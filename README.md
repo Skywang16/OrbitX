@@ -23,15 +23,15 @@
 
 ### 开发环境要求
 
-- Node.js 18+ 
+- Node.js 18+
 - Rust 1.70+
 - 系统依赖 (根据操作系统)
 
 ### 克隆项目
 
 ```bash
-git clone https://github.com/yourusername/termx.git
-cd termx
+git clone https://github.com/Skywang16/TermX.git
+cd TermX
 ```
 
 ### 安装依赖
@@ -120,7 +120,7 @@ termx/
 
 如果你有任何问题或建议，请通过以下方式联系：
 
-- 创建 [Issue](https://github.com/yourusername/termx/issues)
+- 创建 [Issue](https://github.com/Skywang16/TermX/issues)
 - 发送邮件到: your.email@example.com
 
 ---

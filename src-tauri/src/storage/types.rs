@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
 /// 存储层类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum StorageLayer {
     /// TOML配置层
     Config,
@@ -30,7 +30,7 @@ impl StorageLayer {
 }
 
 /// 缓存层类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CacheLayer {
     /// 内存缓存
     Memory,

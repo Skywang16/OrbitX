@@ -8,12 +8,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/termx.git"
+    "url": "https://github.com/Skywang16/TermX.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/termx/issues"
+    "url": "https://github.com/Skywang16/TermX/issues"
   },
-  "homepage": "https://github.com/yourusername/termx#readme",
+  "homepage": "https://github.com/Skywang16/TermX#readme",
   "keywords": [
     "terminal",
     "tauri",

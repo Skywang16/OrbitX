@@ -8,7 +8,7 @@
 
 如果你发现了 bug 或有功能建议：
 
-1. 在 [Issues](https://github.com/yourusername/termx/issues) 中搜索是否已有相关问题
+1. 在 [Issues](https://github.com/Skywang16/TermX/issues) 中搜索是否已有相关问题
 2. 如果没有，创建一个新的 Issue
 3. 使用清晰的标题和详细的描述
 4. 如果是 bug，请提供复现步骤
@@ -16,12 +16,14 @@
 ### 提交代码
 
 1. **Fork 仓库**
+
    ```bash
-   git clone https://github.com/yourusername/termx.git
-   cd termx
+   git clone https://github.com/Skywang16/TermX.git
+   cd TermX
    ```
 
 2. **创建分支**
+
    ```bash
    git checkout -b feature/your-feature-name
    # 或
@@ -29,6 +31,7 @@
    ```
 
 3. **设置开发环境**
+
    ```bash
    npm install
    npm run dev
@@ -40,12 +43,14 @@
    - 更新相关文档
 
 5. **提交更改**
+
    ```bash
    git add .
    git commit -m "feat: add your feature description"
    ```
 
 6. **推送分支**
+
    ```bash
    git push origin feature/your-feature-name
    ```
@@ -70,6 +75,7 @@
 ```
 
 类型包括：
+
 - `feat`: 新功能
 - `fix`: 修复 bug
 - `docs`: 文档更新

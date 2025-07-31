@@ -104,7 +104,7 @@ impl StoragePaths {
                         Some(dir.to_path_buf()),
                     )
                 })?;
-                log::info!("创建目录: {}", dir.display());
+                // 目录创建成功
             }
         }
 
@@ -149,7 +149,7 @@ impl StoragePaths {
                 )
             })?;
 
-            log::info!("缓存目录已清理");
+            // 缓存目录已清理
         }
         Ok(())
     }

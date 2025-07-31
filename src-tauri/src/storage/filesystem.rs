@@ -8,7 +8,7 @@
 use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::paths::StoragePaths;
 use std::fs;
-use std::io::{Read, Write};
+
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs as async_fs;
@@ -56,7 +56,7 @@ impl FileSystemManager {
     /// 确保所有必要的目录存在
     pub async fn initialize(&self) -> StorageResult<()> {
         self.paths.ensure_directories()?;
-        log::info!("文件系统管理器初始化完成");
+        // 文件系统管理器初始化完成
         Ok(())
     }
 
@@ -307,7 +307,7 @@ impl FileSystemManager {
         // 清理旧备份
         self.cleanup_old_backups_sync(path)?;
 
-        log::info!("创建备份: {} -> {}", path.display(), backup_path.display());
+        // 备份创建成功
         Ok(backup_path)
     }
 
@@ -322,7 +322,7 @@ impl FileSystemManager {
         // 清理旧备份
         self.cleanup_old_backups(path).await?;
 
-        log::info!("创建备份: {} -> {}", path.display(), backup_path.display());
+        // 备份创建成功
         Ok(backup_path)
     }
 
@@ -352,10 +352,10 @@ impl FileSystemManager {
 
         // 删除超出保留数量的备份
         for (path, _) in backups.iter().skip(self.options.backup_count) {
-            if let Err(e) = fs::remove_file(path) {
-                log::warn!("删除旧备份失败: {} - {}", path.display(), e);
+            if let Err(_e) = fs::remove_file(path) {
+                // 删除旧备份失败，继续处理其他文件
             } else {
-                log::info!("删除旧备份: {}", path.display());
+                // 删除旧备份成功
             }
         }
 
@@ -388,10 +388,10 @@ impl FileSystemManager {
 
         // 删除超出保留数量的备份
         for (path, _) in backups.iter().skip(self.options.backup_count) {
-            if let Err(e) = async_fs::remove_file(path).await {
-                log::warn!("删除旧备份失败: {} - {}", path.display(), e);
+            if let Err(_e) = async_fs::remove_file(path).await {
+                // 删除旧备份失败，继续处理其他文件
             } else {
-                log::info!("删除旧备份: {}", path.display());
+                // 删除旧备份成功
             }
         }
 
@@ -417,7 +417,7 @@ impl FileSystemManager {
                     Some(path.to_path_buf()),
                 )
             })?;
-            log::info!("删除文件: {}", path.display());
+            // 文件删除成功
         }
         Ok(())
     }
@@ -431,7 +431,7 @@ impl FileSystemManager {
                     Some(path.to_path_buf()),
                 )
             })?;
-            log::info!("删除文件: {}", path.display());
+            // 文件删除成功
         }
         Ok(())
     }

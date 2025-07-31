@@ -189,12 +189,7 @@ impl From<toml::ser::Error> for StorageError {
     }
 }
 
-// 转换为通用应用错误
-impl From<StorageError> for AppError {
-    fn from(err: StorageError) -> Self {
-        AppError::new(err)
-    }
-}
+// 注意：不需要实现 From<StorageError> for AppError，因为 anyhow 已经提供了通用实现
 
 /// 错误恢复策略
 #[derive(Debug, Clone)]
@@ -268,26 +263,26 @@ impl ErrorRecoveryManager {
 
         match strategy {
             RecoveryStrategy::UseDefault => {
-                log::info!("使用默认值恢复: {}", error);
+                // 使用默认值恢复
                 Ok(())
             }
             RecoveryStrategy::RestoreFromBackup => {
-                log::info!("从备份恢复: {}", error);
+                // 从备份恢复
                 // TODO: 实现备份恢复逻辑
                 Ok(())
             }
             RecoveryStrategy::Recreate => {
-                log::info!("重新创建: {}", error);
+                // 重新创建
                 // TODO: 实现重新创建逻辑
                 Ok(())
             }
             RecoveryStrategy::Fallback => {
-                log::info!("降级模式: {}", error);
+                // 降级模式
                 // TODO: 实现降级逻辑
                 Ok(())
             }
             RecoveryStrategy::UserIntervention => {
-                log::error!("需要用户干预: {}", error);
+                // 需要用户干预
                 Err(StorageError::Generic("需要用户干预才能恢复".to_string()))
             }
         }
