@@ -1,0 +1,97 @@
+# Tarpaulin 测试覆盖率配置文件
+
+[tool.tarpaulin.terminal_lib]
+# 项目名称
+name = "terminal_lib"
+
+# 覆盖率输出格式
+out = ["Html", "Lcov", "Json"]
+
+# 输出目录
+output-dir = "target/tarpaulin"
+
+# 包含的文件模式
+include-tests = true
+
+# 排除的文件模式
+exclude = [
+    # 排除测试文件本身
+    "tests/*",
+    # 排除示例代码
+    "examples/*",
+    # 排除基准测试
+    "benches/*",
+    # 排除构建脚本
+    "build.rs",
+    # 排除生成的代码
+    "src/generated/*",
+]
+
+# 排除的行模式
+exclude-lines = [
+    # 排除调试打印
+    "println!",
+    "eprintln!",
+    "dbg!",
+    # 排除未实现的代码
+    "unimplemented!",
+    "unreachable!",
+    "todo!",
+    # 排除测试相关的宏
+    "#\\[cfg\\(test\\)\\]",
+    "#\\[test\\]",
+]
+
+# 超时设置（秒）
+timeout = 120
+
+# 是否跟踪所有目标
+all-targets = true
+
+# 是否包含所有特性
+all-features = true
+
+# 最小覆盖率阈值
+fail-under = 70
+
+# 是否在CI环境中运行
+ciserver = "github"
+
+# 详细输出
+verbose = true
+
+# 是否生成HTML报告
+html = true
+
+# 是否计算分支覆盖率
+branch = true
+
+# 是否计算函数覆盖率
+count = true
+
+# 是否忽略恐慌
+ignore-panics = true
+
+# 是否跟踪内联函数
+inline = true
+
+# 是否跟踪宏
+macros = true
+
+# 工作目录
+root = "."
+
+# 目标目录
+target-dir = "target"
+
+# 是否运行所有测试
+run-types = ["Tests", "Doctests"]
+
+# 引擎类型
+engine = "Auto"
+
+# 是否跟踪孤立的函数
+orphaned = true
+
+# 是否跟踪未使用的函数
+unused = true

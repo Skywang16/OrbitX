@@ -1,0 +1,54 @@
+# TermX 浅色主题配置文件
+# 主题名称: Light
+# 适用场景: 浅色模式，白天使用，高对比度
+
+[theme]
+name = "light"                  # 主题名称，必须与文件名一致
+theme_type = "light"            # 主题类型: light(浅色), dark(深色)
+
+# 基础颜色配置
+[theme.colors]
+foreground = "#24292e"          # 前景色 (文字颜色)
+background = "#ffffff"          # 背景色 (白色)
+cursor = "#044289"              # 光标颜色 (深蓝色)
+selection = "#0366d6"           # 选中文本的背景色
+
+[theme.colors.ansi]
+black = "#24292e"
+red = "#d73a49"
+green = "#28a745"
+yellow = "#ffd33d"
+blue = "#0366d6"
+magenta = "#ea4aaa"
+cyan = "#17a2b8"
+white = "#f6f8fa"
+
+[theme.colors.bright]
+black = "#586069"
+red = "#cb2431"
+green = "#22863a"
+yellow = "#b08800"
+blue = "#005cc5"
+magenta = "#e36209"
+cyan = "#0598bc"
+white = "#fafbfc"
+
+[theme.syntax]
+comment = "#6a737d"
+string = "#032f62"
+number = "#005cc5"
+keyword = "#d73a49"
+function = "#6f42c1"
+variable = "#e36209"
+type_name = "#005cc5"
+operator = "#d73a49"
+
+[theme.ui]
+primary = "#0366d6"
+secondary = "#6c757d"
+success = "#28a745"
+warning = "#ffc107"
+error = "#dc3545"
+info = "#17a2b8"
+border = "#e1e4e8"
+divider = "#d1d5da"

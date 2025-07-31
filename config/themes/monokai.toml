@@ -1,0 +1,49 @@
+[theme]
+name = "monokai"
+theme_type = "dark"
+
+[theme.colors]
+foreground = "#f8f8f2"
+background = "#272822"
+cursor = "#f8f8f0"
+selection = "#49483e"
+
+[theme.colors.ansi]
+black = "#272822"
+red = "#f92672"
+green = "#a6e22e"
+yellow = "#f4bf75"
+blue = "#66d9ef"
+magenta = "#ae81ff"
+cyan = "#a1efe4"
+white = "#f8f8f2"
+
+[theme.colors.bright]
+black = "#75715e"
+red = "#f92672"
+green = "#a6e22e"
+yellow = "#f4bf75"
+blue = "#66d9ef"
+magenta = "#ae81ff"
+cyan = "#a1efe4"
+white = "#f9f8f5"
+
+[theme.syntax]
+comment = "#75715e"
+string = "#e6db74"
+number = "#ae81ff"
+keyword = "#f92672"
+function = "#a6e22e"
+variable = "#f8f8f2"
+type_name = "#66d9ef"
+operator = "#f92672"
+
+[theme.ui]
+primary = "#66d9ef"
+secondary = "#75715e"
+success = "#a6e22e"
+warning = "#f4bf75"
+error = "#f92672"
+info = "#66d9ef"
+border = "#49483e"
+divider = "#49483e"

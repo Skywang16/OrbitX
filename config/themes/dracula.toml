@@ -1,0 +1,49 @@
+[theme]
+name = "dracula"
+theme_type = "dark"
+
+[theme.colors]
+foreground = "#f8f8f2"
+background = "#282a36"
+cursor = "#f8f8f0"
+selection = "#44475a"
+
+[theme.colors.ansi]
+black = "#21222c"
+red = "#ff5555"
+green = "#50fa7b"
+yellow = "#f1fa8c"
+blue = "#bd93f9"
+magenta = "#ff79c6"
+cyan = "#8be9fd"
+white = "#f8f8f2"
+
+[theme.colors.bright]
+black = "#6272a4"
+red = "#ff6e6e"
+green = "#69ff94"
+yellow = "#ffffa5"
+blue = "#d6acff"
+magenta = "#ff92df"
+cyan = "#a4ffff"
+white = "#ffffff"
+
+[theme.syntax]
+comment = "#6272a4"
+string = "#f1fa8c"
+number = "#bd93f9"
+keyword = "#ff79c6"
+function = "#50fa7b"
+variable = "#f8f8f2"
+type_name = "#8be9fd"
+operator = "#ff79c6"
+
+[theme.ui]
+primary = "#bd93f9"
+secondary = "#6272a4"
+success = "#50fa7b"
+warning = "#f1fa8c"
+error = "#ff5555"
+info = "#8be9fd"
+border = "#44475a"
+divider = "#44475a"

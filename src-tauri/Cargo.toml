@@ -1,0 +1,136 @@
+[package]
+name = "termx"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+default-run = "termx"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "terminal_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+doctest = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-deep-link = "2.0.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "io-util", "net", "fs", "time", "macros", "process"] }
+anyhow = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+portable-pty = "0.8"
+crossbeam-channel = "0.5"
+
+
+# 补全功能相关依赖
+regex = "1.10"
+fuzzy-matcher = "0.3"
+dirs = "6.0"
+walkdir = "2.4"
+lru = "0.12"
+async-trait = "0.1"
+urlencoding = "2.1"
+
+# AI集成功能相关依赖
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+uuid = { version = "1.17.0", features = ["v4", "serde"] }
+futures = "0.3"
+tokio-stream = { version = "0.1", features = ["io-util"] }
+tokio-util = { version = "0.7", features = ["io"] }
+
+base64 = "0.22"
+toml = "0.8"
+bincode = "1.3"
+flate2 = "1.0"
+md5 = "0.7"
+
+# AI统一接口库
+async-openai = "0.29"
+
+[dev-dependencies]
+tempfile = "3.8"
+tokio-test = "0.4"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.27", features = ["term", "fs"] }
+libc = "0.2"
+
+# 测试配置
+[[test]]
+name = "mux_integration_test"
+path = "tests/mux/mux_integration_test.rs"
+
+[[test]]
+name = "error_handling_tests"
+path = "tests/mux/error_handling_tests.rs"
+
+[[test]]
+name = "io_integration_test"
+path = "tests/mux/io_integration_test.rs"
+
+[[test]]
+name = "lifecycle_integration_test"
+path = "tests/mux/lifecycle_integration_test.rs"
+
+[[test]]
+name = "pty_io_tests"
+path = "tests/mux/pty_io_tests.rs"
+
+[[test]]
+name = "mux_core_tests"
+path = "tests/unit/mux_core_tests.rs"
+
+[[test]]
+name = "mux_unit_tests"
+path = "tests/unit/mux_unit_tests.rs"
+
+[[test]]
+name = "pty_test"
+path = "tests/pty/pty_test.rs"
+
+[[test]]
+name = "integration_test"
+path = "tests/integration/integration_test.rs"
+
+[[test]]
+name = "performance_test"
+path = "tests/integration/performance_test.rs"
+
+
+
+[[test]]
+name = "singleton_tests"
+path = "tests/unit/singleton_tests.rs"
+
+[[test]]
+name = "io_optimization_test"
+path = "tests/mux/io_optimization_test.rs"
+
+[[test]]
+name = "error_handling_comprehensive_test"
+path = "tests/error_handling_comprehensive_test.rs"
+
+[[test]]
+name = "terminal_error_scenarios_test"
+path = "tests/terminal_error_scenarios_test.rs"
+
+# 桌面平台特定依赖
+[target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
+tauri-plugin-single-instance = { version = "2.0.0", features = ["deep-link"] }
+
+
+

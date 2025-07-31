@@ -1,0 +1,77 @@
+/* 基础样式和通用变量 */
+:root {
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 6px;
+  --spacing-md: 10px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+
+  /* Border Radius */
+  --border-radius: 6px;
+  --border-radius-sm: 4px;
+  --border-radius-md: 6px;
+  --border-radius-lg: 10px;
+
+  /* Typography */
+  --font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  --font-family-mono: Menlo, Monaco, 'Courier New', monospace;
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+
+  /* TitleBar */
+  --titlebar-height: 36px;
+  --titlebar-element-height: 28px;
+
+  /* 分屏相关 */
+  --split-divider-size: 4px;
+  --split-divider-color: var(--color-border);
+  --split-divider-hover-color: var(--color-primary);
+  --split-panel-min-width: 200px;
+  --split-panel-min-height: 100px;
+
+  /* 拖拽相关 */
+  --drag-overlay-bg: rgba(0, 0, 0, 0.1);
+  --drag-preview-bg: rgba(0, 0, 0, 0.8);
+  --drop-zone-bg: rgba(0, 122, 204, 0.1);
+  --drop-zone-bg-active: rgba(0, 122, 204, 0.3);
+  --drop-zone-border: 2px dashed rgba(0, 122, 204, 0.5);
+  --drop-zone-border-active: 2px solid #007acc;
+
+  /* 补全相关 */
+  --completion-bg: var(--color-background-secondary);
+  --completion-border: var(--border-color);
+  --completion-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --completion-item-hover: var(--color-background-hover);
+  --completion-inline-bg: rgba(255, 255, 255, 0.1);
+
+  /* 颜色系统 */
+  --color-blue: #007acc;
+  --color-green: #608b4e;
+  --color-yellow: #dcdcaa;
+  --color-orange: #ce9178;
+  --color-purple: #c586c0;
+  --color-red: #f44747;
+}
+
+/* Custom Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-primary);
+}

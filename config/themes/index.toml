@@ -1,0 +1,122 @@
+version = "1.0.0"
+totalThemes = 10
+customThemes = []
+
+[lastUpdated]
+secs_since_epoch = 1753845493
+nanos_since_epoch = 570375000
+
+[[builtinThemes]]
+name = "light"
+file = "light.toml"
+type = "light"
+builtin = true
+fileSize = 824
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1753840037
+nanos_since_epoch = 690538839
+
+[[builtinThemes]]
+name = "solarized-dark"
+file = "solarized-dark.toml"
+type = "dark"
+builtin = true
+fileSize = 832
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1753840907
+nanos_since_epoch = 448955936
+
+[[builtinThemes]]
+name = "dark"
+file = "dark.toml"
+type = "dark"
+builtin = true
+fileSize = 822
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1753840023
+nanos_since_epoch = 886319761
+
+[[builtinThemes]]
+name = "one-dark"
+file = "one-dark.toml"
+type = "dark"
+builtin = true
+fileSize = 826
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1753840875
+nanos_since_epoch = 196547806
+
+[[builtinThemes]]
+name = "gruvbox-dark"
+file = "gruvbox-dark.toml"
+type = "dark"
+builtin = true
+fileSize = 830
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1753840926
+nanos_since_epoch = 760034969
+
+[[builtinThemes]]
+name = "solarized-light"
+file = "solarized-light.toml"
+type = "light"
+builtin = true
+fileSize = 834
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1753840915
+nanos_since_epoch = 532911505
+
+[[builtinThemes]]
+name = "tokyo-night"
+file = "tokyo-night.toml"
+type = "dark"
+builtin = true
+fileSize = 829
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1753840946
+nanos_since_epoch = 7989290
+
+[[builtinThemes]]
+name = "dracula"
+file = "dracula.toml"
+type = "dark"
+builtin = true
+fileSize = 825
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1753840885
+nanos_since_epoch = 833839899
+
+[[builtinThemes]]
+name = "monokai"
+file = "monokai.toml"
+type = "dark"
+builtin = true
+fileSize = 825
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1753840896
+nanos_since_epoch = 489064319
+
+[[builtinThemes]]
+name = "nord"
+file = "nord.toml"
+type = "dark"
+builtin = true
+fileSize = 822
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1753840936
+nanos_since_epoch = 856661927
+
+[defaults]
+lightTheme = "light"
+darkTheme = "dark"
+defaultTheme = "dark"

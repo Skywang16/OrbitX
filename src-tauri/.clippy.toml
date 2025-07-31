@@ -1,0 +1,35 @@
+# Clippy configuration for TermX project
+# This file defines code quality standards and linting rules
+
+# Allow breaking exported API during development
+avoid-breaking-exported-api = false
+
+# Cognitive complexity threshold - functions with higher complexity will trigger warnings
+cognitive-complexity-threshold = 30
+
+# Maximum number of arguments for a function before triggering a warning
+too-many-arguments-threshold = 8
+
+# Type complexity threshold - complex types will trigger warnings
+type-complexity-threshold = 250
+
+# Array size threshold for large arrays
+array-size-threshold = 512000
+
+# Pass by value size limit
+pass-by-value-size-limit = 256
+
+# Vec box size threshold
+vec-box-size-threshold = 4096
+
+# Enum variant size threshold
+enum-variant-size-threshold = 200
+
+# Stack size threshold
+stack-size-threshold = 512000
+
+# Missing docs in crate items
+missing-docs-in-crate-items = false
+
+# Allow enum variant names with common prefixes/suffixes (common pattern in error types)
+enum-variant-name-threshold = 0

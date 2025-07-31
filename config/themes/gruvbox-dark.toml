@@ -1,0 +1,49 @@
+[theme]
+name = "gruvbox-dark"
+theme_type = "dark"
+
+[theme.colors]
+foreground = "#ebdbb2"
+background = "#282828"
+cursor = "#fe8019"
+selection = "#3c3836"
+
+[theme.colors.ansi]
+black = "#282828"
+red = "#cc241d"
+green = "#98971a"
+yellow = "#d79921"
+blue = "#458588"
+magenta = "#b16286"
+cyan = "#689d6a"
+white = "#a89984"
+
+[theme.colors.bright]
+black = "#928374"
+red = "#fb4934"
+green = "#b8bb26"
+yellow = "#fabd2f"
+blue = "#83a598"
+magenta = "#d3869b"
+cyan = "#8ec07c"
+white = "#ebdbb2"
+
+[theme.syntax]
+comment = "#928374"
+string = "#b8bb26"
+number = "#d3869b"
+keyword = "#fb4934"
+function = "#fabd2f"
+variable = "#83a598"
+type_name = "#8ec07c"
+operator = "#fe8019"
+
+[theme.ui]
+primary = "#458588"
+secondary = "#928374"
+success = "#98971a"
+warning = "#d79921"
+error = "#cc241d"
+info = "#689d6a"
+border = "#3c3836"
+divider = "#3c3836"

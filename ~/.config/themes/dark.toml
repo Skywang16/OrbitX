@@ -1,0 +1,49 @@
+[theme]
+name = "dark"
+theme_type = "dark"
+
+[theme.colors]
+foreground = "#e6e6e6"
+background = "#1e1e1e"
+cursor = "#ffffff"
+selection = "#3391ff"
+
+[theme.colors.ansi]
+black = "#000000"
+red = "#cd3131"
+green = "#0dbc79"
+yellow = "#e5e510"
+blue = "#2472c8"
+magenta = "#bc3fbc"
+cyan = "#11a8cd"
+white = "#e5e5e5"
+
+[theme.colors.bright]
+black = "#666666"
+red = "#f14c4c"
+green = "#23d18b"
+yellow = "#f5f543"
+blue = "#3b8eea"
+magenta = "#d670d6"
+cyan = "#29b8db"
+white = "#ffffff"
+
+[theme.syntax]
+comment = "#6a9955"
+string = "#ce9178"
+number = "#b5cea8"
+keyword = "#569cd6"
+function = "#dcdcaa"
+variable = "#9cdcfe"
+type_name = "#4ec9b0"
+operator = "#d4d4d4"
+
+[theme.ui]
+primary = "#007acc"
+secondary = "#0dbc79"
+success = "#0dbc79"
+warning = "#e5e510"
+error = "#cd3131"
+info = "#2472c8"
+border = "#3c3c3c"
+divider = "#3c3c3c"

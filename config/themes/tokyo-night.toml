@@ -1,0 +1,49 @@
+[theme]
+name = "tokyo-night"
+theme_type = "dark"
+
+[theme.colors]
+foreground = "#c0caf5"
+background = "#1a1b26"
+cursor = "#c0caf5"
+selection = "#33467c"
+
+[theme.colors.ansi]
+black = "#15161e"
+red = "#f7768e"
+green = "#9ece6a"
+yellow = "#e0af68"
+blue = "#7aa2f7"
+magenta = "#bb9af7"
+cyan = "#7dcfff"
+white = "#a9b1d6"
+
+[theme.colors.bright]
+black = "#414868"
+red = "#f7768e"
+green = "#9ece6a"
+yellow = "#e0af68"
+blue = "#7aa2f7"
+magenta = "#bb9af7"
+cyan = "#7dcfff"
+white = "#c0caf5"
+
+[theme.syntax]
+comment = "#565f89"
+string = "#9ece6a"
+number = "#ff9e64"
+keyword = "#bb9af7"
+function = "#7aa2f7"
+variable = "#c0caf5"
+type_name = "#7dcfff"
+operator = "#89ddff"
+
+[theme.ui]
+primary = "#7aa2f7"
+secondary = "#565f89"
+success = "#9ece6a"
+warning = "#e0af68"
+error = "#f7768e"
+info = "#7dcfff"
+border = "#24283b"
+divider = "#24283b"

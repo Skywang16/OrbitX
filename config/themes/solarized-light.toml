@@ -1,0 +1,49 @@
+[theme]
+name = "solarized-light"
+theme_type = "light"
+
+[theme.colors]
+foreground = "#657b83"
+background = "#fdf6e3"
+cursor = "#586e75"
+selection = "#eee8d5"
+
+[theme.colors.ansi]
+black = "#073642"
+red = "#dc322f"
+green = "#859900"
+yellow = "#b58900"
+blue = "#268bd2"
+magenta = "#d33682"
+cyan = "#2aa198"
+white = "#eee8d5"
+
+[theme.colors.bright]
+black = "#002b36"
+red = "#cb4b16"
+green = "#586e75"
+yellow = "#657b83"
+blue = "#839496"
+magenta = "#6c71c4"
+cyan = "#93a1a1"
+white = "#fdf6e3"
+
+[theme.syntax]
+comment = "#93a1a1"
+string = "#2aa198"
+number = "#d33682"
+keyword = "#859900"
+function = "#268bd2"
+variable = "#657b83"
+type_name = "#b58900"
+operator = "#dc322f"
+
+[theme.ui]
+primary = "#268bd2"
+secondary = "#93a1a1"
+success = "#859900"
+warning = "#b58900"
+error = "#dc322f"
+info = "#2aa198"
+border = "#eee8d5"
+divider = "#eee8d5"

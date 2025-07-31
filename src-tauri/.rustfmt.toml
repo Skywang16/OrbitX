@@ -1,0 +1,44 @@
+# Rust formatting configuration for TermX project
+# This file defines code formatting standards using stable rustfmt features
+
+# Edition to use for formatting
+edition = "2021"
+
+# Maximum width of each line
+max_width = 100
+
+# Number of spaces per tab
+tab_spaces = 4
+
+# Use spaces instead of tabs
+hard_tabs = false
+
+# Newline style
+newline_style = "Unix"
+
+# Use field init shorthand if possible
+use_field_init_shorthand = true
+
+# Use try shorthand
+use_try_shorthand = true
+
+# Reorder imports
+reorder_imports = true
+
+# Reorder modules
+reorder_modules = true
+
+# Remove nested parens
+remove_nested_parens = true
+
+# Merge derives
+merge_derives = true
+
+# Use small heuristics
+use_small_heuristics = "Default"
+
+# Force explicit types in let statements when beneficial
+force_explicit_abi = true
+
+# Disable all formatting
+disable_all_formatting = false
