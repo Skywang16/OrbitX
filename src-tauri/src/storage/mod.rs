@@ -5,26 +5,33 @@
  * 提供统一的存储管理接口和协调器，支持缓存、错误恢复和数据迁移
  */
 
+pub mod cache;
+pub mod commands;
 pub mod coordinator;
-pub mod error;
 pub mod filesystem;
 pub mod messagepack;
 pub mod paths;
+pub mod recovery;
 pub mod sqlite;
-pub mod toml_config;
+#[cfg(test)]
+pub mod sqlite_tests;
 pub mod types;
 
 // 重新导出核心类型和函数
+pub use cache::{CacheConfig, MultiLayerCache};
+pub use commands::StorageCoordinatorState;
 pub use coordinator::{StorageCoordinator, StorageCoordinatorOptions};
-pub use error::{StorageError, StorageResult};
 pub use filesystem::{FileSystemManager, FileSystemOptions};
 pub use messagepack::{MessagePackManager, MessagePackOptions};
 pub use paths::{StoragePaths, StoragePathsBuilder};
+pub use recovery::{HealthCheckResult, RecoveryManager, RecoveryResult, SystemHealth};
 pub use sqlite::{SqliteManager, SqliteOptions};
-pub use toml_config::{TomlConfigManager, TomlConfigOptions};
 pub use types::{
     CacheLayer, CacheStats, DataQuery, SaveOptions, SessionState, StorageLayer, StorageStats,
 };
+
+// 统一错误处理类型
+pub use crate::utils::error::{AppError, AppResult};
 
 /// 存储系统版本
 pub const STORAGE_VERSION: &str = "1.0.0";

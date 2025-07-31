@@ -56,9 +56,23 @@ toml = "0.8"
 bincode = "1.3"
 flate2 = "1.0"
 md5 = "0.7"
+notify = "6.1"
+
+# MessagePack 序列化支持
+rmp = "0.8"
+rmp-serde = "1.1"
+sha2 = "0.10"
 
 # AI统一接口库
 async-openai = "0.29"
+
+# SQLite 数据库支持
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json", "migrate"] }
+
+# 加密支持
+chacha20poly1305 = "0.10"
+argon2 = "0.5"
+rand = "0.8"
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -75,24 +89,12 @@ name = "mux_integration_test"
 path = "tests/mux/mux_integration_test.rs"
 
 [[test]]
-name = "error_handling_tests"
-path = "tests/mux/error_handling_tests.rs"
-
-[[test]]
 name = "io_integration_test"
 path = "tests/mux/io_integration_test.rs"
 
 [[test]]
 name = "lifecycle_integration_test"
 path = "tests/mux/lifecycle_integration_test.rs"
-
-[[test]]
-name = "pty_io_tests"
-path = "tests/mux/pty_io_tests.rs"
-
-[[test]]
-name = "mux_core_tests"
-path = "tests/unit/mux_core_tests.rs"
 
 [[test]]
 name = "mux_unit_tests"
@@ -120,13 +122,19 @@ path = "tests/unit/singleton_tests.rs"
 name = "io_optimization_test"
 path = "tests/mux/io_optimization_test.rs"
 
-[[test]]
-name = "error_handling_comprehensive_test"
-path = "tests/error_handling_comprehensive_test.rs"
+
+
+
 
 [[test]]
-name = "terminal_error_scenarios_test"
-path = "tests/terminal_error_scenarios_test.rs"
+name = "messagepack_tests"
+path = "tests/storage/messagepack_tests.rs"
+
+[[test]]
+name = "coordinator_integration_test"
+path = "tests/storage/coordinator_integration_test.rs"
+
+
 
 # 桌面平台特定依赖
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]

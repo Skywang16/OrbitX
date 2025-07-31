@@ -87,7 +87,7 @@ impl ShortcutConflictDetector {
 
             key_map
                 .entry(key_combination)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(conflicting_shortcut);
         }
     }

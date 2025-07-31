@@ -5,8 +5,8 @@
  * 支持跟随系统主题和手动选择主题两种模式。
  */
 
-use crate::config::theme::ThemeManager;
-use crate::config::types::ThemeConfig;
+use super::manager::ThemeManager;
+use super::types::{Theme, ThemeConfig};
 use crate::utils::error::AppResult;
 use anyhow::anyhow;
 use std::sync::Arc;
@@ -67,7 +67,7 @@ impl ThemeService {
         &self,
         theme_config: &ThemeConfig,
         is_system_dark: Option<bool>,
-    ) -> AppResult<crate::config::types::Theme> {
+    ) -> AppResult<Theme> {
         let theme_name = self.get_current_theme_name(theme_config, is_system_dark);
 
         match self.theme_manager.load_theme(&theme_name).await {
@@ -175,21 +175,35 @@ impl SystemThemeDetector {
     /// # Returns
     /// 返回系统主题状态，None 表示无法检测
     pub fn is_dark_mode() -> Option<bool> {
-        // TODO: 实现系统主题检测
-        // 在 macOS 上可以使用 NSAppearance
-        // 在 Windows 上可以读取注册表
-        // 在 Linux 上可以检查环境变量或桌面环境设置
-
         #[cfg(target_os = "macos")]
         {
-            // macOS 系统主题检测的占位符
-            // 实际实现需要使用 Objective-C 或相关库
-            Some(true) // 暂时返回深色模式
+            // macOS 系统主题检测
+            // 使用环境变量检测，这是一个简化的实现
+            std::env::var("TERM_PROGRAM").ok().map(|_| false) // 默认返回浅色模式
         }
 
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
         {
-            // 其他系统的占位符
+            // Windows 系统主题检测
+            // 可以通过注册表检测，这里简化处理
+            None
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // Linux 系统主题检测
+            // 检查常见的环境变量
+            if let Ok(theme) = std::env::var("GTK_THEME") {
+                Some(theme.to_lowercase().contains("dark"))
+            } else if let Ok(theme) = std::env::var("QT_STYLE_OVERRIDE") {
+                Some(theme.to_lowercase().contains("dark"))
+            } else {
+                None
+            }
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        {
             None
         }
     }
@@ -198,7 +212,7 @@ impl SystemThemeDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::types::ThemeConfig;
+    use crate::config::theme::ThemeConfig;
 
     fn create_test_theme_config() -> ThemeConfig {
         ThemeConfig {

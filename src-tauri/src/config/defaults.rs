@@ -33,7 +33,7 @@ fn create_default_appearance_config() -> AppearanceConfig {
     AppearanceConfig {
         ui_scale: 100,
         animations_enabled: true,
-        theme_config: create_default_theme_config(),
+        theme_config: crate::config::theme::create_default_theme_config(),
         font: create_default_font_config(),
     }
 }
@@ -100,17 +100,6 @@ pub fn create_default_ai_config() -> AIConfig {
             enabled: true,
         }],
         features: create_default_ai_features_config(),
-    }
-}
-
-/// 创建默认主题配置
-fn create_default_theme_config() -> ThemeConfig {
-    ThemeConfig {
-        auto_switch_time: "18:00".to_string(),
-        terminal_theme: "dark".to_string(),
-        light_theme: "light".to_string(),
-        dark_theme: "dark".to_string(),
-        follow_system: false,
     }
 }
 

@@ -162,6 +162,12 @@ pub struct WindowStateManager {
     last_updated: Instant,
 }
 
+impl Default for WindowStateManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WindowStateManager {
     /// 创建新的窗口状态管理器
     pub fn new() -> Self {

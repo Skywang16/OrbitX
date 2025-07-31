@@ -5,14 +5,14 @@
  * 支持跨平台文件操作和错误恢复
  */
 
-use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::paths::StoragePaths;
+use crate::utils::error::AppResult;
+use anyhow::{anyhow, Context};
 use std::fs;
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs as async_fs;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// 文件系统管理器选项
 #[derive(Debug, Clone)]
@@ -54,42 +54,38 @@ impl FileSystemManager {
     }
 
     /// 确保所有必要的目录存在
-    pub async fn initialize(&self) -> StorageResult<()> {
+    pub async fn initialize(&self) -> AppResult<()> {
         self.paths.ensure_directories()?;
         // 文件系统管理器初始化完成
         Ok(())
     }
 
     /// 同步读取文件内容
-    pub fn read_file_sync(&self, path: &Path) -> StorageResult<Vec<u8>> {
-        fs::read(path).map_err(|e| {
-            StorageError::filesystem_error(format!("读取文件失败: {}", e), Some(path.to_path_buf()))
-        })
+    pub fn read_file_sync(&self, path: &Path) -> AppResult<Vec<u8>> {
+        fs::read(path).with_context(|| format!("读取文件失败: {}", path.display()))
     }
 
     /// 异步读取文件内容
-    pub async fn read_file(&self, path: &Path) -> StorageResult<Vec<u8>> {
-        async_fs::read(path).await.map_err(|e| {
-            StorageError::filesystem_error(format!("读取文件失败: {}", e), Some(path.to_path_buf()))
-        })
+    pub async fn read_file(&self, path: &Path) -> AppResult<Vec<u8>> {
+        async_fs::read(path)
+            .await
+            .with_context(|| format!("读取文件失败: {}", path.display()))
     }
 
     /// 同步读取文件内容为字符串
-    pub fn read_file_to_string_sync(&self, path: &Path) -> StorageResult<String> {
-        fs::read_to_string(path).map_err(|e| {
-            StorageError::filesystem_error(format!("读取文件失败: {}", e), Some(path.to_path_buf()))
-        })
+    pub fn read_file_to_string_sync(&self, path: &Path) -> AppResult<String> {
+        fs::read_to_string(path).with_context(|| format!("读取文件失败: {}", path.display()))
     }
 
     /// 异步读取文件内容为字符串
-    pub async fn read_file_to_string(&self, path: &Path) -> StorageResult<String> {
-        async_fs::read_to_string(path).await.map_err(|e| {
-            StorageError::filesystem_error(format!("读取文件失败: {}", e), Some(path.to_path_buf()))
-        })
+    pub async fn read_file_to_string(&self, path: &Path) -> AppResult<String> {
+        async_fs::read_to_string(path)
+            .await
+            .with_context(|| format!("读取文件失败: {}", path.display()))
     }
 
     /// 同步写入文件内容
-    pub fn write_file_sync(&self, path: &Path, content: &[u8]) -> StorageResult<()> {
+    pub fn write_file_sync(&self, path: &Path, content: &[u8]) -> AppResult<()> {
         if self.options.atomic_write {
             self.atomic_write_sync(path, content)
         } else {
@@ -98,7 +94,7 @@ impl FileSystemManager {
     }
 
     /// 异步写入文件内容
-    pub async fn write_file(&self, path: &Path, content: &[u8]) -> StorageResult<()> {
+    pub async fn write_file(&self, path: &Path, content: &[u8]) -> AppResult<()> {
         if self.options.atomic_write {
             self.atomic_write(path, content).await
         } else {
@@ -107,49 +103,37 @@ impl FileSystemManager {
     }
 
     /// 同步写入字符串到文件
-    pub fn write_string_sync(&self, path: &Path, content: &str) -> StorageResult<()> {
+    pub fn write_string_sync(&self, path: &Path, content: &str) -> AppResult<()> {
         self.write_file_sync(path, content.as_bytes())
     }
 
     /// 异步写入字符串到文件
-    pub async fn write_string(&self, path: &Path, content: &str) -> StorageResult<()> {
+    pub async fn write_string(&self, path: &Path, content: &str) -> AppResult<()> {
         self.write_file(path, content.as_bytes()).await
     }
 
     /// 原子写入（同步）
-    fn atomic_write_sync(&self, path: &Path, content: &[u8]) -> StorageResult<()> {
+    fn atomic_write_sync(&self, path: &Path, content: &[u8]) -> AppResult<()> {
         // 创建临时文件
         let temp_path = self.get_temp_path(path);
 
         // 确保父目录存在
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                StorageError::filesystem_error(
-                    format!("创建父目录失败: {}", e),
-                    Some(parent.to_path_buf()),
-                )
-            })?;
+            fs::create_dir_all(parent)
+                .with_context(|| format!("创建父目录失败: {}", parent.display()))?;
         }
 
         // 写入临时文件
-        fs::write(&temp_path, content).map_err(|e| {
-            StorageError::filesystem_error(
-                format!("写入临时文件失败: {}", e),
-                Some(temp_path.clone()),
-            )
-        })?;
+        fs::write(&temp_path, content)
+            .with_context(|| format!("写入临时文件失败: {}", temp_path.display()))?;
 
         // 设置文件权限
         #[cfg(unix)]
         if let Some(permissions) = self.options.file_permissions {
             use std::os::unix::fs::PermissionsExt;
             let perms = fs::Permissions::from_mode(permissions);
-            fs::set_permissions(&temp_path, perms).map_err(|e| {
-                StorageError::filesystem_error(
-                    format!("设置文件权限失败: {}", e),
-                    Some(temp_path.clone()),
-                )
-            })?;
+            fs::set_permissions(&temp_path, perms)
+                .with_context(|| format!("设置文件权限失败: {}", temp_path.display()))?;
         }
 
         // 创建备份
@@ -161,34 +145,28 @@ impl FileSystemManager {
         fs::rename(&temp_path, path).map_err(|e| {
             // 清理临时文件
             let _ = fs::remove_file(&temp_path);
-            StorageError::filesystem_error(format!("原子移动失败: {}", e), Some(path.to_path_buf()))
+            anyhow!("原子移动失败: {}", e)
         })?;
 
         Ok(())
     }
 
     /// 原子写入（异步）
-    async fn atomic_write(&self, path: &Path, content: &[u8]) -> StorageResult<()> {
+    async fn atomic_write(&self, path: &Path, content: &[u8]) -> AppResult<()> {
         // 创建临时文件
         let temp_path = self.get_temp_path(path);
 
         // 确保父目录存在
         if let Some(parent) = path.parent() {
-            async_fs::create_dir_all(parent).await.map_err(|e| {
-                StorageError::filesystem_error(
-                    format!("创建父目录失败: {}", e),
-                    Some(parent.to_path_buf()),
-                )
-            })?;
+            async_fs::create_dir_all(parent)
+                .await
+                .with_context(|| format!("创建父目录失败: {}", parent.display()))?;
         }
 
         // 写入临时文件
-        async_fs::write(&temp_path, content).await.map_err(|e| {
-            StorageError::filesystem_error(
-                format!("写入临时文件失败: {}", e),
-                Some(temp_path.clone()),
-            )
-        })?;
+        async_fs::write(&temp_path, content)
+            .await
+            .with_context(|| format!("写入临时文件失败: {}", temp_path.display()))?;
 
         // 设置文件权限
         #[cfg(unix)]
@@ -197,12 +175,7 @@ impl FileSystemManager {
             let perms = fs::Permissions::from_mode(permissions);
             async_fs::set_permissions(&temp_path, perms)
                 .await
-                .map_err(|e| {
-                    StorageError::filesystem_error(
-                        format!("设置文件权限失败: {}", e),
-                        Some(temp_path.clone()),
-                    )
-                })?;
+                .map_err(|e| anyhow!("设置文件权限失败: {}", e))?;
         }
 
         // 创建备份
@@ -214,22 +187,17 @@ impl FileSystemManager {
         async_fs::rename(&temp_path, path).await.map_err(|e| {
             // 清理临时文件
             let _ = std::fs::remove_file(&temp_path);
-            StorageError::filesystem_error(format!("原子移动失败: {}", e), Some(path.to_path_buf()))
+            anyhow!("原子移动失败: {}", e)
         })?;
 
         Ok(())
     }
 
     /// 直接写入（同步）
-    fn direct_write_sync(&self, path: &Path, content: &[u8]) -> StorageResult<()> {
+    fn direct_write_sync(&self, path: &Path, content: &[u8]) -> AppResult<()> {
         // 确保父目录存在
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                StorageError::filesystem_error(
-                    format!("创建父目录失败: {}", e),
-                    Some(parent.to_path_buf()),
-                )
-            })?;
+            fs::create_dir_all(parent).map_err(|e| anyhow!("创建父目录失败: {}", e))?;
         }
 
         // 创建备份
@@ -238,36 +206,26 @@ impl FileSystemManager {
         }
 
         // 直接写入
-        fs::write(path, content).map_err(|e| {
-            StorageError::filesystem_error(format!("写入文件失败: {}", e), Some(path.to_path_buf()))
-        })?;
+        fs::write(path, content).with_context(|| format!("写入文件失败: {}", path.display()))?;
 
         // 设置文件权限
         #[cfg(unix)]
         if let Some(permissions) = self.options.file_permissions {
             use std::os::unix::fs::PermissionsExt;
             let perms = fs::Permissions::from_mode(permissions);
-            fs::set_permissions(path, perms).map_err(|e| {
-                StorageError::filesystem_error(
-                    format!("设置文件权限失败: {}", e),
-                    Some(path.to_path_buf()),
-                )
-            })?;
+            fs::set_permissions(path, perms).map_err(|e| anyhow!("设置文件权限失败: {}", e))?;
         }
 
         Ok(())
     }
 
     /// 直接写入（异步）
-    async fn direct_write(&self, path: &Path, content: &[u8]) -> StorageResult<()> {
+    async fn direct_write(&self, path: &Path, content: &[u8]) -> AppResult<()> {
         // 确保父目录存在
         if let Some(parent) = path.parent() {
-            async_fs::create_dir_all(parent).await.map_err(|e| {
-                StorageError::filesystem_error(
-                    format!("创建父目录失败: {}", e),
-                    Some(parent.to_path_buf()),
-                )
-            })?;
+            async_fs::create_dir_all(parent)
+                .await
+                .map_err(|e| anyhow!("创建父目录失败: {}", e))?;
         }
 
         // 创建备份
@@ -276,32 +234,33 @@ impl FileSystemManager {
         }
 
         // 直接写入
-        async_fs::write(path, content).await.map_err(|e| {
-            StorageError::filesystem_error(format!("写入文件失败: {}", e), Some(path.to_path_buf()))
-        })?;
+        async_fs::write(path, content)
+            .await
+            .with_context(|| format!("写入文件失败: {}", path.display()))?;
 
         // 设置文件权限
         #[cfg(unix)]
         if let Some(permissions) = self.options.file_permissions {
             use std::os::unix::fs::PermissionsExt;
             let perms = fs::Permissions::from_mode(permissions);
-            async_fs::set_permissions(path, perms).await.map_err(|e| {
-                StorageError::filesystem_error(
-                    format!("设置文件权限失败: {}", e),
-                    Some(path.to_path_buf()),
-                )
-            })?;
+            async_fs::set_permissions(path, perms)
+                .await
+                .map_err(|e| anyhow!("设置文件权限失败: {}", e))?;
         }
 
         Ok(())
     }
 
     /// 创建备份（同步）
-    fn create_backup_sync(&self, path: &Path) -> StorageResult<PathBuf> {
+    fn create_backup_sync(&self, path: &Path) -> AppResult<PathBuf> {
         let backup_path = self.get_backup_path(path);
 
-        fs::copy(path, &backup_path).map_err(|e| {
-            StorageError::filesystem_error(format!("创建备份失败: {}", e), Some(path.to_path_buf()))
+        fs::copy(path, &backup_path).with_context(|| {
+            format!(
+                "创建备份失败: {} -> {}",
+                path.display(),
+                backup_path.display()
+            )
         })?;
 
         // 清理旧备份
@@ -312,11 +271,15 @@ impl FileSystemManager {
     }
 
     /// 创建备份（异步）
-    async fn create_backup(&self, path: &Path) -> StorageResult<PathBuf> {
+    async fn create_backup(&self, path: &Path) -> AppResult<PathBuf> {
         let backup_path = self.get_backup_path(path);
 
-        async_fs::copy(path, &backup_path).await.map_err(|e| {
-            StorageError::filesystem_error(format!("创建备份失败: {}", e), Some(path.to_path_buf()))
+        async_fs::copy(path, &backup_path).await.with_context(|| {
+            format!(
+                "创建备份失败: {} -> {}",
+                path.display(),
+                backup_path.display()
+            )
         })?;
 
         // 清理旧备份
@@ -327,7 +290,7 @@ impl FileSystemManager {
     }
 
     /// 清理旧备份（同步）
-    fn cleanup_old_backups_sync(&self, original_path: &Path) -> StorageResult<()> {
+    fn cleanup_old_backups_sync(&self, original_path: &Path) -> AppResult<()> {
         let backup_prefix = self.get_backup_prefix(original_path);
         let mut backups = Vec::new();
 
@@ -363,7 +326,7 @@ impl FileSystemManager {
     }
 
     /// 清理旧备份（异步）
-    async fn cleanup_old_backups(&self, original_path: &Path) -> StorageResult<()> {
+    async fn cleanup_old_backups(&self, original_path: &Path) -> AppResult<()> {
         let backup_prefix = self.get_backup_prefix(original_path);
         let mut backups = Vec::new();
 
@@ -409,28 +372,20 @@ impl FileSystemManager {
     }
 
     /// 删除文件
-    pub async fn remove_file(&self, path: &Path) -> StorageResult<()> {
+    pub async fn remove_file(&self, path: &Path) -> AppResult<()> {
         if self.exists(path).await {
-            async_fs::remove_file(path).await.map_err(|e| {
-                StorageError::filesystem_error(
-                    format!("删除文件失败: {}", e),
-                    Some(path.to_path_buf()),
-                )
-            })?;
+            async_fs::remove_file(path)
+                .await
+                .map_err(|e| anyhow!("删除文件失败: {}", e))?;
             // 文件删除成功
         }
         Ok(())
     }
 
     /// 删除文件（同步）
-    pub fn remove_file_sync(&self, path: &Path) -> StorageResult<()> {
+    pub fn remove_file_sync(&self, path: &Path) -> AppResult<()> {
         if self.exists_sync(path) {
-            fs::remove_file(path).map_err(|e| {
-                StorageError::filesystem_error(
-                    format!("删除文件失败: {}", e),
-                    Some(path.to_path_buf()),
-                )
-            })?;
+            fs::remove_file(path).map_err(|e| anyhow!("删除文件失败: {}", e))?;
             // 文件删除成功
         }
         Ok(())

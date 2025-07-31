@@ -344,6 +344,47 @@ pub struct StorageStats {
     pub logs_size: u64,
 }
 
+impl StorageStats {
+    /// 格式化大小为人类可读的字符串
+    pub fn format_size(bytes: u64) -> String {
+        const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+        let mut size = bytes as f64;
+        let mut unit_index = 0;
+
+        while size >= 1024.0 && unit_index < UNITS.len() - 1 {
+            size /= 1024.0;
+            unit_index += 1;
+        }
+
+        format!("{:.2} {}", size, UNITS[unit_index])
+    }
+
+    /// 获取格式化的总大小
+    pub fn total_size_formatted(&self) -> String {
+        Self::format_size(self.total_size)
+    }
+
+    /// 获取格式化的配置大小
+    pub fn config_size_formatted(&self) -> String {
+        Self::format_size(self.config_size)
+    }
+
+    /// 获取格式化的状态大小
+    pub fn state_size_formatted(&self) -> String {
+        Self::format_size(self.state_size)
+    }
+
+    /// 获取格式化的数据大小
+    pub fn data_size_formatted(&self) -> String {
+        Self::format_size(self.data_size)
+    }
+
+    /// 获取格式化的缓存大小
+    pub fn cache_size_formatted(&self) -> String {
+        Self::format_size(self.cache_size)
+    }
+}
+
 /// 配置节类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ConfigSection {

@@ -358,7 +358,9 @@ pub fn setup_tauri_integration<R: Runtime>(app_handle: AppHandle<R>) {
         match &notification {
             crate::mux::MuxNotification::PaneOutput { pane_id, data } => {
                 let output_text = String::from_utf8_lossy(data);
-                if let Err(e) = OutputAnalyzer::global().analyze_output(pane_id.as_u32(), &output_text) {
+                if let Err(e) =
+                    OutputAnalyzer::global().analyze_output(pane_id.as_u32(), &output_text)
+                {
                     debug!("输出分析失败: {}", e);
                 }
             }

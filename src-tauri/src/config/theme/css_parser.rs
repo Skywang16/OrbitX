@@ -4,14 +4,13 @@
  * 用于解析 CSS 主题文件并提取颜色变量，转换为 TOML 主题配置
  */
 
-use crate::config::types::{AnsiColors, ColorScheme, SyntaxHighlight, Theme, ThemeType, UIColors};
+use super::types::{AnsiColors, ColorScheme, SyntaxHighlight, Theme, ThemeType, UIColors};
 use crate::utils::error::AppResult;
 use anyhow::{anyhow, Context};
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-
 
 /// CSS 变量解析器
 pub struct CssThemeParser {

@@ -3,22 +3,12 @@
  */
 
 use crate::ai::{AIContext, SystemInfo};
+use crate::storage::sqlite::CommandHistoryEntry;
 use crate::utils::error::AppResult;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-/// 命令历史条目
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommandHistoryEntry {
-    pub command: String,
-    pub timestamp: u64,
-    pub exit_code: Option<i32>,
-    pub duration: Option<u64>,
-    pub working_directory: Option<String>,
-}
 
 /// 上下文统计信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,35 +30,7 @@ pub struct ContextManager {
     session_start_time: u64,
 }
 
-impl CommandHistoryEntry {
-    pub fn new(command: String) -> Self {
-        Self {
-            command,
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            exit_code: None,
-            duration: None,
-            working_directory: None,
-        }
-    }
-
-    pub fn with_exit_code(mut self, exit_code: i32) -> Self {
-        self.exit_code = Some(exit_code);
-        self
-    }
-
-    pub fn with_duration(mut self, duration: Duration) -> Self {
-        self.duration = Some(duration.as_millis() as u64);
-        self
-    }
-
-    pub fn with_working_directory(mut self, working_directory: String) -> Self {
-        self.working_directory = Some(working_directory);
-        self
-    }
-}
+// CommandHistoryEntry的实现方法现在在storage::sqlite模块中
 
 impl ContextManager {
     pub fn new(max_history_size: usize) -> Self {
@@ -98,12 +60,22 @@ impl ContextManager {
         // 更新命令频率统计
         *self.command_frequency.entry(command.clone()).or_insert(0) += 1;
 
-        let entry = CommandHistoryEntry::new(command).with_working_directory(
-            self.current_context
+        // 创建适配的CommandHistoryEntry
+        let entry = CommandHistoryEntry {
+            id: None,
+            command,
+            working_directory: self
+                .current_context
                 .working_directory
                 .clone()
                 .unwrap_or_default(),
-        );
+            exit_code: None,
+            output: None,
+            duration_ms: None,
+            executed_at: chrono::Utc::now(),
+            session_id: None,
+            tags: None,
+        };
 
         self.command_history.push_back(entry);
         self.update_command_history();
@@ -333,7 +305,7 @@ impl ContextManager {
 
         // 移除旧的命令历史
         self.command_history
-            .retain(|entry| entry.timestamp > cutoff_time);
+            .retain(|entry| entry.executed_at.timestamp() as u64 > cutoff_time);
 
         // 重新计算命令频率
         self.command_frequency.clear();

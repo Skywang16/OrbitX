@@ -7,7 +7,7 @@
 
 use crate::config::types::{ShortcutAction, ShortcutBinding, ShortcutsConfig};
 use crate::utils::error::AppResult;
-use anyhow::{bail, Context};
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 

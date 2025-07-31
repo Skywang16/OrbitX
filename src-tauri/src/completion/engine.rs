@@ -4,8 +4,8 @@
 
 use crate::completion::cache::CompletionCache;
 use crate::completion::providers::{
-    CompletionProvider, ContextAwareProviderWrapper, FilesystemProvider, GitCompletionProvider, HistoryProvider,
-    NpmCompletionProvider, SystemCommandsProvider,
+    CompletionProvider, ContextAwareProviderWrapper, FilesystemProvider, GitCompletionProvider,
+    HistoryProvider, NpmCompletionProvider, SystemCommandsProvider,
 };
 use crate::completion::smart_provider::SmartCompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionResponse};

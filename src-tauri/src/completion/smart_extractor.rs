@@ -25,19 +25,19 @@ pub struct SmartExtractor {
 pub struct ExtractionRule {
     /// 规则名称
     pub name: String,
-    
+
     /// 适用的命令模式
     pub command_patterns: Vec<String>,
-    
+
     /// 输出特征（用于识别命令输出类型）
     pub output_signatures: Vec<String>,
-    
+
     /// 实体提取模式
     pub entity_patterns: Vec<EntityPattern>,
-    
+
     /// 规则优先级
     pub priority: i32,
-    
+
     /// 是否启用
     pub enabled: bool,
 }
@@ -47,16 +47,16 @@ pub struct ExtractionRule {
 pub struct EntityPattern {
     /// 实体类型
     pub entity_type: String,
-    
+
     /// 正则表达式模式
     pub pattern: String,
-    
+
     /// 捕获组索引（默认为1）
     pub capture_group: Option<usize>,
-    
+
     /// 最小置信度
     pub min_confidence: f64,
-    
+
     /// 上下文要求（可选）
     pub context_requirements: Option<Vec<String>>,
 }
@@ -66,13 +66,13 @@ pub struct EntityPattern {
 pub struct ExtractionResult {
     /// 实体类型
     pub entity_type: String,
-    
+
     /// 实体值
     pub value: String,
-    
+
     /// 置信度
     pub confidence: f64,
-    
+
     /// 上下文信息
     pub context: HashMap<String, String>,
 }
@@ -84,19 +84,19 @@ impl SmartExtractor {
             rules: Vec::new(),
             patterns: HashMap::new(),
         };
-        
+
         // 加载默认规则
         extractor.load_default_rules();
         extractor.compile_patterns();
-        
+
         extractor
     }
-    
+
     /// 获取全局实例
     pub fn global() -> &'static SmartExtractor {
-        GLOBAL_SMART_EXTRACTOR.get_or_init(|| SmartExtractor::new())
+        GLOBAL_SMART_EXTRACTOR.get_or_init(SmartExtractor::new)
     }
-    
+
     /// 加载默认规则
     fn load_default_rules(&mut self) {
         // 进程相关规则
@@ -126,7 +126,7 @@ impl SmartExtractor {
             priority: 10,
             enabled: true,
         });
-        
+
         // 网络相关规则
         self.rules.push(ExtractionRule {
             name: "network_info".to_string(),
@@ -166,7 +166,7 @@ impl SmartExtractor {
             priority: 10,
             enabled: true,
         });
-        
+
         // 文件系统相关规则
         self.rules.push(ExtractionRule {
             name: "filesystem".to_string(),
@@ -185,7 +185,8 @@ impl SmartExtractor {
                 },
                 EntityPattern {
                     entity_type: "directory_path".to_string(),
-                    pattern: r"^d[rwx-]{9}\s+\d+\s+\S+\s+\S+\s+\d+\s+\S+\s+\d+\s+[\d:]+\s+(.+)$".to_string(),
+                    pattern: r"^d[rwx-]{9}\s+\d+\s+\S+\s+\S+\s+\d+\s+\S+\s+\d+\s+[\d:]+\s+(.+)$"
+                        .to_string(),
                     capture_group: Some(1),
                     min_confidence: 0.7,
                     context_requirements: None,
@@ -194,7 +195,7 @@ impl SmartExtractor {
             priority: 5,
             enabled: true,
         });
-        
+
         // Git 相关规则
         self.rules.push(ExtractionRule {
             name: "git_info".to_string(),
@@ -222,26 +223,24 @@ impl SmartExtractor {
             priority: 8,
             enabled: true,
         });
-        
+
         // 通用数字模式（作为后备）
         self.rules.push(ExtractionRule {
             name: "generic_numbers".to_string(),
             command_patterns: vec![".*".to_string()],
             output_signatures: vec![],
-            entity_patterns: vec![
-                EntityPattern {
-                    entity_type: "number".to_string(),
-                    pattern: r"\b(\d+)\b".to_string(),
-                    capture_group: Some(1),
-                    min_confidence: 0.3,
-                    context_requirements: None,
-                },
-            ],
+            entity_patterns: vec![EntityPattern {
+                entity_type: "number".to_string(),
+                pattern: r"\b(\d+)\b".to_string(),
+                capture_group: Some(1),
+                min_confidence: 0.3,
+                context_requirements: None,
+            }],
             priority: 1,
             enabled: true,
         });
     }
-    
+
     /// 编译正则表达式模式
     fn compile_patterns(&mut self) {
         for rule in &self.rules {
@@ -251,7 +250,7 @@ impl SmartExtractor {
                     self.patterns.insert(key, regex);
                 }
             }
-            
+
             // 编译命令模式
             for (i, cmd_pattern) in rule.command_patterns.iter().enumerate() {
                 if let Ok(regex) = Regex::new(cmd_pattern) {
@@ -259,7 +258,7 @@ impl SmartExtractor {
                     self.patterns.insert(key, regex);
                 }
             }
-            
+
             // 编译输出特征模式
             for (i, sig_pattern) in rule.output_signatures.iter().enumerate() {
                 if let Ok(regex) = Regex::new(sig_pattern) {
@@ -269,14 +268,18 @@ impl SmartExtractor {
             }
         }
     }
-    
+
     /// 提取实体
-    pub fn extract_entities(&self, command: &str, output: &str) -> AppResult<Vec<ExtractionResult>> {
+    pub fn extract_entities(
+        &self,
+        command: &str,
+        output: &str,
+    ) -> AppResult<Vec<ExtractionResult>> {
         let mut results = Vec::new();
-        
+
         // 找到适用的规则
         let applicable_rules = self.find_applicable_rules(command, output);
-        
+
         for rule in applicable_rules {
             for pattern in &rule.entity_patterns {
                 if let Some(entities) = self.extract_with_pattern(pattern, output, rule)? {
@@ -284,52 +287,64 @@ impl SmartExtractor {
                 }
             }
         }
-        
+
         // 按置信度排序并去重
         results.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
         self.deduplicate_results(results)
     }
-    
+
     /// 查找适用的规则
     fn find_applicable_rules(&self, command: &str, output: &str) -> Vec<&ExtractionRule> {
         let mut applicable = Vec::new();
-        
+
         for rule in &self.rules {
             if !rule.enabled {
                 continue;
             }
-            
+
             // 检查命令模式
             let command_matches = rule.command_patterns.iter().any(|pattern| {
-                if let Some(regex) = self.patterns.get(&format!("{}_cmd_{}", rule.name, 
-                    rule.command_patterns.iter().position(|p| p == pattern).unwrap())) {
+                if let Some(regex) = self.patterns.get(&format!(
+                    "{}_cmd_{}",
+                    rule.name,
+                    rule.command_patterns
+                        .iter()
+                        .position(|p| p == pattern)
+                        .unwrap()
+                )) {
                     regex.is_match(command)
                 } else {
                     false
                 }
             });
-            
+
             // 检查输出特征
-            let output_matches = rule.output_signatures.is_empty() || 
-                rule.output_signatures.iter().any(|signature| {
-                    if let Some(regex) = self.patterns.get(&format!("{}_sig_{}", rule.name,
-                        rule.output_signatures.iter().position(|s| s == signature).unwrap())) {
+            let output_matches = rule.output_signatures.is_empty()
+                || rule.output_signatures.iter().any(|signature| {
+                    if let Some(regex) = self.patterns.get(&format!(
+                        "{}_sig_{}",
+                        rule.name,
+                        rule.output_signatures
+                            .iter()
+                            .position(|s| s == signature)
+                            .unwrap()
+                    )) {
                         regex.is_match(output)
                     } else {
                         false
                     }
                 });
-            
+
             if command_matches && output_matches {
                 applicable.push(rule);
             }
         }
-        
+
         // 按优先级排序
         applicable.sort_by_key(|rule| std::cmp::Reverse(rule.priority));
         applicable
     }
-    
+
     /// 使用模式提取实体
     fn extract_with_pattern(
         &self,
@@ -338,25 +353,27 @@ impl SmartExtractor {
         rule: &ExtractionRule,
     ) -> AppResult<Option<Vec<ExtractionResult>>> {
         let pattern_key = format!("{}_{}", rule.name, pattern.entity_type);
-        let regex = self.patterns.get(&pattern_key)
+        let regex = self
+            .patterns
+            .get(&pattern_key)
             .ok_or_else(|| anyhow!("未找到编译的正则表达式: {}", pattern_key))?;
-        
+
         let mut results = Vec::new();
         let capture_group = pattern.capture_group.unwrap_or(1);
-        
+
         for captures in regex.captures_iter(output) {
             if let Some(matched) = captures.get(capture_group) {
                 let value = matched.as_str().to_string();
-                
+
                 // 检查上下文要求
                 if let Some(requirements) = &pattern.context_requirements {
                     if !self.check_context_requirements(requirements, output, matched.start()) {
                         continue;
                     }
                 }
-                
+
                 let confidence = self.calculate_confidence(pattern, &value, output);
-                
+
                 if confidence >= pattern.min_confidence {
                     results.push(ExtractionResult {
                         entity_type: pattern.entity_type.clone(),
@@ -367,23 +384,38 @@ impl SmartExtractor {
                 }
             }
         }
-        
-        Ok(if results.is_empty() { None } else { Some(results) })
+
+        Ok(if results.is_empty() {
+            None
+        } else {
+            Some(results)
+        })
     }
-    
+
     /// 检查上下文要求
-    fn check_context_requirements(&self, requirements: &[String], output: &str, position: usize) -> bool {
-        let line_start = output[..position].rfind('\n').map(|pos| pos + 1).unwrap_or(0);
-        let line_end = output[position..].find('\n').map(|pos| position + pos).unwrap_or(output.len());
+    fn check_context_requirements(
+        &self,
+        requirements: &[String],
+        output: &str,
+        position: usize,
+    ) -> bool {
+        let line_start = output[..position]
+            .rfind('\n')
+            .map(|pos| pos + 1)
+            .unwrap_or(0);
+        let line_end = output[position..]
+            .find('\n')
+            .map(|pos| position + pos)
+            .unwrap_or(output.len());
         let line = &output[line_start..line_end];
-        
+
         requirements.iter().any(|req| line.contains(req))
     }
-    
+
     /// 计算置信度
     fn calculate_confidence(&self, pattern: &EntityPattern, value: &str, _output: &str) -> f64 {
         let mut confidence = pattern.min_confidence;
-        
+
         // 根据实体类型调整置信度
         match pattern.entity_type.as_str() {
             "pid" => {
@@ -403,42 +435,43 @@ impl SmartExtractor {
             "ip_address" => {
                 // 简单的IP地址验证
                 let parts: Vec<&str> = value.split('.').collect();
-                if parts.len() == 4 && parts.iter().all(|part| {
-                    part.parse::<u8>().is_ok()
-                }) {
+                if parts.len() == 4 && parts.iter().all(|part| part.parse::<u8>().is_ok()) {
                     confidence += 0.1;
                 }
             }
             _ => {}
         }
-        
+
         confidence.min(1.0)
     }
-    
+
     /// 去重结果
-    fn deduplicate_results(&self, mut results: Vec<ExtractionResult>) -> AppResult<Vec<ExtractionResult>> {
+    fn deduplicate_results(
+        &self,
+        mut results: Vec<ExtractionResult>,
+    ) -> AppResult<Vec<ExtractionResult>> {
         let mut seen = std::collections::HashSet::new();
         results.retain(|result| {
             let key = format!("{}:{}", result.entity_type, result.value);
             seen.insert(key)
         });
-        
+
         Ok(results)
     }
-    
+
     /// 添加自定义规则
     pub fn add_rule(&mut self, rule: ExtractionRule) -> AppResult<()> {
         self.rules.push(rule);
         self.compile_patterns();
         Ok(())
     }
-    
+
     /// 从配置文件加载规则
     pub fn load_rules_from_config(&mut self, config_path: &str) -> AppResult<()> {
         use std::fs;
 
-        let config_content = fs::read_to_string(config_path)
-            .map_err(|e| anyhow!("读取配置文件失败: {}", e))?;
+        let config_content =
+            fs::read_to_string(config_path).map_err(|e| anyhow!("读取配置文件失败: {}", e))?;
 
         let config: serde_json::Value = serde_json::from_str(&config_content)
             .map_err(|e| anyhow!("解析配置文件失败: {}", e))?;
@@ -468,11 +501,10 @@ impl SmartExtractor {
             }
         });
 
-        let config_content = serde_json::to_string_pretty(&config)
-            .map_err(|e| anyhow!("序列化配置失败: {}", e))?;
+        let config_content =
+            serde_json::to_string_pretty(&config).map_err(|e| anyhow!("序列化配置失败: {}", e))?;
 
-        fs::write(config_path, config_content)
-            .map_err(|e| anyhow!("写入配置文件失败: {}", e))?;
+        fs::write(config_path, config_content).map_err(|e| anyhow!("写入配置文件失败: {}", e))?;
 
         Ok(())
     }
@@ -501,29 +533,37 @@ impl SmartExtractor {
     pub fn get_stats(&self) -> HashMap<String, serde_json::Value> {
         let mut stats = HashMap::new();
 
-        stats.insert("total_rules".to_string(), serde_json::Value::Number(
-            serde_json::Number::from(self.rules.len())
-        ));
+        stats.insert(
+            "total_rules".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(self.rules.len())),
+        );
 
-        stats.insert("enabled_rules".to_string(), serde_json::Value::Number(
-            serde_json::Number::from(self.rules.iter().filter(|r| r.enabled).count())
-        ));
+        stats.insert(
+            "enabled_rules".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(
+                self.rules.iter().filter(|r| r.enabled).count(),
+            )),
+        );
 
-        stats.insert("total_patterns".to_string(), serde_json::Value::Number(
-            serde_json::Number::from(self.patterns.len())
-        ));
+        stats.insert(
+            "total_patterns".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(self.patterns.len())),
+        );
 
-        let entity_types: std::collections::HashSet<String> = self.rules
+        let entity_types: std::collections::HashSet<String> = self
+            .rules
             .iter()
             .flat_map(|r| r.entity_patterns.iter().map(|p| p.entity_type.clone()))
             .collect();
 
-        stats.insert("supported_entity_types".to_string(),
+        stats.insert(
+            "supported_entity_types".to_string(),
             serde_json::Value::Array(
-                entity_types.into_iter()
+                entity_types
+                    .into_iter()
                     .map(serde_json::Value::String)
-                    .collect()
-            )
+                    .collect(),
+            ),
         );
 
         stats

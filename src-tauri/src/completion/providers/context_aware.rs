@@ -34,8 +34,6 @@ pub struct ContextAwareProvider {
     max_history: usize,
 }
 
-
-
 impl ContextAwareProvider {
     /// 创建新的上下文感知提供者
     pub fn new() -> Self {
@@ -44,7 +42,7 @@ impl ContextAwareProvider {
             max_history: 100,
         }
     }
-    
+
     /// 记录命令输出
     pub fn record_command_output(
         &self,
@@ -56,20 +54,23 @@ impl ContextAwareProvider {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        
+
         // 使用智能提取器提取实体
         use crate::completion::smart_extractor::SmartExtractor;
         let extractor = SmartExtractor::global();
-        let extraction_results = extractor.extract_entities(&command, &output).unwrap_or_default();
+        let extraction_results = extractor
+            .extract_entities(&command, &output)
+            .unwrap_or_default();
 
         // 转换为旧格式
         let mut extracted_entities = HashMap::new();
         for result in extraction_results {
-            extracted_entities.entry(result.entity_type)
+            extracted_entities
+                .entry(result.entity_type)
                 .or_insert_with(Vec::new)
                 .push(result.value);
         }
-        
+
         let record = CommandOutputRecord {
             command: command.clone(),
             output,
@@ -77,35 +78,38 @@ impl ContextAwareProvider {
             working_directory,
             extracted_entities,
         };
-        
-        let mut history = self.command_history
+
+        let mut history = self
+            .command_history
             .write()
             .map_err(|_| anyhow!("获取命令历史写锁失败"))?;
-        
+
         history.push(record);
-        
+
         // 限制历史记录数量
         if history.len() > self.max_history {
             history.remove(0);
         }
-        
+
         Ok(())
     }
-    
 
-    
     /// 获取相关的补全建议
-    fn get_contextual_completions(&self, context: &CompletionContext) -> AppResult<Vec<CompletionItem>> {
+    fn get_contextual_completions(
+        &self,
+        context: &CompletionContext,
+    ) -> AppResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
-        
+
         // 分析当前输入，确定需要什么类型的补全
         let current_command = context.current_word.clone();
-        
+
         // 获取历史记录
-        let history = self.command_history
+        let history = self
+            .command_history
             .read()
             .map_err(|_| anyhow!("获取命令历史读锁失败"))?;
-        
+
         // 根据当前命令类型提供相应的补全
         match current_command.as_str() {
             "kill" | "killall" => {
@@ -125,43 +129,51 @@ impl ContextAwareProvider {
                 items.extend(self.get_general_completions(&history, &current_command)?);
             }
         }
-        
+
         Ok(items)
     }
-    
+
     /// 获取 PID 补全建议
-    fn get_pid_completions(&self, history: &[CommandOutputRecord]) -> AppResult<Vec<CompletionItem>> {
+    fn get_pid_completions(
+        &self,
+        history: &[CommandOutputRecord],
+    ) -> AppResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
-        
+
         // 查找最近的进程相关命令输出
         for record in history.iter().rev().take(10) {
             if let Some(pids) = record.extracted_entities.get("pid") {
                 for pid in pids {
-                    let description = if let Some(process_names) = record.extracted_entities.get("process_name") {
-                        process_names.get(0).map(|name| format!("进程: {}", name))
+                    let description = if let Some(process_names) =
+                        record.extracted_entities.get("process_name")
+                    {
+                        process_names.first().map(|name| format!("进程: {}", name))
                     } else {
                         Some("进程ID".to_string())
                     };
-                    
+
                     let item = CompletionItem::new(pid.clone(), CompletionType::Value)
                         .with_score(80.0) // 高分数，因为是上下文相关的
                         .with_description(description.unwrap_or_default())
                         .with_source("context".to_string())
                         .with_metadata("type".to_string(), "pid".to_string())
                         .with_metadata("from_command".to_string(), record.command.clone());
-                    
+
                     items.push(item);
                 }
             }
         }
-        
+
         Ok(items)
     }
-    
+
     /// 获取网络相关补全建议
-    fn get_network_completions(&self, history: &[CommandOutputRecord]) -> AppResult<Vec<CompletionItem>> {
+    fn get_network_completions(
+        &self,
+        history: &[CommandOutputRecord],
+    ) -> AppResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
-        
+
         for record in history.iter().rev().take(10) {
             // 添加端口补全
             if let Some(ports) = record.extracted_entities.get("port") {
@@ -171,11 +183,11 @@ impl ContextAwareProvider {
                         .with_description("端口号".to_string())
                         .with_source("context".to_string())
                         .with_metadata("type".to_string(), "port".to_string());
-                    
+
                     items.push(item);
                 }
             }
-            
+
             // 添加IP地址补全
             if let Some(ips) = record.extracted_entities.get("ip") {
                 for ip in ips {
@@ -184,19 +196,22 @@ impl ContextAwareProvider {
                         .with_description("IP地址".to_string())
                         .with_source("context".to_string())
                         .with_metadata("type".to_string(), "ip".to_string());
-                    
+
                     items.push(item);
                 }
             }
         }
-        
+
         Ok(items)
     }
-    
+
     /// 获取路径相关补全建议
-    fn get_path_completions(&self, history: &[CommandOutputRecord]) -> AppResult<Vec<CompletionItem>> {
+    fn get_path_completions(
+        &self,
+        history: &[CommandOutputRecord],
+    ) -> AppResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
-        
+
         for record in history.iter().rev().take(5) {
             if let Some(paths) = record.extracted_entities.get("path") {
                 for path in paths {
@@ -205,21 +220,57 @@ impl ContextAwareProvider {
                         .with_description("文件路径".to_string())
                         .with_source("context".to_string())
                         .with_metadata("type".to_string(), "path".to_string());
-                    
+
                     items.push(item);
                 }
             }
         }
-        
+
         Ok(items)
     }
-    
-    /// 获取通用补全建议
-    fn get_general_completions(&self, _history: &[CommandOutputRecord], _command: &str) -> AppResult<Vec<CompletionItem>> {
-        let items = Vec::new();
 
-        // 这里可以实现更复杂的逻辑，根据命令类型和历史记录提供补全
-        // 暂时返回空列表
+    /// 获取通用补全建议
+    fn get_general_completions(
+        &self,
+        history: &[CommandOutputRecord],
+        command: &str,
+    ) -> AppResult<Vec<CompletionItem>> {
+        let mut items = Vec::new();
+
+        // 基于命令类型提供基础补全
+        match command {
+            "cd" => {
+                // 为cd命令提供目录补全
+                if let Some(record) = history.last() {
+                    if let Some(dirs) = record.extracted_entities.get("directory") {
+                        for dir in dirs {
+                            let item = CompletionItem::new(dir.clone(), CompletionType::Directory)
+                                .with_score(60.0)
+                                .with_description("目录".to_string())
+                                .with_source("context".to_string());
+                            items.push(item);
+                        }
+                    }
+                }
+            }
+            "cat" | "less" | "more" | "head" | "tail" => {
+                // 为文件查看命令提供文件补全
+                if let Some(record) = history.last() {
+                    if let Some(files) = record.extracted_entities.get("file") {
+                        for file in files {
+                            let item = CompletionItem::new(file.clone(), CompletionType::File)
+                                .with_score(60.0)
+                                .with_description("文件".to_string())
+                                .with_source("context".to_string());
+                            items.push(item);
+                        }
+                    }
+                }
+            }
+            _ => {
+                // 其他命令暂不提供特殊补全
+            }
+        }
 
         Ok(items)
     }
@@ -230,20 +281,23 @@ impl CompletionProvider for ContextAwareProvider {
     fn name(&self) -> &'static str {
         "context_aware"
     }
-    
+
     fn should_provide(&self, context: &CompletionContext) -> bool {
         // 总是尝试提供上下文感知的补全
         !context.current_word.is_empty()
     }
-    
-    async fn provide_completions(&self, context: &CompletionContext) -> AppResult<Vec<CompletionItem>> {
+
+    async fn provide_completions(
+        &self,
+        context: &CompletionContext,
+    ) -> AppResult<Vec<CompletionItem>> {
         self.get_contextual_completions(context)
     }
-    
+
     fn priority(&self) -> i32 {
         20 // 最高优先级，因为是上下文相关的
     }
-    
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -281,7 +335,10 @@ impl CompletionProvider for ContextAwareProviderWrapper {
         }
     }
 
-    async fn provide_completions(&self, context: &CompletionContext) -> AppResult<Vec<CompletionItem>> {
+    async fn provide_completions(
+        &self,
+        context: &CompletionContext,
+    ) -> AppResult<Vec<CompletionItem>> {
         // 克隆上下文以避免跨 await 边界的借用问题
         let context_clone = context.clone();
 
@@ -306,5 +363,3 @@ impl CompletionProvider for ContextAwareProviderWrapper {
         self
     }
 }
-
-

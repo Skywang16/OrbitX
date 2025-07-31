@@ -537,7 +537,7 @@ impl CommandExecutionContext {
 
     /// 检查命令是否成功执行
     pub fn is_successful(&self) -> bool {
-        self.exit_code.map_or(false, |code| code == 0)
+        self.exit_code == Some(0)
     }
 
     /// 获取相关的实体
@@ -581,7 +581,9 @@ impl CommandOutput {
 
     /// 获取所有输出文本
     pub fn get_all_output(&self) -> String {
-        format!("{}\n{}", self.stdout, self.stderr).trim().to_string()
+        format!("{}\n{}", self.stdout, self.stderr)
+            .trim()
+            .to_string()
     }
 }
 
@@ -693,11 +695,7 @@ impl ContextSession {
 
     /// 获取最近的命令
     pub fn get_recent_commands(&self, count: usize) -> Vec<&CommandExecutionContext> {
-        self.command_history
-            .iter()
-            .rev()
-            .take(count)
-            .collect()
+        self.command_history.iter().rev().take(count).collect()
     }
 
     /// 根据命令名称搜索历史
@@ -709,7 +707,11 @@ impl ContextSession {
     }
 
     /// 获取相关的实体
-    pub fn get_related_entities(&self, entity_type: &EntityType, limit: usize) -> Vec<&OutputEntity> {
+    pub fn get_related_entities(
+        &self,
+        entity_type: &EntityType,
+        limit: usize,
+    ) -> Vec<&OutputEntity> {
         let mut entities = Vec::new();
 
         for context in self.command_history.iter().rev() {

@@ -42,12 +42,12 @@ impl AIManagerState {
     /// - 按依赖顺序初始化各组件
     /// - 验证配置和依赖关系
     /// - 提供详细的错误信息
-    pub fn new(app_config_manager: Arc<crate::config::ConfigManager>) -> Result<Self, String> {
+    pub fn new(_app_config_manager: Arc<()>) -> Result<Self, String> {
         info!("开始初始化AI管理器状态");
 
         // 1. 初始化配置管理器
         debug!("初始化配置管理器");
-        let config_manager = Arc::new(Mutex::new(AIConfigManager::new(app_config_manager)));
+        let config_manager = Arc::new(Mutex::new(AIConfigManager::new()));
 
         // 2. 初始化适配器管理器
         debug!("初始化适配器管理器");

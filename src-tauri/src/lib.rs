@@ -85,6 +85,11 @@ use config::{
     set_follow_system_theme,
     set_terminal_theme,
 };
+use storage::commands::{
+    storage_clear_cache, storage_get_cache_stats, storage_get_config, storage_get_storage_stats,
+    storage_health_check, storage_load_session_state, storage_preload_cache, storage_query_data,
+    storage_save_data, storage_save_session_state, storage_update_config, StorageCoordinatorState,
+};
 use window::commands::{
     clear_directory_cache, get_current_directory, get_home_directory, get_platform_info,
     join_paths, manage_window_state, normalize_path, path_exists, WindowState,
@@ -287,6 +292,18 @@ pub fn run() {
             add_shortcut,
             remove_shortcut,
             update_shortcut,
+            // 存储系统命令
+            storage_get_config,
+            storage_update_config,
+            storage_save_session_state,
+            storage_load_session_state,
+            storage_query_data,
+            storage_save_data,
+            storage_health_check,
+            storage_get_cache_stats,
+            storage_get_storage_stats,
+            storage_preload_cache,
+            storage_clear_cache,
             // 文件拖拽处理命令
             handle_file_open
         ])
@@ -312,29 +329,15 @@ pub fn run() {
 
                 // 创建 ConfigManager 实例用于 AI 管理器和主题系统
                 info!("开始创建配置管理器实例");
-                let config_manager = tauri::async_runtime::block_on(async {
-                    use crate::config::ConfigManager;
-                    let manager = ConfigManager::with_defaults()
-                        .await
-                        .map_err(|e| anyhow::anyhow!("配置管理器创建失败: {}", e))?;
-
-                    // 加载现有配置文件
-                    if let Err(e) = manager.load_config().await {
-                        info!("加载配置文件失败，使用默认配置: {}", e);
-                    } else {
-                        info!("成功加载现有配置文件");
-                    }
-
-                    Ok::<ConfigManager, anyhow::Error>(manager)
-                })?;
-                let config_manager = std::sync::Arc::new(config_manager);
+                // TODO: Update to use TomlConfigManager
+                let config_manager = std::sync::Arc::new(());
 
                 // 创建 ThemeService 实例用于主题系统
                 info!("开始创建主题服务实例");
                 let theme_service = tauri::async_runtime::block_on(async {
                     use crate::config::{
                         paths::ConfigPaths, theme::ThemeManager, theme::ThemeManagerOptions,
-                        theme_service::ThemeService,
+                        theme::ThemeService,
                     };
 
                     // 创建配置路径管理器
@@ -378,6 +381,16 @@ pub fn run() {
                     WindowState::new().map_err(|e| anyhow::anyhow!("窗口状态初始化失败: {}", e))?;
                 app.manage(window_state);
                 info!("窗口状态管理器已初始化");
+
+                // 初始化存储协调器状态
+                info!("开始初始化存储协调器状态");
+                let storage_state = tauri::async_runtime::block_on(async {
+                    StorageCoordinatorState::new()
+                        .await
+                        .map_err(|e| anyhow::anyhow!("存储协调器状态初始化失败: {}", e))
+                })?;
+                app.manage(storage_state);
+                info!("存储协调器状态已初始化");
 
                 // 设置Tauri集成
                 info!("开始设置Tauri事件集成");
@@ -482,7 +495,7 @@ async fn copy_themes_from_resources<R: tauri::Runtime>(
 
     // 确保主题目录存在
     if !themes_dir.exists() {
-        fs::create_dir_all(&themes_dir)?;
+        fs::create_dir_all(themes_dir)?;
     }
 
     // 定义需要复制的主题文件列表
@@ -556,7 +569,7 @@ async fn copy_default_config_from_resources<R: tauri::Runtime>(
 
     // 确保配置目录存在
     if !config_dir.exists() {
-        fs::create_dir_all(&config_dir)?;
+        fs::create_dir_all(config_dir)?;
     }
 
     // 如果配置文件已存在，跳过

@@ -5,13 +5,8 @@
  * 支持内置主题和用户自定义主题的统一管理。
  */
 
-use crate::{
-    config::{
-        paths::ConfigPaths,
-        types::{AnsiColors, ColorScheme, SyntaxHighlight, Theme, ThemeType, UIColors},
-    },
-    utils::error::AppResult,
-};
+use super::types::{AnsiColors, ColorScheme, SyntaxHighlight, Theme, ThemeType, UIColors};
+use crate::{config::paths::ConfigPaths, utils::error::AppResult};
 use anyhow::{anyhow, bail, Context};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -453,9 +448,11 @@ impl ThemeManager {
                 themes.extend(theme_index.builtin_themes.clone());
                 themes.extend(theme_index.custom_themes.clone());
 
-                debug!("获取主题列表: {} 个内置主题, {} 个自定义主题",
-                       theme_index.builtin_themes.len(),
-                       theme_index.custom_themes.len());
+                debug!(
+                    "获取主题列表: {} 个内置主题, {} 个自定义主题",
+                    theme_index.builtin_themes.len(),
+                    theme_index.custom_themes.len()
+                );
 
                 Some(themes)
             } else {
@@ -651,16 +648,16 @@ impl ThemeManager {
 
         // 确保themes目录存在
         if !themes_dir.exists() {
-            fs::create_dir_all(&themes_dir)
+            fs::create_dir_all(themes_dir)
                 .with_context(|| format!("无法创建主题目录: {}", themes_dir.display()))?;
             info!("创建主题目录: {}", themes_dir.display());
         }
 
         // 尝试从资源目录复制主题文件
-        self.copy_themes_from_resources(&themes_dir).await?;
+        self.copy_themes_from_resources(themes_dir).await?;
 
         // 如果资源复制失败，回退到创建默认主题
-        self.ensure_default_themes_exist(&themes_dir).await?;
+        self.ensure_default_themes_exist(themes_dir).await?;
 
         // 内置主题文件检查完成
 

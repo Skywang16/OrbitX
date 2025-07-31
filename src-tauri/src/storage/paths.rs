@@ -5,7 +5,9 @@
  * 支持跨平台路径处理和路径验证
  */
 
-use crate::storage::error::{StorageError, StorageResult};
+use crate::storage::types::StorageStats;
+use crate::utils::error::AppResult;
+use anyhow::{anyhow, Context};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -30,7 +32,7 @@ pub struct StoragePaths {
 
 impl StoragePaths {
     /// 创建新的路径管理器
-    pub fn new(app_dir: PathBuf) -> StorageResult<Self> {
+    pub fn new(app_dir: PathBuf) -> AppResult<Self> {
         let config_dir = app_dir.join(super::CONFIG_DIR_NAME);
         let state_dir = app_dir.join(super::STATE_DIR_NAME);
         let data_dir = app_dir.join(super::DATA_DIR_NAME);
@@ -85,7 +87,7 @@ impl StoragePaths {
     }
 
     /// 确保所有目录存在
-    pub fn ensure_directories(&self) -> StorageResult<()> {
+    pub fn ensure_directories(&self) -> AppResult<()> {
         let directories = [
             &self.app_dir,
             &self.config_dir,
@@ -98,12 +100,8 @@ impl StoragePaths {
 
         for dir in &directories {
             if !dir.exists() {
-                fs::create_dir_all(dir).map_err(|e| {
-                    StorageError::filesystem_error(
-                        format!("创建目录失败: {}", e),
-                        Some(dir.to_path_buf()),
-                    )
-                })?;
+                fs::create_dir_all(dir)
+                    .with_context(|| format!("创建目录失败: {}", dir.display()))?;
                 // 目录创建成功
             }
         }
@@ -112,20 +110,18 @@ impl StoragePaths {
     }
 
     /// 验证路径的有效性
-    pub fn validate(&self) -> StorageResult<()> {
+    pub fn validate(&self) -> AppResult<()> {
         // 检查应用目录是否可访问
         if !self.app_dir.exists() {
-            return Err(StorageError::filesystem_error(
-                "应用目录不存在",
-                Some(self.app_dir.clone()),
-            ));
+            return Err(anyhow!("应用目录不存在: {}", self.app_dir.display()));
         }
 
         // 检查是否有写权限
         if let Err(e) = fs::metadata(&self.app_dir) {
-            return Err(StorageError::filesystem_error(
-                format!("无法访问应用目录: {}", e),
-                Some(self.app_dir.clone()),
+            return Err(anyhow!(
+                "无法访问应用目录: {} - {}",
+                self.app_dir.display(),
+                e
             ));
         }
 
@@ -133,21 +129,13 @@ impl StoragePaths {
     }
 
     /// 清理缓存目录
-    pub fn clean_cache(&self) -> StorageResult<()> {
+    pub fn clean_cache(&self) -> AppResult<()> {
         if self.cache_dir.exists() {
-            fs::remove_dir_all(&self.cache_dir).map_err(|e| {
-                StorageError::filesystem_error(
-                    format!("清理缓存目录失败: {}", e),
-                    Some(self.cache_dir.clone()),
-                )
-            })?;
+            fs::remove_dir_all(&self.cache_dir)
+                .with_context(|| format!("清理缓存目录失败: {}", self.cache_dir.display()))?;
 
-            fs::create_dir_all(&self.cache_dir).map_err(|e| {
-                StorageError::filesystem_error(
-                    format!("重新创建缓存目录失败: {}", e),
-                    Some(self.cache_dir.clone()),
-                )
-            })?;
+            fs::create_dir_all(&self.cache_dir)
+                .with_context(|| format!("重新创建缓存目录失败: {}", self.cache_dir.display()))?;
 
             // 缓存目录已清理
         }
@@ -155,7 +143,7 @@ impl StoragePaths {
     }
 
     /// 获取目录大小（字节）
-    pub fn get_directory_size(&self, dir: &Path) -> StorageResult<u64> {
+    pub fn get_directory_size(&self, dir: &Path) -> AppResult<u64> {
         if !dir.exists() {
             return Ok(0);
         }
@@ -177,18 +165,14 @@ impl StoragePaths {
             Ok(())
         }
 
-        visit_dir(dir, &mut total_size).map_err(|e| {
-            StorageError::filesystem_error(
-                format!("计算目录大小失败: {}", e),
-                Some(dir.to_path_buf()),
-            )
-        })?;
+        visit_dir(dir, &mut total_size)
+            .with_context(|| format!("计算目录大小失败: {}", dir.display()))?;
 
         Ok(total_size)
     }
 
     /// 获取存储统计信息
-    pub fn get_storage_stats(&self) -> StorageResult<StorageStats> {
+    pub fn get_storage_stats(&self) -> AppResult<StorageStats> {
         let config_size = self.get_directory_size(&self.config_dir)?;
         let state_size = self.get_directory_size(&self.state_dir)?;
         let data_size = self.get_directory_size(&self.data_dir)?;
@@ -258,10 +242,10 @@ impl StoragePathsBuilder {
         self
     }
 
-    pub fn build(self) -> StorageResult<StoragePaths> {
+    pub fn build(self) -> AppResult<StoragePaths> {
         let app_dir = self
             .app_dir
-            .ok_or_else(|| StorageError::Generic("应用目录未设置".to_string()))?;
+            .ok_or_else(|| anyhow!("应用目录未设置".to_string()))?;
 
         let config_dir = self
             .custom_config_dir
@@ -296,58 +280,5 @@ impl StoragePathsBuilder {
 impl Default for StoragePathsBuilder {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// 存储统计信息
-#[derive(Debug, Clone)]
-pub struct StorageStats {
-    pub total_size: u64,
-    pub config_size: u64,
-    pub state_size: u64,
-    pub data_size: u64,
-    pub cache_size: u64,
-    pub backups_size: u64,
-    pub logs_size: u64,
-}
-
-impl StorageStats {
-    /// 格式化大小为人类可读的字符串
-    pub fn format_size(bytes: u64) -> String {
-        const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
-        let mut size = bytes as f64;
-        let mut unit_index = 0;
-
-        while size >= 1024.0 && unit_index < UNITS.len() - 1 {
-            size /= 1024.0;
-            unit_index += 1;
-        }
-
-        format!("{:.2} {}", size, UNITS[unit_index])
-    }
-
-    /// 获取格式化的总大小
-    pub fn total_size_formatted(&self) -> String {
-        Self::format_size(self.total_size)
-    }
-
-    /// 获取格式化的配置大小
-    pub fn config_size_formatted(&self) -> String {
-        Self::format_size(self.config_size)
-    }
-
-    /// 获取格式化的状态大小
-    pub fn state_size_formatted(&self) -> String {
-        Self::format_size(self.state_size)
-    }
-
-    /// 获取格式化的数据大小
-    pub fn data_size_formatted(&self) -> String {
-        Self::format_size(self.data_size)
-    }
-
-    /// 获取格式化的缓存大小
-    pub fn cache_size_formatted(&self) -> String {
-        Self::format_size(self.cache_size)
     }
 }
