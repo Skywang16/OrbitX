@@ -11,8 +11,8 @@
 
   // 在父组件中统一加载设置（只在必要时加载）
   onMounted(async () => {
-    // 如果数据已经存在且不在加载中，就不重复加载
-    if (!aiSettingsStore.settings.models.length && !aiSettingsStore.isLoading) {
+    // 使用新的初始化检查机制
+    if (!aiSettingsStore.isInitialized && !aiSettingsStore.isLoading) {
       await aiSettingsStore.loadSettings()
     }
   })
@@ -32,9 +32,6 @@
       icon: 'toggles',
     },
   ]
-
-  // AI设置状态（暂时未使用，为后续功能预留）
-  // const aiSettings = computed(() => settingsStore.settings.ai)
 
   // 处理子设置切换
   const handleSubSectionChange = (sectionId: string) => {

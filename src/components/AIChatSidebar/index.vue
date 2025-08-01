@@ -1,9 +1,9 @@
 <script setup lang="ts">
-  import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+  import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
   import { useAIChatStore } from './store'
   import { useAISettingsStore } from '@/components/settings/components/AI'
   import ChatHeader from './components/ChatHeader.vue'
-  import SessionList from './components/SessionList.vue'
+
   import MessageList from './components/MessageList.vue'
   import ChatInput from './components/ChatInput.vue'
   import ResizeHandle from './components/ResizeHandle.vue'
@@ -14,12 +14,10 @@
 
   // 本地状态
   const messageInput = ref('')
-  const showSessionList = ref(false)
 
   // 拖拽调整功能状态
   const isDragging = ref(false)
   const isHovering = ref(false)
-  const isNearExit = ref(false)
 
   // 计算属性
   const canSend = computed(() => {
@@ -40,22 +38,24 @@
     }
   }
 
-  const toggleSessionList = () => {
-    showSessionList.value = !showSessionList.value
-  }
-
   const selectSession = (sessionId: string) => {
     aiChatStore.loadSession(sessionId)
-    showSessionList.value = false
   }
 
   const deleteSession = (sessionId: string) => {
     aiChatStore.deleteSession(sessionId)
   }
 
+  const refreshSessions = async () => {
+    try {
+      await aiChatStore.refreshSessions()
+    } catch (error) {
+      console.error('刷新会话列表失败:', error)
+    }
+  }
+
   const createNewSession = () => {
     aiChatStore.createNewSession()
-    showSessionList.value = false
   }
 
   // 拖拽调整功能
@@ -68,13 +68,6 @@
       const deltaX = startX - e.clientX
       const newWidth = Math.max(100, Math.min(800, startWidth + deltaX))
 
-      // 检查是否接近退出区域
-      if (newWidth <= 120) {
-        isNearExit.value = true
-      } else {
-        isNearExit.value = false
-      }
-
       aiChatStore.setSidebarWidth(newWidth)
     }
 
@@ -86,7 +79,6 @@
         aiChatStore.hideSidebar()
       }
 
-      isNearExit.value = false
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
@@ -151,7 +143,10 @@
   watch(
     () => aiChatStore.messages,
     () => {
-      scrollToBottom()
+      // 使用 nextTick 确保 DOM 更新后再滚动
+      nextTick(() => {
+        scrollToBottom()
+      })
     },
     { deep: true }
   )
@@ -162,7 +157,22 @@
     isStreaming => {
       if (isStreaming) {
         // 流式开始时滚动到底部
-        scrollToBottom()
+        nextTick(() => {
+          scrollToBottom()
+        })
+      }
+    }
+  )
+
+  // 监听流式内容变化，实时滚动
+  watch(
+    () => aiChatStore.streamingContent,
+    () => {
+      if (aiChatStore.isStreaming) {
+        // 流式过程中实时滚动
+        nextTick(() => {
+          scrollToBottom()
+        })
       }
     }
   )
@@ -176,7 +186,12 @@
   )
 
   // 生命周期
-  onMounted(() => {
+  onMounted(async () => {
+    // 确保AI设置已加载
+    if (!aiSettingsStore.isInitialized) {
+      await aiSettingsStore.loadSettings()
+    }
+
     aiChatStore.initialize()
     scrollToBottom()
   })
@@ -198,30 +213,19 @@
       @dblclick="onDoubleClick"
     />
 
-    <!-- 退出提示 -->
-    <div v-if="isNearExit" class="exit-hint">继续拖拽以退出聊天</div>
-
     <!-- 头部 -->
     <ChatHeader
-      :show-session-list="showSessionList"
-      :is-loading="aiChatStore.isLoading"
-      @toggle-session-list="toggleSessionList"
-      @create-new-session="createNewSession"
-    />
-
-    <!-- 会话列表 -->
-    <SessionList
-      :visible="showSessionList"
       :sessions="aiChatStore.sessions"
       :current-session-id="aiChatStore.currentSessionId"
-      @close="showSessionList = false"
+      :is-loading="aiChatStore.isLoading"
       @select-session="selectSession"
+      @create-new-session="createNewSession"
       @delete-session="deleteSession"
+      @refresh-sessions="refreshSessions"
     />
 
     <!-- 消息列表区域 -->
     <MessageList
-      v-if="!showSessionList"
       ref="messageListRef"
       :messages="aiChatStore.messages"
       :has-messages="aiChatStore.hasMessages"

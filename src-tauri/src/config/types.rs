@@ -30,9 +30,6 @@ pub struct AppConfig {
     /// 终端配置
     pub terminal: TerminalConfig,
 
-    /// AI 配置
-    pub ai: AIConfig,
-
     /// 快捷键配置 (对应 TOML 中的 [shortcuts])
     pub shortcuts: ShortcutsConfig,
 }
@@ -143,53 +140,6 @@ pub struct CursorConfig {
 
     /// 光标粗细
     pub thickness: f32,
-}
-
-/// AI 配置
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct AIConfig {
-    /// AI 模型配置数组
-    pub models: Vec<AISimpleModelConfig>,
-
-    /// 功能配置
-    pub features: AIFeaturesConfig,
-}
-
-/// AI 简单模型配置（用于TOML数组）
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct AISimpleModelConfig {
-    /// 模型名称
-    pub name: String,
-
-    /// 提供商
-    pub provider: String,
-
-    /// 是否启用
-    pub enabled: bool,
-}
-
-/// AI 功能配置
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct AIFeaturesConfig {
-    /// 聊天功能配置
-    pub chat: AIChatFeatureConfig,
-}
-
-/// AI 聊天功能配置
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct AIChatFeatureConfig {
-    /// 是否启用聊天功能
-    pub enabled: bool,
-
-    /// 使用的模型
-    pub model: String,
-
-    /// 是否启用解释功能
-    pub explanation: bool,
 }
 
 /// 快捷键配置 (对应 TOML 中的 [shortcuts] 节)

@@ -265,6 +265,29 @@ export class TerminalAPI {
       }
     }
   }
+
+  /**
+   * 获取终端缓冲区内容
+   */
+  async getTerminalBuffer(paneId: number): Promise<string> {
+    try {
+      return await invoke<string>('get_terminal_buffer', { paneId })
+    } catch (error) {
+      console.warn('获取终端缓冲区失败:', handleError(error))
+      return ''
+    }
+  }
+
+  /**
+   * 设置终端缓冲区内容
+   */
+  async setTerminalBuffer(paneId: number, content: string): Promise<void> {
+    try {
+      return await invoke<void>('set_terminal_buffer', { paneId, content })
+    } catch (error) {
+      throw new Error(handleError(error, '设置终端缓冲区失败'))
+    }
+  }
 }
 
 /**

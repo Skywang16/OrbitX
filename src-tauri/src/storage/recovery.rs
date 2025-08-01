@@ -27,7 +27,7 @@ pub struct HealthCheckResult {
     pub message: String,
     /// 检查时间
     pub checked_at: SystemTime,
-    /// 检查耗时
+    ///
     pub duration: Duration,
 }
 

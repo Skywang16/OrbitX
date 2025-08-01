@@ -19,9 +19,9 @@ src-tauri/src/
 │   ├── io_handler.rs    # I/O 处理器
 │   ├── singleton.rs # 全局单例管理
 │   └── types.rs     # 核心数据类型
-├── state/           # 应用状态管理（向后兼容）
+├── state/           # 应用状态管理
 │   └── mod.rs       # 状态管理
-├── terminal/        # 终端核心功能（向后兼容）
+├── terminal/        # 终端核心功能
 │   └── mod.rs       # 终端管理器
 └── utils/           # 工具模块
     ├── mod.rs       # 工具模块导出

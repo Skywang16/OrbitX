@@ -14,7 +14,6 @@ pub fn create_default_config() -> AppConfig {
         app: create_default_app_config(),
         appearance: create_default_appearance_config(),
         terminal: create_default_terminal_config(),
-        ai: create_default_ai_config(),
         shortcuts: create_default_shortcuts_config(),
     }
 }
@@ -88,18 +87,6 @@ fn create_default_cursor_config() -> CursorConfig {
         blink: true,
         color: "#ffffff".to_string(),
         thickness: 0.15,
-    }
-}
-
-/// 创建默认 AI 配置
-pub fn create_default_ai_config() -> AIConfig {
-    AIConfig {
-        models: vec![AISimpleModelConfig {
-            name: "gpt-4".to_string(),
-            provider: "openai".to_string(),
-            enabled: true,
-        }],
-        features: create_default_ai_features_config(),
     }
 }
 
@@ -201,17 +188,6 @@ pub fn create_default_shortcuts_config() -> ShortcutsConfig {
     }
 }
 
-/// 创建默认 AI 功能配置
-fn create_default_ai_features_config() -> AIFeaturesConfig {
-    AIFeaturesConfig {
-        chat: AIChatFeatureConfig {
-            enabled: true,
-            model: "gpt-4".to_string(),
-            explanation: true,
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,14 +232,7 @@ mod tests {
         assert!(config.terminal.behavior.close_on_exit);
         assert!(!config.terminal.behavior.confirm_close);
 
-        // 验证AI配置
-        assert_eq!(config.ai.models.len(), 1);
-        assert_eq!(config.ai.models[0].name, "gpt-4");
-        assert_eq!(config.ai.models[0].provider, "openai");
-        assert!(config.ai.models[0].enabled);
-        assert!(config.ai.features.chat.enabled);
-        assert_eq!(config.ai.features.chat.model, "gpt-4");
-        assert!(config.ai.features.chat.explanation);
+        // AI配置已迁移到SQLite，不再在TOML配置中验证
 
         // 验证快捷键配置
         assert!(!config.shortcuts.global.is_empty());
@@ -305,11 +274,6 @@ mod tests {
 
         let terminal_config = create_default_terminal_config();
         assert_eq!(terminal_config.scrollback, 1000);
-
-        let ai_config = create_default_ai_config();
-        assert_eq!(ai_config.models.len(), 1);
-        assert!(ai_config.features.chat.enabled);
-        assert!(ai_config.features.chat.explanation);
 
         let shortcuts_config = create_default_shortcuts_config();
         assert!(!shortcuts_config.global.is_empty());

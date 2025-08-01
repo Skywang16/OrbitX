@@ -1,24 +1,29 @@
 <script setup lang="ts">
   import { ai } from '@/api/ai'
-  import { useAISettingsStore } from './store'
   import type { AIModelConfig } from '@/types'
   import { confirm, createMessage } from '@/ui'
   import { computed, onMounted, ref } from 'vue'
   import AIModelForm from './AIModelForm.vue'
+  import { useAISettingsStore } from './store'
 
+  // 使用AI设置store
   const aiSettingsStore = useAISettingsStore()
 
   // 响应式数据
   const showAddForm = ref(false)
   const editingModel = ref<AIModelConfig | null>(null)
-  const testingModelId = ref<string | null>(null)
+  const testingModels = ref<Set<string>>(new Set())
 
-  // 计算属性
-  const models = computed(() => aiSettingsStore.settings.models)
+  // 使用store中的数据和状态
+  const models = computed(() => aiSettingsStore.models)
+  const loading = computed(() => aiSettingsStore.isLoading)
 
   // 生命周期
-  onMounted(() => {
-    aiSettingsStore.loadSettings()
+  onMounted(async () => {
+    // 确保数据已加载
+    if (!aiSettingsStore.isInitialized) {
+      await aiSettingsStore.loadSettings()
+    }
   })
 
   // 处理添加模型
@@ -35,51 +40,45 @@
 
   // 处理删除模型
   const handleDeleteModel = async (modelId: string) => {
-    const confirmed = await confirm({
-      title: '确认删除',
-      message: '确定要删除这个AI模型配置吗？',
-      type: 'warning',
-    })
+    const confirmed = await confirm('确定要删除这个AI模型配置吗？')
 
     if (confirmed) {
       try {
         await aiSettingsStore.removeModel(modelId)
-        createMessage.success('模型删除成功！')
+        createMessage.success('模型删除成功')
       } catch (error) {
-        createMessage.error(`删除失败：${error}`)
+        createMessage.error('删除失败')
       }
     }
   }
 
-  // 处理模型卡片点击 - 设置为默认模型
-  const handleModelCardClick = async (model: AIModelConfig) => {
-    if (model.id === aiSettingsStore.settings.defaultModelId) {
-      // 已经是默认模型，不需要操作
+  // 处理设置默认模型
+  const handleSetDefault = async (modelId: string, isDefault: boolean) => {
+    if (isDefault) {
       return
     }
-
     try {
-      await aiSettingsStore.setDefaultModel(model.id)
-      createMessage.success('默认模型设置成功！')
+      await aiSettingsStore.setDefaultModel(modelId)
+      createMessage.success('默认模型设置成功')
     } catch (error) {
-      createMessage.error(`设置失败：${error}`)
+      createMessage.error('设置默认模型失败')
     }
   }
 
   // 处理测试连接
   const handleTestConnection = async (modelId: string) => {
-    testingModelId.value = modelId
+    testingModels.value.add(modelId)
     try {
       const result = await ai.testConnection(modelId)
       if (result) {
-        createMessage.success('连接测试成功！')
+        createMessage.success('连接测试成功')
       } else {
-        createMessage.error('连接测试失败：无法连接到AI服务')
+        createMessage.error('连接测试失败')
       }
     } catch (error) {
-      createMessage.error(`测试失败：${error}`)
+      createMessage.error('连接测试失败')
     } finally {
-      testingModelId.value = null
+      testingModels.value.delete(modelId)
     }
   }
 
@@ -89,19 +88,20 @@
       if (editingModel.value) {
         // 编辑模式
         await aiSettingsStore.updateModel(editingModel.value.id, modelData)
-        createMessage.success('模型更新成功！')
+        createMessage.success('模型更新成功')
       } else {
         // 添加模式
         const newModel: AIModelConfig = {
           ...modelData,
-          id: Date.now().toString(), // 简单的ID生成
+          id: Date.now().toString(),
         }
         await aiSettingsStore.addModel(newModel)
-        createMessage.success('模型添加成功！')
+        createMessage.success('模型添加成功')
       }
       showAddForm.value = false
+      editingModel.value = null
     } catch (error) {
-      createMessage.error(`操作失败：${error}`)
+      createMessage.error('操作失败')
     }
   }
 
@@ -116,7 +116,6 @@
     const names: Record<string, string> = {
       openAI: 'OpenAI',
       claude: 'Claude',
-      local: '本地模型',
       custom: '自定义',
     }
     return names[provider] || provider
@@ -140,7 +139,14 @@
 
     <!-- 模型列表 -->
     <div class="models-list">
-      <div v-if="models.length === 0" class="empty-state">
+      <!-- 加载状态 -->
+      <div v-if="loading" class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>加载中...</p>
+      </div>
+
+      <!-- 空状态 -->
+      <div v-else-if="models.length === 0" class="empty-state">
         <div class="empty-icon">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path
@@ -161,9 +167,9 @@
           :key="model.id"
           class="model-card"
           :class="{
-            default: model.id === aiSettingsStore.settings.defaultModelId,
+            default: model.isDefault,
           }"
-          @click="handleModelCardClick(model)"
+          @click="handleSetDefault(model.id, model.isDefault)"
         >
           <!-- 模型头部 -->
           <div class="model-header">
@@ -172,7 +178,7 @@
               <div class="model-provider">{{ getProviderName(model.provider) }}</div>
             </div>
             <div class="option-radio">
-              <div class="radio-button" :class="{ checked: model.id === aiSettingsStore.settings.defaultModelId }">
+              <div class="radio-button" :class="{ checked: model.isDefault }">
                 <div class="radio-dot"></div>
               </div>
             </div>
@@ -195,22 +201,13 @@
             <x-button
               variant="secondary"
               size="small"
-              :disabled="testingModelId === model.id"
-              :loading="testingModelId === model.id"
-              @click="handleTestConnection(model.id)"
+              :loading="testingModels.has(model.id)"
+              @click.stop="handleTestConnection(model.id)"
             >
-              <template #icon>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                  <polyline points="22,4 12,14.01 9,11.01" />
-                </svg>
-              </template>
-              {{ testingModelId === model.id ? '测试中...' : '测试连接' }}
+              {{ testingModels.has(model.id) ? '测试中...' : '测试连接' }}
             </x-button>
-
-            <x-button variant="secondary" size="small" @click="handleEditModel(model)">编辑</x-button>
-
-            <x-button variant="danger" size="small" @click="handleDeleteModel(model.id)">删除</x-button>
+            <x-button variant="secondary" size="small" @click.stop="handleEditModel(model)">编辑</x-button>
+            <x-button variant="danger" size="small" @click.stop="handleDeleteModel(model.id)">删除</x-button>
           </div>
         </div>
       </div>
@@ -391,5 +388,34 @@
 
   .radio-button.checked .radio-dot {
     opacity: 1;
+  }
+
+  /* 加载状态 */
+  .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xl);
+    color: var(--text-secondary);
+  }
+
+  .loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border-color);
+    border-top: 2px solid var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: var(--spacing-md);
+  }
+
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
   }
 </style>

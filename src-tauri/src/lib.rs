@@ -18,17 +18,16 @@ pub mod utils; // 工具和错误处理模块
 pub mod window; // 窗口管理功能模块
 
 use ai::commands::{
-    add_ai_model, analyze_error, cleanup_expired_cache, clear_ai_cache, explain_command,
-    get_ai_cache_monitor_stats, get_ai_cache_stats, get_ai_cache_strategy, get_ai_models,
-    get_ai_processor_status, get_terminal_context, get_user_prefix_prompt, remove_ai_model,
-    reset_ai_cache_monitor, send_chat_message, set_ai_cache_strategy, set_user_prefix_prompt,
-    smart_cleanup_ai_cache, stream_chat_message_with_channel, test_ai_connection, update_ai_model,
-    update_terminal_context, AIManagerState,
+    add_ai_model, analyze_error, clear_ai_cache, clear_chat_history, explain_command,
+    get_ai_models, get_chat_history, get_terminal_context, get_user_prefix_prompt, remove_ai_model,
+    save_chat_history, send_chat_message, set_default_ai_model, set_user_prefix_prompt,
+    stream_chat_message_with_channel, test_ai_connection, update_ai_model, update_terminal_context,
+    AIManagerState,
 };
 use commands::{TerminalState, *};
 use completion::commands::{
     clear_completion_cache, get_completion_stats, get_completions, get_enhanced_completions,
-    init_completion_engine, CompletionEngineState,
+    init_completion_engine, CompletionState,
 };
 use config::commands::{
     // 主题系统命令
@@ -54,7 +53,6 @@ use config::shortcuts::commands::{
     adapt_shortcuts_for_platform,
     // 快捷键系统命令
     add_shortcut,
-    detect_shortcut_conflicts,
     get_current_platform,
     get_shortcuts_config,
     get_shortcuts_statistics,
@@ -62,8 +60,6 @@ use config::shortcuts::commands::{
     reset_shortcuts_to_defaults,
     update_shortcut,
     update_shortcuts_config,
-    validate_shortcut_binding,
-    validate_shortcuts_config,
 };
 use config::terminal_commands::{
     // 终端配置命令
@@ -216,6 +212,9 @@ pub fn run() {
             get_shell_stats,
             initialize_shell_manager,
             validate_shell_manager,
+            // 终端缓冲区命令
+            get_terminal_buffer,
+            set_terminal_buffer,
             // 补全功能命令
             init_completion_engine,
             get_completions,
@@ -262,6 +261,7 @@ pub fn run() {
             update_ai_model,
             remove_ai_model,
             test_ai_connection,
+            set_default_ai_model,
             send_chat_message,
             stream_chat_message_with_channel,
             explain_command,
@@ -271,20 +271,13 @@ pub fn run() {
             get_terminal_context,
             update_terminal_context,
             clear_ai_cache,
-            get_ai_cache_stats,
-            cleanup_expired_cache,
-            get_ai_processor_status,
-            get_ai_cache_monitor_stats,
-            reset_ai_cache_monitor,
-            smart_cleanup_ai_cache,
-            set_ai_cache_strategy,
-            get_ai_cache_strategy,
+            // AI聊天历史命令
+            get_chat_history,
+            save_chat_history,
+            clear_chat_history,
             // 快捷键系统命令
             get_shortcuts_config,
             update_shortcuts_config,
-            validate_shortcuts_config,
-            validate_shortcut_binding,
-            detect_shortcut_conflicts,
             adapt_shortcuts_for_platform,
             get_current_platform,
             reset_shortcuts_to_defaults,
@@ -329,8 +322,11 @@ pub fn run() {
 
                 // 创建 ConfigManager 实例用于 AI 管理器和主题系统
                 info!("开始创建配置管理器实例");
-                // TODO: Update to use TomlConfigManager
-                let config_manager = std::sync::Arc::new(());
+                // 从已初始化的ConfigManagerState中获取TomlConfigManager
+                let config_manager = {
+                    let config_state = app.state::<ConfigManagerState>();
+                    config_state.toml_manager.clone()
+                };
 
                 // 创建 ThemeService 实例用于主题系统
                 info!("开始创建主题服务实例");
@@ -364,14 +360,38 @@ pub fn run() {
 
                 // 初始化补全引擎状态
                 info!("开始初始化补全引擎状态管理器");
-                let completion_state = CompletionEngineState::new();
+                let completion_state = CompletionState::new();
                 app.manage(completion_state);
                 info!("补全引擎状态管理器已初始化");
 
-                // 初始化AI管理器状态（依赖配置管理器）
+                // 初始化存储协调器状态（必须在AI管理器之前）
+                info!("开始初始化存储协调器状态");
+                let storage_state = tauri::async_runtime::block_on(async {
+                    StorageCoordinatorState::new(config_manager.clone())
+                        .await
+                        .map_err(|e| anyhow::anyhow!("存储协调器状态初始化失败: {}", e))
+                })?;
+                app.manage(storage_state);
+                info!("存储协调器状态已初始化");
+
+                // 初始化AI管理器状态（使用存储协调器中的SQLite管理器）
                 info!("开始初始化AI管理器状态");
-                let ai_state = AIManagerState::new(config_manager)
-                    .map_err(|e| anyhow::anyhow!("AI管理器状态初始化失败: {}", e))?;
+                let ai_state = {
+                    let storage_state = app.state::<StorageCoordinatorState>();
+                    let sqlite_manager = storage_state.coordinator.sqlite_manager();
+                    let ai_state = AIManagerState::new(Some(sqlite_manager))
+                        .map_err(|e| anyhow::anyhow!("AI管理器状态初始化失败: {}", e))?;
+
+                    // 初始化AI服务
+                    tauri::async_runtime::block_on(async {
+                        ai_state
+                            .initialize()
+                            .await
+                            .map_err(|e| anyhow::anyhow!("AI服务初始化失败: {}", e))
+                    })?;
+
+                    ai_state
+                };
                 app.manage(ai_state);
                 info!("AI管理器状态已初始化");
 
@@ -381,16 +401,6 @@ pub fn run() {
                     WindowState::new().map_err(|e| anyhow::anyhow!("窗口状态初始化失败: {}", e))?;
                 app.manage(window_state);
                 info!("窗口状态管理器已初始化");
-
-                // 初始化存储协调器状态
-                info!("开始初始化存储协调器状态");
-                let storage_state = tauri::async_runtime::block_on(async {
-                    StorageCoordinatorState::new()
-                        .await
-                        .map_err(|e| anyhow::anyhow!("存储协调器状态初始化失败: {}", e))
-                })?;
-                app.manage(storage_state);
-                info!("存储协调器状态已初始化");
 
                 // 设置Tauri集成
                 info!("开始设置Tauri事件集成");

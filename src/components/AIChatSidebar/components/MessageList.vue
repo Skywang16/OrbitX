@@ -29,7 +29,12 @@
   const scrollToBottom = async () => {
     await nextTick()
     if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+      // 使用 smooth 滚动，但在流式过程中使用 auto 以提高性能
+      const behavior = props.isStreaming ? 'auto' : 'smooth'
+      messagesContainer.value.scrollTo({
+        top: messagesContainer.value.scrollHeight,
+        behavior,
+      })
     }
   }
 

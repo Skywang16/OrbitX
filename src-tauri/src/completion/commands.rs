@@ -75,9 +75,6 @@ impl CompletionState {
     }
 }
 
-/// 向后兼容的类型别名
-pub type CompletionEngineState = CompletionState;
-
 /// 获取补全建议命令
 #[tauri::command]
 pub async fn get_completions(
@@ -85,7 +82,7 @@ pub async fn get_completions(
     cursor_position: usize,
     working_directory: String,
     max_results: Option<usize>,
-    state: State<'_, CompletionEngineState>,
+    state: State<'_, CompletionState>,
 ) -> Result<CompletionResponse, String> {
     let engine = state.get_engine().await?;
 
@@ -112,7 +109,7 @@ pub async fn get_completions(
 
 /// 初始化补全引擎命令
 #[tauri::command]
-pub async fn init_completion_engine(state: State<'_, CompletionEngineState>) -> Result<(), String> {
+pub async fn init_completion_engine(state: State<'_, CompletionState>) -> Result<(), String> {
     let config = CompletionEngineConfig::default();
 
     match CompletionEngine::with_default_providers(config).await {
@@ -126,7 +123,7 @@ pub async fn init_completion_engine(state: State<'_, CompletionEngineState>) -> 
 
 /// 清理缓存命令
 #[tauri::command]
-pub async fn clear_completion_cache(state: State<'_, CompletionEngineState>) -> Result<(), String> {
+pub async fn clear_completion_cache(state: State<'_, CompletionState>) -> Result<(), String> {
     let engine = state.get_engine().await?;
 
     match engine.clear_cache() {
@@ -137,9 +134,7 @@ pub async fn clear_completion_cache(state: State<'_, CompletionEngineState>) -> 
 
 /// 获取统计信息命令
 #[tauri::command]
-pub async fn get_completion_stats(
-    state: State<'_, CompletionEngineState>,
-) -> Result<String, String> {
+pub async fn get_completion_stats(state: State<'_, CompletionState>) -> Result<String, String> {
     let engine = state.get_engine().await?;
 
     match engine.get_stats() {
@@ -166,7 +161,7 @@ pub async fn get_enhanced_completions(
     current_line: String,
     cursor_position: usize,
     working_directory: String,
-    state: State<'_, CompletionEngineState>,
+    state: State<'_, CompletionState>,
 ) -> Result<EnhancedCompletionResponse, String> {
     let engine = state.get_engine().await?;
 

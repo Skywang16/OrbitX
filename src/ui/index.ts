@@ -12,7 +12,6 @@ import {
   confirmDanger,
   confirmInfo,
   confirmWarning,
-  createConfirm,
   createMessage,
   type ConfirmConfig,
   type MessageConfig,
@@ -31,7 +30,7 @@ export { createMessage }
 export type { MessageConfig, MessageInstance }
 
 // 确认对话框API
-export { confirm, confirmDanger, confirmInfo, confirmWarning, createConfirm }
+export { confirm, confirmDanger, confirmInfo, confirmWarning }
 export type { ConfirmConfig }
 
 // 消息API便捷方法（已在createMessage上定义）
@@ -131,8 +130,7 @@ const XUI: XUIPlugin = {
 }
 
 // 安装函数导出
-export const setupXUI = install // 向后兼容
-export { install } // 标准导出
+export { install }
 
 // 默认导出（插件）
 export default XUI

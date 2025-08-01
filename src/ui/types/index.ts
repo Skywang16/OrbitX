@@ -199,21 +199,3 @@ export type PopoverInstance = InstanceType<typeof import('./Popover.vue').defaul
 export type SearchInputInstance = InstanceType<typeof import('./SearchInput.vue').default>
 export type MessageInstance = InstanceType<typeof import('./Message.vue').default>
 export type SelectInstance = InstanceType<typeof import('./Select.vue').default>
-
-// 导出所有类型（保持向后兼容）
-export type {
-  ButtonEmits as XButtonEmits,
-  ButtonProps as XButtonProps,
-  MessageEmits as XMessageEmits,
-  MessageProps as XMessageProps,
-  ModalEmits as XModalEmits,
-  ModalProps as XModalProps,
-  PopoverEmits as XPopoverEmits,
-  PopoverProps as XPopoverProps,
-  SearchInputEmits as XSearchInputEmits,
-  SearchInputProps as XSearchInputProps,
-  SelectEmits as XSelectEmits,
-  SelectProps as XSelectProps,
-  SwitchEmits as XSwitchEmits,
-  SwitchProps as XSwitchProps,
-}

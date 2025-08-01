@@ -24,7 +24,7 @@ export interface ConfirmConfig {
 /**
  * 显示确认对话框
  */
-export function createConfirm(config: string | ConfirmConfig): Promise<boolean> {
+export function confirm(config: string | ConfirmConfig): Promise<boolean> {
   return new Promise(resolve => {
     // 标准化配置
     const normalizedConfig: Required<ConfirmConfig> = {
@@ -246,7 +246,7 @@ export function createConfirm(config: string | ConfirmConfig): Promise<boolean> 
  * 便捷方法：显示警告确认对话框
  */
 export const confirmWarning = (message: string, title = '警告'): Promise<boolean> => {
-  return createConfirm({
+  return confirm({
     message,
     title,
     type: 'warning',
@@ -257,7 +257,7 @@ export const confirmWarning = (message: string, title = '警告'): Promise<boole
  * 便捷方法：显示危险确认对话框
  */
 export const confirmDanger = (message: string, title = '危险操作'): Promise<boolean> => {
-  return createConfirm({
+  return confirm({
     message,
     title,
     type: 'danger',
@@ -268,12 +268,9 @@ export const confirmDanger = (message: string, title = '危险操作'): Promise<
  * 便捷方法：显示信息确认对话框
  */
 export const confirmInfo = (message: string, title = '确认'): Promise<boolean> => {
-  return createConfirm({
+  return confirm({
     message,
     title,
     type: 'info',
   })
 }
-
-// 向后兼容的默认导出
-export const confirm = createConfirm

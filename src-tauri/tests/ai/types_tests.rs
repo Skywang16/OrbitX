@@ -25,7 +25,6 @@ mod tests {
         let providers = vec![
             AIProvider::OpenAI,
             AIProvider::Claude,
-            AIProvider::Local,
             AIProvider::Custom,
         ];
 
@@ -45,10 +44,6 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&AIProvider::Claude).unwrap(),
             "\"claude\""
-        );
-        assert_eq!(
-            serde_json::to_string(&AIProvider::Local).unwrap(),
-            "\"local\""
         );
         assert_eq!(
             serde_json::to_string(&AIProvider::Custom).unwrap(),
@@ -465,6 +460,7 @@ mod tests {
                 tokens_used: Some(50),
                 response_time: Some(1000),
             }),
+            error: None,
         };
 
         let serialized = serde_json::to_string(&response).expect("Failed to serialize response");

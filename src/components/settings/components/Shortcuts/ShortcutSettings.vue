@@ -282,7 +282,7 @@
   }
 
   const handleDeleteShortcut = async (item: ShortcutListItem) => {
-    if (confirm('确定要删除这个快捷键吗？')) {
+    if (await confirm('确定要删除这个快捷键吗？')) {
       try {
         await removeShortcut(item.category, item.index)
       } catch (error) {
@@ -337,7 +337,7 @@
   }
 
   const handleReset = async () => {
-    if (confirm('确定要重置所有快捷键到默认配置吗？此操作不可撤销。')) {
+    if (await confirm('确定要重置所有快捷键到默认配置吗？此操作不可撤销。')) {
       try {
         await resetToDefaults()
       } catch (error) {

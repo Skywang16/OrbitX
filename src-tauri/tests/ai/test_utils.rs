@@ -123,9 +123,10 @@ pub fn create_test_context() -> AIContext {
 pub fn create_test_response(content: &str) -> AIResponse {
     AIResponse {
         content: content.to_string(),
-        model_id: "test-model".to_string(),
-        usage: None,
+        response_type: crate::ai::AIResponseType::Chat,
+        suggestions: None,
         metadata: None,
+        error: None,
     }
 }
 

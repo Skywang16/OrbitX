@@ -32,7 +32,7 @@ use sqlx::{
 };
 use std::{collections::HashMap, num::NonZeroUsize, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// SQLite管理器选项
 #[derive(Debug, Clone)]
@@ -111,6 +111,31 @@ pub struct CommandSearchResult {
     pub command_snippet: Option<String>,
     pub output_snippet: Option<String>,
     pub relevance_score: f64,
+}
+
+/// AI聊天历史条目
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AIChatHistoryEntry {
+    pub id: Option<i64>,
+    pub session_id: String,
+    pub model_id: String,
+    pub role: String, // 'user', 'assistant', 'system'
+    pub content: String,
+    pub token_count: Option<i32>,
+    pub metadata_json: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// AI聊天会话查询条件
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatHistoryQuery {
+    pub session_id: Option<String>,
+    pub model_id: Option<String>,
+    pub role: Option<String>,
+    pub date_from: Option<DateTime<Utc>>,
+    pub date_to: Option<DateTime<Utc>>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
 
 /// 审计日志条目
@@ -321,6 +346,9 @@ impl SqliteManager {
     pub async fn initialize_database(&self) -> AppResult<()> {
         info!("初始化SQLite数据库");
 
+        // 设置默认主密钥（用于加密敏感数据）
+        self.set_default_master_key().await?;
+
         // 创建迁移表
         self.create_migration_table().await?;
 
@@ -331,6 +359,25 @@ impl SqliteManager {
         self.insert_default_data().await?;
 
         info!("数据库初始化完成");
+        Ok(())
+    }
+
+    /// 设置默认主密钥
+    async fn set_default_master_key(&self) -> AppResult<()> {
+        let mut encryption_manager = self.encryption_manager.write().await;
+
+        // 检查是否已经设置了主密钥
+        if encryption_manager.master_key.is_some() {
+            debug!("主密钥已设置，跳过默认密钥设置");
+            return Ok(());
+        }
+
+        // 使用应用程序特定的默认密钥
+        // 在生产环境中，这应该从安全的配置文件或环境变量中读取
+        let default_password = "termx-default-encryption-key-2024";
+        encryption_manager.set_master_password(default_password)?;
+
+        info!("默认主密钥设置完成");
         Ok(())
     }
 
@@ -676,8 +723,15 @@ impl SqliteManager {
 
     /// 保存AI模型数据
     async fn save_ai_model_data(&self, data: &Value, options: &SaveOptions) -> AppResult<()> {
+        debug!("开始保存AI模型数据: {:?}", data);
+
         let model: AIModelConfig = serde_json::from_value(data.clone())
             .map_err(|e| anyhow!(format!("AI模型数据格式错误: {}", e)))?;
+
+        debug!(
+            "解析AI模型配置成功: id={}, name={}, provider={:?}",
+            model.id, model.name, model.provider
+        );
 
         let operation = if options.overwrite {
             "UPDATE"
@@ -687,9 +741,11 @@ impl SqliteManager {
 
         // 加密API密钥
         let encrypted_api_key = if !model.api_key.is_empty() {
+            debug!("加密API密钥");
             let encryption_manager = self.encryption_manager.read().await;
             Some(encryption_manager.encrypt_data(&model.api_key)?)
         } else {
+            debug!("API密钥为空，跳过加密");
             None
         };
 
@@ -698,6 +754,8 @@ impl SqliteManager {
             .options
             .as_ref()
             .map(|opts| serde_json::to_string(opts).unwrap_or_default());
+
+        debug!("配置JSON: {:?}", config_json);
 
         let now = Utc::now();
         let sql = if options.overwrite {
@@ -714,16 +772,23 @@ impl SqliteManager {
             "#
         };
 
+        let provider_str = format!("{:?}", model.provider);
+        debug!("准备执行SQL: {}", sql);
+        debug!(
+            "绑定参数: id={}, name={}, provider={}, api_url={}, model={}, is_default={:?}",
+            model.id, model.name, provider_str, model.api_url, model.model, model.is_default
+        );
+
         let result = self
             .db_pool
             .execute(
                 sqlx::query(sql)
                     .bind(&model.id)
                     .bind(&model.name)
-                    .bind(format!("{:?}", model.provider)) // 序列化枚举
+                    .bind(provider_str) // 序列化枚举
                     .bind(&model.api_url)
                     .bind(encrypted_api_key)
-                    .bind(&model.model)
+                    .bind(&model.model) // 这个字段对应数据库中的model_name
                     .bind(model.is_default.unwrap_or(false))
                     .bind(true) // enabled - ai模块中没有这个字段，默认为true
                     .bind(config_json)
@@ -731,6 +796,8 @@ impl SqliteManager {
                     .bind(now),
             )
             .await;
+
+        debug!("SQL执行结果: {:?}", result);
 
         match result {
             Ok(_) => {
@@ -809,10 +876,46 @@ impl SqliteManager {
         data: &Value,
         _options: &SaveOptions,
     ) -> AppResult<()> {
-        // 这里可以实现AI聊天历史的保存逻辑
-        // 暂时使用通用保存方法
-        self.save_generic_data("ai_chat_history", data, _options)
-            .await
+        debug!("开始保存AI聊天历史数据: {:?}", data);
+
+        let entry: AIChatHistoryEntry = serde_json::from_value(data.clone())
+            .map_err(|e| anyhow!(format!("AI聊天历史数据格式错误: {}", e)))?;
+
+        debug!(
+            "解析AI聊天历史成功: session_id={}, model_id={}, role={}",
+            entry.session_id, entry.model_id, entry.role
+        );
+
+        let sql = r#"
+            INSERT INTO ai_chat_history
+            (session_id, model_id, role, content, token_count, metadata_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        "#;
+
+        let result = self
+            .db_pool
+            .execute(
+                sqlx::query(sql)
+                    .bind(&entry.session_id)
+                    .bind(&entry.model_id)
+                    .bind(&entry.role)
+                    .bind(&entry.content)
+                    .bind(entry.token_count)
+                    .bind(&entry.metadata_json)
+                    .bind(entry.created_at),
+            )
+            .await;
+
+        match result {
+            Ok(_) => {
+                debug!("AI聊天历史保存成功");
+                Ok(())
+            }
+            Err(e) => {
+                error!("保存AI聊天历史失败: {}", e);
+                Err(anyhow!("保存AI聊天历史失败: {}", e))
+            }
+        }
     }
 
     /// 保存通用数据
@@ -990,6 +1093,167 @@ impl SqliteManager {
         Ok(())
     }
 
+    /// 保存AI聊天消息
+    pub async fn save_chat_message(&self, entry: &AIChatHistoryEntry) -> AppResult<i64> {
+        debug!(
+            "保存AI聊天消息: session_id={}, role={}",
+            entry.session_id, entry.role
+        );
+
+        let sql = r#"
+            INSERT INTO ai_chat_history
+            (session_id, model_id, role, content, token_count, metadata_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        "#;
+
+        let result = self
+            .db_pool
+            .execute(
+                sqlx::query(sql)
+                    .bind(&entry.session_id)
+                    .bind(&entry.model_id)
+                    .bind(&entry.role)
+                    .bind(&entry.content)
+                    .bind(entry.token_count)
+                    .bind(&entry.metadata_json)
+                    .bind(entry.created_at),
+            )
+            .await
+            .map_err(|e| anyhow!("保存AI聊天消息失败: {}", e))?;
+
+        // 清除相关缓存
+        self.clear_table_cache("ai_chat_history").await;
+
+        Ok(result.last_insert_rowid())
+    }
+
+    /// 查询AI聊天历史
+    pub async fn get_chat_history(
+        &self,
+        query: &ChatHistoryQuery,
+    ) -> AppResult<Vec<AIChatHistoryEntry>> {
+        debug!("查询AI聊天历史: session_id={:?}", query.session_id);
+
+        // 构建基础查询
+        let mut sql = String::from(
+            r#"
+            SELECT id, session_id, model_id, role, content, token_count, metadata_json, created_at
+            FROM ai_chat_history
+            WHERE 1=1
+        "#,
+        );
+
+        // 添加查询条件
+        if let Some(session_id) = &query.session_id {
+            sql.push_str(&format!(
+                " AND session_id = '{}'",
+                session_id.replace("'", "''")
+            ));
+        }
+
+        if let Some(model_id) = &query.model_id {
+            sql.push_str(&format!(
+                " AND model_id = '{}'",
+                model_id.replace("'", "''")
+            ));
+        }
+
+        if let Some(role) = &query.role {
+            sql.push_str(&format!(" AND role = '{}'", role.replace("'", "''")));
+        }
+
+        if let Some(date_from) = &query.date_from {
+            sql.push_str(&format!(
+                " AND created_at >= '{}'",
+                date_from.format("%Y-%m-%d %H:%M:%S")
+            ));
+        }
+
+        if let Some(date_to) = &query.date_to {
+            sql.push_str(&format!(
+                " AND created_at <= '{}'",
+                date_to.format("%Y-%m-%d %H:%M:%S")
+            ));
+        }
+
+        sql.push_str(" ORDER BY created_at ASC");
+
+        if let Some(limit) = query.limit {
+            sql.push_str(&format!(" LIMIT {}", limit));
+        }
+
+        if let Some(offset) = query.offset {
+            sql.push_str(&format!(" OFFSET {}", offset));
+        }
+
+        // 执行查询
+        let rows = self
+            .db_pool
+            .fetch_all(sqlx::query(&sql))
+            .await
+            .map_err(|e| anyhow!("查询AI聊天历史失败: {}", e))?;
+
+        let entries: Vec<AIChatHistoryEntry> = rows
+            .iter()
+            .map(|row| self.row_to_chat_history_entry(row))
+            .collect();
+
+        debug!("查询到 {} 条AI聊天历史记录", entries.len());
+        Ok(entries)
+    }
+
+    /// 获取所有会话列表
+    pub async fn get_chat_sessions(&self) -> AppResult<Vec<String>> {
+        let sql = r#"
+            SELECT DISTINCT session_id, MAX(created_at) as last_activity
+            FROM ai_chat_history
+            GROUP BY session_id
+            ORDER BY last_activity DESC
+        "#;
+
+        let rows = self
+            .db_pool
+            .fetch_all(sqlx::query(sql))
+            .await
+            .map_err(|e| anyhow!("获取会话列表失败: {}", e))?;
+
+        let sessions: Vec<String> = rows
+            .iter()
+            .map(|row| row.get::<String, _>("session_id"))
+            .collect();
+
+        Ok(sessions)
+    }
+
+    /// 清除AI聊天历史
+    pub async fn clear_chat_history(&self, session_id: Option<&str>) -> AppResult<u64> {
+        debug!("清除AI聊天历史: session_id={:?}", session_id);
+
+        let (_sql, affected_rows) = if let Some(session_id) = session_id {
+            let _sql = "DELETE FROM ai_chat_history WHERE session_id = ?";
+            let result = self
+                .db_pool
+                .execute(sqlx::query(_sql).bind(session_id))
+                .await
+                .map_err(|e| anyhow!("清除指定会话聊天历史失败: {}", e))?;
+            (_sql, result.rows_affected())
+        } else {
+            let _sql = "DELETE FROM ai_chat_history";
+            let result = self
+                .db_pool
+                .execute(sqlx::query(_sql))
+                .await
+                .map_err(|e| anyhow!("清除所有聊天历史失败: {}", e))?;
+            (_sql, result.rows_affected())
+        };
+
+        // 清除相关缓存
+        self.clear_table_cache("ai_chat_history").await;
+
+        debug!("清除了 {} 条AI聊天历史记录", affected_rows);
+        Ok(affected_rows)
+    }
+
     /// 删除AI模型
     pub async fn delete_ai_model(&self, model_id: &str) -> AppResult<()> {
         // 先获取模型信息用于审计日志
@@ -1104,7 +1368,7 @@ impl SqliteManager {
         let provider = match provider_str.as_str() {
             "OpenAI" => crate::ai::types::AIProvider::OpenAI,
             "Claude" => crate::ai::types::AIProvider::Claude,
-            "Local" => crate::ai::types::AIProvider::Local,
+            "Local" => crate::ai::types::AIProvider::Custom, // 将旧的 Local 映射到 Custom
             _ => crate::ai::types::AIProvider::Custom,
         };
 
@@ -1138,6 +1402,20 @@ impl SqliteManager {
             executed_at: row.get("executed_at"),
             session_id: row.get("session_id"),
             tags: row.get("tags"),
+        }
+    }
+
+    /// 将数据库行转换为AI聊天历史条目
+    fn row_to_chat_history_entry(&self, row: &SqliteRow) -> AIChatHistoryEntry {
+        AIChatHistoryEntry {
+            id: row.get("id"),
+            session_id: row.get("session_id"),
+            model_id: row.get("model_id"),
+            role: row.get("role"),
+            content: row.get("content"),
+            token_count: row.get("token_count"),
+            metadata_json: row.get("metadata_json"),
+            created_at: row.get("created_at"),
         }
     }
 

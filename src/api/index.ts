@@ -13,6 +13,7 @@ export * from './completion' // 补全功能模块
 export * from './config' // 配置管理模块
 export * from './shell' // Shell管理模块
 export * from './shortcuts' // 快捷键管理模块
+export * from './storage' // 存储管理模块
 export * from './terminal' // 终端管理模块
 export * from './terminal-config' // 终端配置管理模块
 export * from './window' // 窗口管理模块

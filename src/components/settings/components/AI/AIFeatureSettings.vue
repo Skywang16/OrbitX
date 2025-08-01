@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { useAISettingsStore } from './store'
   import type { AISettings } from '@/types'
-  import { computed, ref } from 'vue'
+  import { computed, onMounted, ref } from 'vue'
   import { ai } from '@/api/ai'
 
   const aiSettingsStore = useAISettingsStore()
@@ -58,17 +58,14 @@
     try {
       const promptToSave = userPrefixPrompt.value.trim() || null
       await ai.setUserPrefixPrompt(promptToSave)
-      // 可以添加成功提示
     } catch (error) {
       console.error('保存用户前置提示词失败:', error)
-      // 可以添加错误提示
     } finally {
       isSavingPrefix.value = false
     }
   }
 
   // 组件挂载时加载前置提示词
-  import { onMounted } from 'vue'
   onMounted(() => {
     loadUserPrefixPrompt()
   })

@@ -15,7 +15,8 @@ import type {
   StreamChunk,
 } from '@/types'
 import { invoke } from '@/utils/request'
-import { AI_CACHE_CONFIG } from '../../constants/ai'
+import { Channel } from '@tauri-apps/api/core'
+
 import { handleError } from '../../utils/errorHandler'
 
 /**
@@ -23,36 +24,16 @@ import { handleError } from '../../utils/errorHandler'
  * 提供AI相关的功能和管理操作，包括模型管理、聊天、补全等功能
  */
 export class AIAPI {
-  // ===== 缓存管理 =====
-  private modelsCache: AIModelConfig[] | null = null
-  private cacheExpiry: number = 0
-  private readonly CACHE_DURATION = AI_CACHE_CONFIG.DURATION
-
   // ===== AI配置管理 =====
 
   /**
    * 获取所有AI模型配置
-   * @param forceRefresh 是否强制刷新缓存
    * @returns 返回所有已配置的AI模型列表
    */
-  async getModels(forceRefresh = false): Promise<AIModelConfig[]> {
-    // 检查缓存
-    if (!forceRefresh && this.modelsCache && Date.now() < this.cacheExpiry) {
-      return this.modelsCache
-    }
-
+  async getModels(): Promise<AIModelConfig[]> {
     try {
-      const models = await invoke<AIModelConfig[]>('get_ai_models')
-      // 更新缓存
-      this.modelsCache = models
-      this.cacheExpiry = Date.now() + this.CACHE_DURATION
-      return models
+      return await invoke<AIModelConfig[]>('get_ai_models')
     } catch (error) {
-      // 如果API调用失败，返回缓存的数据（如果有的话）
-      if (this.modelsCache) {
-        console.warn('API调用失败，使用缓存数据:', handleError(error))
-        return this.modelsCache
-      }
       throw new Error(handleError(error, '获取AI模型失败'))
     }
   }
@@ -63,7 +44,7 @@ export class AIAPI {
    */
   async addModel(config: AIModelConfig): Promise<void> {
     try {
-      return await invoke('add_ai_model', { config })
+      await invoke('add_ai_model', { config })
     } catch (error) {
       throw new Error(handleError(error, '添加AI模型失败'))
     }
@@ -76,7 +57,7 @@ export class AIAPI {
    */
   async updateModel(modelId: string, updates: Partial<AIModelConfig>): Promise<void> {
     try {
-      return await invoke('update_ai_model', { modelId, updates })
+      await invoke('update_ai_model', { modelId, updates })
     } catch (error) {
       throw new Error(handleError(error, '更新AI模型失败'))
     }
@@ -88,9 +69,21 @@ export class AIAPI {
    */
   async removeModel(modelId: string): Promise<void> {
     try {
-      return await invoke('remove_ai_model', { modelId })
+      await invoke('remove_ai_model', { modelId })
     } catch (error) {
       throw new Error(handleError(error, '删除AI模型失败'))
+    }
+  }
+
+  /**
+   * 设置默认AI模型
+   * @param modelId 要设置为默认的模型ID
+   */
+  async setDefaultModel(modelId: string): Promise<void> {
+    try {
+      await invoke('set_default_ai_model', { modelId })
+    } catch (error) {
+      throw new Error(handleError(error, '设置默认模型失败'))
     }
   }
 
@@ -148,12 +141,16 @@ export class AIAPI {
         })
       }
 
-      // 调用后端命令，传递Channel
-      await invoke('stream_chat_message_with_channel', {
-        message,
-        modelId,
-        channel,
-      })
+      // 调用后端命令，传递Channel，设置无超时限制
+      await invoke(
+        'stream_chat_message_with_channel',
+        {
+          message,
+          modelId,
+          channel,
+        },
+        { timeout: 0 }
+      ) // 0 表示无超时限制
     } catch (error) {
       throw new Error(handleError(error, 'Channel流式聊天失败'))
     }
@@ -194,12 +191,16 @@ export class AIAPI {
         })
       }
 
-      // 调用后端命令，传递Channel
-      await invoke('stream_chat_message_with_channel', {
-        message,
-        modelId,
-        channel,
-      })
+      // 调用后端命令，传递Channel，设置无超时限制
+      await invoke(
+        'stream_chat_message_with_channel',
+        {
+          message,
+          modelId,
+          channel,
+        },
+        { timeout: 0 }
+      ) // 0 表示无超时限制
 
       return { cancel }
     } catch (error) {
@@ -288,14 +289,6 @@ export class AIAPI {
     }
   }
 
-  /**
-   * 清除缓存
-   */
-  clearCache(): void {
-    this.modelsCache = null
-    this.cacheExpiry = 0
-  }
-
   // ===== 聊天历史管理 =====
 
   /**
@@ -308,6 +301,14 @@ export class AIAPI {
       return await invoke('get_chat_history', { sessionId })
     } catch (error) {
       throw new Error(handleError(error, '获取聊天历史失败'))
+    }
+  }
+
+  async getChatSessions(): Promise<string[]> {
+    try {
+      return await invoke('get_chat_sessions')
+    } catch (error) {
+      throw new Error(handleError(error, '获取会话列表失败'))
     }
   }
 
@@ -406,6 +407,8 @@ export const ai = {
   addModel: (config: AIModelConfig) => aiAPI.addModel(config),
   updateModel: (modelId: string, updates: Partial<AIModelConfig>) => aiAPI.updateModel(modelId, updates),
   removeModel: (modelId: string) => aiAPI.removeModel(modelId),
+  deleteModel: (modelId: string) => aiAPI.removeModel(modelId), // 别名
+  setDefaultModel: (modelId: string) => aiAPI.setDefaultModel(modelId),
   testConnection: (modelId: string) => aiAPI.testConnection(modelId),
 
   // AI功能
@@ -425,10 +428,10 @@ export const ai = {
   // 统计监控
   getStats: () => aiAPI.getStats(),
   getHealthStatus: () => aiAPI.getHealthStatus(),
-  clearCache: () => aiAPI.clearCache(),
 
   // 聊天历史
   getChatHistory: (sessionId?: string) => aiAPI.getChatHistory(sessionId),
+  getChatSessions: () => aiAPI.getChatSessions(),
   saveChatHistory: (messages: ChatMessage[], sessionId?: string) => aiAPI.saveChatHistory(messages, sessionId),
   clearChatHistory: (sessionId?: string) => aiAPI.clearChatHistory(sessionId),
 

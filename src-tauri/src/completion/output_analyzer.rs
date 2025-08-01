@@ -203,6 +203,27 @@ impl OutputAnalyzer {
         Arc::clone(&self.context_provider)
     }
 
+    /// 获取指定面板的缓冲区内容
+    pub fn get_pane_buffer(&self, pane_id: u32) -> AppResult<String> {
+        let buffer = self
+            .output_buffer
+            .lock()
+            .map_err(|_| anyhow!("获取输出缓冲区锁失败"))?;
+
+        Ok(buffer.get(&pane_id).cloned().unwrap_or_default())
+    }
+
+    /// 设置指定面板的缓冲区内容
+    pub fn set_pane_buffer(&self, pane_id: u32, content: String) -> AppResult<()> {
+        let mut buffer = self
+            .output_buffer
+            .lock()
+            .map_err(|_| anyhow!("获取输出缓冲区锁失败"))?;
+
+        buffer.insert(pane_id, content);
+        Ok(())
+    }
+
     /// 清理指定面板的缓冲区
     pub fn clear_pane_buffer(&self, pane_id: u32) -> AppResult<()> {
         let mut buffer = self

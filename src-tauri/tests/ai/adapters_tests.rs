@@ -2,82 +2,68 @@
  * AI适配器测试
  */
 
-use termx::ai::{AIAdapterManager, CustomAdapter, UnifiedAIAdapter};
+use std::sync::Arc;
+use termx::ai::{AIAdapterManager, AIClient, AIModelConfig, AIProvider};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ai::{test_data::TestModelConfigs, MockAdapter};
+    use crate::ai::test_data::TestModelConfigs;
 
     #[test]
     fn test_adapter_manager_creation() {
         let manager = AIAdapterManager::new();
-        // 基本创建测试
-        assert!(true);
+        assert_eq!(manager.adapter_count(), 0);
     }
 
     #[tokio::test]
-    async fn test_mock_adapter() {
-        let adapter = MockAdapter::success("test");
-
-        // 测试连接
-        let connection_result = adapter.test_connection().await;
-        assert!(connection_result.is_ok());
-
-        // 测试功能列表
-        let features = adapter.supported_features();
-        assert!(!features.is_empty());
-
-        // 测试名称
-        assert_eq!(adapter.name(), "test");
-    }
-
-    #[tokio::test]
-    async fn test_mock_adapter_failure() {
-        let adapter = MockAdapter::failure("test");
-
-        let connection_result = adapter.test_connection().await;
-        assert!(connection_result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_adapter_request() {
-        let adapter = MockAdapter::success("test");
-        let request = crate::ai::test_data::TestRequests::chat();
-
-        let result = adapter.send_request(&request).await;
-        assert!(result.is_ok());
-
-        if let Ok(response) = result {
-            assert!(!response.content.is_empty());
-            assert_eq!(response.model_id, "test");
-        }
-    }
-
-    #[test]
-    fn test_adapter_capabilities() {
-        let adapter = MockAdapter::success("test");
-        let capabilities = adapter.get_capabilities();
-
-        // 验证能力结构
-        assert!(capabilities.max_tokens.is_some());
-        assert!(!capabilities.supported_models.is_empty());
+    async fn test_ai_client_creation() {
+        let config = TestModelConfigs::openai();
+        let client = AIClient::new(config);
+        assert!(client.is_ok());
     }
 
     #[tokio::test]
     async fn test_adapter_manager_operations() {
         let mut manager = AIAdapterManager::new();
-        let adapter = Box::new(MockAdapter::success("test-adapter"));
+        let config = TestModelConfigs::openai();
+        let client = AIClient::new(config).unwrap();
+        let adapter = Arc::new(client);
 
         // 测试添加适配器
-        manager.add_adapter("test-id".to_string(), adapter);
+        manager.register_adapter("test-id".to_string(), adapter.clone());
+        assert_eq!(manager.adapter_count(), 1);
 
         // 测试获取适配器
         let retrieved = manager.get_adapter("test-id");
         assert!(retrieved.is_some());
 
-        // 测试列出适配器
-        let adapters = manager.list_adapters();
-        assert!(!adapters.is_empty());
+        // 测试检查适配器存在
+        assert!(manager.has_adapter("test-id"));
+
+        // 测试获取适配器ID列表
+        let ids = manager.get_adapter_ids();
+        assert_eq!(ids.len(), 1);
+        assert!(ids.contains(&"test-id".to_string()));
+
+        // 测试移除适配器
+        let removed = manager.remove_adapter("test-id");
+        assert!(removed);
+        assert_eq!(manager.adapter_count(), 0);
+    }
+
+    #[test]
+    fn test_adapter_manager_clear() {
+        let mut manager = AIAdapterManager::new();
+        let config = TestModelConfigs::openai();
+        let client = AIClient::new(config).unwrap();
+        let adapter = Arc::new(client);
+
+        manager.register_adapter("test-1".to_string(), adapter.clone());
+        manager.register_adapter("test-2".to_string(), adapter);
+        assert_eq!(manager.adapter_count(), 2);
+
+        manager.clear();
+        assert_eq!(manager.adapter_count(), 0);
     }
 }

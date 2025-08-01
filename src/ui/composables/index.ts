@@ -8,4 +8,4 @@
 export { createMessage, type MessageConfig, type MessageInstance } from './message-api'
 
 // 确认对话框API
-export { confirm, confirmDanger, confirmInfo, confirmWarning, createConfirm, type ConfirmConfig } from './confirm-api'
+export { confirm, confirmDanger, confirmInfo, confirmWarning, type ConfirmConfig } from './confirm-api'

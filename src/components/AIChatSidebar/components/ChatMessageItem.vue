@@ -116,7 +116,10 @@
   <!-- AI消息：直接渲染，无气泡 -->
   <div v-else class="ai-message">
     <div class="ai-content" v-html="formattedContent" @click="handleCopyClick"></div>
-    <div v-if="isStreaming" class="typing-cursor">|</div>
+    <div v-if="isStreaming" class="streaming-indicator">
+      <span class="typing-cursor">|</span>
+      <span class="streaming-text">AI 正在回复...</span>
+    </div>
   </div>
 </template>
 
@@ -166,9 +169,24 @@
     font-size: 14px;
   }
 
+  .streaming-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    opacity: 0.7;
+  }
+
   .typing-cursor {
     color: #1890ff;
+    font-weight: bold;
     animation: blink 1s infinite;
+  }
+
+  .streaming-text {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    font-style: italic;
   }
 
   @keyframes blink {

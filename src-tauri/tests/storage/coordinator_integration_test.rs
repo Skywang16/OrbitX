@@ -22,23 +22,18 @@ async fn create_test_coordinator() -> (StorageCoordinator, TempDir) {
     let paths = StoragePaths::new(temp_dir.path().to_path_buf()).expect("创建存储路径失败");
 
     let options = StorageCoordinatorOptions {
-        cache_enabled: true,
-        cache_size_limit: 1024 * 1024, // 1MB
-        events_enabled: true,
-        toml_options: TomlConfigOptions::default(),
         messagepack_options: MessagePackOptions::default(),
         sqlite_options: SqliteOptions::default(),
-        cache_config: CacheConfig {
-            memory_limit: 512 * 1024, // 512KB
-            lru_capacity: 100,
-            default_ttl: Duration::from_secs(300),
-            disk_cache_dir: paths.cache_dir.clone(),
-            disk_cache_enabled: true,
-            stats_update_interval: Duration::from_secs(10),
-        },
     };
 
-    let coordinator = StorageCoordinator::new(paths, options)
+    // 创建测试用的配置管理器
+    let config_manager = std::sync::Arc::new(
+        terminal_lib::config::TomlConfigManager::new()
+            .await
+            .expect("创建配置管理器失败"),
+    );
+
+    let coordinator = StorageCoordinator::new(paths, options, config_manager)
         .await
         .expect("创建存储协调器失败");
 

@@ -278,6 +278,14 @@ impl TerminalMux {
         panes.get(&pane_id).cloned()
     }
 
+    /// 检查面板是否存在
+    pub fn pane_exists(&self, pane_id: PaneId) -> bool {
+        self.panes
+            .read()
+            .map(|panes| panes.contains_key(&pane_id))
+            .unwrap_or(false)
+    }
+
     /// 移除面板
     ///
     /// 统一日志记录规范：

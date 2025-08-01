@@ -592,7 +592,7 @@
 </template>
 
 <script setup>
-  import { confirm, confirmWarning, confirmDanger, createConfirm } from '@/ui'
+  import { confirm, confirmWarning, confirmDanger } from '@/ui'
   import { createMessage } from '@/ui'
 
   const showBasicConfirm = async () => {
@@ -615,7 +615,7 @@
   }
 
   const showCustomConfirm = async () => {
-    const result = await createConfirm({
+    const result = await confirm({
       title: '自定义确认对话框',
       message: '这是一个完全自定义的确认对话框，您可以自定义标题、按钮文字等。',
       confirmText: '同意',

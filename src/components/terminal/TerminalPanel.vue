@@ -1,6 +1,5 @@
 <script setup lang="ts">
-  import { useTerminalStore } from '@/stores/Terminal'
-  import type { TerminalSession } from '@/types'
+  import { useTerminalStore, type RuntimeTerminalSession } from '@/stores/Terminal'
   import { computed } from 'vue'
   import Terminal from './Terminal.vue'
 
@@ -18,7 +17,7 @@
   const terminals = computed(() => {
     return props.terminalIds
       .map(id => terminalStore.terminals.find(t => t.id === id))
-      .filter((terminal): terminal is TerminalSession => terminal !== undefined)
+      .filter((terminal): terminal is RuntimeTerminalSession => terminal !== undefined)
   })
 
   // --- 事件处理器 ---

@@ -24,9 +24,9 @@ pub use commands::{
 pub use defaults::*;
 pub use paths::ConfigPaths;
 pub use shortcuts::commands::{
-    adapt_shortcuts_for_platform, add_shortcut, detect_shortcut_conflicts, get_current_platform,
-    get_shortcuts_config, get_shortcuts_statistics, remove_shortcut, reset_shortcuts_to_defaults,
-    update_shortcut, update_shortcuts_config, validate_shortcut_binding, validate_shortcuts_config,
+    adapt_shortcuts_for_platform, add_shortcut, get_current_platform, get_shortcuts_config,
+    get_shortcuts_statistics, remove_shortcut, reset_shortcuts_to_defaults, update_shortcut,
+    update_shortcuts_config,
 };
 pub use terminal_commands::{
     detect_system_shells, get_shell_info, get_terminal_config, reset_terminal_config_to_defaults,

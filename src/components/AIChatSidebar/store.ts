@@ -33,11 +33,20 @@ class ChatHistoryManager {
           createdAt: new Date(),
           updatedAt: new Date(),
         }
-        sessions.push(session)
+        // 新会话添加到数组开头，确保它是最新的
+        sessions.unshift(session)
+      } else {
+        // 更新现有会话的时间戳
+        session.updatedAt = new Date()
+        // 将更新的会话移到数组开头
+        const sessionIndex = sessions.findIndex(s => s.id === sessionId)
+        if (sessionIndex > 0) {
+          sessions.splice(sessionIndex, 1)
+          sessions.unshift(session)
+        }
       }
 
       session.messages.push(message)
-      session.updatedAt = new Date()
       this.saveAllSessions(sessions)
     } catch (error) {
       console.error('保存聊天消息失败:', error)
@@ -58,11 +67,20 @@ class ChatHistoryManager {
           createdAt: new Date(),
           updatedAt: new Date(),
         }
-        sessions.push(session)
+        // 新会话添加到数组开头
+        sessions.unshift(session)
+      } else {
+        // 更新现有会话的时间戳
+        session.updatedAt = new Date()
+        // 将更新的会话移到数组开头
+        const sessionIndex = sessions.findIndex(s => s.id === sessionId)
+        if (sessionIndex > 0) {
+          sessions.splice(sessionIndex, 1)
+          sessions.unshift(session)
+        }
       }
 
       session.messages = messages
-      session.updatedAt = new Date()
       this.saveAllSessions(sessions)
     } catch (error) {
       console.error('保存聊天会话失败:', error)
@@ -82,7 +100,9 @@ class ChatHistoryManager {
 
   loadSessions(): ChatSession[] {
     try {
-      return this.loadAllSessions()
+      const sessions = this.loadAllSessions()
+      // 按更新时间降序排列，最新的在前面
+      return sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     } catch (error) {
       console.error('加载会话列表失败:', error)
       return []
@@ -149,7 +169,7 @@ const chatHistory = new ChatHistoryManager()
 export const useAIChatStore = defineStore('ai-chat', () => {
   // 状态
   const isVisible = ref(false)
-  const sidebarWidth = ref(250)
+  const sidebarWidth = ref(350)
   const currentSessionId = ref<string | null>(null)
   const messages = ref<ChatMessage[]>([])
   const streamingContent = ref('')
@@ -180,8 +200,17 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         }
       }
 
-      if (!currentSessionId.value) {
-        createNewSession()
+      // 智能选择会话：如果当前没有会话或没有消息内容，则选择第一个历史会话或创建新会话
+      if (!currentSessionId.value || !hasMessages.value) {
+        loadSessions() // 先加载会话列表
+        const firstSession = getFirstSession()
+        if (firstSession && !hasMessages.value) {
+          // 只有在当前没有消息时才加载历史会话
+          loadSession(firstSession.id)
+        } else if (!currentSessionId.value) {
+          // 如果没有当前会话ID，创建新会话
+          createNewSession()
+        }
       }
     }
   }
@@ -199,8 +228,17 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       }
     }
 
-    if (!currentSessionId.value) {
-      createNewSession()
+    // 智能选择会话：如果当前没有会话或没有消息内容，则选择第一个历史会话或创建新会话
+    if (!currentSessionId.value || !hasMessages.value) {
+      loadSessions() // 先加载会话列表
+      const firstSession = getFirstSession()
+      if (firstSession && !hasMessages.value) {
+        // 只有在当前没有消息时才加载历史会话
+        loadSession(firstSession.id)
+      } else if (!currentSessionId.value) {
+        // 如果没有当前会话ID，创建新会话
+        createNewSession()
+      }
     }
   }
 
@@ -211,9 +249,13 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   const createNewSession = () => {
     saveCurrentSession()
-    currentSessionId.value = chatHistory.generateId()
+    const newSessionId = chatHistory.generateId()
+    currentSessionId.value = newSessionId
     messages.value = []
     error.value = null
+
+    // 创建新会话后立即刷新会话列表，确保新会话出现在列表中
+    loadSessions()
   }
 
   const loadSession = (sessionId: string) => {
@@ -234,6 +276,52 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   const loadSessions = () => {
     sessions.value = chatHistory.loadSessions()
+  }
+
+  // 获取第一个会话（最新的会话）
+  const getFirstSession = (): ChatSession | null => {
+    const sortedSessions = chatHistory.loadSessions()
+    return sortedSessions.length > 0 ? sortedSessions[0] : null
+  }
+
+  // 从后端刷新会话列表
+  const refreshSessions = async () => {
+    try {
+      const sessionIds = await aiAPI.getChatSessions()
+      const localSessions = chatHistory.loadSessions()
+      const refreshedSessions: ChatSession[] = []
+
+      for (const sessionId of sessionIds) {
+        const localSession = localSessions.find(s => s.id === sessionId)
+        const messages = await aiAPI.getChatHistory(sessionId)
+
+        const convertedMessages: ChatMessage[] = messages.map(msg => ({
+          id: msg.id,
+          messageType: msg.messageType,
+          content: msg.content,
+          timestamp: new Date(msg.timestamp),
+          metadata: msg.metadata,
+        }))
+
+        refreshedSessions.push({
+          id: sessionId,
+          title: localSession?.title || convertedMessages[0]?.content.substring(0, 30) || '未命名会话',
+          messages: convertedMessages,
+          createdAt: localSession?.createdAt || new Date(),
+          updatedAt:
+            convertedMessages.length > 0
+              ? new Date(Math.max(...convertedMessages.map(m => m.timestamp.getTime())))
+              : new Date(),
+        })
+      }
+
+      sessions.value = refreshedSessions
+      return refreshedSessions
+    } catch (error) {
+      console.error('刷新会话列表失败:', error)
+      loadSessions()
+      return sessions.value
+    }
   }
 
   const saveCurrentSession = () => {
@@ -281,15 +369,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
       const aiSettingsStore = useAISettingsStore()
 
-      // 设置超时机制，防止流式响应卡住
-      const streamTimeout = setTimeout(() => {
-        if (isStreaming.value) {
-          isStreaming.value = false
-          if (currentSessionId.value) {
-            chatHistory.save(currentSessionId.value, aiMessage)
-          }
-        }
-      }, 30000) // 30秒超时
+      // 移除超时限制，允许长时间的AI响应
 
       const { cancel } = await ai.streamMessageCancellable(
         content,
@@ -299,16 +379,34 @@ export const useAIChatStore = defineStore('ai-chat', () => {
             return
           }
 
+          // 检查是否包含错误信息
+          if (chunk.metadata && typeof chunk.metadata === 'object' && 'error' in chunk.metadata) {
+            const errorInfo = (chunk.metadata as any).error
+            console.error('AI响应错误:', errorInfo)
+
+            // 显示详细错误信息
+            const errorMessage = `${errorInfo.message || '未知错误'}`
+            const errorDetails = errorInfo.providerResponse
+              ? `\n详细信息: ${JSON.stringify(errorInfo.providerResponse, null, 2)}`
+              : ''
+
+            // 直接更新消息内容为错误信息
+            messages.value[messageIndex].content = `❌ ${errorMessage}${errorDetails}`
+
+            clearTimeout(streamTimeout)
+            isStreaming.value = false
+            if (currentSessionId.value) {
+              chatHistory.save(currentSessionId.value, messages.value[messageIndex])
+            }
+            return
+          }
+
           if (chunk.content) {
             // 累积流式内容
             streamingContent.value += chunk.content
 
-            // 强制更新消息数组，确保Vue响应式更新
-            const currentMessage = messages.value[messageIndex]
-            messages.value.splice(messageIndex, 1, {
-              ...currentMessage,
-              content: streamingContent.value,
-            })
+            // 直接更新消息内容，避免使用splice
+            messages.value[messageIndex].content = streamingContent.value
           }
 
           if (chunk.isComplete) {
@@ -324,9 +422,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
       // 保存取消函数
       cancelFunction.value = cancel
-
-      // 清除超时器
-      clearTimeout(streamTimeout)
 
       // 确保流式状态被重置（防止后端没有发送完成标志）
       if (isStreaming.value) {
@@ -401,6 +496,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     loadSession,
     deleteSession,
     loadSessions,
+    getFirstSession,
+    refreshSessions,
     saveCurrentSession,
     sendMessage,
     stopStreaming,

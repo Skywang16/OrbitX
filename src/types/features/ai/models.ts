@@ -4,7 +4,7 @@
 
 // ===== AI提供商类型 =====
 
-export type AIProvider = 'openAI' | 'claude' | 'local' | 'custom'
+export type AIProvider = 'openAI' | 'claude' | 'custom'
 
 // ===== AI模型配置类型 =====
 
@@ -58,6 +58,12 @@ export interface AIResponse {
     model?: string
     tokensUsed?: number
     responseTime?: number
+  }
+  error?: {
+    message: string
+    code?: string
+    details?: Record<string, unknown>
+    providerResponse?: Record<string, unknown>
   }
 }
 

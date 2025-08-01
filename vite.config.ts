@@ -40,10 +40,7 @@ export default defineConfig(() => ({
   build: {
     // Tauri 在 Windows 上使用 Chromium，在 macOS 和 Linux 上使用 WebKit
     // @ts-expect-error process is a nodejs global
-    target:
-      process.env.TAURI_ENV_PLATFORM == 'windows'
-        ? 'chrome105'
-        : 'safari13',
+    target: process.env.TAURI_ENV_PLATFORM == 'windows' ? 'chrome105' : 'safari13',
     // 在 debug 构建中不使用 minify
     // @ts-expect-error process is a nodejs global
     minify: !process.env.TAURI_ENV_DEBUG ? ('esbuild' as const) : false,

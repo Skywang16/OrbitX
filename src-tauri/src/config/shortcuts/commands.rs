@@ -155,38 +155,6 @@ pub async fn update_shortcut(
     Ok(())
 }
 
-// ============================================================================
-// 兼容性存根函数（为了保持向后兼容）
-// ============================================================================
-
-/// 验证快捷键配置（存根实现）
-#[tauri::command]
-pub async fn validate_shortcuts_config(
-    _state: State<'_, ConfigManagerState>,
-) -> Result<(), String> {
-    debug!("验证快捷键配置");
-    Ok(())
-}
-
-/// 验证快捷键绑定（存根实现）
-#[tauri::command]
-pub async fn validate_shortcut_binding(
-    _binding: ShortcutBinding,
-    _state: State<'_, ConfigManagerState>,
-) -> Result<(), String> {
-    debug!("验证快捷键绑定");
-    Ok(())
-}
-
-/// 检测快捷键冲突（存根实现）
-#[tauri::command]
-pub async fn detect_shortcut_conflicts(
-    _state: State<'_, ConfigManagerState>,
-) -> Result<Vec<String>, String> {
-    debug!("检测快捷键冲突");
-    Ok(Vec::new())
-}
-
 /// 为平台适配快捷键（存根实现）
 #[tauri::command]
 pub async fn adapt_shortcuts_for_platform(

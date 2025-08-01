@@ -142,9 +142,6 @@ export class APIClient {
         lastError = error as Error
 
         if (attempt < maxRetries) {
-          if (this.enableLogging) {
-            console.warn(`[API Retry] ${command} attempt ${attempt + 1} failed, retrying in ${retryDelay}ms...`)
-          }
           await new Promise(resolve => setTimeout(resolve, retryDelay))
         }
       }

@@ -5,7 +5,6 @@
  */
 
 // 测试工具和模拟组件
-pub mod mock_adapters;
 pub mod test_data;
 pub mod test_utils;
 
@@ -24,7 +23,6 @@ pub mod prompt_engine_tests;
 pub mod integration_tests;
 
 // 重新导出常用的测试工具
-pub use mock_adapters::*;
 pub use test_data::*;
 pub use test_utils::*;
 

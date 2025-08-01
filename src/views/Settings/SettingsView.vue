@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import AISettings from '@/components/settings/components/AI/AISettings.vue'
   import ConfigSettings from '@/components/settings/components/Config/ConfigSettings.vue'
+  import SystemSettings from '@/components/settings/components/System/SystemSettings.vue'
   import ThemeSettings from '@/components/settings/components/Theme/ThemeSettings.vue'
   import SettingsNav from '@/components/settings/SettingsNav.vue'
   import { useSettingsStore } from '@/components/settings/store'
@@ -37,6 +38,7 @@
           <ThemeSettings v-if="settingsStore.activeSection === 'theme'" />
           <ConfigSettings v-if="settingsStore.activeSection === 'config'" />
           <AISettings v-if="settingsStore.activeSection === 'ai'" />
+          <SystemSettings v-if="settingsStore.activeSection === 'system'" />
 
           <!-- 默认显示主题设置 -->
           <ThemeSettings v-if="!settingsStore.activeSection" />

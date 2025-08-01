@@ -1,0 +1,161 @@
+<script setup lang="ts">
+  import { computed } from 'vue'
+  import { XSelect } from '@/ui'
+  import type { SelectOption } from '@/ui'
+  import type { ChatSession } from '@/types'
+
+  // Props定义
+  interface Props {
+    sessions: ChatSession[]
+    currentSessionId: string | null
+    loading?: boolean
+  }
+
+  // Emits定义
+  interface Emits {
+    (e: 'select-session', sessionId: string): void
+    (e: 'create-new-session'): void
+    (e: 'delete-session', sessionId: string): void
+    (e: 'refresh-sessions'): void
+  }
+
+  const props = withDefaults(defineProps<Props>(), {
+    loading: false,
+  })
+
+  const emit = defineEmits<Emits>()
+
+  const selectOptions = computed<SelectOption[]>(() => {
+    return props.sessions.map(session => ({
+      label: session.title || '未命名会话',
+      value: session.id,
+      description: `${session.messages.length} 条消息 · ${formatDate(session.updatedAt)}`,
+    }))
+  })
+
+  const currentValue = computed(() => {
+    if (!props.currentSessionId) return null
+    return props.currentSessionId
+  })
+
+  const displayValue = computed(() => {
+    if (!props.currentSessionId) return '选择会话'
+    const session = props.sessions.find(s => s.id === props.currentSessionId)
+    return session?.title || '当前会话'
+  })
+
+  // 方法
+  const formatDate = (date: Date | string) => {
+    const d = new Date(date)
+    const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffDays === 0) {
+      return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    } else if (diffDays === 1) {
+      return '昨天'
+    } else if (diffDays < 7) {
+      return `${diffDays}天前`
+    } else {
+      return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+    }
+  }
+
+  const handleSelectChange = (value: string | number | null) => {
+    if (value) {
+      emit('select-session', value as string)
+    }
+  }
+
+  const handleVisibleChange = (visible: boolean) => {
+    if (visible) {
+      emit('refresh-sessions')
+    }
+  }
+</script>
+
+<template>
+  <div class="session-select">
+    <XSelect
+      :model-value="currentValue"
+      :options="selectOptions"
+      :placeholder="displayValue"
+      :disabled="loading"
+      size="small"
+      borderless
+      filterable
+      filter-placeholder="搜索会话..."
+      no-data-text="暂无会话历史"
+      max-height="300px"
+      @update:model-value="handleSelectChange"
+      @visible-change="handleVisibleChange"
+    />
+  </div>
+</template>
+
+<style scoped>
+  .session-select {
+    flex: 1;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .session-select :deep(.x-select) {
+    width: 100%;
+  }
+
+  .session-select :deep(.x-select__input) {
+    padding: 0.3em 1.6em 0.3em 0.6em;
+    min-height: 1.6em;
+    font-size: clamp(10px, 3.5vw, 14px);
+    border-radius: 3px;
+    transition: all 0.2s ease;
+  }
+
+  .session-select :deep(.x-select__input:hover) {
+    background-color: var(--color-background-hover, rgba(0, 0, 0, 0.05));
+  }
+
+  .session-select :deep(.x-select--open .x-select__input) {
+    background-color: var(--color-background-hover, rgba(0, 0, 0, 0.05));
+  }
+
+  .session-select :deep(.x-select__value) {
+    font-weight: 500;
+    color: var(--color-text);
+  }
+
+  .session-select :deep(.x-select__placeholder) {
+    color: var(--color-text-secondary);
+    font-weight: 400;
+  }
+
+  .session-select :deep(.x-select__arrow) {
+    right: 4px;
+    width: 10px;
+    height: 10px;
+  }
+
+  .session-select :deep(.x-select__arrow svg) {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* 下拉选项样式优化 */
+  .session-select :deep(.x-select__option) {
+    padding: 0.5em 0.8em;
+    min-height: 2.2em;
+  }
+
+  .session-select :deep(.x-select__option-label) {
+    font-size: clamp(10px, 3.2vw, 13px);
+    font-weight: 500;
+  }
+
+  .session-select :deep(.x-select__option-description) {
+    font-size: clamp(8px, 2.8vw, 11px);
+    margin-top: 0.1em;
+    opacity: 0.7;
+  }
+</style>

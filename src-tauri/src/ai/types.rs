@@ -1,5 +1,5 @@
 /*!
- * AI相关的数据类型定义
+ * AI相关的数据类型定义 - 简化版
  */
 
 use chrono::{DateTime, Utc};
@@ -16,7 +16,6 @@ use uuid::Uuid;
 pub enum AIProvider {
     OpenAI,
     Claude,
-    Local,
     Custom,
 }
 
@@ -97,7 +96,7 @@ impl AIModelConfig {
         self.options
             .as_ref()
             .and_then(|opts| opts.timeout)
-            .unwrap_or(30) // 默认30秒
+            .unwrap_or(0) // 默认无超时限制
     }
 
     /// 获取最大token数
@@ -226,11 +225,22 @@ pub struct AIResponse {
     pub response_type: AIResponseType,
     pub suggestions: Option<Vec<String>>,
     pub metadata: Option<AIResponseMetadata>,
+    pub error: Option<AIErrorInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AIErrorInfo {
+    pub message: String,
+    pub code: Option<String>,
+    pub details: Option<serde_json::Value>,
+    pub provider_response: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AIResponseType {
+    Chat,
     Text,
     Code,
     Command,

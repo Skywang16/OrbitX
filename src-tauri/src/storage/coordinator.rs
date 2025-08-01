@@ -58,18 +58,15 @@ pub struct StorageCoordinator {
 
 impl StorageCoordinator {
     /// 创建新的存储协调器
-    pub async fn new(paths: StoragePaths, options: StorageCoordinatorOptions) -> AppResult<Self> {
+    pub async fn new(
+        paths: StoragePaths,
+        options: StorageCoordinatorOptions,
+        config_manager: Arc<TomlConfigManager>,
+    ) -> AppResult<Self> {
         info!("初始化简化的存储协调器");
 
         // 确保所有目录存在
         paths.ensure_directories().context("创建存储目录失败")?;
-
-        // 初始化TOML配置管理器
-        let config_manager = Arc::new(
-            TomlConfigManager::new()
-                .await
-                .context("初始化配置管理器失败")?,
-        );
 
         // 初始化MessagePack状态管理器
         let messagepack_manager = Arc::new(
@@ -120,10 +117,10 @@ impl StorageCoordinator {
     pub async fn get_config(&self, section: &str) -> AppResult<Value> {
         debug!("获取配置节: {}", section);
 
-        // 从配置管理器加载配置
+        // 从配置管理器获取配置（使用缓存）
         let config = self
             .config_manager
-            .load_config()
+            .get_config()
             .await
             .context("获取配置失败")?;
 
@@ -132,7 +129,11 @@ impl StorageCoordinator {
             "app" => serde_json::to_value(&config.app)?,
             "appearance" => serde_json::to_value(&config.appearance)?,
             "terminal" => serde_json::to_value(&config.terminal)?,
-            "ai" => serde_json::to_value(&config.ai)?,
+            "ai" => {
+                // AI配置已迁移到SQLite，返回空对象
+                debug!("AI配置请求被重定向，AI配置已迁移到SQLite");
+                Value::Object(serde_json::Map::new())
+            }
             "shortcuts" => serde_json::to_value(&config.shortcuts)?,
             _ => Value::Object(serde_json::Map::new()),
         };
@@ -185,6 +186,11 @@ impl StorageCoordinator {
     /// 获取协调器选项的引用
     pub fn options(&self) -> &StorageCoordinatorOptions {
         &self.options
+    }
+
+    /// 获取SQLite管理器的引用
+    pub fn sqlite_manager(&self) -> Arc<SqliteManager> {
+        self.sqlite_manager.clone()
     }
 
     /// 健康检查

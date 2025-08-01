@@ -675,6 +675,15 @@ impl TomlConfigManager {
                     bail!("滚动缓冲区设置必须是正整数");
                 }
             }
+            "ai" => {
+                // AI配置已迁移到SQLite，TOML中不再存储AI配置
+                bail!("AI配置已迁移到SQLite，请使用AI API进行配置管理");
+            }
+            "shortcuts" => {
+                let shortcuts_config: crate::config::types::ShortcutsConfig =
+                    serde_json::from_value(data).context("无法反序列化快捷键配置")?;
+                config.shortcuts = shortcuts_config;
+            }
             _ => {
                 bail!("不支持的配置节: {}", section);
             }

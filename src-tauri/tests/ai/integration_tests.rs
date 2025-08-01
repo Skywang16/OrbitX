@@ -11,7 +11,6 @@ mod tests {
     use crate::ai::{
         test_data::{TestModelConfigs, TestRequests, TestSettings},
         test_utils::TestEnvironment,
-        MockAdapter,
     };
 
     #[tokio::test]
@@ -25,11 +24,13 @@ mod tests {
             let _ = config_manager.add_model(model);
         }
 
-        // 2. 添加模拟适配器
+        // 2. 添加AI客户端
         {
             let mut adapter_manager = env.adapter_manager.lock().await;
-            let adapter = Box::new(MockAdapter::success("test-model"));
-            adapter_manager.add_adapter("test-model".to_string(), adapter);
+            let config = TestModelConfigs::openai();
+            if let Ok(client) = termx::ai::AIClient::new(config) {
+                adapter_manager.register_adapter("test-model".to_string(), Arc::new(client));
+            }
         }
 
         // 3. 设置上下文
@@ -92,11 +93,13 @@ mod tests {
     async fn test_cache_integration() {
         let env = TestEnvironment::new().await.unwrap();
 
-        // 添加模拟适配器
+        // 添加AI客户端
         {
             let mut adapter_manager = env.adapter_manager.lock().await;
-            let adapter = Box::new(MockAdapter::success("cached-model"));
-            adapter_manager.add_adapter("cached-model".to_string(), adapter);
+            let config = TestModelConfigs::openai();
+            if let Ok(client) = termx::ai::AIClient::new(config) {
+                adapter_manager.register_adapter("cached-model".to_string(), Arc::new(client));
+            }
         }
 
         let processor = termx::ai::AICommandProcessor::new(
@@ -138,11 +141,13 @@ mod tests {
     async fn test_error_handling_integration() {
         let env = TestEnvironment::new().await.unwrap();
 
-        // 添加会失败的模拟适配器
+        // 添加AI客户端（可能会失败）
         {
             let mut adapter_manager = env.adapter_manager.lock().await;
-            let adapter = Box::new(MockAdapter::failure("failing-model"));
-            adapter_manager.add_adapter("failing-model".to_string(), adapter);
+            let config = TestModelConfigs::openai();
+            if let Ok(client) = termx::ai::AIClient::new(config) {
+                adapter_manager.register_adapter("failing-model".to_string(), Arc::new(client));
+            }
         }
 
         let processor = termx::ai::AICommandProcessor::new(
@@ -168,11 +173,13 @@ mod tests {
     async fn test_concurrent_requests() {
         let env = TestEnvironment::new().await.unwrap();
 
-        // 添加模拟适配器
+        // 添加AI客户端
         {
             let mut adapter_manager = env.adapter_manager.lock().await;
-            let adapter = Box::new(MockAdapter::success("concurrent-model"));
-            adapter_manager.add_adapter("concurrent-model".to_string(), adapter);
+            let config = TestModelConfigs::openai();
+            if let Ok(client) = termx::ai::AIClient::new(config) {
+                adapter_manager.register_adapter("concurrent-model".to_string(), Arc::new(client));
+            }
         }
 
         let processor = Arc::new(termx::ai::AICommandProcessor::new(
@@ -216,11 +223,13 @@ mod tests {
     async fn test_performance_benchmark() {
         let env = TestEnvironment::new().await.unwrap();
 
-        // 添加快速响应的模拟适配器
+        // 添加AI客户端
         {
             let mut adapter_manager = env.adapter_manager.lock().await;
-            let adapter = Box::new(MockAdapter::success("fast-model"));
-            adapter_manager.add_adapter("fast-model".to_string(), adapter);
+            let config = TestModelConfigs::openai();
+            if let Ok(client) = termx::ai::AIClient::new(config) {
+                adapter_manager.register_adapter("fast-model".to_string(), Arc::new(client));
+            }
         }
 
         let processor = termx::ai::AICommandProcessor::new(

@@ -57,12 +57,12 @@ impl TestModelConfigs {
         }
     }
 
-    /// 本地模型配置
+    /// 本地模型配置（现在使用Custom类型）
     pub fn local() -> AIModelConfig {
         AIModelConfig {
             id: "local-llama".to_string(),
             name: "Local Llama 2".to_string(),
-            provider: AIProvider::Local,
+            provider: AIProvider::Custom,
             api_url: "http://localhost:11434".to_string(),
             api_key: "".to_string(),
             model: "llama2".to_string(),
@@ -101,12 +101,7 @@ impl TestModelConfigs {
 
     /// 获取所有测试模型配置
     pub fn all() -> Vec<AIModelConfig> {
-        vec![
-            Self::openai(),
-            Self::claude(),
-            Self::local(),
-            Self::custom(),
-        ]
+        vec![Self::openai(), Self::claude(), Self::custom()]
     }
 }
 
@@ -317,9 +312,10 @@ impl TestResponses {
     pub fn chat() -> AIResponse {
         AIResponse {
             content: "I can help you fix that error. Can you provide more details about the specific error message and the code that's causing it?".to_string(),
-            model_id: "test-model".to_string(),
-            usage: None,
+            response_type: crate::ai::AIResponseType::Chat,
+            suggestions: None,
             metadata: None,
+            error: None,
         }
     }
 }

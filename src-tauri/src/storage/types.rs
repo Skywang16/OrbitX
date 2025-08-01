@@ -4,9 +4,10 @@
  * 定义存储系统中使用的核心数据类型和接口
  */
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 /// 存储层类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -161,6 +162,7 @@ impl SaveOptions {
 
 /// 会话状态数据结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionState {
     /// 版本号
     pub version: u32,
@@ -173,7 +175,7 @@ pub struct SessionState {
     /// UI状态
     pub ui_state: UiState,
     /// 创建时间
-    pub created_at: SystemTime,
+    pub created_at: DateTime<Utc>,
     /// 校验和
     pub checksum: Option<String>,
 }
@@ -186,7 +188,7 @@ impl Default for SessionState {
             tabs: Vec::new(),
             terminal_sessions: HashMap::new(),
             ui_state: UiState::default(),
-            created_at: SystemTime::now(),
+            created_at: Utc::now(),
             checksum: None,
         }
     }
@@ -194,6 +196,7 @@ impl Default for SessionState {
 
 /// 窗口状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WindowState {
     /// 窗口位置 (x, y)
     pub position: (i32, i32),
@@ -221,6 +224,7 @@ impl Default for WindowState {
 
 /// 标签页状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TabState {
     /// 标签页ID
     pub id: String,
@@ -238,6 +242,7 @@ pub struct TabState {
 
 /// 终端会话状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TerminalSession {
     /// 会话ID
     pub id: String,
@@ -252,13 +257,14 @@ pub struct TerminalSession {
     /// 是否活跃
     pub is_active: bool,
     /// 创建时间
-    pub created_at: SystemTime,
+    pub created_at: DateTime<Utc>,
     /// 最后活跃时间
-    pub last_active: SystemTime,
+    pub last_active: DateTime<Utc>,
 }
 
 /// UI状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UiState {
     /// 侧边栏是否可见
     pub sidebar_visible: bool,
@@ -444,9 +450,9 @@ pub enum StorageEvent {
         new_value: serde_json::Value,
     },
     /// 状态保存事件
-    StateSaved { timestamp: SystemTime, size: u64 },
+    StateSaved { timestamp: DateTime<Utc>, size: u64 },
     /// 状态加载事件
-    StateLoaded { timestamp: SystemTime, size: u64 },
+    StateLoaded { timestamp: DateTime<Utc>, size: u64 },
     /// 数据更新事件
     DataUpdated {
         table: String,
@@ -463,7 +469,7 @@ pub enum StorageEvent {
     Error {
         layer: StorageLayer,
         error: String,
-        timestamp: SystemTime,
+        timestamp: DateTime<Utc>,
     },
 }
 

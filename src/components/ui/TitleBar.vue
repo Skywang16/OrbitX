@@ -1,12 +1,14 @@
 <script setup lang="ts">
   import ButtonGroup from '@/components/ui/ButtonGroup.vue'
   import TabBar from '@/components/ui/TabBar.vue'
-  import type { TerminalSession, TabItem } from '@/types'
+  import { useTerminalStore } from '@/stores/Terminal'
+  import type { RuntimeTerminalSession } from '@/stores/Terminal'
+  import type { TabItem } from '@/types'
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import { computed } from 'vue'
 
   interface Props {
-    terminals: TerminalSession[]
+    terminals: RuntimeTerminalSession[]
     activeTerminalId: string | null
   }
 
@@ -17,13 +19,14 @@
 
   const props = defineProps<Props>()
   const emit = defineEmits<Emits>()
+  const terminalStore = useTerminalStore()
 
   // 转换终端数据为标签数据
   const tabs = computed<TabItem[]>(() =>
     props.terminals.map(terminal => ({
       id: terminal.id,
       title: terminal.title,
-      isActive: terminal.isActive,
+      isActive: terminal.id === props.activeTerminalId,
       closable: true,
     }))
   )

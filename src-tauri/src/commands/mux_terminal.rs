@@ -12,7 +12,7 @@
 // 注意：移除未使用的 anyhow 导入，因为所有 Tauri 命令都直接返回 Result<T, String>
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Runtime, State};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::mux::{
     get_mux, MuxNotification, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager,
@@ -242,17 +242,40 @@ pub async fn resize_terminal(
 /// - 参数顺序：业务参数在前，state在后
 /// - 日志记录：记录操作开始、成功和失败
 /// - 错误处理：统一转换为String类型
+/// - 防御性编程：优雅处理面板不存在的情况
 #[tauri::command]
 pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> Result<(), String> {
     let start_time = Instant::now();
-    info!(
-        "开始关闭终端会话: ID={}, 当前面板数量: {}",
-        pane_id,
-        get_mux().pane_count()
-    );
-
     let mux = get_mux();
     let pane_id = PaneId::from(pane_id);
+
+    info!(
+        "开始关闭终端会话: ID={}, 当前面板数量: {}",
+        pane_id.as_u32(),
+        mux.pane_count()
+    );
+
+    // 首先检查面板是否存在
+    let pane_exists = mux.pane_exists(pane_id);
+
+    if !pane_exists {
+        let warning_msg = format!(
+            "尝试关闭不存在的面板: ID={}, 当前面板数量: {}, 可能已被其他操作关闭",
+            pane_id.as_u32(),
+            mux.pane_count()
+        );
+        warn!("{}", warning_msg);
+
+        // 对于不存在的面板，我们认为关闭操作已经完成，返回成功
+        // 这避免了前端显示错误，同时记录了警告信息用于调试
+        let processing_time = start_time.elapsed().as_millis();
+        info!(
+            "面板关闭操作完成(面板已不存在): ID={}, 耗时: {}ms",
+            pane_id.as_u32(),
+            processing_time
+        );
+        return Ok(());
+    }
 
     match mux.remove_pane(pane_id) {
         Ok(_) => {
@@ -389,6 +412,64 @@ pub fn setup_tauri_integration<R: Runtime>(app_handle: AppHandle<R>) {
 }
 
 // === Shell 管理命令 ===
+
+/// 获取终端缓冲区内容
+///
+/// 统一命令处理规范：
+/// - 参数顺序：业务参数在前，state在后
+/// - 日志记录：记录操作开始、成功和失败
+/// - 错误处理：统一转换为String类型
+#[tauri::command]
+pub async fn get_terminal_buffer(pane_id: u32) -> Result<String, String> {
+    debug!("开始获取终端缓冲区内容: ID={}", pane_id);
+
+    use crate::completion::output_analyzer::OutputAnalyzer;
+
+    match OutputAnalyzer::global().get_pane_buffer(pane_id) {
+        Ok(content) => {
+            debug!(
+                "获取终端缓冲区成功: ID={}, 内容长度={}",
+                pane_id,
+                content.len()
+            );
+            Ok(content)
+        }
+        Err(e) => {
+            let error_msg = format!("获取终端缓冲区失败: ID={}, 错误: {}", pane_id, e);
+            error!("{}", error_msg);
+            Err(error_msg)
+        }
+    }
+}
+
+/// 设置终端缓冲区内容
+///
+/// 统一命令处理规范：
+/// - 参数顺序：业务参数在前，state在后
+/// - 日志记录：记录操作开始、成功和失败
+/// - 错误处理：统一转换为String类型
+#[tauri::command]
+pub async fn set_terminal_buffer(pane_id: u32, content: String) -> Result<(), String> {
+    debug!(
+        "开始设置终端缓冲区内容: ID={}, 内容长度={}",
+        pane_id,
+        content.len()
+    );
+
+    use crate::completion::output_analyzer::OutputAnalyzer;
+
+    match OutputAnalyzer::global().set_pane_buffer(pane_id, content) {
+        Ok(_) => {
+            debug!("设置终端缓冲区成功: ID={}", pane_id);
+            Ok(())
+        }
+        Err(e) => {
+            let error_msg = format!("设置终端缓冲区失败: ID={}, 错误: {}", pane_id, e);
+            error!("{}", error_msg);
+            Err(error_msg)
+        }
+    }
+}
 
 /// 获取系统可用的shell列表
 ///

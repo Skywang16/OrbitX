@@ -18,7 +18,7 @@ export interface TerminalConfig {
 export interface ShellConfig {
   default: string
   args: string[]
-  working_directory: string
+  workingDirectory: string
 }
 
 export interface CursorConfig {
@@ -29,8 +29,8 @@ export interface CursorConfig {
 }
 
 export interface TerminalBehaviorConfig {
-  close_on_exit: boolean
-  confirm_close: boolean
+  closeOnExit: boolean
+  confirmClose: boolean
 }
 
 export interface TerminalConfigUpdateRequest {
@@ -41,10 +41,10 @@ export interface TerminalConfigUpdateRequest {
 }
 
 export interface TerminalConfigValidationResult {
-  is_valid: boolean
+  isValid: boolean
   errors: string[]
   warnings: string[]
-  validated_fields: string[]
+  validatedFields: string[]
 }
 
 export interface ShellInfo {
@@ -256,7 +256,7 @@ export const DEFAULT_TERMINAL_CONFIG: TerminalConfig = {
   shell: {
     default: 'zsh',
     args: [],
-    working_directory: '~',
+    workingDirectory: '~',
   },
   cursor: {
     style: 'block',
@@ -265,8 +265,8 @@ export const DEFAULT_TERMINAL_CONFIG: TerminalConfig = {
     thickness: 0.15,
   },
   behavior: {
-    close_on_exit: true,
-    confirm_close: false,
+    closeOnExit: true,
+    confirmClose: false,
   },
 }
 

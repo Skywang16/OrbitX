@@ -1,9 +1,11 @@
 import { shell as shellAPI } from '@/api/shell'
 import { terminal as terminalAPI } from '@/api/terminal'
-import type { ShellInfo, ShellManagerState, TerminalSession } from '@/types'
+import type { ShellInfo } from '@/api/shell/types'
+import { useSessionStore } from '@/stores/session'
+import type { TabState, TerminalSession } from '@/types/storage'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 // 组件可以注册的回调函数类型
 interface TerminalEventListeners {
@@ -11,9 +13,22 @@ interface TerminalEventListeners {
   onExit: (exitCode: number | null) => void
 }
 
+// Shell管理状态类型
+interface ShellManagerState {
+  availableShells: ShellInfo[]
+  isLoading: boolean
+  error: string | null
+}
+
+// 终端运行时会话类型，扩展存储型的 TerminalSession
+export interface RuntimeTerminalSession extends TerminalSession {
+  backendId: number | null // 后端进程ID
+  shellInfo?: ShellInfo // Shell信息
+}
+
 export const useTerminalStore = defineStore('Terminal', () => {
   // --- 状态 ---
-  const terminals = ref<TerminalSession[]>([])
+  const terminals = ref<RuntimeTerminalSession[]>([])
   const activeTerminalId = ref<string | null>(null)
 
   // Shell管理状态
@@ -30,6 +45,19 @@ export const useTerminalStore = defineStore('Terminal', () => {
   let _isListenerSetup = false
 
   let nextId = 0
+
+  // 会话状态管理
+  const sessionStore = useSessionStore()
+
+  // 监听终端状态变化，同步到会话存储（但不立即保存到磁盘）
+  watch(
+    [terminals, activeTerminalId],
+    () => {
+      // 只同步到内存中的会话状态，不触发磁盘保存
+      syncToSessionStore()
+    },
+    { deep: true }
+  )
 
   // --- 计算属性 ---
   const activeTerminal = computed(() => terminals.value.find(t => t.id === activeTerminalId.value))
@@ -50,7 +78,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     if (_isListenerSetup) return
     console.log('正在设置全局 Mux 终端监听器...')
 
-    const findTerminalByBackendId = (backendId: number): TerminalSession | undefined => {
+    const findTerminalByBackendId = (backendId: number): RuntimeTerminalSession | undefined => {
       return terminals.value.find(t => t.backendId === backendId)
     }
 
@@ -121,12 +149,17 @@ export const useTerminalStore = defineStore('Terminal', () => {
   const createTerminal = async (initialDirectory?: string): Promise<string> => {
     const id = generateId()
 
-    // 先创建一个临时标题，后面会更新
-    const terminal: TerminalSession = {
+    // 先创建一个临时的终端会话记录
+    const terminal: RuntimeTerminalSession = {
       id,
-      backendId: null,
       title: 'Terminal',
-      isActive: false, // 保留以兼容类型定义
+      workingDirectory: initialDirectory || '~',
+      environment: {},
+      commandHistory: [],
+      isActive: false,
+      createdAt: new Date().toISOString(),
+      lastActive: new Date().toISOString(),
+      backendId: null,
     }
     terminals.value.push(terminal)
 
@@ -164,29 +197,58 @@ export const useTerminalStore = defineStore('Terminal', () => {
    */
   const closeTerminal = async (id: string) => {
     const terminal = terminals.value.find(t => t.id === id)
-    if (!terminal) return
+    if (!terminal) {
+      console.warn(`尝试关闭不存在的终端: ${id}`)
+      return
+    }
+
+    // 防止重复关闭：如果终端正在关闭过程中，直接返回
+    if (terminal.backendId === null) {
+      console.log(`终端 '${id}' 已经关闭或正在关闭中`)
+      // 仍然需要清理前端状态
+      cleanupTerminalState(id)
+      return
+    }
 
     unregisterTerminalCallbacks(id)
 
-    if (terminal.backendId !== null) {
-      try {
-        await terminalAPI.close(terminal.backendId)
-      } catch (error) {
-        console.error(`关闭终端 '${id}' 的后端失败:`, error)
-      }
+    // 先将 backendId 设为 null，防止重复关闭
+    const backendId = terminal.backendId
+    terminal.backendId = null
+
+    try {
+      await terminalAPI.close(backendId)
+      console.log(`成功关闭终端后端: ${id} (backendId: ${backendId})`)
+    } catch (error) {
+      console.error(`关闭终端 '${id}' 的后端失败:`, error)
+      // 即使后端关闭失败，也要清理前端状态
+      // 这通常意味着后端面板已经不存在了
     }
 
+    // 清理前端状态
+    cleanupTerminalState(id)
+  }
+
+  /**
+   * 清理终端的前端状态
+   */
+  const cleanupTerminalState = (id: string) => {
     const index = terminals.value.findIndex(t => t.id === id)
     if (index !== -1) {
       terminals.value.splice(index, 1)
+      console.log(`已清理终端前端状态: ${id}`)
     }
 
+    // 如果关闭的是当前活动终端，需要切换到其他终端
     if (activeTerminalId.value === id) {
       if (terminals.value.length > 0) {
         setActiveTerminal(terminals.value[0].id)
       } else {
         activeTerminalId.value = null
-        await createTerminal()
+        // 异步创建新终端，避免阻塞当前操作
+        createTerminal().catch(error => {
+          console.error('自动创建新终端失败:', error)
+        })
       }
     }
   }
@@ -277,11 +339,16 @@ export const useTerminalStore = defineStore('Terminal', () => {
       throw new Error(`未找到shell: ${shellName}`)
     }
 
-    const terminal: TerminalSession = {
+    const terminal: RuntimeTerminalSession = {
       id,
-      backendId: null,
       title,
+      workingDirectory: shellInfo.path || '~',
+      environment: {},
+      commandHistory: [],
       isActive: false,
+      createdAt: new Date().toISOString(),
+      lastActive: new Date().toISOString(),
+      backendId: null,
       shellInfo,
     }
     terminals.value.push(terminal)
@@ -329,6 +396,182 @@ export const useTerminalStore = defineStore('Terminal', () => {
     await loadAvailableShells()
   }
 
+  // ============================================================================
+  // 会话状态管理
+  // ============================================================================
+
+  /**
+   * 同步终端状态到会话存储（不触发自动保存）
+   */
+  const syncToSessionStore = () => {
+    console.log('🔄 [Terminal Store] 同步终端状态到会话存储')
+    console.log('📊 [Terminal Store] 当前终端数量:', terminals.value.length)
+
+    // 直接替换整个对象，避免触发 Session Store 的响应式更新
+    const terminalSessions: Record<string, TerminalSession> = {}
+    const tabs: TabState[] = []
+
+    terminals.value.forEach(terminal => {
+      // 创建终端会话记录
+      const sessionData: TerminalSession = {
+        id: terminal.id,
+        title: terminal.title,
+        workingDirectory: terminal.workingDirectory,
+        environment: terminal.environment,
+        commandHistory: terminal.commandHistory,
+        isActive: terminal.id === activeTerminalId.value,
+        createdAt: terminal.createdAt,
+        lastActive: new Date().toISOString(),
+      }
+
+      console.log(
+        `📱 [Terminal Store] 同步终端 ${terminal.id}: title='${terminal.title}', isActive=${sessionData.isActive}`
+      )
+      terminalSessions[terminal.id] = sessionData
+
+      // 创建标签页记录
+      const tabData: TabState = {
+        id: terminal.id,
+        title: terminal.title,
+        isActive: terminal.id === activeTerminalId.value,
+        workingDirectory: terminal.workingDirectory,
+        terminalSessionId: terminal.id,
+        customData: {
+          backendId: terminal.backendId,
+          shellInfo: terminal.shellInfo,
+        },
+      }
+
+      tabs.push(tabData)
+    })
+
+    // 直接替换，不使用 Session Store 的方法（避免触发自动保存）
+    sessionStore.sessionState.terminalSessions = terminalSessions
+    sessionStore.sessionState.tabs = tabs
+    console.log('✅ [Terminal Store] 终端状态同步完成')
+  }
+
+  /**
+   * 从会话状态恢复终端
+   */
+  const restoreFromSessionState = async () => {
+    try {
+      const restored = await sessionStore.restoreSession()
+      if (!restored) {
+        console.log('没有找到可恢复的终端会话状态')
+        return false
+      }
+
+      const { tabs, terminalSessions } = sessionStore.sessionState
+
+      // 清空当前终端
+      terminals.value = []
+      activeTerminalId.value = null
+
+      // 记录应该激活的终端ID
+      let shouldActivateTerminalId: string | null = null
+
+      // 恢复终端会话
+      for (const tab of tabs) {
+        if (tab.terminalSessionId && terminalSessions[tab.terminalSessionId]) {
+          const sessionData = terminalSessions[tab.terminalSessionId]
+
+          try {
+            // 创建新的终端会话
+            const id = await createTerminal(sessionData.workingDirectory)
+
+            // 更新标题和其他元数据
+            const terminal = terminals.value.find(t => t.id === id)
+            if (terminal) {
+              terminal.title = sessionData.title
+              // 恢复命令历史
+              terminal.commandHistory = [...sessionData.commandHistory]
+              // 恢复环境变量
+              terminal.environment = { ...sessionData.environment }
+            }
+
+            // 记录应该激活的终端（只记录第一个找到的活跃终端，避免被后续循环覆盖）
+            if (tab.isActive && shouldActivateTerminalId === null) {
+              shouldActivateTerminalId = id
+              console.log(`🎯 [Terminal Store] 标记终端 ${id} 为应激活状态`)
+            }
+          } catch (error) {
+            console.error(`恢复终端会话 ${tab.id} 失败:`, error)
+          }
+        }
+      }
+
+      // 现在激活正确的终端
+      if (shouldActivateTerminalId) {
+        setActiveTerminal(shouldActivateTerminalId)
+        console.log(`✅ [Terminal Store] 激活恢复的终端: ${shouldActivateTerminalId}`)
+      } else if (terminals.value.length > 0) {
+        // 如果没有找到应该激活的终端，激活第一个
+        setActiveTerminal(terminals.value[0].id)
+        console.log(`⚠️ [Terminal Store] 未找到活跃标签，激活第一个终端: ${terminals.value[0].id}`)
+      }
+
+      // 如果没有任何终端，创建一个默认的
+      if (terminals.value.length === 0) {
+        await createTerminal()
+        console.log('📝 [Terminal Store] 没有终端会话，创建默认终端')
+      }
+
+      console.log(
+        `✅ [Terminal Store] 成功恢复 ${terminals.value.length} 个终端会话，活跃终端: ${activeTerminalId.value}`
+      )
+      return true
+    } catch (error) {
+      console.error('恢复终端会话状态失败:', error)
+      return false
+    }
+  }
+
+  /**
+   * 保存当前终端状态到会话
+   */
+  const saveSessionState = async () => {
+    try {
+      console.log('💾 [Terminal Store] 开始保存终端会话状态')
+      syncToSessionStore()
+      await sessionStore.saveSessionState()
+      console.log('✅ [Terminal Store] 终端会话状态保存完成')
+    } catch (error) {
+      console.error('❌ [Terminal Store] 保存终端会话状态失败:', error)
+    }
+  }
+
+  /**
+   * 初始化终端Store（包括会话恢复）
+   */
+  const initializeTerminalStore = async () => {
+    try {
+      // 首先初始化shell管理器
+      await initializeShellManager()
+
+      // 尝试恢复会话状态
+      const restored = await restoreFromSessionState()
+
+      if (!restored) {
+        // 如果没有恢复成功，创建默认终端
+        if (terminals.value.length === 0) {
+          await createTerminal()
+        }
+      }
+
+      // 设置全局监听器
+      await setupGlobalListeners()
+
+      console.log('终端Store初始化完成')
+    } catch (error) {
+      console.error('终端Store初始化失败:', error)
+      // 确保至少有一个终端
+      if (terminals.value.length === 0) {
+        await createTerminal()
+      }
+    }
+  }
+
   return {
     // 终端状态
     terminals,
@@ -355,5 +598,11 @@ export const useTerminalStore = defineStore('Terminal', () => {
     createTerminalWithShell,
     validateShellPath,
     initializeShellManager,
+
+    // 会话状态管理方法
+    syncToSessionStore,
+    restoreFromSessionState,
+    saveSessionState,
+    initializeTerminalStore,
   }
 })

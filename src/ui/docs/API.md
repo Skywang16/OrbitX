@@ -44,15 +44,14 @@ createMessage.closeAll(): void
 createMessage.close(id: string): void
 
 // 确认对话框API
-export { createConfirm, confirmWarning, confirmDanger, confirmInfo, confirm }
+export { confirm, confirmWarning, confirmDanger, confirmInfo }
 export type { ConfirmConfig }
 
 // 确认对话框API方法
-createConfirm(config: string | ConfirmConfig): Promise<boolean>
+confirm(config: string | ConfirmConfig): Promise<boolean>
 confirmWarning(message: string, title?: string): Promise<boolean>
 confirmDanger(message: string, title?: string): Promise<boolean>
 confirmInfo(message: string, title?: string): Promise<boolean>
-confirm(config: string | ConfirmConfig): Promise<boolean>  // 默认方法
 ```
 
 ## 配置和工具函数
@@ -80,8 +79,7 @@ export const setGlobalConfig = (config: Partial<XUIGlobalConfig>): void
 
 ```typescript
 // 安装函数
-export const setupXUI = install // 向后兼容
-export { install } // 标准导出
+export { install }
 
 // 默认导出（插件）
 export default XUI
@@ -185,7 +183,7 @@ import XUI, {
   getGlobalConfig,
 
   // 安装函数
-  setupXUI,
+  install,
 
   // 类型
   type ButtonProps,
@@ -198,5 +196,5 @@ import XUI, {
 app.use(XUI)
 
 // 或使用命名导出安装
-app.use(setupXUI, { theme: 'dark' })
+app.use(install, { theme: 'dark' })
 ```
