@@ -7,53 +7,7 @@
 
 import { invoke } from '@/utils/request'
 import { handleError } from '../../utils/errorHandler'
-import type { Theme } from './types'
-
-// ============================================================================
-// 主题相关类型定义
-// ============================================================================
-
-/**
- * 主题信息
- */
-export interface ThemeInfo {
-  /** 主题名称 */
-  name: string
-  /** 主题类型 */
-  themeType: string
-  /** 是否为当前主题 */
-  isCurrent: boolean
-}
-
-/**
- * 主题配置
- */
-export interface ThemeConfig {
-  /** 自动切换时间 */
-  autoSwitchTime: string
-  /** 终端主题名称，引用themes/目录下的文件 */
-  terminalTheme: string
-  /** 浅色主题 */
-  lightTheme: string
-  /** 深色主题 */
-  darkTheme: string
-  /** 跟随系统主题 */
-  followSystem: boolean
-}
-
-/**
- * 主题配置状态
- */
-export interface ThemeConfigStatus {
-  /** 当前使用的主题名称 */
-  currentThemeName: string
-  /** 主题配置 */
-  themeConfig: ThemeConfig
-  /** 系统是否为深色模式 */
-  isSystemDark: boolean | null
-  /** 所有可用主题 */
-  availableThemes: ThemeInfo[]
-}
+import type { Theme, ThemeInfo, ThemeConfig, ThemeConfigStatus } from '@/types/theme'
 
 // ============================================================================
 // 主题管理 API 类

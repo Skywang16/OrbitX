@@ -76,6 +76,5 @@ export interface ConfigSectionUpdate<T = any> {
 
 // ===== 主题相关类型 =====
 
-// 重新导出主题API相关类型
-// 主题相关类型
-export type { ThemeConfigStatus, ThemeInfo } from './theme'
+// 重新导出主题相关类型
+export type { ThemeConfigStatus, ThemeInfo, ThemeConfig, Theme, ThemeType } from '@/types/theme'

@@ -43,14 +43,21 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
 
   // ===== 操作方法 =====
   /**
+   * 从API获取模型数据
+   */
+  const fetchModelsFromAPI = async () => {
+    const models = await ai.getModels()
+    const defaultModelId = models.find(m => m.isDefault)?.id || null
+    return { models, defaultModelId }
+  }
+
+  /**
    * 刷新模型数据
    * 强制从API重新获取模型列表
    */
   const refreshModels = async () => {
     try {
-      const models = await ai.getModels()
-      const defaultModel = models.find(m => m.isDefault)
-      const defaultModelId = defaultModel?.id || null
+      const { models, defaultModelId } = await fetchModelsFromAPI()
 
       if (settings.value) {
         settings.value = {
@@ -82,15 +89,14 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
     error.value = null
 
     try {
-      // 从AI API获取完整的设置（包括模型、功能和性能配置）
-      const models = await ai.getModels()
-      const defaultModel = models.find(m => m.isDefault)
+      // 从AI API获取模型数据
+      const { models, defaultModelId } = await fetchModelsFromAPI()
 
       // TODO: 这里应该从后端API获取完整的AISettings，而不是只获取模型
       // 目前先构造一个基本的设置对象
       settings.value = {
         models,
-        defaultModelId: defaultModel?.id || null,
+        defaultModelId,
         features: {
           chat: { enabled: true, maxHistoryLength: 1000, autoSaveHistory: true, contextWindowSize: 4000 },
           explanation: { enabled: true, showRisks: true, includeAlternatives: true },

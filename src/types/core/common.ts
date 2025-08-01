@@ -6,7 +6,6 @@
 // ===== 基础通用类型 =====
 
 export type Size = 'small' | 'medium' | 'large'
-export type Theme = 'light' | 'dark'
 export type Status = 'idle' | 'loading' | 'success' | 'error'
 
 // ===== 通用操作结果类型 =====

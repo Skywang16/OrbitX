@@ -4,7 +4,7 @@
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { useConfigTheme } from '../../composables/useConfig'
+import { useTheme } from '../../composables/useTheme'
 import { useAISettingsStore } from './components/AI'
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -14,7 +14,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // 子stores和组合函数
   const aiSettings = useAISettingsStore()
-  const configTheme = useConfigTheme()
+  const themeManager = useTheme()
 
   // 操作方法
   const openSettings = () => {
@@ -32,11 +32,8 @@ export const useSettingsStore = defineStore('settings', () => {
   // 初始化所有设置
   const initializeSettings = async () => {
     try {
-      // 加载主题列表
-      await configTheme.loadThemeList()
-
-      // 启用系统主题监听
-      configTheme.enableSystemThemeWatch()
+      // 初始化主题系统
+      await themeManager.initialize()
 
       // 加载AI设置
       await aiSettings.loadSettings()
@@ -49,8 +46,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const resetAllSettings = async () => {
     try {
       await aiSettings.resetToDefaults()
-      // 主题重置通过配置系统处理
-      await configTheme.switchTheme('dark') // 重置为默认主题
+      // 主题重置为默认主题
+      await themeManager.switchToTheme('dark')
     } catch (error) {
       console.error('重置设置失败:', error)
       throw error
@@ -64,7 +61,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
     // 子stores和组合函数
     aiSettings,
-    configTheme,
+    themeManager,
 
     // 方法
     openSettings,

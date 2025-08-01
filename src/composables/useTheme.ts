@@ -7,15 +7,8 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 import { computed, readonly, ref } from 'vue'
-import {
-  getCurrentTheme,
-  getThemeConfigStatus,
-  setFollowSystemTheme,
-  setTerminalTheme,
-  type ThemeConfigStatus,
-  type ThemeInfo,
-} from '../api/config/theme'
-import type { Theme } from '../api/config/types'
+import { getCurrentTheme, getThemeConfigStatus, setFollowSystemTheme, setTerminalTheme } from '../api/config/theme'
+import type { Theme, ThemeConfigStatus, ThemeInfo, ThemeOption } from '@/types/theme'
 import { applyThemeToUI } from '../utils/themeApplier'
 
 // ============================================================================
@@ -40,7 +33,7 @@ export const useTheme = () => {
   const isFollowingSystem = computed(() => themeConfig.value?.followSystem || false)
 
   // 主题选项（用于UI显示）
-  const themeOptions = computed(() => {
+  const themeOptions = computed((): ThemeOption[] => {
     return availableThemes.value.map(theme => ({
       value: theme.name,
       label: theme.name, // 直接使用主题名称作为显示标签

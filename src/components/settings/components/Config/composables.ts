@@ -37,15 +37,3 @@ export const useConfig = () => {
     clearError,
   }
 }
-
-/**
- * 主题管理组合函数
- */
-export const useTheme = () => {
-  const { currentTheme, updateTheme } = useConfig()
-
-  return {
-    currentTheme,
-    updateTheme,
-  }
-}

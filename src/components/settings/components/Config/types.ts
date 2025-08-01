@@ -343,21 +343,7 @@ export interface ChatConfig {
 // 主题配置
 // ============================================================================
 
-/**
- * 主题配置 (对应后端 ThemeConfig)
- */
-export interface ThemeConfig {
-  /** 自动切换时间 */
-  auto_switch_time: string
-  /** 终端主题名称，引用themes/目录下的文件 */
-  terminal_theme: string
-  /** 浅色主题 */
-  light_theme: string
-  /** 深色主题 */
-  dark_theme: string
-  /** 跟随系统主题 */
-  follow_system: boolean
-}
+// 主题相关类型已迁移到 @/types/theme.ts
 
 /**
  * 主题定义
