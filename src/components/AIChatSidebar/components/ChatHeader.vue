@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import SessionSelect from './SessionSelect.vue'
   import type { ChatSession } from '@/types'
+  import type { ChatMode } from '../types'
 
   // Props定义
   interface Props {
@@ -17,7 +18,7 @@
     (e: 'refresh-sessions'): void
   }
 
-  withDefaults(defineProps<Props>(), {
+  const props = withDefaults(defineProps<Props>(), {
     isLoading: false,
   })
 
@@ -71,12 +72,9 @@
 <style scoped>
   .chat-header {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.4em 0.8em;
+    flex-direction: column;
     border-bottom: 1px solid var(--color-border);
     background-color: var(--color-ai-sidebar-background);
-    min-height: 2em;
     gap: 0.5em;
   }
 
@@ -86,6 +84,7 @@
     align-items: center;
     min-width: 0;
     overflow: hidden;
+    padding: 0 0.8em;
   }
 
   .header-actions {
@@ -93,6 +92,7 @@
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
+    padding-right: 0.8em;
   }
 
   .new-session-btn {

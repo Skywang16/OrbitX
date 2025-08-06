@@ -2,24 +2,24 @@
  * 快捷键设置组件类型定义
  */
 
-import type { ShortcutBinding, ShortcutCategory } from '@/api/shortcuts/types';
+import type { ShortcutBinding, ShortcutCategory } from '@/api/shortcuts/types'
 
 /**
  * 快捷键列表项
  */
 export interface ShortcutListItem {
   /** 快捷键绑定 */
-  binding: ShortcutBinding;
+  binding: ShortcutBinding
   /** 类别 */
-  category: ShortcutCategory;
+  category: ShortcutCategory
   /** 索引 */
-  index: number;
+  index: number
   /** 是否有冲突 */
-  hasConflict?: boolean;
+  hasConflict?: boolean
   /** 是否有验证错误 */
-  hasError?: boolean;
+  hasError?: boolean
   /** 格式化的快捷键字符串 */
-  formatted?: string;
+  formatted?: string
 }
 
 /**
@@ -28,7 +28,7 @@ export interface ShortcutListItem {
 export enum ShortcutEditorMode {
   Add = 'add',
   Edit = 'edit',
-  View = 'view'
+  View = 'view',
 }
 
 /**
@@ -36,15 +36,15 @@ export enum ShortcutEditorMode {
  */
 export interface ShortcutEditorOptions {
   /** 编辑模式 */
-  mode: ShortcutEditorMode;
+  mode: ShortcutEditorMode
   /** 初始快捷键 */
-  initialShortcut?: ShortcutBinding;
+  initialShortcut?: ShortcutBinding
   /** 初始类别 */
-  initialCategory?: ShortcutCategory;
+  initialCategory?: ShortcutCategory
   /** 初始索引 */
-  initialIndex?: number;
+  initialIndex?: number
   /** 是否显示高级选项 */
-  showAdvanced?: boolean;
+  showAdvanced?: boolean
 }
 
 /**
@@ -52,13 +52,13 @@ export interface ShortcutEditorOptions {
  */
 export interface ShortcutSearchFilter {
   /** 搜索关键词 */
-  query: string;
+  query: string
   /** 选中的类别 */
-  categories: ShortcutCategory[];
+  categories: ShortcutCategory[]
   /** 是否只显示有冲突的 */
-  conflictsOnly: boolean;
+  conflictsOnly: boolean
   /** 是否只显示有错误的 */
-  errorsOnly: boolean;
+  errorsOnly: boolean
 }
 
 /**
@@ -66,13 +66,13 @@ export interface ShortcutSearchFilter {
  */
 export interface ShortcutStatsData {
   /** 总数 */
-  total: number;
+  total: number
   /** 各类别数量 */
-  byCategory: Record<ShortcutCategory, number>;
+  byCategory: Record<ShortcutCategory, number>
   /** 冲突数量 */
-  conflicts: number;
+  conflicts: number
   /** 错误数量 */
-  errors: number;
+  errors: number
 }
 
 /**
@@ -85,7 +85,7 @@ export enum ShortcutActionType {
   Duplicate = 'duplicate',
   Export = 'export',
   Import = 'import',
-  Reset = 'reset'
+  Reset = 'reset',
 }
 
 /**
@@ -93,9 +93,9 @@ export enum ShortcutActionType {
  */
 export interface ShortcutActionEvent {
   /** 操作类型 */
-  type: ShortcutActionType;
+  type: ShortcutActionType
   /** 相关的快捷键项 */
-  item?: ShortcutListItem;
+  item?: ShortcutListItem
   /** 额外数据 */
-  data?: any;
+  data?: any
 }

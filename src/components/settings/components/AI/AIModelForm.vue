@@ -25,7 +25,7 @@
     options: {
       maxTokens: 4096,
       temperature: 0.7,
-      timeout: 30000,
+      timeout: 300000,
     },
   })
 
@@ -64,7 +64,7 @@
       options: {
         maxTokens: props.model.options?.maxTokens || 4096,
         temperature: props.model.options?.temperature || 0.7,
-        timeout: props.model.options?.timeout || 30000,
+        timeout: props.model.options?.timeout || 300000,
       },
     })
   }

@@ -1,29 +1,30 @@
 /**
  * 快捷键系统类型定义
- * 
+ *
  * 定义快捷键相关的TypeScript类型，与后端Rust类型保持一致
  */
 
 /**
  * 快捷键动作类型
  */
-export type ShortcutAction = 
-  | string  // 简单动作
-  | {       // 复杂动作
-      action_type: string;
-      text?: string;
-    };
+export type ShortcutAction =
+  | string // 简单动作
+  | {
+      // 复杂动作
+      action_type: string
+      text?: string
+    }
 
 /**
  * 快捷键绑定
  */
 export interface ShortcutBinding {
   /** 按键 */
-  key: string;
+  key: string
   /** 修饰键列表 */
-  modifiers: string[];
+  modifiers: string[]
   /** 动作 */
-  action: ShortcutAction;
+  action: ShortcutAction
 }
 
 /**
@@ -31,11 +32,11 @@ export interface ShortcutBinding {
  */
 export interface ShortcutsConfig {
   /** 全局快捷键 */
-  global: ShortcutBinding[];
+  global: ShortcutBinding[]
   /** 终端快捷键 */
-  terminal: ShortcutBinding[];
+  terminal: ShortcutBinding[]
   /** 自定义快捷键 */
-  custom: ShortcutBinding[];
+  custom: ShortcutBinding[]
 }
 
 /**
@@ -44,7 +45,7 @@ export interface ShortcutsConfig {
 export enum ShortcutCategory {
   Global = 'Global',
   Terminal = 'Terminal',
-  Custom = 'Custom'
+  Custom = 'Custom',
 }
 
 /**
@@ -53,7 +54,7 @@ export enum ShortcutCategory {
 export enum Platform {
   Windows = 'Windows',
   MacOS = 'MacOS',
-  Linux = 'Linux'
+  Linux = 'Linux',
 }
 
 /**
@@ -61,11 +62,11 @@ export enum Platform {
  */
 export interface ShortcutValidationError {
   /** 错误类型 */
-  error_type: string;
+  error_type: string
   /** 错误消息 */
-  message: string;
+  message: string
   /** 相关的快捷键绑定（可选） */
-  shortcut?: ShortcutBinding;
+  shortcut?: ShortcutBinding
 }
 
 /**
@@ -73,11 +74,11 @@ export interface ShortcutValidationError {
  */
 export interface ShortcutValidationWarning {
   /** 警告类型 */
-  warning_type: string;
+  warning_type: string
   /** 警告消息 */
-  message: string;
+  message: string
   /** 相关的快捷键绑定（可选） */
-  shortcut?: ShortcutBinding;
+  shortcut?: ShortcutBinding
 }
 
 /**
@@ -85,11 +86,11 @@ export interface ShortcutValidationWarning {
  */
 export interface ShortcutValidationResult {
   /** 是否通过验证 */
-  is_valid: boolean;
+  is_valid: boolean
   /** 验证错误列表 */
-  errors: ShortcutValidationError[];
+  errors: ShortcutValidationError[]
   /** 验证警告列表 */
-  warnings: ShortcutValidationWarning[];
+  warnings: ShortcutValidationWarning[]
 }
 
 /**
@@ -97,9 +98,9 @@ export interface ShortcutValidationResult {
  */
 export interface ConflictingShortcut {
   /** 快捷键类别 */
-  category: string;
+  category: string
   /** 快捷键绑定 */
-  binding: ShortcutBinding;
+  binding: ShortcutBinding
 }
 
 /**
@@ -107,9 +108,9 @@ export interface ConflictingShortcut {
  */
 export interface ShortcutConflict {
   /** 冲突的快捷键组合 */
-  key_combination: string;
+  key_combination: string
   /** 冲突的快捷键绑定列表 */
-  conflicting_shortcuts: ConflictingShortcut[];
+  conflicting_shortcuts: ConflictingShortcut[]
 }
 
 /**
@@ -117,9 +118,9 @@ export interface ShortcutConflict {
  */
 export interface ConflictDetectionResult {
   /** 是否有冲突 */
-  has_conflicts: boolean;
+  has_conflicts: boolean
   /** 冲突列表 */
-  conflicts: ShortcutConflict[];
+  conflicts: ShortcutConflict[]
 }
 
 /**
@@ -127,22 +128,25 @@ export interface ConflictDetectionResult {
  */
 export interface ShortcutStatistics {
   /** 全局快捷键数量 */
-  global_count: number;
+  global_count: number
   /** 终端快捷键数量 */
-  terminal_count: number;
+  terminal_count: number
   /** 自定义快捷键数量 */
-  custom_count: number;
+  custom_count: number
   /** 总快捷键数量 */
-  total_count: number;
+  total_count: number
 }
 
 /**
  * 快捷键API错误类型
  */
 export class ShortcutApiError extends Error {
-  constructor(message: string, public readonly code?: string) {
-    super(message);
-    this.name = 'ShortcutApiError';
+  constructor(
+    message: string,
+    public readonly code?: string
+  ) {
+    super(message)
+    this.name = 'ShortcutApiError'
   }
 }
 
@@ -151,11 +155,11 @@ export class ShortcutApiError extends Error {
  */
 export interface ShortcutOperationOptions {
   /** 是否验证快捷键 */
-  validate?: boolean;
+  validate?: boolean
   /** 是否检测冲突 */
-  checkConflicts?: boolean;
+  checkConflicts?: boolean
   /** 是否自动保存 */
-  autoSave?: boolean;
+  autoSave?: boolean
 }
 
 /**
@@ -163,11 +167,11 @@ export interface ShortcutOperationOptions {
  */
 export interface ShortcutImportExportOptions {
   /** 导入/导出的类别 */
-  categories?: ShortcutCategory[];
+  categories?: ShortcutCategory[]
   /** 是否覆盖现有配置 */
-  overwrite?: boolean;
+  overwrite?: boolean
   /** 是否备份现有配置 */
-  backup?: boolean;
+  backup?: boolean
 }
 
 /**
@@ -175,15 +179,15 @@ export interface ShortcutImportExportOptions {
  */
 export interface ShortcutSearchOptions {
   /** 搜索关键词 */
-  query?: string;
+  query?: string
   /** 搜索的类别 */
-  categories?: ShortcutCategory[];
+  categories?: ShortcutCategory[]
   /** 搜索的按键 */
-  key?: string;
+  key?: string
   /** 搜索的修饰键 */
-  modifiers?: string[];
+  modifiers?: string[]
   /** 搜索的动作 */
-  action?: string;
+  action?: string
 }
 
 /**
@@ -192,12 +196,12 @@ export interface ShortcutSearchOptions {
 export interface ShortcutSearchResult {
   /** 匹配的快捷键 */
   shortcuts: Array<{
-    category: ShortcutCategory;
-    index: number;
-    binding: ShortcutBinding;
-  }>;
+    category: ShortcutCategory
+    index: number
+    binding: ShortcutBinding
+  }>
   /** 总匹配数量 */
-  total: number;
+  total: number
 }
 
 /**
@@ -205,28 +209,28 @@ export interface ShortcutSearchResult {
  */
 export interface ShortcutFormatOptions {
   /** 目标平台 */
-  platform?: Platform;
+  platform?: Platform
   /** 是否使用符号 */
-  useSymbols?: boolean;
+  useSymbols?: boolean
   /** 分隔符 */
-  separator?: string;
+  separator?: string
 }
 
 /**
  * 快捷键事件监听器类型
  */
-export type ShortcutEventListener = (event: ShortcutEvent) => void;
+export type ShortcutEventListener = (event: ShortcutEvent) => void
 
 /**
  * 快捷键事件
  */
 export interface ShortcutEvent {
   /** 事件类型 */
-  type: 'shortcut_triggered' | 'shortcut_conflict' | 'shortcut_updated';
+  type: 'shortcut_triggered' | 'shortcut_conflict' | 'shortcut_updated'
   /** 相关的快捷键绑定 */
-  shortcut?: ShortcutBinding;
+  shortcut?: ShortcutBinding
   /** 事件数据 */
-  data?: any;
+  data?: any
   /** 时间戳 */
-  timestamp: number;
+  timestamp: number
 }

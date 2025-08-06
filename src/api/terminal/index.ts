@@ -324,6 +324,10 @@ export const terminal = {
   safeWrite: (options: TerminalWriteOptions) => terminalAPI.safeWriteToTerminal(options),
   exists: (paneId: number) => terminalAPI.terminalExists(paneId),
   getStats: () => terminalAPI.getTerminalStats(),
+
+  // 缓冲区操作
+  getBuffer: (paneId: number) => terminalAPI.getTerminalBuffer(paneId),
+  setBuffer: (paneId: number, content: string) => terminalAPI.setTerminalBuffer(paneId, content),
 }
 
 // 类型定义现在统一从 @/types 导入，不在此处重复导出

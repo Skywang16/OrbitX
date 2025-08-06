@@ -3,7 +3,6 @@
  */
 
 // ===== 聊天消息类型 =====
-
 export interface ChatMessage {
   id: string
   messageType: 'user' | 'assistant' | 'system'
@@ -12,7 +11,15 @@ export interface ChatMessage {
   metadata?: {
     model?: string
     tokensUsed?: number
+    // Agent消息相关字段
+    isAgentMessage?: boolean
+    messageData?: any
+    [key: string]: any
   }
+  // 新增：Agent事件相关字段
+  agentEventType?: string
+  agentEventData?: Record<string, unknown>
+  isStreaming?: boolean
 }
 
 export interface ChatSession {

@@ -8,7 +8,7 @@ use crate::utils::error::AppResult;
 use anyhow::{anyhow, Context};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
@@ -313,89 +313,12 @@ impl AIClient {
     }
 }
 
-/// 简化的缓存条目
-#[derive(Debug, Clone)]
-struct CacheEntry {
-    response: AIResponse,
-    created_at: Instant,
-    ttl: Duration,
-}
-
-impl CacheEntry {
-    fn new(response: AIResponse, ttl: Duration) -> Self {
-        Self {
-            response,
-            created_at: Instant::now(),
-            ttl,
-        }
-    }
-
-    fn is_expired(&self) -> bool {
-        self.created_at.elapsed() > self.ttl
-    }
-}
-
-/// AI缓存
-#[derive(Debug)]
-pub struct AICache {
-    entries: HashMap<String, CacheEntry>,
-    default_ttl: Duration,
-    max_entries: usize,
-}
-
-impl AICache {
-    pub fn new(ttl_seconds: u64, max_entries: usize) -> Self {
-        Self {
-            entries: HashMap::new(),
-            default_ttl: Duration::from_secs(ttl_seconds),
-            max_entries,
-        }
-    }
-
-    pub fn get(&mut self, key: &str) -> Option<AIResponse> {
-        if let Some(entry) = self.entries.get(key) {
-            if entry.is_expired() {
-                self.entries.remove(key);
-                None
-            } else {
-                Some(entry.response.clone())
-            }
-        } else {
-            None
-        }
-    }
-
-    pub fn put(&mut self, key: String, response: AIResponse) {
-        // 如果缓存满了，移除最旧的条目
-        if self.entries.len() >= self.max_entries {
-            if let Some(oldest_key) = self.entries.keys().next().cloned() {
-                self.entries.remove(&oldest_key);
-            }
-        }
-
-        let entry = CacheEntry::new(response, self.default_ttl);
-        self.entries.insert(key, entry);
-    }
-
-    pub fn clear(&mut self) {
-        self.entries.clear();
-    }
-}
-
-impl Default for AICache {
-    fn default() -> Self {
-        Self::new(3600, 1000) // 1小时TTL，最大1000条目
-    }
-}
-
 /// AI服务 - 统一管理所有AI功能
 pub struct AIService {
     /// 模型配置
     models: RwLock<HashMap<String, AIModelConfig>>,
     /// AI客户端
     clients: RwLock<HashMap<String, Arc<AIClient>>>,
-    /// 缓存
-    cache: RwLock<AICache>,
     /// 存储管理器
     storage: Option<Arc<SqliteManager>>,
 }
@@ -406,7 +329,6 @@ impl AIService {
         Self {
             models: RwLock::new(HashMap::new()),
             clients: RwLock::new(HashMap::new()),
-            cache: RwLock::new(AICache::new(3600, 1000)),
             storage,
         }
     }
@@ -568,15 +490,6 @@ impl AIService {
         // 选择模型
         let selected_model_id = self.select_model(model_id).await?;
 
-        // 检查缓存
-        let cache_key = format!("{}:{}", selected_model_id, request.content);
-        {
-            let mut cache = self.cache.write().await;
-            if let Some(cached_response) = cache.get(&cache_key) {
-                return Ok(cached_response);
-            }
-        }
-
         // 获取客户端
         let client = {
             let clients = self.clients.read().await;
@@ -586,14 +499,8 @@ impl AIService {
                 .clone()
         };
 
-        // 发送请求
+        // 发送请求（不使用缓存）
         let response = client.send_request(request).await?;
-
-        // 缓存响应
-        {
-            let mut cache = self.cache.write().await;
-            cache.put(cache_key, response.clone());
-        }
 
         Ok(response)
     }
@@ -650,10 +557,9 @@ impl AIService {
         }
     }
 
-    /// 清空缓存
+    /// 清空缓存（已移除缓存功能）
     pub async fn clear_cache(&self) -> AppResult<()> {
-        let mut cache = self.cache.write().await;
-        cache.clear();
+        // 缓存功能已移除，直接返回成功
         Ok(())
     }
 

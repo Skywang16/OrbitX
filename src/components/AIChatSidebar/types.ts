@@ -14,6 +14,53 @@ export type MessageType = 'user' | 'assistant' | 'system'
 // 聊天状态
 export type ChatStatus = 'idle' | 'loading' | 'streaming' | 'error'
 
+// 聊天模式
+export type ChatMode = 'chat' | 'agent'
+
+// Agent消息类型
+export interface AgentThinkingMessage {
+  type: 'thinking'
+  stage: string
+  content: string
+  timestamp: string
+}
+
+export interface AgentToolUseMessage {
+  type: 'tool_use'
+  toolName: string
+  params: Record<string, unknown>
+  timestamp: string
+}
+
+export interface AgentToolResultMessage {
+  type: 'tool_result'
+  toolName: string
+  result: unknown
+  timestamp: string
+}
+
+export interface AgentTextMessage {
+  type: 'text'
+  content: string
+  timestamp: string
+}
+
+export interface AgentWorkflowMessage {
+  type: 'workflow'
+  stage: string
+  content: string
+  timestamp: string
+  workflow?: Record<string, unknown>
+  step?: Record<string, unknown>
+}
+
+export type AgentMessageData =
+  | AgentThinkingMessage
+  | AgentToolUseMessage
+  | AgentToolResultMessage
+  | AgentTextMessage
+  | AgentWorkflowMessage
+
 // 聊天输入状态
 export interface ChatInputState {
   value: string

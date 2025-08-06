@@ -26,7 +26,7 @@
         class="table-row"
         :class="{
           'has-conflict': item.hasConflict,
-          'has-error': item.hasError
+          'has-error': item.hasError,
         }"
       >
         <div class="col-category">
@@ -49,27 +49,15 @@
 
         <div class="col-status">
           <div class="status-indicators">
-            <span
-              v-if="item.hasConflict"
-              class="status-badge status-conflict"
-              title="存在冲突"
-            >
+            <span v-if="item.hasConflict" class="status-badge status-conflict" title="存在冲突">
               <i class="icon-warning"></i>
               冲突
             </span>
-            <span
-              v-if="item.hasError"
-              class="status-badge status-error"
-              title="验证错误"
-            >
+            <span v-if="item.hasError" class="status-badge status-error" title="验证错误">
               <i class="icon-error"></i>
               错误
             </span>
-            <span
-              v-if="!item.hasConflict && !item.hasError"
-              class="status-badge status-ok"
-              title="正常"
-            >
+            <span v-if="!item.hasConflict && !item.hasError" class="status-badge status-ok" title="正常">
               <i class="icon-check"></i>
               正常
             </span>
@@ -78,25 +66,13 @@
 
         <div class="col-operations">
           <div class="operation-buttons">
-            <button
-              class="btn-icon"
-              title="编辑"
-              @click="handleEdit(item)"
-            >
+            <button class="btn-icon" title="编辑" @click="handleEdit(item)">
               <i class="icon-edit"></i>
             </button>
-            <button
-              class="btn-icon"
-              title="复制"
-              @click="handleDuplicate(item)"
-            >
+            <button class="btn-icon" title="复制" @click="handleDuplicate(item)">
               <i class="icon-copy"></i>
             </button>
-            <button
-              class="btn-icon btn-danger"
-              title="删除"
-              @click="handleDelete(item)"
-            >
+            <button class="btn-icon btn-danger" title="删除" @click="handleDelete(item)">
               <i class="icon-delete"></i>
             </button>
           </div>
@@ -107,290 +83,304 @@
 </template>
 
 <script setup lang="ts">
-import { useShortcutFormatter } from '@/composables/useShortcuts';
-import type { ShortcutListItem, ShortcutActionEvent, ShortcutActionType } from './types';
-import type { ShortcutBinding, ShortcutCategory, ShortcutAction } from '@/api/shortcuts/types';
+  import { useShortcutFormatter } from '@/composables/useShortcuts'
+  import type { ShortcutListItem, ShortcutActionEvent, ShortcutActionType } from './types'
+  import type { ShortcutBinding, ShortcutCategory, ShortcutAction } from '@/api/shortcuts/types'
 
-interface Props {
-  items: ShortcutListItem[];
-  loading?: boolean;
-}
-
-interface Emits {
-  (e: 'action', event: ShortcutActionEvent): void;
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  loading: false,
-});
-
-const emit = defineEmits<Emits>();
-
-const { formatShortcut } = useShortcutFormatter();
-
-// 方法
-const getCategoryLabel = (category: ShortcutCategory): string => {
-  const labels = {
-    Global: '全局',
-    Terminal: '终端',
-    Custom: '自定义',
-  };
-  return labels[category] || category;
-};
-
-const getActionText = (action: ShortcutAction): string => {
-  if (typeof action === 'string') {
-    return action;
+  interface Props {
+    items: ShortcutListItem[]
+    loading?: boolean
   }
-  
-  const text = action.text ? ` (${action.text})` : '';
-  return `${action.action_type}${text}`;
-};
 
-const handleEdit = (item: ShortcutListItem) => {
-  emit('action', {
-    type: ShortcutActionType.Edit,
-    item,
-  });
-};
+  interface Emits {
+    (e: 'action', event: ShortcutActionEvent): void
+  }
 
-const handleDuplicate = (item: ShortcutListItem) => {
-  emit('action', {
-    type: ShortcutActionType.Duplicate,
-    item,
-  });
-};
+  const props = withDefaults(defineProps<Props>(), {
+    loading: false,
+  })
 
-const handleDelete = (item: ShortcutListItem) => {
-  emit('action', {
-    type: ShortcutActionType.Delete,
-    item,
-  });
-};
+  const emit = defineEmits<Emits>()
+
+  const { formatShortcut } = useShortcutFormatter()
+
+  // 方法
+  const getCategoryLabel = (category: ShortcutCategory): string => {
+    const labels = {
+      Global: '全局',
+      Terminal: '终端',
+      Custom: '自定义',
+    }
+    return labels[category] || category
+  }
+
+  const getActionText = (action: ShortcutAction): string => {
+    if (typeof action === 'string') {
+      return action
+    }
+
+    const text = action.text ? ` (${action.text})` : ''
+    return `${action.action_type}${text}`
+  }
+
+  const handleEdit = (item: ShortcutListItem) => {
+    emit('action', {
+      type: ShortcutActionType.Edit,
+      item,
+    })
+  }
+
+  const handleDuplicate = (item: ShortcutListItem) => {
+    emit('action', {
+      type: ShortcutActionType.Duplicate,
+      item,
+    })
+  }
+
+  const handleDelete = (item: ShortcutListItem) => {
+    emit('action', {
+      type: ShortcutActionType.Delete,
+      item,
+    })
+  }
 </script>
 
 <style scoped>
-.shortcut-list {
-  width: 100%;
-}
+  .shortcut-list {
+    width: 100%;
+  }
 
-.loading-state,
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  color: var(--text-secondary);
-}
+  .loading-state,
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+  }
 
-.loading-state {
-  gap: 12px;
-}
+  .loading-state {
+    gap: 12px;
+  }
 
-.empty-state {
-  gap: 16px;
-}
+  .empty-state {
+    gap: 16px;
+  }
 
-.empty-state i {
-  font-size: 48px;
-  opacity: 0.5;
-}
+  .empty-state i {
+    font-size: 48px;
+    opacity: 0.5;
+  }
 
-.empty-state h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 500;
-}
+  .empty-state h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 500;
+  }
 
-.empty-state p {
-  margin: 0;
-  font-size: 14px;
-  opacity: 0.8;
-}
+  .empty-state p {
+    margin: 0;
+    font-size: 14px;
+    opacity: 0.8;
+  }
 
-.spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid var(--border);
-  border-top: 2px solid var(--primary);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border);
+    border-top: 2px solid var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
 
-.shortcut-table {
-  width: 100%;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
+  .shortcut-table {
+    width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
 
-.table-header,
-.table-row {
-  display: grid;
-  grid-template-columns: 100px 200px 1fr 120px 120px;
-  gap: 16px;
-  padding: 12px 16px;
-  align-items: center;
-}
-
-.table-header {
-  background: var(--bg-tertiary);
-  font-weight: 500;
-  font-size: 14px;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border);
-}
-
-.table-row {
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border);
-  transition: background-color 0.2s;
-}
-
-.table-row:hover {
-  background: var(--bg-hover);
-}
-
-.table-row:last-child {
-  border-bottom: none;
-}
-
-.table-row.has-conflict {
-  border-left: 3px solid var(--warning);
-}
-
-.table-row.has-error {
-  border-left: 3px solid var(--error);
-}
-
-.category-badge {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-.category-global {
-  background: var(--primary-bg);
-  color: var(--primary);
-}
-
-.category-terminal {
-  background: var(--success-bg);
-  color: var(--success);
-}
-
-.category-custom {
-  background: var(--info-bg);
-  color: var(--info);
-}
-
-.shortcut-display {
-  background: var(--bg-tertiary);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  border: 1px solid var(--border);
-}
-
-.action-text {
-  font-size: 14px;
-  color: var(--text-primary);
-}
-
-.status-indicators {
-  display: flex;
-  gap: 4px;
-}
-
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.status-ok {
-  background: var(--success-bg);
-  color: var(--success);
-}
-
-.status-conflict {
-  background: var(--warning-bg);
-  color: var(--warning);
-}
-
-.status-error {
-  background: var(--error-bg);
-  color: var(--error);
-}
-
-.operation-buttons {
-  display: flex;
-  gap: 4px;
-}
-
-.btn-icon {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: none;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  transition: all 0.2s;
-}
-
-.btn-icon:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.btn-icon.btn-danger:hover {
-  background: var(--error-bg);
-  color: var(--error);
-}
-
-@media (max-width: 768px) {
   .table-header,
   .table-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-  
-  .col-category,
-  .col-shortcut,
-  .col-action,
-  .col-status,
-  .col-operations {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 100px 200px 1fr 120px 120px;
+    gap: 16px;
+    padding: 12px 16px;
     align-items: center;
   }
-  
-  .col-category::before { content: "类别: "; }
-  .col-shortcut::before { content: "快捷键: "; }
-  .col-action::before { content: "动作: "; }
-  .col-status::before { content: "状态: "; }
-  .col-operations::before { content: "操作: "; }
-  
+
   .table-header {
-    display: none;
+    background: var(--bg-tertiary);
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
   }
-}
+
+  .table-row {
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border);
+    transition: background-color 0.2s;
+  }
+
+  .table-row:hover {
+    background: var(--bg-hover);
+  }
+
+  .table-row:last-child {
+    border-bottom: none;
+  }
+
+  .table-row.has-conflict {
+    border-left: 3px solid var(--warning);
+  }
+
+  .table-row.has-error {
+    border-left: 3px solid var(--error);
+  }
+
+  .category-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+
+  .category-global {
+    background: var(--primary-bg);
+    color: var(--primary);
+  }
+
+  .category-terminal {
+    background: var(--success-bg);
+    color: var(--success);
+  }
+
+  .category-custom {
+    background: var(--info-bg);
+    color: var(--info);
+  }
+
+  .shortcut-display {
+    background: var(--bg-tertiary);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    border: 1px solid var(--border);
+  }
+
+  .action-text {
+    font-size: 14px;
+    color: var(--text-primary);
+  }
+
+  .status-indicators {
+    display: flex;
+    gap: 4px;
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .status-ok {
+    background: var(--success-bg);
+    color: var(--success);
+  }
+
+  .status-conflict {
+    background: var(--warning-bg);
+    color: var(--warning);
+  }
+
+  .status-error {
+    background: var(--error-bg);
+    color: var(--error);
+  }
+
+  .operation-buttons {
+    display: flex;
+    gap: 4px;
+  }
+
+  .btn-icon {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+  }
+
+  .btn-icon:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .btn-icon.btn-danger:hover {
+    background: var(--error-bg);
+    color: var(--error);
+  }
+
+  @media (max-width: 768px) {
+    .table-header,
+    .table-row {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .col-category,
+    .col-shortcut,
+    .col-action,
+    .col-status,
+    .col-operations {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .col-category::before {
+      content: '类别: ';
+    }
+    .col-shortcut::before {
+      content: '快捷键: ';
+    }
+    .col-action::before {
+      content: '动作: ';
+    }
+    .col-status::before {
+      content: '状态: ';
+    }
+    .col-operations::before {
+      content: '操作: ';
+    }
+
+    .table-header {
+      display: none;
+    }
+  }
 </style>

@@ -10,6 +10,8 @@ import { createStorage } from '@/utils/storage'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { ChatMessage, ChatSession } from './types'
+import type { ChatMode } from './types'
+import { AgentFramework } from '@/agent'
 
 // 聊天历史管理类
 class ChatHistoryManager {
@@ -49,7 +51,7 @@ class ChatHistoryManager {
       session.messages.push(message)
       this.saveAllSessions(sessions)
     } catch (error) {
-      console.error('保存聊天消息失败:', error)
+      // 保存聊天消息失败
     }
   }
 
@@ -83,7 +85,7 @@ class ChatHistoryManager {
       session.messages = messages
       this.saveAllSessions(sessions)
     } catch (error) {
-      console.error('保存聊天会话失败:', error)
+      // 保存聊天会话失败
     }
   }
 
@@ -93,7 +95,7 @@ class ChatHistoryManager {
       const session = sessions.find(s => s.id === sessionId)
       return session ? session.messages : []
     } catch (error) {
-      console.error('加载聊天历史失败:', error)
+      // 加载聊天历史失败
       return []
     }
   }
@@ -104,7 +106,7 @@ class ChatHistoryManager {
       // 按更新时间降序排列，最新的在前面
       return sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     } catch (error) {
-      console.error('加载会话列表失败:', error)
+      // 加载会话列表失败
       return []
     }
   }
@@ -115,7 +117,7 @@ class ChatHistoryManager {
       const filteredSessions = sessions.filter(s => s.id !== sessionId)
       this.saveAllSessions(filteredSessions)
     } catch (error) {
-      console.error('删除会话失败:', error)
+      // 删除会话失败
     }
   }
 
@@ -123,7 +125,7 @@ class ChatHistoryManager {
     try {
       this.storage.remove()
     } catch (error) {
-      console.error('清空聊天历史失败:', error)
+      // 清空聊天历史失败
     }
   }
 
@@ -140,7 +142,7 @@ class ChatHistoryManager {
         })),
       }))
     } catch (error) {
-      console.error('加载会话数据失败:', error)
+      // 加载会话数据失败
       return []
     }
   }
@@ -154,7 +156,7 @@ class ChatHistoryManager {
 
       this.storage.save(sortedSessions)
     } catch (error) {
-      console.error('保存会话数据失败:', error)
+      // 保存会话数据失败
     }
   }
 
@@ -174,16 +176,21 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const messages = ref<ChatMessage[]>([])
   const streamingContent = ref('')
   const isLoading = ref(false)
-  const isStreaming = ref(false)
+
   const error = ref<string | null>(null)
   const sessions = ref<ChatSession[]>([])
   const cancelFunction = ref<(() => void) | null>(null)
+
+  // 聊天模式相关状态
+  const chatMode = ref<ChatMode>('chat')
+  const agentFramework = ref<AgentFramework | null>(null)
+  const currentAgentId = ref<string | null>(null)
 
   // 计算属性
   const hasMessages = computed(() => messages.value.length > 0)
   const canSendMessage = computed(() => {
     const aiSettingsStore = useAISettingsStore()
-    return !isLoading.value && !isStreaming.value && aiSettingsStore.hasModels
+    return !isLoading.value && aiSettingsStore.hasModels
   })
 
   // 操作方法
@@ -227,6 +234,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         // 静默处理加载失败，不影响用户体验
       }
     }
+
+    // 初始化Agent框架（如果还未初始化）
+    await initializeAgentFramework()
 
     // 智能选择会话：如果当前没有会话或没有消息内容，则选择第一个历史会话或创建新会话
     if (!currentSessionId.value || !hasMessages.value) {
@@ -287,15 +297,15 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   // 从后端刷新会话列表
   const refreshSessions = async () => {
     try {
-      const sessionIds = await aiAPI.getChatSessions()
+      const sessionIds = await ai.getChatSessions()
       const localSessions = chatHistory.loadSessions()
       const refreshedSessions: ChatSession[] = []
 
       for (const sessionId of sessionIds) {
         const localSession = localSessions.find(s => s.id === sessionId)
-        const messages = await aiAPI.getChatHistory(sessionId)
+        const messages = await ai.getChatHistory(sessionId)
 
-        const convertedMessages: ChatMessage[] = messages.map(msg => ({
+        const convertedMessages: ChatMessage[] = messages.map((msg: any) => ({
           id: msg.id,
           messageType: msg.messageType,
           content: msg.content,
@@ -318,7 +328,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       sessions.value = refreshedSessions
       return refreshedSessions
     } catch (error) {
-      console.error('刷新会话列表失败:', error)
+      // 刷新会话列表失败
       loadSessions()
       return sessions.value
     }
@@ -334,7 +344,164 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
   }
 
-  const sendMessage = async (content: string) => {
+  // 处理普通聊天消息
+  const handleChatMessage = async (
+    content: string,
+    aiMessage: ChatMessage,
+    messageIndex: number,
+    aiSettingsStore: any
+  ) => {
+    const { cancel } = await ai.streamMessageCancellable(
+      content,
+      (chunk: { content?: string; isComplete?: boolean; metadata?: unknown }) => {
+        // 检查是否是流式响应开始信号
+        if (chunk.metadata && typeof chunk.metadata === 'object' && 'stream_started' in chunk.metadata) {
+          return
+        }
+
+        // 检查是否包含错误信息
+        if (chunk.metadata && typeof chunk.metadata === 'object' && 'error' in chunk.metadata) {
+          const errorInfo = (chunk.metadata as any).error
+          // AI响应错误
+
+          // 显示详细错误信息
+          const errorMessage = `${errorInfo.message || '未知错误'}`
+          const errorDetails = errorInfo.providerResponse
+            ? `\n详细信息: ${JSON.stringify(errorInfo.providerResponse, null, 2)}`
+            : ''
+
+          // 直接更新消息内容为错误信息
+          messages.value[messageIndex].content = `❌ ${errorMessage}${errorDetails}`
+
+          if (currentSessionId.value) {
+            chatHistory.save(currentSessionId.value, messages.value[messageIndex])
+          }
+          return
+        }
+
+        if (chunk.content) {
+          // 累积流式内容
+          streamingContent.value += chunk.content
+
+          // 直接更新消息内容，避免使用splice
+          messages.value[messageIndex].content = streamingContent.value
+        }
+
+        if (chunk.isComplete) {
+          if (currentSessionId.value) {
+            chatHistory.save(currentSessionId.value, messages.value[messageIndex])
+          }
+        }
+      },
+      aiSettingsStore.defaultModel?.id
+    )
+
+    // 保存取消函数
+    cancelFunction.value = cancel
+  }
+
+  // 处理Agent消息 - 使用新的终端任务执行器
+  // 简单的Agent消息处理 - 只接收Agent给的内容
+  const handleAgentMessage = async (content: string, messageIndex: number) => {
+    try {
+      if (!agentFramework.value || !currentAgentId.value) {
+        throw new Error('Agent framework not initialized')
+      }
+
+      // 初始化消息数组
+      let messageArray: any[] = []
+
+      // 设置回调函数来接收Agent的实时输出
+      const callback = {
+        onMessage: async (message: any) => {
+          console.log(`[${message.type}]`, message)
+
+          // 添加到消息数组
+          messageArray.push(message)
+
+          // 根据消息类型更新UI显示
+          let displayContent = ''
+
+          switch (message.type) {
+            case 'task_start':
+              displayContent = '🚀 ' + message.content
+              break
+            case 'planning':
+              displayContent = '🧠 ' + message.content
+              break
+            case 'plan_generated':
+              displayContent = '📋 ' + message.content
+              if (message.data?.thought) {
+                displayContent += `\n💭 思考过程: ${message.data.thought}`
+              }
+              break
+            case 'agent_start':
+              displayContent = '🤖 ' + message.content
+              break
+            case 'step_start':
+              displayContent = '⚡ ' + message.content
+              break
+            case 'step_output':
+              displayContent = message.content
+              break
+            case 'step_complete':
+              displayContent = '✅ ' + message.content
+              break
+            case 'step_error':
+              displayContent = '❌ ' + message.content
+              break
+            case 'agent_complete':
+              displayContent = '🎉 ' + message.content
+              break
+            case 'task_complete':
+              displayContent = '🏁 ' + message.content
+              break
+            case 'error':
+              displayContent = '💥 ' + message.content
+              break
+            default:
+              displayContent = message.content
+          }
+
+          // 实时更新消息内容
+          if (displayContent) {
+            if (message.type === 'step_output') {
+              // 输出内容直接追加
+              messages.value[messageIndex].content += '\n' + displayContent
+            } else {
+              // 状态信息追加
+              messages.value[messageIndex].content += '\n' + displayContent
+            }
+          }
+
+          // 保持元数据
+          messages.value[messageIndex].metadata = {
+            isAgentMessage: true,
+            messageData: messageArray,
+          }
+        },
+      }
+
+      // 使用新架构：带回调的任务执行，实时显示执行过程
+      try {
+        const result = await agentFramework.value.executeTaskWithCallback(content, callback)
+
+        if (result.success) {
+          // 最终结果已经通过回调显示了，这里可以添加完成标记
+          messages.value[messageIndex].content += '\n\n✅ 任务执行完成'
+        } else {
+          messages.value[messageIndex].content = `❌ 执行失败: ${result.error || '未知错误'}`
+        }
+      } catch (error) {
+        messages.value[messageIndex].content = `❌ 执行失败: ${error instanceof Error ? error.message : '未知错误'}`
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      messages.value[messageIndex].content = `Agent执行失败: ${errorMessage}`
+    }
+  }
+
+  const sendMessage = async (content: string, params?: any) => {
     if (!canSendMessage.value || !currentSessionId.value) {
       return
     }
@@ -363,72 +530,25 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
     try {
       isLoading.value = true
-      isStreaming.value = true
+
       error.value = null
       streamingContent.value = '' // 重置流式内容
 
       const aiSettingsStore = useAISettingsStore()
 
-      // 移除超时限制，允许长时间的AI响应
+      // 根据聊天模式选择不同的处理方式
+      console.log('🔍 [Chat] 当前聊天模式:', chatMode.value)
+      console.log('🔍 [Chat] Agent框架状态:', !!agentFramework.value)
+      console.log('🔍 [Chat] 当前AgentId:', currentAgentId.value)
 
-      const { cancel } = await ai.streamMessageCancellable(
-        content,
-        (chunk: { content?: string; isComplete?: boolean; metadata?: unknown }) => {
-          // 检查是否是流式响应开始信号
-          if (chunk.metadata && typeof chunk.metadata === 'object' && 'stream_started' in chunk.metadata) {
-            return
-          }
-
-          // 检查是否包含错误信息
-          if (chunk.metadata && typeof chunk.metadata === 'object' && 'error' in chunk.metadata) {
-            const errorInfo = (chunk.metadata as any).error
-            console.error('AI响应错误:', errorInfo)
-
-            // 显示详细错误信息
-            const errorMessage = `${errorInfo.message || '未知错误'}`
-            const errorDetails = errorInfo.providerResponse
-              ? `\n详细信息: ${JSON.stringify(errorInfo.providerResponse, null, 2)}`
-              : ''
-
-            // 直接更新消息内容为错误信息
-            messages.value[messageIndex].content = `❌ ${errorMessage}${errorDetails}`
-
-            clearTimeout(streamTimeout)
-            isStreaming.value = false
-            if (currentSessionId.value) {
-              chatHistory.save(currentSessionId.value, messages.value[messageIndex])
-            }
-            return
-          }
-
-          if (chunk.content) {
-            // 累积流式内容
-            streamingContent.value += chunk.content
-
-            // 直接更新消息内容，避免使用splice
-            messages.value[messageIndex].content = streamingContent.value
-          }
-
-          if (chunk.isComplete) {
-            clearTimeout(streamTimeout)
-            isStreaming.value = false
-            if (currentSessionId.value) {
-              chatHistory.save(currentSessionId.value, messages.value[messageIndex])
-            }
-          }
-        },
-        aiSettingsStore.defaultModel?.id
-      )
-
-      // 保存取消函数
-      cancelFunction.value = cancel
-
-      // 确保流式状态被重置（防止后端没有发送完成标志）
-      if (isStreaming.value) {
-        isStreaming.value = false
-        if (currentSessionId.value && messageIndex < messages.value.length) {
-          chatHistory.save(currentSessionId.value, messages.value[messageIndex])
-        }
+      if (chatMode.value === 'agent' && agentFramework.value && currentAgentId.value) {
+        console.log('🤖 [Chat] 使用Agent模式处理消息')
+        // Agent模式：使用Agent框架处理
+        await handleAgentMessage(content, messageIndex)
+      } else {
+        console.log('💬 [Chat] 使用普通聊天模式处理消息')
+        // 普通聊天模式：使用原有的AI API
+        await handleChatMessage(content, aiMessage, messageIndex, aiSettingsStore)
       }
     } catch (err) {
       error.value = handleErrorWithMessage(err, '发送消息失败')
@@ -436,12 +556,10 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       if (messageIndex < messages.value.length) {
         messages.value.splice(messageIndex, 1)
       }
-      // 确保在错误时重置流式状态
-      isStreaming.value = false
+      // 确保在错误时重置状态
     } finally {
       isLoading.value = false
-      // 最终确保流式状态被重置
-      isStreaming.value = false
+      // 最终确保状态被重置
       cancelFunction.value = null
     }
   }
@@ -459,11 +577,64 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
 
   const stopStreaming = () => {
-    if (isStreaming.value && cancelFunction.value) {
+    if (cancelFunction.value) {
       cancelFunction.value()
       cancelFunction.value = null
-      isStreaming.value = false
       isLoading.value = false
+    }
+  }
+
+  // Agent框架初始化
+  const initializeAgentFramework = async () => {
+    if (!agentFramework.value) {
+      try {
+        console.log('🤖 [Agent] 开始初始化Agent框架...')
+
+        // 创建框架实例
+        const framework = new AgentFramework({
+          maxAgents: 5,
+          autoRegisterBuiltinTools: true,
+          defaultTimeout: 300000, // 5分钟timeout，给LLM充足的思考时间
+        })
+
+        console.log('🔧 [Agent] 框架实例创建成功，开始启动...')
+        await framework.start()
+
+        console.log('🔍 [Agent] 检查Agent管理器状态...')
+        const agentCapabilities = framework.getAgentCapabilities()
+        console.log('🎯 [Agent] 可用Agent能力:', agentCapabilities)
+
+        const availableTools = framework.getAllAvailableTools()
+        console.log('🛠️ [Agent] 可用工具:', availableTools)
+
+        agentFramework.value = framework
+
+        // 新架构中不需要创建Agent，直接使用SpecializedAgentManager
+        currentAgentId.value = 'terminal-agent'
+        console.log('✅ [Agent] Agent框架初始化成功')
+        console.log('🆔 [Agent] 当前AgentId:', currentAgentId.value)
+      } catch (error) {
+        console.error('❌ [Agent] Agent框架初始化失败:', error)
+        console.error('❌ [Agent] 错误详情:', error instanceof Error ? error.stack : error)
+        // Agent框架初始化失败，静默处理
+      }
+    } else {
+      console.log('🔄 [Agent] Agent框架已经初始化')
+      console.log('🆔 [Agent] 当前AgentId:', currentAgentId.value)
+    }
+  }
+
+  // 切换聊天模式
+  const switchChatMode = async (mode: ChatMode) => {
+    console.log('🔄 [Mode] 切换聊天模式:', chatMode.value, '->', mode)
+    if (chatMode.value === mode) return
+
+    chatMode.value = mode
+    console.log('✅ [Mode] 聊天模式已更新为:', chatMode.value)
+
+    if (mode === 'agent') {
+      console.log('🤖 [Mode] 切换到Agent模式，初始化Agent框架...')
+      await initializeAgentFramework()
     }
   }
 
@@ -480,9 +651,13 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     messages,
     streamingContent,
     isLoading,
-    isStreaming,
+
     error,
     sessions,
+
+    // 聊天模式相关状态
+    chatMode,
+    currentAgentId,
 
     // 计算属性
     hasMessages,
@@ -501,6 +676,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     saveCurrentSession,
     sendMessage,
     stopStreaming,
+    switchChatMode,
     clearCurrentSession,
     setSidebarWidth,
     initialize,

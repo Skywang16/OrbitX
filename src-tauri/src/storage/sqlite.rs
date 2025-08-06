@@ -709,8 +709,10 @@ impl SqliteManager {
 
         debug!("保存数据到表: {}", table);
 
-        // 清除相关缓存
-        self.clear_table_cache(table).await;
+        // 清除相关缓存（AI相关表除外）
+        if !table.starts_with("ai_") {
+            self.clear_table_cache(table).await;
+        }
 
         // 根据表名选择保存策略
         match table.as_str() {
@@ -1007,21 +1009,6 @@ impl SqliteManager {
 
     /// 获取所有AI模型配置
     pub async fn get_ai_models(&self) -> AppResult<Vec<AIModelConfig>> {
-        let cache_key = "ai_models_all".to_string();
-
-        // 检查缓存
-        {
-            let cache = self.cache.read().await;
-            if let Some(cached_value) = cache.peek(&cache_key) {
-                if let Ok(models) =
-                    serde_json::from_value::<Vec<AIModelConfig>>(cached_value.clone())
-                {
-                    debug!("从缓存获取AI模型配置");
-                    return Ok(models);
-                }
-            }
-        }
-
         let sql = r#"
             SELECT id, name, provider, api_url, api_key_encrypted, model_name,
                    is_default, enabled, config_json, created_at, updated_at
@@ -1041,12 +1028,6 @@ impl SqliteManager {
         for row in rows {
             let model = self.row_to_ai_model_config(&row, &encryption_manager)?;
             models.push(model);
-        }
-
-        // 缓存结果
-        {
-            let mut cache = self.cache.write().await;
-            cache.put(cache_key, serde_json::to_value(&models).unwrap_or_default());
         }
 
         Ok(models)
@@ -1087,9 +1068,6 @@ impl SqliteManager {
             .await
             .map_err(|e| anyhow!("提交事务失败: {}", e))?;
 
-        // 清除相关缓存
-        self.clear_table_cache("ai_models").await;
-
         Ok(())
     }
 
@@ -1120,9 +1098,6 @@ impl SqliteManager {
             )
             .await
             .map_err(|e| anyhow!("保存AI聊天消息失败: {}", e))?;
-
-        // 清除相关缓存
-        self.clear_table_cache("ai_chat_history").await;
 
         Ok(result.last_insert_rowid())
     }
@@ -1247,9 +1222,6 @@ impl SqliteManager {
             (_sql, result.rows_affected())
         };
 
-        // 清除相关缓存
-        self.clear_table_cache("ai_chat_history").await;
-
         debug!("清除了 {} 条AI聊天历史记录", affected_rows);
         Ok(affected_rows)
     }
@@ -1304,9 +1276,6 @@ impl SqliteManager {
                     None,
                 )
                 .await?;
-
-                // 清除相关缓存
-                self.clear_table_cache("ai_models").await;
 
                 Ok(())
             }

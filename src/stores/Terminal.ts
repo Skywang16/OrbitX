@@ -13,6 +13,12 @@ interface TerminalEventListeners {
   onExit: (exitCode: number | null) => void
 }
 
+// 监听器条目类型
+interface ListenerEntry {
+  id: string
+  callbacks: TerminalEventListeners
+}
+
 // Shell管理状态类型
 interface ShellManagerState {
   availableShells: ShellInfo[]
@@ -38,8 +44,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
     error: null,
   })
 
-  // 存储组件注册的回调函数的映射表
-  const _listeners = ref<Map<string, TerminalEventListeners>>(new Map())
+  // 存储组件注册的回调函数的映射表 - 支持多个监听器
+  const _listeners = ref<Map<string, ListenerEntry[]>>(new Map())
 
   let _globalListenersUnlisten: UnlistenFn[] = []
   let _isListenerSetup = false
@@ -87,8 +93,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
       try {
         const terminal = findTerminalByBackendId(event.payload.paneId)
         if (terminal) {
-          const callbacks = _listeners.value.get(terminal.id)
-          callbacks?.onOutput(event.payload.data)
+          const listeners = _listeners.value.get(terminal.id) || []
+          listeners.forEach(listener => listener.onOutput(event.payload.data))
         }
       } catch (error) {
         console.error('处理终端输出事件时发生错误:', error)
@@ -103,8 +109,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
       try {
         const terminal = findTerminalByBackendId(event.payload.paneId)
         if (terminal) {
-          const callbacks = _listeners.value.get(terminal.id)
-          callbacks?.onExit(event.payload.exitCode)
+          const listeners = _listeners.value.get(terminal.id) || []
+          listeners.forEach(listener => listener.onExit(event.payload.exitCode))
 
           // 自动清理已关闭的终端会话
           closeTerminal(terminal.id)
@@ -133,14 +139,28 @@ export const useTerminalStore = defineStore('Terminal', () => {
    * 由终端组件调用，用于注册其事件处理程序。
    */
   const registerTerminalCallbacks = (id: string, callbacks: TerminalEventListeners) => {
-    _listeners.value.set(id, callbacks)
+    const listeners = _listeners.value.get(id) || []
+    listeners.push(callbacks)
+    _listeners.value.set(id, listeners)
   }
 
   /**
    * 当终端组件卸载时调用，用于清理资源。
    */
-  const unregisterTerminalCallbacks = (id: string) => {
-    _listeners.value.delete(id)
+  const unregisterTerminalCallbacks = (id: string, callbacks?: TerminalEventListeners) => {
+    if (!callbacks) {
+      // 如果没有指定回调，清除所有监听器
+      _listeners.value.delete(id)
+    } else {
+      // 只移除指定的监听器
+      const listeners = _listeners.value.get(id) || []
+      const filtered = listeners.filter(listener => listener !== callbacks)
+      if (filtered.length > 0) {
+        _listeners.value.set(id, filtered)
+      } else {
+        _listeners.value.delete(id)
+      }
+    }
   }
 
   /**
