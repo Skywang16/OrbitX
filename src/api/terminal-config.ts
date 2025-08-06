@@ -65,7 +65,7 @@ export interface SystemShellsResult {
 /**
  * 获取当前终端配置
  */
-export async function getTerminalConfig(): Promise<TerminalConfig> {
+export const getTerminalConfig = async (): Promise<TerminalConfig> => {
   return await invoke('get_terminal_config')
 }
 
@@ -73,21 +73,21 @@ export async function getTerminalConfig(): Promise<TerminalConfig> {
  * 更新终端配置
  * @param updateRequest 配置更新请求
  */
-export async function updateTerminalConfig(updateRequest: TerminalConfigUpdateRequest): Promise<void> {
+export const updateTerminalConfig = async (updateRequest: TerminalConfigUpdateRequest): Promise<void> => {
   return await invoke('update_terminal_config', { updateRequest })
 }
 
 /**
  * 验证终端配置
  */
-export async function validateTerminalConfig(): Promise<TerminalConfigValidationResult> {
+export const validateTerminalConfig = async (): Promise<TerminalConfigValidationResult> => {
   return await invoke('validate_terminal_config')
 }
 
 /**
  * 重置终端配置为默认值
  */
-export async function resetTerminalConfigToDefaults(): Promise<void> {
+export const resetTerminalConfigToDefaults = async (): Promise<void> => {
   return await invoke('reset_terminal_config_to_defaults')
 }
 
@@ -96,7 +96,7 @@ export async function resetTerminalConfigToDefaults(): Promise<void> {
 /**
  * 检测系统可用的 Shell
  */
-export async function detectSystemShells(): Promise<SystemShellsResult> {
+export const detectSystemShells = async (): Promise<SystemShellsResult> => {
   return await invoke('detect_system_shells')
 }
 
@@ -104,7 +104,7 @@ export async function detectSystemShells(): Promise<SystemShellsResult> {
  * 验证 Shell 路径
  * @param shellPath Shell 路径
  */
-export async function validateShellPath(shellPath: string): Promise<boolean> {
+export const validateShellPath = async (shellPath: string): Promise<boolean> => {
   return await invoke('validate_terminal_shell_path', { shellPath })
 }
 
@@ -112,7 +112,7 @@ export async function validateShellPath(shellPath: string): Promise<boolean> {
  * 获取 Shell 信息
  * @param shellPath Shell 路径
  */
-export async function getShellInfo(shellPath: string): Promise<ShellInfo | null> {
+export const getShellInfo = async (shellPath: string): Promise<ShellInfo | null> => {
   return await invoke('get_shell_info', { shellPath })
 }
 
@@ -122,7 +122,7 @@ export async function getShellInfo(shellPath: string): Promise<ShellInfo | null>
  * 更新光标配置
  * @param cursorConfig 新的光标配置
  */
-export async function updateCursorConfig(cursorConfig: CursorConfig): Promise<void> {
+export const updateCursorConfig = async (cursorConfig: CursorConfig): Promise<void> => {
   return await invoke('update_cursor_config', { cursorConfig })
 }
 
@@ -132,7 +132,7 @@ export async function updateCursorConfig(cursorConfig: CursorConfig): Promise<vo
  * 更新终端行为配置
  * @param behaviorConfig 新的终端行为配置
  */
-export async function updateTerminalBehaviorConfig(behaviorConfig: TerminalBehaviorConfig): Promise<void> {
+export const updateTerminalBehaviorConfig = async (behaviorConfig: TerminalBehaviorConfig): Promise<void> => {
   return await invoke('update_terminal_behavior_config', { behaviorConfig })
 }
 
@@ -142,7 +142,7 @@ export async function updateTerminalBehaviorConfig(behaviorConfig: TerminalBehav
  * 更新滚动缓冲区大小
  * @param scrollback 滚动缓冲区行数
  */
-export async function updateScrollback(scrollback: number): Promise<void> {
+export const updateScrollback = async (scrollback: number): Promise<void> => {
   return await updateTerminalConfig({ scrollback })
 }
 
@@ -152,7 +152,11 @@ export async function updateScrollback(scrollback: number): Promise<void> {
  * @param args Shell 参数（可选）
  * @param workingDirectory 工作目录（可选）
  */
-export async function updateDefaultShell(shellPath: string, args?: string[], workingDirectory?: string): Promise<void> {
+export const updateDefaultShell = async (
+  shellPath: string,
+  args?: string[],
+  workingDirectory?: string
+): Promise<void> => {
   const shell: ShellConfig = {
     default: shellPath,
     args: args || [],
@@ -165,7 +169,7 @@ export async function updateDefaultShell(shellPath: string, args?: string[], wor
  * 更新光标样式
  * @param style 光标样式
  */
-export async function updateCursorStyle(style: 'block' | 'underline' | 'beam'): Promise<void> {
+export const updateCursorStyle = async (style: 'block' | 'underline' | 'beam'): Promise<void> => {
   const config = await getTerminalConfig()
   const cursor: CursorConfig = {
     ...config.cursor,
@@ -178,7 +182,7 @@ export async function updateCursorStyle(style: 'block' | 'underline' | 'beam'): 
  * 更新光标颜色
  * @param color 光标颜色（十六进制格式）
  */
-export async function updateCursorColor(color: string): Promise<void> {
+export const updateCursorColor = async (color: string): Promise<void> => {
   const config = await getTerminalConfig()
   const cursor: CursorConfig = {
     ...config.cursor,
@@ -190,7 +194,7 @@ export async function updateCursorColor(color: string): Promise<void> {
 /**
  * 切换光标闪烁
  */
-export async function toggleCursorBlink(): Promise<void> {
+export const toggleCursorBlink = async (): Promise<void> => {
   const config = await getTerminalConfig()
   const cursor: CursorConfig = {
     ...config.cursor,
@@ -202,7 +206,7 @@ export async function toggleCursorBlink(): Promise<void> {
 /**
  * 切换退出时关闭终端
  */
-export async function toggleCloseOnExit(): Promise<void> {
+export const toggleCloseOnExit = async (): Promise<void> => {
   const config = await getTerminalConfig()
   const behavior: TerminalBehaviorConfig = {
     ...config.behavior,
@@ -214,7 +218,7 @@ export async function toggleCloseOnExit(): Promise<void> {
 /**
  * 切换关闭时确认
  */
-export async function toggleConfirmClose(): Promise<void> {
+export const toggleConfirmClose = async (): Promise<void> => {
   const config = await getTerminalConfig()
   const behavior: TerminalBehaviorConfig = {
     ...config.behavior,
@@ -229,7 +233,7 @@ export async function toggleConfirmClose(): Promise<void> {
  * 验证颜色格式是否有效
  * @param color 颜色字符串
  */
-export function isValidColor(color: string): boolean {
+export const isValidColor = (color: string): boolean => {
   return /^#[0-9A-Fa-f]{6}$/.test(color)
 }
 
@@ -237,7 +241,7 @@ export function isValidColor(color: string): boolean {
  * 验证滚动缓冲区大小是否有效
  * @param scrollback 滚动缓冲区行数
  */
-export function isValidScrollback(scrollback: number): boolean {
+export const isValidScrollback = (scrollback: number): boolean => {
   return scrollback >= 0 && scrollback <= 1000000
 }
 
@@ -245,7 +249,7 @@ export function isValidScrollback(scrollback: number): boolean {
  * 验证光标粗细是否有效
  * @param thickness 光标粗细
  */
-export function isValidCursorThickness(thickness: number): boolean {
+export const isValidCursorThickness = (thickness: number): boolean => {
   return thickness >= 0.0 && thickness <= 1.0
 }
 

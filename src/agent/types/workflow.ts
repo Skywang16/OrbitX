@@ -1,5 +1,5 @@
 /**
- * 工作流相关类型定义 - 简化版，参考eko设计但保持JSON格式
+ * 工作流相关类型定义
  */
 
 export type WorkflowId = string
@@ -22,14 +22,14 @@ export enum StepType {
 }
 
 /**
- * 工作流Agent定义 - 简化版，参考eko但使用JSON
+ * 工作流Agent定义
  */
 export interface WorkflowAgent {
   id: string
   name: string
   task: string
   type?: string
-  dependsOn: string[] // 简化为字符串数组，像eko一样
+  dependsOn: string[] // 简化为字符串数组
   parallel?: boolean // 简单的并行标记
   status: 'init' | 'running' | 'done' | 'error'
   config?: Record<string, unknown> // 合并原来的steps配置
@@ -40,10 +40,10 @@ export interface WorkflowAgent {
 }
 
 /**
- * 工作流定义 - 简化版，参考eko设计
+ * 工作流定义
  */
 export interface WorkflowDefinition {
-  taskId: string // 改为taskId，与eko保持一致
+  taskId: string // 改为taskId
   name: string
   thought?: string
   agents: WorkflowAgent[]
@@ -52,7 +52,7 @@ export interface WorkflowDefinition {
 }
 
 /**
- * 简化的执行结果 - 参考eko的EkoResult
+ * 简化的执行结果
  */
 export interface ExecutionResult {
   taskId: string
@@ -78,7 +78,7 @@ export interface WorkflowExecution {
 }
 
 /**
- * Agent执行节点 - 参考eko的AgentNode设计
+ * Agent执行节点
  */
 export interface AgentNode {
   type: 'normal' | 'parallel'

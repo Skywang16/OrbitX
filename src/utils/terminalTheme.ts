@@ -15,7 +15,7 @@ import { convertThemeToXTerm, createDefaultXTermTheme, type XTermTheme } from '.
  *
  * @returns Promise<XTermTheme> XTerm.js 主题对象
  */
-export async function getTerminalThemeFromConfig(): Promise<XTermTheme> {
+export const getTerminalThemeFromConfig = async (): Promise<XTermTheme> => {
   try {
     // 从配置系统获取当前主题数据
     const theme = await getCurrentTheme()

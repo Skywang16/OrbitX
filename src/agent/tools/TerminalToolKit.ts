@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from 'uuid'
 /**
  * 创建终端命令执行工具
  */
-export function createTerminalExecuteTool(): ToolDefinition {
+export const createTerminalExecuteTool = (): ToolDefinition => {
   return {
     id: 'terminal_execute',
     name: 'terminal_execute',
@@ -60,7 +60,7 @@ export function createTerminalExecuteTool(): ToolDefinition {
 /**
  * 创建终端会话管理工具
  */
-export function createTerminalSessionTool(): ToolDefinition {
+export const createTerminalSessionTool = (): ToolDefinition => {
   return {
     id: 'terminal_session',
     name: 'terminal_session',
@@ -107,7 +107,7 @@ export function createTerminalSessionTool(): ToolDefinition {
 /**
  * 创建终端环境监控工具
  */
-export function createTerminalMonitorTool(): ToolDefinition {
+export const createTerminalMonitorTool = (): ToolDefinition => {
   return {
     id: 'terminal_monitor',
     name: 'terminal_monitor',
@@ -149,7 +149,7 @@ export function createTerminalMonitorTool(): ToolDefinition {
 /**
  * 创建终端文件操作工具
  */
-export function createTerminalFileOpsTool(): ToolDefinition {
+export const createTerminalFileOpsTool = (): ToolDefinition => {
   return {
     id: 'terminal_file_ops',
     name: 'terminal_file_ops',
@@ -218,7 +218,7 @@ export function createTerminalFileOpsTool(): ToolDefinition {
 
 // ========== Function Call Schemas ==========
 
-function createTerminalExecuteFunctionSchema(): FunctionCallSchema {
+const createTerminalExecuteFunctionSchema = (): FunctionCallSchema => {
   return {
     type: 'function',
     function: {
@@ -252,7 +252,7 @@ function createTerminalExecuteFunctionSchema(): FunctionCallSchema {
   }
 }
 
-function createTerminalSessionFunctionSchema(): FunctionCallSchema {
+const createTerminalSessionFunctionSchema = (): FunctionCallSchema => {
   return {
     type: 'function',
     function: {
@@ -285,7 +285,7 @@ function createTerminalSessionFunctionSchema(): FunctionCallSchema {
   }
 }
 
-function createTerminalMonitorFunctionSchema(): FunctionCallSchema {
+const createTerminalMonitorFunctionSchema = (): FunctionCallSchema => {
   return {
     type: 'function',
     function: {
@@ -315,7 +315,7 @@ function createTerminalMonitorFunctionSchema(): FunctionCallSchema {
   }
 }
 
-function createTerminalFileOpsFunctionSchema(): FunctionCallSchema {
+const createTerminalFileOpsFunctionSchema = (): FunctionCallSchema => {
   return {
     type: 'function',
     function: {
@@ -357,7 +357,7 @@ function createTerminalFileOpsFunctionSchema(): FunctionCallSchema {
 /**
  * 内置终端命令执行实现
  */
-async function executeTerminalCommandBuiltin(
+const executeTerminalCommandBuiltin = async (
   params: Record<string, unknown>,
   context: ExecutionContext
 ): Promise<ToolResult> {
@@ -403,7 +403,7 @@ async function executeTerminalCommandBuiltin(
 /**
  * 内置终端会话管理实现
  */
-async function executeTerminalSessionBuiltin(
+const executeTerminalSessionBuiltin = async (
   params: Record<string, unknown>,
   context: ExecutionContext
 ): Promise<ToolResult> {
@@ -523,7 +523,7 @@ async function executeTerminalSessionBuiltin(
 /**
  * 内置终端监控实现
  */
-async function executeTerminalMonitorBuiltin(
+const executeTerminalMonitorBuiltin = async (
   params: Record<string, unknown>,
   context: ExecutionContext
 ): Promise<ToolResult> {
@@ -573,7 +573,7 @@ async function executeTerminalMonitorBuiltin(
 /**
  * 内置文件操作实现
  */
-async function executeTerminalFileOpsBuiltin(
+const executeTerminalFileOpsBuiltin = async (
   params: Record<string, unknown>,
   context: ExecutionContext
 ): Promise<ToolResult> {
@@ -720,7 +720,7 @@ async function executeTerminalFileOpsBuiltin(
 
 // ========== 辅助函数 ==========
 
-async function executeCommand(
+const executeCommand = async (
   command: string,
   options: {
     workingDirectory?: string
@@ -806,7 +806,7 @@ async function executeCommand(
   }
 }
 
-function isCommandSafe(command: string): boolean {
+const isCommandSafe = (command: string): boolean => {
   const dangerousPatterns = [
     /rm\s+-rf\s+\/$/,
     /sudo\s+rm/,
@@ -819,13 +819,13 @@ function isCommandSafe(command: string): boolean {
   return !dangerousPatterns.some(pattern => pattern.test(command))
 }
 
-function isSafePath(path: string): boolean {
+const isSafePath = (path: string): boolean => {
   const forbiddenPaths = ['/etc/shadow', '/etc/passwd', '/boot', '/sys', '/proc']
 
   return !forbiddenPaths.some(forbidden => path.startsWith(forbidden))
 }
 
-async function getProcessList(detailed: boolean, filterPattern?: string): Promise<unknown> {
+const getProcessList = async (detailed: boolean, filterPattern?: string): Promise<unknown> => {
   const command = detailed ? 'ps aux' : 'ps -e'
   const result = await executeCommand(command)
 
@@ -839,7 +839,7 @@ async function getProcessList(detailed: boolean, filterPattern?: string): Promis
   return processes
 }
 
-async function getEnvironmentInfo(detailed: boolean): Promise<unknown> {
+const getEnvironmentInfo = async (detailed: boolean): Promise<unknown> => {
   const commands = detailed
     ? ['env', 'echo $PATH', 'echo $HOME', 'echo $USER', 'uname -a']
     : ['echo $PATH', 'echo $USER']
@@ -855,7 +855,7 @@ async function getEnvironmentInfo(detailed: boolean): Promise<unknown> {
   }
 }
 
-async function getResourceInfo(detailed: boolean): Promise<unknown> {
+const getResourceInfo = async (detailed: boolean): Promise<unknown> => {
   const commands = detailed ? ['free -h', 'df -h', 'uptime', 'top -bn1 | head -5'] : ['free -h', 'uptime']
 
   const results = await Promise.all(commands.map(cmd => executeCommand(cmd)))
@@ -868,7 +868,7 @@ async function getResourceInfo(detailed: boolean): Promise<unknown> {
   }
 }
 
-async function getCommandHistory(detailed: boolean, filterPattern?: string): Promise<unknown> {
+const getCommandHistory = async (detailed: boolean, filterPattern?: string): Promise<unknown> => {
   const command = detailed ? 'history' : 'history | tail -20'
   const result = await executeCommand(command)
 
@@ -882,7 +882,7 @@ async function getCommandHistory(detailed: boolean, filterPattern?: string): Pro
   return history
 }
 
-async function getTerminalStatus(): Promise<unknown> {
+const getTerminalStatus = async (): Promise<unknown> => {
   const terminalStore = useTerminalStore()
 
   return {
@@ -899,7 +899,7 @@ async function getTerminalStatus(): Promise<unknown> {
 /**
  * 导出所有终端工具
  */
-export function getAllTerminalTools(): ToolDefinition[] {
+export const getAllTerminalTools = (): ToolDefinition[] => {
   return [
     createTerminalExecuteTool(),
     createTerminalSessionTool(),

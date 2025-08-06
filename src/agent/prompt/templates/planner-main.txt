@@ -2,6 +2,10 @@
 
 用户任务: "{{userInput}}"
 
+上下文信息:
+- 聊天历史: `{{chatHistory}}`
+- 工作记忆: `{{workingMemory}}`
+
 {{#if hasTools}}
 可用的工具列表 (JSON格式):
 \`\`\`json

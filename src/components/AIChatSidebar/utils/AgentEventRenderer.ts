@@ -305,6 +305,6 @@ export const defaultAgentEventRenderer = new AgentEventRenderer()
 /**
  * 便捷函数：渲染Agent事件
  */
-export function renderAgentEvent(eventType: string, eventData: Record<string, unknown>): RenderResult {
+export const renderAgentEvent = (eventType: string, eventData: Record<string, unknown>): RenderResult => {
   return defaultAgentEventRenderer.renderEvent(eventType, eventData)
 }

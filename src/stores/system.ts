@@ -124,7 +124,7 @@ export const useSystemStore = defineStore('system', () => {
   /**
    * 执行健康检查
    */
-  async function checkHealth(): Promise<HealthCheckResult> {
+  const checkHealth = async (): Promise<HealthCheckResult> => {
     healthLoading.value = true
     error.value = null
 
@@ -145,7 +145,7 @@ export const useSystemStore = defineStore('system', () => {
   /**
    * 获取缓存统计
    */
-  async function getCacheStatistics(): Promise<CacheStats> {
+  const getCacheStatistics = async (): Promise<CacheStats> => {
     cacheLoading.value = true
     error.value = null
 
@@ -166,7 +166,7 @@ export const useSystemStore = defineStore('system', () => {
   /**
    * 获取存储统计
    */
-  async function getStorageStatistics(): Promise<StorageStats> {
+  const getStorageStatistics = async (): Promise<StorageStats> => {
     storageLoading.value = true
     error.value = null
 
@@ -187,7 +187,7 @@ export const useSystemStore = defineStore('system', () => {
   /**
    * 获取完整系统状态
    */
-  async function getSystemStatus(): Promise<SystemStatus> {
+  const getSystemStatus = async (): Promise<SystemStatus> => {
     statusLoading.value = true
     error.value = null
 
@@ -214,7 +214,7 @@ export const useSystemStore = defineStore('system', () => {
   /**
    * 刷新所有统计信息
    */
-  async function refreshAll(): Promise<void> {
+  const refreshAll = async (): Promise<void> => {
     await Promise.allSettled([checkHealth(), getCacheStatistics(), getStorageStatistics()])
   }
 
@@ -225,7 +225,7 @@ export const useSystemStore = defineStore('system', () => {
   /**
    * 预加载缓存
    */
-  async function preloadCache(): Promise<void> {
+  const preloadCache = async (): Promise<void> => {
     try {
       await storage.preloadCache()
       // 刷新缓存统计
@@ -240,7 +240,7 @@ export const useSystemStore = defineStore('system', () => {
   /**
    * 清空缓存
    */
-  async function clearCache(): Promise<void> {
+  const clearCache = async (): Promise<void> => {
     try {
       await storage.clearCache()
       // 刷新缓存统计
@@ -259,7 +259,7 @@ export const useSystemStore = defineStore('system', () => {
   /**
    * 启动自动刷新
    */
-  function startAutoRefresh(): void {
+  const startAutoRefresh = (): void => {
     if (refreshTimer) return
 
     refreshTimer = setInterval(() => {
@@ -272,7 +272,7 @@ export const useSystemStore = defineStore('system', () => {
   /**
    * 停止自动刷新
    */
-  function stopAutoRefresh(): void {
+  const stopAutoRefresh = (): void => {
     if (refreshTimer) {
       clearInterval(refreshTimer)
       refreshTimer = null
@@ -282,14 +282,14 @@ export const useSystemStore = defineStore('system', () => {
   /**
    * 清除错误
    */
-  function clearError(): void {
+  const clearError = (): void => {
     error.value = null
   }
 
   /**
    * 重置所有状态
    */
-  function reset(): void {
+  const reset = (): void => {
     healthStatus.value = null
     cacheStats.value = null
     storageStats.value = null
@@ -301,7 +301,7 @@ export const useSystemStore = defineStore('system', () => {
   /**
    * 初始化系统监控
    */
-  async function initialize(): Promise<void> {
+  const initialize = async (): Promise<void> => {
     try {
       await getSystemStatus()
       startAutoRefresh()

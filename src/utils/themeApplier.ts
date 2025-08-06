@@ -11,7 +11,7 @@ import type { Theme } from '@/api/config/types'
  *
  * @param theme 主题数据
  */
-export function applyThemeToUI(theme: Theme): void {
+export const applyThemeToUI = (theme: Theme): void => {
   // 更新 data-theme 属性
   updateDataThemeAttribute(theme)
 
@@ -26,7 +26,7 @@ export function applyThemeToUI(theme: Theme): void {
  *
  * @param theme 主题数据
  */
-function updateDataThemeAttribute(theme: Theme): void {
+const updateDataThemeAttribute = (theme: Theme): void => {
   const root = document.documentElement
 
   // 根据主题类型设置 data-theme 属性
@@ -54,7 +54,7 @@ function updateDataThemeAttribute(theme: Theme): void {
  *
  * @param theme 主题数据
  */
-function updateCSSVariables(theme: Theme): void {
+const updateCSSVariables = (theme: Theme): void => {
   const root = document.documentElement
   const style = root.style
 
@@ -114,7 +114,7 @@ function updateCSSVariables(theme: Theme): void {
  * @param percent 亮度调整百分比 (-100 到 100)
  * @returns 调整后的颜色值
  */
-function adjustColorBrightness(color: string, percent: number): string {
+const adjustColorBrightness = (color: string, percent: number): string => {
   // 简单的颜色亮度调整实现
   // 这里可以使用更复杂的颜色处理库，但为了减少依赖，使用简单实现
 
@@ -143,7 +143,7 @@ function adjustColorBrightness(color: string, percent: number): string {
  * @param alpha 透明度 (0-1)
  * @returns rgba 颜色值
  */
-function addAlphaToColor(color: string, alpha: number): string {
+const addAlphaToColor = (color: string, alpha: number): string => {
   if (!color.startsWith('#')) {
     return color
   }
@@ -161,7 +161,7 @@ function addAlphaToColor(color: string, alpha: number): string {
 /**
  * 重置所有自定义 CSS 变量
  */
-export function resetCSSVariables(): void {
+export const resetCSSVariables = (): void => {
   const root = document.documentElement
   const style = root.style
 

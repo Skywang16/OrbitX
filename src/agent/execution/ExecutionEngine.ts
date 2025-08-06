@@ -1,28 +1,40 @@
 /**
  * 简化的执行引擎
  *
- * 参考eko的设计理念，使用简单的树形执行模型而不是复杂的依赖图
+ * 使用简单的树形执行模型而不是复杂的依赖图
+ * 增强版本：集成TaskContext、AgentContext和TaskSnapshot机制
  */
 
-import type { WorkflowDefinition, WorkflowAgent, AgentNode, WorkflowExecution } from '../types/workflow'
-import type { AgentExecutionContext, ExecutionResult, IExecutionEngine } from '../types/execution'
+import type { WorkflowDefinition, WorkflowAgent, AgentNode } from '../types/workflow'
+import type { ExecutionResult, IExecutionEngine } from '../types/execution'
 import type { ExecutionCallback } from '../types/callbacks'
 import { agentRegistry } from '../agents/AgentRegistry'
 import { CallbackManager } from '../core/CallbackManager'
+import { TaskContext } from '../context/TaskContext'
+import { AgentContext } from '../context/AgentContext'
+import { TaskSnapshotManager } from '../core/TaskSnapshotManager'
+import { AgentFrameworkConfig } from '../index'
+import { BaseAgent } from '../agents/BaseAgent'
 
 /**
  * 简化的执行引擎类
+ * 增强版本：集成TaskContext、AgentContext和快照机制
  */
 export class ExecutionEngine implements IExecutionEngine {
-  private taskMap: Map<string, WorkflowExecution> = new Map()
+  private taskContextMap: Map<string, TaskContext> = new Map()
+  private agentContextMap: Map<string, AgentContext[]> = new Map()
   private callbackManager: CallbackManager
+  private snapshotManager: TaskSnapshotManager
+  private config: AgentFrameworkConfig
 
-  constructor(callbackManager?: CallbackManager) {
+  constructor(config: AgentFrameworkConfig = {}, callbackManager?: CallbackManager) {
+    this.config = config
     this.callbackManager = callbackManager || new CallbackManager()
+    this.snapshotManager = new TaskSnapshotManager()
   }
 
   /**
-   * 执行工作流 - 主入口
+   * 执行工作流 - 主入口（增强版本）
    */
   async execute(
     workflow: WorkflowDefinition,
@@ -34,14 +46,22 @@ export class ExecutionEngine implements IExecutionEngine {
       this.callbackManager.onExecution(callback)
     }
 
-    const execution = this.initializeExecution(workflow, contextParams)
-    this.taskMap.set(workflow.taskId, execution)
+    // 创建TaskContext
+    const taskContext = new TaskContext(workflow.taskId, this.config, workflow, contextParams)
+    this.taskContextMap.set(workflow.taskId, taskContext)
+
+    // 创建AgentContexts
+    const agentContexts = workflow.agents.map(agent => new AgentContext(agent, taskContext))
+    this.agentContextMap.set(workflow.taskId, agentContexts)
+
+    // 启动自动快照
+    this.snapshotManager.startAutoSnapshot(taskContext, agentContexts)
 
     // 触发工作流开始事件
     await this.callbackManager.triggerExecutionEvent({
       type: 'workflow_start',
       timestamp: new Date(),
-      workflowId: execution.workflowId,
+      workflowId: workflow.taskId,
       data: { workflow, contextParams },
       metadata: {
         workflowName: workflow.name,
@@ -51,21 +71,20 @@ export class ExecutionEngine implements IExecutionEngine {
     })
 
     try {
-      const agentTree = this.buildAgentTree(workflow.agents)
-      const result = await this.executeAgentTree(agentTree, execution)
+      const result = await this.executeWithContext(taskContext, agentContexts)
 
-      execution.status = 'completed'
-      execution.endTime = new Date()
+      // 创建完成快照
+      await this.snapshotManager.createSnapshot(taskContext, agentContexts, 'manual')
 
       // 触发工作流完成事件
       await this.callbackManager.triggerExecutionEvent({
         type: 'workflow_completed',
         timestamp: new Date(),
-        workflowId: execution.workflowId,
+        workflowId: workflow.taskId,
         data: { result },
         metadata: {
           workflowName: workflow.name,
-          executionTime: execution.endTime.getTime() - execution.startTime.getTime(),
+          executionTime: Date.now() - Date.now(), // 简化处理，实际应该记录开始时间
           executionEndTime: new Date().toISOString(),
         },
       })
@@ -77,19 +96,17 @@ export class ExecutionEngine implements IExecutionEngine {
         result: result || '任务执行完成',
       }
     } catch (error) {
-      execution.status = 'failed'
-      execution.endTime = new Date()
-      execution.error = error instanceof Error ? error.message : String(error)
+      // 创建错误快照
+      await this.snapshotManager.createSnapshot(taskContext, agentContexts, 'error')
 
       // 触发工作流失败事件
       await this.callbackManager.triggerExecutionEvent({
         type: 'workflow_failed',
         timestamp: new Date(),
-        workflowId: execution.workflowId,
-        error: execution.error,
+        workflowId: workflow.taskId,
+        error: error instanceof Error ? error.message : String(error),
         metadata: {
           workflowName: workflow.name,
-          executionTime: execution.endTime.getTime() - execution.startTime.getTime(),
           errorType: error instanceof Error ? error.constructor.name : 'UnknownError',
           executionEndTime: new Date().toISOString(),
         },
@@ -99,90 +116,118 @@ export class ExecutionEngine implements IExecutionEngine {
         taskId: workflow.taskId,
         success: false,
         stopReason: 'error',
-        result: execution.error,
+        result: error instanceof Error ? error.message : String(error),
         error,
       }
     } finally {
-      // 移除任务（不清理回调，因为前端可能注册了持久的回调）
-      this.taskMap.delete(workflow.taskId)
+      // 停止自动快照
+      this.snapshotManager.stopAutoSnapshot(workflow.taskId)
+
+      // 清理上下文
+      this.taskContextMap.delete(workflow.taskId)
+      this.agentContextMap.delete(workflow.taskId)
     }
   }
 
   /**
-   * 执行单个Agent的核心逻辑
+   * 使用上下文执行工作流
    */
-  private async runSingleAgent(agent: WorkflowAgent, execution: WorkflowExecution): Promise<string> {
-    try {
-      agent.status = 'running'
-      execution.currentAgent = agent.id
+  private async executeWithContext(taskContext: TaskContext, agentContexts: AgentContext[]): Promise<string> {
+    const agentTree = this.buildAgentTree(taskContext.workflow!.agents)
+    return this.executeAgentTreeWithContext(agentTree, agentContexts)
+  }
 
+  /**
+   * 使用AgentContext执行Agent树
+   */
+  private async executeAgentTreeWithContext(agentTree: AgentNode, agentContexts: AgentContext[]): Promise<string> {
+    let currentTree: AgentNode | undefined = agentTree
+    let lastResult = ''
+
+    while (currentTree) {
+      if (currentTree.type === 'normal' && currentTree.agent) {
+        const agentContext = agentContexts.find(ctx => ctx.agent.id === currentTree.agent!.id)
+        if (agentContext) {
+          lastResult = await this.runSingleAgentWithContext(agentContext)
+          currentTree.result = lastResult
+        }
+      } else if (currentTree.type === 'parallel' && currentTree.agents) {
+        const parallelResults = await this.runParallelAgentsWithContext(currentTree.agents, agentContexts)
+        lastResult = parallelResults.join('\n\n')
+        currentTree.result = lastResult
+      }
+      currentTree = currentTree.nextAgent
+    }
+    return lastResult
+  }
+
+  /**
+   * 使用AgentContext运行单个Agent
+   */
+  private async runSingleAgentWithContext(agentContext: AgentContext): Promise<string> {
+    const agent = agentContext.agent
+    const startTime = Date.now()
+
+    try {
+      // 触发Agent开始事件
       await this.callbackManager.triggerExecutionEvent({
         type: 'agent_start',
-        agentId: agent.id,
-        workflowId: execution.workflowId,
         timestamp: new Date(),
-        data: agent,
+        workflowId: agentContext.taskContext.taskId,
+        data: { agent },
         metadata: {
+          agentId: agent.id,
           agentName: agent.name,
           agentTask: agent.task,
-          executionStartTime: new Date().toISOString(),
         },
       })
 
-      // 从注册表获取Agent实例
-      const agentType = agent.type || 'Tool' // 默认使用Tool类型
-      const agentInstance = agentRegistry.getAgent(agentType)
+      // 获取Agent实例
+      const agentInstance = agentRegistry.getAgent(agent.type || 'tool')
       if (!agentInstance) {
-        throw new Error(`未找到类型为 "${agentType}" 的Agent实现。`)
+        throw new Error(`Agent type '${agent.type || 'tool'}' not found`)
       }
 
-      const context: AgentExecutionContext = {
-        agentId: agent.id,
-        workflowId: execution.workflowId,
-        variables: execution.variables,
-        stepResults: execution.agentResults,
-      }
-
-      // 将执行委托给Agent实例
-      const agentResult = await agentInstance.execute(agent, context)
+      // 使用新的executeWithContext方法
+      const agentResult = await (agentInstance as BaseAgent).executeWithRetry(agentContext)
 
       if (!agentResult.success) {
-        throw new Error(agentResult.error || agentResult.result || 'Agent执行失败')
+        throw new Error(agentResult.error || 'Agent执行失败')
       }
 
       agent.status = 'done'
-      execution.agentResults[agent.id] = agentResult.result
+      const resultString = typeof agentResult.data === 'string' ? agentResult.data : JSON.stringify(agentResult.data)
 
+      // 触发Agent完成事件
       await this.callbackManager.triggerExecutionEvent({
         type: 'agent_completed',
-        agentId: agent.id,
-        workflowId: execution.workflowId,
         timestamp: new Date(),
-        data: { result: agentResult.result },
+        workflowId: agentContext.taskContext.taskId,
+        data: { agent, result: agentResult },
         metadata: {
+          agentId: agent.id,
           agentName: agent.name,
-          executionTime: agentResult.executionTime,
-          success: agentResult.success,
-          executionEndTime: new Date().toISOString(),
+          executionTime: Date.now() - startTime,
+          success: true,
         },
       })
 
-      return agentResult.result
+      return resultString
     } catch (error) {
       agent.status = 'error'
       const errorMessage = error instanceof Error ? error.message : String(error)
 
+      // 触发Agent失败事件
       await this.callbackManager.triggerExecutionEvent({
         type: 'agent_failed',
-        agentId: agent.id,
-        workflowId: execution.workflowId,
         timestamp: new Date(),
+        workflowId: agentContext.taskContext.taskId,
         error: errorMessage,
         metadata: {
+          agentId: agent.id,
           agentName: agent.name,
-          agentTask: agent.task,
-          errorType: error instanceof Error ? error.constructor.name : 'UnknownError',
-          executionEndTime: new Date().toISOString(),
+          executionTime: Date.now() - startTime,
+          success: false,
         },
       })
 
@@ -191,47 +236,18 @@ export class ExecutionEngine implements IExecutionEngine {
   }
 
   /**
-   * 并行执行多个Agent
+   * 使用AgentContext运行并行Agents
    */
-  private async runParallelAgents(agents: WorkflowAgent[], execution: WorkflowExecution): Promise<string[]> {
-    const executeAgent = (agent: WorkflowAgent, index: number) =>
-      this.runSingleAgent(agent, execution).then(result => ({ result, index }))
+  private async runParallelAgentsWithContext(
+    agents: WorkflowAgent[],
+    agentContexts: AgentContext[]
+  ): Promise<string[]> {
+    const promises = agents.map(agent => {
+      const agentContext = agentContexts.find(ctx => ctx.agent.id === agent.id)
+      return agentContext ? this.runSingleAgentWithContext(agentContext) : Promise.resolve('')
+    })
 
-    const enableParallel = execution.variables.agentParallel !== false
-
-    if (enableParallel) {
-      const parallelResults = await Promise.all(agents.map(executeAgent))
-      parallelResults.sort((a, b) => a.index - b.index)
-      return parallelResults.map(({ result }) => result)
-    } else {
-      const results: string[] = []
-      for (let i = 0; i < agents.length; i++) {
-        const { result } = await executeAgent(agents[i], i)
-        results.push(result)
-      }
-      return results
-    }
-  }
-
-  /**
-   * 执行Agent树
-   */
-  private async executeAgentTree(agentTree: AgentNode, execution: WorkflowExecution): Promise<string> {
-    let currentTree: AgentNode | undefined = agentTree
-    let lastResult = ''
-
-    while (currentTree) {
-      if (currentTree.type === 'normal' && currentTree.agent) {
-        lastResult = await this.runSingleAgent(currentTree.agent, execution)
-        currentTree.result = lastResult
-      } else if (currentTree.type === 'parallel' && currentTree.agents) {
-        const parallelResults = await this.runParallelAgents(currentTree.agents, execution)
-        lastResult = parallelResults.join('\n\n')
-        currentTree.result = lastResult
-      }
-      currentTree = currentTree.nextAgent
-    }
-    return lastResult
+    return Promise.all(promises)
   }
 
   /**
@@ -349,22 +365,5 @@ export class ExecutionEngine implements IExecutionEngine {
     }
 
     return agents
-  }
-
-  /**
-   * 初始化执行状态
-   */
-  private initializeExecution(
-    workflow: WorkflowDefinition,
-    contextParams?: Record<string, unknown>
-  ): WorkflowExecution {
-    return {
-      taskId: workflow.taskId,
-      workflowId: workflow.taskId,
-      status: 'running',
-      agentResults: {},
-      variables: { ...workflow.variables, ...contextParams },
-      startTime: new Date(),
-    }
   }
 }

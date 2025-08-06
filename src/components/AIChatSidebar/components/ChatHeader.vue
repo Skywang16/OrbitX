@@ -72,9 +72,11 @@
 <style scoped>
   .chat-header {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
     border-bottom: 1px solid var(--color-border);
     background-color: var(--color-ai-sidebar-background);
+    padding: 0.5em 0.8em;
     gap: 0.5em;
   }
 
@@ -84,7 +86,6 @@
     align-items: center;
     min-width: 0;
     overflow: hidden;
-    padding: 0 0.8em;
   }
 
   .header-actions {
@@ -92,26 +93,27 @@
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
-    padding-right: 0.8em;
   }
 
   .new-session-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 1.4em;
-    height: 1.4em;
+    width: 2em;
+    height: 2em;
     border: none;
     background: none;
     color: var(--color-text-secondary);
     cursor: pointer;
-    transition: color 0.2s ease;
+    transition: all 0.2s ease;
     padding: 0;
     flex-shrink: 0;
+    border-radius: 4px;
   }
 
   .new-session-btn:hover {
     color: var(--color-text);
+    background-color: var(--color-background-hover, rgba(0, 0, 0, 0.05));
   }
 
   .new-session-btn:disabled {

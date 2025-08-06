@@ -1,258 +1,271 @@
 /**
- * Memory管理器
- *
- * 参考Eko的Memory机制，实现上下文压缩和工具使用历史提取
- * 用于优化动态重规划的性能
+ * @file MemoryManager.ts
+ * @description Manages the agent's memory, including chat history and working memory, with advanced capacity management and compression .
  */
 
-import type { WorkflowStep } from '../types'
-import type { StepExecutionResult } from '../types/execution'
+import { Memory, ChatMessage, ChatMessageRole } from '../types/memory'
+import { TaskContext } from '../context/TaskContext'
+import { promptEngine } from '../prompt/PromptEngine'
+import { llmManager } from '../llm/LLMProvider'
 
-/**
- * 执行历史记录
- */
-export interface ExecutionHistory {
-  stepId: string
-  toolId: string
-  parameters: Record<string, unknown>
-  result: StepExecutionResult
-  timestamp: number
-  duration: number
-  success: boolean
+export interface MemoryManagerConfig {
+  maxMessages?: number
+  maxTokens?: number
+  enableCompression?: boolean
+  compressionThreshold?: number
+  compressionTargetCount?: number
+  compressionTriggerRatio?: number // 触发压缩的Token使用率
+  enableDynamicSystemPrompt?: boolean
+  enableLargeContentOptimization?: boolean
+  maxLargeContentLength?: number
 }
 
-/**
- * 压缩后的上下文
- */
-export interface CompressedContext {
-  essentialSteps: ExecutionHistory[]
-  usedTools: string[]
-  keyResults: Record<string, unknown>
-  terminalState: {
-    currentDirectory?: string
-    lastOutput?: string
-    activeProcesses?: string[]
-  }
-  summary: string
+const DEFAULT_CONFIG: Required<MemoryManagerConfig> = {
+  maxMessages: 20,
+  maxTokens: 16000,
+  enableCompression: true,
+  compressionThreshold: 15,
+  compressionTargetCount: 5,
+  compressionTriggerRatio: 0.8, // 80%使用率时触发压缩
+  enableDynamicSystemPrompt: true,
+  enableLargeContentOptimization: true,
+  maxLargeContentLength: 5000,
 }
 
-/**
- * Memory管理器
- */
 export class MemoryManager {
-  private executionHistory: ExecutionHistory[] = []
-  private maxHistorySize = 100
-  private compressionThreshold = 50
+  private memory: Memory
+  private config: Required<MemoryManagerConfig>
+  private taskContext?: TaskContext
+  private tokenCache: Map<string, number> = new Map() // Token计算缓存
+  private lastSystemPromptUpdate: number = 0 // 上次系统提示更新时间
 
-  /**
-   * 记录步骤执行
-   */
-  recordExecution(step: WorkflowStep, result: StepExecutionResult, duration: number): void {
-    const record: ExecutionHistory = {
-      stepId: step.id,
-      toolId: (step.config.toolId as string) || 'unknown',
-      parameters: step.config.parameters || {},
-      result,
-      timestamp: Date.now(),
-      duration,
-      success: result.success,
+  constructor(initialMemory: Partial<Memory> = {}, config: MemoryManagerConfig = {}, taskContext?: TaskContext) {
+    this.memory = {
+      chatHistory: initialMemory?.chatHistory || [],
+      workingMemory: initialMemory?.workingMemory || {},
     }
-
-    this.executionHistory.push(record)
-
-    // 限制历史记录大小
-    if (this.executionHistory.length > this.maxHistorySize) {
-      this.executionHistory = this.executionHistory.slice(-this.maxHistorySize)
-    }
+    this.config = { ...DEFAULT_CONFIG, ...config }
+    this.taskContext = taskContext
   }
 
-  /**
-   * 提取实际使用的工具
-   */
-  extractUsedTools(): string[] {
-    return [...new Set(this.executionHistory.filter(r => r.success).map(r => r.toolId))]
+  public async addChatMessage(message: ChatMessage): Promise<void> {
+    // 优化大内容
+    if (this.config.enableLargeContentOptimization) {
+      message = this._optimizeLargeContent(message)
+    }
+
+    this.memory.chatHistory.push(message)
+
+    // 动态系统提示调整
+    if (this.config.enableDynamicSystemPrompt && message.role === ChatMessageRole.USER) {
+      await this._updateDynamicSystemPrompt()
+    }
+
+    await this.manageCapacity()
   }
 
-  /**
-   * 提取关键执行结果
-   */
-  extractKeyResults(): Record<string, unknown> {
-    const keyResults: Record<string, unknown> = {}
-    const recentSuccessful = this.executionHistory.filter(r => r.success).slice(-10)
+  private async manageCapacity(): Promise<void> {
+    const currentTokens = this._getEstimatedTokens()
 
-    for (const record of recentSuccessful) {
-      if (record.result.result) {
-        keyResults[`${record.toolId}_${record.stepId}`] = {
-          data: record.result.result,
-          timestamp: record.timestamp,
+    // 智能压缩触发 - 基于Token使用率
+    if (
+      this.config.enableCompression &&
+      (currentTokens > this.config.maxTokens * this.config.compressionTriggerRatio ||
+        this.memory.chatHistory.length > this.config.compressionThreshold)
+    ) {
+      await this.compressMessages()
+    }
+
+    // 批量删除消息而不是逐个删除
+    if (this.memory.chatHistory.length > this.config.maxMessages) {
+      const excess = this.memory.chatHistory.length - this.config.maxMessages
+      this.memory.chatHistory.splice(1, excess) // Keep system message if present
+      this._clearTokenCache() // 清除缓存
+    }
+
+    // 基于Token的批量清理
+    const updatedTokens = this._getEstimatedTokens()
+    if (updatedTokens > this.config.maxTokens && this.memory.chatHistory.length > 2) {
+      const targetTokens = this.config.maxTokens * 0.7 // 目标70%使用率
+      this._batchRemoveByTokens(targetTokens)
+    }
+
+    this._fixDiscontinuousMessages()
+  }
+
+  public async compressMessages(): Promise<void> {
+    if (!this.taskContext) {
+      // 静默跳过压缩，避免console警告
+      return
+    }
+
+    const messagesToCompress = this.memory.chatHistory.slice(0, -this.config.compressionTargetCount)
+    if (messagesToCompress.length < 2) return
+
+    const formattedHistory = messagesToCompress.map(msg => `${msg.role}: ${msg.content}`).join('\n')
+
+    const workflowState = this.taskContext.workflow
+      ? JSON.stringify(
+          {
+            name: this.taskContext.workflow.name,
+            agents: this.taskContext.workflow.agents.map(a => ({ id: a.id, name: a.name, status: a.status })),
+            variables: Object.fromEntries(this.taskContext.variables.entries()),
+          },
+          null,
+          2
+        )
+      : 'No active workflow.'
+
+    const prompt = promptEngine.generate('memory-compression', {
+      variables: {
+        chatHistory: formattedHistory,
+        workflowState,
+      },
+    })
+
+    try {
+      const llmResponse = await llmManager.call(prompt)
+      const summary = llmResponse.content?.trim()
+
+      if (summary) {
+        const summaryMessage: ChatMessage = {
+          role: ChatMessageRole.SYSTEM,
+          content: `[Task Summary]\n${summary}`,
         }
+
+        const remainingMessages = this.memory.chatHistory.slice(-this.config.compressionTargetCount)
+        this.memory.chatHistory = [summaryMessage, ...remainingMessages]
       }
-    }
-
-    return keyResults
-  }
-
-  /**
-   * 压缩执行上下文
-   */
-  compressContext(): CompressedContext {
-    const essentialSteps = this.executionHistory.filter(r => r.success).slice(-20)
-    return {
-      essentialSteps,
-      usedTools: this.extractUsedTools(),
-      keyResults: this.extractKeyResults(),
-      terminalState: this.extractTerminalState(),
-      summary: this.generateExecutionSummary(essentialSteps),
+    } catch (error) {
+      // 压缩失败时静默处理，避免影响主流程
+      // 可以考虑添加到错误日志系统
     }
   }
 
-  /**
-   * 提取终端状态
-   */
-  private extractTerminalState(): CompressedContext['terminalState'] {
-    const terminalRecords = this.executionHistory
-      .filter(record => record.toolId === 'terminal_execute' && record.success)
-      .slice(-5) // 最近5个终端命令
-
-    let currentDirectory: string | undefined
-    let lastOutput: string | undefined
-    const activeProcesses: string[] = []
-
-    for (const record of terminalRecords) {
-      // 提取工作目录变化
-      if (record.parameters.command?.includes('cd ')) {
-        const cdMatch = record.parameters.command.match(/cd\s+(.+)/)
-        if (cdMatch) {
-          currentDirectory = cdMatch[1].trim()
-        }
-      }
-
-      // 提取最后的输出
-      if (record.result.output) {
-        lastOutput = record.result.output
-      }
-
-      // 检测后台进程
-      if (record.parameters.command?.includes('&') || record.parameters.command?.includes('nohup')) {
-        activeProcesses.push(record.parameters.command)
-      }
-    }
-
-    return {
-      currentDirectory,
-      lastOutput,
-      activeProcesses: activeProcesses.length > 0 ? activeProcesses : undefined,
-    }
+  private _getEstimatedTokens(): number {
+    return this.memory.chatHistory.reduce((total, message) => {
+      return total + this._calculateTokens(message.content)
+    }, 0)
   }
 
   /**
-   * 生成执行摘要
+   * 区分中英文字符，提供更准确的Token估算
    */
-  private generateExecutionSummary(steps: ExecutionHistory[]): string {
-    if (steps.length === 0) {
-      return '暂无执行历史'
+  private _calculateTokens(content: string): number {
+    if (!content) return 0
+
+    // 使用缓存提高性能
+    const cacheKey = content.length < 1000 ? content : `${content.substring(0, 100)}...${content.length}`
+    if (this.tokenCache.has(cacheKey)) {
+      return this.tokenCache.get(cacheKey)!
     }
 
-    const toolCounts = new Map<string, number>()
-    let totalDuration = 0
-    let successCount = 0
+    // 区分中英文字符进行Token计算
+    const chineseCharCount = (content.match(/[\u4e00-\u9fff]/g) || []).length
+    const otherCharCount = content.length - chineseCharCount
 
-    for (const step of steps) {
-      toolCounts.set(step.toolId, (toolCounts.get(step.toolId) || 0) + 1)
-      totalDuration += step.duration
-      if (step.success) successCount++
+    // 中文字符1:1，其他字符4:1的比例
+    const tokens = chineseCharCount + Math.ceil(otherCharCount / 4)
+
+    // 缓存结果
+    if (this.tokenCache.size > 1000) {
+      this.tokenCache.clear() // 防止缓存过大
     }
+    this.tokenCache.set(cacheKey, tokens)
 
-    const mostUsedTool = Array.from(toolCounts.entries()).sort((a, b) => b[1] - a[1])[0]
+    return tokens
+  }
 
-    return (
-      `执行了${steps.length}个步骤，成功率${Math.round((successCount / steps.length) * 100)}%，` +
-      `总耗时${Math.round(totalDuration)}ms，主要使用工具：${mostUsedTool?.[0] || '无'}`
-    )
+  private _fixDiscontinuousMessages(): void {
+    if (
+      this.memory.chatHistory.length > 1 &&
+      this.memory.chatHistory[0].role !== ChatMessageRole.SYSTEM &&
+      this.memory.chatHistory[0].role !== ChatMessageRole.USER
+    ) {
+      this.memory.chatHistory.shift()
+    }
+  }
+
+  public getMemory(): Memory {
+    return this.memory
+  }
+
+  public setWorkingMemory(key: string, value: unknown): void {
+    this.memory.workingMemory[key] = value
   }
 
   /**
-   * 检查是否需要压缩
+   * 清除Token缓存
    */
-  shouldCompress(): boolean {
-    return this.executionHistory.length >= this.compressionThreshold
+  private _clearTokenCache(): void {
+    this.tokenCache.clear()
   }
 
   /**
-   * 获取重规划上下文
+   * 基于Token数量批量删除消息
    */
-  getReplanningContext() {
-    const recentHistory = this.executionHistory.slice(-10)
-    return {
-      recentHistory,
-      usedTools: this.extractUsedTools(),
-      terminalState: this.extractTerminalState(),
-      summary: this.generateExecutionSummary(recentHistory),
+  private _batchRemoveByTokens(targetTokens: number): void {
+    let currentTokens = this._getEstimatedTokens()
+    let removeCount = 0
+
+    // 计算需要删除的消息数量
+    for (let i = 1; i < this.memory.chatHistory.length - 1 && currentTokens > targetTokens; i++) {
+      const messageTokens = this._calculateTokens(this.memory.chatHistory[i].content)
+      currentTokens -= messageTokens
+      removeCount++
+    }
+
+    if (removeCount > 0) {
+      this.memory.chatHistory.splice(1, removeCount)
+      this._clearTokenCache()
     }
   }
 
   /**
-   * 清理历史记录
+   * 优化大内容消息
    */
-  clearHistory(): void {
-    this.executionHistory = []
-  }
-
-  /**
-   * 检查是否需要压缩
-   */
-  shouldCompress(): boolean {
-    return this.executionHistory.length >= this.compressionThreshold
-  }
-
-  /**
-   * 获取执行统计
-   */
-  getExecutionStats(): {
-    totalSteps: number
-    successfulSteps: number
-    failedSteps: number
-    successRate: number
-    averageDuration: number
-    mostUsedTools: Array<{ toolId: string; count: number }>
-  } {
-    const totalSteps = this.executionHistory.length
-    const successfulSteps = this.executionHistory.filter(r => r.success).length
-    const failedSteps = totalSteps - successfulSteps
-    const successRate = totalSteps > 0 ? successfulSteps / totalSteps : 0
-
-    const totalDuration = this.executionHistory.reduce((sum, r) => sum + r.duration, 0)
-    const averageDuration = totalSteps > 0 ? totalDuration / totalSteps : 0
-
-    // 统计工具使用频率
-    const toolCounts = new Map<string, number>()
-    for (const record of this.executionHistory) {
-      toolCounts.set(record.toolId, (toolCounts.get(record.toolId) || 0) + 1)
+  private _optimizeLargeContent(message: ChatMessage): ChatMessage {
+    if (message.content.length <= this.config.maxLargeContentLength) {
+      return message
     }
 
-    const mostUsedTools = Array.from(toolCounts.entries())
-      .map(([toolId, count]) => ({ toolId, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5)
+    // 对于过长的内容，保留开头和结尾，中间用省略号替代
+    const halfLength = Math.floor(this.config.maxLargeContentLength / 2)
+    const optimizedContent =
+      message.content.substring(0, halfLength) +
+      '\n\n[... 内容过长，已省略 ...]\n\n' +
+      message.content.substring(message.content.length - halfLength)
 
     return {
-      totalSteps,
-      successfulSteps,
-      failedSteps,
-      successRate,
-      averageDuration,
-      mostUsedTools,
+      ...message,
+      content: optimizedContent,
     }
   }
 
   /**
-   * 导出/导入历史记录
+   * 动态更新系统提示
    */
-  exportHistory(): ExecutionHistory[] {
-    return [...this.executionHistory]
-  }
+  private async _updateDynamicSystemPrompt(): Promise<void> {
+    const now = Date.now()
 
-  importHistory(history: ExecutionHistory[]): void {
-    this.executionHistory = history.slice(-this.maxHistorySize)
+    // 限制更新频率，避免过于频繁的调用
+    if (now - this.lastSystemPromptUpdate < 30000) {
+      // 30秒内不重复更新
+      return
+    }
+
+    this.lastSystemPromptUpdate = now
+
+    // 如果有最新的用户消息，可以基于此调整系统提示
+    const lastUserMessage = this.memory.chatHistory
+      .slice()
+      .reverse()
+      .find(msg => msg.role === ChatMessageRole.USER)
+
+    if (lastUserMessage && this.taskContext?.workflow) {
+      // 这里可以根据最新的用户输入动态调整系统提示
+      // 暂时保留接口，具体实现可以根据需求扩展
+      // 动态系统提示更新逻辑
+    }
   }
 }

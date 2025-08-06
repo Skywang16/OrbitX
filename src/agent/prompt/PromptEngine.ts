@@ -29,7 +29,7 @@ export class PromptEngine {
    */
   async loadTemplatesFromModules(): Promise<void> {
     // Vite/Webpack specific feature to load all .txt files from a directory
-    const templateModules = import.meta.glob('../prompt/templates/*.txt', { as: 'raw' })
+    const templateModules = import.meta.glob('../prompt/templates/*.txt', { query: '?raw', import: 'default' })
 
     for (const path in templateModules) {
       const content = await templateModules[path]()

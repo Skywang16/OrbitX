@@ -245,7 +245,7 @@ export interface StorageEvent {
 // ============================================================================
 
 /** 创建默认的数据查询 */
-export function createDataQuery(query: string): DataQuery {
+export const createDataQuery = (query: string): DataQuery => {
   return {
     query,
     params: {},
@@ -254,7 +254,7 @@ export function createDataQuery(query: string): DataQuery {
 }
 
 /** 创建默认的保存选项 */
-export function createSaveOptions(table?: string): SaveOptions {
+export const createSaveOptions = (table?: string): SaveOptions => {
   return {
     table,
     overwrite: false,
@@ -265,7 +265,7 @@ export function createSaveOptions(table?: string): SaveOptions {
 }
 
 /** 创建默认的会话状态 */
-export function createDefaultSessionState(): SessionState {
+export const createDefaultSessionState = (): SessionState => {
   return {
     version: 1,
     windowState: {
@@ -290,7 +290,7 @@ export function createDefaultSessionState(): SessionState {
 }
 
 /** 格式化字节大小为人类可读的字符串 */
-export function formatBytes(bytes: number): string {
+export const formatBytes = (bytes: number): string => {
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   let size = bytes
   let unitIndex = 0
@@ -304,7 +304,7 @@ export function formatBytes(bytes: number): string {
 }
 
 /** 计算缓存命中率 */
-export function calculateHitRate(hits: number, misses: number): number {
+export const calculateHitRate = (hits: number, misses: number): number => {
   if (hits + misses === 0) return 0
   return hits / (hits + misses)
 }

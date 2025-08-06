@@ -86,7 +86,7 @@
   // 自定义渲染器
   const renderer = new marked.Renderer()
   // 重写代码块渲染，添加复制功能
-  renderer.code = function (code, language) {
+  renderer.code = (code, language) => {
     const lang = language || 'text'
     const id = `code-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
     // 记录代码块信息
@@ -101,7 +101,7 @@
   }
   marked.use({ renderer })
   // HTML转义函数
-  function escapeHtml(text: string): string {
+  const escapeHtml = (text: string): string => {
     const div = document.createElement('div')
     div.textContent = text
     return div.innerHTML

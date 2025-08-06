@@ -5,7 +5,7 @@
  */
 
 import type { IAgent } from './BaseAgent'
-import { NewToolAgent } from './NewToolAgent'
+import { ToolAgent } from './ToolAgent'
 
 export class AgentRegistry {
   private agents: Map<string, IAgent> = new Map()
@@ -21,9 +21,6 @@ export class AgentRegistry {
    * @param agent - 遵循IAgent接口的Agent实例
    */
   register(type: string, agent: IAgent): void {
-    if (this.agents.has(type)) {
-      console.warn(`Agent类型 "${type}" 已被注册，将会被覆盖。`)
-    }
     this.agents.set(type, agent)
   }
 
@@ -41,8 +38,7 @@ export class AgentRegistry {
    */
   private registerDefaultAgents(): void {
     // 注册混合工具Agent
-    this.register('Tool', new NewToolAgent())
-    this.register('HybridTool', new NewToolAgent())
+    this.register('Tool', new ToolAgent())
   }
 }
 

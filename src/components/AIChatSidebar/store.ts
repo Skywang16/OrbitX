@@ -398,14 +398,13 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   // 处理Agent消息 - 使用修复后的回调系统
   const handleAgentMessage = async (content: string) => {
     try {
-      if (!agentFramework.value) {
-        throw new Error('Agent framework not initialized')
+      if (!agentFramework.value || !currentSessionId.value) {
+        throw new Error('Agent framework not initialized or session ID is missing')
       }
-
-      // 执行Agent任务
 
       // 执行任务
       const result = await agentFramework.value.execute(content, {
+        sessionId: currentSessionId.value,
         onProgress: message => {
           console.log('📈 [Agent] 进度回调:', message)
         },
@@ -524,7 +523,14 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const switchChatMode = async (mode: ChatMode) => {
     if (chatMode.value === mode) return
 
+    // 保存当前会话
+    saveCurrentSession()
+
+    // 切换模式
     chatMode.value = mode
+
+    // 创建新会话（切换模式时总是开始新对话）
+    createNewSession()
 
     if (mode === 'agent') {
       await initializeAgentFramework()

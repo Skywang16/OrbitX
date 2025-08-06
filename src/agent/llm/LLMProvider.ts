@@ -9,7 +9,7 @@ import { aiAPI } from '../../api/ai'
 import type { AIResponse, StreamCallback } from '../../types'
 
 /**
- * 基于现有AI API的LLM提供商实现
+ * 默认LLM提供商实现
  */
 export class DefaultLLMProvider implements LLMProvider {
   public readonly name = 'default'

@@ -80,6 +80,22 @@ impl AIClient {
         Ok(())
     }
 
+    /// 构建完整的API端点URL
+    /// 如果配置的URL已经包含/chat/completions，则直接使用
+    /// 否则自动拼接/chat/completions路径
+    fn build_api_url(&self) -> String {
+        let base_url = &self.config.api_url;
+
+        // 如果URL已经包含/chat/completions，直接使用
+        if base_url.contains("/chat/completions") {
+            base_url.clone()
+        } else {
+            // 确保base_url不以/结尾，然后拼接/chat/completions
+            let trimmed_url = base_url.trim_end_matches('/');
+            format!("{}/chat/completions", trimmed_url)
+        }
+    }
+
     /// 发送请求
     pub async fn send_request(&self, request: &AIRequest) -> AppResult<AIResponse> {
         match self.config.provider {
@@ -146,9 +162,10 @@ impl AIClient {
             "stream": true,
         });
 
+        let api_url = self.build_api_url();
         let response = self
             .http_client
-            .post(&self.config.api_url)
+            .post(&api_url)
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {}", self.config.api_key))
             .json(&request_body)
@@ -260,8 +277,9 @@ impl AIClient {
         });
 
         let client = reqwest::Client::new();
+        let api_url = self.build_api_url();
         let req_builder = client
-            .post(&self.config.api_url)
+            .post(&api_url)
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {}", self.config.api_key))
             .json(&request_body);

@@ -83,7 +83,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 保存会话状态
    */
-  async function saveSessionState(): Promise<void> {
+  const saveSessionState = async (): Promise<void> => {
     if (isSaving.value) return
 
     console.log('🔄 [前端] 开始保存会话状态')
@@ -120,7 +120,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 加载会话状态
    */
-  async function loadSessionState(): Promise<SessionState | null> {
+  const loadSessionState = async (): Promise<SessionState | null> => {
     if (isLoading.value) return null
 
     console.log('🔍 [前端] 开始加载会话状态')
@@ -166,7 +166,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 恢复会话状态
    */
-  async function restoreSession(): Promise<boolean> {
+  const restoreSession = async (): Promise<boolean> => {
     if (isRestoring.value) return false
 
     isRestoring.value = true
@@ -197,7 +197,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 更新窗口状态
    */
-  function updateWindowState(newWindowState: Partial<WindowState>): void {
+  const updateWindowState = (newWindowState: Partial<WindowState>): void => {
     sessionState.value.windowState = {
       ...sessionState.value.windowState,
       ...newWindowState,
@@ -208,7 +208,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 添加标签页
    */
-  function addTab(tab: TabState): void {
+  const addTab = (tab: TabState): void => {
     // 如果是第一个标签页，设为活跃
     if (sessionState.value.tabs.length === 0) {
       tab.isActive = true
@@ -221,7 +221,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 移除标签页
    */
-  function removeTab(tabId: string): void {
+  const removeTab = (tabId: string): void => {
     const tabIndex = sessionState.value.tabs.findIndex(tab => tab.id === tabId)
     if (tabIndex === -1) return
 
@@ -240,7 +240,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 激活标签页
    */
-  function activateTab(tabId: string): void {
+  const activateTab = (tabId: string): void => {
     sessionState.value.tabs.forEach(tab => {
       tab.isActive = tab.id === tabId
     })
@@ -250,7 +250,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 更新标签页
    */
-  function updateTab(tabId: string, updates: Partial<TabState>): void {
+  const updateTab = (tabId: string, updates: Partial<TabState>): void => {
     const tab = sessionState.value.tabs.find(tab => tab.id === tabId)
     if (tab) {
       Object.assign(tab, updates)
@@ -261,7 +261,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 添加终端会话
    */
-  function addTerminalSession(session: TerminalSession): void {
+  const addTerminalSession = (session: TerminalSession): void => {
     sessionState.value.terminalSessions[session.id] = session
     scheduleAutoSave()
   }
@@ -269,7 +269,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 移除终端会话
    */
-  function removeTerminalSession(sessionId: string): void {
+  const removeTerminalSession = (sessionId: string): void => {
     delete sessionState.value.terminalSessions[sessionId]
     scheduleAutoSave()
   }
@@ -277,7 +277,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 更新终端会话
    */
-  function updateTerminalSession(sessionId: string, updates: Partial<TerminalSession>): void {
+  const updateTerminalSession = (sessionId: string, updates: Partial<TerminalSession>): void => {
     const session = sessionState.value.terminalSessions[sessionId]
     if (session) {
       Object.assign(session, updates)
@@ -288,7 +288,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 更新UI状态
    */
-  function updateUiState(updates: Partial<typeof sessionState.value.uiState>): void {
+  const updateUiState = (updates: Partial<typeof sessionState.value.uiState>): void => {
     sessionState.value.uiState = {
       ...sessionState.value.uiState,
       ...updates,
@@ -303,7 +303,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 生成状态校验和
    */
-  function generateChecksum(state: SessionState): string {
+  const generateChecksum = (state: SessionState): string => {
     // 简单的校验和生成，实际项目中可以使用更复杂的算法
     const stateString = JSON.stringify({
       version: state.version,
@@ -325,7 +325,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 验证会话状态
    */
-  function validateSessionState(state: SessionState): boolean {
+  const validateSessionState = (state: SessionState): boolean => {
     try {
       // 基本结构验证
       if (
@@ -416,7 +416,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 调度自动保存
    */
-  function scheduleAutoSave(): void {
+  const scheduleAutoSave = (): void => {
     if (autoSaveTimer) {
       clearTimeout(autoSaveTimer)
     }
@@ -431,14 +431,14 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 启动自动保存
    */
-  function startAutoSave(): void {
+  const startAutoSave = (): void => {
     scheduleAutoSave()
   }
 
   /**
    * 停止自动保存
    */
-  function stopAutoSave(): void {
+  const stopAutoSave = (): void => {
     if (autoSaveTimer) {
       clearTimeout(autoSaveTimer)
       autoSaveTimer = null
@@ -448,14 +448,14 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 清除错误
    */
-  function clearError(): void {
+  const clearError = (): void => {
     error.value = null
   }
 
   /**
    * 初始化会话Store
    */
-  async function initialize(): Promise<void> {
+  const initialize = async (): Promise<void> => {
     if (initialized.value) return
 
     try {

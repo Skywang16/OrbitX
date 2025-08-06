@@ -11,7 +11,7 @@ import { createMessage } from '@/ui'
  * @param defaultMessage 默认错误消息
  * @returns 用户友好的错误消息
  */
-export function handleError(error: unknown, defaultMessage = '操作失败'): string {
+export const handleError = (error: unknown, defaultMessage = '操作失败'): string => {
   if (typeof error === 'string') {
     return error
   }
@@ -30,7 +30,7 @@ export function handleError(error: unknown, defaultMessage = '操作失败'): st
 /**
  * 获取AI错误的用户友好消息
  */
-function getAIErrorMessage(error: AIError): string {
+const getAIErrorMessage = (error: AIError): string => {
   switch (error.type) {
     case AIErrorType.AUTHENTICATION_ERROR:
       return '认证失败，请检查API密钥'
@@ -50,7 +50,7 @@ function getAIErrorMessage(error: AIError): string {
 /**
  * 处理错误并显示消息
  */
-export function handleErrorWithMessage(error: unknown, defaultMessage = '操作失败') {
+export const handleErrorWithMessage = (error: unknown, defaultMessage = '操作失败') => {
   const errorMessage = handleError(error, defaultMessage)
   createMessage.error(errorMessage)
   return errorMessage
@@ -59,7 +59,10 @@ export function handleErrorWithMessage(error: unknown, defaultMessage = '操作�
 /**
  * API调用装饰器，统一处理错误
  */
-export function withErrorHandling<T extends (...args: unknown[]) => Promise<unknown>>(fn: T, errorMessage?: string): T {
+export const withErrorHandling = <T extends (...args: unknown[]) => Promise<unknown>>(
+  fn: T,
+  errorMessage?: string
+): T => {
   return (async (...args: Parameters<T>) => {
     try {
       return await fn(...args)

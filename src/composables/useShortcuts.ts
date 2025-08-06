@@ -19,7 +19,7 @@ import type {
 /**
  * 快捷键管理组合式API
  */
-export function useShortcuts() {
+export const useShortcuts = () => {
   const store = useShortcutStore()
 
   // 初始化
@@ -87,7 +87,7 @@ export function useShortcuts() {
 /**
  * 快捷键格式化组合式API
  */
-export function useShortcutFormatter() {
+export const useShortcutFormatter = () => {
   const store = useShortcutStore()
 
   const formatShortcut = (binding: ShortcutBinding, options?: ShortcutFormatOptions): string => {
@@ -114,7 +114,7 @@ export function useShortcutFormatter() {
 /**
  * 快捷键验证组合式API
  */
-export function useShortcutValidation() {
+export const useShortcutValidation = () => {
   const store = useShortcutStore()
 
   const validateBinding = async (binding: ShortcutBinding) => {
@@ -144,7 +144,7 @@ export function useShortcutValidation() {
 /**
  * 快捷键搜索组合式API
  */
-export function useShortcutSearch() {
+export const useShortcutSearch = () => {
   const searchQuery = ref('')
   const searchResults = ref<Awaited<ReturnType<typeof ShortcutApi.searchShortcuts>> | null>(null)
   const searching = ref(false)
@@ -194,7 +194,7 @@ export function useShortcutSearch() {
 /**
  * 快捷键监听组合式API
  */
-export function useShortcutListener() {
+export const useShortcutListener = () => {
   const activeShortcuts = ref<Set<string>>(new Set())
   const pressedKeys = ref<Set<string>>(new Set())
   const pressedModifiers = ref<Set<string>>(new Set())
@@ -284,7 +284,7 @@ export function useShortcutListener() {
 /**
  * 快捷键编辑器组合式API
  */
-export function useShortcutEditor() {
+export const useShortcutEditor = () => {
   const editingShortcut = ref<ShortcutBinding | null>(null)
   const editingCategory = ref<ShortcutCategory | null>(null)
   const editingIndex = ref<number | null>(null)
@@ -343,7 +343,7 @@ export function useShortcutEditor() {
 /**
  * 自动初始化快捷键系统的组合式API
  */
-export function useShortcutsAutoInit() {
+export const useShortcutsAutoInit = () => {
   const { initialize, error } = useShortcuts()
 
   onMounted(async () => {

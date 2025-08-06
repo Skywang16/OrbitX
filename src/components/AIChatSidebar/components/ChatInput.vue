@@ -49,12 +49,10 @@
     {
       label: 'Chat',
       value: 'chat',
-      description: '普通聊天模式',
     },
     {
       label: 'Agent',
       value: 'agent',
-      description: 'Agent智能助手模式',
     },
   ])
 
@@ -279,7 +277,7 @@
   }
 
   .mode-selector {
-    width: 80px;
+    width: 100px;
   }
 
   .model-selector {

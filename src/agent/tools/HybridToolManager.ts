@@ -1,13 +1,11 @@
 /**
- * 混合工具管理器 - 完全重构版本
- *
- * 结合Function Calling和内置工具的智能混合架构
- * 让LLM自主决策使用最佳工具执行方式
+ * 混合工具管理器
  */
 
 import type { LLMProvider, LLMCallOptions, LLMResponse } from '../types/llm'
 import { llmManager } from '../llm/LLMProvider'
 import { promptEngine } from '../prompt/PromptEngine'
+import { MemoryManager } from '../core/MemoryManager'
 
 export type ToolType = 'builtin' | 'function_calling' | 'hybrid'
 export type ExecutionStrategy = 'prefer_builtin' | 'prefer_function_calling' | 'intelligent_auto'
@@ -60,6 +58,7 @@ export interface ExecutionContext {
   sessionId?: string
   workflowId?: string
   parameters: Record<string, unknown>
+  memory: MemoryManager
   metadata?: Record<string, unknown>
 }
 
@@ -82,7 +81,7 @@ export interface DecisionMetrics {
 }
 
 /**
- * 混合工具管理器核心类
+ * 工具管理器核心类
  */
 export class HybridToolManager {
   private tools = new Map<string, ToolDefinition>()
@@ -466,7 +465,8 @@ export class HybridToolManager {
   private needsContextAwareness(tool: ToolDefinition, context: ExecutionContext): boolean {
     return (
       !!(context.metadata && Object.keys(context.metadata).length > 0) ||
-      tool.parameters.some(p => p.name.includes('context'))
+      tool.parameters.some(p => p.name.includes('context')) ||
+      context.memory.getChatHistory().length > 0
     )
   }
 
@@ -539,13 +539,6 @@ export class HybridToolManager {
       stats.averageExecutionTime =
         (stats.averageExecutionTime * (stats.totalExecutions - 1) + result.executionTime) / stats.totalExecutions
     }
-  }
-
-  /**
-   * 获取工具列表
-   */
-  getTools(): ToolDefinition[] {
-    return Array.from(this.tools.values())
   }
 
   /**

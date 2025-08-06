@@ -8,7 +8,8 @@ import { llmManager } from '../llm/LLMProvider'
 import type { LLMCallOptions } from '../types/llm'
 import type { ToolDefinition } from '../types/tool'
 import type { WorkflowDefinition } from '../types/workflow'
-import { MemoryManager } from '../core/MemoryManager'
+import type { Memory } from '../types/memory'
+
 import { promptEngine } from '../prompt/PromptEngine'
 
 /**
@@ -33,6 +34,7 @@ export interface IPlanner {
       model?: string
       availableTools?: ToolDefinition[]
       includeThought?: boolean
+      memory?: Memory
     }
   ): Promise<PlanningResult>
 
@@ -42,6 +44,7 @@ export interface IPlanner {
     options?: {
       model?: string
       availableTools?: ToolDefinition[]
+      memory?: Memory
     }
   ): Promise<PlanningResult>
 }
@@ -50,10 +53,8 @@ export interface IPlanner {
  * 规划器类
  */
 export class Planner implements IPlanner {
-  private memoryManager: MemoryManager
-
   constructor() {
-    this.memoryManager = new MemoryManager()
+    // 初始化规划器
   }
 
   /**
@@ -65,9 +66,10 @@ export class Planner implements IPlanner {
       model?: string
       availableTools?: ToolDefinition[]
       includeThought?: boolean
+      memory?: Memory
     }
   ): Promise<PlanningResult> {
-    const prompt = this.generatePlanningPrompt(userInput, options?.availableTools)
+    const prompt = this.generatePlanningPrompt(userInput, options?.availableTools, options?.memory)
     return this._executePlanning(prompt, options)
   }
 
@@ -80,9 +82,10 @@ export class Planner implements IPlanner {
     options?: {
       model?: string
       availableTools?: ToolDefinition[]
+      memory?: Memory
     }
   ): Promise<PlanningResult> {
-    const prompt = this.generateReplanningPrompt(newUserInput, previousResult, options?.availableTools)
+    const prompt = this.generateReplanningPrompt(newUserInput, previousResult, options?.availableTools, options?.memory)
     return this._executePlanning(prompt, options)
   }
 
@@ -130,7 +133,7 @@ export class Planner implements IPlanner {
   /**
    * 使用 PromptEngine 生成初次规划的提示词
    */
-  private generatePlanningPrompt(userInput: string, availableTools: ToolDefinition[] = []): string {
+  private generatePlanningPrompt(userInput: string, availableTools: ToolDefinition[] = [], memory?: Memory): string {
     const hasTools = availableTools.length > 0
     const toolsJson = hasTools
       ? JSON.stringify(
@@ -151,6 +154,8 @@ export class Planner implements IPlanner {
         hasTools,
         tools: toolsJson,
         timestamp: Date.now(),
+        chatHistory: memory ? JSON.stringify(memory.chatHistory, null, 2) : '[]',
+        workingMemory: memory ? JSON.stringify(memory.workingMemory, null, 2) : '{}',
       },
     })
   }
@@ -161,7 +166,8 @@ export class Planner implements IPlanner {
   private generateReplanningPrompt(
     newUserInput: string,
     previousResult: PlanningResult,
-    availableTools: ToolDefinition[] = []
+    availableTools: ToolDefinition[] = [],
+    memory?: Memory
   ): string {
     const hasTools = availableTools.length > 0
     const toolsJson = hasTools
@@ -183,6 +189,8 @@ export class Planner implements IPlanner {
         hasTools,
         tools: toolsJson,
         previousPlan: previousResult.rawResponse,
+        chatHistory: memory ? JSON.stringify(memory.chatHistory, null, 2) : '[]',
+        workingMemory: memory ? JSON.stringify(memory.workingMemory, null, 2) : '{}',
       },
     })
   }
@@ -224,12 +232,5 @@ export class Planner implements IPlanner {
         error: `JSON解析错误: ${error instanceof Error ? error.message : String(error)}`,
       }
     }
-  }
-
-  /**
-   * 获取Memory管理器
-   */
-  getMemoryManager(): MemoryManager {
-    return this.memoryManager
   }
 }
