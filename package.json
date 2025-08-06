@@ -33,6 +33,8 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@eko-ai/eko": "^3.0.0-alpha.4",
+    "@eko-ai/eko-web": "^3.0.0-alpha.4",
     "@tauri-apps/api": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2.4.0",
     "@tauri-apps/plugin-process": "^2.3.0",

@@ -11,7 +11,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { ChatMessage, ChatSession } from './types'
 import type { ChatMode } from './types'
-import { AgentFramework } from '@/agent'
+import { createDebugTerminalEko, type TerminalEko } from '@/eko'
 
 // 聊天历史管理类
 class ChatHistoryManager {
@@ -183,7 +183,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   // 聊天模式相关状态
   const chatMode = ref<ChatMode>('chat')
-  const agentFramework = ref<AgentFramework | null>(null)
+  const ekoInstance = ref<TerminalEko | null>(null)
   const currentAgentId = ref<string | null>(null)
 
   // 计算属性
@@ -235,8 +235,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       }
     }
 
-    // 初始化Agent框架（如果还未初始化）
-    await initializeAgentFramework()
+    // 初始化Eko框架（如果还未初始化）
+    await initializeEkoFramework()
 
     // 智能选择会话：如果当前没有会话或没有消息内容，则选择第一个历史会话或创建新会话
     if (!currentSessionId.value || !hasMessages.value) {
@@ -395,24 +395,44 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     cancelFunction.value = cancel
   }
 
-  // 处理Agent消息 - 使用修复后的回调系统
-  const handleAgentMessage = async (content: string) => {
+  // 处理Agent消息 - 使用Eko框架
+  const handleAgentMessage = async (content: string, messageIndex: number) => {
     try {
-      if (!agentFramework.value || !currentSessionId.value) {
-        throw new Error('Agent framework not initialized or session ID is missing')
+      if (!ekoInstance.value || !currentSessionId.value) {
+        throw new Error('Eko instance not initialized or session ID is missing')
       }
 
+      console.log('🚀 [Eko] 开始执行任务:', content)
+
       // 执行任务
-      const result = await agentFramework.value.execute(content, {
-        sessionId: currentSessionId.value,
-        onProgress: message => {
-          console.log('📈 [Agent] 进度回调:', message)
-        },
+      const result = await ekoInstance.value.run(content, {
+        timeout: 30000, // 30秒超时
       })
 
-      console.log('✅ [Agent] 任务执行完成:', result)
+      console.log('✅ [Eko] 任务执行完成:', result)
+
+      // 更新消息内容
+      if (result.success && result.result) {
+        messages.value[messageIndex].content = result.result
+      } else {
+        messages.value[messageIndex].content = `❌ 任务执行失败: ${result.error || '未知错误'}`
+      }
+
+      // 保存消息
+      if (currentSessionId.value) {
+        chatHistory.save(currentSessionId.value, messages.value[messageIndex])
+      }
     } catch (error) {
-      console.error('❌ [Agent] 任务执行失败:', error)
+      console.error('❌ [Eko] 任务执行失败:', error)
+
+      // 更新消息内容为错误信息
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      messages.value[messageIndex].content = `❌ 任务执行失败: ${errorMessage}`
+
+      // 保存错误消息
+      if (currentSessionId.value) {
+        chatHistory.save(currentSessionId.value, messages.value[messageIndex])
+      }
     }
   }
 
@@ -453,9 +473,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
       // 根据聊天模式选择不同的处理方式
 
-      if (chatMode.value === 'agent' && agentFramework.value) {
-        // Agent模式：使用Agent框架处理
-        await handleAgentMessage(content)
+      if (chatMode.value === 'agent' && ekoInstance.value) {
+        // Agent模式：使用Eko框架处理
+        await handleAgentMessage(content, messageIndex)
       } else {
         // 普通聊天模式：使用原有的AI API
         await handleChatMessage(content, messageIndex, aiSettingsStore)
@@ -494,27 +514,32 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  // Agent框架初始化
-  const initializeAgentFramework = async () => {
-    if (!agentFramework.value) {
+  // Eko框架初始化
+  const initializeEkoFramework = async () => {
+    if (!ekoInstance.value) {
       try {
-        // 创建框架实例
-        const framework = new AgentFramework({
-          maxAgents: 5,
-          defaultTimeout: 300000, // 5分钟timeout，给LLM充足的思考时间
+        console.log('🚀 [Eko] 正在初始化Eko框架...')
+
+        // 创建Eko实例
+        const eko = await createDebugTerminalEko({
+          agentConfig: {
+            name: 'TerminalAssistant',
+            description: '终端助手，可以执行命令、管理文件、操作目录等',
+            safeMode: true,
+            allowedCommands: ['ls', 'pwd', 'cat', 'echo', 'mkdir', 'cd', 'git'],
+            blockedCommands: ['rm -rf', 'format', 'shutdown', 'reboot'],
+          },
         })
 
-        agentFramework.value = framework
+        ekoInstance.value = eko
 
-        // 注册全局执行回调
-        framework.onExecution(async event => {
-          console.log('📋 [Agent] 执行事件:', event.type, event)
-        })
+        console.log('✅ [Eko] Eko框架初始化成功')
+        console.log('Agent状态:', eko.getAgent().getStatus())
 
         // 设置当前Agent ID
         currentAgentId.value = 'terminal-agent'
       } catch (error) {
-        console.error('❌ [Agent] Agent框架初始化失败:', error)
+        console.error('❌ [Eko] Eko框架初始化失败:', error)
       }
     }
   }
@@ -533,7 +558,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     createNewSession()
 
     if (mode === 'agent') {
-      await initializeAgentFramework()
+      await initializeEkoFramework()
     }
   }
 
