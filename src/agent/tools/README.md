@@ -49,9 +49,7 @@ TerminalToolKit (终端工具套件)
 └── 文件操作工具
 
 Integration Layer (集成层)
-├── NewToolAgent (新工具Agent)
-├── ToolIntegrationManager (集成管理器)
-└── 兼容性适配器
+└── NewToolAgent (工具Agent)
 ```
 
 ## 使用示例
@@ -310,11 +308,10 @@ console.log(decisions) // 决策分布和平均分数
 ### 健康检查
 
 ```typescript
-import { globalIntegrationManager } from '@/agent/integration/ToolIntegrationManager'
+import { globalToolManager } from '@/agent/tools'
 
-const health = globalIntegrationManager.getHealthStatus()
-console.log(health.status) // 'healthy' | 'degraded' | 'unhealthy'
-console.log(health.issues) // 问题列表
+const tools = globalToolManager.getTools()
+console.log(`可用工具数量: ${tools.length}`)
 ```
 
 ## 配置选项
@@ -334,14 +331,16 @@ manager.setStrategy('intelligent_auto')
 manager.setHybridDecisionThreshold(0.7)
 ```
 
-### 集成配置
+### Agent配置
 
 ```typescript
-const integrationManager = new ToolIntegrationManager({
-  enableHybridTools: true,
-  enableLegacyFallback: true,
-  migrationMode: 'gradual',
-  performanceMonitoring: true,
+import { NewToolAgent } from '@/agent/agents/NewToolAgent'
+
+const agent = new NewToolAgent({
+  enableFunctionCalling: true,
+  enableBuiltinTools: true,
+  decisionStrategy: 'intelligent_auto',
+  maxExecutionTime: 120000,
 })
 ```
 

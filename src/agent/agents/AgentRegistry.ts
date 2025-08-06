@@ -5,7 +5,7 @@
  */
 
 import type { IAgent } from './BaseAgent'
-import { ToolAgent } from './ToolAgent'
+import { NewToolAgent } from './NewToolAgent'
 
 export class AgentRegistry {
   private agents: Map<string, IAgent> = new Map()
@@ -40,10 +40,9 @@ export class AgentRegistry {
    * 注册所有内置的、默认的Agent
    */
   private registerDefaultAgents(): void {
-    this.register('Tool', new ToolAgent())
-    // 未来可以在这里注册更多的默认Agent
-    // this.register('Chat', new ChatAgent());
-    // this.register('WebSearch', new WebSearchAgent());
+    // 注册混合工具Agent
+    this.register('Tool', new NewToolAgent())
+    this.register('HybridTool', new NewToolAgent())
   }
 }
 

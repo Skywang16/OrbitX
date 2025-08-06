@@ -8,6 +8,7 @@
 import type { AgentExecutionContext, AgentResult } from '../types/execution'
 import type { WorkflowAgent } from '../types/workflow'
 import type { ExecutionContext } from '../tools/HybridToolManager'
+import type { IAgent } from './BaseAgent'
 import { HybridToolManager, globalToolManager } from '../tools'
 
 export interface ToolAgentConfig {
@@ -22,7 +23,7 @@ export interface ToolAgentConfig {
 /**
  * 混合工具Agent实现
  */
-export class NewToolAgent {
+export class NewToolAgent implements IAgent {
   private toolManager: HybridToolManager
   private config: Required<ToolAgentConfig>
 
@@ -142,9 +143,8 @@ export class NewToolAgent {
   /**
    * 记录执行统计
    */
-  private recordExecutionStats(agent: WorkflowAgent, context: ExecutionContext, result: any): void {
-    // 可以在这里添加更详细的统计记录逻辑
-    console.log(`[ToolAgent] ${agent.id}: ${result.success ? 'SUCCESS' : 'FAILED'} in ${result.executionTime}ms`)
+  private recordExecutionStats(_agent: WorkflowAgent, _context: ExecutionContext, _result: any): void {
+    // 静默执行，不输出调试日志
   }
 
   /**

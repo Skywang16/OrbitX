@@ -6,8 +6,5 @@
 
 export * from '../TerminalToolKit'
 
-// 为了保持兼容性，重新导出工具创建函数
-export {
-  getAllTerminalTools as getBuiltinTools,
-  getAllTerminalTools as getBuiltinToolsByCategory,
-} from '../TerminalToolKit'
+// 导出工具创建函数
+export { getAllTerminalTools as getBuiltinTools } from '../TerminalToolKit'

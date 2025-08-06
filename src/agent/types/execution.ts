@@ -59,8 +59,10 @@ export interface ExecutionEvent {
   type: 'workflow_start' | 'workflow_completed' | 'workflow_failed' | 'agent_start' | 'agent_completed' | 'agent_failed'
   timestamp: Date
   agentId?: string
+  workflowId?: string
   data?: unknown
   error?: string
+  metadata?: Record<string, unknown>
 }
 
 /**

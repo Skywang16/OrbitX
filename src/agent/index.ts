@@ -17,20 +17,25 @@
  */
 
 // 类型导出（用于TypeScript用户）
-export type { ExecutionResult } from './types/execution'
+export type { ExecutionResult, ExecutionEvent } from './types/execution'
+export type { ExecutionCallback, ProgressCallback, ProgressMessage, CallbackOptions } from './types/callbacks'
 export { AgentError, ToolError, WorkflowError } from './types/errors'
 
 // 内部组件导出（仅用于调试和扩展，生产环境不建议直接使用）
 export { Planner } from './planning/Planner'
-export { SimpleExecutionEngine } from './execution/SimpleExecutionEngine'
+export { ExecutionEngine } from './execution/ExecutionEngine'
 export { llmManager } from './llm/LLMProvider'
+export { CallbackManager, globalCallbackManager } from './core/CallbackManager'
 
 import { Planner } from './planning/Planner'
-import { SimpleExecutionEngine } from './execution/SimpleExecutionEngine'
+import { ExecutionEngine } from './execution/ExecutionEngine'
 import type { IExecutionEngine } from './types/execution'
 import type { IPlanner } from './planning/Planner'
-import { ToolManager } from './tools/ToolManager'
+import type { ExecutionCallback, ProgressCallback } from './types/callbacks'
+import { CallbackManager } from './core/CallbackManager'
 import { getBuiltinTools } from './tools/builtin'
+import { promptEngine } from './prompt/PromptEngine'
+import { llmManager } from './llm/LLMProvider'
 
 /**
  * Agent框架配置
@@ -54,23 +59,17 @@ export interface AgentFrameworkConfig {
 export class AgentFramework {
   private planner: IPlanner
   private engine: IExecutionEngine
-  private toolManager: ToolManager
-  private config: AgentFrameworkConfig
+  private callbackManager: CallbackManager
 
   constructor(
-    config: AgentFrameworkConfig = {},
+    _config: AgentFrameworkConfig = {},
     planner?: IPlanner,
     engine?: IExecutionEngine,
-    toolManager?: ToolManager
+    callbackManager?: CallbackManager
   ) {
-    this.config = config
-
-    this.toolManager = toolManager || new ToolManager()
-    // 注册内置工具
-    this.toolManager.registerMany(getBuiltinTools())
-
     this.planner = planner || new Planner()
-    this.engine = engine || new SimpleExecutionEngine(this.toolManager)
+    this.callbackManager = callbackManager || new CallbackManager()
+    this.engine = engine || new ExecutionEngine(this.callbackManager)
   }
 
   /**
@@ -101,7 +100,7 @@ export class AgentFramework {
       // Agent开始思考和规划
       options?.onProgress?.({ type: 'thinking', content: '正在理解任务...' })
 
-      const availableTools = this.toolManager.getAllDefinitions()
+      const availableTools = getBuiltinTools()
       const planResult = await this.planner.planTask(taskDescription, {
         model: options?.model,
         includeThought: true,
@@ -135,10 +134,46 @@ export class AgentFramework {
         }
       })
 
+      if (!executionResult.success) {
+        return {
+          success: false,
+          result: executionResult.result,
+          error: `任务执行遇到问题: ${executionResult.result}`,
+        }
+      }
+
+      // 任务执行成功，基于规划思路和实际结果生成友好回答
+      options?.onProgress?.({ type: 'progress', content: '正在整理回答...', data: { stage: 'summarizing' } })
+
+      try {
+        const summaryPrompt = promptEngine.generate('result-summary', {
+          variables: {
+            userInput: taskDescription,
+            planningThought: planResult.workflow.thought,
+            executionResult: executionResult.result,
+          },
+        })
+
+        const llmResponse = await llmManager.call(summaryPrompt, {
+          model: options?.model,
+        })
+
+        if (llmResponse.content?.trim()) {
+          return {
+            success: true,
+            result: llmResponse.content.trim(),
+            error: undefined,
+          }
+        }
+      } catch (error) {
+        // 静默处理总结失败，返回原始结果
+      }
+
+      // 如果生成失败，返回原始结果
       return {
-        success: executionResult.success,
+        success: true,
         result: executionResult.result,
-        error: executionResult.success ? undefined : `任务执行遇到问题: ${executionResult.result}`,
+        error: undefined,
       }
     } catch (error) {
       return {
@@ -164,7 +199,7 @@ export class AgentFramework {
     try {
       await sendMessage('start', '我来帮你完成这个任务...')
 
-      const availableTools = this.toolManager.getAllDefinitions()
+      const availableTools = getBuiltinTools()
       const planResult = await this.planner.planTask(taskDescription, {
         model: options?.model,
         includeThought: true,
@@ -202,6 +237,30 @@ export class AgentFramework {
     }
   }
 
+  // ===== 回调系统访问方法 =====
+
+  /**
+   * 获取回调管理器实例
+   * 用于注册自定义回调函数
+   */
+  getCallbackManager(): CallbackManager {
+    return this.callbackManager
+  }
+
+  /**
+   * 注册执行回调
+   */
+  onExecution(callback: ExecutionCallback): void {
+    this.callbackManager.onExecution(callback)
+  }
+
+  /**
+   * 注册进度回调
+   */
+  onProgress(callback: ProgressCallback): void {
+    this.callbackManager.onProgress(callback)
+  }
+
   // ===== 开发和调试辅助方法（可选）=====
 
   /**
@@ -210,8 +269,9 @@ export class AgentFramework {
    */
   async debugThinking(taskDescription: string) {
     if (process.env.NODE_ENV === 'production') {
+      return { success: false, error: 'Debug mode not available in production' }
     }
-    const availableTools = this.toolManager.getAllDefinitions()
+    const availableTools = getBuiltinTools()
     return await this.planner.planTask(taskDescription, { includeThought: true, availableTools })
   }
 }

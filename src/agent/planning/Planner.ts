@@ -32,6 +32,7 @@ export interface IPlanner {
     options?: {
       model?: string
       availableTools?: ToolDefinition[]
+      includeThought?: boolean
     }
   ): Promise<PlanningResult>
 
@@ -63,6 +64,7 @@ export class Planner implements IPlanner {
     options?: {
       model?: string
       availableTools?: ToolDefinition[]
+      includeThought?: boolean
     }
   ): Promise<PlanningResult> {
     const prompt = this.generatePlanningPrompt(userInput, options?.availableTools)

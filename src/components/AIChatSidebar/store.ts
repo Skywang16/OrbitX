@@ -345,12 +345,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
 
   // 处理普通聊天消息
-  const handleChatMessage = async (
-    content: string,
-    aiMessage: ChatMessage,
-    messageIndex: number,
-    aiSettingsStore: any
-  ) => {
+  const handleChatMessage = async (content: string, messageIndex: number, aiSettingsStore: any) => {
     const { cancel } = await ai.streamMessageCancellable(
       content,
       (chunk: { content?: string; isComplete?: boolean; metadata?: unknown }) => {
@@ -400,108 +395,29 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     cancelFunction.value = cancel
   }
 
-  // 处理Agent消息 - 使用新的终端任务执行器
-  // 简单的Agent消息处理 - 只接收Agent给的内容
-  const handleAgentMessage = async (content: string, messageIndex: number) => {
+  // 处理Agent消息 - 使用修复后的回调系统
+  const handleAgentMessage = async (content: string) => {
     try {
-      if (!agentFramework.value || !currentAgentId.value) {
+      if (!agentFramework.value) {
         throw new Error('Agent framework not initialized')
       }
 
-      // 初始化消息数组
-      let messageArray: any[] = []
+      // 执行Agent任务
 
-      // 设置回调函数来接收Agent的实时输出
-      const callback = {
-        onMessage: async (message: any) => {
-          console.log(`[${message.type}]`, message)
-
-          // 添加到消息数组
-          messageArray.push(message)
-
-          // 根据消息类型更新UI显示
-          let displayContent = ''
-
-          switch (message.type) {
-            case 'task_start':
-              displayContent = '🚀 ' + message.content
-              break
-            case 'planning':
-              displayContent = '🧠 ' + message.content
-              break
-            case 'plan_generated':
-              displayContent = '📋 ' + message.content
-              if (message.data?.thought) {
-                displayContent += `\n💭 思考过程: ${message.data.thought}`
-              }
-              break
-            case 'agent_start':
-              displayContent = '🤖 ' + message.content
-              break
-            case 'step_start':
-              displayContent = '⚡ ' + message.content
-              break
-            case 'step_output':
-              displayContent = message.content
-              break
-            case 'step_complete':
-              displayContent = '✅ ' + message.content
-              break
-            case 'step_error':
-              displayContent = '❌ ' + message.content
-              break
-            case 'agent_complete':
-              displayContent = '🎉 ' + message.content
-              break
-            case 'task_complete':
-              displayContent = '🏁 ' + message.content
-              break
-            case 'error':
-              displayContent = '💥 ' + message.content
-              break
-            default:
-              displayContent = message.content
-          }
-
-          // 实时更新消息内容
-          if (displayContent) {
-            if (message.type === 'step_output') {
-              // 输出内容直接追加
-              messages.value[messageIndex].content += '\n' + displayContent
-            } else {
-              // 状态信息追加
-              messages.value[messageIndex].content += '\n' + displayContent
-            }
-          }
-
-          // 保持元数据
-          messages.value[messageIndex].metadata = {
-            isAgentMessage: true,
-            messageData: messageArray,
-          }
+      // 执行任务
+      const result = await agentFramework.value.execute(content, {
+        onProgress: message => {
+          console.log('📈 [Agent] 进度回调:', message)
         },
-      }
+      })
 
-      // 使用新架构：带回调的任务执行，实时显示执行过程
-      try {
-        const result = await agentFramework.value.executeTaskWithCallback(content, callback)
-
-        if (result.success) {
-          // 最终结果已经通过回调显示了，这里可以添加完成标记
-          messages.value[messageIndex].content += '\n\n✅ 任务执行完成'
-        } else {
-          messages.value[messageIndex].content = `❌ 执行失败: ${result.error || '未知错误'}`
-        }
-      } catch (error) {
-        messages.value[messageIndex].content = `❌ 执行失败: ${error instanceof Error ? error.message : '未知错误'}`
-      }
+      console.log('✅ [Agent] 任务执行完成:', result)
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '未知错误'
-      messages.value[messageIndex].content = `Agent执行失败: ${errorMessage}`
+      console.error('❌ [Agent] 任务执行失败:', error)
     }
   }
 
-  const sendMessage = async (content: string, params?: any) => {
+  const sendMessage = async (content: string) => {
     if (!canSendMessage.value || !currentSessionId.value) {
       return
     }
@@ -537,18 +453,13 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       const aiSettingsStore = useAISettingsStore()
 
       // 根据聊天模式选择不同的处理方式
-      console.log('🔍 [Chat] 当前聊天模式:', chatMode.value)
-      console.log('🔍 [Chat] Agent框架状态:', !!agentFramework.value)
-      console.log('🔍 [Chat] 当前AgentId:', currentAgentId.value)
 
-      if (chatMode.value === 'agent' && agentFramework.value && currentAgentId.value) {
-        console.log('🤖 [Chat] 使用Agent模式处理消息')
+      if (chatMode.value === 'agent' && agentFramework.value) {
         // Agent模式：使用Agent框架处理
-        await handleAgentMessage(content, messageIndex)
+        await handleAgentMessage(content)
       } else {
-        console.log('💬 [Chat] 使用普通聊天模式处理消息')
         // 普通聊天模式：使用原有的AI API
-        await handleChatMessage(content, aiMessage, messageIndex, aiSettingsStore)
+        await handleChatMessage(content, messageIndex, aiSettingsStore)
       }
     } catch (err) {
       error.value = handleErrorWithMessage(err, '发送消息失败')
@@ -588,52 +499,34 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const initializeAgentFramework = async () => {
     if (!agentFramework.value) {
       try {
-        console.log('🤖 [Agent] 开始初始化Agent框架...')
-
         // 创建框架实例
         const framework = new AgentFramework({
           maxAgents: 5,
-          autoRegisterBuiltinTools: true,
           defaultTimeout: 300000, // 5分钟timeout，给LLM充足的思考时间
         })
 
-        console.log('🔧 [Agent] 框架实例创建成功，开始启动...')
-        await framework.start()
-
-        console.log('🔍 [Agent] 检查Agent管理器状态...')
-        const agentCapabilities = framework.getAgentCapabilities()
-        console.log('🎯 [Agent] 可用Agent能力:', agentCapabilities)
-
-        const availableTools = framework.getAllAvailableTools()
-        console.log('🛠️ [Agent] 可用工具:', availableTools)
-
         agentFramework.value = framework
 
-        // 新架构中不需要创建Agent，直接使用SpecializedAgentManager
+        // 注册全局执行回调
+        framework.onExecution(async event => {
+          console.log('📋 [Agent] 执行事件:', event.type, event)
+        })
+
+        // 设置当前Agent ID
         currentAgentId.value = 'terminal-agent'
-        console.log('✅ [Agent] Agent框架初始化成功')
-        console.log('🆔 [Agent] 当前AgentId:', currentAgentId.value)
       } catch (error) {
         console.error('❌ [Agent] Agent框架初始化失败:', error)
-        console.error('❌ [Agent] 错误详情:', error instanceof Error ? error.stack : error)
-        // Agent框架初始化失败，静默处理
       }
-    } else {
-      console.log('🔄 [Agent] Agent框架已经初始化')
-      console.log('🆔 [Agent] 当前AgentId:', currentAgentId.value)
     }
   }
 
   // 切换聊天模式
   const switchChatMode = async (mode: ChatMode) => {
-    console.log('🔄 [Mode] 切换聊天模式:', chatMode.value, '->', mode)
     if (chatMode.value === mode) return
 
     chatMode.value = mode
-    console.log('✅ [Mode] 聊天模式已更新为:', chatMode.value)
 
     if (mode === 'agent') {
-      console.log('🤖 [Mode] 切换到Agent模式，初始化Agent框架...')
       await initializeAgentFramework()
     }
   }
