@@ -347,6 +347,82 @@ export const useTerminalStore = defineStore('Terminal', () => {
   }
 
   /**
+   * 创建AI Agent专属终端
+   */
+  const createAgentTerminal = async (agentName: string = 'AI Agent', initialDirectory?: string): Promise<string> => {
+    const id = generateId()
+    const agentTerminalTitle = `🤖 ${agentName}`
+
+    // 检查是否已存在Agent专属终端
+    const existingAgentTerminal = terminals.value.find(
+      terminal =>
+        terminal.title?.includes('🤖') || terminal.title?.includes('Agent') || terminal.title?.includes(agentName)
+    )
+
+    if (existingAgentTerminal) {
+      // 如果已存在，直接激活并返回
+      setActiveTerminal(existingAgentTerminal.id)
+      return existingAgentTerminal.id
+    }
+
+    // 创建新的Agent专属终端会话记录
+    const terminal: RuntimeTerminalSession = {
+      id,
+      title: agentTerminalTitle,
+      workingDirectory: initialDirectory || '~',
+      environment: {},
+      commandHistory: [],
+      isActive: false,
+      createdAt: new Date().toISOString(),
+      lastActive: new Date().toISOString(),
+      backendId: null,
+    }
+    terminals.value.push(terminal)
+
+    try {
+      const backendId = await terminalAPI.create({
+        rows: 24,
+        cols: 80,
+        cwd: initialDirectory,
+      })
+
+      const t = terminals.value.find(term => term.id === id)
+      if (t) {
+        t.backendId = backendId
+        // 保持Agent专属标题
+        t.title = agentTerminalTitle
+      }
+
+      // 等待终端创建完成
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // 在新终端中显示欢迎信息
+      await terminalAPI.write({
+        paneId: backendId,
+        data: `\x1b[36m# ${agentTerminalTitle} 终端已创建\x1b[0m\n`,
+      })
+      await terminalAPI.write({
+        paneId: backendId,
+        data: `\x1b[32m# 这是AI Agent的专属终端，所有AI命令将在此执行\x1b[0m\n`,
+      })
+      await terminalAPI.write({
+        paneId: backendId,
+        data: `\x1b[33m# Agent: ${agentName}\x1b[0m\n`,
+      })
+
+      setActiveTerminal(id)
+      return id
+    } catch (error) {
+      console.error(`创建Agent终端 '${id}' 失败:`, error)
+      const index = terminals.value.findIndex(t => t.id === id)
+      if (index !== -1) {
+        terminals.value.splice(index, 1)
+      }
+      throw error
+    }
+  }
+
+  /**
    * 使用指定shell创建终端
    */
   const createTerminalWithShell = async (shellName: string): Promise<string> => {
@@ -608,6 +684,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     registerTerminalCallbacks,
     unregisterTerminalCallbacks,
     createTerminal,
+    createAgentTerminal,
     closeTerminal,
     setActiveTerminal,
     writeToTerminal,

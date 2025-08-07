@@ -10,7 +10,7 @@ import { aiAPI } from '@/api/ai'
 /**
  * 将项目的AIModelConfig转换为Eko的LLM配置
  */
-export function convertToEkoLLMConfig(modelConfig: AIModelConfig) {
+export const convertToEkoLLMConfig = (modelConfig: AIModelConfig) => {
   // 根据provider映射到eko支持的provider
   const providerMap: Record<string, 'openai' | 'anthropic'> = {
     openAI: 'openai',
@@ -36,7 +36,7 @@ export function convertToEkoLLMConfig(modelConfig: AIModelConfig) {
 /**
  * 获取当前选中的模型配置并转换为Eko LLMs格式
  */
-export async function getEkoLLMsConfig(): Promise<LLMs> {
+export const getEkoLLMsConfig = async (): Promise<LLMs> => {
   try {
     // 获取所有模型配置
     const models = await aiAPI.getModels()
@@ -71,7 +71,7 @@ export async function getEkoLLMsConfig(): Promise<LLMs> {
 /**
  * 获取默认模型ID
  */
-export async function getDefaultModelId(): Promise<string> {
+export const getDefaultModelId = async (): Promise<string> => {
   try {
     const models = await aiAPI.getModels()
     const defaultModel = models.find(model => model.isDefault) || models[0]
@@ -90,7 +90,7 @@ export async function getDefaultModelId(): Promise<string> {
 /**
  * 验证模型配置是否有效
  */
-export async function validateModelConfig(modelId?: string): Promise<boolean> {
+export const validateModelConfig = async (modelId?: string): Promise<boolean> => {
   try {
     if (modelId) {
       return await aiAPI.testConnection(modelId)
@@ -121,7 +121,7 @@ export interface EkoConfigOptions {
 /**
  * 获取完整的Eko配置
  */
-export async function getEkoConfig(options: EkoConfigOptions = {}) {
+export const getEkoConfig = async (options: EkoConfigOptions = {}) => {
   const { debug = false, modelId, maxRetries = 3, timeout = 30000 } = options
 
   try {

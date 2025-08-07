@@ -27,7 +27,8 @@ export class DefaultStreamCallback implements TerminalStreamCallback {
         if (message.streamDone) {
           console.log('💬 [Text] AI响应:', message.text)
         } else {
-          process.stdout.write(message.text || '')
+          // 在浏览器环境中使用console.log而不是process.stdout.write
+          console.log('💬 [Text] 流式输出:', message.text || '')
         }
         break
 
@@ -69,6 +70,21 @@ export class DefaultStreamCallback implements TerminalStreamCallback {
 
       case 'finish':
         console.log('🎉 [Finish] 执行完成')
+        break
+
+      case 'agent_result':
+        console.log('🤖 [Agent Result] Agent执行结果:')
+        console.log('- Agent名称:', message.agentName)
+        console.log('- 任务ID:', message.taskId)
+        if (message.error) {
+          console.error('- 错误:', message.error)
+        }
+        if (message.result) {
+          console.log('- 结果:', message.result)
+        }
+        if (message.agentNode) {
+          console.log('- 节点信息:', message.agentNode)
+        }
         break
 
       default:
@@ -119,17 +135,16 @@ export class DefaultHumanCallback implements TerminalHumanCallback {
     return defaultSelection
   }
 
-  async onHumanHelp(context: AgentContext, helpType: string, prompt: string): Promise<string> {
+  async onHumanHelp(context: AgentContext, helpType: string, prompt: string): Promise<boolean> {
     console.log('🆘 [Human Help] 需要用户帮助:')
     console.log('帮助类型:', helpType)
-    console.log(prompt)
+    console.log('提示:', prompt)
     console.log('上下文:', context)
 
-    // 在实际应用中，这里应该显示帮助对话框
-    // 现在先返回默认帮助信息
-    const defaultHelp = '用户提供的帮助信息（开发模式默认值）'
-    console.log('⚠️ 使用默认帮助:', defaultHelp)
-    return defaultHelp
+    // 在实际应用中，这里应该显示帮助信息或UI
+    // 返回true表示帮助请求已被处理
+    console.log('⚠️ 自动处理帮助请求（开发模式）')
+    return true
   }
 
   // 终端专用回调方法
@@ -206,7 +221,7 @@ export class DefaultTerminalCallback implements TerminalCallback {
     return this.humanCallback.onHumanSelect(context, prompt, options, multiple)
   }
 
-  async onHumanHelp(context: AgentContext, helpType: string, prompt: string): Promise<string> {
+  async onHumanHelp(context: AgentContext, helpType: string, prompt: string): Promise<boolean> {
     return this.humanCallback.onHumanHelp(context, helpType, prompt)
   }
 
@@ -227,20 +242,20 @@ export class DefaultTerminalCallback implements TerminalCallback {
 /**
  * 创建默认回调实例
  */
-export function createDefaultCallback(): TerminalCallback {
+export const createDefaultCallback = (): TerminalCallback => {
   return new DefaultTerminalCallback()
 }
 
 /**
  * 创建静默回调（不输出任何信息）
  */
-export function createSilentCallback(): TerminalCallback {
+export const createSilentCallback = (): TerminalCallback => {
   return {
     onMessage: async () => {},
     onHumanConfirm: async () => true,
     onHumanInput: async () => '',
     onHumanSelect: async (_, __, options) => [options[0]],
-    onHumanHelp: async () => '',
+    onHumanHelp: async () => true,
     onCommandConfirm: async () => true,
     onFileSelect: async () => './default-file',
     onPathInput: async (_, __, defaultPath) => defaultPath || './default-path',

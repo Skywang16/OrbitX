@@ -1,11 +1,8 @@
 <script setup lang="ts">
   import type { ChatMessage } from '@/types'
-  import type { AgentMessageData, AgentToolUseMessage } from '../types'
+  import type { AgentMessageData } from '../types'
   import { computed, ref, watch } from 'vue'
   import { marked } from 'marked'
-  import ThinkingMessage from './ThinkingMessage.vue'
-  import ToolUseMessage from './ToolUseMessage.vue'
-
   interface Props {
     message: ChatMessage
     isStreaming?: boolean
@@ -157,8 +154,6 @@
     <!-- Agent 消息 -->
     <div v-if="isAgentMessage" class="agent-message-container">
       <template v-for="(item, index) in agentMessageStream" :key="index">
-        <thinking-message v-if="item.type === 'thinking'" :message="item" />
-        <tool-use-message v-if="item.type === 'tool_use'" :message="item as AgentToolUseMessage" />
         <!-- Render 'text' type messages as plain text, without markdown for now -->
         <div v-if="item.type === 'text'" class="agent-text-message">
           {{ item.content }}

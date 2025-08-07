@@ -5,7 +5,7 @@
 
 import { Agent } from '@eko-ai/eko'
 import type { TerminalAgentConfig } from '../types'
-import { terminalTools } from '../tools/terminal-tools'
+import { terminalTools } from '../tools'
 
 /**
  * 终端Agent类
@@ -44,7 +44,7 @@ export class TerminalAgent extends Agent {
     super({
       name: finalConfig.name,
       description: finalConfig.description,
-      tools: terminalTools,
+      tools: terminalTools as any, // 临时类型断言，解决类型兼容性问题
       llms: ['default'], // 使用默认模型
     })
 
@@ -208,14 +208,14 @@ export class TerminalAgent extends Agent {
 /**
  * 创建默认的终端Agent实例
  */
-export function createTerminalAgent(config?: Partial<TerminalAgentConfig>): TerminalAgent {
+export const createTerminalAgent = (config?: Partial<TerminalAgentConfig>): TerminalAgent => {
   return new TerminalAgent(config)
 }
 
 /**
  * 创建安全模式的终端Agent
  */
-export function createSafeTerminalAgent(config?: Partial<TerminalAgentConfig>): TerminalAgent {
+export const createSafeTerminalAgent = (config?: Partial<TerminalAgentConfig>): TerminalAgent => {
   return new TerminalAgent({
     ...config,
     safeMode: true,
@@ -241,7 +241,7 @@ export function createSafeTerminalAgent(config?: Partial<TerminalAgentConfig>): 
 /**
  * 创建开发者模式的终端Agent（较少限制）
  */
-export function createDeveloperTerminalAgent(config?: Partial<TerminalAgentConfig>): TerminalAgent {
+export const createDeveloperTerminalAgent = (config?: Partial<TerminalAgentConfig>): TerminalAgent => {
   return new TerminalAgent({
     ...config,
     safeMode: false,

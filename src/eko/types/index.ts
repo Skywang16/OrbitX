@@ -15,7 +15,7 @@ export interface Tool<T = unknown> {
   name: string
   description: string
   parameters: {
-    type: string
+    type: 'object'
     properties: Record<string, unknown>
     required?: string[]
   }
@@ -100,11 +100,15 @@ export interface TerminalStreamCallback {
 /**
  * 终端专用人机交互回调
  */
-export interface TerminalHumanCallback {
-  onHumanConfirm: (context: AgentContext, prompt: string) => Promise<boolean>
-  onHumanInput: (context: AgentContext, prompt: string) => Promise<string>
-  onHumanSelect: (context: AgentContext, prompt: string, options: string[], multiple?: boolean) => Promise<string[]>
-  onHumanHelp: (context: AgentContext, helpType: string, prompt: string) => Promise<string>
+export interface TerminalHumanCallback extends EkoHumanCallback {
+  /**
+   * @override
+   * HumanCallback中的onHumanHelp返回Promise<boolean>，这里我们保持一致
+   * @param context
+   * @param helpType
+   * @param prompt
+   */
+  onHumanHelp: (context: AgentContext, helpType: string, prompt: string) => Promise<boolean>
   /** 请求用户确认命令执行 */
   onCommandConfirm?: (context: AgentContext, command: string) => Promise<boolean>
   /** 请求用户选择文件 */
@@ -114,16 +118,12 @@ export interface TerminalHumanCallback {
 }
 
 /**
- * 组合的回调接口
+ * 组合的回调接口, 继承自Eko的核心回调接口，以确保类型兼容
  */
-export interface TerminalCallback {
-  // 流式回调
-  onMessage: (message: StreamCallbackMessage) => Promise<void>
-  // 人机交互回调
-  onHumanConfirm: (context: AgentContext, prompt: string) => Promise<boolean>
-  onHumanInput: (context: AgentContext, prompt: string) => Promise<string>
-  onHumanSelect: (context: AgentContext, prompt: string, options: string[], multiple?: boolean) => Promise<string[]>
-  onHumanHelp: (context: AgentContext, helpType: string, prompt: string) => Promise<string>
+export interface TerminalCallback extends EkoStreamCallback, EkoHumanCallback {
+  // 重新声明不兼容的 onHumanHelp
+  onHumanHelp: (context: AgentContext, helpType: string, prompt: string) => Promise<boolean>
+
   // 终端专用回调
   onCommandConfirm?: (context: AgentContext, command: string) => Promise<boolean>
   onFileSelect?: (context: AgentContext, prompt: string, directory?: string) => Promise<string>

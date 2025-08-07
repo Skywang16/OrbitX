@@ -18,7 +18,7 @@ import {
 } from './agent/terminal-agent'
 
 // 导入工具
-import { terminalTools } from './tools/terminal-tools'
+import { terminalTools } from './tools'
 
 // 导入类型
 import type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult } from './types'
@@ -272,7 +272,7 @@ export class TerminalEko {
 /**
  * 创建TerminalEko实例的便捷函数
  */
-export async function createTerminalEko(config: EkoInstanceConfig = {}): Promise<TerminalEko> {
+export const createTerminalEko = async (config: EkoInstanceConfig = {}): Promise<TerminalEko> => {
   const instance = new TerminalEko(config)
   await instance.initialize()
   return instance
@@ -281,7 +281,7 @@ export async function createTerminalEko(config: EkoInstanceConfig = {}): Promise
 /**
  * 创建调试模式的TerminalEko实例
  */
-export async function createDebugTerminalEko(config: EkoInstanceConfig = {}): Promise<TerminalEko> {
+export const createDebugTerminalEko = async (config: EkoInstanceConfig = {}): Promise<TerminalEko> => {
   return createTerminalEko({
     ...config,
     debug: true,
@@ -291,7 +291,7 @@ export async function createDebugTerminalEko(config: EkoInstanceConfig = {}): Pr
 /**
  * 创建静默模式的TerminalEko实例
  */
-export async function createSilentTerminalEko(config: EkoInstanceConfig = {}): Promise<TerminalEko> {
+export const createSilentTerminalEko = async (config: EkoInstanceConfig = {}): Promise<TerminalEko> => {
   return createTerminalEko({
     ...config,
     callback: createSilentCallback(),

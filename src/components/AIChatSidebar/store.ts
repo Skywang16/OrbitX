@@ -6,7 +6,6 @@ import { ai } from '@/api/ai'
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { AI_SESSION_CONFIG } from '@/constants/ai'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
-import { createStorage } from '@/utils/storage'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { ChatMessage, ChatSession } from './types'
@@ -15,148 +14,90 @@ import { createDebugTerminalEko, type TerminalEko } from '@/eko'
 
 // 聊天历史管理类
 class ChatHistoryManager {
-  private readonly SESSIONS_KEY = AI_SESSION_CONFIG.STORAGE_KEY
-  private readonly storage = createStorage<ChatSession[]>(this.SESSIONS_KEY)
-
   generateId(): string {
     return `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
   }
 
-  save(sessionId: string, message: ChatMessage): void {
+  async save(sessionId: string, message: ChatMessage): Promise<void> {
     try {
-      const sessions = this.loadAllSessions()
-      let session = sessions.find(s => s.id === sessionId)
-
-      if (!session) {
-        session = {
-          id: sessionId,
-          title: this.generateSessionTitle(message.content),
-          messages: [],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }
-        // 新会话添加到数组开头，确保它是最新的
-        sessions.unshift(session)
-      } else {
-        // 更新现有会话的时间戳
-        session.updatedAt = new Date()
-        // 将更新的会话移到数组开头
-        const sessionIndex = sessions.findIndex(s => s.id === sessionId)
-        if (sessionIndex > 0) {
-          sessions.splice(sessionIndex, 1)
-          sessions.unshift(session)
-        }
-      }
-
-      session.messages.push(message)
-      this.saveAllSessions(sessions)
+      // 直接调用后端API保存单条消息
+      await ai.saveChatHistory([message], sessionId)
     } catch (error) {
-      // 保存聊天消息失败
+      console.error('保存聊天消息失败:', error)
+      throw error
     }
   }
 
-  saveAll(sessionId: string, messages: ChatMessage[]): void {
+  async saveAll(sessionId: string, messages: ChatMessage[]): Promise<void> {
     try {
-      const sessions = this.loadAllSessions()
-      let session = sessions.find(s => s.id === sessionId)
-
-      if (!session) {
-        const firstMessage = messages[0]
-        session = {
-          id: sessionId,
-          title: firstMessage ? this.generateSessionTitle(firstMessage.content) : '新对话',
-          messages: [],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }
-        // 新会话添加到数组开头
-        sessions.unshift(session)
-      } else {
-        // 更新现有会话的时间戳
-        session.updatedAt = new Date()
-        // 将更新的会话移到数组开头
-        const sessionIndex = sessions.findIndex(s => s.id === sessionId)
-        if (sessionIndex > 0) {
-          sessions.splice(sessionIndex, 1)
-          sessions.unshift(session)
-        }
-      }
-
-      session.messages = messages
-      this.saveAllSessions(sessions)
+      // 直接调用后端API保存所有消息
+      await ai.saveChatHistory(messages, sessionId)
     } catch (error) {
-      // 保存聊天会话失败
+      console.error('保存聊天会话失败:', error)
+      throw error
     }
   }
 
-  load(sessionId: string): ChatMessage[] {
+  async load(sessionId: string): Promise<ChatMessage[]> {
     try {
-      const sessions = this.loadAllSessions()
-      const session = sessions.find(s => s.id === sessionId)
-      return session ? session.messages : []
+      // 直接从后端API加载聊天历史
+      return await ai.getChatHistory(sessionId)
     } catch (error) {
-      // 加载聊天历史失败
+      console.error('加载聊天历史失败:', error)
       return []
     }
   }
 
-  loadSessions(): ChatSession[] {
+  async loadSessions(): Promise<ChatSession[]> {
     try {
-      const sessions = this.loadAllSessions()
-      // 按更新时间降序排列，最新的在前面
+      // 从后端API获取会话ID列表
+      const sessionIds = await ai.getChatSessions()
+
+      // 为每个会话ID构造ChatSession对象
+      const sessions: ChatSession[] = []
+      for (const sessionId of sessionIds) {
+        // 获取会话的消息来生成会话信息
+        const messages = await ai.getChatHistory(sessionId)
+        if (messages.length > 0) {
+          const firstMessage = messages[0]
+          const lastMessage = messages[messages.length - 1]
+
+          sessions.push({
+            id: sessionId,
+            title: this.generateSessionTitle(firstMessage.content),
+            messages: messages,
+            createdAt: firstMessage.timestamp,
+            // 使用最后一条消息的时间作为会话的最后活动时间
+            updatedAt: lastMessage.timestamp,
+          })
+        }
+      }
+
+      // 按最后活动时间降序排列，最新的在前面
       return sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     } catch (error) {
-      // 加载会话列表失败
+      console.error('加载会话列表失败:', error)
       return []
     }
   }
 
-  delete(sessionId: string): void {
+  async delete(sessionId: string): Promise<void> {
     try {
-      const sessions = this.loadAllSessions()
-      const filteredSessions = sessions.filter(s => s.id !== sessionId)
-      this.saveAllSessions(filteredSessions)
+      // 调用后端API清除指定会话的聊天历史
+      await ai.clearChatHistory(sessionId)
     } catch (error) {
-      // 删除会话失败
+      console.error('删除会话失败:', error)
+      throw error
     }
   }
 
-  clear(): void {
+  async clear(): Promise<void> {
     try {
-      this.storage.remove()
+      // 调用后端API清除所有聊天历史
+      await ai.clearChatHistory()
     } catch (error) {
-      // 清空聊天历史失败
-    }
-  }
-
-  loadAllSessions(): ChatSession[] {
-    try {
-      const sessions = this.storage.load() || []
-      return sessions.map(session => ({
-        ...session,
-        createdAt: new Date(session.createdAt),
-        updatedAt: new Date(session.updatedAt),
-        messages: session.messages.map(msg => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp),
-        })),
-      }))
-    } catch (error) {
-      // 加载会话数据失败
-      return []
-    }
-  }
-
-  private saveAllSessions(sessions: ChatSession[]): void {
-    try {
-      const maxSessions = AI_SESSION_CONFIG.MAX_SESSIONS
-      const sortedSessions = sessions
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-        .slice(0, maxSessions)
-
-      this.storage.save(sortedSessions)
-    } catch (error) {
-      // 保存会话数据失败
+      console.error('清空聊天历史失败:', error)
+      throw error
     }
   }
 
@@ -268,24 +209,24 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     loadSessions()
   }
 
-  const loadSession = (sessionId: string) => {
-    saveCurrentSession()
+  const loadSession = async (sessionId: string) => {
+    await saveCurrentSession()
     currentSessionId.value = sessionId
-    messages.value = chatHistory.load(sessionId)
+    messages.value = await chatHistory.load(sessionId)
     error.value = null
   }
 
-  const deleteSession = (sessionId: string) => {
-    chatHistory.delete(sessionId)
-    loadSessions()
+  const deleteSession = async (sessionId: string) => {
+    await chatHistory.delete(sessionId)
+    await loadSessions()
 
     if (currentSessionId.value === sessionId) {
       createNewSession()
     }
   }
 
-  const loadSessions = () => {
-    sessions.value = chatHistory.loadSessions()
+  const loadSessions = async () => {
+    sessions.value = await chatHistory.loadSessions()
   }
 
   // 获取第一个会话（最新的会话）
