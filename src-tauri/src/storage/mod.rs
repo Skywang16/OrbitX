@@ -12,6 +12,7 @@ pub mod filesystem;
 pub mod messagepack;
 pub mod paths;
 pub mod recovery;
+pub mod sql_scripts;
 pub mod sqlite;
 #[cfg(test)]
 pub mod sqlite_tests;

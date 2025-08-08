@@ -1,11 +1,11 @@
 <script setup lang="ts">
   import { ref, nextTick } from 'vue'
-  import type { ChatMessage } from '@/types'
+  import type { Message } from '@/types/features/ai/chat'
   import ChatMessageItem from './ChatMessageItem.vue'
 
   // Props定义
   interface Props {
-    messages: ChatMessage[]
+    messages: Message[]
     hasMessages?: boolean
     isLoading?: boolean
 

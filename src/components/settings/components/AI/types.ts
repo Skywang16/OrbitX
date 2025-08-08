@@ -3,22 +3,7 @@
  */
 
 // 重新导出通用AI类型
-export type {
-  AIHealthStatus,
-  AIModelConfig,
-  AIProvider,
-  AIRequest,
-  AIResponse,
-  AISettings,
-  AIStats,
-  CacheEntry,
-  CacheStats,
-  ChatMessage,
-  ChatSession,
-  CommandExplanation,
-  ErrorAnalysis,
-  TerminalContext,
-} from '@/types'
+export type { AIHealthStatus, AIModelConfig, AIProvider, AIResponse, AISettings, AIStats } from '@/types'
 
 // 导入需要在本文件中使用的类型
 import type { AIModelConfig, AIProvider } from '@/types'

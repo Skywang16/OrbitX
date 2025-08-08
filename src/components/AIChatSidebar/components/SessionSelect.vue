@@ -2,20 +2,20 @@
   import { computed } from 'vue'
   import { XSelect } from '@/ui'
   import type { SelectOption } from '@/ui'
-  import type { ChatSession } from '@/types'
+  import type { Conversation } from '@/types/features/ai/chat'
 
   // Props定义
   interface Props {
-    sessions: ChatSession[]
-    currentSessionId: string | null
+    sessions: Conversation[]
+    currentSessionId: number | null
     loading?: boolean
   }
 
   // Emits定义
   interface Emits {
-    (e: 'select-session', sessionId: string): void
+    (e: 'select-session', sessionId: number): void
     (e: 'create-new-session'): void
-    (e: 'delete-session', sessionId: string): void
+    (e: 'delete-session', sessionId: number): void
     (e: 'refresh-sessions'): void
   }
 
@@ -29,7 +29,7 @@
     return props.sessions.map(session => ({
       label: session.title || '未命名会话',
       value: session.id,
-      description: `${session.messages.length} 条消息 · ${formatDate(session.updatedAt)}`,
+      description: `${session.messageCount} 条消息 · ${formatDate(session.updatedAt)}`,
     }))
   })
 

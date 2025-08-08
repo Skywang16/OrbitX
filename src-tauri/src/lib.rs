@@ -18,10 +18,23 @@ pub mod utils; // 工具和错误处理模块
 pub mod window; // 窗口管理功能模块
 
 use ai::commands::{
-    add_ai_model, analyze_error, clear_ai_cache, clear_chat_history, explain_command,
-    get_ai_models, get_chat_history, get_terminal_context, get_user_prefix_prompt, remove_ai_model,
-    save_chat_history, send_chat_message, set_default_ai_model, set_user_prefix_prompt,
-    stream_chat_message_with_channel, test_ai_connection, update_ai_model, update_terminal_context,
+    // AI模型管理命令
+    add_ai_model,
+    // AI会话管理命令
+    create_conversation,
+    delete_conversation,
+    get_ai_models,
+    get_compressed_context,
+    get_conversation,
+    get_conversations,
+    get_terminal_context,
+    remove_ai_model,
+    save_message,
+    set_default_ai_model,
+    test_ai_connection,
+    truncate_conversation,
+    update_ai_model,
+    update_conversation_title,
     AIManagerState,
 };
 use commands::{TerminalState, *};
@@ -255,26 +268,24 @@ pub fn run() {
             get_shell_info,
             update_cursor_config,
             update_terminal_behavior_config,
-            // AI功能命令
+            // AI模型管理命令
             get_ai_models,
             add_ai_model,
             update_ai_model,
             remove_ai_model,
-            test_ai_connection,
             set_default_ai_model,
-            send_chat_message,
-            stream_chat_message_with_channel,
-            explain_command,
-            analyze_error,
-            get_user_prefix_prompt,
-            set_user_prefix_prompt,
+            test_ai_connection,
+            // AI会话上下文管理命令
+            create_conversation,
+            get_conversations,
+            get_conversation,
+            update_conversation_title,
+            delete_conversation,
+            get_compressed_context,
+            save_message,
+            truncate_conversation,
+            // 终端上下文管理命令
             get_terminal_context,
-            update_terminal_context,
-            clear_ai_cache,
-            // AI聊天历史命令
-            get_chat_history,
-            save_chat_history,
-            clear_chat_history,
             // 快捷键系统命令
             get_shortcuts_config,
             update_shortcuts_config,

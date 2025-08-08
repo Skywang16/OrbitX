@@ -24,32 +24,6 @@ export interface AIModelConfig {
   }
 }
 
-// ===== AI请求和响应类型 =====
-
-export type AIRequestType = 'Chat' | 'Explanation' | 'ErrorAnalysis'
-
-export interface AIRequest {
-  requestType: AIRequestType
-  content: string
-  context?: {
-    workingDirectory?: string
-    commandHistory?: string[]
-    environment?: Record<string, string>
-    currentCommand?: string
-    lastOutput?: string
-    systemInfo?: {
-      os: string
-      arch: string
-      shell: string
-    }
-  }
-  options?: {
-    maxTokens?: number
-    temperature?: number
-    stream?: boolean
-  }
-}
-
 export interface AIResponse {
   content: string
   responseType: 'text' | 'code' | 'command'
@@ -75,19 +49,11 @@ export interface AISettings {
   features: {
     chat: {
       enabled: boolean
+      model?: string
+      explanation?: boolean
       maxHistoryLength: number
       autoSaveHistory: boolean
       contextWindowSize: number
-    }
-    explanation: {
-      enabled: boolean
-      showRisks: boolean
-      includeAlternatives: boolean
-    }
-    errorAnalysis: {
-      enabled: boolean
-      autoAnalyze: boolean
-      showSolutions: boolean
     }
   }
   performance: {

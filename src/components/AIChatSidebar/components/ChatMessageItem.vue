@@ -1,10 +1,10 @@
 <script setup lang="ts">
-  import type { ChatMessage } from '@/types'
+  import type { Message } from '@/types/features/ai/chat'
   import type { AgentMessageData } from '../types'
   import { computed, ref, watch } from 'vue'
   import { marked } from 'marked'
   interface Props {
-    message: ChatMessage
+    message: Message
     isStreaming?: boolean
   }
   const props = defineProps<Props>()
@@ -12,23 +12,18 @@
   const codeBlocks = ref<Array<{ id: string; code: string; lang: string }>>([])
   const copiedStates = ref<Record<string, boolean>>({})
   // 计算属性
-  const isUser = computed(() => props.message.messageType === 'user')
-  const isAssistant = computed(() => props.message.messageType === 'assistant')
+  const isUser = computed(() => props.message.role === 'user')
+  const isAssistant = computed(() => props.message.role === 'assistant')
   const formattedTime = computed(() => {
     return new Intl.DateTimeFormat('zh-CN', {
       hour: '2-digit',
       minute: '2-digit',
-    }).format(props.message.timestamp)
+    }).format(props.message.createdAt)
   })
 
   // 检查是否为Agent消息
   const isAgentMessage = computed(() => {
     if (!isAssistant.value) return false
-
-    // 检查metadata中是否标记为Agent消息
-    if (props.message.metadata && 'isAgentMessage' in props.message.metadata) {
-      return props.message.metadata.isAgentMessage
-    }
 
     // 检查content是否为JSON格式的Agent消息
     try {
@@ -60,21 +55,6 @@
     { immediate: true, deep: true }
   )
 
-  const agentRawOutput = computed(() => {
-    if (!isAgentMessage.value) return null
-
-    // 优先从metadata中获取
-    if (props.message.metadata && 'messageData' in props.message.metadata) {
-      return props.message.metadata.messageData
-    }
-
-    // 从content中解析
-    try {
-      return JSON.parse(props.message.content)
-    } catch {
-      return props.message.content
-    }
-  })
   // 配置marked
   marked.setOptions({
     breaks: true,
@@ -83,7 +63,7 @@
   // 自定义渲染器
   const renderer = new marked.Renderer()
   // 重写代码块渲染，添加复制功能
-  renderer.code = (code, language) => {
+  renderer.code = ({ text: code, lang: language }: { text: string; lang?: string }) => {
     const lang = language || 'text'
     const id = `code-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
     // 记录代码块信息
@@ -124,7 +104,9 @@
       setTimeout(() => {
         copiedStates.value[blockId] = false
       }, 2000)
-    } catch (error) {}
+    } catch (error) {
+      // 复制失败时静默处理
+    }
   }
   // 处理复制按钮点击
   const handleCopyClick = (event: Event) => {

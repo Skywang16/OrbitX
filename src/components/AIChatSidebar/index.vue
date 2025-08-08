@@ -42,28 +42,30 @@
     }
   }
 
-  const selectSession = (sessionId: string) => {
-    aiChatStore.loadSession(sessionId)
+  const selectSession = (sessionId: number) => {
+    aiChatStore.loadConversation(sessionId)
   }
 
-  const deleteSession = (sessionId: string) => {
-    aiChatStore.deleteSession(sessionId)
+  const deleteSession = (sessionId: number) => {
+    aiChatStore.deleteConversation(sessionId)
   }
 
   const refreshSessions = async () => {
     try {
-      await aiChatStore.refreshSessions()
+      await aiChatStore.refreshConversations()
     } catch (error) {
       // 刷新会话列表失败
     }
   }
 
   const createNewSession = () => {
-    aiChatStore.createNewSession()
+    aiChatStore.createConversation()
   }
 
   const handleSwitchMode = async (mode: 'chat' | 'agent') => {
-    await aiChatStore.switchChatMode(mode)
+    aiChatStore.chatMode = mode
+    // 无论哪种模式都通过eko处理，确保eko已初始化
+    await aiChatStore.initializeEko()
   }
 
   // 拖拽调整功能
@@ -84,7 +86,7 @@
 
       // 如果宽度太小，退出聊天模式
       if (aiChatStore.sidebarWidth <= 120) {
-        aiChatStore.hideSidebar()
+        aiChatStore.isVisible = false
       }
 
       document.removeEventListener('mousemove', handleMouseMove)
@@ -138,7 +140,11 @@
    */
   const stopMessage = () => {
     if (aiChatStore.isLoading) {
-      aiChatStore.stopStreaming()
+      if (aiChatStore.cancelFunction) {
+        aiChatStore.cancelFunction()
+        aiChatStore.cancelFunction = null
+      }
+      aiChatStore.isLoading = false
     }
   }
 
@@ -194,12 +200,12 @@
       await aiSettingsStore.loadSettings()
     }
 
-    aiChatStore.initialize()
+    // 新系统不需要初始化
     scrollToBottom()
   })
 
   onUnmounted(() => {
-    aiChatStore.saveCurrentSession()
+    // 新系统自动保存，不需要手动保存
   })
 </script>
 
@@ -217,8 +223,8 @@
 
     <!-- 头部 -->
     <ChatHeader
-      :sessions="aiChatStore.sessions"
-      :current-session-id="aiChatStore.currentSessionId"
+      :sessions="aiChatStore.conversations"
+      :current-session-id="aiChatStore.currentConversationId"
       :is-loading="aiChatStore.isLoading"
       @select-session="selectSession"
       @create-new-session="createNewSession"

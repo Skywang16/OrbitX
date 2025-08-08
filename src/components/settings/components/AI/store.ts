@@ -99,8 +99,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
         defaultModelId,
         features: {
           chat: { enabled: true, maxHistoryLength: 1000, autoSaveHistory: true, contextWindowSize: 4000 },
-          explanation: { enabled: true, showRisks: true, includeAlternatives: true },
-          errorAnalysis: { enabled: true, autoAnalyze: false, showSolutions: true },
         },
         performance: {
           requestTimeout: 30,

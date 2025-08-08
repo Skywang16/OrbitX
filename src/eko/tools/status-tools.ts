@@ -11,10 +11,12 @@ import type { GetTerminalStatusParams, RemoveFilesParams } from './types'
 
 /**
  * 📊 获取终端状态工具
+ * 注意：此工具主要用于获取终端系统状态，不适合简单的当前目录查询
  */
 export const getTerminalStatusTool: Tool = {
   name: 'get_terminal_status',
-  description: '📊 获取终端状态：查看终端信息，包括当前目录、环境变量、活跃终端数等',
+  description:
+    '📊 获取终端系统状态：查看活跃终端数、系统信息等。不适合简单的当前目录查询，请使用get_current_directory工具',
   parameters: {
     type: 'object',
     properties: {
@@ -53,18 +55,28 @@ export const getTerminalStatusTool: Tool = {
         }
       }
 
-      // 获取终端上下文和终端列表
-      const terminalContext = await aiAPI.getTerminalContext()
+      // 获取终端列表
       const allTerminals = await terminalAPI.listTerminals()
 
-      let statusInfo = `📊 终端状态信息:\n`
-      statusInfo += `- 终端ID: ${targetTerminalId}\n`
-      statusInfo += `- 当前目录: ${terminalContext.workingDirectory || '未知'}\n`
+      let statusInfo = `📊 终端系统状态:\n`
+      statusInfo += `- 当前终端ID: ${targetTerminalId}\n`
       statusInfo += `- 活跃终端数: ${allTerminals.length}\n`
 
       if (detailed) {
         statusInfo += `- 所有终端ID: ${allTerminals.join(', ')}\n`
-        statusInfo += `- 系统信息: ${JSON.stringify(terminalContext.systemInfo || {}, null, 2)}\n`
+
+        // 尝试获取终端上下文，但不依赖它
+        try {
+          const terminalContext = await aiAPI.getTerminalContext()
+          if (terminalContext.workingDirectory) {
+            statusInfo += `- 当前目录: ${terminalContext.workingDirectory}\n`
+          }
+          if (terminalContext.systemInfo) {
+            statusInfo += `- 系统信息: ${JSON.stringify(terminalContext.systemInfo, null, 2)}\n`
+          }
+        } catch (contextError) {
+          statusInfo += `- 上下文信息: 获取失败 (${contextError instanceof Error ? contextError.message : String(contextError)})\n`
+        }
       }
 
       return {

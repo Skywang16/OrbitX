@@ -1,125 +1,35 @@
 /**
- * AI聊天功能的状态管理
+ * AI聊天功能的状态管理 - 完全重构版本
+ *
+ * 使用新的会话上下文管理系统，不再向后兼容
  */
 
-import { ai } from '@/api/ai'
+import { conversations as conversationAPI } from '@/api/ai'
 import { useAISettingsStore } from '@/components/settings/components/AI'
-import { AI_SESSION_CONFIG } from '@/constants/ai'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { ChatMessage, ChatSession } from './types'
 import type { ChatMode } from './types'
 import { createDebugTerminalEko, type TerminalEko } from '@/eko'
+import type { Conversation, Message } from '@/types/features/ai/chat'
 
-// 聊天历史管理类
-class ChatHistoryManager {
-  generateId(): string {
-    return `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
-  }
-
-  async save(sessionId: string, message: ChatMessage): Promise<void> {
-    try {
-      // 直接调用后端API保存单条消息
-      await ai.saveChatHistory([message], sessionId)
-    } catch (error) {
-      console.error('保存聊天消息失败:', error)
-      throw error
-    }
-  }
-
-  async saveAll(sessionId: string, messages: ChatMessage[]): Promise<void> {
-    try {
-      // 直接调用后端API保存所有消息
-      await ai.saveChatHistory(messages, sessionId)
-    } catch (error) {
-      console.error('保存聊天会话失败:', error)
-      throw error
-    }
-  }
-
-  async load(sessionId: string): Promise<ChatMessage[]> {
-    try {
-      // 直接从后端API加载聊天历史
-      return await ai.getChatHistory(sessionId)
-    } catch (error) {
-      console.error('加载聊天历史失败:', error)
-      return []
-    }
-  }
-
-  async loadSessions(): Promise<ChatSession[]> {
-    try {
-      // 从后端API获取会话ID列表
-      const sessionIds = await ai.getChatSessions()
-
-      // 为每个会话ID构造ChatSession对象
-      const sessions: ChatSession[] = []
-      for (const sessionId of sessionIds) {
-        // 获取会话的消息来生成会话信息
-        const messages = await ai.getChatHistory(sessionId)
-        if (messages.length > 0) {
-          const firstMessage = messages[0]
-          const lastMessage = messages[messages.length - 1]
-
-          sessions.push({
-            id: sessionId,
-            title: this.generateSessionTitle(firstMessage.content),
-            messages: messages,
-            createdAt: firstMessage.timestamp,
-            // 使用最后一条消息的时间作为会话的最后活动时间
-            updatedAt: lastMessage.timestamp,
-          })
-        }
-      }
-
-      // 按最后活动时间降序排列，最新的在前面
-      return sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    } catch (error) {
-      console.error('加载会话列表失败:', error)
-      return []
-    }
-  }
-
-  async delete(sessionId: string): Promise<void> {
-    try {
-      // 调用后端API清除指定会话的聊天历史
-      await ai.clearChatHistory(sessionId)
-    } catch (error) {
-      console.error('删除会话失败:', error)
-      throw error
-    }
-  }
-
-  async clear(): Promise<void> {
-    try {
-      // 调用后端API清除所有聊天历史
-      await ai.clearChatHistory()
-    } catch (error) {
-      console.error('清空聊天历史失败:', error)
-      throw error
-    }
-  }
-
-  private generateSessionTitle(content: string): string {
-    const title = content.trim().substring(0, AI_SESSION_CONFIG.TITLE_MAX_LENGTH)
-    return title.length < content.trim().length ? title + '...' : title
-  }
+// 工具函数
+const generateSessionTitle = (content: string): string => {
+  const title = content.trim().slice(0, 20)
+  if (title.length === 0) return '新对话'
+  return title.length < content.trim().length ? title + '...' : title
 }
-
-const chatHistory = new ChatHistoryManager()
 
 export const useAIChatStore = defineStore('ai-chat', () => {
   // 状态
   const isVisible = ref(false)
   const sidebarWidth = ref(350)
-  const currentSessionId = ref<string | null>(null)
-  const messages = ref<ChatMessage[]>([])
+  const currentConversationId = ref<number | null>(null)
+  const messages = ref<Message[]>([])
   const streamingContent = ref('')
   const isLoading = ref(false)
-
   const error = ref<string | null>(null)
-  const sessions = ref<ChatSession[]>([])
+  const conversations = ref<Conversation[]>([])
   const cancelFunction = ref<(() => void) | null>(null)
 
   // 聊天模式相关状态
@@ -148,402 +58,193 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         }
       }
 
-      // 智能选择会话：如果当前没有会话或没有消息内容，则选择第一个历史会话或创建新会话
-      if (!currentSessionId.value || !hasMessages.value) {
-        loadSessions() // 先加载会话列表
-        const firstSession = getFirstSession()
-        if (firstSession && !hasMessages.value) {
-          // 只有在当前没有消息时才加载历史会话
-          loadSession(firstSession.id)
-        } else if (!currentSessionId.value) {
-          // 如果没有当前会话ID，创建新会话
-          createNewSession()
-        }
-      }
-    }
-  }
-
-  const showSidebar = async () => {
-    isVisible.value = true
-
-    // 确保AI设置已加载
-    const aiSettingsStore = useAISettingsStore()
-    if (!aiSettingsStore.hasModels && !aiSettingsStore.isLoading) {
-      try {
-        await aiSettingsStore.loadSettings()
-      } catch (_error) {
-        // 静默处理加载失败，不影响用户体验
-      }
-    }
-
-    // 初始化Eko框架（如果还未初始化）
-    await initializeEkoFramework()
-
-    // 智能选择会话：如果当前没有会话或没有消息内容，则选择第一个历史会话或创建新会话
-    if (!currentSessionId.value || !hasMessages.value) {
-      loadSessions() // 先加载会话列表
-      const firstSession = getFirstSession()
-      if (firstSession && !hasMessages.value) {
-        // 只有在当前没有消息时才加载历史会话
-        loadSession(firstSession.id)
-      } else if (!currentSessionId.value) {
-        // 如果没有当前会话ID，创建新会话
-        createNewSession()
-      }
-    }
-  }
-
-  const hideSidebar = () => {
-    isVisible.value = false
-    saveCurrentSession()
-  }
-
-  const createNewSession = () => {
-    saveCurrentSession()
-    const newSessionId = chatHistory.generateId()
-    currentSessionId.value = newSessionId
-    messages.value = []
-    error.value = null
-
-    // 创建新会话后立即刷新会话列表，确保新会话出现在列表中
-    loadSessions()
-  }
-
-  const loadSession = async (sessionId: string) => {
-    await saveCurrentSession()
-    currentSessionId.value = sessionId
-    messages.value = await chatHistory.load(sessionId)
-    error.value = null
-  }
-
-  const deleteSession = async (sessionId: string) => {
-    await chatHistory.delete(sessionId)
-    await loadSessions()
-
-    if (currentSessionId.value === sessionId) {
-      createNewSession()
-    }
-  }
-
-  const loadSessions = async () => {
-    sessions.value = await chatHistory.loadSessions()
-  }
-
-  // 获取第一个会话（最新的会话）
-  const getFirstSession = (): ChatSession | null => {
-    const sortedSessions = chatHistory.loadSessions()
-    return sortedSessions.length > 0 ? sortedSessions[0] : null
-  }
-
-  // 从后端刷新会话列表
-  const refreshSessions = async () => {
-    try {
-      const sessionIds = await ai.getChatSessions()
-      const localSessions = chatHistory.loadSessions()
-      const refreshedSessions: ChatSession[] = []
-
-      for (const sessionId of sessionIds) {
-        const localSession = localSessions.find(s => s.id === sessionId)
-        const messages = await ai.getChatHistory(sessionId)
-
-        const convertedMessages: ChatMessage[] = messages.map((msg: any) => ({
-          id: msg.id,
-          messageType: msg.messageType,
-          content: msg.content,
-          timestamp: new Date(msg.timestamp),
-          metadata: msg.metadata,
-        }))
-
-        refreshedSessions.push({
-          id: sessionId,
-          title: localSession?.title || convertedMessages[0]?.content.substring(0, 30) || '未命名会话',
-          messages: convertedMessages,
-          createdAt: localSession?.createdAt || new Date(),
-          updatedAt:
-            convertedMessages.length > 0
-              ? new Date(Math.max(...convertedMessages.map(m => m.timestamp.getTime())))
-              : new Date(),
-        })
-      }
-
-      sessions.value = refreshedSessions
-      return refreshedSessions
-    } catch (error) {
-      // 刷新会话列表失败
-      loadSessions()
-      return sessions.value
-    }
-  }
-
-  const saveCurrentSession = () => {
-    if (currentSessionId.value && messages.value.length > 0) {
-      chatHistory.saveAll(currentSessionId.value, messages.value)
-    }
-  }
-
-  const generateMessageId = () => {
-    return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
-  }
-
-  // 处理普通聊天消息
-  const handleChatMessage = async (content: string, messageIndex: number, aiSettingsStore: any) => {
-    const { cancel } = await ai.streamMessageCancellable(
-      content,
-      (chunk: { content?: string; isComplete?: boolean; metadata?: unknown }) => {
-        // 检查是否是流式响应开始信号
-        if (chunk.metadata && typeof chunk.metadata === 'object' && 'stream_started' in chunk.metadata) {
-          return
-        }
-
-        // 检查是否包含错误信息
-        if (chunk.metadata && typeof chunk.metadata === 'object' && 'error' in chunk.metadata) {
-          const errorInfo = (chunk.metadata as any).error
-          // AI响应错误
-
-          // 显示详细错误信息
-          const errorMessage = `${errorInfo.message || '未知错误'}`
-          const errorDetails = errorInfo.providerResponse
-            ? `\n详细信息: ${JSON.stringify(errorInfo.providerResponse, null, 2)}`
-            : ''
-
-          // 直接更新消息内容为错误信息
-          messages.value[messageIndex].content = `❌ ${errorMessage}${errorDetails}`
-
-          if (currentSessionId.value) {
-            chatHistory.save(currentSessionId.value, messages.value[messageIndex])
-          }
-          return
-        }
-
-        if (chunk.content) {
-          // 累积流式内容
-          streamingContent.value += chunk.content
-
-          // 直接更新消息内容，避免使用splice
-          messages.value[messageIndex].content = streamingContent.value
-        }
-
-        if (chunk.isComplete) {
-          if (currentSessionId.value) {
-            chatHistory.save(currentSessionId.value, messages.value[messageIndex])
-          }
-        }
-      },
-      aiSettingsStore.defaultModel?.id
-    )
-
-    // 保存取消函数
-    cancelFunction.value = cancel
-  }
-
-  // 处理Agent消息 - 使用Eko框架
-  const handleAgentMessage = async (content: string, messageIndex: number) => {
-    try {
-      if (!ekoInstance.value || !currentSessionId.value) {
-        throw new Error('Eko instance not initialized or session ID is missing')
-      }
-
-      console.log('🚀 [Eko] 开始执行任务:', content)
-
-      // 执行任务
-      const result = await ekoInstance.value.run(content, {
-        timeout: 30000, // 30秒超时
-      })
-
-      console.log('✅ [Eko] 任务执行完成:', result)
-
-      // 更新消息内容
-      if (result.success && result.result) {
-        messages.value[messageIndex].content = result.result
-      } else {
-        messages.value[messageIndex].content = `❌ 任务执行失败: ${result.error || '未知错误'}`
-      }
-
-      // 保存消息
-      if (currentSessionId.value) {
-        chatHistory.save(currentSessionId.value, messages.value[messageIndex])
-      }
-    } catch (error) {
-      console.error('❌ [Eko] 任务执行失败:', error)
-
-      // 更新消息内容为错误信息
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      messages.value[messageIndex].content = `❌ 任务执行失败: ${errorMessage}`
-
-      // 保存错误消息
-      if (currentSessionId.value) {
-        chatHistory.save(currentSessionId.value, messages.value[messageIndex])
-      }
-    }
-  }
-
-  const sendMessage = async (content: string) => {
-    if (!canSendMessage.value || !currentSessionId.value) {
-      return
-    }
-
-    const userMessage: ChatMessage = {
-      id: generateMessageId(),
-      messageType: 'user',
-      content: content.trim(),
-      timestamp: new Date(),
-    }
-
-    messages.value.push(userMessage)
-    chatHistory.save(currentSessionId.value, userMessage)
-
-    const aiMessage: ChatMessage = {
-      id: generateMessageId(),
-      messageType: 'assistant',
-      content: '',
-      timestamp: new Date(),
-    }
-
-    messages.value.push(aiMessage)
-
-    // 获取消息在数组中的索引，用于后续更新
-    const messageIndex = messages.value.length - 1
-
-    try {
-      isLoading.value = true
-
-      error.value = null
-      streamingContent.value = '' // 重置流式内容
-
-      const aiSettingsStore = useAISettingsStore()
-
-      // 根据聊天模式选择不同的处理方式
-
-      if (chatMode.value === 'agent' && ekoInstance.value) {
-        // Agent模式：使用Eko框架处理
-        await handleAgentMessage(content, messageIndex)
-      } else {
-        // 普通聊天模式：使用原有的AI API
-        await handleChatMessage(content, messageIndex, aiSettingsStore)
-      }
-    } catch (err) {
-      error.value = handleErrorWithMessage(err, '发送消息失败')
-      // 移除失败的AI消息
-      if (messageIndex < messages.value.length) {
-        messages.value.splice(messageIndex, 1)
-      }
-      // 确保在错误时重置状态
-    } finally {
-      isLoading.value = false
-      // 最终确保状态被重置
-      cancelFunction.value = null
-    }
-  }
-
-  const clearCurrentSession = () => {
-    messages.value = []
-    if (currentSessionId.value) {
-      chatHistory.delete(currentSessionId.value)
-      createNewSession()
+      // 加载会话列表
+      await refreshConversations()
     }
   }
 
   const setSidebarWidth = (width: number) => {
-    sidebarWidth.value = Math.max(100, Math.min(800, width))
+    sidebarWidth.value = Math.max(300, Math.min(800, width))
   }
 
-  const stopStreaming = () => {
-    if (cancelFunction.value) {
-      cancelFunction.value()
-      cancelFunction.value = null
+  // 会话管理方法
+  const createConversation = async (title?: string): Promise<void> => {
+    try {
+      isLoading.value = true
+      const conversationId = await conversationAPI.create(title)
+      const newConversation = await conversationAPI.get(conversationId)
+      conversations.value.unshift(newConversation)
+      currentConversationId.value = newConversation.id
+      messages.value = []
+    } catch (err) {
+      error.value = handleErrorWithMessage(err, '创建会话失败')
+    } finally {
       isLoading.value = false
     }
   }
 
-  // Eko框架初始化
-  const initializeEkoFramework = async () => {
-    if (!ekoInstance.value) {
-      try {
-        console.log('🚀 [Eko] 正在初始化Eko框架...')
+  const loadConversation = async (conversationId: number): Promise<void> => {
+    try {
+      isLoading.value = true
+      currentConversationId.value = conversationId
 
-        // 创建Eko实例
-        const eko = await createDebugTerminalEko({
-          agentConfig: {
-            name: 'TerminalAssistant',
-            description: '终端助手，可以执行命令、管理文件、操作目录等',
-            safeMode: true,
-            allowedCommands: ['ls', 'pwd', 'cat', 'echo', 'mkdir', 'cd', 'git'],
-            blockedCommands: ['rm -rf', 'format', 'shutdown', 'reboot'],
-          },
-        })
+      // 使用新的API获取压缩上下文作为消息历史
+      messages.value = await conversationAPI.getCompressedContext(conversationId)
+    } catch (err) {
+      error.value = handleErrorWithMessage(err, '加载会话失败')
+    } finally {
+      isLoading.value = false
+    }
+  }
 
-        ekoInstance.value = eko
+  const deleteConversation = async (conversationId: number): Promise<void> => {
+    try {
+      await conversationAPI.delete(conversationId)
+      conversations.value = conversations.value.filter(c => c.id !== conversationId)
 
-        console.log('✅ [Eko] Eko框架初始化成功')
-        console.log('Agent状态:', eko.getAgent().getStatus())
-
-        // 设置当前Agent ID
-        currentAgentId.value = 'terminal-agent'
-      } catch (error) {
-        console.error('❌ [Eko] Eko框架初始化失败:', error)
+      if (currentConversationId.value === conversationId) {
+        currentConversationId.value = null
+        messages.value = []
       }
+    } catch (err) {
+      error.value = handleErrorWithMessage(err, '删除会话失败')
     }
   }
 
-  // 切换聊天模式
-  const switchChatMode = async (mode: ChatMode) => {
-    if (chatMode.value === mode) return
-
-    // 保存当前会话
-    saveCurrentSession()
-
-    // 切换模式
-    chatMode.value = mode
-
-    // 创建新会话（切换模式时总是开始新对话）
-    createNewSession()
-
-    if (mode === 'agent') {
-      await initializeEkoFramework()
+  const refreshConversations = async (): Promise<void> => {
+    try {
+      conversations.value = await conversationAPI.getList()
+    } catch (err) {
+      error.value = handleErrorWithMessage(err, '刷新会话列表失败')
     }
   }
 
-  // 初始化
-  const initialize = () => {
-    loadSessions()
+  // 发送消息方法（统一通过eko处理）
+  const sendMessage = async (content: string): Promise<void> => {
+    if (!currentConversationId.value) {
+      // 如果没有当前会话，创建一个新会话
+      const title = generateSessionTitle(content)
+      await createConversation(title)
+    }
+
+    if (!currentConversationId.value) {
+      throw new Error('无法创建会话')
+    }
+
+    try {
+      isLoading.value = true
+      error.value = null
+
+      // 确保eko实例存在
+      if (!ekoInstance.value) {
+        await initializeEko()
+      }
+
+      if (!ekoInstance.value) {
+        throw new Error('Eko实例初始化失败')
+      }
+
+      // 1. 保存用户消息
+      await conversationAPI.saveMessage(currentConversationId.value, 'user', content)
+
+      // 2. 获取压缩上下文
+      const contextMessages = await conversationAPI.getCompressedContext(currentConversationId.value)
+
+      // 3. 构建完整的prompt（包含上下文，不重复当前用户消息）
+      const fullPrompt =
+        contextMessages.length > 0
+          ? contextMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n')
+          : `user: ${content}`
+
+      // 4. 通过eko处理消息（传递完整上下文）
+      const response = await ekoInstance.value.run(fullPrompt)
+
+      // 5. 保存AI回复
+      if (response.success && response.result) {
+        await conversationAPI.saveMessage(currentConversationId.value, 'assistant', response.result)
+      }
+
+      // 6. 重新加载当前会话的消息
+      await loadConversation(currentConversationId.value)
+
+      // 7. 刷新会话列表以更新预览
+      await refreshConversations()
+    } catch (err) {
+      error.value = handleErrorWithMessage(err, '发送消息失败')
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  // 截断重问方法（使用新的eko架构）
+  const truncateAndResend = async (truncateAfterMessageId: number, newContent: string): Promise<void> => {
+    if (!currentConversationId.value) {
+      throw new Error('没有选择会话')
+    }
+
+    try {
+      isLoading.value = true
+      error.value = null
+
+      // 1. 截断会话
+      await conversationAPI.truncateConversation(currentConversationId.value, truncateAfterMessageId)
+
+      // 2. 发送新消息（复用sendMessage逻辑）
+      await sendMessage(newContent)
+    } catch (err) {
+      error.value = handleErrorWithMessage(err, '截断重问失败')
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  // 清空错误
+  const clearError = (): void => {
+    error.value = null
+  }
+
+  // 初始化Eko实例（保持原有功能）
+  const initializeEko = async (): Promise<void> => {
+    try {
+      if (!ekoInstance.value) {
+        ekoInstance.value = await createDebugTerminalEko()
+      }
+    } catch (err) {
+      // 静默处理错误
+    }
   }
 
   return {
     // 状态
     isVisible,
     sidebarWidth,
-    currentSessionId,
+    currentConversationId,
     messages,
     streamingContent,
     isLoading,
-
     error,
-    sessions,
-
-    // 聊天模式相关状态
+    conversations,
+    cancelFunction,
     chatMode,
+    ekoInstance,
     currentAgentId,
 
     // 计算属性
     hasMessages,
     canSendMessage,
 
-    // 操作方法
+    // 方法
     toggleSidebar,
-    showSidebar,
-    hideSidebar,
-    createNewSession,
-    loadSession,
-    deleteSession,
-    loadSessions,
-    getFirstSession,
-    refreshSessions,
-    saveCurrentSession,
-    sendMessage,
-    stopStreaming,
-    switchChatMode,
-    clearCurrentSession,
     setSidebarWidth,
-    initialize,
+    createConversation,
+    loadConversation,
+    deleteConversation,
+    refreshConversations,
+    sendMessage,
+    truncateAndResend,
+    clearError,
+    initializeEko,
   }
 })

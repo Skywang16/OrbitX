@@ -1,20 +1,20 @@
 <script setup lang="ts">
   import SessionSelect from './SessionSelect.vue'
-  import type { ChatSession } from '@/types'
+  import type { Conversation } from '@/types/features/ai/chat'
   import type { ChatMode } from '../types'
 
   // Props定义
   interface Props {
-    sessions: ChatSession[]
-    currentSessionId: string | null
+    sessions: Conversation[]
+    currentSessionId: number | null
     isLoading?: boolean
   }
 
   // Emits定义
   interface Emits {
-    (e: 'select-session', sessionId: string): void
+    (e: 'select-session', sessionId: number): void
     (e: 'create-new-session'): void
-    (e: 'delete-session', sessionId: string): void
+    (e: 'delete-session', sessionId: number): void
     (e: 'refresh-sessions'): void
   }
 
@@ -25,7 +25,7 @@
   const emit = defineEmits<Emits>()
 
   // 方法
-  const handleSelectSession = (sessionId: string) => {
+  const handleSelectSession = (sessionId: number) => {
     emit('select-session', sessionId)
   }
 

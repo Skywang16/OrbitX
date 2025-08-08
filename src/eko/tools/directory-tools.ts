@@ -236,7 +236,7 @@ export const changeDirectoryTool: Tool = {
  */
 export const getCurrentDirectoryTool: Tool = {
   name: 'get_current_directory',
-  description: '📍 获取当前目录：显示当前所在的目录路径',
+  description: '📍 获取当前目录：显示当前所在的目录路径。这是查询当前目录的首选工具',
   parameters: {
     type: 'object',
     properties: {},
@@ -258,20 +258,60 @@ export const getCurrentDirectoryTool: Tool = {
         }
       }
 
+      // 使用更可靠的命令和标记来获取当前目录
+      const marker = `PWD_RESULT_${Date.now()}`
       await terminalAPI.writeToTerminal({
         paneId: terminalId,
-        data: 'pwd\n',
+        data: `echo "${marker}_START" && pwd && echo "${marker}_END"\n`,
       })
 
-      await sleep(300)
+      // 等待更长时间确保命令执行完成
+      await sleep(1000)
 
       const output = await terminalAPI.getTerminalBuffer(terminalId)
+
+      // 提取标记之间的内容
+      const startMarker = `${marker}_START`
+      const endMarker = `${marker}_END`
+      const startIndex = output.indexOf(startMarker)
+      const endIndex = output.indexOf(endMarker)
+
+      let currentDir = ''
+
+      if (startIndex !== -1 && endIndex !== -1) {
+        // 提取标记之间的内容
+        const content = output.substring(startIndex + startMarker.length, endIndex)
+        // 清理ANSI转义序列和控制字符
+        currentDir =
+          content
+            .replace(/\x1b\[[0-9;]*m/g, '') // 移除ANSI颜色代码
+            .replace(/\r/g, '') // 移除回车符
+            .replace(/\n+/g, '\n') // 合并多个换行符
+            .trim()
+            .split('\n')
+            .filter(line => line.trim() && !line.includes(marker))
+            .pop() || ''
+      }
+
+      // 如果标记方法失败，尝试简单解析
+      if (!currentDir) {
+        // 清理输出并尝试找到路径
+        const cleanOutput = output
+          .replace(/\x1b\[[0-9;]*m/g, '') // 移除ANSI颜色代码
+          .replace(/\r/g, '') // 移除回车符
+          .split('\n')
+          .map(line => line.trim())
+          .filter(line => line && line.startsWith('/')) // 查找以/开头的路径
+          .pop()
+
+        currentDir = cleanOutput || '未知'
+      }
 
       return {
         content: [
           {
             type: 'text',
-            text: `📍 当前目录: ${output.slice(-200).trim()}`,
+            text: `📍 当前目录: ${currentDir}`,
           },
         ],
       }
