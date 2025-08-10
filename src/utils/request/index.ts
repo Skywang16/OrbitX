@@ -68,7 +68,7 @@ export class APIClient {
    * 执行实际的Tauri命令
    */
   private async executeCommand<T>(command: string, args?: Record<string, unknown>, options?: APIOptions): Promise<T> {
-    const timeout = options?.timeout || 30000
+    const timeout = options?.timeout || 300000
 
     return new Promise((resolve, reject) => {
       const abortHandler = () => {

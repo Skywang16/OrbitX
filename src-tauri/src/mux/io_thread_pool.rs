@@ -13,6 +13,7 @@ use tracing::{debug, error, info, trace, warn};
 
 use crate::mux::{MuxNotification, Pane, PaneId};
 use crate::utils::error::AppResult;
+use bytes::Bytes;
 
 /// I/O任务类型
 pub enum IoTask {
@@ -451,16 +452,13 @@ impl IoThreadPool {
 
             if should_flush {
                 let data_to_send = std::mem::take(&mut batch_data);
+                let send_len = data_to_send.len();
                 let notification = MuxNotification::PaneOutput {
                     pane_id,
-                    data: data_to_send.clone(),
+                    data: Bytes::from(data_to_send),
                 };
 
-                debug!(
-                    "面板 {:?} 发送批处理数据: {} 字节",
-                    pane_id,
-                    data_to_send.len()
-                );
+                debug!("面板 {:?} 发送批处理数据: {} 字节", pane_id, send_len);
 
                 if let Err(e) = notification_sender.send(notification) {
                     error!("面板 {:?} 发送通知失败: {}", pane_id, e);
@@ -469,7 +467,7 @@ impl IoThreadPool {
 
                 // 更新统计信息
                 if let Ok(mut stats) = stats.lock() {
-                    stats.total_bytes_processed += data_to_send.len() as u64;
+                    stats.total_bytes_processed += send_len as u64;
                     stats.total_batches_processed += 1;
                 }
 
@@ -484,7 +482,7 @@ impl IoThreadPool {
         if !batch_data.is_empty() {
             let notification = MuxNotification::PaneOutput {
                 pane_id,
-                data: batch_data,
+                data: Bytes::from(batch_data),
             };
 
             if let Err(e) = notification_sender.send(notification) {

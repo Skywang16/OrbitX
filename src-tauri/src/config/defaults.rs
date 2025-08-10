@@ -248,13 +248,13 @@ mod tests {
         let toml_string =
             toml::to_string_pretty(&config).expect("Failed to serialize config to TOML");
 
-        // 验证关键字段在TOML中存在
+        // 验证关键字段在TOML中存在（AI配置已迁移到SQLite，因此不再包含 [ai]）
         assert!(toml_string.contains("version = \"1.0.0\""));
         assert!(toml_string.contains("[app]"));
         assert!(toml_string.contains("language = \"zh-CN\""));
         assert!(toml_string.contains("[appearance]"));
         assert!(toml_string.contains("[terminal]"));
-        assert!(toml_string.contains("[ai]"));
+        // 移除对 [ai] 的断言
         // Note: shortcuts might be serialized differently, let's check for the content instead
         assert!(toml_string.contains("global") || toml_string.contains("shortcuts"));
 

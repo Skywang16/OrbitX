@@ -23,7 +23,7 @@ export const AI_SESSION_CONFIG = {
 // ===== 流式传输配置 =====
 export const AI_STREAMING_CONFIG = {
   /** 默认超时时间 */
-  DEFAULT_TIMEOUT: 30000,
+  DEFAULT_TIMEOUT: 300000,
   /** 最大重试次数 */
   MAX_RETRIES: 3,
   /** 重试延迟 */

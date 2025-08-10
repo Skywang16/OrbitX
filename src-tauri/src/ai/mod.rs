@@ -9,11 +9,13 @@
  */
 
 pub mod commands;
+pub mod context;
 pub mod service;
 pub mod types;
 
 // 重新导出主要类型和功能
 pub use commands::*;
+pub use context::*;
 pub use service::*;
 pub use types::*;
 

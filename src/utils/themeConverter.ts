@@ -12,7 +12,7 @@ import type { Theme } from '@/api/config/types'
  *
  * @returns 应用背景颜色字符串，如果无法获取则返回null
  */
-function getAppBackgroundColor(): string | null {
+const getAppBackgroundColor = (): string | null => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return null
   }
@@ -107,7 +107,7 @@ export interface XTermTheme {
  * @param theme 项目主题数据
  * @returns XTerm.js 主题对象
  */
-export function convertThemeToXTerm(theme: Theme): XTermTheme {
+export const convertThemeToXTerm = (theme: Theme): XTermTheme => {
   const { colors } = theme
 
   // 使用应用的主背景颜色，而不是终端特定的背景颜色
@@ -149,7 +149,7 @@ export function convertThemeToXTerm(theme: Theme): XTermTheme {
  *
  * @returns 默认的 XTerm.js 主题对象
  */
-export function createDefaultXTermTheme(): XTermTheme {
+export const createDefaultXTermTheme = (): XTermTheme => {
   // 尝试获取应用背景颜色，如果失败则使用默认深色背景
   const appBackground = getAppBackgroundColor() || '#1e1e1e'
 

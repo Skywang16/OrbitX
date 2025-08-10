@@ -1,8 +1,10 @@
 <script setup lang="ts">
   import { ref } from 'vue'
-  import { useRouter } from 'vue-router'
   import { window as windowAPI } from '@/api/window'
   import { useAIChatStore } from '@/components/AIChatSidebar'
+  import { useTabManagerStore } from '@/stores/TabManager'
+  import { openUrl } from '@tauri-apps/plugin-opener'
+  import { createMessage } from '@/ui/composables/message-api'
   import type { ButtonGroup } from '@/types'
 
   interface Props {
@@ -13,8 +15,8 @@
     controls: () => ({ alwaysOnTop: true }),
   })
 
-  const router = useRouter()
   const aiChatStore = useAIChatStore()
+  const tabManagerStore = useTabManagerStore()
   const isAlwaysOnTop = ref(false)
   const showSettingsPopover = ref(false)
 
@@ -35,8 +37,21 @@
   }
 
   // 处理设置操作
-  const handleSettingsAction = () => {
-    router.push('/settings')
+  const handleSettingsAction = async (item: { label: string; value: string }) => {
+    if (item.value === 'settings') {
+      tabManagerStore.createSettingsTab()
+    } else if (item.value === 'feedback') {
+      try {
+        // 使用Tauri的opener插件在外部浏览器中打开GitHub Issues页面
+        await openUrl('https://github.com/Skywang16/OrbitX/issues')
+        // 显示成功提示
+        // createMessage.success('已在浏览器中打开问题反馈页面')
+      } catch (error) {
+        console.error('打开问题反馈页面失败:', error)
+        // 显示错误提示
+        createMessage.error('无法打开问题反馈页面，请手动访问：https://github.com/Skywang16/OrbitX/issues')
+      }
+    }
     showSettingsPopover.value = false
   }
 
@@ -65,7 +80,10 @@
       <x-popover
         v-model="showSettingsPopover"
         placement="bottom-end"
-        :menu-items="[{ label: '打开设置', value: 'settings' }]"
+        :menu-items="[
+          { label: '打开设置', value: 'settings' },
+          { label: '问题反馈', value: 'feedback' },
+        ]"
         @menu-item-click="handleSettingsAction"
       >
         <template #trigger>

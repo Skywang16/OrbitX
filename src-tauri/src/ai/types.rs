@@ -127,70 +127,6 @@ pub struct AIModelOptions {
 
 // ===== AI请求和响应类型 =====
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "camelCase")]
-pub enum AIRequestType {
-    Chat,
-    Explanation,
-    ErrorAnalysis,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AIRequest {
-    pub request_type: AIRequestType,
-    pub content: String,
-    pub context: Option<AIContext>,
-    pub options: Option<AIRequestOptions>,
-}
-
-impl AIRequest {
-    /// 创建新的AI请求
-    pub fn new(request_type: AIRequestType, content: String) -> Self {
-        Self {
-            request_type,
-            content,
-            context: None,
-            options: None,
-        }
-    }
-
-    /// 创建聊天请求
-    pub fn chat(content: String) -> Self {
-        Self::new(AIRequestType::Chat, content)
-    }
-
-    /// 创建解释请求
-    pub fn explanation(content: String) -> Self {
-        Self::new(AIRequestType::Explanation, content)
-    }
-
-    /// 创建错误分析请求
-    pub fn error_analysis(content: String) -> Self {
-        Self::new(AIRequestType::ErrorAnalysis, content)
-    }
-
-    /// 添加上下文
-    pub fn with_context(mut self, context: AIContext) -> Self {
-        self.context = Some(context);
-        self
-    }
-
-    /// 添加选项
-    pub fn with_options(mut self, options: AIRequestOptions) -> Self {
-        self.options = Some(options);
-        self
-    }
-
-    /// 验证请求是否有效
-    pub fn validate(&self) -> Result<(), String> {
-        if self.content.trim().is_empty() {
-            return Err("Request content cannot be empty".to_string());
-        }
-        Ok(())
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AIContext {
@@ -200,6 +136,8 @@ pub struct AIContext {
     pub current_command: Option<String>,
     pub last_output: Option<String>,
     pub system_info: Option<SystemInfo>,
+    // 新增：会话上下文管理系统字段
+    pub chat_history: Option<Vec<Message>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -208,14 +146,6 @@ pub struct SystemInfo {
     pub os: String,
     pub arch: String,
     pub shell: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AIRequestOptions {
-    pub max_tokens: Option<u32>,
-    pub temperature: Option<f32>,
-    pub stream: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -252,235 +182,6 @@ pub struct AIResponseMetadata {
     pub model: Option<String>,
     pub tokens_used: Option<u32>,
     pub response_time: Option<u64>,
-}
-
-// ===== 聊天相关类型 =====
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatMessage {
-    pub id: String,
-    pub message_type: ChatMessageType,
-    pub content: String,
-    pub timestamp: DateTime<Utc>,
-    pub metadata: Option<ChatMessageMetadata>,
-}
-
-impl ChatMessage {
-    /// 创建新的聊天消息
-    pub fn new(message_type: ChatMessageType, content: String) -> Self {
-        Self {
-            id: Uuid::new_v4().to_string(),
-            message_type,
-            content,
-            timestamp: Utc::now(),
-            metadata: None,
-        }
-    }
-
-    /// 创建用户消息
-    pub fn user(content: String) -> Self {
-        Self::new(ChatMessageType::User, content)
-    }
-
-    /// 创建助手消息
-    pub fn assistant(content: String) -> Self {
-        Self::new(ChatMessageType::Assistant, content)
-    }
-
-    /// 创建系统消息
-    pub fn system(content: String) -> Self {
-        Self::new(ChatMessageType::System, content)
-    }
-
-    /// 添加元数据
-    pub fn with_metadata(mut self, metadata: ChatMessageMetadata) -> Self {
-        self.metadata = Some(metadata);
-        self
-    }
-
-    /// 检查是否为用户消息
-    pub fn is_user(&self) -> bool {
-        matches!(self.message_type, ChatMessageType::User)
-    }
-
-    /// 检查是否为助手消息
-    pub fn is_assistant(&self) -> bool {
-        matches!(self.message_type, ChatMessageType::Assistant)
-    }
-
-    /// 检查是否为系统消息
-    pub fn is_system(&self) -> bool {
-        matches!(self.message_type, ChatMessageType::System)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ChatMessageType {
-    User,
-    Assistant,
-    System,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatMessageMetadata {
-    pub model: Option<String>,
-    pub tokens_used: Option<u32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatSession {
-    pub id: String,
-    pub title: String,
-    pub messages: Vec<ChatMessage>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub model_id: Option<String>,
-}
-
-impl ChatSession {
-    /// 创建新的聊天会话
-    pub fn new(title: String) -> Self {
-        let now = Utc::now();
-        Self {
-            id: Uuid::new_v4().to_string(),
-            title,
-            messages: Vec::new(),
-            created_at: now,
-            updated_at: now,
-            model_id: None,
-        }
-    }
-
-    /// 添加消息
-    pub fn add_message(&mut self, message: ChatMessage) {
-        self.messages.push(message);
-        self.updated_at = Utc::now();
-    }
-
-    /// 获取最后一条消息
-    pub fn last_message(&self) -> Option<&ChatMessage> {
-        self.messages.last()
-    }
-
-    /// 获取用户消息数量
-    pub fn user_message_count(&self) -> usize {
-        self.messages.iter().filter(|m| m.is_user()).count()
-    }
-
-    /// 获取助手消息数量
-    pub fn assistant_message_count(&self) -> usize {
-        self.messages.iter().filter(|m| m.is_assistant()).count()
-    }
-
-    /// 清空消息历史
-    pub fn clear_messages(&mut self) {
-        self.messages.clear();
-        self.updated_at = Utc::now();
-    }
-
-    /// 设置模型ID
-    pub fn set_model_id(&mut self, model_id: String) {
-        self.model_id = Some(model_id);
-        self.updated_at = Utc::now();
-    }
-
-    /// 获取会话摘要（用于显示）
-    pub fn summary(&self) -> String {
-        if self.messages.is_empty() {
-            "Empty conversation".to_string()
-        } else if let Some(first_user_msg) = self.messages.iter().find(|m| m.is_user()) {
-            let content = &first_user_msg.content;
-            if content.len() > 50 {
-                format!("{}...", &content[..47])
-            } else {
-                content.clone()
-            }
-        } else {
-            "No user messages".to_string()
-        }
-    }
-}
-
-// ===== 命令解释类型 =====
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommandExplanation {
-    pub command: String,
-    pub explanation: String,
-    pub breakdown: Option<Vec<CommandPart>>,
-    pub risks: Option<Vec<RiskWarning>>,
-    pub alternatives: Option<Vec<CommandAlternative>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommandPart {
-    pub part: String,
-    pub description: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RiskWarning {
-    pub level: RiskLevel,
-    pub description: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum RiskLevel {
-    Low,
-    Medium,
-    High,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommandAlternative {
-    pub command: String,
-    pub description: String,
-    pub reason: String,
-}
-
-// ===== 错误分析类型 =====
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ErrorAnalysis {
-    pub error: String,
-    pub command: String,
-    pub analysis: String,
-    pub possible_causes: Vec<String>,
-    pub solutions: Vec<ErrorSolution>,
-    pub related_docs: Option<Vec<DocumentLink>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ErrorSolution {
-    pub description: String,
-    pub command: Option<String>,
-    pub priority: SolutionPriority,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum SolutionPriority {
-    High,
-    Medium,
-    Low,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DocumentLink {
-    pub title: String,
-    pub url: String,
 }
 
 // ===== AI设置类型 =====
@@ -598,8 +299,6 @@ impl AISettings {
 #[derive(Default)]
 pub struct AIFeatureSettings {
     pub chat: ChatSettings,
-    pub explanation: ExplanationSettings,
-    pub error_analysis: ErrorAnalysisSettings,
     pub user_prefix_prompt: Option<String>,
 }
 
@@ -619,42 +318,6 @@ impl Default for ChatSettings {
             max_history_length: usize::MAX, // 无限历史长度
             auto_save_history: true,
             context_window_size: 4000,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExplanationSettings {
-    pub enabled: bool,
-    pub show_risks: bool,
-    pub include_alternatives: bool,
-}
-
-impl Default for ExplanationSettings {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            show_risks: true,
-            include_alternatives: true,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ErrorAnalysisSettings {
-    pub enabled: bool,
-    pub auto_analyze: bool,
-    pub show_solutions: bool,
-}
-
-impl Default for ErrorAnalysisSettings {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            auto_analyze: false,
-            show_solutions: true,
         }
     }
 }
@@ -747,49 +410,6 @@ pub struct StreamChunk {
 pub type AIStreamResponse =
     Pin<Box<dyn Stream<Item = Result<StreamChunk, crate::utils::error::AppError>> + Send>>;
 
-// ===== 批量请求类型 =====
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BatchRequest {
-    pub id: String,
-    pub requests: Vec<AIRequest>,
-    pub options: Option<BatchRequestOptions>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BatchRequestOptions {
-    pub max_concurrent: Option<usize>,
-    pub timeout_per_request: Option<u64>,
-    pub fail_fast: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BatchResponse {
-    pub id: String,
-    pub responses: Vec<BatchItemResponse>,
-    pub metadata: Option<BatchResponseMetadata>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BatchItemResponse {
-    pub index: usize,
-    pub result: Result<AIResponse, String>,
-    pub processing_time: Option<u64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BatchResponseMetadata {
-    pub total_requests: usize,
-    pub successful_requests: usize,
-    pub failed_requests: usize,
-    pub total_processing_time: u64,
-}
-
 // ===== 适配器能力类型 =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -831,4 +451,56 @@ pub struct ModelInfo {
     pub version: Option<String>,
     pub context_length: Option<u32>,
     pub capabilities: Option<AdapterCapabilities>,
+}
+
+// ===== AI会话上下文管理系统 - 全新数据结构 =====
+
+/// 会话信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Conversation {
+    pub id: i64,
+    pub title: String,
+    pub message_count: i32,
+    pub last_message_preview: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// 消息信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Message {
+    pub id: i64,
+    pub conversation_id: i64,
+    pub role: String, // "user", "assistant", "system"
+    pub content: String,
+    pub created_at: DateTime<Utc>,
+}
+/// AI配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AIConfig {
+    pub max_context_tokens: u32, // 上下文最大token (当前版本暂未强制执行)
+    pub model_name: String,      // 使用的模型名称
+    pub enable_semantic_compression: bool, // 是否启用语义压缩 (Phase 5功能)
+}
+
+impl Default for AIConfig {
+    fn default() -> Self {
+        Self {
+            max_context_tokens: 4096,
+            model_name: "default-model".to_string(),
+            enable_semantic_compression: false,
+        }
+    }
+}
+/// 上下文统计信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextStats {
+    pub conversation_id: i64,
+    pub total_messages: i32,
+    pub summary_generated: bool,
+    pub last_summary_at: Option<DateTime<Utc>>,
 }

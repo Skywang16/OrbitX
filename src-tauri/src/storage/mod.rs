@@ -12,6 +12,7 @@ pub mod filesystem;
 pub mod messagepack;
 pub mod paths;
 pub mod recovery;
+pub mod sql_scripts;
 pub mod sqlite;
 #[cfg(test)]
 pub mod sqlite_tests;
@@ -47,7 +48,7 @@ pub const BACKUPS_DIR_NAME: &str = "backups";
 /// 文件名称
 pub const CONFIG_FILE_NAME: &str = "config.toml";
 pub const SESSION_STATE_FILE_NAME: &str = "session_state.msgpack";
-pub const DATABASE_FILE_NAME: &str = "termx.db";
+pub const DATABASE_FILE_NAME: &str = "orbitx.db";
 
 /// 缓存配置
 pub const DEFAULT_CACHE_SIZE: usize = 1024 * 1024; // 1MB

@@ -1,30 +1,31 @@
 <script setup lang="ts">
   import SessionSelect from './SessionSelect.vue'
-  import type { ChatSession } from '@/types'
+  import type { Conversation } from '@/types/features/ai/chat'
+  import type { ChatMode } from '../types'
 
   // Props定义
   interface Props {
-    sessions: ChatSession[]
-    currentSessionId: string | null
+    sessions: Conversation[]
+    currentSessionId: number | null
     isLoading?: boolean
   }
 
   // Emits定义
   interface Emits {
-    (e: 'select-session', sessionId: string): void
+    (e: 'select-session', sessionId: number): void
     (e: 'create-new-session'): void
-    (e: 'delete-session', sessionId: string): void
+    (e: 'delete-session', sessionId: number): void
     (e: 'refresh-sessions'): void
   }
 
-  withDefaults(defineProps<Props>(), {
+  const props = withDefaults(defineProps<Props>(), {
     isLoading: false,
   })
 
   const emit = defineEmits<Emits>()
 
   // 方法
-  const handleSelectSession = (sessionId: string) => {
+  const handleSelectSession = (sessionId: number) => {
     emit('select-session', sessionId)
   }
 
@@ -71,12 +72,11 @@
 <style scoped>
   .chat-header {
     display: flex;
+    flex-direction: row;
     align-items: center;
-    justify-content: space-between;
-    padding: 0.4em 0.8em;
     border-bottom: 1px solid var(--color-border);
     background-color: var(--color-ai-sidebar-background);
-    min-height: 2em;
+    padding: 0.5em 0.8em;
     gap: 0.5em;
   }
 
@@ -99,19 +99,21 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 1.4em;
-    height: 1.4em;
+    width: 2em;
+    height: 2em;
     border: none;
     background: none;
     color: var(--color-text-secondary);
     cursor: pointer;
-    transition: color 0.2s ease;
+    transition: all 0.2s ease;
     padding: 0;
     flex-shrink: 0;
+    border-radius: 4px;
   }
 
   .new-session-btn:hover {
     color: var(--color-text);
+    background-color: var(--color-background-hover, rgba(0, 0, 0, 0.05));
   }
 
   .new-session-btn:disabled {

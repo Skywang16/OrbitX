@@ -13,6 +13,12 @@ interface TerminalEventListeners {
   onExit: (exitCode: number | null) => void
 }
 
+// 监听器条目类型
+interface ListenerEntry {
+  id: string
+  callbacks: TerminalEventListeners
+}
+
 // Shell管理状态类型
 interface ShellManagerState {
   availableShells: ShellInfo[]
@@ -38,8 +44,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
     error: null,
   })
 
-  // 存储组件注册的回调函数的映射表
-  const _listeners = ref<Map<string, TerminalEventListeners>>(new Map())
+  // 存储组件注册的回调函数的映射表 - 支持多个监听器
+  const _listeners = ref<Map<string, ListenerEntry[]>>(new Map())
 
   let _globalListenersUnlisten: UnlistenFn[] = []
   let _isListenerSetup = false
@@ -87,8 +93,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
       try {
         const terminal = findTerminalByBackendId(event.payload.paneId)
         if (terminal) {
-          const callbacks = _listeners.value.get(terminal.id)
-          callbacks?.onOutput(event.payload.data)
+          const listeners = _listeners.value.get(terminal.id) || []
+          listeners.forEach(listener => listener.onOutput(event.payload.data))
         }
       } catch (error) {
         console.error('处理终端输出事件时发生错误:', error)
@@ -103,8 +109,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
       try {
         const terminal = findTerminalByBackendId(event.payload.paneId)
         if (terminal) {
-          const callbacks = _listeners.value.get(terminal.id)
-          callbacks?.onExit(event.payload.exitCode)
+          const listeners = _listeners.value.get(terminal.id) || []
+          listeners.forEach(listener => listener.onExit(event.payload.exitCode))
 
           // 自动清理已关闭的终端会话
           closeTerminal(terminal.id)
@@ -133,14 +139,28 @@ export const useTerminalStore = defineStore('Terminal', () => {
    * 由终端组件调用，用于注册其事件处理程序。
    */
   const registerTerminalCallbacks = (id: string, callbacks: TerminalEventListeners) => {
-    _listeners.value.set(id, callbacks)
+    const listeners = _listeners.value.get(id) || []
+    listeners.push(callbacks)
+    _listeners.value.set(id, listeners)
   }
 
   /**
    * 当终端组件卸载时调用，用于清理资源。
    */
-  const unregisterTerminalCallbacks = (id: string) => {
-    _listeners.value.delete(id)
+  const unregisterTerminalCallbacks = (id: string, callbacks?: TerminalEventListeners) => {
+    if (!callbacks) {
+      // 如果没有指定回调，清除所有监听器
+      _listeners.value.delete(id)
+    } else {
+      // 只移除指定的监听器
+      const listeners = _listeners.value.get(id) || []
+      const filtered = listeners.filter(listener => listener !== callbacks)
+      if (filtered.length > 0) {
+        _listeners.value.set(id, filtered)
+      } else {
+        _listeners.value.delete(id)
+      }
+    }
   }
 
   /**
@@ -323,6 +343,87 @@ export const useTerminalStore = defineStore('Terminal', () => {
       shellManager.value.error = error instanceof Error ? error.message : '获取shell列表失败'
     } finally {
       shellManager.value.isLoading = false
+    }
+  }
+
+  /**
+   * 创建AI Agent专属终端
+   */
+  const createAgentTerminal = async (agentName: string = 'AI Agent', initialDirectory?: string): Promise<string> => {
+    const id = generateId()
+    const agentTerminalTitle = agentName
+
+    // 检查是否已存在Agent专属终端（精确匹配Agent名称）
+    const existingAgentTerminal = terminals.value.find(terminal => terminal.title === agentName)
+
+    if (existingAgentTerminal) {
+      // 如果已存在，静默激活现有终端
+      setActiveTerminal(existingAgentTerminal.id)
+      existingAgentTerminal.title = agentTerminalTitle
+      existingAgentTerminal.lastActive = new Date().toISOString()
+
+      // 不再输出重新激活信息，保持终端清洁
+
+      return existingAgentTerminal.id
+    }
+
+    // 创建新的Agent专属终端会话记录
+    const terminal: RuntimeTerminalSession = {
+      id,
+      title: agentTerminalTitle,
+      workingDirectory: initialDirectory || '~',
+      environment: {
+        OrbitX_AGENT: agentName,
+        OrbitX_TERMINAL_TYPE: 'agent',
+      },
+      commandHistory: [],
+      isActive: false,
+      createdAt: new Date().toISOString(),
+      lastActive: new Date().toISOString(),
+      backendId: null,
+    }
+    terminals.value.push(terminal)
+
+    try {
+      const backendId = await terminalAPI.create({
+        rows: 24,
+        cols: 80,
+        cwd: initialDirectory,
+      })
+
+      const t = terminals.value.find(term => term.id === id)
+      if (t) {
+        t.backendId = backendId
+        // 保持Agent专属标题
+        t.title = agentTerminalTitle
+      }
+
+      // 等待终端创建完成
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // 在新终端中显示欢迎信息
+      await terminalAPI.write({
+        paneId: backendId,
+        data: `\x1b[36m# ${agentTerminalTitle} 终端已创建\x1b[0m\n`,
+      })
+      await terminalAPI.write({
+        paneId: backendId,
+        data: `\x1b[32m# 这是${agentName}的专属终端，所有AI命令将在此执行\x1b[0m\n`,
+      })
+      await terminalAPI.write({
+        paneId: backendId,
+        data: `\x1b[33m# Agent: ${agentName}\x1b[0m\n`,
+      })
+
+      setActiveTerminal(id)
+      return id
+    } catch (error) {
+      console.error(`创建Agent终端 '${id}' 失败:`, error)
+      const index = terminals.value.findIndex(t => t.id === id)
+      if (index !== -1) {
+        terminals.value.splice(index, 1)
+      }
+      throw error
     }
   }
 
@@ -588,6 +689,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     registerTerminalCallbacks,
     unregisterTerminalCallbacks,
     createTerminal,
+    createAgentTerminal,
     closeTerminal,
     setActiveTerminal,
     writeToTerminal,

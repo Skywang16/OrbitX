@@ -13,6 +13,7 @@ use tracing::{debug, error, info, trace, warn};
 use crate::mux::io_thread_pool::{IoThreadPool, IoThreadPoolConfig};
 use crate::mux::{MuxNotification, Pane, PaneId};
 use crate::utils::error::AppResult;
+use bytes::Bytes;
 
 /// I/O 处理配置
 #[derive(Debug, Clone)]
@@ -369,18 +370,18 @@ impl IoHandler {
                 if should_flush {
                     // 发送批处理数据
                     let data_to_send = std::mem::take(&mut batch_data);
+                    let send_len = data_to_send.len();
+                    let preview_end = std::cmp::min(50, send_len);
+                    let preview_owned =
+                        String::from_utf8_lossy(&data_to_send[..preview_end]).to_string();
                     let notification = MuxNotification::PaneOutput {
                         pane_id,
-                        data: data_to_send.clone(),
+                        data: Bytes::from(data_to_send),
                     };
 
                     debug!(
                         "🚀 面板 {:?} 发送批处理数据: {} 字节, 内容预览: {:?}",
-                        pane_id,
-                        data_to_send.len(),
-                        String::from_utf8_lossy(
-                            &data_to_send[..std::cmp::min(50, data_to_send.len())]
-                        )
+                        pane_id, send_len, preview_owned,
                     );
 
                     if let Err(e) = notification_sender.send(notification) {
@@ -401,7 +402,7 @@ impl IoHandler {
             if !batch_data.is_empty() {
                 let notification = MuxNotification::PaneOutput {
                     pane_id,
-                    data: batch_data,
+                    data: batch_data.into(),
                 };
 
                 if let Err(e) = notification_sender.send(notification) {

@@ -298,7 +298,8 @@ impl WindowConfigManager {
             "unknown".to_string()
         };
 
-        let os_version = env::var("OS").unwrap_or_else(|_| "unknown".to_string());
+        // 使用 os_info 库获取准确的系统版本信息
+        let os_version = Self::get_accurate_os_version();
         let is_mac = cfg!(target_os = "macos");
 
         PlatformInfo {
@@ -306,6 +307,41 @@ impl WindowConfigManager {
             arch,
             os_version,
             is_mac,
+        }
+    }
+
+    /// 获取准确的操作系统版本信息
+    fn get_accurate_os_version() -> String {
+        let info = os_info::get();
+
+        // 构建基础版本信息
+        let os_type = info.os_type().to_string();
+        let version = info.version().to_string();
+
+        // 简化实现，只使用基础信息
+        let result = if version.is_empty() || version == "Unknown" {
+            os_type
+        } else {
+            format!("{} {}", os_type, version)
+        };
+
+        // 如果获取失败，提供回退方案
+        if result.trim().is_empty() || result == "Unknown" {
+            // 尝试从环境变量获取作为备选方案
+            env::var("OS").unwrap_or_else(|_| {
+                // 根据编译时目标提供基础信息
+                if cfg!(target_os = "windows") {
+                    "Windows".to_string()
+                } else if cfg!(target_os = "macos") {
+                    "macOS".to_string()
+                } else if cfg!(target_os = "linux") {
+                    "Linux".to_string()
+                } else {
+                    "Unknown".to_string()
+                }
+            })
+        } else {
+            result
         }
     }
 

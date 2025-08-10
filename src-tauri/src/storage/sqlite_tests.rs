@@ -82,8 +82,9 @@ mod tests {
         .expect("查询表列表失败");
 
         let expected_tables = vec![
-            "ai_chat_history",
+            "ai_conversations", // 会话表
             "ai_features",
+            "ai_messages", // 消息表
             "ai_model_usage_stats",
             "ai_models",
             "audit_logs",
@@ -179,7 +180,6 @@ mod tests {
         let query = HistoryQuery {
             command_pattern: Some("ls".to_string()),
             working_directory: None,
-            session_id: None,
             date_from: None,
             date_to: None,
             limit: Some(10),

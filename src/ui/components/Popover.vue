@@ -1,6 +1,6 @@
 <template>
-  <!-- 触发器插槽 - 只在非手动坐标模式下显示 -->
-  <div v-if="!isManualPosition" ref="triggerRef" class="popover-trigger" @click="handleTriggerClick">
+  <!-- 触发器插槽 - 手动坐标模式也渲染触发器，只是不参与定位计算 -->
+  <div ref="triggerRef" class="popover-trigger" @click="handleTriggerClick">
     <slot name="trigger">
       <button class="default-trigger">{{ triggerText }}</button>
     </slot>
@@ -27,7 +27,9 @@
               :class="{ 'popover-menu-item--disabled': item.disabled }"
               @click="handleMenuItemClick(item)"
             >
-              <component v-if="item.icon" :is="item.icon" class="menu-item-icon" />
+              <!-- 支持字符串表情/文本图标 与 组件图标 -->
+              <span v-if="typeof item.icon === 'string'" class="menu-item-icon">{{ item.icon }}</span>
+              <component v-else-if="item.icon" :is="item.icon" class="menu-item-icon" />
               <span class="menu-item-text">{{ item.label }}</span>
             </div>
           </div>
@@ -123,11 +125,6 @@
     },
     { immediate: true }
   )
-
-  // 判断是否为手动坐标模式
-  const isManualPosition = computed(() => {
-    return props.x !== undefined && props.y !== undefined
-  })
 
   // 计算弹出框样式
   const popoverStyle = computed(() => {
@@ -351,15 +348,16 @@
     z-index: 1000;
     background: var(--color-background);
     border: 1px solid var(--border-color);
-    border-radius: var(--border-radius-lg);
+    border-radius: 6px;
     box-shadow: var(--shadow-sm);
-    padding: var(--spacing-xs);
-    min-width: 120px;
-    max-width: 300px;
+    padding: 4px 6px; /* 上下更紧凑，左右留少量内边距 */
+    min-width: 100px;
+    max-width: 260px;
     font-family: var(--font-family);
-    font-size: var(--font-size-md);
+    font-size: 14px;
     line-height: 1.5;
     color: var(--text-primary);
+    -webkit-app-region: no-drag; /* 防止标题栏拖拽区域拦截交互 */
   }
 
   .popover-content {
@@ -368,18 +366,23 @@
   }
 
   .popover-menu {
-    padding: var(--spacing-xs) 0;
+    padding: 0; /* 简化：去掉额外上下留白，让分割线与项目紧贴 */
   }
 
   .popover-menu-item {
     display: flex;
     align-items: center;
-    padding: var(--spacing-xs) var(--spacing-sm);
+    padding: 4px 6px; /* 更紧凑，和容器左右内边距对齐 */
     cursor: pointer;
-    border-radius: var(--border-radius-sm);
-    margin: 0 var(--spacing-xs);
+    border-radius: 0; /* 去圆角以保证分割线简洁笔直 */
+    margin: 0; /* 去掉左右额外留白 */
     transition: all 0.2s ease;
     color: var(--text-primary);
+  }
+
+  /* 分割线：相邻菜单项之间添加上边框 */
+  .popover-menu-item + .popover-menu-item {
+    border-top: 1px solid var(--border-color); /* 最简单的分割线 */
   }
 
   .popover-menu-item:hover:not(.popover-menu-item--disabled) {
@@ -409,7 +412,7 @@
   .menu-item-text {
     flex: 1;
     color: inherit;
-    font-size: var(--font-size-md);
+    font-size: inherit;
   }
 
   .popover-mask {

@@ -2,21 +2,19 @@
  * AI服务 - 统一管理所有AI功能
  */
 
-use crate::ai::{AIModelConfig, AIProvider, AIRequest, AIResponse, AIStreamResponse, StreamChunk};
+use crate::ai::{AIModelConfig, AIProvider, AIResponse};
 use crate::storage::sqlite::SqliteManager;
 use crate::utils::error::AppResult;
 use anyhow::{anyhow, Context};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 // 重新导入必要的HTTP客户端
 use async_openai::{
-    config::OpenAIConfig,
-    types::{ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs},
-    Client as OpenAIClient,
+    config::OpenAIConfig, types::CreateChatCompletionRequestArgs, Client as OpenAIClient,
 };
 
 /// AI客户端
@@ -80,35 +78,100 @@ impl AIClient {
         Ok(())
     }
 
-    /// 发送请求
-    pub async fn send_request(&self, request: &AIRequest) -> AppResult<AIResponse> {
-        match self.config.provider {
-            AIProvider::Custom => self.send_custom_request(request).await,
-            _ => self.send_openai_request(request).await,
+    /// 构建完整的API端点URL
+    /// 如果配置的URL已经包含/chat/completions，则直接使用
+    /// 否则自动拼接/chat/completions路径
+    fn build_api_url(&self) -> String {
+        let base_url = &self.config.api_url;
+
+        // 如果URL已经包含/chat/completions，直接使用
+        if base_url.contains("/chat/completions") {
+            base_url.clone()
+        } else {
+            // 确保base_url不以/结尾，然后拼接/chat/completions
+            let trimmed_url = base_url.trim_end_matches('/');
+            format!("{}/chat/completions", trimmed_url)
         }
     }
 
-    /// 发送流式请求
-    pub async fn send_stream_request(&self, request: &AIRequest) -> AppResult<AIStreamResponse> {
+    /// 发送聊天消息（新的简化接口）
+    ///
+    /// 直接处理消息内容和历史记录，构建正确的多轮对话请求
+    pub async fn send_chat_message(
+        &self,
+        content: String,
+        history: Vec<crate::ai::types::Message>,
+    ) -> AppResult<AIResponse> {
         match self.config.provider {
-            AIProvider::Custom => self.send_custom_stream_request(request).await,
-            _ => self.send_openai_stream_request(request).await,
+            AIProvider::Custom => self.send_custom_chat_message(content, history).await,
+            _ => self.send_openai_chat_message(content, history).await,
         }
     }
 
-    /// 发送OpenAI兼容请求
-    async fn send_openai_request(&self, request: &AIRequest) -> AppResult<AIResponse> {
+    /// 发送OpenAI聊天消息（新接口，正确处理历史对话）
+    async fn send_openai_chat_message(
+        &self,
+        content: String,
+        history: Vec<crate::ai::types::Message>,
+    ) -> AppResult<AIResponse> {
+        use async_openai::types::{
+            ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
+            ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+        };
+
         let client = self
             .openai_client
             .as_ref()
             .ok_or_else(|| anyhow!("OpenAI客户端未初始化"))?;
 
+        // 构建消息列表，包含历史对话
+        let mut messages: Vec<ChatCompletionRequestMessage> = Vec::new();
+
+        // 添加历史消息
+        for msg in history {
+            match msg.role.as_str() {
+                "user" => {
+                    messages.push(
+                        ChatCompletionRequestUserMessageArgs::default()
+                            .content(msg.content)
+                            .build()?
+                            .into(),
+                    );
+                }
+                "assistant" => {
+                    messages.push(
+                        ChatCompletionRequestAssistantMessageArgs::default()
+                            .content(msg.content)
+                            .build()?
+                            .into(),
+                    );
+                }
+                "system" => {
+                    messages.push(
+                        ChatCompletionRequestSystemMessageArgs::default()
+                            .content(msg.content)
+                            .build()?
+                            .into(),
+                    );
+                }
+                _ => {
+                    warn!("未知的消息角色: {}", msg.role);
+                    continue;
+                }
+            }
+        }
+
+        // 添加当前用户消息
+        messages.push(
+            ChatCompletionRequestUserMessageArgs::default()
+                .content(content)
+                .build()?
+                .into(),
+        );
+
         let chat_request = CreateChatCompletionRequestArgs::default()
             .model(&self.config.model)
-            .messages(vec![ChatCompletionRequestUserMessageArgs::default()
-                .content(request.content.clone())
-                .build()?
-                .into()])
+            .messages(messages)
             .max_tokens(self.config.max_tokens())
             .temperature(self.config.temperature())
             .build()?;
@@ -117,7 +180,7 @@ impl AIClient {
             .chat()
             .create(chat_request)
             .await
-            .context("发送OpenAI请求失败")?;
+            .context("发送OpenAI聊天请求失败")?;
 
         let content = response
             .choices
@@ -138,93 +201,65 @@ impl AIClient {
         })
     }
 
-    /// 发送自定义请求
-    async fn send_custom_request(&self, request: &AIRequest) -> AppResult<AIResponse> {
+    /// 发送自定义聊天消息（新接口，正确处理历史对话）
+    async fn send_custom_chat_message(
+        &self,
+        content: String,
+        history: Vec<crate::ai::types::Message>,
+    ) -> AppResult<AIResponse> {
+        // 构建消息列表，包含历史对话
+        let mut messages = Vec::new();
+
+        // 添加历史消息
+        for msg in history {
+            messages.push(serde_json::json!({
+                "role": msg.role,
+                "content": msg.content
+            }));
+        }
+
+        // 添加当前用户消息
+        messages.push(serde_json::json!({
+            "role": "user",
+            "content": content
+        }));
+
         let request_body = serde_json::json!({
             "model": self.config.model,
-            "messages": [{"role": "user", "content": request.content}],
-            "stream": true,
+            "messages": messages,
+            "stream": false,
         });
 
+        let api_url = self.build_api_url();
         let response = self
             .http_client
-            .post(&self.config.api_url)
+            .post(&api_url)
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {}", self.config.api_key))
             .json(&request_body)
             .send()
             .await
-            .context("发送自定义请求失败")?;
+            .context("发送自定义聊天请求失败")?;
 
+        // 检查响应状态
         if !response.status().is_success() {
+            let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-
-            // 尝试解析错误响应为JSON
-            let error_json: Option<serde_json::Value> = serde_json::from_str(&error_text).ok();
-
-            // 提取错误代码和消息
-            let (error_code, error_message) = if let Some(json) = &error_json {
-                let code = json["error"]["code"].as_str().map(|s| s.to_string());
-                let message = json["error"]["message"]
-                    .as_str()
-                    .unwrap_or("未知错误")
-                    .to_string();
-                (code, message)
-            } else {
-                (None, error_text.clone())
-            };
-
-            // 返回包含错误信息的响应，而不是抛出错误
-            return Ok(AIResponse {
-                content: String::new(),
-                response_type: crate::ai::AIResponseType::Chat,
-                suggestions: None,
-                metadata: Some(crate::ai::AIResponseMetadata {
-                    model: Some(self.config.id.clone()),
-                    tokens_used: None,
-                    response_time: None,
-                }),
-                error: Some(crate::ai::AIErrorInfo {
-                    message: error_message,
-                    code: error_code,
-                    details: None,
-                    provider_response: error_json,
-                }),
-            });
+            return Err(anyhow!("自定义聊天请求失败: {} - {}", status, error_text));
         }
 
-        // 获取原始文本并解析SSE格式
-        let response_text = response.text().await.context("获取响应文本失败")?;
+        // 解析响应
+        let response_json: serde_json::Value =
+            response.json().await.context("解析自定义聊天响应失败")?;
 
-        // 解析SSE格式，提取所有content内容
-        let mut full_content = String::new();
-
-        for line in response_text.lines() {
-            if line.starts_with("data: ") {
-                let json_str = &line[6..]; // 去掉 "data: " 前缀
-
-                // 跳过 [DONE] 标志
-                if json_str == "[DONE]" {
-                    break;
-                }
-
-                // 解析JSON
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(json_str) {
-                    // 提取delta.content内容
-                    if let Some(content) = json["choices"][0]["delta"]["content"].as_str() {
-                        if !content.is_empty() {
-                            full_content.push_str(content);
-                        }
-                    }
-                }
-            }
-        }
-
-        let content = if full_content.is_empty() {
-            return Err(anyhow!("未找到有效的content内容"));
-        } else {
-            full_content
-        };
+        // 提取内容
+        let content = response_json
+            .get("choices")
+            .and_then(|choices| choices.get(0))
+            .and_then(|choice| choice.get("message"))
+            .and_then(|message| message.get("content"))
+            .and_then(|content| content.as_str())
+            .ok_or_else(|| anyhow!("无法从自定义聊天响应中提取内容"))?;
 
         Ok(AIResponse {
             content: content.to_string(),
@@ -238,154 +273,6 @@ impl AIClient {
             error: None,
         })
     }
-
-    /// 发送OpenAI流式请求（简化实现）
-    async fn send_openai_stream_request(
-        &self,
-        _request: &AIRequest,
-    ) -> AppResult<AIStreamResponse> {
-        // 简化实现：暂时返回错误，后续可以实现
-        Err(anyhow!("流式请求暂未实现"))
-    }
-
-    /// 发送自定义流式请求
-    async fn send_custom_stream_request(&self, request: &AIRequest) -> AppResult<AIStreamResponse> {
-        use futures::stream::StreamExt;
-        use reqwest_eventsource::{Event, EventSource};
-
-        let request_body = serde_json::json!({
-            "model": self.config.model,
-            "messages": [{"role": "user", "content": request.content}],
-            "stream": true,
-        });
-
-        let client = reqwest::Client::new();
-        let req_builder = client
-            .post(&self.config.api_url)
-            .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
-            .json(&request_body);
-
-        let mut event_source = EventSource::new(req_builder).context("创建EventSource失败")?;
-
-        let stream = async_stream::stream! {
-            while let Some(event) = event_source.next().await {
-                match event {
-                    Ok(Event::Open) => {
-                        // SSE连接已建立
-                    }
-                    Ok(Event::Message(message)) => {
-                        let data = message.data;
-
-                        // 跳过 [DONE] 标志
-                        if data == "[DONE]" {
-                            yield Ok(StreamChunk {
-                                content: String::new(),
-                                is_complete: true,
-                                metadata: None,
-                            });
-                            break;
-                        }
-
-                        // 解析JSON并提取content
-                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
-                            if let Some(content) = json["choices"][0]["delta"]["content"].as_str() {
-                                if !content.is_empty() {
-                                    yield Ok(StreamChunk {
-                                        content: content.to_string(),
-                                        is_complete: false,
-                                        metadata: None,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        error!("SSE错误: {}", err);
-                        yield Err(crate::utils::error::AppError::from(anyhow!("SSE错误: {}", err)));
-                        break;
-                    }
-                }
-            }
-        };
-
-        Ok(Box::pin(stream))
-    }
-}
-
-/// 简化的缓存条目
-#[derive(Debug, Clone)]
-struct CacheEntry {
-    response: AIResponse,
-    created_at: Instant,
-    ttl: Duration,
-}
-
-impl CacheEntry {
-    fn new(response: AIResponse, ttl: Duration) -> Self {
-        Self {
-            response,
-            created_at: Instant::now(),
-            ttl,
-        }
-    }
-
-    fn is_expired(&self) -> bool {
-        self.created_at.elapsed() > self.ttl
-    }
-}
-
-/// AI缓存
-#[derive(Debug)]
-pub struct AICache {
-    entries: HashMap<String, CacheEntry>,
-    default_ttl: Duration,
-    max_entries: usize,
-}
-
-impl AICache {
-    pub fn new(ttl_seconds: u64, max_entries: usize) -> Self {
-        Self {
-            entries: HashMap::new(),
-            default_ttl: Duration::from_secs(ttl_seconds),
-            max_entries,
-        }
-    }
-
-    pub fn get(&mut self, key: &str) -> Option<AIResponse> {
-        if let Some(entry) = self.entries.get(key) {
-            if entry.is_expired() {
-                self.entries.remove(key);
-                None
-            } else {
-                Some(entry.response.clone())
-            }
-        } else {
-            None
-        }
-    }
-
-    pub fn put(&mut self, key: String, response: AIResponse) {
-        // 如果缓存满了，移除最旧的条目
-        if self.entries.len() >= self.max_entries {
-            if let Some(oldest_key) = self.entries.keys().next().cloned() {
-                self.entries.remove(&oldest_key);
-            }
-        }
-
-        let entry = CacheEntry::new(response, self.default_ttl);
-        self.entries.insert(key, entry);
-    }
-
-    pub fn clear(&mut self) {
-        self.entries.clear();
-    }
-}
-
-impl Default for AICache {
-    fn default() -> Self {
-        Self::new(3600, 1000) // 1小时TTL，最大1000条目
-    }
 }
 
 /// AI服务 - 统一管理所有AI功能
@@ -394,8 +281,6 @@ pub struct AIService {
     models: RwLock<HashMap<String, AIModelConfig>>,
     /// AI客户端
     clients: RwLock<HashMap<String, Arc<AIClient>>>,
-    /// 缓存
-    cache: RwLock<AICache>,
     /// 存储管理器
     storage: Option<Arc<SqliteManager>>,
 }
@@ -406,7 +291,6 @@ impl AIService {
         Self {
             models: RwLock::new(HashMap::new()),
             clients: RwLock::new(HashMap::new()),
-            cache: RwLock::new(AICache::new(3600, 1000)),
             storage,
         }
     }
@@ -559,24 +443,18 @@ impl AIService {
         Ok(())
     }
 
-    /// 发送AI请求
-    pub async fn send_request(
+    /// 发送聊天消息（新的简化接口）
+    ///
+    /// 直接接收消息内容和历史记录，避免复杂的AIRequest结构
+    pub async fn send_chat_message(
         &self,
-        request: &AIRequest,
+        content: String,
+        history: Vec<crate::ai::types::Message>,
         model_id: Option<&str>,
     ) -> AppResult<AIResponse> {
         // 选择模型
         let selected_model_id = self.select_model(model_id).await?;
 
-        // 检查缓存
-        let cache_key = format!("{}:{}", selected_model_id, request.content);
-        {
-            let mut cache = self.cache.write().await;
-            if let Some(cached_response) = cache.get(&cache_key) {
-                return Ok(cached_response);
-            }
-        }
-
         // 获取客户端
         let client = {
             let clients = self.clients.read().await;
@@ -586,38 +464,10 @@ impl AIService {
                 .clone()
         };
 
-        // 发送请求
-        let response = client.send_request(request).await?;
-
-        // 缓存响应
-        {
-            let mut cache = self.cache.write().await;
-            cache.put(cache_key, response.clone());
-        }
+        // 直接发送聊天消息
+        let response = client.send_chat_message(content, history).await?;
 
         Ok(response)
-    }
-
-    /// 发送流式AI请求
-    pub async fn send_stream_request(
-        &self,
-        request: &AIRequest,
-        model_id: Option<&str>,
-    ) -> AppResult<AIStreamResponse> {
-        // 选择模型
-        let selected_model_id = self.select_model(model_id).await?;
-
-        // 获取客户端
-        let client = {
-            let clients = self.clients.read().await;
-            clients
-                .get(&selected_model_id)
-                .ok_or_else(|| anyhow!("客户端不存在: {}", selected_model_id))?
-                .clone()
-        };
-
-        // 发送流式请求
-        client.send_stream_request(request).await
     }
 
     /// 测试模型连接
@@ -630,18 +480,8 @@ impl AIService {
                 .clone()
         };
 
-        let test_request = AIRequest {
-            request_type: crate::ai::AIRequestType::Chat,
-            content: "Hello".to_string(),
-            context: None,
-            options: Some(crate::ai::AIRequestOptions {
-                max_tokens: Some(10),
-                temperature: Some(0.1),
-                stream: Some(false),
-            }),
-        };
-
-        match client.send_request(&test_request).await {
+        // 使用新的简化接口进行连接测试
+        match client.send_chat_message("Hello".to_string(), vec![]).await {
             Ok(_) => Ok(true),
             Err(e) => {
                 warn!("模型连接测试失败 {}: {}", model_id, e);
@@ -650,10 +490,9 @@ impl AIService {
         }
     }
 
-    /// 清空缓存
+    /// 清空缓存（已移除缓存功能）
     pub async fn clear_cache(&self) -> AppResult<()> {
-        let mut cache = self.cache.write().await;
-        cache.clear();
+        // 缓存功能已移除，直接返回成功
         Ok(())
     }
 

@@ -30,7 +30,7 @@ app.mount('#app')
 /**
  * 初始化存储系统
  */
-async function initializeStorageSystem() {
+const initializeStorageSystem = async () => {
   try {
     // 预加载缓存，提升后续访问性能
     await storage.preloadCache()
@@ -43,7 +43,7 @@ async function initializeStorageSystem() {
 /**
  * 初始化应用状态管理
  */
-async function initializeStores() {
+const initializeStores = async () => {
   try {
     // 初始化会话状态管理
     const sessionStore = useSessionStore()
@@ -67,7 +67,7 @@ async function initializeStores() {
 /**
  * 初始化应用设置
  */
-async function initializeSettings() {
+const initializeSettings = async () => {
   try {
     // 初始化AI设置
     const aiSettingsStore = useAISettingsStore()
@@ -86,7 +86,7 @@ async function initializeSettings() {
 /**
  * 初始化其他服务
  */
-async function initializeServices() {
+const initializeServices = async () => {
   try {
     // 初始化补全引擎
     await completionAPI.initEngine()
@@ -99,7 +99,7 @@ async function initializeServices() {
 /**
  * 应用启动初始化
  */
-async function initializeApplication() {
+const initializeApplication = async () => {
   console.log('开始初始化应用...')
 
   try {
@@ -130,7 +130,7 @@ initializeApplication()
 /**
  * 应用关闭时的清理工作
  */
-async function handleAppClose() {
+const handleAppClose = async () => {
   try {
     console.log('🔄 [应用] 开始应用关闭清理...')
 
@@ -155,7 +155,7 @@ async function handleAppClose() {
 /**
  * 设置 Tauri 窗口关闭事件监听器
  */
-async function setupWindowCloseListener() {
+const setupWindowCloseListener = async () => {
   try {
     // 监听窗口关闭请求事件
     const unlisten = await getCurrentWebviewWindow().onCloseRequested(async event => {

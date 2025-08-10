@@ -57,7 +57,7 @@ impl<R: Runtime> TauriEventIntegrator<R> {
     /// 创建 Tauri 事件订阅者
     fn create_tauri_subscriber(app_handle: AppHandle<R>) -> SubscriberCallback {
         Box::new(move |notification| {
-            let (event_name, payload) = Self::notification_to_tauri_payload(&notification);
+            let (event_name, payload) = Self::notification_to_tauri_payload(notification);
 
             match app_handle.emit(event_name, payload) {
                 Ok(_) => {

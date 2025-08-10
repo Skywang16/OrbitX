@@ -1,6 +1,5 @@
 /**
  * 统一的确认对话框API
- * 基于X-UI Modal组件实现
  */
 
 import { createApp, h, ref } from 'vue'
@@ -24,7 +23,7 @@ export interface ConfirmConfig {
 /**
  * 显示确认对话框
  */
-export function confirm(config: string | ConfirmConfig): Promise<boolean> {
+export const confirm = (config: string | ConfirmConfig): Promise<boolean> => {
   return new Promise(resolve => {
     // 标准化配置
     const normalizedConfig: Required<ConfirmConfig> = {

@@ -6,10 +6,11 @@
     modelValue: string
     placeholder?: string
     loading?: boolean
-    isStreaming?: boolean
+
     canSend?: boolean
     selectedModel?: string | null
     modelOptions?: Array<{ label: string; value: string | number }>
+    chatMode?: 'chat' | 'agent'
   }
 
   // Emits定义
@@ -19,15 +20,17 @@
     (e: 'stop'): void
     (e: 'update:selectedModel', value: string | null): void
     (e: 'model-change', value: string | null): void
+    (e: 'mode-change', mode: 'chat' | 'agent'): void
   }
 
   const props = withDefaults(defineProps<Props>(), {
     placeholder: '输入消息...',
     loading: false,
-    isStreaming: false,
+
     canSend: false,
     selectedModel: null,
     modelOptions: () => [],
+    chatMode: 'chat',
   })
 
   const emit = defineEmits<Emits>()
@@ -40,6 +43,18 @@
     get: () => props.modelValue,
     set: (value: string) => emit('update:modelValue', value),
   })
+
+  // 模式选项数据
+  const modeOptions = computed(() => [
+    {
+      label: 'Chat',
+      value: 'chat',
+    },
+    {
+      label: 'Agent',
+      value: 'agent',
+    },
+  ])
 
   // 方法
   /**
@@ -74,7 +89,7 @@
    * 处理发送/停止按钮点击
    */
   const handleButtonClick = () => {
-    if (props.isStreaming) {
+    if (props.loading) {
       emit('stop')
     } else if (props.canSend) {
       emit('send')
@@ -88,6 +103,20 @@
     const modelId = typeof value === 'string' ? value : null
     emit('update:selectedModel', modelId)
     emit('model-change', modelId)
+  }
+
+  /**
+   * 处理模式切换
+   */
+  const handleModeChange = (value: string | number | null) => {
+    console.log('🔄 [ChatInput] 模式切换事件触发:', value)
+    const mode = value as 'chat' | 'agent'
+    if (mode && (mode === 'chat' || mode === 'agent')) {
+      console.log('✅ [ChatInput] 发送模式切换事件:', mode)
+      emit('mode-change', mode)
+    } else {
+      console.log('❌ [ChatInput] 无效的模式值:', value)
+    }
   }
 
   // 暴露方法给父组件
@@ -114,17 +143,17 @@
       </div>
       <div class="button-container">
         <x-button
-          :variant="isStreaming ? 'danger' : 'primary'"
+          :variant="loading ? 'danger' : 'primary'"
           size="small"
           circle
           class="send-button"
-          :class="{ 'stop-button': isStreaming }"
-          :disabled="isStreaming ? false : !canSend"
-          :loading="loading && !isStreaming"
+          :class="{ 'stop-button': loading }"
+          :disabled="loading ? false : !canSend"
+          :loading="loading"
           @click="handleButtonClick"
         >
           <template #icon>
-            <svg v-if="isStreaming" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <svg v-if="loading" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <rect x="6" y="6" width="12" height="12" rx="2" />
             </svg>
             <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -136,17 +165,28 @@
       </div>
     </div>
 
-    <!-- 模型选择器 -->
+    <!-- 模型选择器和模式切换 -->
     <div class="input-bottom">
-      <x-select
-        class="model-selector"
-        :model-value="selectedModel"
-        :options="modelOptions"
-        placeholder="选择AI模型"
-        size="small"
-        borderless
-        @update:model-value="handleModelChange"
-      />
+      <div class="bottom-left">
+        <x-select
+          class="mode-selector"
+          :model-value="chatMode"
+          :options="modeOptions"
+          placeholder="选择模式"
+          size="small"
+          borderless
+          @update:model-value="handleModeChange"
+        />
+        <x-select
+          class="model-selector"
+          :model-value="selectedModel"
+          :options="modelOptions"
+          placeholder="选择AI模型"
+          size="small"
+          borderless
+          @update:model-value="handleModelChange"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -218,7 +258,96 @@
     background-color: #ff7875 !important;
   }
 
+  .input-bottom {
+    margin-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .bottom-left {
+    flex: 1;
+    display: flex;
+    gap: 8px;
+  }
+
+  .bottom-right {
+    flex-shrink: 0;
+  }
+
+  .mode-selector {
+    width: 100px;
+  }
+
   .model-selector {
     width: 110px;
+  }
+
+  /* 智能体模式开关样式 */
+  .agent-mode-toggle {
+    display: flex;
+    align-items: center;
+  }
+
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    gap: 6px;
+  }
+
+  .toggle-checkbox {
+    display: none;
+  }
+
+  .toggle-slider {
+    position: relative;
+    width: 32px;
+    height: 18px;
+    background-color: var(--color-border);
+    border-radius: 9px;
+    transition: background-color 0.2s ease;
+  }
+
+  .toggle-slider::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    background-color: white;
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .toggle-checkbox:checked + .toggle-slider {
+    background-color: var(--color-primary);
+  }
+
+  .toggle-checkbox:checked + .toggle-slider::before {
+    transform: translateX(14px);
+  }
+
+  .toggle-label:hover .toggle-slider {
+    background-color: var(--color-primary-hover);
+  }
+
+  .toggle-checkbox:checked + .toggle-slider:hover {
+    background-color: var(--color-primary-active);
+  }
+
+  .toggle-text {
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .toggle-checkbox:checked ~ .toggle-text {
+    color: var(--color-primary);
   }
 </style>

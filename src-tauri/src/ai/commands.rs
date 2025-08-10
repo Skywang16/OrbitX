@@ -1,18 +1,21 @@
 /*!
- * AI功能的Tauri命令接口
+ * AI功能的Tauri命令接口 - 全新重构版本
+ *
+ * 实现基于会话上下文管理的AI命令接口
  */
 
 use crate::ai::{
-    AIModelConfig, AIRequest, AIRequestType, AIResponse, AIService, ChatMessage, ChatMessageType,
-    StreamChunk,
+    context::handle_truncate_conversation,
+    types::{AIModelConfig, Conversation, Message},
+    AIService,
 };
-use crate::storage::sqlite::{AIChatHistoryEntry, ChatHistoryQuery, SqliteManager};
+use crate::storage::sqlite::SqliteManager;
 use chrono::Utc;
 use std::sync::Arc;
-use tauri::{ipc::Channel, State};
-use tracing::{error, info};
+use tauri::State;
+use tracing::{debug, info};
 
-/// AI管理器状态
+/// AI管理器状态 - 重构版本
 pub struct AIManagerState {
     pub ai_service: Arc<AIService>,
     pub sqlite_manager: Option<Arc<SqliteManager>>,
@@ -38,7 +41,267 @@ impl AIManagerState {
     }
 }
 
-// ===== AI模型管理命令 =====
+// ===== AI会话上下文管理命令 - 全新实现 =====
+
+/// 创建新会话
+#[tauri::command]
+pub async fn create_conversation(
+    title: Option<String>,
+    state: State<'_, AIManagerState>,
+) -> Result<i64, String> {
+    debug!("创建新会话: title={:?}", title);
+
+    let sqlite_manager = state
+        .sqlite_manager
+        .as_ref()
+        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+
+    let conversation = Conversation {
+        id: 0, // 数据库自动生成
+        title: title.unwrap_or_else(|| "新对话".to_string()),
+        message_count: 0,
+        last_message_preview: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+
+    let conversation_id = sqlite_manager
+        .create_conversation(&conversation)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    info!("成功创建会话: {}", conversation_id);
+    Ok(conversation_id)
+}
+
+/// 获取会话列表
+#[tauri::command]
+pub async fn get_conversations(
+    limit: Option<i64>,
+    offset: Option<i64>,
+    state: State<'_, AIManagerState>,
+) -> Result<Vec<Conversation>, String> {
+    debug!("获取会话列表: limit={:?}, offset={:?}", limit, offset);
+
+    let sqlite_manager = state
+        .sqlite_manager
+        .as_ref()
+        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+
+    let conversations = sqlite_manager
+        .get_conversations(limit, offset)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(conversations)
+}
+
+/// 获取会话详情
+#[tauri::command]
+pub async fn get_conversation(
+    conversation_id: i64,
+    state: State<'_, AIManagerState>,
+) -> Result<Conversation, String> {
+    debug!("获取会话详情: {}", conversation_id);
+
+    let sqlite_manager = state
+        .sqlite_manager
+        .as_ref()
+        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+
+    let conversation = sqlite_manager
+        .get_conversation(conversation_id)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("会话不存在: {}", conversation_id))?;
+
+    Ok(conversation)
+}
+
+/// 更新会话标题
+#[tauri::command]
+pub async fn update_conversation_title(
+    conversation_id: i64,
+    title: String,
+    state: State<'_, AIManagerState>,
+) -> Result<(), String> {
+    debug!("更新会话标题: {} -> {}", conversation_id, title);
+
+    // 参数验证
+    if title.trim().is_empty() {
+        return Err("会话标题不能为空".to_string());
+    }
+    if conversation_id <= 0 {
+        return Err("无效的会话ID".to_string());
+    }
+
+    let sqlite_manager = state
+        .sqlite_manager
+        .as_ref()
+        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+
+    sqlite_manager
+        .update_conversation_title(conversation_id, &title)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// 删除会话
+#[tauri::command]
+pub async fn delete_conversation(
+    conversation_id: i64,
+    state: State<'_, AIManagerState>,
+) -> Result<(), String> {
+    debug!("删除会话: {}", conversation_id);
+
+    let sqlite_manager = state
+        .sqlite_manager
+        .as_ref()
+        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+
+    sqlite_manager
+        .delete_conversation(conversation_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    info!("成功删除会话: {}", conversation_id);
+    Ok(())
+}
+
+/// 获取压缩上下文（供前端eko使用）
+#[tauri::command]
+pub async fn get_compressed_context(
+    conversation_id: i64,
+    up_to_message_id: Option<i64>,
+    state: State<'_, AIManagerState>,
+) -> Result<Vec<Message>, String> {
+    info!(
+        "获取压缩上下文: conversation_id={}, up_to_message_id={:?}",
+        conversation_id, up_to_message_id
+    );
+
+    // 参数验证
+    if conversation_id <= 0 {
+        return Err("无效的会话ID".to_string());
+    }
+
+    let sqlite_manager = state
+        .sqlite_manager
+        .as_ref()
+        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+
+    // 使用context.rs中的build_context_for_request函数
+    let config = crate::ai::types::AIConfig::default();
+    let messages = crate::ai::context::build_context_for_request(
+        sqlite_manager,
+        conversation_id,
+        up_to_message_id,
+        &config,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // TODO: 实现智能压缩功能
+    // 当前版本直接返回所有消息，未来将在这里实现：
+    // - 基于token限制的智能压缩
+    // - 语义相似度分析
+    // - 重要性评分
+    // - 动态压缩策略选择
+
+    info!(
+        "压缩上下文获取完成: conversation_id={}, 消息数量={}",
+        conversation_id,
+        messages.len()
+    );
+
+    Ok(messages)
+}
+
+/// 截断会话（供前端eko使用）
+#[tauri::command]
+pub async fn truncate_conversation(
+    conversation_id: i64,
+    truncate_after_message_id: i64,
+    state: State<'_, AIManagerState>,
+) -> Result<(), String> {
+    info!(
+        "截断会话: conversation_id={}, truncate_after={}",
+        conversation_id, truncate_after_message_id
+    );
+
+    // 参数验证
+    if conversation_id <= 0 {
+        return Err("无效的会话ID".to_string());
+    }
+    if truncate_after_message_id <= 0 {
+        return Err("无效的消息ID".to_string());
+    }
+
+    let sqlite_manager = state
+        .sqlite_manager
+        .as_ref()
+        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+
+    // 截断会话
+    handle_truncate_conversation(sqlite_manager, conversation_id, truncate_after_message_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    info!("会话截断完成: conversation_id={}", conversation_id);
+    Ok(())
+}
+
+/// 保存单条消息（供前端eko使用）
+#[tauri::command]
+pub async fn save_message(
+    conversation_id: i64,
+    role: String,
+    content: String,
+    state: State<'_, AIManagerState>,
+) -> Result<i64, String> {
+    info!(
+        "保存消息: conversation_id={}, role={}",
+        conversation_id, role
+    );
+
+    // 参数验证
+    if conversation_id <= 0 {
+        return Err("无效的会话ID".to_string());
+    }
+    if content.trim().is_empty() {
+        return Err("消息内容不能为空".to_string());
+    }
+    if !["user", "assistant", "system"].contains(&role.as_str()) {
+        return Err("无效的消息角色".to_string());
+    }
+
+    let sqlite_manager = state
+        .sqlite_manager
+        .as_ref()
+        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+
+    // 创建消息对象
+    let message = Message {
+        id: 0, // 数据库自动生成
+        conversation_id,
+        role,
+        content,
+        created_at: Utc::now(),
+    };
+
+    // 保存消息
+    let message_id = sqlite_manager
+        .save_message(&message)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    info!("消息保存成功: message_id={}", message_id);
+    Ok(message_id)
+}
+
+// ===== AI模型管理命令（保留基础功能） =====
 
 /// 获取所有AI模型配置
 #[tauri::command]
@@ -62,22 +325,6 @@ pub async fn add_ai_model(
         .map_err(|e| e.to_string())
 }
 
-/// 更新AI模型配置
-#[tauri::command]
-pub async fn update_ai_model(
-    model_id: String,
-    updates: serde_json::Value,
-    state: State<'_, AIManagerState>,
-) -> Result<(), String> {
-    info!("更新AI模型: {}", model_id);
-
-    state
-        .ai_service
-        .update_model(&model_id, updates)
-        .await
-        .map_err(|e| e.to_string())
-}
-
 /// 删除AI模型配置
 #[tauri::command]
 pub async fn remove_ai_model(
@@ -93,17 +340,18 @@ pub async fn remove_ai_model(
         .map_err(|e| e.to_string())
 }
 
-/// 测试AI模型连接
+/// 更新AI模型配置
 #[tauri::command]
-pub async fn test_ai_connection(
+pub async fn update_ai_model(
     model_id: String,
+    updates: serde_json::Value,
     state: State<'_, AIManagerState>,
-) -> Result<bool, String> {
-    info!("测试AI模型连接: {}", model_id);
+) -> Result<(), String> {
+    info!("更新AI模型: {}", model_id);
 
     state
         .ai_service
-        .test_connection(&model_id)
+        .update_model(&model_id, updates)
         .await
         .map_err(|e| e.to_string())
 }
@@ -123,374 +371,22 @@ pub async fn set_default_ai_model(
         .map_err(|e| e.to_string())
 }
 
-// ===== AI功能命令 =====
-
-/// 发送聊天消息
+/// 测试AI模型连接
 #[tauri::command]
-pub async fn send_chat_message(
-    message: String,
-    model_id: Option<String>,
+pub async fn test_ai_connection(
+    model_id: String,
     state: State<'_, AIManagerState>,
-) -> Result<AIResponse, String> {
-    let request = AIRequest {
-        request_type: AIRequestType::Chat,
-        content: message,
-        context: None,
-        options: None,
-    };
+) -> Result<bool, String> {
+    info!("测试AI模型连接: {}", model_id);
 
-    state
-        .ai_service
-        .send_request(&request, model_id.as_deref())
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// 发送流式聊天消息
-#[tauri::command]
-pub async fn stream_chat_message_with_channel(
-    message: String,
-    model_id: Option<String>,
-    channel: Channel<StreamChunk>,
-    state: State<'_, AIManagerState>,
-) -> Result<(), String> {
-    let request = AIRequest {
-        request_type: AIRequestType::Chat,
-        content: message,
-        context: None,
-        options: None,
-    };
-
-    // 发送开始信号
-    let start_chunk = StreamChunk {
-        content: String::new(),
-        is_complete: false,
-        metadata: Some({
-            let mut metadata = std::collections::HashMap::new();
-            metadata.insert("stream_started".to_string(), serde_json::json!(true));
-            metadata
-        }),
-    };
-
-    if let Err(e) = channel.send(start_chunk) {
-        error!("发送开始信号失败: {}", e);
-        return Err("发送开始信号失败".to_string());
+    // 参数验证
+    if model_id.trim().is_empty() {
+        return Err("模型ID不能为空".to_string());
     }
 
-    // 使用真正的流式请求
-    match state
-        .ai_service
-        .send_stream_request(&request, model_id.as_deref())
-        .await
-    {
-        Ok(mut stream) => {
-            use futures::StreamExt;
-
-            while let Some(chunk_result) = stream.next().await {
-                match chunk_result {
-                    Ok(chunk) => {
-                        if let Err(e) = channel.send(chunk.clone()) {
-                            error!("发送流式数据失败: {}", e);
-                            return Err("发送流式数据失败".to_string());
-                        }
-
-                        if chunk.is_complete {
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        error!("流式响应错误: {}", e);
-
-                        let error_chunk = StreamChunk {
-                            content: String::new(),
-                            is_complete: true,
-                            metadata: Some({
-                                let mut metadata = std::collections::HashMap::new();
-                                metadata.insert(
-                                    "error".to_string(),
-                                    serde_json::json!({
-                                        "message": e.to_string(),
-                                        "code": "stream_error"
-                                    }),
-                                );
-                                metadata
-                            }),
-                        };
-
-                        let _ = channel.send(error_chunk);
-                        return Err(e.to_string());
-                    }
-                }
-            }
-
-            Ok(())
-        }
-        Err(e) => {
-            error!("创建流式请求失败: {}", e);
-
-            // 发送错误chunk
-            let error_chunk = StreamChunk {
-                content: String::new(),
-                is_complete: true,
-                metadata: Some({
-                    let mut metadata = std::collections::HashMap::new();
-                    metadata.insert(
-                        "error".to_string(),
-                        serde_json::json!({
-                            "message": e.to_string(),
-                            "code": "stream_init_error"
-                        }),
-                    );
-                    metadata
-                }),
-            };
-
-            let _ = channel.send(error_chunk);
-            Err(e.to_string())
-        }
-    }
-}
-
-/// 解释命令
-#[tauri::command]
-pub async fn explain_command(
-    command: String,
-    _context: Option<serde_json::Value>,
-    state: State<'_, AIManagerState>,
-) -> Result<AIResponse, String> {
-    let prompt = format!("请解释以下命令的作用和用法：{}", command);
-
-    let request = AIRequest {
-        request_type: AIRequestType::Explanation,
-        content: prompt,
-        context: None,
-        options: None,
-    };
-
     state
         .ai_service
-        .send_request(&request, None)
+        .test_connection(&model_id)
         .await
         .map_err(|e| e.to_string())
-}
-
-/// 分析错误
-#[tauri::command]
-pub async fn analyze_error(
-    error: String,
-    command: String,
-    _context: Option<serde_json::Value>,
-    state: State<'_, AIManagerState>,
-) -> Result<AIResponse, String> {
-    let prompt = format!(
-        "命令 '{}' 执行时出现错误：{}\n请分析错误原因并提供解决方案。",
-        command, error
-    );
-
-    let request = AIRequest {
-        request_type: AIRequestType::ErrorAnalysis,
-        content: prompt,
-        context: None,
-        options: None,
-    };
-
-    state
-        .ai_service
-        .send_request(&request, None)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-// ===== 缓存管理命令 =====
-
-/// 清空AI缓存
-#[tauri::command]
-pub async fn clear_ai_cache(state: State<'_, AIManagerState>) -> Result<(), String> {
-    info!("清空AI缓存");
-
-    state
-        .ai_service
-        .clear_cache()
-        .await
-        .map_err(|e| e.to_string())
-}
-
-// ===== 聊天历史管理命令 =====
-
-/// 获取聊天历史记录
-#[tauri::command]
-pub async fn get_chat_history(
-    session_id: Option<String>,
-    state: State<'_, AIManagerState>,
-) -> Result<Vec<ChatMessage>, String> {
-    info!("获取聊天历史: session_id={:?}", session_id);
-
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
-
-    let query = ChatHistoryQuery {
-        session_id,
-        model_id: None,
-        role: None,
-        date_from: None,
-        date_to: None,
-        limit: Some(1000), // 限制最多返回1000条记录
-        offset: None,
-    };
-
-    let entries = sqlite_manager
-        .get_chat_history(&query)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 转换为前端期望的ChatMessage格式
-    let messages: Vec<ChatMessage> = entries
-        .into_iter()
-        .map(|entry| ChatMessage {
-            id: entry.id.unwrap_or(0).to_string(),
-            message_type: match entry.role.as_str() {
-                "user" => ChatMessageType::User,
-                "assistant" => ChatMessageType::Assistant,
-                "system" => ChatMessageType::System,
-                _ => ChatMessageType::User,
-            },
-            content: entry.content,
-            timestamp: entry.created_at,
-            metadata: entry
-                .metadata_json
-                .and_then(|json| serde_json::from_str(&json).ok()),
-        })
-        .collect();
-
-    info!("成功获取 {} 条聊天历史记录", messages.len());
-    Ok(messages)
-}
-
-/// 获取所有会话列表
-#[tauri::command]
-pub async fn get_chat_sessions(state: State<'_, AIManagerState>) -> Result<Vec<String>, String> {
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
-
-    sqlite_manager
-        .get_chat_sessions()
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// 保存聊天历史记录
-#[tauri::command]
-pub async fn save_chat_history(
-    messages: Vec<ChatMessage>,
-    session_id: Option<String>,
-    state: State<'_, AIManagerState>,
-) -> Result<String, String> {
-    info!(
-        "保存聊天历史: {} 条消息, session_id={:?}",
-        messages.len(),
-        session_id
-    );
-
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
-
-    // 使用提供的session_id或生成新的
-    let final_session_id =
-        session_id.unwrap_or_else(|| format!("session_{}", Utc::now().timestamp()));
-
-    // 获取默认模型ID
-    let default_model = sqlite_manager
-        .get_default_ai_model()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let model_id = default_model
-        .map(|m| m.id)
-        .unwrap_or_else(|| "default".to_string());
-
-    // 保存每条消息
-    for message in messages {
-        let entry = AIChatHistoryEntry {
-            id: None,
-            session_id: final_session_id.clone(),
-            model_id: model_id.clone(),
-            role: match message.message_type {
-                ChatMessageType::User => "user".to_string(),
-                ChatMessageType::Assistant => "assistant".to_string(),
-                ChatMessageType::System => "system".to_string(),
-            },
-            content: message.content,
-            token_count: message
-                .metadata
-                .as_ref()
-                .and_then(|m| m.tokens_used)
-                .map(|t| t as i32),
-            metadata_json: message
-                .metadata
-                .map(|m| serde_json::to_string(&m).unwrap_or_default()),
-            created_at: message.timestamp,
-        };
-
-        sqlite_manager
-            .save_chat_message(&entry)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-
-    info!("成功保存聊天历史到会话: {}", final_session_id);
-    Ok(final_session_id)
-}
-
-/// 清除聊天历史记录
-#[tauri::command]
-pub async fn clear_chat_history(
-    session_id: Option<String>,
-    state: State<'_, AIManagerState>,
-) -> Result<(), String> {
-    info!("清除聊天历史: session_id={:?}", session_id);
-
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
-
-    let affected_rows = sqlite_manager
-        .clear_chat_history(session_id.as_deref())
-        .await
-        .map_err(|e| e.to_string())?;
-
-    info!("成功清除 {} 条聊天历史记录", affected_rows);
-    Ok(())
-}
-
-// ===== 占位符命令（保持API兼容性） =====
-
-/// 获取用户前置提示词（占位符）
-#[tauri::command]
-pub async fn get_user_prefix_prompt() -> Result<Option<String>, String> {
-    Ok(None)
-}
-
-/// 设置用户前置提示词（占位符）
-#[tauri::command]
-pub async fn set_user_prefix_prompt(_prompt: Option<String>) -> Result<(), String> {
-    Ok(())
-}
-
-/// 获取终端上下文（占位符）
-#[tauri::command]
-pub async fn get_terminal_context() -> Result<serde_json::Value, String> {
-    Ok(serde_json::json!({}))
-}
-
-/// 更新终端上下文（占位符）
-#[tauri::command]
-pub async fn update_terminal_context(_context: serde_json::Value) -> Result<(), String> {
-    Ok(())
 }

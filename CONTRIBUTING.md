@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你对 TermX 项目的关注！我们欢迎所有形式的贡献。
+感谢你对 OrbitX 项目的关注！我们欢迎所有形式的贡献。
 
 ## 🤝 如何贡献
 
@@ -8,7 +8,7 @@
 
 如果你发现了 bug 或有功能建议：
 
-1. 在 [Issues](https://github.com/Skywang16/TermX/issues) 中搜索是否已有相关问题
+1. 在 [Issues](https://github.com/Skywang16/OrbitX/issues) 中搜索是否已有相关问题
 2. 如果没有，创建一个新的 Issue
 3. 使用清晰的标题和详细的描述
 4. 如果是 bug，请提供复现步骤
@@ -18,8 +18,8 @@
 1. **Fork 仓库**
 
    ```bash
-   git clone https://github.com/Skywang16/TermX.git
-   cd TermX
+   git clone https://github.com/Skywang16/OrbitX.git
+   cd OrbitX
    ```
 
 2. **创建分支**
@@ -168,7 +168,7 @@ src/
 
 ## 🙏 致谢
 
-感谢所有为 TermX 项目做出贡献的开发者！
+感谢所有为 OrbitX 项目做出贡献的开发者！
 
 ---
 

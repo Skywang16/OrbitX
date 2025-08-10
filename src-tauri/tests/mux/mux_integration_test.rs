@@ -238,7 +238,7 @@ fn test_notification_system() {
 
     // 订阅通知
     let _subscriber_id = mux.subscribe(move |notification| {
-        received_clone.lock().unwrap().push(notification);
+        received_clone.lock().unwrap().push(notification.clone());
         true // 继续订阅
     });
 
@@ -248,7 +248,7 @@ fn test_notification_system() {
     )));
     mux.notify(MuxNotification::PaneOutput {
         pane_id: terminal_lib::mux::PaneId::from(1),
-        data: b"test output".to_vec(),
+        data: b"test output".to_vec().into(),
     });
     mux.notify(MuxNotification::PaneRemoved(
         terminal_lib::mux::PaneId::from(1),
@@ -275,7 +275,7 @@ fn test_notification_system() {
     match &notifications[1] {
         MuxNotification::PaneOutput { pane_id, data } => {
             assert_eq!(pane_id.as_u32(), 1);
-            assert_eq!(data, b"test output");
+            assert_eq!(data.as_ref(), b"test output");
         }
         _ => panic!("期望 PaneOutput 通知"),
     }

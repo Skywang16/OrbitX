@@ -429,15 +429,33 @@ impl TomlConfigManager {
                             if let Ok(metadata) = std::fs::metadata(&config_path) {
                                 if let Ok(modified) = metadata.modified() {
                                     let should_reload = {
-                                        let last_mod = last_modified.read().unwrap();
-                                        last_mod.map_or(true, |last| modified > last)
+                                        match last_modified.read() {
+                                            Ok(last_mod) => {
+                                                last_mod.map_or(true, |last| modified > last)
+                                            }
+                                            Err(e) => {
+                                                error!(
+                                                    "无法获取最后修改时间读锁，跳过重载检查: {}",
+                                                    e
+                                                );
+                                                false
+                                            }
+                                        }
                                     };
 
                                     if should_reload {
                                         // 更新最后修改时间
-                                        {
-                                            let mut last_mod = last_modified.write().unwrap();
-                                            *last_mod = Some(modified);
+                                        match last_modified.write() {
+                                            Ok(mut last_mod) => {
+                                                *last_mod = Some(modified);
+                                            }
+                                            Err(e) => {
+                                                error!(
+                                                    "无法获取最后修改时间写锁，跳过时间更新: {}",
+                                                    e
+                                                );
+                                                return; // 跳过本次处理，避免重复触发
+                                            }
                                         }
 
                                         // 发送文件更改事件

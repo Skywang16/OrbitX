@@ -1,5 +1,6 @@
 //! 核心数据类型定义
 
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -334,7 +335,7 @@ impl Default for ShellManager {
 #[allow(clippy::enum_variant_names)]
 pub enum MuxNotification {
     /// 面板输出数据
-    PaneOutput { pane_id: PaneId, data: Vec<u8> },
+    PaneOutput { pane_id: PaneId, data: Bytes },
     /// 面板已添加
     PaneAdded(PaneId),
     /// 面板已移除

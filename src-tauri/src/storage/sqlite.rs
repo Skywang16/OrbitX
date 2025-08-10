@@ -5,8 +5,9 @@
  * 实现数据库初始化、迁移系统、加密存储和智能查询功能
  */
 
-use crate::ai::types::AIModelConfig;
+use crate::ai::types::{AIModelConfig, Conversation, Message};
 use crate::storage::paths::StoragePaths;
+use crate::storage::sql_scripts::SqlScriptLoader;
 use crate::storage::types::{DataQuery, SaveOptions};
 use crate::utils::error::AppResult;
 use anyhow::{anyhow, Context};
@@ -93,7 +94,6 @@ pub struct UsageStats {
 pub struct HistoryQuery {
     pub command_pattern: Option<String>,
     pub working_directory: Option<String>,
-    pub session_id: Option<String>,
     pub date_from: Option<DateTime<Utc>>,
     pub date_to: Option<DateTime<Utc>>,
     pub limit: Option<i64>,
@@ -111,31 +111,6 @@ pub struct CommandSearchResult {
     pub command_snippet: Option<String>,
     pub output_snippet: Option<String>,
     pub relevance_score: f64,
-}
-
-/// AI聊天历史条目
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AIChatHistoryEntry {
-    pub id: Option<i64>,
-    pub session_id: String,
-    pub model_id: String,
-    pub role: String, // 'user', 'assistant', 'system'
-    pub content: String,
-    pub token_count: Option<i32>,
-    pub metadata_json: Option<String>,
-    pub created_at: DateTime<Utc>,
-}
-
-/// AI聊天会话查询条件
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatHistoryQuery {
-    pub session_id: Option<String>,
-    pub model_id: Option<String>,
-    pub role: Option<String>,
-    pub date_from: Option<DateTime<Utc>>,
-    pub date_to: Option<DateTime<Utc>>,
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
 }
 
 /// 审计日志条目
@@ -236,40 +211,16 @@ impl EncryptionManager {
     }
 }
 
-/// 数据库迁移
-#[derive(Clone)]
-pub struct Migration {
-    pub version: u32,
-    pub description: String,
-    pub up_sql: String,
-    pub down_sql: String,
-}
-
-impl Migration {
-    pub fn new(
-        version: u32,
-        description: impl Into<String>,
-        up_sql: impl Into<String>,
-        down_sql: impl Into<String>,
-    ) -> Self {
-        Self {
-            version,
-            description: description.into(),
-            up_sql: up_sql.into(),
-            down_sql: down_sql.into(),
-        }
-    }
-}
-
 /// SQLite数据管理器
 pub struct SqliteManager {
     db_pool: SqlitePool,
+    #[allow(dead_code)]
     paths: StoragePaths,
     #[allow(dead_code)]
     options: SqliteOptions,
     encryption_manager: Arc<RwLock<EncryptionManager>>,
     cache: Arc<RwLock<LruCache<String, Value>>>,
-    migrations: Vec<Migration>,
+    sql_script_loader: SqlScriptLoader,
 }
 
 impl SqliteManager {
@@ -309,56 +260,135 @@ impl SqliteManager {
             NonZeroUsize::new(options.cache_size).unwrap(),
         )));
 
-        let mut manager = Self {
+        // 初始化SQL脚本加载器，sql目录在src-tauri目录下
+        let sql_dir = if cfg!(debug_assertions) {
+            // 开发环境：固定使用crate根目录（src-tauri）下的 sql 目录，避免当前工作目录不一致的问题
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sql")
+        } else {
+            // 生产环境：使用相对于可执行文件的sql目录
+            std::env::current_exe()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("sql")
+        };
+        let sql_script_loader = SqlScriptLoader::new(sql_dir);
+
+        let manager = Self {
             db_pool,
             paths,
             options,
             encryption_manager: Arc::new(RwLock::new(EncryptionManager::new())),
             cache,
-            migrations: Vec::new(),
+            sql_script_loader,
         };
-
-        // 初始化迁移
-        manager.init_migrations();
 
         Ok(manager)
     }
 
-    /// 初始化迁移列表
-    fn init_migrations(&mut self) {
-        self.migrations = vec![Migration::new(
-            1,
-            "创建基础表结构",
-            include_str!("../../migrations/001_initial_schema.sql"),
-            "DROP TABLE IF EXISTS ai_model_usage_stats;
-                 DROP TABLE IF EXISTS ai_features;
-                 DROP TABLE IF EXISTS terminal_sessions;
-                 DROP TABLE IF EXISTS command_search;
-                 DROP TABLE IF EXISTS ai_chat_history;
-                 DROP TABLE IF EXISTS command_usage_stats;
-                 DROP TABLE IF EXISTS command_history;
-                 DROP TABLE IF EXISTS ai_models;
-                 DROP TABLE IF EXISTS schema_migrations;",
-        )];
-    }
-
-    /// 初始化数据库
+    /// 初始化数据库（重构版本：使用SQL脚本）
     pub async fn initialize_database(&self) -> AppResult<()> {
-        info!("初始化SQLite数据库");
+        info!("初始化SQLite数据库（使用SQL脚本）");
+
+        // 检查sql目录是否存在
+        let sql_dir = if cfg!(debug_assertions) {
+            // 开发环境：固定使用crate根目录（src-tauri）下的 sql 目录
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sql")
+        } else {
+            std::env::current_exe()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("sql")
+        };
+
+        if !sql_dir.exists() {
+            return Err(anyhow!(
+                "SQL脚本目录不存在: {}。请确保SQL脚本文件已正确部署。",
+                sql_dir.display()
+            ));
+        }
+
+        info!("使用SQL脚本目录: {}", sql_dir.display());
 
         // 设置默认主密钥（用于加密敏感数据）
-        self.set_default_master_key().await?;
+        self.set_default_master_key()
+            .await
+            .context("设置默认主密钥失败")?;
 
-        // 创建迁移表
-        self.create_migration_table().await?;
-
-        // 执行迁移
-        self.run_migrations().await?;
+        // 按顺序执行SQL脚本
+        self.execute_sql_scripts()
+            .await
+            .context("执行SQL脚本失败")?;
 
         // 插入默认数据
-        self.insert_default_data().await?;
+        self.insert_default_data()
+            .await
+            .context("插入默认数据失败")?;
 
         info!("数据库初始化完成");
+        Ok(())
+    }
+
+    /// 按顺序执行所有SQL脚本
+    async fn execute_sql_scripts(&self) -> AppResult<()> {
+        info!("开始执行SQL脚本");
+
+        // 加载所有SQL脚本文件
+        let scripts = self
+            .sql_script_loader
+            .load_all_scripts()
+            .await
+            .context("加载SQL脚本文件失败")?;
+
+        if scripts.is_empty() {
+            return Err(anyhow!("没有找到任何SQL脚本文件"));
+        }
+
+        info!("找到 {} 个SQL脚本文件", scripts.len());
+
+        // 按执行顺序执行脚本
+        for script in scripts {
+            info!("执行SQL脚本: {} (顺序 {})", script.name, script.order);
+
+            for (i, statement) in script.statements.iter().enumerate() {
+                if !statement.is_empty() {
+                    debug!(
+                        "执行SQL语句 {}/{} ({}): {}",
+                        i + 1,
+                        script.statements.len(),
+                        script.name,
+                        statement
+                    );
+
+                    sqlx::query(statement)
+                        .execute(self.pool())
+                        .await
+                        .map_err(|e| {
+                            error!(
+                                "SQL语句执行失败 {}/{} ({}): {} - SQL: {}",
+                                i + 1,
+                                script.statements.len(),
+                                script.name,
+                                e,
+                                statement
+                            );
+                            anyhow!(
+                                "SQL语句执行失败 {}/{} ({}): {} - SQL: {}",
+                                i + 1,
+                                script.statements.len(),
+                                script.name,
+                                e,
+                                statement
+                            )
+                        })?;
+                }
+            }
+
+            info!("SQL脚本 {} 执行完成", script.name);
+        }
+
+        info!("所有SQL脚本执行完成");
         Ok(())
     }
 
@@ -372,101 +402,134 @@ impl SqliteManager {
             return Ok(());
         }
 
-        // 使用应用程序特定的默认密钥
-        // 在生产环境中，这应该从安全的配置文件或环境变量中读取
-        let default_password = "termx-default-encryption-key-2024";
-        encryption_manager.set_master_password(default_password)?;
+        // 安全的密钥获取策略：优先级从高到低
+        let master_password = self.get_secure_master_key().await?;
+        encryption_manager.set_master_password(&master_password)?;
 
-        info!("默认主密钥设置完成");
+        info!("主密钥设置完成");
         Ok(())
     }
 
-    /// 创建迁移表
-    async fn create_migration_table(&self) -> AppResult<()> {
-        let sql = r#"
-            CREATE TABLE IF NOT EXISTS schema_migrations (
-                version INTEGER PRIMARY KEY,
-                description TEXT NOT NULL,
-                applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-        "#;
-
-        self.db_pool.execute(sql).await.with_context(|| {
-            format!(
-                "创建迁移表失败: {}",
-                self.paths
-                    .data_dir
-                    .join(crate::storage::DATABASE_FILE_NAME)
-                    .display()
-            )
-        })?;
-
-        Ok(())
-    }
-
-    /// 运行数据库迁移
-    async fn run_migrations(&self) -> AppResult<()> {
-        let current_version = self.get_current_schema_version().await?;
-        info!("当前数据库版本: {}", current_version);
-
-        for migration in &self.migrations {
-            if migration.version > current_version {
-                info!("执行迁移 v{}: {}", migration.version, migration.description);
-
-                // 开始事务
-                let mut tx = self
-                    .db_pool
-                    .begin()
-                    .await
-                    .map_err(|e| anyhow!("开始迁移事务失败: {}", e))?;
-
-                // 执行迁移SQL
-                tx.execute(migration.up_sql.as_str())
-                    .await
-                    .map_err(|e| anyhow!("执行迁移SQL失败: {}", e))?;
-
-                // 记录迁移
-                let record_sql =
-                    "INSERT INTO schema_migrations (version, description) VALUES (?, ?)";
-                tx.execute(
-                    sqlx::query(record_sql)
-                        .bind(migration.version as i64)
-                        .bind(&migration.description),
-                )
-                .await
-                .map_err(|e| anyhow!("记录迁移失败: {}", e))?;
-
-                // 提交事务
-                tx.commit()
-                    .await
-                    .map_err(|e| anyhow!("提交迁移事务失败: {}", e))?;
-
-                info!("迁移 v{} 完成", migration.version);
+    /// 安全获取主密钥
+    /// 优先级：环境变量 > 系统密钥链 > 用户配置 > 安全随机生成
+    async fn get_secure_master_key(&self) -> AppResult<String> {
+        // 1. 尝试从环境变量获取
+        if let Ok(key) = std::env::var("OrbitX_MASTER_KEY") {
+            if !key.is_empty() && key.len() >= 16 {
+                debug!("从环境变量获取主密钥");
+                return Ok(key);
+            } else {
+                warn!("环境变量 OrbitX_MASTER_KEY 长度不足（需要至少16个字符）");
             }
         }
 
-        Ok(())
+        // 2. 尝试从系统密钥链获取（仅在支持的平台上）
+        if let Some(key) = self.get_key_from_system_keychain().await? {
+            debug!("从系统密钥链获取主密钥");
+            return Ok(key);
+        }
+
+        // 3. 尝试从用户配置目录的安全文件获取
+        if let Some(key) = self.get_key_from_config_file().await? {
+            debug!("从配置文件获取主密钥");
+            return Ok(key);
+        }
+
+        // 4. 生成新的安全随机密钥并保存
+        let new_key = self.generate_and_save_master_key().await?;
+        info!("生成新的主密钥并保存到配置文件");
+        Ok(new_key)
     }
 
-    /// 获取当前数据库版本
-    async fn get_current_schema_version(&self) -> AppResult<u32> {
-        let sql = "SELECT MAX(version) as version FROM schema_migrations";
+    /// 从系统密钥链获取密钥
+    async fn get_key_from_system_keychain(&self) -> AppResult<Option<String>> {
+        // 在实际实现中，这里应该调用系统特定的密钥链API
+        // 例如：macOS Keychain、Windows DPAPI、Linux Secret Service
 
-        let row = self
-            .db_pool
-            .fetch_optional(sql)
+        #[cfg(target_os = "macos")]
+        {
+            // 示例：macOS Keychain集成（需要security-framework crate）
+            // let service = "terminal-app";
+            // let account = "master-encryption-key";
+            // 实际实现需要添加对应的依赖和代码
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            // 示例：Windows DPAPI集成（需要winapi crate）
+            // 实际实现需要添加对应的依赖和代码
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // 示例：Linux Secret Service集成（需要secret-service crate）
+            // 实际实现需要添加对应的依赖和代码
+        }
+
+        // 当前简化实现：返回None，表示不支持系统密钥链
+        debug!("系统密钥链支持尚未实现");
+        Ok(None)
+    }
+
+    /// 从配置文件获取密钥
+    async fn get_key_from_config_file(&self) -> AppResult<Option<String>> {
+        let config_dir = self.paths.config_dir.clone();
+        let key_file_path = config_dir.join(".master_key");
+
+        if !key_file_path.exists() {
+            return Ok(None);
+        }
+
+        match tokio::fs::read_to_string(&key_file_path).await {
+            Ok(content) => {
+                let key = content.trim().to_string();
+                if key.len() >= 16 {
+                    Ok(Some(key))
+                } else {
+                    warn!("配置文件中的密钥长度不足");
+                    Ok(None)
+                }
+            }
+            Err(e) => {
+                warn!("读取密钥配置文件失败: {}", e);
+                Ok(None)
+            }
+        }
+    }
+
+    /// 生成并保存新的主密钥
+    async fn generate_and_save_master_key(&self) -> AppResult<String> {
+        use rand::{distributions::Alphanumeric, Rng};
+
+        // 生成64字符的随机密钥
+        let new_key: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(64)
+            .map(char::from)
+            .collect();
+
+        // 保存到配置文件
+        let config_dir = &self.paths.config_dir;
+        tokio::fs::create_dir_all(config_dir)
             .await
-            .map_err(|e| anyhow!("查询数据库版本失败: {}", e))?;
+            .with_context(|| format!("创建配置目录失败: {}", config_dir.display()))?;
 
-        match row {
-            Some(row) => {
-                let version: Option<i64> = row
-                    .try_get("version")
-                    .map_err(|e| anyhow!("解析版本号失败: {}", e))?;
-                Ok(version.unwrap_or(0) as u32)
-            }
-            None => Ok(0),
+        let key_file_path = config_dir.join(".master_key");
+        tokio::fs::write(&key_file_path, &new_key)
+            .await
+            .with_context(|| format!("保存主密钥文件失败: {}", key_file_path.display()))?;
+
+        // 设置文件权限（仅所有者可读写）
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = tokio::fs::metadata(&key_file_path).await?.permissions();
+            perms.set_mode(0o600); // rw-------
+            tokio::fs::set_permissions(&key_file_path, perms).await?;
         }
+
+        info!("新主密钥已生成并保存到: {}", key_file_path.display());
+        Ok(new_key)
     }
 
     /// 插入默认数据
@@ -498,87 +561,6 @@ impl SqliteManager {
         Ok(())
     }
 
-    /// 迁移到指定版本
-    pub async fn migrate_to_version(&self, target_version: u32) -> AppResult<()> {
-        let current_version = self.get_current_schema_version().await?;
-
-        if target_version == current_version {
-            return Ok(());
-        }
-
-        if target_version > current_version {
-            // 向上迁移
-            for migration in &self.migrations {
-                if migration.version > current_version && migration.version <= target_version {
-                    info!(
-                        "执行向上迁移 v{}: {}",
-                        migration.version, migration.description
-                    );
-                    self.apply_migration(migration, true).await?;
-                }
-            }
-        } else {
-            // 向下迁移
-            let mut migrations = self.migrations.clone();
-            migrations.sort_by(|a, b| b.version.cmp(&a.version)); // 降序排列
-
-            for migration in &migrations {
-                if migration.version <= current_version && migration.version > target_version {
-                    info!(
-                        "执行向下迁移 v{}: {}",
-                        migration.version, migration.description
-                    );
-                    self.apply_migration(migration, false).await?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// 应用单个迁移
-    async fn apply_migration(&self, migration: &Migration, is_up: bool) -> AppResult<()> {
-        let mut tx = self
-            .db_pool
-            .begin()
-            .await
-            .map_err(|e| anyhow!("开始迁移事务失败: {}", e))?;
-
-        let sql = if is_up {
-            &migration.up_sql
-        } else {
-            &migration.down_sql
-        };
-
-        tx.execute(sql.as_str())
-            .await
-            .map_err(|e| anyhow!("执行迁移SQL失败: {}", e))?;
-
-        if is_up {
-            // 记录迁移
-            let record_sql = "INSERT INTO schema_migrations (version, description) VALUES (?, ?)";
-            tx.execute(
-                sqlx::query(record_sql)
-                    .bind(migration.version as i64)
-                    .bind(&migration.description),
-            )
-            .await
-            .map_err(|e| anyhow!("记录迁移失败: {}", e))?;
-        } else {
-            // 删除迁移记录
-            let delete_sql = "DELETE FROM schema_migrations WHERE version = ?";
-            tx.execute(sqlx::query(delete_sql).bind(migration.version as i64))
-                .await
-                .map_err(|e| anyhow!("删除迁移记录失败: {}", e))?;
-        }
-
-        tx.commit()
-            .await
-            .map_err(|e| anyhow!("提交迁移事务失败: {}", e))?;
-
-        Ok(())
-    }
-
     /// 查询数据
     pub async fn query_data(&self, query: &DataQuery) -> AppResult<Vec<Value>> {
         debug!("执行数据查询: {}", query.query);
@@ -595,30 +577,46 @@ impl SqliteManager {
             }
         }
 
-        // 构建SQL查询
+        // 构建SQL查询（安全版）：
+        // - 仅允许 ORDER BY 的字段为白名单
+        // - LIMIT/OFFSET 使用参数绑定（i64）
         let mut sql = query.query.clone();
 
-        // 添加排序
+        // 允许排序的字段白名单（按需扩展或通过配置注入）
+        let allowed_order_fields = ["id", "created_at", "updated_at"]; // 示例
         if let Some(order_by) = &query.order_by {
-            sql.push_str(&format!(
-                " ORDER BY {} {}",
-                order_by,
-                if query.desc { "DESC" } else { "ASC" }
-            ));
+            if allowed_order_fields.contains(&order_by.as_str()) {
+                sql.push_str(&format!(
+                    " ORDER BY {} {}",
+                    order_by,
+                    if query.desc { "DESC" } else { "ASC" }
+                ));
+            } else {
+                debug!("忽略不在白名单中的 ORDER BY 字段: {}", order_by);
+            }
         }
 
-        // 添加限制和偏移
-        if let Some(limit) = query.limit {
-            sql.push_str(&format!(" LIMIT {}", limit));
-            if let Some(offset) = query.offset {
-                sql.push_str(&format!(" OFFSET {}", offset));
-            }
+        let limit_i64: Option<i64> = query.limit.map(|v| v as i64);
+        let offset_i64: Option<i64> = query.offset.map(|v| v as i64);
+        if limit_i64.is_some() {
+            sql.push_str(" LIMIT ?");
+        }
+        if offset_i64.is_some() {
+            sql.push_str(" OFFSET ?");
+        }
+
+        let mut q = sqlx::query(&sql);
+        if let Some(l) = limit_i64 {
+            q = q.bind(l);
+        }
+        if let Some(o) = offset_i64 {
+            q = q.bind(o);
         }
 
         // 执行查询
         let rows = self
             .db_pool
-            .fetch_all(sql.as_str())
+            .fetch_all(q)
             .await
             .map_err(|e| anyhow!("查询执行失败: {}", e))?;
 
@@ -709,14 +707,16 @@ impl SqliteManager {
 
         debug!("保存数据到表: {}", table);
 
-        // 清除相关缓存
-        self.clear_table_cache(table).await;
+        // 清除相关缓存（AI相关表除外）
+        if !table.starts_with("ai_") {
+            self.clear_table_cache(table).await;
+        }
 
         // 根据表名选择保存策略
         match table.as_str() {
             "ai_models" => self.save_ai_model_data(data, options).await,
             "command_history" => self.save_command_history_data(data, options).await,
-            "ai_chat_history" => self.save_ai_chat_history_data(data, options).await,
+
             _ => self.save_generic_data(table, data, options).await,
         }
     }
@@ -870,54 +870,6 @@ impl SqliteManager {
         Ok(())
     }
 
-    /// 保存AI聊天历史数据
-    async fn save_ai_chat_history_data(
-        &self,
-        data: &Value,
-        _options: &SaveOptions,
-    ) -> AppResult<()> {
-        debug!("开始保存AI聊天历史数据: {:?}", data);
-
-        let entry: AIChatHistoryEntry = serde_json::from_value(data.clone())
-            .map_err(|e| anyhow!(format!("AI聊天历史数据格式错误: {}", e)))?;
-
-        debug!(
-            "解析AI聊天历史成功: session_id={}, model_id={}, role={}",
-            entry.session_id, entry.model_id, entry.role
-        );
-
-        let sql = r#"
-            INSERT INTO ai_chat_history
-            (session_id, model_id, role, content, token_count, metadata_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        "#;
-
-        let result = self
-            .db_pool
-            .execute(
-                sqlx::query(sql)
-                    .bind(&entry.session_id)
-                    .bind(&entry.model_id)
-                    .bind(&entry.role)
-                    .bind(&entry.content)
-                    .bind(entry.token_count)
-                    .bind(&entry.metadata_json)
-                    .bind(entry.created_at),
-            )
-            .await;
-
-        match result {
-            Ok(_) => {
-                debug!("AI聊天历史保存成功");
-                Ok(())
-            }
-            Err(e) => {
-                error!("保存AI聊天历史失败: {}", e);
-                Err(anyhow!("保存AI聊天历史失败: {}", e))
-            }
-        }
-    }
-
     /// 保存通用数据
     async fn save_generic_data(
         &self,
@@ -1007,21 +959,6 @@ impl SqliteManager {
 
     /// 获取所有AI模型配置
     pub async fn get_ai_models(&self) -> AppResult<Vec<AIModelConfig>> {
-        let cache_key = "ai_models_all".to_string();
-
-        // 检查缓存
-        {
-            let cache = self.cache.read().await;
-            if let Some(cached_value) = cache.peek(&cache_key) {
-                if let Ok(models) =
-                    serde_json::from_value::<Vec<AIModelConfig>>(cached_value.clone())
-                {
-                    debug!("从缓存获取AI模型配置");
-                    return Ok(models);
-                }
-            }
-        }
-
         let sql = r#"
             SELECT id, name, provider, api_url, api_key_encrypted, model_name,
                    is_default, enabled, config_json, created_at, updated_at
@@ -1041,12 +978,6 @@ impl SqliteManager {
         for row in rows {
             let model = self.row_to_ai_model_config(&row, &encryption_manager)?;
             models.push(model);
-        }
-
-        // 缓存结果
-        {
-            let mut cache = self.cache.write().await;
-            cache.put(cache_key, serde_json::to_value(&models).unwrap_or_default());
         }
 
         Ok(models)
@@ -1087,171 +1018,7 @@ impl SqliteManager {
             .await
             .map_err(|e| anyhow!("提交事务失败: {}", e))?;
 
-        // 清除相关缓存
-        self.clear_table_cache("ai_models").await;
-
         Ok(())
-    }
-
-    /// 保存AI聊天消息
-    pub async fn save_chat_message(&self, entry: &AIChatHistoryEntry) -> AppResult<i64> {
-        debug!(
-            "保存AI聊天消息: session_id={}, role={}",
-            entry.session_id, entry.role
-        );
-
-        let sql = r#"
-            INSERT INTO ai_chat_history
-            (session_id, model_id, role, content, token_count, metadata_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        "#;
-
-        let result = self
-            .db_pool
-            .execute(
-                sqlx::query(sql)
-                    .bind(&entry.session_id)
-                    .bind(&entry.model_id)
-                    .bind(&entry.role)
-                    .bind(&entry.content)
-                    .bind(entry.token_count)
-                    .bind(&entry.metadata_json)
-                    .bind(entry.created_at),
-            )
-            .await
-            .map_err(|e| anyhow!("保存AI聊天消息失败: {}", e))?;
-
-        // 清除相关缓存
-        self.clear_table_cache("ai_chat_history").await;
-
-        Ok(result.last_insert_rowid())
-    }
-
-    /// 查询AI聊天历史
-    pub async fn get_chat_history(
-        &self,
-        query: &ChatHistoryQuery,
-    ) -> AppResult<Vec<AIChatHistoryEntry>> {
-        debug!("查询AI聊天历史: session_id={:?}", query.session_id);
-
-        // 构建基础查询
-        let mut sql = String::from(
-            r#"
-            SELECT id, session_id, model_id, role, content, token_count, metadata_json, created_at
-            FROM ai_chat_history
-            WHERE 1=1
-        "#,
-        );
-
-        // 添加查询条件
-        if let Some(session_id) = &query.session_id {
-            sql.push_str(&format!(
-                " AND session_id = '{}'",
-                session_id.replace("'", "''")
-            ));
-        }
-
-        if let Some(model_id) = &query.model_id {
-            sql.push_str(&format!(
-                " AND model_id = '{}'",
-                model_id.replace("'", "''")
-            ));
-        }
-
-        if let Some(role) = &query.role {
-            sql.push_str(&format!(" AND role = '{}'", role.replace("'", "''")));
-        }
-
-        if let Some(date_from) = &query.date_from {
-            sql.push_str(&format!(
-                " AND created_at >= '{}'",
-                date_from.format("%Y-%m-%d %H:%M:%S")
-            ));
-        }
-
-        if let Some(date_to) = &query.date_to {
-            sql.push_str(&format!(
-                " AND created_at <= '{}'",
-                date_to.format("%Y-%m-%d %H:%M:%S")
-            ));
-        }
-
-        sql.push_str(" ORDER BY created_at ASC");
-
-        if let Some(limit) = query.limit {
-            sql.push_str(&format!(" LIMIT {}", limit));
-        }
-
-        if let Some(offset) = query.offset {
-            sql.push_str(&format!(" OFFSET {}", offset));
-        }
-
-        // 执行查询
-        let rows = self
-            .db_pool
-            .fetch_all(sqlx::query(&sql))
-            .await
-            .map_err(|e| anyhow!("查询AI聊天历史失败: {}", e))?;
-
-        let entries: Vec<AIChatHistoryEntry> = rows
-            .iter()
-            .map(|row| self.row_to_chat_history_entry(row))
-            .collect();
-
-        debug!("查询到 {} 条AI聊天历史记录", entries.len());
-        Ok(entries)
-    }
-
-    /// 获取所有会话列表
-    pub async fn get_chat_sessions(&self) -> AppResult<Vec<String>> {
-        let sql = r#"
-            SELECT DISTINCT session_id, MAX(created_at) as last_activity
-            FROM ai_chat_history
-            GROUP BY session_id
-            ORDER BY last_activity DESC
-        "#;
-
-        let rows = self
-            .db_pool
-            .fetch_all(sqlx::query(sql))
-            .await
-            .map_err(|e| anyhow!("获取会话列表失败: {}", e))?;
-
-        let sessions: Vec<String> = rows
-            .iter()
-            .map(|row| row.get::<String, _>("session_id"))
-            .collect();
-
-        Ok(sessions)
-    }
-
-    /// 清除AI聊天历史
-    pub async fn clear_chat_history(&self, session_id: Option<&str>) -> AppResult<u64> {
-        debug!("清除AI聊天历史: session_id={:?}", session_id);
-
-        let (_sql, affected_rows) = if let Some(session_id) = session_id {
-            let _sql = "DELETE FROM ai_chat_history WHERE session_id = ?";
-            let result = self
-                .db_pool
-                .execute(sqlx::query(_sql).bind(session_id))
-                .await
-                .map_err(|e| anyhow!("清除指定会话聊天历史失败: {}", e))?;
-            (_sql, result.rows_affected())
-        } else {
-            let _sql = "DELETE FROM ai_chat_history";
-            let result = self
-                .db_pool
-                .execute(sqlx::query(_sql))
-                .await
-                .map_err(|e| anyhow!("清除所有聊天历史失败: {}", e))?;
-            (_sql, result.rows_affected())
-        };
-
-        // 清除相关缓存
-        self.clear_table_cache("ai_chat_history").await;
-
-        debug!("清除了 {} 条AI聊天历史记录", affected_rows);
-        Ok(affected_rows)
     }
 
     /// 删除AI模型
@@ -1304,9 +1071,6 @@ impl SqliteManager {
                     None,
                 )
                 .await?;
-
-                // 清除相关缓存
-                self.clear_table_cache("ai_models").await;
 
                 Ok(())
             }
@@ -1405,20 +1169,6 @@ impl SqliteManager {
         }
     }
 
-    /// 将数据库行转换为AI聊天历史条目
-    fn row_to_chat_history_entry(&self, row: &SqliteRow) -> AIChatHistoryEntry {
-        AIChatHistoryEntry {
-            id: row.get("id"),
-            session_id: row.get("session_id"),
-            model_id: row.get("model_id"),
-            role: row.get("role"),
-            content: row.get("content"),
-            token_count: row.get("token_count"),
-            metadata_json: row.get("metadata_json"),
-            created_at: row.get("created_at"),
-        }
-    }
-
     // ========================================================================
     // 审计日志方法
     // ========================================================================
@@ -1472,23 +1222,32 @@ impl SqliteManager {
         "#,
         );
 
-        if let Some(table) = table_name {
-            sql.push_str(&format!(" AND table_name = '{}'", table));
+        // 参数化绑定，避免注入
+        if table_name.is_some() {
+            sql.push_str(" AND table_name = ?");
         }
-
-        if let Some(op) = operation {
-            sql.push_str(&format!(" AND operation = '{}'", op));
+        if operation.is_some() {
+            sql.push_str(" AND operation = ?");
         }
-
         sql.push_str(" ORDER BY timestamp DESC");
+        if limit.is_some() {
+            sql.push_str(" LIMIT ?");
+        }
 
+        let mut q = sqlx::query(&sql);
+        if let Some(table) = table_name {
+            q = q.bind(table);
+        }
+        if let Some(op) = operation {
+            q = q.bind(op);
+        }
         if let Some(limit_val) = limit {
-            sql.push_str(&format!(" LIMIT {}", limit_val));
+            q = q.bind(limit_val);
         }
 
         let rows = self
             .db_pool
-            .fetch_all(sqlx::query(&sql))
+            .fetch_all(q)
             .await
             .map_err(|e| anyhow!("查询审计日志失败: {}", e))?;
 
@@ -1530,56 +1289,61 @@ impl SqliteManager {
         "#,
         );
 
-        // 简化版本：使用字符串拼接构建查询（在生产环境中应该使用参数化查询）
+        // 参数化查询，避免注入
+        let mut args: Vec<(String, String)> = Vec::new();
         if let Some(pattern) = &query.command_pattern {
-            sql.push_str(&format!(
-                " AND command LIKE '%{}%'",
-                pattern.replace("'", "''")
-            ));
+            sql.push_str(" AND command LIKE ?");
+            args.push(("like".to_string(), format!("%{}%", pattern)));
         }
 
         if let Some(working_dir) = &query.working_directory {
-            sql.push_str(&format!(
-                " AND working_directory = '{}'",
-                working_dir.replace("'", "''")
-            ));
+            sql.push_str(" AND working_directory = ?");
+            args.push(("eq".to_string(), working_dir.clone()));
         }
 
-        if let Some(session_id) = &query.session_id {
-            sql.push_str(&format!(
-                " AND session_id = '{}'",
-                session_id.replace("'", "''")
-            ));
-        }
+        // session_id 字段已从 HistoryQuery 中移除
 
         if let Some(date_from) = &query.date_from {
-            sql.push_str(&format!(
-                " AND executed_at >= '{}'",
-                date_from.format("%Y-%m-%d %H:%M:%S")
+            sql.push_str(" AND executed_at >= ?");
+            args.push((
+                "ge".to_string(),
+                date_from.format("%Y-%m-%d %H:%M:%S").to_string(),
             ));
         }
 
         if let Some(date_to) = &query.date_to {
-            sql.push_str(&format!(
-                " AND executed_at <= '{}'",
-                date_to.format("%Y-%m-%d %H:%M:%S")
+            sql.push_str(" AND executed_at <= ?");
+            args.push((
+                "le".to_string(),
+                date_to.format("%Y-%m-%d %H:%M:%S").to_string(),
             ));
         }
 
         sql.push_str(" ORDER BY executed_at DESC");
 
-        if let Some(limit) = query.limit {
-            sql.push_str(&format!(" LIMIT {}", limit));
+        // LIMIT/OFFSET 参数化 + 执行
+        let limit_i64: Option<i64> = query.limit.map(|v| v as i64);
+        let offset_i64: Option<i64> = query.offset.map(|v| v as i64);
+        if limit_i64.is_some() {
+            sql.push_str(" LIMIT ?");
+        }
+        if offset_i64.is_some() {
+            sql.push_str(" OFFSET ?");
         }
 
-        if let Some(offset) = query.offset {
-            sql.push_str(&format!(" OFFSET {}", offset));
+        let mut q = sqlx::query(&sql);
+        for (_k, v) in &args {
+            q = q.bind(v);
         }
-
-        // 执行查询
+        if let Some(l) = limit_i64 {
+            q = q.bind(l);
+        }
+        if let Some(o) = offset_i64 {
+            q = q.bind(o);
+        }
         let rows = self
             .db_pool
-            .fetch_all(sqlx::query(&sql))
+            .fetch_all(q)
             .await
             .map_err(|e| anyhow!("查询命令历史失败: {}", e))?;
 
@@ -1912,5 +1676,326 @@ impl SqliteManager {
 
         info!("批量保存了 {} 条命令历史记录", entries.len());
         Ok(())
+    }
+
+    // ===== AI会话上下文管理系统 - 全新方法 =====
+
+    /// 创建新会话
+    pub async fn create_conversation(&self, conversation: &Conversation) -> AppResult<i64> {
+        debug!("创建会话: title={}", conversation.title);
+
+        let sql = r#"
+            INSERT INTO ai_conversations (title, message_count, last_message_preview, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+        "#;
+
+        let result = self
+            .db_pool
+            .execute(
+                sqlx::query(sql)
+                    .bind(&conversation.title)
+                    .bind(conversation.message_count)
+                    .bind(&conversation.last_message_preview)
+                    .bind(conversation.created_at)
+                    .bind(conversation.updated_at),
+            )
+            .await
+            .with_context(|| "创建会话失败")?;
+
+        Ok(result.last_insert_rowid())
+    }
+
+    /// 获取会话列表
+    pub async fn get_conversations(
+        &self,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> AppResult<Vec<Conversation>> {
+        debug!("查询会话列表: limit={:?}, offset={:?}", limit, offset);
+
+        let mut sql = String::from(
+            r#"
+            SELECT id, title, message_count, last_message_preview, created_at, updated_at
+            FROM ai_conversations
+            ORDER BY updated_at DESC
+        "#,
+        );
+
+        if let Some(limit) = limit {
+            sql.push_str(&format!(" LIMIT {}", limit));
+        }
+
+        if let Some(offset) = offset {
+            sql.push_str(&format!(" OFFSET {}", offset));
+        }
+
+        let rows = self
+            .db_pool
+            .fetch_all(sqlx::query(&sql))
+            .await
+            .with_context(|| "查询会话列表失败")?;
+
+        let conversations: Vec<Conversation> = rows
+            .iter()
+            .map(|row| self.row_to_conversation(row))
+            .collect();
+
+        Ok(conversations)
+    }
+
+    /// 获取单个会话
+    pub async fn get_conversation(&self, conversation_id: i64) -> AppResult<Option<Conversation>> {
+        debug!("查询会话: {}", conversation_id);
+
+        let sql = r#"
+            SELECT id, title, message_count, last_message_preview, created_at, updated_at
+            FROM ai_conversations
+            WHERE id = ?
+        "#;
+
+        let row = self
+            .db_pool
+            .fetch_optional(sqlx::query(sql).bind(conversation_id))
+            .await
+            .with_context(|| format!("查询会话失败: {}", conversation_id))?;
+
+        Ok(row.map(|r| self.row_to_conversation(&r)))
+    }
+
+    /// 更新会话标题
+    pub async fn update_conversation_title(
+        &self,
+        conversation_id: i64,
+        title: &str,
+    ) -> AppResult<()> {
+        debug!("更新会话标题: {} -> {}", conversation_id, title);
+
+        let sql = r#"
+            UPDATE ai_conversations
+            SET title = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        "#;
+
+        self.db_pool
+            .execute(sqlx::query(sql).bind(title).bind(conversation_id))
+            .await
+            .with_context(|| format!("更新会话标题失败: {}", conversation_id))?;
+
+        Ok(())
+    }
+
+    /// 删除会话
+    pub async fn delete_conversation(&self, conversation_id: i64) -> AppResult<()> {
+        debug!("删除会话: {}", conversation_id);
+
+        // 由于设置了级联删除，删除会话会自动删除相关消息
+        let sql = "DELETE FROM ai_conversations WHERE id = ?";
+
+        let result = self
+            .db_pool
+            .execute(sqlx::query(sql).bind(conversation_id))
+            .await
+            .with_context(|| format!("删除会话失败: {}", conversation_id))?;
+
+        if result.rows_affected() == 0 {
+            return Err(anyhow!("会话不存在: {}", conversation_id));
+        }
+
+        Ok(())
+    }
+
+    /// 保存消息
+    pub async fn save_message(&self, message: &Message) -> AppResult<i64> {
+        debug!(
+            "保存消息: conversation_id={}, role={}",
+            message.conversation_id, message.role
+        );
+
+        let sql = r#"
+            INSERT INTO ai_messages (conversation_id, role, content, created_at)
+            VALUES (?, ?, ?, ?)
+        "#;
+
+        let result = self
+            .db_pool
+            .execute(
+                sqlx::query(sql)
+                    .bind(message.conversation_id)
+                    .bind(&message.role)
+                    .bind(&message.content)
+                    .bind(message.created_at),
+            )
+            .await
+            .with_context(|| "保存消息失败")?;
+
+        Ok(result.last_insert_rowid())
+    }
+
+    /// 获取会话消息
+    pub async fn get_messages(
+        &self,
+        conversation_id: i64,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> AppResult<Vec<Message>> {
+        debug!(
+            "查询消息: conversation_id={}, limit={:?}, offset={:?}",
+            conversation_id, limit, offset
+        );
+
+        let mut sql = String::from(
+            r#"
+            SELECT id, conversation_id, role, content, created_at
+            FROM ai_messages
+            WHERE conversation_id = ?
+            ORDER BY created_at ASC
+        "#,
+        );
+
+        if let Some(limit) = limit {
+            sql.push_str(&format!(" LIMIT {}", limit));
+        }
+
+        if let Some(offset) = offset {
+            sql.push_str(&format!(" OFFSET {}", offset));
+        }
+
+        let rows = self
+            .db_pool
+            .fetch_all(sqlx::query(&sql).bind(conversation_id))
+            .await
+            .with_context(|| format!("查询消息失败: {}", conversation_id))?;
+
+        let messages: Vec<Message> = rows.iter().map(|row| self.row_to_message(row)).collect();
+
+        Ok(messages)
+    }
+
+    /// 获取指定位置之前的消息（用于截断重问）
+    pub async fn get_messages_up_to(
+        &self,
+        conversation_id: i64,
+        up_to_message_id: i64,
+    ) -> AppResult<Vec<Message>> {
+        debug!(
+            "查询截断消息: conversation_id={}, up_to={}",
+            conversation_id, up_to_message_id
+        );
+
+        let sql = r#"
+            SELECT id, conversation_id, role, content, created_at
+            FROM ai_messages
+            WHERE conversation_id = ? AND id <= ?
+            ORDER BY created_at ASC
+        "#;
+
+        let rows = self
+            .db_pool
+            .fetch_all(
+                sqlx::query(sql)
+                    .bind(conversation_id)
+                    .bind(up_to_message_id),
+            )
+            .await
+            .with_context(|| "查询截断消息失败")?;
+
+        let messages: Vec<Message> = rows.iter().map(|row| self.row_to_message(row)).collect();
+
+        Ok(messages)
+    }
+
+    /// 删除指定消息ID之后的所有消息（用于截断重问）
+    pub async fn delete_messages_after(
+        &self,
+        conversation_id: i64,
+        after_message_id: i64,
+    ) -> AppResult<u64> {
+        debug!(
+            "删除截断消息: conversation_id={}, after={}",
+            conversation_id, after_message_id
+        );
+
+        let sql = r#"
+            DELETE FROM ai_messages
+            WHERE conversation_id = ? AND id > ?
+        "#;
+
+        let result = self
+            .db_pool
+            .execute(
+                sqlx::query(sql)
+                    .bind(conversation_id)
+                    .bind(after_message_id),
+            )
+            .await
+            .with_context(|| "删除消息失败")?;
+
+        Ok(result.rows_affected())
+    }
+
+    /// 获取会话的最后一条消息
+    pub async fn get_last_message(&self, conversation_id: i64) -> AppResult<Option<Message>> {
+        debug!("查询最后消息: conversation_id={}", conversation_id);
+
+        let sql = r#"
+            SELECT id, conversation_id, role, content, created_at
+            FROM ai_messages
+            WHERE conversation_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        "#;
+
+        let row = self
+            .db_pool
+            .fetch_optional(sqlx::query(sql).bind(conversation_id))
+            .await
+            .with_context(|| format!("查询最后消息失败: {}", conversation_id))?;
+
+        Ok(row.map(|r| self.row_to_message(&r)))
+    }
+
+    /// 更新会话预览
+    pub async fn update_conversation_preview(
+        &self,
+        conversation_id: i64,
+        preview: &str,
+    ) -> AppResult<()> {
+        debug!("更新会话预览: {} -> {}", conversation_id, preview);
+
+        let sql = r#"
+            UPDATE ai_conversations
+            SET last_message_preview = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        "#;
+
+        self.db_pool
+            .execute(sqlx::query(sql).bind(preview).bind(conversation_id))
+            .await
+            .with_context(|| format!("更新会话预览失败: {}", conversation_id))?;
+
+        Ok(())
+    }
+
+    /// 数据库行转换为会话对象
+    fn row_to_conversation(&self, row: &SqliteRow) -> Conversation {
+        Conversation {
+            id: row.get("id"),
+            title: row.get("title"),
+            message_count: row.get("message_count"),
+            last_message_preview: row.get("last_message_preview"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        }
+    }
+
+    /// 数据库行转换为消息对象
+    fn row_to_message(&self, row: &SqliteRow) -> Message {
+        Message {
+            id: row.get("id"),
+            conversation_id: row.get("conversation_id"),
+            role: row.get("role"),
+            content: row.get("content"),
+            created_at: row.get("created_at"),
+        }
     }
 }

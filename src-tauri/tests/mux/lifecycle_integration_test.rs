@@ -19,7 +19,10 @@ mod integration_tests {
 
         // 订阅所有通知
         let _subscriber_id = mux.subscribe(move |notification| {
-            notifications_clone.lock().unwrap().push(notification);
+            notifications_clone
+                .lock()
+                .unwrap()
+                .push(notification.clone());
             true
         });
 
@@ -394,7 +397,7 @@ mod integration_tests {
             for i in 0..10 {
                 mux_clone.notify_from_any_thread(MuxNotification::PaneOutput {
                     pane_id,
-                    data: format!("Cross-thread message {i}\n").into_bytes(),
+                    data: format!("Cross-thread message {i}\n").into_bytes().into(),
                 });
                 thread::sleep(Duration::from_millis(1));
             }

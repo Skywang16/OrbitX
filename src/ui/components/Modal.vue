@@ -1,18 +1,11 @@
 <template>
   <Teleport to="body">
     <div v-if="visible" class="modal-overlay" @click.self="handleOverlayClick">
-      <div
-        ref="modalRef"
-        class="modal-container"
-        :class="sizeClass"
-        role="dialog"
-        aria-modal="true"
-        :aria-labelledby="titleId"
-      >
+      <div ref="modalRef" class="modal-container" :class="sizeClass" role="dialog" aria-modal="true">
         <!-- 模态框头部 -->
         <div v-if="showHeader" class="modal-header">
           <div class="modal-title-section">
-            <h3 v-if="title" :id="titleId" class="modal-title">{{ title }}</h3>
+            <h3 v-if="title" class="modal-title">{{ title }}</h3>
             <slot name="title"></slot>
           </div>
           <button v-if="closable" class="modal-close-button" @click="handleClose" :title="closeButtonTitle">

@@ -17,7 +17,7 @@ use crate::mux::{
 use crate::utils::error::AppResult;
 
 /// 订阅者回调函数类型
-pub type SubscriberCallback = Box<dyn Fn(MuxNotification) -> bool + Send + Sync>;
+pub type SubscriberCallback = Box<dyn Fn(&MuxNotification) -> bool + Send + Sync>;
 
 /// TerminalMux状态信息
 #[derive(Debug, Clone)]
@@ -428,7 +428,7 @@ impl TerminalMux {
     /// 订阅事件通知
     pub fn subscribe<F>(&self, subscriber: F) -> usize
     where
-        F: Fn(MuxNotification) -> bool + Send + Sync + 'static,
+        F: Fn(&MuxNotification) -> bool + Send + Sync + 'static,
     {
         let subscriber_id = self.next_subscriber_id();
 
@@ -459,25 +459,25 @@ impl TerminalMux {
     /// 发送通知给所有订阅者
     pub fn notify(&self, notification: MuxNotification) {
         if thread::current().id() == self.main_thread_id {
-            self.notify_internal(notification);
+            self.notify_internal(&notification);
         } else {
             // 从其他线程发送通知，使用通道发送到主线程
-            if let Err(e) = self.notification_sender.send(notification.clone()) {
+            if let Err(e) = self.notification_sender.send(notification) {
                 tracing::error!("跨线程通知发送失败: {}", e);
             } else {
-                tracing::debug!("跨线程通知已发送: {:?}", notification);
+                tracing::debug!("跨线程通知已发送");
             }
         }
     }
 
     /// 内部通知实现
-    fn notify_internal(&self, notification: MuxNotification) {
+    fn notify_internal(&self, notification: &MuxNotification) {
         let mut dead_subscribers = Vec::new();
 
         if let Ok(subscribers) = self.subscribers.read() {
             for (&subscriber_id, callback) in subscribers.iter() {
                 match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    callback(notification.clone())
+                    callback(notification)
                 })) {
                     Ok(true) => {
                         // 订阅者处理成功，继续保持订阅
@@ -510,10 +510,10 @@ impl TerminalMux {
 
     /// 从任意线程发送通知到主线程
     pub fn notify_from_any_thread(&self, notification: MuxNotification) {
-        if let Err(e) = self.notification_sender.send(notification.clone()) {
+        if let Err(e) = self.notification_sender.send(notification) {
             tracing::error!("跨线程通知发送失败: {}", e);
         } else {
-            tracing::debug!("跨线程通知已发送: {:?}", notification);
+            tracing::debug!("跨线程通知已发送");
         }
     }
 
@@ -523,7 +523,7 @@ impl TerminalMux {
             if let Some(receiver) = receiver_guard.as_ref() {
                 // 处理所有待处理的通知
                 while let Ok(notification) = receiver.try_recv() {
-                    self.notify_internal(notification);
+                    self.notify_internal(&notification);
                 }
             }
         }
@@ -549,7 +549,7 @@ impl TerminalMux {
                 loop {
                     match receiver.recv() {
                         Ok(notification) => {
-                            mux.notify_internal(notification);
+                            mux.notify_internal(&notification);
                         }
                         Err(_) => {
                             tracing::info!("通知通道已关闭，退出处理线程");
@@ -682,5 +682,4 @@ impl std::fmt::Debug for TerminalMux {
 }
 
 // 线程安全标记
-unsafe impl Send for TerminalMux {}
-unsafe impl Sync for TerminalMux {}
+// 依赖成员类型的 Send/Sync 自动推导即可，无需显式 unsafe 标记

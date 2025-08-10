@@ -1,19 +1,19 @@
 {
-  "name": "termx",
+  "name": "orbitx",
   "private": false,
   "version": "0.1.0",
-  "description": "A modern terminal application built with Vue.js and Tauri",
+  "description": "OrbitX - A modern terminal application with AI assistant built with Vue.js and Tauri",
   "type": "module",
   "author": "Your Name <your.email@example.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Skywang16/TermX.git"
+    "url": "https://github.com/Skywang16/OrbitX.git"
   },
   "bugs": {
-    "url": "https://github.com/Skywang16/TermX/issues"
+    "url": "https://github.com/Skywang16/OrbitX/issues"
   },
-  "homepage": "https://github.com/Skywang16/TermX#readme",
+  "homepage": "https://github.com/Skywang16/OrbitX#readme",
   "keywords": [
     "terminal",
     "tauri",
@@ -33,21 +33,27 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@tauri-apps/api": "^2",
+    "@eko-ai/eko": "^3.0.0-alpha.4",
+    "@eko-ai/eko-web": "^3.0.0-alpha.4",
+    "@tauri-apps/api": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2.4.0",
     "@tauri-apps/plugin-process": "^2.3.0",
     "@vueuse/core": "^13.5.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",
+    "ajv": "^8.17.1",
     "marked": "^16.1.1",
     "pinia": "^3.0.3",
     "sharp": "^0.34.3",
+    "uuid": "^11.1.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "@types/node": "^24.2.0",
+    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.38.0",
     "@typescript-eslint/parser": "^8.38.0",
     "@vitejs/plugin-vue": "^5.2.1",

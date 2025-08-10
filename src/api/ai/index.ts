@@ -1,23 +1,15 @@
 /**
- * AI功能相关的API接口
+ * AI功能相关的API接口 - 重构版本
+ *
+ * 集成新的会话上下文管理系统
  */
 
-import type {
-  AIHealthStatus,
-  AIModelConfig,
-  AIResponse,
-  AISettings,
-  AIStats,
-  ChatMessage,
-  CommandExplanation,
-  ErrorAnalysis,
-  StreamCallback,
-  StreamChunk,
-} from '@/types'
+import type { AIHealthStatus, AIModelConfig, AISettings, AIStats } from '@/types'
 import { invoke } from '@/utils/request'
-import { Channel } from '@tauri-apps/api/core'
 
 import { handleError } from '../../utils/errorHandler'
+// 导入新的会话管理API
+import { conversationAPI, conversations } from './conversations'
 
 /**
  * AI管理API类
@@ -107,136 +99,6 @@ export class AIAPI {
 
   // ===== AI功能接口 =====
 
-  /**
-   * 发送聊天消息（一次性返回完整响应）
-   * @param message 用户输入的聊天消息
-   * @param modelId 可选的模型ID，不指定则使用默认模型
-   * @returns 返回AI的完整响应
-   */
-  async sendChatMessage(message: string, modelId?: string): Promise<AIResponse> {
-    try {
-      return await invoke('send_chat_message', { message, modelId })
-    } catch (error) {
-      throw new Error(handleError(error, '发送聊天消息失败'))
-    }
-  }
-
-  /**
-   * 流式聊天消息（使用Channel实时接收响应片段）
-   * @param message 用户输入的聊天消息
-   * @param callback 处理流式数据的回调函数
-   * @param modelId 可选的模型ID，不指定则使用默认模型
-   */
-  async streamChatMessageWithChannel(message: string, callback: StreamCallback, modelId?: string): Promise<void> {
-    try {
-      // 创建Channel用于接收流式数据
-      const channel = new Channel<StreamChunk>()
-
-      // 设置Channel消息处理器
-      channel.onmessage = (chunk: StreamChunk) => {
-        callback({
-          content: chunk.content,
-          isComplete: chunk.isComplete,
-          metadata: chunk.metadata,
-        })
-      }
-
-      // 调用后端命令，传递Channel，设置无超时限制
-      await invoke(
-        'stream_chat_message_with_channel',
-        {
-          message,
-          modelId,
-          channel,
-        },
-        { timeout: 0 }
-      ) // 0 表示无超时限制
-    } catch (error) {
-      throw new Error(handleError(error, 'Channel流式聊天失败'))
-    }
-  }
-
-  /**
-   * 可取消的流式聊天消息（支持中途取消请求）
-   * @param message 用户输入的聊天消息
-   * @param callback 处理流式数据的回调函数
-   * @param modelId 可选的模型ID，不指定则使用默认模型
-   * @returns 返回包含取消函数的对象
-   */
-  async streamChatMessageCancellable(
-    message: string,
-    callback: StreamCallback,
-    modelId?: string
-  ): Promise<{ cancel: () => void }> {
-    let cancelled = false // 取消标志
-    const cancel = () => {
-      cancelled = true
-    }
-
-    try {
-      // 创建Channel用于接收流式数据
-      const channel = new Channel<StreamChunk>()
-
-      // 设置Channel消息处理器
-      channel.onmessage = (chunk: StreamChunk) => {
-        // 检查是否已取消
-        if (cancelled) {
-          return
-        }
-
-        callback({
-          content: chunk.content,
-          isComplete: chunk.isComplete,
-          metadata: chunk.metadata,
-        })
-      }
-
-      // 调用后端命令，传递Channel，设置无超时限制
-      await invoke(
-        'stream_chat_message_with_channel',
-        {
-          message,
-          modelId,
-          channel,
-        },
-        { timeout: 0 }
-      ) // 0 表示无超时限制
-
-      return { cancel }
-    } catch (error) {
-      throw new Error(handleError(error, '可取消流式聊天失败'))
-    }
-  }
-
-  /**
-   * 解释命令功能
-   * @param command 要解释的命令字符串
-   * @param context 可选的上下文信息
-   * @returns 返回命令的详细解释
-   */
-  async explainCommand(command: string, context?: Record<string, unknown>): Promise<CommandExplanation> {
-    try {
-      return await invoke('explain_command', { command, context })
-    } catch (error) {
-      throw new Error(handleError(error, '解释命令失败'))
-    }
-  }
-
-  /**
-   * 分析错误并提供解决方案
-   * @param error 错误信息
-   * @param command 导致错误的命令
-   * @param context 可选的上下文信息
-   * @returns 返回错误分析和解决建议
-   */
-  async analyzeError(error: string, command: string, context?: Record<string, unknown>): Promise<ErrorAnalysis> {
-    try {
-      return await invoke('analyze_error', { error, command, context })
-    } catch (err) {
-      throw new Error(handleError(err, '分析错误失败'))
-    }
-  }
-
   // ===== AI设置管理 =====
 
   /**
@@ -289,81 +151,6 @@ export class AIAPI {
     }
   }
 
-  // ===== 聊天历史管理 =====
-
-  /**
-   * 获取聊天历史记录
-   * @param sessionId 可选的会话ID，不指定则获取默认会话历史
-   * @returns 返回聊天消息列表
-   */
-  async getChatHistory(sessionId?: string): Promise<ChatMessage[]> {
-    try {
-      return await invoke('get_chat_history', { sessionId })
-    } catch (error) {
-      throw new Error(handleError(error, '获取聊天历史失败'))
-    }
-  }
-
-  async getChatSessions(): Promise<string[]> {
-    try {
-      return await invoke('get_chat_sessions')
-    } catch (error) {
-      throw new Error(handleError(error, '获取会话列表失败'))
-    }
-  }
-
-  /**
-   * 保存聊天历史记录
-   * @param messages 要保存的聊天消息列表
-   * @param sessionId 可选的会话ID，不指定则保存到默认会话
-   * @returns 返回会话ID
-   */
-  async saveChatHistory(messages: ChatMessage[], sessionId?: string): Promise<string> {
-    try {
-      return await invoke('save_chat_history', { messages, sessionId })
-    } catch (error) {
-      throw new Error(handleError(error, '保存聊天历史失败'))
-    }
-  }
-
-  /**
-   * 清除聊天历史记录
-   * @param sessionId 可选的会话ID，不指定则清除默认会话历史
-   */
-  async clearChatHistory(sessionId?: string): Promise<void> {
-    try {
-      return await invoke('clear_chat_history', { sessionId })
-    } catch (error) {
-      throw new Error(handleError(error, '清除聊天历史失败'))
-    }
-  }
-
-  // ===== 上下文管理 =====
-
-  /**
-   * 获取当前终端上下文信息
-   * @returns 返回终端的上下文数据，包含当前目录、环境变量等
-   */
-  async getTerminalContext(): Promise<Record<string, unknown>> {
-    try {
-      return await invoke('get_terminal_context')
-    } catch (error) {
-      throw new Error(handleError(error, '获取终端上下文失败'))
-    }
-  }
-
-  /**
-   * 更新终端上下文信息
-   * @param context 要更新的上下文数据
-   */
-  async updateTerminalContext(context: Record<string, unknown>): Promise<void> {
-    try {
-      return await invoke('update_terminal_context', { context })
-    } catch (error) {
-      throw new Error(handleError(error, '更新终端上下文失败'))
-    }
-  }
-
   // ===== 用户前置提示词管理 =====
 
   /**
@@ -398,8 +185,8 @@ export class AIAPI {
 export const aiAPI = new AIAPI()
 
 /**
- * 便捷的AI操作函数集合
- * 提供简化的AI功能调用接口，避免直接使用aiAPI实例
+ * 便捷的AI操作函数集合 - 重构版本
+ * 提供简化的AI功能调用接口，集成新的会话管理系统
  */
 export const ai = {
   // 模型管理
@@ -411,15 +198,17 @@ export const ai = {
   setDefaultModel: (modelId: string) => aiAPI.setDefaultModel(modelId),
   testConnection: (modelId: string) => aiAPI.testConnection(modelId),
 
-  // AI功能
-  sendMessage: (message: string, modelId?: string) => aiAPI.sendChatMessage(message, modelId),
-  streamMessage: (message: string, callback: StreamCallback, modelId?: string) =>
-    aiAPI.streamChatMessageWithChannel(message, callback, modelId),
-  streamMessageCancellable: (message: string, callback: StreamCallback, modelId?: string) =>
-    aiAPI.streamChatMessageCancellable(message, callback, modelId),
-  explainCommand: (command: string, context?: Record<string, unknown>) => aiAPI.explainCommand(command, context),
-  analyzeError: (error: string, command: string, context?: Record<string, unknown>) =>
-    aiAPI.analyzeError(error, command, context),
+  // 新的会话管理功能
+  conversations: {
+    create: conversations.create,
+    getList: conversations.getList,
+    get: conversations.get,
+    updateTitle: conversations.updateTitle,
+    delete: conversations.delete,
+    getCompressedContext: conversations.getCompressedContext,
+    saveMessage: conversations.saveMessage,
+    truncateConversation: conversations.truncateConversation,
+  },
 
   // 设置管理
   getSettings: () => aiAPI.getSettings(),
@@ -429,19 +218,15 @@ export const ai = {
   getStats: () => aiAPI.getStats(),
   getHealthStatus: () => aiAPI.getHealthStatus(),
 
-  // 聊天历史
-  getChatHistory: (sessionId?: string) => aiAPI.getChatHistory(sessionId),
-  getChatSessions: () => aiAPI.getChatSessions(),
-  saveChatHistory: (messages: ChatMessage[], sessionId?: string) => aiAPI.saveChatHistory(messages, sessionId),
-  clearChatHistory: (sessionId?: string) => aiAPI.clearChatHistory(sessionId),
-
-  // 上下文管理
-  getTerminalContext: () => aiAPI.getTerminalContext(),
-  updateTerminalContext: (context: Record<string, unknown>) => aiAPI.updateTerminalContext(context),
-
   // 用户前置提示词管理
   getUserPrefixPrompt: () => aiAPI.getUserPrefixPrompt(),
   setUserPrefixPrompt: (prompt: string | null) => aiAPI.setUserPrefixPrompt(prompt),
 }
+
+// 导出会话管理API
+export { conversationAPI, conversations }
+
+// 默认导出
+export default aiAPI
 
 // 类型定义现在统一从 @/types 导入，不在此处重复导出

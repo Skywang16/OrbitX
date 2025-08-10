@@ -1,27 +1,51 @@
 /**
- * AI聊天相关类型定义
+ * AI聊天相关类型定义 - 全新重构版本
+ *
+ * 基于会话上下文管理系统的类型定义
  */
 
-// ===== 聊天消息类型 =====
+// ===== 会话管理类型 =====
 
-export interface ChatMessage {
-  id: string
-  messageType: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp: Date
-  metadata?: {
-    model?: string
-    tokensUsed?: number
-  }
-}
-
-export interface ChatSession {
-  id: string
+/**
+ * 会话信息
+ */
+export interface Conversation {
+  id: number
   title: string
-  messages: ChatMessage[]
+  messageCount: number
+  lastMessagePreview?: string
   createdAt: Date
   updatedAt: Date
-  modelId?: string
+}
+
+/**
+ * 消息信息
+ */
+export interface Message {
+  id: number
+  conversationId: number
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  createdAt: Date
+}
+
+/**
+ * AI配置
+ */
+export interface AIConfig {
+  maxContextTokens: number // 上下文最大token
+  modelName: string // 使用的模型名称
+  enableSemanticCompression: boolean // 是否启用语义压缩
+}
+
+/**
+ * 上下文统计信息
+ */
+export interface ContextStats {
+  conversationId: number
+  totalMessages: number
+  summaryGenerated: boolean
+  lastSummaryAt?: Date
 }
 
 // ===== 聊天状态类型 =====
@@ -35,12 +59,34 @@ export interface ChatInputState {
   disabled: boolean
 }
 
-export interface ChatSessionState {
-  id: string | null
-  title: string
-  messageCount: number
-  lastActivity: Date | null
-  isActive: boolean
+/**
+ * 会话状态（重构版本）
+ */
+export interface ConversationState {
+  currentConversationId: number | null
+  conversations: Conversation[]
+  messages: Message[]
+  isLoading: boolean
+  error: string | null
+}
+
+/**
+ * 消息发送请求
+ */
+export interface SendMessageRequest {
+  conversationId: number
+  content: string
+  modelId?: string
+}
+
+/**
+ * 截断重问请求
+ */
+export interface TruncateAndResendRequest {
+  conversationId: number
+  truncateAfterMessageId: number
+  newContent: string
+  modelId?: string
 }
 
 // ===== 聊天配置类型 =====

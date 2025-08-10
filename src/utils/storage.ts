@@ -56,6 +56,6 @@ export class StorageManager<T = any> {
 /**
  * 创建存储管理器实例
  */
-export function createStorage<T>(key: string) {
+export const createStorage = <T>(key: string) => {
   return new StorageManager<T>(key)
 }

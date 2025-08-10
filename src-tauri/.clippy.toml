@@ -1,4 +1,4 @@
-# Clippy configuration for TermX project
+# Clippy configuration for OrbitX project
 # This file defines code quality standards and linting rules
 
 # Allow breaking exported API during development

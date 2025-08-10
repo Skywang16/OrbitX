@@ -1,6 +1,6 @@
-# TermX
+# OrbitX
 
-一个现代化的终端应用程序，基于 Vue.js 和 Tauri 构建。
+一个现代化的智能终端应用程序，集成 AI 助手，基于 Vue.js 和 Tauri 构建。
 
 ## 🚀 特性
 
@@ -30,8 +30,8 @@
 ### 克隆项目
 
 ```bash
-git clone https://github.com/Skywang16/TermX.git
-cd TermX
+git clone https://github.com/Skywang16/OrbitX.git
+cd OrbitX
 ```
 
 ### 安装依赖
@@ -69,7 +69,7 @@ npm run tauri build
 ## 📁 项目结构
 
 ```
-termx/
+orbitx/
 ├── src/                    # Vue.js 前端源码
 │   ├── components/         # Vue 组件
 │   ├── views/             # 页面视图
@@ -120,7 +120,7 @@ termx/
 
 如果你有任何问题或建议，请通过以下方式联系：
 
-- 创建 [Issue](https://github.com/Skywang16/TermX/issues)
+- 创建 [Issue](https://github.com/Skywang16/OrbitX/issues)
 - 发送邮件到: your.email@example.com
 
 ---

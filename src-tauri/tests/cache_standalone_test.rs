@@ -402,7 +402,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_expiration() {
-        let config = create_test_cache_config();
+        let mut config = create_test_cache_config();
+        // 关闭磁盘缓存，避免从磁盘回填导致过期用例失败
+        config.enable_disk_cache = false;
         let mut cache = TestConfigCache::new(config).unwrap();
         cache.start().await.unwrap();
 
@@ -461,6 +463,8 @@ mod tests {
     async fn test_lru_eviction() {
         let mut config = create_test_cache_config();
         config.max_memory_entries = 2; // 限制为 2 个条目
+                                       // 关闭磁盘缓存，确保被驱逐的条目不会从磁盘回填
+        config.enable_disk_cache = false;
 
         let mut cache = TestConfigCache::new(config).unwrap();
         cache.start().await.unwrap();

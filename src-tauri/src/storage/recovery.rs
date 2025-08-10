@@ -152,7 +152,7 @@ impl RecoveryManager {
                 RecoveryStrategy::Fallback {
                     fallback_data: serde_json::json!({
                         "app": {
-                            "name": "TermX",
+                            "name": "OrbitX",
                             "version": "1.0.0"
                         }
                     }),
@@ -180,7 +180,7 @@ impl RecoveryManager {
                     delay: Duration::from_secs(1),
                 },
                 RecoveryStrategy::UseBackup {
-                    backup_path: paths.backup_file("termx.db.bak"),
+                    backup_path: paths.backup_file("orbitx.db.bak"),
                 },
                 RecoveryStrategy::Rebuild,
             ],
@@ -317,7 +317,7 @@ impl RecoveryManager {
             ),
             StorageLayer::Data => (
                 self.paths.database_file(),
-                self.paths.backup_file("termx.db.bak"),
+                self.paths.backup_file("orbitx.db.bak"),
             ),
         };
 
@@ -361,7 +361,7 @@ impl RecoveryManager {
             ),
             StorageLayer::Data => (
                 self.paths.database_file(),
-                self.paths.backup_file("termx.db.bak"),
+                self.paths.backup_file("orbitx.db.bak"),
             ),
         };
 
@@ -617,7 +617,7 @@ impl RecoveryManager {
                     // 创建默认配置文件
                     let default_config = r#"
 [app]
-name = "TermX"
+name = "OrbitX"
 version = "1.0.0"
 auto_save = true
 

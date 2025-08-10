@@ -1,20 +1,22 @@
 <script setup lang="ts">
   import { ref, nextTick } from 'vue'
-  import type { ChatMessage } from '@/types'
+  import type { Message } from '@/types/features/ai/chat'
   import ChatMessageItem from './ChatMessageItem.vue'
 
   // Props定义
   interface Props {
-    messages: ChatMessage[]
+    messages: Message[]
     hasMessages?: boolean
-    isStreaming?: boolean
+    isLoading?: boolean
+
     emptyStateTitle?: string
     emptyStateDescription?: string
   }
 
   const props = withDefaults(defineProps<Props>(), {
     hasMessages: false,
-    isStreaming: false,
+    isLoading: false,
+
     emptyStateTitle: '开始与AI对话',
     emptyStateDescription: '请先配置AI模型',
   })
@@ -30,7 +32,7 @@
     await nextTick()
     if (messagesContainer.value) {
       // 使用 smooth 滚动，但在流式过程中使用 auto 以提高性能
-      const behavior = props.isStreaming ? 'auto' : 'smooth'
+      const behavior = 'auto'
       messagesContainer.value.scrollTo({
         top: messagesContainer.value.scrollHeight,
         behavior,
@@ -61,10 +63,10 @@
     <!-- 消息列表 -->
     <div v-else class="messages-list">
       <ChatMessageItem
-        v-for="message in messages"
+        v-for="(message, index) in messages"
         :key="message.id"
         :message="message"
-        :is-streaming="isStreaming && message.messageType === 'assistant' && message === messages[messages.length - 1]"
+        :is-streaming="isLoading && index === messages.length - 1"
       />
     </div>
   </div>
