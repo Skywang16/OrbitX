@@ -6,9 +6,10 @@
 
 import { conversations as conversationAPI } from '@/api/ai'
 import { useAISettingsStore } from '@/components/settings/components/AI'
+import { useSessionStore } from '@/stores/session'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { ChatMode } from './types'
 import { createDebugTerminalEko, type TerminalEko } from '@/eko'
 import type { Conversation, Message } from '@/types/features/ai/chat'
@@ -21,6 +22,8 @@ const generateSessionTitle = (content: string): string => {
 }
 
 export const useAIChatStore = defineStore('ai-chat', () => {
+  const sessionStore = useSessionStore()
+
   // 状态
   const isVisible = ref(false)
   const sidebarWidth = ref(350)
@@ -36,6 +39,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const chatMode = ref<ChatMode>('chat')
   const ekoInstance = ref<TerminalEko | null>(null)
   const currentAgentId = ref<string | null>(null)
+
+  // 初始化标志
+  const isInitialized = ref(false)
 
   // 计算属性
   const hasMessages = computed(() => messages.value.length > 0)
@@ -144,30 +150,37 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         throw new Error('Eko实例初始化失败')
       }
 
-      // 1. 保存用户消息
+      // 1. 根据模式设置只读/全权限工具
+      try {
+        ekoInstance.value.setMode(chatMode.value)
+      } catch (_) {
+        // 忽略
+      }
+
+      // 2. 保存用户消息
       await conversationAPI.saveMessage(currentConversationId.value, 'user', content)
 
-      // 2. 获取压缩上下文
+      // 3. 获取压缩上下文
       const contextMessages = await conversationAPI.getCompressedContext(currentConversationId.value)
 
-      // 3. 构建完整的prompt（包含上下文，不重复当前用户消息）
+      // 4. 构建完整的prompt（包含上下文，不重复当前用户消息）
       const fullPrompt =
         contextMessages.length > 0
           ? contextMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n')
           : `user: ${content}`
 
-      // 4. 通过eko处理消息（传递完整上下文）
+      // 5. 通过eko处理消息（传递完整上下文）
       const response = await ekoInstance.value.run(fullPrompt)
 
-      // 5. 保存AI回复
+      // 6. 保存AI回复
       if (response.success && response.result) {
         await conversationAPI.saveMessage(currentConversationId.value, 'assistant', response.result)
       }
 
-      // 6. 重新加载当前会话的消息
+      // 7. 重新加载当前会话的消息
       await loadConversation(currentConversationId.value)
 
-      // 7. 刷新会话列表以更新预览
+      // 8. 刷新会话列表以更新预览
       await refreshConversations()
     } catch (err) {
       error.value = handleErrorWithMessage(err, '发送消息失败')
@@ -216,6 +229,79 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
+  // 从会话状态恢复 OrbitX 状态
+  const restoreFromSessionState = (): void => {
+    if (!sessionStore.initialized) return
+
+    const orbitxState = sessionStore.sessionState.uiState.orbitxChat
+    if (orbitxState) {
+      isVisible.value = orbitxState.isVisible
+      sidebarWidth.value = orbitxState.sidebarWidth
+      chatMode.value = orbitxState.chatMode
+      currentConversationId.value = orbitxState.currentConversationId
+    }
+  }
+
+  // 将当前状态保存到会话系统
+  const saveToSessionState = (): void => {
+    if (!sessionStore.initialized) return
+
+    // 更新会话状态中的 OrbitX 状态
+    sessionStore.sessionState.uiState.orbitxChat = {
+      isVisible: isVisible.value,
+      sidebarWidth: sidebarWidth.value,
+      chatMode: chatMode.value,
+      currentConversationId: currentConversationId.value,
+    }
+
+    // 触发会话状态保存
+    sessionStore.saveSessionState().catch(err => {
+      console.warn('保存 OrbitX 状态失败:', err)
+    })
+  }
+
+  // 监听状态变化并自动保存
+  watch(
+    [isVisible, sidebarWidth, chatMode, currentConversationId],
+    () => {
+      if (isInitialized.value) {
+        saveToSessionState()
+      }
+    },
+    { deep: true }
+  )
+
+  // 初始化方法
+  const initialize = async (): Promise<void> => {
+    if (isInitialized.value) return
+
+    try {
+      // 等待会话Store初始化
+      if (!sessionStore.initialized) {
+        await sessionStore.initialize()
+      }
+
+      // 从会话状态恢复
+      restoreFromSessionState()
+
+      // 如果恢复了当前会话ID，尝试加载会话
+      if (currentConversationId.value) {
+        try {
+          await loadConversation(currentConversationId.value)
+        } catch (err) {
+          currentConversationId.value = null
+        }
+      }
+
+      // 加载会话列表
+      await refreshConversations()
+
+      isInitialized.value = true
+    } catch (err) {
+      console.warn('OrbitX Store 初始化失败:', err)
+    }
+  }
+
   return {
     // 状态
     isVisible,
@@ -230,6 +316,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     chatMode,
     ekoInstance,
     currentAgentId,
+    isInitialized,
 
     // 计算属性
     hasMessages,
@@ -246,5 +333,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     truncateAndResend,
     clearError,
     initializeEko,
+    initialize,
+    restoreFromSessionState,
+    saveToSessionState,
   }
 })

@@ -46,10 +46,18 @@ impl OutputAnalyzer {
             let current_output = buffer.entry(pane_id).or_insert_with(String::new);
             current_output.push_str(data);
 
-            // 限制缓冲区大小，避免内存泄漏
-            if current_output.len() > 50000 {
-                let start = current_output.len() - 25000;
-                *current_output = current_output[start..].to_string();
+            // 限制缓冲区大小，避免内存泄漏（按字符边界安全截断）
+            const MAX_LEN: usize = 50_000;
+            const KEEP_LEN: usize = 25_000;
+            if current_output.len() > MAX_LEN {
+                let mut byte_start = current_output.len() - KEEP_LEN;
+                while !current_output.is_char_boundary(byte_start)
+                    && byte_start < current_output.len()
+                {
+                    byte_start += 1;
+                }
+                let truncated = current_output.split_off(byte_start);
+                *current_output = truncated;
             }
         }
 

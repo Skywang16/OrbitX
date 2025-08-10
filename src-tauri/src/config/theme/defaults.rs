@@ -13,6 +13,6 @@ pub fn create_default_theme_config() -> ThemeConfig {
         terminal_theme: "dark".to_string(),
         light_theme: "light".to_string(),
         dark_theme: "dark".to_string(),
-        follow_system: false,
+        follow_system: true,
     }
 }

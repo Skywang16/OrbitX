@@ -106,3 +106,9 @@ CREATE TABLE IF NOT EXISTS ai_model_usage_stats (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (model_id) REFERENCES ai_models(id) ON DELETE CASCADE
 );
+
+-- 迁移记录表
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version TEXT PRIMARY KEY,
+    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

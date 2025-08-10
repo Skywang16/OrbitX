@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "termX",
+  "productName": "OrbitX",
   "version": "0.1.0",
-  "identifier": "com.termx.terminal",
+  "identifier": "com.orbitx.terminal",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -44,7 +44,7 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["termx"]
+        "schemes": ["orbitx"]
       }
     }
   },
@@ -56,7 +56,7 @@
     "fileAssociations": [
       {
         "ext": ["*"],
-        "description": "Open with TermX",
+        "description": "Open with OrbitX",
         "role": "Editor"
       }
     ],

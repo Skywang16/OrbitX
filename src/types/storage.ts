@@ -144,6 +144,17 @@ export interface UiState {
   zoomLevel: number
   /** 面板布局 */
   panelLayout: Record<string, any>
+  /** OrbitX AI 聊天状态 */
+  orbitxChat?: {
+    /** 是否可见 */
+    isVisible: boolean
+    /** 侧边栏宽度 */
+    sidebarWidth: number
+    /** 当前模式 */
+    chatMode: 'chat' | 'agent'
+    /** 当前会话ID */
+    currentConversationId: number | null
+  }
 }
 
 /** 会话状态数据结构 */
@@ -284,6 +295,12 @@ export const createDefaultSessionState = (): SessionState => {
       fontSize: 14,
       zoomLevel: 1.0,
       panelLayout: {},
+      orbitxChat: {
+        isVisible: false,
+        sidebarWidth: 350,
+        chatMode: 'chat',
+        currentConversationId: null,
+      },
     },
     createdAt: new Date().toISOString(),
   }

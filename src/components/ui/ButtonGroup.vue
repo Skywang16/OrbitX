@@ -43,13 +43,13 @@
     } else if (item.value === 'feedback') {
       try {
         // 使用Tauri的opener插件在外部浏览器中打开GitHub Issues页面
-        await openUrl('https://github.com/Skywang16/TermX/issues')
+        await openUrl('https://github.com/Skywang16/OrbitX/issues')
         // 显示成功提示
         // createMessage.success('已在浏览器中打开问题反馈页面')
       } catch (error) {
         console.error('打开问题反馈页面失败:', error)
         // 显示错误提示
-        createMessage.error('无法打开问题反馈页面，请手动访问：https://github.com/Skywang16/TermX/issues')
+        createMessage.error('无法打开问题反馈页面，请手动访问：https://github.com/Skywang16/OrbitX/issues')
       }
     }
     showSettingsPopover.value = false

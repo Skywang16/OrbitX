@@ -257,7 +257,7 @@ mod notification_system_tests {
         mux.notify(MuxNotification::PaneRemoved(PaneId::new(1)));
         mux.notify(MuxNotification::PaneOutput {
             pane_id: PaneId::new(2),
-            data: b"test".to_vec(),
+            data: b"test".to_vec().into(),
         });
 
         thread::sleep(Duration::from_millis(10));
@@ -326,7 +326,7 @@ mod notification_system_tests {
             for i in 0..5 {
                 mux_clone.notify_from_any_thread(MuxNotification::PaneOutput {
                     pane_id: PaneId::new(1),
-                    data: format!("test data {i}").into_bytes(),
+                    data: format!("test data {i}").into_bytes().into(),
                 });
                 thread::sleep(Duration::from_millis(1));
             }
@@ -349,7 +349,7 @@ mod notification_system_tests {
         // 测试PaneOutput通知转换
         let notification = MuxNotification::PaneOutput {
             pane_id: PaneId::new(1),
-            data: b"hello world".to_vec(),
+            data: b"hello world".to_vec().into(),
         };
 
         let (event_name, payload) = TerminalMux::notification_to_tauri_event(&notification);
@@ -412,7 +412,7 @@ mod notification_system_tests {
         mux.notify(MuxNotification::PaneAdded(PaneId::new(1)));
         mux.notify(MuxNotification::PaneOutput {
             pane_id: PaneId::new(1),
-            data: b"test debug output".to_vec(),
+            data: b"test debug output".to_vec().into(),
         });
         mux.notify(MuxNotification::PaneRemoved(PaneId::new(1)));
 

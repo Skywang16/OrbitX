@@ -32,6 +32,7 @@ export class TerminalEko {
   private agent: TerminalAgent
   private callback: TerminalCallback
   private config: EkoInstanceConfig
+  private mode: 'chat' | 'agent' = 'chat'
 
   constructor(config: EkoInstanceConfig = {}) {
     this.config = { ...config }
@@ -62,6 +63,9 @@ export class TerminalEko {
         planLlms: ekoConfig.planLlms,
         callback: this.callback,
       })
+
+      // 初始化模式（默认chat）
+      this.agent.setMode(this.mode)
 
       // 初始化完成，无需输出额外日志
     } catch (error) {
@@ -214,6 +218,14 @@ ${prompt}`
     if (updates.agentConfig) {
       this.agent.updateConfig(updates.agentConfig)
     }
+  }
+
+  /**
+   * 设置工作模式（chat/agent）并同步到Agent
+   */
+  setMode(mode: 'chat' | 'agent'): void {
+    this.mode = mode
+    this.agent.setMode(mode)
   }
 
   /**

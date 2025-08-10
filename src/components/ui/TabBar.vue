@@ -37,7 +37,7 @@
       classes.push('active')
     }
 
-    if (tab.type === TabType.TERMINAL && tab.title === 'X-Orbit') {
+    if (tab.type === TabType.TERMINAL && tab.title === 'OrbitX') {
       classes.push('agent-tab')
     }
 

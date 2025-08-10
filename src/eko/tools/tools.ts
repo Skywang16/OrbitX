@@ -181,6 +181,17 @@ export function getToolsStats(): {
   }
 }
 
+/**
+ * 按模式筛选工具
+ * - chat 模式：仅允许读取类工具，禁止任何写入/执行类工具
+ * - agent 模式：允许所有工具
+ */
+export function getToolsForMode(mode: 'chat' | 'agent'): Tool[] {
+  if (mode === 'agent') return allTools
+
+  // 只读集合：文件读取、多文件读取、网络获取/搜索
+  return [readFileTool, readManyFilesTool, webFetchTool, webSearchTool]
+}
+
 // 自动注册所有工具
 registerAllTools()
-

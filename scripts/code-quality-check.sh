@@ -1,5 +1,5 @@
 #!/bin/bash
-# Code quality check script for TermX project
+# Code quality check script for OrbitX project
 # This script provides comprehensive code quality analysis
 
 set -e
@@ -35,7 +35,7 @@ command_exists() {
 
 # Main function
 main() {
-    print_status "Starting comprehensive code quality check for TermX project..."
+    print_status "Starting comprehensive code quality check for OrbitX project..."
     
     # Check if we're in the right directory
     if [ ! -f "src-tauri/Cargo.toml" ]; then
@@ -144,7 +144,7 @@ main() {
 show_help() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Code quality check script for TermX project"
+    echo "Code quality check script for OrbitX project"
     echo ""
     echo "OPTIONS:"
     echo "  -h, --help     Show this help message"

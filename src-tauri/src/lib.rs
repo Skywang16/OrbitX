@@ -1,4 +1,4 @@
-//! TermX 终端应用后端
+//! OrbitX 终端应用后端
 //!
 //! 这是一个基于 Tauri 框架的终端应用后端实现，提供跨平台的终端功能。
 //! 主要功能包括：
@@ -174,8 +174,8 @@ pub fn run() {
         std::process::exit(1);
     }
 
-    info!("TermX 应用程序启动");
-    println!("TermX 应用程序启动 - 控制台输出");
+    info!("OrbitX 应用程序启动");
+    println!("OrbitX 应用程序启动 - 控制台输出");
 
     let mut builder = tauri::Builder::default();
 

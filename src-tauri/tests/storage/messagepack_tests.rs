@@ -14,11 +14,11 @@ use terminal_lib::storage::{
     messagepack::{MessagePackManager, MessagePackOptions},
     paths::StoragePaths,
     types::{SessionState, TabState, TerminalSession, UiState, WindowState},
-    StorageResult,
 };
+use terminal_lib::utils::error::AppResult;
 
 /// 创建测试用的临时存储路径
-async fn create_test_paths() -> StorageResult<(TempDir, StoragePaths)> {
+async fn create_test_paths() -> AppResult<(TempDir, StoragePaths)> {
     let temp_dir = TempDir::new().unwrap();
     let paths = StoragePaths::new(temp_dir.path().to_path_buf())?;
     paths.ensure_directories()?;
@@ -46,8 +46,8 @@ fn create_test_session_state() -> SessionState {
                 "echo hello".to_string(),
             ],
             is_active: true,
-            created_at: SystemTime::now(),
-            last_active: SystemTime::now(),
+            created_at: SystemTime::now().into(),
+            last_active: SystemTime::now().into(),
         },
     );
 
@@ -103,7 +103,7 @@ fn create_test_session_state() -> SessionState {
                 layout
             },
         },
-        created_at: SystemTime::now(),
+        created_at: SystemTime::now().into(),
         checksum: None,
     }
 }
@@ -559,8 +559,8 @@ async fn test_large_data_performance() {
             },
             command_history: (0..50).map(|j| format!("command_{}_{}", i, j)).collect(),
             is_active: i == 0,
-            created_at: SystemTime::now(),
-            last_active: SystemTime::now(),
+            created_at: SystemTime::now().into(),
+            last_active: SystemTime::now().into(),
         };
         large_state
             .terminal_sessions

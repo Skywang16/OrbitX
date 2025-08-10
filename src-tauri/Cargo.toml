@@ -1,10 +1,10 @@
 [package]
-name = "termx"
+name = "orbitx"
 version = "0.1.0"
-description = "A Tauri App"
+description = "OrbitX - A modern terminal application with AI assistant"
 authors = ["you"]
 edition = "2021"
-default-run = "termx"
+default-run = "orbitx"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -32,6 +32,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 portable-pty = "0.8"
 crossbeam-channel = "0.5"
+bytes = { version = "1", features = ["serde"] }
 
 
 # 补全功能相关依赖
@@ -75,6 +76,9 @@ sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono"
 chacha20poly1305 = "0.10"
 argon2 = "0.5"
 rand = "0.8"
+
+# 系统信息
+os_info = "3.8"
 
 [dev-dependencies]
 tempfile = "3.8"

@@ -205,7 +205,7 @@ export class ShellTool extends ModifiableTool {
       const terminalStore = useTerminalStore()
 
       // 查找现有的Agent终端
-      const agentTerminal = terminalStore.terminals.find(terminal => terminal.title === 'X-Orbit')
+      const agentTerminal = terminalStore.terminals.find(terminal => terminal.title === 'OrbitX')
 
       if (agentTerminal && agentTerminal.backendId) {
         // 激活现有的Agent终端
@@ -214,7 +214,7 @@ export class ShellTool extends ModifiableTool {
       }
 
       // 创建新的Agent终端
-      const agentTerminalSessionId = await terminalStore.createAgentTerminal('X-Orbit')
+      const agentTerminalSessionId = await terminalStore.createAgentTerminal('OrbitX')
       const newAgentTerminal = terminalStore.terminals.find(t => t.id === agentTerminalSessionId)
       if (!newAgentTerminal || !newAgentTerminal.backendId) {
         throw new TerminalError('无法创建或获取Agent专属终端')

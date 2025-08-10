@@ -9,7 +9,7 @@ const routes = [
     name: 'Terminal',
     component: TerminalView,
     meta: {
-      title: 'TermX',
+      title: 'OrbitX',
     },
   },
 

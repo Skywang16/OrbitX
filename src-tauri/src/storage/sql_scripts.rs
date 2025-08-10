@@ -107,15 +107,20 @@ impl SqlScriptLoader {
     /// 从文件名解析执行顺序
     fn parse_order_from_filename(&self, filename: &str) -> AppResult<u32> {
         // 假设文件名格式为 "01_tables" 或 "01-tables"
-        let order_part = filename
+        let raw = filename
             .split('_')
             .next()
             .or_else(|| filename.split('-').next())
             .ok_or_else(|| anyhow!("无法从文件名解析执行顺序: {}", filename))?;
 
-        order_part
+        // 支持前缀包含非数字字符的情况，如 "01-tables" 或 "01_tables"
+        let digits: String = raw.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if digits.is_empty() {
+            return Err(anyhow!("执行顺序解析失败: {}", raw));
+        }
+        digits
             .parse::<u32>()
-            .with_context(|| format!("执行顺序解析失败: {}", order_part))
+            .with_context(|| format!("执行顺序解析失败: {}", raw))
     }
 
     /// 解析SQL语句

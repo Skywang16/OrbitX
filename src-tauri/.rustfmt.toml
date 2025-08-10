@@ -1,4 +1,4 @@
-# Rust formatting configuration for TermX project
+# Rust formatting configuration for OrbitX project
 # This file defines code formatting standards using stable rustfmt features
 
 # Edition to use for formatting

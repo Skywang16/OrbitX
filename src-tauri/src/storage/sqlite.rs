@@ -402,13 +402,134 @@ impl SqliteManager {
             return Ok(());
         }
 
-        // 使用应用程序特定的默认密钥
-        // 在生产环境中，这应该从安全的配置文件或环境变量中读取
-        let default_password = "termx-default-encryption-key-2024";
-        encryption_manager.set_master_password(default_password)?;
+        // 安全的密钥获取策略：优先级从高到低
+        let master_password = self.get_secure_master_key().await?;
+        encryption_manager.set_master_password(&master_password)?;
 
-        info!("默认主密钥设置完成");
+        info!("主密钥设置完成");
         Ok(())
+    }
+
+    /// 安全获取主密钥
+    /// 优先级：环境变量 > 系统密钥链 > 用户配置 > 安全随机生成
+    async fn get_secure_master_key(&self) -> AppResult<String> {
+        // 1. 尝试从环境变量获取
+        if let Ok(key) = std::env::var("OrbitX_MASTER_KEY") {
+            if !key.is_empty() && key.len() >= 16 {
+                debug!("从环境变量获取主密钥");
+                return Ok(key);
+            } else {
+                warn!("环境变量 OrbitX_MASTER_KEY 长度不足（需要至少16个字符）");
+            }
+        }
+
+        // 2. 尝试从系统密钥链获取（仅在支持的平台上）
+        if let Some(key) = self.get_key_from_system_keychain().await? {
+            debug!("从系统密钥链获取主密钥");
+            return Ok(key);
+        }
+
+        // 3. 尝试从用户配置目录的安全文件获取
+        if let Some(key) = self.get_key_from_config_file().await? {
+            debug!("从配置文件获取主密钥");
+            return Ok(key);
+        }
+
+        // 4. 生成新的安全随机密钥并保存
+        let new_key = self.generate_and_save_master_key().await?;
+        info!("生成新的主密钥并保存到配置文件");
+        Ok(new_key)
+    }
+
+    /// 从系统密钥链获取密钥
+    async fn get_key_from_system_keychain(&self) -> AppResult<Option<String>> {
+        // 在实际实现中，这里应该调用系统特定的密钥链API
+        // 例如：macOS Keychain、Windows DPAPI、Linux Secret Service
+
+        #[cfg(target_os = "macos")]
+        {
+            // 示例：macOS Keychain集成（需要security-framework crate）
+            // let service = "terminal-app";
+            // let account = "master-encryption-key";
+            // 实际实现需要添加对应的依赖和代码
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            // 示例：Windows DPAPI集成（需要winapi crate）
+            // 实际实现需要添加对应的依赖和代码
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // 示例：Linux Secret Service集成（需要secret-service crate）
+            // 实际实现需要添加对应的依赖和代码
+        }
+
+        // 当前简化实现：返回None，表示不支持系统密钥链
+        debug!("系统密钥链支持尚未实现");
+        Ok(None)
+    }
+
+    /// 从配置文件获取密钥
+    async fn get_key_from_config_file(&self) -> AppResult<Option<String>> {
+        let config_dir = self.paths.config_dir.clone();
+        let key_file_path = config_dir.join(".master_key");
+
+        if !key_file_path.exists() {
+            return Ok(None);
+        }
+
+        match tokio::fs::read_to_string(&key_file_path).await {
+            Ok(content) => {
+                let key = content.trim().to_string();
+                if key.len() >= 16 {
+                    Ok(Some(key))
+                } else {
+                    warn!("配置文件中的密钥长度不足");
+                    Ok(None)
+                }
+            }
+            Err(e) => {
+                warn!("读取密钥配置文件失败: {}", e);
+                Ok(None)
+            }
+        }
+    }
+
+    /// 生成并保存新的主密钥
+    async fn generate_and_save_master_key(&self) -> AppResult<String> {
+        use rand::{distributions::Alphanumeric, Rng};
+
+        // 生成64字符的随机密钥
+        let new_key: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(64)
+            .map(char::from)
+            .collect();
+
+        // 保存到配置文件
+        let config_dir = &self.paths.config_dir;
+        tokio::fs::create_dir_all(config_dir)
+            .await
+            .with_context(|| format!("创建配置目录失败: {}", config_dir.display()))?;
+
+        let key_file_path = config_dir.join(".master_key");
+        tokio::fs::write(&key_file_path, &new_key)
+            .await
+            .with_context(|| format!("保存主密钥文件失败: {}", key_file_path.display()))?;
+
+        // 设置文件权限（仅所有者可读写）
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = tokio::fs::metadata(&key_file_path).await?.permissions();
+            perms.set_mode(0o600); // rw-------
+            tokio::fs::set_permissions(&key_file_path, perms).await?;
+        }
+
+        info!("新主密钥已生成并保存到: {}", key_file_path.display());
+        Ok(new_key)
     }
 
     /// 插入默认数据
@@ -456,30 +577,46 @@ impl SqliteManager {
             }
         }
 
-        // 构建SQL查询
+        // 构建SQL查询（安全版）：
+        // - 仅允许 ORDER BY 的字段为白名单
+        // - LIMIT/OFFSET 使用参数绑定（i64）
         let mut sql = query.query.clone();
 
-        // 添加排序
+        // 允许排序的字段白名单（按需扩展或通过配置注入）
+        let allowed_order_fields = ["id", "created_at", "updated_at"]; // 示例
         if let Some(order_by) = &query.order_by {
-            sql.push_str(&format!(
-                " ORDER BY {} {}",
-                order_by,
-                if query.desc { "DESC" } else { "ASC" }
-            ));
+            if allowed_order_fields.contains(&order_by.as_str()) {
+                sql.push_str(&format!(
+                    " ORDER BY {} {}",
+                    order_by,
+                    if query.desc { "DESC" } else { "ASC" }
+                ));
+            } else {
+                debug!("忽略不在白名单中的 ORDER BY 字段: {}", order_by);
+            }
         }
 
-        // 添加限制和偏移
-        if let Some(limit) = query.limit {
-            sql.push_str(&format!(" LIMIT {}", limit));
-            if let Some(offset) = query.offset {
-                sql.push_str(&format!(" OFFSET {}", offset));
-            }
+        let limit_i64: Option<i64> = query.limit.map(|v| v as i64);
+        let offset_i64: Option<i64> = query.offset.map(|v| v as i64);
+        if limit_i64.is_some() {
+            sql.push_str(" LIMIT ?");
+        }
+        if offset_i64.is_some() {
+            sql.push_str(" OFFSET ?");
+        }
+
+        let mut q = sqlx::query(&sql);
+        if let Some(l) = limit_i64 {
+            q = q.bind(l);
+        }
+        if let Some(o) = offset_i64 {
+            q = q.bind(o);
         }
 
         // 执行查询
         let rows = self
             .db_pool
-            .fetch_all(sql.as_str())
+            .fetch_all(q)
             .await
             .map_err(|e| anyhow!("查询执行失败: {}", e))?;
 
@@ -1085,23 +1222,32 @@ impl SqliteManager {
         "#,
         );
 
-        if let Some(table) = table_name {
-            sql.push_str(&format!(" AND table_name = '{}'", table));
+        // 参数化绑定，避免注入
+        if table_name.is_some() {
+            sql.push_str(" AND table_name = ?");
         }
-
-        if let Some(op) = operation {
-            sql.push_str(&format!(" AND operation = '{}'", op));
+        if operation.is_some() {
+            sql.push_str(" AND operation = ?");
         }
-
         sql.push_str(" ORDER BY timestamp DESC");
+        if limit.is_some() {
+            sql.push_str(" LIMIT ?");
+        }
 
+        let mut q = sqlx::query(&sql);
+        if let Some(table) = table_name {
+            q = q.bind(table);
+        }
+        if let Some(op) = operation {
+            q = q.bind(op);
+        }
         if let Some(limit_val) = limit {
-            sql.push_str(&format!(" LIMIT {}", limit_val));
+            q = q.bind(limit_val);
         }
 
         let rows = self
             .db_pool
-            .fetch_all(sqlx::query(&sql))
+            .fetch_all(q)
             .await
             .map_err(|e| anyhow!("查询审计日志失败: {}", e))?;
 
@@ -1143,51 +1289,61 @@ impl SqliteManager {
         "#,
         );
 
-        // 简化版本：使用字符串拼接构建查询（在生产环境中应该使用参数化查询）
+        // 参数化查询，避免注入
+        let mut args: Vec<(String, String)> = Vec::new();
         if let Some(pattern) = &query.command_pattern {
-            sql.push_str(&format!(
-                " AND command LIKE '%{}%'",
-                pattern.replace("'", "''")
-            ));
+            sql.push_str(" AND command LIKE ?");
+            args.push(("like".to_string(), format!("%{}%", pattern)));
         }
 
         if let Some(working_dir) = &query.working_directory {
-            sql.push_str(&format!(
-                " AND working_directory = '{}'",
-                working_dir.replace("'", "''")
-            ));
+            sql.push_str(" AND working_directory = ?");
+            args.push(("eq".to_string(), working_dir.clone()));
         }
 
         // session_id 字段已从 HistoryQuery 中移除
 
         if let Some(date_from) = &query.date_from {
-            sql.push_str(&format!(
-                " AND executed_at >= '{}'",
-                date_from.format("%Y-%m-%d %H:%M:%S")
+            sql.push_str(" AND executed_at >= ?");
+            args.push((
+                "ge".to_string(),
+                date_from.format("%Y-%m-%d %H:%M:%S").to_string(),
             ));
         }
 
         if let Some(date_to) = &query.date_to {
-            sql.push_str(&format!(
-                " AND executed_at <= '{}'",
-                date_to.format("%Y-%m-%d %H:%M:%S")
+            sql.push_str(" AND executed_at <= ?");
+            args.push((
+                "le".to_string(),
+                date_to.format("%Y-%m-%d %H:%M:%S").to_string(),
             ));
         }
 
         sql.push_str(" ORDER BY executed_at DESC");
 
-        if let Some(limit) = query.limit {
-            sql.push_str(&format!(" LIMIT {}", limit));
+        // LIMIT/OFFSET 参数化 + 执行
+        let limit_i64: Option<i64> = query.limit.map(|v| v as i64);
+        let offset_i64: Option<i64> = query.offset.map(|v| v as i64);
+        if limit_i64.is_some() {
+            sql.push_str(" LIMIT ?");
+        }
+        if offset_i64.is_some() {
+            sql.push_str(" OFFSET ?");
         }
 
-        if let Some(offset) = query.offset {
-            sql.push_str(&format!(" OFFSET {}", offset));
+        let mut q = sqlx::query(&sql);
+        for (_k, v) in &args {
+            q = q.bind(v);
         }
-
-        // 执行查询
+        if let Some(l) = limit_i64 {
+            q = q.bind(l);
+        }
+        if let Some(o) = offset_i64 {
+            q = q.bind(o);
+        }
         let rows = self
             .db_pool
-            .fetch_all(sqlx::query(&sql))
+            .fetch_all(q)
             .await
             .map_err(|e| anyhow!("查询命令历史失败: {}", e))?;
 

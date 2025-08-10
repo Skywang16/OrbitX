@@ -66,6 +66,9 @@
     aiChatStore.chatMode = mode
     // 无论哪种模式都通过eko处理，确保eko已初始化
     await aiChatStore.initializeEko()
+    // 同步模式到 Eko，确保工具权限生效
+    aiChatStore.ekoInstance?.setMode(mode)
+    // 状态变化会自动触发保存（通过 watch 监听器）
   }
 
   // 拖拽调整功能
@@ -200,7 +203,11 @@
       await aiSettingsStore.loadSettings()
     }
 
-    // 新系统不需要初始化
+    // 初始化 OrbitX Store（恢复状态）
+    if (!aiChatStore.isInitialized) {
+      await aiChatStore.initialize()
+    }
+
     scrollToBottom()
   })
 
@@ -238,13 +245,13 @@
       :messages="aiChatStore.messages"
       :has-messages="hasMessages"
       :is-loading="aiChatStore.isLoading"
-      :empty-state-title="aiChatStore.chatMode === 'agent' ? '开始使用Agent助手' : '开始与AI对话'"
+      :empty-state-title="aiChatStore.chatMode === 'agent' ? '开始使用 Orbit Agent' : '开始与 Orbit 对话'"
       :empty-state-description="
         aiChatStore.chatMode === 'agent'
-          ? '我可以执行终端命令、分析文件、处理数据等。试试问我：「当前在哪个目录？」'
+          ? 'Orbit 可以执行终端命令、分析文件、处理数据等。试试问我：「当前在哪个目录？」'
           : aiSettingsStore.defaultModel
             ? `使用 ${aiSettingsStore.defaultModel.name} 模型`
-            : '请先配置AI模型'
+            : '请先配置 AI 模型'
       "
     />
 
@@ -257,7 +264,7 @@
       :model-options="modelOptions"
       :chat-mode="aiChatStore.chatMode"
       :placeholder="
-        aiChatStore.chatMode === 'agent' ? '问我任何终端问题，如：当前在哪个目录？列出文件？' : '输入消息...'
+        aiChatStore.chatMode === 'agent' ? '问 Orbit 任何终端问题，如：当前在哪个目录？列出文件？' : '与 Orbit 对话...'
       "
       @send="sendMessage"
       @stop="stopMessage"

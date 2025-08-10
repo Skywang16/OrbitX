@@ -1,19 +1,19 @@
 {
-  "name": "termx",
+  "name": "orbitx",
   "private": false,
   "version": "0.1.0",
-  "description": "A modern terminal application built with Vue.js and Tauri",
+  "description": "OrbitX - A modern terminal application with AI assistant built with Vue.js and Tauri",
   "type": "module",
   "author": "Your Name <your.email@example.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Skywang16/TermX.git"
+    "url": "https://github.com/Skywang16/OrbitX.git"
   },
   "bugs": {
-    "url": "https://github.com/Skywang16/TermX/issues"
+    "url": "https://github.com/Skywang16/OrbitX/issues"
   },
-  "homepage": "https://github.com/Skywang16/TermX#readme",
+  "homepage": "https://github.com/Skywang16/OrbitX#readme",
   "keywords": [
     "terminal",
     "tauri",

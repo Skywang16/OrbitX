@@ -373,8 +373,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
       title: agentTerminalTitle,
       workingDirectory: initialDirectory || '~',
       environment: {
-        TERMX_AGENT: agentName,
-        TERMX_TERMINAL_TYPE: 'agent',
+        OrbitX_AGENT: agentName,
+        OrbitX_TERMINAL_TYPE: 'agent',
       },
       commandHistory: [],
       isActive: false,

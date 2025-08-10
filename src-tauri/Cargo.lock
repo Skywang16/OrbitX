@@ -3440,6 +3440,62 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
+name = "orbitx"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "async-openai",
+ "async-stream",
+ "async-trait",
+ "base64 0.22.1",
+ "bincode",
+ "bytes",
+ "chacha20poly1305",
+ "chrono",
+ "criterion",
+ "crossbeam-channel",
+ "dirs",
+ "flate2",
+ "futures",
+ "fuzzy-matcher",
+ "libc",
+ "lru",
+ "md5",
+ "nix 0.27.1",
+ "notify",
+ "os_info",
+ "portable-pty",
+ "rand 0.8.5",
+ "regex",
+ "reqwest",
+ "reqwest-eventsource",
+ "rmp",
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-deep-link",
+ "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-stream",
+ "tokio-test",
+ "tokio-util",
+ "toml 0.8.23",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
 name = "ordered-multimap"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3457,6 +3513,18 @@ checksum = "9aa2b01e1d916879f73a53d01d1d6cee68adbb31d6d9177a8cfce093cced1d50"
 dependencies = [
  "futures-core",
  "pin-project-lite",
+]
+
+[[package]]
+name = "os_info"
+version = "3.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0e1ac5fde8d43c34139135df8ea9ee9465394b2d8d20f032d38998f64afffc3"
+dependencies = [
+ "log",
+ "plist",
+ "serde",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5776,60 +5844,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5d9cf598a6d7ce700a4e6a9199da127e6819a61e64b68609683cc9a01b5683a"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "termx"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "argon2",
- "async-openai",
- "async-stream",
- "async-trait",
- "base64 0.22.1",
- "bincode",
- "chacha20poly1305",
- "chrono",
- "criterion",
- "crossbeam-channel",
- "dirs",
- "flate2",
- "futures",
- "fuzzy-matcher",
- "libc",
- "lru",
- "md5",
- "nix 0.27.1",
- "notify",
- "portable-pty",
- "rand 0.8.5",
- "regex",
- "reqwest",
- "reqwest-eventsource",
- "rmp",
- "rmp-serde",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "tauri",
- "tauri-build",
- "tauri-plugin-deep-link",
- "tauri-plugin-opener",
- "tauri-plugin-single-instance",
- "tempfile",
- "thiserror 2.0.12",
- "tokio",
- "tokio-stream",
- "tokio-test",
- "tokio-util",
- "toml 0.8.23",
- "tracing",
- "tracing-subscriber",
- "urlencoding",
- "uuid",
- "walkdir",
 ]
 
 [[package]]

@@ -262,6 +262,31 @@ pub struct TerminalSession {
     pub last_active: DateTime<Utc>,
 }
 
+/// OrbitX AI 聊天状态
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrbitxChatState {
+    /// 是否可见
+    pub is_visible: bool,
+    /// 侧边栏宽度
+    pub sidebar_width: u32,
+    /// 当前模式
+    pub chat_mode: String, // "chat" | "agent"
+    /// 当前会话ID
+    pub current_conversation_id: Option<i64>,
+}
+
+impl Default for OrbitxChatState {
+    fn default() -> Self {
+        Self {
+            is_visible: false,
+            sidebar_width: 350,
+            chat_mode: "chat".to_string(),
+            current_conversation_id: None,
+        }
+    }
+}
+
 /// UI状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -278,6 +303,9 @@ pub struct UiState {
     pub zoom_level: f32,
     /// 面板布局
     pub panel_layout: HashMap<String, serde_json::Value>,
+    /// OrbitX AI 聊天状态
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orbitx_chat: Option<OrbitxChatState>,
 }
 
 impl Default for UiState {
@@ -289,6 +317,7 @@ impl Default for UiState {
             font_size: 14.0,
             zoom_level: 1.0,
             panel_layout: HashMap::new(),
+            orbitx_chat: Some(OrbitxChatState::default()),
         }
     }
 }

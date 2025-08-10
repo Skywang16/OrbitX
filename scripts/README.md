@@ -1,6 +1,6 @@
 # Scripts Directory
 
-This directory contains utility scripts for the TermX project.
+This directory contains utility scripts for the OrbitX project.
 
 ## Available Scripts
 
