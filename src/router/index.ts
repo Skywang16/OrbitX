@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 // 路由组件懒加载
 const TerminalView = () => import('@/views/Terminal/TerminalView.vue')
-const SettingsView = () => import('@/views/Settings/SettingsView.vue')
 
 const routes = [
   {
@@ -10,15 +9,7 @@ const routes = [
     name: 'Terminal',
     component: TerminalView,
     meta: {
-      title: '终端',
-    },
-  },
-  {
-    path: '/settings',
-    name: 'Settings',
-    component: SettingsView,
-    meta: {
-      title: '设置',
+      title: 'TermX',
     },
   },
 
@@ -37,7 +28,7 @@ const router = createRouter({
 // 路由守卫 - 设置页面标题
 router.beforeEach((to, _from, next) => {
   if (to.meta?.title) {
-    document.title = `${to.meta.title} - TermX`
+    document.title = to.meta.title
   }
   next()
 })

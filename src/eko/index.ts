@@ -18,7 +18,7 @@ import {
 } from './agent/terminal-agent'
 
 // 导入工具
-import { terminalTools } from './tools'
+import { allTools } from './tools'
 
 // 导入类型
 import type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult } from './types'
@@ -34,10 +34,7 @@ export class TerminalEko {
   private config: EkoInstanceConfig
 
   constructor(config: EkoInstanceConfig = {}) {
-    this.config = {
-      debug: false,
-      ...config,
-    }
+    this.config = { ...config }
 
     // 创建回调
     this.callback = config.callback || createDefaultCallback()
@@ -45,11 +42,7 @@ export class TerminalEko {
     // 创建Agent
     this.agent = createTerminalAgent(config.agentConfig)
 
-    if (config.debug) {
-      console.log('🚀 TerminalEko 实例已创建')
-      console.log('配置:', this.config)
-      console.log('Agent状态:', this.agent.getStatus())
-    }
+    // 取消冗余初始化日志，保持控制台整洁
   }
 
   /**
@@ -57,13 +50,8 @@ export class TerminalEko {
    */
   async initialize(options: EkoConfigOptions = {}): Promise<void> {
     try {
-      if (this.config.debug) {
-        console.log('🔧 正在初始化Eko实例...')
-      }
-
       // 获取Eko配置
       const ekoConfig = await getEkoConfig({
-        debug: this.config.debug,
         ...options,
       })
 
@@ -75,9 +63,7 @@ export class TerminalEko {
         callback: this.callback,
       })
 
-      if (this.config.debug) {
-        console.log('✅ Eko实例初始化完成')
-      }
+      // 初始化完成，无需输出额外日志
     } catch (error) {
       console.error('❌ Eko实例初始化失败:', error)
       throw error
@@ -95,11 +81,6 @@ export class TerminalEko {
         await this.initialize()
       }
 
-      if (this.config.debug) {
-        console.log('🎯 开始执行任务:', prompt)
-        console.log('选项:', options)
-      }
-
       // 设置终端上下文
       if (options.terminalId) {
         this.agent.setDefaultTerminalId(options.terminalId)
@@ -109,14 +90,14 @@ export class TerminalEko {
         this.agent.setDefaultWorkingDirectory(options.workingDirectory)
       }
 
+      // 构建用户请求prompt
+      const enhancedPrompt = `🎯 **用户请求**
+${prompt}`
+
       // 执行任务
-      const result = await this.eko!.run(prompt)
+      const result = await this.eko!.run(enhancedPrompt)
 
       const duration = Date.now() - startTime
-
-      if (this.config.debug) {
-        console.log('✅ 任务执行完成，耗时:', duration, 'ms')
-      }
 
       return {
         result: result.result,
@@ -126,10 +107,7 @@ export class TerminalEko {
     } catch (error) {
       const duration = Date.now() - startTime
       const errorMessage = error instanceof Error ? error.message : String(error)
-
-      if (this.config.debug) {
-        console.error('❌ 任务执行失败:', errorMessage)
-      }
+      console.error('❌ 任务执行失败:', errorMessage)
 
       return {
         result: '',
@@ -149,15 +127,7 @@ export class TerminalEko {
         await this.initialize()
       }
 
-      if (this.config.debug) {
-        console.log('📋 生成工作流:', prompt)
-      }
-
       const workflow = await this.eko!.generate(prompt)
-
-      if (this.config.debug) {
-        console.log('✅ 工作流生成完成')
-      }
 
       return workflow
     } catch (error) {
@@ -177,11 +147,6 @@ export class TerminalEko {
         await this.initialize()
       }
 
-      if (this.config.debug) {
-        console.log('⚙️ 执行工作流')
-        console.log('选项:', options)
-      }
-
       // 设置终端上下文
       if (options.terminalId) {
         this.agent.setDefaultTerminalId(options.terminalId)
@@ -196,10 +161,6 @@ export class TerminalEko {
 
       const duration = Date.now() - startTime
 
-      if (this.config.debug) {
-        console.log('✅ 工作流执行完成，耗时:', duration, 'ms')
-      }
-
       return {
         result: result.result,
         duration,
@@ -208,10 +169,7 @@ export class TerminalEko {
     } catch (error) {
       const duration = Date.now() - startTime
       const errorMessage = error instanceof Error ? error.message : String(error)
-
-      if (this.config.debug) {
-        console.error('❌ 工作流执行失败:', errorMessage)
-      }
+      console.error('❌ 工作流执行失败:', errorMessage)
 
       return {
         result: '',
@@ -259,13 +217,29 @@ export class TerminalEko {
   }
 
   /**
+   * 获取Agent专属终端ID
+   */
+  getAgentTerminalId(): number | null {
+    return this.agent.getAgentTerminalId()
+  }
+
+  /**
+   * 清理资源
+   */
+  async cleanup(): Promise<void> {
+    try {
+      await this.agent.cleanupAgentTerminal()
+    } catch (error) {
+      console.error('清理TerminalEko资源失败:', error)
+    }
+  }
+
+  /**
    * 销毁实例
    */
   destroy(): void {
     this.eko = null
-    if (this.config.debug) {
-      console.log('🗑️ TerminalEko 实例已销毁')
-    }
+    // 保持静默销毁，避免冗余日志
   }
 }
 
@@ -315,7 +289,8 @@ export {
   createSilentCallback,
 
   // 工具
-  terminalTools,
+  allTools,
+  allTools as terminalTools, // 向后兼容性别名
 
   // 配置
   getEkoConfig,

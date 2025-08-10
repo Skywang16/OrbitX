@@ -1,15 +1,13 @@
 <script setup lang="ts">
   import ButtonGroup from '@/components/ui/ButtonGroup.vue'
   import TabBar from '@/components/ui/TabBar.vue'
-  import { useTerminalStore } from '@/stores/Terminal'
-  import type { RuntimeTerminalSession } from '@/stores/Terminal'
   import type { TabItem } from '@/types'
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import { computed } from 'vue'
 
   interface Props {
-    terminals: RuntimeTerminalSession[]
-    activeTerminalId: string | null
+    tabs: TabItem[]
+    activeTabId: string | null
   }
 
   interface Emits {
@@ -19,17 +17,8 @@
 
   const props = defineProps<Props>()
   const emit = defineEmits<Emits>()
-  const terminalStore = useTerminalStore()
 
-  // 转换终端数据为标签数据
-  const tabs = computed<TabItem[]>(() =>
-    props.terminals.map(terminal => ({
-      id: terminal.id,
-      title: terminal.title,
-      isActive: terminal.id === props.activeTerminalId,
-      closable: true,
-    }))
-  )
+  const tabs = computed(() => props.tabs)
 
   // 开始拖拽窗口
   const startDrag = async () => {
@@ -44,12 +33,7 @@
 
     <!-- 中间标签栏区域 -->
     <div class="tab-bar-container" data-tauri-drag-region="false">
-      <TabBar
-        :tabs="tabs"
-        :activeTabId="activeTerminalId"
-        @switch="emit('switch', $event)"
-        @close="emit('close', $event)"
-      />
+      <TabBar :tabs="tabs" :activeTabId="activeTabId" @switch="emit('switch', $event)" @close="emit('close', $event)" />
     </div>
 
     <!-- 右侧窗口控制按钮 -->

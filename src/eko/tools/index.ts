@@ -1,99 +1,65 @@
 /**
- * 终端工具统一导出
+ * 工具模块主入口
  *
- * 🎯 工具分类说明：
+ * 🛠️ 工具模块重构版本 2.0
  *
- * 📁 文件操作工具 (file-tools.ts)：
- * - read_file_enhanced: 📖 读取文件内容（支持行号、范围、文件信息）
- * - save_file: 💾 创建新文件（专业创建，支持编码、权限、目录创建）
- * - write_file: 📝 快速写入/追加内容（简单文本写入，支持追加模式）
+ * 新的工具架构：
  *
- * 📂 目录操作工具 (directory-tools.ts)：
- * - list_directory: 📂 列出目录内容
- * - create_directory: 📁 创建目录
- * - change_directory: 🚶 切换工作目录
- * - get_current_directory: 📍 获取当前目录
+ * 📁 文件操作工具：
+ * - read-file: 📖 单文件读取（支持行号、范围、文件信息）
+ * - read-many-files: 📚 批量文件读取（支持模式匹配、大小限制）
+ * - write-file: 💾 文件写入（支持创建目录、权限设置、备份）
  *
- * 🔍 搜索工具 (search-tools.ts)：
- * - search_code: 🔍 搜索代码/文本（支持正则、扩展名过滤）
+ * 🖥️ 系统工具：
+ * - shell: 🔧 Shell命令执行（支持工作目录、环境变量、超时）
  *
- * ⚡ 命令执行工具 (command-tools.ts)：
- * - execute_command: 🔧 万能命令执行（其他工具无法满足时使用）
- * - precise_edit: ✏️ 精确编辑现有文件（类似IDE的查找替换）
+ * 🌐 网络工具：
+ * - web-fetch: 🌐 HTTP请求（支持各种方法、头部、超时）
+ * - web-search: 🔍 网络搜索（支持多引擎、语言地区、安全搜索）
  *
- * 📊 状态查询工具 (status-tools.ts)：
- * - get_terminal_status: 📊 获取终端状态信息
- * - remove_files: 🗑️ 安全删除文件/目录（支持备份、预览、安全检查）
+ * 🧠 内存管理工具：
+ * - memory: 🧠 会话内存管理（支持TTL、标签、模式匹配）
+ *
+ * 🔧 基础设施：
+ * - tool-error: 错误处理和类型定义
+ * - tool-registry: 工具注册和管理系统
+ * - modifiable-tool: 可扩展的工具基类
  */
-
-import type { Tool } from '../types'
-
-// 文件操作工具
-import { enhancedReadFileTool, saveFileTool, writeFileTool } from './file-tools'
-
-// 目录操作工具
-import { listDirectoryTool, createDirectoryTool, changeDirectoryTool, getCurrentDirectoryTool } from './directory-tools'
-
-// 搜索工具
-import { codeSearchTool } from './search-tools'
-
-// 命令执行工具
-import { executeCommandTool, preciseEditTool } from './command-tools'
-
-// 状态查询工具
-import { getTerminalStatusTool, removeFilesTool } from './status-tools'
-
-/**
- * 所有终端工具的集合
- * 按使用频率和重要性排序
- */
-export const terminalTools: Tool[] = [
-  // 🔧 核心命令执行
-  executeCommandTool,
-
-  // 📁 文件操作（按使用频率排序）
-  enhancedReadFileTool, // 读取文件 - 最常用
-  saveFileTool, // 创建文件 - 专业创建
-  writeFileTool, // 写入/追加 - 快速写入
-  preciseEditTool, // 编辑文件 - 精确修改
-  removeFilesTool, // 删除文件 - 安全删除
-
-  // 📂 目录操作
-  listDirectoryTool, // 列出目录
-  createDirectoryTool, // 创建目录
-  changeDirectoryTool, // 切换目录
-  getCurrentDirectoryTool, // 获取当前目录
-
-  // 🔍 搜索和状态
-  codeSearchTool, // 搜索代码
-  getTerminalStatusTool, // 终端状态
-]
 
 // 导出所有工具
+export * from './tools'
+
+// 导出工具注册系统
+export * from './tool-registry'
+
+// 导出基础工具类
+export * from './modifiable-tool'
+
+// 导出错误类型
+export * from './tool-error'
+
+// 导出具体工具实例
+export { readFileTool } from './read-file'
+export { readManyFilesTool } from './read-many-files'
+export { writeFileTool } from './write-file'
+export { shellTool } from './shell'
+export { webFetchTool } from './web-fetch'
+export { webSearchTool } from './web-search'
+export { memoryTool } from './memoryTool'
+
+// 导出主要的工具集合
 export {
-  // 文件操作
-  enhancedReadFileTool,
-  saveFileTool,
-  writeFileTool,
+  allTools,
+  coreTools,
+  networkTools,
+  fileTools,
+  toolsByCategory,
+  getToolByName,
+  getToolsByCategory,
+  searchTools,
+  getToolsStats,
+  registerAllTools,
+} from './tools'
 
-  // 目录操作
-  listDirectoryTool,
-  createDirectoryTool,
-  changeDirectoryTool,
-  getCurrentDirectoryTool,
-
-  // 搜索
-  codeSearchTool,
-
-  // 命令执行
-  executeCommandTool,
-  preciseEditTool,
-
-  // 状态查询
-  getTerminalStatusTool,
-  removeFilesTool,
-}
-
-// 导出类型和工具函数
-export * from './types'
-export * from './utils'
+// 默认导出核心工具
+export { coreTools as default } from './tools'

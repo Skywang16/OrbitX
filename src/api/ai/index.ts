@@ -151,32 +151,6 @@ export class AIAPI {
     }
   }
 
-  // ===== 上下文管理 =====
-
-  /**
-   * 获取当前终端上下文信息
-   * @returns 返回终端的上下文数据，包含当前目录、环境变量等
-   */
-  async getTerminalContext(): Promise<Record<string, unknown>> {
-    try {
-      return await invoke('get_terminal_context')
-    } catch (error) {
-      throw new Error(handleError(error, '获取终端上下文失败'))
-    }
-  }
-
-  /**
-   * 更新终端上下文信息
-   * @param context 要更新的上下文数据
-   */
-  async updateTerminalContext(context: Record<string, unknown>): Promise<void> {
-    try {
-      return await invoke('update_terminal_context', { context })
-    } catch (error) {
-      throw new Error(handleError(error, '更新终端上下文失败'))
-    }
-  }
-
   // ===== 用户前置提示词管理 =====
 
   /**
@@ -243,10 +217,6 @@ export const ai = {
   // 统计监控
   getStats: () => aiAPI.getStats(),
   getHealthStatus: () => aiAPI.getHealthStatus(),
-
-  // 上下文管理
-  getTerminalContext: () => aiAPI.getTerminalContext(),
-  updateTerminalContext: (context: Record<string, unknown>) => aiAPI.updateTerminalContext(context),
 
   // 用户前置提示词管理
   getUserPrefixPrompt: () => aiAPI.getUserPrefixPrompt(),

@@ -1,16 +1,18 @@
 <script setup lang="ts">
   import { useAIChatStore } from '@/components/AIChatSidebar'
   import AIChatSidebar from '@/components/AIChatSidebar/index.vue'
-  import TerminalPanel from '@/components/terminal/TerminalPanel.vue'
+  import ContentRenderer from '@/components/ui/ContentRenderer.vue'
   import TitleBar from '@/components/ui/TitleBar.vue'
   import { useTerminalStore } from '@/stores/Terminal'
+  import { useTabManagerStore } from '@/stores/TabManager'
   import { invoke } from '@tauri-apps/api/core'
   import { listen, UnlistenFn } from '@tauri-apps/api/event'
   import { getCurrentWebview } from '@tauri-apps/api/webview'
-  import { onBeforeUnmount, onMounted, ref } from 'vue'
+  import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
   const terminalStore = useTerminalStore()
   const aiChatStore = useAIChatStore()
+  const tabManagerStore = useTabManagerStore()
 
   // 存储事件监听器的取消函数
   let unlistenStartupFile: UnlistenFn | null = null
@@ -51,12 +53,33 @@
     terminalStore.writeToTerminal(terminalStore.activeTerminalId, processedPath)
   }
 
+  // 监听终端状态变化，同步到标签管理器
+  watch(
+    () => terminalStore.terminals,
+    () => {
+      tabManagerStore.syncTerminalTabs()
+    },
+    { deep: true }
+  )
+
+  watch(
+    () => terminalStore.activeTerminalId,
+    newActiveId => {
+      if (newActiveId && tabManagerStore.activeTabId !== newActiveId) {
+        tabManagerStore.setActiveTab(newActiveId)
+      }
+    }
+  )
+
   // 当主应用组件挂载时，设置全局监听器
   onMounted(async () => {
     await terminalStore.setupGlobalListeners()
 
     // 初始化shell管理器
     await terminalStore.initializeShellManager()
+
+    // 初始化标签管理器
+    tabManagerStore.initialize()
 
     // 如果没有终端，创建一个初始终端
     if (terminalStore.terminals.length === 0) {
@@ -104,35 +127,20 @@
       unlistenFileDrop()
     }
   })
-
-  // 处理标签切换
-  const handleTabSwitch = (id: string) => {
-    terminalStore.setActiveTerminal(id)
-  }
-
-  // 处理标签关闭
-  const handleTabClose = (id: string) => {
-    terminalStore.closeTerminal(id)
-  }
 </script>
 
 <template>
   <div class="app-container">
     <TitleBar
-      :terminals="terminalStore.terminals"
-      :activeTerminalId="terminalStore.activeTerminalId"
-      @switch="handleTabSwitch"
-      @close="handleTabClose"
+      :tabs="tabManagerStore.tabs"
+      :activeTabId="tabManagerStore.activeTabId"
+      @switch="tabManagerStore.setActiveTab"
+      @close="tabManagerStore.closeTab"
     />
 
     <div class="main-content">
-      <main class="terminal-wrapper">
-        <TerminalPanel
-          panelId="main"
-          :terminalIds="terminalStore.terminals.map(t => t.id)"
-          :activeTerminalId="terminalStore.activeTerminalId"
-        />
-      </main>
+      <!-- 使用新的内容渲染器 -->
+      <ContentRenderer />
 
       <!-- AI聊天侧边栏 -->
       <div v-if="aiChatStore.isVisible" class="sidebar-wrapper" :style="{ width: `${aiChatStore.sidebarWidth}px` }">
@@ -152,12 +160,6 @@
 
   .main-content {
     display: flex;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .terminal-wrapper {
     flex: 1;
     min-height: 0;
     overflow: hidden;

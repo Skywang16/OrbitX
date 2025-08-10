@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
   import { useTerminalStore } from '@/stores/Terminal'
-  import type { TabItem } from '@/types'
+  import { TabType, type TabItem } from '@/types'
 
   interface Props {
     tabs: TabItem[]
@@ -16,27 +16,33 @@
   const props = defineProps<Props>()
   const emit = defineEmits<Emits>()
 
-  // 使用终端store
+  // 使用store
   const terminalStore = useTerminalStore()
+  // 移除未使用的 tabManagerStore 引用
 
-  // Shell选择popover状态
-  const showShellPopover = ref(false)
+  // 弹出菜单状态
+  const showAddMenuPopover = ref(false)
 
-  // 计算Shell菜单项
-  const shellMenuItems = computed(() => {
-    if (terminalStore.shellManager.isLoading) {
-      return [{ label: '加载中...', value: 'loading', disabled: true }]
-    }
-
-    if (terminalStore.shellManager.error) {
-      return [{ label: '加载失败', value: 'error', disabled: true }]
-    }
-
-    return terminalStore.shellManager.availableShells.map(shell => ({
-      label: shell.displayName,
-      value: shell.name,
-    }))
+  // 添加菜单项：仅显示可用 shell 名称
+  const addMenuItems = computed(() => {
+    const shells = terminalStore.shellManager.availableShells || []
+    return shells.map(s => ({ label: s.name, value: s.name }))
   })
+
+  // 获取标签样式类
+  const getTabClass = (tab: TabItem): string[] => {
+    const classes = ['tab']
+
+    if (tab.isActive) {
+      classes.push('active')
+    }
+
+    if (tab.type === TabType.TERMINAL && tab.title === 'X-Orbit') {
+      classes.push('agent-tab')
+    }
+
+    return classes
+  }
 
   const tabBarRef = ref<HTMLDivElement | null>(null)
   const tabBarWrapperRef = ref<HTMLDivElement | null>(null)
@@ -55,29 +61,21 @@
     const tabCount = props.tabs.length
     if (tabCount === 0) return TAB_CONFIG.maxWidth
 
-    // 获取容器总宽度
     const containerWidth = tabBarWrapperRef.value?.clientWidth || 400
-
-    // 计算需要为固定按钮预留的空间
-    // 先假设按钮不固定，计算标签宽度，然后判断是否需要固定按钮
     let availableWidth = containerWidth - TAB_CONFIG.padding * 2
 
-    // 计算每个标签可用的宽度（包括margin和内联按钮）
     const totalMarginWidth = (tabCount - 1) * TAB_CONFIG.margin
-    const inlineButtonWidth = TAB_CONFIG.addBtnWidth + 4 // 4px for button margin
+    const inlineButtonWidth = TAB_CONFIG.addBtnWidth + 4
     const widthForTabs = availableWidth - totalMarginWidth - inlineButtonWidth
     const widthPerTab = widthForTabs / tabCount
 
-    // 如果标签宽度会小于最大宽度，说明需要压缩或滚动，此时按钮应该固定
     if (widthPerTab < TAB_CONFIG.maxWidth) {
-      // 重新计算，为固定按钮预留空间
-      availableWidth = containerWidth - TAB_CONFIG.addBtnWidth - TAB_CONFIG.padding * 2 - 4 // gap
+      availableWidth = containerWidth - TAB_CONFIG.addBtnWidth - TAB_CONFIG.padding * 2 - 4
       const widthForTabsFixed = availableWidth - totalMarginWidth
       const widthPerTabFixed = widthForTabsFixed / tabCount
       return Math.max(TAB_CONFIG.minWidth, widthPerTabFixed)
     }
 
-    // 限制在最小和最大宽度之间
     return Math.max(TAB_CONFIG.minWidth, Math.min(TAB_CONFIG.maxWidth, widthPerTab))
   })
 
@@ -86,7 +84,7 @@
     return dynamicTabWidth.value <= TAB_CONFIG.minWidth
   })
 
-  // 判断标签是否被压缩（宽度小于最大宽度）
+  // 判断标签是否被压缩
   const isCompressed = computed(() => {
     return dynamicTabWidth.value < TAB_CONFIG.maxWidth && !needsScroll.value
   })
@@ -104,36 +102,30 @@
     emit('close', id)
   }
 
-  // 处理左键点击 - 创建默认终端
+  // 左键点击：直接新建默认终端
   const handleAddClick = async () => {
     try {
       await terminalStore.createTerminal()
     } catch (error) {
-      console.error('创建默认终端失败:', error)
+      // 静默处理
     }
   }
 
-  // 处理右键点击 - 显示Shell选择菜单
-  const handleRightClick = (event: MouseEvent) => {
+  // 右键点击：打开选择菜单
+  const handleAddContextMenu = (event: MouseEvent) => {
     event.preventDefault()
-    event.stopPropagation()
-
-    // 初始化shell管理器（如果还没有初始化）
-    if (terminalStore.shellManager.availableShells.length === 0) {
-      terminalStore.initializeShellManager()
-    }
-
-    showShellPopover.value = true
+    showAddMenuPopover.value = true
   }
 
-  // 处理Shell菜单项点击
-  const handleShellMenuClick = async (item: { label: string; value?: string; disabled?: boolean }) => {
-    if (item.disabled || !item.value) return
+  // 处理添加菜单项点击
+  const handleAddMenuClick = async (item: { label: string; value: string }) => {
+    showAddMenuPopover.value = false
 
     try {
+      // value 直接为 shell 名称
       await terminalStore.createTerminalWithShell(item.value)
     } catch (error) {
-      console.error('创建终端失败:', error)
+      // 静默处理错误
     }
   }
 
@@ -182,14 +174,18 @@
       <div
         v-for="tab in tabs"
         :key="tab.id"
-        class="tab"
-        :class="{ active: tab.id === activeTabId }"
+        :class="getTabClass(tab)"
         :style="{ width: needsScroll ? `${TAB_CONFIG.minWidth}px` : `${dynamicTabWidth}px` }"
         @mousedown="handleMouseDown($event, tab.id)"
         @click="handleTabClick(tab.id)"
       >
-        <span class="tab-title">{{ tab.title }}</span>
-        <button v-if="tabs.length > 1" class="close-btn" @click="handleCloseClick($event, tab.id)" title="关闭标签">
+        <span class="tab-title" :title="tab.title">{{ tab.title }}</span>
+        <button
+          v-if="tab.closable && tabs.length > 1"
+          class="close-btn"
+          @click="handleCloseClick($event, tab.id)"
+          title="关闭标签"
+        >
           <svg
             width="12"
             height="12"
@@ -205,21 +201,22 @@
           </svg>
         </button>
       </div>
-      <!-- 当不需要滚动时，添加按钮跟在标签后面 -->
+
+      <!-- 内联添加按钮 -->
       <x-popover
         v-if="!needsScroll && !isCompressed"
-        v-model="showShellPopover"
+        v-model="showAddMenuPopover"
         placement="bottom-start"
         trigger="manual"
-        :menu-items="shellMenuItems"
-        @menu-item-click="handleShellMenuClick"
+        :menu-items="addMenuItems"
+        @menu-item-click="handleAddMenuClick"
       >
         <template #trigger>
           <button
             class="add-tab-btn inline"
-            title="左键新建默认终端，右键选择Shell"
+            title="新建终端（左键） / 选择Shell（右键）"
             @click="handleAddClick"
-            @contextmenu="handleRightClick"
+            @contextmenu="handleAddContextMenu"
           >
             <svg
               width="16"
@@ -238,21 +235,22 @@
         </template>
       </x-popover>
     </div>
-    <!-- 当需要滚动或压缩时，添加按钮固定在右边 -->
+
+    <!-- 固定添加按钮 -->
     <x-popover
       v-if="needsScroll || isCompressed"
-      v-model="showShellPopover"
+      v-model="showAddMenuPopover"
       placement="bottom-end"
       trigger="manual"
-      :menu-items="shellMenuItems"
-      @menu-item-click="handleShellMenuClick"
+      :menu-items="addMenuItems"
+      @menu-item-click="handleAddMenuClick"
     >
       <template #trigger>
         <button
           class="add-tab-btn fixed"
-          title="左键新建默认终端，右键选择Shell"
+          title="新建终端（左键） / 选择Shell（右键）"
           @click="handleAddClick"
-          @contextmenu="handleRightClick"
+          @contextmenu="handleAddContextMenu"
         >
           <svg
             width="16"
@@ -307,14 +305,12 @@
     position: relative;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     height: var(--titlebar-element-height);
     min-width: 60px;
     max-width: 200px;
     margin: 0 6px 0 0;
     padding: 0 8px;
     border-radius: var(--border-radius-md);
-    background-color: var(--color-secondary);
     color: var(--text-muted);
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -331,7 +327,7 @@
     background-color: var(--color-background);
     color: var(--text-primary);
     border-color: var(--color-border);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: none; /* 仅移除阴影，其他保持不变 */
   }
 
   .tab.active::before {
@@ -345,6 +341,76 @@
     background: linear-gradient(90deg, var(--color-primary), #4fc3f7);
     border-radius: 2px 2px 0 0;
     box-shadow: 0 -1px 4px rgba(0, 122, 204, 0.3);
+  }
+
+  /* 终端Tab样式 */
+  .tab:not(.agent-tab) {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.08));
+    border: 1px solid rgba(59, 130, 246, 0.2);
+  }
+
+  .tab:not(.agent-tab):hover {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.12));
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+
+  .tab:not(.agent-tab).active {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(37, 99, 235, 0.06));
+    border-color: rgba(59, 130, 246, 0.4);
+    box-shadow: none; /* 移除阴影 */
+  }
+
+  .tab:not(.agent-tab).active::before {
+    background: linear-gradient(90deg, #3b82f6, #2563eb, #1d4ed8);
+    box-shadow: 0 -1px 4px rgba(59, 130, 246, 0.4);
+  }
+
+  /* Agent专属终端Tab样式 */
+  .tab.agent-tab {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(99, 102, 241, 0.08));
+    border: 1px solid rgba(124, 58, 237, 0.2);
+    position: relative;
+  }
+
+  .tab.agent-tab:hover {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.15), rgba(99, 102, 241, 0.12));
+    border-color: rgba(124, 58, 237, 0.3);
+  }
+
+  .tab.agent-tab.active {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(99, 102, 241, 0.06));
+    border-color: rgba(124, 58, 237, 0.4);
+  }
+
+  .tab.agent-tab.active::before {
+    background: linear-gradient(90deg, #7c3aed, #6366f1, #3b82f6);
+    box-shadow: 0 -1px 4px rgba(124, 58, 237, 0.4);
+  }
+
+  /* Agent终端Tab的特殊标识 */
+  .tab.agent-tab::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 6px;
+    height: 6px;
+    background: linear-gradient(45deg, #7c3aed, #6366f1);
+    border-radius: 50%;
+    box-shadow: 0 0 6px rgba(124, 58, 237, 0.6);
+    animation: pulse-glow 2s infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%,
+    100% {
+      opacity: 0.8;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
   }
 
   .tab-title {

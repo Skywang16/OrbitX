@@ -86,6 +86,9 @@
 
   const fitAddon = ref<FitAddon | null>(null) // 终端自适应大小插件
 
+  // 防止重复清理的标记
+  let hasDisposed = false
+
   // === 终端状态 ===
   const currentLine = ref('') // 当前输入行内容
   const cursorCol = ref(0) // 光标列位置
@@ -204,14 +207,18 @@
       focusTerminal()
     } catch (error) {
       console.error('初始化终端时发生错误:', error)
-      // 清理可能已创建的资源
-      if (terminal.value) {
+      // 清理可能已创建的资源（注意与卸载生命周期的竞争条件）
+      if (!hasDisposed && terminal.value) {
         try {
           terminal.value.dispose()
-        } catch (disposeError) {
-          console.warn('清理终端实例时发生错误:', disposeError)
+        } catch (disposeError: any) {
+          const msg = String(disposeError?.message || disposeError)
+          if (!/addon.*not been loaded/i.test(msg)) {
+            console.warn('清理终端实例时发生错误:', disposeError)
+          }
         }
         terminal.value = null
+        hasDisposed = true
       }
       fitAddon.value = null
     }
@@ -645,6 +652,9 @@
   })
 
   onBeforeUnmount(() => {
+    if (hasDisposed) return
+    hasDisposed = true
+
     terminalStore.unregisterTerminalCallbacks(props.terminalId)
 
     // 清理主题监听器
@@ -662,12 +672,15 @@
       viewportElement.removeEventListener('scroll', updateTerminalCursorPosition)
     }
 
-    // 安全地清理终端实例和插件
+    // 安全地清理终端实例
     if (terminal.value) {
       try {
         terminal.value.dispose()
-      } catch (error) {
-        console.warn('清理终端实例时发生错误:', error)
+      } catch (error: any) {
+        const msg = String(error?.message || error)
+        if (!/addon.*not been loaded/i.test(msg)) {
+          console.warn('清理终端实例时发生错误:', error)
+        }
       }
       terminal.value = null
     }

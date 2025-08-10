@@ -351,17 +351,19 @@ export const useTerminalStore = defineStore('Terminal', () => {
    */
   const createAgentTerminal = async (agentName: string = 'AI Agent', initialDirectory?: string): Promise<string> => {
     const id = generateId()
-    const agentTerminalTitle = `🤖 ${agentName}`
+    const agentTerminalTitle = agentName
 
-    // 检查是否已存在Agent专属终端
-    const existingAgentTerminal = terminals.value.find(
-      terminal =>
-        terminal.title?.includes('🤖') || terminal.title?.includes('Agent') || terminal.title?.includes(agentName)
-    )
+    // 检查是否已存在Agent专属终端（精确匹配Agent名称）
+    const existingAgentTerminal = terminals.value.find(terminal => terminal.title === agentName)
 
     if (existingAgentTerminal) {
-      // 如果已存在，直接激活并返回
+      // 如果已存在，静默激活现有终端
       setActiveTerminal(existingAgentTerminal.id)
+      existingAgentTerminal.title = agentTerminalTitle
+      existingAgentTerminal.lastActive = new Date().toISOString()
+
+      // 不再输出重新激活信息，保持终端清洁
+
       return existingAgentTerminal.id
     }
 
@@ -370,7 +372,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
       id,
       title: agentTerminalTitle,
       workingDirectory: initialDirectory || '~',
-      environment: {},
+      environment: {
+        TERMX_AGENT: agentName,
+        TERMX_TERMINAL_TYPE: 'agent',
+      },
       commandHistory: [],
       isActive: false,
       createdAt: new Date().toISOString(),
@@ -403,7 +408,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       })
       await terminalAPI.write({
         paneId: backendId,
-        data: `\x1b[32m# 这是AI Agent的专属终端，所有AI命令将在此执行\x1b[0m\n`,
+        data: `\x1b[32m# 这是${agentName}的专属终端，所有AI命令将在此执行\x1b[0m\n`,
       })
       await terminalAPI.write({
         paneId: backendId,

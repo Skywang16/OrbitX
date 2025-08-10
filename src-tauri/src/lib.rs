@@ -27,7 +27,7 @@ use ai::commands::{
     get_compressed_context,
     get_conversation,
     get_conversations,
-    get_terminal_context,
+
     remove_ai_model,
     save_message,
     set_default_ai_model,
@@ -284,8 +284,6 @@ pub fn run() {
             get_compressed_context,
             save_message,
             truncate_conversation,
-            // 终端上下文管理命令
-            get_terminal_context,
             // 快捷键系统命令
             get_shortcuts_config,
             update_shortcuts_config,
