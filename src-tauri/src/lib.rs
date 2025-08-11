@@ -341,23 +341,24 @@ pub fn run() {
                 info!("开始创建主题服务实例");
                 let theme_service = tauri::async_runtime::block_on(async {
                     use crate::config::{
-                        paths::ConfigPaths, theme::ThemeManager, theme::ThemeManagerOptions,
-                        theme::ThemeService,
+                        paths::ConfigPaths, theme::ThemeManagerOptions, theme::ThemeService,
                     };
+                    use crate::storage::StorageCoordinatorState;
+
+                    // 获取缓存实例
+                    let storage_state = app.state::<StorageCoordinatorState>();
+                    let cache = storage_state.coordinator.cache();
 
                     // 创建配置路径管理器
                     let paths = ConfigPaths::new()
                         .map_err(|e| anyhow::anyhow!("配置路径创建失败: {}", e))?;
 
-                    // 创建主题管理器
+                    // 创建主题管理器选项
                     let theme_manager_options = ThemeManagerOptions::default();
-                    let theme_manager = ThemeManager::new(paths, theme_manager_options)
-                        .await
-                        .map_err(|e| anyhow::anyhow!("主题管理器创建失败: {}", e))?;
-                    let theme_manager = std::sync::Arc::new(theme_manager);
 
                     // 创建主题服务
-                    let theme_service = ThemeService::new(theme_manager);
+                    let theme_service =
+                        ThemeService::new(paths, theme_manager_options, cache).await?;
                     Ok::<ThemeService, anyhow::Error>(theme_service)
                 })?;
                 let theme_service = std::sync::Arc::new(theme_service);
@@ -388,7 +389,8 @@ pub fn run() {
                 let ai_state = {
                     let storage_state = app.state::<StorageCoordinatorState>();
                     let sqlite_manager = storage_state.coordinator.sqlite_manager();
-                    let ai_state = AIManagerState::new(Some(sqlite_manager))
+                    let cache = storage_state.coordinator.cache();
+                    let ai_state = AIManagerState::new(Some(sqlite_manager), cache)
                         .map_err(|e| anyhow::anyhow!("AI管理器状态初始化失败: {}", e))?;
 
                     // 初始化AI服务

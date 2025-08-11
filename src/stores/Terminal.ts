@@ -495,9 +495,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
    * 同步终端状态到会话存储（不触发自动保存）
    */
   const syncToSessionStore = () => {
-    console.log('🔄 [Terminal Store] 同步终端状态到会话存储')
-    console.log('📊 [Terminal Store] 当前终端数量:', terminals.value.length)
-
     // 直接替换整个对象，避免触发 Session Store 的响应式更新
     const terminalSessions: Record<string, TerminalSession> = {}
     const tabs: TabState[] = []
@@ -515,9 +512,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
         lastActive: new Date().toISOString(),
       }
 
-      console.log(
-        `📱 [Terminal Store] 同步终端 ${terminal.id}: title='${terminal.title}', isActive=${sessionData.isActive}`
-      )
       terminalSessions[terminal.id] = sessionData
 
       // 创建标签页记录
@@ -536,10 +530,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
       tabs.push(tabData)
     })
 
-    // 直接替换，不使用 Session Store 的方法（避免触发自动保存）
+    // 直接替换，不使用 Session Store 的方法
     sessionStore.sessionState.terminalSessions = terminalSessions
     sessionStore.sessionState.tabs = tabs
-    console.log('✅ [Terminal Store] 终端状态同步完成')
   }
 
   /**

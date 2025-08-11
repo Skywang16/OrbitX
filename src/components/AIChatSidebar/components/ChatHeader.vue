@@ -33,7 +33,7 @@
     emit('create-new-session')
   }
 
-  const handleDeleteSession = (sessionId: string) => {
+  const handleDeleteSession = (sessionId: number) => {
     emit('delete-session', sessionId)
   }
 

@@ -305,23 +305,4 @@ mod tests {
             .expect("获取命令推荐失败");
         assert!(!recommendations.is_empty(), "命令推荐不应该为空");
     }
-
-    #[tokio::test]
-    async fn test_cache_functionality() {
-        let (manager, _temp_dir) = create_test_sqlite_manager().await;
-        manager
-            .initialize_database()
-            .await
-            .expect("数据库初始化失败");
-
-        // 测试缓存统计
-        let (entries, capacity) = manager.get_cache_stats().await;
-        assert_eq!(entries, 0, "初始缓存条目数应该为0");
-        assert!(capacity > 0, "缓存容量应该大于0");
-
-        // 测试清除缓存
-        manager.clear_cache().await;
-        let (entries_after_clear, _) = manager.get_cache_stats().await;
-        assert_eq!(entries_after_clear, 0, "清除后缓存条目数应该为0");
-    }
 }

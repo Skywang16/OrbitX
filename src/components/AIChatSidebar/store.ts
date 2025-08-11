@@ -11,7 +11,7 @@ import { handleErrorWithMessage } from '@/utils/errorHandler'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import type { ChatMode } from './types'
-import { createDebugTerminalEko, type TerminalEko } from '@/eko'
+import { createTerminalEko, createSidebarCallback, type TerminalEko } from '@/eko'
 import type { Conversation, Message } from '@/types/features/ai/chat'
 
 // 工具函数
@@ -28,7 +28,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const isVisible = ref(false)
   const sidebarWidth = ref(350)
   const currentConversationId = ref<number | null>(null)
-  const messages = ref<Message[]>([])
+  const messageList = ref<Message[]>([])
   const streamingContent = ref('')
   const isLoading = ref(false)
   const error = ref<string | null>(null)
@@ -44,7 +44,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const isInitialized = ref(false)
 
   // 计算属性
-  const hasMessages = computed(() => messages.value.length > 0)
+  const hasMessages = computed(() => messageList.value.length > 0)
   const canSendMessage = computed(() => {
     const aiSettingsStore = useAISettingsStore()
     return !isLoading.value && aiSettingsStore.hasModels
@@ -60,7 +60,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         try {
           await aiSettingsStore.loadSettings()
         } catch (_error) {
-          // 静默处理加载失败，不影响用户体验
+          /* ignore: 静默处理加载失败，不影响用户体验 */
         }
       }
 
@@ -81,7 +81,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       const newConversation = await conversationAPI.get(conversationId)
       conversations.value.unshift(newConversation)
       currentConversationId.value = newConversation.id
-      messages.value = []
+      messageList.value = []
     } catch (err) {
       error.value = handleErrorWithMessage(err, '创建会话失败')
     } finally {
@@ -95,7 +95,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       currentConversationId.value = conversationId
 
       // 使用新的API获取压缩上下文作为消息历史
-      messages.value = await conversationAPI.getCompressedContext(conversationId)
+      const loadedMessages = await conversationAPI.getCompressedContext(conversationId)
+      messageList.value = loadedMessages
     } catch (err) {
       error.value = handleErrorWithMessage(err, '加载会话失败')
     } finally {
@@ -110,7 +111,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
       if (currentConversationId.value === conversationId) {
         currentConversationId.value = null
-        messages.value = []
+        messageList.value = []
       }
     } catch (err) {
       error.value = handleErrorWithMessage(err, '删除会话失败')
@@ -141,46 +142,67 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       isLoading.value = true
       error.value = null
 
-      // 确保eko实例存在
-      if (!ekoInstance.value) {
-        await initializeEko()
-      }
-
-      if (!ekoInstance.value) {
-        throw new Error('Eko实例初始化失败')
-      }
-
-      // 1. 根据模式设置只读/全权限工具
-      try {
-        ekoInstance.value.setMode(chatMode.value)
-      } catch (_) {
-        // 忽略
-      }
-
-      // 2. 保存用户消息
+      // 1. 立即保存用户消息（不等待Eko初始化）
       await conversationAPI.saveMessage(currentConversationId.value, 'user', content)
 
-      // 3. 获取压缩上下文
+      // 2. 立即更新UI显示用户消息
+      await loadConversation(currentConversationId.value)
+
+      // 3. 确保Eko实例可用（如果未初始化则自动初始化）
+      if (!ekoInstance.value) {
+        console.log('Eko实例未初始化，正在自动初始化...')
+        await initializeEko()
+
+        // 如果初始化后仍然没有实例，则抛出错误
+        if (!ekoInstance.value) {
+          throw new Error('Eko实例初始化失败')
+        }
+      }
+
+      // 4. 根据模式设置只读/全权限工具（若失败不影响整体发送流程）
+      try {
+        ekoInstance.value.setMode(chatMode.value)
+      } catch {
+        /* ignore */
+      }
+
+      // 5. 获取压缩上下文
       const contextMessages = await conversationAPI.getCompressedContext(currentConversationId.value)
 
-      // 4. 构建完整的prompt（包含上下文，不重复当前用户消息）
+      // 6. 构建完整的prompt（包含上下文，不重复当前用户消息）
       const fullPrompt =
         contextMessages.length > 0
           ? contextMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n')
           : `user: ${content}`
 
-      // 5. 通过eko处理消息（传递完整上下文）
+      // 7. 创建临时AI消息（使用新的数据结构）
+      const tempAIMessage: Message = {
+        id: Date.now(),
+        conversationId: currentConversationId.value,
+        role: 'assistant' as const,
+        createdAt: new Date(),
+        steps: [],
+        status: 'streaming',
+      }
+
+      // 添加临时消息到列表
+      messageList.value.push(tempAIMessage)
+
+      // 8. 通过eko处理消息（流式输出通过回调处理）
+      streamingContent.value = ''
       const response = await ekoInstance.value.run(fullPrompt)
 
-      // 6. 保存AI回复
+      // 9. 保存AI回复到数据库
       if (response.success && response.result) {
+        // 更新占位消息内容
+        tempAIMessage.content = response.result
         await conversationAPI.saveMessage(currentConversationId.value, 'assistant', response.result)
       }
 
-      // 7. 重新加载当前会话的消息
+      // 10. 重新加载消息
       await loadConversation(currentConversationId.value)
 
-      // 8. 刷新会话列表以更新预览
+      // 11. 刷新会话列表以更新预览
       await refreshConversations()
     } catch (err) {
       error.value = handleErrorWithMessage(err, '发送消息失败')
@@ -218,14 +240,112 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     error.value = null
   }
 
-  // 初始化Eko实例（保持原有功能）
+  // 初始化Eko实例（带流式回调）
   const initializeEko = async (): Promise<void> => {
     try {
       if (!ekoInstance.value) {
-        ekoInstance.value = await createDebugTerminalEko()
+        // 处理流式消息更新UI
+        const handleStreamMessage = async (message: any) => {
+          const tempMessage = messageList.value[messageList.value.length - 1]
+          if (!tempMessage || tempMessage.role !== 'assistant') return
+
+          if (message.type === 'tool_use') {
+            // 详细打印工具调用消息结构
+            console.log('🔧 Tool Use Message:', JSON.stringify(message, null, 2))
+
+            // 处理工具调用 - 创建工具步骤
+            tempMessage.steps?.push({
+              type: 'tool_use',
+              content: '正在调用工具...',
+              timestamp: Date.now(),
+              metadata: {
+                toolName: message.toolName || '工具调用',
+                toolCommand: message.params?.command || JSON.stringify(message.params || {}),
+                status: 'running',
+                originalMessage: message, // 保存原始消息用于调试
+              },
+            })
+          } else if (message.type === 'tool_result') {
+            // 详细打印工具结果消息结构
+            console.log('✅ Tool Result Message:', JSON.stringify(message, null, 2))
+
+            // 更新现有工具步骤的结果
+            let toolStep = tempMessage.steps?.find(step => step.type === 'tool_use')
+            if (toolStep) {
+              toolStep.content = '工具执行完成'
+              toolStep.metadata = {
+                ...toolStep.metadata,
+                status: 'completed',
+                toolResult: message,
+              }
+            }
+          } else if (message.type === 'workflow' && message.workflow?.thought) {
+            // 处理思考步骤
+            let thinkingStep = tempMessage.steps?.find(step => step.type === 'thinking')
+            if (thinkingStep) {
+              thinkingStep.content = message.workflow.thought
+
+              // 如果thinking完成，记录持续时间
+              if (message.streamDone) {
+                thinkingStep.metadata = {
+                  ...thinkingStep.metadata,
+                  thinkingDuration: Date.now() - thinkingStep.timestamp,
+                }
+              }
+            } else {
+              const newStep = {
+                type: 'thinking' as const,
+                content: message.workflow.thought,
+                timestamp: Date.now(),
+                metadata: {
+                  workflowName: message.workflow.name,
+                  agentName: message.agentName,
+                  taskId: message.taskId,
+                },
+              }
+
+              // 如果thinking瞬间完成，记录0持续时间
+              if (message.streamDone) {
+                newStep.metadata = {
+                  ...newStep.metadata,
+                  thinkingDuration: 0,
+                }
+              }
+
+              tempMessage.steps?.push(newStep)
+            }
+          } else if (message.type === 'text' && !message.streamDone) {
+            // 处理文本步骤
+            let textStep = tempMessage.steps?.find(step => step.type === 'text')
+            if (textStep) {
+              textStep.content = message.text
+              textStep.timestamp = Date.now()
+            } else {
+              tempMessage.steps?.push({
+                type: 'text',
+                content: message.text,
+                timestamp: Date.now(),
+              })
+            }
+            streamingContent.value = message.text
+          }
+        }
+
+        // 使用回调工厂
+        const callback = createSidebarCallback(handleStreamMessage)
+
+        ekoInstance.value = await createTerminalEko({
+          callback,
+          debug: true,
+        })
       }
     } catch (err) {
-      // 静默处理错误
+      // 创建fallback实例
+      try {
+        ekoInstance.value = await createTerminalEko({ debug: true })
+      } catch {
+        // 完全失败，保持null
+      }
     }
   }
 
@@ -255,21 +375,17 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
 
     // 触发会话状态保存
-    sessionStore.saveSessionState().catch(err => {
-      console.warn('保存 OrbitX 状态失败:', err)
+    sessionStore.saveSessionState().catch(() => {
+      /* ignore: 后台保存失败不打扰用户 */
     })
   }
 
   // 监听状态变化并自动保存
-  watch(
-    [isVisible, sidebarWidth, chatMode, currentConversationId],
-    () => {
-      if (isInitialized.value) {
-        saveToSessionState()
-      }
-    },
-    { deep: true }
-  )
+  watch([isVisible, sidebarWidth, chatMode, currentConversationId], () => {
+    if (isInitialized.value) {
+      saveToSessionState()
+    }
+  })
 
   // 初始化方法
   const initialize = async (): Promise<void> => {
@@ -298,7 +414,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
       isInitialized.value = true
     } catch (err) {
-      console.warn('OrbitX Store 初始化失败:', err)
+      handleErrorWithMessage(err, 'AI聊天初始化失败')
     }
   }
 
@@ -307,7 +423,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     isVisible,
     sidebarWidth,
     currentConversationId,
-    messages,
+    messageList,
     streamingContent,
     isLoading,
     error,

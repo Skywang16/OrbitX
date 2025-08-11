@@ -1,129 +1,103 @@
 <script setup lang="ts">
-  import { ref, nextTick } from 'vue'
+  import { computed, nextTick, ref, watch } from 'vue'
   import type { Message } from '@/types/features/ai/chat'
-  import ChatMessageItem from './ChatMessageItem.vue'
+  import UserMessage from './UserMessage.vue'
+  import AIMessage from './AIMessage.vue'
 
-  // Props定义
   interface Props {
     messages: Message[]
-    hasMessages?: boolean
-    isLoading?: boolean
-
-    emptyStateTitle?: string
-    emptyStateDescription?: string
   }
 
-  const props = withDefaults(defineProps<Props>(), {
-    hasMessages: false,
-    isLoading: false,
+  const props = defineProps<Props>()
 
-    emptyStateTitle: '开始与AI对话',
-    emptyStateDescription: '请先配置AI模型',
+  // 消息列表容器引用
+  const messageListRef = ref<HTMLElement | null>(null)
+
+  // 消息列表
+  const msgList = computed(() => {
+    return props.messages.map(msg => ({
+      ...msg,
+      type: msg.role as 'user' | 'assistant',
+    }))
   })
 
-  // 响应式引用
-  const messagesContainer = ref<HTMLElement>()
-
-  // 方法
-  /**
-   * 滚动到底部
-   */
+  // 自动滚动到底部
   const scrollToBottom = async () => {
     await nextTick()
-    if (messagesContainer.value) {
-      // 使用 smooth 滚动，但在流式过程中使用 auto 以提高性能
-      const behavior = 'auto'
-      messagesContainer.value.scrollTo({
-        top: messagesContainer.value.scrollHeight,
-        behavior,
-      })
+    if (messageListRef.value) {
+      messageListRef.value.scrollTop = messageListRef.value.scrollHeight
     }
   }
 
-  // 暴露方法给父组件
-  defineExpose({
-    scrollToBottom,
-    messagesContainer,
-  })
+  // 监听消息变化，自动滚动到底部
+  watch(
+    () => msgList.value.length,
+    () => {
+      scrollToBottom()
+    },
+    { immediate: true }
+  )
 </script>
 
 <template>
-  <div ref="messagesContainer" class="messages-container">
-    <!-- 空状态 -->
-    <div v-if="!hasMessages" class="empty-state">
-      <div class="empty-icon">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-      </div>
-      <div class="empty-title">{{ emptyStateTitle }}</div>
-      <div class="empty-description">{{ emptyStateDescription }}</div>
+  <div ref="messageListRef" class="message-list">
+    <div v-if="msgList.length === 0" class="empty-state">
+      <div class="empty-icon">💬</div>
+      <div class="empty-text">开始对话吧</div>
+      <div class="empty-hint">发送消息开始与AI助手对话</div>
     </div>
 
-    <!-- 消息列表 -->
-    <div v-else class="messages-list">
-      <ChatMessageItem
-        v-for="(message, index) in messages"
-        :key="message.id"
-        :message="message"
-        :is-streaming="isLoading && index === messages.length - 1"
-      />
+    <div v-else class="message-container">
+      <template v-for="message in msgList" :key="message.id">
+        <!-- 用户消息 -->
+        <UserMessage v-if="message.type === 'user'" :message="message" />
+
+        <!-- AI消息 -->
+        <AIMessage v-else-if="message.type === 'assistant'" :message="message" />
+      </template>
     </div>
   </div>
 </template>
 
 <style scoped>
-  .messages-container {
+  .message-list {
     flex: 1;
     overflow-y: auto;
-    padding: 16px;
+    padding: var(--spacing-md);
     display: flex;
     flex-direction: column;
-    background-color: var(--color-ai-sidebar-background);
-  }
-
-  .messages-container::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  .messages-container::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 2px;
   }
 
   .empty-state {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100%;
     text-align: center;
-    color: var(--color-text-secondary);
-    padding: 40px 20px;
+    color: var(--text-secondary);
+    gap: var(--spacing-md);
   }
 
   .empty-icon {
-    margin-bottom: 16px;
-    opacity: 0.6;
+    font-size: 48px;
+    opacity: 0.5;
   }
 
-  .empty-title {
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 12px;
-    color: var(--color-text);
+  .empty-text {
+    font-size: var(--font-size-lg);
+    font-weight: 500;
+    color: var(--text-primary);
   }
 
-  .empty-description {
-    font-size: 14px;
+  .empty-hint {
+    font-size: var(--font-size-sm);
     opacity: 0.7;
-    line-height: 1.5;
   }
 
-  .messages-list {
+  .message-container {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding-bottom: 16px;
+    gap: var(--spacing-md);
   }
 </style>

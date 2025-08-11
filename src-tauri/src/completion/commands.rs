@@ -12,7 +12,7 @@ use crate::completion::engine::{CompletionEngine, CompletionEngineConfig};
 use crate::completion::types::{
     CompletionContext, CompletionResponse, EnhancedCompletionItem, EnhancedCompletionResponse,
 };
-
+use crate::storage::StorageCoordinatorState;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::State;
@@ -109,10 +109,14 @@ pub async fn get_completions(
 
 /// 初始化补全引擎命令
 #[tauri::command]
-pub async fn init_completion_engine(state: State<'_, CompletionState>) -> Result<(), String> {
+pub async fn init_completion_engine(
+    state: State<'_, CompletionState>,
+    storage_state: State<'_, StorageCoordinatorState>,
+) -> Result<(), String> {
     let config = CompletionEngineConfig::default();
+    let cache = storage_state.coordinator.cache();
 
-    match CompletionEngine::with_default_providers(config).await {
+    match CompletionEngine::with_default_providers(config, cache).await {
         Ok(engine) => {
             state.set_engine(Arc::new(engine)).await?;
             Ok(())
@@ -121,15 +125,11 @@ pub async fn init_completion_engine(state: State<'_, CompletionState>) -> Result
     }
 }
 
-/// 清理缓存命令
+/// 清理缓存命令（已简化，无缓存）
 #[tauri::command]
-pub async fn clear_completion_cache(state: State<'_, CompletionState>) -> Result<(), String> {
-    let engine = state.get_engine().await?;
-
-    match engine.clear_cache() {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("[缓存错误] 清理缓存失败: {e}")),
-    }
+pub async fn clear_completion_cache(_state: State<'_, CompletionState>) -> Result<(), String> {
+    // 缓存已删除，直接返回成功
+    Ok(())
 }
 
 /// 获取统计信息命令
@@ -140,13 +140,7 @@ pub async fn get_completion_stats(state: State<'_, CompletionState>) -> Result<S
     match engine.get_stats() {
         Ok(stats) => {
             let stats_json = serde_json::json!({
-                "provider_count": stats.provider_count,
-                "cache_stats": stats.cache_stats.map(|cs| serde_json::json!({
-                    "total_entries": cs.total_entries,
-                    "capacity": cs.capacity,
-                    "expired_entries": cs.expired_entries,
-                    "hit_rate": cs.hit_rate,
-                }))
+                "provider_count": stats.provider_count
             });
 
             Ok(stats_json.to_string())

@@ -1,17 +1,32 @@
 <script setup lang="ts">
   import AISettings from '@/components/settings/components/AI/AISettings.vue'
   import ThemeSettings from '@/components/settings/components/Theme/ThemeSettings.vue'
+  import ShortcutSettings from '@/components/settings/components/Shortcuts/ShortcutSettings.vue'
   import SettingsNav from '@/components/settings/SettingsNav.vue'
   import { useSettingsStore } from '@/components/settings/store'
-  import { onMounted } from 'vue'
+  import { onMounted, watch, toRef } from 'vue'
 
+  interface Props {
+    section?: string
+  }
+
+  const props = defineProps<Props>()
   const settingsStore = useSettingsStore()
 
   // 组件挂载时设置设置页面为打开状态并初始化设置
   onMounted(async () => {
     settingsStore.openSettings()
+    if (props.section) {
+      settingsStore.setActiveSection(props.section)
+    }
     // 初始化所有设置
     await settingsStore.initializeSettings()
+  })
+
+  // 外部传入的 section 变化时同步到 store
+  const sectionRef = toRef(props, 'section')
+  watch(sectionRef, newVal => {
+    if (newVal) settingsStore.setActiveSection(newVal)
   })
 
   // 处理导航项切换
@@ -35,6 +50,7 @@
           <!-- 根据当前选中的设置项显示对应组件 -->
           <ThemeSettings v-if="settingsStore.activeSection === 'theme'" />
           <AISettings v-if="settingsStore.activeSection === 'ai'" />
+          <ShortcutSettings v-if="settingsStore.activeSection === 'shortcuts'" />
 
           <!-- 默认显示主题设置 -->
           <ThemeSettings v-if="!settingsStore.activeSection" />

@@ -1,11 +1,12 @@
 <script setup lang="ts">
   import { ref } from 'vue'
   import { window as windowAPI } from '@/api/window'
+  import { handleErrorWithMessage } from '@/utils/errorHandler'
   import { useAIChatStore } from '@/components/AIChatSidebar'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { openUrl } from '@tauri-apps/plugin-opener'
   import { createMessage } from '@/ui/composables/message-api'
-  import type { ButtonGroup } from '@/types'
+  type ButtonGroup = { alwaysOnTop?: boolean }
 
   interface Props {
     controls?: ButtonGroup
@@ -26,12 +27,10 @@
     if (!props.controls.alwaysOnTop) return
 
     try {
-      // 使用新的批量切换接口，一次IPC调用完成切换和状态同步
       const newState = await windowAPI.toggleAlwaysOnTop()
       isAlwaysOnTop.value = newState
     } catch (error) {
-      console.error('切换窗口置顶状态失败:', error)
-      // 回退到原来的状态
+      handleErrorWithMessage(error, '切换窗口置顶失败')
       isAlwaysOnTop.value = !isAlwaysOnTop.value
     }
   }
@@ -40,6 +39,8 @@
   const handleSettingsAction = async (item: { label: string; value: string }) => {
     if (item.value === 'settings') {
       tabManagerStore.createSettingsTab()
+    } else if (item.value === 'shortcuts') {
+      tabManagerStore.createSettingsTab('shortcuts')
     } else if (item.value === 'feedback') {
       try {
         // 使用Tauri的opener插件在外部浏览器中打开GitHub Issues页面
@@ -47,9 +48,8 @@
         // 显示成功提示
         // createMessage.success('已在浏览器中打开问题反馈页面')
       } catch (error) {
-        console.error('打开问题反馈页面失败:', error)
-        // 显示错误提示
-        createMessage.error('无法打开问题反馈页面，请手动访问：https://github.com/Skywang16/OrbitX/issues')
+        handleErrorWithMessage(error, '无法打开问题反馈页面')
+        createMessage.error('请手动访问：https://github.com/Skywang16/OrbitX/issues')
       }
     }
     showSettingsPopover.value = false

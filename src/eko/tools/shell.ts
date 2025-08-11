@@ -227,16 +227,23 @@ export class ShellTool extends ModifiableTool {
       // 终端输出监听回调
       const callbacks = {
         onOutput: (data: string) => {
+          console.log(`🔧 Shell Tool - 收到终端输出:`, JSON.stringify(data))
           outputBuffer += data
+          console.log(`🔧 Shell Tool - 当前缓冲区:`, JSON.stringify(outputBuffer))
 
           // 检测命令是否完成（出现新的提示符）
-          if (detectCommandCompletion(data)) {
+          const isComplete = detectCommandCompletion(data)
+          console.log(`🔧 Shell Tool - 命令完成检测:`, isComplete)
+
+          if (isComplete) {
             if (!isCompleted) {
+              console.log(`🔧 Shell Tool - 命令执行完成，开始清理输出`)
               isCompleted = true
               cleanup()
 
               // 清理输出并返回
               const cleanOutput = this.cleanOutput(outputBuffer, command)
+              console.log(`🔧 Shell Tool - 清理后的输出:`, JSON.stringify(cleanOutput))
               resolve(cleanOutput)
             }
           }
@@ -257,15 +264,21 @@ export class ShellTool extends ModifiableTool {
       }
 
       // 注册监听器
+      console.log(`🔧 Shell Tool - 注册终端监听器, terminalSession.id: ${terminalSession.id}`)
       terminalStore.registerTerminalCallbacks(terminalSession.id, callbacks)
 
       // 执行命令
+      console.log(`🔧 Shell Tool - 执行命令: ${command}, terminalId: ${terminalId}`)
       terminalAPI
         .writeToTerminal({
           paneId: terminalId,
           data: `${command}\n`,
         })
+        .then(() => {
+          console.log(`🔧 Shell Tool - 命令写入成功`)
+        })
         .catch(error => {
+          console.error(`🔧 Shell Tool - 命令写入失败:`, error)
           if (!isCompleted) {
             isCompleted = true
             cleanup()

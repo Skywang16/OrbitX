@@ -1,6 +1,7 @@
 import { completionAPI } from '@/api'
 import { storage } from '@/api/storage'
 import { useAISettingsStore } from '@/components/settings/components/AI'
+import { useAIChatStore } from '@/components/AIChatSidebar/store'
 import { useTheme } from '@/composables/useTheme'
 import { useSessionStore } from '@/stores/session'
 import { useSystemStore } from '@/stores/system'
@@ -91,8 +92,13 @@ const initializeServices = async () => {
     // 初始化补全引擎
     await completionAPI.initEngine()
     console.log('补全引擎初始化完成')
+
+    // 初始化AI聊天服务（包括Eko实例）
+    const aiChatStore = useAIChatStore()
+    await aiChatStore.initializeEko()
+    console.log('AI聊天服务初始化完成')
   } catch (error) {
-    console.warn('补全引擎初始化失败，使用本地补全作为后备:', error)
+    console.warn('服务初始化失败:', error)
   }
 }
 

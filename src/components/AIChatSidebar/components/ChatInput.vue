@@ -109,13 +109,9 @@
    * 处理模式切换
    */
   const handleModeChange = (value: string | number | null) => {
-    console.log('🔄 [ChatInput] 模式切换事件触发:', value)
     const mode = value as 'chat' | 'agent'
-    if (mode && (mode === 'chat' || mode === 'agent')) {
-      console.log('✅ [ChatInput] 发送模式切换事件:', mode)
+    if (mode === 'chat' || mode === 'agent') {
       emit('mode-change', mode)
-    } else {
-      console.log('❌ [ChatInput] 无效的模式值:', value)
     }
   }
 
@@ -148,7 +144,7 @@
           circle
           class="send-button"
           :class="{ 'stop-button': loading }"
-          :disabled="loading ? false : !canSend"
+          :disabled="!loading && !canSend"
           :loading="loading"
           @click="handleButtonClick"
         >
@@ -282,72 +278,5 @@
 
   .model-selector {
     width: 110px;
-  }
-
-  /* 智能体模式开关样式 */
-  .agent-mode-toggle {
-    display: flex;
-    align-items: center;
-  }
-
-  .toggle-label {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    user-select: none;
-    font-size: 12px;
-    color: var(--color-text-secondary);
-    gap: 6px;
-  }
-
-  .toggle-checkbox {
-    display: none;
-  }
-
-  .toggle-slider {
-    position: relative;
-    width: 32px;
-    height: 18px;
-    background-color: var(--color-border);
-    border-radius: 9px;
-    transition: background-color 0.2s ease;
-  }
-
-  .toggle-slider::before {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 14px;
-    height: 14px;
-    background-color: white;
-    border-radius: 50%;
-    transition: transform 0.2s ease;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  }
-
-  .toggle-checkbox:checked + .toggle-slider {
-    background-color: var(--color-primary);
-  }
-
-  .toggle-checkbox:checked + .toggle-slider::before {
-    transform: translateX(14px);
-  }
-
-  .toggle-label:hover .toggle-slider {
-    background-color: var(--color-primary-hover);
-  }
-
-  .toggle-checkbox:checked + .toggle-slider:hover {
-    background-color: var(--color-primary-active);
-  }
-
-  .toggle-text {
-    font-weight: 500;
-    white-space: nowrap;
-  }
-
-  .toggle-checkbox:checked ~ .toggle-text {
-    color: var(--color-primary);
   }
 </style>

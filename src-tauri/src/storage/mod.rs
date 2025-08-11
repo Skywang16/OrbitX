@@ -19,7 +19,7 @@ pub mod sqlite_tests;
 pub mod types;
 
 // 重新导出核心类型和函数
-pub use cache::{CacheConfig, MultiLayerCache};
+
 pub use commands::StorageCoordinatorState;
 pub use coordinator::{StorageCoordinator, StorageCoordinatorOptions};
 pub use filesystem::{FileSystemManager, FileSystemOptions};
@@ -42,15 +42,10 @@ pub const STORAGE_DIR_NAME: &str = "storage";
 pub const CONFIG_DIR_NAME: &str = "config";
 pub const STATE_DIR_NAME: &str = "state";
 pub const DATA_DIR_NAME: &str = "data";
-pub const CACHE_DIR_NAME: &str = "cache";
+
 pub const BACKUPS_DIR_NAME: &str = "backups";
 
 /// 文件名称
 pub const CONFIG_FILE_NAME: &str = "config.toml";
 pub const SESSION_STATE_FILE_NAME: &str = "session_state.msgpack";
 pub const DATABASE_FILE_NAME: &str = "orbitx.db";
-
-/// 缓存配置
-pub const DEFAULT_CACHE_SIZE: usize = 1024 * 1024; // 1MB
-pub const DEFAULT_LRU_CAPACITY: usize = 1000;
-pub const DEFAULT_TTL_SECONDS: u64 = 3600; // 1小时

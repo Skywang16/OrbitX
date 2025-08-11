@@ -19,14 +19,51 @@ export interface Conversation {
 }
 
 /**
- * 消息信息
+ * AI输出的单个步骤/阶段
+ */
+export interface AIOutputStep {
+  type: 'thinking' | 'workflow' | 'text' | 'tool_use' | 'tool_result' | 'error'
+  content: string
+  timestamp: number
+  metadata?: {
+    // 思考阶段的元数据
+    thinkingDuration?: number
+
+    // 工具调用的元数据
+    toolName?: string
+    toolCommand?: string
+    toolParams?: Record<string, any>
+    toolResult?: any
+    status?: 'running' | 'completed' | 'error'
+    originalMessage?: any // 用于调试
+
+    // 工作流的元数据
+    workflowName?: string
+    agentName?: string
+    taskId?: string
+
+    // 错误信息
+    errorType?: string
+    errorDetails?: string
+  }
+}
+
+/**
+ * 消息信息 - 扩展版本支持完整AI对话数据
  */
 export interface Message {
   id: number
   conversationId: number
   role: 'user' | 'assistant' | 'system'
-  content: string
   createdAt: Date
+
+  // AI消息的扩展字段
+  steps?: AIOutputStep[] // AI输出的所有步骤
+  status?: 'pending' | 'streaming' | 'complete' | 'error' // 消息状态
+  duration?: number // 总耗时（毫秒）
+
+  // 兼容字段（用户消息需要，AI消息从steps中获取）
+  content?: string // 用户消息内容
 }
 
 /**

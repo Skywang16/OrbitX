@@ -16,7 +16,6 @@
   // Props
   interface Props {
     input: string
-    cursorPosition: number
     workingDirectory: string
     terminalElement?: HTMLElement | null
     terminalCursorPosition?: { x: number; y: number }
@@ -68,7 +67,7 @@
     if (props.terminalCursorPosition) {
       const { x, y } = props.terminalCursorPosition
 
-      // 添加微调偏移：往右20px，往下6px
+      // 微调偏移：x 向左 8px，y 向上 38px（与视觉对齐）
       const adjustedX = x - 8
       const adjustedY = y - 38
 
@@ -158,10 +157,10 @@
 
     // 防抖处理
     if (debounceTimeout) {
-      clearTimeout(debounceTimeout)
+      window.clearTimeout(debounceTimeout)
     }
 
-    debounceTimeout = setTimeout(async () => {
+    debounceTimeout = window.setTimeout(async () => {
       // 取消之前的请求
       if (currentRequest) {
         currentRequest.abort()
@@ -185,11 +184,9 @@
         try {
           // 尝试调用后端API
           response = await completionAPI.getCompletions(request)
-        } catch (error) {
+        } catch (error: unknown) {
           // 如果是取消错误，直接返回
-          if (error instanceof Error && error.message === 'Request was aborted') {
-            return
-          }
+          if (error instanceof Error && error.message === 'Request was aborted') return
 
           // 使用统一的错误处理，但不显示错误消息（因为有本地补全作为后备）
           handleError(error, '后端补全调用失败')
@@ -200,16 +197,6 @@
 
         completionItems.value = response.items
         emit('completion-ready', response.items)
-
-        // 输出最终补全结果
-        if (response.items.length > 0) {
-          const results = response.items.map(item => ({
-            text: item.text,
-            source: item.source,
-            score: item.score || 0,
-          }))
-          console.log(`补全结果 (${input}):`, results)
-        }
 
         // 设置第一个匹配项作为内联补全
         if (response.items.length > 0) {
@@ -256,19 +243,14 @@
    * 清除当前的补全状态，因为补全已被接受
    */
   const acceptCompletion = () => {
-    try {
-      const completionToAccept = completionText.value
-      if (completionToAccept && completionToAccept.trim()) {
-        // 清除当前补全状态
-        currentSuggestion.value = ''
-        completionItems.value = []
-        emit('suggestion-change', '')
-        emit('completion-ready', [])
-
-        return completionToAccept
-      }
-    } catch (error) {
-      console.warn('接受补全建议时发生错误:', error)
+    const completionToAccept = completionText.value
+    if (completionToAccept && completionToAccept.trim()) {
+      // 清除当前补全状态
+      currentSuggestion.value = ''
+      completionItems.value = []
+      emit('suggestion-change', '')
+      emit('completion-ready', [])
+      return completionToAccept
     }
     return ''
   }
@@ -276,21 +258,11 @@
   /**
    * 检查是否有可用的补全建议
    */
-  const hasCompletion = () => {
-    try {
-      return showCompletion.value && completionText.value && completionText.value.length > 0
-    } catch (error) {
-      console.warn('检查补全状态时发生错误:', error)
-      return false
-    }
-  }
+  const hasCompletion = () => showCompletion.value && !!completionText.value && completionText.value.length > 0
 
   // 暴露方法给父组件
   defineExpose({
-    getCurrentSuggestion: () => currentSuggestion.value,
     getCompletionText: () => completionText.value,
-    getCompletionItems: () => completionItems.value,
-    isLoading: () => isLoading.value,
     acceptCompletion,
     hasCompletion,
   })
@@ -325,20 +297,5 @@
     border-radius: 4px;
     border: 1px solid rgba(153, 153, 153, 0.2);
     opacity: 0.7;
-  }
-
-  /* 暗色主题适配 */
-  @media (prefers-color-scheme: dark) {
-    .completion-text {
-      color: #aaa;
-      background: rgba(170, 170, 170, 0.1);
-      border-color: rgba(170, 170, 170, 0.2);
-    }
-
-    .completion-hint {
-      color: #888;
-      background: rgba(136, 136, 136, 0.1);
-      border-color: rgba(136, 136, 136, 0.2);
-    }
   }
 </style>

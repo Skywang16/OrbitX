@@ -6,11 +6,11 @@
  */
 
 use super::types::{AnsiColors, ColorScheme, SyntaxHighlight, Theme, ThemeType, UIColors};
+use crate::storage::cache::UnifiedCache;
 use crate::{config::paths::ConfigPaths, utils::error::AppResult};
 use anyhow::{anyhow, bail, Context};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
@@ -92,49 +92,21 @@ pub struct ThemeDefaults {
     pub default_theme: String,
 }
 
-/// 主题缓存条目
-#[derive(Debug, Clone)]
-pub struct ThemeCacheEntry {
-    /// 主题数据
-    pub theme: Theme,
-
-    /// 缓存时间
-    pub cached_at: Instant,
-
-    /// 文件修改时间
-    pub file_modified: SystemTime,
-
-    /// 文件校验和
-    pub checksum: String,
-}
-
 /// 主题管理器选项
 #[derive(Debug, Clone)]
 pub struct ThemeManagerOptions {
-    /// 启用缓存
-    pub enable_cache: bool,
-
-    /// 缓存 TTL（秒）
-    pub cache_ttl: u64,
-
     /// 自动刷新索引
     pub auto_refresh_index: bool,
 
     /// 索引刷新间隔（秒）
     pub index_refresh_interval: u64,
-
-    /// 最大缓存条目数
-    pub max_cache_entries: usize,
 }
 
 impl Default for ThemeManagerOptions {
     fn default() -> Self {
         Self {
-            enable_cache: true,
-            cache_ttl: 1800, // 30分钟
             auto_refresh_index: true,
             index_refresh_interval: 300, // 5分钟
-            max_cache_entries: 50,
         }
     }
 }
@@ -150,13 +122,14 @@ pub struct ThemeManager {
     /// 配置路径管理器
     paths: ConfigPaths,
 
-    /// 主题缓存
-    cache: Arc<Mutex<HashMap<String, ThemeCacheEntry>>>,
-
     /// 主题索引
     index: Arc<RwLock<Option<ThemeIndex>>>,
 
+    /// 统一缓存
+    cache: Arc<UnifiedCache>,
+
     /// 管理器选项
+    #[allow(dead_code)]
     options: ThemeManagerOptions,
 
     /// 最后索引刷新时间
@@ -172,11 +145,15 @@ impl ThemeManager {
     ///
     /// # Returns
     /// 返回主题管理器实例
-    pub async fn new(paths: ConfigPaths, options: ThemeManagerOptions) -> AppResult<Self> {
+    pub async fn new(
+        paths: ConfigPaths,
+        options: ThemeManagerOptions,
+        cache: Arc<UnifiedCache>,
+    ) -> AppResult<Self> {
         let manager = Self {
             paths,
-            cache: Arc::new(Mutex::new(HashMap::new())),
             index: Arc::new(RwLock::new(None)),
+            cache,
             options,
             last_index_refresh: Arc::new(Mutex::new(None)),
         };
@@ -299,19 +276,21 @@ impl ThemeManager {
     /// # Returns
     /// 返回主题数据
     pub async fn load_theme(&self, theme_name: &str) -> AppResult<Theme> {
-        // 检查缓存
-        if self.options.enable_cache {
-            if let Some(cached_theme) = self.get_cached_theme(theme_name).await? {
-                return Ok(cached_theme);
+        let cache_key = format!("theme:{}", theme_name);
+
+        // 尝试从缓存获取
+        if let Some(cached_value) = self.cache.get(&cache_key).await {
+            if let Ok(theme) = serde_json::from_value(cached_value) {
+                return Ok(theme);
             }
         }
 
-        // 从文件加载主题
+        // 缓存未命中，从文件加载
         let theme = self.load_theme_from_file(theme_name).await?;
 
-        // 更新缓存
-        if self.options.enable_cache {
-            self.cache_theme(theme_name, &theme).await?;
+        // 存入缓存
+        if let Ok(theme_value) = serde_json::to_value(&theme) {
+            let _ = self.cache.set(&cache_key, theme_value).await;
         }
 
         Ok(theme)
@@ -367,71 +346,6 @@ impl ThemeManager {
             theme_name,
             themes_dir.display()
         );
-    }
-
-    /// 从缓存获取主题
-    async fn get_cached_theme(&self, theme_name: &str) -> AppResult<Option<Theme>> {
-        let cache = self.cache.lock().await;
-
-        if let Some(entry) = cache.get(theme_name) {
-            // 检查缓存是否过期
-            let cache_age = entry.cached_at.elapsed().as_secs();
-            if cache_age < self.options.cache_ttl {
-                // 检查文件是否被修改
-                if let Ok(theme_path) = self.get_theme_file_path(theme_name).await {
-                    if let Ok(metadata) = fs::metadata(&theme_path) {
-                        if let Ok(modified) = metadata.modified() {
-                            if modified == entry.file_modified {
-                                return Ok(Some(entry.theme.clone()));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(None)
-    }
-
-    /// 缓存主题
-    async fn cache_theme(&self, theme_name: &str, theme: &Theme) -> AppResult<()> {
-        let theme_path = self.get_theme_file_path(theme_name).await?;
-        let metadata = fs::metadata(&theme_path)
-            .with_context(|| format!("无法获取主题文件元数据: {}", theme_path.display()))?;
-
-        let file_modified = metadata
-            .modified()
-            .with_context(|| "无法获取文件修改时间")?;
-
-        // 计算文件校验和
-        let content = fs::read_to_string(&theme_path)
-            .with_context(|| format!("无法读取主题文件: {}", theme_path.display()))?;
-        let checksum = format!("{:x}", md5::compute(content.as_bytes()));
-
-        let entry = ThemeCacheEntry {
-            theme: theme.clone(),
-            cached_at: Instant::now(),
-            file_modified,
-            checksum,
-        };
-
-        let mut cache = self.cache.lock().await;
-
-        // 检查缓存大小限制
-        if cache.len() >= self.options.max_cache_entries {
-            // 移除最旧的缓存条目
-            if let Some(oldest_key) = cache
-                .iter()
-                .min_by_key(|(_, entry)| entry.cached_at)
-                .map(|(key, _)| key.clone())
-            {
-                cache.remove(&oldest_key);
-            }
-        }
-
-        cache.insert(theme_name.to_string(), entry);
-
-        Ok(())
     }
 
     /// 获取所有可用主题列表
@@ -540,6 +454,18 @@ impl ThemeManager {
                 default_theme: "dark".to_string(),
             },
         };
+
+        // 清空旧的主题缓存
+        let theme_keys_to_remove: Vec<String> = self
+            .cache
+            .keys()
+            .await
+            .into_iter()
+            .filter(|k| k.starts_with("theme:"))
+            .collect();
+        for key in theme_keys_to_remove {
+            self.cache.remove(&key).await;
+        }
 
         // 保存索引到文件
         self.save_index_to_file(&new_index).await?;

@@ -7,11 +7,13 @@
  */
 
 use crate::config::TomlConfigManager;
+
+use crate::storage::cache::UnifiedCache;
 use crate::storage::messagepack::{MessagePackManager, MessagePackOptions};
 use crate::storage::paths::StoragePaths;
 use crate::storage::sqlite::{SqliteManager, SqliteOptions};
-use crate::storage::types::{CacheStats, DataQuery, SaveOptions, SessionState, StorageStats};
-use crate::storage::{CacheConfig, HealthCheckResult, MultiLayerCache, RecoveryManager};
+use crate::storage::types::{DataQuery, SaveOptions, SessionState, StorageStats};
+use crate::storage::{HealthCheckResult, RecoveryManager};
 use crate::utils::error::AppResult;
 use anyhow::Context;
 use serde_json::Value;
@@ -50,10 +52,12 @@ pub struct StorageCoordinator {
     messagepack_manager: Arc<MessagePackManager>,
     /// SQLite数据管理器
     sqlite_manager: Arc<SqliteManager>,
-    /// 多层缓存管理器
-    cache: Arc<MultiLayerCache>,
+
     /// 恢复管理器
     recovery_manager: Arc<RecoveryManager>,
+
+    /// 统一缓存
+    cache: Arc<UnifiedCache>,
 }
 
 impl StorageCoordinator {
@@ -88,14 +92,6 @@ impl StorageCoordinator {
             .await
             .context("初始化数据库失败")?;
 
-        // 初始化缓存系统
-        let cache_config = CacheConfig::default();
-        let cache = Arc::new(
-            MultiLayerCache::new(&paths, cache_config)
-                .await
-                .context("初始化缓存系统失败")?,
-        );
-
         // 初始化恢复管理器
         let recovery_manager = Arc::new(RecoveryManager::new(paths.clone()));
 
@@ -105,8 +101,9 @@ impl StorageCoordinator {
             config_manager,
             messagepack_manager,
             sqlite_manager,
-            cache,
+
             recovery_manager,
+            cache: Arc::new(UnifiedCache::new()),
         };
 
         info!("存储协调器初始化完成");
@@ -193,6 +190,11 @@ impl StorageCoordinator {
         self.sqlite_manager.clone()
     }
 
+    /// 获取缓存管理器的引用
+    pub fn cache(&self) -> Arc<UnifiedCache> {
+        self.cache.clone()
+    }
+
     /// 健康检查
     pub async fn health_check(&self) -> AppResult<HealthCheckResult> {
         debug!("执行存储系统健康检查");
@@ -215,17 +217,10 @@ impl StorageCoordinator {
         })
     }
 
-    /// 获取缓存统计信息
-    pub async fn get_cache_stats(&self) -> AppResult<CacheStats> {
-        debug!("获取缓存统计信息");
-        Ok(self.cache.get_stats().await)
-    }
-
     /// 获取存储统计信息
     pub async fn get_storage_stats(&self) -> AppResult<StorageStats> {
         debug!("获取存储统计信息");
 
-        let cache_stats = self.cache.get_stats().await;
         let config_size = self
             .paths
             .config_file()
@@ -245,42 +240,45 @@ impl StorageCoordinator {
             .map(|m| m.len())
             .unwrap_or(0);
 
+        let cache_stats = self.cache.get_stats().await;
+
         Ok(StorageStats {
-            total_size: config_size + state_size + db_size,
+            total_size: config_size + state_size + db_size + cache_stats.memory_usage as u64,
             config_size,
             state_size,
             data_size: db_size,
-            cache_size: cache_stats.total_memory_usage,
+            cache_size: cache_stats.memory_usage as u64,
             backups_size: 0, // 简化实现
             logs_size: 0,    // 简化实现
         })
     }
 
-    /// 预加载缓存
-    pub async fn preload_cache(&self) -> AppResult<()> {
-        debug!("预加载缓存");
-
-        // 预加载配置数据
-        if let Ok(config) = self.config_manager.load_config().await {
-            let config_value = serde_json::to_value(&config)?;
-            self.cache.set("config:all", config_value).await?;
-        }
-
-        // 预加载会话状态
-        if let Ok(Some(state)) = self.messagepack_manager.load_state().await {
-            let state_value = serde_json::to_value(&state)?;
-            self.cache.set("session:state", state_value).await?;
-        }
-
-        info!("缓存预加载完成");
-        Ok(())
+    /// 获取缓存统计信息
+    pub async fn get_cache_stats(&self) -> AppResult<crate::storage::cache::CacheStats> {
+        Ok(self.cache.get_stats().await)
     }
 
     /// 清空缓存
     pub async fn clear_cache(&self) -> AppResult<()> {
-        debug!("清空缓存");
-        self.cache.clear().await?;
-        info!("缓存已清空");
+        self.cache.clear().await
+    }
+
+    /// 预加载缓存
+    pub async fn preload_cache(&self) -> AppResult<()> {
+        // 预加载配置数据
+        if let Ok(config) = self.config_manager.load_config().await {
+            if let Ok(config_value) = serde_json::to_value(&config) {
+                let _ = self.cache.set("config:all", config_value).await;
+            }
+        }
+
+        // 预加载会话状态
+        if let Ok(Some(state)) = self.messagepack_manager.load_state().await {
+            if let Ok(state_value) = serde_json::to_value(&state) {
+                let _ = self.cache.set("session:state", state_value).await;
+            }
+        }
+
         Ok(())
     }
 }

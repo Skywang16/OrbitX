@@ -54,11 +54,8 @@ export {
   networkTools,
   fileTools,
   toolsByCategory,
-  getToolByName,
-  getToolsByCategory,
-  searchTools,
-  getToolsStats,
   registerAllTools,
+  getToolsForMode,
 } from './tools'
 
 // 默认导出核心工具

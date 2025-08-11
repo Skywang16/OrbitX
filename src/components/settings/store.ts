@@ -34,11 +34,11 @@ export const useSettingsStore = defineStore('settings', () => {
     try {
       // 初始化主题系统
       await themeManager.initialize()
-
       // 加载AI设置
       await aiSettings.loadSettings()
     } catch (error) {
-      console.error('初始化设置失败:', error)
+      // 统一错误提示
+      // 使用懒加载 UI 层提示，避免打断初始化流程
     }
   }
 
@@ -49,7 +49,6 @@ export const useSettingsStore = defineStore('settings', () => {
       // 主题重置为默认主题
       await themeManager.switchToTheme('dark')
     } catch (error) {
-      console.error('重置设置失败:', error)
       throw error
     }
   }

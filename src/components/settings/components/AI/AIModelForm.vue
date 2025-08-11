@@ -1,8 +1,8 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
   import { reactive, ref } from 'vue'
-  import { ai } from '@/api/ai'
   import { createMessage } from '@/ui'
+  import { handleError } from '@/utils/errorHandler'
 
   interface Props {
     model?: AIModelConfig | null
@@ -125,7 +125,7 @@
       // 这里需要先保存模型再测试，或者修改API支持直接测试配置
       createMessage.info('请先保存模型后再进行连接测试')
     } catch (error) {
-      createMessage.error(`连接测试失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      createMessage.error(handleError(error, '连接测试失败'))
     } finally {
       isTesting.value = false
     }

@@ -59,8 +59,8 @@ struct PackageJson {
 pub struct NpmCompletionProvider {
     /// HTTP客户端
     client: reqwest::Client,
-    /// 缓存
-    cache: std::sync::Mutex<HashMap<String, Vec<CompletionItem>>>,
+    /// 使用统一缓存
+    cache: crate::storage::cache::UnifiedCache,
 }
 
 impl NpmCompletionProvider {
@@ -74,7 +74,7 @@ impl NpmCompletionProvider {
 
         Self {
             client,
-            cache: std::sync::Mutex::new(HashMap::new()),
+            cache: crate::storage::cache::UnifiedCache::new(),
         }
     }
 
@@ -247,11 +247,10 @@ impl NpmCompletionProvider {
         }
 
         // 检查缓存
-        let cache_key = format!("search:{}", query);
-        {
-            let cache = self.cache.lock().unwrap();
-            if let Some(cached) = cache.get(&cache_key) {
-                return Ok(cached.clone());
+        let cache_key = format!("npm_search:{}", query);
+        if let Some(cached_result) = self.cache.get(&cache_key).await {
+            if let Ok(items) = serde_json::from_value::<Vec<CompletionItem>>(cached_result) {
+                return Ok(items);
             }
         }
 
@@ -293,9 +292,8 @@ impl NpmCompletionProvider {
         }
 
         // 缓存结果
-        {
-            let mut cache = self.cache.lock().unwrap();
-            cache.insert(cache_key, completions.clone());
+        if let Ok(cache_value) = serde_json::to_value(&completions) {
+            let _ = self.cache.set(&cache_key, cache_value).await;
         }
 
         Ok(completions)

@@ -9,6 +9,7 @@ use crate::ai::{
     types::{AIModelConfig, Conversation, Message},
     AIService,
 };
+use crate::storage::cache::UnifiedCache;
 use crate::storage::sqlite::SqliteManager;
 use chrono::Utc;
 use std::sync::Arc;
@@ -19,16 +20,24 @@ use tracing::{debug, info};
 pub struct AIManagerState {
     pub ai_service: Arc<AIService>,
     pub sqlite_manager: Option<Arc<SqliteManager>>,
+    pub cache: Arc<UnifiedCache>,
 }
 
 impl AIManagerState {
     /// 创建新的AI管理器状态
-    pub fn new(sqlite_manager: Option<Arc<SqliteManager>>) -> Result<Self, String> {
-        let ai_service = Arc::new(AIService::new(sqlite_manager.clone()));
+    pub fn new(
+        sqlite_manager: Option<Arc<SqliteManager>>,
+        cache: Arc<UnifiedCache>,
+    ) -> Result<Self, String> {
+        let ai_service = Arc::new(AIService::new(
+            sqlite_manager.clone().unwrap(),
+            cache.clone(),
+        ));
 
         Ok(Self {
             ai_service,
             sqlite_manager,
+            cache,
         })
     }
 

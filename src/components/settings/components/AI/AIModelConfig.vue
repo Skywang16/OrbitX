@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
   import { confirm, createMessage } from '@/ui'
+  import { handleError } from '@/utils/errorHandler'
   import { computed, onMounted, ref } from 'vue'
   import AIModelForm from './AIModelForm.vue'
   import { useAISettingsStore } from './store'
@@ -45,7 +46,7 @@
         await aiSettingsStore.removeModel(modelId)
         createMessage.success('模型删除成功')
       } catch (error) {
-        createMessage.error('删除失败')
+        createMessage.error(handleError(error, '删除失败'))
       }
     }
   }
@@ -59,7 +60,7 @@
       await aiSettingsStore.setDefaultModel(modelId)
       createMessage.success('默认模型设置成功')
     } catch (error) {
-      createMessage.error('设置默认模型失败')
+      createMessage.error(handleError(error, '设置默认模型失败'))
     }
   }
 
@@ -90,7 +91,7 @@
       showAddForm.value = false
       editingModel.value = null
     } catch (error) {
-      createMessage.error('操作失败')
+      createMessage.error(handleError(error, '操作失败'))
     }
   }
 

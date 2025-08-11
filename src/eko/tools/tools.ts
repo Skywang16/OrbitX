@@ -133,55 +133,6 @@ export function registerAllTools(): void {
 }
 
 /**
- * 获取工具by名称
- */
-export function getToolByName(name: string): Tool | undefined {
-  return allTools.find(tool => tool.name === name)
-}
-
-/**
- * 获取工具by分类
- */
-export function getToolsByCategory(category: keyof typeof toolsByCategory): Tool[] {
-  return toolsByCategory[category] || []
-}
-
-/**
- * 搜索工具
- */
-export function searchTools(query: string): Tool[] {
-  const lowerQuery = query.toLowerCase()
-  return allTools.filter(
-    tool => tool.name.toLowerCase().includes(lowerQuery) || tool.description.toLowerCase().includes(lowerQuery)
-  )
-}
-
-/**
- * 获取工具统计信息
- */
-export function getToolsStats(): {
-  total: number
-  byCategory: Record<string, number>
-  mostUsed: string[]
-} {
-  const total = allTools.length
-  const byCategory: Record<string, number> = {}
-
-  for (const [category, tools] of Object.entries(toolsByCategory)) {
-    byCategory[category] = tools.length
-  }
-
-  // 假设的使用频率排序（实际应用中可以根据真实使用数据排序）
-  const mostUsed = ['read_file', 'write_file', 'shell', 'memory', 'web_fetch', 'read_many_files', 'web_search']
-
-  return {
-    total,
-    byCategory,
-    mostUsed,
-  }
-}
-
-/**
  * 按模式筛选工具
  * - chat 模式：仅允许读取类工具，禁止任何写入/执行类工具
  * - agent 模式：允许所有工具

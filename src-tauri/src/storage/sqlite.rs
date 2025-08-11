@@ -21,7 +21,7 @@ use chacha20poly1305::{
     ChaCha20Poly1305, Key, Nonce,
 };
 use chrono::{DateTime, Utc};
-use lru::LruCache;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{
@@ -31,7 +31,7 @@ use sqlx::{
     },
     Column, ConnectOptions, Executor, Row, TypeInfo,
 };
-use std::{collections::HashMap, num::NonZeroUsize, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
@@ -48,8 +48,6 @@ pub struct SqliteOptions {
     pub query_timeout: u64,
     /// 是否启用WAL模式
     pub wal_mode: bool,
-    /// 缓存大小
-    pub cache_size: usize,
 }
 
 impl Default for SqliteOptions {
@@ -60,7 +58,6 @@ impl Default for SqliteOptions {
             connection_timeout: 30,
             query_timeout: 30,
             wal_mode: true,
-            cache_size: 1000,
         }
     }
 }
@@ -219,7 +216,7 @@ pub struct SqliteManager {
     #[allow(dead_code)]
     options: SqliteOptions,
     encryption_manager: Arc<RwLock<EncryptionManager>>,
-    cache: Arc<RwLock<LruCache<String, Value>>>,
+
     sql_script_loader: SqlScriptLoader,
 }
 
@@ -256,10 +253,6 @@ impl SqliteManager {
             .await
             .with_context(|| format!("数据库连接失败: {}", db_path.display()))?;
 
-        let cache = Arc::new(RwLock::new(LruCache::new(
-            NonZeroUsize::new(options.cache_size).unwrap(),
-        )));
-
         // 初始化SQL脚本加载器，sql目录在src-tauri目录下
         let sql_dir = if cfg!(debug_assertions) {
             // 开发环境：固定使用crate根目录（src-tauri）下的 sql 目录，避免当前工作目录不一致的问题
@@ -279,7 +272,7 @@ impl SqliteManager {
             paths,
             options,
             encryption_manager: Arc::new(RwLock::new(EncryptionManager::new())),
-            cache,
+
             sql_script_loader,
         };
 
@@ -565,18 +558,6 @@ impl SqliteManager {
     pub async fn query_data(&self, query: &DataQuery) -> AppResult<Vec<Value>> {
         debug!("执行数据查询: {}", query.query);
 
-        // 检查缓存
-        let cache_key = format!("query:{}", serde_json::to_string(query).unwrap_or_default());
-        {
-            let cache = self.cache.read().await;
-            if let Some(cached_result) = cache.peek(&cache_key) {
-                debug!("从缓存返回查询结果");
-                if let Ok(results) = serde_json::from_value::<Vec<Value>>(cached_result.clone()) {
-                    return Ok(results);
-                }
-            }
-        }
-
         // 构建SQL查询（安全版）：
         // - 仅允许 ORDER BY 的字段为白名单
         // - LIMIT/OFFSET 使用参数绑定（i64）
@@ -633,15 +614,6 @@ impl SqliteManager {
             }
 
             results.push(Value::Object(obj));
-        }
-
-        // 缓存结果
-        {
-            let mut cache = self.cache.write().await;
-            cache.put(
-                cache_key,
-                serde_json::to_value(&results).unwrap_or(Value::Null),
-            );
         }
 
         Ok(results)
@@ -706,11 +678,6 @@ impl SqliteManager {
             .ok_or_else(|| anyhow!("未指定目标表".to_string()))?;
 
         debug!("保存数据到表: {}", table);
-
-        // 清除相关缓存（AI相关表除外）
-        if !table.starts_with("ai_") {
-            self.clear_table_cache(table).await;
-        }
 
         // 根据表名选择保存策略
         match table.as_str() {
@@ -917,20 +884,6 @@ impl SqliteManager {
         Ok(())
     }
 
-    /// 清除表相关的缓存
-    async fn clear_table_cache(&self, table: &str) {
-        let mut cache = self.cache.write().await;
-        let keys_to_remove: Vec<String> = cache
-            .iter()
-            .filter(|(key, _)| key.contains(table))
-            .map(|(key, _)| key.clone())
-            .collect();
-
-        for key in keys_to_remove {
-            cache.pop(&key);
-        }
-    }
-
     /// 获取数据库连接池的引用
     pub fn pool(&self) -> &SqlitePool {
         &self.db_pool
@@ -939,18 +892,6 @@ impl SqliteManager {
     /// 获取加密管理器的引用
     pub fn encryption_manager(&self) -> Arc<RwLock<EncryptionManager>> {
         self.encryption_manager.clone()
-    }
-
-    /// 清除所有缓存
-    pub async fn clear_cache(&self) {
-        let mut cache = self.cache.write().await;
-        cache.clear();
-    }
-
-    /// 获取缓存统计信息
-    pub async fn get_cache_stats(&self) -> (usize, usize) {
-        let cache = self.cache.read().await;
-        (cache.len(), cache.cap().get())
     }
 
     // ========================================================================

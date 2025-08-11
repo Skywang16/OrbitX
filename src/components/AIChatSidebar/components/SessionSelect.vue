@@ -63,8 +63,8 @@
   }
 
   const handleSelectChange = (value: string | number | null) => {
-    if (value) {
-      emit('select-session', value as string)
+    if (value !== null) {
+      emit('select-session', Number(value))
     }
   }
 

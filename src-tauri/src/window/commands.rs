@@ -28,23 +28,12 @@ use tracing::{debug, error, info, warn};
 /// 3. 支持组件间的依赖注入
 /// 4. 提供缓存和性能优化
 pub struct WindowState {
-    /// 目录缓存管理器
-    pub directory_cache: Arc<Mutex<DirectoryCache>>,
+    /// 统一缓存
+    pub cache: crate::storage::cache::UnifiedCache,
     /// 窗口配置管理器
     pub config_manager: Arc<Mutex<WindowConfigManager>>,
     /// 窗口状态管理器
     pub state_manager: Arc<Mutex<WindowStateManager>>,
-}
-
-/// 目录缓存管理器
-#[derive(Debug)]
-pub struct DirectoryCache {
-    /// 当前目录缓存
-    current_dir: Option<(String, Instant)>,
-    /// 家目录缓存
-    home_dir: Option<(String, Instant)>,
-    /// 缓存有效期（秒）
-    cache_duration: u64,
 }
 
 /// 平台信息
@@ -207,58 +196,6 @@ impl WindowStateManager {
     }
 }
 
-impl DirectoryCache {
-    pub fn new() -> Self {
-        Self {
-            current_dir: None,
-            home_dir: None,
-            cache_duration: 30, // 30秒缓存
-        }
-    }
-
-    /// 获取缓存的当前目录
-    pub fn get_current_dir(&self) -> Option<String> {
-        if let Some((dir, timestamp)) = &self.current_dir {
-            if timestamp.elapsed().as_secs() < self.cache_duration {
-                return Some(dir.clone());
-            }
-        }
-        None
-    }
-
-    /// 设置当前目录缓存
-    pub fn set_current_dir(&mut self, dir: String) {
-        self.current_dir = Some((dir, Instant::now()));
-    }
-
-    /// 获取缓存的家目录
-    pub fn get_home_dir(&self) -> Option<String> {
-        if let Some((dir, timestamp)) = &self.home_dir {
-            if timestamp.elapsed().as_secs() < self.cache_duration {
-                return Some(dir.clone());
-            }
-        }
-        None
-    }
-
-    /// 设置家目录缓存
-    pub fn set_home_dir(&mut self, dir: String) {
-        self.home_dir = Some((dir, Instant::now()));
-    }
-
-    /// 清除所有缓存
-    pub fn clear_cache(&mut self) {
-        self.current_dir = None;
-        self.home_dir = None;
-    }
-}
-
-impl Default for DirectoryCache {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl WindowConfigManager {
     pub fn new() -> Self {
         Self {
@@ -365,12 +302,11 @@ impl WindowState {
     pub fn new() -> AppResult<Self> {
         info!("开始初始化窗口状态");
 
-        let directory_cache = Arc::new(Mutex::new(DirectoryCache::new()));
         let config_manager = Arc::new(Mutex::new(WindowConfigManager::new()));
         let state_manager = Arc::new(Mutex::new(WindowStateManager::new()));
 
         let state = Self {
-            directory_cache,
+            cache: crate::storage::cache::UnifiedCache::new(),
             config_manager,
             state_manager,
         };
@@ -384,21 +320,11 @@ impl WindowState {
         info!("开始验证窗口状态");
 
         // 验证各组件是否可访问
-        let _cache = self.directory_cache.lock().await;
         let _config = self.config_manager.lock().await;
         let _state = self.state_manager.lock().await;
 
         info!("窗口状态验证通过");
         Ok(())
-    }
-
-    /// 统一的组件访问方法
-    pub async fn with_directory_cache<F, R>(&self, f: F) -> AppResult<R>
-    where
-        F: FnOnce(&mut DirectoryCache) -> AppResult<R>,
-    {
-        let mut cache = self.directory_cache.lock().await;
-        f(&mut cache)
     }
 
     pub async fn with_config_manager<F, R>(&self, f: F) -> AppResult<R>
@@ -551,27 +477,21 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
         .map_err(|e| e.to_string())?;
 
     // 获取目录信息
-    let current_directory = state
-        .with_directory_cache(|cache| {
-            Ok(cache.get_current_dir().unwrap_or_else(|| {
-                env::current_dir()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|_| "/".to_string())
-            }))
-        })
-        .await
-        .map_err(|e| e.to_string())?;
+    let current_directory = if let Some(cached_dir) = state.cache.get("current_dir").await {
+        cached_dir.as_str().unwrap_or("/").to_string()
+    } else {
+        env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| "/".to_string())
+    };
 
-    let home_directory = state
-        .with_directory_cache(|cache| {
-            Ok(cache.get_home_dir().unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/".to_string())
-            }))
-        })
-        .await
-        .map_err(|e| e.to_string())?;
+    let home_directory = if let Some(cached_dir) = state.cache.get("home_dir").await {
+        cached_dir.as_str().unwrap_or("/").to_string()
+    } else {
+        dirs::home_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "/".to_string())
+    };
 
     // 获取平台信息
     let platform_info = state
@@ -668,13 +588,8 @@ async fn handle_reset_state<R: Runtime>(
         .map_err(|e| format!("重置窗口置顶失败: {}", e))?;
 
     // 清除目录缓存
-    state
-        .with_directory_cache(|cache| {
-            cache.clear_cache();
-            Ok(())
-        })
-        .await
-        .map_err(|e| e.to_string())?;
+    let _ = state.cache.remove("current_dir").await;
+    let _ = state.cache.remove("home_dir").await;
 
     serde_json::to_value(true).map_err(|e| format!("序列化结果失败: {}", e))
 }
@@ -699,12 +614,11 @@ pub async fn get_current_directory(
 
     // 如果启用缓存，先尝试从缓存获取
     if use_cache {
-        if let Ok(Some(dir)) = state
-            .with_directory_cache(|cache| Ok(cache.get_current_dir()))
-            .await
-        {
-            debug!("从缓存获取当前目录: {}", dir);
-            return Ok(dir);
+        if let Some(cached_dir) = state.cache.get("current_dir").await {
+            if let Some(dir) = cached_dir.as_str() {
+                debug!("从缓存获取当前目录: {}", dir);
+                return Ok(dir.to_string());
+            }
         }
     }
 
@@ -720,10 +634,11 @@ pub async fn get_current_directory(
 
     // 更新缓存
     if let Err(e) = state
-        .with_directory_cache(|cache| {
-            cache.set_current_dir(current_dir.clone());
-            Ok(())
-        })
+        .cache
+        .set(
+            "current_dir",
+            serde_json::Value::String(current_dir.clone()),
+        )
         .await
     {
         warn!("更新目录缓存失败: {}", e);
@@ -749,12 +664,11 @@ pub async fn get_home_directory(
 
     // 如果启用缓存，先尝试从缓存获取
     if use_cache {
-        if let Ok(Some(dir)) = state
-            .with_directory_cache(|cache| Ok(cache.get_home_dir()))
-            .await
-        {
-            debug!("从缓存获取家目录: {}", dir);
-            return Ok(dir);
+        if let Some(cached_dir) = state.cache.get("home_dir").await {
+            if let Some(dir) = cached_dir.as_str() {
+                debug!("从缓存获取家目录: {}", dir);
+                return Ok(dir.to_string());
+            }
         }
     }
 
@@ -772,10 +686,8 @@ pub async fn get_home_directory(
 
     // 更新缓存
     if let Err(e) = state
-        .with_directory_cache(|cache| {
-            cache.set_home_dir(home_dir.clone());
-            Ok(())
-        })
+        .cache
+        .set("home_dir", serde_json::Value::String(home_dir.clone()))
         .await
     {
         warn!("更新目录缓存失败: {}", e);
@@ -795,13 +707,9 @@ pub async fn get_home_directory(
 pub async fn clear_directory_cache(state: State<'_, WindowState>) -> Result<(), String> {
     info!("开始清除目录缓存");
 
-    state
-        .with_directory_cache(|cache| {
-            cache.clear_cache();
-            Ok(())
-        })
-        .await
-        .map_err(|e| e.to_string())?;
+    // 清除目录相关的缓存
+    let _ = state.cache.remove("current_dir").await;
+    let _ = state.cache.remove("home_dir").await;
 
     info!("目录缓存清除成功");
     Ok(())

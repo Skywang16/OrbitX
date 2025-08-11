@@ -486,7 +486,6 @@ impl RecoveryManager {
             &self.paths.config_dir,
             &self.paths.state_dir,
             &self.paths.data_dir,
-            &self.paths.cache_dir,
             &self.paths.backups_dir,
         ];
 

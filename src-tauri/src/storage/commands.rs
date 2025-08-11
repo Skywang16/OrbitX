@@ -5,7 +5,7 @@
  * 包含配置管理、会话状态、数据查询等功能
  */
 
-use crate::storage::types::{CacheStats, DataQuery, SaveOptions, SessionState, StorageStats};
+use crate::storage::types::{DataQuery, SaveOptions, SessionState, StorageStats};
 use crate::storage::{HealthCheckResult, StorageCoordinator};
 use crate::utils::error::AppResult;
 use anyhow::Context;
@@ -227,14 +227,13 @@ pub async fn storage_health_check(
 #[tauri::command]
 pub async fn storage_get_cache_stats(
     state: State<'_, StorageCoordinatorState>,
-) -> Result<CacheStats, String> {
+) -> Result<String, String> {
     debug!("存储命令: 获取缓存统计信息");
 
-    state
-        .coordinator
-        .get_cache_stats()
-        .await
-        .map_err(|e| e.to_string())
+    match state.coordinator.get_cache_stats().await {
+        Ok(stats) => serde_json::to_string(&stats).map_err(|e| e.to_string()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// 获取存储统计信息

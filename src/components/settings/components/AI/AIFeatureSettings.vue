@@ -30,13 +30,13 @@
   }
 
   // 监听输入变化，自动保存
-  let saveTimeout: NodeJS.Timeout | null = null
+  let saveTimeout: number | null = null
   watch(userPrefixPrompt, newValue => {
     if (saveTimeout) {
-      clearTimeout(saveTimeout)
+      window.clearTimeout(saveTimeout)
     }
     // 延迟500ms保存，避免频繁保存
-    saveTimeout = setTimeout(() => {
+    saveTimeout = window.setTimeout(() => {
       saveUserPrefixPrompt(newValue)
     }, 500)
   })

@@ -102,6 +102,7 @@ fn create_test_session_state() -> SessionState {
                 );
                 layout
             },
+            orbitx_chat: Some(Default::default()),
         },
         created_at: SystemTime::now().into(),
         checksum: None,

@@ -27,8 +27,8 @@ export interface TerminalConfig {
   drawBoldTextInBrightColors?: boolean
   fastScrollModifier?: 'alt' | 'ctrl' | 'shift'
   fastScrollSensitivity?: number
-  fontWeight?: string | number
-  fontWeightBold?: string | number
+  fontWeight?: number
+  fontWeightBold?: number
   letterSpacing?: number
   lineHeight?: number
   linkTooltipHoverDuration?: number

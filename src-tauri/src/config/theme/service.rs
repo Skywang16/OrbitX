@@ -7,6 +7,9 @@
 
 use super::manager::ThemeManager;
 use super::types::{Theme, ThemeConfig};
+use crate::config::paths::ConfigPaths;
+use crate::config::theme::ThemeManagerOptions;
+use crate::storage::cache::UnifiedCache;
 use crate::utils::error::AppResult;
 use anyhow::anyhow;
 use std::sync::Arc;
@@ -20,8 +23,13 @@ pub struct ThemeService {
 
 impl ThemeService {
     /// 创建新的主题服务实例
-    pub fn new(theme_manager: Arc<ThemeManager>) -> Self {
-        Self { theme_manager }
+    pub async fn new(
+        paths: ConfigPaths,
+        options: ThemeManagerOptions,
+        cache: Arc<UnifiedCache>,
+    ) -> AppResult<Self> {
+        let theme_manager = Arc::new(ThemeManager::new(paths, options, cache.clone()).await?);
+        Ok(Self { theme_manager })
     }
 
     /// 获取主题管理器引用
@@ -213,6 +221,7 @@ impl SystemThemeDetector {
 mod tests {
     use super::*;
     use crate::config::theme::ThemeConfig;
+    use crate::storage::cache::UnifiedCache;
 
     fn create_test_theme_config() -> ThemeConfig {
         ThemeConfig {
@@ -233,12 +242,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let paths = ConfigPaths::with_app_data_dir(temp_dir.path()).unwrap();
         let options = ThemeManagerOptions::default();
-        let theme_manager = Arc::new(
-            crate::config::theme::ThemeManager::new(paths, options)
-                .await
-                .unwrap(),
-        );
-        let service = ThemeService::new(theme_manager);
+        let cache = Arc::new(UnifiedCache::new());
+        let service = ThemeService::new(paths, options, cache).await.unwrap();
         let config = create_test_theme_config();
 
         let theme_name = service.get_current_theme_name(&config, Some(true));
@@ -254,12 +259,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let paths = ConfigPaths::with_app_data_dir(temp_dir.path()).unwrap();
         let options = ThemeManagerOptions::default();
-        let theme_manager = Arc::new(
-            crate::config::theme::ThemeManager::new(paths, options)
-                .await
-                .unwrap(),
-        );
-        let service = ThemeService::new(theme_manager);
+        let cache = Arc::new(UnifiedCache::new());
+        let service = ThemeService::new(paths, options, cache).await.unwrap();
         let mut config = create_test_theme_config();
         config.follow_system = true;
 
@@ -276,12 +277,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let paths = ConfigPaths::with_app_data_dir(temp_dir.path()).unwrap();
         let options = ThemeManagerOptions::default();
-        let theme_manager = Arc::new(
-            crate::config::theme::ThemeManager::new(paths, options)
-                .await
-                .unwrap(),
-        );
-        let service = ThemeService::new(theme_manager);
+        let cache = Arc::new(UnifiedCache::new());
+        let service = ThemeService::new(paths, options, cache).await.unwrap();
         let mut config = create_test_theme_config();
         config.follow_system = true;
 

@@ -15,8 +15,8 @@ export const TERMINAL_CONFIG: TerminalConfig = {
   convertEol: true, // 自动转换行尾符，有助于处理不同系统的换行符
   cursorStyle: 'block',
   drawBoldTextInBrightColors: true,
-  fontWeight: 'normal',
-  fontWeightBold: 'bold',
+  fontWeight: 400,
+  fontWeightBold: 700,
   letterSpacing: 0,
   lineHeight: 1.2,
   macOptionIsMeta: false, // 在Mac上，Option键不作为Meta键，避免中文输入问题

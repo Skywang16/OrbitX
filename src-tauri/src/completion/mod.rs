@@ -6,7 +6,6 @@
 //! - 系统命令补全
 //! - 环境变量补全
 
-pub mod cache;
 pub mod commands;
 pub mod context_analyzer;
 pub mod engine;
@@ -16,7 +15,6 @@ pub mod smart_extractor;
 pub mod smart_provider;
 pub mod types;
 
-pub use cache::*;
 pub use commands::*;
 pub use engine::*;
 pub use providers::*;

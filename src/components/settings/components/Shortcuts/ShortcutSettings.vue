@@ -76,18 +76,15 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted, watch } from 'vue'
+  import { ref, computed, onMounted } from 'vue'
+  import { handleErrorWithMessage } from '@/utils/errorHandler'
+  import { confirm } from '@/ui'
   import { useShortcuts, useShortcutValidation } from '@/composables/useShortcuts'
   import { ShortcutList, ShortcutEditor, ShortcutConflictDialog, ShortcutSearchBar, ShortcutStatistics } from './index'
-  import type {
-    ShortcutListItem,
-    ShortcutSearchFilter,
-    ShortcutEditorOptions,
-    ShortcutActionEvent,
-    ShortcutEditorMode,
-    ShortcutActionType,
-  } from './types'
-  import type { ShortcutBinding, ShortcutCategory } from '@/api/shortcuts/types'
+  import type { ShortcutListItem, ShortcutSearchFilter, ShortcutEditorOptions, ShortcutActionEvent } from './types'
+  import { ShortcutEditorMode, ShortcutActionType } from './types'
+  import type { ShortcutBinding } from '@/api/shortcuts/types'
+  import { ShortcutCategory } from '@/api/shortcuts/types'
 
   // 组合式API
   const {
@@ -95,7 +92,7 @@
     loading,
     error,
     hasConflicts,
-    statistics,
+
     initialize,
     addShortcut,
     removeShortcut,
@@ -118,15 +115,14 @@
 
   const showEditor = ref(false)
   const showConflictDialog = ref(false)
-  const editorOptions = ref<ShortcutEditorOptions>({
-    mode: ShortcutEditorMode.Add,
-  })
+  const editorOptions = ref<ShortcutEditorOptions>({ mode: ShortcutEditorMode.Add })
 
   const importFileInput = ref<HTMLInputElement>()
 
   // 计算属性
   const conflicts = computed(() => lastConflictDetection.value?.conflicts || [])
   const conflictCount = computed(() => conflicts.value.length)
+  const handleSearch = () => {}
 
   const allShortcuts = computed((): ShortcutListItem[] => {
     if (!config.value) return []
@@ -137,9 +133,9 @@
     config.value.global.forEach((binding, index) => {
       items.push({
         binding,
-        category: 'Global' as ShortcutCategory,
+        category: ShortcutCategory.Global,
         index,
-        hasConflict: hasShortcutConflict(binding, 'Global', index),
+        hasConflict: hasShortcutConflict(binding, ShortcutCategory.Global),
       })
     })
 
@@ -147,9 +143,9 @@
     config.value.terminal.forEach((binding, index) => {
       items.push({
         binding,
-        category: 'Terminal' as ShortcutCategory,
+        category: ShortcutCategory.Terminal,
         index,
-        hasConflict: hasShortcutConflict(binding, 'Terminal', index),
+        hasConflict: hasShortcutConflict(binding, ShortcutCategory.Terminal),
       })
     })
 
@@ -157,9 +153,9 @@
     config.value.custom.forEach((binding, index) => {
       items.push({
         binding,
-        category: 'Custom' as ShortcutCategory,
+        category: ShortcutCategory.Custom,
         index,
-        hasConflict: hasShortcutConflict(binding, 'Custom', index),
+        hasConflict: hasShortcutConflict(binding, ShortcutCategory.Custom),
       })
     })
 
@@ -203,7 +199,7 @@
   })
 
   // 方法
-  const hasShortcutConflict = (binding: ShortcutBinding, category: ShortcutCategory, index: number): boolean => {
+  const hasShortcutConflict = (binding: ShortcutBinding, category: ShortcutCategory): boolean => {
     if (!lastConflictDetection.value) return false
 
     return lastConflictDetection.value.conflicts.some(conflict =>
@@ -216,10 +212,6 @@
     )
   }
 
-  const handleSearch = () => {
-    // 搜索逻辑已在计算属性中处理
-  }
-
   const handleClearSearch = () => {
     searchFilter.value = {
       query: '',
@@ -230,9 +222,7 @@
   }
 
   const handleAddShortcut = () => {
-    editorOptions.value = {
-      mode: ShortcutEditorMode.Add,
-    }
+    editorOptions.value = { mode: ShortcutEditorMode.Add }
     showEditor.value = true
   }
 
@@ -273,7 +263,7 @@
       }
       showEditor.value = false
     } catch (error) {
-      console.error('保存快捷键失败:', error)
+      handleErrorWithMessage(error, '保存快捷键失败')
     }
   }
 
@@ -286,7 +276,7 @@
       try {
         await removeShortcut(item.category, item.index)
       } catch (error) {
-        console.error('删除快捷键失败:', error)
+        handleErrorWithMessage(error, '删除快捷键失败')
       }
     }
   }
@@ -311,7 +301,7 @@
       a.click()
       URL.revokeObjectURL(url)
     } catch (error) {
-      console.error('导出配置失败:', error)
+      handleErrorWithMessage(error, '导出配置失败')
     }
   }
 
@@ -328,7 +318,7 @@
         const text = await file.text()
         await importConfig(text)
       } catch (error) {
-        console.error('导入配置失败:', error)
+        handleErrorWithMessage(error, '导入配置失败')
       }
     }
 
@@ -341,12 +331,12 @@
       try {
         await resetToDefaults()
       } catch (error) {
-        console.error('重置配置失败:', error)
+        handleErrorWithMessage(error, '重置配置失败')
       }
     }
   }
 
-  const handleResolveConflict = (conflictIndex: number) => {
+  const handleResolveConflict = (_conflictIndex: number) => {
     // 处理冲突解决逻辑
     showConflictDialog.value = false
   }
@@ -356,7 +346,7 @@
     try {
       await initialize()
     } catch (err) {
-      console.error('快捷键设置初始化失败:', err)
+      handleErrorWithMessage(err, '快捷键设置初始化失败')
     }
   })
 </script>
