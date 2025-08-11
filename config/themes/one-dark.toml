@@ -28,22 +28,10 @@ magenta = "#c678dd"
 cyan = "#56b6c2"
 white = "#ffffff"
 
-[theme.syntax]
-comment = "#5c6370"
-string = "#98c379"
-number = "#d19a66"
-keyword = "#c678dd"
-function = "#61afef"
-variable = "#e06c75"
-type_name = "#e5c07b"
-operator = "#56b6c2"
+
 
 [theme.ui]
 primary = "#61afef"
-secondary = "#5c6370"
-success = "#98c379"
-warning = "#e5c07b"
-error = "#e06c75"
-info = "#56b6c2"
 border = "#3e4451"
-divider = "#3e4451"
+background_secondary = "#21252b"
+background_hover = "#2c313c"

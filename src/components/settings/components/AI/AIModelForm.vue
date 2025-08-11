@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
-  import { reactive, ref, watch } from 'vue'
+  import { reactive, ref } from 'vue'
+  import { ai } from '@/api/ai'
+  import { createMessage } from '@/ui'
 
   interface Props {
     model?: AIModelConfig | null
@@ -32,6 +34,7 @@
   // 表单验证状态
   const errors = ref<Record<string, string>>({})
   const isSubmitting = ref(false)
+  const isTesting = ref(false)
 
   // 提供商选项
   const providerOptions = [
@@ -97,6 +100,36 @@
   const handleCancel = () => {
     emit('cancel')
   }
+
+  // 测试连接
+  const handleTestConnection = async () => {
+    // 验证必填字段
+    if (!formData.apiUrl || !formData.apiKey || !formData.model) {
+      createMessage.warning('请先填写API地址、API密钥和模型名称')
+      return
+    }
+
+    isTesting.value = true
+    try {
+      // 创建临时模型配置进行测试
+      const tempModel: Omit<AIModelConfig, 'id'> = {
+        name: formData.name || '测试模型',
+        provider: formData.provider,
+        apiUrl: formData.apiUrl,
+        apiKey: formData.apiKey,
+        model: formData.model,
+        isDefault: false,
+        options: formData.options,
+      }
+
+      // 这里需要先保存模型再测试，或者修改API支持直接测试配置
+      createMessage.info('请先保存模型后再进行连接测试')
+    } catch (error) {
+      createMessage.error(`连接测试失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      isTesting.value = false
+    }
+  }
 </script>
 
 <template>
@@ -105,16 +138,23 @@
     :title="props.model ? '编辑AI模型' : '添加AI模型'"
     size="large"
     show-footer
-    :show-cancel-button="true"
-    :show-confirm-button="true"
-    cancel-text="取消"
-    :confirm-text="props.model ? '保存' : '添加'"
-    :loading="isSubmitting"
-    loading-text="保存中..."
-    @cancel="handleCancel"
-    @confirm="handleSubmit"
+    :show-cancel-button="false"
+    :show-confirm-button="false"
     @close="handleCancel"
   >
+    <template #footer>
+      <div class="modal-footer">
+        <x-button variant="secondary" :loading="isTesting" @click="handleTestConnection">
+          {{ isTesting ? '测试中...' : '测试连接' }}
+        </x-button>
+        <div class="footer-right">
+          <x-button variant="secondary" @click="handleCancel">取消</x-button>
+          <x-button variant="primary" :loading="isSubmitting" @click="handleSubmit">
+            {{ props.model ? '保存' : '添加' }}
+          </x-button>
+        </div>
+      </div>
+    </template>
     <form @submit.prevent="handleSubmit">
       <!-- 基本信息 -->
       <div class="form-section">
@@ -230,5 +270,17 @@
     font-size: var(--font-size-xs);
     color: var(--color-danger);
     margin-top: var(--spacing-xs);
+  }
+
+  .modal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--spacing-md);
+  }
+
+  .footer-right {
+    display: flex;
+    gap: var(--spacing-sm);
   }
 </style>

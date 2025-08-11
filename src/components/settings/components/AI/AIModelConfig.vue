@@ -1,5 +1,4 @@
 <script setup lang="ts">
-  import { ai } from '@/api/ai'
   import type { AIModelConfig } from '@/types'
   import { confirm, createMessage } from '@/ui'
   import { computed, onMounted, ref } from 'vue'
@@ -12,7 +11,6 @@
   // 响应式数据
   const showAddForm = ref(false)
   const editingModel = ref<AIModelConfig | null>(null)
-  const testingModels = ref<Set<string>>(new Set())
 
   // 使用store中的数据和状态
   const models = computed(() => aiSettingsStore.models)
@@ -65,23 +63,6 @@
     }
   }
 
-  // 处理测试连接
-  const handleTestConnection = async (modelId: string) => {
-    testingModels.value.add(modelId)
-    try {
-      const result = await ai.testConnection(modelId)
-      if (result) {
-        createMessage.success('连接测试成功')
-      } else {
-        createMessage.error('连接测试失败')
-      }
-    } catch (error) {
-      createMessage.error('连接测试失败')
-    } finally {
-      testingModels.value.delete(modelId)
-    }
-  }
-
   // 处理表单提交
   const handleFormSubmit = async (modelData: Omit<AIModelConfig, 'id'>) => {
     try {
@@ -95,8 +76,16 @@
           ...modelData,
           id: Date.now().toString(),
         }
+
+        // 如果这是第一个模型，自动设置为默认
+        if (models.value.length === 0) {
+          newModel.isDefault = true
+          createMessage.success('模型添加成功，已自动设为默认模型')
+        } else {
+          createMessage.success('模型添加成功')
+        }
+
         await aiSettingsStore.addModel(newModel)
-        createMessage.success('模型添加成功')
       }
       showAddForm.value = false
       editingModel.value = null
@@ -110,22 +99,12 @@
     showAddForm.value = false
     editingModel.value = null
   }
-
-  // 获取提供商显示名称
-  const getProviderName = (provider: string) => {
-    const names: Record<string, string> = {
-      openAI: 'OpenAI',
-      claude: 'Claude',
-      custom: '自定义',
-    }
-    return names[provider] || provider
-  }
 </script>
 
 <template>
   <div class="ai-model-config">
-    <!-- 页面标题和操作 -->
-    <div class="section-header">
+    <!-- 操作按钮 -->
+    <div class="action-header">
       <x-button variant="primary" @click="handleAddModel">
         <template #icon>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -169,43 +148,17 @@
           :class="{
             default: model.isDefault,
           }"
-          @click="handleSetDefault(model.id, model.isDefault)"
         >
-          <!-- 模型头部 -->
-          <div class="model-header">
-            <div class="model-info">
-              <div class="model-name">{{ model.name }}</div>
-              <div class="model-provider">{{ getProviderName(model.provider) }}</div>
-            </div>
+          <div class="model-left" @click="handleSetDefault(model.id, model.isDefault || false)">
             <div class="option-radio">
               <div class="radio-button" :class="{ checked: model.isDefault }">
                 <div class="radio-dot"></div>
               </div>
             </div>
+            <div class="model-name">{{ model.name }}</div>
           </div>
 
-          <!-- 模型详情 -->
-          <div class="model-details">
-            <div class="detail-item">
-              <span class="detail-label">模型:</span>
-              <span class="detail-value">{{ model.model }}</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">API地址:</span>
-              <span class="detail-value">{{ model.apiUrl }}</span>
-            </div>
-          </div>
-
-          <!-- 模型操作 -->
           <div class="model-actions">
-            <x-button
-              variant="secondary"
-              size="small"
-              :loading="testingModels.has(model.id)"
-              @click.stop="handleTestConnection(model.id)"
-            >
-              {{ testingModels.has(model.id) ? '测试中...' : '测试连接' }}
-            </x-button>
             <x-button variant="secondary" size="small" @click.stop="handleEditModel(model)">编辑</x-button>
             <x-button variant="danger" size="small" @click.stop="handleDeleteModel(model.id)">删除</x-button>
           </div>
@@ -223,12 +176,8 @@
     width: 100%;
   }
 
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: var(--spacing-xl);
-    gap: var(--spacing-lg);
+  .action-header {
+    margin-bottom: var(--spacing-md);
   }
 
   .header-content {
@@ -279,83 +228,42 @@
   }
 
   .model-card {
-    background-color: var(--color-background);
-    border: 2px solid var(--border-color);
-    border-radius: var(--border-radius-lg);
-    padding: var(--spacing-sm) var(--spacing-md);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
     transition: all 0.2s ease;
+    margin-bottom: var(--spacing-sm);
   }
 
   .model-card:hover {
-    border-color: var(--border-color-hover);
-    background-color: var(--color-background-hover);
+    border-color: var(--color-primary);
   }
 
   .model-card.default {
     border-color: var(--color-primary);
-    background-color: var(--color-primary-alpha);
   }
 
-  .model-header {
+  .model-left {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: var(--spacing-xs);
+    align-items: center;
+    flex: 1;
+    cursor: pointer;
   }
 
   .model-name {
     font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 1px;
-  }
-
-  .model-provider {
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .model-details {
-    margin-bottom: var(--spacing-sm);
-    position: relative;
-  }
-
-  .detail-item {
-    display: flex;
-    gap: var(--spacing-xs);
-    margin-bottom: 2px;
-    font-size: var(--font-size-xs);
-  }
-
-  .detail-label {
-    color: var(--text-secondary);
-    min-width: 60px;
-  }
-
-  .detail-value {
-    color: var(--text-primary);
-    word-break: break-all;
-  }
-
-  .default-badge {
-    position: absolute;
-    top: 0;
-    right: 0;
-    background-color: var(--color-primary);
-    color: white;
-    font-size: var(--font-size-xs);
-    padding: 2px var(--spacing-xs);
-    border-radius: var(--border-radius);
-    font-weight: 500;
+    margin-left: var(--spacing-sm);
   }
 
   .model-actions {
     display: flex;
     gap: var(--spacing-xs);
-    flex-wrap: wrap;
-    margin-top: var(--spacing-xs);
+    flex-shrink: 0;
   }
 
   .option-radio {

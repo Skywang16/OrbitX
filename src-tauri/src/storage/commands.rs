@@ -26,17 +26,17 @@ impl StorageCoordinatorState {
         use tracing::{debug, info};
 
         // 获取应用数据目录
-        let app_dir = if let Ok(dir) = env::var("TERMX_DATA_DIR") {
+        let app_dir = if let Ok(dir) = env::var("OrbitX_DATA_DIR") {
             debug!("使用环境变量指定的数据目录: {}", dir);
             std::path::PathBuf::from(dir)
         } else {
             // 使用默认的应用数据目录
             let data_dir = dirs::data_dir().ok_or_else(|| {
                 anyhow::anyhow!(
-                    "无法获取系统应用数据目录，请检查系统配置或设置 TERMX_DATA_DIR 环境变量"
+                    "无法获取系统应用数据目录，请检查系统配置或设置 OrbitX_DATA_DIR 环境变量"
                 )
             })?;
-            let app_dir = data_dir.join("termx");
+            let app_dir = data_dir.join("OrbitX");
             debug!("使用默认应用数据目录: {}", app_dir.display());
             app_dir
         };

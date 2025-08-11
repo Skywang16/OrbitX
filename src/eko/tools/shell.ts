@@ -7,12 +7,12 @@ import type { ToolResult } from '../types'
 import { TerminalError, ValidationError } from './tool-error'
 import { terminalAPI } from '@/api/terminal'
 import { useTerminalStore } from '@/stores/Terminal'
+import { TerminalAgent } from '../agent/terminal-agent'
 export interface ShellParams {
   command: string
   workingDirectory?: string
   timeout?: number
   terminalId?: number
-  interactive?: boolean
   environment?: Record<string, string>
 }
 
@@ -59,11 +59,6 @@ export class ShellTool extends ModifiableTool {
             type: 'number',
             description: '指定终端ID，可选',
           },
-          interactive: {
-            type: 'boolean',
-            description: '是否为交互式命令，默认false',
-            default: false,
-          },
           environment: {
             type: 'object',
             description: '环境变量设置',
@@ -76,7 +71,13 @@ export class ShellTool extends ModifiableTool {
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
-    const { command, workingDirectory, terminalId, environment } = context.parameters as unknown as ShellParams
+    const {
+      command,
+      workingDirectory,
+      terminalId,
+      environment,
+      timeout = 30000,
+    } = context.parameters as unknown as ShellParams
 
     // 验证命令
     this.validateCommand(command)
@@ -107,24 +108,13 @@ export class ShellTool extends ModifiableTool {
       commandParts.push(command)
       const finalCommand = commandParts.length > 1 ? commandParts.join(' && ') : command
 
-      // 执行命令
-      await terminalAPI.writeToTerminal({
-        paneId: targetTerminalId,
-        data: `${finalCommand}\n`,
-      })
-
-      // 等待执行完成
-      await this.sleep(500)
-
-      // 获取输出
-      const output = await terminalAPI.getTerminalBuffer(targetTerminalId)
-      const cleanOutput = this.cleanOutput(output, finalCommand)
-
+      // 使用事件驱动的方式等待命令完成
+      const result = await this.executeCommandWithCallback(targetTerminalId, finalCommand, timeout)
       return {
         content: [
           {
             type: 'text',
-            text: cleanOutput || '(无输出)',
+            text: result || '(无输出)',
           },
         ],
       }
@@ -187,59 +177,125 @@ export class ShellTool extends ModifiableTool {
     return cleanLines.join('\n') || '(无输出)'
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
+  /**
+   * 基于事件驱动的命令执行
+   */
+  private async executeCommandWithCallback(terminalId: number, command: string, timeout: number): Promise<string> {
+    const terminalStore = useTerminalStore()
+
+    // 找到对应的终端会话
+    const terminalSession = terminalStore.terminals.find(t => t.backendId === terminalId)
+    if (!terminalSession) {
+      throw new TerminalError('找不到对应的终端会话')
+    }
+
+    return new Promise<string>((resolve, reject) => {
+      let outputBuffer = ''
+      let timeoutId: NodeJS.Timeout
+      let isCompleted = false
+
+      // 设置超时
+      timeoutId = setTimeout(() => {
+        if (!isCompleted) {
+          isCompleted = true
+          cleanup()
+          reject(new TerminalError(`命令执行超时 (${timeout}ms): ${command}`))
+        }
+      }, timeout)
+
+      // 命令完成检测逻辑
+      const detectCommandCompletion = (output: string): boolean => {
+        // 检测常见的shell提示符
+        const promptPatterns = [
+          /[#%>]\s*$/, // 基本提示符 (移除了$的转义)
+          /.*[@#%>:]\s*$/, // 复杂提示符 (移除了$的转义)
+          /\w+@\w+.*[#]\s*$/, // user@hostname# 格式 (移除了$的转义)
+          /.*\$\s*$/, // $ 提示符 (单独处理)
+        ]
+
+        return promptPatterns.some(pattern => pattern.test(output.trim()))
+      }
+
+      // 清理函数
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
+        terminalStore.unregisterTerminalCallbacks(terminalSession.id, callbacks)
+      }
+
+      // 终端输出监听回调
+      const callbacks = {
+        onOutput: (data: string) => {
+          outputBuffer += data
+
+          // 检测命令是否完成（出现新的提示符）
+          if (detectCommandCompletion(data)) {
+            if (!isCompleted) {
+              isCompleted = true
+              cleanup()
+
+              // 清理输出并返回
+              const cleanOutput = this.cleanOutput(outputBuffer, command)
+              resolve(cleanOutput)
+            }
+          }
+        },
+        onExit: (exitCode: number | null) => {
+          if (!isCompleted) {
+            isCompleted = true
+            cleanup()
+
+            if (exitCode === 0) {
+              const cleanOutput = this.cleanOutput(outputBuffer, command)
+              resolve(cleanOutput)
+            } else {
+              reject(new TerminalError(`命令执行失败，退出码: ${exitCode}`))
+            }
+          }
+        },
+      }
+
+      // 注册监听器
+      terminalStore.registerTerminalCallbacks(terminalSession.id, callbacks)
+
+      // 执行命令
+      terminalAPI
+        .writeToTerminal({
+          paneId: terminalId,
+          data: `${command}\n`,
+        })
+        .catch(error => {
+          if (!isCompleted) {
+            isCompleted = true
+            cleanup()
+            reject(new TerminalError(`写入命令失败: ${error.message}`))
+          }
+        })
+    })
   }
 
   /**
    * 获取或创建Agent专属终端
    */
   private async getOrCreateAgentTerminal(): Promise<number> {
-    try {
-      // 首先尝试从上下文中获取Agent实例
-      const agentTerminalId = await this.getAgentTerminalFromContext()
+    // 尝试从当前活跃的Agent实例获取专属终端
+    const currentAgent = TerminalAgent.getCurrentInstance()
+    if (currentAgent) {
+      const agentTerminalId = currentAgent.getTerminalIdForTools()
       if (agentTerminalId) {
         return agentTerminalId
       }
-
-      const terminalStore = useTerminalStore()
-
-      // 查找现有的Agent终端
-      const agentTerminal = terminalStore.terminals.find(terminal => terminal.title === 'OrbitX')
-
-      if (agentTerminal && agentTerminal.backendId) {
-        // 激活现有的Agent终端
-        terminalStore.setActiveTerminal(agentTerminal.id)
-        return agentTerminal.backendId
-      }
-
-      // 创建新的Agent终端
-      const agentTerminalSessionId = await terminalStore.createAgentTerminal('OrbitX')
-      const newAgentTerminal = terminalStore.terminals.find(t => t.id === agentTerminalSessionId)
-      if (!newAgentTerminal || !newAgentTerminal.backendId) {
-        throw new TerminalError('无法创建或获取Agent专属终端')
-      }
-
-      return newAgentTerminal.backendId
-    } catch (error) {
-      // 降级到使用任何可用的终端
-      console.warn('无法获取Agent专属终端，使用普通终端:', error)
-      const terminals = await terminalAPI.listTerminals()
-      if (terminals.length === 0) {
-        throw new TerminalError('没有可用的终端')
-      }
-      return terminals[0]
+      // 如果Agent存在但没有终端，让Agent创建一个
+      return await currentAgent.ensureAgentTerminal()
     }
-  }
 
-  /**
-   * 尝试从Agent上下文中获取专属终端ID
-   */
-  private async getAgentTerminalFromContext(): Promise<number | null> {
-    // 这里可以通过某种方式获取当前Agent实例
-    // 由于架构限制，暂时返回null
-    // 在未来可以考虑通过context传递Agent实例
-    return null
+    // 降级方案：如果没有Agent实例，使用任何可用的终端
+    const terminals = await terminalAPI.listTerminals()
+    if (terminals.length === 0) {
+      throw new TerminalError('没有可用的终端')
+    }
+    return terminals[0]
   }
 }
 

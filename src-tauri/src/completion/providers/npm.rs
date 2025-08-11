@@ -68,7 +68,7 @@ impl NpmCompletionProvider {
     pub fn new() -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(3))
-            .user_agent("TermX/1.0")
+            .user_agent("OrbitX/1.0")
             .build()
             .unwrap_or_default();
 

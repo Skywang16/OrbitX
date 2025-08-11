@@ -94,7 +94,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
         const terminal = findTerminalByBackendId(event.payload.paneId)
         if (terminal) {
           const listeners = _listeners.value.get(terminal.id) || []
-          listeners.forEach(listener => listener.onOutput(event.payload.data))
+          listeners.forEach(listener => listener.callbacks.onOutput(event.payload.data))
         }
       } catch (error) {
         console.error('处理终端输出事件时发生错误:', error)
@@ -110,7 +110,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
         const terminal = findTerminalByBackendId(event.payload.paneId)
         if (terminal) {
           const listeners = _listeners.value.get(terminal.id) || []
-          listeners.forEach(listener => listener.onExit(event.payload.exitCode))
+          listeners.forEach(listener => listener.callbacks.onExit(event.payload.exitCode))
 
           // 自动清理已关闭的终端会话
           closeTerminal(terminal.id)
@@ -140,7 +140,11 @@ export const useTerminalStore = defineStore('Terminal', () => {
    */
   const registerTerminalCallbacks = (id: string, callbacks: TerminalEventListeners) => {
     const listeners = _listeners.value.get(id) || []
-    listeners.push(callbacks)
+    const entry: ListenerEntry = {
+      id: `${id}-${Date.now()}`,
+      callbacks,
+    }
+    listeners.push(entry)
     _listeners.value.set(id, listeners)
   }
 
@@ -154,7 +158,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     } else {
       // 只移除指定的监听器
       const listeners = _listeners.value.get(id) || []
-      const filtered = listeners.filter(listener => listener !== callbacks)
+      const filtered = listeners.filter(listener => listener.callbacks !== callbacks)
       if (filtered.length > 0) {
         _listeners.value.set(id, filtered)
       } else {
@@ -400,20 +404,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       // 等待终端创建完成
       await new Promise(resolve => setTimeout(resolve, 500))
-
-      // 在新终端中显示欢迎信息
-      await terminalAPI.write({
-        paneId: backendId,
-        data: `\x1b[36m# ${agentTerminalTitle} 终端已创建\x1b[0m\n`,
-      })
-      await terminalAPI.write({
-        paneId: backendId,
-        data: `\x1b[32m# 这是${agentName}的专属终端，所有AI命令将在此执行\x1b[0m\n`,
-      })
-      await terminalAPI.write({
-        paneId: backendId,
-        data: `\x1b[33m# Agent: ${agentName}\x1b[0m\n`,
-      })
 
       setActiveTerminal(id)
       return id

@@ -17,6 +17,9 @@ export class TerminalAgent extends Agent {
   private agentTerminalId: number | null = null
   private baseDescription: string
 
+  // 静态实例引用，允许工具访问当前活跃的Agent
+  private static currentInstance: TerminalAgent | null = null
+
   constructor(config: Partial<TerminalAgentConfig> = {}) {
     // 默认配置
     const defaultConfig: TerminalAgentConfig = {
@@ -90,6 +93,9 @@ export class TerminalAgent extends Agent {
 
     this.config = finalConfig
     this.baseDescription = finalConfig.description
+
+    // 设置为当前活跃实例
+    TerminalAgent.currentInstance = this
   }
 
   /**
@@ -309,13 +315,8 @@ export class TerminalAgent extends Agent {
    */
   private async initializeAgentTerminal(terminalId: number): Promise<void> {
     try {
-      // 简化的初始化信息
-      await terminalAPI.writeToTerminal({
-        paneId: terminalId,
-        data: `echo "${this.config.name} 专属终端已就绪"\n`,
-      })
-
-      // 设置工作目录（如果配置了）
+      // 保持Agent终端干净，不输出欢迎信息
+      // 只设置工作目录（如果配置了）
       if (this.config.defaultWorkingDirectory) {
         await terminalAPI.writeToTerminal({
           paneId: terminalId,
@@ -400,6 +401,13 @@ export class TerminalAgent extends Agent {
    */
   getTerminalIdForTools(): number | null {
     return this.agentTerminalId
+  }
+
+  /**
+   * 获取当前活跃的Agent实例（供工具使用）
+   */
+  static getCurrentInstance(): TerminalAgent | null {
+    return TerminalAgent.currentInstance
   }
 }
 
