@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::mux::{
@@ -59,6 +59,9 @@ pub struct TerminalMux {
 
     /// I/O 处理器
     io_handler: IoHandler,
+
+    /// 是否正在关闭（用于通知处理线程优雅退出）
+    shutting_down: std::sync::atomic::AtomicBool,
 }
 
 impl TerminalMux {
@@ -86,6 +89,7 @@ impl TerminalMux {
             notification_sender,
             notification_receiver: Arc::new(RwLock::new(Some(notification_receiver))),
             io_handler,
+            shutting_down: std::sync::atomic::AtomicBool::new(false),
         };
 
         info!("TerminalMux初始化完成");
@@ -547,11 +551,20 @@ impl TerminalMux {
 
             if let Some(receiver) = receiver {
                 loop {
-                    match receiver.recv() {
+                    if mux.shutting_down.load(std::sync::atomic::Ordering::Relaxed) {
+                        tracing::info!("检测到关闭信号，退出通知处理线程");
+                        break;
+                    }
+
+                    match receiver.recv_timeout(Duration::from_millis(200)) {
                         Ok(notification) => {
                             mux.notify_internal(&notification);
                         }
-                        Err(_) => {
+                        Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                            // 周期性检查关闭标志
+                            continue;
+                        }
+                        Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
                             tracing::info!("通知通道已关闭，退出处理线程");
                             break;
                         }
@@ -632,14 +645,34 @@ impl TerminalMux {
     pub fn shutdown(&self) -> AppResult<()> {
         tracing::info!("开始关闭TerminalMux");
 
+        // 标记为关闭状态，使通知处理线程能尽快退出
+        self.shutting_down
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+
         // 获取所有面板ID
         let pane_ids: Vec<PaneId> = self.list_panes();
+        tracing::info!("准备关闭 {} 个面板", pane_ids.len());
 
         // 逐个关闭面板
+        let mut failed_panes = Vec::new();
         for pane_id in pane_ids {
-            if let Err(e) = self.remove_pane(pane_id) {
-                tracing::error!("关闭面板 {:?} 失败: {}", pane_id, e);
+            match self.remove_pane(pane_id) {
+                Ok(_) => {
+                    tracing::debug!("面板 {:?} 关闭成功", pane_id);
+                }
+                Err(e) => {
+                    tracing::warn!("关闭面板 {:?} 失败: {}", pane_id, e);
+                    failed_panes.push(pane_id);
+                }
             }
+        }
+
+        if !failed_panes.is_empty() {
+            tracing::warn!(
+                "有 {} 个面板关闭失败: {:?}",
+                failed_panes.len(),
+                failed_panes
+            );
         }
 
         // 清理所有订阅者
@@ -647,13 +680,18 @@ impl TerminalMux {
             let count = subscribers.len();
             subscribers.clear();
             tracing::info!("清理了 {} 个订阅者", count);
+        } else {
+            tracing::warn!("无法获取订阅者锁进行清理");
         }
 
         // 关闭I/O处理器
-        if let Err(e) = self.io_handler.shutdown() {
-            tracing::error!("关闭I/O处理器失败: {}", e);
-        } else {
-            tracing::info!("I/O处理器已关闭");
+        match self.io_handler.shutdown() {
+            Ok(_) => {
+                tracing::info!("I/O处理器已关闭");
+            }
+            Err(e) => {
+                tracing::warn!("关闭I/O处理器失败（可能已经关闭）: {}", e);
+            }
         }
 
         tracing::info!("TerminalMux 关闭完成");

@@ -128,8 +128,9 @@ export class ShellTool extends ModifiableTool {
       throw new ValidationError('命令不能为空')
     }
 
+    const lowerCommand = command.toLowerCase().trim()
+
     // 检查危险命令
-    const lowerCommand = command.toLowerCase()
     for (const dangerous of this.dangerousCommands) {
       if (lowerCommand.includes(dangerous)) {
         throw new ValidationError(`检测到危险命令，已阻止执行: ${command}`)
@@ -194,6 +195,9 @@ export class ShellTool extends ModifiableTool {
       let timeoutId: NodeJS.Timeout
       let isCompleted = false
 
+      // 绑定 cleanOutput 方法
+      const cleanOutputFn = this.cleanOutput.bind(this)
+
       // 设置超时
       timeoutId = setTimeout(() => {
         if (!isCompleted) {
@@ -205,15 +209,22 @@ export class ShellTool extends ModifiableTool {
 
       // 命令完成检测逻辑
       const detectCommandCompletion = (output: string): boolean => {
-        // 检测常见的shell提示符
-        const promptPatterns = [
-          /[#%>]\s*$/, // 基本提示符 (移除了$的转义)
-          /.*[@#%>:]\s*$/, // 复杂提示符 (移除了$的转义)
-          /\w+@\w+.*[#]\s*$/, // user@hostname# 格式 (移除了$的转义)
-          /.*\$\s*$/, // $ 提示符 (单独处理)
-        ]
+        // 彻底清理ANSI转义序列
+        let cleanOutput = output
+          .replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '') // 标准ANSI序列
+          .replace(/\u001b\[[?][0-9]*[a-zA-Z]/g, '') // ?开头的序列
+          .replace(/\u001b\[K/g, '') // 清除行序列
+          .replace(/\u001b\[[0-9]*[mK]/g, '') // m和K结尾的序列
+          .replace(/\r/g, '') // 回车符
+          .replace(/\n+/g, ' ') // 换行符转空格
+          .replace(/\s+/g, ' ') // 多个空格合并
+          .trim()
 
-        return promptPatterns.some(pattern => pattern.test(output.trim()))
+        // 检测提示符：包含 @ 和 % 的提示符，或以常见提示符结尾
+        const hasUserHostPrompt = cleanOutput.includes('@') && cleanOutput.includes(' % ')
+        const hasSimplePrompt = /[%$#>]\s*$/.test(cleanOutput)
+
+        return hasUserHostPrompt || hasSimplePrompt
       }
 
       // 清理函数
@@ -227,25 +238,21 @@ export class ShellTool extends ModifiableTool {
       // 终端输出监听回调
       const callbacks = {
         onOutput: (data: string) => {
-          console.log(`🔧 Shell Tool - 收到终端输出:`, JSON.stringify(data))
           outputBuffer += data
-          console.log(`🔧 Shell Tool - 当前缓冲区:`, JSON.stringify(outputBuffer))
 
           // 检测命令是否完成（出现新的提示符）
-          const isComplete = detectCommandCompletion(data)
-          console.log(`🔧 Shell Tool - 命令完成检测:`, isComplete)
+          // 同时检测当前数据块和整个缓冲区
+          const isCompleteInData = detectCommandCompletion(data)
+          const isCompleteInBuffer = detectCommandCompletion(outputBuffer)
+          const isComplete = isCompleteInData || isCompleteInBuffer
 
-          if (isComplete) {
-            if (!isCompleted) {
-              console.log(`🔧 Shell Tool - 命令执行完成，开始清理输出`)
-              isCompleted = true
-              cleanup()
+          if (isComplete && !isCompleted) {
+            isCompleted = true
+            cleanup()
 
-              // 清理输出并返回
-              const cleanOutput = this.cleanOutput(outputBuffer, command)
-              console.log(`🔧 Shell Tool - 清理后的输出:`, JSON.stringify(cleanOutput))
-              resolve(cleanOutput)
-            }
+            // 清理输出并返回
+            const cleanOutput = cleanOutputFn(outputBuffer, command)
+            resolve(cleanOutput)
           }
         },
         onExit: (exitCode: number | null) => {
@@ -254,7 +261,7 @@ export class ShellTool extends ModifiableTool {
             cleanup()
 
             if (exitCode === 0) {
-              const cleanOutput = this.cleanOutput(outputBuffer, command)
+              const cleanOutput = cleanOutputFn(outputBuffer, command)
               resolve(cleanOutput)
             } else {
               reject(new TerminalError(`命令执行失败，退出码: ${exitCode}`))
@@ -264,21 +271,15 @@ export class ShellTool extends ModifiableTool {
       }
 
       // 注册监听器
-      console.log(`🔧 Shell Tool - 注册终端监听器, terminalSession.id: ${terminalSession.id}`)
       terminalStore.registerTerminalCallbacks(terminalSession.id, callbacks)
 
       // 执行命令
-      console.log(`🔧 Shell Tool - 执行命令: ${command}, terminalId: ${terminalId}`)
       terminalAPI
         .writeToTerminal({
           paneId: terminalId,
           data: `${command}\n`,
         })
-        .then(() => {
-          console.log(`🔧 Shell Tool - 命令写入成功`)
-        })
         .catch(error => {
-          console.error(`🔧 Shell Tool - 命令写入失败:`, error)
           if (!isCompleted) {
             isCompleted = true
             cleanup()

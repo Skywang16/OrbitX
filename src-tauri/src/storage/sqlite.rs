@@ -258,12 +258,24 @@ impl SqliteManager {
             // 开发环境：固定使用crate根目录（src-tauri）下的 sql 目录，避免当前工作目录不一致的问题
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sql")
         } else {
-            // 生产环境：使用相对于可执行文件的sql目录
-            std::env::current_exe()
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new("."))
-                .join("sql")
+            // 生产环境：在macOS .app包中，SQL脚本位于 Contents/Resources/sql
+            let exe_path =
+                std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+            // 检查是否在 .app 包中
+            if let Some(contents_dir) = exe_path
+                .ancestors()
+                .find(|p| p.file_name() == Some(std::ffi::OsStr::new("Contents")))
+            {
+                // 在 .app 包中，使用 Contents/Resources/sql
+                contents_dir.join("Resources").join("sql")
+            } else {
+                // 不在 .app 包中，使用传统路径
+                exe_path
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new("."))
+                    .join("sql")
+            }
         };
         let sql_script_loader = SqlScriptLoader::new(sql_dir);
 
@@ -288,11 +300,24 @@ impl SqliteManager {
             // 开发环境：固定使用crate根目录（src-tauri）下的 sql 目录
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sql")
         } else {
-            std::env::current_exe()
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new("."))
-                .join("sql")
+            // 生产环境：在macOS .app包中，SQL脚本位于 Contents/Resources/sql
+            let exe_path =
+                std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+            // 检查是否在 .app 包中
+            if let Some(contents_dir) = exe_path
+                .ancestors()
+                .find(|p| p.file_name() == Some(std::ffi::OsStr::new("Contents")))
+            {
+                // 在 .app 包中，使用 Contents/Resources/sql
+                contents_dir.join("Resources").join("sql")
+            } else {
+                // 不在 .app 包中，使用传统路径
+                exe_path
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new("."))
+                    .join("sql")
+            }
         };
 
         if !sql_dir.exists() {
@@ -403,65 +428,19 @@ impl SqliteManager {
         Ok(())
     }
 
-    /// 安全获取主密钥
-    /// 优先级：环境变量 > 系统密钥链 > 用户配置 > 安全随机生成
+    /// 获取主密钥
+    /// 标准做法：优先从配置文件读取，不存在则基于用户+主机生成稳定密钥
     async fn get_secure_master_key(&self) -> AppResult<String> {
-        // 1. 尝试从环境变量获取
-        if let Ok(key) = std::env::var("OrbitX_MASTER_KEY") {
-            if !key.is_empty() && key.len() >= 16 {
-                debug!("从环境变量获取主密钥");
-                return Ok(key);
-            } else {
-                warn!("环境变量 OrbitX_MASTER_KEY 长度不足（需要至少16个字符）");
-            }
-        }
-
-        // 2. 尝试从系统密钥链获取（仅在支持的平台上）
-        if let Some(key) = self.get_key_from_system_keychain().await? {
-            debug!("从系统密钥链获取主密钥");
-            return Ok(key);
-        }
-
-        // 3. 尝试从用户配置目录的安全文件获取
+        // 1. 尝试从用户配置目录读取已保存的密钥
         if let Some(key) = self.get_key_from_config_file().await? {
             debug!("从配置文件获取主密钥");
             return Ok(key);
         }
 
-        // 4. 生成新的安全随机密钥并保存
-        let new_key = self.generate_and_save_master_key().await?;
-        info!("生成新的主密钥并保存到配置文件");
+        // 2. 生成基于用户+主机的确定性密钥并保存
+        let new_key = self.generate_deterministic_master_key().await?;
+        info!("生成用户机器密钥并保存到配置文件");
         Ok(new_key)
-    }
-
-    /// 从系统密钥链获取密钥
-    async fn get_key_from_system_keychain(&self) -> AppResult<Option<String>> {
-        // 在实际实现中，这里应该调用系统特定的密钥链API
-        // 例如：macOS Keychain、Windows DPAPI、Linux Secret Service
-
-        #[cfg(target_os = "macos")]
-        {
-            // 示例：macOS Keychain集成（需要security-framework crate）
-            // let service = "terminal-app";
-            // let account = "master-encryption-key";
-            // 实际实现需要添加对应的依赖和代码
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            // 示例：Windows DPAPI集成（需要winapi crate）
-            // 实际实现需要添加对应的依赖和代码
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            // 示例：Linux Secret Service集成（需要secret-service crate）
-            // 实际实现需要添加对应的依赖和代码
-        }
-
-        // 当前简化实现：返回None，表示不支持系统密钥链
-        debug!("系统密钥链支持尚未实现");
-        Ok(None)
     }
 
     /// 从配置文件获取密钥
@@ -490,16 +469,44 @@ impl SqliteManager {
         }
     }
 
-    /// 生成并保存新的主密钥
-    async fn generate_and_save_master_key(&self) -> AppResult<String> {
-        use rand::{distributions::Alphanumeric, Rng};
+    /// 生成基于机器标识的确定性主密钥
+    /// 使用标准的应用密钥生成方式：基于用户名、主机名等机器标识符
+    async fn generate_deterministic_master_key(&self) -> AppResult<String> {
+        use sha2::{Digest, Sha256};
 
-        // 生成64字符的随机密钥
-        let new_key: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(64)
-            .map(char::from)
-            .collect();
+        // 收集机器标识信息
+        let username = std::env::var("USER")
+            .or_else(|_| std::env::var("USERNAME"))
+            .unwrap_or_else(|_| "unknown_user".to_string());
+
+        let hostname = std::env::var("HOSTNAME")
+            .or_else(|_| std::env::var("COMPUTERNAME"))
+            .unwrap_or_else(|_| {
+                std::process::Command::new("hostname")
+                    .output()
+                    .ok()
+                    .and_then(|output| String::from_utf8(output.stdout).ok())
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_else(|| "unknown_host".to_string())
+            });
+
+        // 获取用户主目录作为额外标识
+        let home_dir = dirs::home_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "unknown_home".to_string());
+
+        // 使用标准的密钥派生方式
+        let mut hasher = Sha256::default();
+        hasher.update(b"OrbitX-Terminal-App-v1.0"); // 应用标识
+        hasher.update(username.as_bytes()); // 用户名
+        hasher.update(hostname.as_bytes()); // 主机名
+        hasher.update(home_dir.as_bytes()); // 用户目录
+        hasher.update(b"encryption-key-salt"); // 固定盐值
+
+        let hash = hasher.finalize();
+
+        // 转换为 base64 密钥
+        let key = base64::engine::general_purpose::STANDARD.encode(hash);
 
         // 保存到配置文件
         let config_dir = &self.paths.config_dir;
@@ -508,7 +515,7 @@ impl SqliteManager {
             .with_context(|| format!("创建配置目录失败: {}", config_dir.display()))?;
 
         let key_file_path = config_dir.join(".master_key");
-        tokio::fs::write(&key_file_path, &new_key)
+        tokio::fs::write(&key_file_path, &key)
             .await
             .with_context(|| format!("保存主密钥文件失败: {}", key_file_path.display()))?;
 
@@ -521,8 +528,9 @@ impl SqliteManager {
             tokio::fs::set_permissions(&key_file_path, perms).await?;
         }
 
-        info!("新主密钥已生成并保存到: {}", key_file_path.display());
-        Ok(new_key)
+        info!("机器标识密钥已生成并保存到: {}", key_file_path.display());
+        debug!("基于用户: {}, 主机: {}", username, hostname);
+        Ok(key)
     }
 
     /// 插入默认数据
@@ -1753,8 +1761,8 @@ impl SqliteManager {
         );
 
         let sql = r#"
-            INSERT INTO ai_messages (conversation_id, role, content, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO ai_messages (conversation_id, role, content, steps_json, status, duration_ms, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         "#;
 
         let result = self
@@ -1764,12 +1772,47 @@ impl SqliteManager {
                     .bind(message.conversation_id)
                     .bind(&message.role)
                     .bind(&message.content)
+                    .bind(&message.steps_json)
+                    .bind(&message.status)
+                    .bind(&message.duration_ms)
                     .bind(message.created_at),
             )
             .await
             .with_context(|| "保存消息失败")?;
 
         Ok(result.last_insert_rowid())
+    }
+
+    /// 更新消息的扩展元数据（steps/status/duration）
+    pub async fn update_message_meta(
+        &self,
+        message_id: i64,
+        steps_json: Option<&str>,
+        status: Option<&str>,
+        duration_ms: Option<i64>,
+    ) -> AppResult<()> {
+        debug!("更新消息扩展: id={}", message_id);
+
+        let sql = r#"
+            UPDATE ai_messages
+            SET steps_json = ?,
+                status = ?,
+                duration_ms = ?
+            WHERE id = ?
+        "#;
+
+        self.db_pool
+            .execute(
+                sqlx::query(sql)
+                    .bind(steps_json)
+                    .bind(status)
+                    .bind(duration_ms)
+                    .bind(message_id),
+            )
+            .await
+            .with_context(|| format!("更新消息扩展失败: {}", message_id))?;
+
+        Ok(())
     }
 
     /// 获取会话消息
@@ -1786,7 +1829,7 @@ impl SqliteManager {
 
         let mut sql = String::from(
             r#"
-            SELECT id, conversation_id, role, content, created_at
+            SELECT id, conversation_id, role, content, steps_json, status, duration_ms, created_at
             FROM ai_messages
             WHERE conversation_id = ?
             ORDER BY created_at ASC
@@ -1824,7 +1867,7 @@ impl SqliteManager {
         );
 
         let sql = r#"
-            SELECT id, conversation_id, role, content, created_at
+            SELECT id, conversation_id, role, content, steps_json, status, duration_ms, created_at
             FROM ai_messages
             WHERE conversation_id = ? AND id <= ?
             ORDER BY created_at ASC
@@ -1879,7 +1922,7 @@ impl SqliteManager {
         debug!("查询最后消息: conversation_id={}", conversation_id);
 
         let sql = r#"
-            SELECT id, conversation_id, role, content, created_at
+            SELECT id, conversation_id, role, content, steps_json, status, duration_ms, created_at
             FROM ai_messages
             WHERE conversation_id = ?
             ORDER BY created_at DESC
@@ -1936,6 +1979,9 @@ impl SqliteManager {
             conversation_id: row.get("conversation_id"),
             role: row.get("role"),
             content: row.get("content"),
+            steps_json: row.get("steps_json"),
+            status: row.get("status"),
+            duration_ms: row.get("duration_ms"),
             created_at: row.get("created_at"),
         }
     }

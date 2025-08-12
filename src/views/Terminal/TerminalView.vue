@@ -8,7 +8,7 @@
   import { invoke } from '@tauri-apps/api/core'
   import { listen, UnlistenFn } from '@tauri-apps/api/event'
   import { getCurrentWebview } from '@tauri-apps/api/webview'
-  import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+  import { onBeforeUnmount, onMounted, watch } from 'vue'
 
   const terminalStore = useTerminalStore()
   const aiChatStore = useAIChatStore()
@@ -103,6 +103,7 @@
       if (
         event.event === 'tauri://drag-drop' &&
         event.payload &&
+        'paths' in event.payload &&
         event.payload.paths &&
         event.payload.paths.length > 0
       ) {

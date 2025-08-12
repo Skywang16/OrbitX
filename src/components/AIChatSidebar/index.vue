@@ -40,7 +40,7 @@
   }
 
   const selectSession = (sessionId: number) => {
-    aiChatStore.loadConversation(sessionId)
+    aiChatStore.switchToConversation(sessionId)
   }
 
   const deleteSession = (sessionId: number) => {

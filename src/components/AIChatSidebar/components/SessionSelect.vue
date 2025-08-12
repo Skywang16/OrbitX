@@ -62,8 +62,8 @@
     }
   }
 
-  const handleSelectChange = (value: string | number | null) => {
-    if (value !== null) {
+  const handleSelectChange = (value: string | number | null | Array<string | number>) => {
+    if (value !== null && !Array.isArray(value)) {
       emit('select-session', Number(value))
     }
   }
@@ -88,7 +88,7 @@
       filter-placeholder="搜索会话..."
       no-data-text="暂无会话历史"
       max-height="300px"
-      @update:model-value="handleSelectChange"
+      @update:modelValue="handleSelectChange"
       @visible-change="handleVisibleChange"
     />
   </div>

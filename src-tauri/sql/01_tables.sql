@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS ai_messages (
     conversation_id INTEGER NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
     content TEXT NOT NULL,
+    -- 新增：持久化AI步骤/状态/耗时
+    steps_json TEXT,
+    status TEXT CHECK (status IN ('pending','streaming','complete','error')),
+    duration_ms INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (conversation_id) REFERENCES ai_conversations(id) ON DELETE CASCADE
 );

@@ -1,7 +1,6 @@
 <script setup lang="ts">
   import SessionSelect from './SessionSelect.vue'
   import type { Conversation } from '@/types/features/ai/chat'
-  import type { ChatMode } from '../types'
 
   // Props定义
   interface Props {
@@ -18,7 +17,7 @@
     (e: 'refresh-sessions'): void
   }
 
-  const props = withDefaults(defineProps<Props>(), {
+  withDefaults(defineProps<Props>(), {
     isLoading: false,
   })
 

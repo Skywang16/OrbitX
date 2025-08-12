@@ -5,7 +5,7 @@
     message: Message
   }
 
-  const props = defineProps<Props>()
+  defineProps<Props>()
 
   // 格式化时间
   const formatTime = (date: Date) => {

@@ -47,8 +47,7 @@
     "pinia": "^3.0.3",
     "sharp": "^0.34.3",
     "uuid": "^11.1.0",
-    "vue": "^3.5.13",
-    "vue-router": "^4.5.1"
+    "vue": "^3.5.13"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

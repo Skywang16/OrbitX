@@ -4,7 +4,7 @@
  * 使用新的会话上下文管理系统，不再向后兼容
  */
 
-import { conversations as conversationAPI } from '@/api/ai'
+import { ai } from '@/api/ai'
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useSessionStore } from '@/stores/session'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
@@ -77,8 +77,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const createConversation = async (title?: string): Promise<void> => {
     try {
       isLoading.value = true
-      const conversationId = await conversationAPI.create(title)
-      const newConversation = await conversationAPI.get(conversationId)
+      const conversationId = await ai.conversations.create(title)
+      const newConversation = await ai.conversations.get(conversationId)
       conversations.value.unshift(newConversation)
       currentConversationId.value = newConversation.id
       messageList.value = []
@@ -89,14 +89,25 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  const loadConversation = async (conversationId: number): Promise<void> => {
+  const loadConversation = async (conversationId: number, forceReload = false): Promise<void> => {
     try {
       isLoading.value = true
       currentConversationId.value = conversationId
 
-      // 使用新的API获取压缩上下文作为消息历史
-      const loadedMessages = await conversationAPI.getCompressedContext(conversationId)
-      messageList.value = loadedMessages
+      const loadedMessages = await ai.conversations.getCompressedContext(conversationId)
+
+      if (forceReload) {
+        // 强制重新加载：完全替换消息列表
+        messageList.value = loadedMessages
+      } else {
+        // 增量更新：保留现有消息的步骤信息，只添加新消息
+        const existingIds = new Set(messageList.value.map(msg => msg.id))
+        const newMessages = loadedMessages.filter(msg => !existingIds.has(msg.id))
+
+        messageList.value = [...messageList.value, ...newMessages].sort(
+          (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+        )
+      }
     } catch (err) {
       error.value = handleErrorWithMessage(err, '加载会话失败')
     } finally {
@@ -104,9 +115,15 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
+  // 会话切换方法
+  const switchToConversation = async (conversationId: number): Promise<void> => {
+    messageList.value = []
+    await loadConversation(conversationId, true)
+  }
+
   const deleteConversation = async (conversationId: number): Promise<void> => {
     try {
-      await conversationAPI.delete(conversationId)
+      await ai.conversations.delete(conversationId)
       conversations.value = conversations.value.filter(c => c.id !== conversationId)
 
       if (currentConversationId.value === conversationId) {
@@ -120,7 +137,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   const refreshConversations = async (): Promise<void> => {
     try {
-      conversations.value = await conversationAPI.getList()
+      conversations.value = await ai.conversations.getList()
     } catch (err) {
       error.value = handleErrorWithMessage(err, '刷新会话列表失败')
     }
@@ -143,10 +160,17 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       error.value = null
 
       // 1. 立即保存用户消息（不等待Eko初始化）
-      await conversationAPI.saveMessage(currentConversationId.value, 'user', content)
+      const userMessageId = await ai.conversations.saveMessage(currentConversationId.value, 'user', content)
 
-      // 2. 立即更新UI显示用户消息
-      await loadConversation(currentConversationId.value)
+      // 2. 立即更新UI显示用户消息（添加到当前消息列表而不是重新加载）
+      const userMessage: Message = {
+        id: userMessageId,
+        conversationId: currentConversationId.value,
+        role: 'user',
+        content,
+        createdAt: new Date(),
+      }
+      messageList.value.push(userMessage)
 
       // 3. 确保Eko实例可用（如果未初始化则自动初始化）
       if (!ekoInstance.value) {
@@ -167,7 +191,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       }
 
       // 5. 获取压缩上下文
-      const contextMessages = await conversationAPI.getCompressedContext(currentConversationId.value)
+      const contextMessages = await ai.conversations.getCompressedContext(currentConversationId.value)
 
       // 6. 构建完整的prompt（包含上下文，不重复当前用户消息）
       const fullPrompt =
@@ -175,11 +199,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           ? contextMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n')
           : `user: ${content}`
 
-      // 7. 创建临时AI消息（使用新的数据结构）
+      // 7. 创建临时AI消息
       const tempAIMessage: Message = {
-        id: Date.now(),
+        id: -Date.now(), // 使用负数作为临时ID，避免与数据库ID冲突
         conversationId: currentConversationId.value,
-        role: 'assistant' as const,
+        role: 'assistant',
         createdAt: new Date(),
         steps: [],
         status: 'streaming',
@@ -192,17 +216,43 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       streamingContent.value = ''
       const response = await ekoInstance.value.run(fullPrompt)
 
-      // 9. 保存AI回复到数据库
+      // 9. 保存AI回复到数据库并更新消息状态
       if (response.success && response.result) {
-        // 更新占位消息内容
+        // 更新临时消息的内容和状态
         tempAIMessage.content = response.result
-        await conversationAPI.saveMessage(currentConversationId.value, 'assistant', response.result)
+        tempAIMessage.status = 'complete'
+        tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
+
+        // 保存到数据库并更新消息ID
+        const messageId = await ai.conversations.saveMessage(currentConversationId.value, 'assistant', response.result)
+        tempAIMessage.id = messageId
+
+        // 增量持久化：将steps/status/duration落库，保证历史回放一致
+        try {
+          await ai.conversations.updateMessageMeta(
+            messageId,
+            tempAIMessage.steps || [],
+            tempAIMessage.status,
+            tempAIMessage.duration
+          )
+        } catch {
+          // 静默失败，不影响前端展示
+        }
+      } else {
+        // 处理失败情况
+        tempAIMessage.status = 'error'
+        tempAIMessage.steps?.push({
+          type: 'error',
+          content: '消息发送失败',
+          timestamp: Date.now(),
+          metadata: {
+            errorType: 'SendError',
+            errorDetails: response.error || '未知错误',
+          },
+        })
       }
 
-      // 10. 重新加载消息
-      await loadConversation(currentConversationId.value)
-
-      // 11. 刷新会话列表以更新预览
+      // 10. 刷新会话列表以更新预览（不重新加载消息，保持步骤信息）
       await refreshConversations()
     } catch (err) {
       error.value = handleErrorWithMessage(err, '发送消息失败')
@@ -223,7 +273,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       error.value = null
 
       // 1. 截断会话
-      await conversationAPI.truncateConversation(currentConversationId.value, truncateAfterMessageId)
+      await ai.conversations.truncateConversation(currentConversationId.value, truncateAfterMessageId)
 
       // 2. 发送新消息（复用sendMessage逻辑）
       await sendMessage(newContent)
@@ -249,34 +299,33 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           const tempMessage = messageList.value[messageList.value.length - 1]
           if (!tempMessage || tempMessage.role !== 'assistant') return
 
-          if (message.type === 'tool_use') {
-            // 详细打印工具调用消息结构
-            console.log('🔧 Tool Use Message:', JSON.stringify(message, null, 2))
+          // 确保steps数组存在
+          if (!tempMessage.steps) {
+            tempMessage.steps = []
+          }
 
-            // 处理工具调用 - 创建工具步骤
-            tempMessage.steps?.push({
+          if (message.type === 'tool_use') {
+            tempMessage.steps.push({
               type: 'tool_use',
               content: '正在调用工具...',
               timestamp: Date.now(),
               metadata: {
                 toolName: message.toolName || '工具调用',
-                toolCommand: message.params?.command || JSON.stringify(message.params || {}),
                 status: 'running',
-                originalMessage: message, // 保存原始消息用于调试
               },
             })
           } else if (message.type === 'tool_result') {
-            // 详细打印工具结果消息结构
-            console.log('✅ Tool Result Message:', JSON.stringify(message, null, 2))
+            // 找到最后一个运行中的工具步骤
+            const runningSteps = tempMessage.steps.filter(
+              step => step.type === 'tool_use' && step.metadata?.status === 'running'
+            )
+            const toolStep = runningSteps[runningSteps.length - 1]
 
-            // 更新现有工具步骤的结果
-            let toolStep = tempMessage.steps?.find(step => step.type === 'tool_use')
             if (toolStep) {
               toolStep.content = '工具执行完成'
               toolStep.metadata = {
                 ...toolStep.metadata,
                 status: 'completed',
-                toolResult: message,
               }
             }
           } else if (message.type === 'workflow' && message.workflow?.thought) {
@@ -301,21 +350,14 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                   workflowName: message.workflow.name,
                   agentName: message.agentName,
                   taskId: message.taskId,
+                  // 如果thinking瞬间完成，记录0持续时间
+                  thinkingDuration: message.streamDone ? 0 : undefined,
                 },
-              }
-
-              // 如果thinking瞬间完成，记录0持续时间
-              if (message.streamDone) {
-                newStep.metadata = {
-                  ...newStep.metadata,
-                  thinkingDuration: 0,
-                }
               }
 
               tempMessage.steps?.push(newStep)
             }
-          } else if (message.type === 'text' && !message.streamDone) {
-            // 处理文本步骤
+          } else if (message.type === 'text') {
             let textStep = tempMessage.steps?.find(step => step.type === 'text')
             if (textStep) {
               textStep.content = message.text
@@ -328,6 +370,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               })
             }
             streamingContent.value = message.text
+
+            // 如果文本流完成，更新消息状态
+            if (message.streamDone) {
+              tempMessage.status = 'complete'
+              tempMessage.content = message.text
+            }
           }
         }
 
@@ -403,7 +451,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       // 如果恢复了当前会话ID，尝试加载会话
       if (currentConversationId.value) {
         try {
-          await loadConversation(currentConversationId.value)
+          await switchToConversation(currentConversationId.value)
         } catch (err) {
           currentConversationId.value = null
         }
@@ -443,6 +491,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     setSidebarWidth,
     createConversation,
     loadConversation,
+    switchToConversation,
     deleteConversation,
     refreshConversations,
     sendMessage,

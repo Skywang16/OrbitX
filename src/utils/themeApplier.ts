@@ -4,7 +4,7 @@
  * 负责将主题数据应用到前端界面，包括CSS变量更新和DOM属性设置
  */
 
-import type { Theme } from '@/api/config/types'
+import type { Theme, ThemeType } from '@/types/theme'
 
 /**
  * 将主题数据应用到前端界面
@@ -17,8 +17,6 @@ export const applyThemeToUI = (theme: Theme): void => {
 
   // 更新 CSS 变量
   updateCSSVariables(theme)
-
-  console.log(`已应用主题: ${theme.name} (${theme.themeType})`)
 }
 
 /**
@@ -43,7 +41,7 @@ const updateDataThemeAttribute = (theme: Theme): void => {
 
   // 如果有特殊映射，使用映射的名称
   if (themeNameMap[theme.name]) {
-    themeAttribute = themeNameMap[theme.name]
+    themeAttribute = themeNameMap[theme.name] as ThemeType
   }
 
   root.setAttribute('data-theme', themeAttribute)
@@ -66,10 +64,10 @@ const updateCSSVariables = (theme: Theme): void => {
 
   // UI 颜色
   if (theme.ui) {
-    style.setProperty('--color-background-secondary', theme.ui.background_secondary || theme.colors.background)
-    style.setProperty('--color-background-hover', theme.ui.background_hover || theme.colors.background)
-    style.setProperty('--color-border', theme.ui.border || 'rgba(255, 255, 255, 0.1)')
-    style.setProperty('--border-color', theme.ui.border || 'rgba(255, 255, 255, 0.1)')
+    style.setProperty('--color-background-secondary', theme.ui.surface || theme.colors.background)
+    style.setProperty('--color-background-hover', theme.ui.surface || theme.colors.background)
+    style.setProperty('--color-border', theme.ui.secondary || 'rgba(255, 255, 255, 0.1)')
+    style.setProperty('--border-color', theme.ui.secondary || 'rgba(255, 255, 255, 0.1)')
 
     // 主色调
     if (theme.ui.primary) {
@@ -96,7 +94,7 @@ const updateCSSVariables = (theme: Theme): void => {
   style.setProperty('--ansi-white', ansiColors.white)
 
   // 明亮 ANSI 颜色
-  const brightColors = theme.colors.bright
+  const brightColors = theme.colors.ansi
   style.setProperty('--ansi-bright-black', brightColors.black)
   style.setProperty('--ansi-bright-red', brightColors.red)
   style.setProperty('--ansi-bright-green', brightColors.green)

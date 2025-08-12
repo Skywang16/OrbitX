@@ -84,7 +84,7 @@
 
 <script setup lang="ts">
   import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-  import type { SelectEmits, SelectProps, SelectOption } from '../types/index'
+  import type { SelectProps, SelectOption } from '../types/index'
 
   const props = withDefaults(defineProps<SelectProps>(), {
     placeholder: '请选择',
@@ -105,7 +105,15 @@
     remote: false,
   })
 
-  const emit = defineEmits<SelectEmits>()
+  const emit = defineEmits<{
+    'update:modelValue': [value: string | number | null | Array<string | number>]
+    change: [value: string | number | null | Array<string | number>]
+    focus: [event: FocusEvent]
+    blur: [event: FocusEvent]
+    clear: []
+    'visible-change': [visible: boolean]
+    'remove-tag': [value: string | number]
+  }>()
 
   // 响应式引用
   const selectRef = ref<HTMLElement>()

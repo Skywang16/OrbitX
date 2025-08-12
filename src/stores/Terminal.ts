@@ -173,45 +173,37 @@ export const useTerminalStore = defineStore('Terminal', () => {
   const createTerminal = async (initialDirectory?: string): Promise<string> => {
     const id = generateId()
 
-    // 先创建一个临时的终端会话记录
-    const terminal: RuntimeTerminalSession = {
-      id,
-      title: 'Terminal',
-      workingDirectory: initialDirectory || '~',
-      environment: {},
-      commandHistory: [],
-      isActive: false,
-      createdAt: new Date().toISOString(),
-      lastActive: new Date().toISOString(),
-      backendId: null,
-    }
-    terminals.value.push(terminal)
-
     try {
+      // 先创建后端终端，确保成功后再添加到前端状态
       const backendId = await terminalAPI.create({
         rows: 24,
         cols: 80,
-        cwd: initialDirectory, // 传入初始目录
+        cwd: initialDirectory,
       })
 
-      // 获取系统默认shell信息来更新标题
+      // 获取系统默认shell信息
       const defaultShell = await shellAPI.getDefault()
 
-      const t = terminals.value.find(term => term.id === id)
-      if (t) {
-        t.backendId = backendId
-        t.title = defaultShell.name // 使用shell名称作为标题
-        t.shellInfo = defaultShell as ShellInfo // 保存shell信息
+      // 只有在后端创建成功后才创建前端会话记录
+      const terminal: RuntimeTerminalSession = {
+        id,
+        title: defaultShell.name,
+        workingDirectory: initialDirectory || '~',
+        environment: {},
+        commandHistory: [],
+        isActive: false,
+        createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+        backendId, // 直接设置有效的backendId
+        shellInfo: defaultShell as ShellInfo,
       }
 
+      // 添加到terminals数组，此时backendId已经有效
+      terminals.value.push(terminal)
       setActiveTerminal(id)
       return id
     } catch (error) {
       console.error(`创建终端 '${id}' 失败:`, error)
-      const index = terminals.value.findIndex(t => t.id === id)
-      if (index !== -1) {
-        terminals.value.splice(index, 1)
-      }
       throw error
     }
   }
@@ -371,48 +363,40 @@ export const useTerminalStore = defineStore('Terminal', () => {
       return existingAgentTerminal.id
     }
 
-    // 创建新的Agent专属终端会话记录
-    const terminal: RuntimeTerminalSession = {
-      id,
-      title: agentTerminalTitle,
-      workingDirectory: initialDirectory || '~',
-      environment: {
-        OrbitX_AGENT: agentName,
-        OrbitX_TERMINAL_TYPE: 'agent',
-      },
-      commandHistory: [],
-      isActive: false,
-      createdAt: new Date().toISOString(),
-      lastActive: new Date().toISOString(),
-      backendId: null,
-    }
-    terminals.value.push(terminal)
-
     try {
+      // 先创建后端终端，确保成功后再添加到前端状态
       const backendId = await terminalAPI.create({
         rows: 24,
         cols: 80,
         cwd: initialDirectory,
       })
 
-      const t = terminals.value.find(term => term.id === id)
-      if (t) {
-        t.backendId = backendId
-        // 保持Agent专属标题
-        t.title = agentTerminalTitle
+      // 只有在后端创建成功后才创建前端会话记录
+      const terminal: RuntimeTerminalSession = {
+        id,
+        title: agentTerminalTitle,
+        workingDirectory: initialDirectory || '~',
+        environment: {
+          OrbitX_AGENT: agentName,
+          OrbitX_TERMINAL_TYPE: 'agent',
+        },
+        commandHistory: [],
+        isActive: false,
+        createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+        backendId, // 直接设置有效的backendId
       }
 
-      // 等待终端创建完成
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // 添加到terminals数组，此时backendId已经有效
+      terminals.value.push(terminal)
+
+      // 等待终端创建完成（可选的稳定性延迟）
+      await new Promise(resolve => setTimeout(resolve, 100))
 
       setActiveTerminal(id)
       return id
     } catch (error) {
       console.error(`创建Agent终端 '${id}' 失败:`, error)
-      const index = terminals.value.findIndex(t => t.id === id)
-      if (index !== -1) {
-        terminals.value.splice(index, 1)
-      }
       throw error
     }
   }
@@ -430,40 +414,34 @@ export const useTerminalStore = defineStore('Terminal', () => {
       throw new Error(`未找到shell: ${shellName}`)
     }
 
-    const terminal: RuntimeTerminalSession = {
-      id,
-      title,
-      workingDirectory: shellInfo.path || '~',
-      environment: {},
-      commandHistory: [],
-      isActive: false,
-      createdAt: new Date().toISOString(),
-      lastActive: new Date().toISOString(),
-      backendId: null,
-      shellInfo,
-    }
-    terminals.value.push(terminal)
-
     try {
+      // 先创建后端终端，确保成功后再添加到前端状态
       const backendId = await terminalAPI.createWithShell({
         shellName,
         rows: 24,
         cols: 80,
       })
 
-      const t = terminals.value.find(term => term.id === id)
-      if (t) {
-        t.backendId = backendId
+      // 只有在后端创建成功后才创建前端会话记录
+      const terminal: RuntimeTerminalSession = {
+        id,
+        title,
+        workingDirectory: shellInfo.path || '~',
+        environment: {},
+        commandHistory: [],
+        isActive: false,
+        createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+        backendId, // 直接设置有效的backendId
+        shellInfo,
       }
 
+      // 添加到terminals数组，此时backendId已经有效
+      terminals.value.push(terminal)
       setActiveTerminal(id)
       return id
     } catch (error) {
       console.error(`创建终端 '${id}' 失败:`, error)
-      const index = terminals.value.findIndex(t => t.id === id)
-      if (index !== -1) {
-        terminals.value.splice(index, 1)
-      }
       throw error
     }
   }

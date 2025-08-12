@@ -467,7 +467,7 @@ pub struct Conversation {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 消息信息
+/// 消息信息（扩展：携带steps、status、duration）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Message {
@@ -475,6 +475,9 @@ pub struct Message {
     pub conversation_id: i64,
     pub role: String, // "user", "assistant", "system"
     pub content: String,
+    pub steps_json: Option<String>,
+    pub status: Option<String>,
+    pub duration_ms: Option<i64>,
     pub created_at: DateTime<Utc>,
 }
 /// AI配置

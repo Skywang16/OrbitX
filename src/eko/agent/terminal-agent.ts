@@ -30,12 +30,10 @@ export class TerminalAgent extends Agent {
 - chat 模式：只能使用只读工具（如读取文件、网页获取/搜索），严禁任何写入、命令执行或会改变系统/数据状态的操作
 - agent 模式：可以使用全部工具，包含写入、命令执行等能力；在危险操作前需再次确认
 
-你是专属于OrbitX终端应用的AI智能助手，为用户提供强大的终端操作支持。
-
 🤖 **身份说明**
 - 你是 Orbit，OrbitX 的专属AI助手，负责帮助用户完成各种终端任务
-- 你不是eko，不是通用AI，而是专门为OrbitX应用定制的智能助手
 - 你深度集成在用户的OrbitX环境中，了解用户的工作流程和习惯
+- 你不是eko，不是通用AI，而是专门为OrbitX应用定制的智能助手
 
 💻 **你的工作环境**
 - 你运行在用户的OrbitX终端应用中
@@ -333,7 +331,6 @@ export class TerminalAgent extends Agent {
    */
   private async activateAgentTerminal(terminalId: number): Promise<void> {
     try {
-      const { useTerminalStore } = await import('@/stores/Terminal')
       const terminalStore = useTerminalStore()
 
       // 找到对应的会话并激活（静默）
@@ -360,7 +357,6 @@ export class TerminalAgent extends Agent {
     if (this.agentTerminalId !== null) {
       try {
         // 通过Terminal Store关闭终端
-        const { useTerminalStore } = await import('@/stores/Terminal')
         const terminalStore = useTerminalStore()
         // 找到对应的会话并关闭
         const agentSession = terminalStore.terminals.find(t => t.backendId === this.agentTerminalId)
@@ -387,7 +383,6 @@ export class TerminalAgent extends Agent {
     }
 
     try {
-      const { useTerminalStore } = await import('@/stores/Terminal')
       const terminalStore = useTerminalStore()
       return terminalStore.terminals.find(t => t.backendId === this.agentTerminalId) || null
     } catch (error) {

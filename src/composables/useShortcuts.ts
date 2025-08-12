@@ -4,10 +4,10 @@
  * 提供便捷的快捷键使用和管理接口
  */
 
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useShortcutStore } from '@/stores/shortcuts'
 import { ShortcutApi } from '@/api/shortcuts'
-import type {
+import {
   ShortcutBinding,
   ShortcutCategory,
   Platform,

@@ -7,7 +7,7 @@
 
 import { invoke } from '@/utils/request'
 import { handleError } from '../../utils/errorHandler'
-import type { Theme, ThemeInfo, ThemeConfig, ThemeConfigStatus } from '@/types/theme'
+import type { Theme, ThemeInfo, ThemeConfigStatus } from '@/types/theme'
 
 // ============================================================================
 // 主题管理 API 类

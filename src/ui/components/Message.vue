@@ -40,7 +40,7 @@
 
 <script setup lang="ts">
   import { computed, inject, onMounted, onUnmounted } from 'vue'
-  import type { MessageEmits, MessageProps } from '../types/index'
+  import type { MessageProps } from '../types/index'
 
   const props = withDefaults(defineProps<MessageProps>(), {
     type: 'info',
@@ -50,10 +50,12 @@
     dangerouslyUseHTMLString: false,
   })
 
-  const emit = defineEmits<MessageEmits>()
+  const emit = defineEmits<{
+    close: []
+  }>()
 
   // 注入全局配置
-  const globalConfig = inject('xui-config', {})
+  inject('xui-config', {})
 
   let timer: number | null = null
 
@@ -132,15 +134,6 @@
 
   const onAfterLeave = () => {
     // 动画完成后的清理工作
-  }
-
-  // 鼠标悬停暂停定时器
-  const handleMouseEnter = () => {
-    clearTimer()
-  }
-
-  const handleMouseLeave = () => {
-    startTimer()
   }
 
   onMounted(() => {

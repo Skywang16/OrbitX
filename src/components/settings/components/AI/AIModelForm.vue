@@ -111,17 +111,6 @@
 
     isTesting.value = true
     try {
-      // 创建临时模型配置进行测试
-      const tempModel: Omit<AIModelConfig, 'id'> = {
-        name: formData.name || '测试模型',
-        provider: formData.provider,
-        apiUrl: formData.apiUrl,
-        apiKey: formData.apiKey,
-        model: formData.model,
-        isDefault: false,
-        options: formData.options,
-      }
-
       // 这里需要先保存模型再测试，或者修改API支持直接测试配置
       createMessage.info('请先保存模型后再进行连接测试')
     } catch (error) {

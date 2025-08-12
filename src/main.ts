@@ -10,7 +10,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import App from './App.vue'
-import router from './router'
+
 import './styles/variables.css'
 import ui from './ui'
 
@@ -18,7 +18,6 @@ const app = createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
-app.use(router)
 app.use(ui)
 
 // 挂载应用
@@ -49,17 +48,14 @@ const initializeStores = async () => {
     // 初始化会话状态管理
     const sessionStore = useSessionStore()
     await sessionStore.initialize()
-    console.log('会话状态管理初始化完成')
 
     // 初始化系统监控
     const systemStore = useSystemStore()
     await systemStore.initialize()
-    console.log('系统监控初始化完成')
 
     // 初始化终端Store（包括会话恢复）
     const terminalStore = useTerminalStore()
     await terminalStore.initializeTerminalStore()
-    console.log('终端Store初始化完成')
   } catch (error) {
     console.error('应用状态管理初始化失败:', error)
   }

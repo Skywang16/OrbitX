@@ -44,7 +44,7 @@
 
 <script setup lang="ts">
   import { computed, inject, useSlots } from 'vue'
-  import type { ButtonEmits, ButtonProps } from '../types/index'
+  import type { ButtonProps } from '../types/index'
 
   const props = withDefaults(defineProps<ButtonProps>(), {
     variant: 'primary',
@@ -58,13 +58,15 @@
     circle: false,
   })
 
-  const emit = defineEmits<ButtonEmits>()
+  const emit = defineEmits<{
+    click: [event: MouseEvent]
+  }>()
 
   // 获取插槽
   const slots = useSlots()
 
   // 注入全局配置
-  const globalConfig = inject('xui-config', {})
+  inject('xui-config', {})
 
   // 计算按钮类名
   const buttonClasses = computed(() => [
@@ -109,11 +111,11 @@
   }
 
   // 处理焦点事件
-  const handleFocus = (event: FocusEvent) => {
+  const handleFocus = (_event: FocusEvent) => {
     // 可以在这里添加焦点处理逻辑
   }
 
-  const handleBlur = (event: FocusEvent) => {
+  const handleBlur = (_event: FocusEvent) => {
     // 可以在这里添加失焦处理逻辑
   }
 </script>

@@ -21,7 +21,7 @@
       </div>
 
       <div
-        v-for="(item, index) in items"
+        v-for="item in items"
         :key="`${item.category}-${item.index}`"
         class="table-row"
         :class="{
@@ -84,8 +84,8 @@
 
 <script setup lang="ts">
   import { useShortcutFormatter } from '@/composables/useShortcuts'
-  import type { ShortcutListItem, ShortcutActionEvent, ShortcutActionType } from './types'
-  import type { ShortcutBinding, ShortcutCategory, ShortcutAction } from '@/api/shortcuts/types'
+  import { ShortcutListItem, ShortcutActionEvent, ShortcutActionType } from './types'
+  import type { ShortcutAction } from '@/api/shortcuts/types'
 
   interface Props {
     items: ShortcutListItem[]
@@ -96,7 +96,7 @@
     (e: 'action', event: ShortcutActionEvent): void
   }
 
-  const props = withDefaults(defineProps<Props>(), {
+  withDefaults(defineProps<Props>(), {
     loading: false,
   })
 
@@ -105,8 +105,8 @@
   const { formatShortcut } = useShortcutFormatter()
 
   // 方法
-  const getCategoryLabel = (category: ShortcutCategory): string => {
-    const labels = {
+  const getCategoryLabel = (category: string): string => {
+    const labels: Record<string, string> = {
       Global: '全局',
       Terminal: '终端',
       Custom: '自定义',

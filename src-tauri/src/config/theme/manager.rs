@@ -436,18 +436,21 @@ impl ThemeManager {
     pub async fn refresh_index(&self) -> AppResult<()> {
         info!("开始刷新主题索引");
 
-        // 扫描主题目录下的所有主题文件
+        // 分别扫描内置主题和自定义主题目录
         let themes_dir = self.paths.themes_dir();
-        let all_themes = self.scan_theme_directory(themes_dir, true).await?;
+        let builtin_dir = themes_dir.join("builtin");
+
+        let custom_themes = self.scan_theme_directory(themes_dir, false).await?;
+        let builtin_themes = self.scan_theme_directory(&builtin_dir, true).await?;
 
         // 创建新索引
-        let total_themes = all_themes.len();
+        let total_themes = custom_themes.len() + builtin_themes.len();
         let new_index = ThemeIndex {
             version: "1.0.0".to_string(),
             last_updated: SystemTime::now(),
             total_themes,
-            builtin_themes: all_themes,
-            custom_themes: Vec::new(),
+            builtin_themes,
+            custom_themes,
             defaults: ThemeDefaults {
                 light_theme: "light".to_string(),
                 dark_theme: "dark".to_string(),

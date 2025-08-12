@@ -77,9 +77,9 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, watch, onMounted } from 'vue'
-  import type { ShortcutEditorOptions, ShortcutEditorMode } from './types'
-  import type { ShortcutBinding, ShortcutCategory, ShortcutAction } from '@/api/shortcuts/types'
+  import { ref, computed, onMounted } from 'vue'
+  import { ShortcutEditorOptions, ShortcutEditorMode } from './types'
+  import { ShortcutBinding, ShortcutCategory, ShortcutAction } from '@/api/shortcuts/types'
 
   interface Props {
     options: ShortcutEditorOptions
@@ -94,7 +94,7 @@
   const emit = defineEmits<Emits>()
 
   // 响应式状态
-  const currentCategory = ref<ShortcutCategory>('Global')
+  const currentCategory = ref<ShortcutCategory>(ShortcutCategory.Global)
   const currentKey = ref('')
   const currentModifiers = ref<string[]>([])
   const actionType = ref<'simple' | 'complex'>('simple')

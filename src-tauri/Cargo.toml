@@ -146,5 +146,24 @@ path = "tests/storage/coordinator_integration_test.rs"
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2.0.0", features = ["deep-link"] }
 
+# 编译优化配置
+[profile.dev]
+# 减少调试信息以节省空间
+debug = 1
+# 启用增量编译
+incremental = true
+
+[profile.release]
+# 优化大小
+opt-level = "s"
+# 减少调试信息
+debug = false
+# 启用链接时优化
+lto = true
+# 减少代码大小
+codegen-units = 1
+# 去除panic信息以减少大小
+panic = "abort"
+
 
 

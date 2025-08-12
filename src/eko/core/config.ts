@@ -47,7 +47,7 @@ export const getEkoLLMsConfig = async (): Promise<LLMs> => {
 
     // 找到默认模型
     const defaultModel = models.find(model => model.isDefault) || models[0]
-
+    console.log('defaultModel', defaultModel)
     // 构建LLMs配置对象
     const llms: LLMs = {
       default: convertToEkoLLMConfig(defaultModel),
@@ -60,7 +60,6 @@ export const getEkoLLMsConfig = async (): Promise<LLMs> => {
       }
     })
 
-    console.log('Eko LLMs配置:', llms)
     return llms
   } catch (error) {
     console.error('获取Eko LLMs配置失败:', error)

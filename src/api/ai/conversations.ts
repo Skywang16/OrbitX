@@ -23,6 +23,9 @@ interface RawMessage {
   conversationId: number
   role: 'user' | 'assistant' | 'system'
   content: string
+  stepsJson?: string | null
+  status?: 'pending' | 'streaming' | 'complete' | 'error'
+  durationMs?: number | null
   createdAt: string
 }
 
@@ -122,10 +125,16 @@ export class ConversationAPI {
         conversationId,
         upToMessageId,
       })
-      // 转换日期字符串为Date对象
+      // 转换日期字符串为Date对象，并解析steps/status/duration
       return messages.map((msg: RawMessage) => ({
-        ...msg,
+        id: msg.id,
+        conversationId: msg.conversationId,
+        role: msg.role,
+        content: msg.content,
         createdAt: new Date(msg.createdAt),
+        steps: msg.stepsJson ? JSON.parse(msg.stepsJson) : undefined,
+        status: msg.status,
+        duration: msg.durationMs ?? undefined,
       }))
     } catch (error) {
       throw new Error(handleError(error, '获取压缩上下文失败'))
@@ -148,6 +157,27 @@ export class ConversationAPI {
       })
     } catch (error) {
       throw new Error(handleError(error, '保存消息失败'))
+    }
+  }
+
+  /**
+   * 更新消息扩展（steps/status/duration）
+   */
+  async updateMessageMeta(
+    messageId: number,
+    steps?: any[] | null,
+    status?: 'pending' | 'streaming' | 'complete' | 'error' | null,
+    duration?: number | null
+  ): Promise<void> {
+    try {
+      await invoke('update_message_meta', {
+        messageId,
+        stepsJson: steps ? JSON.stringify(steps) : null,
+        status: status ?? null,
+        durationMs: duration ?? null,
+      })
+    } catch (error) {
+      throw new Error(handleError(error, '更新消息扩展失败'))
     }
   }
 
@@ -188,6 +218,12 @@ export const conversations = {
     conversationAPI.getCompressedContext(conversationId, upToMessageId),
   saveMessage: (conversationId: number, role: string, content: string) =>
     conversationAPI.saveMessage(conversationId, role, content),
+  updateMessageMeta: (
+    messageId: number,
+    steps?: any[] | null,
+    status?: 'pending' | 'streaming' | 'complete' | 'error' | null,
+    duration?: number | null
+  ) => conversationAPI.updateMessageMeta(messageId, steps, status, duration),
   truncateConversation: (conversationId: number, truncateAfterMessageId: number) =>
     conversationAPI.truncateConversation(conversationId, truncateAfterMessageId),
 }

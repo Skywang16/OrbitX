@@ -5,7 +5,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
-import type {
+import {
   ShortcutsConfig,
   ShortcutBinding,
   ShortcutCategory,

@@ -207,6 +207,8 @@ export const ai = {
     delete: conversations.delete,
     getCompressedContext: conversations.getCompressedContext,
     saveMessage: conversations.saveMessage,
+    updateMessageMeta: (messageId: number, steps?: any[] | null, status?: string | null, duration?: number | null) =>
+      conversationAPI.updateMessageMeta(messageId, steps, status as any, duration),
     truncateConversation: conversations.truncateConversation,
   },
 

@@ -297,6 +297,9 @@ pub async fn save_message(
         conversation_id,
         role,
         content,
+        steps_json: None,
+        status: None,
+        duration_ms: None,
         created_at: Utc::now(),
     };
 
@@ -308,6 +311,39 @@ pub async fn save_message(
 
     info!("消息保存成功: message_id={}", message_id);
     Ok(message_id)
+}
+
+/// 更新消息扩展（steps/status/duration）
+#[tauri::command]
+pub async fn update_message_meta(
+    message_id: i64,
+    steps_json: Option<String>,
+    status: Option<String>,
+    duration_ms: Option<i64>,
+    state: State<'_, AIManagerState>,
+) -> Result<(), String> {
+    info!("更新消息扩展: id={}", message_id);
+
+    if message_id <= 0 {
+        return Err("无效的消息ID".to_string());
+    }
+
+    let sqlite_manager = state
+        .sqlite_manager
+        .as_ref()
+        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+
+    sqlite_manager
+        .update_message_meta(
+            message_id,
+            steps_json.as_deref(),
+            status.as_deref(),
+            duration_ms,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 // ===== AI模型管理命令（保留基础功能） =====

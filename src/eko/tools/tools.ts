@@ -8,6 +8,8 @@ import { globalToolRegistry } from './tool-registry'
 // 导入所有工具
 import { readFileTool } from './read-file'
 import { readManyFilesTool } from './read-many-files'
+import { readDirectoryTool } from './read-directory'
+import { fileSystemTool } from './filesystem'
 import { writeFileTool } from './write-file'
 import { shellTool } from './shell'
 import { webFetchTool } from './web-fetch'
@@ -21,7 +23,11 @@ export const allTools: Tool[] = [
   // 文件操作工具
   readFileTool,
   readManyFilesTool,
+  readDirectoryTool,
   writeFileTool,
+
+  // 文件系统工具
+  fileSystemTool,
 
   // 系统工具
   shellTool,
@@ -38,7 +44,8 @@ export const allTools: Tool[] = [
  * 按分类组织的工具
  */
 export const toolsByCategory = {
-  file: [readFileTool, readManyFilesTool, writeFileTool],
+  file: [readFileTool, readManyFilesTool, readDirectoryTool, writeFileTool],
+  filesystem: [fileSystemTool],
   system: [shellTool],
   network: [webFetchTool, webSearchTool],
   memory: [memoryTool],
@@ -47,7 +54,7 @@ export const toolsByCategory = {
 /**
  * 核心工具（最常用的工具）
  */
-export const coreTools: Tool[] = [readFileTool, writeFileTool, shellTool, memoryTool]
+export const coreTools: Tool[] = [readFileTool, readDirectoryTool, fileSystemTool, writeFileTool, shellTool, memoryTool]
 
 /**
  * 网络工具
@@ -57,7 +64,12 @@ export const networkTools: Tool[] = [webFetchTool, webSearchTool]
 /**
  * 文件操作工具
  */
-export const fileTools: Tool[] = [readFileTool, readManyFilesTool, writeFileTool]
+export const fileTools: Tool[] = [readFileTool, readManyFilesTool, readDirectoryTool, writeFileTool]
+
+/**
+ * 文件系统工具
+ */
+export const fileSystemTools: Tool[] = [fileSystemTool]
 
 /**
  * 注册所有工具到全局注册表
@@ -80,6 +92,24 @@ export function registerAllTools(): void {
         category: 'file',
         version: '1.0.0',
         tags: ['file', 'read', 'batch', 'multiple'],
+      },
+    },
+    {
+      tool: readDirectoryTool,
+      metadata: {
+        description: readDirectoryTool.description,
+        category: 'file',
+        version: '1.0.0',
+        tags: ['directory', 'list', 'folder', 'filesystem'],
+      },
+    },
+    {
+      tool: fileSystemTool,
+      metadata: {
+        description: fileSystemTool.description,
+        category: 'filesystem',
+        version: '1.0.0',
+        tags: ['filesystem', 'info', 'metadata', 'permissions'],
       },
     },
     {
@@ -138,10 +168,7 @@ export function registerAllTools(): void {
  * - agent 模式：允许所有工具
  */
 export function getToolsForMode(mode: 'chat' | 'agent'): Tool[] {
-  if (mode === 'agent') return allTools
-
-  // 只读集合：文件读取、多文件读取、网络获取/搜索
-  return [readFileTool, readManyFilesTool, webFetchTool, webSearchTool]
+  return mode === 'agent' ? allTools : [...fileTools, fileSystemTool, ...networkTools]
 }
 
 // 自动注册所有工具

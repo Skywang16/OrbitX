@@ -4,7 +4,7 @@
  * 将项目的主题数据转换为 XTerm.js 可用的主题格式
  */
 
-import type { Theme } from '@/api/config/types'
+import type { Theme } from '@/types/theme'
 
 /**
  * 获取应用的主背景颜色
@@ -132,14 +132,14 @@ export const convertThemeToXTerm = (theme: Theme): XTermTheme => {
     white: colors.ansi.white,
 
     // ANSI 明亮颜色 (8-15)
-    brightBlack: colors.bright.black,
-    brightRed: colors.bright.red,
-    brightGreen: colors.bright.green,
-    brightYellow: colors.bright.yellow,
-    brightBlue: colors.bright.blue,
-    brightMagenta: colors.bright.magenta,
-    brightCyan: colors.bright.cyan,
-    brightWhite: colors.bright.white,
+    brightBlack: colors.ansi.brightBlack,
+    brightRed: colors.ansi.brightRed,
+    brightGreen: colors.ansi.brightGreen,
+    brightYellow: colors.ansi.brightYellow,
+    brightBlue: colors.ansi.brightBlue,
+    brightMagenta: colors.ansi.brightMagenta,
+    brightCyan: colors.ansi.brightCyan,
+    brightWhite: colors.ansi.brightWhite,
   }
 }
 

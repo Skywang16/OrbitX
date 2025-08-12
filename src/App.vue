@@ -1,11 +1,11 @@
 <script setup lang="ts">
-  // 新的标签系统不需要路由相关的逻辑
+  import TerminalView from '@/views/Terminal/TerminalView.vue'
 </script>
 
 <template>
   <div class="app-layout">
     <!-- 直接显示终端视图，所有内容都通过标签系统管理 -->
-    <router-view />
+    <TerminalView />
   </div>
 </template>
 

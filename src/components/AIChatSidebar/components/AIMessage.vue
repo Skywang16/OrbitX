@@ -66,6 +66,11 @@
       </template>
     </template>
 
+    <!-- 回退渲染：无步骤数据时，直接渲染消息内容（用于从数据库加载的历史AI消息） -->
+    <div v-else-if="message.content" class="ai-message-text">
+      <div v-html="renderMarkdown(message.content)"></div>
+    </div>
+
     <!-- 消息时间和状态 -->
     <div class="ai-message-footer">
       <div class="ai-message-time">{{ formatTime(message.createdAt) }}</div>

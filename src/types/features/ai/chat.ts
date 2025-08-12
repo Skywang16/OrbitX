@@ -30,11 +30,13 @@ export interface AIOutputStep {
     thinkingDuration?: number
 
     // 工具调用的元数据
+    toolCallId?: string // 工具调用唯一标识
     toolName?: string
     toolCommand?: string
     toolParams?: Record<string, any>
     toolResult?: any
     status?: 'running' | 'completed' | 'error'
+    completedAt?: number // 完成时间戳
     originalMessage?: any // 用于调试
 
     // 工作流的元数据

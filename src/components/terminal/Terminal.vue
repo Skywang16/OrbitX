@@ -47,7 +47,7 @@
   import { Terminal } from '@xterm/xterm'
 
   // 项目内部模块
-  import type { Theme } from '@/api/config/types'
+  import type { Theme } from '@/types/theme'
   import { window as windowAPI } from '@/api/window'
   import { useTheme } from '@/composables/useTheme'
   import { TERMINAL_CONFIG } from '@/constants/terminal'
@@ -116,6 +116,7 @@
 
   // === 性能优化 ===
   let resizeTimeout: number | null = null // 防抖定时器
+  let themeUpdateTimeout: number | null = null // 主题更新防抖定时器
 
   // 终端样式缓存，避免重复DOM查询
   const terminalStyleCache = ref<{
@@ -124,6 +125,49 @@
     paddingLeft: number // 左边距
     paddingTop: number // 上边距
   } | null>(null)
+
+  // === 输出缓冲优化 ===
+  let outputBuffer = '' // 输出数据缓冲区，使用字符串而非数组提高性能
+  let outputFlushTimeout: number | null = null // 输出刷新定时器
+  const OUTPUT_FLUSH_INTERVAL = 16 // 16ms刷新间隔，约60fps
+  const MAX_BUFFER_LENGTH = 8192 // 最大缓冲区长度，防止内存过度使用
+
+  // === 输出缓冲处理函数 ===
+
+  /**
+   * 刷新输出缓冲区到终端
+   * 将缓冲区中的所有数据一次性写入终端，减少DOM更新频率
+   */
+  const flushOutputBuffer = () => {
+    if (outputBuffer.length === 0 || !terminal.value) return
+
+    try {
+      // 一次性写入终端
+      terminal.value.write(outputBuffer)
+      outputBuffer = '' // 清空缓冲区
+    } catch {
+      outputBuffer = '' // 出错时也要清空缓冲区
+    }
+
+    // 清除定时器
+    if (outputFlushTimeout) {
+      clearTimeout(outputFlushTimeout)
+      outputFlushTimeout = null
+    }
+  }
+
+  /**
+   * 调度输出缓冲区刷新
+   * 使用防抖机制控制刷新频率
+   */
+  const scheduleOutputFlush = () => {
+    // 如果已经有定时器在运行，不需要重新调度
+    if (outputFlushTimeout) return
+
+    outputFlushTimeout = window.setTimeout(() => {
+      flushOutputBuffer()
+    }, OUTPUT_FLUSH_INTERVAL)
+  }
 
   // === 核心功能函数 ===
 
@@ -236,28 +280,30 @@
       // 更新主题选项
       terminal.value.options.theme = xtermTheme
 
-      // 强制刷新终端以应用主题，使用更彻底的刷新方式
-      terminal.value.refresh(0, terminal.value.rows - 1)
-
-      // 额外的刷新操作，确保主题完全应用
-      nextTick(() => {
-        if (terminal.value) {
-          // 重新调整大小以确保样式正确应用
-          resizeTerminal()
-          // 再次刷新确保主题完全生效
-          terminal.value.refresh(0, terminal.value.rows - 1)
-        }
-      })
+      // 简单刷新，避免频繁刷新导致闪烁
+      if (terminal.value.rows > 0) {
+        terminal.value.refresh(0, terminal.value.rows - 1)
+      }
     } catch {
       // ignore
     }
   }
 
-  // 监听主题变化
+  // 监听主题变化 - 使用防抖优化，减少频繁更新
   watch(
     () => themeStore.currentThemeData.value,
-    updateTerminalTheme,
-    { immediate: true, deep: true } // 立即执行并深度监听
+    newTheme => {
+      // 清除之前的定时器
+      if (themeUpdateTimeout) {
+        clearTimeout(themeUpdateTimeout)
+      }
+
+      // 使用防抖，避免频繁更新
+      themeUpdateTimeout = window.setTimeout(() => {
+        updateTerminalTheme(newTheme)
+      }, 16) // 16ms 防抖，与输出刷新频率保持一致
+    },
+    { immediate: true } // 移除深度监听，只在主题对象引用变化时更新
   )
 
   // === 事件处理器 ===
@@ -368,12 +414,14 @@
         resizeTimeout = window.setTimeout(() => {
           try {
             fitAddon.value?.fit()
-            // 清除缓存，强制重新计算样式
-            terminalStyleCache.value = null
+            // 只在必要时清除缓存
+            if (!terminalStyleCache.value) {
+              terminalStyleCache.value = null
+            }
           } catch {
             // ignore
           }
-        }, 100)
+        }, 50) // 减少防抖时间，提高响应性
       }
     } catch {
       // ignore
@@ -585,7 +633,16 @@
   const handleOutput = (data: string) => {
     try {
       if (terminal.value && typeof data === 'string') {
-        terminal.value.write(data)
+        // 将数据添加到缓冲区而不是立即写入
+        outputBuffer += data
+
+        // 如果缓冲区过大，立即刷新以防止内存溢出
+        if (outputBuffer.length >= MAX_BUFFER_LENGTH) {
+          flushOutputBuffer()
+        } else {
+          // 否则调度延迟刷新
+          scheduleOutputFlush()
+        }
       }
     } catch {
       // ignore
@@ -649,7 +706,12 @@
     // 清理主题监听器
     themeStore.cleanup()
 
+    // 清理所有定时器和缓冲区
     if (resizeTimeout) clearTimeout(resizeTimeout)
+    if (themeUpdateTimeout) clearTimeout(themeUpdateTimeout)
+    if (outputFlushTimeout) clearTimeout(outputFlushTimeout)
+    outputBuffer = '' // 清空输出缓冲区
+
     window.removeEventListener('resize', resizeTerminal)
 
     // 清理键盘事件监听器
@@ -690,9 +752,8 @@
     isActive => {
       if (isActive) {
         nextTick(() => {
-          resizeTerminal()
           focusTerminal()
-          terminal.value?.refresh(0, terminal.value.rows - 1)
+          resizeTerminal() // resize会触发必要的重绘，不需要额外的refresh
         })
       }
     },

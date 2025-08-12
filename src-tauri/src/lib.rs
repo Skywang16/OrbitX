@@ -35,6 +35,7 @@ use ai::commands::{
     truncate_conversation,
     update_ai_model,
     update_conversation_title,
+    update_message_meta,
     AIManagerState,
 };
 use commands::{TerminalState, *};
@@ -283,6 +284,7 @@ pub fn run() {
             delete_conversation,
             get_compressed_context,
             save_message,
+            update_message_meta,
             truncate_conversation,
             // 快捷键系统命令
             get_shortcuts_config,
@@ -329,13 +331,23 @@ pub fn run() {
                 app.manage(config_state);
                 info!("配置管理器状态已初始化");
 
-                // 创建 ConfigManager 实例用于 AI 管理器和主题系统
-                info!("开始创建配置管理器实例");
-                // 从已初始化的ConfigManagerState中获取TomlConfigManager
-                let config_manager = {
-                    let config_state = app.state::<ConfigManagerState>();
-                    config_state.toml_manager.clone()
+                // 提取并管理 TomlConfigManager，以便其他服务可以依赖它
+                let config_manager = app.state::<ConfigManagerState>().toml_manager.clone();
+                app.manage(config_manager);
+                info!("TomlConfigManager 状态已管理");
+
+                // 初始化存储协调器状态（必须在依赖它的服务之前）
+                info!("开始初始化存储协调器状态");
+                let storage_state = {
+                    let config_manager = app.state::<ConfigManagerState>().toml_manager.clone();
+                    tauri::async_runtime::block_on(async {
+                        StorageCoordinatorState::new(config_manager)
+                            .await
+                            .map_err(|e| anyhow::anyhow!("存储协调器状态初始化失败: {}", e))
+                    })?
                 };
+                app.manage(storage_state);
+                info!("存储协调器状态已初始化");
 
                 // 创建 ThemeService 实例用于主题系统
                 info!("开始创建主题服务实例");
@@ -343,7 +355,6 @@ pub fn run() {
                     use crate::config::{
                         paths::ConfigPaths, theme::ThemeManagerOptions, theme::ThemeService,
                     };
-                    use crate::storage::StorageCoordinatorState;
 
                     // 获取缓存实例
                     let storage_state = app.state::<StorageCoordinatorState>();
@@ -361,12 +372,8 @@ pub fn run() {
                         ThemeService::new(paths, theme_manager_options, cache).await?;
                     Ok::<ThemeService, anyhow::Error>(theme_service)
                 })?;
-                let theme_service = std::sync::Arc::new(theme_service);
-
-                // 管理状态
-                app.manage(config_manager.clone());
-                app.manage(theme_service);
-                info!("配置管理器和主题服务状态已管理");
+                app.manage(std::sync::Arc::new(theme_service));
+                info!("主题服务状态已管理");
 
                 // 初始化补全引擎状态
                 info!("开始初始化补全引擎状态管理器");
@@ -374,17 +381,7 @@ pub fn run() {
                 app.manage(completion_state);
                 info!("补全引擎状态管理器已初始化");
 
-                // 初始化存储协调器状态（必须在AI管理器之前）
-                info!("开始初始化存储协调器状态");
-                let storage_state = tauri::async_runtime::block_on(async {
-                    StorageCoordinatorState::new(config_manager.clone())
-                        .await
-                        .map_err(|e| anyhow::anyhow!("存储协调器状态初始化失败: {}", e))
-                })?;
-                app.manage(storage_state);
-                info!("存储协调器状态已初始化");
-
-                // 初始化AI管理器状态（使用存储协调器中的SQLite管理器）
+                // 初始化AI管理器状态（使用存储协调器中的SQLite管理器和缓存）
                 info!("开始初始化AI管理器状态");
                 let ai_state = {
                     let storage_state = app.state::<StorageCoordinatorState>();
@@ -417,6 +414,21 @@ pub fn run() {
                 info!("开始设置Tauri事件集成");
                 setup_tauri_integration(app.handle().clone());
                 info!("Tauri事件集成设置完成");
+
+                // 在窗口关闭请求时优雅关闭 TerminalMux，释放后台线程
+                if let Some(window) = app.get_webview_window("main") {
+                    use tauri::WindowEvent;
+                    window.on_window_event(|event| {
+                        if let WindowEvent::CloseRequested { .. } = event {
+                            info!("检测到窗口关闭请求，开始关闭 TerminalMux");
+                            if let Err(e) = crate::mux::singleton::shutdown_mux() {
+                                warn!("关闭 TerminalMux 失败: {}", e);
+                            } else {
+                                info!("TerminalMux 已关闭");
+                            }
+                        }
+                    });
+                }
 
                 // 设置deep-link事件处理
                 #[cfg(desktop)]

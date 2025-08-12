@@ -7,13 +7,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { storage } from '@/api/storage'
-import {
-  formatBytes,
-  calculateHitRate,
-  type HealthCheckResult,
-  type CacheStats,
-  type StorageStats,
-} from '@/types/storage'
+import { formatBytes, type HealthCheckResult, type CacheStats, type StorageStats } from '@/types/storage'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
 
 /**

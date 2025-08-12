@@ -55,6 +55,18 @@ export class ReadFileTool extends ModifiableTool {
     }
 
     try {
+      // 首先检查文件是否存在
+      const exists = await this.checkFileExists(filePath)
+      if (!exists) {
+        throw new FileNotFoundError(filePath)
+      }
+
+      // 检查是否为目录
+      const isDirectory = await this.checkIsDirectory(filePath)
+      if (isDirectory) {
+        throw new Error(`路径 ${filePath} 是一个目录，请使用 read_directory 工具读取目录内容`)
+      }
+
       // 直接使用Tauri API读取文件
       const content = await invoke<string>('plugin:fs|read_text_file', {
         path: filePath,
@@ -79,17 +91,62 @@ export class ReadFileTool extends ModifiableTool {
         )
       }
 
+      // 添加文件信息头部
+      const fileInfo = await this.getFileInfo(filePath)
+      const header = `📖 文件: ${filePath} (${fileInfo.size}, 修改时间: ${fileInfo.modified})\n${'='.repeat(60)}\n`
+
       return {
         content: [
           {
             type: 'text',
-            text: processedLines.join('\n'),
+            text: header + processedLines.join('\n'),
           },
         ],
       }
     } catch (error) {
-      throw new FileNotFoundError(filePath)
+      if (error instanceof FileNotFoundError) {
+        throw error
+      }
+      throw new Error(`读取文件失败: ${error instanceof Error ? error.message : String(error)}`)
     }
+  }
+
+  private async checkFileExists(path: string): Promise<boolean> {
+    try {
+      await invoke('plugin:fs|exists', { path })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private async checkIsDirectory(path: string): Promise<boolean> {
+    try {
+      const metadata = await invoke<{ isDir: boolean }>('plugin:fs|metadata', { path })
+      return metadata.isDir
+    } catch {
+      return false
+    }
+  }
+
+  private async getFileInfo(path: string): Promise<{ size: string; modified: string }> {
+    try {
+      const metadata = await invoke<{ size: number; modified: number }>('plugin:fs|metadata', { path })
+      return {
+        size: this.formatFileSize(metadata.size),
+        modified: new Date(metadata.modified * 1000).toLocaleString(),
+      }
+    } catch {
+      return { size: '未知', modified: '未知' }
+    }
+  }
+
+  private formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
   }
 }
 

@@ -160,7 +160,7 @@ export const updateDefaultShell = async (
   const shell: ShellConfig = {
     default: shellPath,
     args: args || [],
-    working_directory: workingDirectory || '~',
+    workingDirectory: workingDirectory || '~',
   }
   return await updateTerminalConfig({ shell })
 }
@@ -210,7 +210,7 @@ export const toggleCloseOnExit = async (): Promise<void> => {
   const config = await getTerminalConfig()
   const behavior: TerminalBehaviorConfig = {
     ...config.behavior,
-    close_on_exit: !config.behavior.close_on_exit,
+    closeOnExit: !config.behavior.closeOnExit,
   }
   return await updateTerminalBehaviorConfig(behavior)
 }
@@ -222,7 +222,7 @@ export const toggleConfirmClose = async (): Promise<void> => {
   const config = await getTerminalConfig()
   const behavior: TerminalBehaviorConfig = {
     ...config.behavior,
-    confirm_close: !config.behavior.confirm_close,
+    confirmClose: !config.behavior.confirmClose,
   }
   return await updateTerminalBehaviorConfig(behavior)
 }

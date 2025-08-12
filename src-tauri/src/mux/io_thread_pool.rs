@@ -217,20 +217,48 @@ impl IoThreadPool {
         info!("开始关闭I/O线程池");
 
         // 发送关闭信号给所有工作线程
-        for _ in 0..self.config.worker_threads {
-            if let Err(e) = self.task_sender.send(IoTask::Shutdown) {
-                warn!("发送关闭信号失败: {}", e);
+        let mut successful_sends = 0;
+        for worker_id in 0..self.config.worker_threads {
+            match self.task_sender.send(IoTask::Shutdown) {
+                Ok(_) => {
+                    successful_sends += 1;
+                    debug!("成功向工作线程 {} 发送关闭信号", worker_id);
+                }
+                Err(e) => {
+                    // 通道已断开，说明工作线程可能已经退出了
+                    debug!(
+                        "向工作线程 {} 发送关闭信号失败（通道已断开）: {}",
+                        worker_id, e
+                    );
+                }
             }
         }
 
-        // 等待所有工作线程完成
+        info!(
+            "已向 {}/{} 个工作线程发送关闭信号",
+            successful_sends, self.config.worker_threads
+        );
+
+        // 等待所有工作线程完成（带超时）
         if let Ok(mut handles_guard) = self.worker_handles.lock() {
             if let Some(handles) = handles_guard.take() {
+                let start_time = std::time::Instant::now();
+                let timeout = Duration::from_secs(5); // 5秒超时
+
                 for (worker_id, handle) in handles.into_iter().enumerate() {
-                    if let Err(e) = handle.join() {
-                        error!("工作线程 {} 退出异常: {:?}", worker_id, e);
-                    } else {
-                        debug!("工作线程 {} 正常退出", worker_id);
+                    if start_time.elapsed() > timeout {
+                        warn!("等待工作线程退出超时，强制继续关闭");
+                        break;
+                    }
+
+                    match handle.join() {
+                        Ok(_) => {
+                            debug!("工作线程 {} 正常退出", worker_id);
+                        }
+                        Err(e) => {
+                            // 线程退出异常不一定是错误，可能是正常的关闭过程
+                            debug!("工作线程 {} 退出: {:?}", worker_id, e);
+                        }
                     }
                 }
             }
@@ -461,7 +489,7 @@ impl IoThreadPool {
                 debug!("面板 {:?} 发送批处理数据: {} 字节", pane_id, send_len);
 
                 if let Err(e) = notification_sender.send(notification) {
-                    error!("面板 {:?} 发送通知失败: {}", pane_id, e);
+                    debug!("面板 {:?} 发送通知失败（可能是正在关闭）: {}", pane_id, e);
                     break;
                 }
 
@@ -486,7 +514,10 @@ impl IoThreadPool {
             };
 
             if let Err(e) = notification_sender.send(notification) {
-                error!("面板 {:?} 发送最后的批处理数据失败: {}", pane_id, e);
+                debug!(
+                    "面板 {:?} 发送最后的批处理数据失败（可能是正在关闭）: {}",
+                    pane_id, e
+                );
             }
         }
 
@@ -497,7 +528,10 @@ impl IoThreadPool {
         };
 
         if let Err(e) = notification_sender.send(exit_notification) {
-            error!("面板 {:?} 发送退出通知失败: {}", pane_id, e);
+            debug!(
+                "面板 {:?} 发送退出通知失败（可能是正在关闭）: {}",
+                pane_id, e
+            );
         }
 
         debug!("面板 {:?} 批处理器已退出", pane_id);

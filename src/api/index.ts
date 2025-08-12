@@ -15,7 +15,3 @@ export * from './shell' // Shell管理模块
 export * from './shortcuts' // 快捷键管理模块
 export * from './storage' // 存储管理模块
 export * from './terminal' // 终端管理模块
-export * from './terminal-config' // 终端配置管理模块
-export * from './window' // 窗口管理模块
-
-// 类型定义现在统一从 @/types 导入，不在此处重复导出
