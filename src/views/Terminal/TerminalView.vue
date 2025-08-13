@@ -32,9 +32,7 @@
         // 拖动到窗口内：将文件路径插入到当前终端输入行
         insertFilePathToCurrentTerminal(filePath)
       }
-    } catch (error) {
-      console.error('处理文件路径失败:', error)
-    }
+    } catch (error) {}
   }
 
   /**
@@ -86,17 +84,16 @@
       await terminalStore.createTerminal()
     }
 
-    // 监听应用启动时的文件参数（拖动到应用图标）
-    unlistenStartupFile = await listen<string>('startup-file', event => {
+    // 统一的文件处理函数
+    const handleAppIconFileDrop = (event: { payload: string }) => {
       handleFilePath(event.payload, 'app-icon')
-    })
+    }
 
-    // 监听文件拖拽事件（从single instance插件，拖动到应用图标）
-    unlistenFileDropped = await listen<string>('file-dropped', event => {
-      handleFilePath(event.payload, 'app-icon')
-    })
+    // 监听应用启动时的文件参数和文件拖拽事件（合并处理）
+    unlistenStartupFile = await listen<string>('startup-file', handleAppIconFileDrop)
+    unlistenFileDropped = await listen<string>('file-dropped', handleAppIconFileDrop)
 
-    // 监听 Tauri 原生文件拖拽事件
+    // 监听 Tauri 原生文件拖拽事件（窗口内拖拽）
     const webview = getCurrentWebview()
     unlistenFileDrop = await webview.onDragDropEvent(event => {
       // 只处理文件拖拽放置事件

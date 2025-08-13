@@ -11,6 +11,7 @@ use crate::ai::{
 };
 use crate::storage::cache::UnifiedCache;
 use crate::storage::sqlite::SqliteManager;
+use crate::utils::error::{ToTauriResult, Validator};
 use chrono::Utc;
 use std::sync::Arc;
 use tauri::State;
@@ -43,10 +44,14 @@ impl AIManagerState {
 
     /// 初始化AI服务
     pub async fn initialize(&self) -> Result<(), String> {
-        self.ai_service
-            .initialize()
-            .await
-            .map_err(|e| e.to_string())
+        self.ai_service.initialize().await.to_tauri()
+    }
+
+    /// 获取数据库管理器的辅助方法
+    fn get_sqlite_manager(&self) -> Result<&Arc<SqliteManager>, String> {
+        self.sqlite_manager
+            .as_ref()
+            .ok_or_else(|| "数据库管理器未初始化".to_string())
     }
 }
 
@@ -58,12 +63,12 @@ pub async fn create_conversation(
     title: Option<String>,
     state: State<'_, AIManagerState>,
 ) -> Result<i64, String> {
-    debug!("创建新会话: title={:?}", title);
+    // 验证参数
+    if let Some(ref t) = title {
+        Validator::validate_not_empty(t, "会话标题")?;
+    }
 
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+    let sqlite_manager = state.get_sqlite_manager()?;
 
     let conversation = Conversation {
         id: 0, // 数据库自动生成
@@ -77,9 +82,9 @@ pub async fn create_conversation(
     let conversation_id = sqlite_manager
         .create_conversation(&conversation)
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
-    info!("成功创建会话: {}", conversation_id);
+    info!("创建会话成功, ID: {}", conversation_id);
     Ok(conversation_id)
 }
 
@@ -92,15 +97,12 @@ pub async fn get_conversations(
 ) -> Result<Vec<Conversation>, String> {
     debug!("获取会话列表: limit={:?}, offset={:?}", limit, offset);
 
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+    let sqlite_manager = state.get_sqlite_manager()?;
 
     let conversations = sqlite_manager
         .get_conversations(limit, offset)
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     Ok(conversations)
 }
@@ -113,15 +115,12 @@ pub async fn get_conversation(
 ) -> Result<Conversation, String> {
     debug!("获取会话详情: {}", conversation_id);
 
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+    let sqlite_manager = state.get_sqlite_manager()?;
 
     let conversation = sqlite_manager
         .get_conversation(conversation_id)
         .await
-        .map_err(|e| e.to_string())?
+        .to_tauri()?
         .ok_or_else(|| format!("会话不存在: {}", conversation_id))?;
 
     Ok(conversation)
@@ -134,25 +133,16 @@ pub async fn update_conversation_title(
     title: String,
     state: State<'_, AIManagerState>,
 ) -> Result<(), String> {
-    debug!("更新会话标题: {} -> {}", conversation_id, title);
-
     // 参数验证
-    if title.trim().is_empty() {
-        return Err("会话标题不能为空".to_string());
-    }
-    if conversation_id <= 0 {
-        return Err("无效的会话ID".to_string());
-    }
+    Validator::validate_id(conversation_id, "会话ID")?;
+    Validator::validate_not_empty(&title, "会话标题")?;
 
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+    let sqlite_manager = state.get_sqlite_manager()?;
 
     sqlite_manager
         .update_conversation_title(conversation_id, &title)
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     Ok(())
 }
@@ -163,19 +153,17 @@ pub async fn delete_conversation(
     conversation_id: i64,
     state: State<'_, AIManagerState>,
 ) -> Result<(), String> {
-    debug!("删除会话: {}", conversation_id);
+    // 参数验证
+    Validator::validate_id(conversation_id, "会话ID")?;
 
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+    let sqlite_manager = state.get_sqlite_manager()?;
 
     sqlite_manager
         .delete_conversation(conversation_id)
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
-    info!("成功删除会话: {}", conversation_id);
+    info!("删除会话成功, ID: {}", conversation_id);
     Ok(())
 }
 
@@ -196,10 +184,7 @@ pub async fn get_compressed_context(
         return Err("无效的会话ID".to_string());
     }
 
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+    let sqlite_manager = state.get_sqlite_manager()?;
 
     // 使用context.rs中的build_context_for_request函数
     let config = crate::ai::types::AIConfig::default();
@@ -210,7 +195,7 @@ pub async fn get_compressed_context(
         &config,
     )
     .await
-    .map_err(|e| e.to_string())?;
+    .to_tauri()?;
 
     // TODO: 实现智能压缩功能
     // 当前版本直接返回所有消息，未来将在这里实现：
@@ -248,15 +233,12 @@ pub async fn truncate_conversation(
         return Err("无效的消息ID".to_string());
     }
 
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+    let sqlite_manager = state.get_sqlite_manager()?;
 
     // 截断会话
     handle_truncate_conversation(sqlite_manager, conversation_id, truncate_after_message_id)
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     info!("会话截断完成: conversation_id={}", conversation_id);
     Ok(())
@@ -286,10 +268,7 @@ pub async fn save_message(
         return Err("无效的消息角色".to_string());
     }
 
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+    let sqlite_manager = state.get_sqlite_manager()?;
 
     // 创建消息对象
     let message = Message {
@@ -304,10 +283,7 @@ pub async fn save_message(
     };
 
     // 保存消息
-    let message_id = sqlite_manager
-        .save_message(&message)
-        .await
-        .map_err(|e| e.to_string())?;
+    let message_id = sqlite_manager.save_message(&message).await.to_tauri()?;
 
     info!("消息保存成功: message_id={}", message_id);
     Ok(message_id)
@@ -328,10 +304,7 @@ pub async fn update_message_meta(
         return Err("无效的消息ID".to_string());
     }
 
-    let sqlite_manager = state
-        .sqlite_manager
-        .as_ref()
-        .ok_or_else(|| "数据库管理器未初始化".to_string())?;
+    let sqlite_manager = state.get_sqlite_manager()?;
 
     sqlite_manager
         .update_message_meta(
@@ -341,7 +314,7 @@ pub async fn update_message_meta(
             duration_ms,
         )
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     Ok(())
 }
@@ -363,11 +336,7 @@ pub async fn add_ai_model(
 ) -> Result<(), String> {
     info!("添加AI模型: {}", config.id);
 
-    state
-        .ai_service
-        .add_model(config)
-        .await
-        .map_err(|e| e.to_string())
+    state.ai_service.add_model(config).await.to_tauri()
 }
 
 /// 删除AI模型配置
@@ -378,11 +347,7 @@ pub async fn remove_ai_model(
 ) -> Result<(), String> {
     info!("删除AI模型: {}", model_id);
 
-    state
-        .ai_service
-        .remove_model(&model_id)
-        .await
-        .map_err(|e| e.to_string())
+    state.ai_service.remove_model(&model_id).await.to_tauri()
 }
 
 /// 更新AI模型配置
@@ -398,7 +363,7 @@ pub async fn update_ai_model(
         .ai_service
         .update_model(&model_id, updates)
         .await
-        .map_err(|e| e.to_string())
+        .to_tauri()
 }
 
 /// 设置默认AI模型
@@ -413,7 +378,7 @@ pub async fn set_default_ai_model(
         .ai_service
         .set_default_model(&model_id)
         .await
-        .map_err(|e| e.to_string())
+        .to_tauri()
 }
 
 /// 测试AI模型连接
@@ -429,9 +394,5 @@ pub async fn test_ai_connection(
         return Err("模型ID不能为空".to_string());
     }
 
-    state
-        .ai_service
-        .test_connection(&model_id)
-        .await
-        .map_err(|e| e.to_string())
+    state.ai_service.test_connection(&model_id).await.to_tauri()
 }

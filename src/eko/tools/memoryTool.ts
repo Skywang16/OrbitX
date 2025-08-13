@@ -5,6 +5,7 @@
 import { ModifiableTool, type ToolExecutionContext } from './modifiable-tool'
 import type { ToolResult } from '../types'
 import { ValidationError } from './tool-error'
+import { formatLocaleDateTime } from '@/utils/dateFormatter'
 
 export interface MemoryEntry {
   key: string
@@ -149,7 +150,7 @@ export class MemoryTool extends ModifiableTool {
     resultText += `- 大小: ${this.getValueSize(params.value)}\n`
 
     if (expiresAt) {
-      resultText += `- 过期时间: ${expiresAt.toLocaleString()}\n`
+      resultText += `- 过期时间: ${formatLocaleDateTime(expiresAt)}\n`
     }
 
     if (params.tags && params.tags.length > 0) {
@@ -200,8 +201,8 @@ export class MemoryTool extends ModifiableTool {
     let resultText = `🧠 内存读取结果:\n`
     resultText += `- 键名: ${entry.key}\n`
     resultText += `- 类型: ${entry.type}\n`
-    resultText += `- 创建时间: ${entry.createdAt.toLocaleString()}\n`
-    resultText += `- 更新时间: ${entry.updatedAt.toLocaleString()}\n`
+    resultText += `- 创建时间: ${formatLocaleDateTime(entry.createdAt)}\n`
+    resultText += `- 更新时间: ${formatLocaleDateTime(entry.updatedAt)}\n`
 
     if (entry.expiresAt) {
       resultText += `- 过期时间: ${entry.expiresAt.toLocaleString()}\n`
@@ -272,7 +273,7 @@ export class MemoryTool extends ModifiableTool {
         }
 
         if (entry.expiresAt) {
-          resultText += ` - 过期: ${entry.expiresAt.toLocaleString()}`
+          resultText += ` - 过期: ${formatLocaleDateTime(entry.expiresAt)}`
         }
 
         resultText += `\n`

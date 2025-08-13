@@ -34,7 +34,6 @@ const initializeStorageSystem = async () => {
   try {
     // 预加载缓存，提升后续访问性能
     await storage.preloadCache()
-    console.log('存储系统缓存预加载完成')
   } catch (error) {
     console.warn('存储系统缓存预加载失败:', error)
   }
@@ -69,12 +68,10 @@ const initializeSettings = async () => {
     // 初始化AI设置
     const aiSettingsStore = useAISettingsStore()
     await aiSettingsStore.loadSettings()
-    console.log('AI设置初始化完成')
 
     // 初始化主题系统
     const themeManager = useTheme()
     await themeManager.initialize()
-    console.log('主题系统初始化完成')
   } catch (error) {
     console.warn('应用设置初始化失败:', error)
   }
@@ -87,12 +84,10 @@ const initializeServices = async () => {
   try {
     // 初始化补全引擎
     await completionAPI.initEngine()
-    console.log('补全引擎初始化完成')
 
     // 初始化AI聊天服务（包括Eko实例）
     const aiChatStore = useAIChatStore()
     await aiChatStore.initializeEko()
-    console.log('AI聊天服务初始化完成')
   } catch (error) {
     console.warn('服务初始化失败:', error)
   }
@@ -102,8 +97,6 @@ const initializeServices = async () => {
  * 应用启动初始化
  */
 const initializeApplication = async () => {
-  console.log('开始初始化应用...')
-
   try {
     // 并行初始化各个系统
     await Promise.allSettled([
@@ -112,8 +105,6 @@ const initializeApplication = async () => {
       initializeSettings(),
       initializeServices(),
     ])
-
-    console.log('应用初始化完成')
 
     // 设置窗口关闭监听器
     setupWindowCloseListener()
@@ -134,8 +125,6 @@ initializeApplication()
  */
 const handleAppClose = async () => {
   try {
-    console.log('🔄 [应用] 开始应用关闭清理...')
-
     // 保存终端状态（这会自动同步并保存会话状态）
     const terminalStore = useTerminalStore()
     await terminalStore.saveSessionState()
@@ -147,8 +136,6 @@ const handleAppClose = async () => {
     // 停止会话自动保存
     const sessionStore = useSessionStore()
     sessionStore.stopAutoSave()
-
-    console.log('✅ [应用] 应用关闭清理完成')
   } catch (error) {
     console.error('❌ [应用] 应用关闭清理失败:', error)
   }
@@ -161,29 +148,22 @@ const setupWindowCloseListener = async () => {
   try {
     // 监听窗口关闭请求事件
     const unlisten = await getCurrentWebviewWindow().onCloseRequested(async event => {
-      console.log('🔄 [应用] 收到窗口关闭请求')
-
       // 阻止默认关闭行为，这样我们可以先执行保存操作
       event.preventDefault()
 
       try {
         // 执行保存操作
         await handleAppClose()
-        console.log('✅ [应用] 保存完成')
       } catch (error) {
         console.error('❌ [应用] 保存失败:', error)
       }
 
-      // 但要避免循环，所以我们移除监听器后再关闭
       unlisten()
       await getCurrentWebviewWindow().close()
     })
 
-    console.log('✅ [应用] 窗口关闭监听器已设置')
-
-    // 返回取消监听的函数，以便在需要时清理
     return unlisten
   } catch (error) {
-    console.error('❌ [应用] 设置窗口关闭监听器失败:', error)
+    console.error(error)
   }
 }

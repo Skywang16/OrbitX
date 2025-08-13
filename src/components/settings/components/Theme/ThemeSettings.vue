@@ -20,11 +20,6 @@
   // 计算属性
   const currentMode = computed(() => {
     const isFollowing = theme.isFollowingSystem.value
-    console.log('currentMode 计算:', {
-      isFollowing,
-      themeConfig: theme.themeConfig.value,
-      configStatus: theme.configStatus.value,
-    })
     return isFollowing ? 'system' : 'manual'
   })
 
@@ -115,26 +110,15 @@
 
   // 事件处理
   const handleModeChange = async (mode: 'manual' | 'system') => {
-    console.log('handleModeChange 调用:', { mode, currentMode: currentMode.value })
     try {
       if (mode === 'system') {
         // 确保有默认的浅色和深色主题
         const lightTheme = selectedLightTheme.value || 'light'
         const darkTheme = selectedDarkTheme.value || 'dark'
 
-        console.log('启用跟随系统模式:', { lightTheme, darkTheme })
         await theme.enableFollowSystem(lightTheme, darkTheme)
-        console.log('跟随系统模式启用完成，新状态:', {
-          isFollowing: theme.isFollowingSystem.value,
-          currentMode: currentMode.value,
-        })
       } else {
-        console.log('禁用跟随系统模式')
         await theme.disableFollowSystem()
-        console.log('跟随系统模式禁用完成，新状态:', {
-          isFollowing: theme.isFollowingSystem.value,
-          currentMode: currentMode.value,
-        })
       }
     } catch (error) {
       console.error('切换主题模式失败:', error)
@@ -153,9 +137,7 @@
     if (currentMode.value === 'system') {
       try {
         await theme.setFollowSystem(true, selectedLightTheme.value, selectedDarkTheme.value)
-      } catch (error) {
-        console.error('更新系统主题设置失败:', error)
-      }
+      } catch (error) {}
     }
   }
 </script>

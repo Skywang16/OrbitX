@@ -692,8 +692,8 @@
         onExit: handleExit,
       })
 
-      // 窗口大小变化监听
-      window.addEventListener('resize', resizeTerminal)
+      // 注册到终端store的resize回调，避免每个终端都监听window resize
+      terminalStore.registerResizeCallback(props.terminalId, resizeTerminal)
     })
   })
 
@@ -712,7 +712,8 @@
     if (outputFlushTimeout) clearTimeout(outputFlushTimeout)
     outputBuffer = '' // 清空输出缓冲区
 
-    window.removeEventListener('resize', resizeTerminal)
+    // 从终端store注销resize回调
+    terminalStore.unregisterResizeCallback(props.terminalId)
 
     // 清理键盘事件监听器
     if (keyListener) {

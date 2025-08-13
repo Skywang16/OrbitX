@@ -6,6 +6,8 @@
 
 use crate::config::commands::ConfigManagerState;
 use crate::config::types::{ShortcutBinding, ShortcutsConfig};
+use crate::utils::error::ToTauriResult;
+
 use tauri::State;
 use tracing::{debug, info};
 
@@ -16,14 +18,10 @@ pub async fn get_shortcuts_config(
 ) -> Result<ShortcutsConfig, String> {
     debug!("开始获取快捷键配置");
 
-    let config = state
-        .toml_manager
-        .get_config()
-        .await
-        .map_err(|e| e.to_string())?;
+    let config = state.toml_manager.get_config().await.to_tauri()?;
     let shortcuts_config = config.shortcuts.clone();
 
-    info!("快捷键配置获取成功");
+    info!("获取快捷键配置成功");
     Ok(shortcuts_config)
 }
 
@@ -43,7 +41,7 @@ pub async fn update_shortcuts_config(
             Ok(())
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     info!("快捷键配置更新成功");
     Ok(())
@@ -66,9 +64,9 @@ pub async fn reset_shortcuts_to_defaults(
             Ok(())
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
-    info!("快捷键配置已重置为默认值");
+    info!("快捷键重置配置更新成功");
     Ok(())
 }
 
@@ -89,9 +87,9 @@ pub async fn add_shortcut(
             Ok(())
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
-    info!("快捷键添加成功");
+    info!("添加快捷键成功");
     Ok(())
 }
 
@@ -116,11 +114,11 @@ pub async fn remove_shortcut(
             Ok(())
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     match removed_shortcut {
         Some(shortcut) => {
-            info!("快捷键删除成功");
+            info!("删除快捷键成功");
             Ok(shortcut)
         }
         None => Err("快捷键索引无效".to_string()),
@@ -149,9 +147,9 @@ pub async fn update_shortcut(
             Ok(())
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
-    info!("快捷键更新成功");
+    info!("快捷键更新配置更新成功");
     Ok(())
 }
 

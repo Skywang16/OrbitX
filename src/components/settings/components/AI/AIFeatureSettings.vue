@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { onMounted, ref, watch } from 'vue'
   import { ai } from '@/api/ai'
+  import { debounce } from 'lodash-es'
 
   // 用户前置提示词
   const userPrefixPrompt = ref<string>('')
@@ -29,17 +30,12 @@
     }
   }
 
-  // 监听输入变化，自动保存
-  let saveTimeout: number | null = null
-  watch(userPrefixPrompt, newValue => {
-    if (saveTimeout) {
-      window.clearTimeout(saveTimeout)
-    }
-    // 延迟500ms保存，避免频繁保存
-    saveTimeout = window.setTimeout(() => {
-      saveUserPrefixPrompt(newValue)
-    }, 500)
-  })
+  // 使用lodash防抖监听输入变化，自动保存
+  const debouncedSave = debounce((newValue: string) => {
+    saveUserPrefixPrompt(newValue)
+  }, 500)
+
+  watch(userPrefixPrompt, debouncedSave)
 
   // 组件挂载时加载前置提示词
   onMounted(() => {

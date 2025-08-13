@@ -29,13 +29,8 @@
     return props.sessions.map(session => ({
       label: session.title || '未命名会话',
       value: session.id,
-      description: `${session.messageCount} 条消息 · ${formatDate(session.updatedAt)}`,
+      description: `${session.messageCount} 条消息 · ${formatSessionTime(session.updatedAt)}`,
     }))
-  })
-
-  const currentValue = computed(() => {
-    if (!props.currentSessionId) return null
-    return props.currentSessionId
   })
 
   const displayValue = computed(() => {
@@ -44,23 +39,7 @@
     return session?.title || '当前会话'
   })
 
-  // 方法
-  const formatDate = (date: Date | string) => {
-    const d = new Date(date)
-    const now = new Date()
-    const diffMs = now.getTime() - d.getTime()
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-    if (diffDays === 0) {
-      return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    } else if (diffDays === 1) {
-      return '昨天'
-    } else if (diffDays < 7) {
-      return `${diffDays}天前`
-    } else {
-      return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
-    }
-  }
+  import { formatSessionTime } from '@/utils/dateFormatter'
 
   const handleSelectChange = (value: string | number | null | Array<string | number>) => {
     if (value !== null && !Array.isArray(value)) {
@@ -78,7 +57,7 @@
 <template>
   <div class="session-select">
     <XSelect
-      :model-value="currentValue"
+      :model-value="props.currentSessionId"
       :options="selectOptions"
       :placeholder="displayValue"
       :disabled="loading"

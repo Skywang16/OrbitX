@@ -17,13 +17,7 @@
     return [...props.message.steps].sort((a, b) => a.timestamp - b.timestamp)
   })
 
-  // 格式化时间
-  const formatTime = (date: Date) => {
-    return new Intl.DateTimeFormat('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date)
-  }
+  import { formatTime } from '@/utils/dateFormatter'
 
   // 格式化持续时间
   const formatDuration = (ms: number) => {

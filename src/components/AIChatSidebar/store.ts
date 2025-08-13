@@ -13,6 +13,7 @@ import { computed, ref, watch } from 'vue'
 import type { ChatMode } from './types'
 import { createTerminalEko, createSidebarCallback, type TerminalEko } from '@/eko'
 import type { Conversation, Message } from '@/types/features/ai/chat'
+import { debounce } from 'lodash-es'
 
 // 工具函数
 const generateSessionTitle = (content: string): string => {
@@ -174,7 +175,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
       // 3. 确保Eko实例可用（如果未初始化则自动初始化）
       if (!ekoInstance.value) {
-        console.log('Eko实例未初始化，正在自动初始化...')
         await initializeEko()
 
         // 如果初始化后仍然没有实例，则抛出错误
@@ -295,7 +295,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     try {
       if (!ekoInstance.value) {
         // 处理流式消息更新UI
-        const handleStreamMessage = async (message: any) => {
+        const handleStreamMessage = async (message: unknown) => {
           const tempMessage = messageList.value[messageList.value.length - 1]
           if (!tempMessage || tempMessage.role !== 'assistant') return
 
@@ -307,10 +307,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           if (message.type === 'tool_use') {
             tempMessage.steps.push({
               type: 'tool_use',
-              content: '正在调用工具...',
+              content: `正在调用工具: ${message.toolName}`,
               timestamp: Date.now(),
               metadata: {
                 toolName: message.toolName || '工具调用',
+                toolParams: message.params || {},
+                toolCommand: message.params?.command || message.params?.path || '',
                 status: 'running',
               },
             })
@@ -322,10 +324,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
             const toolStep = runningSteps[runningSteps.length - 1]
 
             if (toolStep) {
-              toolStep.content = '工具执行完成'
+              toolStep.content = `工具执行完成: ${toolStep.metadata?.toolName}`
               toolStep.metadata = {
                 ...toolStep.metadata,
                 status: 'completed',
+                completedAt: Date.now(),
+                toolResult: message.toolResult,
               }
             }
           } else if (message.type === 'workflow' && message.workflow?.thought) {
@@ -358,11 +362,17 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               tempMessage.steps?.push(newStep)
             }
           } else if (message.type === 'text') {
-            let textStep = tempMessage.steps?.find(step => step.type === 'text')
-            if (textStep) {
-              textStep.content = message.text
-              textStep.timestamp = Date.now()
+            // 瀑布流逻辑：只有当最后一个step就是text类型时，才更新它
+            // 如果最后一个step是tool/thinking等其他类型，则创建新的text step
+            const lastStep = tempMessage.steps?.[tempMessage.steps.length - 1]
+            const isCurrentRoundText = lastStep?.type === 'text'
+
+            if (isCurrentRoundText) {
+              // 同一轮text流式更新：更新最后一个text step
+              lastStep.content = message.text
+              lastStep.timestamp = Date.now()
             } else {
+              // 新一轮text输出：创建新的text step
               tempMessage.steps?.push({
                 type: 'text',
                 content: message.text,
@@ -428,12 +438,15 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     })
   }
 
-  // 监听状态变化并自动保存
-  watch([isVisible, sidebarWidth, chatMode, currentConversationId], () => {
+  // 使用lodash防抖保存函数，避免频繁保存
+  const debouncedSave = debounce(() => {
     if (isInitialized.value) {
       saveToSessionState()
     }
-  })
+  }, 300)
+
+  // 监听状态变化并自动保存（防抖）
+  watch([isVisible, sidebarWidth, chatMode, currentConversationId], debouncedSave)
 
   // 初始化方法
   const initialize = async (): Promise<void> => {

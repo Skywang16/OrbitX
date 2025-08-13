@@ -10,6 +10,7 @@
  */
 
 // 注意：移除未使用的 anyhow 导入，因为所有 Tauri 命令都直接返回 Result<T, String>
+
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tracing::{debug, error, info, warn};
@@ -612,8 +613,7 @@ pub async fn create_terminal_with_shell<R: Runtime>(
                 name, cols, rows
             );
             ShellManager::find_shell_by_name(&name)
-                .ok_or_else(|| format!("Shell查找错误: 未找到shell '{}'", name))
-                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("Shell查找错误: 未找到shell '{}'", name))?
         }
         None => {
             info!("开始使用默认shell创建终端, 大小: {}x{}", cols, rows);

@@ -39,9 +39,7 @@
         }
       ]
     },
-    "fs": {
-      "scope": ["$HOME/**", "$APPDATA/**", "$APPCONFIG/**", "$APPLOCALDATA/**"]
-    },
+
     "deep-link": {
       "desktop": {
         "schemes": ["orbitx"]

@@ -86,13 +86,6 @@ export const useSessionStore = defineStore('session', () => {
   const saveSessionState = async (): Promise<void> => {
     if (isSaving.value) return
 
-    console.log('🔄 [前端] 开始保存会话状态')
-    console.log('📊 [前端] 会话状态统计:', {
-      终端会话数量: Object.keys(sessionState.value.terminalSessions).length,
-      标签页数量: sessionState.value.tabs.length,
-      版本: sessionState.value.version,
-    })
-
     isSaving.value = true
     error.value = null
 
@@ -104,13 +97,10 @@ export const useSessionStore = defineStore('session', () => {
         checksum: generateChecksum(sessionState.value),
       }
 
-      console.log('📤 [前端] 调用后端保存接口')
       await storage.saveSessionState(stateToSave)
       sessionState.value = stateToSave
-      console.log('✅ [前端] 会话状态保存成功')
     } catch (err) {
       error.value = handleErrorWithMessage(err, '保存会话状态失败')
-      console.error('❌ [前端] 保存会话状态失败:', err)
       throw err
     } finally {
       isSaving.value = false
@@ -128,34 +118,23 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null
 
     try {
-      console.log('📥 [前端] 调用后端加载接口')
       const savedState = await storage.loadSessionState()
 
       if (savedState) {
-        console.log('✅ [前端] 会话状态加载成功')
-        console.log('📊 [前端] 加载的会话状态统计:', {
-          终端会话数量: Object.keys(savedState.terminalSessions).length,
-          标签页数量: savedState.tabs.length,
-          版本: savedState.version,
-        })
-
         // 验证状态完整性
         if (validateSessionState(savedState)) {
           sessionState.value = savedState
           return savedState
         } else {
-          console.warn('⚠️ [前端] 会话状态验证失败，使用默认状态')
           sessionState.value = createDefaultSessionState()
           return null
         }
       } else {
-        console.log('ℹ️ [前端] 没有找到保存的会话状态，使用默认状态')
         sessionState.value = createDefaultSessionState()
         return null
       }
     } catch (err) {
       error.value = handleErrorWithMessage(err, '加载会话状态失败')
-      console.error('❌ [前端] 加载会话状态失败:', err)
       sessionState.value = createDefaultSessionState()
       return null
     } finally {
@@ -175,10 +154,8 @@ export const useSessionStore = defineStore('session', () => {
     try {
       const restoredState = await loadSessionState()
       if (restoredState) {
-        console.log('会话状态恢复成功')
         return true
       } else {
-        console.log('没有找到可恢复的会话状态')
         return false
       }
     } catch (err) {

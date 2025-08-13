@@ -62,21 +62,28 @@ export class ReadManyFilesTool extends ModifiableTool {
 
     for (const filePath of filePaths) {
       try {
-        // 检查文件大小
-        const metadata = await invoke<{ size: number }>('plugin:fs|metadata', { path: filePath })
+        // 尝试检查文件大小（如果权限允许）
+        let fileSize: number | undefined = undefined
+        try {
+          const metadata = await invoke<{ size: number }>('plugin:fs|metadata', { path: filePath })
+          fileSize = metadata.size
 
-        if (metadata.size > maxFileSize) {
-          results.push({
-            path: filePath,
-            success: false,
-            error: `文件过大 (${metadata.size} bytes > ${maxFileSize} bytes)`,
-            size: metadata.size,
-          })
-          continue
+          if (metadata.size > maxFileSize) {
+            results.push({
+              path: filePath,
+              success: false,
+              error: `文件过大 (${metadata.size} bytes > ${maxFileSize} bytes)`,
+              size: metadata.size,
+            })
+            continue
+          }
+        } catch (metadataError) {
+          // 如果无法获取metadata，跳过大小检查，继续读取文件
         }
 
         // 读取文件内容
-        const content = await invoke<string>('plugin:fs|read_text_file', { path: filePath })
+        const rawContent = await invoke<ArrayBuffer>('plugin:fs|read_text_file', { path: filePath })
+        const content = new TextDecoder('utf-8').decode(rawContent)
         const lines = content.split('\n')
 
         let processedContent = content
@@ -90,7 +97,7 @@ export class ReadManyFilesTool extends ModifiableTool {
           path: filePath,
           success: true,
           content: processedContent,
-          size: metadata.size,
+          size: fileSize,
           lines: lines.length,
         })
       } catch (error) {

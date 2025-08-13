@@ -5,6 +5,7 @@
  */
 
 import { computed, readonly, ref } from 'vue'
+import { formatLocaleDateTime } from '@/utils/dateFormatter'
 import {
   getConfig,
   getConfigFileInfo,
@@ -37,7 +38,7 @@ const formatFileSize = (size?: number): string => {
 const formatTimestamp = (timestamp?: string): string => {
   if (!timestamp) return '未知'
   try {
-    return new Date(timestamp).toLocaleString()
+    return formatLocaleDateTime(timestamp)
   } catch {
     return '无效时间'
   }

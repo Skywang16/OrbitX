@@ -42,37 +42,30 @@ const isDangerousCommand = (command: string): boolean => {
 export const createCallback = (): TerminalCallback => {
   return {
     onMessage: async message => {
-      console.log('[Eko Message]', message)
+      // 静默处理消息
     },
     onHumanConfirm: async (_, prompt) => {
-      console.log('[确认]', prompt, '-> 自动确认')
       return true
     },
     onHumanInput: async (_, prompt) => {
-      console.log('[输入]', prompt, '-> 使用默认值')
       return ''
     },
     onHumanSelect: async (_, prompt, options) => {
-      console.log('[选择]', prompt, '选项:', options, '-> 选择第一个')
       return [options?.[0] || '']
     },
     onHumanHelp: async (_, helpType, prompt) => {
-      console.log('[帮助]', helpType, prompt, '-> 自动处理')
       return true
     },
     onCommandConfirm: async (_, command) => {
       const safe = !isDangerousCommand(command)
-      console.log('[命令确认]', command, '->', safe ? '允许' : '拒绝')
       return safe
     },
     onFileSelect: async (_, prompt, directory) => {
       const file = smartFileSelect(prompt, directory)
-      console.log('[文件选择]', prompt, '目录:', directory, '-> 选择:', file)
       return file
     },
     onPathInput: async (_, prompt, defaultPath) => {
       const path = defaultPath || './default-path'
-      console.log('[路径输入]', prompt, '-> 使用:', path)
       return path
     },
   }

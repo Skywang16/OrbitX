@@ -290,15 +290,7 @@ impl CompletionProvider for HistoryProvider {
 mod tests {
     use super::*;
     use crate::storage::cache::UnifiedCache;
-    use std::io::Write;
     use std::sync::Arc;
-    use tempfile::NamedTempFile;
-
-    fn create_test_history_file(content: &str) -> NamedTempFile {
-        let mut temp_file = NamedTempFile::new().unwrap();
-        temp_file.write_all(content.as_bytes()).unwrap();
-        temp_file
-    }
 
     #[tokio::test]
     async fn test_shell_type_detection() {

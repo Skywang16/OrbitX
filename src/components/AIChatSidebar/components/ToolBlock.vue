@@ -1,32 +1,20 @@
 <template>
-  <div class="tool-block">
-    <div class="tool-header" @click="toggleExpanded">
+  <div class="tool-block" @click="toggleExpanded">
+    <div class="tool-header">
+      <div class="tool-info">
+        <span class="tool-name">{{ step.metadata?.toolName || '工具调用' }}</span>
+        <span class="tool-command" v-if="step.metadata?.toolCommand">{{ step.metadata.toolCommand }}</span>
+      </div>
       <div
-        class="tool-icon"
+        class="status-dot"
         :class="{
           running: step.metadata?.status === 'running',
-          completed: step.metadata?.status === 'completed',
           error: step.metadata?.status === 'error',
         }"
-      >
-        <span v-if="step.metadata?.status === 'running'">⚙️</span>
-        <span v-else-if="step.metadata?.status === 'error'">❌</span>
-        <span v-else>✅</span>
-      </div>
-      <div class="tool-info">
-        <div class="tool-name">{{ step.metadata?.toolName || '工具调用' }}</div>
-        <div class="tool-command" v-if="step.metadata?.toolCommand">{{ step.metadata.toolCommand }}</div>
-        <div class="tool-status">
-          <span v-if="step.metadata?.status === 'running'">正在执行...</span>
-          <span v-else-if="step.metadata?.status === 'error'">执行失败</span>
-          <span v-else>执行完成</span>
-        </div>
-      </div>
-      <div class="tool-toggle">{{ isExpanded ? '▼' : '▶' }}</div>
+      ></div>
     </div>
 
     <div v-if="isExpanded && step.metadata?.toolResult" class="tool-result">
-      <div class="tool-result-label">执行结果：</div>
       <div class="tool-result-content">{{ formatResult(step.metadata.toolResult) }}</div>
     </div>
   </div>
@@ -34,14 +22,11 @@
 
 <script setup lang="ts">
   import { ref } from 'vue'
-
   import type { AIOutputStep } from '@/types/features/ai/chat'
 
-  interface Props {
+  defineProps<{
     step: AIOutputStep
-  }
-
-  defineProps<Props>()
+  }>()
 
   const isExpanded = ref(false)
 
@@ -49,7 +34,7 @@
     isExpanded.value = !isExpanded.value
   }
 
-  const formatResult = (result: any) => {
+  const formatResult = (result: unknown) => {
     if (typeof result === 'string') return result
     if (typeof result === 'object') return JSON.stringify(result, null, 2)
     return String(result)
@@ -58,97 +43,72 @@
 
 <style scoped>
   .tool-block {
-    padding: var(--spacing-sm);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-    background: var(--color-background-secondary);
-    font-size: var(--font-size-sm);
-    border-left: 3px solid #3b82f6;
+    padding: 8px 12px;
+    background: #2a2a2a;
+    border: 1px solid #404040;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    max-width: 100%;
+  }
+
+  .tool-block:hover {
+    background: #333333;
   }
 
   .tool-header {
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .tool-header:hover {
-    background: var(--color-background-hover);
-    margin: calc(var(--spacing-sm) * -1);
-    padding: var(--spacing-sm);
-    border-radius: var(--border-radius);
-  }
-
-  .tool-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    font-size: 14px;
-  }
-
-  .tool-icon.running {
-    background: #3b82f6;
-    color: white;
-    animation: pulse 1.5s infinite;
-  }
-
-  .tool-icon.completed {
-    background: #10b981;
-    color: white;
-  }
-
-  .tool-icon.error {
-    background: #ef4444;
-    color: white;
+    gap: 8px;
   }
 
   .tool-info {
     flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0; /* 允许flex子元素收缩 */
   }
 
   .tool-name {
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 2px;
+    color: #ffffff;
+    font-weight: 500;
+    white-space: nowrap;
   }
 
   .tool-command {
+    color: #a0a0a0;
     font-family: monospace;
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-    background: var(--color-background);
-    padding: 2px 6px;
-    border-radius: 3px;
-    margin-bottom: 2px;
-  }
-
-  .tool-status {
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-  }
-
-  .tool-toggle {
     font-size: 12px;
-    color: var(--text-secondary);
-    margin-left: auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10b981;
+  }
+
+  .status-dot.running {
+    background: #3b82f6;
+    animation: pulse 1.5s infinite;
+  }
+
+  .status-dot.error {
+    background: #ef4444;
   }
 
   .tool-result {
-    margin-top: var(--spacing-sm);
-    padding: var(--spacing-xs);
+    margin-top: 8px;
+    padding: 8px;
     background: var(--color-background);
-    border-radius: var(--border-radius);
-  }
-
-  .tool-result-label {
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-    margin-bottom: var(--spacing-xs);
+    border-radius: 4px;
+    border-left: 2px solid var(--color-border);
   }
 
   .tool-result-content {
@@ -156,7 +116,8 @@
     color: var(--text-primary);
     white-space: pre-wrap;
     word-wrap: break-word;
-    font-size: var(--font-size-sm);
+    font-size: 12px;
+    line-height: 1.4;
   }
 
   @keyframes pulse {

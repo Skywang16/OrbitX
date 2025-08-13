@@ -13,6 +13,7 @@ use crate::completion::types::{
     CompletionContext, CompletionResponse, EnhancedCompletionItem, EnhancedCompletionResponse,
 };
 use crate::storage::StorageCoordinatorState;
+use crate::utils::error::ToTauriResult;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::State;
@@ -164,10 +165,7 @@ pub async fn get_enhanced_completions(
     let context = CompletionContext::new(current_line, cursor_position, working_directory);
 
     // 获取标准补全建议
-    let response = engine
-        .get_completions(&context)
-        .await
-        .map_err(|e| e.to_string())?;
+    let response = engine.get_completions(&context).await.to_tauri()?;
 
     // 转换为增强补全格式
     let enhanced_items: Vec<EnhancedCompletionItem> = response

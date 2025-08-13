@@ -19,6 +19,9 @@ interface ListenerEntry {
   callbacks: TerminalEventListeners
 }
 
+// Resize回调类型
+type ResizeCallback = () => void
+
 // Shell管理状态类型
 interface ShellManagerState {
   availableShells: ShellInfo[]
@@ -46,6 +49,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
   // 存储组件注册的回调函数的映射表 - 支持多个监听器
   const _listeners = ref<Map<string, ListenerEntry[]>>(new Map())
+
+  // Resize回调管理
+  const _resizeCallbacks = ref<Map<string, ResizeCallback>>(new Map())
+  let _globalResizeListener: (() => void) | null = null
 
   let _globalListenersUnlisten: UnlistenFn[] = []
   let _isListenerSetup = false
@@ -82,7 +89,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
    */
   const setupGlobalListeners = async () => {
     if (_isListenerSetup) return
-    console.log('正在设置全局 Mux 终端监听器...')
 
     const findTerminalByBackendId = (backendId: number): RuntimeTerminalSession | undefined => {
       return terminals.value.find(t => t.backendId === backendId)
@@ -122,7 +128,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
     _globalListenersUnlisten = [unlistenOutput, unlistenExit]
     _isListenerSetup = true
-    console.log('全局 Mux 终端监听器已激活。')
   }
 
   /**
@@ -132,7 +137,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     _globalListenersUnlisten.forEach(unlisten => unlisten())
     _globalListenersUnlisten = []
     _isListenerSetup = false
-    console.log('全局 Mux 终端监听器已关闭。')
   }
 
   /**
@@ -164,6 +168,40 @@ export const useTerminalStore = defineStore('Terminal', () => {
       } else {
         _listeners.value.delete(id)
       }
+    }
+  }
+
+  /**
+   * 注册终端resize回调，统一管理window resize监听器
+   */
+  const registerResizeCallback = (terminalId: string, callback: ResizeCallback) => {
+    _resizeCallbacks.value.set(terminalId, callback)
+
+    // 如果是第一个回调，添加全局监听器
+    if (_resizeCallbacks.value.size === 1 && !_globalResizeListener) {
+      _globalResizeListener = () => {
+        // 只对当前活跃的终端执行resize
+        if (activeTerminalId.value) {
+          const activeCallback = _resizeCallbacks.value.get(activeTerminalId.value)
+          if (activeCallback) {
+            activeCallback()
+          }
+        }
+      }
+      window.addEventListener('resize', _globalResizeListener)
+    }
+  }
+
+  /**
+   * 注销终端resize回调
+   */
+  const unregisterResizeCallback = (terminalId: string) => {
+    _resizeCallbacks.value.delete(terminalId)
+
+    // 如果没有回调了，移除全局监听器
+    if (_resizeCallbacks.value.size === 0 && _globalResizeListener) {
+      window.removeEventListener('resize', _globalResizeListener)
+      _globalResizeListener = null
     }
   }
 
@@ -649,6 +687,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
     teardownGlobalListeners,
     registerTerminalCallbacks,
     unregisterTerminalCallbacks,
+    registerResizeCallback,
+    unregisterResizeCallback,
     createTerminal,
     createAgentTerminal,
     closeTerminal,

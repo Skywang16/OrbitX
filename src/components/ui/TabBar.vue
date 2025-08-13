@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+  import { computed, ref } from 'vue'
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType, type TabItem } from '@/types'
 
@@ -137,35 +137,7 @@
     }
   }
 
-  // 处理鼠标滚轮事件（水平滚动）
-  const handleWheel = (event: WheelEvent) => {
-    const el = tabBarRef.value
-    if (!el) return
-
-    // 如果用户按住shift键，让浏览器处理原生水平滚动
-    if (event.shiftKey) return
-
-    // 阻止默认垂直滚动，改为水平滚动
-    if (el.scrollWidth > el.clientWidth) {
-      event.preventDefault()
-      el.scrollLeft += event.deltaY
-    }
-  }
-
-  // 处理窗口大小变化
-  const handleResize = () => {
-    // 触发重新计算，Vue的响应式系统会自动处理
-  }
-
-  onMounted(() => {
-    tabBarRef.value?.addEventListener('wheel', handleWheel, { passive: false })
-    window.addEventListener('resize', handleResize)
-  })
-
-  onBeforeUnmount(() => {
-    tabBarRef.value?.removeEventListener('wheel', handleWheel)
-    window.removeEventListener('resize', handleResize)
-  })
+  // 移除JavaScript滚轮处理，改用CSS实现
 </script>
 
 <template>

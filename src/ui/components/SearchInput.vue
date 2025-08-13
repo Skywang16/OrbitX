@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
   import { ref, watch } from 'vue'
+  import { debounce } from 'lodash-es'
 
   interface Props {
     modelValue?: string
@@ -58,7 +59,11 @@
 
   const inputRef = ref<HTMLInputElement>()
   const inputValue = ref(props.modelValue)
-  let debounceTimer: number | undefined
+
+  // 使用lodash防抖搜索
+  const debouncedSearch = debounce((value: string) => {
+    emit('search', value)
+  }, props.debounce)
 
   // 监听外部值变化
   watch(
@@ -71,10 +76,7 @@
   // 处理输入
   const handleInput = () => {
     emit('update:modelValue', inputValue.value)
-    clearTimeout(debounceTimer)
-    debounceTimer = window.setTimeout(() => {
-      emit('search', inputValue.value)
-    }, props.debounce)
+    debouncedSearch(inputValue.value)
   }
 
   // 处理焦点
@@ -88,7 +90,7 @@
 
   // 处理回车
   const handleEnter = () => {
-    clearTimeout(debounceTimer)
+    debouncedSearch.cancel() // 取消防抖，立即搜索
     emit('search', inputValue.value)
   }
 
@@ -101,7 +103,7 @@
 
   // 清除输入
   const handleClear = () => {
-    clearTimeout(debounceTimer)
+    debouncedSearch.cancel() // 取消防抖
     inputValue.value = ''
     emit('update:modelValue', '')
     emit('search', '')

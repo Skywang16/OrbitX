@@ -7,13 +7,7 @@
 
   defineProps<Props>()
 
-  // 格式化时间
-  const formatTime = (date: Date) => {
-    return new Intl.DateTimeFormat('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date)
-  }
+  import { formatTime } from '@/utils/dateFormatter'
 </script>
 
 <template>

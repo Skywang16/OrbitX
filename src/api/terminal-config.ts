@@ -143,7 +143,7 @@ export const updateTerminalBehaviorConfig = async (behaviorConfig: TerminalBehav
  * @param scrollback 滚动缓冲区行数
  */
 export const updateScrollback = async (scrollback: number): Promise<void> => {
-  return await updateTerminalConfig({ scrollback })
+  await updateTerminalConfig({ scrollback })
 }
 
 /**
@@ -162,7 +162,7 @@ export const updateDefaultShell = async (
     args: args || [],
     workingDirectory: workingDirectory || '~',
   }
-  return await updateTerminalConfig({ shell })
+  await updateTerminalConfig({ shell })
 }
 
 /**
@@ -175,7 +175,7 @@ export const updateCursorStyle = async (style: 'block' | 'underline' | 'beam'): 
     ...config.cursor,
     style,
   }
-  return await updateCursorConfig(cursor)
+  await updateCursorConfig(cursor)
 }
 
 /**
@@ -188,7 +188,7 @@ export const updateCursorColor = async (color: string): Promise<void> => {
     ...config.cursor,
     color,
   }
-  return await updateCursorConfig(cursor)
+  await updateCursorConfig(cursor)
 }
 
 /**
@@ -200,7 +200,7 @@ export const toggleCursorBlink = async (): Promise<void> => {
     ...config.cursor,
     blink: !config.cursor.blink,
   }
-  return await updateCursorConfig(cursor)
+  await updateCursorConfig(cursor)
 }
 
 /**
@@ -212,7 +212,7 @@ export const toggleCloseOnExit = async (): Promise<void> => {
     ...config.behavior,
     closeOnExit: !config.behavior.closeOnExit,
   }
-  return await updateTerminalBehaviorConfig(behavior)
+  await updateTerminalBehaviorConfig(behavior)
 }
 
 /**
@@ -224,7 +224,7 @@ export const toggleConfirmClose = async (): Promise<void> => {
     ...config.behavior,
     confirmClose: !config.behavior.confirmClose,
   }
-  return await updateTerminalBehaviorConfig(behavior)
+  await updateTerminalBehaviorConfig(behavior)
 }
 
 // ===== 验证工具 =====

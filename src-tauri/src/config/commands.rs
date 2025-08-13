@@ -5,7 +5,8 @@
  */
 
 use crate::config::{defaults::create_default_config, types::AppConfig, TomlConfigManager};
-use crate::utils::error::AppResult;
+
+use crate::utils::error::{AppResult, ToTauriResult};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
@@ -35,11 +36,7 @@ impl ConfigManagerState {
 /// 获取当前配置
 #[tauri::command]
 pub async fn get_config(state: State<'_, ConfigManagerState>) -> Result<AppConfig, String> {
-    state
-        .toml_manager
-        .get_config()
-        .await
-        .map_err(|e| e.to_string())
+    state.toml_manager.get_config().await.to_tauri()
 }
 
 /// 更新配置
@@ -48,41 +45,22 @@ pub async fn update_config(
     new_config: AppConfig,
     state: State<'_, ConfigManagerState>,
 ) -> Result<(), String> {
-    state
-        .toml_manager
-        .save_config(&new_config)
-        .await
-        .map_err(|e| e.to_string())
+    state.toml_manager.save_config(&new_config).await.to_tauri()
 }
 
 /// 保存配置
 #[tauri::command]
 pub async fn save_config(state: State<'_, ConfigManagerState>) -> Result<(), String> {
-    let config = state
-        .toml_manager
-        .get_config()
-        .await
-        .map_err(|e| e.to_string())?;
-    state
-        .toml_manager
-        .save_config(&config)
-        .await
-        .map_err(|e| e.to_string())
+    let config = state.toml_manager.get_config().await.to_tauri()?;
+    state.toml_manager.save_config(&config).await.to_tauri()
 }
 
 /// 验证配置
 #[tauri::command]
 pub async fn validate_config(state: State<'_, ConfigManagerState>) -> Result<(), String> {
     debug!("开始验证配置");
-    let config = state
-        .toml_manager
-        .get_config()
-        .await
-        .map_err(|e| e.to_string())?;
-    state
-        .toml_manager
-        .validate_config(&config)
-        .map_err(|e| e.to_string())
+    let config = state.toml_manager.get_config().await.to_tauri()?;
+    state.toml_manager.validate_config(&config).to_tauri()
 }
 
 /// 重置配置为默认值
@@ -94,7 +72,7 @@ pub async fn reset_config_to_defaults(state: State<'_, ConfigManagerState>) -> R
         .toml_manager
         .save_config(&default_config)
         .await
-        .map_err(|e| e.to_string())
+        .to_tauri()
 }
 
 /// 获取配置文件路径

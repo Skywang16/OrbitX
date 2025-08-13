@@ -336,7 +336,3 @@ export const storage = {
 
 // 重新导出类型
 export type * from './types'
-
-export const getStorageStorageStats = () => storageAPI.getStorageStats()
-export const preloadStorageCache = () => storageAPI.preloadCache()
-export const clearStorageCache = () => storageAPI.clearCache()

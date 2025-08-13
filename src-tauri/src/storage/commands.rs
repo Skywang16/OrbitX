@@ -7,7 +7,7 @@
 
 use crate::storage::types::{DataQuery, SaveOptions, SessionState, StorageStats};
 use crate::storage::{HealthCheckResult, StorageCoordinator};
-use crate::utils::error::AppResult;
+use crate::utils::error::{serialize_to_json, AppResult, ToTauriResult};
 use anyhow::Context;
 use serde_json::Value;
 use std::sync::Arc;
@@ -65,11 +65,7 @@ pub async fn storage_get_config(
 ) -> Result<Value, String> {
     debug!("存储命令: 获取配置节 {}", section);
 
-    state
-        .coordinator
-        .get_config(&section)
-        .await
-        .map_err(|e| e.to_string())
+    state.coordinator.get_config(&section).await.to_tauri()
 }
 
 /// 更新配置数据
@@ -85,7 +81,7 @@ pub async fn storage_update_config(
         .coordinator
         .update_config(&section, data)
         .await
-        .map_err(|e| e.to_string())
+        .to_tauri()
 }
 
 /// 保存会话状态
@@ -186,11 +182,7 @@ pub async fn storage_query_data(
 ) -> Result<Vec<Value>, String> {
     debug!("存储命令: 查询数据 {}", query.query);
 
-    state
-        .coordinator
-        .query_data(&query)
-        .await
-        .map_err(|e| e.to_string())
+    state.coordinator.query_data(&query).await.to_tauri()
 }
 
 /// 保存数据
@@ -206,7 +198,7 @@ pub async fn storage_save_data(
         .coordinator
         .save_data(&data, &options)
         .await
-        .map_err(|e| e.to_string())
+        .to_tauri()
 }
 
 /// 健康检查
@@ -216,11 +208,7 @@ pub async fn storage_health_check(
 ) -> Result<HealthCheckResult, String> {
     debug!("存储命令: 健康检查");
 
-    state
-        .coordinator
-        .health_check()
-        .await
-        .map_err(|e| e.to_string())
+    state.coordinator.health_check().await.to_tauri()
 }
 
 /// 获取缓存统计信息
@@ -230,10 +218,8 @@ pub async fn storage_get_cache_stats(
 ) -> Result<String, String> {
     debug!("存储命令: 获取缓存统计信息");
 
-    match state.coordinator.get_cache_stats().await {
-        Ok(stats) => serde_json::to_string(&stats).map_err(|e| e.to_string()),
-        Err(e) => Err(e.to_string()),
-    }
+    let stats = state.coordinator.get_cache_stats().await.to_tauri()?;
+    serialize_to_json(&stats, "缓存统计")
 }
 
 /// 获取存储统计信息
@@ -243,11 +229,7 @@ pub async fn storage_get_storage_stats(
 ) -> Result<StorageStats, String> {
     debug!("存储命令: 获取存储统计信息");
 
-    state
-        .coordinator
-        .get_storage_stats()
-        .await
-        .map_err(|e| e.to_string())
+    state.coordinator.get_storage_stats().await.to_tauri()
 }
 
 /// 预加载缓存
@@ -257,11 +239,7 @@ pub async fn storage_preload_cache(
 ) -> Result<(), String> {
     debug!("存储命令: 预加载缓存");
 
-    state
-        .coordinator
-        .preload_cache()
-        .await
-        .map_err(|e| e.to_string())
+    state.coordinator.preload_cache().await.to_tauri()
 }
 
 /// 清空缓存
@@ -269,9 +247,5 @@ pub async fn storage_preload_cache(
 pub async fn storage_clear_cache(state: State<'_, StorageCoordinatorState>) -> Result<(), String> {
     debug!("存储命令: 清空缓存");
 
-    state
-        .coordinator
-        .clear_cache()
-        .await
-        .map_err(|e| e.to_string())
+    state.coordinator.clear_cache().await.to_tauri()
 }

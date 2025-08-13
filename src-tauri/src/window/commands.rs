@@ -9,7 +9,7 @@
  * 5. 错误处理：使用anyhow统一错误类型
  */
 
-use crate::utils::error::AppResult;
+use crate::utils::error::{serialize_to_value, AppResult, ToTauriResult};
 
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -373,7 +373,7 @@ pub async fn manage_window_state<R: Runtime>(
     let window_id = state
         .with_config_manager(|config| Ok(config.get_default_window_id().to_string()))
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     debug!("使用窗口ID: {}", window_id);
 
@@ -474,7 +474,7 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
     let always_on_top = state
         .with_state_manager(|manager| Ok(manager.get_always_on_top()))
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     // 获取目录信息
     let current_directory = if let Some(cached_dir) = state.cache.get("current_dir").await {
@@ -497,7 +497,7 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
     let platform_info = state
         .with_config_manager(|config| Ok(config.get_platform_info().clone()))
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     // 构建完整状态
     let complete_state = CompleteWindowState {
@@ -511,7 +511,7 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
             .as_secs(),
     };
 
-    serde_json::to_value(complete_state).map_err(|e| format!("序列化状态失败: {}", e))
+    serialize_to_value(&complete_state, "窗口状态")
 }
 
 /// 处理设置置顶状态操作
@@ -540,9 +540,9 @@ async fn handle_set_always_on_top<R: Runtime>(
             Ok(())
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
-    serde_json::to_value(always_on_top).map_err(|e| format!("序列化结果失败: {}", e))
+    serialize_to_value(&always_on_top, "置顶状态")
 }
 
 /// 处理切换置顶状态操作
@@ -556,14 +556,14 @@ async fn handle_toggle_always_on_top<R: Runtime>(
     let new_state = state
         .with_state_manager(|manager| Ok(manager.toggle_always_on_top()))
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     // 设置窗口置顶
     window
         .set_always_on_top(new_state)
         .map_err(|e| format!("设置窗口置顶失败: {}", e))?;
 
-    serde_json::to_value(new_state).map_err(|e| format!("序列化结果失败: {}", e))
+    serialize_to_value(&new_state, "切换状态")
 }
 
 /// 处理重置窗口状态操作
@@ -580,7 +580,7 @@ async fn handle_reset_state<R: Runtime>(
             Ok(())
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     // 重置窗口置顶状态
     window
@@ -591,7 +591,7 @@ async fn handle_reset_state<R: Runtime>(
     let _ = state.cache.remove("current_dir").await;
     let _ = state.cache.remove("home_dir").await;
 
-    serde_json::to_value(true).map_err(|e| format!("序列化结果失败: {}", e))
+    serialize_to_value(&true, "重置结果")
 }
 
 // ===== 命令参数类型定义 =====
@@ -791,7 +791,7 @@ pub async fn get_platform_info(state: State<'_, WindowState>) -> Result<Platform
             Ok(info)
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     info!(
         "平台信息获取成功: platform={}, arch={}, is_mac={}",

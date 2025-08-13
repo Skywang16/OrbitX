@@ -12,6 +12,7 @@
   import type { CompletionItem, CompletionRequest, CompletionResponse } from '@/api/completion/types'
   import { handleError } from '@/utils/errorHandler'
   import { computed, ref, watch } from 'vue'
+  import { debounce } from 'lodash-es'
 
   // Props
   interface Props {
@@ -36,7 +37,6 @@
   const completionItems = ref<CompletionItem[]>([])
   const currentSuggestion = ref('')
   const isLoading = ref(false)
-  let debounceTimeout: number | null = null
   let currentRequest: AbortController | null = null
 
   // 计算属性
@@ -145,7 +145,7 @@
     }
   }
 
-  // 获取补全建议
+  // 获取补全建议的核心逻辑
   const fetchCompletions = async (input: string) => {
     if (!input.trim()) {
       completionItems.value = []
@@ -155,85 +155,81 @@
       return
     }
 
-    // 防抖处理
-    if (debounceTimeout) {
-      window.clearTimeout(debounceTimeout)
+    // 取消之前的请求
+    if (currentRequest) {
+      currentRequest.abort()
     }
 
-    debounceTimeout = window.setTimeout(async () => {
-      // 取消之前的请求
-      if (currentRequest) {
-        currentRequest.abort()
+    // 创建新的请求控制器
+    currentRequest = new AbortController()
+
+    try {
+      isLoading.value = true
+
+      const request: CompletionRequest = {
+        input,
+        cursorPosition: input.length,
+        workingDirectory: props.workingDirectory,
+        maxResults: 10,
       }
 
-      // 创建新的请求控制器
-      currentRequest = new AbortController()
+      let response: CompletionResponse
 
       try {
-        isLoading.value = true
+        // 尝试调用后端API
+        response = await completionAPI.getCompletions(request)
+      } catch (error: unknown) {
+        // 如果是取消错误，直接返回
+        if (error instanceof Error && error.message === 'Request was aborted') return
 
-        const request: CompletionRequest = {
-          input,
-          cursorPosition: input.length,
-          workingDirectory: props.workingDirectory,
-          maxResults: 10,
-        }
+        // 使用统一的错误处理，但不显示错误消息（因为有本地补全作为后备）
+        handleError(error, '后端补全调用失败')
 
-        let response: CompletionResponse
+        // 使用本地补全作为后备方案
+        response = getLocalCompletions(input)
+      }
 
-        try {
-          // 尝试调用后端API
-          response = await completionAPI.getCompletions(request)
-        } catch (error: unknown) {
-          // 如果是取消错误，直接返回
-          if (error instanceof Error && error.message === 'Request was aborted') return
+      completionItems.value = response.items
+      emit('completion-ready', response.items)
 
-          // 使用统一的错误处理，但不显示错误消息（因为有本地补全作为后备）
-          handleError(error, '后端补全调用失败')
-
-          // 使用本地补全作为后备方案
-          response = getLocalCompletions(input)
-        }
-
-        completionItems.value = response.items
-        emit('completion-ready', response.items)
-
-        // 设置第一个匹配项作为内联补全
-        if (response.items.length > 0) {
-          const firstItem = response.items[0]
-          if (firstItem.text.toLowerCase().startsWith(input.toLowerCase())) {
-            currentSuggestion.value = firstItem.text
-          } else {
-            currentSuggestion.value = ''
-          }
+      // 设置第一个匹配项作为内联补全
+      if (response.items.length > 0) {
+        const firstItem = response.items[0]
+        if (firstItem.text.toLowerCase().startsWith(input.toLowerCase())) {
+          currentSuggestion.value = firstItem.text
         } else {
           currentSuggestion.value = ''
         }
-
-        emit('suggestion-change', currentSuggestion.value)
-      } catch (error) {
-        // 使用统一的错误处理
-        handleError(error, '获取补全失败')
-
-        // 重置状态
+      } else {
         currentSuggestion.value = ''
-        completionItems.value = []
-        emit('completion-ready', [])
-        emit('suggestion-change', '')
-
-        // 可以考虑向用户显示错误提示，但这里选择静默处理
-        // 因为补全失败不应该中断用户的正常操作
-      } finally {
-        isLoading.value = false
       }
-    }, 150) // 150ms 防抖
+
+      emit('suggestion-change', currentSuggestion.value)
+    } catch (error) {
+      // 使用统一的错误处理
+      handleError(error, '获取补全失败')
+
+      // 重置状态
+      currentSuggestion.value = ''
+      completionItems.value = []
+      emit('completion-ready', [])
+      emit('suggestion-change', '')
+
+      // 可以考虑向用户显示错误提示，但这里选择静默处理
+      // 因为补全失败不应该中断用户的正常操作
+    } finally {
+      isLoading.value = false
+    }
   }
+
+  // 使用lodash防抖的补全函数
+  const debouncedFetchCompletions = debounce(fetchCompletions, 150)
 
   // 监听输入变化
   watch(
     () => props.input,
     newInput => {
-      fetchCompletions(newInput)
+      debouncedFetchCompletions(newInput)
     },
     { immediate: true }
   )

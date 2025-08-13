@@ -6,6 +6,7 @@ import { ModifiableTool, type ToolExecutionContext } from './modifiable-tool'
 import type { ToolResult } from '../types'
 import { FileNotFoundError } from './tool-error'
 import { invoke } from '@tauri-apps/api/core'
+import { formatFileTime } from '@/utils/dateFormatter'
 
 export interface FileSystemParams {
   path: string
@@ -34,22 +35,27 @@ export interface FileInfo {
  */
 export class FileSystemTool extends ModifiableTool {
   constructor() {
-    super('filesystem', '🗂️ 文件系统操作：检查文件/目录是否存在、获取详细信息、权限检查等', {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description: '要操作的文件或目录路径',
+    super(
+      'filesystem',
+      '🗂️ 文件信息查询：当需要检查文件是否存在、获取文件详细信息（大小、修改时间、权限）或判断文件类型时使用。不用于读取文件内容',
+      {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: '要操作的文件或目录路径',
+          },
+          operation: {
+            type: 'string',
+            enum: ['exists', 'info', 'type', 'permissions'],
+            description:
+              '操作类型：exists(仅检查文件是否存在)、info(获取完整文件信息-默认)、type(判断文件类型)、permissions(检查文件权限)',
+            default: 'info',
+          },
         },
-        operation: {
-          type: 'string',
-          enum: ['exists', 'info', 'type', 'permissions'],
-          description: '操作类型：exists(检查存在)、info(详细信息)、type(文件类型)、permissions(权限检查)',
-          default: 'info',
-        },
-      },
-      required: ['path'],
-    })
+        required: ['path'],
+      }
+    )
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
@@ -120,9 +126,9 @@ export class FileSystemTool extends ModifiableTool {
         isDirectory: metadata.isDir,
         size: metadata.size,
         sizeFormatted: this.formatFileSize(metadata.size),
-        created: new Date(metadata.created * 1000).toLocaleString(),
-        modified: new Date(metadata.modified * 1000).toLocaleString(),
-        accessed: new Date(metadata.accessed * 1000).toLocaleString(),
+        created: formatFileTime(metadata.created),
+        modified: formatFileTime(metadata.modified),
+        accessed: formatFileTime(metadata.accessed),
         permissions: {
           readable: true, // 假设可读，因为我们能获取到元数据
           writable: !metadata.readonly,
@@ -169,7 +175,7 @@ export class FileSystemTool extends ModifiableTool {
       } else if (metadata.isFile) {
         type = '文件'
         icon = '📄'
-        
+
         // 根据扩展名确定文件类型
         const ext = path.split('.').pop()?.toLowerCase()
         if (ext) {
@@ -273,28 +279,28 @@ export class FileSystemTool extends ModifiableTool {
       c: { type: 'C文件', icon: '⚙️' },
       rs: { type: 'Rust文件', icon: '🦀' },
       go: { type: 'Go文件', icon: '🐹' },
-      
+
       // 配置文件
       json: { type: 'JSON配置文件', icon: '⚙️' },
       yaml: { type: 'YAML配置文件', icon: '⚙️' },
       yml: { type: 'YAML配置文件', icon: '⚙️' },
       toml: { type: 'TOML配置文件', icon: '⚙️' },
       xml: { type: 'XML文件', icon: '📋' },
-      
+
       // 文档文件
       md: { type: 'Markdown文档', icon: '📝' },
       txt: { type: '文本文件', icon: '📄' },
       pdf: { type: 'PDF文档', icon: '📕' },
       doc: { type: 'Word文档', icon: '📘' },
       docx: { type: 'Word文档', icon: '📘' },
-      
+
       // 图片文件
       png: { type: 'PNG图片', icon: '🖼️' },
       jpg: { type: 'JPEG图片', icon: '🖼️' },
       jpeg: { type: 'JPEG图片', icon: '🖼️' },
       gif: { type: 'GIF图片', icon: '🖼️' },
       svg: { type: 'SVG矢量图', icon: '🎨' },
-      
+
       // 其他
       zip: { type: 'ZIP压缩包', icon: '📦' },
       tar: { type: 'TAR归档', icon: '📦' },

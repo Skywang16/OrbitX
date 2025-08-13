@@ -6,6 +6,7 @@ import { ModifiableTool, type ToolExecutionContext } from './modifiable-tool'
 import type { ToolResult } from '../types'
 import { FileNotFoundError } from './tool-error'
 import { invoke } from '@tauri-apps/api/core'
+import { formatDate } from '@/utils/dateFormatter'
 
 export interface ReadDirectoryParams {
   directoryPath: string
@@ -29,45 +30,49 @@ export interface FileEntry {
  */
 export class ReadDirectoryTool extends ModifiableTool {
   constructor() {
-    super('read_directory', '📁 读取目录内容：列出目录中的文件和子目录，支持递归、排序、隐藏文件显示', {
-      type: 'object',
-      properties: {
-        directoryPath: {
-          type: 'string',
-          description: '要读取的目录路径',
+    super(
+      'read_directory',
+      '📁 列出目录内容：当需要查看文件夹中有哪些文件和子目录时使用。适用于浏览项目结构、查找文件位置。支持递归列出、排序、显示隐藏文件',
+      {
+        type: 'object',
+        properties: {
+          directoryPath: {
+            type: 'string',
+            description: '要列出内容的目录路径（必须是目录，不是文件）',
+          },
+          showHidden: {
+            type: 'boolean',
+            description: '是否显示隐藏文件（以.开头的文件），默认false',
+            default: false,
+          },
+          recursive: {
+            type: 'boolean',
+            description: '是否递归读取子目录，默认false',
+            default: false,
+          },
+          maxDepth: {
+            type: 'number',
+            description: '递归的最大深度，仅在recursive为true时有效，默认3',
+            default: 3,
+            minimum: 1,
+            maximum: 10,
+          },
+          sortBy: {
+            type: 'string',
+            enum: ['name', 'size', 'modified'],
+            description: '排序方式：name(名称)、size(大小)、modified(修改时间)，默认name',
+            default: 'name',
+          },
+          sortOrder: {
+            type: 'string',
+            enum: ['asc', 'desc'],
+            description: '排序顺序：asc(升序)、desc(降序)，默认asc',
+            default: 'asc',
+          },
         },
-        showHidden: {
-          type: 'boolean',
-          description: '是否显示隐藏文件（以.开头的文件），默认false',
-          default: false,
-        },
-        recursive: {
-          type: 'boolean',
-          description: '是否递归读取子目录，默认false',
-          default: false,
-        },
-        maxDepth: {
-          type: 'number',
-          description: '递归的最大深度，仅在recursive为true时有效，默认3',
-          default: 3,
-          minimum: 1,
-          maximum: 10,
-        },
-        sortBy: {
-          type: 'string',
-          enum: ['name', 'size', 'modified'],
-          description: '排序方式：name(名称)、size(大小)、modified(修改时间)，默认name',
-          default: 'name',
-        },
-        sortOrder: {
-          type: 'string',
-          enum: ['asc', 'desc'],
-          description: '排序顺序：asc(升序)、desc(降序)，默认asc',
-          default: 'asc',
-        },
-      },
-      required: ['directoryPath'],
-    })
+        required: ['directoryPath'],
+      }
+    )
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
@@ -112,9 +117,9 @@ export class ReadDirectoryTool extends ModifiableTool {
 
   private async checkPathExists(path: string): Promise<boolean> {
     try {
-      await invoke('plugin:fs|exists', { path })
-      return true
-    } catch {
+      const exists = await invoke<boolean>('plugin:fs|exists', { path })
+      return exists
+    } catch (error) {
       return false
     }
   }
@@ -130,8 +135,15 @@ export class ReadDirectoryTool extends ModifiableTool {
 
     try {
       // 使用Tauri API读取目录
-      const dirEntries = await invoke<Array<{ name: string; path: string }>>('plugin:fs|read_dir', {
-        dir: dirPath,
+      const dirEntries = await invoke<
+        Array<{
+          name: string
+          isDirectory: boolean
+          isFile: boolean
+          isSymlink: boolean
+        }>
+      >('plugin:fs|read_dir', {
+        path: dirPath,
       })
 
       for (const entry of dirEntries) {
@@ -140,40 +152,52 @@ export class ReadDirectoryTool extends ModifiableTool {
           continue
         }
 
+        // 构建完整路径
+        const fullPath = `${dirPath}/${entry.name}`.replace(/\/+/g, '/')
+
+        // 尝试获取文件元数据（可选）
+        let size: number | undefined = undefined
+        let modified: string = new Date().toISOString()
+
         try {
-          // 获取文件/目录信息
-          const metadata = await invoke<{
-            isDir: boolean
-            size: number
-            modified: number
-          }>('plugin:fs|metadata', {
-            path: entry.path,
-          })
-
-          const fileEntry: FileEntry = {
-            name: entry.name,
-            path: entry.path,
-            isDirectory: metadata.isDir,
-            size: metadata.size,
-            modified: new Date(metadata.modified * 1000).toISOString(),
+          if (entry.isFile) {
+            const metadata = await invoke<{
+              size: number
+              modified: number
+            }>('plugin:fs|metadata', {
+              path: fullPath,
+            })
+            size = metadata.size
+            modified = new Date(metadata.modified * 1000).toISOString()
           }
+        } catch (error) {
+          // 如果获取metadata失败，使用默认值（静默处理）
+        }
 
-          entries.push(fileEntry)
+        const fileEntry: FileEntry = {
+          name: entry.name,
+          path: fullPath,
+          isDirectory: entry.isDirectory,
+          size,
+          modified,
+        }
 
-          // 递归处理子目录
-          if (recursive && metadata.isDir && currentDepth < maxDepth) {
+        entries.push(fileEntry)
+
+        // 递归处理子目录
+        if (recursive && entry.isDirectory && currentDepth < maxDepth) {
+          try {
             const subEntries = await this.readDirectoryRecursive(
-              entry.path,
+              fullPath,
               showHidden,
               recursive,
               maxDepth,
               currentDepth + 1
             )
             entries.push(...subEntries)
+          } catch (error) {
+            // 跳过无法访问的子目录（静默处理）
           }
-        } catch (error) {
-          // 跳过无法访问的文件/目录
-          console.warn(`无法访问 ${entry.path}:`, error)
         }
       }
     } catch (error) {
@@ -235,7 +259,7 @@ export class ReadDirectoryTool extends ModifiableTool {
       for (const file of files) {
         const relativePath = recursive ? file.path.replace(basePath, '.') : file.name
         const size = file.size ? this.formatFileSize(file.size) : ''
-        const modified = file.modified ? new Date(file.modified).toLocaleDateString() : ''
+        const modified = file.modified ? formatDate(file.modified) : ''
         lines.push(`  📄 ${relativePath} ${size} ${modified}`.trim())
       }
     }

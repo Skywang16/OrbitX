@@ -108,7 +108,7 @@ use window::commands::{
 use std::path::PathBuf;
 use tauri::{Emitter, Manager};
 use tracing::{info, warn};
-use utils::init_logging;
+use tracing_subscriber;
 
 /// 处理文件打开事件，返回文件所在的目录路径
 #[tauri::command]
@@ -170,7 +170,7 @@ pub fn init_plugin<R: tauri::Runtime>(name: &'static str) -> tauri::plugin::Taur
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // 初始化日志系统
-    if let Err(e) = init_logging() {
+    if let Err(e) = tracing_subscriber::fmt::try_init() {
         eprintln!("日志系统初始化失败: {}", e);
         std::process::exit(1);
     }
@@ -198,6 +198,7 @@ pub fn run() {
     builder
         .plugin(init_plugin("init"))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
         .invoke_handler(tauri::generate_handler![
             // 窗口管理命令
