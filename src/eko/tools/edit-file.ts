@@ -57,8 +57,14 @@ export class EditFileTool extends ModifiableTool {
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
-    const { filePath, oldString, newString, replaceAll = false, lineNumber, insertMode = 'replace' } = 
-      context.parameters as unknown as EditFileParams
+    const {
+      filePath,
+      oldString,
+      newString,
+      replaceAll = false,
+      lineNumber,
+      insertMode = 'replace',
+    } = context.parameters as unknown as EditFileParams
 
     if (!filePath?.trim()) {
       throw new ValidationError('文件路径不能为空')
@@ -76,9 +82,10 @@ export class EditFileTool extends ModifiableTool {
       }
 
       const originalContent = await readTextFile(filePath)
-      const modifiedContent = lineNumber !== undefined
-        ? this.editByLineNumber(originalContent, oldString, newString, lineNumber, insertMode)
-        : this.editByTextMatch(originalContent, oldString, newString, replaceAll)
+      const modifiedContent =
+        lineNumber !== undefined
+          ? this.editByLineNumber(originalContent, oldString, newString, lineNumber, insertMode)
+          : this.editByTextMatch(originalContent, oldString, newString, replaceAll)
 
       if (modifiedContent === originalContent) {
         return {
@@ -102,7 +109,13 @@ export class EditFileTool extends ModifiableTool {
   /**
    * 基于行号进行编辑
    */
-  private editByLineNumber(content: string, oldString: string, newString: string, lineNumber: number, insertMode: string): string {
+  private editByLineNumber(
+    content: string,
+    oldString: string,
+    newString: string,
+    lineNumber: number,
+    insertMode: string
+  ): string {
     const lines = content.split('\n')
     const index = lineNumber - 1
 
@@ -131,8 +144,10 @@ export class EditFileTool extends ModifiableTool {
 
   private calculateEditStats(originalContent: string, modifiedContent: string, oldString: string): string {
     const linesDiff = modifiedContent.split('\n').length - originalContent.split('\n').length
-    const replacementCount = (originalContent.match(new RegExp(oldString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length
-    
+    const replacementCount = (
+      originalContent.match(new RegExp(oldString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []
+    ).length
+
     let stats = `替换了 ${replacementCount} 处内容`
     if (linesDiff !== 0) {
       stats += `，行数变化: ${linesDiff > 0 ? '+' : ''}${linesDiff}`

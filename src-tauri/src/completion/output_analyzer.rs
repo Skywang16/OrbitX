@@ -1,23 +1,60 @@
-//! 输出分析器模块
-//!
-//! 负责分析终端输出，提取有用的上下文信息用于智能补全
+/*!
+ * 输出分析器模块
+ *
+ * 负责分析终端输出，提取有用的上下文信息用于智能补全
+ */
 
 use crate::completion::providers::ContextAwareProvider;
 use crate::completion::smart_extractor::SmartExtractor;
-use crate::utils::error::AppResult;
-use anyhow::anyhow;
+use crate::mux::{ConfigManager, TerminalResult, TerminalError};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
+use tracing::{debug, warn};
 
 /// 全局输出分析器实例
 static GLOBAL_OUTPUT_ANALYZER: OnceLock<Arc<OutputAnalyzer>> = OnceLock::new();
+
+/// 面板缓冲区条目
+#[derive(Debug, Clone)]
+struct PaneBufferEntry {
+    content: String,
+    last_access: Instant,
+    last_cleanup: Instant,
+}
+
+impl PaneBufferEntry {
+    fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            content: String::new(),
+            last_access: now,
+            last_cleanup: now,
+        }
+    }
+
+    fn access(&mut self) {
+        self.last_access = Instant::now();
+    }
+
+    fn should_cleanup(&self) -> bool {
+        let config = crate::mux::ConfigManager::get_config();
+        self.last_cleanup.elapsed() > config.cleanup_interval()
+    }
+
+    fn is_stale(&self, max_age: Duration) -> bool {
+        self.last_access.elapsed() > max_age
+    }
+}
 
 /// 输出分析器
 pub struct OutputAnalyzer {
     /// 上下文感知提供者
     context_provider: Arc<Mutex<ContextAwareProvider>>,
-    /// 命令输出缓冲区 - 按面板ID存储
-    output_buffer: Arc<Mutex<HashMap<u32, String>>>,
+    /// 命令输出缓冲区 - 按面板ID存储，包含访问时间信息
+    output_buffer: Arc<Mutex<HashMap<u32, PaneBufferEntry>>>,
+    /// 最后清理时间
+    last_global_cleanup: Arc<Mutex<Instant>>,
 }
 
 impl OutputAnalyzer {
@@ -26,6 +63,7 @@ impl OutputAnalyzer {
         Self {
             context_provider: Arc::new(Mutex::new(ContextAwareProvider::new())),
             output_buffer: Arc::new(Mutex::new(HashMap::new())),
+            last_global_cleanup: Arc::new(Mutex::new(Instant::now())),
         }
     }
 
@@ -34,71 +72,211 @@ impl OutputAnalyzer {
         GLOBAL_OUTPUT_ANALYZER.get_or_init(|| Arc::new(OutputAnalyzer::new()))
     }
 
-    /// 分析终端输出
-    pub fn analyze_output(&self, pane_id: u32, data: &str) -> AppResult<()> {
-        // 将输出添加到缓冲区
-        {
-            let mut buffer = self
-                .output_buffer
-                .lock()
-                .map_err(|_| anyhow!("获取输出缓冲区锁失败"))?;
-
-            let current_output = buffer.entry(pane_id).or_insert_with(String::new);
-            current_output.push_str(data);
-
-            // 限制缓冲区大小，避免内存泄漏（按字符边界安全截断）
-            const MAX_LEN: usize = 50_000;
-            const KEEP_LEN: usize = 25_000;
-            if current_output.len() > MAX_LEN {
-                let mut byte_start = current_output.len() - KEEP_LEN;
-                while !current_output.is_char_boundary(byte_start)
-                    && byte_start < current_output.len()
-                {
-                    byte_start += 1;
-                }
-                let truncated = current_output.split_off(byte_start);
-                *current_output = truncated;
+    /// 安全获取缓冲区锁，处理中毒情况
+    fn get_buffer_lock(&self) -> TerminalResult<std::sync::MutexGuard<HashMap<u32, PaneBufferEntry>>> {
+        match self.output_buffer.lock() {
+            Ok(guard) => Ok(guard),
+            Err(poisoned) => {
+                warn!("输出缓冲区锁被中毒，尝试恢复数据");
+                Ok(poisoned.into_inner())
             }
         }
+    }
 
-        // 检查是否有完整的命令输出
-        self.check_and_process_complete_commands(pane_id)?;
+    /// 安全获取上下文提供者锁，处理中毒情况
+    fn get_context_provider_lock(&self) -> TerminalResult<std::sync::MutexGuard<ContextAwareProvider>> {
+        match self.context_provider.lock() {
+            Ok(guard) => Ok(guard),
+            Err(poisoned) => {
+                warn!("上下文提供者锁被中毒，尝试恢复数据");
+                Ok(poisoned.into_inner())
+            }
+        }
+    }
+
+    /// 分析终端输出
+    pub fn analyze_output(&self, pane_id: u32, data: &str) -> TerminalResult<()> {
+        debug!("分析面板 {} 的输出，数据长度: {}", pane_id, data.len());
+
+        // 检查是否需要全局清理
+        self.maybe_cleanup_stale_buffers()?;
+
+        // 一次性处理所有缓冲区操作，避免多次获取锁
+        let (should_process_commands, processed_output) = {
+            let mut buffer = self.get_buffer_lock()?;
+
+            // 获取或创建面板缓冲区条目
+            let entry = buffer.entry(pane_id).or_insert_with(PaneBufferEntry::new);
+            entry.access();
+
+            // 添加新数据
+            entry.content.push_str(data);
+
+            // 安全截断缓冲区，防止内存泄漏和无限循环
+            let config = ConfigManager::get_config();
+            if entry.content.len() > config.buffer.max_size {
+                self.safe_truncate_buffer(&mut entry.content)?;
+            }
+
+            // 检查是否需要处理命令
+            let should_process = self.has_complete_command(&entry.content);
+            let content_copy = if should_process {
+                Some(entry.content.clone())
+            } else {
+                None
+            };
+
+            (should_process, content_copy)
+        };
+
+        // 在锁外处理命令，避免死锁
+        if should_process_commands {
+            if let Some(output) = processed_output {
+                self.process_complete_commands(pane_id, &output)?;
+            }
+        }
 
         Ok(())
     }
 
-    /// 检查并处理完整的命令
-    fn check_and_process_complete_commands(&self, pane_id: u32) -> AppResult<()> {
-        let output = {
-            let buffer = self
-                .output_buffer
-                .lock()
-                .map_err(|_| anyhow!("获取输出缓冲区锁失败"))?;
+    /// 安全截断缓冲区，防止无限循环
+    fn safe_truncate_buffer(&self, content: &mut String) -> TerminalResult<()> {
+        let config = ConfigManager::get_config();
+        let target_start = content.len().saturating_sub(config.buffer.keep_size);
+        let mut byte_start = target_start;
+        let mut attempts = 0;
 
-            buffer.get(&pane_id).cloned().unwrap_or_default()
-        };
+        // 防止无限循环的安全检查
+        while !content.is_char_boundary(byte_start)
+            && byte_start < content.len()
+            && attempts < config.buffer.max_truncation_attempts
+        {
+            byte_start += 1;
+            attempts += 1;
+        }
+
+        // 如果找不到合适的字符边界，使用更保守的截断策略
+        if attempts >= config.buffer.max_truncation_attempts {
+            warn!("字符边界查找超过最大尝试次数，使用保守截断策略");
+            byte_start = content.len().saturating_sub(config.buffer.keep_size / 2);
+
+            // 确保不会在UTF-8字符中间截断
+            while byte_start > 0 && !content.is_char_boundary(byte_start) {
+                byte_start -= 1;
+            }
+        }
+
+        if byte_start > 0 && byte_start < content.len() {
+            let truncated = content.split_off(byte_start);
+            *content = truncated;
+            debug!("缓冲区已截断，新长度: {}", content.len());
+        }
+
+        Ok(())
+    }
+
+    /// 检查是否有完整的命令
+    fn has_complete_command(&self, content: &str) -> bool {
+        // 简单检查：是否包含提示符模式
+        content.lines().any(|line| {
+            line.contains('$') || line.contains('#') || line.contains('%') || line.contains('>')
+        })
+    }
+
+    /// 处理完整的命令（在锁外调用，避免死锁）
+    fn process_complete_commands(&self, pane_id: u32, output: &str) -> TerminalResult<()> {
+        debug!("处理面板 {} 的完整命令", pane_id);
 
         // 尝试检测命令
-        if let Some((command, command_output)) = self.detect_command_completion(&output) {
+        if let Some((command, command_output)) = self.detect_command_completion(output) {
+            debug!("检测到完整命令: {}", command);
+
             // 处理完整的命令
             self.process_complete_command(&command, &command_output)?;
 
-            // 清理缓冲区中已处理的部分
-            let mut buffer = self
-                .output_buffer
-                .lock()
-                .map_err(|_| anyhow!("获取输出缓冲区锁失败"))?;
+            // 清理缓冲区中已处理的部分（一次性操作）
+            {
+                let mut buffer = self.get_buffer_lock()?;
+                if let Some(entry) = buffer.get_mut(&pane_id) {
+                    entry.access();
 
-            if let Some(current_output) = buffer.get_mut(&pane_id) {
-                // 保留最后的提示符部分
-                if let Some(last_prompt_pos) = current_output.rfind('$') {
-                    *current_output = current_output[last_prompt_pos..].to_string();
-                } else {
-                    current_output.clear();
+                    // 保留最后的提示符部分
+                    if let Some(last_prompt_pos) = entry.content.rfind('$') {
+                        entry.content = entry.content[last_prompt_pos..].to_string();
+                    } else {
+                        entry.content.clear();
+                    }
+
+                    debug!("清理后缓冲区长度: {}", entry.content.len());
                 }
             }
         }
 
+        Ok(())
+    }
+
+    /// 定期清理过期的缓冲区，防止内存泄漏
+    fn maybe_cleanup_stale_buffers(&self) -> TerminalResult<()> {
+        let config = ConfigManager::get_config();
+        let should_cleanup = {
+            let cleanup_guard = self.last_global_cleanup.lock()
+                .map_err(|_| TerminalError::concurrency("获取清理时间锁", "锁获取失败"))?;
+            cleanup_guard.elapsed() > config.cleanup_interval()
+        };
+
+        if should_cleanup && config.cleanup.auto_cleanup_enabled {
+            self.cleanup_stale_buffers()?;
+        }
+
+        Ok(())
+    }
+
+    /// 清理过期的缓冲区
+    fn cleanup_stale_buffers(&self) -> TerminalResult<()> {
+        debug!("开始清理过期缓冲区");
+
+        let config = ConfigManager::get_config();
+        let stale_threshold = config.stale_threshold();
+        let mut removed_count = 0;
+
+        {
+            let mut buffer = self.get_buffer_lock()?;
+            let mut to_remove = Vec::new();
+
+            // 收集需要删除的面板ID
+            for (&pane_id, entry) in buffer.iter() {
+                if entry.is_stale(stale_threshold) {
+                    to_remove.push(pane_id);
+                }
+            }
+
+            // 删除过期条目
+            for pane_id in to_remove {
+                buffer.remove(&pane_id);
+                removed_count += 1;
+            }
+        }
+
+        // 更新清理时间
+        {
+            let mut cleanup_guard = self.last_global_cleanup.lock()
+                .map_err(|_| TerminalError::concurrency("获取清理时间锁", "锁获取失败"))?;
+            *cleanup_guard = Instant::now();
+        }
+
+        if removed_count > 0 {
+            debug!("清理了 {} 个过期缓冲区", removed_count);
+        }
+
+        Ok(())
+    }
+
+    /// 清理指定面板的缓冲区（外部调用）
+    pub fn cleanup_pane_buffer(&self, pane_id: u32) -> TerminalResult<()> {
+        let mut buffer = self.get_buffer_lock()?;
+        if buffer.remove(&pane_id).is_some() {
+            debug!("清理面板 {} 的缓冲区", pane_id);
+        }
         Ok(())
     }
 
@@ -169,7 +347,7 @@ impl OutputAnalyzer {
     }
 
     /// 处理完整的命令
-    fn process_complete_command(&self, command: &str, output: &str) -> AppResult<()> {
+    fn process_complete_command(&self, command: &str, output: &str) -> TerminalResult<()> {
         // 使用智能提取器分析输出
         let extractor = SmartExtractor::global();
         let extraction_results = extractor.extract_entities(command, output)?;
@@ -184,10 +362,7 @@ impl OutputAnalyzer {
         }
 
         // 记录命令输出到上下文感知提供者
-        let provider = self
-            .context_provider
-            .lock()
-            .map_err(|_| anyhow!("获取上下文提供者锁失败"))?;
+        let provider = self.get_context_provider_lock()?;
 
         // 创建一个增强的命令输出记录，包含提取的实体
         let mut enhanced_output = output.to_string();
@@ -212,35 +387,54 @@ impl OutputAnalyzer {
     }
 
     /// 获取指定面板的缓冲区内容
-    pub fn get_pane_buffer(&self, pane_id: u32) -> AppResult<String> {
-        let buffer = self
-            .output_buffer
-            .lock()
-            .map_err(|_| anyhow!("获取输出缓冲区锁失败"))?;
+    pub fn get_pane_buffer(&self, pane_id: u32) -> TerminalResult<String> {
+        let mut buffer = self.get_buffer_lock()?;
 
-        Ok(buffer.get(&pane_id).cloned().unwrap_or_default())
+        if let Some(entry) = buffer.get_mut(&pane_id) {
+            entry.access();
+            Ok(entry.content.clone())
+        } else {
+            Ok(String::new())
+        }
     }
 
     /// 设置指定面板的缓冲区内容
-    pub fn set_pane_buffer(&self, pane_id: u32, content: String) -> AppResult<()> {
-        let mut buffer = self
-            .output_buffer
-            .lock()
-            .map_err(|_| anyhow!("获取输出缓冲区锁失败"))?;
+    pub fn set_pane_buffer(&self, pane_id: u32, content: String) -> TerminalResult<()> {
+        let mut buffer = self.get_buffer_lock()?;
 
-        buffer.insert(pane_id, content);
+        let entry = buffer.entry(pane_id).or_insert_with(PaneBufferEntry::new);
+        entry.content = content;
+        entry.access();
+
+        debug!("设置面板 {} 缓冲区内容，长度: {}", pane_id, entry.content.len());
         Ok(())
     }
 
     /// 清理指定面板的缓冲区
-    pub fn clear_pane_buffer(&self, pane_id: u32) -> AppResult<()> {
-        let mut buffer = self
-            .output_buffer
-            .lock()
-            .map_err(|_| anyhow!("获取输出缓冲区锁失败"))?;
+    pub fn clear_pane_buffer(&self, pane_id: u32) -> TerminalResult<()> {
+        let mut buffer = self.get_buffer_lock()?;
 
-        buffer.remove(&pane_id);
+        if buffer.remove(&pane_id).is_some() {
+            debug!("清理面板 {} 的缓冲区", pane_id);
+        }
+
         Ok(())
+    }
+
+    /// 获取缓冲区统计信息
+    pub fn get_buffer_stats(&self) -> TerminalResult<HashMap<String, usize>> {
+        let buffer = self.get_buffer_lock()?;
+
+        let mut stats = HashMap::new();
+        stats.insert("total_panes".to_string(), buffer.len());
+
+        let total_size: usize = buffer.values().map(|entry| entry.content.len()).sum();
+        stats.insert("total_buffer_size".to_string(), total_size);
+
+        let avg_size = if buffer.is_empty() { 0 } else { total_size / buffer.len() };
+        stats.insert("average_buffer_size".to_string(), avg_size);
+
+        Ok(stats)
     }
 }
 
