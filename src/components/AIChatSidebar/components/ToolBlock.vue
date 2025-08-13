@@ -1,6 +1,6 @@
 <template>
-  <div class="tool-block" @click="toggleExpanded">
-    <div class="tool-header">
+  <div class="tool-block">
+    <div class="tool-header" @click="toggleExpanded">
       <div class="tool-info">
         <span class="tool-name">{{ step.metadata?.toolName || '工具调用' }}</span>
         <span class="tool-command" v-if="step.metadata?.toolCommand">{{ step.metadata.toolCommand }}</span>
@@ -14,7 +14,7 @@
       ></div>
     </div>
 
-    <div v-if="isExpanded && step.metadata?.toolResult" class="tool-result">
+    <div v-if="isExpanded && step.metadata?.toolResult" class="tool-result" @click.stop>
       <div class="tool-result-content">{{ formatResult(step.metadata.toolResult) }}</div>
     </div>
   </div>
@@ -43,24 +43,24 @@
 
 <style scoped>
   .tool-block {
-    padding: 8px 12px;
     background: var(--bg-500);
     border: 1px solid var(--border-300);
     border-radius: 6px;
     font-size: 13px;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
     max-width: 100%;
   }
 
-  .tool-block:hover {
-    background: var(--bg-600);
-  }
-
   .tool-header {
+    padding: 8px 12px;
     display: flex;
     align-items: center;
     gap: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+
+  .tool-header:hover {
+    background: var(--bg-600);
   }
 
   .tool-info {
@@ -104,7 +104,6 @@
   }
 
   .tool-result {
-    margin-top: 8px;
     padding: 8px;
     background: var(--bg-400);
     border-radius: 4px;

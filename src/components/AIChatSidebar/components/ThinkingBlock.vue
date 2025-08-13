@@ -3,12 +3,20 @@
     <div class="thinking-header" @click="toggleExpanded">
       <div class="thinking-title">Thinking...</div>
       <div class="thinking-timer">{{ formatTime(elapsedTime) }}</div>
-      <div class="thinking-toggle">{{ isExpanded ? '▼' : '▶' }}</div>
     </div>
 
     <div v-if="isExpanded" class="thinking-content">
       <div class="thinking-text">{{ step.content }}</div>
     </div>
+
+    <!-- 正在思考时：显示若隐若现的内容预览 -->
+    <div v-else-if="!isThinkingComplete && step.content" class="thinking-preview">
+      <div class="thinking-text-preview">{{ step.content }}</div>
+      <div class="thinking-gradient-top"></div>
+      <div class="thinking-gradient-bottom"></div>
+    </div>
+
+    <!-- 思考完成后：不显示任何内容预览，需要点击展开 -->
   </div>
 </template>
 
@@ -30,6 +38,11 @@
   const elapsedTime = computed(() => {
     // 如果有持续时间，直接使用；否则实时计算
     return props.step.metadata?.thinkingDuration || currentTime.value - props.step.timestamp
+  })
+
+  // 判断思考是否已完成
+  const isThinkingComplete = computed(() => {
+    return Boolean(props.step.metadata?.thinkingDuration)
   })
 
   const formatTime = (ms: number) => {
@@ -76,6 +89,7 @@
   }
 
   .thinking-header:hover {
+    border-radius: var(--border-radius);
     background: var(--color-hover);
   }
 
@@ -92,11 +106,6 @@
     font-family: monospace;
   }
 
-  .thinking-toggle {
-    font-size: 12px;
-    color: var(--text-400);
-  }
-
   .thinking-content {
     border-top: 1px solid var(--border-300);
     padding: var(--spacing-md);
@@ -108,5 +117,42 @@
     color: var(--text-400);
     white-space: pre-wrap;
     word-wrap: break-word;
+  }
+
+  .thinking-preview {
+    position: relative;
+    height: 60px;
+    overflow: hidden;
+    padding: var(--spacing-md);
+    padding-top: 0;
+  }
+
+  .thinking-text-preview {
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    color: var(--text-400);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    opacity: 0.7;
+  }
+
+  .thinking-gradient-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    background: linear-gradient(to bottom, var(--bg-400), transparent);
+    pointer-events: none;
+  }
+
+  .thinking-gradient-bottom {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    background: linear-gradient(to top, var(--bg-400), transparent);
+    pointer-events: none;
   }
 </style>

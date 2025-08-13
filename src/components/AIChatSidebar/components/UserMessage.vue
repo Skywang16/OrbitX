@@ -40,26 +40,10 @@
     color: white;
     padding: var(--spacing-sm) var(--spacing-md);
     border-radius: var(--border-radius-lg);
-    border-bottom-right-radius: var(--border-radius-sm);
-    position: relative;
     word-wrap: break-word;
     word-break: break-word;
     white-space: pre-wrap;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  }
-
-  .user-message-bubble::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    right: -6px;
-    width: 0;
-    height: 0;
-    border: 6px solid transparent;
-    border-left-color: var(--color-primary);
-    border-bottom: 0;
-    border-right: 0;
-    margin-bottom: -6px;
   }
 
   .user-message-text {
@@ -73,12 +57,5 @@
     color: var(--text-400);
     margin-top: var(--spacing-xs);
     margin-right: var(--spacing-sm);
-  }
-
-  /* 响应式设计 */
-  @media (max-width: 768px) {
-    .user-message-content {
-      max-width: 90%;
-    }
   }
 </style>
