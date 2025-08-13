@@ -11,10 +11,7 @@ use crate::storage::sql_scripts::SqlScriptLoader;
 use crate::storage::types::{DataQuery, SaveOptions};
 use crate::utils::error::AppResult;
 use anyhow::{anyhow, Context};
-use argon2::{
-    password_hash::{rand_core::OsRng, SaltString},
-    Argon2, PasswordHasher,
-};
+use argon2::{password_hash::Salt, Argon2, PasswordHasher};
 use base64::{engine::general_purpose, Engine as _};
 use chacha20poly1305::{
     aead::{Aead, AeadCore, KeyInit, OsRng as ChaChaOsRng},
@@ -146,10 +143,17 @@ impl EncryptionManager {
 
     /// 设置主密钥（从用户密码派生）
     pub fn set_master_password(&mut self, password: &str) -> AppResult<()> {
-        let salt = SaltString::generate(&mut OsRng);
+        // 使用固定的盐值确保每次生成相同的主密钥
+        // 这样重启应用后能够正确解密之前加密的数据
+
+        // 直接使用固定的盐值字符串，这是argon2标准的base64格式
+        // 这个盐值是"OrbitXTerminalSalt"的base64编码
+        let salt = Salt::from_b64("T3JiaXRYVGVybWluYWxTYWx0")
+            .map_err(|e| anyhow!(format!("创建固定盐值失败: {}", e)))?;
+
         let password_hash = self
             .argon2
-            .hash_password(password.as_bytes(), &salt)
+            .hash_password(password.as_bytes(), salt)
             .map_err(|e| anyhow!(format!("密钥派生失败: {}", e)))?;
 
         // 使用密码哈希的前32字节作为加密密钥
@@ -432,9 +436,17 @@ impl SqliteManager {
     /// 标准做法：优先从配置文件读取，不存在则基于用户+主机生成稳定密钥
     async fn get_secure_master_key(&self) -> AppResult<String> {
         // 1. 尝试从用户配置目录读取已保存的密钥
-        if let Some(key) = self.get_key_from_config_file().await? {
-            debug!("从配置文件获取主密钥");
-            return Ok(key);
+        match self.get_key_from_config_file().await {
+            Ok(Some(key)) => {
+                debug!("从配置文件获取主密钥");
+                return Ok(key);
+            }
+            Ok(None) => {
+                debug!("配置文件中未找到主密钥");
+            }
+            Err(e) => {
+                warn!("从配置文件读取主密钥失败: {}，将生成新的主密钥", e);
+            }
         }
 
         // 2. 生成基于用户+主机的确定性密钥并保存
@@ -912,7 +924,7 @@ impl SqliteManager {
             SELECT id, name, provider, api_url, api_key_encrypted, model_name,
                    is_default, enabled, config_json, created_at, updated_at
             FROM ai_models
-            ORDER BY is_default DESC, name ASC
+            ORDER BY created_at ASC
         "#;
 
         let rows = self
@@ -1070,10 +1082,19 @@ impl SqliteManager {
     ) -> AppResult<AIModelConfig> {
         let api_key =
             if let Some(encrypted_data) = row.get::<Option<Vec<u8>>, _>("api_key_encrypted") {
-                encryption_manager
-                    .decrypt_data(&encrypted_data)
-                    .unwrap_or_default()
+                // 尝试解密API密钥，如果失败则记录错误并返回空字符串
+                match encryption_manager.decrypt_data(&encrypted_data) {
+                    Ok(decrypted_key) => {
+                        debug!("成功解密API密钥");
+                        decrypted_key
+                    }
+                    Err(e) => {
+                        warn!("解密API密钥失败: {}，返回空字符串", e);
+                        String::new()
+                    }
+                }
             } else {
+                debug!("API密钥未加密或为空");
                 String::new()
             };
 

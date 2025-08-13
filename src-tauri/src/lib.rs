@@ -108,7 +108,36 @@ use window::commands::{
 use std::path::PathBuf;
 use tauri::{Emitter, Manager};
 use tracing::{info, warn};
-use tracing_subscriber;
+use tracing_subscriber::{self, EnvFilter};
+
+/// 初始化日志系统
+fn init_logging() {
+    // 设置默认的日志级别，如果没有设置 RUST_LOG 环境变量
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        // 默认显示 info 级别及以上的日志
+        EnvFilter::new("info")
+    });
+
+    // 初始化日志订阅器
+    let result = tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .with_target(true)  // 显示模块路径
+        .with_thread_ids(false)  // 不显示线程ID
+        .with_file(false)  // 不显示文件名
+        .with_line_number(false)  // 不显示行号
+        .with_level(true)  // 显示日志级别
+        .try_init();
+
+    match result {
+        Ok(_) => {
+            println!("日志系统初始化成功");
+        }
+        Err(e) => {
+            eprintln!("日志系统初始化失败: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
 
 /// 处理文件打开事件，返回文件所在的目录路径
 #[tauri::command]
@@ -170,13 +199,17 @@ pub fn init_plugin<R: tauri::Runtime>(name: &'static str) -> tauri::plugin::Taur
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // 初始化日志系统
-    if let Err(e) = tracing_subscriber::fmt::try_init() {
-        eprintln!("日志系统初始化失败: {}", e);
-        std::process::exit(1);
-    }
+    init_logging();
 
     info!("OrbitX 应用程序启动");
     println!("OrbitX 应用程序启动 - 控制台输出");
+
+    // 测试不同级别的日志输出
+    tracing::trace!("这是 TRACE 级别的日志");
+    tracing::debug!("这是 DEBUG 级别的日志");
+    tracing::info!("这是 INFO 级别的日志");
+    tracing::warn!("这是 WARN 级别的日志");
+    tracing::error!("这是 ERROR 级别的日志");
 
     let mut builder = tauri::Builder::default();
 

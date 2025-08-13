@@ -10,7 +10,8 @@ import { readFileTool } from './read-file'
 import { readManyFilesTool } from './read-many-files'
 import { readDirectoryTool } from './read-directory'
 import { fileSystemTool } from './filesystem'
-import { writeFileTool } from './write-file'
+import { createFileTool } from './create-file'
+import { editFileTool } from './edit-file'
 import { shellTool } from './shell'
 import { webFetchTool } from './web-fetch'
 import { webSearchTool } from './web-search'
@@ -24,7 +25,8 @@ export const allTools: Tool[] = [
   readFileTool,
   readManyFilesTool,
   readDirectoryTool,
-  writeFileTool,
+  createFileTool,
+  editFileTool,
 
   // 文件系统工具
   fileSystemTool,
@@ -44,7 +46,7 @@ export const allTools: Tool[] = [
  * 按分类组织的工具
  */
 export const toolsByCategory = {
-  file: [readFileTool, readManyFilesTool, readDirectoryTool, writeFileTool],
+  file: [readFileTool, readManyFilesTool, readDirectoryTool, createFileTool, editFileTool],
   filesystem: [fileSystemTool],
   system: [shellTool],
   network: [webFetchTool, webSearchTool],
@@ -54,7 +56,7 @@ export const toolsByCategory = {
 /**
  * 核心工具（最常用的工具）
  */
-export const coreTools: Tool[] = [readFileTool, readDirectoryTool, fileSystemTool, writeFileTool, shellTool, memoryTool]
+export const coreTools: Tool[] = [readFileTool, readDirectoryTool, fileSystemTool, createFileTool, editFileTool, shellTool, memoryTool]
 
 /**
  * 网络工具
@@ -64,7 +66,7 @@ export const networkTools: Tool[] = [webFetchTool, webSearchTool]
 /**
  * 文件操作工具
  */
-export const fileTools: Tool[] = [readFileTool, readManyFilesTool, readDirectoryTool, writeFileTool]
+export const fileTools: Tool[] = [readFileTool, readManyFilesTool, readDirectoryTool, createFileTool, editFileTool]
 
 /**
  * 文件系统工具
@@ -113,12 +115,21 @@ export function registerAllTools(): void {
       },
     },
     {
-      tool: writeFileTool,
+      tool: createFileTool,
       metadata: {
-        description: writeFileTool.description,
+        description: createFileTool.description,
         category: 'file',
         version: '1.0.0',
-        tags: ['file', 'write', 'create'],
+        tags: ['file', 'create', 'new'],
+      },
+    },
+    {
+      tool: editFileTool,
+      metadata: {
+        description: editFileTool.description,
+        category: 'file',
+        version: '1.0.0',
+        tags: ['file', 'edit', 'modify', 'replace', 'line'],
       },
     },
     {
