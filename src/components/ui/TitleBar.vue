@@ -48,7 +48,7 @@
     display: flex;
     align-items: center;
     height: var(--titlebar-height);
-    background-color: var(--color-background);
+    background-color: var(--bg-200);
     cursor: default;
   }
 

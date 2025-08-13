@@ -156,14 +156,14 @@
     gap: var(--spacing-sm);
     padding: var(--spacing-md) var(--spacing-lg);
     margin-bottom: var(--spacing-sm);
-    background: var(--color-background);
-    border: 1px solid var(--border-color);
+    background: var(--bg-400);
+    border: 1px solid var(--border-300);
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-sm);
     font-family: var(--font-family);
     font-size: var(--font-size-md);
     line-height: 1.5;
-    color: var(--text-primary);
+    color: var(--text-200);
     transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
     max-width: 400px;
     word-wrap: break-word;
@@ -171,39 +171,39 @@
 
   /* 消息类型样式 */
   .x-message--success {
-    border-color: var(--color-green);
-    background: var(--color-background);
+    border-color: var(--color-success);
+    background: var(--bg-400);
   }
 
   .x-message--success .x-message__icon {
-    color: var(--color-green);
+    color: var(--color-success);
   }
 
   .x-message--error {
-    border-color: var(--color-red);
-    background: var(--color-background);
+    border-color: var(--color-error);
+    background: var(--bg-400);
   }
 
   .x-message--error .x-message__icon {
-    color: var(--color-red);
+    color: var(--color-error);
   }
 
   .x-message--warning {
-    border-color: var(--color-yellow);
-    background: var(--color-background);
+    border-color: var(--color-warning);
+    background: var(--bg-400);
   }
 
   .x-message--warning .x-message__icon {
-    color: var(--color-yellow);
+    color: var(--color-warning);
   }
 
   .x-message--info {
-    border-color: var(--color-blue);
-    background: var(--color-background);
+    border-color: var(--color-info);
+    background: var(--bg-400);
   }
 
   .x-message--info .x-message__icon {
-    color: var(--color-blue);
+    color: var(--color-info);
   }
 
   /* 图标样式 */
@@ -231,7 +231,7 @@
 
   .x-message__text {
     margin: 0;
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   /* 关闭按钮样式 */
@@ -246,15 +246,15 @@
     padding: 0;
     background: transparent;
     border: none;
-    color: var(--text-secondary);
+    color: var(--text-400);
     cursor: pointer;
     border-radius: var(--border-radius-sm);
     transition: all 0.2s ease;
   }
 
   .x-message__close:hover {
-    color: var(--text-primary);
-    background: var(--color-background-hover);
+    color: var(--text-200);
+    background: var(--color-hover);
   }
 
   .x-message__close-icon {

@@ -157,7 +157,7 @@
     align-items: center;
     justify-content: center;
     padding: 60px 20px;
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .loading-state {
@@ -223,12 +223,12 @@
     background: var(--bg-tertiary);
     font-weight: 500;
     font-size: 14px;
-    color: var(--text-secondary);
+    color: var(--text-400);
     border-bottom: 1px solid var(--border);
   }
 
   .table-row {
-    background: var(--bg-primary);
+    background: var(--bg-400);
     border-bottom: 1px solid var(--border);
     transition: background-color 0.2s;
   }
@@ -284,7 +284,7 @@
 
   .action-text {
     font-size: 14px;
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .status-indicators {
@@ -332,13 +332,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-secondary);
+    color: var(--text-400);
     transition: all 0.2s;
   }
 
   .btn-icon:hover {
     background: var(--bg-tertiary);
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .btn-icon.btn-danger:hover {

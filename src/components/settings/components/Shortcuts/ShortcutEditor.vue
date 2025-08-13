@@ -220,7 +220,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--color-selection);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -228,7 +228,7 @@
   }
 
   .shortcut-editor {
-    background: var(--bg-primary);
+    background: var(--bg-400);
     border-radius: 8px;
     box-shadow: var(--shadow-lg);
     width: 90%;
@@ -256,7 +256,7 @@
   .btn-close {
     background: none;
     border: none;
-    color: var(--text-secondary);
+    color: var(--text-400);
     cursor: pointer;
     padding: 4px;
     border-radius: 4px;
@@ -264,7 +264,7 @@
 
   .btn-close:hover {
     background: var(--bg-hover);
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .editor-content {
@@ -281,7 +281,7 @@
     display: block;
     margin-bottom: 6px;
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .form-control {
@@ -290,7 +290,7 @@
     border: 1px solid var(--border);
     border-radius: 4px;
     background: var(--bg-secondary);
-    color: var(--text-primary);
+    color: var(--text-200);
     font-size: 14px;
   }
 
@@ -316,7 +316,7 @@
     transform: translateY(-50%);
     background: none;
     border: none;
-    color: var(--text-secondary);
+    color: var(--text-400);
     cursor: pointer;
     padding: 4px;
     border-radius: 3px;
@@ -324,7 +324,7 @@
 
   .btn-clear:hover {
     background: var(--bg-hover);
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .editor-footer {
@@ -351,7 +351,7 @@
 
   .btn-secondary {
     background: var(--bg-tertiary);
-    color: var(--text-primary);
+    color: var(--text-200);
     border: 1px solid var(--border);
   }
 

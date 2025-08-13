@@ -153,7 +153,7 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background-color: var(--color-background);
+    background-color: var(--bg-200);
   }
 
   .main-content {

@@ -275,23 +275,23 @@
   }
 
   .completion-text {
-    color: #888;
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-    font-size: 14px;
-    background: rgba(136, 136, 136, 0.1);
+    color: var(--text-400);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-md);
+    background: var(--bg-500);
     padding: 1px 4px;
     border-radius: 3px;
-    border: 1px solid rgba(136, 136, 136, 0.2);
+    border: 1px solid var(--border-300);
   }
 
   .completion-hint {
-    color: #999;
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-    font-size: 11px;
-    background: rgba(153, 153, 153, 0.1);
+    color: var(--text-500);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    background: var(--bg-400);
     padding: 2px 6px;
     border-radius: 4px;
-    border: 1px solid rgba(153, 153, 153, 0.2);
+    border: 1px solid var(--border-200);
     opacity: 0.7;
   }
 </style>

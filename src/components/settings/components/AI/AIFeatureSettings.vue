@@ -73,13 +73,13 @@
   .section-title {
     font-size: var(--font-size-md);
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-200);
     margin: 0 0 var(--spacing-xs) 0;
   }
 
   .section-description {
     font-size: var(--font-size-sm);
-    color: var(--text-secondary);
+    color: var(--text-400);
     margin: 0 0 var(--spacing-md) 0;
     line-height: 1.5;
   }
@@ -88,10 +88,10 @@
     width: 100%;
     min-height: 100px;
     padding: var(--spacing-sm);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-300);
     border-radius: var(--border-radius);
-    background-color: var(--color-background);
-    color: var(--text-primary);
+    background-color: var(--bg-400);
+    color: var(--text-200);
     font-size: var(--font-size-sm);
     font-family: inherit;
     line-height: 1.5;
@@ -111,7 +111,7 @@
   }
 
   .prompt-textarea::placeholder {
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .prompt-actions {

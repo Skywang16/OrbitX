@@ -93,20 +93,20 @@
   }
 
   .session-select :deep(.x-select__input:hover) {
-    background-color: var(--color-background-hover, rgba(0, 0, 0, 0.05));
+    background-color: var(--color-hover, rgba(0, 0, 0, 0.05));
   }
 
   .session-select :deep(.x-select--open .x-select__input) {
-    background-color: var(--color-background-hover, rgba(0, 0, 0, 0.05));
+    background-color: var(--color-hover, rgba(0, 0, 0, 0.05));
   }
 
   .session-select :deep(.x-select__value) {
     font-weight: 500;
-    color: var(--color-text);
+    color: var(--text-200);
   }
 
   .session-select :deep(.x-select__placeholder) {
-    color: var(--color-text-secondary);
+    color: var(--text-400);
     font-weight: 400;
   }
 

@@ -75,7 +75,7 @@
     align-items: center;
     justify-content: center;
     text-align: center;
-    color: var(--text-secondary);
+    color: var(--text-400);
     gap: var(--spacing-md);
   }
 
@@ -87,7 +87,7 @@
   .empty-text {
     font-size: var(--font-size-lg);
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .empty-hint {

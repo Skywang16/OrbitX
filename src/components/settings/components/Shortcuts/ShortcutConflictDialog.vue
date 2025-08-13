@@ -111,7 +111,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--color-selection);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -119,7 +119,7 @@
   }
 
   .conflict-dialog {
-    background: var(--bg-primary);
+    background: var(--bg-400);
     border-radius: 8px;
     box-shadow: var(--shadow-lg);
     width: 90%;
@@ -148,7 +148,7 @@
   .btn-close {
     background: none;
     border: none;
-    color: var(--text-secondary);
+    color: var(--text-400);
     cursor: pointer;
     padding: 4px;
     border-radius: 4px;
@@ -156,7 +156,7 @@
 
   .btn-close:hover {
     background: var(--bg-hover);
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .dialog-content {
@@ -167,7 +167,7 @@
 
   .conflict-description {
     margin: 0 0 20px 0;
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .conflict-item {
@@ -252,7 +252,7 @@
 
   .action-text {
     font-size: 14px;
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .dialog-footer {
@@ -279,7 +279,7 @@
 
   .btn-secondary {
     background: var(--bg-tertiary);
-    color: var(--text-primary);
+    color: var(--text-200);
     border: 1px solid var(--border);
   }
 

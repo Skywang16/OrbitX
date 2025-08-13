@@ -44,8 +44,8 @@
 <style scoped>
   .tool-block {
     padding: 8px 12px;
-    background: #2a2a2a;
-    border: 1px solid #404040;
+    background: var(--bg-500);
+    border: 1px solid var(--border-300);
     border-radius: 6px;
     font-size: 13px;
     cursor: pointer;
@@ -54,7 +54,7 @@
   }
 
   .tool-block:hover {
-    background: #333333;
+    background: var(--bg-600);
   }
 
   .tool-header {
@@ -72,13 +72,13 @@
   }
 
   .tool-name {
-    color: #ffffff;
+    color: var(--text-200);
     font-weight: 500;
     white-space: nowrap;
   }
 
   .tool-command {
-    color: #a0a0a0;
+    color: var(--text-400);
     font-family: monospace;
     font-size: 12px;
     white-space: nowrap;
@@ -91,29 +91,28 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #10b981;
+    background: var(--color-success);
   }
 
   .status-dot.running {
-    background: #3b82f6;
+    background: var(--color-info);
     animation: pulse 1.5s infinite;
   }
 
   .status-dot.error {
-    background: #ef4444;
+    background: var(--color-error);
   }
 
   .tool-result {
     margin-top: 8px;
     padding: 8px;
-    background: var(--color-background);
+    background: var(--bg-400);
     border-radius: 4px;
-    border-left: 2px solid var(--color-border);
   }
 
   .tool-result-content {
     font-family: monospace;
-    color: var(--text-primary);
+    color: var(--text-300);
     white-space: pre-wrap;
     word-wrap: break-word;
     font-size: 12px;

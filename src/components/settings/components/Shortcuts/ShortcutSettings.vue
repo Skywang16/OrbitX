@@ -385,7 +385,7 @@
   }
 
   .settings-content {
-    background: var(--bg-secondary);
+    background: var(--bg-400);
     border-radius: 8px;
     padding: 20px;
   }
@@ -438,13 +438,13 @@
   }
 
   .btn-secondary {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
+    background: var(--bg-500);
+    color: var(--text-200);
+    border: 1px solid var(--border-300);
   }
 
   .btn-secondary:hover:not(:disabled) {
-    background: var(--bg-hover);
+    background: var(--color-hover);
   }
 
   .btn-warning {
@@ -468,8 +468,8 @@
     position: absolute;
     top: 100%;
     right: 0;
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
+    background: var(--bg-400);
+    border: 1px solid var(--border-300);
     border-radius: 6px;
     box-shadow: var(--shadow-lg);
     min-width: 160px;
@@ -494,12 +494,12 @@
   }
 
   .dropdown-menu button:hover {
-    background: var(--bg-hover);
+    background: var(--color-hover);
   }
 
   .dropdown-divider {
     height: 1px;
-    background: var(--border);
+    background: var(--border-300);
     margin: 4px 0;
   }
 

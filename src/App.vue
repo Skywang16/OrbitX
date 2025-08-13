@@ -14,8 +14,8 @@
     font-family: var(--font-family);
     font-size: var(--font-size-lg);
     font-weight: 400;
-    color: var(--text-secondary);
-    background-color: var(--color-background);
+    color: var(--text-300);
+    background-color: var(--bg-200);
 
     font-synthesis: none;
     text-rendering: optimizeLegibility;

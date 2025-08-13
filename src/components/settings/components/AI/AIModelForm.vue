@@ -219,7 +219,7 @@
   .section-title {
     font-size: var(--font-size-md);
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-200);
     margin: 0 0 var(--spacing-md) 0;
   }
 
@@ -231,17 +231,17 @@
     display: block;
     font-size: var(--font-size-sm);
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-200);
     margin-bottom: var(--spacing-xs);
   }
 
   .form-input {
     width: 100%;
     padding: var(--spacing-sm);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-300);
     border-radius: var(--border-radius);
-    background-color: var(--color-background);
-    color: var(--text-primary);
+    background-color: var(--bg-400);
+    color: var(--text-200);
     font-size: var(--font-size-sm);
     transition: all 0.2s ease;
   }

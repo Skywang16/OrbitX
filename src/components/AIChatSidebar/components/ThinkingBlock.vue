@@ -60,9 +60,9 @@
 <style scoped>
   .thinking-block {
     margin-bottom: var(--spacing-sm);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--border-300);
     border-radius: var(--border-radius);
-    background: var(--color-background-secondary);
+    background: var(--bg-400);
     opacity: 0.8;
   }
 
@@ -76,36 +76,36 @@
   }
 
   .thinking-header:hover {
-    background: var(--color-background-hover);
+    background: var(--color-hover);
   }
 
   .thinking-title {
     flex: 1;
     font-size: var(--font-size-sm);
-    color: var(--text-secondary);
+    color: var(--text-400);
     font-style: italic;
   }
 
   .thinking-timer {
     font-size: var(--font-size-xs);
-    color: var(--text-tertiary);
+    color: var(--text-500);
     font-family: monospace;
   }
 
   .thinking-toggle {
     font-size: 12px;
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .thinking-content {
-    border-top: 1px solid var(--color-border);
+    border-top: 1px solid var(--border-300);
     padding: var(--spacing-md);
   }
 
   .thinking-text {
     font-size: var(--font-size-sm);
     line-height: 1.5;
-    color: var(--text-secondary);
+    color: var(--text-400);
     white-space: pre-wrap;
     word-wrap: break-word;
   }

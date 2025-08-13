@@ -102,7 +102,7 @@
 
   .navigation-header {
     padding: var(--spacing-md);
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-300);
     margin-bottom: var(--spacing-md);
   }
 
@@ -123,7 +123,7 @@
   }
 
   .navigation-item:hover {
-    background-color: var(--color-background-hover);
+    background-color: var(--color-hover);
   }
 
   .navigation-item.active {
@@ -137,7 +137,7 @@
 
   .item-icon {
     flex-shrink: 0;
-    color: var(--text-secondary);
+    color: var(--text-400);
     transition: color 0.2s ease;
   }
 
@@ -153,13 +153,13 @@
   .item-label {
     font-size: var(--font-size-sm);
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-200);
     margin-bottom: 2px;
   }
 
   .item-description {
     font-size: var(--font-size-xs);
-    color: var(--text-secondary);
+    color: var(--text-400);
     line-height: 1.3;
   }
 </style>

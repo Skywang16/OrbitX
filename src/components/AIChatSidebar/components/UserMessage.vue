@@ -36,7 +36,7 @@
   }
 
   .user-message-bubble {
-    background: var(--color-blue);
+    background: var(--color-primary);
     color: white;
     padding: var(--spacing-sm) var(--spacing-md);
     border-radius: var(--border-radius-lg);
@@ -56,7 +56,7 @@
     width: 0;
     height: 0;
     border: 6px solid transparent;
-    border-left-color: var(--color-blue);
+    border-left-color: var(--color-primary);
     border-bottom: 0;
     border-right: 0;
     margin-bottom: -6px;
@@ -70,7 +70,7 @@
 
   .user-message-time {
     font-size: var(--font-size-xs);
-    color: var(--text-secondary);
+    color: var(--text-400);
     margin-top: var(--spacing-xs);
     margin-right: var(--spacing-sm);
   }

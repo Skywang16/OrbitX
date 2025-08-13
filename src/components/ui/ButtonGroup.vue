@@ -126,10 +126,10 @@
     align-items: center;
     gap: var(--spacing-xs);
     height: var(--titlebar-element-height);
-    background: var(--color-secondary);
+    background: var(--bg-400);
     border-radius: var(--border-radius-md);
     padding: 2px;
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--border-300);
   }
 
   .control-btn {
@@ -148,7 +148,7 @@
   }
 
   .control-btn:hover {
-    background: var(--color-background-hover);
+    background: var(--color-hover);
   }
 
   .pin-btn.active {
@@ -156,20 +156,20 @@
   }
 
   .pin-btn.active .pin-icon {
-    color: white;
+    color: var(--text-100);
   }
 
   .pin-icon {
     height: 14px;
     width: 14px;
-    color: var(--text-primary);
+    color: var(--text-200);
     transition: color 0.2s ease;
   }
 
   .settings-icon {
     height: 14px;
     width: 14px;
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .ai-chat-btn.active {
@@ -177,13 +177,13 @@
   }
 
   .ai-chat-btn.active .ai-chat-icon {
-    color: white;
+    color: var(--text-100);
   }
 
   .ai-chat-icon {
     height: 14px;
     width: 14px;
-    color: var(--text-primary);
+    color: var(--text-200);
     transition: color 0.2s ease;
   }
 </style>

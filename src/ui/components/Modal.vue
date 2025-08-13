@@ -185,7 +185,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: var(--color-selection);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -195,8 +195,8 @@
   }
 
   .modal-container {
-    background-color: var(--color-background);
-    border: 1px solid var(--border-color);
+    background-color: var(--bg-400);
+    border: 1px solid var(--border-300);
     border-radius: var(--border-radius-lg);
     box-shadow: var(--shadow-sm);
     max-height: 90vh;
@@ -246,7 +246,7 @@
     justify-content: space-between;
     align-items: center;
     padding: var(--spacing-lg);
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-300);
     flex-shrink: 0;
   }
 
@@ -258,14 +258,14 @@
   .modal-title {
     font-size: var(--font-size-lg);
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-200);
     margin: 0;
   }
 
   .modal-close-button {
     background: none;
     border: none;
-    color: var(--text-secondary);
+    color: var(--text-400);
     cursor: pointer;
     padding: var(--spacing-xs);
     border-radius: var(--border-radius);
@@ -275,8 +275,8 @@
   }
 
   .modal-close-button:hover {
-    background-color: var(--color-background-hover);
-    color: var(--text-primary);
+    background-color: var(--color-hover);
+    color: var(--text-200);
   }
 
   .modal-body {
@@ -292,8 +292,8 @@
   .modal-footer {
     flex-shrink: 0;
     padding: var(--spacing-lg);
-    border-top: 1px solid var(--border-color);
-    background-color: var(--color-background-secondary);
+    border-top: 1px solid var(--border-300);
+    background-color: var(--bg-500);
   }
 
   .modal-actions {
@@ -324,12 +324,12 @@
 
   .modal-button-secondary {
     background-color: transparent;
-    border-color: var(--border-color);
-    color: var(--text-primary);
+    border-color: var(--border-300);
+    color: var(--text-200);
   }
 
   .modal-button-secondary:hover:not(:disabled) {
-    background-color: var(--color-background-hover);
+    background-color: var(--color-hover);
   }
 
   .modal-button-primary {

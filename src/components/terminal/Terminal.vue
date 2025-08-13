@@ -779,7 +779,7 @@
   .terminal-container {
     height: 100%;
     width: 100%;
-    background: var(--color-background);
+    background: var(--bg-100);
     overflow: hidden;
   }
 
@@ -794,6 +794,6 @@
   :global(.xterm-link-layer a) {
     text-decoration: underline !important;
     text-decoration-style: dotted !important;
-    text-decoration-color: #888 !important;
+    text-decoration-color: var(--text-400) !important;
   }
 </style>

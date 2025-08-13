@@ -159,10 +159,10 @@
     line-height: 1.5715;
     white-space: nowrap;
     text-align: center;
-    background: var(--color-background);
-    border: var(--x-button-border-width) var(--x-button-border-style) var(--border-color);
+    background: var(--bg-400);
+    border: var(--x-button-border-width) var(--x-button-border-style) var(--border-300);
     border-radius: var(--x-button-border-radius);
-    color: var(--text-primary);
+    color: var(--text-200);
     cursor: pointer;
     transition: var(--x-button-transition);
     user-select: none;
@@ -173,7 +173,7 @@
   .x-button:hover {
     color: var(--color-primary);
     border-color: var(--color-primary);
-    background: var(--color-background-hover);
+    background: var(--color-hover);
   }
 
   .x-button:focus {
@@ -185,7 +185,7 @@
   .x-button:active {
     color: var(--color-primary);
     border-color: var(--color-primary);
-    background: var(--color-background-hover);
+    background: var(--color-hover);
   }
 
   /* 尺寸变体 */
@@ -205,27 +205,27 @@
 
   /* 主要按钮 */
   .x-button--primary {
-    color: #fff;
+    color: var(--text-100);
     background: var(--color-primary);
     border-color: var(--color-primary);
   }
 
   .x-button--primary:hover {
-    color: #fff;
+    color: var(--text-100);
     background: var(--color-primary);
     border-color: var(--color-primary);
     opacity: 0.8;
   }
 
   .x-button--primary:focus {
-    color: #fff;
+    color: var(--text-100);
     background: var(--color-primary);
     border-color: var(--color-primary);
     box-shadow: 0 0 0 2px var(--color-primary-alpha);
   }
 
   .x-button--primary:active {
-    color: #fff;
+    color: var(--text-100);
     background: var(--color-primary);
     border-color: var(--color-primary);
     opacity: 0.9;
@@ -233,49 +233,49 @@
 
   /* 次要按钮 */
   .x-button--secondary {
-    color: var(--text-primary);
-    background: var(--color-background-secondary);
-    border-color: var(--border-color);
+    color: var(--text-200);
+    background: var(--bg-500);
+    border-color: var(--border-300);
   }
 
   .x-button--secondary:hover {
-    background: var(--color-background-hover);
-    border-color: var(--border-color-hover);
+    background: var(--color-hover);
+    border-color: var(--border-400);
   }
 
   /* 危险按钮 */
   .x-button--danger {
-    color: #fff;
-    background: var(--color-red);
-    border-color: var(--color-red);
+    color: var(--text-100);
+    background: var(--color-error);
+    border-color: var(--color-error);
   }
 
   .x-button--danger:hover {
-    color: #fff;
-    background: var(--color-red);
-    border-color: var(--color-red);
+    color: var(--text-100);
+    background: var(--color-error);
+    border-color: var(--color-error);
     opacity: 0.8;
   }
 
   .x-button--danger:focus {
-    color: #fff;
-    background: var(--color-red);
-    border-color: var(--color-red);
-    box-shadow: 0 0 0 2px rgba(244, 71, 71, 0.2);
+    color: var(--text-100);
+    background: var(--color-error);
+    border-color: var(--color-error);
+    box-shadow: 0 0 0 2px var(--color-primary-alpha);
   }
 
   .x-button--danger:active {
-    color: #fff;
-    background: var(--color-red);
-    border-color: var(--color-red);
+    color: var(--text-100);
+    background: var(--color-error);
+    border-color: var(--color-error);
     opacity: 0.9;
   }
 
   /* 幽灵按钮 */
   .x-button--ghost {
-    color: var(--text-primary);
+    color: var(--text-200);
     background: transparent;
-    border-color: var(--border-color);
+    border-color: var(--border-300);
   }
 
   .x-button--ghost:hover {
@@ -314,9 +314,9 @@
   /* 禁用状态 */
   .x-button--disabled,
   .x-button:disabled {
-    color: var(--text-muted) !important;
-    background: var(--color-background-secondary) !important;
-    border-color: var(--border-color) !important;
+    color: var(--text-500) !important;
+    background: var(--bg-500) !important;
+    border-color: var(--border-300) !important;
     cursor: not-allowed !important;
     box-shadow: none !important;
     opacity: 0.6 !important;
@@ -324,7 +324,7 @@
 
   .x-button--link.x-button--disabled,
   .x-button--link:disabled {
-    color: var(--text-muted) !important;
+    color: var(--text-500) !important;
     background: transparent !important;
     border-color: transparent !important;
   }

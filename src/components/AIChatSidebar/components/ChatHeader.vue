@@ -73,8 +73,8 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    border-bottom: 1px solid var(--color-border);
-    background-color: var(--color-ai-sidebar-background);
+    border-bottom: 1px solid var(--border-300);
+    background-color: var(--bg-300);
     padding: 0.5em 0.8em;
     gap: 0.5em;
   }
@@ -102,7 +102,7 @@
     height: 2em;
     border: none;
     background: none;
-    color: var(--color-text-secondary);
+    color: var(--text-400);
     cursor: pointer;
     transition: all 0.2s ease;
     padding: 0;
@@ -111,8 +111,8 @@
   }
 
   .new-session-btn:hover {
-    color: var(--color-text);
-    background-color: var(--color-background-hover, rgba(0, 0, 0, 0.05));
+    color: var(--text-200);
+    background-color: var(--bg-500);
   }
 
   .new-session-btn:disabled {

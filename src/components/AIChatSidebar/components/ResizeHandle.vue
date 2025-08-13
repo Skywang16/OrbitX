@@ -62,11 +62,12 @@
   }
 
   .resize-handle:hover {
-    background: rgba(24, 144, 255, 0.1);
+    background: var(--color-primary-alpha);
   }
 
   .resize-handle--dragging {
-    background: rgba(24, 144, 255, 0.2);
+    background: var(--color-primary-alpha);
+    opacity: 2;
   }
 
   .resize-handle__indicator {

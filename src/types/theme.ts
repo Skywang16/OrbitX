@@ -66,25 +66,6 @@ export interface AnsiColors {
   magenta: string
   cyan: string
   white: string
-  brightBlack: string
-  brightRed: string
-  brightGreen: string
-  brightYellow: string
-  brightBlue: string
-  brightMagenta: string
-  brightCyan: string
-  brightWhite: string
-}
-
-/**
- * 颜色方案
- */
-export interface ColorScheme {
-  background: string
-  foreground: string
-  cursor: string
-  selection: string
-  ansi: AnsiColors
 }
 
 /**
@@ -101,18 +82,44 @@ export interface SyntaxHighlight {
 }
 
 /**
- * UI 颜色配置
+ * UI 颜色配置 - 全新的数字层次系统
  */
 export interface UIColors {
+  // 背景色层次
+  bg_100: string
+  bg_200: string
+  bg_300: string
+  bg_400: string
+  bg_500: string
+  bg_600: string
+  bg_700: string
+
+  // 边框层次
+  border_200: string
+  border_300: string
+  border_400: string
+
+  // 文本层次
+  text_100: string
+  text_200: string
+  text_300: string
+  text_400: string
+  text_500: string
+
+  // 状态颜色
   primary: string
-  secondary: string
-  accent: string
-  background: string
-  surface: string
-  error: string
-  warning: string
-  info: string
+  primary_hover: string
+  primary_alpha: string
   success: string
+  warning: string
+  error: string
+  info: string
+
+  // 交互状态
+  hover: string
+  active: string
+  focus: string
+  selection: string
 }
 
 // ===== 完整主题定义 =====
@@ -125,8 +132,10 @@ export interface Theme {
   name: string
   /** 主题类型 */
   themeType: ThemeType
-  /** 颜色配置 */
-  colors: ColorScheme
+  /** ANSI 颜色 */
+  ansi: AnsiColors
+  /** 明亮 ANSI 颜色 */
+  bright: AnsiColors
   /** 语法高亮 */
   syntax: SyntaxHighlight
   /** UI 颜色 */

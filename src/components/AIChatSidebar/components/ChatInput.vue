@@ -193,9 +193,9 @@
     margin: auto;
     width: 90%;
     margin-bottom: 10px;
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--border-300);
     border-radius: 8px;
-    background-color: var(--color-background);
+    background-color: var(--bg-400);
     transition: border-color 0.1s ease;
   }
 
@@ -219,7 +219,7 @@
     max-height: 150px;
     border: none;
     background: transparent;
-    color: var(--color-text);
+    color: var(--text-300);
     font-size: 14px;
     outline: none;
     resize: none;
@@ -236,7 +236,7 @@
   }
 
   .message-input::placeholder {
-    color: var(--color-text-secondary);
+    color: var(--text-400);
     opacity: 0.6;
   }
 
@@ -247,11 +247,12 @@
   }
 
   .stop-button {
-    background-color: #ff4d4f !important;
+    background-color: var(--color-error) !important;
   }
 
   .stop-button:hover:not(:disabled) {
-    background-color: #ff7875 !important;
+    background-color: var(--color-error) !important;
+    opacity: 0.8;
   }
 
   .input-bottom {

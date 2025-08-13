@@ -2,13 +2,9 @@
 name = "solarized-light"
 theme_type = "light"
 
-[theme.colors]
-foreground = "#657b83"
-background = "#fdf6e3"
-cursor = "#586e75"
-selection = "#eee8d5"
 
-[theme.colors.ansi]
+
+[theme.ansi]
 black = "#073642"
 red = "#dc322f"
 green = "#859900"
@@ -18,7 +14,7 @@ magenta = "#d33682"
 cyan = "#2aa198"
 white = "#eee8d5"
 
-[theme.colors.bright]
+[theme.bright]
 black = "#002b36"
 red = "#cb4b16"
 green = "#586e75"
@@ -28,10 +24,49 @@ magenta = "#6c71c4"
 cyan = "#93a1a1"
 white = "#fdf6e3"
 
-
+[theme.syntax]
+comment = "#93a1a1"
+string = "#2aa198"
+number = "#d33682"
+keyword = "#859900"
+function = "#268bd2"
+variable = "#657b83"
+type_name = "#b58900"
+operator = "#dc322f"
 
 [theme.ui]
+# Solarized Light 背景色层次
+bg_100 = "#ffffff"
+bg_200 = "#fdf6e3"
+bg_300 = "#f7f1e8"
+bg_400 = "#f0ead7"
+bg_500 = "#eee8d5"
+bg_600 = "#e5dcc3"
+bg_700 = "#ddd6c1"
+
+# 边框层次
+border_200 = "rgba(238, 232, 213, 0.3)"
+border_300 = "rgba(238, 232, 213, 0.5)"
+border_400 = "rgba(238, 232, 213, 0.7)"
+
+# 文本层次
+text_100 = "#002b36"
+text_200 = "#073642"
+text_300 = "#586e75"
+text_400 = "#657b83"
+text_500 = "#93a1a1"
+
+# 状态颜色
 primary = "#268bd2"
-border = "#eee8d5"
-background_secondary = "#f7f1e8"
-background_hover = "#f0ead7"
+primary_hover = "#1e6ba8"
+primary_alpha = "rgba(38, 139, 210, 0.1)"
+success = "#859900"
+warning = "#b58900"
+error = "#dc322f"
+info = "#2aa198"
+
+# 交互状态
+hover = "#f7f1e8"
+active = "#eee8d5"
+focus = "#268bd2"
+selection = "rgba(38, 139, 210, 0.3)"

@@ -321,10 +321,10 @@
 
   .default-trigger {
     padding: var(--spacing-sm) var(--spacing-lg);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-300);
     border-radius: var(--border-radius);
-    background: var(--color-background);
-    color: var(--text-primary);
+    background: var(--bg-400);
+    color: var(--text-200);
     font-family: var(--font-family);
     font-size: var(--font-size-md);
     cursor: pointer;
@@ -334,7 +334,7 @@
   .default-trigger:hover {
     border-color: var(--color-primary);
     color: var(--color-primary);
-    background: var(--color-background-hover);
+    background: var(--color-hover);
   }
 
   .default-trigger:focus {
@@ -346,8 +346,8 @@
   .popover {
     position: fixed;
     z-index: 1000;
-    background: var(--color-background);
-    border: 1px solid var(--border-color);
+    background: var(--bg-400);
+    border: 1px solid var(--border-300);
     border-radius: 6px;
     box-shadow: var(--shadow-sm);
     padding: 4px 6px; /* 上下更紧凑，左右留少量内边距 */
@@ -356,7 +356,7 @@
     font-family: var(--font-family);
     font-size: 14px;
     line-height: 1.5;
-    color: var(--text-primary);
+    color: var(--text-200);
     -webkit-app-region: no-drag; /* 防止标题栏拖拽区域拦截交互 */
   }
 
@@ -377,28 +377,28 @@
     border-radius: 0; /* 去圆角以保证分割线简洁笔直 */
     margin: 0; /* 去掉左右额外留白 */
     transition: all 0.2s ease;
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   /* 分割线：相邻菜单项之间添加上边框 */
   .popover-menu-item + .popover-menu-item {
-    border-top: 1px solid var(--border-color); /* 最简单的分割线 */
+    border-top: 1px solid var(--border-300); /* 最简单的分割线 */
   }
 
   .popover-menu-item:hover:not(.popover-menu-item--disabled) {
-    background-color: var(--color-background-hover);
-    color: var(--text-primary);
+    background-color: var(--color-hover);
+    color: var(--text-200);
   }
 
   .popover-menu-item:focus {
-    background-color: var(--color-background-hover);
+    background-color: var(--color-hover);
     outline: none;
   }
 
   .popover-menu-item--disabled {
     opacity: 0.5;
     cursor: not-allowed;
-    color: var(--text-muted);
+    color: var(--text-500);
   }
 
   .menu-item-icon {
@@ -406,7 +406,7 @@
     height: 16px;
     margin-right: var(--spacing-sm);
     flex-shrink: 0;
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .menu-item-text {

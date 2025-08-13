@@ -48,7 +48,7 @@ const updateDataThemeAttribute = (theme: Theme): void => {
 }
 
 /**
- * 更新 CSS 变量
+ * 更新 CSS 变量 - 全新的层次系统
  *
  * @param theme 主题数据
  */
@@ -56,104 +56,105 @@ const updateCSSVariables = (theme: Theme): void => {
   const root = document.documentElement
   const style = root.style
 
-  // 基础颜色
-  style.setProperty('--color-background', theme.colors.background)
-  style.setProperty('--color-foreground', theme.colors.foreground)
-  style.setProperty('--color-cursor', theme.colors.cursor)
-  style.setProperty('--color-selection', theme.colors.selection)
+  // 清除所有旧变量
+  clearAllOldVariables(style)
 
-  // UI 颜色
+  // 应用新的颜色层次系统
   if (theme.ui) {
-    style.setProperty('--color-background-secondary', theme.ui.surface || theme.colors.background)
-    style.setProperty('--color-background-hover', theme.ui.surface || theme.colors.background)
-    style.setProperty('--color-border', theme.ui.secondary || 'rgba(255, 255, 255, 0.1)')
-    style.setProperty('--border-color', theme.ui.secondary || 'rgba(255, 255, 255, 0.1)')
+    // 背景色层次
+    style.setProperty('--bg-100', theme.ui.bg_100)
+    style.setProperty('--bg-200', theme.ui.bg_200)
+    style.setProperty('--bg-300', theme.ui.bg_300)
+    style.setProperty('--bg-400', theme.ui.bg_400)
+    style.setProperty('--bg-500', theme.ui.bg_500)
+    style.setProperty('--bg-600', theme.ui.bg_600)
+    style.setProperty('--bg-700', theme.ui.bg_700)
 
-    // 主色调
-    if (theme.ui.primary) {
-      style.setProperty('--color-primary', theme.ui.primary)
-      style.setProperty('--color-primary-hover', adjustColorBrightness(theme.ui.primary, -10))
-      style.setProperty('--color-primary-alpha', addAlphaToColor(theme.ui.primary, 0.1))
-    }
+    // 边框层次
+    style.setProperty('--border-200', theme.ui.border_200)
+    style.setProperty('--border-300', theme.ui.border_300)
+    style.setProperty('--border-400', theme.ui.border_400)
 
-    // 文本颜色
-    style.setProperty('--text-primary', theme.colors.foreground)
-    style.setProperty('--text-secondary', adjustColorBrightness(theme.colors.foreground, -20))
-    style.setProperty('--text-muted', adjustColorBrightness(theme.colors.foreground, -40))
+    // 文本层次
+    style.setProperty('--text-100', theme.ui.text_100)
+    style.setProperty('--text-200', theme.ui.text_200)
+    style.setProperty('--text-300', theme.ui.text_300)
+    style.setProperty('--text-400', theme.ui.text_400)
+    style.setProperty('--text-500', theme.ui.text_500)
+
+    // 状态颜色
+    style.setProperty('--color-primary', theme.ui.primary)
+    style.setProperty('--color-primary-hover', theme.ui.primary_hover)
+    style.setProperty('--color-primary-alpha', theme.ui.primary_alpha)
+    style.setProperty('--color-success', theme.ui.success)
+    style.setProperty('--color-warning', theme.ui.warning)
+    style.setProperty('--color-error', theme.ui.error)
+    style.setProperty('--color-info', theme.ui.info)
+
+    // 交互状态
+    style.setProperty('--color-hover', theme.ui.hover)
+    style.setProperty('--color-active', theme.ui.active)
+    style.setProperty('--color-focus', theme.ui.focus)
+    style.setProperty('--color-selection', theme.ui.selection)
   }
 
   // ANSI 颜色（用于终端和语法高亮）
-  const ansiColors = theme.colors.ansi
-  style.setProperty('--ansi-black', ansiColors.black)
-  style.setProperty('--ansi-red', ansiColors.red)
-  style.setProperty('--ansi-green', ansiColors.green)
-  style.setProperty('--ansi-yellow', ansiColors.yellow)
-  style.setProperty('--ansi-blue', ansiColors.blue)
-  style.setProperty('--ansi-magenta', ansiColors.magenta)
-  style.setProperty('--ansi-cyan', ansiColors.cyan)
-  style.setProperty('--ansi-white', ansiColors.white)
+  style.setProperty('--ansi-black', theme.ansi.black)
+  style.setProperty('--ansi-red', theme.ansi.red)
+  style.setProperty('--ansi-green', theme.ansi.green)
+  style.setProperty('--ansi-yellow', theme.ansi.yellow)
+  style.setProperty('--ansi-blue', theme.ansi.blue)
+  style.setProperty('--ansi-magenta', theme.ansi.magenta)
+  style.setProperty('--ansi-cyan', theme.ansi.cyan)
+  style.setProperty('--ansi-white', theme.ansi.white)
 
   // 明亮 ANSI 颜色
-  const brightColors = theme.colors.ansi
-  style.setProperty('--ansi-bright-black', brightColors.black)
-  style.setProperty('--ansi-bright-red', brightColors.red)
-  style.setProperty('--ansi-bright-green', brightColors.green)
-  style.setProperty('--ansi-bright-yellow', brightColors.yellow)
-  style.setProperty('--ansi-bright-blue', brightColors.blue)
-  style.setProperty('--ansi-bright-magenta', brightColors.magenta)
-  style.setProperty('--ansi-bright-cyan', brightColors.cyan)
-  style.setProperty('--ansi-bright-white', brightColors.white)
+  style.setProperty('--ansi-bright-black', theme.bright.black)
+  style.setProperty('--ansi-bright-red', theme.bright.red)
+  style.setProperty('--ansi-bright-green', theme.bright.green)
+  style.setProperty('--ansi-bright-yellow', theme.bright.yellow)
+  style.setProperty('--ansi-bright-blue', theme.bright.blue)
+  style.setProperty('--ansi-bright-magenta', theme.bright.magenta)
+  style.setProperty('--ansi-bright-cyan', theme.bright.cyan)
+  style.setProperty('--ansi-bright-white', theme.bright.white)
+
+  // 语法高亮颜色
+  if (theme.syntax) {
+    style.setProperty('--syntax-comment', theme.syntax.comment)
+    style.setProperty('--syntax-keyword', theme.syntax.keyword)
+    style.setProperty('--syntax-string', theme.syntax.string)
+    style.setProperty('--syntax-number', theme.syntax.number)
+    style.setProperty('--syntax-function', theme.syntax.function)
+    style.setProperty('--syntax-variable', theme.syntax.variable)
+    style.setProperty('--syntax-operator', theme.syntax.operator)
+  }
 }
 
 /**
- * 调整颜色亮度
- *
- * @param color 颜色值 (hex)
- * @param percent 亮度调整百分比 (-100 到 100)
- * @returns 调整后的颜色值
+ * 清除所有旧变量
  */
-const adjustColorBrightness = (color: string, percent: number): string => {
-  // 简单的颜色亮度调整实现
-  // 这里可以使用更复杂的颜色处理库，但为了减少依赖，使用简单实现
+const clearAllOldVariables = (style: CSSStyleDeclaration) => {
+  // 删除所有旧变量
+  const oldVariables = [
+    // 旧的UI变量
+    '--color-background-secondary',
+    '--color-background-hover',
+    '--color-border',
+    '--border-color',
+    '--border-color-hover',
+    '--text-primary',
+    '--text-secondary',
+    '--text-muted',
+    // 其他可能的旧变量
+    '--color-accent',
+    '--color-surface',
+    '--color-foreground',
+    '--color-cursor',
+  ]
 
-  if (!color.startsWith('#')) {
-    return color // 如果不是 hex 颜色，直接返回
-  }
-
-  const hex = color.slice(1)
-  const num = parseInt(hex, 16)
-
-  let r = (num >> 16) + Math.round((255 * percent) / 100)
-  let g = ((num >> 8) & 0x00ff) + Math.round((255 * percent) / 100)
-  let b = (num & 0x0000ff) + Math.round((255 * percent) / 100)
-
-  r = Math.max(0, Math.min(255, r))
-  g = Math.max(0, Math.min(255, g))
-  b = Math.max(0, Math.min(255, b))
-
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`
-}
-
-/**
- * 为颜色添加透明度
- *
- * @param color 颜色值 (hex)
- * @param alpha 透明度 (0-1)
- * @returns rgba 颜色值
- */
-const addAlphaToColor = (color: string, alpha: number): string => {
-  if (!color.startsWith('#')) {
-    return color
-  }
-
-  const hex = color.slice(1)
-  const num = parseInt(hex, 16)
-
-  const r = num >> 16
-  const g = (num >> 8) & 0x00ff
-  const b = num & 0x0000ff
-
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  oldVariables.forEach(variable => {
+    style.removeProperty(variable)
+  })
 }
 
 /**
@@ -163,22 +164,37 @@ export const resetCSSVariables = (): void => {
   const root = document.documentElement
   const style = root.style
 
-  // 移除所有自定义设置的 CSS 变量
-  const customProperties = [
-    '--color-background',
-    '--color-foreground',
-    '--color-cursor',
-    '--color-selection',
-    '--color-background-secondary',
-    '--color-background-hover',
-    '--color-border',
-    '--border-color',
+  // 移除所有CSS变量
+  const allProperties = [
+    // 新的层次变量
+    '--bg-100',
+    '--bg-200',
+    '--bg-300',
+    '--bg-400',
+    '--bg-500',
+    '--bg-600',
+    '--bg-700',
+    '--border-200',
+    '--border-300',
+    '--border-400',
+    '--text-100',
+    '--text-200',
+    '--text-300',
+    '--text-400',
+    '--text-500',
     '--color-primary',
     '--color-primary-hover',
     '--color-primary-alpha',
-    '--text-primary',
-    '--text-secondary',
-    '--text-muted',
+    '--color-success',
+    '--color-warning',
+    '--color-error',
+    '--color-info',
+    '--color-hover',
+    '--color-active',
+    '--color-focus',
+    '--color-selection',
+
+    // ANSI 颜色
     '--ansi-black',
     '--ansi-red',
     '--ansi-green',
@@ -195,9 +211,18 @@ export const resetCSSVariables = (): void => {
     '--ansi-bright-magenta',
     '--ansi-bright-cyan',
     '--ansi-bright-white',
+
+    // 语法高亮
+    '--syntax-comment',
+    '--syntax-keyword',
+    '--syntax-string',
+    '--syntax-number',
+    '--syntax-function',
+    '--syntax-variable',
+    '--syntax-operator',
   ]
 
-  customProperties.forEach(property => {
+  allProperties.forEach(property => {
     style.removeProperty(property)
   })
 }

@@ -218,8 +218,8 @@
 <style scoped>
   .ai-chat-sidebar {
     height: 100%;
-    background-color: var(--color-ai-sidebar-background);
-    border-left: 1px solid var(--color-border);
+    background-color: var(--bg-300);
+    border-left: 1px solid var(--border-300);
     display: flex;
     flex-direction: column;
     position: relative;
@@ -236,11 +236,11 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: var(--color-background);
-    color: var(--text-primary);
+    background: var(--bg-500);
+    color: var(--text-200);
     padding: 8px 16px;
     border-radius: 4px;
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--border-300);
     font-size: 12px;
     z-index: 100;
     white-space: nowrap;

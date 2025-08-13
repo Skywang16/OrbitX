@@ -188,13 +188,13 @@
   .section-title {
     font-size: var(--font-size-lg);
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-200);
     margin: 0 0 var(--spacing-xs) 0;
   }
 
   .section-description {
     font-size: var(--font-size-sm);
-    color: var(--text-secondary);
+    color: var(--text-400);
     margin: 0;
     line-height: 1.5;
   }
@@ -202,7 +202,7 @@
   .empty-state {
     text-align: center;
     padding: var(--spacing-xl) var(--spacing-lg);
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .empty-icon {
@@ -213,7 +213,7 @@
   .empty-title {
     font-size: var(--font-size-md);
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-200);
     margin: 0 0 var(--spacing-xs) 0;
   }
 
@@ -232,7 +232,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-300);
     border-radius: var(--border-radius);
     padding: var(--spacing-md);
     transition: all 0.2s ease;
@@ -257,7 +257,7 @@
   .model-name {
     font-size: var(--font-size-md);
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-200);
     margin-left: var(--spacing-sm);
   }
 
@@ -274,7 +274,7 @@
   .radio-button {
     width: 20px;
     height: 20px;
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--border-300);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -306,13 +306,13 @@
     align-items: center;
     justify-content: center;
     padding: var(--spacing-xl);
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .loading-spinner {
     width: 24px;
     height: 24px;
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--border-300);
     border-top: 2px solid var(--color-primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;

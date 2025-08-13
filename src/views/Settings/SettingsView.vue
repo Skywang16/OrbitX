@@ -63,7 +63,7 @@
 <style scoped>
   .settings-view {
     height: 100vh;
-    background-color: var(--color-background);
+    background-color: var(--bg-200);
     overflow: hidden;
   }
 
@@ -74,15 +74,15 @@
 
   .settings-sidebar {
     width: 280px;
-    background-color: var(--color-background-secondary);
-    border-right: 1px solid var(--color-border);
+    background-color: var(--bg-300);
+    border-right: 1px solid var(--border-300);
     overflow-y: auto;
   }
 
   .settings-main {
     flex: 1;
     overflow-y: auto;
-    background-color: var(--color-background);
+    background-color: var(--bg-200);
   }
 
   .settings-panel {

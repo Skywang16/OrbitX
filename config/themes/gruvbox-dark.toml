@@ -2,13 +2,9 @@
 name = "gruvbox-dark"
 theme_type = "dark"
 
-[theme.colors]
-foreground = "#ebdbb2"
-background = "#282828"
-cursor = "#fe8019"
-selection = "#3c3836"
 
-[theme.colors.ansi]
+
+[theme.ansi]
 black = "#282828"
 red = "#cc241d"
 green = "#98971a"
@@ -18,7 +14,7 @@ magenta = "#b16286"
 cyan = "#689d6a"
 white = "#a89984"
 
-[theme.colors.bright]
+[theme.bright]
 black = "#928374"
 red = "#fb4934"
 green = "#b8bb26"
@@ -39,11 +35,38 @@ type_name = "#8ec07c"
 operator = "#fe8019"
 
 [theme.ui]
+# Gruvbox Dark 背景色层次
+bg_100 = "#1d2021"
+bg_200 = "#282828"
+bg_300 = "#32302f"
+bg_400 = "#3c3836"
+bg_500 = "#504945"
+bg_600 = "#665c54"
+bg_700 = "#7c6f64"
+
+# 边框层次
+border_200 = "rgba(60, 56, 54, 0.3)"
+border_300 = "rgba(60, 56, 54, 0.5)"
+border_400 = "rgba(60, 56, 54, 0.7)"
+
+# 文本层次
+text_100 = "#ffffff"
+text_200 = "#fbf1c7"
+text_300 = "#ebdbb2"
+text_400 = "#d5c4a1"
+text_500 = "#928374"
+
+# 状态颜色
 primary = "#458588"
-secondary = "#928374"
+primary_hover = "#327074"
+primary_alpha = "rgba(69, 133, 136, 0.1)"
 success = "#98971a"
 warning = "#d79921"
 error = "#cc241d"
 info = "#689d6a"
-border = "#3c3836"
-divider = "#3c3836"
+
+# 交互状态
+hover = "#32302f"
+active = "#3c3836"
+focus = "#458588"
+selection = "rgba(60, 56, 54, 0.8)"

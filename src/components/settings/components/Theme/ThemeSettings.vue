@@ -273,7 +273,7 @@
   .section-title {
     font-size: var(--font-size-md);
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-200);
     margin: 0 0 var(--spacing-md) 0;
   }
 
@@ -297,7 +297,7 @@
     align-items: center;
     justify-content: space-between;
     padding: var(--spacing-md);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-300);
     border-radius: var(--border-radius);
     transition: all 0.2s ease;
   }
@@ -319,7 +319,7 @@
 
   .mode-icon {
     margin-right: 12px;
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .mode-option input[type='radio']:checked + .mode-content .mode-icon {
@@ -328,12 +328,12 @@
 
   .mode-label {
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .mode-description {
     font-size: 14px;
-    color: var(--text-secondary);
+    color: var(--text-400);
     margin-top: 4px;
   }
 
@@ -344,7 +344,7 @@
   .radio-button {
     width: 20px;
     height: 20px;
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--border-300);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -380,7 +380,7 @@
     align-items: center;
     justify-content: space-between;
     padding: var(--spacing-md);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-300);
     border-radius: var(--border-radius);
     cursor: pointer;
     transition: all 0.2s ease;
@@ -403,7 +403,7 @@
 
   .theme-icon {
     margin-right: 12px;
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .theme-card.active .theme-icon {
@@ -416,12 +416,12 @@
 
   .theme-name {
     font-weight: 500;
-    color: var(--text-secondary);
+    color: var(--text-300);
     margin-bottom: 4px;
   }
 
   .system-status {
-    background-color: var(--border-color);
+    background-color: var(--bg-400);
     border-radius: var(--border-radius);
     padding: var(--spacing-md);
     margin-bottom: var(--spacing-lg);
@@ -440,11 +440,11 @@
 
   .status-label {
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .status-value {
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .theme-selector {
@@ -456,22 +456,22 @@
     align-items: center;
     font-size: var(--font-size-sm);
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-200);
     margin-bottom: var(--spacing-xs);
   }
 
   .title-icon {
     margin-right: var(--spacing-xs);
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .theme-select {
     width: 100%;
     padding: var(--spacing-xs) var(--spacing-sm);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-300);
     border-radius: var(--border-radius);
-    background-color: var(--color-background);
-    color: var(--text-primary);
+    background-color: var(--bg-400);
+    color: var(--text-300);
     font-size: var(--font-size-sm);
   }
 

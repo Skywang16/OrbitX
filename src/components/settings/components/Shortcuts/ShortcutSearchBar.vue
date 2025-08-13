@@ -108,7 +108,7 @@
   .search-input-group .icon-search {
     position: absolute;
     left: 12px;
-    color: var(--text-secondary);
+    color: var(--text-400);
     z-index: 1;
   }
 
@@ -117,8 +117,8 @@
     padding: 8px 12px 8px 36px;
     border: 1px solid var(--border);
     border-radius: 4px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--bg-400);
+    color: var(--text-200);
     font-size: 14px;
   }
 
@@ -133,7 +133,7 @@
     right: 8px;
     background: none;
     border: none;
-    color: var(--text-secondary);
+    color: var(--text-400);
     cursor: pointer;
     padding: 4px;
     border-radius: 3px;
@@ -141,7 +141,7 @@
 
   .btn-clear:hover {
     background: var(--bg-hover);
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .search-filters {
@@ -160,7 +160,7 @@
   .filter-label {
     font-size: 14px;
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .category-filters {
@@ -173,7 +173,7 @@
     align-items: center;
     gap: 6px;
     font-size: 14px;
-    color: var(--text-primary);
+    color: var(--text-200);
     cursor: pointer;
     user-select: none;
   }

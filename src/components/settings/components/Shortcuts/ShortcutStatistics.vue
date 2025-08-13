@@ -96,7 +96,7 @@
   .stat-value {
     font-size: 24px;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-200);
     line-height: 1;
   }
 
@@ -110,7 +110,7 @@
 
   .stat-label {
     font-size: 12px;
-    color: var(--text-secondary);
+    color: var(--text-400);
     margin-top: 4px;
     text-align: center;
   }
@@ -125,10 +125,10 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    background: rgba(var(--bg-primary-rgb), 0.8);
+    background: var(--bg-500);
     border-radius: 6px;
     font-size: 14px;
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .spinner {

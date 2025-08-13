@@ -23,7 +23,7 @@ const getAppBackgroundColor = (): string | null => {
     const computedStyle = window.getComputedStyle(rootElement)
 
     // 尝试获取应用背景颜色CSS变量
-    const backgroundColor = computedStyle.getPropertyValue('--color-background').trim()
+    const backgroundColor = computedStyle.getPropertyValue('--bg-200').trim()
 
     if (backgroundColor && backgroundColor !== '') {
       return backgroundColor
@@ -108,38 +108,36 @@ export interface XTermTheme {
  * @returns XTerm.js 主题对象
  */
 export const convertThemeToXTerm = (theme: Theme): XTermTheme => {
-  const { colors } = theme
-
   // 使用应用的主背景颜色，而不是终端特定的背景颜色
   // 这样可以确保终端背景与应用背景保持一致
   const appBackground = getAppBackgroundColor()
 
   return {
-    // 基础颜色 - 使用应用背景颜色
-    foreground: colors.foreground,
-    background: appBackground || colors.background,
-    cursor: colors.cursor,
-    selectionBackground: colors.selection,
+    // 基础颜色 - 使用应用背景颜色和新的主题结构
+    foreground: theme.ui.text_200, // 使用新的文本颜色
+    background: appBackground || theme.ui.bg_100, // 使用应用背景或终端背景
+    cursor: theme.ui.text_100, // 使用最亮的文本颜色作为光标
+    selectionBackground: theme.ui.selection, // 使用新的选择背景色
 
-    // ANSI 标准颜色 (0-7)
-    black: colors.ansi.black,
-    red: colors.ansi.red,
-    green: colors.ansi.green,
-    yellow: colors.ansi.yellow,
-    blue: colors.ansi.blue,
-    magenta: colors.ansi.magenta,
-    cyan: colors.ansi.cyan,
-    white: colors.ansi.white,
+    // ANSI 标准颜色 (0-7) - 使用新的ansi结构
+    black: theme.ansi.black,
+    red: theme.ansi.red,
+    green: theme.ansi.green,
+    yellow: theme.ansi.yellow,
+    blue: theme.ansi.blue,
+    magenta: theme.ansi.magenta,
+    cyan: theme.ansi.cyan,
+    white: theme.ansi.white,
 
-    // ANSI 明亮颜色 (8-15)
-    brightBlack: colors.ansi.brightBlack,
-    brightRed: colors.ansi.brightRed,
-    brightGreen: colors.ansi.brightGreen,
-    brightYellow: colors.ansi.brightYellow,
-    brightBlue: colors.ansi.brightBlue,
-    brightMagenta: colors.ansi.brightMagenta,
-    brightCyan: colors.ansi.brightCyan,
-    brightWhite: colors.ansi.brightWhite,
+    // ANSI 明亮颜色 (8-15) - 使用新的bright结构
+    brightBlack: theme.bright.black,
+    brightRed: theme.bright.red,
+    brightGreen: theme.bright.green,
+    brightYellow: theme.bright.yellow,
+    brightBlue: theme.bright.blue,
+    brightMagenta: theme.bright.magenta,
+    brightCyan: theme.bright.cyan,
+    brightWhite: theme.bright.white,
   }
 }
 

@@ -88,7 +88,7 @@
     padding: var(--spacing-sm) 0;
     font-size: var(--font-size-md);
     line-height: 1.5;
-    color: var(--text-primary);
+    color: var(--text-200);
     word-wrap: break-word;
     word-break: break-word;
   }
@@ -106,7 +106,7 @@
   }
 
   .ai-message-text :deep(code) {
-    background: var(--color-background-secondary);
+    background: var(--bg-500);
     padding: 0.2em 0.4em;
     border-radius: 3px;
     font-family: monospace;
@@ -114,7 +114,7 @@
   }
 
   .ai-message-text :deep(pre) {
-    background: var(--color-background-secondary);
+    background: var(--bg-500);
     padding: var(--spacing-sm);
     border-radius: var(--border-radius);
     overflow-x: auto;
@@ -148,22 +148,23 @@
   /* 错误块 */
   .error-block {
     padding: var(--spacing-sm);
-    border: 1px solid #ef4444;
-    border-left: 3px solid #ef4444;
+    border: 1px solid var(--color-error);
+    border-left: 3px solid var(--color-error);
     border-radius: var(--border-radius);
-    background: #fef2f2;
+    background: var(--color-error);
+    opacity: 0.1;
     font-size: var(--font-size-sm);
   }
 
   .error-header {
     font-weight: 600;
     margin-bottom: var(--spacing-xs);
-    color: #dc2626;
+    color: var(--color-error);
   }
 
   .error-content,
   .error-details {
-    color: #991b1b;
+    color: var(--color-error);
     margin-bottom: var(--spacing-xs);
   }
 
@@ -179,12 +180,12 @@
     gap: var(--spacing-sm);
     margin-top: var(--spacing-sm);
     padding-top: var(--spacing-xs);
-    border-top: 1px solid var(--color-border);
+    border-top: 1px solid var(--border-300);
   }
 
   .ai-message-time {
     font-size: var(--font-size-xs);
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .streaming-indicator {
@@ -192,20 +193,20 @@
     align-items: center;
     gap: var(--spacing-xs);
     font-size: var(--font-size-xs);
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .streaming-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #3b82f6;
+    background: var(--color-primary);
     animation: pulse 1.5s infinite;
   }
 
   .duration-info {
     font-size: var(--font-size-xs);
-    color: var(--text-tertiary);
+    color: var(--text-500);
     font-family: monospace;
   }
 

@@ -283,7 +283,7 @@
     margin: 0 6px 0 0;
     padding: 0 8px;
     border-radius: var(--border-radius-md);
-    color: var(--text-muted);
+    color: var(--text-400);
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
@@ -292,13 +292,13 @@
 
   .tab:hover {
     background-color: var(--color-hover);
-    color: var(--text-secondary);
+    color: var(--text-300);
   }
 
   .tab.active {
-    background-color: var(--color-background);
-    color: var(--text-primary);
-    border-color: var(--color-border);
+    background-color: var(--bg-200);
+    color: var(--text-200);
+    border-color: var(--border-300);
     box-shadow: none; /* 仅移除阴影，其他保持不变 */
   }
 
@@ -310,53 +310,57 @@
     transform: translateX(-50%);
     width: 40%;
     height: 2px;
-    background: linear-gradient(90deg, var(--color-primary), #4fc3f7);
+    background: var(--color-primary);
     border-radius: 2px 2px 0 0;
-    box-shadow: 0 -1px 4px rgba(0, 122, 204, 0.3);
+    box-shadow: 0 -1px 4px var(--color-primary-alpha);
   }
 
   /* 终端Tab样式 */
   .tab:not(.agent-tab) {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.08));
-    border: 1px solid rgba(59, 130, 246, 0.2);
+    background: var(--color-primary-alpha);
+    border: 1px solid var(--color-primary-alpha);
   }
 
   .tab:not(.agent-tab):hover {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.12));
-    border-color: rgba(59, 130, 246, 0.3);
+    background: var(--color-primary-alpha);
+    border-color: var(--color-primary-alpha);
+    opacity: 0.8;
   }
 
   .tab:not(.agent-tab).active {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(37, 99, 235, 0.06));
-    border-color: rgba(59, 130, 246, 0.4);
+    background: var(--color-primary-alpha);
+    border-color: var(--color-primary);
     box-shadow: none; /* 移除阴影 */
   }
 
   .tab:not(.agent-tab).active::before {
-    background: linear-gradient(90deg, #3b82f6, #2563eb, #1d4ed8);
-    box-shadow: 0 -1px 4px rgba(59, 130, 246, 0.4);
+    background: var(--color-primary);
+    box-shadow: 0 -1px 4px var(--color-primary-alpha);
   }
 
   /* Agent专属终端Tab样式 */
   .tab.agent-tab {
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(99, 102, 241, 0.08));
-    border: 1px solid rgba(124, 58, 237, 0.2);
+    background: var(--color-info);
+    opacity: 0.1;
+    border: 1px solid var(--color-info);
     position: relative;
   }
 
   .tab.agent-tab:hover {
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.15), rgba(99, 102, 241, 0.12));
-    border-color: rgba(124, 58, 237, 0.3);
+    background: var(--color-info);
+    opacity: 0.15;
+    border-color: var(--color-info);
   }
 
   .tab.agent-tab.active {
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(99, 102, 241, 0.06));
-    border-color: rgba(124, 58, 237, 0.4);
+    background: var(--color-info);
+    opacity: 0.08;
+    border-color: var(--color-info);
   }
 
   .tab.agent-tab.active::before {
-    background: linear-gradient(90deg, #7c3aed, #6366f1, #3b82f6);
-    box-shadow: 0 -1px 4px rgba(124, 58, 237, 0.4);
+    background: var(--color-info);
+    box-shadow: 0 -1px 4px var(--color-primary-alpha);
   }
 
   /* Agent终端Tab的特殊标识 */
@@ -367,9 +371,9 @@
     right: 2px;
     width: 6px;
     height: 6px;
-    background: linear-gradient(45deg, #7c3aed, #6366f1);
+    background: var(--color-info);
     border-radius: 50%;
-    box-shadow: 0 0 6px rgba(124, 58, 237, 0.6);
+    box-shadow: 0 0 6px var(--color-primary-alpha);
     animation: pulse-glow 2s infinite;
   }
 
@@ -405,7 +409,7 @@
     padding: 0;
     border: none;
     background-color: transparent;
-    color: var(--text-muted);
+    color: var(--text-400);
     border-radius: var(--border-radius-sm);
     transition: all 0.2s ease;
     cursor: pointer;
@@ -416,12 +420,12 @@
 
   .tab:hover .close-btn {
     opacity: 1;
-    color: var(--text-secondary);
+    color: var(--text-300);
   }
 
   .close-btn:hover {
     background-color: var(--color-hover);
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .add-tab-btn {
@@ -432,7 +436,7 @@
     height: var(--titlebar-element-height);
     border: none;
     background-color: transparent;
-    color: var(--text-muted);
+    color: var(--text-400);
     border-radius: var(--border-radius-md);
     cursor: pointer;
     transition: all 0.2s ease;
@@ -450,9 +454,9 @@
 
   .add-tab-btn:hover {
     background-color: var(--color-hover);
-    color: var(--text-primary);
+    color: var(--text-200);
     opacity: 1;
     transform: scale(1.05);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
   }
 </style>
