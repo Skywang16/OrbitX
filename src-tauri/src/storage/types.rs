@@ -29,114 +29,11 @@ impl StorageLayer {
     }
 }
 
-/// 数据查询结构
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DataQuery {
-    /// 查询语句或条件
-    pub query: String,
-    /// 查询参数
-    pub params: HashMap<String, serde_json::Value>,
-    /// 限制结果数量
-    pub limit: Option<usize>,
-    /// 偏移量
-    pub offset: Option<usize>,
-    /// 排序字段
-    pub order_by: Option<String>,
-    /// 是否降序
-    pub desc: bool,
-}
 
-impl DataQuery {
-    pub fn new(query: impl Into<String>) -> Self {
-        Self {
-            query: query.into(),
-            params: HashMap::new(),
-            limit: None,
-            offset: None,
-            order_by: None,
-            desc: false,
-        }
-    }
 
-    pub fn with_param(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
-        self.params.insert(key.into(), value);
-        self
-    }
 
-    pub fn with_limit(mut self, limit: usize) -> Self {
-        self.limit = Some(limit);
-        self
-    }
 
-    pub fn with_offset(mut self, offset: usize) -> Self {
-        self.offset = Some(offset);
-        self
-    }
 
-    pub fn with_order_by(mut self, field: impl Into<String>, desc: bool) -> Self {
-        self.order_by = Some(field.into());
-        self.desc = desc;
-        self
-    }
-}
-
-/// 保存选项
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SaveOptions {
-    /// 目标表或集合名称
-    pub table: Option<String>,
-    /// 是否覆盖现有数据
-    pub overwrite: bool,
-    /// 是否创建备份
-    pub backup: bool,
-    /// 是否验证数据
-    pub validate: bool,
-    /// 自定义元数据
-    pub metadata: HashMap<String, serde_json::Value>,
-}
-
-impl Default for SaveOptions {
-    fn default() -> Self {
-        Self {
-            table: None,
-            overwrite: false,
-            backup: true,
-            validate: true,
-            metadata: HashMap::new(),
-        }
-    }
-}
-
-impl SaveOptions {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn table(mut self, table: impl Into<String>) -> Self {
-        self.table = Some(table.into());
-        self
-    }
-
-    pub fn overwrite(mut self, overwrite: bool) -> Self {
-        self.overwrite = overwrite;
-        self
-    }
-
-    pub fn backup(mut self, backup: bool) -> Self {
-        self.backup = backup;
-        self
-    }
-
-    pub fn validate(mut self, validate: bool) -> Self {
-        self.validate = validate;
-        self
-    }
-
-    pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
-        self.metadata.insert(key.into(), value);
-        self
-    }
-}
 
 /// 会话状态数据结构
 #[derive(Debug, Clone, Serialize, Deserialize)]

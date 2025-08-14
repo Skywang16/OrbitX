@@ -1,19 +1,19 @@
 /*!
  * 存储协调器模块
  *
- * 简化的存储协调器，管理三层存储的交互和数据流
- * 集成现有的配置管理器、MessagePack状态层和SQLite数据层
- * 遵循"不过度工程化"原则，只保留核心协调功能
+ * 管理三层存储架构的协调器，采用Repository模式
+ * 集成配置管理器、MessagePack状态层和数据库层
+ * 提供统一的存储访问接口
  */
 
 use crate::config::TomlConfigManager;
-
 use crate::storage::cache::UnifiedCache;
+use crate::storage::database::{DatabaseManager, DatabaseOptions};
 use crate::storage::messagepack::{MessagePackManager, MessagePackOptions};
 use crate::storage::paths::StoragePaths;
-use crate::storage::sqlite::{SqliteManager, SqliteOptions};
-use crate::storage::types::{DataQuery, SaveOptions, SessionState};
-use crate::storage::RecoveryManager;
+use crate::storage::repositories::RepositoryManager;
+use crate::storage::types::SessionState;
+
 use crate::utils::error::AppResult;
 use anyhow::Context;
 use serde_json::Value;
@@ -25,22 +25,22 @@ use tracing::{debug, info};
 pub struct StorageCoordinatorOptions {
     /// MessagePack管理器选项
     pub messagepack_options: MessagePackOptions,
-    /// SQLite管理器选项
-    pub sqlite_options: SqliteOptions,
+    /// 数据库管理器选项
+    pub database_options: DatabaseOptions,
 }
 
 impl Default for StorageCoordinatorOptions {
     fn default() -> Self {
         Self {
             messagepack_options: MessagePackOptions::default(),
-            sqlite_options: SqliteOptions::default(),
+            database_options: DatabaseOptions::default(),
         }
     }
 }
 
 /// 存储协调器
 ///
-/// 简化的三层存储系统协调器，只保留核心功能
+/// 三层存储系统协调器，采用Repository模式管理数据访问
 pub struct StorageCoordinator {
     /// 存储路径管理器
     paths: StoragePaths,
@@ -50,12 +50,10 @@ pub struct StorageCoordinator {
     config_manager: Arc<TomlConfigManager>,
     /// MessagePack状态管理器
     messagepack_manager: Arc<MessagePackManager>,
-    /// SQLite数据管理器
-    sqlite_manager: Arc<SqliteManager>,
-
-    /// 恢复管理器
-    recovery_manager: Arc<RecoveryManager>,
-
+    /// 数据库管理器
+    database_manager: Arc<DatabaseManager>,
+    /// Repository管理器
+    repository_manager: Arc<RepositoryManager>,
     /// 统一缓存
     cache: Arc<UnifiedCache>,
 }
@@ -79,30 +77,31 @@ impl StorageCoordinator {
                 .context("初始化MessagePack管理器失败")?,
         );
 
-        // 初始化SQLite数据管理器
-        let sqlite_manager = Arc::new(
-            SqliteManager::new(paths.clone(), options.sqlite_options.clone())
+        // 初始化数据库管理器
+        let database_manager = Arc::new(
+            DatabaseManager::new(paths.clone(), options.database_options.clone())
                 .await
-                .context("初始化SQLite管理器失败")?,
+                .context("初始化数据库管理器失败")?,
         );
 
         // 初始化数据库
-        sqlite_manager
-            .initialize_database()
+        database_manager
+            .initialize()
             .await
             .context("初始化数据库失败")?;
 
-        // 初始化恢复管理器
-        let recovery_manager = Arc::new(RecoveryManager::new(paths.clone()));
+        // 初始化Repository管理器
+        let repository_manager = Arc::new(RepositoryManager::new(database_manager.clone()));
+
+
 
         let coordinator = Self {
             paths,
             options,
             config_manager,
             messagepack_manager,
-            sqlite_manager,
-
-            recovery_manager,
+            database_manager,
+            repository_manager,
             cache: Arc::new(UnifiedCache::new()),
         };
 
@@ -163,17 +162,7 @@ impl StorageCoordinator {
         self.messagepack_manager.load_state().await
     }
 
-    /// 查询数据
-    pub async fn query_data(&self, query: &DataQuery) -> AppResult<Vec<Value>> {
-        debug!("查询数据: {}", query.query);
-        self.sqlite_manager.query_data(query).await
-    }
 
-    /// 保存数据
-    pub async fn save_data(&self, data: &Value, options: &SaveOptions) -> AppResult<()> {
-        debug!("保存数据到表: {:?}", options.table);
-        self.sqlite_manager.save_data(data, options).await
-    }
 
     /// 获取存储路径管理器的引用
     pub fn paths(&self) -> &StoragePaths {
@@ -185,9 +174,14 @@ impl StorageCoordinator {
         &self.options
     }
 
-    /// 获取SQLite管理器的引用
-    pub fn sqlite_manager(&self) -> Arc<SqliteManager> {
-        self.sqlite_manager.clone()
+    /// 获取数据库管理器的引用
+    pub fn database_manager(&self) -> Arc<DatabaseManager> {
+        self.database_manager.clone()
+    }
+
+    /// 获取Repository管理器的引用
+    pub fn repositories(&self) -> Arc<RepositoryManager> {
+        self.repository_manager.clone()
     }
 
     /// 获取缓存管理器的引用

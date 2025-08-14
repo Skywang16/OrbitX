@@ -6,13 +6,14 @@
 
 use crate::ai::{
     context::handle_truncate_conversation,
-    types::{AIModelConfig, Conversation, Message},
     AIService,
 };
+use crate::ai::types::{AIModelConfig, Conversation, Message};
+use crate::storage::repositories::Repository;
 use crate::storage::cache::UnifiedCache;
-use crate::storage::sqlite::SqliteManager;
+use crate::storage::repositories::RepositoryManager;
 use crate::utils::error::{ToTauriResult, Validator};
-use chrono::Utc;
+
 use std::sync::Arc;
 use tauri::State;
 use tracing::{debug, info};
@@ -20,24 +21,24 @@ use tracing::{debug, info};
 /// AI管理器状态 - 重构版本
 pub struct AIManagerState {
     pub ai_service: Arc<AIService>,
-    pub sqlite_manager: Option<Arc<SqliteManager>>,
+    pub repositories: Arc<RepositoryManager>,
     pub cache: Arc<UnifiedCache>,
 }
 
 impl AIManagerState {
     /// 创建新的AI管理器状态
     pub fn new(
-        sqlite_manager: Option<Arc<SqliteManager>>,
+        repositories: Arc<RepositoryManager>,
         cache: Arc<UnifiedCache>,
     ) -> Result<Self, String> {
         let ai_service = Arc::new(AIService::new(
-            sqlite_manager.clone().unwrap(),
+            repositories.clone(),
             cache.clone(),
         ));
 
         Ok(Self {
             ai_service,
-            sqlite_manager,
+            repositories,
             cache,
         })
     }
@@ -47,11 +48,9 @@ impl AIManagerState {
         self.ai_service.initialize().await.to_tauri()
     }
 
-    /// 获取数据库管理器的辅助方法
-    fn get_sqlite_manager(&self) -> Result<&Arc<SqliteManager>, String> {
-        self.sqlite_manager
-            .as_ref()
-            .ok_or_else(|| "数据库管理器未初始化".to_string())
+    /// 获取Repository管理器的辅助方法
+    pub fn repositories(&self) -> &Arc<RepositoryManager> {
+        &self.repositories
     }
 }
 
@@ -68,19 +67,15 @@ pub async fn create_conversation(
         Validator::validate_not_empty(t, "会话标题")?;
     }
 
-    let sqlite_manager = state.get_sqlite_manager()?;
+    let repositories = state.repositories();
 
-    let conversation = Conversation {
-        id: 0, // 数据库自动生成
-        title: title.unwrap_or_else(|| "新对话".to_string()),
-        message_count: 0,
-        last_message_preview: None,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-    };
+    let conversation = Conversation::new(
+        title.unwrap_or_else(|| "新对话".to_string())
+    );
 
-    let conversation_id = sqlite_manager
-        .create_conversation(&conversation)
+    let conversation_id = repositories
+        .conversations()
+        .save(&conversation)
         .await
         .to_tauri()?;
 
@@ -97,10 +92,11 @@ pub async fn get_conversations(
 ) -> Result<Vec<Conversation>, String> {
     debug!("获取会话列表: limit={:?}, offset={:?}", limit, offset);
 
-    let sqlite_manager = state.get_sqlite_manager()?;
+    let repositories = state.repositories();
 
-    let conversations = sqlite_manager
-        .get_conversations(limit, offset)
+    let conversations = repositories
+        .conversations()
+        .find_conversations(limit, offset)
         .await
         .to_tauri()?;
 
@@ -115,10 +111,11 @@ pub async fn get_conversation(
 ) -> Result<Conversation, String> {
     debug!("获取会话详情: {}", conversation_id);
 
-    let sqlite_manager = state.get_sqlite_manager()?;
+    let repositories = state.repositories();
 
-    let conversation = sqlite_manager
-        .get_conversation(conversation_id)
+    let conversation = repositories
+        .conversations()
+        .find_by_id(conversation_id)
         .await
         .to_tauri()?
         .ok_or_else(|| format!("会话不存在: {}", conversation_id))?;
@@ -137,10 +134,11 @@ pub async fn update_conversation_title(
     Validator::validate_id(conversation_id, "会话ID")?;
     Validator::validate_not_empty(&title, "会话标题")?;
 
-    let sqlite_manager = state.get_sqlite_manager()?;
+    let repositories = state.repositories();
 
-    sqlite_manager
-        .update_conversation_title(conversation_id, &title)
+    repositories
+        .conversations()
+        .update_title(conversation_id, &title)
         .await
         .to_tauri()?;
 
@@ -156,10 +154,11 @@ pub async fn delete_conversation(
     // 参数验证
     Validator::validate_id(conversation_id, "会话ID")?;
 
-    let sqlite_manager = state.get_sqlite_manager()?;
+    let repositories = state.repositories();
 
-    sqlite_manager
-        .delete_conversation(conversation_id)
+    repositories
+        .conversations()
+        .delete(conversation_id)
         .await
         .to_tauri()?;
 
@@ -184,12 +183,12 @@ pub async fn get_compressed_context(
         return Err("无效的会话ID".to_string());
     }
 
-    let sqlite_manager = state.get_sqlite_manager()?;
+    let repositories = state.repositories();
 
     // 使用context.rs中的build_context_for_request函数
     let config = crate::ai::types::AIConfig::default();
     let messages = crate::ai::context::build_context_for_request(
-        sqlite_manager,
+        repositories,
         conversation_id,
         up_to_message_id,
         &config,
@@ -233,10 +232,10 @@ pub async fn truncate_conversation(
         return Err("无效的消息ID".to_string());
     }
 
-    let sqlite_manager = state.get_sqlite_manager()?;
+    let repositories = state.repositories();
 
     // 截断会话
-    handle_truncate_conversation(sqlite_manager, conversation_id, truncate_after_message_id)
+    handle_truncate_conversation(repositories, conversation_id, truncate_after_message_id)
         .await
         .to_tauri()?;
 
@@ -268,22 +267,17 @@ pub async fn save_message(
         return Err("无效的消息角色".to_string());
     }
 
-    let sqlite_manager = state.get_sqlite_manager()?;
+    let repositories = state.repositories();
 
     // 创建消息对象
-    let message = Message {
-        id: 0, // 数据库自动生成
-        conversation_id,
-        role,
-        content,
-        steps_json: None,
-        status: None,
-        duration_ms: None,
-        created_at: Utc::now(),
-    };
+    let message = Message::new(conversation_id, role, content);
 
     // 保存消息
-    let message_id = sqlite_manager.save_message(&message).await.to_tauri()?;
+    let message_id = repositories
+        .conversations()
+        .save_message(&message)
+        .await
+        .to_tauri()?;
 
     info!("消息保存成功: message_id={}", message_id);
     Ok(message_id)
@@ -304,9 +298,10 @@ pub async fn update_message_meta(
         return Err("无效的消息ID".to_string());
     }
 
-    let sqlite_manager = state.get_sqlite_manager()?;
+    let repositories = state.repositories();
 
-    sqlite_manager
+    repositories
+        .conversations()
         .update_message_meta(
             message_id,
             steps_json.as_deref(),

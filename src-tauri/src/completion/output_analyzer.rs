@@ -20,16 +20,13 @@ static GLOBAL_OUTPUT_ANALYZER: OnceLock<Arc<OutputAnalyzer>> = OnceLock::new();
 struct PaneBufferEntry {
     content: String,
     last_access: Instant,
-    last_cleanup: Instant,
 }
 
 impl PaneBufferEntry {
     fn new() -> Self {
-        let now = Instant::now();
         Self {
             content: String::new(),
-            last_access: now,
-            last_cleanup: now,
+            last_access: Instant::now(),
         }
     }
 
@@ -37,10 +34,7 @@ impl PaneBufferEntry {
         self.last_access = Instant::now();
     }
 
-    fn should_cleanup(&self) -> bool {
-        let config = crate::mux::ConfigManager::get_config();
-        self.last_cleanup.elapsed() > config.cleanup_interval()
-    }
+
 
     fn is_stale(&self, max_age: Duration) -> bool {
         self.last_access.elapsed() > max_age

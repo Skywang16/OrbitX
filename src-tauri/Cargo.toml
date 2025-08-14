@@ -138,8 +138,8 @@ name = "messagepack_tests"
 path = "tests/storage/messagepack_tests.rs"
 
 [[test]]
-name = "coordinator_integration_test"
-path = "tests/storage/coordinator_integration_test.rs"
+name = "storage_repository_tests"
+path = "tests/storage_repository_tests.rs"
 
 
 

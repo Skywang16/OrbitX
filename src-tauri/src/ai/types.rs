@@ -7,123 +7,15 @@ use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::pin::Pin;
-use uuid::Uuid;
+
 
 // ===== AI提供商类型 =====
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub enum AIProvider {
-    OpenAI,
-    Claude,
-    Custom,
-}
-
 // ===== AI模型配置 =====
+// 重新导出Repository中的类型
+pub use crate::storage::repositories::ai_models::{AIModelConfig, AIProvider};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct AIModelConfig {
-    pub id: String,
-    pub name: String,
-    pub provider: AIProvider,
-    pub api_url: String,
-    pub api_key: String,
-    pub model: String,
-    pub is_default: Option<bool>,
-    pub options: Option<AIModelOptions>,
-}
 
-impl AIModelConfig {
-    /// 创建新的AI模型配置
-    pub fn new(
-        name: String,
-        provider: AIProvider,
-        api_url: String,
-        api_key: String,
-        model: String,
-    ) -> Self {
-        Self {
-            id: Uuid::new_v4().to_string(),
-            name,
-            provider,
-            api_url,
-            api_key,
-            model,
-            is_default: Some(false),
-            options: None,
-        }
-    }
-
-    /// 验证配置是否有效
-    pub fn validate(&self) -> Result<(), String> {
-        if self.id.is_empty() {
-            return Err("Model ID cannot be empty".to_string());
-        }
-        if self.name.is_empty() {
-            return Err("Model name cannot be empty".to_string());
-        }
-        if self.api_url.is_empty() {
-            return Err("API URL cannot be empty".to_string());
-        }
-        if self.api_key.is_empty() {
-            return Err("API key cannot be empty".to_string());
-        }
-        if self.model.is_empty() {
-            return Err("Model name cannot be empty".to_string());
-        }
-
-        // 验证URL格式
-        if !self.api_url.starts_with("http://") && !self.api_url.starts_with("https://") {
-            return Err("API URL must start with http:// or https://".to_string());
-        }
-
-        Ok(())
-    }
-
-    /// 检查是否为默认模型
-    pub fn is_default(&self) -> bool {
-        self.is_default.unwrap_or(false)
-    }
-
-    /// 设置为默认模型
-    pub fn set_default(&mut self, is_default: bool) {
-        self.is_default = Some(is_default);
-    }
-
-    /// 获取超时设置
-    pub fn timeout(&self) -> u64 {
-        self.options
-            .as_ref()
-            .and_then(|opts| opts.timeout)
-            .unwrap_or(0) // 默认无超时限制
-    }
-
-    /// 获取最大token数
-    pub fn max_tokens(&self) -> u32 {
-        self.options
-            .as_ref()
-            .and_then(|opts| opts.max_tokens)
-            .unwrap_or(4096) // 默认4096 tokens
-    }
-
-    /// 获取温度参数
-    pub fn temperature(&self) -> f32 {
-        self.options
-            .as_ref()
-            .and_then(|opts| opts.temperature)
-            .unwrap_or(0.7) // 默认0.7
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct AIModelOptions {
-    pub max_tokens: Option<u32>,
-    pub temperature: Option<f32>,
-    pub timeout: Option<u64>,
-    pub custom_config: Option<String>, // JSON字符串形式的自定义配置
-}
 
 // ===== AI请求和响应类型 =====
 
@@ -217,8 +109,7 @@ impl AISettings {
 
     /// 添加模型
     pub fn add_model(&mut self, model: AIModelConfig) -> Result<(), String> {
-        // 验证模型配置
-        model.validate()?;
+
 
         // 检查ID是否已存在
         if self.models.iter().any(|m| m.id == model.id) {
@@ -278,10 +169,7 @@ impl AISettings {
 
     /// 验证设置
     pub fn validate(&self) -> Result<(), String> {
-        // 验证所有模型配置
-        for model in &self.models {
-            model.validate()?;
-        }
+
 
         // 验证默认模型ID是否存在
         if let Some(default_id) = &self.default_model_id {
@@ -455,31 +343,8 @@ pub struct ModelInfo {
 
 // ===== AI会话上下文管理系统 - 全新数据结构 =====
 
-/// 会话信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Conversation {
-    pub id: i64,
-    pub title: String,
-    pub message_count: i32,
-    pub last_message_preview: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-/// 消息信息（扩展：携带steps、status、duration）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Message {
-    pub id: i64,
-    pub conversation_id: i64,
-    pub role: String, // "user", "assistant", "system"
-    pub content: String,
-    pub steps_json: Option<String>,
-    pub status: Option<String>,
-    pub duration_ms: Option<i64>,
-    pub created_at: DateTime<Utc>,
-}
+// 重新导出Repository中的会话和消息类型
+pub use crate::storage::repositories::conversations::{Conversation, Message};
 /// AI配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

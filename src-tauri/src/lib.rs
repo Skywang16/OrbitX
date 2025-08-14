@@ -96,7 +96,7 @@ use config::{
     set_terminal_theme,
 };
 use storage::commands::{
-    storage_get_config, storage_load_session_state, storage_query_data, storage_save_data,
+    storage_get_config, storage_load_session_state,
     storage_save_session_state, storage_update_config, StorageCoordinatorState,
 };
 use window::commands::{
@@ -334,8 +334,6 @@ pub fn run() {
             storage_update_config,
             storage_save_session_state,
             storage_load_session_state,
-            storage_query_data,
-            storage_save_data,
             // 文件拖拽处理命令
             handle_file_open
         ])
@@ -413,9 +411,9 @@ pub fn run() {
                 info!("开始初始化AI管理器状态");
                 let ai_state = {
                     let storage_state = app.state::<StorageCoordinatorState>();
-                    let sqlite_manager = storage_state.coordinator.sqlite_manager();
+                    let repositories = storage_state.coordinator.repositories();
                     let cache = storage_state.coordinator.cache();
-                    let ai_state = AIManagerState::new(Some(sqlite_manager), cache)
+                    let ai_state = AIManagerState::new(repositories, cache)
                         .map_err(|e| anyhow::anyhow!("AI管理器状态初始化失败: {}", e))?;
 
                     // 初始化AI服务

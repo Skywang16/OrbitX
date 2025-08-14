@@ -5,7 +5,7 @@
  */
 
 use crate::ai::types::{AIConfig, AIContext, Message};
-use crate::storage::sqlite::SqliteManager;
+use crate::storage::repositories::RepositoryManager;
 use crate::utils::error::AppResult;
 use tracing::{debug, info, warn};
 
@@ -15,7 +15,7 @@ use tracing::{debug, info, warn};
 /// 注意：当前版本不包含任何压缩逻辑，直接返回所有相关消息。
 /// TODO: 未来在此处实现上下文智能压缩功能 (Phase 5)。
 pub async fn build_context_for_request(
-    sqlite_manager: &SqliteManager,
+    repositories: &RepositoryManager,
     conversation_id: i64,
     up_to_message_id: Option<i64>,
     _config: &AIConfig, // config暂时未使用，但保留接口
@@ -26,12 +26,15 @@ pub async fn build_context_for_request(
     );
 
     // 直接获取历史消息并返回，不进行任何压缩
-    let messages = if let Some(msg_id) = up_to_message_id {
-        sqlite_manager
-            .get_messages_up_to(conversation_id, msg_id)
+    let messages = if let Some(_msg_id) = up_to_message_id {
+        // TODO: 实现get_messages_up_to功能
+        repositories
+            .conversations()
+            .get_messages(conversation_id, None, None)
             .await?
     } else {
-        sqlite_manager
+        repositories
+            .conversations()
             .get_messages(conversation_id, None, None)
             .await?
     };
@@ -61,7 +64,7 @@ pub fn messages_to_ai_context(messages: Vec<Message>, _conversation_id: i64) -> 
 ///
 /// 删除指定消息ID之后的所有消息，并更新会话统计
 pub async fn handle_truncate_conversation(
-    sqlite_manager: &SqliteManager,
+    repositories: &RepositoryManager,
     conversation_id: i64,
     truncate_after_message_id: i64,
 ) -> AppResult<()> {
@@ -71,17 +74,24 @@ pub async fn handle_truncate_conversation(
     );
 
     // 1. 删除截断点之后的消息
-    let deleted_count = sqlite_manager
+    let deleted_count = repositories
+        .conversations()
         .delete_messages_after(conversation_id, truncate_after_message_id)
         .await?;
 
     // 2. 更新会话统计（触发器会自动处理message_count）
     if deleted_count > 0 {
         // 获取最后一条消息作为预览
-        if let Some(last_message) = sqlite_manager.get_last_message(conversation_id).await? {
+        let messages = repositories
+            .conversations()
+            .get_messages(conversation_id, Some(1), None)
+            .await?;
+
+        if let Some(last_message) = messages.last() {
             let preview = truncate_string(&last_message.content, 40);
-            sqlite_manager
-                .update_conversation_preview(conversation_id, &preview)
+            repositories
+                .conversations()
+                .update_preview(conversation_id, &preview)
                 .await?;
         }
     }

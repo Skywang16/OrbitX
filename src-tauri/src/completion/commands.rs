@@ -12,7 +12,7 @@ use crate::completion::engine::{CompletionEngine, CompletionEngineConfig};
 use crate::completion::types::{
     CompletionContext, CompletionResponse, EnhancedCompletionItem, EnhancedCompletionResponse,
 };
-use crate::storage::StorageCoordinatorState;
+use crate::storage::commands::StorageCoordinatorState;
 use crate::utils::error::ToTauriResult;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};

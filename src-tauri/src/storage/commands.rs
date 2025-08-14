@@ -1,11 +1,11 @@
 /*!
  * 存储系统Tauri命令模块
  *
- * 提供统一的存储API命令，基于StorageCoordinator实现
+ * 提供统一的存储API命令，基于新的Repository架构实现
  * 包含配置管理、会话状态、数据查询等功能
  */
 
-use crate::storage::types::{DataQuery, SaveOptions, SessionState};
+use crate::storage::types::SessionState;
 use crate::storage::StorageCoordinator;
 use crate::utils::error::{AppResult, ToTauriResult};
 use anyhow::Context;
@@ -174,29 +174,4 @@ pub async fn storage_load_session_state(
     }
 }
 
-/// 查询数据
-#[tauri::command]
-pub async fn storage_query_data(
-    query: DataQuery,
-    state: State<'_, StorageCoordinatorState>,
-) -> Result<Vec<Value>, String> {
-    debug!("存储命令: 查询数据 {}", query.query);
 
-    state.coordinator.query_data(&query).await.to_tauri()
-}
-
-/// 保存数据
-#[tauri::command]
-pub async fn storage_save_data(
-    data: Value,
-    options: SaveOptions,
-    state: State<'_, StorageCoordinatorState>,
-) -> Result<(), String> {
-    debug!("存储命令: 保存数据到表 {:?}", options.table);
-
-    state
-        .coordinator
-        .save_data(&data, &options)
-        .await
-        .to_tauri()
-}
