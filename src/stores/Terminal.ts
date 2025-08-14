@@ -2,7 +2,7 @@ import { shell as shellAPI } from '@/api/shell'
 import { terminal as terminalAPI } from '@/api/terminal'
 import type { ShellInfo } from '@/api/shell/types'
 import { useSessionStore } from '@/stores/session'
-import type { TabState, TerminalSession } from '@/types/storage'
+import type { TerminalState } from '@/types/storage'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
@@ -29,15 +29,15 @@ interface ShellManagerState {
   error: string | null
 }
 
-// 终端运行时会话类型，扩展存储型的 TerminalSession
-export interface RuntimeTerminalSession extends TerminalSession {
+// 终端运行时状态，包含后端进程信息的 TerminalState
+export interface RuntimeTerminalState extends TerminalState {
   backendId: number | null // 后端进程ID
   shellInfo?: ShellInfo // Shell信息
 }
 
 export const useTerminalStore = defineStore('Terminal', () => {
   // --- 状态 ---
-  const terminals = ref<RuntimeTerminalSession[]>([])
+  const terminals = ref<RuntimeTerminalState[]>([])
   const activeTerminalId = ref<string | null>(null)
 
   // Shell管理状态
@@ -90,7 +90,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
   const setupGlobalListeners = async () => {
     if (_isListenerSetup) return
 
-    const findTerminalByBackendId = (backendId: number): RuntimeTerminalSession | undefined => {
+    const findTerminalByBackendId = (backendId: number): RuntimeTerminalState | undefined => {
       return terminals.value.find(t => t.backendId === backendId)
     }
 
@@ -223,15 +223,12 @@ export const useTerminalStore = defineStore('Terminal', () => {
       const defaultShell = await shellAPI.getDefault()
 
       // 只有在后端创建成功后才创建前端会话记录
-      const terminal: RuntimeTerminalSession = {
+      const terminal: RuntimeTerminalState = {
         id,
         title: defaultShell.name,
-        workingDirectory: initialDirectory || '~',
-        environment: {},
-        commandHistory: [],
-        isActive: false,
-        createdAt: new Date().toISOString(),
-        lastActive: new Date().toISOString(),
+        cwd: initialDirectory || '~',
+        active: false,
+        shell: defaultShell.name,
         backendId, // 直接设置有效的backendId
         shellInfo: defaultShell as ShellInfo,
       }
@@ -281,6 +278,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
     // 清理前端状态
     cleanupTerminalState(id)
+
+    // 立即保存状态变化
+    await saveSessionState()
   }
 
   /**
@@ -394,7 +394,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
       // 如果已存在，静默激活现有终端
       setActiveTerminal(existingAgentTerminal.id)
       existingAgentTerminal.title = agentTerminalTitle
-      existingAgentTerminal.lastActive = new Date().toISOString()
 
       // 不再输出重新激活信息，保持终端清洁
 
@@ -410,18 +409,12 @@ export const useTerminalStore = defineStore('Terminal', () => {
       })
 
       // 只有在后端创建成功后才创建前端会话记录
-      const terminal: RuntimeTerminalSession = {
+      const terminal: RuntimeTerminalState = {
         id,
         title: agentTerminalTitle,
-        workingDirectory: initialDirectory || '~',
-        environment: {
-          OrbitX_AGENT: agentName,
-          OrbitX_TERMINAL_TYPE: 'agent',
-        },
-        commandHistory: [],
-        isActive: false,
-        createdAt: new Date().toISOString(),
-        lastActive: new Date().toISOString(),
+        cwd: initialDirectory || '~',
+        active: false,
+        shell: 'agent',
         backendId, // 直接设置有效的backendId
       }
 
@@ -461,15 +454,12 @@ export const useTerminalStore = defineStore('Terminal', () => {
       })
 
       // 只有在后端创建成功后才创建前端会话记录
-      const terminal: RuntimeTerminalSession = {
+      const terminal: RuntimeTerminalState = {
         id,
         title,
-        workingDirectory: shellInfo.path || '~',
-        environment: {},
-        commandHistory: [],
-        isActive: false,
-        createdAt: new Date().toISOString(),
-        lastActive: new Date().toISOString(),
+        cwd: shellInfo.path || '~',
+        active: false,
+        shell: shellInfo.name,
         backendId, // 直接设置有效的backendId
         shellInfo,
       }
@@ -477,6 +467,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
       // 添加到terminals数组，此时backendId已经有效
       terminals.value.push(terminal)
       setActiveTerminal(id)
+
+      // 立即保存新终端状态
+      await saveSessionState()
+
       return id
     } catch (error) {
       console.error(`创建终端 '${id}' 失败:`, error)
@@ -508,47 +502,19 @@ export const useTerminalStore = defineStore('Terminal', () => {
   // ============================================================================
 
   /**
-   * 同步终端状态到会话存储（不触发自动保存）
+   * 同步终端状态到会话存储
    */
   const syncToSessionStore = () => {
-    // 直接替换整个对象，避免触发 Session Store 的响应式更新
-    const terminalSessions: Record<string, TerminalSession> = {}
-    const tabs: TabState[] = []
+    const terminalStates: TerminalState[] = terminals.value.map(terminal => ({
+      id: terminal.id,
+      title: terminal.title,
+      cwd: terminal.cwd,
+      active: terminal.id === activeTerminalId.value,
+      shell: terminal.shellInfo?.name,
+    }))
 
-    terminals.value.forEach(terminal => {
-      // 创建终端会话记录
-      const sessionData: TerminalSession = {
-        id: terminal.id,
-        title: terminal.title,
-        workingDirectory: terminal.workingDirectory,
-        environment: terminal.environment,
-        commandHistory: terminal.commandHistory,
-        isActive: terminal.id === activeTerminalId.value,
-        createdAt: terminal.createdAt,
-        lastActive: new Date().toISOString(),
-      }
-
-      terminalSessions[terminal.id] = sessionData
-
-      // 创建标签页记录
-      const tabData: TabState = {
-        id: terminal.id,
-        title: terminal.title,
-        isActive: terminal.id === activeTerminalId.value,
-        workingDirectory: terminal.workingDirectory,
-        terminalSessionId: terminal.id,
-        customData: {
-          backendId: terminal.backendId,
-          shellInfo: terminal.shellInfo,
-        },
-      }
-
-      tabs.push(tabData)
-    })
-
-    // 直接替换，不使用 Session Store 的方法
-    sessionStore.sessionState.terminalSessions = terminalSessions
-    sessionStore.sessionState.tabs = tabs
+    // 使用Session Store的方法更新终端状态
+    sessionStore.updateTerminals(terminalStates)
   }
 
   /**
@@ -556,13 +522,19 @@ export const useTerminalStore = defineStore('Terminal', () => {
    */
   const restoreFromSessionState = async () => {
     try {
-      const restored = await sessionStore.restoreSession()
-      if (!restored) {
-        console.log('没有找到可恢复的终端会话状态')
-        return false
+      console.log('🔄 [Terminal Store] 开始恢复终端状态')
+
+      // 等待Session Store初始化
+      if (!sessionStore.initialized) {
+        await sessionStore.initialize()
       }
 
-      const { tabs, terminalSessions } = sessionStore.sessionState
+      const terminalStates = sessionStore.terminals
+
+      if (!terminalStates || terminalStates.length === 0) {
+        console.log('ℹ️ [Terminal Store] 没有找到可恢复的终端状态')
+        return false
+      }
 
       // 清空当前终端
       terminals.value = []
@@ -571,33 +543,27 @@ export const useTerminalStore = defineStore('Terminal', () => {
       // 记录应该激活的终端ID
       let shouldActivateTerminalId: string | null = null
 
-      // 恢复终端会话
-      for (const tab of tabs) {
-        if (tab.terminalSessionId && terminalSessions[tab.terminalSessionId]) {
-          const sessionData = terminalSessions[tab.terminalSessionId]
+      // 恢复终端
+      for (const terminalState of terminalStates) {
+        try {
+          console.log(`🔄 [Terminal Store] 恢复终端: ${terminalState.id}`)
 
-          try {
-            // 创建新的终端会话
-            const id = await createTerminal(sessionData.workingDirectory)
+          // 创建新的终端会话
+          const id = await createTerminal(terminalState.cwd)
 
-            // 更新标题和其他元数据
-            const terminal = terminals.value.find(t => t.id === id)
-            if (terminal) {
-              terminal.title = sessionData.title
-              // 恢复命令历史
-              terminal.commandHistory = [...sessionData.commandHistory]
-              // 恢复环境变量
-              terminal.environment = { ...sessionData.environment }
-            }
-
-            // 记录应该激活的终端（只记录第一个找到的活跃终端，避免被后续循环覆盖）
-            if (tab.isActive && shouldActivateTerminalId === null) {
-              shouldActivateTerminalId = id
-              console.log(`🎯 [Terminal Store] 标记终端 ${id} 为应激活状态`)
-            }
-          } catch (error) {
-            console.error(`恢复终端会话 ${tab.id} 失败:`, error)
+          // 更新标题
+          const terminal = terminals.value.find(t => t.id === id)
+          if (terminal) {
+            terminal.title = terminalState.title
           }
+
+          // 记录应该激活的终端
+          if (terminalState.active && shouldActivateTerminalId === null) {
+            shouldActivateTerminalId = id
+            console.log(`🎯 [Terminal Store] 标记终端 ${id} 为应激活状态`)
+          }
+        } catch (error) {
+          console.error(`恢复终端 ${terminalState.id} 失败:`, error)
         }
       }
 

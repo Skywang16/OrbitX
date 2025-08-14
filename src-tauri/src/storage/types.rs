@@ -6,7 +6,6 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// 存储层类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -35,167 +34,129 @@ impl StorageLayer {
 
 
 
-/// 会话状态数据结构
+/// 会话状态数据结构 - 精简版
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionState {
     /// 版本号
     pub version: u32,
     /// 窗口状态
-    pub window_state: WindowState,
-    /// 标签页状态
-    pub tabs: Vec<TabState>,
-    /// 终端会话状态
-    pub terminal_sessions: HashMap<String, TerminalSession>,
+    pub window: WindowState,
+    /// 终端状态列表
+    pub terminals: Vec<TerminalState>,
     /// UI状态
-    pub ui_state: UiState,
-    /// 创建时间
-    pub created_at: DateTime<Utc>,
-    /// 校验和
-    pub checksum: Option<String>,
+    pub ui: UiState,
+    /// AI状态
+    pub ai: AiState,
+    /// 时间戳
+    pub timestamp: DateTime<Utc>,
 }
 
 impl Default for SessionState {
     fn default() -> Self {
         Self {
             version: 1,
-            window_state: WindowState::default(),
-            tabs: Vec::new(),
-            terminal_sessions: HashMap::new(),
-            ui_state: UiState::default(),
-            created_at: Utc::now(),
-            checksum: None,
+            window: WindowState::default(),
+            terminals: Vec::new(),
+            ui: UiState::default(),
+            ai: AiState::default(),
+            timestamp: Utc::now(),
         }
     }
 }
 
-/// 窗口状态
+/// 窗口状态 - 精简版
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowState {
-    /// 窗口位置 (x, y)
-    pub position: (i32, i32),
-    /// 窗口大小 (width, height)
-    pub size: (u32, u32),
+    /// X坐标
+    pub x: i32,
+    /// Y坐标
+    pub y: i32,
+    /// 宽度
+    pub width: u32,
+    /// 高度
+    pub height: u32,
     /// 是否最大化
-    pub is_maximized: bool,
-    /// 是否全屏
-    pub is_fullscreen: bool,
-    /// 是否置顶
-    pub is_always_on_top: bool,
+    pub maximized: bool,
 }
 
 impl Default for WindowState {
     fn default() -> Self {
         Self {
-            position: (100, 100),
-            size: (1200, 800),
-            is_maximized: false,
-            is_fullscreen: false,
-            is_always_on_top: false,
+            x: 100,
+            y: 100,
+            width: 1200,
+            height: 800,
+            maximized: false,
         }
     }
 }
 
-/// 标签页状态
+/// 终端状态 - 精简版
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TabState {
-    /// 标签页ID
+pub struct TerminalState {
+    /// 终端ID
     pub id: String,
-    /// 标签页标题
+    /// 终端标题
     pub title: String,
+    /// 工作目录
+    pub cwd: String,
     /// 是否激活
-    pub is_active: bool,
-    /// 工作目录
-    pub working_directory: String,
-    /// 终端会话ID
-    pub terminal_session_id: Option<String>,
-    /// 自定义数据
-    pub custom_data: HashMap<String, serde_json::Value>,
+    pub active: bool,
+    /// Shell类型（可选）
+    pub shell: Option<String>,
 }
 
-/// 终端会话状态
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TerminalSession {
-    /// 会话ID
-    pub id: String,
-    /// 会话标题
-    pub title: String,
-    /// 工作目录
-    pub working_directory: String,
-    /// 环境变量
-    pub environment: HashMap<String, String>,
-    /// 命令历史
-    pub command_history: Vec<String>,
-    /// 是否活跃
-    pub is_active: bool,
-    /// 创建时间
-    pub created_at: DateTime<Utc>,
-    /// 最后活跃时间
-    pub last_active: DateTime<Utc>,
-}
-
-/// OrbitX AI 聊天状态
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OrbitxChatState {
-    /// 是否可见
-    pub is_visible: bool,
-    /// 侧边栏宽度
-    pub sidebar_width: u32,
-    /// 当前模式
-    pub chat_mode: String, // "chat" | "agent"
-    /// 当前会话ID
-    pub current_conversation_id: Option<i64>,
-}
-
-impl Default for OrbitxChatState {
-    fn default() -> Self {
-        Self {
-            is_visible: false,
-            sidebar_width: 350,
-            chat_mode: "chat".to_string(),
-            current_conversation_id: None,
-        }
-    }
-}
-
-/// UI状态
+/// UI状态 - 精简版
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UiState {
-    /// 侧边栏是否可见
-    pub sidebar_visible: bool,
-    /// 侧边栏宽度
-    pub sidebar_width: u32,
-    /// 当前主题
-    pub current_theme: String,
+    /// 主题名称
+    pub theme: String,
     /// 字体大小
     pub font_size: f32,
-    /// 缩放级别
-    pub zoom_level: f32,
-    /// 面板布局
-    pub panel_layout: HashMap<String, serde_json::Value>,
-    /// OrbitX AI 聊天状态
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub orbitx_chat: Option<OrbitxChatState>,
+    /// 侧边栏宽度
+    pub sidebar_width: u32,
 }
 
 impl Default for UiState {
     fn default() -> Self {
         Self {
-            sidebar_visible: true,
-            sidebar_width: 300,
-            current_theme: "dark".to_string(),
+            theme: "dark".to_string(),
             font_size: 14.0,
-            zoom_level: 1.0,
-            panel_layout: HashMap::new(),
-            orbitx_chat: Some(OrbitxChatState::default()),
+            sidebar_width: 300,
         }
     }
 }
+
+/// AI状态 - 精简版
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiState {
+    /// 是否可见
+    pub visible: bool,
+    /// 侧边栏宽度
+    pub width: u32,
+    /// 聊天模式
+    pub mode: String, // "chat" | "agent"
+    /// 当前会话ID
+    pub conversation_id: Option<i64>,
+}
+
+impl Default for AiState {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            width: 350,
+            mode: "chat".to_string(),
+            conversation_id: None,
+        }
+    }
+}
+
+
 
 /// 配置节类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

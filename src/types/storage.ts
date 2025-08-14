@@ -41,7 +41,7 @@ export interface DataQuery {
   /** 查询语句或条件 */
   query: string
   /** 查询参数 */
-  params: Record<string, any>
+  params: Record<string, unknown>
   /** 限制结果数量 */
   limit?: number
   /** 偏移量 */
@@ -63,88 +63,61 @@ export interface SaveOptions {
   /** 是否验证数据 */
   validate: boolean
   /** 自定义元数据 */
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 // ============================================================================
-// 会话状态相关类型
+// 会话状态相关类型 - 精简版，与后端完全一致
 // ============================================================================
 
 /** 窗口状态 */
 export interface WindowState {
-  /** 窗口位置 [x, y] */
-  position: [number, number]
-  /** 窗口大小 [width, height] */
-  size: [number, number]
+  /** X坐标 */
+  x: number
+  /** Y坐标 */
+  y: number
+  /** 宽度 */
+  width: number
+  /** 高度 */
+  height: number
   /** 是否最大化 */
-  isMaximized: boolean
-  /** 是否全屏 */
-  isFullscreen: boolean
-  /** 是否置顶 */
-  isAlwaysOnTop: boolean
+  maximized: boolean
 }
 
-/** 标签页状态 */
-export interface TabState {
-  /** 标签页ID */
+/** 终端状态 */
+export interface TerminalState {
+  /** 终端ID */
   id: string
-  /** 标签页标题 */
+  /** 终端标题 */
   title: string
+  /** 工作目录 */
+  cwd: string
   /** 是否激活 */
-  isActive: boolean
-  /** 工作目录 */
-  workingDirectory: string
-  /** 终端会话ID */
-  terminalSessionId?: string
-  /** 自定义数据 */
-  customData: Record<string, any>
-}
-
-/** 终端会话状态 */
-export interface TerminalSession {
-  /** 会话ID */
-  id: string
-  /** 会话标题 */
-  title: string
-  /** 工作目录 */
-  workingDirectory: string
-  /** 环境变量 */
-  environment: Record<string, string>
-  /** 命令历史 */
-  commandHistory: string[]
-  /** 是否活跃 */
-  isActive: boolean
-  /** 创建时间 */
-  createdAt: string
-  /** 最后活跃时间 */
-  lastActive: string
+  active: boolean
+  /** Shell类型（可选） */
+  shell?: string
 }
 
 /** UI状态 */
 export interface UiState {
-  /** 侧边栏是否可见 */
-  sidebarVisible: boolean
-  /** 侧边栏宽度 */
-  sidebarWidth: number
-  /** 当前主题 */
-  currentTheme: string
+  /** 主题名称 */
+  theme: string
   /** 字体大小 */
   fontSize: number
-  /** 缩放级别 */
-  zoomLevel: number
-  /** 面板布局 */
-  panelLayout: Record<string, any>
-  /** OrbitX AI 聊天状态 */
-  orbitxChat?: {
-    /** 是否可见 */
-    isVisible: boolean
-    /** 侧边栏宽度 */
-    sidebarWidth: number
-    /** 当前模式 */
-    chatMode: 'chat' | 'agent'
-    /** 当前会话ID */
-    currentConversationId: number | null
-  }
+  /** 侧边栏宽度 */
+  sidebarWidth: number
+}
+
+/** AI状态 */
+export interface AiState {
+  /** 是否可见 */
+  visible: boolean
+  /** 侧边栏宽度 */
+  width: number
+  /** 聊天模式 */
+  mode: 'chat' | 'agent'
+  /** 当前会话ID */
+  conversationId?: number
 }
 
 /** 会话状态数据结构 */
@@ -152,17 +125,15 @@ export interface SessionState {
   /** 版本号 */
   version: number
   /** 窗口状态 */
-  windowState: WindowState
-  /** 标签页状态 */
-  tabs: TabState[]
-  /** 终端会话状态 */
-  terminalSessions: Record<string, TerminalSession>
+  window: WindowState
+  /** 终端状态列表 */
+  terminals: TerminalState[]
   /** UI状态 */
-  uiState: UiState
-  /** 创建时间 */
-  createdAt: string
-  /** 校验和 */
-  checksum?: string
+  ui: UiState
+  /** AI状态 */
+  ai: AiState
+  /** 时间戳 */
+  timestamp: string
 }
 
 // ============================================================================
@@ -174,7 +145,7 @@ export interface StorageEvent {
   /** 事件类型 */
   type: 'config_changed' | 'state_saved' | 'state_loaded' | 'data_updated' | 'cache_event' | 'error'
   /** 事件数据 */
-  data: any
+  data: unknown
   /** 事件时间戳 */
   timestamp: number
 }
@@ -207,30 +178,26 @@ export const createSaveOptions = (table?: string): SaveOptions => {
 export const createDefaultSessionState = (): SessionState => {
   return {
     version: 1,
-    windowState: {
-      position: [100, 100],
-      size: [1200, 800],
-      isMaximized: false,
-      isFullscreen: false,
-      isAlwaysOnTop: false,
+    window: {
+      x: 100,
+      y: 100,
+      width: 1200,
+      height: 800,
+      maximized: false,
     },
-    tabs: [],
-    terminalSessions: {},
-    uiState: {
-      sidebarVisible: true,
-      sidebarWidth: 300,
-      currentTheme: 'dark',
+    terminals: [],
+    ui: {
+      theme: 'dark',
       fontSize: 14,
-      zoomLevel: 1.0,
-      panelLayout: {},
-      orbitxChat: {
-        isVisible: false,
-        sidebarWidth: 350,
-        chatMode: 'chat',
-        currentConversationId: null,
-      },
+      sidebarWidth: 300,
     },
-    createdAt: new Date().toISOString(),
+    ai: {
+      visible: false,
+      width: 350,
+      mode: 'chat',
+      conversationId: undefined,
+    },
+    timestamp: new Date().toISOString(),
   }
 }
 

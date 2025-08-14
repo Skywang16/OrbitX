@@ -407,16 +407,16 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  // 从会话状态恢复 OrbitX 状态
+  // 从会话状态恢复 AI 状态
   const restoreFromSessionState = (): void => {
     if (!sessionStore.initialized) return
 
-    const orbitxState = sessionStore.sessionState.uiState.orbitxChat
-    if (orbitxState) {
-      isVisible.value = orbitxState.isVisible
-      sidebarWidth.value = orbitxState.sidebarWidth
-      chatMode.value = orbitxState.chatMode
-      currentConversationId.value = orbitxState.currentConversationId
+    const aiState = sessionStore.aiState
+    if (aiState) {
+      isVisible.value = aiState.visible
+      sidebarWidth.value = aiState.width
+      chatMode.value = aiState.mode as 'chat' | 'agent'
+      currentConversationId.value = aiState.conversationId || null
     }
   }
 
@@ -424,17 +424,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const saveToSessionState = (): void => {
     if (!sessionStore.initialized) return
 
-    // 更新会话状态中的 OrbitX 状态
-    sessionStore.sessionState.uiState.orbitxChat = {
-      isVisible: isVisible.value,
-      sidebarWidth: sidebarWidth.value,
-      chatMode: chatMode.value,
-      currentConversationId: currentConversationId.value,
-    }
-
-    // 触发会话状态保存
-    sessionStore.saveSessionState().catch(() => {
-      /* ignore: 后台保存失败不打扰用户 */
+    // 更新会话状态中的 AI 状态
+    sessionStore.updateAiState({
+      visible: isVisible.value,
+      width: sidebarWidth.value,
+      mode: chatMode.value,
+      conversationId: currentConversationId.value || undefined,
     })
   }
 

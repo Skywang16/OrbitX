@@ -20,7 +20,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
         id: terminal.id,
         title: terminal.title,
         type: TabType.TERMINAL,
-        isActive: terminal.id === terminalStore.activeTerminalId,
+        isActive: terminal.active,
         closable: true,
         icon: '🖥️',
         data: { backendId: terminal.backendId },

@@ -92,26 +92,15 @@ pub async fn storage_save_session_state(
 ) -> Result<(), String> {
     info!("🔄 开始保存会话状态");
     info!("📊 会话状态统计:");
-    info!(
-        "  - 终端会话数量: {}",
-        session_state.terminal_sessions.len()
-    );
-    info!("  - 标签页数量: {}", session_state.tabs.len());
+    info!("  - 终端数量: {}", session_state.terminals.len());
     info!("  - 版本: {}", session_state.version);
+    info!("  - AI可见: {}", session_state.ai.visible);
 
-    // 打印终端会话详情
-    for (id, session) in &session_state.terminal_sessions {
+    // 打印终端详情
+    for terminal in &session_state.terminals {
         info!(
-            "  📱 终端会话 {}: title='{}', is_active={}, working_dir='{}'",
-            id, session.title, session.is_active, session.working_directory
-        );
-    }
-
-    // 打印标签页详情
-    for tab in &session_state.tabs {
-        info!(
-            "  📋 标签页 {}: title='{}', is_active={}",
-            tab.id, tab.title, tab.is_active
+            "  🖥️ 终端 {}: title='{}', active={}, cwd='{}'",
+            terminal.id, terminal.title, terminal.active, terminal.cwd
         );
     }
 
@@ -138,26 +127,15 @@ pub async fn storage_load_session_state(
         Ok(Some(session_state)) => {
             info!("✅ 会话状态加载成功");
             info!("📊 加载的会话状态统计:");
-            info!(
-                "  - 终端会话数量: {}",
-                session_state.terminal_sessions.len()
-            );
-            info!("  - 标签页数量: {}", session_state.tabs.len());
+            info!("  - 终端数量: {}", session_state.terminals.len());
             info!("  - 版本: {}", session_state.version);
+            info!("  - AI可见: {}", session_state.ai.visible);
 
-            // 打印终端会话详情
-            for (id, session) in &session_state.terminal_sessions {
+            // 打印终端详情
+            for terminal in &session_state.terminals {
                 info!(
-                    "  📱 终端会话 {}: title='{}', is_active={}, working_dir='{}'",
-                    id, session.title, session.is_active, session.working_directory
-                );
-            }
-
-            // 打印标签页详情
-            for tab in &session_state.tabs {
-                info!(
-                    "  📋 标签页 {}: title='{}', is_active={}",
-                    tab.id, tab.title, tab.is_active
+                    "  🖥️ 终端 {}: title='{}', active={}, cwd='{}'",
+                    terminal.id, terminal.title, terminal.active, terminal.cwd
                 );
             }
 

@@ -5,6 +5,8 @@
   import TitleBar from '@/components/ui/TitleBar.vue'
   import { useTerminalStore } from '@/stores/Terminal'
   import { useTabManagerStore } from '@/stores/TabManager'
+  import { useSessionStore } from '@/stores/session'
+  import '@/utils/testStatePersistence' // 引入测试工具
   import { invoke } from '@tauri-apps/api/core'
   import { listen, UnlistenFn } from '@tauri-apps/api/event'
   import { getCurrentWebview } from '@tauri-apps/api/webview'
@@ -13,6 +15,7 @@
   const terminalStore = useTerminalStore()
   const aiChatStore = useAIChatStore()
   const tabManagerStore = useTabManagerStore()
+  const sessionStore = useSessionStore()
 
   // 存储事件监听器的取消函数
   let unlistenStartupFile: UnlistenFn | null = null
@@ -69,20 +72,9 @@
     }
   )
 
-  // 当主应用组件挂载时，设置全局监听器
+  // 当主应用组件挂载时，初始化应用状态
   onMounted(async () => {
-    await terminalStore.setupGlobalListeners()
-
-    // 初始化shell管理器
-    await terminalStore.initializeShellManager()
-
-    // 初始化标签管理器
-    tabManagerStore.initialize()
-
-    // 如果没有终端，创建一个初始终端
-    if (terminalStore.terminals.length === 0) {
-      await terminalStore.createTerminal()
-    }
+    // 状态恢复和初始化逻辑已移至 main.ts，此处不再重复执行
 
     // 统一的文件处理函数
     const handleAppIconFileDrop = (event: { payload: string }) => {
@@ -110,8 +102,11 @@
     })
   })
 
-  // 应用关闭/卸载时清理监听器
+  // 应用关闭/卸载时清理监听器并保存状态
   onBeforeUnmount(() => {
+    console.log('🔄 [TerminalView] 应用关闭，开始清理')
+
+    // 先立即清理监听器，确保不阻塞关闭
     terminalStore.teardownGlobalListeners()
 
     // 清理文件拖拽事件监听器
@@ -124,6 +119,23 @@
     if (unlistenFileDrop) {
       unlistenFileDrop()
     }
+
+    // 异步保存状态，不阻塞关闭流程
+    Promise.resolve().then(async () => {
+      try {
+        console.log('🤖 [TerminalView] 保存AI聊天状态')
+        aiChatStore.saveToSessionState()
+
+        console.log('💾 [TerminalView] 保存会话状态')
+        await terminalStore.saveSessionState()
+        console.log('✅ [TerminalView] 状态保存完成')
+      } catch (error) {
+        console.error('❌ [TerminalView] 状态保存失败:', error)
+        // 保存失败不影响应用关闭
+      }
+    })
+
+    console.log('🧹 [TerminalView] 清理完成，应用可以安全关闭')
   })
 </script>
 

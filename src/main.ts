@@ -51,6 +51,10 @@ const initializeStores = async () => {
     // 初始化终端Store（包括会话恢复）
     const terminalStore = useTerminalStore()
     await terminalStore.initializeTerminalStore()
+
+    // 初始化AI聊天Store
+    const aiChatStore = useAIChatStore()
+    await aiChatStore.initialize()
   } catch (error) {
     console.error('应用状态管理初始化失败:', error)
   }
