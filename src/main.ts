@@ -1,10 +1,10 @@
 import { completionAPI } from '@/api'
-import { storage } from '@/api/storage'
+
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useAIChatStore } from '@/components/AIChatSidebar/store'
 import { useTheme } from '@/composables/useTheme'
 import { useSessionStore } from '@/stores/session'
-import { useSystemStore } from '@/stores/system'
+
 import { useTerminalStore } from '@/stores/Terminal'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { createPinia } from 'pinia'
@@ -32,10 +32,10 @@ app.mount('#app')
  */
 const initializeStorageSystem = async () => {
   try {
-    // 预加载缓存，提升后续访问性能
-    await storage.preloadCache()
+    // 存储系统已简化，无需预加载缓存
+    console.log('存储系统初始化完成')
   } catch (error) {
-    console.warn('存储系统缓存预加载失败:', error)
+    console.warn('存储系统初始化失败:', error)
   }
 }
 
@@ -47,10 +47,6 @@ const initializeStores = async () => {
     // 初始化会话状态管理
     const sessionStore = useSessionStore()
     await sessionStore.initialize()
-
-    // 初始化系统监控
-    const systemStore = useSystemStore()
-    await systemStore.initialize()
 
     // 初始化终端Store（包括会话恢复）
     const terminalStore = useTerminalStore()
@@ -128,10 +124,6 @@ const handleAppClose = async () => {
     // 保存终端状态（这会自动同步并保存会话状态）
     const terminalStore = useTerminalStore()
     await terminalStore.saveSessionState()
-
-    // 停止自动刷新
-    const systemStore = useSystemStore()
-    systemStore.stopAutoRefresh()
 
     // 停止会话自动保存
     const sessionStore = useSessionStore()

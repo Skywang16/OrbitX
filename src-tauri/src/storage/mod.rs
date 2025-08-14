@@ -25,11 +25,9 @@ pub use coordinator::{StorageCoordinator, StorageCoordinatorOptions};
 pub use filesystem::{FileSystemManager, FileSystemOptions};
 pub use messagepack::{MessagePackManager, MessagePackOptions};
 pub use paths::{StoragePaths, StoragePathsBuilder};
-pub use recovery::{HealthCheckResult, RecoveryManager, RecoveryResult, SystemHealth};
+pub use recovery::{RecoveryManager, RecoveryResult};
 pub use sqlite::{SqliteManager, SqliteOptions};
-pub use types::{
-    CacheLayer, CacheStats, DataQuery, SaveOptions, SessionState, StorageLayer, StorageStats,
-};
+pub use types::{DataQuery, SaveOptions, SessionState, StorageLayer};
 
 // 统一错误处理类型
 pub use crate::utils::error::{AppError, AppResult};

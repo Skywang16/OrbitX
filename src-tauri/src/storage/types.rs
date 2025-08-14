@@ -7,7 +7,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::Duration;
 
 /// 存储层类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -26,27 +25,6 @@ impl StorageLayer {
             Self::Config => "config",
             Self::State => "state",
             Self::Data => "data",
-        }
-    }
-}
-
-/// 缓存层类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum CacheLayer {
-    /// 内存缓存
-    Memory,
-    /// LRU缓存
-    Lru,
-    /// 磁盘缓存
-    Disk,
-}
-
-impl CacheLayer {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Memory => "memory",
-            Self::Lru => "lru",
-            Self::Disk => "disk",
         }
     }
 }
@@ -322,104 +300,6 @@ impl Default for UiState {
     }
 }
 
-/// 缓存统计信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CacheStats {
-    /// 缓存层统计
-    pub layers: HashMap<CacheLayer, LayerStats>,
-    /// 总命中率
-    pub total_hit_rate: f64,
-    /// 总内存使用量（字节）
-    pub total_memory_usage: u64,
-    /// 总条目数
-    pub total_entries: usize,
-}
-
-/// 单层缓存统计
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LayerStats {
-    /// 命中次数
-    pub hits: u64,
-    /// 未命中次数
-    pub misses: u64,
-    /// 条目数量
-    pub entries: usize,
-    /// 内存使用量（字节）
-    pub memory_usage: u64,
-    /// 平均访问时间（纳秒）
-    pub avg_access_time: Duration,
-}
-
-impl LayerStats {
-    pub fn hit_rate(&self) -> f64 {
-        if self.hits + self.misses == 0 {
-            0.0
-        } else {
-            self.hits as f64 / (self.hits + self.misses) as f64
-        }
-    }
-}
-
-/// 存储统计信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StorageStats {
-    /// 总大小（字节）
-    pub total_size: u64,
-    /// 配置层大小
-    pub config_size: u64,
-    /// 状态层大小
-    pub state_size: u64,
-    /// 数据层大小
-    pub data_size: u64,
-    /// 缓存层大小
-    pub cache_size: u64,
-    /// 备份大小
-    pub backups_size: u64,
-    /// 日志大小
-    pub logs_size: u64,
-}
-
-impl StorageStats {
-    /// 格式化大小为人类可读的字符串
-    pub fn format_size(bytes: u64) -> String {
-        const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
-        let mut size = bytes as f64;
-        let mut unit_index = 0;
-
-        while size >= 1024.0 && unit_index < UNITS.len() - 1 {
-            size /= 1024.0;
-            unit_index += 1;
-        }
-
-        format!("{:.2} {}", size, UNITS[unit_index])
-    }
-
-    /// 获取格式化的总大小
-    pub fn total_size_formatted(&self) -> String {
-        Self::format_size(self.total_size)
-    }
-
-    /// 获取格式化的配置大小
-    pub fn config_size_formatted(&self) -> String {
-        Self::format_size(self.config_size)
-    }
-
-    /// 获取格式化的状态大小
-    pub fn state_size_formatted(&self) -> String {
-        Self::format_size(self.state_size)
-    }
-
-    /// 获取格式化的数据大小
-    pub fn data_size_formatted(&self) -> String {
-        Self::format_size(self.data_size)
-    }
-
-    /// 获取格式化的缓存大小
-    pub fn cache_size_formatted(&self) -> String {
-        Self::format_size(self.cache_size)
-    }
-}
-
 /// 配置节类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ConfigSection {
@@ -489,11 +369,7 @@ pub enum StorageEvent {
         affected_rows: usize,
     },
     /// 缓存事件
-    CacheEvent {
-        layer: CacheLayer,
-        operation: String,
-        key: String,
-    },
+    CacheEvent { operation: String, key: String },
     /// 错误事件
     Error {
         layer: StorageLayer,

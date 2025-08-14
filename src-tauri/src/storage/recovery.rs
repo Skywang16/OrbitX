@@ -16,83 +16,6 @@ use std::time::{Duration, SystemTime};
 use tokio::fs;
 use tracing::{debug, error, info, warn};
 
-/// 健康检查结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HealthCheckResult {
-    /// 检查项名称
-    pub name: String,
-    /// 是否健康
-    pub healthy: bool,
-    /// 检查消息
-    pub message: String,
-    /// 检查时间
-    pub checked_at: SystemTime,
-    ///
-    pub duration: Duration,
-}
-
-impl HealthCheckResult {
-    pub fn healthy(
-        name: impl Into<String>,
-        message: impl Into<String>,
-        duration: Duration,
-    ) -> Self {
-        Self {
-            name: name.into(),
-            healthy: true,
-            message: message.into(),
-            checked_at: SystemTime::now(),
-            duration,
-        }
-    }
-
-    pub fn unhealthy(
-        name: impl Into<String>,
-        message: impl Into<String>,
-        duration: Duration,
-    ) -> Self {
-        Self {
-            name: name.into(),
-            healthy: false,
-            message: message.into(),
-            checked_at: SystemTime::now(),
-            duration,
-        }
-    }
-}
-
-/// 系统健康状态
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SystemHealth {
-    /// 整体健康状态
-    pub overall_healthy: bool,
-    /// 各项检查结果
-    pub checks: Vec<HealthCheckResult>,
-    /// 检查时间
-    pub checked_at: SystemTime,
-    /// 总检查耗时
-    pub total_duration: Duration,
-}
-
-impl SystemHealth {
-    pub fn new(checks: Vec<HealthCheckResult>) -> Self {
-        let overall_healthy = checks.iter().all(|check| check.healthy);
-        let total_duration = checks.iter().map(|check| check.duration).sum();
-
-        Self {
-            overall_healthy,
-            checks,
-            checked_at: SystemTime::now(),
-            total_duration,
-        }
-    }
-
-    /// 获取不健康的检查项
-    pub fn unhealthy_checks(&self) -> Vec<&HealthCheckResult> {
-        self.checks.iter().filter(|check| !check.healthy).collect()
-    }
-}
-
 /// 恢复策略
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RecoveryStrategy {
@@ -129,9 +52,6 @@ pub struct RecoveryManager {
     paths: StoragePaths,
     /// 恢复策略配置
     strategies: HashMap<StorageLayer, Vec<RecoveryStrategy>>,
-    /// 健康检查间隔
-    #[allow(dead_code)]
-    health_check_interval: Duration,
     /// 最大重试次数
     #[allow(dead_code)]
     max_retry_attempts: u32,
@@ -189,53 +109,8 @@ impl RecoveryManager {
         Self {
             paths,
             strategies,
-            health_check_interval: Duration::from_secs(300), // 5分钟
             max_retry_attempts: 3,
         }
-    }
-
-    /// 执行系统健康检查
-    pub async fn health_check(&self) -> AppResult<SystemHealth> {
-        info!("开始系统健康检查");
-        let start_time = std::time::Instant::now();
-
-        let mut checks = Vec::new();
-
-        // 检查配置文件
-        checks.push(self.check_config_file().await);
-
-        // 检查状态文件
-        checks.push(self.check_state_file().await);
-
-        // 检查数据库文件
-        checks.push(self.check_database_file().await);
-
-        // 检查目录权限
-        checks.push(self.check_directory_permissions().await);
-
-        // 检查磁盘空间
-        checks.push(self.check_disk_space().await);
-
-        let health = SystemHealth::new(checks);
-
-        info!(
-            "系统健康检查完成，整体状态: {}, 耗时: {:?}",
-            if health.overall_healthy {
-                "健康"
-            } else {
-                "不健康"
-            },
-            start_time.elapsed()
-        );
-
-        if !health.overall_healthy {
-            warn!("发现 {} 个健康问题", health.unhealthy_checks().len());
-            for check in health.unhealthy_checks() {
-                warn!("健康问题: {} - {}", check.name, check.message);
-            }
-        }
-
-        Ok(health)
     }
 
     /// 尝试恢复存储层
@@ -276,30 +151,6 @@ impl RecoveryManager {
 
         error!("存储层恢复失败: {:?}", layer);
         Ok(result)
-    }
-
-    /// 自动修复系统问题
-    pub async fn auto_repair(&self) -> AppResult<Vec<RecoveryResult>> {
-        info!("开始自动修复系统问题");
-
-        let health = self.health_check().await?;
-        let mut repair_results = Vec::new();
-
-        if !health.overall_healthy {
-            for check in health.unhealthy_checks() {
-                match self.repair_health_issue(check).await {
-                    Ok(result) => {
-                        repair_results.push(result);
-                    }
-                    Err(e) => {
-                        error!("修复健康问题失败: {} - {}", check.name, e);
-                    }
-                }
-            }
-        }
-
-        info!("自动修复完成，修复了 {} 个问题", repair_results.len());
-        Ok(repair_results)
     }
 
     /// 创建备份
@@ -384,161 +235,6 @@ impl RecoveryManager {
         Ok(())
     }
 
-    /// 检查配置文件
-    async fn check_config_file(&self) -> HealthCheckResult {
-        let start_time = std::time::Instant::now();
-        let config_path = self.paths.config_file();
-
-        if !config_path.exists() {
-            return HealthCheckResult::unhealthy(
-                "config_file",
-                "配置文件不存在",
-                start_time.elapsed(),
-            );
-        }
-
-        match fs::metadata(&config_path).await {
-            Ok(metadata) => {
-                if metadata.len() == 0 {
-                    HealthCheckResult::unhealthy(
-                        "config_file",
-                        "配置文件为空",
-                        start_time.elapsed(),
-                    )
-                } else {
-                    HealthCheckResult::healthy("config_file", "配置文件正常", start_time.elapsed())
-                }
-            }
-            Err(e) => HealthCheckResult::unhealthy(
-                "config_file",
-                format!("无法读取配置文件元数据: {}", e),
-                start_time.elapsed(),
-            ),
-        }
-    }
-
-    /// 检查状态文件
-    async fn check_state_file(&self) -> HealthCheckResult {
-        let start_time = std::time::Instant::now();
-        let state_path = self.paths.session_state_file();
-
-        // 状态文件可以不存在（首次运行）
-        if !state_path.exists() {
-            return HealthCheckResult::healthy(
-                "state_file",
-                "状态文件不存在（首次运行）",
-                start_time.elapsed(),
-            );
-        }
-
-        match fs::metadata(&state_path).await {
-            Ok(_) => HealthCheckResult::healthy("state_file", "状态文件正常", start_time.elapsed()),
-            Err(e) => HealthCheckResult::unhealthy(
-                "state_file",
-                format!("无法读取状态文件元数据: {}", e),
-                start_time.elapsed(),
-            ),
-        }
-    }
-
-    /// 检查数据库文件
-    async fn check_database_file(&self) -> HealthCheckResult {
-        let start_time = std::time::Instant::now();
-        let db_path = self.paths.database_file();
-
-        if !db_path.exists() {
-            return HealthCheckResult::unhealthy(
-                "database_file",
-                "数据库文件不存在",
-                start_time.elapsed(),
-            );
-        }
-
-        match fs::metadata(&db_path).await {
-            Ok(metadata) => {
-                if metadata.len() == 0 {
-                    HealthCheckResult::unhealthy(
-                        "database_file",
-                        "数据库文件为空",
-                        start_time.elapsed(),
-                    )
-                } else {
-                    HealthCheckResult::healthy(
-                        "database_file",
-                        "数据库文件正常",
-                        start_time.elapsed(),
-                    )
-                }
-            }
-            Err(e) => HealthCheckResult::unhealthy(
-                "database_file",
-                format!("无法读取数据库文件元数据: {}", e),
-                start_time.elapsed(),
-            ),
-        }
-    }
-
-    /// 检查目录权限
-    async fn check_directory_permissions(&self) -> HealthCheckResult {
-        let start_time = std::time::Instant::now();
-
-        let directories = [
-            &self.paths.config_dir,
-            &self.paths.state_dir,
-            &self.paths.data_dir,
-            &self.paths.backups_dir,
-        ];
-
-        for dir in &directories {
-            if !dir.exists() {
-                if let Err(e) = fs::create_dir_all(dir).await {
-                    return HealthCheckResult::unhealthy(
-                        "directory_permissions",
-                        format!("无法创建目录 {:?}: {}", dir, e),
-                        start_time.elapsed(),
-                    );
-                }
-            }
-
-            // 尝试在目录中创建临时文件来测试写权限
-            let test_file = dir.join(".write_test");
-            match fs::write(&test_file, "test").await {
-                Ok(_) => {
-                    let _ = fs::remove_file(&test_file).await;
-                }
-                Err(e) => {
-                    return HealthCheckResult::unhealthy(
-                        "directory_permissions",
-                        format!("目录 {:?} 没有写权限: {}", dir, e),
-                        start_time.elapsed(),
-                    );
-                }
-            }
-        }
-
-        HealthCheckResult::healthy(
-            "directory_permissions",
-            "所有目录权限正常",
-            start_time.elapsed(),
-        )
-    }
-
-    /// 检查磁盘空间
-    async fn check_disk_space(&self) -> HealthCheckResult {
-        let start_time = std::time::Instant::now();
-
-        // 简单的磁盘空间检查
-        // 在实际实现中，可以使用更精确的方法来检查可用空间
-        match fs::metadata(&self.paths.app_dir).await {
-            Ok(_) => HealthCheckResult::healthy("disk_space", "磁盘空间充足", start_time.elapsed()),
-            Err(e) => HealthCheckResult::unhealthy(
-                "disk_space",
-                format!("无法检查磁盘空间: {}", e),
-                start_time.elapsed(),
-            ),
-        }
-    }
-
     /// 应用恢复策略
     async fn apply_recovery_strategy(
         &self,
@@ -600,76 +296,6 @@ impl RecoveryManager {
                 recovered_at: SystemTime::now(),
                 duration: start_time.elapsed(),
             }),
-        }
-    }
-
-    /// 修复健康问题
-    async fn repair_health_issue(&self, check: &HealthCheckResult) -> AppResult<RecoveryResult> {
-        let start_time = std::time::Instant::now();
-
-        match check.name.as_str() {
-            "config_file" => {
-                // 尝试从备份恢复或创建默认配置
-                if self.paths.backup_file("config.toml.bak").exists() {
-                    self.restore_from_backup(StorageLayer::Config).await?;
-                } else {
-                    // 创建默认配置文件
-                    let default_config = r#"
-[app]
-name = "OrbitX"
-version = "1.0.0"
-auto_save = true
-
-[appearance]
-theme = "dark"
-font_size = 14
-font_family = "Monaco"
-
-[terminal]
-shell = "/bin/bash"
-scrollback = 1000
-cursor_blink = true
-"#;
-                    fs::write(&self.paths.config_file(), default_config)
-                        .await
-                        .with_context(|| {
-                            format!(
-                                "创建默认配置文件失败: {}",
-                                self.paths.config_file().display()
-                            )
-                        })?;
-                }
-
-                Ok(RecoveryResult {
-                    success: true,
-                    strategy: RecoveryStrategy::Fallback {
-                        fallback_data: serde_json::json!({}),
-                    },
-                    message: "配置文件修复成功".to_string(),
-                    recovered_at: SystemTime::now(),
-                    duration: start_time.elapsed(),
-                })
-            }
-            "database_file" => {
-                // 数据库文件修复逻辑
-                Ok(RecoveryResult {
-                    success: true,
-                    strategy: RecoveryStrategy::Rebuild,
-                    message: "数据库文件修复成功".to_string(),
-                    recovered_at: SystemTime::now(),
-                    duration: start_time.elapsed(),
-                })
-            }
-            _ => {
-                // 通用修复逻辑
-                Ok(RecoveryResult {
-                    success: false,
-                    strategy: RecoveryStrategy::Skip,
-                    message: format!("无法修复问题: {}", check.name),
-                    recovered_at: SystemTime::now(),
-                    duration: start_time.elapsed(),
-                })
-            }
         }
     }
 }

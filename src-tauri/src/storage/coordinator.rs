@@ -12,8 +12,8 @@ use crate::storage::cache::UnifiedCache;
 use crate::storage::messagepack::{MessagePackManager, MessagePackOptions};
 use crate::storage::paths::StoragePaths;
 use crate::storage::sqlite::{SqliteManager, SqliteOptions};
-use crate::storage::types::{DataQuery, SaveOptions, SessionState, StorageStats};
-use crate::storage::{HealthCheckResult, RecoveryManager};
+use crate::storage::types::{DataQuery, SaveOptions, SessionState};
+use crate::storage::RecoveryManager;
 use crate::utils::error::AppResult;
 use anyhow::Context;
 use serde_json::Value;
@@ -193,92 +193,5 @@ impl StorageCoordinator {
     /// 获取缓存管理器的引用
     pub fn cache(&self) -> Arc<UnifiedCache> {
         self.cache.clone()
-    }
-
-    /// 健康检查
-    pub async fn health_check(&self) -> AppResult<HealthCheckResult> {
-        debug!("执行存储系统健康检查");
-        let system_health = self.recovery_manager.health_check().await?;
-
-        // 转换SystemHealth为HealthCheckResult
-        Ok(HealthCheckResult {
-            name: "storage_system".to_string(),
-            healthy: system_health.overall_healthy,
-            message: if system_health.overall_healthy {
-                "存储系统健康".to_string()
-            } else {
-                format!(
-                    "存储系统存在问题: {} 个检查项失败",
-                    system_health.unhealthy_checks().len()
-                )
-            },
-            checked_at: system_health.checked_at,
-            duration: system_health.total_duration,
-        })
-    }
-
-    /// 获取存储统计信息
-    pub async fn get_storage_stats(&self) -> AppResult<StorageStats> {
-        debug!("获取存储统计信息");
-
-        let config_size = self
-            .paths
-            .config_file()
-            .metadata()
-            .map(|m| m.len())
-            .unwrap_or(0);
-        let state_size = self
-            .paths
-            .session_state_file()
-            .metadata()
-            .map(|m| m.len())
-            .unwrap_or(0);
-        let db_size = self
-            .paths
-            .database_file()
-            .metadata()
-            .map(|m| m.len())
-            .unwrap_or(0);
-
-        let cache_stats = self.cache.get_stats().await;
-
-        Ok(StorageStats {
-            total_size: config_size + state_size + db_size + cache_stats.memory_usage as u64,
-            config_size,
-            state_size,
-            data_size: db_size,
-            cache_size: cache_stats.memory_usage as u64,
-            backups_size: 0, // 简化实现
-            logs_size: 0,    // 简化实现
-        })
-    }
-
-    /// 获取缓存统计信息
-    pub async fn get_cache_stats(&self) -> AppResult<crate::storage::cache::CacheStats> {
-        Ok(self.cache.get_stats().await)
-    }
-
-    /// 清空缓存
-    pub async fn clear_cache(&self) -> AppResult<()> {
-        self.cache.clear().await
-    }
-
-    /// 预加载缓存
-    pub async fn preload_cache(&self) -> AppResult<()> {
-        // 预加载配置数据
-        if let Ok(config) = self.config_manager.load_config().await {
-            if let Ok(config_value) = serde_json::to_value(&config) {
-                let _ = self.cache.set("config:all", config_value).await;
-            }
-        }
-
-        // 预加载会话状态
-        if let Ok(Some(state)) = self.messagepack_manager.load_state().await {
-            if let Ok(state_value) = serde_json::to_value(&state) {
-                let _ = self.cache.set("session:state", state_value).await;
-            }
-        }
-
-        Ok(())
     }
 }

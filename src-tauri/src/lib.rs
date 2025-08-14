@@ -96,9 +96,8 @@ use config::{
     set_terminal_theme,
 };
 use storage::commands::{
-    storage_clear_cache, storage_get_cache_stats, storage_get_config, storage_get_storage_stats,
-    storage_health_check, storage_load_session_state, storage_preload_cache, storage_query_data,
-    storage_save_data, storage_save_session_state, storage_update_config, StorageCoordinatorState,
+    storage_get_config, storage_load_session_state, storage_query_data, storage_save_data,
+    storage_save_session_state, storage_update_config, StorageCoordinatorState,
 };
 use window::commands::{
     clear_directory_cache, get_current_directory, get_home_directory, get_platform_info,
@@ -337,11 +336,6 @@ pub fn run() {
             storage_load_session_state,
             storage_query_data,
             storage_save_data,
-            storage_health_check,
-            storage_get_cache_stats,
-            storage_get_storage_stats,
-            storage_preload_cache,
-            storage_clear_cache,
             // 文件拖拽处理命令
             handle_file_open
         ])

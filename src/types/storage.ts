@@ -18,16 +18,6 @@ export enum StorageLayer {
   Data = 'data',
 }
 
-/** 缓存层类型 */
-export enum CacheLayer {
-  /** 内存缓存 */
-  Memory = 'memory',
-  /** LRU缓存 */
-  Lru = 'lru',
-  /** 磁盘缓存 */
-  Disk = 'disk',
-}
-
 /** 配置节类型 */
 export enum ConfigSection {
   /** 应用配置 */
@@ -176,70 +166,8 @@ export interface SessionState {
 }
 
 // ============================================================================
-// 统计信息类型
+// 事件类型
 // ============================================================================
-
-/** 单层缓存统计 */
-export interface LayerStats {
-  /** 命中次数 */
-  hits: number
-  /** 未命中次数 */
-  misses: number
-  /** 条目数量 */
-  entries: number
-  /** 内存使用量（字节） */
-  memory_usage: number
-  /** 平均访问时间（纳秒） */
-  avg_access_time: number
-}
-
-/** 缓存统计信息 */
-export interface CacheStats {
-  /** 缓存层统计 */
-  layers: Record<CacheLayer, LayerStats>
-  /** 总命中率 */
-  total_hit_rate: number
-  /** 总内存使用量（字节） */
-  total_memory_usage: number
-  /** 总条目数 */
-  total_entries: number
-}
-
-/** 存储统计信息 */
-export interface StorageStats {
-  /** 总大小（字节） */
-  total_size: number
-  /** 配置层大小 */
-  config_size: number
-  /** 状态层大小 */
-  state_size: number
-  /** 数据层大小 */
-  data_size: number
-  /** 缓存层大小 */
-  cache_size: number
-  /** 备份大小 */
-  backups_size: number
-  /** 日志大小 */
-  logs_size: number
-}
-
-// ============================================================================
-// 健康检查和事件类型
-// ============================================================================
-
-/** 健康检查结果 */
-export interface HealthCheckResult {
-  /** 检查项名称 */
-  name: string
-  /** 是否健康 */
-  healthy: boolean
-  /** 检查消息 */
-  message: string
-  /** 检查时间 */
-  checked_at: number
-  /** 检查耗时（毫秒） */
-  duration: number
-}
 
 /** 存储事件类型 */
 export interface StorageEvent {
@@ -318,10 +246,4 @@ export const formatBytes = (bytes: number): string => {
   }
 
   return `${size.toFixed(2)} ${units[unitIndex]}`
-}
-
-/** 计算缓存命中率 */
-export const calculateHitRate = (hits: number, misses: number): number => {
-  if (hits + misses === 0) return 0
-  return hits / (hits + misses)
 }

@@ -68,7 +68,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
       }
 
       dataVersion.value++
-      await saveSettings()
     } catch (err) {
       error.value = handleErrorWithMessage(err, '刷新模型列表失败')
       throw err
@@ -119,15 +118,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
   }
 
   /**
-   * 保存设置（AI配置已迁移到SQLite）
-   * 所有配置都通过后端API保存
-   */
-  const saveSettings = async () => {
-    // TODO: 实现通过后端API保存完整的AI设置
-    // 目前模型配置通过AI API自动保存，功能和性能配置需要新的API
-  }
-
-  /**
    * 更新AI设置
    * @param newSettings 要更新的设置项（部分更新）
    */
@@ -145,9 +135,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
 
       // 乐观更新本地状态
       settings.value = updatedSettings
-
-      // 保存设置到后端
-      await saveSettings()
     } catch (err) {
       error.value = err instanceof Error ? err.message : '更新AI设置失败'
       throw err

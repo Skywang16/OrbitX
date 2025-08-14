@@ -5,9 +5,9 @@
  * 包含配置管理、会话状态、数据查询等功能
  */
 
-use crate::storage::types::{DataQuery, SaveOptions, SessionState, StorageStats};
-use crate::storage::{HealthCheckResult, StorageCoordinator};
-use crate::utils::error::{serialize_to_json, AppResult, ToTauriResult};
+use crate::storage::types::{DataQuery, SaveOptions, SessionState};
+use crate::storage::StorageCoordinator;
+use crate::utils::error::{AppResult, ToTauriResult};
 use anyhow::Context;
 use serde_json::Value;
 use std::sync::Arc;
@@ -199,53 +199,4 @@ pub async fn storage_save_data(
         .save_data(&data, &options)
         .await
         .to_tauri()
-}
-
-/// 健康检查
-#[tauri::command]
-pub async fn storage_health_check(
-    state: State<'_, StorageCoordinatorState>,
-) -> Result<HealthCheckResult, String> {
-    debug!("存储命令: 健康检查");
-
-    state.coordinator.health_check().await.to_tauri()
-}
-
-/// 获取缓存统计信息
-#[tauri::command]
-pub async fn storage_get_cache_stats(
-    state: State<'_, StorageCoordinatorState>,
-) -> Result<String, String> {
-    debug!("存储命令: 获取缓存统计信息");
-
-    let stats = state.coordinator.get_cache_stats().await.to_tauri()?;
-    serialize_to_json(&stats, "缓存统计")
-}
-
-/// 获取存储统计信息
-#[tauri::command]
-pub async fn storage_get_storage_stats(
-    state: State<'_, StorageCoordinatorState>,
-) -> Result<StorageStats, String> {
-    debug!("存储命令: 获取存储统计信息");
-
-    state.coordinator.get_storage_stats().await.to_tauri()
-}
-
-/// 预加载缓存
-#[tauri::command]
-pub async fn storage_preload_cache(
-    state: State<'_, StorageCoordinatorState>,
-) -> Result<(), String> {
-    debug!("存储命令: 预加载缓存");
-
-    state.coordinator.preload_cache().await.to_tauri()
-}
-
-/// 清空缓存
-#[tauri::command]
-pub async fn storage_clear_cache(state: State<'_, StorageCoordinatorState>) -> Result<(), String> {
-    debug!("存储命令: 清空缓存");
-
-    state.coordinator.clear_cache().await.to_tauri()
 }

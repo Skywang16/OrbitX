@@ -7,15 +7,7 @@
 import { invoke } from '@/utils/request'
 import { handleError } from '@/utils/errorHandler'
 import { ConfigSection } from '@/types/storage'
-import type {
-  SessionState,
-  DataQuery,
-  SaveOptions,
-  CacheStats,
-  StorageStats,
-  HealthCheckResult,
-  StorageOperationResult,
-} from './types'
+import type { SessionState, DataQuery, SaveOptions, StorageOperationResult } from './types'
 
 // ============================================================================
 // 存储管理 API 类
@@ -107,69 +99,6 @@ export class StorageAPI {
   }
 
   // ============================================================================
-  // 系统监控
-  // ============================================================================
-
-  /**
-   * 执行健康检查
-   */
-  async healthCheck(): Promise<HealthCheckResult> {
-    try {
-      return await invoke<HealthCheckResult>('storage_health_check')
-    } catch (error) {
-      throw new Error(handleError(error, '健康检查失败'))
-    }
-  }
-
-  /**
-   * 获取缓存统计信息
-   */
-  async getCacheStats(): Promise<CacheStats> {
-    try {
-      return await invoke<CacheStats>('storage_get_cache_stats')
-    } catch (error) {
-      throw new Error(handleError(error, '获取缓存统计失败'))
-    }
-  }
-
-  /**
-   * 获取存储统计信息
-   */
-  async getStorageStats(): Promise<StorageStats> {
-    try {
-      return await invoke<StorageStats>('storage_get_storage_stats')
-    } catch (error) {
-      throw new Error(handleError(error, '获取存储统计失败'))
-    }
-  }
-
-  // ============================================================================
-  // 缓存管理
-  // ============================================================================
-
-  /**
-   * 预加载缓存
-   */
-  async preloadCache(): Promise<void> {
-    try {
-      await invoke<void>('storage_preload_cache')
-    } catch (error) {
-      throw new Error(handleError(error, '预加载缓存失败'))
-    }
-  }
-
-  /**
-   * 清空缓存
-   */
-  async clearCache(): Promise<void> {
-    try {
-      await invoke<void>('storage_clear_cache')
-    } catch (error) {
-      throw new Error(handleError(error, '清空缓存失败'))
-    }
-  }
-
-  // ============================================================================
   // 便捷方法
   // ============================================================================
 
@@ -252,24 +181,6 @@ export class StorageAPI {
   }
 
   /**
-   * 获取完整的系统状态
-   */
-  async getSystemStatus() {
-    const [health, cacheStats, storageStats] = await Promise.all([
-      this.healthCheck(),
-      this.getCacheStats(),
-      this.getStorageStats(),
-    ])
-
-    return {
-      health,
-      cacheStats,
-      storageStats,
-      timestamp: Date.now(),
-    }
-  }
-
-  /**
    * 安全的配置更新（带错误处理）
    */
   async safeUpdateConfig(section: ConfigSection | string, data: any): Promise<StorageOperationResult> {
@@ -307,16 +218,6 @@ export const storage = {
   // 数据操作
   queryData: <T = any>(query: DataQuery) => storageAPI.queryData<T>(query),
   saveData: (data: any, options: SaveOptions) => storageAPI.saveData(data, options),
-
-  // 系统监控
-  healthCheck: () => storageAPI.healthCheck(),
-  getCacheStats: () => storageAPI.getCacheStats(),
-  getStorageStats: () => storageAPI.getStorageStats(),
-  getSystemStatus: () => storageAPI.getSystemStatus(),
-
-  // 缓存管理
-  preloadCache: () => storageAPI.preloadCache(),
-  clearCache: () => storageAPI.clearCache(),
 
   // 便捷方法
   getAppConfig: <T = any>() => storageAPI.getAppConfig<T>(),

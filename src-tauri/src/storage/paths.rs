@@ -5,7 +5,6 @@
  * 支持跨平台路径处理和路径验证
  */
 
-use crate::storage::types::StorageStats;
 use crate::utils::error::AppResult;
 use anyhow::{anyhow, Context};
 use std::fs;
@@ -149,26 +148,6 @@ impl StoragePaths {
             .with_context(|| format!("计算目录大小失败: {}", dir.display()))?;
 
         Ok(total_size)
-    }
-
-    /// 获取存储统计信息
-    pub fn get_storage_stats(&self) -> AppResult<StorageStats> {
-        let config_size = self.get_directory_size(&self.config_dir)?;
-        let state_size = self.get_directory_size(&self.state_dir)?;
-        let data_size = self.get_directory_size(&self.data_dir)?;
-
-        let backups_size = self.get_directory_size(&self.backups_dir)?;
-        let logs_size = self.get_directory_size(&self.logs_dir)?;
-
-        Ok(StorageStats {
-            total_size: config_size + state_size + data_size + backups_size + logs_size,
-            config_size,
-            state_size,
-            data_size,
-            cache_size: 0,
-            backups_size,
-            logs_size,
-        })
     }
 }
 
