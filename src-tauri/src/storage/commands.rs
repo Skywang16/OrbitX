@@ -41,7 +41,7 @@ impl StorageCoordinatorState {
             app_dir
         };
 
-        info!("初始化存储路径，应用目录: {}", app_dir.display());
+        debug!("初始化存储路径，应用目录: {}", app_dir.display());
         let paths =
             StoragePaths::new(app_dir).with_context(|| "存储路径初始化失败，请检查目录权限")?;
 
@@ -52,7 +52,7 @@ impl StorageCoordinatorState {
                 .with_context(|| "存储协调器创建失败")?,
         );
 
-        info!("存储协调器状态初始化成功");
+        debug!("存储协调器状态初始化成功");
         Ok(Self { coordinator })
     }
 }
@@ -90,23 +90,15 @@ pub async fn storage_save_session_state(
     session_state: SessionState,
     state: State<'_, StorageCoordinatorState>,
 ) -> Result<(), String> {
-    info!("🔄 开始保存会话状态");
-    info!("📊 会话状态统计:");
-    info!("  - 终端数量: {}", session_state.terminals.len());
-    info!("  - 版本: {}", session_state.version);
-    info!("  - AI可见: {}", session_state.ai.visible);
 
-    // 打印终端详情
-    for terminal in &session_state.terminals {
-        info!(
-            "  🖥️ 终端 {}: title='{}', active={}, cwd='{}'",
-            terminal.id, terminal.title, terminal.active, terminal.cwd
-        );
-    }
+    debug!("📊 会话状态统计:");
+    debug!("  - 终端数量: {}", session_state.terminals.len());
+    debug!("  - 版本: {}", session_state.version);
+    debug!("  - AI可见: {}", session_state.ai.visible);
 
     match state.coordinator.save_session_state(&session_state).await {
         Ok(()) => {
-            info!("✅ 会话状态保存成功");
+            debug!("✅ 会话状态保存成功");
             Ok(())
         }
         Err(e) => {
@@ -121,28 +113,18 @@ pub async fn storage_save_session_state(
 pub async fn storage_load_session_state(
     state: State<'_, StorageCoordinatorState>,
 ) -> Result<Option<SessionState>, String> {
-    info!("🔍 开始加载会话状态");
+    debug!("🔍 开始加载会话状态");
 
     match state.coordinator.load_session_state().await {
         Ok(Some(session_state)) => {
-            info!("✅ 会话状态加载成功");
-            info!("📊 加载的会话状态统计:");
-            info!("  - 终端数量: {}", session_state.terminals.len());
-            info!("  - 版本: {}", session_state.version);
-            info!("  - AI可见: {}", session_state.ai.visible);
-
-            // 打印终端详情
-            for terminal in &session_state.terminals {
-                info!(
-                    "  🖥️ 终端 {}: title='{}', active={}, cwd='{}'",
-                    terminal.id, terminal.title, terminal.active, terminal.cwd
-                );
-            }
+            debug!("  - 终端数量: {}", session_state.terminals.len());
+            debug!("  - 版本: {}", session_state.version);
+            debug!("  - AI可见: {}", session_state.ai.visible);
 
             Ok(Some(session_state))
         }
         Ok(None) => {
-            info!("ℹ️ 没有找到保存的会话状态");
+            debug!("ℹ️ 没有找到保存的会话状态");
             Ok(None)
         }
         Err(e) => {

@@ -5,8 +5,6 @@
   import TitleBar from '@/components/ui/TitleBar.vue'
   import { useTerminalStore } from '@/stores/Terminal'
   import { useTabManagerStore } from '@/stores/TabManager'
-  import { useSessionStore } from '@/stores/session'
-  import '@/utils/testStatePersistence' // 引入测试工具
   import { invoke } from '@tauri-apps/api/core'
   import { listen, UnlistenFn } from '@tauri-apps/api/event'
   import { getCurrentWebview } from '@tauri-apps/api/webview'
@@ -15,7 +13,6 @@
   const terminalStore = useTerminalStore()
   const aiChatStore = useAIChatStore()
   const tabManagerStore = useTabManagerStore()
-  const sessionStore = useSessionStore()
 
   // 存储事件监听器的取消函数
   let unlistenStartupFile: UnlistenFn | null = null

@@ -21,6 +21,9 @@
  * 🧠 内存管理工具：
  * - memory: 🧠 会话内存管理（支持TTL、标签、模式匹配）
  *
+ * 🔍 搜索工具：
+ * - orbit-context: 🔍 智能代码库搜索（动态探索、多模式搜索、上下文理解）
+ *
  * 🔧 基础设施：
  * - tool-error: 错误处理和类型定义
  * - tool-registry: 工具注册和管理系统
@@ -48,6 +51,7 @@ export { shellTool } from './shell'
 export { webFetchTool } from './web-fetch'
 export { webSearchTool } from './web-search'
 export { memoryTool } from './memoryTool'
+export { orbitContextTool } from './orbit-context'
 
 // 导出主要的工具集合
 export {
@@ -55,6 +59,7 @@ export {
   coreTools,
   networkTools,
   fileTools,
+  searchTools,
   toolsByCategory,
   registerAllTools,
   getToolsForMode,

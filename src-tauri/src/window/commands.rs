@@ -320,8 +320,8 @@ impl WindowState {
         info!("开始验证窗口状态");
 
         // 验证各组件是否可访问
-        let _config = self.config_manager.lock().await;
-        let _state = self.state_manager.lock().await;
+        self.config_manager.lock().await;
+        self.state_manager.lock().await;
 
         info!("窗口状态验证通过");
         Ok(())

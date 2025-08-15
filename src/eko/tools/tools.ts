@@ -16,6 +16,7 @@ import { shellTool } from './shell'
 import { webFetchTool } from './web-fetch'
 import { webSearchTool } from './web-search'
 import { memoryTool } from './memoryTool'
+import { orbitContextTool } from './orbit-context'
 
 /**
  * 所有可用工具的数组
@@ -38,6 +39,9 @@ export const allTools: Tool[] = [
   webFetchTool,
   webSearchTool,
 
+  // 搜索工具
+  orbitContextTool,
+
   // 内存管理工具
   memoryTool,
 ]
@@ -50,13 +54,22 @@ export const toolsByCategory = {
   filesystem: [fileSystemTool],
   system: [shellTool],
   network: [webFetchTool, webSearchTool],
+  search: [orbitContextTool],
   memory: [memoryTool],
 }
 
 /**
  * 核心工具（最常用的工具）
  */
-export const coreTools: Tool[] = [readFileTool, readDirectoryTool, fileSystemTool, createFileTool, editFileTool, shellTool, memoryTool]
+export const coreTools: Tool[] = [
+  readFileTool,
+  readDirectoryTool,
+  fileSystemTool,
+  createFileTool,
+  editFileTool,
+  shellTool,
+  memoryTool,
+]
 
 /**
  * 网络工具
@@ -74,6 +87,11 @@ export const fileTools: Tool[] = [readFileTool, readManyFilesTool, readDirectory
 export const fileSystemTools: Tool[] = [fileSystemTool]
 
 /**
+ * 搜索工具
+ */
+export const searchTools: Tool[] = [orbitContextTool]
+
+/**
  * 注册所有工具到全局注册表
  */
 export function registerAllTools(): void {
@@ -83,7 +101,6 @@ export function registerAllTools(): void {
       metadata: {
         description: readFileTool.description,
         category: 'file',
-        version: '1.0.0',
         tags: ['file', 'read', 'content'],
       },
     },
@@ -92,7 +109,6 @@ export function registerAllTools(): void {
       metadata: {
         description: readManyFilesTool.description,
         category: 'file',
-        version: '1.0.0',
         tags: ['file', 'read', 'batch', 'multiple'],
       },
     },
@@ -101,7 +117,6 @@ export function registerAllTools(): void {
       metadata: {
         description: readDirectoryTool.description,
         category: 'file',
-        version: '1.0.0',
         tags: ['directory', 'list', 'folder', 'filesystem'],
       },
     },
@@ -110,7 +125,6 @@ export function registerAllTools(): void {
       metadata: {
         description: fileSystemTool.description,
         category: 'filesystem',
-        version: '1.0.0',
         tags: ['filesystem', 'info', 'metadata', 'permissions'],
       },
     },
@@ -119,7 +133,6 @@ export function registerAllTools(): void {
       metadata: {
         description: createFileTool.description,
         category: 'file',
-        version: '1.0.0',
         tags: ['file', 'create', 'new'],
       },
     },
@@ -128,7 +141,6 @@ export function registerAllTools(): void {
       metadata: {
         description: editFileTool.description,
         category: 'file',
-        version: '1.0.0',
         tags: ['file', 'edit', 'modify', 'replace', 'line'],
       },
     },
@@ -137,7 +149,6 @@ export function registerAllTools(): void {
       metadata: {
         description: shellTool.description,
         category: 'system',
-        version: '1.0.0',
         tags: ['shell', 'command', 'execute', 'terminal'],
       },
     },
@@ -146,7 +157,6 @@ export function registerAllTools(): void {
       metadata: {
         description: webFetchTool.description,
         category: 'network',
-        version: '1.0.0',
         tags: ['web', 'http', 'fetch', 'api'],
       },
     },
@@ -155,7 +165,6 @@ export function registerAllTools(): void {
       metadata: {
         description: webSearchTool.description,
         category: 'network',
-        version: '1.0.0',
         tags: ['web', 'search', 'internet', 'information'],
       },
     },
@@ -164,8 +173,15 @@ export function registerAllTools(): void {
       metadata: {
         description: memoryTool.description,
         category: 'memory',
-        version: '1.0.0',
         tags: ['memory', 'storage', 'cache', 'data'],
+      },
+    },
+    {
+      tool: orbitContextTool,
+      metadata: {
+        description: orbitContextTool.description,
+        category: 'search',
+        tags: ['search', 'text', 'code', 'context', 'orbit', 'dynamic'],
       },
     },
   ]
@@ -179,7 +195,7 @@ export function registerAllTools(): void {
  * - agent 模式：允许所有工具
  */
 export function getToolsForMode(mode: 'chat' | 'agent'): Tool[] {
-  return mode === 'agent' ? allTools : [...fileTools, fileSystemTool, ...networkTools]
+  return mode === 'agent' ? allTools : [...fileTools, fileSystemTool, ...networkTools, ...searchTools]
 }
 
 // 自动注册所有工具

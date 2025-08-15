@@ -128,6 +128,8 @@ export interface SessionState {
   window: WindowState
   /** 终端状态列表 */
   terminals: TerminalState[]
+  /** 当前活跃的标签页ID */
+  activeTabId?: string
   /** UI状态 */
   ui: UiState
   /** AI状态 */
@@ -186,6 +188,7 @@ export const createDefaultSessionState = (): SessionState => {
       maximized: false,
     },
     terminals: [],
+    activeTabId: undefined,
     ui: {
       theme: 'dark',
       fontSize: 14,

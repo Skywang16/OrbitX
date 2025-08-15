@@ -72,8 +72,6 @@ impl TerminalMux {
     /// - 验证配置和依赖关系
     /// - 提供详细的错误信息
     pub fn new() -> Self {
-        info!("开始初始化TerminalMux");
-
         let (notification_sender, notification_receiver) = unbounded();
         debug!("创建通知通道成功");
 
@@ -92,7 +90,6 @@ impl TerminalMux {
             shutting_down: std::sync::atomic::AtomicBool::new(false),
         };
 
-        info!("TerminalMux初始化完成");
         mux
     }
 
@@ -121,19 +118,17 @@ impl TerminalMux {
         debug!("开始验证TerminalMux状态");
 
         // 验证面板映射是否可访问
-        let _panes = self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
+        self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
         debug!("面板映射验证通过");
 
         // 验证订阅者映射是否可访问
-        let _subscribers = self
-            .subscribers
+        self.subscribers
             .read()
             .map_err(|_| anyhow!("无法获取订阅者读锁"))?;
         debug!("订阅者映射验证通过");
 
         // 验证通知接收器是否可访问
-        let _receiver = self
-            .notification_receiver
+        self.notification_receiver
             .read()
             .map_err(|_| anyhow!("无法获取通知接收器读锁"))?;
         debug!("通知接收器验证通过");

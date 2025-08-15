@@ -118,7 +118,7 @@ impl LocalPane {
         cmd.env("QT_IM_MODULE", "ibus");
 
         // 启动子进程
-        let _child = pty_pair
+        pty_pair
             .slave
             .spawn_command(cmd)
             .with_context(|| format!("启动进程失败: pane_id={:?}", pane_id))?;

@@ -62,12 +62,6 @@ pub struct TerminalState {
 impl TerminalState {
     /// 统一的初始化方法
     pub fn new() -> Result<Self, String> {
-        info!("开始初始化终端状态");
-
-        // 初始化全局 Mux 实例
-        let mux = get_mux();
-        info!("终端状态初始化完成，Mux 面板数量: {}", mux.pane_count());
-
         let state = Self { _placeholder: () };
 
         // 验证状态完整性
@@ -81,9 +75,8 @@ impl TerminalState {
         let mux = get_mux();
 
         // 验证Mux实例是否可访问
-        let _pane_count = mux.pane_count();
+        mux.pane_count();
 
-        info!("终端状态验证通过");
         Ok(())
     }
 }
@@ -103,7 +96,7 @@ pub async fn create_terminal<R: Runtime>(
     _state: State<'_, TerminalState>,
 ) -> Result<u32, String> {
     let start_time = Instant::now();
-    info!("开始创建终端会话: {}x{}, 初始目录: {:?}", cols, rows, cwd);
+    debug!("开始创建终端会话: {}x{}, 初始目录: {:?}", cols, rows, cwd);
     debug!("当前Mux状态 - 面板数量: {}", get_mux().pane_count());
 
     // 参数验证
@@ -133,7 +126,7 @@ pub async fn create_terminal<R: Runtime>(
                 .map(|dir| format!(", 初始目录: {}", dir))
                 .unwrap_or_default();
 
-            info!(
+            debug!(
                 "终端创建成功: ID={}{}, 新的面板数量: {}, 耗时: {}ms",
                 pane_id.as_u32(),
                 dir_info,
@@ -211,7 +204,7 @@ pub async fn resize_terminal(
     _state: State<'_, TerminalState>,
 ) -> Result<(), String> {
     let start_time = Instant::now();
-    info!("开始调整终端大小: ID={}, 大小={}x{}", pane_id, cols, rows);
+    debug!("开始调整终端大小: ID={}, 大小={}x{}", pane_id, cols, rows);
 
     // 参数验证
     validate_terminal_size(rows, cols)
@@ -224,7 +217,7 @@ pub async fn resize_terminal(
     match mux.resize_pane(pane_id_obj, size) {
         Ok(_) => {
             let processing_time = start_time.elapsed().as_millis();
-            info!(
+            debug!(
                 "调整终端大小成功: ID={}, 耗时: {}ms",
                 pane_id,
                 processing_time
@@ -250,7 +243,7 @@ pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> R
     let mux = get_mux();
     let pane_id_obj = PaneId::from(pane_id);
 
-    info!(
+    debug!(
         "开始关闭终端会话: ID={}, 当前面板数量: {}",
         pane_id,
         mux.pane_count()
@@ -260,7 +253,7 @@ pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> R
     match mux.remove_pane(pane_id_obj) {
         Ok(_) => {
             let processing_time = start_time.elapsed().as_millis();
-            info!(
+            debug!(
                 "关闭终端成功: ID={}, 剩余面板数量: {}, 耗时: {}ms",
                 pane_id,
                 mux.pane_count(),
@@ -299,13 +292,13 @@ pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> R
 #[tauri::command]
 pub async fn list_terminals(_state: State<'_, TerminalState>) -> Result<Vec<u32>, String> {
     let start_time = Instant::now();
-    info!("开始获取终端列表");
+    debug!("开始获取终端列表");
 
     let mux = get_mux();
     let pane_ids: Vec<u32> = mux.list_panes().into_iter().map(|id| id.as_u32()).collect();
 
     let processing_time = start_time.elapsed().as_millis();
-    info!(
+    debug!(
         "获取终端列表成功: count={}, 耗时: {}ms",
         pane_ids.len(),
         processing_time
@@ -426,11 +419,11 @@ pub fn setup_tauri_integration_with_processor<R: Runtime>(
         true
     });
 
-    info!("Tauri 事件集成完成，订阅者ID: {}", subscriber_id);
+    debug!("Tauri 事件集成完成，订阅者ID: {}", subscriber_id);
 
     let mux_arc = get_mux();
     mux_arc.start_notification_processor();
-    info!("通知处理器已启动");
+    debug!("通知处理器已启动");
 }
 
 // === Shell 管理命令 ===
@@ -502,14 +495,14 @@ pub async fn set_terminal_buffer(pane_id: u32, content: String) -> Result<(), St
 #[tauri::command]
 pub async fn get_available_shells() -> Result<Vec<ShellInfo>, String> {
     let start_time = Instant::now();
-    info!("开始获取可用shell列表");
+    debug!("开始获取可用shell列表");
 
     let shells = ErrorHandler::handle_panic("获取可用shell列表", || {
         ShellManager::detect_available_shells()
     }).map_err(handle_terminal_error)?;
 
     let processing_time = start_time.elapsed().as_millis();
-    info!(
+    debug!(
         "获取可用shell列表成功: count={}, 耗时: {}ms",
         shells.len(),
         processing_time
@@ -534,14 +527,14 @@ pub async fn get_available_shells() -> Result<Vec<ShellInfo>, String> {
 #[tauri::command]
 pub async fn get_default_shell() -> Result<ShellInfo, String> {
     let start_time = Instant::now();
-    info!("开始获取系统默认shell");
+    debug!("开始获取系统默认shell");
 
     let default_shell = ErrorHandler::handle_panic("获取默认shell", || {
         ShellManager::get_default_shell()
     }).map_err(handle_terminal_error)?;
 
     let processing_time = start_time.elapsed().as_millis();
-    info!(
+    debug!(
         "获取默认shell成功: {} -> {}, 耗时: {}ms",
         default_shell.name, default_shell.path, processing_time
     );
@@ -563,7 +556,7 @@ pub async fn get_default_shell() -> Result<ShellInfo, String> {
 #[tauri::command]
 pub async fn validate_shell_path(path: String) -> Result<bool, String> {
     let start_time = Instant::now();
-    info!("开始验证shell路径: {}", path);
+    debug!("开始验证shell路径: {}", path);
 
     // 参数验证
     validate_non_empty_string(&path, "Shell路径")
@@ -574,7 +567,7 @@ pub async fn validate_shell_path(path: String) -> Result<bool, String> {
     }).map_err(handle_terminal_error)?;
 
     let processing_time = start_time.elapsed().as_millis();
-    info!(
+    debug!(
         "验证shell路径完成: path={}, valid={}, 耗时: {}ms",
         path, is_valid, processing_time
     );
@@ -796,7 +789,7 @@ pub async fn initialize_shell_manager() -> Result<(), String> {
 
     // ShellManager 不需要单独的初始化方法，创建实例时自动初始化
     match std::panic::catch_unwind(|| {
-        let _manager = ShellManager::new();
+        ShellManager::new();
     }) {
         Ok(()) => {
             let processing_time = start_time.elapsed().as_millis();
@@ -825,7 +818,7 @@ pub async fn validate_shell_manager() -> Result<(), String> {
     // ShellManager 不需要单独的验证方法，创建实例时自动验证
     match std::panic::catch_unwind(|| {
         let manager = ShellManager::new();
-        let _stats = manager.get_stats();
+        manager.get_stats();
     }) {
         Ok(()) => {
             let processing_time = start_time.elapsed().as_millis();

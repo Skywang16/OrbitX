@@ -6,6 +6,7 @@ import type { TerminalState } from '@/types/storage'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import { debounce } from 'lodash-es'
 
 // 组件可以注册的回调函数类型
 interface TerminalEventListeners {
@@ -62,12 +63,16 @@ export const useTerminalStore = defineStore('Terminal', () => {
   // 会话状态管理
   const sessionStore = useSessionStore()
 
-  // 监听终端状态变化，同步到会话存储（但不立即保存到磁盘）
+  // 使用 lodash 防抖同步状态
+  const debouncedSync = debounce(() => {
+    syncToSessionStore()
+  }, 500)
+
+  // 监听终端状态变化，使用防抖同步到会话存储
   watch(
     [terminals, activeTerminalId],
     () => {
-      // 只同步到内存中的会话状态，不触发磁盘保存
-      syncToSessionStore()
+      debouncedSync()
     },
     { deep: true }
   )
@@ -319,6 +324,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
 
     activeTerminalId.value = id
+
+    // 同步活跃标签页ID到会话状态
+    sessionStore.setActiveTabId(id)
   }
 
   /**
@@ -356,6 +364,19 @@ export const useTerminalStore = defineStore('Terminal', () => {
       })
     } catch (error) {
       console.error(`调整终端 '${id}' 大小失败:`, error)
+    }
+  }
+
+  /**
+   * 更新终端的当前工作目录
+   */
+  const updateTerminalCwd = (id: string, cwd: string) => {
+    const terminal = terminals.value.find(t => t.id === id)
+    if (terminal && terminal.cwd !== cwd) {
+      terminal.cwd = cwd
+      console.log(`📁 [Terminal] 更新终端 ${id} 工作目录: ${cwd}`)
+      // 使用防抖同步
+      debouncedSync()
     }
   }
 
@@ -513,8 +534,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
       shell: terminal.shellInfo?.name,
     }))
 
-    // 使用Session Store的方法更新终端状态
+    // 使用Session Store的方法更新终端状态和活跃标签页ID
     sessionStore.updateTerminals(terminalStates)
+    sessionStore.setActiveTabId(activeTerminalId.value)
   }
 
   /**
@@ -567,14 +589,23 @@ export const useTerminalStore = defineStore('Terminal', () => {
         }
       }
 
-      // 现在激活正确的终端
-      if (shouldActivateTerminalId) {
-        setActiveTerminal(shouldActivateTerminalId)
-        console.log(`✅ [Terminal Store] 激活恢复的终端: ${shouldActivateTerminalId}`)
+      // 现在激活正确的终端 - 优先使用保存的活跃标签页ID
+      const savedActiveTabId = sessionStore.sessionState.activeTabId
+      let terminalToActivate: string | null = null
+
+      if (savedActiveTabId && terminals.value.find(t => t.id === savedActiveTabId)) {
+        terminalToActivate = savedActiveTabId
+        console.log(`🎯 [Terminal Store] 使用保存的活跃标签页: ${savedActiveTabId}`)
+      } else if (shouldActivateTerminalId) {
+        terminalToActivate = shouldActivateTerminalId
+        console.log(`✅ [Terminal Store] 使用终端状态中的活跃终端: ${shouldActivateTerminalId}`)
       } else if (terminals.value.length > 0) {
-        // 如果没有找到应该激活的终端，激活第一个
-        setActiveTerminal(terminals.value[0].id)
+        terminalToActivate = terminals.value[0].id
         console.log(`⚠️ [Terminal Store] 未找到活跃标签，激活第一个终端: ${terminals.value[0].id}`)
+      }
+
+      if (terminalToActivate) {
+        setActiveTerminal(terminalToActivate)
       }
 
       // 如果没有任何终端，创建一个默认的
@@ -661,6 +692,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     setActiveTerminal,
     writeToTerminal,
     resizeTerminal,
+    updateTerminalCwd,
 
     // Shell管理方法
     loadAvailableShells,

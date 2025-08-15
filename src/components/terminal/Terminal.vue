@@ -636,6 +636,9 @@
         // 将数据添加到缓冲区而不是立即写入
         outputBuffer += data
 
+        // 检测工作目录变化
+        detectWorkingDirectoryChange(data)
+
         // 如果缓冲区过大，立即刷新以防止内存溢出
         if (outputBuffer.length >= MAX_BUFFER_LENGTH) {
           flushOutputBuffer()
@@ -646,6 +649,30 @@
       }
     } catch {
       // ignore
+    }
+  }
+
+  /**
+   * 检测工作目录变化
+   * 使用简化的检测机制，只在特定条件下触发
+   */
+  const detectWorkingDirectoryChange = (data: string) => {
+    // 只在包含路径分隔符且长度合理的数据中检测
+    if (!data.includes('/') || data.length > 200) return
+
+    try {
+      // 简化的检测：只匹配明显的提示符格式
+      const promptMatch = data.match(/([\/\w\-\.~]+)\s*[$#>]\s*$/)
+      if (promptMatch) {
+        const newPath = promptMatch[1]
+        if (newPath && newPath.startsWith('/') && newPath !== workingDirectory.value) {
+          workingDirectory.value = newPath
+          terminalStore.updateTerminalCwd(props.terminalId, newPath)
+          console.log(`📁 [Terminal] 工作目录: ${newPath}`)
+        }
+      }
+    } catch {
+      // 静默忽略错误
     }
   }
 
@@ -676,15 +703,22 @@
       // 初始化终端（现在是异步的）
       await initXterm()
 
-      // 初始化工作目录
-      windowAPI
-        .getHomeDir()
-        .then(dir => {
-          workingDirectory.value = dir
-        })
-        .catch(() => {
-          workingDirectory.value = '/tmp'
-        })
+      // 初始化工作目录 - 优先使用终端状态中保存的工作目录
+      const terminal = terminalStore.terminals.find(t => t.id === props.terminalId)
+      if (terminal && terminal.cwd) {
+        workingDirectory.value = terminal.cwd
+        console.log(`📁 [Terminal] 恢复工作目录: ${terminal.cwd}`)
+      } else {
+        // 如果没有保存的工作目录，使用系统默认
+        windowAPI
+          .getHomeDir()
+          .then(dir => {
+            workingDirectory.value = dir
+          })
+          .catch(() => {
+            workingDirectory.value = '/tmp'
+          })
+      }
 
       // 注册回调
       terminalStore.registerTerminalCallbacks(props.terminalId, {

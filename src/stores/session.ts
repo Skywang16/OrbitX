@@ -184,6 +184,16 @@ export const useSessionStore = defineStore('session', () => {
     sessionState.value.terminals.forEach(t => {
       t.active = t.id === terminalId
     })
+    // 同时更新活跃标签页ID
+    sessionState.value.activeTabId = terminalId
+    scheduleAutoSave()
+  }
+
+  /**
+   * 设置活跃标签页ID
+   */
+  const setActiveTabId = (tabId: string | null | undefined): void => {
+    sessionState.value.activeTabId = tabId || undefined
     scheduleAutoSave()
   }
 
@@ -311,6 +321,7 @@ export const useSessionStore = defineStore('session', () => {
     addTerminal,
     removeTerminal,
     activateTerminal,
+    setActiveTabId,
     updateUiState,
     updateAiState,
 
