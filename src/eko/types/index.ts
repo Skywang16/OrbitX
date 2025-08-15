@@ -280,6 +280,45 @@ export interface EkoRunResult {
   error?: string
 }
 
+// ===== AST分析相关类型 =====
+
+/**
+ * 代码符号信息
+ */
+export interface CodeSymbol {
+  name: string
+  type: 'function' | 'class' | 'variable' | 'interface' | 'type'
+  line: number
+  column: number
+  file: string
+}
+
+/**
+ * 代码分析结果
+ */
+export interface CodeAnalysis {
+  file: string
+  language: string
+  symbols: CodeSymbol[]
+  imports: string[]
+  exports: string[]
+  complexity?: number
+}
+
+/**
+ * AST分析工具参数
+ */
+export interface AnalyzeCodeParams extends TerminalToolParams {
+  /** 文件路径或目录路径 */
+  path: string
+  /** 是否递归分析目录 */
+  recursive?: boolean
+  /** 包含的文件模式 */
+  include?: string[]
+  /** 排除的文件模式 */
+  exclude?: string[]
+}
+
 // ===== 导出所有类型 =====
 
 export type {
