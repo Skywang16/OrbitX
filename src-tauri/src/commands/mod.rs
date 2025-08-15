@@ -8,5 +8,9 @@
 /// 基于 TerminalMux 的终端命令处理
 pub mod mux_terminal;
 
+/// 网络请求命令处理
+pub mod web_fetch;
+
 // 重新导出所有命令函数和状态类型，使它们可以在 lib.rs 中直接使用
 pub use mux_terminal::*;
+pub use web_fetch::*;

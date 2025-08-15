@@ -2,12 +2,12 @@
  * Shell命令执行工具
  */
 
-import { ModifiableTool, type ToolExecutionContext } from './modifiable-tool'
-import type { ToolResult } from '../types'
-import { TerminalError, ValidationError } from './tool-error'
+import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
+import type { ToolResult } from '../../types'
+import { TerminalError, ValidationError } from '../tool-error'
 import { terminalAPI } from '@/api/terminal'
 import { useTerminalStore } from '@/stores/Terminal'
-import { TerminalAgent } from '../agent/terminal-agent'
+import { TerminalAgent } from '../../agent/terminal-agent'
 export interface ShellParams {
   command: string
   workingDirectory?: string

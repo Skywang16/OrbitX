@@ -3,6 +3,7 @@
   import { reactive, ref } from 'vue'
   import { createMessage } from '@/ui'
   import { handleError } from '@/utils/errorHandler'
+  import { AIAPI } from '@/api/ai'
 
   interface Props {
     model?: AIModelConfig | null
@@ -15,6 +16,8 @@
 
   const props = defineProps<Props>()
   const emit = defineEmits<Emits>()
+
+  const ai = new AIAPI()
 
   // 表单数据
   const formData = reactive({
@@ -111,8 +114,26 @@
 
     isTesting.value = true
     try {
-      // 这里需要先保存模型再测试，或者修改API支持直接测试配置
-      createMessage.info('请先保存模型后再进行连接测试')
+      // 构造临时的模型配置用于测试
+      const testConfig: AIModelConfig = {
+        id: 'test-' + Date.now(), // 临时ID
+        name: formData.name || 'Test Model',
+        provider: formData.provider,
+        apiUrl: formData.apiUrl,
+        apiKey: formData.apiKey,
+        model: formData.model,
+        isDefault: false,
+        options: formData.options,
+      }
+
+      // 调用连接测试 API
+      const isConnected = await ai.testConnectionWithConfig(testConfig)
+
+      if (isConnected) {
+        createMessage.success('连接测试成功！')
+      } else {
+        createMessage.error('连接测试失败，请检查配置')
+      }
     } catch (error) {
       createMessage.error(handleError(error, '连接测试失败'))
     } finally {

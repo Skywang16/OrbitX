@@ -71,6 +71,10 @@ sha2 = "0.10"
 # AI统一接口库
 async-openai = "0.29"
 
+# HTML 解析和内容提取
+scraper = "0.20"
+html2text = "0.12"
+
 # SQLite 数据库支持
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json", "migrate"] }
 

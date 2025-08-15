@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS ai_models (
     name TEXT NOT NULL,
     provider TEXT NOT NULL,
     api_url TEXT,
-    api_key_encrypted BLOB,
+    api_key_encrypted TEXT,
     model_name TEXT NOT NULL,
     is_default BOOLEAN DEFAULT FALSE,
     enabled BOOLEAN DEFAULT TRUE,

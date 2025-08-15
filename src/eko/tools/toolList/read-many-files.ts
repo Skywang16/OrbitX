@@ -2,8 +2,8 @@
  * 批量文件读取工具
  */
 
-import { ModifiableTool, type ToolExecutionContext } from './modifiable-tool'
-import type { ToolResult } from '../types'
+import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
+import type { ToolResult } from '../../types'
 import { invoke } from '@tauri-apps/api/core'
 
 export interface ReadManyFilesParams {

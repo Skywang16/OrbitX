@@ -17,6 +17,16 @@ use sqlx::Row;
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
+/// 默认启用状态
+fn default_enabled() -> bool {
+    true
+}
+
+/// 默认时间戳
+fn default_timestamp() -> DateTime<Utc> {
+    Utc::now()
+}
+
 /// AI提供商类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -59,10 +69,15 @@ pub struct AIModelConfig {
     pub api_url: String,
     pub api_key: String,
     pub model: String,
+    #[serde(default)]
     pub is_default: Option<bool>,
+    #[serde(default = "default_enabled")]
     pub enabled: bool,
+    #[serde(default)]
     pub options: Option<Value>,
+    #[serde(default = "default_timestamp")]
     pub created_at: DateTime<Utc>,
+    #[serde(default = "default_timestamp")]
     pub updated_at: DateTime<Utc>,
 }
 
@@ -141,11 +156,21 @@ impl AIModelRepository {
     pub async fn find_all_with_decrypted_keys(&self) -> AppResult<Vec<AIModelConfig>> {
         let (query, params) = SafeQueryBuilder::new("ai_models")
             .select(&[
-                "id", "name", "provider", "api_url", "api_key_encrypted", 
-                "model_name", "is_default", "enabled", "config_json", 
-                "created_at", "updated_at"
+                "id",
+                "name",
+                "provider",
+                "api_url",
+                "api_key_encrypted",
+                "model_name",
+                "is_default",
+                "enabled",
+                "config_json",
+                "created_at",
+                "updated_at",
             ])
-            .order_by(crate::storage::query::QueryOrder::Asc("created_at".to_string()))
+            .order_by(crate::storage::query::QueryOrder::Asc(
+                "created_at".to_string(),
+            ))
             .build()?;
 
         let mut query_builder = sqlx::query(&query);
@@ -175,20 +200,30 @@ impl AIModelRepository {
 
         for row in rows {
             let mut model = AIModelConfig::from_row(&row)?;
-            
+
             // 解密API密钥
-            if let Some(encrypted_data) = row.try_get::<Option<Vec<u8>>, _>("api_key_encrypted")? {
-                match encryption_manager.decrypt_data(&encrypted_data) {
-                    Ok(decrypted_key) => {
-                        model.api_key = decrypted_key;
-                    }
-                    Err(e) => {
-                        error!("解密API密钥失败: {}", e);
-                        model.api_key = String::new();
+            if let Some(encrypted_base64) = row.try_get::<Option<String>, _>("api_key_encrypted")? {
+                if !encrypted_base64.is_empty() {
+                    match base64::engine::general_purpose::STANDARD.decode(&encrypted_base64) {
+                        Ok(encrypted_data) => {
+                            match encryption_manager.decrypt_data(&encrypted_data) {
+                                Ok(decrypted_key) => {
+                                    model.api_key = decrypted_key;
+                                }
+                                Err(e) => {
+                                    error!("解密API密钥失败: {}", e);
+                                    model.api_key = String::new();
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("Base64解码失败: {}", e);
+                            model.api_key = String::new();
+                        }
                     }
                 }
             }
-            
+
             models.push(model);
         }
 
@@ -239,7 +274,9 @@ impl AIModelRepository {
             None
         };
 
-        let config_json = model.options.as_ref()
+        let config_json = model
+            .options
+            .as_ref()
             .map(|opts| serde_json::to_string(opts).unwrap_or_default());
 
         let (query, params) = InsertBuilder::new("ai_models")
@@ -248,13 +285,21 @@ impl AIModelRepository {
             .set("name", Value::String(model.name.clone()))
             .set("provider", Value::String(model.provider.to_string()))
             .set("api_url", Value::String(model.api_url.clone()))
-            .set("api_key_encrypted", encrypted_api_key.map(|data| {
-                Value::String(base64::engine::general_purpose::STANDARD.encode(data))
-            }).unwrap_or(Value::Null))
+            .set(
+                "api_key_encrypted",
+                encrypted_api_key
+                    .map(|data| {
+                        Value::String(base64::engine::general_purpose::STANDARD.encode(data))
+                    })
+                    .unwrap_or(Value::Null),
+            )
             .set("model_name", Value::String(model.model.clone()))
             .set("is_default", Value::Bool(model.is_default()))
             .set("enabled", Value::Bool(model.enabled))
-            .set("config_json", config_json.map(Value::String).unwrap_or(Value::Null))
+            .set(
+                "config_json",
+                config_json.map(Value::String).unwrap_or(Value::Null),
+            )
             .set("created_at", Value::String(model.created_at.to_rfc3339()))
             .set("updated_at", Value::String(model.updated_at.to_rfc3339()))
             .build()?;
@@ -270,7 +315,7 @@ impl AIModelRepository {
         }
 
         let result = query_builder.execute(self.database.pool()).await?;
-        
+
         info!("AI模型保存成功: {}", model.name);
         Ok(result.last_insert_rowid())
     }

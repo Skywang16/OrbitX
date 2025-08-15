@@ -2,9 +2,9 @@
  * 目录读取工具
  */
 
-import { ModifiableTool, type ToolExecutionContext } from './modifiable-tool'
-import type { ToolResult } from '../types'
-import { FileNotFoundError } from './tool-error'
+import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
+import type { ToolResult } from '../../types'
+import { FileNotFoundError } from '../tool-error'
 import { invoke } from '@tauri-apps/api/core'
 import { formatDate } from '@/utils/dateFormatter'
 

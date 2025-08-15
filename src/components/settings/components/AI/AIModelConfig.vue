@@ -81,8 +81,6 @@
         // 如果这是第一个模型，自动设置为默认
         if (models.value.length === 0) {
           newModel.isDefault = true
-          createMessage.success('模型添加成功，已自动设为默认模型')
-        } else {
           createMessage.success('模型添加成功')
         }
 

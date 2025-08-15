@@ -97,6 +97,20 @@ export class AIAPI {
     }
   }
 
+  /**
+   * 测试AI模型连接（基于表单配置）
+   * @param config AI模型配置对象
+   * @returns 连接是否成功
+   */
+  async testConnectionWithConfig(config: AIModelConfig): Promise<boolean> {
+    try {
+      return await invoke('test_ai_connection_with_config', { config })
+    } catch (error) {
+      const errorMessage = handleError(error)
+      throw new Error(errorMessage)
+    }
+  }
+
   // ===== AI功能接口 =====
 
   // ===== AI设置管理 =====
@@ -197,6 +211,7 @@ export const ai = {
   deleteModel: (modelId: string) => aiAPI.removeModel(modelId), // 别名
   setDefaultModel: (modelId: string) => aiAPI.setDefaultModel(modelId),
   testConnection: (modelId: string) => aiAPI.testConnection(modelId),
+  testConnectionWithConfig: (config: AIModelConfig) => aiAPI.testConnectionWithConfig(config),
 
   // 新的会话管理功能
   conversations: {

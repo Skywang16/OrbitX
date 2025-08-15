@@ -4,13 +4,10 @@
  * 实现基于会话上下文管理的AI命令接口
  */
 
-use crate::ai::{
-    context::handle_truncate_conversation,
-    AIService,
-};
 use crate::ai::types::{AIModelConfig, Conversation, Message};
-use crate::storage::repositories::Repository;
+use crate::ai::{context::handle_truncate_conversation, AIService};
 use crate::storage::cache::UnifiedCache;
+use crate::storage::repositories::Repository;
 use crate::storage::repositories::RepositoryManager;
 use crate::utils::error::{ToTauriResult, Validator};
 
@@ -31,10 +28,7 @@ impl AIManagerState {
         repositories: Arc<RepositoryManager>,
         cache: Arc<UnifiedCache>,
     ) -> Result<Self, String> {
-        let ai_service = Arc::new(AIService::new(
-            repositories.clone(),
-            cache.clone(),
-        ));
+        let ai_service = Arc::new(AIService::new(repositories.clone(), cache.clone()));
 
         Ok(Self {
             ai_service,
@@ -54,7 +48,7 @@ impl AIManagerState {
     }
 }
 
-// ===== AI会话上下文管理命令 - 全新实现 =====
+// ===== AI会话上下文管理命令  =====
 
 /// 创建新会话
 #[tauri::command]
@@ -69,9 +63,7 @@ pub async fn create_conversation(
 
     let repositories = state.repositories();
 
-    let conversation = Conversation::new(
-        title.unwrap_or_else(|| "新对话".to_string())
-    );
+    let conversation = Conversation::new(title.unwrap_or_else(|| "新对话".to_string()));
 
     let conversation_id = repositories
         .conversations()
@@ -178,7 +170,6 @@ pub async fn get_compressed_context(
         conversation_id, up_to_message_id
     );
 
-    // 参数验证
     if conversation_id <= 0 {
         return Err("无效的会话ID".to_string());
     }
@@ -224,7 +215,6 @@ pub async fn truncate_conversation(
         conversation_id, truncate_after_message_id
     );
 
-    // 参数验证
     if conversation_id <= 0 {
         return Err("无效的会话ID".to_string());
     }
@@ -256,7 +246,6 @@ pub async fn save_message(
         conversation_id, role
     );
 
-    // 参数验证
     if conversation_id <= 0 {
         return Err("无效的会话ID".to_string());
     }
@@ -390,4 +379,31 @@ pub async fn test_ai_connection(
     }
 
     state.ai_service.test_connection(&model_id).await.to_tauri()
+}
+
+/// 测试AI模型连接（基于表单数据）
+#[tauri::command]
+pub async fn test_ai_connection_with_config(
+    config: AIModelConfig,
+    state: State<'_, AIManagerState>,
+) -> Result<bool, String> {
+    info!("测试AI模型连接（表单数据）: {}", config.name);
+
+    // 参数验证
+    if config.api_url.trim().is_empty() {
+        return Err("API URL不能为空".to_string());
+    }
+    if config.api_key.trim().is_empty() {
+        return Err("API Key不能为空".to_string());
+    }
+    if config.model.trim().is_empty() {
+        return Err("模型名称不能为空".to_string());
+    }
+
+    // 直接使用提供的配置进行连接测试
+    state
+        .ai_service
+        .test_connection_with_config(&config)
+        .await
+        .to_tauri()
 }

@@ -2,9 +2,9 @@
  * 文件编辑工具 - 支持精细化编辑功能
  */
 
-import { ModifiableTool, type ToolExecutionContext } from './modifiable-tool'
-import type { ToolResult } from '../types'
-import { ValidationError } from './tool-error'
+import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
+import type { ToolResult } from '../../types'
+import { ValidationError } from '../tool-error'
 import { writeTextFile, readTextFile, exists } from '@tauri-apps/plugin-fs'
 
 export interface EditFileParams {

@@ -6,17 +6,16 @@ import type { Tool } from '../types'
 import { globalToolRegistry } from './tool-registry'
 
 // 导入所有工具
-import { readFileTool } from './read-file'
-import { readManyFilesTool } from './read-many-files'
-import { readDirectoryTool } from './read-directory'
-import { fileSystemTool } from './filesystem'
-import { createFileTool } from './create-file'
-import { editFileTool } from './edit-file'
-import { shellTool } from './shell'
-import { webFetchTool } from './web-fetch'
-import { webSearchTool } from './web-search'
-import { memoryTool } from './memoryTool'
-import { orbitContextTool } from './orbit-context'
+import { readFileTool } from './toolList/read-file'
+import { readManyFilesTool } from './toolList/read-many-files'
+import { readDirectoryTool } from './toolList/read-directory'
+import { fileSystemTool } from './toolList/filesystem'
+import { createFileTool } from './toolList/create-file'
+import { editFileTool } from './toolList/edit-file'
+import { shellTool } from './toolList/shell'
+import { webFetchTool } from './toolList/web-fetch'
+
+import { orbitContextTool } from './toolList/orbit-context'
 
 /**
  * 所有可用工具的数组
@@ -37,13 +36,9 @@ export const allTools: Tool[] = [
 
   // 网络工具
   webFetchTool,
-  webSearchTool,
 
   // 搜索工具
   orbitContextTool,
-
-  // 内存管理工具
-  memoryTool,
 ]
 
 /**
@@ -53,9 +48,8 @@ export const toolsByCategory = {
   file: [readFileTool, readManyFilesTool, readDirectoryTool, createFileTool, editFileTool],
   filesystem: [fileSystemTool],
   system: [shellTool],
-  network: [webFetchTool, webSearchTool],
+  network: [webFetchTool],
   search: [orbitContextTool],
-  memory: [memoryTool],
 }
 
 /**
@@ -68,13 +62,12 @@ export const coreTools: Tool[] = [
   createFileTool,
   editFileTool,
   shellTool,
-  memoryTool,
 ]
 
 /**
  * 网络工具
  */
-export const networkTools: Tool[] = [webFetchTool, webSearchTool]
+export const networkTools: Tool[] = [webFetchTool]
 
 /**
  * 文件操作工具
@@ -158,22 +151,6 @@ export function registerAllTools(): void {
         description: webFetchTool.description,
         category: 'network',
         tags: ['web', 'http', 'fetch', 'api'],
-      },
-    },
-    {
-      tool: webSearchTool,
-      metadata: {
-        description: webSearchTool.description,
-        category: 'network',
-        tags: ['web', 'search', 'internet', 'information'],
-      },
-    },
-    {
-      tool: memoryTool,
-      metadata: {
-        description: memoryTool.description,
-        category: 'memory',
-        tags: ['memory', 'storage', 'cache', 'data'],
       },
     },
     {

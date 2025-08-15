@@ -32,6 +32,7 @@ use ai::commands::{
     save_message,
     set_default_ai_model,
     test_ai_connection,
+    test_ai_connection_with_config,
     truncate_conversation,
     update_ai_model,
     update_conversation_title,
@@ -310,6 +311,7 @@ pub fn run() {
             remove_ai_model,
             set_default_ai_model,
             test_ai_connection,
+            test_ai_connection_with_config,
             // AI会话上下文管理命令
             create_conversation,
             get_conversations,
@@ -335,6 +337,9 @@ pub fn run() {
             storage_update_config,
             storage_save_session_state,
             storage_load_session_state,
+            // 网络请求命令
+            web_fetch_headless,
+            simple_web_fetch,
             // 文件拖拽处理命令
             handle_file_open
         ])

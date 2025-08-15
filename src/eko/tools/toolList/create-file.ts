@@ -2,9 +2,9 @@
  * 文件创建工具
  */
 
-import { ModifiableTool, type ToolExecutionContext } from './modifiable-tool'
-import type { ToolResult } from '../types'
-import { ValidationError } from './tool-error'
+import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
+import type { ToolResult } from '../../types'
+import { ValidationError } from '../tool-error'
 import { writeTextFile, exists } from '@tauri-apps/plugin-fs'
 
 export interface CreateFileParams {

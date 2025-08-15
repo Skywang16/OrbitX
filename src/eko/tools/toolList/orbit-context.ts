@@ -5,9 +5,9 @@
  * 提供强大的代码搜索和上下文理解能力
  */
 
-import { ModifiableTool, type ToolExecutionContext } from './modifiable-tool'
-import type { ToolResult } from '../types'
-import { FileNotFoundError, ValidationError } from './tool-error'
+import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
+import type { ToolResult } from '../../types'
+import { FileNotFoundError, ValidationError } from '../tool-error'
 import { invoke } from '@tauri-apps/api/core'
 
 export interface OrbitContextParams {

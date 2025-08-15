@@ -16,10 +16,6 @@
  *
  * 🌐 网络工具：
  * - web-fetch: 🌐 HTTP请求（支持各种方法、头部、超时）
- * - web-search: 🔍 网络搜索（支持多引擎、语言地区、安全搜索）
- *
- * 🧠 内存管理工具：
- * - memory: 🧠 会话内存管理（支持TTL、标签、模式匹配）
  *
  * 🔍 搜索工具：
  * - orbit-context: 🔍 智能代码库搜索（动态探索、多模式搜索、上下文理解）
@@ -43,15 +39,14 @@ export * from './modifiable-tool'
 export * from './tool-error'
 
 // 导出具体工具实例
-export { readFileTool } from './read-file'
-export { readManyFilesTool } from './read-many-files'
-export { createFileTool } from './create-file'
-export { editFileTool } from './edit-file'
-export { shellTool } from './shell'
-export { webFetchTool } from './web-fetch'
-export { webSearchTool } from './web-search'
-export { memoryTool } from './memoryTool'
-export { orbitContextTool } from './orbit-context'
+export { readFileTool } from './toolList/read-file'
+export { readManyFilesTool } from './toolList/read-many-files'
+export { createFileTool } from './toolList/create-file'
+export { editFileTool } from './toolList/edit-file'
+export { shellTool } from './toolList/shell'
+export { webFetchTool } from './toolList/web-fetch'
+
+export { orbitContextTool } from './toolList/orbit-context'
 
 // 导出主要的工具集合
 export {

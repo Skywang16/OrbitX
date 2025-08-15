@@ -164,8 +164,8 @@ impl ThemeManager {
         // 创建内置主题文件（如果不存在）
         manager.create_builtin_themes().await?;
 
-        // 加载主题索引
-        manager.load_theme_index().await?;
+        // 直接刷新索引而不是加载现有索引（确保索引与实际文件同步）
+        manager.refresh_index().await?;
 
         info!("主题管理器初始化完成");
         Ok(manager)
@@ -179,14 +179,6 @@ impl ThemeManager {
             fs::create_dir_all(themes_dir)
                 .with_context(|| format!("无法创建主题目录: {}", themes_dir.display()))?;
             info!("创建主题目录: {}", themes_dir.display());
-        }
-
-        // 创建内置主题子目录
-        let builtin_dir = themes_dir.join("builtin");
-        if !builtin_dir.exists() {
-            fs::create_dir_all(&builtin_dir)
-                .with_context(|| format!("无法创建内置主题目录: {}", builtin_dir.display()))?;
-            info!("创建内置主题目录: {}", builtin_dir.display());
         }
 
         Ok(())
@@ -436,12 +428,12 @@ impl ThemeManager {
     pub async fn refresh_index(&self) -> AppResult<()> {
         info!("开始刷新主题索引");
 
-        // 分别扫描内置主题和自定义主题目录
+        // 只扫描主题目录，不区分内置和自定义主题
         let themes_dir = self.paths.themes_dir();
-        let builtin_dir = themes_dir.join("builtin");
+        let all_themes = self.scan_theme_directory(themes_dir, false).await?;
 
-        let custom_themes = self.scan_theme_directory(themes_dir, false).await?;
-        let builtin_themes = self.scan_theme_directory(&builtin_dir, true).await?;
+        // 根据主题索引文件中的信息区分内置和自定义主题
+        let (builtin_themes, custom_themes) = self.categorize_themes(all_themes).await;
 
         // 创建新索引
         let total_themes = custom_themes.len() + builtin_themes.len();
@@ -555,7 +547,7 @@ impl ThemeManager {
             .with_context(|| format!("无法读取主题文件: {}", path.display()))?;
 
         let theme_wrapper: ThemeFileWrapper = toml::from_str(&content)
-            .with_context(|| format!("无法解析主题文件: {}", path.display()))?;
+            .map_err(|e| anyhow!("无法解析主题文件: {} - {}", path.display(), e))?;
 
         let theme = theme_wrapper.theme;
 
@@ -851,6 +843,24 @@ selection = "rgba(3, 102, 214, 0.3)"
         }
 
         Ok(())
+    }
+
+    /// 根据实际存在的主题文件动态分类主题
+    /// 所有在 themes 目录中找到的主题文件都被视为可用主题
+    async fn categorize_themes(
+        &self,
+        themes: Vec<ThemeIndexEntry>,
+    ) -> (Vec<ThemeIndexEntry>, Vec<ThemeIndexEntry>) {
+        let mut builtin_themes = Vec::new();
+        let custom_themes = Vec::new();
+
+        for mut theme in themes {
+            // 将所有找到的主题都标记为内置主题
+            theme.builtin = true;
+            builtin_themes.push(theme);
+        }
+
+        (builtin_themes, custom_themes)
     }
 }
 
