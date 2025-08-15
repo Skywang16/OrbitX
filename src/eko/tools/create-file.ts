@@ -48,23 +48,27 @@ export class CreateFileTool extends ModifiableTool {
 
     try {
       const fileExists = await exists(filePath)
-      
+
       if (fileExists && !overwrite) {
         return {
-          content: [{
-            type: 'text',
-            text: `❌ 文件已存在: ${filePath}\n💡 如需覆盖现有文件，请设置 overwrite: true 参数`,
-          }],
+          content: [
+            {
+              type: 'text',
+              text: `❌ 文件已存在: ${filePath}\n💡 如需覆盖现有文件，请设置 overwrite: true 参数`,
+            },
+          ],
         }
       }
 
       await writeTextFile(filePath, content)
 
       return {
-        content: [{
-          type: 'text',
-          text: fileExists ? `✅ 文件已更新: ${filePath}` : `✅ 文件已创建: ${filePath}`,
-        }],
+        content: [
+          {
+            type: 'text',
+            text: fileExists ? `✅ 文件已更新: ${filePath}` : `✅ 文件已创建: ${filePath}`,
+          },
+        ],
       }
     } catch (error) {
       throw new Error(`创建文件失败: ${error instanceof Error ? error.message : String(error)}`)

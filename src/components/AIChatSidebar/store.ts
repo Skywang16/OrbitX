@@ -15,6 +15,22 @@ import { createTerminalEko, createSidebarCallback, type TerminalEko } from '@/ek
 import type { Conversation, Message } from '@/types/features/ai/chat'
 import { debounce } from 'lodash-es'
 
+// 流式消息类型定义
+interface StreamMessage {
+  type: 'tool_use' | 'tool_result' | 'workflow' | 'text'
+  toolName?: string
+  params?: Record<string, any>
+  toolResult?: any
+  workflow?: {
+    name?: string
+    thought?: string
+  }
+  agentName?: string
+  taskId?: string
+  text?: string
+  streamDone?: boolean
+}
+
 // 工具函数
 const generateSessionTitle = (content: string): string => {
   const title = content.trim().slice(0, 20)
@@ -295,7 +311,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     try {
       if (!ekoInstance.value) {
         // 处理流式消息更新UI
-        const handleStreamMessage = async (message: unknown) => {
+        const handleStreamMessage = async (message: StreamMessage) => {
           const tempMessage = messageList.value[messageList.value.length - 1]
           if (!tempMessage || tempMessage.role !== 'assistant') return
 
@@ -361,7 +377,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
               tempMessage.steps?.push(newStep)
             }
-          } else if (message.type === 'text') {
+          } else if (message.type === 'text' && message.text !== undefined) {
             // 瀑布流逻辑：只有当最后一个step就是text类型时，才更新它
             // 如果最后一个step是tool/thinking等其他类型，则创建新的text step
             const lastStep = tempMessage.steps?.[tempMessage.steps.length - 1]

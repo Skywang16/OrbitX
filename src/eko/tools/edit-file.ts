@@ -139,7 +139,13 @@ export class EditFileTool extends ModifiableTool {
   }
 
   private editByTextMatch(content: string, oldString: string, newString: string, replaceAll: boolean): string {
-    return replaceAll ? content.replaceAll(oldString, newString) : content.replace(oldString, newString)
+    if (replaceAll) {
+      // 使用全局正则表达式替换所有匹配项
+      const escapedOldString = oldString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      return content.replace(new RegExp(escapedOldString, 'g'), newString)
+    } else {
+      return content.replace(oldString, newString)
+    }
   }
 
   private calculateEditStats(originalContent: string, modifiedContent: string, oldString: string): string {

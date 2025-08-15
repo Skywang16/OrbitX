@@ -18,7 +18,6 @@
 
   // 使用store
   const terminalStore = useTerminalStore()
-  // 移除未使用的 tabManagerStore 引用
 
   // 弹出菜单状态
   const showAddMenuPopover = ref(false)
@@ -122,7 +121,7 @@
     showAddMenuPopover.value = false
 
     try {
-      // value 直接为 shell 名称
+      // 创建终端标签页
       await terminalStore.createTerminalWithShell(item.value)
     } catch (error) {
       // 静默处理错误

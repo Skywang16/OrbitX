@@ -662,7 +662,7 @@
 
     try {
       // 简化的检测：只匹配明显的提示符格式
-      const promptMatch = data.match(/([\/\w\-\.~]+)\s*[$#>]\s*$/)
+      const promptMatch = data.match(/([/\w\-.~]+)\s*[$#>]\s*$/)
       if (promptMatch) {
         const newPath = promptMatch[1]
         if (newPath && newPath.startsWith('/') && newPath !== workingDirectory.value) {

@@ -392,8 +392,8 @@ export class ShortcutApi {
 
       // 如果需要备份现有配置
       if (options.backup) {
-        const currentConfig = await this.getConfig()
-        // 这里可以实现备份逻辑，比如保存到本地存储
+        // TODO: 实现备份逻辑，比如保存到本地存储
+        await this.getConfig() // 获取当前配置用于备份
       }
 
       // 根据选项决定是覆盖还是合并

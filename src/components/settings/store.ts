@@ -44,13 +44,9 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // 重置所有设置
   const resetAllSettings = async () => {
-    try {
-      await aiSettings.resetToDefaults()
-      // 主题重置为默认主题
-      await themeManager.switchToTheme('dark')
-    } catch (error) {
-      throw error
-    }
+    await aiSettings.resetToDefaults()
+    // 主题重置为默认主题
+    await themeManager.switchToTheme('dark')
   }
 
   return {
