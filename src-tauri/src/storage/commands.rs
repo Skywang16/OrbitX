@@ -12,7 +12,7 @@ use anyhow::Context;
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::State;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 /// 存储协调器状态管理
 pub struct StorageCoordinatorState {
@@ -23,7 +23,7 @@ impl StorageCoordinatorState {
     pub async fn new(config_manager: Arc<crate::config::TomlConfigManager>) -> AppResult<Self> {
         use crate::storage::{StorageCoordinatorOptions, StoragePaths};
         use std::env;
-        use tracing::{debug, info};
+        use tracing::debug;
 
         // 获取应用数据目录
         let app_dir = if let Ok(dir) = env::var("OrbitX_DATA_DIR") {
@@ -90,7 +90,6 @@ pub async fn storage_save_session_state(
     session_state: SessionState,
     state: State<'_, StorageCoordinatorState>,
 ) -> Result<(), String> {
-
     debug!("📊 会话状态统计:");
     debug!("  - 终端数量: {}", session_state.terminals.len());
     debug!("  - 版本: {}", session_state.version);
@@ -133,5 +132,3 @@ pub async fn storage_load_session_state(
         }
     }
 }
-
-

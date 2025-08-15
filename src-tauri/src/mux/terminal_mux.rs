@@ -118,17 +118,19 @@ impl TerminalMux {
         debug!("开始验证TerminalMux状态");
 
         // 验证面板映射是否可访问
-        self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
+        let _unused = self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
         debug!("面板映射验证通过");
 
         // 验证订阅者映射是否可访问
-        self.subscribers
+        let _unused = self
+            .subscribers
             .read()
             .map_err(|_| anyhow!("无法获取订阅者读锁"))?;
         debug!("订阅者映射验证通过");
 
         // 验证通知接收器是否可访问
-        self.notification_receiver
+        let _unused = self
+            .notification_receiver
             .read()
             .map_err(|_| anyhow!("无法获取通知接收器读锁"))?;
         debug!("通知接收器验证通过");

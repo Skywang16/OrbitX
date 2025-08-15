@@ -96,8 +96,8 @@ use config::{
     set_terminal_theme,
 };
 use storage::commands::{
-    storage_get_config, storage_load_session_state,
-    storage_save_session_state, storage_update_config, StorageCoordinatorState,
+    storage_get_config, storage_load_session_state, storage_save_session_state,
+    storage_update_config, StorageCoordinatorState,
 };
 use window::commands::{
     clear_directory_cache, get_current_directory, get_home_directory, get_platform_info,
@@ -232,6 +232,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![
             // 窗口管理命令
             manage_window_state,
