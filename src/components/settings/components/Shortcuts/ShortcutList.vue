@@ -83,9 +83,8 @@
 </template>
 
 <script setup lang="ts">
-  import { useShortcutFormatter } from '@/composables/useShortcuts'
   import { ShortcutListItem, ShortcutActionEvent, ShortcutActionType } from './types'
-  import type { ShortcutAction } from '@/api/shortcuts/types'
+  import type { ShortcutAction, ShortcutBinding } from '@/api/shortcuts/types'
 
   interface Props {
     items: ShortcutListItem[]
@@ -102,9 +101,11 @@
 
   const emit = defineEmits<Emits>()
 
-  const { formatShortcut } = useShortcutFormatter()
-
   // 方法
+  const formatShortcut = (binding: ShortcutBinding): string => {
+    const parts = [...binding.modifiers, binding.key]
+    return parts.join('+')
+  }
   const getCategoryLabel = (category: string): string => {
     const labels: Record<string, string> = {
       Global: '全局',

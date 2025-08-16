@@ -7,7 +7,7 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 import { computed, readonly, ref } from 'vue'
-import { getCurrentTheme, getThemeConfigStatus, setFollowSystemTheme, setTerminalTheme } from '../api/config/theme'
+import { themeAPI } from '@/api/config'
 import type { Theme, ThemeConfigStatus, ThemeInfo, ThemeOption } from '@/types/theme'
 import { applyThemeToUI } from '../utils/themeApplier'
 
@@ -54,7 +54,7 @@ export const useTheme = () => {
     error.value = null
 
     try {
-      const status = await getThemeConfigStatus()
+      const status = await themeAPI.getThemeConfigStatus()
       configStatus.value = status
       availableThemes.value = status.availableThemes
     } catch (err) {
@@ -70,7 +70,7 @@ export const useTheme = () => {
    */
   const loadCurrentTheme = async () => {
     try {
-      const theme = await getCurrentTheme()
+      const theme = await themeAPI.getCurrentTheme()
       currentThemeData.value = theme
 
       // 应用主题到 UI
@@ -95,7 +95,7 @@ export const useTheme = () => {
     error.value = null
 
     try {
-      await setTerminalTheme(themeName)
+      await themeAPI.setTerminalTheme(themeName)
       // 重新加载配置状态
       await loadThemeConfigStatus()
       await loadCurrentTheme()
@@ -115,7 +115,7 @@ export const useTheme = () => {
     error.value = null
 
     try {
-      await setFollowSystemTheme(followSystem, lightTheme, darkTheme)
+      await themeAPI.setFollowSystemTheme(followSystem, lightTheme, darkTheme)
       // 重新加载配置状态
       await loadThemeConfigStatus()
       await loadCurrentTheme()
@@ -229,22 +229,3 @@ export const useTheme = () => {
   }
 }
 
-// ============================================================================
-// 便捷的主题操作函数
-// ============================================================================
-
-/**
- * 简化的主题切换函数
- */
-export const switchTheme = async (themeName: string) => {
-  const { switchToTheme } = useTheme()
-  return switchToTheme(themeName)
-}
-
-/**
- * 简化的跟随系统主题设置函数
- */
-export const toggleFollowSystem = async (enable: boolean, lightTheme?: string, darkTheme?: string) => {
-  const { setFollowSystem } = useTheme()
-  return setFollowSystem(enable, lightTheme, darkTheme)
-}

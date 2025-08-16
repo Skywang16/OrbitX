@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { ref } from 'vue'
-  import { window as windowAPI } from '@/api/window'
+  import { windowApi } from '@/api'
   import { handleErrorWithMessage } from '@/utils/errorHandler'
   import { useAIChatStore } from '@/components/AIChatSidebar'
   import { useTabManagerStore } from '@/stores/TabManager'
@@ -27,7 +27,7 @@
     if (!props.controls.alwaysOnTop) return
 
     try {
-      const newState = await windowAPI.toggleAlwaysOnTop()
+      const newState = await windowApi.toggleAlwaysOnTop()
       isAlwaysOnTop.value = newState
     } catch (error) {
       handleErrorWithMessage(error, '切换窗口置顶失败')

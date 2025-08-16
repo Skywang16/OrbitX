@@ -41,11 +41,14 @@
 
 <script setup lang="ts">
   import { computed } from 'vue'
-  import { useShortcuts, useShortcutValidation } from '@/composables/useShortcuts'
+  import { useShortcuts } from '@/composables/useShortcuts'
+  import { useShortcutStore } from '@/stores/shortcuts'
 
   // 组合式API
   const { statistics, loading } = useShortcuts()
-  const { lastConflictDetection, lastValidation } = useShortcutValidation()
+  const store = useShortcutStore()
+  const lastConflictDetection = computed(() => store.state.lastConflictDetection)
+  const lastValidation = computed(() => store.state.lastValidation)
 
   // 计算属性
   const conflictCount = computed(() => {

@@ -6,7 +6,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { ShortcutApi } from '@/api/shortcuts'
+import { shortcutsApi } from '@/api'
 import type {
   ShortcutsConfig,
   ShortcutBinding,
@@ -15,9 +15,6 @@ import type {
   ShortcutValidationResult,
   ConflictDetectionResult,
   ShortcutStatistics,
-  ShortcutSearchOptions,
-  ShortcutSearchResult,
-  ShortcutOperationOptions,
 } from '@/api/shortcuts/types'
 
 /**
@@ -88,9 +85,9 @@ export const useShortcutStore = defineStore('shortcuts', () => {
     try {
       // 并行加载配置、平台信息和统计信息
       const [config, platform, statistics] = await Promise.all([
-        ShortcutApi.getConfig(),
-        ShortcutApi.getCurrentPlatform(),
-        ShortcutApi.getStatistics(),
+        shortcutsApi.getConfig(),
+        shortcutsApi.getCurrentPlatform(),
+        shortcutsApi.getStatistics(),
       ])
 
       state.value.config = config
@@ -116,7 +113,7 @@ export const useShortcutStore = defineStore('shortcuts', () => {
     state.value.error = null
 
     try {
-      const [config, statistics] = await Promise.all([ShortcutApi.getConfig(), ShortcutApi.getStatistics()])
+      const [config, statistics] = await Promise.all([shortcutsApi.getConfig(), shortcutsApi.getStatistics()])
 
       state.value.config = config
       state.value.statistics = statistics
@@ -134,16 +131,16 @@ export const useShortcutStore = defineStore('shortcuts', () => {
   /**
    * 更新配置
    */
-  const updateConfig = async (config: ShortcutsConfig, options: ShortcutOperationOptions = {}): Promise<void> => {
+  const updateConfig = async (config: ShortcutsConfig): Promise<void> => {
     state.value.loading = true
     state.value.error = null
 
     try {
-      await ShortcutApi.updateConfig(config, options)
+      await shortcutsApi.updateConfig(config)
       state.value.config = config
 
       // 更新统计信息
-      state.value.statistics = await ShortcutApi.getStatistics()
+      state.value.statistics = await shortcutsApi.getStatistics()
 
       // 重新验证和检测冲突
       await Promise.all([validateCurrentConfig(), detectCurrentConflicts()])
@@ -164,7 +161,7 @@ export const useShortcutStore = defineStore('shortcuts', () => {
     }
 
     try {
-      const result = await ShortcutApi.validateConfig(state.value.config)
+      const result = await shortcutsApi.validateConfig(state.value.config)
       state.value.lastValidation = result
       return result
     } catch (error) {
@@ -182,7 +179,7 @@ export const useShortcutStore = defineStore('shortcuts', () => {
     }
 
     try {
-      const result = await ShortcutApi.detectConflicts(state.value.config)
+      const result = await shortcutsApi.detectConflicts(state.value.config)
       state.value.lastConflictDetection = result
       return result
     } catch (error) {
@@ -196,14 +193,13 @@ export const useShortcutStore = defineStore('shortcuts', () => {
    */
   const addShortcut = async (
     category: ShortcutCategory,
-    shortcut: ShortcutBinding,
-    options: ShortcutOperationOptions = {}
+    shortcut: ShortcutBinding
   ): Promise<void> => {
     state.value.loading = true
     state.value.error = null
 
     try {
-      await ShortcutApi.addShortcut(category, shortcut, options)
+      await shortcutsApi.addShortcut(category, shortcut)
       await refreshConfig()
     } catch (error) {
       state.value.error = `添加快捷键失败: ${error}`
@@ -221,7 +217,7 @@ export const useShortcutStore = defineStore('shortcuts', () => {
     state.value.error = null
 
     try {
-      const removedShortcut = await ShortcutApi.removeShortcut(category, index)
+      const removedShortcut = await shortcutsApi.removeShortcut(category, index)
       await refreshConfig()
       return removedShortcut
     } catch (error) {
@@ -238,14 +234,13 @@ export const useShortcutStore = defineStore('shortcuts', () => {
   const updateShortcut = async (
     category: ShortcutCategory,
     index: number,
-    shortcut: ShortcutBinding,
-    options: ShortcutOperationOptions = {}
+    shortcut: ShortcutBinding
   ): Promise<void> => {
     state.value.loading = true
     state.value.error = null
 
     try {
-      await ShortcutApi.updateShortcut(category, index, shortcut, options)
+      await shortcutsApi.updateShortcut(category, index, shortcut)
       await refreshConfig()
     } catch (error) {
       state.value.error = `更新快捷键失败: ${error}`
@@ -255,17 +250,6 @@ export const useShortcutStore = defineStore('shortcuts', () => {
     }
   }
 
-  /**
-   * 搜索快捷键
-   */
-  const searchShortcuts = async (options: ShortcutSearchOptions): Promise<ShortcutSearchResult> => {
-    try {
-      return await ShortcutApi.searchShortcuts(options)
-    } catch (error) {
-      state.value.error = `搜索快捷键失败: ${error}`
-      throw error
-    }
-  }
 
   /**
    * 重置到默认配置
@@ -275,7 +259,7 @@ export const useShortcutStore = defineStore('shortcuts', () => {
     state.value.error = null
 
     try {
-      await ShortcutApi.resetToDefaults()
+      await shortcutsApi.resetToDefaults()
       await refreshConfig()
     } catch (error) {
       state.value.error = `重置快捷键配置失败: ${error}`
@@ -285,35 +269,6 @@ export const useShortcutStore = defineStore('shortcuts', () => {
     }
   }
 
-  /**
-   * 导出配置
-   */
-  const exportConfig = async (): Promise<string> => {
-    try {
-      return await ShortcutApi.exportConfig()
-    } catch (error) {
-      state.value.error = `导出快捷键配置失败: ${error}`
-      throw error
-    }
-  }
-
-  /**
-   * 导入配置
-   */
-  const importConfig = async (json: string): Promise<void> => {
-    state.value.loading = true
-    state.value.error = null
-
-    try {
-      await ShortcutApi.importConfig(json)
-      await refreshConfig()
-    } catch (error) {
-      state.value.error = `导入快捷键配置失败: ${error}`
-      throw error
-    } finally {
-      state.value.loading = false
-    }
-  }
 
   /**
    * 清除错误
@@ -357,10 +312,7 @@ export const useShortcutStore = defineStore('shortcuts', () => {
     addShortcut,
     removeShortcut,
     updateShortcut,
-    searchShortcuts,
     resetToDefaults,
-    exportConfig,
-    importConfig,
     clearError,
   }
 })

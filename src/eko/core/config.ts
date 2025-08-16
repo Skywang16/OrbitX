@@ -5,7 +5,7 @@
 
 import type { LLMs } from '@eko-ai/eko'
 import type { AIModelConfig } from '@/types'
-import { aiAPI } from '@/api/ai'
+import { aiApi } from '@/api'
 
 /**
  * 将项目的AIModelConfig转换为Eko的LLM配置
@@ -39,7 +39,7 @@ export const convertToEkoLLMConfig = (modelConfig: AIModelConfig) => {
 export const getEkoLLMsConfig = async (): Promise<LLMs> => {
   try {
     // 获取所有模型配置
-    const models = await aiAPI.getModels()
+    const models = await aiApi.getModels()
 
     if (models.length === 0) {
       throw new Error('没有配置任何AI模型，请先在设置中添加模型配置')
@@ -71,7 +71,7 @@ export const getEkoLLMsConfig = async (): Promise<LLMs> => {
  */
 export const getDefaultModelId = async (): Promise<string> => {
   try {
-    const models = await aiAPI.getModels()
+    const models = await aiApi.getModels()
     const defaultModel = models.find(model => model.isDefault) || models[0]
 
     if (!defaultModel) {
@@ -91,10 +91,10 @@ export const getDefaultModelId = async (): Promise<string> => {
 export const validateModelConfig = async (modelId?: string): Promise<boolean> => {
   try {
     if (modelId) {
-      return await aiAPI.testConnection(modelId)
+      return await aiApi.testConnection(modelId)
     } else {
       const defaultModelId = await getDefaultModelId()
-      return await aiAPI.testConnection(defaultModelId)
+      return await aiApi.testConnection(defaultModelId)
     }
   } catch (error) {
     console.error('验证模型配置失败:', error)

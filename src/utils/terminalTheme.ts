@@ -4,7 +4,7 @@
  * 提供从配置系统获取终端主题的功能，替代原来的 CSS 主题系统
  */
 
-import { getCurrentTheme } from '@/api/config/theme'
+import { themeAPI } from '@/api/config'
 import { convertThemeToXTerm, createDefaultXTermTheme, type XTermTheme } from './themeConverter'
 
 /**
@@ -18,7 +18,7 @@ import { convertThemeToXTerm, createDefaultXTermTheme, type XTermTheme } from '.
 export const getTerminalThemeFromConfig = async (): Promise<XTermTheme> => {
   try {
     // 从配置系统获取当前主题数据
-    const theme = await getCurrentTheme()
+    const theme = await themeAPI.getCurrentTheme()
 
     // 转换为 XTerm.js 主题格式
     return convertThemeToXTerm(theme)

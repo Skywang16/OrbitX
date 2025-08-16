@@ -7,9 +7,7 @@
 //! - 窗口管理功能
 
 // 模块声明
-pub mod ai; // AI集成功能模块
-            // AST代码分析模块已移动到 ai::tool::ast
-mod commands; // Tauri 命令处理模块
+pub mod ai;
 pub mod completion; // 终端补全功能模块
 pub mod config; // 统一配置系统模块
                 // pub mod lock_optimization_demo; // 锁优化演示模块 - 暂时注释掉

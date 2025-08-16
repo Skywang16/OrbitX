@@ -15,6 +15,10 @@ import type {
   TerminalCreateOptions,
   TerminalResizeOptions,
   TerminalWriteOptions,
+  TerminalConfig,
+  CursorConfig,
+  TerminalConfigValidationResult,
+  SystemShellsResult,
 } from './types'
 
 /**
@@ -138,6 +142,64 @@ export class TerminalApi {
     } catch (error) {
       console.warn('检查终端存在性失败:', handleError(error))
       return false
+    }
+  }
+
+  // ===== 终端配置管理 =====
+
+  async getTerminalConfig(): Promise<TerminalConfig> {
+    try {
+      return await invoke<TerminalConfig>('get_terminal_config')
+    } catch (error) {
+      throw new Error(handleError(error, '获取终端配置失败'))
+    }
+  }
+
+  async updateTerminalConfig(config: TerminalConfig): Promise<void> {
+    try {
+      await invoke('update_terminal_config', { terminalConfig: config })
+    } catch (error) {
+      throw new Error(handleError(error, '更新终端配置失败'))
+    }
+  }
+
+  async validateTerminalConfig(): Promise<TerminalConfigValidationResult> {
+    try {
+      return await invoke<TerminalConfigValidationResult>('validate_terminal_config')
+    } catch (error) {
+      throw new Error(handleError(error, '验证终端配置失败'))
+    }
+  }
+
+  async resetTerminalConfigToDefaults(): Promise<void> {
+    try {
+      await invoke('reset_terminal_config_to_defaults')
+    } catch (error) {
+      throw new Error(handleError(error, '重置终端配置失败'))
+    }
+  }
+
+  async detectSystemShells(): Promise<SystemShellsResult> {
+    try {
+      return await invoke<SystemShellsResult>('detect_system_shells')
+    } catch (error) {
+      throw new Error(handleError(error, '检测系统Shell失败'))
+    }
+  }
+
+  async getShellInfo(shellPath: string): Promise<ShellInfo | null> {
+    try {
+      return await invoke<ShellInfo | null>('get_shell_info', { shellPath })
+    } catch (error) {
+      throw new Error(handleError(error, '获取Shell信息失败'))
+    }
+  }
+
+  async updateCursorConfig(cursorConfig: CursorConfig): Promise<void> {
+    try {
+      await invoke('update_cursor_config', { cursorConfig })
+    } catch (error) {
+      throw new Error(handleError(error, '更新光标配置失败'))
     }
   }
 }

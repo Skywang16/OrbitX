@@ -3,7 +3,7 @@
  */
 
 import type { Tool } from '../../types'
-import { analyzeCode, type AnalyzeCodeParams, type AnalysisResult, type CodeSymbol } from '@/api/ai/tool'
+import { aiApi, type AnalyzeCodeParams, type AnalysisResult, type CodeSymbol } from '@/api'
 
 export const analyzeCodeTool: Tool<AnalyzeCodeParams> = {
   name: 'analyze-code',
@@ -40,7 +40,7 @@ export const analyzeCodeTool: Tool<AnalyzeCodeParams> = {
       const { path, recursive = false, include = [], exclude = [] } = params
 
       // 调用 Tauri 后端的 AST 分析命令
-      const result = await analyzeCode({
+      const result = await aiApi.analyzeCode({
         path,
         recursive,
         include,

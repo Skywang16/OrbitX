@@ -5,7 +5,7 @@
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '../../types'
 import { NetworkError, ValidationError } from '../tool-error'
-import { webFetchHeadless } from '@/api/ai/tool'
+import { aiApi } from '@/api'
 
 export interface WebFetchParams {
   url: string
@@ -183,7 +183,7 @@ export class WebFetchTool extends ModifiableTool {
   }) {
     // 使用API中定义的WebFetchResponse类型
 
-    const response = await webFetchHeadless({
+    const response = await aiApi.webFetch({
       url: params.url,
       method: params.method,
       headers: params.headers,

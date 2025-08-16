@@ -6,17 +6,8 @@
 
 import { computed, readonly, ref } from 'vue'
 import { formatLocaleDateTime } from '@/utils/dateFormatter'
-import {
-  getConfig,
-  getConfigFileInfo,
-  getConfigFilePath,
-  openConfigFile,
-  resetConfigToDefaults,
-  saveConfig,
-  updateConfig,
-  validateConfig,
-} from '../api/config'
-import { type AppConfig, type ConfigFileInfo, ConfigApiError } from '../api/config/types'
+import { configApi } from '@/api'
+import { type AppConfig, type ConfigFileInfo, ConfigApiError } from '@/api'
 
 // ============================================================================
 // 工具函数
@@ -93,7 +84,7 @@ export const useConfig = () => {
     loadingState.value.error = null
 
     try {
-      const loadedConfig = await getConfig()
+      const loadedConfig = await configApi.getConfig()
       config.value = loadedConfig
       loadingState.value.lastUpdated = new Date()
     } catch (error) {
@@ -115,7 +106,7 @@ export const useConfig = () => {
     loadingState.value.error = null
 
     try {
-      await updateConfig(newConfig)
+      await configApi.updateConfig(newConfig)
       config.value = newConfig
       loadingState.value.lastUpdated = new Date()
     } catch (error) {
@@ -151,7 +142,7 @@ export const useConfig = () => {
     loadingState.value.error = null
 
     try {
-      await saveConfig()
+      await configApi.saveConfig()
       loadingState.value.lastUpdated = new Date()
     } catch (error) {
       const message = error instanceof ConfigApiError ? error.message : String(error)
@@ -169,7 +160,7 @@ export const useConfig = () => {
     loadingState.value.error = null
 
     try {
-      await validateConfig()
+      await configApi.validateConfig()
     } catch (error) {
       const message = error instanceof ConfigApiError ? error.message : String(error)
       loadingState.value.error = message
@@ -186,7 +177,7 @@ export const useConfig = () => {
     loadingState.value.error = null
 
     try {
-      await resetConfigToDefaults()
+      await configApi.resetToDefaults()
       await loadConfig() // 重新加载配置
     } catch (error) {
       const message = error instanceof ConfigApiError ? error.message : String(error)
@@ -260,7 +251,7 @@ export const useConfigFile = () => {
   // 获取配置文件路径
   const getFilePath = async () => {
     try {
-      const path = await getConfigFilePath()
+      const path = await configApi.getFilePath()
       filePath.value = path
       return path
     } catch (error) {
@@ -277,7 +268,7 @@ export const useConfigFile = () => {
     fileState.value.error = null
 
     try {
-      const info = await getConfigFileInfo()
+      const info = await configApi.getFileInfo()
       fileState.value.info = info
       return info
     } catch (error) {
@@ -293,7 +284,7 @@ export const useConfigFile = () => {
   // 打开配置文件
   const openFile = async () => {
     try {
-      await openConfigFile()
+      await configApi.openFile()
     } catch (error) {
       const message = error instanceof ConfigApiError ? error.message : String(error)
       fileState.value.error = message

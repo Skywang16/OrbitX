@@ -8,8 +8,8 @@
 </template>
 
 <script setup lang="ts">
-  import { completionAPI } from '@/api/completion'
-  import type { CompletionItem, CompletionRequest, CompletionResponse } from '@/api/completion/types'
+  import { completionApi } from '@/api'
+  import type { CompletionRequest, CompletionResponse } from '@/api'
   import { handleError } from '@/utils/errorHandler'
   import { computed, ref, watch } from 'vue'
   import { debounce } from 'lodash-es'
@@ -27,14 +27,14 @@
 
   // Emits
   interface Emits {
-    (e: 'completion-ready', items: CompletionItem[]): void
+    (e: 'completion-ready', items: any[]): void
     (e: 'suggestion-change', suggestion: string): void
   }
 
   const emit = defineEmits<Emits>()
 
   // 状态
-  const completionItems = ref<CompletionItem[]>([])
+  const completionItems = ref<any[]>([])
   const currentSuggestion = ref('')
   const isLoading = ref(false)
   let currentRequest: AbortController | null = null
@@ -177,7 +177,7 @@
 
       try {
         // 尝试调用后端API
-        response = await completionAPI.getCompletions(request)
+        response = await completionApi.getCompletions(request)
       } catch (error: unknown) {
         // 如果是取消错误，直接返回
         if (error instanceof Error && error.message === 'Request was aborted') return

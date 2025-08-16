@@ -4,7 +4,7 @@
  * 使用新的统一存储系统管理 AI 设置
  */
 
-import { ai } from '@/api/ai'
+import { aiApi } from '@/api'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
 
 import { defineStore } from 'pinia'
@@ -46,7 +46,7 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
    * 从API获取模型数据
    */
   const fetchModelsFromAPI = async () => {
-    const models = await ai.getModels()
+    const models = await aiApi.getModels()
     const defaultModelId = models.find(m => m.isDefault)?.id || null
     return { models, defaultModelId }
   }
@@ -149,7 +149,7 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
    */
   const addModel = async (model: AIModelConfig) => {
     // 直接使用AI API添加模型（存储到SQLite）
-    await ai.addModel(model)
+    await aiApi.addModel(model)
 
     // 刷新模型数据，确保所有组件同步更新
     await refreshModels()
@@ -162,7 +162,7 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
    */
   const updateModel = async (modelId: string, updates: Partial<AIModelConfig>) => {
     // 直接使用AI API更新模型（存储到SQLite）
-    await ai.updateModel(modelId, updates)
+    await aiApi.updateModel(modelId, updates)
 
     // 刷新模型数据，确保所有组件同步更新
     await refreshModels()
@@ -174,7 +174,7 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
    */
   const removeModel = async (modelId: string) => {
     // 直接使用AI API删除模型（从SQLite中删除）
-    await ai.removeModel(modelId)
+    await aiApi.removeModel(modelId)
 
     // 刷新模型数据，确保所有组件同步更新
     await refreshModels()
@@ -187,7 +187,7 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
   const setDefaultModel = async (modelId: string | null) => {
     // 使用AI API设置默认模型
     if (modelId) {
-      await ai.setDefaultModel(modelId)
+      await aiApi.setDefaultModel(modelId)
     }
 
     // 刷新模型数据，确保所有组件同步更新

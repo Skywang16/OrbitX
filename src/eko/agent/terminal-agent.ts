@@ -6,7 +6,7 @@
 import { Agent } from '@eko-ai/eko'
 import type { TerminalAgentConfig } from '../types'
 import { getToolsForMode } from '../tools'
-import { terminalAPI } from '@/api/terminal'
+import { terminalApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'
 /**
  * 终端Agent类
@@ -275,7 +275,7 @@ export class TerminalAgent extends Agent {
     try {
       // 如果已经有专属终端，检查是否还存在
       if (this.agentTerminalId !== null) {
-        const terminals = await terminalAPI.listTerminals()
+        const terminals = await terminalApi.listTerminals()
         if (terminals.includes(this.agentTerminalId)) {
           // 激活现有的Agent终端
           await this.activateAgentTerminal(this.agentTerminalId)
@@ -317,7 +317,7 @@ export class TerminalAgent extends Agent {
       // 保持Agent终端干净，不输出欢迎信息
       // 只设置工作目录（如果配置了）
       if (this.config.defaultWorkingDirectory) {
-        await terminalAPI.writeToTerminal({
+        await terminalApi.writeToTerminal({
           paneId: terminalId,
           data: `cd "${this.config.defaultWorkingDirectory}"\n`,
         })
@@ -365,7 +365,7 @@ export class TerminalAgent extends Agent {
           await terminalStore.closeTerminal(agentSession.id)
         } else {
           // 降级到直接关闭后端终端
-          await terminalAPI.closeTerminal(this.agentTerminalId)
+          await terminalApi.closeTerminal(this.agentTerminalId)
         }
       } catch (error) {
         console.warn('关闭Agent专属终端失败:', error)

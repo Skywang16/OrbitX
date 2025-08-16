@@ -16,7 +16,6 @@ import type {
   ShortcutValidationResult,
   ConflictDetectionResult,
   ShortcutStatistics,
-  ShortcutApiError,
 } from './types'
 
 /**
@@ -131,6 +130,7 @@ export class ShortcutsApi {
       throw new Error(`更新快捷键失败: ${error}`)
     }
   }
+
 }
 
 // 导出单例实例

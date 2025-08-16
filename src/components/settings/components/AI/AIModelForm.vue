@@ -3,8 +3,7 @@
   import { reactive, ref } from 'vue'
   import { createMessage } from '@/ui'
   import { handleError } from '@/utils/errorHandler'
-  import { AIAPI } from '@/api/ai'
-
+  import { aiApi } from '@/api'
   interface Props {
     model?: AIModelConfig | null
   }
@@ -16,8 +15,6 @@
 
   const props = defineProps<Props>()
   const emit = defineEmits<Emits>()
-
-  const ai = new AIAPI()
 
   // 表单数据
   const formData = reactive({
@@ -127,7 +124,7 @@
       }
 
       // 调用连接测试 API
-      const isConnected = await ai.testConnectionWithConfig(testConfig)
+      const isConnected = await aiApi.testConnectionWithConfig(testConfig)
 
       if (isConnected) {
         createMessage.success('连接测试成功！')

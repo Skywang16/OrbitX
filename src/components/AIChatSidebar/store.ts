@@ -4,7 +4,7 @@
  * 使用新的会话上下文管理系统，不再向后兼容
  */
 
-import { ai } from '@/api/ai'
+import { aiApi } from '@/api'
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useSessionStore } from '@/stores/session'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
@@ -94,8 +94,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const createConversation = async (title?: string): Promise<void> => {
     try {
       isLoading.value = true
-      const conversationId = await ai.conversations.create(title)
-      const newConversation = await ai.conversations.get(conversationId)
+      const conversationId = await aiApi.createConversation(title)
+      const newConversation = await aiApi.getConversation(conversationId)
       conversations.value.unshift(newConversation)
       currentConversationId.value = newConversation.id
       messageList.value = []
@@ -111,7 +111,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       isLoading.value = true
       currentConversationId.value = conversationId
 
-      const loadedMessages = await ai.conversations.getCompressedContext(conversationId)
+      const loadedMessages = await aiApi.getCompressedContext(conversationId)
 
       if (forceReload) {
         // 强制重新加载：完全替换消息列表
@@ -140,7 +140,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   const deleteConversation = async (conversationId: number): Promise<void> => {
     try {
-      await ai.conversations.delete(conversationId)
+      await aiApi.deleteConversation(conversationId)
       conversations.value = conversations.value.filter(c => c.id !== conversationId)
 
       if (currentConversationId.value === conversationId) {
@@ -154,7 +154,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   const refreshConversations = async (): Promise<void> => {
     try {
-      conversations.value = await ai.conversations.getList()
+      conversations.value = await aiApi.getConversations()
     } catch (err) {
       error.value = handleErrorWithMessage(err, '刷新会话列表失败')
     }
@@ -177,7 +177,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       error.value = null
 
       // 1. 立即保存用户消息（不等待Eko初始化）
-      const userMessageId = await ai.conversations.saveMessage(currentConversationId.value, 'user', content)
+      const userMessageId = await aiApi.saveMessage(currentConversationId.value, 'user', content)
 
       // 2. 立即更新UI显示用户消息（添加到当前消息列表而不是重新加载）
       const userMessage: Message = {
@@ -207,7 +207,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       }
 
       // 5. 获取压缩上下文
-      const contextMessages = await ai.conversations.getCompressedContext(currentConversationId.value)
+      const contextMessages = await aiApi.getCompressedContext(currentConversationId.value)
 
       // 6. 构建完整的prompt（包含上下文，不重复当前用户消息）
       const fullPrompt =
@@ -240,12 +240,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
 
         // 保存到数据库并更新消息ID
-        const messageId = await ai.conversations.saveMessage(currentConversationId.value, 'assistant', response.result)
+        const messageId = await aiApi.saveMessage(currentConversationId.value, 'assistant', response.result)
         tempAIMessage.id = messageId
 
         // 增量持久化：将steps/status/duration落库，保证历史回放一致
         try {
-          await ai.conversations.updateMessageMeta(
+          await aiApi.updateMessageMeta(
             messageId,
             tempAIMessage.steps || [],
             tempAIMessage.status,
@@ -289,7 +289,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       error.value = null
 
       // 1. 截断会话
-      await ai.conversations.truncateConversation(currentConversationId.value, truncateAfterMessageId)
+      await aiApi.truncateConversation(currentConversationId.value, truncateAfterMessageId)
 
       // 2. 发送新消息（复用sendMessage逻辑）
       await sendMessage(newContent)

@@ -5,7 +5,7 @@
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '../../types'
 import { TerminalError, ValidationError } from '../tool-error'
-import { terminalAPI } from '@/api/terminal'
+import { terminalApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'
 import { TerminalAgent } from '../../agent/terminal-agent'
 export interface ShellParams {
@@ -274,7 +274,7 @@ export class ShellTool extends ModifiableTool {
       terminalStore.registerTerminalCallbacks(terminalSession.id, callbacks)
 
       // 执行命令
-      terminalAPI
+      terminalApi
         .writeToTerminal({
           paneId: terminalId,
           data: `${command}\n`,
@@ -305,7 +305,7 @@ export class ShellTool extends ModifiableTool {
     }
 
     // 降级方案：如果没有Agent实例，使用任何可用的终端
-    const terminals = await terminalAPI.listTerminals()
+    const terminals = await terminalApi.listTerminals()
     if (terminals.length === 0) {
       throw new TerminalError('没有可用的终端')
     }

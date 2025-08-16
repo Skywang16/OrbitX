@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { onMounted, ref, watch } from 'vue'
-  import { ai } from '@/api/ai'
+  import { aiApi } from '@/api'
   import { debounce } from 'lodash-es'
 
   // 用户前置提示词
@@ -11,7 +11,7 @@
   const loadUserPrefixPrompt = async () => {
     isLoadingPrefix.value = true
     try {
-      const prompt = await ai.getUserPrefixPrompt()
+      const prompt = await aiApi.getUserPrefixPrompt()
       userPrefixPrompt.value = prompt || ''
     } catch (error) {
       // 加载用户前置提示词失败
@@ -24,7 +24,7 @@
   const saveUserPrefixPrompt = async (value: string) => {
     try {
       const promptToSave = value.trim() || null
-      await ai.setUserPrefixPrompt(promptToSave)
+      await aiApi.setUserPrefixPrompt(promptToSave)
     } catch (error) {
       // 保存用户前置提示词失败
     }

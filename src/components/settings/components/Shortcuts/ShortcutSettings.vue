@@ -79,7 +79,8 @@
   import { ref, computed, onMounted } from 'vue'
   import { handleErrorWithMessage } from '@/utils/errorHandler'
   import { confirm } from '@/ui'
-  import { useShortcuts, useShortcutValidation } from '@/composables/useShortcuts'
+  import { useShortcuts } from '@/composables/useShortcuts'
+  import { useShortcutStore } from '@/stores/shortcuts'
   import { ShortcutList, ShortcutEditor, ShortcutConflictDialog, ShortcutSearchBar, ShortcutStatistics } from './index'
   import type { ShortcutListItem, ShortcutSearchFilter, ShortcutEditorOptions, ShortcutActionEvent } from './types'
   import { ShortcutEditorMode, ShortcutActionType } from './types'
@@ -98,12 +99,11 @@
     removeShortcut,
     updateShortcut,
     resetToDefaults,
-    exportConfig,
-    importConfig,
     clearError,
   } = useShortcuts()
 
-  const { lastConflictDetection } = useShortcutValidation()
+  const store = useShortcutStore()
+  const lastConflictDetection = computed(() => store.state.lastConflictDetection)
 
   // 响应式状态
   const searchFilter = ref<ShortcutSearchFilter>({
@@ -202,9 +202,9 @@
   const hasShortcutConflict = (binding: ShortcutBinding, category: ShortcutCategory): boolean => {
     if (!lastConflictDetection.value) return false
 
-    return lastConflictDetection.value.conflicts.some(conflict =>
+    return lastConflictDetection.value.conflicts.some((conflict: any) =>
       conflict.conflicting_shortcuts.some(
-        cs =>
+        (cs: any) =>
           cs.category === category &&
           cs.binding.key === binding.key &&
           JSON.stringify(cs.binding.modifiers) === JSON.stringify(binding.modifiers)
@@ -292,7 +292,7 @@
 
   const handleExport = async () => {
     try {
-      const configJson = await exportConfig()
+      const configJson = JSON.stringify(config.value, null, 2)
       const blob = new Blob([configJson], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -316,7 +316,8 @@
     if (file) {
       try {
         const text = await file.text()
-        await importConfig(text)
+        const parsedConfig = JSON.parse(text)
+        await store.updateConfig(parsedConfig)
       } catch (error) {
         handleErrorWithMessage(error, '导入配置失败')
       }

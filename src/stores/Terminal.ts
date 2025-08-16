@@ -1,6 +1,5 @@
-import { shell as shellAPI } from '@/api/shell'
-import { terminal as terminalAPI } from '@/api/terminal'
-import type { ShellInfo } from '@/api/shell/types'
+import { shellApi, terminalApi } from '@/api'
+import type { ShellInfo } from '@/api'
 import { useSessionStore } from '@/stores/session'
 import type { TerminalState } from '@/types/storage'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
@@ -218,14 +217,14 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
     try {
       // 先创建后端终端，确保成功后再添加到前端状态
-      const backendId = await terminalAPI.create({
+      const backendId = await terminalApi.createTerminal({
         rows: 24,
         cols: 80,
         cwd: initialDirectory,
       })
 
       // 获取系统默认shell信息
-      const defaultShell = await shellAPI.getDefault()
+      const defaultShell = await shellApi.getDefaultShell()
 
       // 只有在后端创建成功后才创建前端会话记录
       const terminal: RuntimeTerminalState = {
@@ -273,7 +272,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     terminal.backendId = null
 
     try {
-      await terminalAPI.close(backendId)
+      await terminalApi.closeTerminal(backendId)
       console.log(`成功关闭终端后端: ${id} (backendId: ${backendId})`)
     } catch (error) {
       console.error(`关闭终端 '${id}' 的后端失败:`, error)
@@ -340,7 +339,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
 
     try {
-      await terminalAPI.write({ paneId: terminal.backendId, data })
+      await terminalApi.writeToTerminal({ paneId: terminal.backendId, data })
     } catch (error) {
       console.error(`向终端 '${id}' 写入数据失败:`, error)
     }
@@ -357,7 +356,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
 
     try {
-      await terminalAPI.resize({
+      await terminalApi.resizeTerminal({
         paneId: terminalSession.backendId,
         rows,
         cols,
@@ -390,7 +389,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     shellManager.value.error = null
 
     try {
-      const shells = await shellAPI.getAvailable()
+      const shells = await shellApi.getAvailableShells()
       shellManager.value.availableShells = shells as ShellInfo[]
       console.log('已加载可用shell列表:', shells.length, '个')
     } catch (error) {
@@ -423,7 +422,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
     try {
       // 先创建后端终端，确保成功后再添加到前端状态
-      const backendId = await terminalAPI.create({
+      const backendId = await terminalApi.createTerminal({
         rows: 24,
         cols: 80,
         cwd: initialDirectory,
@@ -468,7 +467,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
     try {
       // 先创建后端终端，确保成功后再添加到前端状态
-      const backendId = await terminalAPI.createWithShell({
+      const backendId = await terminalApi.createTerminalWithShell({
         shellName,
         rows: 24,
         cols: 80,
@@ -504,7 +503,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
    */
   const validateShellPath = async (path: string): Promise<boolean> => {
     try {
-      return await shellAPI.validate(path)
+      return await shellApi.validateShellPath(path)
     } catch (error) {
       console.error('验证shell路径失败:', error)
       return false

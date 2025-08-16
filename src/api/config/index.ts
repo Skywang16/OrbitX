@@ -5,19 +5,70 @@
  * - 配置获取和更新
  * - 文件操作
  * - 验证和重置
+ * - 主题管理
  */
 
 import { invoke } from '@/utils/request'
 import { handleError } from '@/utils/errorHandler'
-import type { AppConfig, ConfigFileInfo } from './types'
+import type { AppConfig, ConfigFileInfo, Theme, ThemeInfo, ThemeConfigStatus } from './types'
 
-// 导入主题模块
-export * from './theme'
+/**
+ * 主题管理 API 类
+ */
+class ThemeAPI {
+  async getThemeConfigStatus(): Promise<ThemeConfigStatus> {
+    try {
+      return await invoke<ThemeConfigStatus>('get_theme_config_status')
+    } catch (error) {
+      throw new Error(handleError(error, '获取主题配置状态失败'))
+    }
+  }
+
+  async getCurrentTheme(): Promise<Theme> {
+    try {
+      return await invoke<Theme>('get_current_theme')
+    } catch (error) {
+      throw new Error(handleError(error, '获取当前主题失败'))
+    }
+  }
+
+  async getAvailableThemes(): Promise<ThemeInfo[]> {
+    try {
+      return await invoke<ThemeInfo[]>('get_available_themes')
+    } catch (error) {
+      throw new Error(handleError(error, '获取可用主题失败'))
+    }
+  }
+
+  async setTerminalTheme(name: string): Promise<void> {
+    try {
+      await invoke('set_terminal_theme', { themeName: name })
+    } catch (error) {
+      throw new Error(handleError(error, '设置终端主题失败'))
+    }
+  }
+
+  async setFollowSystemTheme(followSystem: boolean, lightTheme?: string, darkTheme?: string): Promise<void> {
+    try {
+      await invoke('set_follow_system_theme', {
+        followSystem,
+        lightTheme: lightTheme || null,
+        darkTheme: darkTheme || null,
+      })
+    } catch (error) {
+      throw new Error(handleError(error, '设置跟随系统主题失败'))
+    }
+  }
+}
 
 /**
  * 配置 API 接口类
  */
 export class ConfigApi {
+  private themeAPI = new ThemeAPI()
+
+  // ===== 基础配置管理 =====
+
   async getConfig(): Promise<AppConfig> {
     try {
       return await invoke<AppConfig>('get_config')
@@ -50,23 +101,25 @@ export class ConfigApi {
     }
   }
 
-  async resetToDefaults(): Promise<void> {
+  async resetConfig(): Promise<void> {
     try {
-      await invoke('reset_config_to_defaults')
+      await invoke('reset_config')
     } catch (error) {
       throw new Error(handleError(error, '重置配置失败'))
     }
   }
 
-  async getFilePath(): Promise<string> {
+  async reloadConfig(): Promise<void> {
     try {
-      return await invoke<string>('get_config_file_path')
+      await invoke('reload_config')
     } catch (error) {
-      throw new Error(handleError(error, '获取配置文件路径失败'))
+      throw new Error(handleError(error, '重新加载配置失败'))
     }
   }
 
-  async getFileInfo(): Promise<ConfigFileInfo> {
+  // ===== 文件操作 =====
+
+  async getConfigFileInfo(): Promise<ConfigFileInfo> {
     try {
       return await invoke<ConfigFileInfo>('get_config_file_info')
     } catch (error) {
@@ -74,42 +127,56 @@ export class ConfigApi {
     }
   }
 
-  async openFile(): Promise<void> {
+  async exportConfig(): Promise<string> {
     try {
-      await invoke('open_config_file')
+      return await invoke<string>('export_config')
     } catch (error) {
-      throw new Error(handleError(error, '打开配置文件失败'))
+      throw new Error(handleError(error, '导出配置失败'))
     }
   }
 
-  async updateSection<K extends keyof AppConfig>(section: K, updates: Partial<AppConfig[K]>): Promise<void> {
+  async importConfig(configData: string): Promise<void> {
     try {
-      const currentConfig = await this.getConfig()
-      const updatedConfig = {
-        ...currentConfig,
-        [section]: {
-          ...(currentConfig[section] as object),
-          ...(updates as object),
-        },
-      }
-      await this.updateConfig(updatedConfig)
+      await invoke('import_config', { data: configData })
     } catch (error) {
-      throw new Error(handleError(error, '更新配置部分失败'))
+      throw new Error(handleError(error, '导入配置失败'))
     }
   }
 
-  async getSection<K extends keyof AppConfig>(section: K): Promise<AppConfig[K]> {
-    try {
-      const config = await this.getConfig()
-      return config[section]
-    } catch (error) {
-      throw new Error(handleError(error, '获取配置部分失败'))
-    }
+  // ===== 主题管理（代理到 ThemeAPI） =====
+
+  async getThemeConfigStatus(): Promise<ThemeConfigStatus> {
+    return this.themeAPI.getThemeConfigStatus()
+  }
+
+  async getCurrentTheme(): Promise<Theme> {
+    return this.themeAPI.getCurrentTheme()
+  }
+
+  async getAvailableThemes(): Promise<ThemeInfo[]> {
+    return this.themeAPI.getAvailableThemes()
+  }
+
+  async setTerminalTheme(name: string): Promise<void> {
+    return this.themeAPI.setTerminalTheme(name)
+  }
+
+  async setFollowSystemTheme(followSystem: boolean, lightTheme?: string, darkTheme?: string): Promise<void> {
+    return this.themeAPI.setFollowSystemTheme(followSystem, lightTheme, darkTheme)
+  }
+
+  // ===== 便捷访问器 =====
+
+  get theme() {
+    return this.themeAPI
   }
 }
 
 // 导出单例实例
 export const configApi = new ConfigApi()
+
+// 向后兼容的主题 API 导出
+export const themeAPI = configApi.theme
 
 // 导出类型
 export type * from './types'

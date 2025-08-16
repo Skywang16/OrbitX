@@ -48,7 +48,7 @@
 
   // 项目内部模块
   import type { Theme } from '@/types/theme'
-  import { window as windowAPI } from '@/api/window'
+  import { windowApi } from '@/api'
   import { useTheme } from '@/composables/useTheme'
   import { TERMINAL_CONFIG } from '@/constants/terminal'
   import { useTerminalStore } from '@/stores/Terminal'
@@ -313,7 +313,7 @@
    */
   const initPlatformInfo = async () => {
     try {
-      isMac.value = await windowAPI.isMac()
+      isMac.value = await windowApi.isMac()
     } catch {
       // 降级到浏览器检测
       isMac.value = navigator.platform.toUpperCase().indexOf('MAC') >= 0
@@ -710,9 +710,9 @@
         console.log(`📁 [Terminal] 恢复工作目录: ${terminal.cwd}`)
       } else {
         // 如果没有保存的工作目录，使用系统默认
-        windowAPI
-          .getHomeDir()
-          .then(dir => {
+        windowApi
+          .getHomeDirectory()
+          .then((dir: any) => {
             workingDirectory.value = dir
           })
           .catch(() => {

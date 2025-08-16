@@ -1,4 +1,4 @@
-import { completionAPI } from '@/api'
+import { completionApi } from '@/api'
 
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useAIChatStore } from '@/components/AIChatSidebar/store'
@@ -83,7 +83,7 @@ const initializeSettings = async () => {
 const initializeServices = async () => {
   try {
     // 初始化补全引擎
-    await completionAPI.initEngine()
+    await completionApi.initEngine()
 
     // 初始化AI聊天服务（包括Eko实例）
     const aiChatStore = useAIChatStore()
