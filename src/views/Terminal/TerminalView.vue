@@ -51,7 +51,6 @@
     terminalStore.writeToTerminal(terminalStore.activeTerminalId, processedPath)
   }
 
-  // 监听终端状态变化，同步到标签管理器
   watch(
     () => terminalStore.terminals,
     () => {
@@ -60,19 +59,8 @@
     { deep: true }
   )
 
-  watch(
-    () => terminalStore.activeTerminalId,
-    newActiveId => {
-      if (newActiveId && tabManagerStore.activeTabId !== newActiveId) {
-        tabManagerStore.setActiveTab(newActiveId)
-      }
-    }
-  )
-
   // 当主应用组件挂载时，初始化应用状态
   onMounted(async () => {
-    // 状态恢复和初始化逻辑已移至 main.ts，此处不再重复执行
-
     // 统一的文件处理函数
     const handleAppIconFileDrop = (event: { payload: string }) => {
       handleFilePath(event.payload, 'app-icon')
@@ -123,16 +111,12 @@
         console.log('🤖 [TerminalView] 保存AI聊天状态')
         aiChatStore.saveToSessionState()
 
-        console.log('💾 [TerminalView] 保存会话状态')
         await terminalStore.saveSessionState()
-        console.log('✅ [TerminalView] 状态保存完成')
       } catch (error) {
         console.error('❌ [TerminalView] 状态保存失败:', error)
         // 保存失败不影响应用关闭
       }
     })
-
-    console.log('🧹 [TerminalView] 清理完成，应用可以安全关闭')
   })
 </script>
 

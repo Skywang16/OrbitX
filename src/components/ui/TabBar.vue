@@ -32,7 +32,8 @@
   const getTabClass = (tab: TabItem): string[] => {
     const classes = ['tab']
 
-    if (tab.isActive) {
+    // 使用activeTabId作为激活状态的唯一判断依据，确保状态一致性
+    if (tab.id === props.activeTabId) {
       classes.push('active')
     }
 
@@ -284,9 +285,10 @@
     border-radius: var(--border-radius-md);
     color: var(--text-400);
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
     border: 1px solid transparent;
+    will-change: background-color, border-color, color;
   }
 
   .tab:hover {
