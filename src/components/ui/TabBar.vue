@@ -50,7 +50,6 @@
   // 简化的标签宽度配置
   const MIN_TAB_WIDTH = 60
   const MAX_TAB_WIDTH = 200
-  const ADD_BTN_WIDTH = 32
 
   // 简化的标签宽度计算
   const tabWidth = computed(() => {
@@ -58,7 +57,14 @@
     if (tabCount === 0) return MAX_TAB_WIDTH
 
     const containerWidth = tabBarWrapperRef.value?.clientWidth || 400
-    const availableWidth = containerWidth - ADD_BTN_WIDTH - 24 // 24px for padding
+
+    // 计算实际占用空间：
+    // - padding-left: 6px (--spacing-sm)
+    // - gap: 4px (--spacing-xs)
+    // - add按钮: 28px + margin(4px或6px) = 32px-34px
+    // - 每个tab的右边距: 6px * tabCount
+    const paddingAndGaps = 6 + 4 + 34 + 6 * tabCount
+    const availableWidth = containerWidth - paddingAndGaps
     const widthPerTab = availableWidth / tabCount
 
     return Math.max(MIN_TAB_WIDTH, Math.min(MAX_TAB_WIDTH, widthPerTab))
@@ -275,7 +281,6 @@
   }
 
   .tab.active {
-    background-color: var(--bg-200);
     color: var(--text-200);
     border-color: var(--border-300);
     box-shadow: none; /* 仅移除阴影，其他保持不变 */
@@ -387,7 +392,7 @@
     height: 16px;
     padding: 0;
     border: none;
-    background-color: transparent;
+    background: none;
     color: var(--text-400);
     border-radius: var(--border-radius-sm);
     transition: all 0.2s ease;
@@ -403,7 +408,6 @@
   }
 
   .close-btn:hover {
-    background-color: var(--color-hover);
     color: var(--text-200);
   }
 
@@ -414,7 +418,7 @@
     width: 28px;
     height: var(--titlebar-element-height);
     border: none;
-    background-color: transparent;
+    background: none;
     color: var(--text-400);
     border-radius: var(--border-radius-md);
     cursor: pointer;
@@ -429,13 +433,5 @@
 
   .add-tab-btn.fixed {
     margin-right: var(--spacing-sm);
-  }
-
-  .add-tab-btn:hover {
-    background-color: var(--color-hover);
-    color: var(--text-200);
-    opacity: 1;
-    transform: scale(1.05);
-    box-shadow: var(--shadow-sm);
   }
 </style>

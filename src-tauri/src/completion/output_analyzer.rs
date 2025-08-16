@@ -6,7 +6,7 @@
 
 use crate::completion::providers::ContextAwareProvider;
 use crate::completion::smart_extractor::SmartExtractor;
-use crate::mux::{ConfigManager, TerminalResult, TerminalError};
+use crate::mux::{ConfigManager, TerminalError, TerminalResult};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -33,8 +33,6 @@ impl PaneBufferEntry {
     fn access(&mut self) {
         self.last_access = Instant::now();
     }
-
-
 
     fn is_stale(&self, max_age: Duration) -> bool {
         self.last_access.elapsed() > max_age
@@ -67,7 +65,9 @@ impl OutputAnalyzer {
     }
 
     /// 安全获取缓冲区锁，处理中毒情况
-    fn get_buffer_lock(&self) -> TerminalResult<std::sync::MutexGuard<HashMap<u32, PaneBufferEntry>>> {
+    fn get_buffer_lock(
+        &self,
+    ) -> TerminalResult<std::sync::MutexGuard<'_, HashMap<u32, PaneBufferEntry>>> {
         match self.output_buffer.lock() {
             Ok(guard) => Ok(guard),
             Err(poisoned) => {
@@ -78,7 +78,9 @@ impl OutputAnalyzer {
     }
 
     /// 安全获取上下文提供者锁，处理中毒情况
-    fn get_context_provider_lock(&self) -> TerminalResult<std::sync::MutexGuard<ContextAwareProvider>> {
+    fn get_context_provider_lock(
+        &self,
+    ) -> TerminalResult<std::sync::MutexGuard<'_, ContextAwareProvider>> {
         match self.context_provider.lock() {
             Ok(guard) => Ok(guard),
             Err(poisoned) => {
@@ -213,7 +215,9 @@ impl OutputAnalyzer {
     fn maybe_cleanup_stale_buffers(&self) -> TerminalResult<()> {
         let config = ConfigManager::get_config();
         let should_cleanup = {
-            let cleanup_guard = self.last_global_cleanup.lock()
+            let cleanup_guard = self
+                .last_global_cleanup
+                .lock()
                 .map_err(|_| TerminalError::concurrency("获取清理时间锁", "锁获取失败"))?;
             cleanup_guard.elapsed() > config.cleanup_interval()
         };
@@ -253,7 +257,9 @@ impl OutputAnalyzer {
 
         // 更新清理时间
         {
-            let mut cleanup_guard = self.last_global_cleanup.lock()
+            let mut cleanup_guard = self
+                .last_global_cleanup
+                .lock()
                 .map_err(|_| TerminalError::concurrency("获取清理时间锁", "锁获取失败"))?;
             *cleanup_guard = Instant::now();
         }
@@ -400,7 +406,11 @@ impl OutputAnalyzer {
         entry.content = content;
         entry.access();
 
-        debug!("设置面板 {} 缓冲区内容，长度: {}", pane_id, entry.content.len());
+        debug!(
+            "设置面板 {} 缓冲区内容，长度: {}",
+            pane_id,
+            entry.content.len()
+        );
         Ok(())
     }
 
@@ -425,7 +435,11 @@ impl OutputAnalyzer {
         let total_size: usize = buffer.values().map(|entry| entry.content.len()).sum();
         stats.insert("total_buffer_size".to_string(), total_size);
 
-        let avg_size = if buffer.is_empty() { 0 } else { total_size / buffer.len() };
+        let avg_size = if buffer.is_empty() {
+            0
+        } else {
+            total_size / buffer.len()
+        };
         stats.insert("average_buffer_size".to_string(), avg_size);
 
         Ok(stats)

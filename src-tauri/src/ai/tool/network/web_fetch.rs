@@ -74,7 +74,19 @@ pub async fn web_fetch_headless(request: WebFetchRequest) -> Result<WebFetchResp
     };
 
     // 构建 HTTP 客户端
-    let mut client_builder = reqwest::Client::builder()
+    #[cfg(debug_assertions)]
+    let client_builder = reqwest::Client::builder()
+        .timeout(Duration::from_millis(request.timeout.unwrap_or(10000)))
+        .redirect(if request.follow_redirects.unwrap_or(true) {
+            reqwest::redirect::Policy::limited(10)
+        } else {
+            reqwest::redirect::Policy::none()
+        })
+        .user_agent("Eko-Agent/1.0")
+        .danger_accept_invalid_certs(true);
+
+    #[cfg(not(debug_assertions))]
+    let client_builder = reqwest::Client::builder()
         .timeout(Duration::from_millis(request.timeout.unwrap_or(10000)))
         .redirect(if request.follow_redirects.unwrap_or(true) {
             reqwest::redirect::Policy::limited(10)
@@ -82,12 +94,6 @@ pub async fn web_fetch_headless(request: WebFetchRequest) -> Result<WebFetchResp
             reqwest::redirect::Policy::none()
         })
         .user_agent("Eko-Agent/1.0");
-
-    // 禁用证书验证（用于开发环境）
-    #[cfg(debug_assertions)]
-    {
-        client_builder = client_builder.danger_accept_invalid_certs(true);
-    }
 
     let client = match client_builder.build() {
         Ok(client) => client,

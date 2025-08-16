@@ -239,12 +239,18 @@ pub async fn detect_system_shells(
     };
 
     // 获取用户当前Shell
-    let user_shell = std::env::var("SHELL")
-        .unwrap_or_else(|_| default_shell.clone())
-        .split('/')
-        .last()
-        .unwrap_or(&default_shell)
-        .to_string();
+    let user_shell = if cfg!(windows) {
+        // Windows平台通常没有SHELL环境变量，使用默认shell
+        default_shell.clone()
+    } else {
+        // Unix平台从SHELL环境变量获取
+        std::env::var("SHELL")
+            .unwrap_or_else(|_| default_shell.clone())
+            .split('/')
+            .last()
+            .unwrap_or(&default_shell)
+            .to_string()
+    };
 
     info!(
         "检测到 {} 个可用Shell: {:?}",

@@ -67,6 +67,21 @@
       "providerShortName": null,
       "signingIdentity": null,
       "minimumSystemVersion": "10.13"
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": null,
+      "tsp": false,
+      "wix": {
+        "language": "en-US",
+        "template": null
+      },
+      "nsis": {
+        "displayLanguageSelector": false,
+        "languages": ["English"],
+        "template": null
+      }
     }
   }
 }

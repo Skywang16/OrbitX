@@ -291,7 +291,8 @@ impl ShellManager {
             self.stats.available_shells = entry.shells.len();
             self.stats.default_shell = Some(entry.default_shell.clone());
             self.stats.last_detection_time = Some(
-                entry.timestamp
+                entry
+                    .timestamp
                     .duration_since(UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
@@ -365,7 +366,8 @@ impl ShellManager {
 
         // 重新获取
         let cache_guard = cache.lock().unwrap();
-        cache_guard.as_ref()
+        cache_guard
+            .as_ref()
             .map(|entry| entry.default_shell.clone())
             .unwrap_or_else(|| Self::get_default_shell_internal())
     }
@@ -433,19 +435,45 @@ impl ShellManager {
 
         // 尝试从PATH环境变量中查找其他shell
         if let Ok(path_env) = std::env::var("PATH") {
-            for path_dir in path_env.split(':') {
-                for shell_name in &["zsh", "bash", "fish", "tcsh", "csh"] {
-                    let shell_path = format!("{}/{}", path_dir, shell_name);
-                    if Self::validate_shell(&shell_path) && !shells.iter().any(|s| s.path == shell_path) {
-                        let display_name = match *shell_name {
+            // 使用平台特定的PATH分隔符
+            let path_separator = if cfg!(windows) { ';' } else { ':' };
+            for path_dir in path_env.split(path_separator) {
+                // 根据平台选择要搜索的shell
+                let shell_names = if cfg!(windows) {
+                    &["bash.exe", "powershell.exe", "cmd.exe", "pwsh.exe"][..]
+                } else {
+                    &["zsh", "bash", "fish", "tcsh", "csh"][..]
+                };
+
+                for shell_name in shell_names {
+                    // 使用PathBuf来正确处理路径连接
+                    let shell_path = std::path::PathBuf::from(path_dir)
+                        .join(shell_name)
+                        .to_string_lossy()
+                        .to_string();
+
+                    if Self::validate_shell(&shell_path)
+                        && !shells.iter().any(|s| s.path == shell_path)
+                    {
+                        // 获取不带扩展名的shell名称用于匹配
+                        let base_name = if cfg!(windows) {
+                            shell_name.strip_suffix(".exe").unwrap_or(shell_name)
+                        } else {
+                            shell_name
+                        };
+
+                        let display_name = match base_name {
                             "zsh" => "Zsh",
                             "bash" => "Bash",
                             "fish" => "Fish",
                             "tcsh" => "Tcsh",
                             "csh" => "Csh",
+                            "powershell" => "PowerShell",
+                            "pwsh" => "PowerShell Core",
+                            "cmd" => "Command Prompt",
                             _ => shell_name,
                         };
-                        shells.push(ShellInfo::new(shell_name, &shell_path, display_name));
+                        shells.push(ShellInfo::new(base_name, &shell_path, display_name));
                     }
                 }
             }
@@ -467,7 +495,11 @@ impl ShellManager {
             // Windows平台的默认shell检测
             let windows_shells = [
                 ("bash", "C:\\Program Files\\Git\\bin\\bash.exe", "Git Bash"),
-                ("powershell", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "PowerShell"),
+                (
+                    "powershell",
+                    "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                    "PowerShell",
+                ),
                 ("cmd", "C:\\Windows\\System32\\cmd.exe", "Command Prompt"),
             ];
 
@@ -543,7 +575,10 @@ impl ShellManager {
         let exists = path_obj.exists();
         let is_executable = path_obj.is_file();
 
-        debug!("验证shell路径: {} -> exists: {}, executable: {}", path, exists, is_executable);
+        debug!(
+            "验证shell路径: {} -> exists: {}, executable: {}",
+            path, exists, is_executable
+        );
         exists && is_executable
     }
 
@@ -602,7 +637,8 @@ impl ShellManager {
             stats.available_shells = entry.shells.len();
             stats.default_shell = Some(entry.default_shell.clone());
             stats.last_detection_time = Some(
-                entry.timestamp
+                entry
+                    .timestamp
                     .duration_since(UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),

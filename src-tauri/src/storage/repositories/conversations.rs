@@ -17,6 +17,7 @@ use std::sync::Arc;
 
 /// 会话
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Conversation {
     pub id: Option<i64>,
     pub title: String,
@@ -55,15 +56,17 @@ impl RowMapper<Conversation> for Conversation {
 
 /// 消息
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Message {
     pub id: Option<i64>,
     pub conversation_id: i64,
     pub role: String,
     pub content: String,
+    #[serde(rename = "steps")]
     pub steps_json: Option<String>,
     pub status: Option<String>,
     pub duration_ms: Option<i64>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: String,
 }
 
 impl Message {
@@ -76,13 +79,14 @@ impl Message {
             steps_json: None,
             status: None,
             duration_ms: None,
-            created_at: Utc::now(),
+            created_at: Utc::now().to_rfc3339(),
         }
     }
 }
 
 impl RowMapper<Message> for Message {
     fn from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<Self> {
+        let created_at_dt: DateTime<Utc> = row.try_get("created_at")?;
         Ok(Self {
             id: Some(row.try_get("id")?),
             conversation_id: row.try_get("conversation_id")?,
@@ -91,7 +95,7 @@ impl RowMapper<Message> for Message {
             steps_json: row.try_get("steps_json")?,
             status: row.try_get("status")?,
             duration_ms: row.try_get("duration_ms")?,
-            created_at: row.try_get("created_at")?,
+            created_at: created_at_dt.to_rfc3339(),
         })
     }
 }
@@ -107,10 +111,23 @@ impl ConversationRepository {
     }
 
     /// 获取会话列表
-    pub async fn find_conversations(&self, limit: Option<i64>, offset: Option<i64>) -> AppResult<Vec<Conversation>> {
+    pub async fn find_conversations(
+        &self,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> AppResult<Vec<Conversation>> {
         let mut builder = SafeQueryBuilder::new("ai_conversations")
-            .select(&["id", "title", "message_count", "last_message_preview", "created_at", "updated_at"])
-            .order_by(crate::storage::query::QueryOrder::Desc("updated_at".to_string()));
+            .select(&[
+                "id",
+                "title",
+                "message_count",
+                "last_message_preview",
+                "created_at",
+                "updated_at",
+            ])
+            .order_by(crate::storage::query::QueryOrder::Desc(
+                "updated_at".to_string(),
+            ));
 
         if let Some(limit) = limit {
             builder = builder.limit(limit);
@@ -147,11 +164,13 @@ impl ConversationRepository {
 
     /// 更新会话标题
     pub async fn update_title(&self, conversation_id: i64, title: &str) -> AppResult<()> {
-        sqlx::query("UPDATE ai_conversations SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-            .bind(title)
-            .bind(conversation_id)
-            .execute(self.database.pool())
-            .await?;
+        sqlx::query(
+            "UPDATE ai_conversations SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(title)
+        .bind(conversation_id)
+        .execute(self.database.pool())
+        .await?;
 
         Ok(())
     }
@@ -170,13 +189,36 @@ impl ConversationRepository {
     /// 保存消息
     pub async fn save_message(&self, message: &Message) -> AppResult<i64> {
         let (sql, params) = InsertBuilder::new("ai_messages")
-            .set("conversation_id", Value::Number(message.conversation_id.into()))
+            .set(
+                "conversation_id",
+                Value::Number(message.conversation_id.into()),
+            )
             .set("role", Value::String(message.role.clone()))
             .set("content", Value::String(message.content.clone()))
-            .set("steps_json", message.steps_json.as_ref().map(|s| Value::String(s.clone())).unwrap_or(Value::Null))
-            .set("status", message.status.as_ref().map(|s| Value::String(s.clone())).unwrap_or(Value::Null))
-            .set("duration_ms", message.duration_ms.map(|d| Value::Number(d.into())).unwrap_or(Value::Null))
-            .set("created_at", Value::String(message.created_at.to_rfc3339()))
+            .set(
+                "steps_json",
+                message
+                    .steps_json
+                    .as_ref()
+                    .map(|s| Value::String(s.clone()))
+                    .unwrap_or(Value::Null),
+            )
+            .set(
+                "status",
+                message
+                    .status
+                    .as_ref()
+                    .map(|s| Value::String(s.clone()))
+                    .unwrap_or(Value::Null),
+            )
+            .set(
+                "duration_ms",
+                message
+                    .duration_ms
+                    .map(|d| Value::Number(d.into()))
+                    .unwrap_or(Value::Null),
+            )
+            .set("created_at", Value::String(message.created_at.clone()))
             .build()?;
 
         let mut query_builder = sqlx::query(&sql);
@@ -200,11 +242,30 @@ impl ConversationRepository {
     }
 
     /// 获取会话消息
-    pub async fn get_messages(&self, conversation_id: i64, limit: Option<i64>, offset: Option<i64>) -> AppResult<Vec<Message>> {
+    pub async fn get_messages(
+        &self,
+        conversation_id: i64,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> AppResult<Vec<Message>> {
         let mut builder = SafeQueryBuilder::new("ai_messages")
-            .select(&["id", "conversation_id", "role", "content", "steps_json", "status", "duration_ms", "created_at"])
-            .where_condition(QueryCondition::Eq("conversation_id".to_string(), Value::Number(conversation_id.into())))
-            .order_by(crate::storage::query::QueryOrder::Asc("created_at".to_string()));
+            .select(&[
+                "id",
+                "conversation_id",
+                "role",
+                "content",
+                "steps_json",
+                "status",
+                "duration_ms",
+                "created_at",
+            ])
+            .where_condition(QueryCondition::Eq(
+                "conversation_id".to_string(),
+                Value::Number(conversation_id.into()),
+            ))
+            .order_by(crate::storage::query::QueryOrder::Asc(
+                "created_at".to_string(),
+            ));
 
         if let Some(limit) = limit {
             builder = builder.limit(limit);
@@ -240,7 +301,11 @@ impl ConversationRepository {
     }
 
     /// 删除指定消息ID之后的所有消息
-    pub async fn delete_messages_after(&self, conversation_id: i64, after_message_id: i64) -> AppResult<u64> {
+    pub async fn delete_messages_after(
+        &self,
+        conversation_id: i64,
+        after_message_id: i64,
+    ) -> AppResult<u64> {
         let result = sqlx::query("DELETE FROM ai_messages WHERE conversation_id = ? AND id > ?")
             .bind(conversation_id)
             .bind(after_message_id)
@@ -259,7 +324,7 @@ impl ConversationRepository {
         duration_ms: Option<i64>,
     ) -> AppResult<()> {
         sqlx::query(
-            "UPDATE ai_messages SET steps_json = ?, status = ?, duration_ms = ? WHERE id = ?"
+            "UPDATE ai_messages SET steps_json = ?, status = ?, duration_ms = ? WHERE id = ?",
         )
         .bind(steps_json)
         .bind(status)
@@ -276,7 +341,10 @@ impl ConversationRepository {
 impl Repository<Conversation> for ConversationRepository {
     async fn find_by_id(&self, id: i64) -> AppResult<Option<Conversation>> {
         let (sql, _params) = SafeQueryBuilder::new("ai_conversations")
-            .where_condition(QueryCondition::Eq("id".to_string(), Value::Number(id.into())))
+            .where_condition(QueryCondition::Eq(
+                "id".to_string(),
+                Value::Number(id.into()),
+            ))
             .build()?;
 
         let row = sqlx::query(&sql)
@@ -298,7 +366,10 @@ impl Repository<Conversation> for ConversationRepository {
         let (sql, params) = InsertBuilder::new("ai_conversations")
             .set("title", Value::String(entity.title.clone()))
             .set("message_count", Value::Number(entity.message_count.into()))
-            .set("last_message_preview", Value::String(entity.last_message_preview.clone()))
+            .set(
+                "last_message_preview",
+                Value::String(entity.last_message_preview.clone()),
+            )
             .set("created_at", Value::String(entity.created_at.to_rfc3339()))
             .set("updated_at", Value::String(entity.updated_at.to_rfc3339()))
             .build()?;

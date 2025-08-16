@@ -207,7 +207,8 @@ impl WindowConfigManager {
 
     /// 获取平台信息，如果缓存中没有则检测并缓存
     pub fn get_platform_info(&mut self) -> &PlatformInfo {
-        self.platform_info.get_or_insert_with(Self::detect_platform_info)
+        self.platform_info
+            .get_or_insert_with(Self::detect_platform_info)
     }
 
     /// 检测平台信息
@@ -671,13 +672,23 @@ pub async fn get_home_directory(
 
     debug!("从系统获取家目录");
 
-    // 尝试获取家目录
-    let home_dir = env::var("HOME")
-        .or_else(|_| {
+    // 尝试获取家目录，优先使用平台特定的环境变量
+    let home_dir = if cfg!(windows) {
+        // Windows平台优先使用USERPROFILE，然后是HOME
+        env::var("USERPROFILE")
+            .or_else(|_| env::var("HOME"))
+            .or_else(|_| {
+                // 如果都不存在，尝试获取当前目录
+                env::current_dir().map(|p| p.to_string_lossy().to_string())
+            })
+    } else {
+        // Unix平台使用HOME
+        env::var("HOME").or_else(|_| {
             // 如果HOME环境变量不存在，尝试获取当前目录
             env::current_dir().map(|p| p.to_string_lossy().to_string())
         })
-        .map_err(|e| format!("目录操作失败: 获取家目录失败: {}", e))?;
+    }
+    .map_err(|e| format!("目录操作失败: 获取家目录失败: {}", e))?;
 
     debug!("系统家目录: {}", home_dir);
 

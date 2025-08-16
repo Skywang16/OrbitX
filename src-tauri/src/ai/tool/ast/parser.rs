@@ -5,7 +5,6 @@ use oxc_parser::Parser as OxcParser;
 use oxc_span::SourceType;
 use std::path::Path;
 use syn::visit::Visit as SynVisit;
-use tree_sitter::{Language, Node, Parser as TreeSitterParser, Tree};
 
 // 使用 tree-sitter crate 提供的语言
 
@@ -119,115 +118,6 @@ impl AstParser {
         Err(AstError::UnsupportedLanguage(
             "Python analysis temporarily disabled".to_string(),
         ))
-    }
-
-    async fn analyze_with_tree_sitter(
-        &self,
-        content: &str,
-        file_path: &str,
-        language: &str,
-        lang: Language,
-    ) -> AstResult<CodeAnalysis> {
-        let mut parser = TreeSitterParser::new();
-        parser
-            .set_language(&lang)
-            .map_err(|e| AstError::ParseError(format!("设置语言失败: {}", e)))?;
-
-        let tree = parser
-            .parse(content, None)
-            .ok_or_else(|| AstError::ParseError("解析失败".to_string()))?;
-
-        let mut symbols = Vec::new();
-        let mut imports = Vec::new();
-        let mut exports = Vec::new();
-
-        self.extract_symbols_from_tree(
-            &tree,
-            content.as_bytes(),
-            &mut symbols,
-            &mut imports,
-            &mut exports,
-            file_path,
-            language,
-        );
-
-        Ok(CodeAnalysis {
-            file: file_path.to_string(),
-            language: language.to_string(),
-            symbols,
-            imports,
-            exports,
-        })
-    }
-
-    fn extract_symbols_from_tree(
-        &self,
-        tree: &Tree,
-        source: &[u8],
-        symbols: &mut Vec<CodeSymbol>,
-        imports: &mut Vec<String>,
-        exports: &mut Vec<String>,
-        file_path: &str,
-        language: &str,
-    ) {
-        let root_node = tree.root_node();
-        self.walk_tree_node(
-            root_node, source, symbols, imports, exports, file_path, language,
-        );
-    }
-
-    fn walk_tree_node(
-        &self,
-        node: Node,
-        source: &[u8],
-        symbols: &mut Vec<CodeSymbol>,
-        imports: &mut Vec<String>,
-        exports: &mut Vec<String>,
-        file_path: &str,
-        language: &str,
-    ) {
-        match node.kind() {
-            "function_definition" | "function_declaration" => {
-                if let Some(name_node) = node.child_by_field_name("name") {
-                    if let Ok(name) = name_node.utf8_text(source) {
-                        symbols.push(CodeSymbol {
-                            name: name.to_string(),
-                            symbol_type: SymbolType::Function,
-                            line: node.start_position().row as u32 + 1,
-                            column: node.start_position().column as u32,
-                            file: file_path.to_string(),
-                        });
-                    }
-                }
-            }
-            "class_definition" | "class_declaration" => {
-                if let Some(name_node) = node.child_by_field_name("name") {
-                    if let Ok(name) = name_node.utf8_text(source) {
-                        symbols.push(CodeSymbol {
-                            name: name.to_string(),
-                            symbol_type: SymbolType::Class,
-                            line: node.start_position().row as u32 + 1,
-                            column: node.start_position().column as u32,
-                            file: file_path.to_string(),
-                        });
-                    }
-                }
-            }
-            "import_statement" | "import_from_statement" => {
-                if let Ok(import_text) = node.utf8_text(source) {
-                    imports.push(import_text.to_string());
-                }
-            }
-            _ => {}
-        }
-
-        for i in 0..node.child_count() {
-            if let Some(child) = node.child(i) {
-                self.walk_tree_node(
-                    child, source, symbols, imports, exports, file_path, language,
-                );
-            }
-        }
     }
 }
 
