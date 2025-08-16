@@ -13,7 +13,7 @@ import { createCallback, createSidebarCallback } from './core/callbacks'
 import { TerminalAgent, createTerminalAgent } from './agent/terminal-agent'
 
 // 导入工具
-import { allTools } from './tools'
+import { getAllTools } from './tools'
 
 // 导入类型
 import type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult } from './types'
@@ -274,8 +274,9 @@ export {
   createSidebarCallback,
 
   // 工具
-  allTools,
-  allTools as terminalTools, // 向后兼容性别名
+  getAllTools,
+  getAllTools as allTools, // 向后兼容性别名
+  getAllTools as terminalTools, // 向后兼容性别名
 
   // 配置
   getEkoConfig,
