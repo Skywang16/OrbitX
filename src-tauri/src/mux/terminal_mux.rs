@@ -593,21 +593,28 @@ impl TerminalMux {
             TerminalResizedEvent,
         };
 
+        fn safe_serialize<T: serde::Serialize>(event: &T, fallback: &str) -> String {
+            serde_json::to_string(event).unwrap_or_else(|e| {
+                tracing::error!("JSON序列化失败: {}, 使用默认值", e);
+                fallback.to_string()
+            })
+        }
+
         match notification {
             MuxNotification::PaneOutput { pane_id, data } => {
                 let event = TerminalOutputEvent {
                     pane_id: *pane_id,
                     data: String::from_utf8_lossy(data).to_string(),
                 };
-                ("terminal_output", serde_json::to_string(&event).unwrap())
+                ("terminal_output", safe_serialize(&event, "{\"pane_id\":0,\"data\":\"\"}"))
             }
             MuxNotification::PaneAdded(pane_id) => {
                 let event = TerminalCreatedEvent { pane_id: *pane_id };
-                ("terminal_created", serde_json::to_string(&event).unwrap())
+                ("terminal_created", safe_serialize(&event, "{\"pane_id\":0}"))
             }
             MuxNotification::PaneRemoved(pane_id) => {
                 let event = TerminalClosedEvent { pane_id: *pane_id };
-                ("terminal_closed", serde_json::to_string(&event).unwrap())
+                ("terminal_closed", safe_serialize(&event, "{\"pane_id\":0}"))
             }
             MuxNotification::PaneResized { pane_id, size } => {
                 let event = TerminalResizedEvent {
@@ -615,14 +622,14 @@ impl TerminalMux {
                     rows: size.rows,
                     cols: size.cols,
                 };
-                ("terminal_resized", serde_json::to_string(&event).unwrap())
+                ("terminal_resized", safe_serialize(&event, "{\"pane_id\":0,\"rows\":24,\"cols\":80}"))
             }
             MuxNotification::PaneExited { pane_id, exit_code } => {
                 let event = TerminalExitEvent {
                     pane_id: *pane_id,
                     exit_code: *exit_code,
                 };
-                ("terminal_exit", serde_json::to_string(&event).unwrap())
+                ("terminal_exit", safe_serialize(&event, "{\"pane_id\":0,\"exit_code\":0}"))
             }
         }
     }

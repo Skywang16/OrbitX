@@ -8,7 +8,7 @@
 // 核心模块
 pub mod cache;
 pub mod coordinator;
-pub mod filesystem;
+// pub mod filesystem; // 已移动到 ai::tool::filesystem
 pub mod messagepack;
 pub mod paths;
 pub mod recovery;
@@ -20,19 +20,17 @@ pub mod query;
 pub mod repositories;
 
 // 命令和脚本
-pub mod commands;
+// pub mod commands; // 已移动到 ai::tool::storage
 pub mod sql_scripts;
-
-
 
 // 重新导出核心类型和功能
 pub use cache::UnifiedCache;
 pub use coordinator::{StorageCoordinator, StorageCoordinatorOptions};
 pub use database::{DatabaseManager, DatabaseOptions};
-pub use filesystem::{FileSystemManager, FileSystemOptions};
+// pub use filesystem::{FileSystemManager, FileSystemOptions}; // 已移动到 ai::tool::filesystem
 pub use messagepack::{MessagePackManager, MessagePackOptions};
 pub use paths::{StoragePaths, StoragePathsBuilder};
-pub use query::{SafeQueryBuilder, QueryCondition, QueryOrder};
+pub use query::{QueryCondition, QueryOrder, SafeQueryBuilder};
 pub use repositories::*;
 pub use types::{SessionState, StorageLayer};
 

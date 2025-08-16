@@ -86,6 +86,18 @@ rand = "0.8"
 # 系统信息
 os_info = "3.8"
 
+# AST 解析相关依赖 - 使用最佳技术选型
+oxc_parser = "0.41"
+oxc_ast = "0.41"
+oxc_span = "0.41"
+oxc_allocator = "0.41"
+oxc_syntax = "0.41"
+tree-sitter = "0.24"
+tree-sitter-python = "0.23"
+tree-sitter-rust = "0.23"
+syn = { version = "2.0", features = ["full", "visit"] }
+quote = "1.0"
+
 [dev-dependencies]
 tempfile = "3.8"
 tokio-test = "0.4"

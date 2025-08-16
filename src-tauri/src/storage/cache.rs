@@ -75,13 +75,9 @@ impl UnifiedCache {
     /// 批量获取
     pub async fn get_batch(&self, keys: &[String]) -> HashMap<String, Value> {
         let data = self.data.read().await;
-        let mut result = HashMap::new();
-        for key in keys {
-            if let Some(value) = data.get(key) {
-                result.insert(key.clone(), value.clone());
-            }
-        }
-        result
+        keys.iter()
+            .filter_map(|key| data.get(key).map(|value| (key.clone(), value.clone())))
+            .collect()
     }
 }
 

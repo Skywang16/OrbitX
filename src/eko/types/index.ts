@@ -287,7 +287,21 @@ export interface EkoRunResult {
  */
 export interface CodeSymbol {
   name: string
-  type: 'function' | 'class' | 'variable' | 'interface' | 'type'
+  type:
+    | 'function'
+    | 'class'
+    | 'variable'
+    | 'interface'
+    | 'type'
+    | 'struct'
+    | 'enum'
+    | 'trait'
+    | 'method'
+    | 'property'
+    | 'constant'
+    | 'module'
+    | 'namespace'
+    | 'macro'
   line: number
   column: number
   file: string

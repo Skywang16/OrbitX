@@ -8,6 +8,7 @@
 
 // 模块声明
 pub mod ai; // AI集成功能模块
+            // AST代码分析模块已移动到 ai::tool::ast
 mod commands; // Tauri 命令处理模块
 pub mod completion; // 终端补全功能模块
 pub mod config; // 统一配置系统模块
@@ -39,7 +40,13 @@ use ai::commands::{
     update_message_meta,
     AIManagerState,
 };
-use commands::{TerminalState, *};
+use ai::tool::ast::commands::analyze_code;
+use ai::tool::network::{simple_web_fetch, web_fetch_headless};
+use ai::tool::shell::{TerminalState, *};
+use ai::tool::storage::{
+    storage_get_config, storage_load_session_state, storage_save_session_state,
+    storage_update_config, StorageCoordinatorState,
+};
 use completion::commands::{
     clear_completion_cache, get_completion_stats, get_completions, get_enhanced_completions,
     init_completion_engine, CompletionState,
@@ -95,10 +102,6 @@ use config::{
     get_theme_config_status,
     set_follow_system_theme,
     set_terminal_theme,
-};
-use storage::commands::{
-    storage_get_config, storage_load_session_state, storage_save_session_state,
-    storage_update_config, StorageCoordinatorState,
 };
 use window::commands::{
     clear_directory_cache, get_current_directory, get_home_directory, get_platform_info,
@@ -340,6 +343,8 @@ pub fn run() {
             // 网络请求命令
             web_fetch_headless,
             simple_web_fetch,
+            // AST代码分析命令
+            analyze_code,
             // 文件拖拽处理命令
             handle_file_open
         ])

@@ -70,16 +70,22 @@ impl StorageCoordinator {
         // 确保所有目录存在
         paths.ensure_directories().context("创建存储目录失败")?;
 
+        // 先解构options避免partial move
+        let StorageCoordinatorOptions {
+            messagepack_options,
+            database_options,
+        } = options;
+
         // 初始化MessagePack状态管理器
         let messagepack_manager = Arc::new(
-            MessagePackManager::new(paths.clone(), options.messagepack_options.clone())
+            MessagePackManager::new(paths.clone(), messagepack_options)
                 .await
                 .context("初始化MessagePack管理器失败")?,
         );
 
-        // 初始化数据库管理器
+        // 初始化数据库管理器  
         let database_manager = Arc::new(
-            DatabaseManager::new(paths.clone(), options.database_options.clone())
+            DatabaseManager::new(paths.clone(), database_options)
                 .await
                 .context("初始化数据库管理器失败")?,
         );
@@ -91,13 +97,16 @@ impl StorageCoordinator {
             .context("初始化数据库失败")?;
 
         // 初始化Repository管理器
-        let repository_manager = Arc::new(RepositoryManager::new(database_manager.clone()));
+        let repository_manager = Arc::new(RepositoryManager::new(Arc::clone(&database_manager)));
 
 
 
         let coordinator = Self {
             paths,
-            options,
+            options: StorageCoordinatorOptions {
+                messagepack_options: MessagePackOptions::default(),
+                database_options: DatabaseOptions::default(),
+            },
             config_manager,
             messagepack_manager,
             database_manager,
@@ -176,16 +185,16 @@ impl StorageCoordinator {
 
     /// 获取数据库管理器的引用
     pub fn database_manager(&self) -> Arc<DatabaseManager> {
-        self.database_manager.clone()
+        Arc::clone(&self.database_manager)
     }
 
     /// 获取Repository管理器的引用
     pub fn repositories(&self) -> Arc<RepositoryManager> {
-        self.repository_manager.clone()
+        Arc::clone(&self.repository_manager)
     }
 
     /// 获取缓存管理器的引用
     pub fn cache(&self) -> Arc<UnifiedCache> {
-        self.cache.clone()
+        Arc::clone(&self.cache)
     }
 }

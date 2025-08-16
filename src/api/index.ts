@@ -8,7 +8,8 @@
 export * from '../utils/request'
 
 // 导出各个功能模块
-export * from './ai' // AI功能模块
+export * from './ai' // AI功能模块（包含工具API）
+// export * from './ast' // AST代码分析模块 - 已整合到 ai/tool
 export * from './completion' // 补全功能模块
 export * from './config' // 配置管理模块
 export * from './shell' // Shell管理模块

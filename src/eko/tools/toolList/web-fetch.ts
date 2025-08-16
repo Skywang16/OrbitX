@@ -5,7 +5,7 @@
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '../../types'
 import { NetworkError, ValidationError } from '../tool-error'
-import { invoke } from '@tauri-apps/api/core'
+import { webFetchHeadless } from '@/api/ai/tool'
 
 export interface WebFetchParams {
   url: string
@@ -24,14 +24,7 @@ export interface WebFetchParams {
   useJinaReader?: boolean // 是否优先使用Jina.ai Reader，默认true
 }
 
-export interface WebFetchResponse {
-  status: number
-  statusText: string
-  headers: Record<string, string>
-  data: unknown
-  responseTime: number
-  finalUrl: string
-}
+// WebFetchResponse 类型已在 @/api/ai/tool 中定义
 
 /**
  * 网络请求工具
@@ -120,30 +113,15 @@ export class WebFetchTool extends ModifiableTool {
       timeout = 10000,
       followRedirects = true,
       responseFormat = 'text',
-      corsMode = 'cors',
-      useProxy = false,
+      // corsMode = 'cors', // 暂未使用
+      // useProxy = false, // 暂未使用
       extractContent = true,
       maxContentLength = 2000,
       useJinaReader = true,
     } = context.parameters as unknown as WebFetchParams
 
-    console.log('🔍 [WebFetch] 开始执行网络请求')
-    console.log('📋 [WebFetch] 请求参数:', {
-      url,
-      method,
-      headers,
-      body: body ? `${body.substring(0, 100)}${body.length > 100 ? '...' : ''}` : undefined,
-      timeout,
-      followRedirects,
-      responseFormat,
-      corsMode,
-      useProxy,
-    })
-
     // 验证URL
-    console.log('✅ [WebFetch] 开始验证URL:', url)
     this.validateUrl(url)
-    console.log('✅ [WebFetch] URL验证通过')
 
     // 验证方法和请求体
     if (body && !['POST', 'PUT', 'PATCH'].includes(method)) {
@@ -152,20 +130,17 @@ export class WebFetchTool extends ModifiableTool {
 
     // 优先尝试使用 Jina.ai Reader 进行智能内容提取
     if (useJinaReader && method === 'GET' && extractContent) {
-      console.log('🤖 [WebFetch] 尝试使用 Jina.ai Reader 进行智能内容提取')
       try {
         const jinaResult = await this.tryJinaReader(url, timeout)
         if (jinaResult) {
-          console.log('✅ [WebFetch] Jina.ai Reader 提取成功')
           return jinaResult
         }
       } catch (error) {
-        console.warn('⚠️ [WebFetch] Jina.ai Reader 失败，回退到本地算法:', error)
+        // Jina.ai Reader 失败，回退到本地算法
       }
     }
 
     // 回退到本地 Tauri 后端进行无头请求
-    console.log('🚀 [WebFetch] 使用本地 Tauri 后端进行无头请求')
     try {
       const tauriResponse = await this.executeWithTauri({
         url,
@@ -180,14 +155,11 @@ export class WebFetchTool extends ModifiableTool {
       })
 
       if (tauriResponse.success) {
-        console.log('✅ [WebFetch] 请求成功')
         return this.formatTauriResponse(tauriResponse, url, method)
       } else {
-        console.error('❌ [WebFetch] 请求失败:', tauriResponse.error)
         throw new NetworkError(tauriResponse.error || '请求失败')
       }
     } catch (error) {
-      console.error('❌ [WebFetch] 请求执行失败:', error)
       if (error instanceof NetworkError) {
         throw error
       }
@@ -209,29 +181,18 @@ export class WebFetchTool extends ModifiableTool {
     extractContent: boolean
     maxContentLength: number
   }) {
-    interface TauriWebFetchResponse {
-      status: number
-      status_text: string
-      headers: Record<string, string>
-      data: string
-      response_time: number
-      final_url: string
-      success: boolean
-      error?: string
-    }
+    // 使用API中定义的WebFetchResponse类型
 
-    const response = await invoke<TauriWebFetchResponse>('web_fetch_headless', {
-      request: {
-        url: params.url,
-        method: params.method,
-        headers: params.headers,
-        body: params.body,
-        timeout: params.timeout,
-        follow_redirects: params.followRedirects,
-        response_format: params.responseFormat,
-        extract_content: params.extractContent,
-        max_content_length: params.maxContentLength,
-      },
+    const response = await webFetchHeadless({
+      url: params.url,
+      method: params.method,
+      headers: params.headers,
+      body: params.body,
+      timeout: params.timeout,
+      follow_redirects: params.followRedirects,
+      response_format: params.responseFormat,
+      extract_content: params.extractContent,
+      max_content_length: params.maxContentLength,
     })
 
     return response
@@ -306,31 +267,20 @@ export class WebFetchTool extends ModifiableTool {
   }
 
   private validateUrl(url: string): void {
-    console.log('🔍 [WebFetch] 开始URL验证:', url)
-
     if (!url || url.trim() === '') {
-      console.error('❌ [WebFetch] URL为空')
       throw new ValidationError('URL不能为空')
     }
 
     try {
       const urlObj = new URL(url)
-      console.log('📋 [WebFetch] URL解析结果:', {
-        protocol: urlObj.protocol,
-        hostname: urlObj.hostname,
-        port: urlObj.port,
-        pathname: urlObj.pathname,
-      })
 
       // 检查协议
       if (!['http:', 'https:'].includes(urlObj.protocol)) {
-        console.error('❌ [WebFetch] 不支持的协议:', urlObj.protocol)
         throw new ValidationError('只支持HTTP和HTTPS协议')
       }
 
       // 检查是否为本地地址（安全考虑）
       const hostname = urlObj.hostname.toLowerCase()
-      console.log('🔍 [WebFetch] 检查主机名:', hostname)
 
       if (
         hostname === 'localhost' ||
@@ -339,17 +289,12 @@ export class WebFetchTool extends ModifiableTool {
         hostname.startsWith('10.') ||
         hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)
       ) {
-        console.error('❌ [WebFetch] 检测到本地地址:', hostname)
         throw new ValidationError('不允许访问本地地址')
       }
-
-      console.log('✅ [WebFetch] URL验证通过')
     } catch (error) {
       if (error instanceof ValidationError) {
-        console.error('❌ [WebFetch] 验证错误:', error.message)
         throw error
       }
-      console.error('❌ [WebFetch] URL格式错误:', error)
       throw new ValidationError(`无效的URL格式: ${url}`)
     }
   }
@@ -380,7 +325,6 @@ export class WebFetchTool extends ModifiableTool {
       clearTimeout(timeoutId)
 
       if (!response.ok) {
-        console.warn(`Jina.ai Reader 返回错误状态: ${response.status}`)
         return null
       }
 
@@ -389,7 +333,6 @@ export class WebFetchTool extends ModifiableTool {
 
       // 检查内容是否有效
       if (!content || content.trim().length < 50) {
-        console.warn('Jina.ai Reader 返回的内容太短，可能提取失败')
         return null
       }
 
@@ -411,11 +354,7 @@ export class WebFetchTool extends ModifiableTool {
         ],
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.warn('Jina.ai Reader 请求超时')
-      } else {
-        console.warn('Jina.ai Reader 请求失败:', error)
-      }
+      // Jina.ai Reader 请求失败
       return null
     }
   }

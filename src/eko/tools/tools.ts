@@ -17,12 +17,11 @@ import { webFetchTool } from './toolList/web-fetch'
 
 import { orbitContextTool } from './toolList/orbit-context'
 import { analyzeCodeTool } from './toolList/analyze-code'
-import { findSymbolTool } from './toolList/find-symbol'
 
 /**
  * 所有可用工具的数组
  */
-export const allTools: Tool[] = [
+export const allTools: Tool<unknown>[] = [
   // 文件操作工具
   readFileTool,
   readManyFilesTool,
@@ -43,8 +42,7 @@ export const allTools: Tool[] = [
   orbitContextTool,
 
   // AST分析工具
-  analyzeCodeTool,
-  findSymbolTool,
+  analyzeCodeTool as Tool<unknown>,
 ]
 
 /**
@@ -56,7 +54,7 @@ export const toolsByCategory = {
   system: [shellTool],
   network: [webFetchTool],
   search: [orbitContextTool],
-  ast: [analyzeCodeTool, findSymbolTool],
+  ast: [analyzeCodeTool],
 }
 
 /**
@@ -94,7 +92,7 @@ export const searchTools: Tool[] = [orbitContextTool]
 /**
  * AST分析工具
  */
-export const astTools: Tool[] = [analyzeCodeTool as Tool, findSymbolTool as Tool]
+export const astTools: Tool[] = [analyzeCodeTool as Tool]
 
 /**
  * 注册所有工具到全局注册表
@@ -179,14 +177,6 @@ export function registerAllTools(): void {
         description: 'AST代码结构分析：解析语法树，提取符号定义和依赖关系，了解代码整体架构',
         category: 'ast',
         tags: ['ast', 'code', 'analysis', 'structure', 'symbols', 'architecture', 'overview'],
-      },
-    },
-    {
-      tool: findSymbolTool as Tool,
-      metadata: {
-        description: '精确符号查找：基于AST查找特定符号的定义位置，支持函数、类、变量等',
-        category: 'ast',
-        tags: ['ast', 'search', 'symbol', 'find', 'definition', 'precise'],
       },
     },
   ]

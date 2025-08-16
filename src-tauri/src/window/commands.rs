@@ -207,10 +207,7 @@ impl WindowConfigManager {
 
     /// 获取平台信息，如果缓存中没有则检测并缓存
     pub fn get_platform_info(&mut self) -> &PlatformInfo {
-        if self.platform_info.is_none() {
-            self.platform_info = Some(Self::detect_platform_info());
-        }
-        self.platform_info.as_ref().unwrap()
+        self.platform_info.get_or_insert_with(Self::detect_platform_info)
     }
 
     /// 检测平台信息

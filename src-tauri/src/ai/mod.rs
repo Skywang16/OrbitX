@@ -11,6 +11,7 @@
 pub mod commands;
 pub mod context;
 pub mod service;
+pub mod tool;
 pub mod types;
 
 // 重新导出主要类型和功能

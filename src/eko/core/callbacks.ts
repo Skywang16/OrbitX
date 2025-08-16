@@ -1,5 +1,5 @@
 /**
- * Eko回调系统实现 - 简化版本
+ * Eko回调系统实现
  * 只保留核心功能，移除冗余代码
  */
 
@@ -41,19 +41,19 @@ const isDangerousCommand = (command: string): boolean => {
  */
 export const createCallback = (): TerminalCallback => {
   return {
-    onMessage: async message => {
+    onMessage: async _message => {
       // 静默处理消息
     },
-    onHumanConfirm: async (_, prompt) => {
+    onHumanConfirm: async (_, _prompt) => {
       return true
     },
-    onHumanInput: async (_, prompt) => {
+    onHumanInput: async (_, _prompt) => {
       return ''
     },
-    onHumanSelect: async (_, prompt, options) => {
+    onHumanSelect: async (_, _prompt, options) => {
       return [options?.[0] || '']
     },
-    onHumanHelp: async (_, helpType, prompt) => {
+    onHumanHelp: async (_, _helpType, _prompt) => {
       return true
     },
     onCommandConfirm: async (_, command) => {
@@ -64,7 +64,7 @@ export const createCallback = (): TerminalCallback => {
       const file = smartFileSelect(prompt, directory)
       return file
     },
-    onPathInput: async (_, prompt, defaultPath) => {
+    onPathInput: async (_, _prompt, defaultPath) => {
       const path = defaultPath || './default-path'
       return path
     },

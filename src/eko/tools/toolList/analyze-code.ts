@@ -2,11 +2,8 @@
  * 代码分析工具 - 使用AST分析代码结构
  */
 
-import type { Tool, AnalyzeCodeParams, CodeAnalysis, CodeSymbol } from '../../types'
-import { readFile, readDir } from '@tauri-apps/plugin-fs'
-import { parse } from '@typescript-eslint/typescript-estree'
-import * as acorn from 'acorn'
-import { join, extname, basename } from 'path'
+import type { Tool } from '../../types'
+import { analyzeCode, type AnalyzeCodeParams, type AnalysisResult, type CodeSymbol } from '@/api/ai/tool'
 
 export const analyzeCodeTool: Tool<AnalyzeCodeParams> = {
   name: 'analyze-code',
@@ -38,39 +35,23 @@ export const analyzeCodeTool: Tool<AnalyzeCodeParams> = {
     required: ['path'],
   },
 
-  async execute(params, context) {
+  async execute(params, _context) {
     try {
       const { path, recursive = false, include = [], exclude = [] } = params
 
-      // 检查路径是文件还是目录
-      const isFile = await checkIsFile(path)
-
-      let filesToAnalyze: string[] = []
-
-      if (isFile) {
-        filesToAnalyze = [path]
-      } else {
-        filesToAnalyze = await getFilesToAnalyze(path, recursive, include, exclude)
-      }
-
-      const results: CodeAnalysis[] = []
-
-      for (const filePath of filesToAnalyze) {
-        try {
-          const analysis = await analyzeFile(filePath)
-          if (analysis) {
-            results.push(analysis)
-          }
-        } catch (error) {
-          console.warn(`分析文件 ${filePath} 失败:`, error)
-        }
-      }
+      // 调用 Tauri 后端的 AST 分析命令
+      const result = await analyzeCode({
+        path,
+        recursive,
+        include,
+        exclude,
+      })
 
       return {
         content: [
           {
             type: 'text',
-            text: formatAnalysisResults(results),
+            text: formatAnalysisResults(result),
           },
         ],
       }
@@ -88,371 +69,111 @@ export const analyzeCodeTool: Tool<AnalyzeCodeParams> = {
 }
 
 /**
- * 检查路径是否为文件
+ * 格式化分析结果 - LLM 偏好格式
  */
-async function checkIsFile(path: string): Promise<boolean> {
-  try {
-    // 简单的文件检查 - 如果有扩展名就认为是文件
-    return extname(path) !== ''
-  } catch {
-    return false
+function formatAnalysisResults(result: AnalysisResult): string {
+  if (result.analyses.length === 0) {
+    return 'No code files found for analysis.'
   }
-}
 
-/**
- * 获取要分析的文件列表
- */
-async function getFilesToAnalyze(
-  dirPath: string,
-  recursive: boolean,
-  include: string[],
-  exclude: string[]
-): Promise<string[]> {
-  const files: string[] = []
+  let output = `# Code Analysis Results\n\n`
+  output += `**Summary:** ${result.total_files} files processed, ${result.success_count} successful, ${result.error_count} failed\n\n`
 
-  try {
-    const entries = await readDir(dirPath)
+  for (const analysis of result.analyses) {
+    const fileName = analysis.file.split('/').pop() || analysis.file
+    output += `## File: \`${fileName}\` (${analysis.language})\n\n`
 
-    for (const entry of entries) {
-      const fullPath = join(dirPath, entry.name)
+    // 按类型分组符号
+    const symbolsByType = groupSymbolsByType(analysis.symbols)
 
-      if (entry.isDirectory) {
-        if (recursive && !shouldExclude(entry.name, exclude)) {
-          const subFiles = await getFilesToAnalyze(fullPath, recursive, include, exclude)
-          files.push(...subFiles)
+    // 输出各类型的符号
+    for (const [type, symbols] of Object.entries(symbolsByType)) {
+      if (symbols.length > 0) {
+        output += `### ${getTypeDisplayName(type)} (${symbols.length})\n\n`
+        for (const symbol of symbols) {
+          output += `- **${symbol.name}** (line ${symbol.line})\n`
         }
-      } else {
-        if (shouldInclude(entry.name, include) && !shouldExclude(entry.name, exclude)) {
-          files.push(fullPath)
-        }
-      }
-    }
-  } catch (error) {
-    console.warn(`读取目录 ${dirPath} 失败:`, error)
-  }
-
-  return files
-}
-
-/**
- * 检查文件是否应该包含
- */
-function shouldInclude(fileName: string, include: string[]): boolean {
-  if (include.length === 0) {
-    // 默认包含常见的代码文件
-    const ext = extname(fileName)
-    return ['.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go'].includes(ext)
-  }
-
-  return include.some(pattern => {
-    if (pattern.includes('*')) {
-      const regex = new RegExp(pattern.replace(/\*/g, '.*'))
-      return regex.test(fileName)
-    }
-    return fileName.includes(pattern)
-  })
-}
-
-/**
- * 检查文件是否应该排除
- */
-function shouldExclude(fileName: string, exclude: string[]): boolean {
-  return exclude.some(pattern => {
-    if (pattern.includes('*')) {
-      const regex = new RegExp(pattern.replace(/\*/g, '.*'))
-      return regex.test(fileName)
-    }
-    return fileName.includes(pattern)
-  })
-}
-
-/**
- * 分析单个文件
- */
-async function analyzeFile(filePath: string): Promise<CodeAnalysis | null> {
-  try {
-    const content = await readFile(filePath)
-    const text = new TextDecoder().decode(content)
-    const ext = extname(filePath)
-
-    let language = 'unknown'
-    let symbols: CodeSymbol[] = []
-    let imports: string[] = []
-    let exports: string[] = []
-
-    if (['.ts', '.tsx'].includes(ext)) {
-      language = 'typescript'
-      const result = analyzeTypeScript(text, filePath)
-      symbols = result.symbols
-      imports = result.imports
-      exports = result.exports
-    } else if (['.js', '.jsx'].includes(ext)) {
-      language = 'javascript'
-      const result = analyzeJavaScript(text, filePath)
-      symbols = result.symbols
-      imports = result.imports
-      exports = result.exports
-    }
-
-    return {
-      file: filePath,
-      language,
-      symbols,
-      imports,
-      exports,
-    }
-  } catch (error) {
-    console.warn(`分析文件 ${filePath} 失败:`, error)
-    return null
-  }
-}
-
-/**
- * 分析TypeScript代码
- */
-function analyzeTypeScript(content: string, filePath: string) {
-  const symbols: CodeSymbol[] = []
-  const imports: string[] = []
-  const exports: string[] = []
-
-  try {
-    const ast = parse(content, {
-      loc: true,
-      range: true,
-      jsx: filePath.endsWith('.tsx'),
-    })
-
-    // 遍历AST节点
-    function visit(node: any) {
-      if (!node) return
-
-      switch (node.type) {
-        case 'FunctionDeclaration':
-          if (node.id?.name) {
-            symbols.push({
-              name: node.id.name,
-              type: 'function',
-              line: node.loc?.start?.line || 0,
-              column: node.loc?.start?.column || 0,
-              file: filePath,
-            })
-          }
-          break
-
-        case 'ClassDeclaration':
-          if (node.id?.name) {
-            symbols.push({
-              name: node.id.name,
-              type: 'class',
-              line: node.loc?.start?.line || 0,
-              column: node.loc?.start?.column || 0,
-              file: filePath,
-            })
-          }
-          break
-
-        case 'VariableDeclarator':
-          if (node.id?.name) {
-            symbols.push({
-              name: node.id.name,
-              type: 'variable',
-              line: node.loc?.start?.line || 0,
-              column: node.loc?.start?.column || 0,
-              file: filePath,
-            })
-          }
-          break
-
-        case 'TSInterfaceDeclaration':
-          if (node.id?.name) {
-            symbols.push({
-              name: node.id.name,
-              type: 'interface',
-              line: node.loc?.start?.line || 0,
-              column: node.loc?.start?.column || 0,
-              file: filePath,
-            })
-          }
-          break
-
-        case 'TSTypeAliasDeclaration':
-          if (node.id?.name) {
-            symbols.push({
-              name: node.id.name,
-              type: 'type',
-              line: node.loc?.start?.line || 0,
-              column: node.loc?.start?.column || 0,
-              file: filePath,
-            })
-          }
-          break
-
-        case 'ImportDeclaration':
-          if (node.source?.value) {
-            imports.push(node.source.value)
-          }
-          break
-
-        case 'ExportNamedDeclaration':
-        case 'ExportDefaultDeclaration':
-          if (node.declaration?.id?.name) {
-            exports.push(node.declaration.id.name)
-          }
-          break
-      }
-
-      // 递归遍历子节点
-      for (const key in node) {
-        const child = node[key]
-        if (Array.isArray(child)) {
-          child.forEach(visit)
-        } else if (child && typeof child === 'object') {
-          visit(child)
-        }
+        output += '\n'
       }
     }
 
-    visit(ast)
-  } catch (error) {
-    console.warn('TypeScript解析失败:', error)
-  }
-
-  return { symbols, imports, exports }
-}
-
-/**
- * 分析JavaScript代码
- */
-function analyzeJavaScript(content: string, filePath: string) {
-  const symbols: CodeSymbol[] = []
-  const imports: string[] = []
-  const exports: string[] = []
-
-  try {
-    const ast = acorn.parse(content, {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
-      locations: true,
-    })
-
-    // 简化的AST遍历
-    function visit(node: any) {
-      if (!node) return
-
-      switch (node.type) {
-        case 'FunctionDeclaration':
-          if (node.id?.name) {
-            symbols.push({
-              name: node.id.name,
-              type: 'function',
-              line: node.loc?.start?.line || 0,
-              column: node.loc?.start?.column || 0,
-              file: filePath,
-            })
-          }
-          break
-
-        case 'ClassDeclaration':
-          if (node.id?.name) {
-            symbols.push({
-              name: node.id.name,
-              type: 'class',
-              line: node.loc?.start?.line || 0,
-              column: node.loc?.start?.column || 0,
-              file: filePath,
-            })
-          }
-          break
-
-        case 'VariableDeclarator':
-          if (node.id?.name) {
-            symbols.push({
-              name: node.id.name,
-              type: 'variable',
-              line: node.loc?.start?.line || 0,
-              column: node.loc?.start?.column || 0,
-              file: filePath,
-            })
-          }
-          break
-
-        case 'ImportDeclaration':
-          if (node.source?.value) {
-            imports.push(node.source.value)
-          }
-          break
-      }
-
-      // 递归遍历
-      for (const key in node) {
-        const child = node[key]
-        if (Array.isArray(child)) {
-          child.forEach(visit)
-        } else if (child && typeof child === 'object') {
-          visit(child)
-        }
-      }
+    // 导入信息
+    if (analysis.imports.length > 0) {
+      output += `### Imports (${analysis.imports.length})\n\n`
+      output += '```\n'
+      analysis.imports.forEach(imp => {
+        output += `${imp}\n`
+      })
+      output += '```\n\n'
     }
 
-    visit(ast)
-  } catch (error) {
-    console.warn('JavaScript解析失败:', error)
-  }
-
-  return { symbols, imports, exports }
-}
-
-/**
- * 格式化分析结果
- */
-function formatAnalysisResults(results: CodeAnalysis[]): string {
-  if (results.length === 0) {
-    return '没有找到可分析的代码文件'
-  }
-
-  let output = `代码分析结果 (共 ${results.length} 个文件):\n\n`
-
-  for (const result of results) {
-    output += `📁 ${basename(result.file)} (${result.language})\n`
-
-    if (result.symbols.length > 0) {
-      output += `  符号 (${result.symbols.length}):\n`
-      for (const symbol of result.symbols) {
-        const icon = getSymbolIcon(symbol.type)
-        output += `    ${icon} ${symbol.name} (${symbol.type}) - 第${symbol.line}行\n`
-      }
+    // 导出信息
+    if (analysis.exports.length > 0) {
+      output += `### Exports (${analysis.exports.length})\n\n`
+      output += '```\n'
+      analysis.exports.forEach(exp => {
+        output += `${exp}\n`
+      })
+      output += '```\n\n'
     }
 
-    if (result.imports.length > 0) {
-      output += `  导入 (${result.imports.length}): ${result.imports.join(', ')}\n`
-    }
-
-    if (result.exports.length > 0) {
-      output += `  导出 (${result.exports.length}): ${result.exports.join(', ')}\n`
-    }
-
-    output += '\n'
+    output += '---\n\n'
   }
 
   return output
 }
 
 /**
- * 获取符号图标
+ * 按类型分组符号
  */
-function getSymbolIcon(type: string): string {
+function groupSymbolsByType(symbols: CodeSymbol[]): Record<string, CodeSymbol[]> {
+  const groups: Record<string, CodeSymbol[]> = {}
+
+  for (const symbol of symbols) {
+    const type = symbol.type
+    if (!groups[type]) {
+      groups[type] = []
+    }
+    groups[type].push(symbol)
+  }
+
+  return groups
+}
+
+/**
+ * 获取类型的显示名称
+ */
+function getTypeDisplayName(type: string): string {
   switch (type) {
     case 'function':
-      return '🔧'
+      return 'Functions'
     case 'class':
-      return '🏗️'
+      return 'Classes'
     case 'variable':
-      return '📦'
+      return 'Variables'
     case 'interface':
-      return '📋'
+      return 'Interfaces'
     case 'type':
-      return '🏷️'
+      return 'Type Aliases'
+    case 'struct':
+      return 'Structs'
+    case 'enum':
+      return 'Enums'
+    case 'trait':
+      return 'Traits'
+    case 'method':
+      return 'Methods'
+    case 'property':
+      return 'Properties'
+    case 'constant':
+      return 'Constants'
+    case 'module':
+      return 'Modules'
+    case 'namespace':
+      return 'Namespaces'
+    case 'macro':
+      return 'Macros'
     default:
-      return '📄'
+      return 'Other Symbols'
   }
 }

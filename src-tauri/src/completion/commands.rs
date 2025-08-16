@@ -8,11 +8,11 @@
 //! 3. 日志记录：每个命令都记录调用和结果日志
 //! 4. 状态管理：统一使用CompletionState访问各组件
 
+use crate::ai::tool::storage::StorageCoordinatorState;
 use crate::completion::engine::{CompletionEngine, CompletionEngineConfig};
 use crate::completion::types::{
     CompletionContext, CompletionResponse, EnhancedCompletionItem, EnhancedCompletionResponse,
 };
-use crate::storage::commands::StorageCoordinatorState;
 use crate::utils::error::ToTauriResult;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};

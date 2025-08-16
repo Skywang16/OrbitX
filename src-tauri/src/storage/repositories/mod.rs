@@ -54,10 +54,10 @@ impl RepositoryManager {
     /// 创建新的Repository管理器
     pub fn new(database: Arc<DatabaseManager>) -> Self {
         Self {
-            ai_models: AIModelRepository::new(database.clone()),
-            audit_logs: AuditLogRepository::new(database.clone()),
-            command_history: CommandHistoryRepository::new(database.clone()),
-            conversations: ConversationRepository::new(database.clone()),
+            ai_models: AIModelRepository::new(Arc::clone(&database)),
+            audit_logs: AuditLogRepository::new(Arc::clone(&database)),
+            command_history: CommandHistoryRepository::new(Arc::clone(&database)),
+            conversations: ConversationRepository::new(Arc::clone(&database)),
             database,
         }
     }
