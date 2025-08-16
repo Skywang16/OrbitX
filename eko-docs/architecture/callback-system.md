@@ -23,8 +23,8 @@ Eko 的回调系统分为两个主要域：
 2. **人工回调**：暂停并请求用户输入或确认。
 
 ```typescript
-import { Eko, LLMs, StreamCallbackMessage } from "@eko-ai/eko";
-import { StreamCallback, HumanCallback } from "@eko-ai/eko/types";
+import { Eko, LLMs, StreamCallbackMessage } from '@eko-ai/eko'
+import { StreamCallback, HumanCallback } from '@eko-ai/eko/types'
 
 let callback: StreamCallback & HumanCallback = {
   onMessage: async (message: StreamCallbackMessage) => {
@@ -32,11 +32,11 @@ let callback: StreamCallback & HumanCallback = {
   },
   onHumanConfirm: async (context, prompt) => {
     /* 向用户显示提示，用户将确认或拒绝*/
-    return /* 如果确认则为 true，如果拒绝则为 false*/;
+    return /* 如果确认则为 true，如果拒绝则为 false*/
   },
-};
+}
 
-let eko = new Eko({ llms, agents, callback });
+let eko = new Eko({ llms, agents, callback })
 ```
 
 ### 流回调
@@ -61,38 +61,38 @@ let eko = new Eko({ llms, agents, callback });
 #### 使用方法
 
 ```typescript
-import { Eko, LLMs, StreamCallbackMessage } from "@eko-ai/eko";
-import { StreamCallback, HumanCallback } from "@eko-ai/eko/types";
+import { Eko, LLMs, StreamCallbackMessage } from '@eko-ai/eko'
+import { StreamCallback, HumanCallback } from '@eko-ai/eko/types'
 
 let callback: StreamCallback & HumanCallback = {
   onMessage: async (message: StreamCallbackMessage) => {
     // 等待流完成并做一些重要的事情...
-    if(message.streamDone) {
-      switch(message.type) {
-        case "workflow":
+    if (message.streamDone) {
+      switch (message.type) {
+        case 'workflow':
           // 当工作流正在生成或更新时发出。
-          break;
-        case "text":
+          break
+        case 'text':
           // 为来自代理或 LLM 的流式文本输出发出。
-          break;
-        case "tool_streaming":
+          break
+        case 'tool_streaming':
           // 为流式工具调用发出。
-          break;
-        case "tool_use":
+          break
+        case 'tool_use':
           // 在工具执行之前发出，包括工具名称和参数。
-          break;
-        case "tool_result":
+          break
+        case 'tool_result':
           // 在工具完成执行后发出，包括结果。
-          break;
-        case "...":
+          break
+        case '...':
           // 其他事件。
-          break;
+          break
       }
     }
   },
-};
+}
 
-let eko = new Eko({ llms, agents, callback });
+let eko = new Eko({ llms, agents, callback })
 ```
 
 #### 干预模型调用的工具的输入和输出
@@ -173,13 +173,13 @@ request_help: 请求用户协助；例如，当操作被阻止时，AI 可以要
 #### 使用方法
 
 ```typescript
-import { Eko, LLMs, StreamCallbackMessage } from "@eko-ai/eko";
-import { StreamCallback, HumanCallback } from "@eko-ai/eko/types";
+import { Eko, LLMs, StreamCallbackMessage } from '@eko-ai/eko'
+import { StreamCallback, HumanCallback } from '@eko-ai/eko/types'
 
 let callback: StreamCallback & HumanCallback = {
   onHumanConfirm: async (message: StreamCallbackMessage) => {
     // 等待流完成并做一些重要的事情...
-    return confirm(prompt);
+    return confirm(prompt)
   },
   onHumanInput: async (message: StreamCallbackMessage) => {
     // 等待流完成并做一些重要的事情...
@@ -190,9 +190,9 @@ let callback: StreamCallback & HumanCallback = {
   onHumanHelp: async (message: StreamCallbackMessage) => {
     // 等待流完成并做一些重要的事情...
   },
-};
+}
 
-let eko = new Eko({ llms, agents, callback });
+let eko = new Eko({ llms, agents, callback })
 ```
 
 ## 回调使用案例
@@ -200,35 +200,31 @@ let eko = new Eko({ llms, agents, callback });
 此示例使用 `onMessage` 将工作流、大型语言模型响应和工具调用参数记录到日志中，还实现了 `onHumanConfirm` 接口以允许用户确认某些操作：
 
 ```typescript
-import { Eko, LLMs, StreamCallbackMessage } from "@eko-ai/eko";
-import { StreamCallback, HumanCallback } from "@eko-ai/eko/types";
+import { Eko, LLMs, StreamCallbackMessage } from '@eko-ai/eko'
+import { StreamCallback, HumanCallback } from '@eko-ai/eko/types'
 
-function printLog(message: string, level?: "info" | "success" | "error") {
+function printLog(message: string, level?: 'info' | 'success' | 'error') {
   /* 例如 console.log(message); */
 }
 
 let callback: StreamCallback & HumanCallback = {
   onMessage: async (message: StreamCallbackMessage) => {
-    if (message.type == "workflow" && message.streamDone) {
-      printLog("计划\n" + message.workflow.xml);
-    } else if (message.type == "text" && message.streamDone) {
-      printLog(message.text);
-    } else if (message.type == "tool_use") {
-      printLog(
-        `${message.agentName} > ${message.toolName}\n${JSON.stringify(
-          message.params
-        )}`
-      );
+    if (message.type == 'workflow' && message.streamDone) {
+      printLog('计划\n' + message.workflow.xml)
+    } else if (message.type == 'text' && message.streamDone) {
+      printLog(message.text)
+    } else if (message.type == 'tool_use') {
+      printLog(`${message.agentName} > ${message.toolName}\n${JSON.stringify(message.params)}`)
     }
-    console.log("消息: ", JSON.stringify(message, null, 2));
+    console.log('消息: ', JSON.stringify(message, null, 2))
   },
   onHumanConfirm: async (context, prompt) => {
     /* 向用户显示提示，用户将确认或拒绝*/
-    return /* 如果确认则为 true，如果拒绝则为 false*/;
+    return /* 如果确认则为 true，如果拒绝则为 false*/
   },
-};
+}
 
-let eko = new Eko({ llms, agents, callback });
+let eko = new Eko({ llms, agents, callback })
 ```
 
 ## 回调类型

@@ -103,7 +103,7 @@
   } = useShortcuts()
 
   const store = useShortcutStore()
-  const lastConflictDetection = computed(() => store.state.lastConflictDetection)
+  const lastConflictDetection = computed(() => store.lastConflictDetection)
 
   // 响应式状态
   const searchFilter = ref<ShortcutSearchFilter>({

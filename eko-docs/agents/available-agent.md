@@ -13,22 +13,22 @@ Eko 为不同环境提供各种内置代理，包括：
 `Browser`: 使用浏览器代理来操作浏览器。
 
 ```typescript
-import { Eko } from "@eko-ai/eko";
-import { BrowserAgent } from "@eko-ai/eko-extension";
+import { Eko } from '@eko-ai/eko'
+import { BrowserAgent } from '@eko-ai/eko-extension'
 
 let eko = new Eko({
   llms: {
     default: {
-      provider: "anthropic",
-      model: "claude-3-7-sonnet",
-      apiKey: "your_api_key"
+      provider: 'anthropic',
+      model: 'claude-3-7-sonnet',
+      apiKey: 'your_api_key',
     },
   },
   agents: [new BrowserAgent()],
-});
+})
 
 let result = await eko.run(`
-  打开 Twitter，搜索 "Fellou AI" 并关注`);
+  打开 Twitter，搜索 "Fellou AI" 并关注`)
 ```
 
 该代理内置以下工具：
@@ -55,22 +55,22 @@ let result = await eko.run(`
 `Browser`: 使用浏览器代理来操作浏览器。
 
 ```typescript
-import { Eko } from "@eko-ai/eko";
-import { BrowserAgent } from "@eko-ai/eko-nodejs";
+import { Eko } from '@eko-ai/eko'
+import { BrowserAgent } from '@eko-ai/eko-nodejs'
 
 let eko = new Eko({
   llms: {
     default: {
-      provider: "anthropic",
-      model: "claude-3-7-sonnet",
-      apiKey: "your_api_key"
+      provider: 'anthropic',
+      model: 'claude-3-7-sonnet',
+      apiKey: 'your_api_key',
     },
   },
   agents: [new BrowserAgent()],
-});
+})
 
 let result = await eko.run(`
-  打开 Twitter，搜索 "Fellou AI" 并关注`);
+  打开 Twitter，搜索 "Fellou AI" 并关注`)
 ```
 
 ### FileAgent
@@ -78,22 +78,22 @@ let result = await eko.run(`
 `File`: 使用文件代理来操作本地文件。
 
 ```typescript
-import { Eko } from "@eko-ai/eko";
-import { FileAgent } from "@eko-ai/eko-nodejs";
+import { Eko } from '@eko-ai/eko'
+import { FileAgent } from '@eko-ai/eko-nodejs'
 
 let eko = new Eko({
   llms: {
     default: {
-      provider: "anthropic",
-      model: "claude-3-7-sonnet",
-      apiKey: "your_api_key"
+      provider: 'anthropic',
+      model: 'claude-3-7-sonnet',
+      apiKey: 'your_api_key',
     },
   },
   agents: [new FileAgent()],
-});
+})
 
 let result = await eko.run(`
-  在桌面创建一个 test.txt 并写入 hello eko。`);
+  在桌面创建一个 test.txt 并写入 hello eko。`)
 ```
 
 该代理内置以下工具：
@@ -111,20 +111,20 @@ let result = await eko.run(`
 `Browser`: 使用浏览器代理来操作当前页面。
 
 ```typescript
-import { Eko } from "@eko-ai/eko";
-import { BrowserAgent } from "@eko-ai/eko-web";
+import { Eko } from '@eko-ai/eko'
+import { BrowserAgent } from '@eko-ai/eko-web'
 
 let eko = new Eko({
   llms: {
     default: {
-      provider: "anthropic",
-      model: "claude-3-7-sonnet",
-      apiKey: "your_api_key"
+      provider: 'anthropic',
+      model: 'claude-3-7-sonnet',
+      apiKey: 'your_api_key',
     },
   },
   agents: [new BrowserAgent()],
-});
+})
 
 let result = await eko.run(`
-  找到文本框并输入 hello eko`);
+  找到文本框并输入 hello eko`)
 ```

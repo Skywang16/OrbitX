@@ -47,47 +47,25 @@
   const tabBarRef = ref<HTMLDivElement | null>(null)
   const tabBarWrapperRef = ref<HTMLDivElement | null>(null)
 
-  // 标签宽度配置
-  const TAB_CONFIG = {
-    minWidth: 60, // 最小宽度
-    maxWidth: 200, // 最大宽度
-    addBtnWidth: 32, // 添加按钮宽度
-    margin: 6, // 标签右边距
-    padding: 12, // 容器内边距
-  }
+  // 简化的标签宽度配置
+  const MIN_TAB_WIDTH = 60
+  const MAX_TAB_WIDTH = 200
+  const ADD_BTN_WIDTH = 32
 
-  // 计算动态标签宽度
-  const dynamicTabWidth = computed(() => {
+  // 简化的标签宽度计算
+  const tabWidth = computed(() => {
     const tabCount = props.tabs.length
-    if (tabCount === 0) return TAB_CONFIG.maxWidth
+    if (tabCount === 0) return MAX_TAB_WIDTH
 
     const containerWidth = tabBarWrapperRef.value?.clientWidth || 400
-    let availableWidth = containerWidth - TAB_CONFIG.padding * 2
+    const availableWidth = containerWidth - ADD_BTN_WIDTH - 24 // 24px for padding
+    const widthPerTab = availableWidth / tabCount
 
-    const totalMarginWidth = (tabCount - 1) * TAB_CONFIG.margin
-    const inlineButtonWidth = TAB_CONFIG.addBtnWidth + 4
-    const widthForTabs = availableWidth - totalMarginWidth - inlineButtonWidth
-    const widthPerTab = widthForTabs / tabCount
-
-    if (widthPerTab < TAB_CONFIG.maxWidth) {
-      availableWidth = containerWidth - TAB_CONFIG.addBtnWidth - TAB_CONFIG.padding * 2 - 4
-      const widthForTabsFixed = availableWidth - totalMarginWidth
-      const widthPerTabFixed = widthForTabsFixed / tabCount
-      return Math.max(TAB_CONFIG.minWidth, widthPerTabFixed)
-    }
-
-    return Math.max(TAB_CONFIG.minWidth, Math.min(TAB_CONFIG.maxWidth, widthPerTab))
+    return Math.max(MIN_TAB_WIDTH, Math.min(MAX_TAB_WIDTH, widthPerTab))
   })
 
-  // 判断是否需要滚动
-  const needsScroll = computed(() => {
-    return dynamicTabWidth.value <= TAB_CONFIG.minWidth
-  })
-
-  // 判断标签是否被压缩
-  const isCompressed = computed(() => {
-    return dynamicTabWidth.value < TAB_CONFIG.maxWidth && !needsScroll.value
-  })
+  // 简化的滚动判断
+  const needsScroll = computed(() => tabWidth.value <= MIN_TAB_WIDTH)
 
   // 处理标签点击
   const handleTabClick = (id: string) => {
@@ -147,7 +125,7 @@
         v-for="tab in tabs"
         :key="tab.id"
         :class="getTabClass(tab)"
-        :style="{ width: needsScroll ? `${TAB_CONFIG.minWidth}px` : `${dynamicTabWidth}px` }"
+        :style="{ width: needsScroll ? `${MIN_TAB_WIDTH}px` : `${tabWidth}px` }"
         @mousedown="handleMouseDown($event, tab.id)"
         @click="handleTabClick(tab.id)"
       >
@@ -176,7 +154,7 @@
 
       <!-- 内联添加按钮 -->
       <x-popover
-        v-if="!needsScroll && !isCompressed"
+        v-if="!needsScroll && tabWidth >= MAX_TAB_WIDTH"
         v-model="showAddMenuPopover"
         placement="bottom-start"
         trigger="manual"
@@ -210,7 +188,7 @@
 
     <!-- 固定添加按钮 -->
     <x-popover
-      v-if="needsScroll || isCompressed"
+      v-if="needsScroll || tabWidth < MAX_TAB_WIDTH"
       v-model="showAddMenuPopover"
       placement="bottom-end"
       trigger="manual"

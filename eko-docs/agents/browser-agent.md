@@ -24,10 +24,8 @@
 
 - [`BaseBrowserAgent`](../../../packages/eko-core/src/agent/browser/browser_base.ts)：  
   扩展 `Agent`，定义浏览器代理的核心接口，包括截图、导航、标签管理和 js 脚本的执行方法。
-  
 - [`BaseBrowserLabelsAgent`](../../../packages/eko-core/src/agent/browser/browser_labels.ts)：  
   扩展 `BaseBrowserAgent` 以提供使用索引元素的元素级交互、截图和 HTML 提取以及基于工具的操作。这是扩展/web/Node.js 环境中浏览器自动化的主要基础。
-  
 - [`BaseBrowserScreenAgent`](../../../packages/eko-core/src/agent/browser/browser_screen.ts)：  
   扩展 `BaseBrowserAgent` 以提供基于坐标的鼠标和键盘自动化接口，适用于基于屏幕的自动化场景。
 
@@ -37,16 +35,12 @@
 
 - **截图和 DOM 提取：**  
   代理将页面截图与交互元素的伪 HTML 表示相结合。每个可操作元素都被索引并在截图中进行视觉标记，实现强大的元素识别和交互。
-  
 - **元素索引和交互：**  
   所有交互元素（按钮、输入、链接等）都被分配唯一索引。诸如 `click_element`、`input_text` 和 `hover_to_element` 等工具在这些索引上操作，确保精确可靠的自动化。
-  
 - **基于工具的操作模型：**  
   所有浏览器操作都作为工具公开（例如，`navigate_to`、`input_text`、`extract_page_content`）。代理通过按顺序调用这些工具来执行工作流，允许模块化、可解释和可扩展的自动化。
-  
 - **多环境支持：**  
   相同的高级接口在浏览器扩展、Node.js 和 web 环境中可用，具有特定于环境的低级操作实现。
-  
 - **错误处理和健壮性：**  
   代理包括内置错误处理、回退策略，并支持等待、重试和在找不到元素或操作失败时的替代方法。
 
@@ -55,14 +49,12 @@
 浏览器代理为浏览器自动化公开以下工具和方法：
 
 - **导航**
-  
   - `navigate_to(url: string)`: 导航到特定 URL。
   - `go_back()`: 返回到历史记录中的上一页。
   - `switch_tab(index: number)`: 通过索引切换到不同的浏览器标签页。
   - `get_all_tabs()`: 检索所有打开标签页的列表。
 
 - **元素交互**
-  
   - `input_text(index: number, text: string, enter?: boolean)`: 通过索引向输入元素输入文本。可选择在输入后按 Enter。
   - `click_element(index: number, num_clicks?: number, button?: "left" | "right" | "middle")`: 通过索引点击元素，可选择点击次数和鼠标按钮。
   - `hover_to_element(index: number)`: 通过索引将鼠标指针移动到元素上。
@@ -71,16 +63,13 @@
   - `get_select_options(index: number)`: 通过索引检索选择元素的可用选项。
 
 - **内容提取**
-  
   - `extract_page_content(variable_name?: string)`: 提取当前页面的完整 HTML/文本内容。
   - `screenshot_and_html()`: 捕获可见页面的截图并提取结构化元素信息。
 
 - **滚动**
-  
   - `scroll_mouse_wheel(amount: number)`: 按指定量垂直滚动页面。
 
 - **实用工具**
-  
   - `wait(milliseconds: number)`: 等待指定的持续时间（用于等待内容加载）。
 
 - **错误处理**: 代理包括内置错误处理、重试和回退策略，以实现强大的自动化。
@@ -92,43 +81,43 @@
 ### Node.js（使用 Playwright）
 
 ```typescript
-import { BrowserAgent } from 'eko/agents/browser';
-import { createPlaywrightEnv } from 'eko/envs/playwright';
+import { BrowserAgent } from 'eko/agents/browser'
+import { createPlaywrightEnv } from 'eko/envs/playwright'
 
-const env = await createPlaywrightEnv();
-const agent = new BrowserAgent({ env });
+const env = await createPlaywrightEnv()
+const agent = new BrowserAgent({ env })
 
-await agent.navigate_to('https://example.com');
-await agent.input_text(2, 'hello world', true); // 向索引为 2 的输入框输入并按 Enter
-await agent.click_element(3); // 点击索引为 3 的按钮
-const content = await agent.extract_page_content();
-console.log(content);
+await agent.navigate_to('https://example.com')
+await agent.input_text(2, 'hello world', true) // 向索引为 2 的输入框输入并按 Enter
+await agent.click_element(3) // 点击索引为 3 的按钮
+const content = await agent.extract_page_content()
+console.log(content)
 ```
 
 ### 浏览器扩展
 
 ```typescript
-import { BrowserAgent } from 'eko/agents/browser';
+import { BrowserAgent } from 'eko/agents/browser'
 
-const agent = new BrowserAgent();
+const agent = new BrowserAgent()
 
-await agent.navigate_to('https://example.com');
-await agent.click_element(1); // 点击索引为 1 的元素
-await agent.wait(1000); // 等待 1 秒
-const screenshot = await agent.screenshot_and_html();
-console.log(screenshot);
+await agent.navigate_to('https://example.com')
+await agent.click_element(1) // 点击索引为 1 的元素
+await agent.wait(1000) // 等待 1 秒
+const screenshot = await agent.screenshot_and_html()
+console.log(screenshot)
 ```
 
 ### Web（沙盒 DOM 自动化）
 
 ```typescript
-import { BrowserAgent } from 'eko/agents/browser';
+import { BrowserAgent } from 'eko/agents/browser'
 
-const agent = new BrowserAgent();
+const agent = new BrowserAgent()
 
-await agent.input_text(0, 'search query');
-await agent.click_element(1); // 点击搜索按钮
-await agent.scroll_to_element(5); // 滚动到索引为 5 的元素
+await agent.input_text(0, 'search query')
+await agent.click_element(1) // 点击搜索按钮
+await agent.scroll_to_element(5) // 滚动到索引为 5 的元素
 ```
 
 **注意：**
@@ -140,23 +129,28 @@ await agent.scroll_to_element(5); // 滚动到索引为 5 的元素
 ### 自定义浏览器
 
 ```typescript
-import { AgentContext, BaseBrowserLabelsAgent } from "@eko-ai/eko";
+import { AgentContext, BaseBrowserLabelsAgent } from '@eko-ai/eko'
 
 export class E2bBrowser extends BaseBrowserLabelsAgent {
-  protected screenshot(agentContext: AgentContext): Promise<{ imageBase64: string; imageType: "image/jpeg" | "image/png"; }> {
-    throw new Error("方法未实现。");
+  protected screenshot(
+    agentContext: AgentContext
+  ): Promise<{ imageBase64: string; imageType: 'image/jpeg' | 'image/png' }> {
+    throw new Error('方法未实现。')
   }
-  protected navigate_to(agentContext: AgentContext, url: string): Promise<{ url: string; title?: string; }> {
-    throw new Error("方法未实现。");
+  protected navigate_to(agentContext: AgentContext, url: string): Promise<{ url: string; title?: string }> {
+    throw new Error('方法未实现。')
   }
-  protected get_all_tabs(agentContext: AgentContext): Promise<Array<{ tabId: number; url: string; title: string; }>> {
-    throw new Error("方法未实现。");
+  protected get_all_tabs(agentContext: AgentContext): Promise<Array<{ tabId: number; url: string; title: string }>> {
+    throw new Error('方法未实现。')
   }
-  protected switch_tab(agentContext: AgentContext, tabId: number): Promise<{ tabId: number; url: string; title: string; }> {
-    throw new Error("方法未实现。");
+  protected switch_tab(
+    agentContext: AgentContext,
+    tabId: number
+  ): Promise<{ tabId: number; url: string; title: string }> {
+    throw new Error('方法未实现。')
   }
   protected execute_script(agentContext: AgentContext, func: (...args: any[]) => void, args: any[]): Promise<any> {
-    throw new Error("方法未实现。");
+    throw new Error('方法未实现。')
   }
 }
 ```

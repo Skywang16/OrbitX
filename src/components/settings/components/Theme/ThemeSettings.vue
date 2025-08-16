@@ -137,7 +137,9 @@
     if (currentMode.value === 'system') {
       try {
         await theme.setFollowSystem(true, selectedLightTheme.value, selectedDarkTheme.value)
-      } catch (error) {}
+      } catch (error) {
+        console.error('设置跟随系统主题失败:', error)
+      }
     }
   }
 </script>

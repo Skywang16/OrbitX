@@ -43,17 +43,9 @@ export interface CursorConfig {
   blinking: boolean
 }
 
-// ===== 配置操作结果类型 =====
-
-export interface ConfigOperationResult<T = void> {
-  success: boolean
-  data?: T
-  error?: string
-}
-
 // ===== 配置部分更新类型 =====
 
-export interface ConfigSectionUpdate<T = any> {
+export interface ConfigSectionUpdate<T = unknown> {
   section: string
   updates: Partial<T>
 }

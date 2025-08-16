@@ -10,15 +10,15 @@
 
 ```typescript
 export interface IMcpClient {
-  connect(): Promise<void>;
+  connect(): Promise<void>
 
-  listTools(param: McpListToolParam): Promise<McpListToolResult>;
+  listTools(param: McpListToolParam): Promise<McpListToolResult>
 
-  callTool(param: McpCallToolParam): Promise<ToolResult>;
+  callTool(param: McpCallToolParam): Promise<ToolResult>
 
-  isConnected(): boolean;
+  isConnected(): boolean
 
-  close(): Promise<void>;
+  close(): Promise<void>
 }
 ```
 
@@ -27,10 +27,10 @@ export interface IMcpClient {
 使用示例：
 
 ```typescript
-import { SimpleSseMcpClient } from "@eko-ai/eko";
+import { SimpleSseMcpClient } from '@eko-ai/eko'
 
-let sseUrl = "http://localhost:8080/sse";
-let mcpClient = new SimpleSseMcpClient(sseUrl);
+let sseUrl = 'http://localhost:8080/sse'
+let mcpClient = new SimpleSseMcpClient(sseUrl)
 ```
 
 ### 通过 MCP 动态扩展代理工具
@@ -38,36 +38,36 @@ let mcpClient = new SimpleSseMcpClient(sseUrl);
 代理支持通过 MCP 动态加载工具，假设您已经有一个 MCP 服务，完整示例如下：
 
 ```typescript
-import { Eko, Agent, LLMs, SimpleSseMcpClient } from "@eko-ai/eko";
+import { Eko, Agent, LLMs, SimpleSseMcpClient } from '@eko-ai/eko'
 
 const llms: LLMs = {
   default: {
-    provider: "anthropic",
-    model: "claude-3-5-sonnet-20241022",
-    apiKey: "your_api_key",
+    provider: 'anthropic',
+    model: 'claude-3-5-sonnet-20241022',
+    apiKey: 'your_api_key',
   },
   openai: {
-    provider: "openai",
-    model: "gpt-4o-mini",
-    apiKey: "your_api_key",
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    apiKey: 'your_api_key',
   },
-};
+}
 
 // 您的 mcp 服务器
-let sseUrl = "http://localhost:8080/sse";
-let mcpClient = new SimpleSseMcpClient(sseUrl);
+let sseUrl = 'http://localhost:8080/sse'
+let mcpClient = new SimpleSseMcpClient(sseUrl)
 
 // 自定义 SmartMall 代理
 let agents: Agent[] = [
   new Agent({
-    name: "SmartMall",
-    description: "提供产品查询和下单服务",
+    name: 'SmartMall',
+    description: '提供产品查询和下单服务',
     tools: [],
     mcpClient: mcpClient,
     llms: Object.keys(llms),
   }),
-];
+]
 
-let eko = new Eko({ llms, agents });
-let result = await eko.run("我有300美元，请帮我买一套夏装、裤子和鞋子。");
+let eko = new Eko({ llms, agents })
+let result = await eko.run('我有300美元，请帮我买一套夏装、裤子和鞋子。')
 ```

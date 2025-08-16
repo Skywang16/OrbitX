@@ -143,6 +143,38 @@ export class ConfigApi {
     }
   }
 
+  async resetToDefaults(): Promise<void> {
+    try {
+      await invoke('reset_config_to_defaults')
+    } catch (error) {
+      throw new Error(handleError(error, '重置配置为默认值失败'))
+    }
+  }
+
+  async getFilePath(): Promise<string> {
+    try {
+      return await invoke<string>('get_config_file_path')
+    } catch (error) {
+      throw new Error(handleError(error, '获取配置文件路径失败'))
+    }
+  }
+
+  async getFileInfo(): Promise<ConfigFileInfo> {
+    try {
+      return await invoke<ConfigFileInfo>('get_config_file_info')
+    } catch (error) {
+      throw new Error(handleError(error, '获取配置文件信息失败'))
+    }
+  }
+
+  async openFile(): Promise<void> {
+    try {
+      await invoke('open_config_file')
+    } catch (error) {
+      throw new Error(handleError(error, '打开配置文件失败'))
+    }
+  }
+
   // ===== 主题管理（代理到 ThemeAPI） =====
 
   async getThemeConfigStatus(): Promise<ThemeConfigStatus> {

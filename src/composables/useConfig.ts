@@ -78,22 +78,31 @@ export const useConfig = () => {
   const hasError = computed(() => loadingState.value.error !== null)
   const isLoading = computed(() => loadingState.value.loading)
 
-  // 加载配置
-  const loadConfig = async () => {
+  // 通用异步操作处理
+  const withLoading = async <T>(operation: () => Promise<T>): Promise<T> => {
     loadingState.value.loading = true
     loadingState.value.error = null
-
     try {
-      const loadedConfig = await configApi.getConfig()
-      config.value = loadedConfig
+      const result = await operation()
       loadingState.value.lastUpdated = new Date()
+      return result
     } catch (error) {
       const message = error instanceof ConfigApiError ? error.message : String(error)
       loadingState.value.error = message
-      console.error('加载配置失败:', error)
+      console.error('配置操作失败:', error)
+      throw error
     } finally {
       loadingState.value.loading = false
     }
+  }
+
+  // 加载配置
+  const loadConfig = async () => {
+    return withLoading(async () => {
+      const loadedConfig = await configApi.getConfig()
+      config.value = loadedConfig
+      return loadedConfig
+    })
   }
 
   // 更新配置
@@ -102,21 +111,10 @@ export const useConfig = () => {
       throw new Error('配置未加载')
     }
 
-    loadingState.value.loading = true
-    loadingState.value.error = null
-
-    try {
+    return withLoading(async () => {
       await configApi.updateConfig(newConfig)
       config.value = newConfig
-      loadingState.value.lastUpdated = new Date()
-    } catch (error) {
-      const message = error instanceof ConfigApiError ? error.message : String(error)
-      loadingState.value.error = message
-      console.error('更新配置失败:', error)
-      throw error
-    } finally {
-      loadingState.value.loading = false
-    }
+    })
   }
 
   // 更新配置的特定部分
@@ -138,55 +136,24 @@ export const useConfig = () => {
 
   // 保存配置
   const saveConfigData = async () => {
-    loadingState.value.loading = true
-    loadingState.value.error = null
-
-    try {
+    return withLoading(async () => {
       await configApi.saveConfig()
-      loadingState.value.lastUpdated = new Date()
-    } catch (error) {
-      const message = error instanceof ConfigApiError ? error.message : String(error)
-      loadingState.value.error = message
-      console.error('保存配置失败:', error)
-      throw error
-    } finally {
-      loadingState.value.loading = false
-    }
+    })
   }
 
   // 验证配置
   const validateConfigData = async () => {
-    loadingState.value.loading = true
-    loadingState.value.error = null
-
-    try {
+    return withLoading(async () => {
       await configApi.validateConfig()
-    } catch (error) {
-      const message = error instanceof ConfigApiError ? error.message : String(error)
-      loadingState.value.error = message
-      console.error('验证配置失败:', error)
-      throw error
-    } finally {
-      loadingState.value.loading = false
-    }
+    })
   }
 
   // 重置为默认值
   const resetToDefaults = async () => {
-    loadingState.value.loading = true
-    loadingState.value.error = null
-
-    try {
+    return withLoading(async () => {
       await configApi.resetToDefaults()
       await loadConfig() // 重新加载配置
-    } catch (error) {
-      const message = error instanceof ConfigApiError ? error.message : String(error)
-      loadingState.value.error = message
-      console.error('重置配置失败:', error)
-      throw error
-    } finally {
-      loadingState.value.loading = false
-    }
+    })
   }
 
   // 清除错误

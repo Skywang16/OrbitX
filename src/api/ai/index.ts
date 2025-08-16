@@ -199,7 +199,7 @@ export class AiApi {
 
   async deleteModel(id: string): Promise<void> {
     try {
-      await invoke('delete_ai_model', { id })
+      await invoke('remove_ai_model', { modelId: id })
     } catch (error) {
       throw new Error(handleError(error, '删除AI模型失败'))
     }
@@ -207,7 +207,7 @@ export class AiApi {
 
   async setDefaultModel(id: string): Promise<void> {
     try {
-      await invoke('set_default_ai_model', { id })
+      await invoke('set_default_ai_model', { modelId: id })
     } catch (error) {
       throw new Error(handleError(error, '设置默认AI模型失败'))
     }
@@ -215,9 +215,33 @@ export class AiApi {
 
   async testConnectionWithConfig(config: AIModelConfig): Promise<boolean> {
     try {
-      return await invoke<boolean>('test_ai_model_connection', { config })
+      return await invoke<boolean>('test_ai_connection_with_config', { config })
     } catch (error) {
       throw new Error(handleError(error, 'AI模型连接测试失败'))
+    }
+  }
+
+  async testConnection(modelId: string): Promise<boolean> {
+    try {
+      return await invoke<boolean>('test_ai_connection', { modelId: modelId })
+    } catch (error) {
+      throw new Error(handleError(error, 'AI模型连接测试失败'))
+    }
+  }
+
+  async getUserPrefixPrompt(): Promise<string | null> {
+    try {
+      return await invoke<string | null>('get_user_prefix_prompt')
+    } catch (error) {
+      throw new Error(handleError(error, '获取用户前置提示词失败'))
+    }
+  }
+
+  async setUserPrefixPrompt(prompt: string | null): Promise<void> {
+    try {
+      await invoke('set_user_prefix_prompt', { prompt })
+    } catch (error) {
+      throw new Error(handleError(error, '设置用户前置提示词失败'))
     }
   }
 

@@ -1,6 +1,6 @@
 /**
  * 快捷键管理 API
- * 
+ *
  * 提供快捷键管理的统一接口，包括：
  * - 配置获取和更新
  * - 验证和冲突检测
@@ -119,18 +119,13 @@ export class ShortcutsApi {
     }
   }
 
-  async updateShortcut(
-    category: ShortcutCategory,
-    index: number,
-    shortcut: ShortcutBinding
-  ): Promise<void> {
+  async updateShortcut(category: ShortcutCategory, index: number, shortcut: ShortcutBinding): Promise<void> {
     try {
       await invoke('update_shortcut', { category, index, shortcut })
     } catch (error) {
       throw new Error(`更新快捷键失败: ${error}`)
     }
   }
-
 }
 
 // 导出单例实例

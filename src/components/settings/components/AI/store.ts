@@ -161,8 +161,17 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
    * @param updates 要更新的配置项（部分更新）
    */
   const updateModel = async (modelId: string, updates: Partial<AIModelConfig>) => {
+    // 先获取现有模型配置
+    const existingModel = models.value.find(m => m.id === modelId)
+    if (!existingModel) {
+      throw new Error(`模型 ${modelId} 不存在`)
+    }
+
+    // 合并更新
+    const updatedModel = { ...existingModel, ...updates }
+
     // 直接使用AI API更新模型（存储到SQLite）
-    await aiApi.updateModel(modelId, updates)
+    await aiApi.updateModel(updatedModel)
 
     // 刷新模型数据，确保所有组件同步更新
     await refreshModels()
@@ -174,7 +183,7 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
    */
   const removeModel = async (modelId: string) => {
     // 直接使用AI API删除模型（从SQLite中删除）
-    await aiApi.removeModel(modelId)
+    await aiApi.deleteModel(modelId)
 
     // 刷新模型数据，确保所有组件同步更新
     await refreshModels()

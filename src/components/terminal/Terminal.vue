@@ -13,11 +13,11 @@
     <!-- 补全组件 -->
     <TerminalCompletion
       ref="completionRef"
-      :input="currentLine"
-      :working-directory="workingDirectory"
+      :input="inputState.currentLine"
+      :working-directory="terminalEnv.workingDirectory"
       :terminal-element="terminalRef"
-      :terminal-cursor-position="terminalCursorPosition"
-      :is-mac="isMac"
+      :terminal-cursor-position="terminalEnv.cursorPosition"
+      :is-mac="terminalEnv.isMac"
       @suggestion-change="handleSuggestionChange"
     />
 
@@ -90,12 +90,19 @@
   let keyListener: { dispose: () => void } | null = null
 
   // === 终端状态 ===
-  const currentLine = ref('') // 当前输入行内容
-  const cursorCol = ref(0) // 光标列位置
-  const workingDirectory = ref('/tmp') // 当前工作目录
-  const terminalCursorPosition = ref({ x: 0, y: 0 }) // 终端光标屏幕坐标
-  const currentSuggestion = ref('') // 当前补全建议
-  const isMac = ref(false) // 是否为Mac系统
+  // 合并输入相关状态
+  const inputState = reactive({
+    currentLine: '', // 当前输入行内容
+    cursorCol: 0, // 光标列位置
+    suggestion: '', // 当前补全建议
+  })
+
+  // 合并终端环境状态
+  const terminalEnv = reactive({
+    workingDirectory: '/tmp', // 当前工作目录
+    cursorPosition: { x: 0, y: 0 }, // 终端光标屏幕坐标
+    isMac: false, // 是否为Mac系统
+  })
 
   // === UI 状态 ===
   // 右键菜单状态
@@ -115,20 +122,23 @@
   })
 
   // === 性能优化 ===
-  let resizeTimeout: number | null = null // 防抖定时器
-  let themeUpdateTimeout: number | null = null // 主题更新防抖定时器
+  // 合并定时器管理
+  const timers = {
+    resize: null as number | null,
+    themeUpdate: null as number | null,
+    outputFlush: null as number | null,
+  }
 
   // 终端样式缓存，避免重复DOM查询
-  const terminalStyleCache = ref<{
-    charWidth: number // 字符宽度
-    lineHeight: number // 行高
-    paddingLeft: number // 左边距
-    paddingTop: number // 上边距
+  const styleCache = ref<{
+    charWidth: number
+    lineHeight: number
+    paddingLeft: number
+    paddingTop: number
   } | null>(null)
 
   // === 输出缓冲优化 ===
   let outputBuffer = '' // 输出数据缓冲区，使用字符串而非数组提高性能
-  let outputFlushTimeout: number | null = null // 输出刷新定时器
   const OUTPUT_FLUSH_INTERVAL = 16 // 16ms刷新间隔，约60fps
   const MAX_BUFFER_LENGTH = 8192 // 最大缓冲区长度，防止内存过度使用
 
@@ -150,9 +160,9 @@
     }
 
     // 清除定时器
-    if (outputFlushTimeout) {
-      clearTimeout(outputFlushTimeout)
-      outputFlushTimeout = null
+    if (timers.outputFlush) {
+      clearTimeout(timers.outputFlush)
+      timers.outputFlush = null
     }
   }
 
@@ -162,9 +172,9 @@
    */
   const scheduleOutputFlush = () => {
     // 如果已经有定时器在运行，不需要重新调度
-    if (outputFlushTimeout) return
+    if (timers.outputFlush) return
 
-    outputFlushTimeout = window.setTimeout(() => {
+    timers.outputFlush = window.setTimeout(() => {
       flushOutputBuffer()
     }, OUTPUT_FLUSH_INTERVAL)
   }
@@ -213,16 +223,16 @@
       terminal.value.onData(data => {
         emit('input', data)
         if (data === '\r') {
-          currentLine.value = ''
-          cursorCol.value = 0
+          inputState.currentLine = ''
+          inputState.cursorCol = 0
         } else if (data === '\x7f') {
-          if (cursorCol.value > 0) {
-            currentLine.value = currentLine.value.slice(0, -1)
-            cursorCol.value--
+          if (inputState.cursorCol > 0) {
+            inputState.currentLine = inputState.currentLine.slice(0, -1)
+            inputState.cursorCol--
           }
         } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
-          currentLine.value += data
-          cursorCol.value++
+          inputState.currentLine += data
+          inputState.cursorCol++
         }
         updateTerminalCursorPosition()
       })
@@ -294,12 +304,12 @@
     () => themeStore.currentThemeData.value,
     newTheme => {
       // 清除之前的定时器
-      if (themeUpdateTimeout) {
-        clearTimeout(themeUpdateTimeout)
+      if (timers.themeUpdate) {
+        clearTimeout(timers.themeUpdate)
       }
 
       // 使用防抖，避免频繁更新
-      themeUpdateTimeout = window.setTimeout(() => {
+      timers.themeUpdate = window.setTimeout(() => {
         updateTerminalTheme(newTheme)
       }, 16) // 16ms 防抖，与输出刷新频率保持一致
     },
@@ -313,10 +323,10 @@
    */
   const initPlatformInfo = async () => {
     try {
-      isMac.value = await windowApi.isMac()
+      terminalEnv.isMac = await windowApi.isMac()
     } catch {
       // 降级到浏览器检测
-      isMac.value = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+      terminalEnv.isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
     }
   }
 
@@ -326,7 +336,7 @@
    */
   const handleKeyDown = (event: KeyboardEvent) => {
     // 根据操作系统检查相应的修饰键组合
-    const isCompletionShortcut = isMac.value
+    const isCompletionShortcut = terminalEnv.isMac
       ? event.metaKey && event.key === 'ArrowRight' // Mac: Cmd + 右箭头
       : event.ctrlKey && event.key === 'ArrowRight' // Windows/Linux: Ctrl + 右箭头
 
@@ -361,8 +371,8 @@
 
     try {
       // 更新当前输入行状态
-      currentLine.value += completionText
-      cursorCol.value += completionText.length
+      inputState.currentLine += completionText
+      inputState.cursorCol += completionText.length
 
       // 将补全文本发送到终端，这会显示在终端中
       emit('input', completionText)
@@ -382,7 +392,7 @@
    * 处理补全建议变化
    */
   const handleSuggestionChange = (suggestion: string) => {
-    currentSuggestion.value = suggestion
+    inputState.suggestion = suggestion
   }
 
   /**
@@ -407,16 +417,16 @@
     try {
       if (terminal.value && fitAddon.value && terminalRef.value) {
         // 使用防抖避免频繁调整大小
-        if (resizeTimeout) {
-          clearTimeout(resizeTimeout)
+        if (timers.resize) {
+          clearTimeout(timers.resize)
         }
 
-        resizeTimeout = window.setTimeout(() => {
+        timers.resize = window.setTimeout(() => {
           try {
             fitAddon.value?.fit()
             // 只在必要时清除缓存
-            if (!terminalStyleCache.value) {
-              terminalStyleCache.value = null
+            if (!styleCache.value) {
+              styleCache.value = null
             }
           } catch {
             // ignore
@@ -437,7 +447,7 @@
       if (!terminal.value || !terminalRef.value) return
 
       // 获取或计算终端样式信息
-      if (!terminalStyleCache.value) {
+      if (!styleCache.value) {
         const computedStyle = window.getComputedStyle(terminalRef.value)
         const testElement = terminalRef.value.querySelector('.xterm-rows')
 
@@ -445,7 +455,7 @@
           const testChar = testElement.querySelector('.xterm-row')?.querySelector('span')
           if (testChar) {
             const charRect = testChar.getBoundingClientRect()
-            terminalStyleCache.value = {
+            styleCache.value = {
               charWidth: charRect.width || 9,
               lineHeight: charRect.height || 17,
               paddingLeft: parseInt(computedStyle.paddingLeft) || 0,
@@ -455,8 +465,8 @@
         }
 
         // 如果无法获取准确值，使用默认值
-        if (!terminalStyleCache.value) {
-          terminalStyleCache.value = {
+        if (!styleCache.value) {
+          styleCache.value = {
             charWidth: 9,
             lineHeight: 17,
             paddingLeft: 0,
@@ -465,7 +475,7 @@
         }
       }
 
-      const cache = terminalStyleCache.value
+      const cache = styleCache.value
       const buffer = terminal.value.buffer.active
       const terminalRect = terminalRef.value.getBoundingClientRect()
 
@@ -473,10 +483,10 @@
       const x = terminalRect.left + cache.paddingLeft + buffer.cursorX * cache.charWidth
       const y = terminalRect.top + cache.paddingTop + buffer.cursorY * cache.lineHeight
 
-      terminalCursorPosition.value = { x, y }
+      terminalEnv.cursorPosition = { x, y }
     } catch {
       // 设置默认位置
-      terminalCursorPosition.value = { x: 0, y: 0 }
+      terminalEnv.cursorPosition = { x: 0, y: 0 }
     }
   }
 
@@ -665,10 +675,9 @@
       const promptMatch = data.match(/([/\w\-.~]+)\s*[$#>]\s*$/)
       if (promptMatch) {
         const newPath = promptMatch[1]
-        if (newPath && newPath.startsWith('/') && newPath !== workingDirectory.value) {
-          workingDirectory.value = newPath
+        if (newPath && newPath.startsWith('/') && newPath !== terminalEnv.workingDirectory) {
+          terminalEnv.workingDirectory = newPath
           terminalStore.updateTerminalCwd(props.terminalId, newPath)
-          console.log(`📁 [Terminal] 工作目录: ${newPath}`)
         }
       }
     } catch {
@@ -706,17 +715,16 @@
       // 初始化工作目录 - 优先使用终端状态中保存的工作目录
       const terminal = terminalStore.terminals.find(t => t.id === props.terminalId)
       if (terminal && terminal.cwd) {
-        workingDirectory.value = terminal.cwd
-        console.log(`📁 [Terminal] 恢复工作目录: ${terminal.cwd}`)
+        terminalEnv.workingDirectory = terminal.cwd
       } else {
         // 如果没有保存的工作目录，使用系统默认
         windowApi
           .getHomeDirectory()
           .then((dir: any) => {
-            workingDirectory.value = dir
+            terminalEnv.workingDirectory = dir
           })
           .catch(() => {
-            workingDirectory.value = '/tmp'
+            terminalEnv.workingDirectory = '/tmp'
           })
       }
 
@@ -741,9 +749,9 @@
     themeStore.cleanup()
 
     // 清理所有定时器和缓冲区
-    if (resizeTimeout) clearTimeout(resizeTimeout)
-    if (themeUpdateTimeout) clearTimeout(themeUpdateTimeout)
-    if (outputFlushTimeout) clearTimeout(outputFlushTimeout)
+    if (timers.resize) clearTimeout(timers.resize)
+    if (timers.themeUpdate) clearTimeout(timers.themeUpdate)
+    if (timers.outputFlush) clearTimeout(timers.outputFlush)
     outputBuffer = '' // 清空输出缓冲区
 
     // 从终端store注销resize回调
@@ -777,7 +785,7 @@
 
     // 清理插件引用
     fitAddon.value = null
-    terminalStyleCache.value = null
+    styleCache.value = null
     closeContextMenu()
   })
 

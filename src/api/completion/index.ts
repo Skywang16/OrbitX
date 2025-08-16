@@ -1,6 +1,6 @@
 /**
  * 补全管理 API
- * 
+ *
  * 提供智能补全的统一接口，包括：
  * - 补全引擎管理
  * - 补全建议获取
@@ -9,12 +9,7 @@
 
 import { invoke } from '@/utils/request'
 import { handleError } from '@/utils/errorHandler'
-import type {
-  CompletionEngineStatus,
-  CompletionRequest,
-  CompletionResponse,
-  CompletionStats,
-} from './types'
+import type { CompletionEngineStatus, CompletionRequest, CompletionResponse, CompletionStats } from './types'
 
 /**
  * 补全 API 接口类
@@ -41,11 +36,7 @@ export class CompletionApi {
     }
   }
 
-  async getEnhancedCompletions(
-    currentLine: string, 
-    cursorPosition: number, 
-    workingDirectory: string
-  ): Promise<any> {
+  async getEnhancedCompletions(currentLine: string, cursorPosition: number, workingDirectory: string): Promise<any> {
     try {
       return await invoke('get_enhanced_completions', {
         currentLine,

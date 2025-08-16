@@ -281,43 +281,8 @@ export interface EkoRunResult {
 }
 
 // ===== AST分析相关类型 =====
-
-/**
- * 代码符号信息
- */
-export interface CodeSymbol {
-  name: string
-  type:
-    | 'function'
-    | 'class'
-    | 'variable'
-    | 'interface'
-    | 'type'
-    | 'struct'
-    | 'enum'
-    | 'trait'
-    | 'method'
-    | 'property'
-    | 'constant'
-    | 'module'
-    | 'namespace'
-    | 'macro'
-  line: number
-  column: number
-  file: string
-}
-
-/**
- * 代码分析结果
- */
-export interface CodeAnalysis {
-  file: string
-  language: string
-  symbols: CodeSymbol[]
-  imports: string[]
-  exports: string[]
-  complexity?: number
-}
+// 重新导出AI模块中的类型定义，避免重复
+export type { CodeSymbol, CodeAnalysis, BatchCodeAnalysis as AnalysisResult } from '@/api/ai/types'
 
 /**
  * AST分析工具参数

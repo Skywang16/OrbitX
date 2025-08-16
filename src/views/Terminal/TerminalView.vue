@@ -32,7 +32,9 @@
         // 拖动到窗口内：将文件路径插入到当前终端输入行
         insertFilePathToCurrentTerminal(filePath)
       }
-    } catch (error) {}
+    } catch (error) {
+      console.warn('处理文件路径失败:', error)
+    }
   }
 
   /**

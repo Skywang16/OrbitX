@@ -3,14 +3,7 @@
  */
 
 // 重新导出主要类型
-export type {
-  AIHealthStatus,
-  AIModelConfig,
-  AISettings,
-  AIStats,
-  Conversation,
-  Message,
-} from '@/types'
+export type { AIHealthStatus, AIModelConfig, AISettings, AIStats, Conversation, Message } from '@/types'
 
 // ===== 会话管理类型 =====
 
@@ -55,7 +48,7 @@ export interface CodeSymbol {
   }
 }
 
-/** 代码分析结果 */
+/** 单个文件的代码分析结果 */
 export interface CodeAnalysis {
   /** 文件路径 */
   file: string
@@ -67,33 +60,34 @@ export interface CodeAnalysis {
   imports: string[]
   /** 导出语句 */
   exports: string[]
-  /** 代码复杂度 */
-  complexity?: number
-  /** 代码行数 */
-  lines?: number
+}
+
+/** 批量代码分析结果 */
+export interface BatchCodeAnalysis {
+  /** 分析结果列表 */
+  analyses: CodeAnalysis[]
+  /** 总文件数 */
+  total_files: number
+  /** 成功分析的文件数 */
+  success_count: number
+  /** 失败的文件数 */
+  error_count: number
 }
 
 /** 分析代码参数 */
 export interface AnalyzeCodeParams {
-  /** 文件路径或代码内容 */
-  source: string
-  /** 是否为文件路径 */
-  isFilePath?: boolean
-  /** 编程语言（可选，自动检测） */
-  language?: string
-  /** 分析选项 */
-  options?: {
-    /** 是否包含符号信息 */
-    includeSymbols?: boolean
-    /** 是否包含导入导出 */
-    includeImports?: boolean
-    /** 是否计算复杂度 */
-    includeComplexity?: boolean
-  }
+  /** 文件路径 */
+  path: string
+  /** 是否递归分析 */
+  recursive?: boolean
+  /** 包含的文件模式 */
+  include?: string[]
+  /** 排除的文件模式 */
+  exclude?: string[]
 }
 
 /** 分析结果类型 */
-export type AnalysisResult = CodeAnalysis
+export type AnalysisResult = BatchCodeAnalysis
 
 /** Web 请求类型 */
 export interface WebFetchRequest {
@@ -113,12 +107,22 @@ export interface WebFetchRequest {
 export interface WebFetchResponse {
   /** 响应状态码 */
   status: number
+  /** 响应状态文本 */
+  status_text: string
   /** 响应头 */
   headers: Record<string, string>
-  /** 响应体 */
-  body: string
-  /** 响应URL */
-  url: string
+  /** 响应数据 */
+  data: string
+  /** 最终URL */
+  final_url: string
   /** 是否成功 */
-  ok: boolean
+  success: boolean
+  /** 错误信息 */
+  error?: string
+  /** 响应时间 */
+  response_time: number
+  /** 内容类型 */
+  content_type?: string
+  /** 内容长度 */
+  content_length?: number
 }

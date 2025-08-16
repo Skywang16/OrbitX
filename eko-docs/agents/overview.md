@@ -22,11 +22,11 @@
 
 ```typescript
 class Agent {
-  name: string;
-  description: string;
-  tools: Tool[] = [];
-  llms?: string[];
-  mcpClient?: IMcpClient;
+  name: string
+  description: string
+  tools: Tool[] = []
+  llms?: string[]
+  mcpClient?: IMcpClient
 }
 ```
 
@@ -49,26 +49,23 @@ Eko 框架为不同环境提供了各种内置代理，可以直接使用，您�
 以下是 node.js 环境的演示
 
 ```typescript
-import { Eko } from "@eko-ai/eko";
-import { BrowserAgent, FileAgent } from "@eko-ai/eko-nodejs";
+import { Eko } from '@eko-ai/eko'
+import { BrowserAgent, FileAgent } from '@eko-ai/eko-nodejs'
 
 let eko = new Eko({
   llms: {
     default: {
-      provider: "anthropic",
-      model: "claude-3-7-sonnet",
-      apiKey: "your_api_key"
+      provider: 'anthropic',
+      model: 'claude-3-7-sonnet',
+      apiKey: 'your_api_key',
     },
   },
-  agents: [
-    new BrowserAgent(),
-    new FileAgent()
-  ],
-});
+  agents: [new BrowserAgent(), new FileAgent()],
+})
 
 let result = await eko.run(`
   搜索关于马斯克的最新新闻，总结并保存为 musk_news.md 文件到桌面。
-`);
+`)
 ```
 
 了解更多：[可用代理](available-agent.md)。
@@ -76,21 +73,21 @@ let result = await eko.run(`
 ### 自定义代理
 
 ```typescript
-import { Eko, Agent, AgentContext } from "@eko-ai/eko";
-import { ToolResult } from "@eko-ai/eko/types";
+import { Eko, Agent, AgentContext } from '@eko-ai/eko'
+import { ToolResult } from '@eko-ai/eko/types'
 
 let weather_agent = new Agent({
-  name: "Weather",
-  description: "提供天气查询服务",
+  name: 'Weather',
+  description: '提供天气查询服务',
   tools: [
     {
-      name: "get_weather",
-      description: "天气查询",
+      name: 'get_weather',
+      description: '天气查询',
       parameters: {
-        type: "object",
+        type: 'object',
         properties: {
           city: {
-            type: "string"
+            type: 'string',
           },
         },
       },
@@ -98,30 +95,30 @@ let weather_agent = new Agent({
         return {
           content: [
             {
-              type: "text",
-              text: `今天，${args.city}的天气是多云，25-30°（摄氏度），适合外出散步。`
-            }
-          ]
-        };
+              type: 'text',
+              text: `今天，${args.city}的天气是多云，25-30°（摄氏度），适合外出散步。`,
+            },
+          ],
+        }
       },
-    }
-  ]
-});
+    },
+  ],
+})
 
 let eko = new Eko({
   llms: {
     default: {
-      provider: "anthropic",
-      model: "claude-3-7-sonnet",
-      apiKey: "your_api_key"
+      provider: 'anthropic',
+      model: 'claude-3-7-sonnet',
+      apiKey: 'your_api_key',
     },
   },
   agents: [weather_agent],
-});
+})
 
 let result = await eko.run(`
   北京今天的天气怎么样？
-`);
+`)
 ```
 
 了解更多：[自定义代理](custom-agent.md)。

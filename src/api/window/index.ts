@@ -1,6 +1,6 @@
 /**
  * 窗口管理 API
- * 
+ *
  * 提供窗口管理的统一接口，包括：
  * - 窗口状态管理
  * - 目录操作
@@ -39,9 +39,11 @@ export class WindowApi {
 
   async getCompleteWindowState(): Promise<CompleteWindowState> {
     const request = {
-      operations: [{
-        operation: 'get_state' as const,
-      }],
+      operations: [
+        {
+          operation: 'get_state' as const,
+        },
+      ],
     }
 
     const response = await this.manageWindowState(request)
@@ -55,10 +57,12 @@ export class WindowApi {
 
   async setAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
     const request = {
-      operations: [{
-        operation: 'set_always_on_top' as const,
-        params: { alwaysOnTop },
-      }],
+      operations: [
+        {
+          operation: 'set_always_on_top' as const,
+          params: { alwaysOnTop },
+        },
+      ],
     }
 
     const response = await this.manageWindowState(request)
@@ -71,9 +75,11 @@ export class WindowApi {
 
   async toggleAlwaysOnTop(): Promise<boolean> {
     const request = {
-      operations: [{
-        operation: 'toggle_always_on_top' as const,
-      }],
+      operations: [
+        {
+          operation: 'toggle_always_on_top' as const,
+        },
+      ],
     }
 
     const response = await this.manageWindowState(request)
@@ -170,10 +176,7 @@ export class WindowApi {
 
   async getPathInfo(path: string): Promise<PathInfo> {
     try {
-      const [exists, normalized] = await Promise.all([
-        this.pathExists(path),
-        this.normalizePath(path)
-      ])
+      const [exists, normalized] = await Promise.all([this.pathExists(path), this.normalizePath(path)])
 
       return {
         path,

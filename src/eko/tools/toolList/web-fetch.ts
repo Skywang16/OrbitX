@@ -9,19 +9,11 @@ import { aiApi } from '@/api'
 
 export interface WebFetchParams {
   url: string
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS'
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   headers?: Record<string, string>
   body?: string
   timeout?: number
-  followRedirects?: boolean
-  maxRedirects?: number
-  responseFormat?: 'text' | 'json' | 'blob' | 'arrayBuffer'
-  corsMode?: 'cors' | 'no-cors' | 'same-origin'
-  useProxy?: boolean
-  extractContent?: boolean
-  maxContentLength?: number
-  // 智能内容提取参数（简化版）
-  useJinaReader?: boolean // 是否优先使用Jina.ai Reader，默认true
+  useJinaReader?: boolean
 }
 
 // WebFetchResponse 类型已在 @/api/ai/tool 中定义
@@ -111,12 +103,6 @@ export class WebFetchTool extends ModifiableTool {
       headers = {},
       body,
       timeout = 10000,
-      followRedirects = true,
-      responseFormat = 'text',
-      // corsMode = 'cors', // 暂未使用
-      // useProxy = false, // 暂未使用
-      extractContent = true,
-      maxContentLength = 2000,
       useJinaReader = true,
     } = context.parameters as unknown as WebFetchParams
 
@@ -129,7 +115,7 @@ export class WebFetchTool extends ModifiableTool {
     }
 
     // 优先尝试使用 Jina.ai Reader 进行智能内容提取
-    if (useJinaReader && method === 'GET' && extractContent) {
+    if (useJinaReader && method === 'GET') {
       try {
         const jinaResult = await this.tryJinaReader(url, timeout)
         if (jinaResult) {
@@ -148,10 +134,6 @@ export class WebFetchTool extends ModifiableTool {
         headers,
         body,
         timeout,
-        followRedirects,
-        responseFormat,
-        extractContent,
-        maxContentLength,
       })
 
       if (tauriResponse.success) {
@@ -172,14 +154,10 @@ export class WebFetchTool extends ModifiableTool {
    */
   private async executeWithTauri(params: {
     url: string
-    method: string
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE'
     headers: Record<string, string>
     body?: string
     timeout: number
-    followRedirects: boolean
-    responseFormat: string
-    extractContent: boolean
-    maxContentLength: number
   }) {
     // 使用API中定义的WebFetchResponse类型
 
@@ -189,10 +167,6 @@ export class WebFetchTool extends ModifiableTool {
       headers: params.headers,
       body: params.body,
       timeout: params.timeout,
-      follow_redirects: params.followRedirects,
-      response_format: params.responseFormat,
-      extract_content: params.extractContent,
-      max_content_length: params.maxContentLength,
     })
 
     return response

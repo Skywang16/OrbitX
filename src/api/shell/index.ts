@@ -1,6 +1,6 @@
 /**
  * Shell 管理 API
- * 
+ *
  * 提供 Shell 管理的统一接口，包括：
  * - Shell 发现和验证
  * - 配置管理
@@ -16,7 +16,7 @@ import type { ShellInfo } from './types'
  */
 export class ShellApi {
   // ===== 基本操作 =====
-  
+
   async getAvailableShells(): Promise<ShellInfo[]> {
     try {
       return await invoke<ShellInfo[]>('get_available_shells')

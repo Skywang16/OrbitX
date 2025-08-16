@@ -39,25 +39,20 @@ export type {
   AnalysisResult,
   CodeSymbol,
   WebFetchRequest,
-  WebFetchResponse
+  WebFetchResponse,
 } from './ai'
 
-export type {
-  AppConfig,
-  ConfigFileInfo,
-} from './config'
+export type { AppConfig, ConfigFileInfo } from './config'
 
 export { ConfigApiError } from './config/types'
 
-export type {
-  ShellInfo
-} from './shell'
+export type { ShellInfo } from './shell'
 
 export type {
   TerminalCreateOptions,
   TerminalWriteOptions,
   TerminalResizeOptions,
-  CreateTerminalWithShellOptions
+  CreateTerminalWithShellOptions,
 } from './terminal'
 
 export type {
@@ -70,15 +65,10 @@ export type {
   ShortcutStatistics,
   ShortcutSearchOptions,
   ShortcutOperationOptions,
-  ShortcutFormatOptions
+  ShortcutFormatOptions,
 } from './shortcuts'
 
-export type {
-  CompletionRequest,
-  CompletionResponse,
-  CompletionStats,
-  CompletionEngineStatus
-} from './completion'
+export type { CompletionRequest, CompletionResponse, CompletionStats, CompletionEngineStatus } from './completion'
 
 export type {
   WindowState,
@@ -87,5 +77,5 @@ export type {
   PathInfo,
   PlatformInfo,
   WindowStateBatchRequest,
-  WindowStateBatchResponse
+  WindowStateBatchResponse,
 } from './window'

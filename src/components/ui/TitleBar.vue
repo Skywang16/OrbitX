@@ -3,7 +3,6 @@
   import TabBar from '@/components/ui/TabBar.vue'
   import type { TabItem } from '@/types'
   import { getCurrentWindow } from '@tauri-apps/api/window'
-  import { computed } from 'vue'
 
   interface Props {
     tabs: TabItem[]
@@ -18,8 +17,6 @@
   const props = defineProps<Props>()
   const emit = defineEmits<Emits>()
 
-  const tabs = computed(() => props.tabs)
-
   // 开始拖拽窗口
   const startDrag = async () => {
     await getCurrentWindow().startDragging()
@@ -33,7 +30,12 @@
 
     <!-- 中间标签栏区域 -->
     <div class="tab-bar-container" data-tauri-drag-region="false">
-      <TabBar :tabs="tabs" :activeTabId="activeTabId" @switch="emit('switch', $event)" @close="emit('close', $event)" />
+      <TabBar
+        :tabs="props.tabs"
+        :activeTabId="activeTabId"
+        @switch="emit('switch', $event)"
+        @close="emit('close', $event)"
+      />
     </div>
 
     <!-- 右侧窗口控制按钮 -->

@@ -19,12 +19,12 @@
 
 ```typescript
 class Agent {
-  protected name: string;
-  protected description: string;
-  protected tools: Tool[] = [];
-  protected llms?: string[];
-  protected mcpClient?: IMcpClient;
-  protected planDescription?: string;
+  protected name: string
+  protected description: string
+  protected tools: Tool[] = []
+  protected llms?: string[]
+  protected mcpClient?: IMcpClient
+  protected planDescription?: string
 }
 ```
 
@@ -35,26 +35,26 @@ class Agent {
 1. 直接 `new Agent({ name, description, tools })` 方法
 
 ```typescript
-import { Agent } from "@eko-ai/eko";
+import { Agent } from '@eko-ai/eko'
 
 let fileAgent = new Agent({
-  name: "File",
-  description: "您是一个文件代理，处理文件相关任务，如创建、查找、读取、修改文件等。",
-  tools: []
+  name: 'File',
+  description: '您是一个文件代理，处理文件相关任务，如创建、查找、读取、修改文件等。',
+  tools: [],
 })
 ```
 
 2. 定义一个代理类，然后扩展 Agent 方法
 
 ```typescript
-import { Agent } from "@eko-ai/eko";
+import { Agent } from '@eko-ai/eko'
 
 class FileAgent extends Agent {
   constructor() {
     super({
-      name: "File",
-      description: "您是一个文件代理，处理文件相关任务，如创建、查找、读取、修改文件等。",
-      tools: []
+      name: 'File',
+      description: '您是一个文件代理，处理文件相关任务，如创建、查找、读取、修改文件等。',
+      tools: [],
     })
   }
 }
@@ -65,87 +65,81 @@ let fileAgent = new FileAgent()
 完整的示例代码如下：
 
 ```typescript
-import { Agent, AgentContext } from "@eko-ai/eko";
-import { Tool, ToolResult } from "@eko-ai/eko/types";
+import { Agent, AgentContext } from '@eko-ai/eko'
+import { Tool, ToolResult } from '@eko-ai/eko/types'
 
 // 定义代理工具
 let tools: Tool[] = [
   {
-    name: "file_read",
-    description: "读取文件内容。",
+    name: 'file_read',
+    description: '读取文件内容。',
     parameters: {
-      type: "object",
+      type: 'object',
       properties: {
         path: {
-          type: "string",
-          description: "文件路径",
+          type: 'string',
+          description: '文件路径',
         },
       },
-      required: ["path"],
+      required: ['path'],
     },
-    execute: async (
-      args: Record<string, unknown>,
-      agentContext: AgentContext
-    ): Promise<ToolResult> => {
+    execute: async (args: Record<string, unknown>, agentContext: AgentContext): Promise<ToolResult> => {
       // TODO 具体读取逻辑
-      let file_content = "文件内容...";
+      let file_content = '文件内容...'
       return {
         isError: false,
-        content: [{ type: "text", text: file_content }]
-      };
+        content: [{ type: 'text', text: file_content }],
+      }
     },
   },
   {
-    name: "file_write",
-    description: "覆盖或追加内容到文件。",
+    name: 'file_write',
+    description: '覆盖或追加内容到文件。',
     parameters: {
-      type: "object",
+      type: 'object',
       properties: {
         path: {
-          type: "string",
-          description: "文件路径",
+          type: 'string',
+          description: '文件路径',
         },
         content: {
-          type: "string",
-          description: "文本内容",
+          type: 'string',
+          description: '文本内容',
         },
         append: {
-          type: "boolean",
-          description: "（可选）是否使用追加模式",
+          type: 'boolean',
+          description: '（可选）是否使用追加模式',
           default: false,
         },
       },
-      required: ["path", "content"],
+      required: ['path', 'content'],
     },
-    execute: async (
-      args: Record<string, unknown>,
-      agentContext: AgentContext
-    ): Promise<ToolResult> => {
+    execute: async (args: Record<string, unknown>, agentContext: AgentContext): Promise<ToolResult> => {
       // TODO 具体写入逻辑
       return {
         isError: false,
-        content: [{ type: "text", text: "写入成功。" }]
-      };
+        content: [{ type: 'text', text: '写入成功。' }],
+      }
     },
-  }
-];
+  },
+]
 
-let fileAgent: Agent;
+let fileAgent: Agent
 
 // 方法一
 fileAgent = new Agent({
-  name: "File",
-  description: "您是一个文件代理，支持读取和写入文件。",
-  tools: tools
+  name: 'File',
+  description: '您是一个文件代理，支持读取和写入文件。',
+  tools: tools,
 })
 
 // 方法二
 class FileAgent extends Agent {
   constructor() {
     super({
-      name: "File",
-      description: "您是一个文件代理，处理文件相关任务，如创建、查找、读取、修改文件等。",
-      tools: tools
+      name: 'File',
+      description: '您是一个文件代理，处理文件相关任务，如创建、查找、读取、修改文件等。',
+      tools: tools,
     })
   }
 }
@@ -162,47 +156,47 @@ fileAgent = new FileAgent()
 默认情况下，代理遵循默认模型配置，允许设置多个模型配置作为回退。当模型 1 无法访问时，将回退到模型 2，然后是模型 3，依此类推。
 
 ```typescript
-import { Eko, Agent, LLMs } from "@eko-ai/eko";
+import { Eko, Agent, LLMs } from '@eko-ai/eko'
 
 // 多模型配置
 let llms: LLMs = {
   default: {
-    provider: "anthropic",
-    model: "claude-3-7-sonnet",
-    apiKey: "your_api_key",
+    provider: 'anthropic',
+    model: 'claude-3-7-sonnet',
+    apiKey: 'your_api_key',
   },
   model1: {
-    provider: "openai",
-    model: "gpt-mini-4o",
-    apiKey: "your_api_key",
+    provider: 'openai',
+    model: 'gpt-mini-4o',
+    apiKey: 'your_api_key',
   },
   model2: {
-    provider: "anthropic",
-    model: "claude-3-5-sonnet",
-    apiKey: "your_api_key",
+    provider: 'anthropic',
+    model: 'claude-3-5-sonnet',
+    apiKey: 'your_api_key',
   },
   model3: {
-    provider: "openrouter",
-    model: "openai/gpt-mini-4o",
-    apiKey: "your_api_key",
-  }
-};
+    provider: 'openrouter',
+    model: 'openai/gpt-mini-4o',
+    apiKey: 'your_api_key',
+  },
+}
 
 // 自定义文件代理
 let fileAgent = new Agent({
-  name: "File",
-  description: "您是一个文件代理，支持读取和写入文件。",
+  name: 'File',
+  description: '您是一个文件代理，支持读取和写入文件。',
   tools: tools,
-  llms: ["model1", "model2", "model3"] // 模型链回退
-});
+  llms: ['model1', 'model2', 'model3'], // 模型链回退
+})
 
 let eko = new Eko({
   llms: llms,
   agents: [fileAgent],
-});
+})
 
 // 运行
-let result = await eko.run("读取桌面 test.txt 文件");
+let result = await eko.run('读取桌面 test.txt 文件')
 ```
 
 ## 下一步

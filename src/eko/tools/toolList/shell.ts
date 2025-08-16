@@ -211,10 +211,10 @@ export class ShellTool extends ModifiableTool {
       const detectCommandCompletion = (output: string): boolean => {
         // 彻底清理ANSI转义序列
         let cleanOutput = output
-          .replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '') // 标准ANSI序列
-          .replace(/\u001b\[[?][0-9]*[a-zA-Z]/g, '') // ?开头的序列
-          .replace(/\u001b\[K/g, '') // 清除行序列
-          .replace(/\u001b\[[0-9]*[mK]/g, '') // m和K结尾的序列
+          .replace(/\u001B\[[0-9;?]*[a-zA-Z]/g, '') // 标准ANSI序列
+          .replace(/\u001B\[[?][0-9]*[a-zA-Z]/g, '') // ?开头的序列
+          .replace(/\u001B\[K/g, '') // 清除行序列
+          .replace(/\u001B\[[0-9]*[mK]/g, '') // m和K结尾的序列
           .replace(/\r/g, '') // 回车符
           .replace(/\n+/g, ' ') // 换行符转空格
           .replace(/\s+/g, ' ') // 多个空格合并

@@ -47,8 +47,8 @@
   // 组合式API
   const { statistics, loading } = useShortcuts()
   const store = useShortcutStore()
-  const lastConflictDetection = computed(() => store.state.lastConflictDetection)
-  const lastValidation = computed(() => store.state.lastValidation)
+  const lastConflictDetection = computed(() => store.lastConflictDetection)
+  const lastValidation = computed(() => store.lastValidation)
 
   // 计算属性
   const conflictCount = computed(() => {

@@ -21,10 +21,14 @@
 
 ```typescript
 interface Tool {
-  name: string; // 工具名称
-  description: string; // 功能描述，解释工具的目的和使用场景
-  parameters: InputSchema; // 功能描述，解释工具的目的和使用场景
-  execute: (args: Record<string, unknown>, agentContext: AgentContext, toolCall: LanguageModelV1ToolCallPart) => Promise<ToolResult>; // 执行函数
+  name: string // 工具名称
+  description: string // 功能描述，解释工具的目的和使用场景
+  parameters: InputSchema // 功能描述，解释工具的目的和使用场景
+  execute: (
+    args: Record<string, unknown>,
+    agentContext: AgentContext,
+    toolCall: LanguageModelV1ToolCallPart
+  ) => Promise<ToolResult> // 执行函数
 }
 ```
 
@@ -35,35 +39,35 @@ interface Tool {
 假设我们想创建一个发送邮件的工具：
 
 ```typescript
-import { AgentContext } from "@eko-ai/eko";
-import { Tool, ToolResult, LanguageModelV1ToolCallPart } from "@eko-ai/eko/types";
+import { AgentContext } from '@eko-ai/eko'
+import { Tool, ToolResult, LanguageModelV1ToolCallPart } from '@eko-ai/eko/types'
 
 class SendEmail implements Tool {
-  name: string;
-  description: string;
-  parameters: any;
+  name: string
+  description: string
+  parameters: any
 
   constructor() {
-    this.name = "send_email";
-    this.description = "向指定收件人发送邮件";
+    this.name = 'send_email'
+    this.description = '向指定收件人发送邮件'
     this.parameters = {
-      type: "object",
+      type: 'object',
       properties: {
         to: {
-          type: "string",
-          description: "收件人的邮箱地址",
+          type: 'string',
+          description: '收件人的邮箱地址',
         },
         subject: {
-          type: "string",
-          description: "邮件主题",
+          type: 'string',
+          description: '邮件主题',
         },
         content: {
-          type: "string",
-          description: "邮件内容",
+          type: 'string',
+          description: '邮件内容',
         },
       },
-      required: ["to", "subject", "content"],
-    };
+      required: ['to', 'subject', 'content'],
+    }
   }
 
   async execute(
@@ -73,17 +77,15 @@ class SendEmail implements Tool {
   ): Promise<ToolResult> {
     // 实现具体的邮件发送逻辑
     // 这只是一个示例
-    let emailService: any;
+    let emailService: any
     const result = await emailService.send({
       to: args.to,
       subject: args.subject,
       content: args.content,
-    });
+    })
     return {
-      content: [
-        { type: "text", text: JSON.stringify({ messageId: result.id }) },
-      ],
-    };
+      content: [{ type: 'text', text: JSON.stringify({ messageId: result.id }) }],
+    }
   }
 }
 ```
