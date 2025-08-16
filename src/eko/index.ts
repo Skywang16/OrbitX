@@ -11,6 +11,7 @@ import { createCallback, createSidebarCallback } from './core/callbacks'
 
 // 导入Agent
 import { TerminalAgent, createTerminalAgent } from './agent/terminal-agent'
+import { CodeAgent, createCodeAgent } from './agent/code-agent'
 
 // 导入工具
 import { getAllTools } from './tools'
@@ -19,12 +20,13 @@ import { getAllTools } from './tools'
 import type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult } from './types'
 
 /**
- * 终端Eko实例类
- * 封装Eko框架，专门为终端模拟器优化
+ * OrbitX Eko实例类
+ * 封装Eko框架，支持智能Agent选择
  */
-export class TerminalEko {
+export class OrbitXEko {
   private eko: Eko | null = null
-  private agent: TerminalAgent
+  private terminalAgent: TerminalAgent
+  private codeAgent: CodeAgent
   private callback: TerminalCallback
   private config: EkoInstanceConfig
   private mode: 'chat' | 'agent' = 'chat'
@@ -35,10 +37,9 @@ export class TerminalEko {
     // 创建回调
     this.callback = config.callback || createCallback()
 
-    // 创建Agent
-    this.agent = createTerminalAgent(config.agentConfig)
-
-    // 取消冗余初始化日志，保持控制台整洁
+    // 创建两个专门的Agent
+    this.terminalAgent = createTerminalAgent(config.agentConfig)
+    this.codeAgent = createCodeAgent(config.codeAgentConfig)
   }
 
   /**
@@ -51,16 +52,17 @@ export class TerminalEko {
         ...options,
       })
 
-      // 创建Eko实例
+      // 创建Eko实例，传入多个Agent让Eko智能选择
       this.eko = new Eko({
         llms: ekoConfig.llms,
-        agents: [this.agent],
+        agents: [this.terminalAgent, this.codeAgent], // Eko会智能选择合适的Agent
         planLlms: ekoConfig.planLlms,
         callback: this.callback,
       })
 
       // 初始化模式（默认chat）
-      this.agent.setMode(this.mode)
+      this.terminalAgent.setMode(this.mode)
+      this.codeAgent.setMode(this.mode)
 
       // 初始化完成，无需输出额外日志
     } catch (error) {
@@ -82,11 +84,12 @@ export class TerminalEko {
 
       // 设置终端上下文
       if (options.terminalId) {
-        this.agent.setDefaultTerminalId(options.terminalId)
+        this.terminalAgent.setDefaultTerminalId(options.terminalId)
       }
 
       if (options.workingDirectory) {
-        this.agent.setDefaultWorkingDirectory(options.workingDirectory)
+        this.terminalAgent.setDefaultWorkingDirectory(options.workingDirectory)
+        this.codeAgent.updateConfig({ defaultWorkingDirectory: options.workingDirectory })
       }
 
       // 构建用户请求prompt
@@ -148,11 +151,12 @@ ${prompt}`
 
       // 设置终端上下文
       if (options.terminalId) {
-        this.agent.setDefaultTerminalId(options.terminalId)
+        this.terminalAgent.setDefaultTerminalId(options.terminalId)
       }
 
       if (options.workingDirectory) {
-        this.agent.setDefaultWorkingDirectory(options.workingDirectory)
+        this.terminalAgent.setDefaultWorkingDirectory(options.workingDirectory)
+        this.codeAgent.updateConfig({ defaultWorkingDirectory: options.workingDirectory })
       }
 
       // 执行工作流
@@ -180,10 +184,17 @@ ${prompt}`
   }
 
   /**
-   * 获取Agent实例
+   * 获取终端Agent实例
    */
-  getAgent(): TerminalAgent {
-    return this.agent
+  getTerminalAgent(): TerminalAgent {
+    return this.terminalAgent
+  }
+
+  /**
+   * 获取代码Agent实例
+   */
+  getCodeAgent(): CodeAgent {
+    return this.codeAgent
   }
 
   /**
@@ -211,7 +222,11 @@ ${prompt}`
     }
 
     if (updates.agentConfig) {
-      this.agent.updateConfig(updates.agentConfig)
+      this.terminalAgent.updateConfig(updates.agentConfig)
+    }
+
+    if (updates.codeAgentConfig) {
+      this.codeAgent.updateConfig(updates.codeAgentConfig)
     }
   }
 
@@ -220,14 +235,15 @@ ${prompt}`
    */
   setMode(mode: 'chat' | 'agent'): void {
     this.mode = mode
-    this.agent.setMode(mode)
+    this.terminalAgent.setMode(mode)
+    this.codeAgent.setMode(mode)
   }
 
   /**
    * 获取Agent专属终端ID
    */
   getAgentTerminalId(): number | null {
-    return this.agent.getAgentTerminalId()
+    return this.terminalAgent.getAgentTerminalId()
   }
 
   /**
@@ -235,9 +251,9 @@ ${prompt}`
    */
   async cleanup(): Promise<void> {
     try {
-      await this.agent.cleanupAgentTerminal()
+      await this.terminalAgent.cleanupAgentTerminal()
     } catch (error) {
-      console.error('清理TerminalEko资源失败:', error)
+      console.error('清理OrbitXEko资源失败:', error)
     }
   }
 
@@ -251,10 +267,10 @@ ${prompt}`
 }
 
 /**
- * 创建TerminalEko实例
+ * 创建OrbitXEko实例
  */
-export const createTerminalEko = async (config: EkoInstanceConfig = {}): Promise<TerminalEko> => {
-  const instance = new TerminalEko(config)
+const createOrbitXEko = async (config: EkoInstanceConfig = {}): Promise<OrbitXEko> => {
+  const instance = new OrbitXEko(config)
   await instance.initialize()
   return instance
 }
@@ -265,9 +281,12 @@ export type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOp
 export {
   // 核心类
   TerminalAgent,
+  CodeAgent,
 
   // 工厂函数
+  createOrbitXEko,
   createTerminalAgent,
+  createCodeAgent,
 
   // 回调
   createCallback,
@@ -275,8 +294,6 @@ export {
 
   // 工具
   getAllTools,
-  getAllTools as allTools, // 向后兼容性别名
-  getAllTools as terminalTools, // 向后兼容性别名
 
   // 配置
   getEkoConfig,

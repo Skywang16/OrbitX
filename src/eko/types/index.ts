@@ -223,6 +223,52 @@ export interface TerminalAgentConfig {
 }
 
 /**
+ * 代码Agent配置
+ */
+export interface CodeAgentConfig {
+  /** Agent名称 */
+  name: string
+  /** Agent描述 */
+  description: string
+  /** 默认工作目录 */
+  defaultWorkingDirectory?: string
+  /** 是否启用安全模式 */
+  safeMode?: boolean
+  /** 支持的编程语言 */
+  supportedLanguages: string[]
+  /** 代码风格配置 */
+  codeStyle: {
+    /** 缩进大小 */
+    indentSize: number
+    /** 缩进类型 */
+    indentType: 'spaces' | 'tabs'
+    /** 最大行长度 */
+    maxLineLength: number
+    /** 插入最终换行符 */
+    insertFinalNewline: boolean
+    /** 删除尾随空白 */
+    trimTrailingWhitespace: boolean
+  }
+  /** 启用的功能 */
+  enabledFeatures: {
+    /** 代码生成 */
+    codeGeneration: boolean
+    /** 代码分析 */
+    codeAnalysis: boolean
+    /** 重构 */
+    refactoring: boolean
+    /** 格式化 */
+    formatting: boolean
+    /** 语法检查 */
+    linting: boolean
+    /** 测试 */
+    testing: boolean
+    /** 文档生成 */
+    documentation: boolean
+  }
+}
+
+/**
  * 工具执行上下文
  */
 export interface ToolExecutionContext extends AgentContext {
@@ -244,8 +290,10 @@ export interface EkoInstanceConfig {
   defaultTerminalId?: number
   /** 回调配置 */
   callback?: TerminalCallback
-  /** Agent配置 */
+  /** 终端Agent配置 */
   agentConfig?: TerminalAgentConfig
+  /** 代码Agent配置 */
+  codeAgentConfig?: CodeAgentConfig
 }
 
 /**
