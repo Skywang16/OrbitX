@@ -32,6 +32,8 @@ export class OrbitXEko {
   private callback: TerminalCallback
   private config: EkoInstanceConfig
   private mode: 'chat' | 'agent' = 'chat'
+  private currentTaskId: string | null = null
+  private isRunning: boolean = false
 
   constructor(config: EkoInstanceConfig = {}) {
     this.config = { ...config }
@@ -90,6 +92,9 @@ export class OrbitXEko {
         await this.initialize()
       }
 
+      // 设置运行状态
+      this.isRunning = true
+
       // 设置终端上下文
       if (options.terminalId) {
         this.terminalAgent.setDefaultTerminalId(options.terminalId)
@@ -104,8 +109,12 @@ export class OrbitXEko {
       const enhancedPrompt = `🎯 **用户请求**
 ${prompt}`
 
-      // 执行任务
-      const result = await this.eko!.run(enhancedPrompt)
+      // 生成唯一的taskId
+      const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      this.currentTaskId = taskId
+
+      // 执行任务，使用eko的原生run方法（内部会生成taskId）
+      const result = await this.eko!.run(enhancedPrompt, taskId)
 
       const duration = Date.now() - startTime
 
@@ -117,7 +126,6 @@ ${prompt}`
     } catch (error) {
       const duration = Date.now() - startTime
       const errorMessage = error instanceof Error ? error.message : String(error)
-      console.error('❌ 任务执行失败:', errorMessage)
 
       return {
         result: '',
@@ -125,6 +133,9 @@ ${prompt}`
         success: false,
         error: errorMessage,
       }
+    } finally {
+      this.isRunning = false
+      this.currentTaskId = null
     }
   }
 
@@ -283,9 +294,41 @@ ${prompt}`
   }
 
   /**
+   * 中断当前正在运行的任务
+   */
+  abort(): boolean {
+    if (this.eko && this.currentTaskId && this.isRunning) {
+      console.log('🛑 中断当前AI任务:', this.currentTaskId)
+      const success = this.eko.abortTask(this.currentTaskId)
+      if (success) {
+        this.isRunning = false
+        this.currentTaskId = null
+      }
+      return success
+    }
+    return false
+  }
+
+  /**
+   * 检查是否有任务正在运行
+   */
+  isTaskRunning(): boolean {
+    return this.isRunning
+  }
+
+  /**
+   * 获取当前任务ID
+   */
+  getCurrentTaskId(): string | null {
+    return this.currentTaskId
+  }
+
+  /**
    * 销毁实例
    */
   destroy(): void {
+    // 中断任何正在运行的任务
+    this.abort()
     this.eko = null
     // 保持静默销毁，避免冗余日志
   }

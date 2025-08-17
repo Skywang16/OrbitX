@@ -175,7 +175,7 @@
               <div class="mode-icon" v-html="getIconSvg('monitor')"></div>
               <div class="mode-info">
                 <div class="mode-label">跟随系统</div>
-                <div class="mode-description">根据系统设置自动切换浅色/深色主题</div>
+                <div class="mode-description">根据系统设置自动切换主题</div>
               </div>
             </div>
             <div class="option-radio">

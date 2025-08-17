@@ -36,7 +36,8 @@ use ai::commands::{
     update_ai_model,
     update_conversation_title,
     update_message_content,
-    update_message_meta,
+    update_message_status,
+    update_message_steps,
     AIManagerState,
 };
 use ai::tool::ast::commands::analyze_code;
@@ -323,7 +324,8 @@ pub fn run() {
             get_compressed_context,
             save_message,
             update_message_content,
-            update_message_meta,
+            update_message_steps,
+            update_message_status,
             truncate_conversation,
             // 快捷键系统命令
             get_shortcuts_config,

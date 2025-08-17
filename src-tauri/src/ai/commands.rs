@@ -293,11 +293,31 @@ pub async fn update_message_content(
     Ok(())
 }
 
-/// 更新消息扩展（steps/status/duration）
+/// 更新消息步骤数据
 #[tauri::command]
-pub async fn update_message_meta(
+pub async fn update_message_steps(
     message_id: i64,
-    steps_json: Option<String>,
+    steps_json: String,
+    state: State<'_, AIManagerState>,
+) -> Result<(), String> {
+    if message_id <= 0 {
+        return Err("无效的消息ID".to_string());
+    }
+
+    let repositories = state.repositories();
+    repositories
+        .conversations()
+        .update_message_steps(message_id, &steps_json)
+        .await
+        .to_tauri()?;
+
+    Ok(())
+}
+
+/// 更新消息状态
+#[tauri::command]
+pub async fn update_message_status(
+    message_id: i64,
     status: Option<String>,
     duration_ms: Option<i64>,
     state: State<'_, AIManagerState>,
@@ -309,12 +329,7 @@ pub async fn update_message_meta(
     let repositories = state.repositories();
     repositories
         .conversations()
-        .update_message_meta(
-            message_id,
-            steps_json.as_deref(),
-            status.as_deref(),
-            duration_ms,
-        )
+        .update_message_status(message_id, status.as_deref(), duration_ms)
         .await
         .to_tauri()?;
 

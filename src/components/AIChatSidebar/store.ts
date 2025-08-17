@@ -93,6 +93,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   // 会话管理方法
   const createConversation = async (title?: string): Promise<void> => {
     try {
+      // 如果有正在进行的对话，先中断
+      stopCurrentConversation()
+
       isLoading.value = true
       const conversationId = await aiApi.createConversation(title)
       const newConversation = await aiApi.getConversation(conversationId)
@@ -134,6 +137,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   // 会话切换方法
   const switchToConversation = async (conversationId: number): Promise<void> => {
+    // 如果有正在进行的对话，先中断
+    stopCurrentConversation()
+
     messageList.value = []
     await loadConversation(conversationId, true)
   }
@@ -231,27 +237,30 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       // 添加消息到列表
       messageList.value.push(tempAIMessage)
 
-      // 8. 通过eko处理消息（流式输出通过回调处理）
+      // 8. 设置取消函数
+      cancelFunction.value = () => {
+        if (ekoInstance.value) {
+          ekoInstance.value.abort()
+        }
+      }
+
+      // 9. 通过eko处理消息（流式输出通过回调处理）
       streamingContent.value = ''
       const response = await ekoInstance.value.run(fullPrompt)
 
-      // 9. 更新AI回复内容和状态
+      // 10. 更新AI回复内容和状态
       if (response.success && response.result) {
         // 更新消息的内容和状态
         tempAIMessage.content = response.result
         tempAIMessage.status = 'complete'
         tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
 
-        // 只需要更新最终的持续时间，内容和steps已经在流式处理中更新了
+        // 更新消息的最终内容和状态
         try {
-          await aiApi.updateMessageMeta(
-            tempAIMessage.id,
-            null, // steps已经实时保存
-            tempAIMessage.status,
-            tempAIMessage.duration
-          )
+          await aiApi.updateMessageContent(tempAIMessage.id, tempAIMessage.content)
+          await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
         } catch (error) {
-          console.warn('⚠️ 更新最终消息状态失败:', error)
+          // 更新失败时静默处理
         }
       } else {
         tempAIMessage.status = 'error'
@@ -264,16 +273,19 @@ export const useAIChatStore = defineStore('ai-chat', () => {
             errorDetails: response.error || '未知错误',
           },
         })
-        saveStepsToDatabase(tempAIMessage.id, tempAIMessage.steps)
+        if (tempAIMessage.steps) {
+          saveStepsToDatabase(tempAIMessage.id, tempAIMessage.steps)
+        }
       }
 
-      // 10. 刷新会话列表以更新预览（不重新加载消息，保持步骤信息）
+      // 11. 刷新会话列表以更新预览（不重新加载消息，保持步骤信息）
       await refreshConversations()
     } catch (err) {
       error.value = handleErrorWithMessage(err, '发送消息失败')
       throw err
     } finally {
       isLoading.value = false
+      cancelFunction.value = null
     }
   }
 
@@ -300,6 +312,15 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
+  // 中断当前正在进行的对话
+  const stopCurrentConversation = (): void => {
+    if (isLoading.value && cancelFunction.value) {
+      cancelFunction.value()
+      cancelFunction.value = null
+      isLoading.value = false
+    }
+  }
+
   // 清空错误
   const clearError = (): void => {
     error.value = null
@@ -319,7 +340,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         try {
           await saveTask()
         } catch (error) {
-          console.warn('保存steps失败:', error)
+          // 保存失败时静默处理，不影响用户体验
         }
       }
     }
@@ -332,7 +353,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
     // 添加保存任务到队列
     saveQueue.push(async () => {
-      await aiApi.updateMessageMeta(messageId, [...steps], null, null)
+      await aiApi.updateMessageSteps(messageId, [...steps])
     })
 
     // 立即开始处理队列
@@ -393,9 +414,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                   ...thinkingStep.metadata,
                   thinkingDuration: Date.now() - thinkingStep.timestamp,
                 }
-                // 🔥 只在thinking完成时保存
-                saveStepsToDatabase(tempMessage.id, tempMessage.steps)
               }
+              // 🔥 thinking内容更新时也要保存
+              saveStepsToDatabase(tempMessage.id, tempMessage.steps)
             } else {
               tempMessage.steps?.push({
                 type: 'thinking' as const,
@@ -419,6 +440,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               // 更新现有text步骤内容
               lastStep.content = message.text
               lastStep.timestamp = Date.now()
+              // 🔥 text内容更新时也要保存
+              saveStepsToDatabase(tempMessage.id, tempMessage.steps)
             } else {
               // 新的text步骤
               tempMessage.steps?.push({
@@ -558,6 +581,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     refreshConversations,
     sendMessage,
     truncateAndResend,
+    stopCurrentConversation,
     clearError,
     initializeEko,
     initialize,

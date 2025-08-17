@@ -96,31 +96,31 @@ class ConversationAPI {
     }
   }
 
-  async updateMessageMeta(
-    messageId: number,
-    steps?: any[] | null,
-    status?: 'pending' | 'streaming' | 'complete' | 'error' | null,
-    duration?: number | null
-  ): Promise<void> {
+  async updateMessageSteps(messageId: number, steps: any[]): Promise<void> {
     try {
-      let stepsJson: string | null = null
-      if (steps) {
-        try {
-          stepsJson = JSON.stringify(steps)
-        } catch (jsonError) {
-          console.error('❌ steps序列化失败:', jsonError, steps)
-          throw new Error('steps数据序列化失败')
-        }
-      }
-
-      await invoke('update_message_meta', {
+      const stepsJson = JSON.stringify(steps)
+      await invoke('update_message_steps', {
         messageId,
         stepsJson,
+      })
+    } catch (error) {
+      throw new Error(handleError(error, '更新消息步骤失败'))
+    }
+  }
+
+  async updateMessageStatus(
+    messageId: number,
+    status?: 'pending' | 'streaming' | 'complete' | 'error',
+    duration?: number
+  ): Promise<void> {
+    try {
+      await invoke('update_message_status', {
+        messageId,
         status,
         durationMs: duration,
       })
     } catch (error) {
-      throw new Error(handleError(error, '更新消息元数据失败'))
+      throw new Error(handleError(error, '更新消息状态失败'))
     }
   }
 
@@ -341,8 +341,12 @@ export class AiApi {
     return this.conversationAPI.updateMessageContent(messageId, content)
   }
 
-  async updateMessageMeta(messageId: number, steps?: any[] | null, status?: string | null, duration?: number | null) {
-    return this.conversationAPI.updateMessageMeta(messageId, steps, status as any, duration)
+  async updateMessageSteps(messageId: number, steps: any[]) {
+    return this.conversationAPI.updateMessageSteps(messageId, steps)
+  }
+
+  async updateMessageStatus(messageId: number, status?: string, duration?: number) {
+    return this.conversationAPI.updateMessageStatus(messageId, status as any, duration)
   }
 
   async truncateConversation(conversationId: number, truncateAfterMessageId: number) {

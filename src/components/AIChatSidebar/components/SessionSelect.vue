@@ -60,7 +60,6 @@
       :model-value="props.currentSessionId"
       :options="selectOptions"
       :placeholder="displayValue"
-      :disabled="loading"
       size="small"
       borderless
       filterable

@@ -308,24 +308,29 @@ impl ConversationRepository {
         Ok(())
     }
 
-    /// 更新消息元数据
-    pub async fn update_message_meta(
+    /// 更新消息步骤数据
+    pub async fn update_message_steps(&self, message_id: i64, steps_json: &str) -> AppResult<()> {
+        sqlx::query("UPDATE ai_messages SET steps_json = ? WHERE id = ?")
+            .bind(steps_json)
+            .bind(message_id)
+            .execute(self.database.pool())
+            .await?;
+        Ok(())
+    }
+
+    /// 更新消息状态
+    pub async fn update_message_status(
         &self,
         message_id: i64,
-        steps_json: Option<&str>,
         status: Option<&str>,
         duration_ms: Option<i64>,
     ) -> AppResult<()> {
-        sqlx::query(
-            "UPDATE ai_messages SET steps_json = ?, status = ?, duration_ms = ? WHERE id = ?",
-        )
-        .bind(steps_json)
-        .bind(status)
-        .bind(duration_ms)
-        .bind(message_id)
-        .execute(self.database.pool())
-        .await?;
-
+        sqlx::query("UPDATE ai_messages SET status = ?, duration_ms = ? WHERE id = ?")
+            .bind(status)
+            .bind(duration_ms)
+            .bind(message_id)
+            .execute(self.database.pool())
+            .await?;
         Ok(())
     }
 }

@@ -145,7 +145,6 @@
           class="send-button"
           :class="{ 'stop-button': loading }"
           :disabled="!loading && !canSend"
-          :loading="loading"
           @click="handleButtonClick"
         >
           <template #icon>
