@@ -59,7 +59,7 @@ export interface orbitSearchResponse {
 export class OrbitSearchTool extends ModifiableTool {
   constructor() {
     super(
-      'semantic_search',
+      'orbit_search',
       `智能代码搜索工具，结合文本搜索、AST分析和语义理解。可以搜索函数定义、变量使用、类声明等代码符号，也可以进行普通文本搜索。支持多种编程语言的语法分析。比普通文本搜索更智能，能理解代码结构和上下文。适用于代码审查、函数查找、重构分析等场景。query参数指定搜索内容，path参数指定搜索路径（默认当前目录）。返回简洁的搜索结果，按相关性排序。
 
 输入示例: {"query": "createUser", "path": "./src"}

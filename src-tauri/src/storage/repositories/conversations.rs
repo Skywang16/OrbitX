@@ -59,7 +59,6 @@ pub struct Message {
     pub conversation_id: i64,
     pub role: String,
     pub content: String,
-    #[serde(rename = "steps")]
     pub steps_json: Option<String>,
     pub status: Option<String>,
     pub duration_ms: Option<i64>,
@@ -84,12 +83,16 @@ impl Message {
 impl RowMapper<Message> for Message {
     fn from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<Self> {
         let created_at_dt: DateTime<Utc> = row.try_get("created_at")?;
+        let id: i64 = row.try_get("id")?;
+        let role: String = row.try_get("role")?;
+        let steps_json: Option<String> = row.try_get("steps_json")?;
+
         Ok(Self {
-            id: Some(row.try_get("id")?),
+            id: Some(id),
             conversation_id: row.try_get("conversation_id")?,
-            role: row.try_get("role")?,
+            role,
             content: row.try_get("content")?,
-            steps_json: row.try_get("steps_json")?,
+            steps_json,
             status: row.try_get("status")?,
             duration_ms: row.try_get("duration_ms")?,
             created_at: created_at_dt.to_rfc3339(),
@@ -292,6 +295,17 @@ impl ConversationRepository {
             .await?;
 
         Ok(result.rows_affected())
+    }
+
+    /// 更新消息内容
+    pub async fn update_message_content(&self, message_id: i64, content: &str) -> AppResult<()> {
+        sqlx::query("UPDATE ai_messages SET content = ? WHERE id = ?")
+            .bind(content)
+            .bind(message_id)
+            .execute(self.database.pool())
+            .await?;
+
+        Ok(())
     }
 
     /// 更新消息元数据

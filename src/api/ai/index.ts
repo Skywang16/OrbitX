@@ -88,6 +88,14 @@ class ConversationAPI {
     }
   }
 
+  async updateMessageContent(messageId: number, content: string): Promise<void> {
+    try {
+      await invoke('update_message_content', { messageId, content })
+    } catch (error) {
+      throw new Error(handleError(error, '更新消息内容失败'))
+    }
+  }
+
   async updateMessageMeta(
     messageId: number,
     steps?: any[] | null,
@@ -95,9 +103,19 @@ class ConversationAPI {
     duration?: number | null
   ): Promise<void> {
     try {
+      let stepsJson: string | null = null
+      if (steps) {
+        try {
+          stepsJson = JSON.stringify(steps)
+        } catch (jsonError) {
+          console.error('❌ steps序列化失败:', jsonError, steps)
+          throw new Error('steps数据序列化失败')
+        }
+      }
+
       await invoke('update_message_meta', {
         messageId,
-        stepsJson: steps ? JSON.stringify(steps) : null,
+        stepsJson,
         status,
         durationMs: duration,
       })
@@ -127,12 +145,21 @@ class ConversationAPI {
   }
 
   private convertMessage(raw: RawMessage): Message {
+    let steps: any[] | undefined = undefined
+    if (raw.stepsJson) {
+      try {
+        steps = JSON.parse(raw.stepsJson)
+      } catch (error) {
+        console.error('steps解析失败:', error)
+      }
+    }
+
     return {
       id: raw.id,
       conversationId: raw.conversationId,
       role: raw.role,
       content: raw.content,
-      steps: raw.stepsJson ? JSON.parse(raw.stepsJson) : undefined,
+      steps,
       status: raw.status,
       duration: raw.durationMs || undefined,
       createdAt: new Date(raw.createdAt),
@@ -308,6 +335,10 @@ export class AiApi {
 
   async saveMessage(conversationId: number, role: string, content: string) {
     return this.conversationAPI.saveMessage(conversationId, role, content)
+  }
+
+  async updateMessageContent(messageId: number, content: string) {
+    return this.conversationAPI.updateMessageContent(messageId, content)
   }
 
   async updateMessageMeta(messageId: number, steps?: any[] | null, status?: string | null, duration?: number | null) {

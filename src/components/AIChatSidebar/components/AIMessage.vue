@@ -13,7 +13,9 @@
 
   // 按时间戳排序步骤，确保瀑布式显示顺序
   const sortedSteps = computed(() => {
-    if (!props.message.steps) return []
+    if (!props.message.steps) {
+      return []
+    }
     return [...props.message.steps].sort((a, b) => a.timestamp - b.timestamp)
   })
 

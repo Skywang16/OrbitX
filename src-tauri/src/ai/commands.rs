@@ -272,6 +272,27 @@ pub async fn save_message(
     Ok(message_id)
 }
 
+/// 更新消息内容
+#[tauri::command]
+pub async fn update_message_content(
+    message_id: i64,
+    content: String,
+    state: State<'_, AIManagerState>,
+) -> Result<(), String> {
+    if message_id <= 0 {
+        return Err("无效的消息ID".to_string());
+    }
+
+    let repositories = state.repositories();
+    repositories
+        .conversations()
+        .update_message_content(message_id, &content)
+        .await
+        .to_tauri()?;
+
+    Ok(())
+}
+
 /// 更新消息扩展（steps/status/duration）
 #[tauri::command]
 pub async fn update_message_meta(
@@ -281,14 +302,11 @@ pub async fn update_message_meta(
     duration_ms: Option<i64>,
     state: State<'_, AIManagerState>,
 ) -> Result<(), String> {
-    info!("更新消息扩展: id={}", message_id);
-
     if message_id <= 0 {
         return Err("无效的消息ID".to_string());
     }
 
     let repositories = state.repositories();
-
     repositories
         .conversations()
         .update_message_meta(

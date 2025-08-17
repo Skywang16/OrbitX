@@ -35,6 +35,7 @@ use ai::commands::{
     truncate_conversation,
     update_ai_model,
     update_conversation_title,
+    update_message_content,
     update_message_meta,
     AIManagerState,
 };
@@ -321,6 +322,7 @@ pub fn run() {
             delete_conversation,
             get_compressed_context,
             save_message,
+            update_message_content,
             update_message_meta,
             truncate_conversation,
             // 快捷键系统命令

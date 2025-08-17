@@ -215,9 +215,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           ? contextMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n')
           : `user: ${content}`
 
-      // 7. 创建临时AI消息
+      // 7. 立即创建AI消息记录到数据库，获取真实ID用于实时保存steps
+      const messageId = await aiApi.saveMessage(currentConversationId.value, 'assistant', '正在生成回复...')
+
+      // 创建AI消息对象，使用真实的数据库ID
       const tempAIMessage: Message = {
-        id: -Date.now(), // 使用负数作为临时ID，避免与数据库ID冲突
+        id: messageId,
         conversationId: currentConversationId.value,
         role: 'assistant',
         createdAt: new Date(),
@@ -225,37 +228,32 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         status: 'streaming',
       }
 
-      // 添加临时消息到列表
+      // 添加消息到列表
       messageList.value.push(tempAIMessage)
 
       // 8. 通过eko处理消息（流式输出通过回调处理）
       streamingContent.value = ''
       const response = await ekoInstance.value.run(fullPrompt)
 
-      // 9. 保存AI回复到数据库并更新消息状态
+      // 9. 更新AI回复内容和状态
       if (response.success && response.result) {
-        // 更新临时消息的内容和状态
+        // 更新消息的内容和状态
         tempAIMessage.content = response.result
         tempAIMessage.status = 'complete'
         tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
 
-        // 保存到数据库并更新消息ID
-        const messageId = await aiApi.saveMessage(currentConversationId.value, 'assistant', response.result)
-        tempAIMessage.id = messageId
-
-        // 增量持久化：将steps/status/duration落库，保证历史回放一致
+        // 只需要更新最终的持续时间，内容和steps已经在流式处理中更新了
         try {
           await aiApi.updateMessageMeta(
-            messageId,
-            tempAIMessage.steps || [],
+            tempAIMessage.id,
+            null, // steps已经实时保存
             tempAIMessage.status,
             tempAIMessage.duration
           )
-        } catch {
-          // 静默失败，不影响前端展示
+        } catch (error) {
+          console.warn('⚠️ 更新最终消息状态失败:', error)
         }
       } else {
-        // 处理失败情况
         tempAIMessage.status = 'error'
         tempAIMessage.steps?.push({
           type: 'error',
@@ -266,6 +264,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
             errorDetails: response.error || '未知错误',
           },
         })
+        saveStepsToDatabase(tempAIMessage.id, tempAIMessage.steps)
       }
 
       // 10. 刷新会话列表以更新预览（不重新加载消息，保持步骤信息）
@@ -306,6 +305,40 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     error.value = null
   }
 
+  // 实时保存队列 - 确保每次更新都立即保存，按顺序执行
+  const saveQueue: Array<() => Promise<void>> = []
+  let isProcessing = false
+
+  const processSaveQueue = async () => {
+    if (isProcessing) return
+    isProcessing = true
+
+    while (saveQueue.length > 0) {
+      const saveTask = saveQueue.shift()
+      if (saveTask) {
+        try {
+          await saveTask()
+        } catch (error) {
+          console.warn('保存steps失败:', error)
+        }
+      }
+    }
+
+    isProcessing = false
+  }
+
+  const saveStepsToDatabase = (messageId: number, steps: any[]) => {
+    if (messageId <= 0) return
+
+    // 添加保存任务到队列
+    saveQueue.push(async () => {
+      await aiApi.updateMessageMeta(messageId, [...steps], null, null)
+    })
+
+    // 立即开始处理队列
+    processSaveQueue()
+  }
+
   // 初始化Eko实例（带流式回调）
   const initializeEko = async (): Promise<void> => {
     try {
@@ -332,12 +365,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                 status: 'running',
               },
             })
+            // 🔥 tool开始时立即保存
+            saveStepsToDatabase(tempMessage.id, tempMessage.steps)
           } else if (message.type === 'tool_result') {
-            // 找到最后一个运行中的工具步骤
-            const runningSteps = tempMessage.steps.filter(
-              step => step.type === 'tool_use' && step.metadata?.status === 'running'
-            )
-            const toolStep = runningSteps[runningSteps.length - 1]
+            const toolStep = tempMessage.steps
+              .filter(step => step.type === 'tool_use' && step.metadata?.status === 'running')
+              .pop()
 
             if (toolStep) {
               toolStep.content = `工具执行完成: ${toolStep.metadata?.toolName}`
@@ -347,22 +380,24 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                 completedAt: Date.now(),
                 toolResult: message.toolResult,
               }
+              // 🔥 tool完成时立即保存
+              saveStepsToDatabase(tempMessage.id, tempMessage.steps)
             }
           } else if (message.type === 'workflow' && message.workflow?.thought) {
-            // 处理思考步骤
             let thinkingStep = tempMessage.steps?.find(step => step.type === 'thinking')
+
             if (thinkingStep) {
               thinkingStep.content = message.workflow.thought
-
-              // 如果thinking完成，记录持续时间
               if (message.streamDone) {
                 thinkingStep.metadata = {
                   ...thinkingStep.metadata,
                   thinkingDuration: Date.now() - thinkingStep.timestamp,
                 }
+                // 🔥 只在thinking完成时保存
+                saveStepsToDatabase(tempMessage.id, tempMessage.steps)
               }
             } else {
-              const newStep = {
+              tempMessage.steps?.push({
                 type: 'thinking' as const,
                 content: message.workflow.thought,
                 timestamp: Date.now(),
@@ -370,37 +405,40 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                   workflowName: message.workflow.name,
                   agentName: message.agentName,
                   taskId: message.taskId,
-                  // 如果thinking瞬间完成，记录0持续时间
                   thinkingDuration: message.streamDone ? 0 : undefined,
                 },
-              }
-
-              tempMessage.steps?.push(newStep)
+              })
+              // 🔥 新thinking步骤创建时保存
+              saveStepsToDatabase(tempMessage.id, tempMessage.steps)
             }
           } else if (message.type === 'text' && message.text !== undefined) {
-            // 瀑布流逻辑：只有当最后一个step就是text类型时，才更新它
-            // 如果最后一个step是tool/thinking等其他类型，则创建新的text step
             const lastStep = tempMessage.steps?.[tempMessage.steps.length - 1]
             const isCurrentRoundText = lastStep?.type === 'text'
 
             if (isCurrentRoundText) {
-              // 同一轮text流式更新：更新最后一个text step
+              // 更新现有text步骤内容
               lastStep.content = message.text
               lastStep.timestamp = Date.now()
             } else {
-              // 新一轮text输出：创建新的text step
+              // 新的text步骤
               tempMessage.steps?.push({
                 type: 'text',
                 content: message.text,
                 timestamp: Date.now(),
               })
+              // 🔥 新text步骤创建时保存
+              saveStepsToDatabase(tempMessage.id, tempMessage.steps)
             }
+
             streamingContent.value = message.text
 
-            // 如果文本流完成，更新消息状态
             if (message.streamDone) {
               tempMessage.status = 'complete'
               tempMessage.content = message.text
+              // 🔥 text完成时保存最终状态
+              saveStepsToDatabase(tempMessage.id, tempMessage.steps)
+              // 同时更新消息内容
+              await aiApi.updateMessageContent(tempMessage.id, message.text)
             }
           }
         }
