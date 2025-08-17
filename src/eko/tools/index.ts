@@ -18,7 +18,7 @@
  * - web-fetch: 🌐 HTTP请求（支持各种方法、头部、超时）
  *
  * 🔍 搜索工具：
- * - semantic-search: 🧠 智能语义搜索（融合文本搜索、AST分析、语义理解）
+ * - orbit-search: 🧠 智能语义搜索（融合文本搜索、AST分析、语义理解）
  *
  * 🔧 基础设施：
  * - tool-error: 错误处理和类型定义
@@ -46,7 +46,7 @@ export { editFileTool } from './toolList/edit-file'
 export { shellTool } from './toolList/shell'
 export { webFetchTool } from './toolList/web-fetch'
 
-export { semanticSearchTool } from './toolList/semantic-search'
+export { orbitSearchTool } from './toolList/orbit-search'
 
 // 导出主要的工具集合
 export {

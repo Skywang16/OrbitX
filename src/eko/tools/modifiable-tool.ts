@@ -63,6 +63,11 @@ export abstract class ModifiableTool implements Tool {
    * 错误处理钩子
    */
   protected async onError(_context: ToolExecutionContext, error: unknown): Promise<ToolResult> {
+    // 对于ToolError类型的错误，重新抛出以便测试可以捕获
+    if (error instanceof ToolError) {
+      throw error
+    }
+
     return {
       content: [
         {

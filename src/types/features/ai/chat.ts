@@ -13,7 +13,6 @@ export interface Conversation {
   id: number
   title: string
   messageCount: number
-  lastMessagePreview?: string
   createdAt: Date
   updatedAt: Date
 }

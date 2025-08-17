@@ -28,8 +28,9 @@ export class ReadManyFilesTool extends ModifiableTool {
   constructor() {
     super(
       'read_many_files',
-      `批量读取文件工具。
-输入示例: {"filePaths": ["src/main.ts", "src/utils.ts"], "showLineNumbers": true}
+      `批量读取多个文件的内容。一次性读取多个文件，比单独调用read_file更高效。支持显示行号，可设置文件大小限制避免读取过大文件。会跳过无法读取的文件并在结果中标记。适用于代码审查、批量文件分析、项目文件对比等场景。paths参数指定文件路径数组，showLineNumbers参数控制是否显示行号，maxFileSize参数设置单文件大小限制。返回所有文件的内容和读取状态。
+
+输入示例: {"paths": ["src/main.ts", "src/utils.ts"], "showLineNumbers": true}
 输出示例: {
   "content": [{
     "type": "text",
@@ -57,7 +58,7 @@ export class ReadManyFilesTool extends ModifiableTool {
             minimum: 1024,
           },
         },
-        required: ['filePaths'],
+        required: ['paths'],
       }
     )
   }

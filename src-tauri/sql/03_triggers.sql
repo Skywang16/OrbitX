@@ -15,9 +15,14 @@ BEGIN
     UPDATE ai_conversations
     SET message_count = message_count + 1,
         updated_at = CURRENT_TIMESTAMP,
-        last_message_preview = CASE
-            WHEN LENGTH(NEW.content) > 40 THEN SUBSTR(NEW.content, 1, 40) || '...'
-            ELSE NEW.content
+        -- 如果是第一条用户消息且标题仍为"新对话"，则自动更新标题
+        title = CASE
+            WHEN NEW.role = 'user' AND title = '新对话' THEN
+                CASE
+                    WHEN LENGTH(NEW.content) > 20 THEN SUBSTR(NEW.content, 1, 20) || '...'
+                    ELSE NEW.content
+                END
+            ELSE title
         END
     WHERE id = NEW.conversation_id;
 END;
@@ -32,15 +37,4 @@ BEGIN
     WHERE id = OLD.conversation_id;
 END;
 
--- 更新消息时刷新会话预览
-CREATE TRIGGER IF NOT EXISTS update_message_preview
-AFTER UPDATE ON ai_messages
-BEGIN
-    UPDATE ai_conversations
-    SET updated_at = CURRENT_TIMESTAMP,
-        last_message_preview = CASE
-            WHEN LENGTH(NEW.content) > 40 THEN SUBSTR(NEW.content, 1, 40) || '...'
-            ELSE NEW.content
-        END
-    WHERE id = NEW.conversation_id;
-END;
+

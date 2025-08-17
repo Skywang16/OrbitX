@@ -121,7 +121,6 @@ class ConversationAPI {
       id: raw.id,
       title: raw.title,
       messageCount: raw.messageCount,
-      lastMessagePreview: raw.lastMessagePreview,
       createdAt: new Date(raw.createdAt),
       updatedAt: new Date(raw.updatedAt),
     }

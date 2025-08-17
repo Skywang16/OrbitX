@@ -22,7 +22,6 @@ pub struct Conversation {
     pub id: Option<i64>,
     pub title: String,
     pub message_count: i64,
-    pub last_message_preview: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -34,7 +33,6 @@ impl Conversation {
             id: None,
             title,
             message_count: 0,
-            last_message_preview: String::new(),
             created_at: now,
             updated_at: now,
         }
@@ -47,7 +45,6 @@ impl RowMapper<Conversation> for Conversation {
             id: Some(row.try_get("id")?),
             title: row.try_get("title")?,
             message_count: row.try_get("message_count")?,
-            last_message_preview: row.try_get("last_message_preview")?,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
         })
@@ -117,14 +114,7 @@ impl ConversationRepository {
         offset: Option<i64>,
     ) -> AppResult<Vec<Conversation>> {
         let mut builder = SafeQueryBuilder::new("ai_conversations")
-            .select(&[
-                "id",
-                "title",
-                "message_count",
-                "last_message_preview",
-                "created_at",
-                "updated_at",
-            ])
+            .select(&["id", "title", "message_count", "created_at", "updated_at"])
             .order_by(crate::storage::query::QueryOrder::Desc(
                 "updated_at".to_string(),
             ));
@@ -171,17 +161,6 @@ impl ConversationRepository {
         .bind(conversation_id)
         .execute(self.database.pool())
         .await?;
-
-        Ok(())
-    }
-
-    /// 更新会话预览
-    pub async fn update_preview(&self, conversation_id: i64, preview: &str) -> AppResult<()> {
-        sqlx::query("UPDATE ai_conversations SET last_message_preview = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-            .bind(preview)
-            .bind(conversation_id)
-            .execute(self.database.pool())
-            .await?;
 
         Ok(())
     }
@@ -366,10 +345,6 @@ impl Repository<Conversation> for ConversationRepository {
         let (sql, params) = InsertBuilder::new("ai_conversations")
             .set("title", Value::String(entity.title.clone()))
             .set("message_count", Value::Number(entity.message_count.into()))
-            .set(
-                "last_message_preview",
-                Value::String(entity.last_message_preview.clone()),
-            )
             .set("created_at", Value::String(entity.created_at.to_rfc3339()))
             .set("updated_at", Value::String(entity.updated_at.to_rfc3339()))
             .build()?;
@@ -395,10 +370,9 @@ impl Repository<Conversation> for ConversationRepository {
 
     async fn update(&self, entity: &Conversation) -> AppResult<()> {
         if let Some(id) = entity.id {
-            sqlx::query("UPDATE ai_conversations SET title = ?, message_count = ?, last_message_preview = ?, updated_at = ? WHERE id = ?")
+            sqlx::query("UPDATE ai_conversations SET title = ?, message_count = ?, updated_at = ? WHERE id = ?")
                 .bind(&entity.title)
                 .bind(entity.message_count)
-                .bind(&entity.last_message_preview)
                 .bind(entity.updated_at)
                 .bind(id)
                 .execute(self.database.pool())

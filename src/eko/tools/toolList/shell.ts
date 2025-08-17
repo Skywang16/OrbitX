@@ -33,8 +33,9 @@ export class ShellTool extends ModifiableTool {
   constructor() {
     super(
       'shell',
-      `执行Shell命令工具。
-输入示例: {"command": "ls -la", "workingDirectory": "./src"}
+      `执行Shell命令并返回输出结果。支持各种系统命令如ls、cat、grep、npm、git等。会在指定的工作目录中执行命令，如果不指定则在当前目录执行。包含安全检查，会阻止危险命令如rm -rf /等。适用于文件操作、项目构建、版本控制等场景。command参数指定要执行的命令，path参数可选指定工作目录。执行成功返回命令输出，失败返回错误信息。
+
+输入示例: {"command": "ls -la", "path": "./src"}
 输出示例: {
   "content": [{
     "type": "text",
@@ -172,22 +173,33 @@ export class ShellTool extends ModifiableTool {
 
       // 命令完成检测逻辑
       const detectCommandCompletion = (output: string): boolean => {
+        if (!output || output.trim() === '') return false
+
         // 彻底清理ANSI转义序列
         let cleanOutput = output
-          .replace(/\u001B\[[0-9;?]*[a-zA-Z]/g, '') // 标准ANSI序列
-          .replace(/\u001B\[[?][0-9]*[a-zA-Z]/g, '') // ?开头的序列
-          .replace(/\u001B\[K/g, '') // 清除行序列
-          .replace(/\u001B\[[0-9]*[mK]/g, '') // m和K结尾的序列
+          .replace(/\x1B\[[0-9;?]*[a-zA-Z]/g, '') // 标准ANSI序列
+          .replace(/\x1B\[[?][0-9]*[a-zA-Z]/g, '') // ?开头的序列
+          .replace(/\x1B\[K/g, '') // 清除行序列
+          .replace(/\x1B\[[0-9]*[mK]/g, '') // m和K结尾的序列
           .replace(/\r/g, '') // 回车符
-          .replace(/\n+/g, ' ') // 换行符转空格
-          .replace(/\s+/g, ' ') // 多个空格合并
-          .trim()
 
-        // 检测提示符：包含 @ 和 % 的提示符，或以常见提示符结尾
-        const hasUserHostPrompt = cleanOutput.includes('@') && cleanOutput.includes(' % ')
-        const hasSimplePrompt = /[%$#>]\s*$/.test(cleanOutput)
+        // 按行分割，检查最后几行
+        const lines = cleanOutput.split('\n').filter(line => line.trim() !== '')
+        if (lines.length === 0) return false
 
-        return hasUserHostPrompt || hasSimplePrompt
+        const lastLine = lines[lines.length - 1].trim()
+
+        // 检测各种提示符模式
+        const promptPatterns = [
+          /.*[@#$%>]\s*$/, // 通用提示符结尾
+          /.*\$\s*$/, // bash提示符
+          /.*%\s*$/, // zsh提示符
+          /.*#\s*$/, // root提示符
+          /.*>\s*$/, // cmd提示符
+          /.*@.*:\s*[~/].*[$%#>]\s*$/, // 完整的用户@主机:路径$ 格式
+        ]
+
+        return promptPatterns.some(pattern => pattern.test(lastLine))
       }
 
       // 清理函数
@@ -256,7 +268,7 @@ export class ShellTool extends ModifiableTool {
    * 获取或创建Agent专属终端
    */
   private async getOrCreateAgentTerminal(): Promise<number> {
-    // 尝试从当前活跃的Agent实例获取专属终端
+    // 尝试从当前活跃的TerminalAgent实例获取专属终端
     const currentAgent = TerminalAgent.getCurrentInstance()
     if (currentAgent) {
       const agentTerminalId = currentAgent.getTerminalIdForTools()
@@ -267,7 +279,7 @@ export class ShellTool extends ModifiableTool {
       return await currentAgent.ensureAgentTerminal()
     }
 
-    // 降级方案：如果没有Agent实例，使用任何可用的终端
+    // 如果没有TerminalAgent实例（可能是Chat模式），使用任何可用的终端
     const terminals = await terminalApi.listTerminals()
     if (terminals.length === 0) {
       throw new ToolError('没有可用的终端')

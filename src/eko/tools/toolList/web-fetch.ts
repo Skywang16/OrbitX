@@ -22,7 +22,8 @@ export class WebFetchTool extends ModifiableTool {
   constructor() {
     super(
       'web_fetch',
-      `获取网页内容工具。
+      `获取网页内容和API数据。支持GET、POST、PUT、DELETE等HTTP方法。优先使用Jina.ai Reader进行智能内容提取，可以获取网页的主要文本内容而非HTML源码。适用于获取API数据、网页内容、文档等场景。url参数指定目标URL，method参数指定HTTP方法（默认GET），body参数用于POST请求的数据。返回网页内容或API响应数据。
+
 输入示例: {"url": "https://api.github.com/users/octocat", "method": "GET"}
 输出示例: {
   "content": [{

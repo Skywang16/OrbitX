@@ -64,7 +64,7 @@
     // 无论哪种模式都通过eko处理，确保eko已初始化
     await aiChatStore.initializeEko()
     // 同步模式到 Eko，确保工具权限生效
-    aiChatStore.ekoInstance?.setMode(mode)
+    await aiChatStore.ekoInstance?.setMode(mode)
     // 状态变化会自动触发保存（通过 watch 监听器）
   }
 

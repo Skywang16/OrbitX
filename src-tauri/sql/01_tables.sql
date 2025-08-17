@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS ai_conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL DEFAULT '新对话',
     message_count INTEGER DEFAULT 0,
-    last_message_preview TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

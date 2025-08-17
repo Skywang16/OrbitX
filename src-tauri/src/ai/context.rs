@@ -80,21 +80,7 @@ pub async fn handle_truncate_conversation(
         .await?;
 
     // 2. 更新会话统计（触发器会自动处理message_count）
-    if deleted_count > 0 {
-        // 获取最后一条消息作为预览
-        let messages = repositories
-            .conversations()
-            .get_messages(conversation_id, Some(1), None)
-            .await?;
-
-        if let Some(last_message) = messages.last() {
-            let preview = truncate_string(&last_message.content, 40);
-            repositories
-                .conversations()
-                .update_preview(conversation_id, &preview)
-                .await?;
-        }
-    }
+    // 删除消息后，会话统计会通过数据库触发器自动更新
 
     info!(
         "会话 {} 截断完成，删除了 {} 条消息",

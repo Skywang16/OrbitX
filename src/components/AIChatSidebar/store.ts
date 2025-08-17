@@ -201,7 +201,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
       // 4. 根据模式设置只读/全权限工具（若失败不影响整体发送流程）
       try {
-        ekoInstance.value.setMode(chatMode.value)
+        await ekoInstance.value.setMode(chatMode.value)
       } catch {
         /* ignore */
       }

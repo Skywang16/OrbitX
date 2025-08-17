@@ -20,12 +20,13 @@ export class EditFileTool extends ModifiableTool {
   constructor() {
     super(
       'edit_file',
-      `编辑文件工具。
-输入示例: {"filePath": "src/main.ts", "oldString": "const app = createApp()", "newString": "const app = createApp(App)"}
+      `编辑文件内容，通过精确的字符串替换修改文件。会查找文件中所有匹配oldString的内容并替换为newString。替换是全局的，会替换文件中的所有匹配项。必须完全匹配，区分大小写。适用于代码重构、配置更新、版本号修改等场景。path参数指定文件路径，oldString参数指定要替换的原始文本，newString参数指定替换后的新文本。如果未找到匹配内容会提示，成功替换会返回确认信息。
+
+输入示例: {"path": "src/main.ts", "oldString": "const app = createApp()", "newString": "const app = createApp(App)"}
 输出示例: {
   "content": [{
     "type": "text",
-    "text": "文件已修改: src/main.ts\\n替换了 1 处匹配项"
+    "text": "文件已修改: src/main.ts"
   }]
 }`,
       {
@@ -44,7 +45,7 @@ export class EditFileTool extends ModifiableTool {
             description: '替换后的新文本。示例："const app = createApp(App)"',
           },
         },
-        required: ['filePath', 'oldString', 'newString'],
+        required: ['path', 'oldString', 'newString'],
       }
     )
   }

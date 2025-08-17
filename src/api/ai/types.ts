@@ -12,7 +12,6 @@ export interface RawConversation {
   id: number
   title: string
   messageCount: number
-  lastMessagePreview?: string
   createdAt: string
   updatedAt: string
 }

@@ -20,12 +20,13 @@ export class ReadFileTool extends ModifiableTool {
   constructor() {
     super(
       'read_file',
-      `读取文件内容工具。
-输入示例: {"filePath": "src/main.ts", "startLine": 10, "endLine": 20}
+      `读取文件内容并显示。支持读取完整文件或指定行号范围。会自动添加行号便于定位。可以检测文件是否存在，如果路径是目录会提示使用read_directory工具。适用于查看代码文件、配置文件、日志文件等场景。path参数指定文件路径，startLine和endLine参数可选指定读取的行号范围。返回带行号的文件内容。
+
+输入示例: {"path": "src/main.ts", "startLine": 10, "endLine": 20}
 输出示例: {
   "content": [{
     "type": "text",
-    "text": "文件: src/main.ts (第10-20行)\\n\\n10: import { createApp } from 'vue'\\n11: import App from './App.vue'\\n12: \\n13: const app = createApp(App)\\n14: app.mount('#app')"
+    "text": "  10  import { createApp } from 'vue'\\n  11  import App from './App.vue'\\n  12  \\n  13  const app = createApp(App)\\n  14  app.mount('#app')"
   }]
 }`,
       {
@@ -46,7 +47,7 @@ export class ReadFileTool extends ModifiableTool {
             minimum: 1,
           },
         },
-        required: ['filePath'],
+        required: ['path'],
       }
     )
   }

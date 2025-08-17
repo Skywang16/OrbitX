@@ -9,13 +9,13 @@ import { globalToolRegistry } from './tool-registry'
 import { readFileTool } from './toolList/read-file'
 import { readManyFilesTool } from './toolList/read-many-files'
 import { readDirectoryTool } from './toolList/read-directory'
-import { fileSystemTool } from './toolList/filesystem'
+
 import { createFileTool } from './toolList/create-file'
 import { editFileTool } from './toolList/edit-file'
 import { shellTool } from './toolList/shell'
 import { webFetchTool } from './toolList/web-fetch'
 
-import { semanticSearchTool } from './toolList/semantic-search'
+import { orbitSearchTool } from './toolList/orbit-search'
 
 /**
  * 所有可用工具的数组
@@ -28,9 +28,6 @@ export const allTools: Tool<unknown>[] = [
   createFileTool,
   editFileTool,
 
-  // 文件系统工具
-  fileSystemTool,
-
   // 系统工具
   shellTool,
 
@@ -38,7 +35,7 @@ export const allTools: Tool<unknown>[] = [
   webFetchTool,
 
   // 搜索工具
-  semanticSearchTool,
+  orbitSearchTool,
 ]
 
 /**
@@ -46,23 +43,16 @@ export const allTools: Tool<unknown>[] = [
  */
 export const toolsByCategory = {
   file: [readFileTool, readManyFilesTool, readDirectoryTool, createFileTool, editFileTool],
-  filesystem: [fileSystemTool],
+
   system: [shellTool],
   network: [webFetchTool],
-  search: [semanticSearchTool],
+  search: [orbitSearchTool],
 }
 
 /**
  * 核心工具（最常用的工具）
  */
-export const coreTools: Tool[] = [
-  readFileTool,
-  readDirectoryTool,
-  fileSystemTool,
-  createFileTool,
-  editFileTool,
-  shellTool,
-]
+export const coreTools: Tool[] = [readFileTool, readDirectoryTool, createFileTool, editFileTool, shellTool]
 
 /**
  * 网络工具
@@ -75,14 +65,9 @@ export const networkTools: Tool[] = [webFetchTool]
 export const fileTools: Tool[] = [readFileTool, readManyFilesTool, readDirectoryTool, createFileTool, editFileTool]
 
 /**
- * 文件系统工具
- */
-export const fileSystemTools: Tool[] = [fileSystemTool]
-
-/**
  * 搜索工具
  */
-export const searchTools: Tool[] = [semanticSearchTool]
+export const searchTools: Tool[] = [orbitSearchTool]
 
 /**
  * 注册所有工具到全局注册表
@@ -113,14 +98,7 @@ export function registerAllTools(): void {
         tags: ['directory', 'list', 'folder', 'filesystem'],
       },
     },
-    {
-      tool: fileSystemTool,
-      metadata: {
-        description: fileSystemTool.description,
-        category: 'filesystem',
-        tags: ['filesystem', 'info', 'metadata', 'permissions'],
-      },
-    },
+
     {
       tool: createFileTool,
       metadata: {
@@ -154,11 +132,11 @@ export function registerAllTools(): void {
       },
     },
     {
-      tool: semanticSearchTool,
+      tool: orbitSearchTool,
       metadata: {
-        description: semanticSearchTool.description,
+        description: orbitSearchTool.description,
         category: 'search',
-        tags: ['search', 'semantic', 'ast', 'code', 'text', 'symbol', 'intelligent'],
+        tags: ['search', 'semantic', 'code', 'context', 'intelligent', 'analysis'],
       },
     },
   ]
@@ -171,8 +149,8 @@ export function registerAllTools(): void {
  * - chat 模式：仅允许读取类工具，禁止任何写入/执行类工具
  * - agent 模式：允许所有工具
  */
-export function getToolsForMode(mode: 'chat' | 'agent'): Tool<unknown>[] {
-  return mode === 'agent' ? allTools : [...fileTools, fileSystemTool, ...networkTools, ...searchTools]
+export function getToolsForMode(mode: 'chat' | 'agent'): Tool[] {
+  return mode === 'agent' ? allTools : [...fileTools, ...networkTools, ...searchTools]
 }
 
 // 自动注册所有工具

@@ -4,18 +4,18 @@
  * 测试Repository模式、数据库管理器和查询构建器的集成功能
  */
 
-use std::sync::Arc;
 use chrono::Utc;
+use std::sync::Arc;
 use tempfile::TempDir;
 use tokio;
 
 use terminal_lib::storage::{
     database::{DatabaseManager, DatabaseOptions},
     paths::StoragePathsBuilder,
-    repositories::{RepositoryManager, Repository},
+    query::{QueryCondition, SafeQueryBuilder},
     repositories::ai_models::{AIModelConfig, AIProvider},
     repositories::conversations::Conversation,
-    query::{SafeQueryBuilder, QueryCondition},
+    repositories::{Repository, RepositoryManager},
 };
 
 /// 创建测试用的数据库管理器
@@ -38,7 +38,9 @@ async fn create_test_database_manager() -> (DatabaseManager, TempDir) {
     {
         let encryption_manager = manager.encryption_manager();
         let mut enc_mgr = encryption_manager.write().await;
-        enc_mgr.set_master_password("test-password-123").expect("设置主密钥失败");
+        enc_mgr
+            .set_master_password("test-password-123")
+            .expect("设置主密钥失败");
     }
 
     (manager, temp_dir)
@@ -128,7 +130,10 @@ async fn test_ai_model_crud_operations() {
     assert_eq!(models.len(), 1, "应该有1个AI模型");
 
     // 测试删除AI模型（使用字符串ID）
-    let result = repositories.ai_models().delete_by_string_id(&test_model.id).await;
+    let result = repositories
+        .ai_models()
+        .delete_by_string_id(&test_model.id)
+        .await;
     assert!(result.is_ok(), "删除AI模型应该成功");
 
     // 验证删除后模型不存在
@@ -149,7 +154,6 @@ async fn test_conversations_repository() {
         id: None,
         title: "Test Conversation".to_string(),
         message_count: 0,
-        last_message_preview: "".to_string(),
         created_at: Utc::now(),
         updated_at: Utc::now(),
     };
