@@ -20,26 +20,37 @@ export interface WebFetchParams {
  */
 export class WebFetchTool extends ModifiableTool {
   constructor() {
-    super('web_fetch', '获取网页内容：访问指定URL并提取页面内容，自动处理网页解析和内容提取', {
-      type: 'object',
-      properties: {
-        url: {
-          type: 'string',
-          description: '要访问的网页URL地址',
+    super(
+      'web_fetch',
+      `获取网页内容工具。
+输入示例: {"url": "https://api.github.com/users/octocat", "method": "GET"}
+输出示例: {
+  "content": [{
+    "type": "text",
+    "text": "网页内容获取成功\\n\\nURL: https://api.github.com/users/octocat\\n状态: 200 OK\\n内容类型: application/json\\n\\n内容:\\n{\\n  \\"login\\": \\"octocat\\",\\n  \\"id\\": 1,\\n  \\"name\\": \\"The Octocat\\"\\n}"
+  }]
+}`,
+      {
+        type: 'object',
+        properties: {
+          url: {
+            type: 'string',
+            description: 'URL地址。示例："https://api.github.com/users/octocat"、"https://httpbin.org/get"',
+          },
+          method: {
+            type: 'string',
+            enum: ['GET', 'POST'],
+            description: 'HTTP方法。示例："GET"、"POST"',
+            default: 'GET',
+          },
+          body: {
+            type: 'string',
+            description: 'POST请求数据。示例：\'{"name": "test", "value": 123}\'',
+          },
         },
-        method: {
-          type: 'string',
-          enum: ['GET', 'POST'],
-          description: 'HTTP请求方法，默认GET',
-          default: 'GET',
-        },
-        body: {
-          type: 'string',
-          description: 'POST请求的数据内容（JSON格式）',
-        },
-      },
-      required: ['url'],
-    })
+        required: ['url'],
+      }
+    )
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {

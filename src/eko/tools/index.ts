@@ -18,7 +18,7 @@
  * - web-fetch: 🌐 HTTP请求（支持各种方法、头部、超时）
  *
  * 🔍 搜索工具：
- * - orbit-context: 🔍 智能代码库搜索（动态探索、多模式搜索、上下文理解）
+ * - semantic-search: 🧠 智能语义搜索（融合文本搜索、AST分析、语义理解）
  *
  * 🔧 基础设施：
  * - tool-error: 错误处理和类型定义
@@ -46,7 +46,7 @@ export { editFileTool } from './toolList/edit-file'
 export { shellTool } from './toolList/shell'
 export { webFetchTool } from './toolList/web-fetch'
 
-export { orbitContextTool } from './toolList/orbit-context'
+export { semanticSearchTool } from './toolList/semantic-search'
 
 // 导出主要的工具集合
 export {

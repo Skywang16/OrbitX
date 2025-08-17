@@ -7,7 +7,7 @@ import type { ToolResult } from '../../types'
 import { invoke } from '@tauri-apps/api/core'
 
 export interface ReadManyFilesParams {
-  filePaths: string[]
+  paths: string[]
   showLineNumbers?: boolean
   maxFileSize?: number
 }
@@ -26,41 +26,52 @@ export interface FileReadResult {
  */
 export class ReadManyFilesTool extends ModifiableTool {
   constructor() {
-    super('read_many_files', '批量读取文件：一次性读取多个文件的内容', {
-      type: 'object',
-      properties: {
-        filePaths: {
-          type: 'array',
-          items: { type: 'string' },
-          description: '要读取的文件路径列表',
-          minItems: 1,
+    super(
+      'read_many_files',
+      `批量读取文件工具。
+输入示例: {"filePaths": ["src/main.ts", "src/utils.ts"], "showLineNumbers": true}
+输出示例: {
+  "content": [{
+    "type": "text",
+    "text": "批量读取 2 个文件\\n\\n=== src/main.ts (成功) ===\\n1: import { createApp } from 'vue'\\n2: import App from './App.vue'\\n\\n=== src/utils.ts (成功) ===\\n1: export function formatDate() {\\n2:   return new Date().toISOString()\\n3: }\\n\\n读取完成: 2个成功, 0个失败"
+  }]
+}`,
+      {
+        type: 'object',
+        properties: {
+          paths: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '文件路径列表。示例：["src/main.ts", "src/utils.ts", "package.json"]',
+            minItems: 1,
+          },
+          showLineNumbers: {
+            type: 'boolean',
+            description: '是否显示行号。示例：true、false',
+            default: false,
+          },
+          maxFileSize: {
+            type: 'number',
+            description: '最大文件大小（字节）。示例：1048576、2097152',
+            default: 1048576,
+            minimum: 1024,
+          },
         },
-        showLineNumbers: {
-          type: 'boolean',
-          description: '是否显示行号，默认false',
-          default: false,
-        },
-        maxFileSize: {
-          type: 'number',
-          description: '最大文件大小（字节），默认1MB',
-          default: 1048576,
-          minimum: 1024,
-        },
-      },
-      required: ['filePaths'],
-    })
+        required: ['filePaths'],
+      }
+    )
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
     const {
-      filePaths,
+      paths,
       showLineNumbers = false,
       maxFileSize = 1048576,
     } = context.parameters as unknown as ReadManyFilesParams
 
     const results: FileReadResult[] = []
 
-    for (const filePath of filePaths) {
+    for (const filePath of paths) {
       try {
         // 尝试检查文件大小（如果权限允许）
         let fileSize: number | undefined = undefined

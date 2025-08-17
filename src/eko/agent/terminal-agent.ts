@@ -155,7 +155,7 @@ export class TerminalAgent extends Agent {
     super({
       name: finalConfig.name,
       description: finalConfig.description,
-      tools: getToolsForMode('safe'), // 初始化为chat模式的只读工具
+      tools: getToolsForMode('chat') as any, // 初始化为chat模式的只读工具
       llms: ['default'], // 使用默认模型
     })
 
@@ -177,11 +177,8 @@ export class TerminalAgent extends Agent {
    * 切换工作模式并更新工具/提示词
    */
   setMode(mode: 'chat' | 'agent'): void {
-    // 映射模式到工具系统的模式
-    const toolMode = mode === 'chat' ? 'safe' : 'full'
-
     // 更新工具权限
-    this.tools = getToolsForMode(toolMode)
+    this.tools = getToolsForMode(mode) as any
 
     // 根据模式强化描述中的权限提醒
     const modeNotice =

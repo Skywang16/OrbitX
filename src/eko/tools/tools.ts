@@ -15,8 +15,7 @@ import { editFileTool } from './toolList/edit-file'
 import { shellTool } from './toolList/shell'
 import { webFetchTool } from './toolList/web-fetch'
 
-import { orbitContextTool } from './toolList/orbit-context'
-import { analyzeCodeTool } from './toolList/analyze-code'
+import { semanticSearchTool } from './toolList/semantic-search'
 
 /**
  * 所有可用工具的数组
@@ -39,10 +38,7 @@ export const allTools: Tool<unknown>[] = [
   webFetchTool,
 
   // 搜索工具
-  orbitContextTool,
-
-  // AST分析工具
-  analyzeCodeTool as Tool<unknown>,
+  semanticSearchTool,
 ]
 
 /**
@@ -53,8 +49,7 @@ export const toolsByCategory = {
   filesystem: [fileSystemTool],
   system: [shellTool],
   network: [webFetchTool],
-  search: [orbitContextTool],
-  ast: [analyzeCodeTool],
+  search: [semanticSearchTool],
 }
 
 /**
@@ -87,12 +82,7 @@ export const fileSystemTools: Tool[] = [fileSystemTool]
 /**
  * 搜索工具
  */
-export const searchTools: Tool[] = [orbitContextTool]
-
-/**
- * AST分析工具
- */
-export const astTools: Tool[] = [analyzeCodeTool as Tool]
+export const searchTools: Tool[] = [semanticSearchTool]
 
 /**
  * 注册所有工具到全局注册表
@@ -164,19 +154,11 @@ export function registerAllTools(): void {
       },
     },
     {
-      tool: orbitContextTool,
+      tool: semanticSearchTool,
       metadata: {
-        description: orbitContextTool.description,
+        description: semanticSearchTool.description,
         category: 'search',
-        tags: ['search', 'text', 'code', 'context', 'orbit', 'dynamic'],
-      },
-    },
-    {
-      tool: analyzeCodeTool as Tool,
-      metadata: {
-        description: 'AST代码结构分析：解析语法树，提取符号定义和依赖关系，了解代码整体架构',
-        category: 'ast',
-        tags: ['ast', 'code', 'analysis', 'structure', 'symbols', 'architecture', 'overview'],
+        tags: ['search', 'semantic', 'ast', 'code', 'text', 'symbol', 'intelligent'],
       },
     },
   ]
@@ -189,8 +171,8 @@ export function registerAllTools(): void {
  * - chat 模式：仅允许读取类工具，禁止任何写入/执行类工具
  * - agent 模式：允许所有工具
  */
-export function getToolsForMode(mode: 'chat' | 'agent'): Tool[] {
-  return mode === 'agent' ? allTools : [...fileTools, fileSystemTool, ...networkTools, ...searchTools, ...astTools]
+export function getToolsForMode(mode: 'chat' | 'agent'): Tool<unknown>[] {
+  return mode === 'agent' ? allTools : [...fileTools, fileSystemTool, ...networkTools, ...searchTools]
 }
 
 // 自动注册所有工具

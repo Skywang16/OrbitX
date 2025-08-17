@@ -8,7 +8,7 @@ import { ValidationError } from '../tool-error'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 
 export interface CreateFileParams {
-  filePath: string
+  path: string
   content: string
 }
 
@@ -17,37 +17,48 @@ export interface CreateFileParams {
  */
 export class CreateFileTool extends ModifiableTool {
   constructor() {
-    super('create_file', '创建文件：创建新文件并写入内容', {
-      type: 'object',
-      properties: {
-        filePath: {
-          type: 'string',
-          description: '文件路径',
+    super(
+      'create_file',
+      `创建文件工具。
+输入示例: {"filePath": "src/utils.ts", "content": "export function hello() {\\n  return 'Hello World'\\n}"}
+输出示例: {
+  "content": [{
+    "type": "text",
+    "text": "文件已创建: src/utils.ts"
+  }]
+}`,
+      {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: '文件路径。示例："src/utils.ts"、"config.json"',
+          },
+          content: {
+            type: 'string',
+            description: '文件内容。示例："export function hello() { return \'Hello\' }"',
+          },
         },
-        content: {
-          type: 'string',
-          description: '文件内容',
-        },
-      },
-      required: ['filePath', 'content'],
-    })
+        required: ['filePath', 'content'],
+      }
+    )
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
-    const { filePath, content } = context.parameters as unknown as CreateFileParams
+    const { path, content } = context.parameters as unknown as CreateFileParams
 
-    if (!filePath?.trim()) {
+    if (!path?.trim()) {
       throw new ValidationError('文件路径不能为空')
     }
 
     try {
-      await writeTextFile(filePath, content)
+      await writeTextFile(path, content)
 
       return {
         content: [
           {
             type: 'text',
-            text: `文件已创建: ${filePath}`,
+            text: `文件已创建: ${path}`,
           },
         ],
       }

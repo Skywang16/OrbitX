@@ -35,16 +35,27 @@ export interface FileInfo {
  */
 export class FileSystemTool extends ModifiableTool {
   constructor() {
-    super('filesystem', '文件信息：获取文件或目录的基本信息', {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description: '文件或目录路径',
+    super(
+      'filesystem',
+      `文件系统信息工具。
+输入示例: {"path": "./src/main.ts"}
+输出示例: {
+  "content": [{
+    "type": "text",
+    "text": "文件信息: ./src/main.ts\\n\\n类型: 文件\\n大小: 1.2 KB (1234 bytes)\\n创建时间: 2024-12-15 10:30:45\\n修改时间: 2024-12-15 14:22:10\\n权限: 可读 可写"
+  }]
+}`,
+      {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: '文件或目录路径。示例："./src/main.ts"、"./package.json"、"./src"',
+          },
         },
-      },
-      required: ['path'],
-    })
+        required: ['path'],
+      }
+    )
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
@@ -156,21 +167,17 @@ export class FileSystemTool extends ModifiableTool {
       }>('plugin:fs|metadata', { path })
 
       let type = '未知'
-      let icon = '❓'
 
       if (metadata.isDir) {
         type = '目录'
-        icon = '📁'
       } else if (metadata.isFile) {
         type = '文件'
-        icon = '📄'
 
         // 根据扩展名确定文件类型
         const ext = path.split('.').pop()?.toLowerCase()
         if (ext) {
           const typeInfo = this.getFileTypeByExtension(ext)
           type = typeInfo.type
-          icon = typeInfo.icon
         }
       }
 
@@ -178,7 +185,7 @@ export class FileSystemTool extends ModifiableTool {
         content: [
           {
             type: 'text',
-            text: `${icon} ${path} 是一个${type}`,
+            text: `${path} 是一个${type}`,
           },
         ],
       }
@@ -256,47 +263,47 @@ export class FileSystemTool extends ModifiableTool {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
   }
 
-  private getFileTypeByExtension(ext: string): { type: string; icon: string } {
-    const typeMap: Record<string, { type: string; icon: string }> = {
+  private getFileTypeByExtension(ext: string): { type: string } {
+    const typeMap: Record<string, { type: string }> = {
       // 代码文件
-      js: { type: 'JavaScript文件', icon: '📜' },
-      ts: { type: 'TypeScript文件', icon: '📜' },
-      vue: { type: 'Vue组件文件', icon: '💚' },
-      py: { type: 'Python文件', icon: '🐍' },
-      java: { type: 'Java文件', icon: '☕' },
-      cpp: { type: 'C++文件', icon: '⚙️' },
-      c: { type: 'C文件', icon: '⚙️' },
-      rs: { type: 'Rust文件', icon: '🦀' },
-      go: { type: 'Go文件', icon: '🐹' },
+      js: { type: 'JavaScript文件' },
+      ts: { type: 'TypeScript文件' },
+      vue: { type: 'Vue组件文件' },
+      py: { type: 'Python文件' },
+      java: { type: 'Java文件' },
+      cpp: { type: 'C++文件' },
+      c: { type: 'C文件' },
+      rs: { type: 'Rust文件' },
+      go: { type: 'Go文件' },
 
       // 配置文件
-      json: { type: 'JSON配置文件', icon: '⚙️' },
-      yaml: { type: 'YAML配置文件', icon: '⚙️' },
-      yml: { type: 'YAML配置文件', icon: '⚙️' },
-      toml: { type: 'TOML配置文件', icon: '⚙️' },
-      xml: { type: 'XML文件', icon: '📋' },
+      json: { type: 'JSON配置文件' },
+      yaml: { type: 'YAML配置文件' },
+      yml: { type: 'YAML配置文件' },
+      toml: { type: 'TOML配置文件' },
+      xml: { type: 'XML文件' },
 
       // 文档文件
-      md: { type: 'Markdown文档', icon: '📝' },
-      txt: { type: '文本文件', icon: '📄' },
-      pdf: { type: 'PDF文档', icon: '📕' },
-      doc: { type: 'Word文档', icon: '📘' },
-      docx: { type: 'Word文档', icon: '📘' },
+      md: { type: 'Markdown文档' },
+      txt: { type: '文本文件' },
+      pdf: { type: 'PDF文档' },
+      doc: { type: 'Word文档' },
+      docx: { type: 'Word文档' },
 
       // 图片文件
-      png: { type: 'PNG图片', icon: '🖼️' },
-      jpg: { type: 'JPEG图片', icon: '🖼️' },
-      jpeg: { type: 'JPEG图片', icon: '🖼️' },
-      gif: { type: 'GIF图片', icon: '🖼️' },
-      svg: { type: 'SVG矢量图', icon: '🎨' },
+      png: { type: 'PNG图片' },
+      jpg: { type: 'JPEG图片' },
+      jpeg: { type: 'JPEG图片' },
+      gif: { type: 'GIF图片' },
+      svg: { type: 'SVG矢量图' },
 
       // 其他
-      zip: { type: 'ZIP压缩包', icon: '📦' },
-      tar: { type: 'TAR归档', icon: '📦' },
-      gz: { type: 'GZIP压缩文件', icon: '📦' },
+      zip: { type: 'ZIP压缩包' },
+      tar: { type: 'TAR归档' },
+      gz: { type: 'GZIP压缩文件' },
     }
 
-    return typeMap[ext] || { type: '文件', icon: '📄' }
+    return typeMap[ext] || { type: '文件' }
   }
 }
 

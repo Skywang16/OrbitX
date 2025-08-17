@@ -14,7 +14,7 @@ import { TerminalAgent, createTerminalAgent } from './agent/terminal-agent'
 import { CodeAgent, createCodeAgent } from './agent/code-agent'
 
 // 导入工具
-import { getAllTools } from './tools'
+import { allTools } from './tools'
 
 // 导入类型
 import type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult } from './types'
@@ -275,8 +275,16 @@ const createOrbitXEko = async (config: EkoInstanceConfig = {}): Promise<OrbitXEk
   return instance
 }
 
+/**
+ * 创建终端Eko实例（createOrbitXEko的别名）
+ */
+const createTerminalEko = createOrbitXEko
+
 // 导出所有类型和工具
 export type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult, EkoConfigOptions }
+
+// 类型别名
+export type TerminalEko = OrbitXEko
 
 export {
   // 核心类
@@ -285,6 +293,7 @@ export {
 
   // 工厂函数
   createOrbitXEko,
+  createTerminalEko,
   createTerminalAgent,
   createCodeAgent,
 
@@ -293,7 +302,7 @@ export {
   createSidebarCallback,
 
   // 工具
-  getAllTools,
+  allTools,
 
   // 配置
   getEkoConfig,

@@ -8,7 +8,7 @@ import { FileNotFoundError } from '../tool-error'
 import { invoke } from '@tauri-apps/api/core'
 
 export interface ReadFileParams {
-  filePath: string
+  path: string
   startLine?: number
   endLine?: number
 }
@@ -18,30 +18,41 @@ export interface ReadFileParams {
  */
 export class ReadFileTool extends ModifiableTool {
   constructor() {
-    super('read_file', '读取文件内容：查看指定文件的文本内容', {
-      type: 'object',
-      properties: {
-        filePath: {
-          type: 'string',
-          description: '要读取的文件路径',
+    super(
+      'read_file',
+      `读取文件内容工具。
+输入示例: {"filePath": "src/main.ts", "startLine": 10, "endLine": 20}
+输出示例: {
+  "content": [{
+    "type": "text",
+    "text": "文件: src/main.ts (第10-20行)\\n\\n10: import { createApp } from 'vue'\\n11: import App from './App.vue'\\n12: \\n13: const app = createApp(App)\\n14: app.mount('#app')"
+  }]
+}`,
+      {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: '文件路径。示例："src/main.ts"、"package.json"',
+          },
+          startLine: {
+            type: 'number',
+            description: '开始行号。示例：10、1',
+            minimum: 1,
+          },
+          endLine: {
+            type: 'number',
+            description: '结束行号。示例：20、50',
+            minimum: 1,
+          },
         },
-        startLine: {
-          type: 'number',
-          description: '开始行号（可选，从1开始）',
-          minimum: 1,
-        },
-        endLine: {
-          type: 'number',
-          description: '结束行号（可选）',
-          minimum: 1,
-        },
-      },
-      required: ['filePath'],
-    })
+        required: ['filePath'],
+      }
+    )
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
-    const { filePath, startLine, endLine } = context.parameters as unknown as ReadFileParams
+    const { path, startLine, endLine } = context.parameters as unknown as ReadFileParams
 
     // 验证参数
     if (startLine && endLine && startLine > endLine) {
@@ -50,20 +61,20 @@ export class ReadFileTool extends ModifiableTool {
 
     try {
       // 首先检查文件是否存在
-      const exists = await this.checkFileExists(filePath)
+      const exists = await this.checkFileExists(path)
       if (!exists) {
-        throw new FileNotFoundError(filePath)
+        throw new FileNotFoundError(path)
       }
 
       // 检查是否为目录
-      const isDirectory = await this.checkIsDirectory(filePath)
+      const isDirectory = await this.checkIsDirectory(path)
       if (isDirectory) {
-        throw new Error(`路径 ${filePath} 是一个目录，请使用 read_directory 工具读取目录内容`)
+        throw new Error(`路径 ${path} 是一个目录，请使用 read_directory 工具读取目录内容`)
       }
 
       // 使用Tauri API读取文件
       const rawContent = await invoke<ArrayBuffer>('plugin:fs|read_text_file', {
-        path: filePath,
+        path: path,
       })
 
       // 确保内容不为空

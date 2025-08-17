@@ -4,13 +4,13 @@
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '../../types'
-import { TerminalError, ValidationError } from '../tool-error'
+import { ValidationError, ToolError } from '../tool-error'
 import { terminalApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'
 import { TerminalAgent } from '../../agent/terminal-agent'
 export interface ShellParams {
   command: string
-  workingDirectory?: string
+  path?: string
 }
 
 /**
@@ -31,24 +31,35 @@ export class ShellTool extends ModifiableTool {
   ]
 
   constructor() {
-    super('shell', '执行命令：在终端中运行指定的命令', {
-      type: 'object',
-      properties: {
-        command: {
-          type: 'string',
-          description: '要执行的命令',
+    super(
+      'shell',
+      `执行Shell命令工具。
+输入示例: {"command": "ls -la", "workingDirectory": "./src"}
+输出示例: {
+  "content": [{
+    "type": "text",
+    "text": "命令执行成功\\n\\n$ ls -la\\ntotal 24\\ndrwxr-xr-x  4 user  staff  128 Dec 15 10:30 .\\ndrwxr-xr-x  8 user  staff  256 Dec 15 10:29 ..\\n-rw-r--r--  1 user  staff  1234 Dec 15 10:30 main.ts\\n-rw-r--r--  1 user  staff  567 Dec 15 10:29 utils.ts"
+  }]
+}`,
+      {
+        type: 'object',
+        properties: {
+          command: {
+            type: 'string',
+            description: '要执行的命令。示例："ls -la"、"npm install"、"git status"',
+          },
+          path: {
+            type: 'string',
+            description: '工作目录。示例："./src"、"/Users/user/project"',
+          },
         },
-        workingDirectory: {
-          type: 'string',
-          description: '工作目录（可选）',
-        },
-      },
-      required: ['command'],
-    })
+        required: ['command'],
+      }
+    )
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
-    const { command, workingDirectory } = context.parameters as unknown as ShellParams
+    const { command, path } = context.parameters as unknown as ShellParams
 
     // 验证命令
     this.validateCommand(command)
@@ -58,7 +69,7 @@ export class ShellTool extends ModifiableTool {
 
     try {
       // 构建命令
-      const finalCommand = workingDirectory ? `cd "${workingDirectory}" && ${command}` : command
+      const finalCommand = path ? `cd "${path}" && ${command}` : command
 
       // 使用事件驱动的方式等待命令完成
       const result = await this.executeCommandWithCallback(targetTerminalId, finalCommand, 30000)
@@ -71,7 +82,7 @@ export class ShellTool extends ModifiableTool {
         ],
       }
     } catch (error) {
-      throw new TerminalError(`命令执行失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`命令执行失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -139,7 +150,7 @@ export class ShellTool extends ModifiableTool {
     // 找到对应的终端会话
     const terminalSession = terminalStore.terminals.find(t => t.backendId === terminalId)
     if (!terminalSession) {
-      throw new TerminalError('找不到对应的终端会话')
+      throw new ToolError('找不到对应的终端会话')
     }
 
     return new Promise<string>((resolve, reject) => {
@@ -155,7 +166,7 @@ export class ShellTool extends ModifiableTool {
         if (!isCompleted) {
           isCompleted = true
           cleanup()
-          reject(new TerminalError(`命令执行超时 (${timeout}ms): ${command}`))
+          reject(new ToolError(`命令执行超时 (${timeout}ms): ${command}`))
         }
       }, timeout)
 
@@ -216,7 +227,7 @@ export class ShellTool extends ModifiableTool {
               const cleanOutput = cleanOutputFn(outputBuffer, command)
               resolve(cleanOutput)
             } else {
-              reject(new TerminalError(`命令执行失败，退出码: ${exitCode}`))
+              reject(new ToolError(`命令执行失败，退出码: ${exitCode}`))
             }
           }
         },
@@ -235,7 +246,7 @@ export class ShellTool extends ModifiableTool {
           if (!isCompleted) {
             isCompleted = true
             cleanup()
-            reject(new TerminalError(`写入命令失败: ${error.message}`))
+            reject(new ToolError(`写入命令失败: ${error.message}`))
           }
         })
     })
@@ -259,7 +270,7 @@ export class ShellTool extends ModifiableTool {
     // 降级方案：如果没有Agent实例，使用任何可用的终端
     const terminals = await terminalApi.listTerminals()
     if (terminals.length === 0) {
-      throw new TerminalError('没有可用的终端')
+      throw new ToolError('没有可用的终端')
     }
     return terminals[0]
   }

@@ -8,7 +8,7 @@ import { ValidationError } from '../tool-error'
 import { writeTextFile, readTextFile, exists } from '@tauri-apps/plugin-fs'
 
 export interface EditFileParams {
-  filePath: string
+  path: string
   oldString: string
   newString: string
 }
@@ -18,30 +18,41 @@ export interface EditFileParams {
  */
 export class EditFileTool extends ModifiableTool {
   constructor() {
-    super('edit_file', '编辑文件：替换文件中的指定文本内容', {
-      type: 'object',
-      properties: {
-        filePath: {
-          type: 'string',
-          description: '要编辑的文件路径',
+    super(
+      'edit_file',
+      `编辑文件工具。
+输入示例: {"filePath": "src/main.ts", "oldString": "const app = createApp()", "newString": "const app = createApp(App)"}
+输出示例: {
+  "content": [{
+    "type": "text",
+    "text": "文件已修改: src/main.ts\\n替换了 1 处匹配项"
+  }]
+}`,
+      {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: '文件路径。示例："src/main.ts"',
+          },
+          oldString: {
+            type: 'string',
+            description: '要替换的原始文本。示例："const app = createApp()"',
+          },
+          newString: {
+            type: 'string',
+            description: '替换后的新文本。示例："const app = createApp(App)"',
+          },
         },
-        oldString: {
-          type: 'string',
-          description: '要替换的原始文本',
-        },
-        newString: {
-          type: 'string',
-          description: '替换后的新文本',
-        },
-      },
-      required: ['filePath', 'oldString', 'newString'],
-    })
+        required: ['filePath', 'oldString', 'newString'],
+      }
+    )
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
-    const { filePath, oldString, newString } = context.parameters as unknown as EditFileParams
+    const { path, oldString, newString } = context.parameters as unknown as EditFileParams
 
-    if (!filePath?.trim()) {
+    if (!path?.trim()) {
       throw new ValidationError('文件路径不能为空')
     }
 
@@ -52,11 +63,11 @@ export class EditFileTool extends ModifiableTool {
     }
 
     try {
-      if (!(await exists(filePath))) {
-        throw new ValidationError(`文件不存在: ${filePath}`)
+      if (!(await exists(path))) {
+        throw new ValidationError(`文件不存在: ${path}`)
       }
 
-      const originalContent = await readTextFile(filePath)
+      const originalContent = await readTextFile(path)
       const modifiedContent = originalContent.replace(oldString, newString)
 
       if (modifiedContent === originalContent) {
@@ -65,10 +76,10 @@ export class EditFileTool extends ModifiableTool {
         }
       }
 
-      await writeTextFile(filePath, modifiedContent)
+      await writeTextFile(path, modifiedContent)
 
       return {
-        content: [{ type: 'text', text: `文件已修改: ${filePath}` }],
+        content: [{ type: 'text', text: `文件已修改: ${path}` }],
       }
     } catch (error) {
       if (error instanceof ValidationError) throw error

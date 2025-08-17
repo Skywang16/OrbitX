@@ -8,7 +8,7 @@ import { FileNotFoundError } from '../tool-error'
 import { invoke } from '@tauri-apps/api/core'
 
 export interface ReadDirectoryParams {
-  directoryPath: string
+  path: string
 }
 
 export interface FileEntry {
@@ -22,30 +22,41 @@ export interface FileEntry {
  */
 export class ReadDirectoryTool extends ModifiableTool {
   constructor() {
-    super('read_directory', '列出目录内容：查看指定目录中的文件和子目录', {
-      type: 'object',
-      properties: {
-        directoryPath: {
-          type: 'string',
-          description: '目录路径',
+    super(
+      'read_directory',
+      `列出目录内容工具。
+输入示例: {"directoryPath": "./src"}
+输出示例: {
+  "content": [{
+    "type": "text",
+    "text": "目录: ./src\\n\\ncomponents/\\nutils/\\nmain.ts\\nApp.vue\\nstyle.css\\n\\n总计: 3个目录, 3个文件"
+  }]
+}`,
+      {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: '目录路径。示例："./src"、"./components"、"/Users/user/project"',
+          },
         },
-      },
-      required: ['directoryPath'],
-    })
+        required: ['directoryPath'],
+      }
+    )
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
-    const { directoryPath } = context.parameters as unknown as ReadDirectoryParams
+    const { path } = context.parameters as unknown as ReadDirectoryParams
 
     try {
       // 检查目录是否存在
-      const exists = await this.checkPathExists(directoryPath)
+      const exists = await this.checkPathExists(path)
       if (!exists) {
-        throw new FileNotFoundError(directoryPath)
+        throw new FileNotFoundError(path)
       }
 
       // 读取目录内容
-      const entries = await this.readDirectorySimple(directoryPath)
+      const entries = await this.readDirectorySimple(path)
 
       // 格式化输出
       const output = this.formatDirectoryOutput(entries)
