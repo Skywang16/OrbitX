@@ -14,21 +14,10 @@
   // 按时间戳排序步骤，确保瀑布式显示顺序
   const sortedSteps = computed(() => {
     if (!props.message.steps) {
-      console.log('🔍 [AIMessage] 消息没有steps:', { messageId: props.message.id, role: props.message.role })
       return []
     }
 
-    const sorted = [...props.message.steps].sort((a, b) => a.timestamp - b.timestamp)
-    console.log('🔍 [AIMessage] 渲染steps:', {
-      messageId: props.message.id,
-      totalSteps: props.message.steps.length,
-      toolSteps: props.message.steps.filter(s => s.type === 'tool_use').length,
-      thinkingSteps: props.message.steps.filter(s => s.type === 'thinking').length,
-      textSteps: props.message.steps.filter(s => s.type === 'text').length,
-      steps: props.message.steps,
-    })
-
-    return sorted
+    return [...props.message.steps].sort((a, b) => a.timestamp - b.timestamp)
   })
 
   import { formatTime } from '@/utils/dateFormatter'

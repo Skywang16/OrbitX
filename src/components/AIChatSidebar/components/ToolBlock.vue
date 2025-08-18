@@ -1,30 +1,43 @@
 <template>
-  <div class="tool-block">
+  <div class="tool-block" v-if="step?.toolExecution">
     <div
       class="tool-header"
       :class="{ expandable: isExpandable, 'non-expandable': !isExpandable }"
       @click="toggleExpanded"
     >
       <div class="tool-info">
-        <div class="tool-icon" v-html="getToolIcon(step.metadata?.toolName || 'read_file')"></div>
-        <span class="tool-name">{{ step.metadata?.toolName || '工具调用' }}</span>
-        <span class="tool-command" v-if="step.metadata?.toolCommand">{{ step.metadata.toolCommand }}</span>
-        <span class="tool-url" v-if="getToolUrl()">{{ getToolUrl() }}</span>
+        <div class="tool-icon" v-html="getToolIcon(step.toolExecution.name)"></div>
+        <span class="tool-name">{{ step.toolExecution.name }}</span>
+        <span class="tool-param" v-if="getToolParam(step.toolExecution)">
+          {{ getToolParam(step.toolExecution) }}
+        </span>
       </div>
       <div
         class="status-dot"
         :class="{
-          running: step.metadata?.status === 'running',
-          error: step.metadata?.status === 'error',
+          running: step.toolExecution.status === 'running',
+          completed: step.toolExecution.status === 'completed',
+          error: step.toolExecution.status === 'error',
         }"
       ></div>
     </div>
 
-    <div v-if="isExpanded && step.metadata?.toolResult" class="tool-result" @click.stop>
+    <div v-if="isExpanded && step.toolExecution.result" class="tool-result" @click.stop>
       <!-- 特殊渲染edit_file工具的结果 -->
-      <EditResult v-if="isEditResult(step.metadata.toolResult)" :editData="getEditData(step.metadata.toolResult)" />
+      <EditResult v-if="isEditResult(step.toolExecution.result)" :editData="getEditData(step.toolExecution.result)" />
       <!-- 普通工具结果 -->
-      <div v-else class="tool-result-content">{{ step.metadata.toolResult }}</div>
+      <div v-else class="tool-result-content">{{ step.toolExecution.result }}</div>
+    </div>
+  </div>
+  
+  <!-- 兼容旧数据或错误数据 -->
+  <div v-else class="tool-block error">
+    <div class="tool-header non-expandable">
+      <div class="tool-info">
+        <div class="tool-icon" v-html="getToolIcon('unknown')"></div>
+        <span class="tool-name">数据错误</span>
+      </div>
+      <div class="status-dot error"></div>
     </div>
   </div>
 </template>
@@ -32,18 +45,19 @@
 <script setup lang="ts">
   import { ref, computed } from 'vue'
   import type { AIOutputStep } from '@/types/features/ai/chat'
+  import type { ToolExecution } from '@/eko/types/tool-metadata'
   import EditResult from './EditResult.vue'
   import type { SimpleEditResult } from '@/eko/tools/toolList/edit-file'
 
   const props = defineProps<{
-    step: AIOutputStep
+    step: AIOutputStep & { toolExecution?: ToolExecution }
   }>()
 
   const isExpanded = ref(false)
 
   // 计算属性：判断是否为可展开的工具（只有edit_file工具可以展开）
   const isExpandable = computed(() => {
-    return props.step.metadata?.toolName === 'edit_file'
+    return props.step?.toolExecution?.name === 'edit_file'
   })
 
   // 工具图标映射
@@ -94,11 +108,71 @@
       <path d="M8 11H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       <path d="M11 8V14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>`,
+    unknown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+      <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M12 17H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`,
   }
 
   // 获取工具图标
   const getToolIcon = (toolName: string) => {
-    return toolIcons[toolName as keyof typeof toolIcons] || toolIcons.read_file
+    return toolIcons[toolName as keyof typeof toolIcons] || toolIcons.unknown
+  }
+
+  // 获取工具参数显示
+  const getToolParam = (toolExecution: ToolExecution) => {
+    const { name, params } = toolExecution
+
+    switch (name) {
+      case 'edit_file':
+      case 'read_file':
+      case 'create_file':
+      case 'read_directory':
+        return formatPath(params.path as string)
+
+      case 'read_many_files':
+        return `${(params.paths as string[])?.length || 0} files`
+
+      case 'web_fetch':
+        return formatUrl(params.url as string)
+
+      case 'orbit_search':
+        return formatText(params.query as string)
+
+      case 'shell':
+        return formatText(params.command as string)
+
+      default:
+        return ''
+    }
+  }
+
+  // 格式化路径显示
+  const formatPath = (path: string) => {
+    if (!path) return ''
+    const parts = path.split('/')
+    if (parts.length > 3) {
+      return `.../${parts.slice(-2).join('/')}`
+    }
+    return path
+  }
+
+  // 格式化URL显示
+  const formatUrl = (url: string) => {
+    if (!url) return ''
+    try {
+      const urlObj = new URL(url)
+      return urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname : '')
+    } catch {
+      return url
+    }
+  }
+
+  // 格式化文本显示
+  const formatText = (text: string) => {
+    if (!text) return ''
+    return text.length > 50 ? text.substring(0, 47) + '...' : text
   }
 
   const toggleExpanded = () => {
@@ -109,31 +183,13 @@
   }
 
   // 判断是否为edit_file工具的结果
-  const isEditResult = (result: any): boolean => {
-    return result?.content?.[0]?.data?.file
+  const isEditResult = (result: unknown): boolean => {
+    return (result as { content?: { data?: { file?: string } }[] })?.content?.[0]?.data?.file !== undefined
   }
 
   // 获取EditData
-  const getEditData = (result: any): SimpleEditResult => {
-    return result?.content?.[0]?.data
-  }
-
-  // 获取工具URL（仅web_fetch工具）
-  const getToolUrl = (): string => {
-    if (props.step.metadata?.toolName === 'web_fetch') {
-      // 尝试从toolCommand中解析URL
-      const command = props.step.metadata?.toolCommand
-      if (command) {
-        try {
-          const params = JSON.parse(command)
-          return params.url || ''
-        } catch {
-          // 如果解析失败，直接返回command作为URL
-          return command
-        }
-      }
-    }
-    return ''
+  const getEditData = (result: unknown): SimpleEditResult => {
+    return (result as { content?: { data?: SimpleEditResult }[] })?.content?.[0]?.data || ({} as SimpleEditResult)
   }
 </script>
 
@@ -200,17 +256,7 @@
     white-space: nowrap;
   }
 
-  .tool-command {
-    color: var(--text-400);
-    font-family: monospace;
-    font-size: 12px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex: 1;
-  }
-
-  .tool-url {
+  .tool-param {
     color: var(--text-300);
     font-size: 11px;
     white-space: nowrap;
@@ -221,6 +267,17 @@
     padding: 2px 6px;
     border-radius: 3px;
     border: 1px solid var(--border-300);
+    margin-left: 8px;
+  }
+
+  .tool-command {
+    color: var(--text-400);
+    font-family: monospace;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
   }
 
   .status-dot {

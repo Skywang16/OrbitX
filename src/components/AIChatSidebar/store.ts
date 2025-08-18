@@ -14,6 +14,7 @@ import type { ChatMode } from './types'
 import { createTerminalEko, createSidebarCallback, type TerminalEko } from '@/eko'
 import type { Conversation, Message } from '@/types/features/ai/chat'
 import { debounce } from 'lodash-es'
+import { createToolExecution } from '@/eko/types/tool-metadata'
 
 // 流式消息类型定义
 interface StreamMessage {
@@ -22,11 +23,8 @@ interface StreamMessage {
   params?: Record<string, any>
   toolResult?: any
   workflow?: {
-    name?: string
     thought?: string
   }
-  agentName?: string
-  taskId?: string
   text?: string
   streamDone?: boolean
 }
@@ -375,32 +373,29 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           }
 
           if (message.type === 'tool_use') {
-            tempMessage.steps.push({
-              type: 'tool_use',
+            // 创建统一的工具执行信息
+            const toolExecution = createToolExecution(message.toolName || '工具调用', message.params || {}, 'running')
+
+            const newStep = {
+              type: 'tool_use' as const,
               content: `正在调用工具: ${message.toolName}`,
               timestamp: Date.now(),
-              metadata: {
-                toolName: message.toolName || '工具调用',
-                toolParams: message.params || {},
-                toolCommand: message.params?.command || message.params?.path || '',
-                status: 'running',
-              },
-            })
+              toolExecution,
+            }
+
+            tempMessage.steps.push(newStep)
             // 🔥 tool开始时立即保存
             saveStepsToDatabase(tempMessage.id, tempMessage.steps)
           } else if (message.type === 'tool_result') {
-            const toolStep = tempMessage.steps
-              .filter(step => step.type === 'tool_use' && step.metadata?.status === 'running')
-              .pop()
+            const toolStep = tempMessage.steps.filter(step => step.type === 'tool_use').pop() as any
 
-            if (toolStep) {
-              toolStep.content = `工具执行完成: ${toolStep.metadata?.toolName}`
-              toolStep.metadata = {
-                ...toolStep.metadata,
-                status: 'completed',
-                completedAt: Date.now(),
-                toolResult: message.toolResult,
-              }
+            if (toolStep?.toolExecution?.status === 'running') {
+              // 更新工具执行状态
+              toolStep.toolExecution.status = 'completed'
+              toolStep.toolExecution.endTime = Date.now()
+              toolStep.toolExecution.result = message.toolResult
+              toolStep.content = `工具执行完成: ${toolStep.toolExecution.name}`
+
               // 🔥 tool完成时立即保存
               saveStepsToDatabase(tempMessage.id, tempMessage.steps)
             }
@@ -423,9 +418,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                 content: message.workflow.thought,
                 timestamp: Date.now(),
                 metadata: {
-                  workflowName: message.workflow.name,
-                  agentName: message.agentName,
-                  taskId: message.taskId,
                   thinkingDuration: message.streamDone ? 0 : undefined,
                 },
               })
@@ -461,7 +453,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               // 🔥 text完成时保存最终状态
               saveStepsToDatabase(tempMessage.id, tempMessage.steps)
               // 同时更新消息内容
-              await aiApi.updateMessageContent(tempMessage.id, message.text)
+              try {
+                await aiApi.updateMessageContent(tempMessage.id, message.text)
+              } catch (error) {
+                console.error('更新消息内容失败:', error)
+              }
             }
           }
         }

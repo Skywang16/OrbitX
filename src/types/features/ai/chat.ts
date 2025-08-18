@@ -4,6 +4,8 @@
  * 基于会话上下文管理系统的类型定义
  */
 
+import type { ToolExecution } from '@/eko/types/tool-metadata'
+
 // ===== 会话管理类型 =====
 
 /**
@@ -18,36 +20,40 @@ export interface Conversation {
 }
 
 /**
- * AI输出的单个步骤/阶段
+ * 基础步骤接口
  */
-export interface AIOutputStep {
-  type: 'thinking' | 'workflow' | 'text' | 'tool_use' | 'tool_result' | 'error'
+interface BaseStep {
   content: string
   timestamp: number
   metadata?: {
     // 思考阶段的元数据
     thinkingDuration?: number
 
-    // 工具调用的元数据
-    toolCallId?: string // 工具调用唯一标识
-    toolName?: string
-    toolCommand?: string
-    toolParams?: Record<string, any>
-    toolResult?: any
-    status?: 'running' | 'completed' | 'error'
-    completedAt?: number // 完成时间戳
-    originalMessage?: any // 用于调试
-
-    // 工作流的元数据
-    workflowName?: string
-    agentName?: string
-    taskId?: string
-
     // 错误信息
     errorType?: string
     errorDetails?: string
   }
 }
+
+/**
+ * 工具相关步骤
+ */
+interface ToolStep extends BaseStep {
+  type: 'tool_use' | 'tool_result'
+  toolExecution: ToolExecution
+}
+
+/**
+ * 非工具步骤
+ */
+interface NonToolStep extends BaseStep {
+  type: 'thinking' | 'workflow' | 'text' | 'error'
+}
+
+/**
+ * AI输出的单个步骤/阶段 - 联合类型
+ */
+export type AIOutputStep = ToolStep | NonToolStep
 
 /**
  * 消息信息 - 扩展版本支持完整AI对话数据
