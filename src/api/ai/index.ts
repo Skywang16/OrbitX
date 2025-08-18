@@ -209,7 +209,7 @@ export class AiApi {
 
   async addModel(model: Omit<AIModelConfig, 'id'>): Promise<AIModelConfig> {
     try {
-      return await invoke<AIModelConfig>('add_ai_model', { model })
+      return await invoke<AIModelConfig>('add_ai_model', { config: model })
     } catch (error) {
       throw new Error(handleError(error, '添加AI模型失败'))
     }
@@ -217,7 +217,9 @@ export class AiApi {
 
   async updateModel(model: AIModelConfig): Promise<void> {
     try {
-      await invoke('update_ai_model', { model })
+      // 将完整的模型对象分解为 model_id 和 updates
+      const { id: model_id, ...updates } = model
+      await invoke('update_ai_model', { model_id, updates })
     } catch (error) {
       throw new Error(handleError(error, '更新AI模型失败'))
     }
@@ -225,7 +227,7 @@ export class AiApi {
 
   async deleteModel(id: string): Promise<void> {
     try {
-      await invoke('remove_ai_model', { modelId: id })
+      await invoke('remove_ai_model', { model_id: id })
     } catch (error) {
       throw new Error(handleError(error, '删除AI模型失败'))
     }
@@ -233,7 +235,7 @@ export class AiApi {
 
   async setDefaultModel(id: string): Promise<void> {
     try {
-      await invoke('set_default_ai_model', { modelId: id })
+      await invoke('set_default_ai_model', { model_id: id })
     } catch (error) {
       throw new Error(handleError(error, '设置默认AI模型失败'))
     }
@@ -249,7 +251,7 @@ export class AiApi {
 
   async testConnection(modelId: string): Promise<boolean> {
     try {
-      return await invoke<boolean>('test_ai_connection', { modelId: modelId })
+      return await invoke<boolean>('test_ai_connection', { model_id: modelId })
     } catch (error) {
       throw new Error(handleError(error, 'AI模型连接测试失败'))
     }

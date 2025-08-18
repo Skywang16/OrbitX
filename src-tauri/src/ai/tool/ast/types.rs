@@ -2,33 +2,19 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SymbolType {
-    #[serde(rename = "function")]
     Function,
-    #[serde(rename = "class")]
     Class,
-    #[serde(rename = "variable")]
     Variable,
-    #[serde(rename = "interface")]
     Interface,
-    #[serde(rename = "type")]
     Type,
-    #[serde(rename = "struct")]
     Struct,
-    #[serde(rename = "enum")]
     Enum,
-    #[serde(rename = "trait")]
     Trait,
-    #[serde(rename = "method")]
     Method,
-    #[serde(rename = "property")]
     Property,
-    #[serde(rename = "constant")]
     Constant,
-    #[serde(rename = "module")]
     Module,
-    #[serde(rename = "namespace")]
     Namespace,
-    #[serde(rename = "macro")]
     Macro,
 }
 
@@ -64,7 +50,6 @@ pub struct AnalyzeCodeParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeSymbol {
     pub name: String,
-    #[serde(rename = "type")]
     pub symbol_type: SymbolType,
     pub line: u32,
     pub column: u32,
