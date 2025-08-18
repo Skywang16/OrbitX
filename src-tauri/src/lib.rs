@@ -20,6 +20,7 @@ use ai::commands::{
     // AI模型管理命令
     add_ai_model,
     // AI会话管理命令
+    build_prompt_with_context,
     create_conversation,
     delete_conversation,
     get_ai_models,
@@ -322,6 +323,7 @@ pub fn run() {
             update_conversation_title,
             delete_conversation,
             get_compressed_context,
+            build_prompt_with_context,
             save_message,
             update_message_content,
             update_message_steps,

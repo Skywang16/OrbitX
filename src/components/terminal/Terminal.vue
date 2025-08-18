@@ -21,16 +21,6 @@
       @suggestion-change="handleSuggestionChange"
     />
 
-    <!-- 右键菜单 -->
-    <XPopover
-      :visible="contextMenu.visible"
-      :x="contextMenu.x"
-      :y="contextMenu.y"
-      :menu-items="contextMenu.menuItems"
-      @menu-item-click="handleContextMenuItemClick"
-      @close="closeContextMenu"
-    />
-
     <!-- 提示消息 -->
     <XMessage :visible="toast.visible" :message="toast.message" :type="toast.type" @close="closeToast" />
   </div>
@@ -52,7 +42,7 @@
   import { useTheme } from '@/composables/useTheme'
   import { TERMINAL_CONFIG } from '@/constants/terminal'
   import { useTerminalStore } from '@/stores/Terminal'
-  import { XMessage, XPopover } from '@/ui/components'
+  import { XMessage } from '@/ui/components'
   import { convertThemeToXTerm, createDefaultXTermTheme } from '@/utils/themeConverter'
   import { invoke } from '@tauri-apps/api/core'
   import type { ITheme } from '@xterm/xterm'
@@ -105,14 +95,6 @@
   })
 
   // === UI 状态 ===
-  // 右键菜单状态
-  const contextMenu = reactive({
-    visible: false, // 是否显示菜单
-    x: 0, // 菜单X坐标
-    y: 0, // 菜单Y坐标
-    menuItems: [] as Array<{ label: string; value: string }>, // 菜单项
-    currentPath: '', // 当前选中的路径
-  })
 
   // 提示消息状态
   const toast = reactive({
@@ -209,9 +191,11 @@
       fitAddon.value = new FitAddon() // 创建自适应大小插件实例
       terminal.value.loadAddon(fitAddon.value) // 自适应大小插件
       terminal.value.loadAddon(
-        new WebLinksAddon((_event, uri) => {
-          // 适配 openPath 函数的签名
-          openPath(uri).catch(() => {})
+        new WebLinksAddon((event, uri) => {
+          // 支持 Ctrl+点击（Windows/Linux）或 Cmd+点击（Mac）打开链接
+          if (event.ctrlKey || event.metaKey) {
+            openPath(uri).catch(() => {})
+          }
         })
       ) // 链接点击插件
       terminal.value.open(terminalRef.value)
@@ -239,9 +223,6 @@
 
       // 使用 XTerm 的 onKey 处理补全快捷键
       keyListener = terminal.value.onKey(e => handleKeyDown(e.domEvent))
-
-      // 添加右键菜单支持
-      terminal.value.element?.addEventListener('contextmenu', handleRightClick)
 
       // 监听终端滚动事件，实时更新光标位置
       const viewportElement = terminalRef.value.querySelector('.xterm-viewport')
@@ -491,60 +472,6 @@
   }
 
   /**
-   * 处理终端右键点击事件
-   * 检测选中的文本是否为路径，显示相应的上下文菜单
-   */
-  const handleRightClick = (event: MouseEvent) => {
-    event.preventDefault()
-
-    const selection = terminal.value?.getSelection()
-    if (!selection) return
-
-    // 简单的路径检测：非空白字符序列
-    const pathMatch = selection.match(/[^\s]+/)
-    if (pathMatch) {
-      showContextMenu(event.clientX, event.clientY, pathMatch[0])
-    }
-  }
-
-  /**
-   * 显示右键上下文菜单
-   */
-  const showContextMenu = (x: number, y: number, path: string) => {
-    contextMenu.visible = true
-    contextMenu.x = x
-    contextMenu.y = y
-    contextMenu.currentPath = path
-    contextMenu.menuItems = [
-      { label: '打开', value: 'open' }, // 在系统中打开路径
-      { label: '到这去', value: 'goto' }, // 切换到该目录
-    ]
-  }
-
-  /**
-   * 关闭右键菜单
-   */
-  const closeContextMenu = () => {
-    contextMenu.visible = false
-  }
-
-  /**
-   * 处理右键菜单项点击
-   */
-  const handleContextMenuItemClick = (item: { value?: unknown }) => {
-    const path = contextMenu.currentPath
-
-    const value = String(item?.value ?? '')
-    if (value === 'open') {
-      handlePathOpen(path)
-    } else if (value === 'goto') {
-      handleGoToPath(path)
-    }
-
-    closeContextMenu()
-  }
-
-  /**
    * 在系统中打开路径
    */
   const handlePathOpen = async (path: string) => {
@@ -786,7 +713,6 @@
     // 清理插件引用
     fitAddon.value = null
     styleCache.value = null
-    closeContextMenu()
   })
 
   // === Watchers ===

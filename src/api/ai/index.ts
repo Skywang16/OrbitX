@@ -80,6 +80,23 @@ class ConversationAPI {
     }
   }
 
+  async buildPromptWithContext(
+    conversationId: number,
+    currentMessage: string,
+    upToMessageId?: number
+  ): Promise<string> {
+    try {
+      const prompt = await invoke<string>('build_prompt_with_context', {
+        conversationId,
+        currentMessage,
+        upToMessageId,
+      })
+      return prompt
+    } catch (error) {
+      throw new Error(handleError(error, '构建prompt失败'))
+    }
+  }
+
   async saveMessage(conversationId: number, role: string, content: string): Promise<number> {
     try {
       return await invoke('save_message', { conversationId, role, content })
@@ -333,6 +350,10 @@ export class AiApi {
 
   async getCompressedContext(conversationId: number, upToMessageId?: number) {
     return this.conversationAPI.getCompressedContext(conversationId, upToMessageId)
+  }
+
+  async buildPromptWithContext(conversationId: number, currentMessage: string, upToMessageId?: number) {
+    return this.conversationAPI.buildPromptWithContext(conversationId, currentMessage, upToMessageId)
   }
 
   async saveMessage(conversationId: number, role: string, content: string) {

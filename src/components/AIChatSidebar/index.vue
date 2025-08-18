@@ -204,9 +204,7 @@
       :selected-model="selectedModelId"
       :model-options="modelOptions"
       :chat-mode="aiChatStore.chatMode"
-      :placeholder="
-        aiChatStore.chatMode === 'agent' ? '问 Orbit 任何终端问题，如：当前在哪个目录？列出文件？' : '与 Orbit 对话...'
-      "
+      placeholder="与 Orbit 对话..."
       @send="sendMessage"
       @stop="stopMessage"
       @model-change="handleModelChange"

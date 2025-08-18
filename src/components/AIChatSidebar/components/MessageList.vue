@@ -42,7 +42,6 @@
 <template>
   <div ref="messageListRef" class="message-list">
     <div v-if="msgList.length === 0" class="empty-state">
-      <div class="empty-icon">💬</div>
       <div class="empty-text">开始对话吧</div>
       <div class="empty-hint">发送消息开始与AI助手对话</div>
     </div>
@@ -77,11 +76,6 @@
     text-align: center;
     color: var(--text-400);
     gap: var(--spacing-md);
-  }
-
-  .empty-icon {
-    font-size: 48px;
-    opacity: 0.5;
   }
 
   .empty-text {

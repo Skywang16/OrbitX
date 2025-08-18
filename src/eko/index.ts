@@ -109,6 +109,10 @@ export class OrbitXEko {
       const enhancedPrompt = `🎯 **用户请求**
 ${prompt}`
 
+      // 打印调试信息
+      console.log('🚀 [Eko] 运行任务 - 原始Prompt:', prompt)
+      console.log('🚀 [Eko] 运行任务 - 增强Prompt:', enhancedPrompt)
+
       // 生成唯一的taskId
       const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       this.currentTaskId = taskId

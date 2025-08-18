@@ -187,13 +187,6 @@ pub async fn get_compressed_context(
     .await
     .to_tauri()?;
 
-    // TODO: 实现智能压缩功能
-    // 当前版本直接返回所有消息，未来将在这里实现：
-    // - 基于token限制的智能压缩
-    // - 语义相似度分析
-    // - 重要性评分
-    // - 动态压缩策略选择
-
     info!(
         "压缩上下文获取完成: conversation_id={}, 消息数量={}",
         conversation_id,
@@ -201,6 +194,70 @@ pub async fn get_compressed_context(
     );
 
     Ok(messages)
+}
+
+/// 构建带上下文的prompt（专门用于AI推理）
+#[tauri::command]
+pub async fn build_prompt_with_context(
+    conversation_id: i64,
+    current_message: String,
+    up_to_message_id: Option<i64>,
+    state: State<'_, AIManagerState>,
+) -> Result<String, String> {
+    info!(
+        "构建prompt: conversation_id={}, current_message length={}, up_to_message_id={:?}",
+        conversation_id,
+        current_message.len(),
+        up_to_message_id
+    );
+
+    if conversation_id <= 0 {
+        return Err("无效的会话ID".to_string());
+    }
+
+    if current_message.trim().is_empty() {
+        return Err("当前消息不能为空".to_string());
+    }
+
+    let repositories = state.repositories();
+
+    // 获取历史消息
+    let config = crate::ai::types::AIConfig::default();
+    let messages = crate::ai::context::build_context_for_request(
+        repositories,
+        conversation_id,
+        up_to_message_id,
+        &config,
+    )
+    .await
+    .to_tauri()?;
+
+    // 构建prompt
+    let prompt = if messages.len() > 0 {
+        // 有历史对话的情况
+        let history_context = messages
+            .iter()
+            .map(|msg| format!("{}: {}", msg.role, msg.content))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        format!(
+            "以下是我们之前的对话历史，请参考这些上下文来回答我的新问题：\n\n【对话历史】\n{}\n\n【当前问题】\n{}\n\n请基于以上对话历史的上下文，回答我的当前问题。如果当前问题与历史对话相关，请结合历史信息给出回答；如果是全新的问题，请直接回答。",
+            history_context,
+            current_message
+        )
+    } else {
+        // 没有历史对话，直接使用用户问题
+        current_message
+    };
+
+    info!(
+        "prompt构建完成: conversation_id={}, 历史消息数量={}",
+        conversation_id,
+        messages.len()
+    );
+
+    Ok(prompt)
 }
 
 /// 截断会话（供前端eko使用）

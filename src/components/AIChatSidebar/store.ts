@@ -224,14 +224,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         /* ignore */
       }
 
-      // 5. 获取压缩上下文
-      const contextMessages = await aiApi.getCompressedContext(currentConversationId.value)
-
-      // 6. 构建完整的prompt（包含上下文，不重复当前用户消息）
-      const fullPrompt =
-        contextMessages.length > 0
-          ? contextMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n')
-          : `user: ${content}`
+      // 5. 获取后端构建的完整prompt（包含上下文）
+      const fullPrompt = await aiApi.buildPromptWithContext(currentConversationId.value, content)
 
       // 7. 立即创建AI消息记录到数据库，获取真实ID用于实时保存steps
       const messageId = await aiApi.saveMessage(currentConversationId.value, 'assistant', '正在生成回复...')
@@ -327,9 +321,14 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   // 中断当前正在进行的对话
   const stopCurrentConversation = (): void => {
     if (isLoading.value && cancelFunction.value) {
-      cancelFunction.value()
-      cancelFunction.value = null
-      isLoading.value = false
+      try {
+        cancelFunction.value()
+      } catch (error) {
+        console.warn('停止对话时出现错误:', error)
+      } finally {
+        cancelFunction.value = null
+        isLoading.value = false
+      }
     }
   }
 
