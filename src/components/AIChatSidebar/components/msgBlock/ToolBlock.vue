@@ -45,7 +45,7 @@
   import { ref, computed } from 'vue'
   import type { AIOutputStep } from '@/types/features/ai/chat'
   import type { ToolExecution } from '@/eko/types/tool-metadata'
-  import EditResult from './EditResult.vue'
+  import EditResult from './components/EditResult.vue'
   import type { SimpleEditResult } from '@/eko/tools/toolList/edit-file'
 
   const props = defineProps<{
