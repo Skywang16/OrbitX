@@ -31,7 +31,7 @@
   import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
   // 第三方库
-  import { openPath } from '@tauri-apps/plugin-opener'
+  import { openUrl } from '@tauri-apps/plugin-opener'
   import { FitAddon } from '@xterm/addon-fit'
   import { WebLinksAddon } from '@xterm/addon-web-links'
   import { Terminal } from '@xterm/xterm'
@@ -194,7 +194,7 @@
         new WebLinksAddon((event, uri) => {
           // 支持 Ctrl+点击（Windows/Linux）或 Cmd+点击（Mac）打开链接
           if (event.ctrlKey || event.metaKey) {
-            openPath(uri).catch(() => {})
+            openUrl(uri).catch(() => {})
           }
         })
       ) // 链接点击插件

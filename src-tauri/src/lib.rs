@@ -31,7 +31,6 @@ use ai::commands::{
     remove_ai_model,
     save_message,
     set_default_ai_model,
-    test_ai_connection,
     test_ai_connection_with_config,
     truncate_conversation,
     update_ai_model,
@@ -314,7 +313,6 @@ pub fn run() {
             update_ai_model,
             remove_ai_model,
             set_default_ai_model,
-            test_ai_connection,
             test_ai_connection_with_config,
             // AI会话上下文管理命令
             create_conversation,

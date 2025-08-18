@@ -530,21 +530,6 @@ pub async fn set_default_ai_model(
         .to_tauri()
 }
 
-/// 测试AI模型连接
-#[tauri::command]
-pub async fn test_ai_connection(
-    model_id: String,
-    state: State<'_, AIManagerState>,
-) -> Result<bool, String> {
-    info!("测试AI模型连接: {}", model_id);
-
-    // 参数验证
-    if model_id.trim().is_empty() {
-        return Err("模型ID不能为空".to_string());
-    }
-
-    state.ai_service.test_connection(&model_id).await.to_tauri()
-}
 
 /// 测试AI模型连接（基于表单数据）
 #[tauri::command]

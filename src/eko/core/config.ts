@@ -86,23 +86,6 @@ export const getDefaultModelId = async (): Promise<string> => {
 }
 
 /**
- * 验证模型配置是否有效
- */
-export const validateModelConfig = async (modelId?: string): Promise<boolean> => {
-  try {
-    if (modelId) {
-      return await aiApi.testConnection(modelId)
-    } else {
-      const defaultModelId = await getDefaultModelId()
-      return await aiApi.testConnection(defaultModelId)
-    }
-  } catch (error) {
-    console.error('验证模型配置失败:', error)
-    return false
-  }
-}
-
-/**
  * Eko配置选项
  */
 export interface EkoConfigOptions {
@@ -125,12 +108,6 @@ export const getEkoConfig = async (options: EkoConfigOptions = {}) => {
   try {
     // 获取LLM配置
     const llms = await getEkoLLMsConfig()
-
-    // 验证模型配置
-    const isValid = await validateModelConfig(modelId)
-    if (!isValid) {
-      console.warn('模型配置验证失败，但继续使用')
-    }
 
     return {
       llms,

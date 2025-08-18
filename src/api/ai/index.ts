@@ -266,14 +266,6 @@ export class AiApi {
     }
   }
 
-  async testConnection(modelId: string): Promise<boolean> {
-    try {
-      return await invoke<boolean>('test_ai_connection', { model_id: modelId })
-    } catch (error) {
-      throw new Error(handleError(error, 'AI模型连接测试失败'))
-    }
-  }
-
   async getUserPrefixPrompt(): Promise<string | null> {
     try {
       return await invoke<string | null>('get_user_prefix_prompt')

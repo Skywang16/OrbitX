@@ -23,6 +23,29 @@
         }
       ]
     },
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "http://localhost:*"
+        },
+        {
+          "url": "https://localhost:*"
+        },
+        {
+          "url": "http://127.0.0.1:*"
+        },
+        {
+          "url": "https://127.0.0.1:*"
+        },
+        {
+          "url": "http://*.*.*.*:*"
+        },
+        {
+          "url": "https://*.*.*.*:*"
+        }
+      ]
+    },
     "fs:default",
     "fs:allow-read-text-file",
     "fs:allow-write-text-file",
