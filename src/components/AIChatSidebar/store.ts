@@ -88,11 +88,25 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     sidebarWidth.value = Math.max(300, Math.min(800, width))
   }
 
+  // 辅助函数：查找空会话（messageCount为0的会话）
+  const findEmptyConversation = (): Conversation | null => {
+    return conversations.value.find(conv => conv.messageCount === 0) || null
+  }
+
   // 会话管理方法
   const createConversation = async (title?: string): Promise<void> => {
     try {
       // 如果有正在进行的对话，先中断
       stopCurrentConversation()
+
+      // 检查是否已经存在空会话
+      const existingEmptyConversation = findEmptyConversation()
+      if (existingEmptyConversation) {
+        // 如果存在空会话，直接切换到该会话
+        currentConversationId.value = existingEmptyConversation.id
+        messageList.value = []
+        return
+      }
 
       isLoading.value = true
       const conversationId = await aiApi.createConversation(title)

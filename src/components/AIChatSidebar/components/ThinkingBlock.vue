@@ -15,8 +15,6 @@
       <div class="thinking-gradient-top"></div>
       <div class="thinking-gradient-bottom"></div>
     </div>
-
-    <!-- 思考完成后：不显示任何内容预览，需要点击展开 -->
   </div>
 </template>
 

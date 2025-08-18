@@ -24,13 +24,12 @@
 
     <div v-if="isExpanded && step.toolExecution.result" class="tool-result" @click.stop>
       <!-- 特殊渲染edit_file工具的结果 -->
-      <EditResult v-if="isEditResult(step.toolExecution.result)" :editData="getEditData(step.toolExecution.result)" />
+      <EditResult v-if="isEditResult()" :editData="getEditData(step.toolExecution.result)" />
       <!-- 普通工具结果 -->
       <div v-else class="tool-result-content">{{ step.toolExecution.result }}</div>
     </div>
   </div>
-  
-  <!-- 兼容旧数据或错误数据 -->
+
   <div v-else class="tool-block error">
     <div class="tool-header non-expandable">
       <div class="tool-info">
@@ -183,8 +182,8 @@
   }
 
   // 判断是否为edit_file工具的结果
-  const isEditResult = (result: unknown): boolean => {
-    return (result as { content?: { data?: { file?: string } }[] })?.content?.[0]?.data?.file !== undefined
+  const isEditResult = (): boolean => {
+    return props.step?.toolExecution?.name === 'edit_file'
   }
 
   // 获取EditData
@@ -258,15 +257,12 @@
 
   .tool-param {
     color: var(--text-300);
-    font-size: 11px;
+    font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 200px;
-    background: var(--bg-500);
-    padding: 2px 6px;
-    border-radius: 3px;
-    border: 1px solid var(--border-300);
+    background: transparent;
     margin-left: 8px;
   }
 
