@@ -135,7 +135,17 @@
         @mousedown="handleMouseDown($event, tab.id)"
         @click="handleTabClick(tab.id)"
       >
-        <span class="tab-title" :title="tab.title">{{ tab.title }}</span>
+        <div class="tab-content" :title="tab.type === TabType.TERMINAL ? `${tab.shell} • ${tab.path}` : tab.title">
+          <template v-if="tab.type === TabType.TERMINAL && tab.shell && tab.path">
+            <div class="terminal-info">
+              <span class="shell-badge">{{ tab.shell }}</span>
+              <span class="path-info">{{ tab.path }}</span>
+            </div>
+          </template>
+          <template v-else>
+            <span class="tab-title">{{ tab.title }}</span>
+          </template>
+        </div>
         <button
           v-if="tab.closable && tabs.length > 1"
           class="close-btn"
@@ -373,15 +383,54 @@
     }
   }
 
+  .tab-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    height: 100%;
+  }
+
   .tab-title {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--font-size-sm);
     font-weight: 500;
+    color: var(--text-200);
+  }
+
+  .terminal-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     flex: 1;
-    text-align: left;
     min-width: 0;
+  }
+
+  .shell-badge {
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    color: var(--text-100);
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+    line-height: 1.2;
+  }
+
+  .path-info {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-300);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
   }
 
   .close-btn {

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { computed, ref, nextTick } from 'vue'
+  import { useTerminalSelection } from '@/composables/useTerminalSelection'
+  import TerminalSelectionTag from './TerminalSelectionTag.vue'
 
   // Props定义
   interface Props {
@@ -37,6 +39,9 @@
 
   // 响应式引用
   const inputTextarea = ref<HTMLTextAreaElement>()
+
+  // 终端选择管理
+  const terminalSelection = useTerminalSelection()
 
   // 计算属性
   const inputValue = computed({
@@ -115,6 +120,25 @@
     }
   }
 
+  /**
+   * 处理插入选定文本 - 优化逻辑
+   */
+  const handleInsertSelectedText = () => {
+    const selectedText = terminalSelection.getSelectedText()
+    if (!selectedText.trim()) return
+
+    // 智能拼接：有内容时添加空格分隔
+    const newValue = props.modelValue ? `${props.modelValue} ${selectedText}` : selectedText
+
+    emit('update:modelValue', newValue)
+
+    // 异步聚焦和调整高度
+    nextTick(() => {
+      inputTextarea.value?.focus()
+      adjustTextareaHeight()
+    })
+  }
+
   // 暴露方法给父组件
   defineExpose({
     adjustTextareaHeight,
@@ -124,6 +148,15 @@
 
 <template>
   <div class="chat-input">
+    <!-- 终端选择标签 -->
+    <TerminalSelectionTag
+      :visible="terminalSelection.hasSelection.value"
+      :selected-text="terminalSelection.selectedText.value"
+      :selection-info="terminalSelection.selectionInfo.value"
+      @clear="terminalSelection.clearSelection"
+      @insert="handleInsertSelectedText"
+    />
+
     <!-- 主输入区域 -->
     <div class="input-main">
       <div class="input-content">

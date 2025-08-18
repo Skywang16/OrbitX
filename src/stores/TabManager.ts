@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { TabType, type TabItem } from '@/types'
 import { useTerminalStore } from './Terminal'
 
@@ -10,18 +10,38 @@ export const useTabManagerStore = defineStore('TabManager', () => {
 
   const activeTab = computed(() => tabs.value.find(tab => tab.id === activeTabId.value))
 
+  // 监听终端状态变化，自动同步标签
+  watch(
+    () => terminalStore.terminals,
+    () => {
+      syncTerminalTabs()
+    },
+    { deep: true }
+  )
+
   const syncTerminalTabs = () => {
     tabs.value = tabs.value.filter(tab => tab.type !== TabType.TERMINAL)
 
     tabs.value.push(
-      ...terminalStore.terminals.map(terminal => ({
-        id: terminal.id,
-        title: terminal.title,
-        type: TabType.TERMINAL,
-        closable: true,
-        icon: '🖥️',
-        data: { backendId: terminal.backendId },
-      }))
+      ...terminalStore.terminals.map(terminal => {
+        const shellName = terminal.shell || 'shell'
+        const cwd = terminal.cwd || '~'
+
+        // 提取路径的最后一部分
+        const pathParts = cwd.replace(/\/$/, '').split('/')
+        const lastPath = pathParts[pathParts.length - 1] || '~'
+
+        return {
+          id: terminal.id,
+          title: '', // 终端标签不再使用title字段
+          type: TabType.TERMINAL,
+          closable: true,
+          icon: '🖥️',
+          data: { backendId: terminal.backendId },
+          shell: shellName,
+          path: lastPath,
+        }
+      })
     )
 
     if (terminalStore.activeTerminalId) {

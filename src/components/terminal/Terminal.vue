@@ -40,6 +40,7 @@
   import type { Theme } from '@/types/theme'
   import { windowApi } from '@/api'
   import { useTheme } from '@/composables/useTheme'
+  import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import { TERMINAL_CONFIG } from '@/constants/terminal'
   import { useTerminalStore } from '@/stores/Terminal'
   import { XMessage } from '@/ui/components'
@@ -67,6 +68,7 @@
   // === 状态管理 ===
   const terminalStore = useTerminalStore() // 终端状态管理
   const themeStore = useTheme() // 主题管理
+  const terminalSelection = useTerminalSelection() // 终端选择管理
 
   // === 核心引用 ===
   const terminalRef = ref<HTMLElement | null>(null) // 终端容器DOM引用
@@ -233,6 +235,23 @@
       // 监听终端内容变化，确保光标位置准确
       terminal.value.onCursorMove(updateTerminalCursorPosition)
       terminal.value.onScroll(updateTerminalCursorPosition)
+
+      // 监听文本选择事件 - 简化逻辑
+      terminal.value.onSelectionChange(() => {
+        const selectedText = terminal.value?.getSelection()
+        
+        if (!selectedText?.trim()) {
+          terminalSelection.clearSelection()
+          return
+        }
+
+        // 尝试获取选择位置信息
+        const selection = terminal.value?.getSelectionPosition()
+        const startLine = selection ? selection.start.y + 1 : 1 // xterm行号从0开始
+        const endLine = selection ? selection.end.y + 1 : undefined
+
+        terminalSelection.setSelectedText(selectedText, startLine, endLine)
+      })
 
       // 初始化终端状态
       resizeTerminal()
