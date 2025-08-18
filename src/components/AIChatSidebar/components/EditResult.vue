@@ -1,0 +1,117 @@
+<template>
+  <div class="edit-result">
+    <!-- 统计信息 -->
+    <div class="stats">
+      <span class="stat removed">-{{ getLineCount(editData.old) }}</span>
+      <span class="stat added">+{{ getLineCount(editData.new) }}</span>
+    </div>
+
+    <!-- 代码对比 -->
+    <div class="code-diff">
+      <!-- 移除的行 -->
+      <div class="diff-line removed">
+        <span class="line-prefix">-</span>
+        <span class="line-content">{{ editData.old }}</span>
+      </div>
+      <!-- 添加的行 -->
+      <div class="diff-line added">
+        <span class="line-prefix">+</span>
+        <span class="line-content">{{ editData.new }}</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+  import type { SimpleEditResult } from '@/eko/tools/toolList/edit-file'
+
+  defineProps<{
+    editData: SimpleEditResult
+  }>()
+
+  const getLineCount = (text: string) => {
+    return text.split('\n').length
+  }
+</script>
+
+<style scoped>
+  .edit-result {
+    background: var(--bg-400);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .stats {
+    padding: 8px 12px;
+    display: flex;
+    gap: 12px;
+    background: var(--bg-300);
+    border-bottom: 1px solid var(--border-300);
+  }
+
+  .stat {
+    font-size: 11px;
+    font-weight: 400;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  .stat.added {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+  }
+
+  .stat.removed {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+  }
+
+  .code-diff {
+    overflow: hidden;
+  }
+
+  .diff-line {
+    display: flex;
+    align-items: flex-start;
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 4px 0;
+  }
+
+  .diff-line.added {
+    background: rgba(34, 197, 94, 0.05);
+  }
+
+  .diff-line.removed {
+    background: rgba(239, 68, 68, 0.05);
+  }
+
+  .line-prefix {
+    color: var(--text-400);
+    padding: 0 12px;
+    min-width: 30px;
+    text-align: center;
+    flex-shrink: 0;
+    user-select: none;
+    font-weight: 500;
+  }
+
+  .line-content {
+    color: var(--text-200);
+    padding-right: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    flex: 1;
+  }
+
+  .diff-line.added .line-prefix,
+  .diff-line.added .line-content {
+    color: #16a34a;
+  }
+
+  .diff-line.removed .line-prefix,
+  .diff-line.removed .line-content {
+    color: #dc2626;
+  }
+</style>

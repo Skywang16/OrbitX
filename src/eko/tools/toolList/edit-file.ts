@@ -4,13 +4,19 @@
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '../../types'
-import { ValidationError } from '../tool-error'
-import { writeTextFile, readTextFile, exists } from '@tauri-apps/plugin-fs'
+import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
 
 export interface EditFileParams {
   path: string
   oldString: string
   newString: string
+}
+
+export interface SimpleEditResult {
+  file: string // 文件路径
+  success: boolean // 是否成功
+  old: string // 原始内容片段
+  new: string // 新内容片段
 }
 
 /**
@@ -53,38 +59,32 @@ export class EditFileTool extends ModifiableTool {
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
     const { path, oldString, newString } = context.parameters as unknown as EditFileParams
 
-    if (!path?.trim()) {
-      throw new ValidationError('文件路径不能为空')
+    const originalContent = await readTextFile(path)
+    const modifiedContent = originalContent.replace(oldString, newString)
+
+    if (modifiedContent === originalContent) {
+      const editResult: SimpleEditResult = {
+        file: path,
+        success: false,
+        old: oldString,
+        new: newString,
+      }
+      return {
+        content: [{ type: 'text', text: `未找到匹配的内容`, data: editResult }],
+      }
     }
 
-    if (oldString === newString) {
-      return {
-        content: [{ type: 'text', text: `原始文本和新文本相同，无需修改` }],
-      }
+    await writeTextFile(path, modifiedContent)
+
+    const editResult: SimpleEditResult = {
+      file: path,
+      success: true,
+      old: oldString,
+      new: newString,
     }
 
-    try {
-      if (!(await exists(path))) {
-        throw new ValidationError(`文件不存在: ${path}`)
-      }
-
-      const originalContent = await readTextFile(path)
-      const modifiedContent = originalContent.replace(oldString, newString)
-
-      if (modifiedContent === originalContent) {
-        return {
-          content: [{ type: 'text', text: `未找到匹配的内容，文件未修改` }],
-        }
-      }
-
-      await writeTextFile(path, modifiedContent)
-
-      return {
-        content: [{ type: 'text', text: `文件已修改: ${path}` }],
-      }
-    } catch (error) {
-      if (error instanceof ValidationError) throw error
-      throw new Error(`编辑文件失败: ${error instanceof Error ? error.message : String(error)}`)
+    return {
+      content: [{ type: 'text', text: `文件已修改: ${path}`, data: editResult }],
     }
   }
 }
