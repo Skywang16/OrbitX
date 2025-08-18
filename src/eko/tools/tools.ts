@@ -18,56 +18,23 @@ import { webFetchTool } from './toolList/web-fetch'
 import { orbitSearchTool } from './toolList/orbit-search'
 
 /**
- * 所有可用工具的数组
+ * 只读工具 - Chat模式可以使用
+ */
+export const readOnlyTools: Tool[] = [readFileTool, readManyFilesTool, readDirectoryTool, webFetchTool, orbitSearchTool]
+
+/**
+ * 所有工具 - Agent模式可以使用
  */
 export const allTools: Tool<unknown>[] = [
-  // 文件操作工具
   readFileTool,
   readManyFilesTool,
   readDirectoryTool,
   createFileTool,
   editFileTool,
-
-  // 系统工具
   shellTool,
-
-  // 网络工具
   webFetchTool,
-
-  // 搜索工具
   orbitSearchTool,
 ]
-
-/**
- * 按分类组织的工具
- */
-export const toolsByCategory = {
-  file: [readFileTool, readManyFilesTool, readDirectoryTool, createFileTool, editFileTool],
-
-  system: [shellTool],
-  network: [webFetchTool],
-  search: [orbitSearchTool],
-}
-
-/**
- * 核心工具（最常用的工具）
- */
-export const coreTools: Tool[] = [readFileTool, readDirectoryTool, createFileTool, editFileTool, shellTool]
-
-/**
- * 网络工具
- */
-export const networkTools: Tool[] = [webFetchTool]
-
-/**
- * 文件操作工具
- */
-export const fileTools: Tool[] = [readFileTool, readManyFilesTool, readDirectoryTool, createFileTool, editFileTool]
-
-/**
- * 搜索工具
- */
-export const searchTools: Tool[] = [orbitSearchTool]
 
 /**
  * 注册所有工具到全局注册表
@@ -146,11 +113,9 @@ export function registerAllTools(): void {
 
 /**
  * 按模式筛选工具
- * - chat 模式：仅允许读取类工具，禁止任何写入/执行类工具
- * - agent 模式：允许所有工具
  */
 export function getToolsForMode(mode: 'chat' | 'agent'): Tool[] {
-  return mode === 'agent' ? allTools : [...fileTools, ...networkTools, ...searchTools]
+  return mode === 'agent' ? allTools : readOnlyTools
 }
 
 // 自动注册所有工具

@@ -237,7 +237,82 @@ pub async fn build_prompt_with_context(
         // 有历史对话的情况
         let history_context = messages
             .iter()
-            .map(|msg| format!("{}: {}", msg.role, msg.content))
+            .map(|msg| {
+                if msg.role == "assistant" && msg.steps_json.is_some() {
+                    // 对于AI消息，如果有steps数据，需要包含完整的工具调用过程
+                    if let Some(steps_json) = &msg.steps_json {
+                        // 尝试解析steps数据以提取完整上下文
+                        match serde_json::from_str::<serde_json::Value>(steps_json) {
+                            Ok(steps) => {
+                                let mut full_content = Vec::new();
+                                
+                                // 如果steps是数组，遍历每个步骤
+                                if let Some(steps_array) = steps.as_array() {
+                                    for step in steps_array {
+                                        if let Some(step_type) = step.get("type").and_then(|t| t.as_str()) {
+                                            match step_type {
+                                                "thinking" => {
+                                                    if let Some(content) = step.get("content").and_then(|c| c.as_str()) {
+                                                        full_content.push(format!("[思考] {}", content));
+                                                    }
+                                                }
+                                                "tool_use" => {
+                                                    if let Some(tool_execution) = step.get("toolExecution") {
+                                                        if let (Some(name), Some(params)) = (
+                                                            tool_execution.get("name").and_then(|n| n.as_str()),
+                                                            tool_execution.get("params")
+                                                        ) {
+                                                            full_content.push(format!("[工具调用] {} 参数: {}", name, params));
+                                                            
+                                                            // 如果有工具结果，也添加
+                                                            if let Some(result) = tool_execution.get("result") {
+                                                                let result_str = if result.is_string() {
+                                                                    result.as_str().unwrap_or("").to_string()
+                                                                } else {
+                                                                    result.to_string()
+                                                                };
+                                                                // 输出完整的工具结果，不进行截断
+                                                                full_content.push(format!("[工具结果] {}", result_str));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                "text" => {
+                                                    if let Some(content) = step.get("content").and_then(|c| c.as_str()) {
+                                                        full_content.push(format!("[回复] {}", content));
+                                                    }
+                                                }
+                                                _ => {
+                                                    // 其他类型的步骤
+                                                    if let Some(content) = step.get("content").and_then(|c| c.as_str()) {
+                                                        full_content.push(format!("[{}] {}", step_type, content));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // 如果成功解析了steps，使用完整内容；否则回退到基础content
+                                if !full_content.is_empty() {
+                                    format!("{}: {}", msg.role, full_content.join("\n"))
+                                } else {
+                                    format!("{}: {}", msg.role, msg.content)
+                                }
+                            }
+                            Err(_) => {
+                                // 解析失败，使用基础content
+                                format!("{}: {}", msg.role, msg.content)
+                            }
+                        }
+                    } else {
+                        format!("{}: {}", msg.role, msg.content)
+                    }
+                } else {
+                    // 用户消息或没有steps的消息，直接使用content
+                    format!("{}: {}", msg.role, msg.content)
+                }
+            })
             .collect::<Vec<_>>()
             .join("\n");
 

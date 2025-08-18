@@ -472,18 +472,6 @@
   }
 
   /**
-   * 在系统中打开路径
-   */
-  const handlePathOpen = async (path: string) => {
-    try {
-      await openPath(path.trim().replace(/^["']|["']$/g, '')) // 清理引号
-      showToast('已打开路径', 'success')
-    } catch {
-      showToast('无法打开路径', 'error')
-    }
-  }
-
-  /**
    * 切换到指定路径
    * 发送 cd 命令到终端
    */

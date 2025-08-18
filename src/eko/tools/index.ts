@@ -49,16 +49,7 @@ export { webFetchTool } from './toolList/web-fetch'
 export { orbitSearchTool } from './toolList/orbit-search'
 
 // 导出主要的工具集合
-export {
-  allTools,
-  coreTools,
-  networkTools,
-  fileTools,
-  searchTools,
-  toolsByCategory,
-  registerAllTools,
-  getToolsForMode,
-} from './tools'
+export { allTools, readOnlyTools, registerAllTools, getToolsForMode } from './tools'
 
-// 默认导出核心工具
-export { coreTools as default } from './tools'
+// 默认导出所有工具
+export { allTools as default } from './tools'

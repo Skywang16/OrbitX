@@ -7,7 +7,6 @@ import type { ToolResult } from '../../types'
 import { ValidationError, ToolError } from '../tool-error'
 import { terminalApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'
-import { TerminalAgent } from '../../agent/terminal-agent'
 export interface ShellParams {
   command: string
   path?: string
@@ -268,18 +267,6 @@ export class ShellTool extends ModifiableTool {
    * 获取或创建Agent专属终端
    */
   private async getOrCreateAgentTerminal(): Promise<number> {
-    // 尝试从当前活跃的TerminalAgent实例获取专属终端
-    const currentAgent = TerminalAgent.getCurrentInstance()
-    if (currentAgent) {
-      const agentTerminalId = currentAgent.getTerminalIdForTools()
-      if (agentTerminalId) {
-        return agentTerminalId
-      }
-      // 如果Agent存在但没有终端，让Agent创建一个
-      return await currentAgent.ensureAgentTerminal()
-    }
-
-    // 如果没有TerminalAgent实例（可能是Chat模式），使用任何可用的终端
     const terminals = await terminalApi.listTerminals()
     if (terminals.length === 0) {
       throw new ToolError('没有可用的终端')

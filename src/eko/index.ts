@@ -10,8 +10,8 @@ import { getEkoConfig, type EkoConfigOptions } from './core/config'
 import { createCallback, createSidebarCallback } from './core/callbacks'
 
 // 导入Agent
-import { TerminalAgent, TerminalChatAgent, createTerminalAgent, createTerminalChatAgent } from './agent/terminal-agent'
-import { CodeAgent, CodeChatAgent, createCodeAgent, createCodeChatAgent } from './agent/code-agent'
+import { TerminalAgent, createTerminalAgent, createTerminalChatAgent } from './agent/terminal-agent'
+import { CodeAgent, createCodeAgent, createCodeChatAgent } from './agent/code-agent'
 
 // 导入工具
 import { allTools } from './tools'
@@ -25,9 +25,9 @@ import type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOp
  */
 export class OrbitXEko {
   private eko: Eko | null = null
-  private terminalChatAgent: TerminalChatAgent
+  private terminalChatAgent: TerminalAgent
   private terminalAgent: TerminalAgent
-  private codeChatAgent: CodeChatAgent
+  private codeChatAgent: CodeAgent
   private codeAgent: CodeAgent
   private callback: TerminalCallback
   private config: EkoInstanceConfig
@@ -46,8 +46,8 @@ export class OrbitXEko {
     this.codeChatAgent = createCodeChatAgent(config.codeAgentConfig)
 
     // 创建Agent模式的Agent（全权限）
-    this.terminalAgent = createTerminalAgent(config.agentConfig)
-    this.codeAgent = createCodeAgent(config.codeAgentConfig)
+    this.terminalAgent = createTerminalAgent('agent', config.agentConfig)
+    this.codeAgent = createCodeAgent('agent', config.codeAgentConfig)
   }
 
   /**
