@@ -245,54 +245,83 @@ pub async fn build_prompt_with_context(
                         match serde_json::from_str::<serde_json::Value>(steps_json) {
                             Ok(steps) => {
                                 let mut full_content = Vec::new();
-                                
+
                                 // 如果steps是数组，遍历每个步骤
                                 if let Some(steps_array) = steps.as_array() {
                                     for step in steps_array {
-                                        if let Some(step_type) = step.get("type").and_then(|t| t.as_str()) {
+                                        if let Some(step_type) =
+                                            step.get("type").and_then(|t| t.as_str())
+                                        {
                                             match step_type {
                                                 "thinking" => {
-                                                    if let Some(content) = step.get("content").and_then(|c| c.as_str()) {
-                                                        full_content.push(format!("[思考] {}", content));
+                                                    if let Some(content) =
+                                                        step.get("content").and_then(|c| c.as_str())
+                                                    {
+                                                        full_content
+                                                            .push(format!("[思考] {}", content));
                                                     }
                                                 }
                                                 "tool_use" => {
-                                                    if let Some(tool_execution) = step.get("toolExecution") {
+                                                    if let Some(tool_execution) =
+                                                        step.get("toolExecution")
+                                                    {
                                                         if let (Some(name), Some(params)) = (
-                                                            tool_execution.get("name").and_then(|n| n.as_str()),
-                                                            tool_execution.get("params")
+                                                            tool_execution
+                                                                .get("name")
+                                                                .and_then(|n| n.as_str()),
+                                                            tool_execution.get("params"),
                                                         ) {
-                                                            full_content.push(format!("[工具调用] {} 参数: {}", name, params));
-                                                            
+                                                            full_content.push(format!(
+                                                                "[工具调用] {} 参数: {}",
+                                                                name, params
+                                                            ));
+
                                                             // 如果有工具结果，也添加
-                                                            if let Some(result) = tool_execution.get("result") {
-                                                                let result_str = if result.is_string() {
-                                                                    result.as_str().unwrap_or("").to_string()
-                                                                } else {
-                                                                    result.to_string()
-                                                                };
+                                                            if let Some(result) =
+                                                                tool_execution.get("result")
+                                                            {
+                                                                let result_str =
+                                                                    if result.is_string() {
+                                                                        result
+                                                                            .as_str()
+                                                                            .unwrap_or("")
+                                                                            .to_string()
+                                                                    } else {
+                                                                        result.to_string()
+                                                                    };
                                                                 // 输出完整的工具结果，不进行截断
-                                                                full_content.push(format!("[工具结果] {}", result_str));
+                                                                full_content.push(format!(
+                                                                    "[工具结果] {}",
+                                                                    result_str
+                                                                ));
                                                             }
                                                         }
                                                     }
                                                 }
                                                 "text" => {
-                                                    if let Some(content) = step.get("content").and_then(|c| c.as_str()) {
-                                                        full_content.push(format!("[回复] {}", content));
+                                                    if let Some(content) =
+                                                        step.get("content").and_then(|c| c.as_str())
+                                                    {
+                                                        full_content
+                                                            .push(format!("[回复] {}", content));
                                                     }
                                                 }
                                                 _ => {
                                                     // 其他类型的步骤
-                                                    if let Some(content) = step.get("content").and_then(|c| c.as_str()) {
-                                                        full_content.push(format!("[{}] {}", step_type, content));
+                                                    if let Some(content) =
+                                                        step.get("content").and_then(|c| c.as_str())
+                                                    {
+                                                        full_content.push(format!(
+                                                            "[{}] {}",
+                                                            step_type, content
+                                                        ));
                                                     }
                                                 }
                                             }
                                         }
                                     }
                                 }
-                                
+
                                 // 如果成功解析了steps，使用完整内容；否则回退到基础content
                                 if !full_content.is_empty() {
                                     format!("{}: {}", msg.role, full_content.join("\n"))
@@ -317,7 +346,7 @@ pub async fn build_prompt_with_context(
             .join("\n");
 
         format!(
-            "以下是我们之前的对话历史，请参考这些上下文来回答我的新问题：\n\n【对话历史】\n{}\n\n【当前问题】\n{}\n\n请基于以上对话历史的上下文，回答我的当前问题。如果当前问题与历史对话相关，请结合历史信息给出回答；如果是全新的问题，请直接回答。",
+            "以下是我们之前的对话历史，请参考这些上下文来回答我的新问题：\n\n【对话历史】\n{}\n\n【当前问题】\n{}\n\n你的首要任务是：精确理解用户当前的意图，查看最近的上下文。严格遵循用户的要求，不要自己想当然的执行操作",
             history_context,
             current_message
         )
@@ -529,7 +558,6 @@ pub async fn set_default_ai_model(
         .await
         .to_tauri()
 }
-
 
 /// 测试AI模型连接（基于表单数据）
 #[tauri::command]
