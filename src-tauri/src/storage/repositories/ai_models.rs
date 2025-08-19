@@ -367,4 +367,51 @@ impl AIModelRepository {
         info!("AI模型删除成功: {}", id);
         Ok(())
     }
+
+    /// 获取用户前置提示词
+    pub async fn get_user_prefix_prompt(&self) -> AppResult<Option<String>> {
+        debug!("获取用户前置提示词");
+
+        let result = sqlx::query("SELECT value FROM settings WHERE key = 'user_prefix_prompt'")
+            .fetch_optional(self.database.pool())
+            .await?;
+
+        match result {
+            Some(row) => {
+                let value: Option<String> = row.try_get("value")?;
+                debug!(
+                    "用户前置提示词获取成功: {:?}",
+                    value.as_ref().map(|v| v.len())
+                );
+                Ok(value)
+            }
+            None => {
+                debug!("用户前置提示词未设置");
+                Ok(None)
+            }
+        }
+    }
+
+    /// 设置用户前置提示词
+    pub async fn set_user_prefix_prompt(&self, prompt: Option<String>) -> AppResult<()> {
+        debug!("设置用户前置提示词: {:?}", prompt.as_ref().map(|p| p.len()));
+
+        if let Some(prompt_text) = prompt {
+            // 插入或更新设置
+            sqlx::query(
+                "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('user_prefix_prompt', ?, datetime('now'))"
+            )
+            .bind(prompt_text)
+            .execute(self.database.pool())
+            .await?;
+        } else {
+            // 删除设置
+            sqlx::query("DELETE FROM settings WHERE key = 'user_prefix_prompt'")
+                .execute(self.database.pool())
+                .await?;
+        }
+
+        info!("用户前置提示词设置成功");
+        Ok(())
+    }
 }

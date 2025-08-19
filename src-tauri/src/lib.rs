@@ -28,6 +28,8 @@ use ai::commands::{
     get_compressed_context,
     get_conversation,
     get_conversations,
+    get_user_prefix_prompt,
+    set_user_prefix_prompt,
 
     remove_ai_model,
     save_message,
@@ -331,6 +333,8 @@ pub fn run() {
             delete_conversation,
             get_compressed_context,
             build_prompt_with_context,
+            get_user_prefix_prompt,
+            set_user_prefix_prompt,
             save_message,
             update_message_content,
             update_message_steps,

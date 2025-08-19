@@ -221,6 +221,13 @@ pub async fn build_prompt_with_context(
 
     let repositories = state.repositories();
 
+    // 获取用户前置提示词
+    let user_prefix_prompt = repositories
+        .ai_models()
+        .get_user_prefix_prompt()
+        .await
+        .to_tauri()?;
+
     // 获取历史消息
     let config = crate::ai::types::AIConfig::default();
     let messages = crate::ai::context::build_context_for_request(
@@ -233,6 +240,15 @@ pub async fn build_prompt_with_context(
     .to_tauri()?;
 
     // 构建prompt
+    let mut prompt_parts = Vec::new();
+
+    // 添加用户前置提示词（如果存在）
+    if let Some(prefix_prompt) = user_prefix_prompt {
+        if !prefix_prompt.trim().is_empty() {
+            prompt_parts.push(format!("【用户前置提示词】\n{}\n", prefix_prompt));
+        }
+    }
+
     let prompt = if messages.len() > 0 {
         // 有历史对话的情况
         let history_context = messages
@@ -345,14 +361,17 @@ pub async fn build_prompt_with_context(
             .collect::<Vec<_>>()
             .join("\n");
 
-        format!(
+        prompt_parts.push(format!(
             "以下是我们之前的对话历史，请参考这些上下文来回答我的新问题：\n\n【对话历史】\n{}\n\n【当前问题】\n{}\n\n你的首要任务是：精确理解用户当前的意图，查看最近的上下文。严格遵循用户的要求，不要自己想当然的执行操作",
             history_context,
             current_message
-        )
+        ));
+
+        prompt_parts.join("\n")
     } else {
-        // 没有历史对话，直接使用用户问题
-        current_message
+        // 没有历史对话的情况
+        prompt_parts.push(current_message);
+        prompt_parts.join("\n")
     };
 
     info!(
@@ -582,6 +601,41 @@ pub async fn test_ai_connection_with_config(
     state
         .ai_service
         .test_connection_with_config(&config)
+        .await
+        .to_tauri()
+}
+
+// ===== 用户前置提示词管理命令 =====
+
+/// 获取用户前置提示词
+#[tauri::command]
+pub async fn get_user_prefix_prompt(
+    state: State<'_, AIManagerState>,
+) -> Result<Option<String>, String> {
+    debug!("获取用户前置提示词");
+
+    let repositories = state.repositories();
+
+    repositories
+        .ai_models()
+        .get_user_prefix_prompt()
+        .await
+        .to_tauri()
+}
+
+/// 设置用户前置提示词
+#[tauri::command]
+pub async fn set_user_prefix_prompt(
+    prompt: Option<String>,
+    state: State<'_, AIManagerState>,
+) -> Result<(), String> {
+    info!("设置用户前置提示词: {:?}", prompt.as_ref().map(|p| p.len()));
+
+    let repositories = state.repositories();
+
+    repositories
+        .ai_models()
+        .set_user_prefix_prompt(prompt)
         .await
         .to_tauri()
 }
