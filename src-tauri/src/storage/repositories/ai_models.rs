@@ -14,8 +14,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tracing::{debug, error, info};
+
+/// 简单的内存缓存存储用户前置提示词
+static USER_PREFIX_PROMPT: Mutex<Option<String>> = Mutex::new(None);
 
 /// 默认启用状态
 fn default_enabled() -> bool {
@@ -370,46 +373,21 @@ impl AIModelRepository {
 
     /// 获取用户前置提示词
     pub async fn get_user_prefix_prompt(&self) -> AppResult<Option<String>> {
-        debug!("获取用户前置提示词");
+        debug!("从内存缓存获取用户前置提示词");
 
-        let result = sqlx::query("SELECT value FROM settings WHERE key = 'user_prefix_prompt'")
-            .fetch_optional(self.database.pool())
-            .await?;
-
-        match result {
-            Some(row) => {
-                let value: Option<String> = row.try_get("value")?;
-                debug!(
-                    "用户前置提示词获取成功: {:?}",
-                    value.as_ref().map(|v| v.len())
-                );
-                Ok(value)
-            }
-            None => {
-                debug!("用户前置提示词未设置");
-                Ok(None)
-            }
-        }
+        let prompt = USER_PREFIX_PROMPT.lock().unwrap().clone();
+        debug!(
+            "用户前置提示词获取成功: {:?}",
+            prompt.as_ref().map(|p| p.len())
+        );
+        Ok(prompt)
     }
 
     /// 设置用户前置提示词
     pub async fn set_user_prefix_prompt(&self, prompt: Option<String>) -> AppResult<()> {
         debug!("设置用户前置提示词: {:?}", prompt.as_ref().map(|p| p.len()));
 
-        if let Some(prompt_text) = prompt {
-            // 插入或更新设置
-            sqlx::query(
-                "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('user_prefix_prompt', ?, datetime('now'))"
-            )
-            .bind(prompt_text)
-            .execute(self.database.pool())
-            .await?;
-        } else {
-            // 删除设置
-            sqlx::query("DELETE FROM settings WHERE key = 'user_prefix_prompt'")
-                .execute(self.database.pool())
-                .await?;
-        }
+        *USER_PREFIX_PROMPT.lock().unwrap() = prompt;
 
         info!("用户前置提示词设置成功");
         Ok(())

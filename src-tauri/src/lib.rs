@@ -29,11 +29,11 @@ use ai::commands::{
     get_conversation,
     get_conversations,
     get_user_prefix_prompt,
-    set_user_prefix_prompt,
-
     remove_ai_model,
     save_message,
     set_default_ai_model,
+    set_user_prefix_prompt,
+
     test_ai_connection_with_config,
     truncate_conversation,
     update_ai_model,
@@ -374,8 +374,10 @@ pub fn run() {
                 info!("终端状态管理器已初始化");
 
                 // 创建配置路径管理器
-                info!("开始创建配置路径管理器
-");
+                info!(
+                    "开始创建配置路径管理器
+"
+                );
                 let paths = config::paths::ConfigPaths::new()
                     .map_err(|e| anyhow::anyhow!("配置路径创建失败: {}", e))?;
                 app.manage(paths);
@@ -479,20 +481,31 @@ pub fn run() {
                 info!("开始设置Shell Integration");
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    let paths = app_handle.state::<config::paths::ConfigPaths>().inner().clone();
+                    let paths = app_handle
+                        .state::<config::paths::ConfigPaths>()
+                        .inner()
+                        .clone();
                     let config_manager = app_handle.state::<ConfigManagerState>();
                     match config_manager.toml_manager.get_config().await {
                         Ok(config) => {
                             let default_shell_path = config.terminal.shell.default_shell;
-                            let shell_type = shell::script_generator::ShellType::from_program(&default_shell_path);
+                            let shell_type = shell::script_generator::ShellType::from_program(
+                                &default_shell_path,
+                            );
 
-                            let integration_config = shell::script_generator::ShellIntegrationConfig::default();
-                            let generator = shell::script_generator::ShellScriptGenerator::new(integration_config);
+                            let integration_config =
+                                shell::script_generator::ShellIntegrationConfig::default();
+                            let generator = shell::script_generator::ShellScriptGenerator::new(
+                                integration_config,
+                            );
 
                             if let Err(e) = generator.setup_shell_integration(&shell_type, &paths) {
                                 warn!("Shell Integration设置失败: {}", e);
                             } else {
-                                info!("Shell Integration设置成功 for shell: {:?}", shell_type.display_name());
+                                info!(
+                                    "Shell Integration设置成功 for shell: {:?}",
+                                    shell_type.display_name()
+                                );
                             }
                         }
                         Err(e) => {

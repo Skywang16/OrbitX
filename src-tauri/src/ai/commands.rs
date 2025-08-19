@@ -196,7 +196,7 @@ pub async fn get_compressed_context(
     Ok(messages)
 }
 
-/// 构建带上下文的prompt（专门用于AI推理）
+/// 构建带智能上下文的prompt（专门用于AI推理）
 #[tauri::command]
 pub async fn build_prompt_with_context(
     conversation_id: i64,
@@ -205,182 +205,34 @@ pub async fn build_prompt_with_context(
     state: State<'_, AIManagerState>,
 ) -> Result<String, String> {
     info!(
-        "构建prompt: conversation_id={}, current_message length={}, up_to_message_id={:?}",
+        "构建智能prompt: conversation_id={}, current_message length={}, up_to_message_id={:?}",
         conversation_id,
         current_message.len(),
         up_to_message_id
     );
 
+    // 参数验证
     if conversation_id <= 0 {
         return Err("无效的会话ID".to_string());
     }
-
     if current_message.trim().is_empty() {
         return Err("当前消息不能为空".to_string());
     }
 
     let repositories = state.repositories();
 
-    // 获取用户前置提示词
-    let user_prefix_prompt = repositories
-        .ai_models()
-        .get_user_prefix_prompt()
-        .await
-        .to_tauri()?;
-
-    // 获取历史消息
-    let config = crate::ai::types::AIConfig::default();
-    let messages = crate::ai::context::build_context_for_request(
+    // 使用智能上下文管理器构建prompt
+    let intelligent_prompt = crate::ai::context::build_intelligent_prompt(
         repositories,
         conversation_id,
+        &current_message,
         up_to_message_id,
-        &config,
     )
     .await
     .to_tauri()?;
 
-    // 构建prompt
-    let mut prompt_parts = Vec::new();
-
-    // 添加用户前置提示词（如果存在）
-    if let Some(prefix_prompt) = user_prefix_prompt {
-        if !prefix_prompt.trim().is_empty() {
-            prompt_parts.push(format!("【用户前置提示词】\n{}\n", prefix_prompt));
-        }
-    }
-
-    let prompt = if messages.len() > 0 {
-        // 有历史对话的情况
-        let history_context = messages
-            .iter()
-            .map(|msg| {
-                if msg.role == "assistant" && msg.steps_json.is_some() {
-                    // 对于AI消息，如果有steps数据，需要包含完整的工具调用过程
-                    if let Some(steps_json) = &msg.steps_json {
-                        // 尝试解析steps数据以提取完整上下文
-                        match serde_json::from_str::<serde_json::Value>(steps_json) {
-                            Ok(steps) => {
-                                let mut full_content = Vec::new();
-
-                                // 如果steps是数组，遍历每个步骤
-                                if let Some(steps_array) = steps.as_array() {
-                                    for step in steps_array {
-                                        if let Some(step_type) =
-                                            step.get("type").and_then(|t| t.as_str())
-                                        {
-                                            match step_type {
-                                                "thinking" => {
-                                                    if let Some(content) =
-                                                        step.get("content").and_then(|c| c.as_str())
-                                                    {
-                                                        full_content
-                                                            .push(format!("[思考] {}", content));
-                                                    }
-                                                }
-                                                "tool_use" => {
-                                                    if let Some(tool_execution) =
-                                                        step.get("toolExecution")
-                                                    {
-                                                        if let (Some(name), Some(params)) = (
-                                                            tool_execution
-                                                                .get("name")
-                                                                .and_then(|n| n.as_str()),
-                                                            tool_execution.get("params"),
-                                                        ) {
-                                                            full_content.push(format!(
-                                                                "[工具调用] {} 参数: {}",
-                                                                name, params
-                                                            ));
-
-                                                            // 如果有工具结果，也添加
-                                                            if let Some(result) =
-                                                                tool_execution.get("result")
-                                                            {
-                                                                let result_str =
-                                                                    if result.is_string() {
-                                                                        result
-                                                                            .as_str()
-                                                                            .unwrap_or("")
-                                                                            .to_string()
-                                                                    } else {
-                                                                        result.to_string()
-                                                                    };
-                                                                // 输出完整的工具结果，不进行截断
-                                                                full_content.push(format!(
-                                                                    "[工具结果] {}",
-                                                                    result_str
-                                                                ));
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                "text" => {
-                                                    if let Some(content) =
-                                                        step.get("content").and_then(|c| c.as_str())
-                                                    {
-                                                        full_content
-                                                            .push(format!("[回复] {}", content));
-                                                    }
-                                                }
-                                                _ => {
-                                                    // 其他类型的步骤
-                                                    if let Some(content) =
-                                                        step.get("content").and_then(|c| c.as_str())
-                                                    {
-                                                        full_content.push(format!(
-                                                            "[{}] {}",
-                                                            step_type, content
-                                                        ));
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // 如果成功解析了steps，使用完整内容；否则回退到基础content
-                                if !full_content.is_empty() {
-                                    format!("{}: {}", msg.role, full_content.join("\n"))
-                                } else {
-                                    format!("{}: {}", msg.role, msg.content)
-                                }
-                            }
-                            Err(_) => {
-                                // 解析失败，使用基础content
-                                format!("{}: {}", msg.role, msg.content)
-                            }
-                        }
-                    } else {
-                        format!("{}: {}", msg.role, msg.content)
-                    }
-                } else {
-                    // 用户消息或没有steps的消息，直接使用content
-                    format!("{}: {}", msg.role, msg.content)
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        prompt_parts.push(format!(
-            "以下是我们之前的对话历史，请参考这些上下文来回答我的新问题：\n\n【对话历史】\n{}\n\n【当前问题】\n{}\n\n你的首要任务是：精确理解用户当前的意图，查看最近的上下文。严格遵循用户的要求，不要自己想当然的执行操作",
-            history_context,
-            current_message
-        ));
-
-        prompt_parts.join("\n")
-    } else {
-        // 没有历史对话的情况
-        prompt_parts.push(current_message);
-        prompt_parts.join("\n")
-    };
-
-    info!(
-        "prompt构建完成: conversation_id={}, 历史消息数量={}",
-        conversation_id,
-        messages.len()
-    );
-
-    Ok(prompt)
+    info!("智能prompt构建完成: conversation_id={}", conversation_id);
+    Ok(intelligent_prompt)
 }
 
 /// 截断会话（供前端eko使用）
@@ -638,4 +490,54 @@ pub async fn set_user_prefix_prompt(
         .set_user_prefix_prompt(prompt)
         .await
         .to_tauri()
+}
+
+// ===== 智能上下文配置管理命令 =====
+
+/// 获取上下文配置
+#[tauri::command]
+pub async fn get_context_config() -> Result<crate::ai::enhanced_context::ContextConfig, String> {
+    Ok(crate::ai::enhanced_context::ContextConfig::default())
+}
+
+/// 更新上下文配置
+#[tauri::command]
+pub async fn update_context_config(
+    config: crate::ai::enhanced_context::ContextConfig,
+) -> Result<(), String> {
+    info!("更新上下文配置: max_tokens={}, compress_threshold={}", 
+        config.max_tokens, config.compress_threshold);
+    
+    // TODO: 实现配置持久化
+    // 可以保存到数据库或配置文件
+    
+    Ok(())
+}
+
+/// 获取KV缓存统计
+#[tauri::command]
+pub async fn get_kv_cache_stats() -> Result<crate::ai::enhanced_context::CacheStats, String> {
+    let manager = &*crate::ai::context::CONTEXT_MANAGER;
+    Ok(manager.cache_stats())
+}
+
+/// 清理过期的KV缓存
+#[tauri::command]
+pub async fn cleanup_kv_cache() -> Result<(), String> {
+    let manager = &*crate::ai::context::CONTEXT_MANAGER;
+    manager.cleanup_cache();
+    info!("KV缓存清理完成");
+    Ok(())
+}
+
+/// 手动失效指定对话的缓存
+#[tauri::command]
+pub async fn invalidate_conversation_cache(conversation_id: i64) -> Result<(), String> {
+    if conversation_id <= 0 {
+        return Err("无效的会话ID".to_string());
+    }
+    
+    let manager = &*crate::ai::context::CONTEXT_MANAGER;
+    manager.invalidate_cache(conversation_id);
+    Ok(())
 }
