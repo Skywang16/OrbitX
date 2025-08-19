@@ -11,7 +11,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::enhanced_context::*;
+    use crate::ai::enhanced_context::*;
     use crate::ai::types::Message;
     use chrono::Utc;
 
