@@ -352,6 +352,13 @@ fn notification_to_tauri_payload(
             };
             ("terminal_exit", serde_json::to_value(event).unwrap())
         }
+        MuxNotification::PaneCwdChanged { pane_id, cwd } => {
+            // 暂时忽略CWD变化事件，或者可以创建相应的事件结构
+            ("pane_cwd_changed", serde_json::json!({
+                "pane_id": pane_id,
+                "cwd": cwd
+            }))
+        }
     }
 }
 

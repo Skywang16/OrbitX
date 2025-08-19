@@ -204,7 +204,7 @@ pub async fn web_fetch_headless(request: WebFetchRequest) -> Result<WebFetchResp
             let (extracted_text, page_title) = if extract_content
                 && content_type
                     .as_ref()
-                    .map_or(false, |ct| ct.contains("text/html"))
+                    .is_some_and(|ct| ct.contains("text/html"))
             {
                 // 使用改进的内容提取算法
                 let (text, title) = extract_content_from_html_improved(&raw_data, max_length);
@@ -252,7 +252,7 @@ pub async fn web_fetch_headless(request: WebFetchRequest) -> Result<WebFetchResp
                 data: final_data,
                 response_time,
                 final_url,
-                success: status >= 200 && status < 400,
+                success: (200..400).contains(&status),
                 error: None,
                 content_type,
                 content_length,

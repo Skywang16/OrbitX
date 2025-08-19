@@ -123,8 +123,8 @@
 
   // === 输出缓冲优化 ===
   let outputBuffer = '' // 输出数据缓冲区，使用字符串而非数组提高性能
-  const OUTPUT_FLUSH_INTERVAL = 16 // 16ms刷新间隔，约60fps
-  const MAX_BUFFER_LENGTH = 8192 // 最大缓冲区长度，防止内存过度使用
+  const OUTPUT_FLUSH_INTERVAL = 0 // 立即刷新，避免字符丢失
+  const MAX_BUFFER_LENGTH = 1024 // 降低缓冲区长度，减少延迟
 
   // === 输出缓冲处理函数 ===
 
@@ -152,9 +152,15 @@
 
   /**
    * 调度输出缓冲区刷新
-   * 使用防抖机制控制刷新频率
+   * 立即刷新以避免字符丢失
    */
   const scheduleOutputFlush = () => {
+    // 立即刷新，避免字符显示延迟
+    if (OUTPUT_FLUSH_INTERVAL === 0) {
+      flushOutputBuffer()
+      return
+    }
+
     // 如果已经有定时器在运行，不需要重新调度
     if (timers.outputFlush) return
 
@@ -239,7 +245,7 @@
       // 监听文本选择事件 - 简化逻辑
       terminal.value.onSelectionChange(() => {
         const selectedText = terminal.value?.getSelection()
-        
+
         if (!selectedText?.trim()) {
           terminalSelection.clearSelection()
           return
@@ -577,17 +583,23 @@
   const handleOutput = (data: string) => {
     try {
       if (terminal.value && typeof data === 'string') {
-        // 将数据添加到缓冲区而不是立即写入
-        outputBuffer += data
-
         // 检测工作目录变化
         detectWorkingDirectoryChange(data)
 
-        // 如果缓冲区过大，立即刷新以防止内存溢出
+        // 如果设置为立即刷新，直接写入终端
+        if (OUTPUT_FLUSH_INTERVAL === 0) {
+          terminal.value.write(data)
+          return
+        }
+
+        // 否则使用缓冲机制
+        outputBuffer += data
+
+        // 在缓冲区过大时立即刷新
         if (outputBuffer.length >= MAX_BUFFER_LENGTH) {
           flushOutputBuffer()
         } else {
-          // 否则调度延迟刷新
+          // 调度延迟刷新
           scheduleOutputFlush()
         }
       }
@@ -597,21 +609,162 @@
   }
 
   /**
+   * 解析OSC序列并处理shell integration事件
+   * 支持VS Code风格的shell integration协议
+   */
+  const parseOSCSequences = (data: string) => {
+    // OSC 633 序列匹配器（VS Code shell integration）
+    const oscPattern = /\x1b]633;([ABCDP]);([^\x07\x1b]*?)(?:\x07|\x1b\\)/g
+    let match
+
+    while ((match = oscPattern.exec(data)) !== null) {
+      const command = match[1]
+      const payload = match[2]
+
+      switch (command) {
+        case 'A': // Command started
+          break
+        case 'B': // Command finished
+          break
+        case 'C': // Command executed (start of output)
+          break
+        case 'D': // Command finished with exit code
+          const exitCode = payload ? parseInt(payload) : 0
+          break
+        case 'P': // Property update
+          handlePropertyUpdate(payload)
+          break
+      }
+    }
+
+    // OSC 7 序列匹配器（CWD更新）
+    const cwdPattern = /\x1b]7;file:\/\/[^\/]*([^\x07\x1b]*?)(?:\x07|\x1b\\)/g
+    let cwdMatch
+
+    while ((cwdMatch = cwdPattern.exec(data)) !== null) {
+      const newCwd = decodeURIComponent(cwdMatch[1])
+      if (newCwd && newCwd !== terminalEnv.workingDirectory) {
+        terminalEnv.workingDirectory = newCwd
+        terminalStore.updateTerminalCwd(props.terminalId, newCwd)
+        console.log(`📁 Shell integration: CWD updated to ${newCwd}`)
+      }
+    }
+  }
+
+  /**
+   * 处理shell integration属性更新
+   */
+  const handlePropertyUpdate = (payload: string) => {
+    try {
+      const parts = payload.split('=')
+      if (parts.length !== 2) return
+
+      const [key, value] = parts
+      switch (key) {
+        case 'Cwd':
+          const decodedCwd = decodeURIComponent(value)
+          if (decodedCwd && decodedCwd !== terminalEnv.workingDirectory) {
+            terminalEnv.workingDirectory = decodedCwd
+            terminalStore.updateTerminalCwd(props.terminalId, decodedCwd)
+            console.log(`📁 Shell integration: CWD property updated to ${decodedCwd}`)
+          }
+          break
+        case 'OSType':
+          console.log(`💻 Shell integration: OS Type detected as ${value}`)
+          break
+      }
+    } catch (error) {
+      console.warn('Failed to parse shell integration property:', payload)
+    }
+  }
+
+  /**
+   * 注入shell integration脚本 - VS Code风格的静默注入
+   * 通过后端API静默注入，用户完全感知不到
+   */
+  const injectShellIntegration = async () => {
+    if (!terminal.value) return
+
+    try {
+      // 等待终端初始化完成
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      // 通过后端API静默注入
+      await silentShellIntegration()
+    } catch (error) {
+      console.warn('Failed to inject shell integration:', error)
+      // 如果静默注入失败，回退到OSC序列解析
+      console.log('Falling back to OSC sequence parsing only')
+    }
+  }
+
+  /**
+   * 静默shell integration - 通过后端API实现
+   */
+  const silentShellIntegration = async () => {
+    try {
+      // 尝试通过后端API静默注入
+      if (props.backendId) {
+        await invoke('setup_shell_integration', {
+          paneId: props.backendId,
+          silent: true,
+        })
+        console.log('📡 Shell integration configured via backend API')
+      }
+    } catch (error) {
+      console.warn('Backend shell integration not available:', error)
+
+      // 回退到OSC序列监听模式
+      enableOSCSequenceMode()
+    }
+  }
+
+  /**
+   * 启用OSC序列监听模式（无需注入脚本）
+   */
+  const enableOSCSequenceMode = () => {
+    console.log('🔍 Enabled OSC sequence parsing mode')
+
+    // 设置环境变量标识
+    const envSetup = 'export TERM_PROGRAM=ClaudeCode TERM_PROGRAM_VERSION=1.0'
+
+    // 使用invisible character方式隐藏命令
+    setTimeout(() => {
+      emit('input', `\x1b[?25l${envSetup}\x1b[?25h\r`)
+    }, 100)
+  }
+
+  /**
    * 检测工作目录变化
-   * 使用简化的检测机制，只在特定条件下触发
+   * 作为OSC序列解析的备选方案
    */
   const detectWorkingDirectoryChange = (data: string) => {
-    // 只在包含路径分隔符且长度合理的数据中检测
+    // 优先使用OSC序列，只在必要时使用正则表达式检测
+    if (data.includes('\x1b]')) {
+      parseOSCSequences(data)
+      return
+    }
+
+    // 备选的正则表达式检测（保持兼容性）
     if (!data.includes('/') || data.length > 200) return
 
     try {
-      // 简化的检测：只匹配明显的提示符格式
       const promptMatch = data.match(/([/\w\-.~]+)\s*[$#>]\s*$/)
       if (promptMatch) {
         const newPath = promptMatch[1]
         if (newPath && newPath.startsWith('/') && newPath !== terminalEnv.workingDirectory) {
           terminalEnv.workingDirectory = newPath
           terminalStore.updateTerminalCwd(props.terminalId, newPath)
+
+          // 静默模式下，同步更新后端状态
+          if (props.backendId) {
+            invoke('update_pane_cwd', {
+              paneId: props.backendId,
+              cwd: newPath,
+            }).catch(() => {
+              // 静默忽略错误
+            })
+          }
         }
       }
     } catch {
@@ -670,6 +823,9 @@
 
       // 注册到终端store的resize回调，避免每个终端都监听window resize
       terminalStore.registerResizeCallback(props.terminalId, resizeTerminal)
+
+      // 注入shell integration脚本（现在是静默的）
+      await injectShellIntegration()
     })
   })
 

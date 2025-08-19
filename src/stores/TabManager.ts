@@ -27,9 +27,8 @@ export const useTabManagerStore = defineStore('TabManager', () => {
         const shellName = terminal.shell || 'shell'
         const cwd = terminal.cwd || '~'
 
-        // 提取路径的最后一部分
-        const pathParts = cwd.replace(/\/$/, '').split('/')
-        const lastPath = pathParts[pathParts.length - 1] || '~'
+        // 智能路径显示逻辑
+        const displayPath = getDisplayPath(cwd)
 
         return {
           id: terminal.id,
@@ -39,7 +38,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
           icon: '🖥️',
           data: { backendId: terminal.backendId },
           shell: shellName,
-          path: lastPath,
+          path: displayPath,
         }
       })
     )
@@ -47,6 +46,67 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     if (terminalStore.activeTerminalId) {
       activeTabId.value = terminalStore.activeTerminalId
     }
+  }
+
+  /**
+   * 智能路径显示逻辑
+   * 根据路径特征返回合适的显示名称
+   */
+  const getDisplayPath = (cwd: string): string => {
+    if (!cwd || cwd === '~') return '~'
+
+    // 移除末尾的斜杠
+    const cleanPath = cwd.replace(/\/$/, '')
+
+    // 处理home目录及其子目录
+    const homePattern = /^\/Users\/[^\/]+/
+    if (homePattern.test(cleanPath)) {
+      if (cleanPath.match(/^\/Users\/[^\/]+$/)) {
+        return '~' // 用户home目录
+      }
+      // home子目录显示相对路径
+      const relativePath = cleanPath.replace(homePattern, '~')
+      const pathParts = relativePath.split('/')
+      return pathParts[pathParts.length - 1] || '~'
+    }
+
+    // 处理系统重要目录
+    const systemDirs: Record<string, string> = {
+      '/': 'root',
+      '/usr': 'usr',
+      '/etc': 'etc',
+      '/var': 'var',
+      '/tmp': 'tmp',
+      '/opt': 'opt',
+      '/Applications': 'Apps',
+      '/System': 'System',
+      '/Library': 'Library',
+    }
+
+    if (systemDirs[cleanPath]) {
+      return systemDirs[cleanPath]
+    }
+
+    // 对于其他路径，显示最后一级目录名
+    const pathParts = cleanPath.split('/')
+    const lastPart = pathParts[pathParts.length - 1]
+
+    // 如果是根目录下的直接子目录，显示带斜杠前缀
+    if (pathParts.length === 2 && pathParts[0] === '') {
+      return `/${lastPart}`
+    }
+
+    // 特殊项目目录检测
+    if (lastPart.includes('-') || lastPart.includes('_')) {
+      return lastPart
+    }
+
+    // 如果目录名太长，进行截断
+    if (lastPart.length > 15) {
+      return lastPart.substring(0, 12) + '...'
+    }
+
+    return lastPart || '/'
   }
 
   // --- 公共方法 ---

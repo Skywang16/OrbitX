@@ -12,6 +12,7 @@ pub mod completion; // 终端补全功能模块
 pub mod config; // 统一配置系统模块
                 // pub mod lock_optimization_demo; // 锁优化演示模块 - 暂时注释掉
 pub mod mux; // 终端多路复用器核心模块
+pub mod shell; // Shell Integration功能模块
 pub mod storage; // 统一存储系统模块
 pub mod utils; // 工具和错误处理模块
 pub mod window; // 窗口管理功能模块
@@ -102,6 +103,9 @@ use config::{
     get_theme_config_status,
     set_follow_system_theme,
     set_terminal_theme,
+};
+use shell::commands::{
+    check_shell_integration_status, get_pane_cwd, setup_shell_integration, update_pane_cwd,
 };
 use window::commands::{
     clear_directory_cache, get_current_directory, get_home_directory, get_platform_info,
@@ -307,6 +311,11 @@ pub fn run() {
             get_shell_info,
             update_cursor_config,
             update_terminal_behavior_config,
+            // Shell integration命令
+            setup_shell_integration,
+            check_shell_integration_status,
+            get_pane_cwd,
+            update_pane_cwd,
             // AI模型管理命令
             get_ai_models,
             add_ai_model,
@@ -360,6 +369,14 @@ pub fn run() {
                 app.manage(terminal_state);
                 info!("终端状态管理器已初始化");
 
+                // 创建配置路径管理器
+                info!("开始创建配置路径管理器
+");
+                let paths = config::paths::ConfigPaths::new()
+                    .map_err(|e| anyhow::anyhow!("配置路径创建失败: {}", e))?;
+                app.manage(paths);
+                info!("配置路径管理器已创建并管理");
+
                 // 初始化配置管理器状态（必须先初始化，因为其他组件依赖它）
                 info!("开始初始化配置管理器状态");
                 let config_state = tauri::async_runtime::block_on(async {
@@ -399,9 +416,8 @@ pub fn run() {
                     let storage_state = app.state::<StorageCoordinatorState>();
                     let cache = storage_state.coordinator.cache();
 
-                    // 创建配置路径管理器
-                    let paths = ConfigPaths::new()
-                        .map_err(|e| anyhow::anyhow!("配置路径创建失败: {}", e))?;
+                    // 从状态中获取配置路径管理器
+                    let paths = app.state::<ConfigPaths>().inner().clone();
 
                     // 创建主题管理器选项
                     let theme_manager_options = ThemeManagerOptions::default();
@@ -448,6 +464,38 @@ pub fn run() {
                     WindowState::new().map_err(|e| anyhow::anyhow!("窗口状态初始化失败: {}", e))?;
                 app.manage(window_state);
                 info!("窗口状态管理器已初始化");
+
+                // 初始化TerminalMux状态（用于shell integration命令）
+                info!("开始初始化TerminalMux状态管理器");
+                let terminal_mux = crate::mux::singleton::get_mux();
+                app.manage(terminal_mux);
+                info!("TerminalMux状态管理器已初始化");
+
+                // 初始化Shell Integration
+                info!("开始设置Shell Integration");
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let paths = app_handle.state::<config::paths::ConfigPaths>().inner().clone();
+                    let config_manager = app_handle.state::<ConfigManagerState>();
+                    match config_manager.toml_manager.get_config().await {
+                        Ok(config) => {
+                            let default_shell_path = config.terminal.shell.default_shell;
+                            let shell_type = shell::script_generator::ShellType::from_program(&default_shell_path);
+
+                            let integration_config = shell::script_generator::ShellIntegrationConfig::default();
+                            let generator = shell::script_generator::ShellScriptGenerator::new(integration_config);
+
+                            if let Err(e) = generator.setup_shell_integration(&shell_type, &paths) {
+                                warn!("Shell Integration设置失败: {}", e);
+                            } else {
+                                info!("Shell Integration设置成功 for shell: {:?}", shell_type.display_name());
+                            }
+                        }
+                        Err(e) => {
+                            warn!("无法获取配置以设置Shell Integration: {}", e);
+                        }
+                    }
+                });
 
                 // 设置Tauri集成
                 info!("开始设置Tauri事件集成");

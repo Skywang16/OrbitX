@@ -30,6 +30,9 @@ pub struct ConfigPaths {
 
     /// 日志目录
     logs_dir: PathBuf,
+
+    /// Shell集成脚本目录
+    shell_dir: PathBuf,
 }
 
 impl ConfigPaths {
@@ -62,6 +65,7 @@ impl ConfigPaths {
         let backups_dir = app_data_dir.join(crate::config::BACKUPS_DIR_NAME);
         let cache_dir = app_data_dir.join(crate::config::CACHE_DIR_NAME);
         let logs_dir = app_data_dir.join(crate::config::LOGS_DIR_NAME);
+        let shell_dir = app_data_dir.join("shell");
 
         let paths = Self {
             app_data_dir,
@@ -70,6 +74,7 @@ impl ConfigPaths {
             backups_dir,
             cache_dir,
             logs_dir,
+            shell_dir,
         };
 
         // 确保所有必要的目录存在
@@ -165,6 +170,7 @@ impl ConfigPaths {
             &self.backups_dir,
             &self.cache_dir,
             &self.logs_dir,
+            &self.shell_dir,
         ];
 
         for dir in &directories {
@@ -245,6 +251,16 @@ impl ConfigPaths {
     /// 获取错误日志文件路径
     pub fn error_log_file(&self) -> PathBuf {
         self.logs_dir.join("error.log")
+    }
+
+    /// 获取Shell集成脚本目录路径
+    pub fn shell_dir(&self) -> &Path {
+        &self.shell_dir
+    }
+
+    /// 获取指定shell的集成脚本文件路径
+    pub fn shell_integration_script_path(&self, shell_name: &str) -> PathBuf {
+        self.shell_dir.join(format!("integration.{}", shell_name))
     }
 
     // ========================================================================
@@ -489,6 +505,7 @@ impl ConfigPaths {
             backups_dir: base_dir.join("backups"),
             cache_dir: base_dir.join("cache"),
             logs_dir: base_dir.join("logs"),
+            shell_dir: base_dir.join("shell"),
         }
     }
 }

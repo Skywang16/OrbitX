@@ -44,6 +44,20 @@
     return classes
   }
 
+  // 获取标签提示信息
+  const getTabTooltip = (tab: TabItem): string => {
+    if (tab.type === TabType.TERMINAL) {
+      // 获取完整路径信息
+      const terminal = terminalStore.terminals.find(t => t.id === tab.id)
+      const fullPath = terminal?.cwd || '~'
+      const shell = tab.shell || 'shell'
+
+      return `${shell} • ${fullPath}`
+    }
+
+    return tab.title
+  }
+
   const tabBarRef = ref<HTMLDivElement | null>(null)
   const tabBarWrapperRef = ref<HTMLDivElement | null>(null)
 
@@ -135,7 +149,7 @@
         @mousedown="handleMouseDown($event, tab.id)"
         @click="handleTabClick(tab.id)"
       >
-        <div class="tab-content" :title="tab.type === TabType.TERMINAL ? `${tab.shell} • ${tab.path}` : tab.title">
+        <div class="tab-content" :title="getTabTooltip(tab)">
           <template v-if="tab.type === TabType.TERMINAL && tab.shell && tab.path">
             <div class="terminal-info">
               <span class="shell-badge">{{ tab.shell }}</span>

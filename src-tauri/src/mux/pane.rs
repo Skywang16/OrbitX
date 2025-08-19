@@ -109,6 +109,7 @@ impl LocalPane {
         cmd.env("COLORTERM", "truecolor");
 
         // 添加UTF-8和中文支持的环境变量
+        cmd.env("TERM_PROGRAM", "OrbitX"); // <-- 激活Shell Integration的关键
         cmd.env("LANG", "en_US.UTF-8");
         cmd.env("LC_ALL", "en_US.UTF-8");
         cmd.env("LC_CTYPE", "en_US.UTF-8");

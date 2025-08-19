@@ -45,6 +45,7 @@ walkdir = "2.4"
 lru = "0.12"
 async-trait = "0.1"
 urlencoding = "2.1"
+url = "2.5"
 
 # AI集成功能相关依赖
 chrono = { version = "0.4", features = ["serde"] }

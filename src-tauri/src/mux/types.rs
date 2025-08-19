@@ -37,6 +37,12 @@ impl From<PaneId> for u32 {
     }
 }
 
+impl std::fmt::Display for PaneId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// PTY 终端尺寸
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -673,6 +679,11 @@ pub enum MuxNotification {
     PaneExited {
         pane_id: PaneId,
         exit_code: Option<i32>,
+    },
+    /// 面板工作目录已变化
+    PaneCwdChanged {
+        pane_id: PaneId,
+        cwd: String,
     },
 }
 

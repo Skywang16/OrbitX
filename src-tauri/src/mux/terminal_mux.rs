@@ -14,6 +14,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::mux::{
     IoHandler, IoThreadPoolStats, LocalPane, MuxNotification, Pane, PaneId, PtySize, TerminalConfig,
 };
+use crate::shell::ShellIntegrationManager;
 use crate::utils::error::AppResult;
 
 /// 订阅者回调函数类型
@@ -60,6 +61,9 @@ pub struct TerminalMux {
     /// I/O 处理器
     io_handler: IoHandler,
 
+    /// Shell Integration管理器
+    shell_integration: Arc<ShellIntegrationManager>,
+
     /// 是否正在关闭（用于通知处理线程优雅退出）
     shutting_down: std::sync::atomic::AtomicBool,
 }
@@ -75,10 +79,20 @@ impl TerminalMux {
         let (notification_sender, notification_receiver) = unbounded();
         debug!("创建通知通道成功");
 
-        let io_handler = IoHandler::new(notification_sender.clone());
-        debug!("创建I/O处理器成功");
+        let shell_integration =
+            Arc::new(ShellIntegrationManager::new().expect("创建Shell Integration管理器失败"));
+        let io_handler = IoHandler::new(notification_sender.clone(), shell_integration.clone());
 
-        let mux = Self {
+        let notification_sender_clone = notification_sender.clone();
+        shell_integration.register_cwd_callback(move |pane_id, new_cwd| {
+            let notification = MuxNotification::PaneCwdChanged {
+                pane_id,
+                cwd: new_cwd.to_string(),
+            };
+            let _ = notification_sender_clone.send(notification);
+        });
+
+        Self {
             panes: RwLock::new(HashMap::new()),
             subscribers: RwLock::new(HashMap::new()),
             main_thread_id: thread::current().id(),
@@ -87,10 +101,9 @@ impl TerminalMux {
             notification_sender,
             notification_receiver: Arc::new(RwLock::new(Some(notification_receiver))),
             io_handler,
+            shell_integration,
             shutting_down: std::sync::atomic::AtomicBool::new(false),
-        };
-
-        mux
+        }
     }
 
     /// 统一的初始化方法
@@ -606,11 +619,17 @@ impl TerminalMux {
                     pane_id: *pane_id,
                     data: String::from_utf8_lossy(data).to_string(),
                 };
-                ("terminal_output", safe_serialize(&event, "{\"pane_id\":0,\"data\":\"\"}"))
+                (
+                    "terminal_output",
+                    safe_serialize(&event, "{\"pane_id\":0,\"data\":\"\"}"),
+                )
             }
             MuxNotification::PaneAdded(pane_id) => {
                 let event = TerminalCreatedEvent { pane_id: *pane_id };
-                ("terminal_created", safe_serialize(&event, "{\"pane_id\":0}"))
+                (
+                    "terminal_created",
+                    safe_serialize(&event, "{\"pane_id\":0}"),
+                )
             }
             MuxNotification::PaneRemoved(pane_id) => {
                 let event = TerminalClosedEvent { pane_id: *pane_id };
@@ -622,14 +641,26 @@ impl TerminalMux {
                     rows: size.rows,
                     cols: size.cols,
                 };
-                ("terminal_resized", safe_serialize(&event, "{\"pane_id\":0,\"rows\":24,\"cols\":80}"))
+                (
+                    "terminal_resized",
+                    safe_serialize(&event, "{\"pane_id\":0,\"rows\":24,\"cols\":80}"),
+                )
             }
             MuxNotification::PaneExited { pane_id, exit_code } => {
                 let event = TerminalExitEvent {
                     pane_id: *pane_id,
                     exit_code: *exit_code,
                 };
-                ("terminal_exit", safe_serialize(&event, "{\"pane_id\":0,\"exit_code\":0}"))
+                (
+                    "terminal_exit",
+                    safe_serialize(&event, "{\"pane_id\":0,\"exit_code\":0}"),
+                )
+            }
+            MuxNotification::PaneCwdChanged { pane_id, cwd } => {
+                (
+                    "pane_cwd_changed",
+                    format!("{{\"pane_id\":{},\"cwd\":\"{}\"}}", pane_id.as_u32(), cwd),
+                )
             }
         }
     }
@@ -639,8 +670,71 @@ impl TerminalMux {
         Box::new(|notification| {
             let (event_name, payload) = Self::notification_to_tauri_event(&notification);
             tracing::info!("事件: {} -> {}", event_name, payload);
-            true // 继续保持订阅
+            true
         })
+    }
+
+    // === Shell Integration 方法 ===
+
+    /// 设置面板的Shell Integration
+    pub fn setup_pane_integration(&self, pane_id: PaneId) -> AppResult<()> {
+        info!("为面板 {} 设置Shell Integration", pane_id);
+        Ok(())
+    }
+
+    /// 检查面板是否已集成Shell Integration
+    pub fn is_pane_integrated(&self, pane_id: PaneId) -> bool {
+        self.shell_integration.get_pane_state(pane_id).is_some()
+    }
+
+    /// 获取面板的当前工作目录
+    pub fn get_pane_cwd(&self, pane_id: PaneId) -> Option<String> {
+        self.shell_integration.get_current_working_directory(pane_id)
+    }
+
+    /// 更新面板的当前工作目录
+    pub fn update_pane_cwd(&self, pane_id: PaneId, cwd: String) {
+        self.shell_integration.update_current_working_directory(pane_id, cwd);
+    }
+
+    /// 获取面板的完整Shell状态
+    pub fn get_pane_shell_state(&self, pane_id: PaneId) -> Option<crate::shell::PaneShellState> {
+        self.shell_integration.get_pane_shell_state(pane_id)
+    }
+
+    /// 设置面板的Shell类型
+    pub fn set_pane_shell_type(&self, pane_id: PaneId, shell_type: crate::shell::ShellType) {
+        self.shell_integration.set_pane_shell_type(pane_id, shell_type);
+    }
+
+    /// 生成Shell集成脚本
+    pub fn generate_shell_integration_script(&self, shell_type: &crate::shell::ShellType) -> anyhow::Result<String> {
+        self.shell_integration.generate_shell_script(shell_type)
+    }
+
+    /// 生成Shell环境变量
+    pub fn generate_shell_env_vars(&self, shell_type: &crate::shell::ShellType) -> std::collections::HashMap<String, String> {
+        self.shell_integration.generate_shell_env_vars(shell_type)
+    }
+
+    /// 启用面板Shell Integration
+    pub fn enable_pane_integration(&self, pane_id: PaneId) {
+        self.shell_integration.enable_integration(pane_id);
+    }
+
+    /// 禁用面板Shell Integration
+    pub fn disable_pane_integration(&self, pane_id: PaneId) {
+        self.shell_integration.disable_integration(pane_id);
+    }
+
+    /// 获取面板的当前命令信息
+    pub fn get_pane_current_command(&self, pane_id: PaneId) -> Option<crate::shell::CommandInfo> {
+        self.shell_integration.get_current_command(pane_id)
+    }
+
+    /// 获取面板的命令历史
+    pub fn get_pane_command_history(&self, pane_id: PaneId) -> Vec<crate::shell::CommandInfo> {
+        self.shell_integration.get_command_history(pane_id)
     }
 
     // === 生命周期管理 ===

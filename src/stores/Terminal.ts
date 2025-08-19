@@ -130,7 +130,29 @@ export const useTerminalStore = defineStore('Terminal', () => {
       }
     })
 
-    _globalListenersUnlisten = [unlistenOutput, unlistenExit]
+    // 监听终端CWD变化
+    const unlistenCwdChanged = await listen<{
+      paneId: number
+      cwd: string
+    }>('pane_cwd_changed', event => {
+      try {
+        const terminal = findTerminalByBackendId(event.payload.paneId)
+        if (terminal) {
+          // 更新终端的当前工作目录
+          const oldCwd = terminal.cwd
+          terminal.cwd = event.payload.cwd
+
+          // 智能更新终端标题（参考 VS Code Shell Integration 思路）
+          updateTerminalTitle(terminal, event.payload.cwd)
+
+          console.log(`终端 ${terminal.id} CWD 更新: ${oldCwd} -> ${event.payload.cwd}`)
+        }
+      } catch (error) {
+        console.error('处理终端CWD变化事件时发生错误:', error)
+      }
+    })
+
+    _globalListenersUnlisten = [unlistenOutput, unlistenExit, unlistenCwdChanged]
     _isListenerSetup = true
   }
 
@@ -372,10 +394,83 @@ export const useTerminalStore = defineStore('Terminal', () => {
   const updateTerminalCwd = (id: string, cwd: string) => {
     const terminal = terminals.value.find(t => t.id === id)
     if (terminal && terminal.cwd !== cwd) {
+      const oldCwd = terminal.cwd
       terminal.cwd = cwd
-      console.log(`📁 [Terminal] 更新终端 ${id} 工作目录: ${cwd}`)
+
+      // 智能更新终端标题
+      updateTerminalTitle(terminal, cwd)
+
+      console.log(`📁 [Terminal] 更新终端 ${id} 工作目录: ${oldCwd} -> ${cwd}`)
       // 使用防抖同步
       debouncedSync()
+    }
+  }
+
+  /**
+   * 智能更新终端标题（参考 VS Code Shell Integration 思路）
+   * 根据当前工作目录智能生成终端标题
+   */
+  const updateTerminalTitle = (terminal: RuntimeTerminalState, cwd: string) => {
+    try {
+      // 如果是 Agent 终端，保持原有标题不变
+      if (terminal.shell === 'agent') {
+        return
+      }
+
+      // 处理路径显示逻辑
+      let displayPath = cwd
+
+      // 支持 ~ 扩展（如果有全局 homedir 函数）
+      if (typeof window !== 'undefined' && (window as any).os && (window as any).os.homedir) {
+        const homeDir = (window as any).os.homedir()
+        if (homeDir && cwd.startsWith(homeDir)) {
+          displayPath = cwd.replace(homeDir, '~')
+        }
+      }
+
+      // 从路径中提取有意义的标题
+      const pathParts = displayPath.split(/[/\\]/).filter(part => part.length > 0)
+
+      let newTitle: string
+
+      if (displayPath === '~' || displayPath === '/') {
+        // 根目录或用户主目录
+        newTitle = displayPath
+      } else if (pathParts.length === 0) {
+        // 空路径，使用根目录
+        newTitle = '/'
+      } else if (pathParts.length === 1) {
+        // 只有一级目录
+        newTitle = pathParts[0]
+      } else {
+        // 多级目录，显示最后两级（类似 VS Code 的做法）
+        const lastTwo = pathParts.slice(-2)
+        newTitle = lastTwo.join('/')
+
+        // 如果路径很长，添加省略号前缀
+        if (pathParts.length > 3) {
+          newTitle = `…/${newTitle}`
+        }
+      }
+
+      // 限制标题长度，避免过长
+      if (newTitle.length > 30) {
+        newTitle = '…' + newTitle.slice(-27)
+      }
+
+      // 只在标题真正改变时更新
+      if (terminal.title !== newTitle) {
+        const oldTitle = terminal.title
+        terminal.title = newTitle
+        console.log(`🏷️ [Terminal] 更新终端 ${terminal.id} 标题: "${oldTitle}" -> "${newTitle}"`)
+      }
+    } catch (error) {
+      console.error('更新终端标题时发生错误:', error)
+      // 发生错误时，使用目录名作为后备标题
+      const fallbackTitle = cwd.split(/[/\\]/).pop() || 'Terminal'
+      if (terminal.title !== fallbackTitle) {
+        terminal.title = fallbackTitle
+      }
     }
   }
 

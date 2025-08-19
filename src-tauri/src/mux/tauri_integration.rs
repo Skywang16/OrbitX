@@ -112,6 +112,13 @@ impl<R: Runtime> TauriEventIntegrator<R> {
                     "exit_code": exit_code
                 }),
             ),
+            MuxNotification::PaneCwdChanged { pane_id, cwd } => (
+                "pane_cwd_changed",
+                json!({
+                    "pane_id": pane_id.as_u32(),
+                    "cwd": cwd
+                }),
+            ),
         }
     }
 }
