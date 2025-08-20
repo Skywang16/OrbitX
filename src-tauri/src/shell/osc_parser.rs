@@ -4,7 +4,7 @@
 //! 支持完整的Shell Integration协议，包括命令生命周期、CWD同步等
 
 use anyhow::Result;
-use regex::Regex;
+use regex::{Captures, Regex};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 use url::Url;
@@ -31,20 +31,19 @@ pub enum CommandStatus {
     Finished { exit_code: Option<i32> },
 }
 
-/// OSC序列类型 - 支持完整的Shell Integration
+/// OSC序列类型 - 支持Shell Integration（OSC 633）、CWD（OSC 7）等
 #[derive(Debug, Clone)]
 pub enum OscSequence {
     /// OSC 7 - 当前工作目录
     CurrentWorkingDirectory { path: String },
 
-    /// OSC 133 序列 - VS Code Shell Integration
-    VsCodeShellIntegration {
-        marker: VsCodeMarker,
+    /// OSC 633 序列 - Shell Integration（命令生命周期）
+    ShellIntegration {
+        marker: IntegrationMarker,
         data: Option<String>,
     },
 
-    /// OSC 1337 序列 - iTerm2 Shell Integration
-    ITerm2ShellIntegration { key: String, value: Option<String> },
+   
 
     /// OSC 9;9 序列 - Windows Terminal CWD
     WindowsTerminalCwd { path: String },
@@ -59,9 +58,9 @@ pub enum OscSequence {
     Unknown { number: String, data: String },
 }
 
-/// VS Code Shell Integration标记
+/// Shell Integration（OSC 633）标记
 #[derive(Debug, Clone, PartialEq)]
-pub enum VsCodeMarker {
+pub enum IntegrationMarker {
     /// A - 命令开始前（提示符开始）
     PromptStart,
     /// B - 命令开始（用户输入完成）
@@ -97,10 +96,8 @@ pub enum WindowTitleType {
 pub struct OscParser {
     /// OSC序列正则表达式
     osc_regex: Regex,
-    /// VS Code Shell Integration 正则表达式
-    vscode_regex: Regex,
-    /// iTerm2 Shell Integration 正则表达式
-    iterm2_regex: Regex,
+    /// Shell Integration (OSC 633) 正则表达式
+    si_regex: Regex,
     /// 窗口标题正则表达式
     title_regex: Regex,
     /// CWD (OSC 7) 正则表达式
@@ -113,12 +110,8 @@ impl OscParser {
         // 基本OSC序列正则表达式
         let osc_regex = Regex::new(r"\x1b]([0-9]+);([^\x07\x1b]*?)(?:\x07|\x1b\\)")?;
 
-        // VS Code Shell Integration (OSC 633)
-        let vscode_regex = Regex::new(r"\x1b]633;([A-Z]);?([^\x07\x1b]*?)(?:\x07|\x1b\\)")?;
-
-        // iTerm2 Shell Integration (OSC 1337)
-        let iterm2_regex =
-            Regex::new(r"\x1b]1337;([^=\x07\x1b]+)(?:=([^\x07\x1b]*))?(?:\x07|\x1b\\)")?;
+        // Shell Integration (OSC 633) - 大小写不敏感
+        let si_regex = Regex::new(r"(?i)\x1b]633;([A-Z]);?([^\x07\x1b]*?)(?:\x07|\x1b\\)")?;
 
         // 窗口标题 (OSC 0/1/2)
         let title_regex = Regex::new(r"\x1b]([012]);([^\x07\x1b]*?)(?:\x07|\x1b\\)")?;
@@ -128,40 +121,28 @@ impl OscParser {
 
         Ok(Self {
             osc_regex,
-            vscode_regex,
-            iterm2_regex,
+            si_regex,
             title_regex,
             cwd_regex,
         })
     }
+
 
     /// 解析文本中的OSC序列
     pub fn parse(&self, data: &str) -> Vec<OscSequence> {
         debug!("OSC Parser received data: {:?}", data);
         let mut sequences = Vec::new();
 
-        // 解析VS Code Shell Integration序列 (OSC 633)
-        for captures in self.vscode_regex.captures_iter(data) {
+        // 解析 Shell Integration 序列 (OSC 633)
+        for captures in self.si_regex.captures_iter(data) {
             if let Some(marker_match) = captures.get(1) {
                 let marker_str = marker_match.as_str();
                 let data_str = captures.get(2).map(|m| m.as_str()).unwrap_or("");
 
-                if let Some(sequence) = self.parse_vscode_sequence(marker_str, data_str) {
-                    debug!("解析到VS Code Shell Integration序列: {:?}", sequence);
+                if let Some(sequence) = self.parse_shell_integration_sequence(marker_str, data_str) {
+                    debug!("解析到 Shell Integration 序列: {:?}", sequence);
                     sequences.push(sequence);
                 }
-            }
-        }
-
-        // 解析iTerm2 Shell Integration序列 (OSC 1337)
-        for captures in self.iterm2_regex.captures_iter(data) {
-            if let Some(key_match) = captures.get(1) {
-                let key = key_match.as_str().to_string();
-                let value = captures.get(2).map(|m| m.as_str().to_string());
-
-                let sequence = OscSequence::ITerm2ShellIntegration { key, value };
-                debug!("解析到iTerm2 Shell Integration序列: {:?}", sequence);
-                sequences.push(sequence);
             }
         }
 
@@ -232,29 +213,35 @@ impl OscParser {
         }
     }
 
-    /// 解析VS Code Shell Integration序列
-    fn parse_vscode_sequence(&self, marker: &str, data: &str) -> Option<OscSequence> {
-        let vscode_marker = match marker {
-            "A" => VsCodeMarker::PromptStart,
-            "B" => VsCodeMarker::CommandStart,
-            "C" => VsCodeMarker::CommandExecuted,
+    /// 解析Shell Integration（OSC 633）序列
+    fn parse_shell_integration_sequence(&self, marker: &str, data: &str) -> Option<OscSequence> {
+        // 统一大写，兼容大小写标记
+        let marker_up = marker.to_ascii_uppercase();
+        let si_marker = match marker_up.as_str() {
+            "A" => IntegrationMarker::PromptStart,
+            "B" => IntegrationMarker::CommandStart,
+            "C" => IntegrationMarker::CommandExecuted,
             "D" => {
-                // D可能包含退出码
+                // D 可能包含退出码，兼容 "0"、"exit=0"、"status=0" 等形式
                 let exit_code = if data.is_empty() {
                     None
+                } else if let Ok(n) = data.parse::<i32>() {
+                    Some(n)
                 } else {
-                    data.parse::<i32>().ok()
+                    // 在以 ;、=、空白 分隔的 token 中查找第一个可解析为整数的片段
+                    data.split(|c: char| c == ';' || c == '=' || c.is_whitespace())
+                        .find_map(|tok| tok.parse::<i32>().ok())
                 };
-                VsCodeMarker::CommandFinished { exit_code }
+                IntegrationMarker::CommandFinished { exit_code }
             }
-            "E" => VsCodeMarker::CommandContinuation,
-            "F" => VsCodeMarker::RightPrompt,
-            "G" => VsCodeMarker::CommandInvalid,
-            "H" => VsCodeMarker::CommandCancelled,
+            "E" => IntegrationMarker::CommandContinuation,
+            "F" => IntegrationMarker::RightPrompt,
+            "G" => IntegrationMarker::CommandInvalid,
+            "H" => IntegrationMarker::CommandCancelled,
             "P" => {
                 // P格式: key=value
                 if let Some((key, value)) = data.split_once('=') {
-                    VsCodeMarker::Property {
+                    IntegrationMarker::Property {
                         key: key.to_string(),
                         value: value.to_string(),
                     }
@@ -265,8 +252,8 @@ impl OscParser {
             _ => return None,
         };
 
-        Some(OscSequence::VsCodeShellIntegration {
-            marker: vscode_marker,
+        Some(OscSequence::ShellIntegration {
+            marker: si_marker,
             data: if data.is_empty() {
                 None
             } else {
@@ -310,31 +297,60 @@ impl OscParser {
     pub fn strip_osc_sequences(&self, data: &str) -> String {
         let mut result = data.to_string();
 
-        // 移除所有类型的OSC序列
-        result = self.vscode_regex.replace_all(&result, "").to_string();
-        result = self.iterm2_regex.replace_all(&result, "").to_string();
+        // 先移除明确匹配到的 Shell Integration / 窗口标题 序列
+        result = self.si_regex.replace_all(&result, "").to_string();
         result = self.title_regex.replace_all(&result, "").to_string();
-        result = self.osc_regex.replace_all(&result, "").to_string();
+        // 再移除其他 OSC，但保留任何未被上面正则匹配到的 633（避免误删未识别变体）
+        result = self
+            .osc_regex
+            .replace_all(&result, |caps: &Captures| {
+                let number = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                if number == "633" {
+                    // 保留 633（若之前未匹配到特定形式）
+                    caps.get(0)
+                        .map(|m| m.as_str().to_string())
+                        .unwrap_or_else(String::new)
+                } else {
+                    String::new()
+                }
+            })
+            .to_string();
 
         result
     }
 
-    /// 检测是否包含Shell Integration序列
+    /// 移除非命令生命周期相关的 OSC 序列（仅保留 633），用于 sidecar 前置检测
+    pub fn strip_preserve_shell_integration(&self, data: &str) -> String {
+        let mut result = data.to_string();
+        // 去掉常见非命令生命周期相关内容（标题等）
+        result = self.title_regex.replace_all(&result, "").to_string();
+        // 使用通用 OSC 清洗，但保留 633
+        result = self
+            .osc_regex
+            .replace_all(&result, |caps: &Captures| {
+                let number = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                if number == "633" {
+                    caps.get(0)
+                        .map(|m| m.as_str().to_string())
+                        .unwrap_or_else(String::new)
+                } else {
+                    String::new()
+                }
+            })
+            .to_string();
+        result
+    }
+
+    /// 检测是否包含 Shell Integration（OSC 633）序列
     pub fn contains_shell_integration(&self, data: &str) -> bool {
-        self.vscode_regex.is_match(data) || self.iterm2_regex.is_match(data)
+        self.si_regex.is_match(data)
     }
 
     /// 提取命令执行相关的序列
     pub fn extract_command_sequences(&self, data: &str) -> Vec<OscSequence> {
         self.parse(data)
             .into_iter()
-            .filter(|seq| {
-                matches!(
-                    seq,
-                    OscSequence::VsCodeShellIntegration { .. }
-                        | OscSequence::ITerm2ShellIntegration { .. }
-                )
-            })
+            .filter(|seq| matches!(seq, OscSequence::ShellIntegration { .. }))
             .collect()
     }
 
@@ -363,24 +379,24 @@ impl Default for OscParser {
 pub struct OscGenerator;
 
 impl OscGenerator {
-    /// 生成VS Code Shell Integration序列
-    pub fn vscode_sequence(marker: &VsCodeMarker, data: Option<&str>) -> String {
+    /// 生成 Shell Integration（OSC 633） 序列
+    pub fn shell_integration_sequence(marker: &IntegrationMarker, data: Option<&str>) -> String {
         let marker_char = match marker {
-            VsCodeMarker::PromptStart => "A",
-            VsCodeMarker::CommandStart => "B",
-            VsCodeMarker::CommandExecuted => "C",
-            VsCodeMarker::CommandFinished { exit_code } => {
+            IntegrationMarker::PromptStart => "A",
+            IntegrationMarker::CommandStart => "B",
+            IntegrationMarker::CommandExecuted => "C",
+            IntegrationMarker::CommandFinished { exit_code } => {
                 return if let Some(code) = exit_code {
                     format!("\x1b]633;D;{}\x07", code)
                 } else {
                     "\x1b]633;D\x07".to_string()
                 };
             }
-            VsCodeMarker::CommandContinuation => "E",
-            VsCodeMarker::RightPrompt => "F",
-            VsCodeMarker::CommandInvalid => "G",
-            VsCodeMarker::CommandCancelled => "H",
-            VsCodeMarker::Property { key, value } => {
+            IntegrationMarker::CommandContinuation => "E",
+            IntegrationMarker::RightPrompt => "F",
+            IntegrationMarker::CommandInvalid => "G",
+            IntegrationMarker::CommandCancelled => "H",
+            IntegrationMarker::Property { key, value } => {
                 return format!("\x1b]633;P;{}={}\x07", key, value);
             }
         };
@@ -397,14 +413,6 @@ impl OscGenerator {
         format!("\x1b]7;file://{}\x07", path)
     }
 
-    /// 生成iTerm2 Shell Integration序列
-    pub fn iterm2_sequence(key: &str, value: Option<&str>) -> String {
-        if let Some(value) = value {
-            format!("\x1b]1337;{}={}\x07", key, value)
-        } else {
-            format!("\x1b]1337;{}\x07", key)
-        }
-    }
 
     /// 生成Windows Terminal CWD序列
     pub fn windows_terminal_cwd_sequence(path: &str) -> String {
@@ -442,7 +450,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_vscode_sequences() {
+    fn test_parse_shell_integration_sequences() {
         let parser = OscParser::new().unwrap();
 
         let sequences = parser.parse("\x1b]633;A\x07\x1b]633;B\x07\x1b]633;C\x07\x1b]633;D;0\x07");
@@ -451,8 +459,8 @@ mod tests {
 
         // 测试命令开始序列
         match &sequences[0] {
-            OscSequence::VsCodeShellIntegration {
-                marker: VsCodeMarker::PromptStart,
+            OscSequence::ShellIntegration {
+                marker: IntegrationMarker::PromptStart,
                 ..
             } => {}
             _ => panic!("期望PromptStart序列"),
@@ -460,29 +468,11 @@ mod tests {
 
         // 测试命令完成序列
         match &sequences[3] {
-            OscSequence::VsCodeShellIntegration {
-                marker: VsCodeMarker::CommandFinished { exit_code: Some(0) },
+            OscSequence::ShellIntegration {
+                marker: IntegrationMarker::CommandFinished { exit_code: Some(0) },
                 ..
             } => {}
             _ => panic!("期望CommandFinished序列"),
-        }
-    }
-
-    #[test]
-    fn test_parse_iterm2_sequences() {
-        let parser = OscParser::new().unwrap();
-
-        let sequences = parser
-            .parse("\x1b]1337;RemoteHost=user@hostname\x07\x1b]1337;CurrentDir=/home/user\x07");
-
-        assert_eq!(sequences.len(), 2);
-
-        match &sequences[0] {
-            OscSequence::ITerm2ShellIntegration { key, value } => {
-                assert_eq!(key, "RemoteHost");
-                assert_eq!(value.as_ref().unwrap(), "user@hostname");
-            }
-            _ => panic!("期望iTerm2序列"),
         }
     }
 
@@ -501,19 +491,18 @@ mod tests {
         let parser = OscParser::new().unwrap();
 
         assert!(parser.contains_shell_integration("\x1b]633;A\x07"));
-        assert!(parser.contains_shell_integration("\x1b]1337;CurrentDir=/home\x07"));
         assert!(!parser.contains_shell_integration("\x1b]7;/home/user\x07"));
         assert!(!parser.contains_shell_integration("regular text"));
     }
 
     #[test]
     fn test_osc_generator() {
-        // 测试VS Code序列生成
-        let prompt_start = OscGenerator::vscode_sequence(&VsCodeMarker::PromptStart, None);
+        // 测试 Shell Integration 633 序列生成
+        let prompt_start = OscGenerator::shell_integration_sequence(&IntegrationMarker::PromptStart, None);
         assert_eq!(prompt_start, "\x1b]633;A\x07");
 
-        let command_finished = OscGenerator::vscode_sequence(
-            &VsCodeMarker::CommandFinished { exit_code: Some(0) },
+        let command_finished = OscGenerator::shell_integration_sequence(
+            &IntegrationMarker::CommandFinished { exit_code: Some(0) },
             None,
         );
         assert_eq!(command_finished, "\x1b]633;D;0\x07");
@@ -521,9 +510,5 @@ mod tests {
         // 测试CWD序列生成
         let cwd = OscGenerator::cwd_sequence("/home/user");
         assert_eq!(cwd, "\x1b]7;file:///home/user\x07");
-
-        // 测试iTerm2序列生成
-        let iterm2 = OscGenerator::iterm2_sequence("CurrentDir", Some("/home/user"));
-        assert_eq!(iterm2, "\x1b]1337;CurrentDir=/home/user\x07");
     }
 }

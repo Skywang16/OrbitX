@@ -123,8 +123,14 @@ use tracing_subscriber::{self, EnvFilter};
 fn init_logging() {
     // 设置默认的日志级别，如果没有设置 RUST_LOG 环境变量
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        // 默认显示 info 级别及以上的日志
-        EnvFilter::new("info")
+        // 开发构建：显示 debug 级别及以上的日志
+        // 发布构建：显示 info 级别及以上的日志
+        #[cfg(debug_assertions)]
+        let default_level = "debug";
+        #[cfg(not(debug_assertions))]
+        let default_level = "info";
+        
+        EnvFilter::new(default_level)
     });
 
     // 初始化日志订阅器

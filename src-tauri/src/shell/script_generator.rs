@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use tracing::{debug, warn};
 
 /// Shell类型
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -73,8 +72,6 @@ pub struct ShellIntegrationConfig {
     pub enable_title_updates: bool,
     /// 自定义环境变量
     pub custom_env_vars: HashMap<String, String>,
-    /// 是否使用iTerm2协议（而非VS Code协议）
-    pub prefer_iterm2_protocol: bool,
 }
 
 impl Default for ShellIntegrationConfig {
@@ -84,7 +81,6 @@ impl Default for ShellIntegrationConfig {
             enable_cwd_sync: true,
             enable_title_updates: true,
             custom_env_vars: HashMap::new(),
-            prefer_iterm2_protocol: false,
         }
     }
 }
@@ -102,20 +98,16 @@ impl ShellScriptGenerator {
 
     /// 生成给定shell类型的集成脚本
     pub fn generate_integration_script(&self, shell_type: &ShellType) -> Result<String> {
-        debug!("为{}生成Shell Integration脚本", shell_type.display_name());
-
         let script = match shell_type {
             ShellType::Bash => self.generate_bash_script(),
             ShellType::Zsh => self.generate_zsh_script(),
             ShellType::Fish => self.generate_fish_script(),
             ShellType::PowerShell => self.generate_powershell_script(),
             _ => {
-                debug!("{}不支持Shell Integration", shell_type.display_name());
                 return Ok(String::new());
             }
         };
 
-        debug!("脚本生成完成，长度: {} 字符", script.len());
         Ok(script)
     }
 
@@ -146,28 +138,10 @@ __orbitx_update_cwd() {
             );
         }
 
-        // 命令跟踪功能
+        // 命令跟踪功能（仅 VS Code 协议）
         if self.config.enable_command_tracking {
-            if self.config.prefer_iterm2_protocol {
-                script.push_str(
-                    r#"
-# iTerm2协议命令跟踪
-__orbitx_preexec() {
-    printf '\e]1337;ShellIntegrationVersion=16;shell=bash\e\\'
-    printf '\e]1337;RemoteHost=%s@%s\e\\' "$USER" "$HOSTNAME"
-    __orbitx_update_cwd
-}
-
-__orbitx_precmd() {
-    local exit_code=$?
-    printf '\e]1337;CommandFinished;ExitCode=%d\e\\' "$exit_code"
-    __orbitx_update_cwd
-}
-"#,
-                );
-            } else {
-                script.push_str(
-                    r#"
+            script.push_str(
+                r#"
 # VS Code协议命令跟踪
 __orbitx_preexec() {
     printf '\e]633;B\e\\'
@@ -180,8 +154,7 @@ __orbitx_precmd() {
     __orbitx_update_cwd
 }
 "#,
-                );
-            }
+            );
 
             // 集成到Bash钩子系统
             script.push_str(
@@ -272,12 +245,12 @@ __orbitx_log "Zsh integration script started."
             r#"
 __orbitx_update_cwd() {
     __orbitx_log "Updating CWD to $PWD"
-    printf '\e]7;file://%s%s\e\' "$HOSTNAME" "$PWD"
+    printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$PWD"
 }
 
 __orbitx_update_title() {
     __orbitx_log "Updating title."
-    printf '\e]2;%s@%s:%s\e\' "$USER" "$HOSTNAME" "${PWD/#$HOME/~}"
+    printf '\e]2;%s@%s:%s\e\\' "$USER" "$HOSTNAME" "${PWD/#$HOME/~}"
 }
 "#,
         );
@@ -289,7 +262,7 @@ __orbitx_update_title() {
 __orbitx_prompt_start() { printf '\e]633;A\e\\'; }
 __orbitx_prompt_end() { printf '\e]633;B\e\\'; }
 __orbitx_command_start() { printf '\e]633;C\e\\'; }
-__orbitx_command_end() { printf '\e]633;D;%s\e\\' "$?"; }
+__orbitx_command_end() { printf '\e]633;D;%d\e\\' "$?"; }
 __orbitx_precmd() { __orbitx_command_end; }
 __orbitx_preexec() { __orbitx_command_start; }
 "#,
@@ -374,27 +347,10 @@ end
             );
         }
 
-        // 命令跟踪功能
+        // 命令跟踪功能（仅 VS Code 协议）
         if self.config.enable_command_tracking {
-            if self.config.prefer_iterm2_protocol {
-                script.push_str(
-                    r#"
-# iTerm2协议命令跟踪
-function __orbitx_preexec --on-event fish_preexec
-    printf '\e]1337;ShellIntegrationVersion=16;shell=fish\e\\'
-    printf '\e]1337;RemoteHost=%s@%s\e\\' (whoami) (hostname)
-    __orbitx_update_cwd
-end
-
-function __orbitx_postexec --on-event fish_postexec
-    printf '\e]1337;CommandFinished;ExitCode=%d\e\\' $status
-    __orbitx_update_cwd
-end
-"#,
-                );
-            } else {
-                script.push_str(
-                    r#"
+            script.push_str(
+                r#"
 # VS Code协议命令跟踪
 function __orbitx_preexec --on-event fish_preexec
     printf '\e]633;C\e\\'
@@ -405,8 +361,7 @@ function __orbitx_postexec --on-event fish_postexec
     __orbitx_update_cwd
 end
 "#,
-                );
-            }
+            );
         } else if self.config.enable_cwd_sync {
             // 只启用CWD同步
             script.push_str(
@@ -467,28 +422,10 @@ function Update-OrbitXCwd {
             );
         }
 
-        // 命令跟踪功能
+        // 命令跟踪功能（仅 VS Code 协议）
         if self.config.enable_command_tracking {
-            if self.config.prefer_iterm2_protocol {
-                script.push_str(
-                    r#"
-# iTerm2协议命令跟踪
-function Invoke-OrbitXPreCommand {
-    Write-Host -NoNewline "`e]1337;ShellIntegrationVersion=16;shell=powershell`e\"
-    Write-Host -NoNewline "`e]1337;RemoteHost=$env:USERNAME@$env:COMPUTERNAME`e\"
-    Update-OrbitXCwd
-}
-
-function Invoke-OrbitXPostCommand {
-    param($exitCode)
-    Write-Host -NoNewline "`e]1337;CommandFinished;ExitCode=$exitCode`e\"
-    Update-OrbitXCwd
-}
-"#,
-                );
-            } else {
-                script.push_str(
-                    r#"
+            script.push_str(
+                r#"
 # VS Code协议命令跟踪
 function Invoke-OrbitXPreCommand {
     Write-Host -NoNewline "`e]633;C`e\"
@@ -500,8 +437,7 @@ function Invoke-OrbitXPostCommand {
     Update-OrbitXCwd
 }
 "#,
-                );
-            }
+            );
 
             // 集成到PowerShell提示符系统
             script.push_str(
@@ -631,19 +567,11 @@ if (Test-Path Function:\prompt) {
         paths: &ConfigPaths,
     ) -> Result<()> {
         if !shell_type.supports_integration() {
-            debug!(
-                "Skipping shell integration setup for unsupported shell: {:?}",
-                shell_type
-            );
             return Ok(());
         }
 
         let script_content = self.generate_integration_script(shell_type)?;
         if script_content.is_empty() {
-            debug!(
-                "Generated script is empty, skipping setup for {:?}.",
-                shell_type
-            );
             return Ok(());
         }
 
@@ -662,8 +590,6 @@ if (Test-Path Function:\prompt) {
         // 更新shell配置文件
         if let Some(config_path) = self.find_best_shell_config_file(shell_type) {
             self.source_script_in_config(&config_path, &script_path)?;
-        } else {
-            warn!("Could not find a suitable config file for {:?}", shell_type);
         }
 
         Ok(())
@@ -701,7 +627,6 @@ if (Test-Path Function:\prompt) {
         }
 
         if file_content.contains(&source_command.trim()) {
-            debug!("Integration script already sourced in {:?}", config_path);
             return Ok(());
         }
 
@@ -720,7 +645,6 @@ if (Test-Path Function:\prompt) {
             format!("Failed to write to shell config file at {:?}", config_path)
         })?;
 
-        debug!("Sourced integration script in {:?}", config_path);
         Ok(())
     }
 

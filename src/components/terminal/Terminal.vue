@@ -430,10 +430,8 @@
         timers.resize = window.setTimeout(() => {
           try {
             fitAddon.value?.fit()
-            // 只在必要时清除缓存
-            if (!styleCache.value) {
-              styleCache.value = null
-            }
+            // 尺寸变化后无条件清空缓存，避免使用旧的字符宽高数据
+            styleCache.value = null
           } catch {
             // ignore
           }
@@ -446,48 +444,41 @@
 
   /**
    * 更新终端光标位置
-   * 计算并更新光标在屏幕上的坐标位置
+   * 使用更精确的方法计算光标在屏幕上的坐标位置
    */
   const updateTerminalCursorPosition = () => {
     try {
       if (!terminal.value || !terminalRef.value) return
 
-      // 获取或计算终端样式信息
-      if (!styleCache.value) {
-        const computedStyle = window.getComputedStyle(terminalRef.value)
-        const testElement = terminalRef.value.querySelector('.xterm-rows')
-
-        if (testElement) {
-          const testChar = testElement.querySelector('.xterm-row')?.querySelector('span')
-          if (testChar) {
-            const charRect = testChar.getBoundingClientRect()
-            styleCache.value = {
-              charWidth: charRect.width || 9,
-              lineHeight: charRect.height || 17,
-              paddingLeft: parseInt(computedStyle.paddingLeft) || 0,
-              paddingTop: parseInt(computedStyle.paddingTop) || 0,
-            }
-          }
-        }
-
-        // 如果无法获取准确值，使用默认值
-        if (!styleCache.value) {
-          styleCache.value = {
-            charWidth: 9,
-            lineHeight: 17,
-            paddingLeft: 0,
-            paddingTop: 0,
-          }
-        }
-      }
-
-      const cache = styleCache.value
       const buffer = terminal.value.buffer.active
       const terminalRect = terminalRef.value.getBoundingClientRect()
 
-      // 计算光标位置
-      const x = terminalRect.left + cache.paddingLeft + buffer.cursorX * cache.charWidth
-      const y = terminalRect.top + cache.paddingTop + buffer.cursorY * cache.lineHeight
+      // 尝试直接从XTerm的DOM结构获取光标元素
+      const cursorElement = terminalRef.value.querySelector('.xterm-cursor')
+      if (cursorElement) {
+        const cursorRect = cursorElement.getBoundingClientRect()
+        terminalEnv.cursorPosition = {
+          x: cursorRect.left,
+          y: cursorRect.top,
+        }
+        return
+      }
+
+      // 如果没有光标元素，使用更精确的字符尺寸计算
+      const xtermScreen = terminalRef.value.querySelector('.xterm-screen')
+      if (!xtermScreen) return
+
+      // 计算字符尺寸 - 使用终端实际尺寸除以行列数
+      const terminalCols = terminal.value.cols
+      const terminalRows = terminal.value.rows
+      const screenRect = xtermScreen.getBoundingClientRect()
+
+      const charWidth = screenRect.width / terminalCols
+      const lineHeight = screenRect.height / terminalRows
+
+      // 计算光标位置，基于屏幕区域而不是整个容器
+      const x = screenRect.left + buffer.cursorX * charWidth
+      const y = screenRect.top + buffer.cursorY * lineHeight
 
       terminalEnv.cursorPosition = { x, y }
     } catch {
@@ -583,8 +574,8 @@
   const handleOutput = (data: string) => {
     try {
       if (terminal.value && typeof data === 'string') {
-        // 检测工作目录变化
-        detectWorkingDirectoryChange(data)
+        // 处理Shell Integration相关的OSC序列
+        processTerminalOutput(data)
 
         // 如果设置为立即刷新，直接写入终端
         if (OUTPUT_FLUSH_INTERVAL === 0) {
@@ -614,11 +605,12 @@
    */
   const parseOSCSequences = (data: string) => {
     // OSC 633 序列匹配器（VS Code shell integration）
-    const oscPattern = /\x1b]633;([ABCDP]);([^\x07\x1b]*?)(?:\x07|\x1b\\)/g
+    // 允许无 payload 的 A/B/C 等标记（第二个分号可选），并兼容大小写
+    const oscPattern = /\x1b]633;([A-Za-z]);?([^\x07\x1b]*?)(?:\x07|\x1b\\)/g
     let match
 
     while ((match = oscPattern.exec(data)) !== null) {
-      const command = match[1]
+      const command = match[1].toUpperCase()
       const payload = match[2]
 
       switch (command) {
@@ -629,7 +621,6 @@
         case 'C': // Command executed (start of output)
           break
         case 'D': // Command finished with exit code
-          const exitCode = payload ? parseInt(payload) : 0
           break
         case 'P': // Property update
           handlePropertyUpdate(payload)
@@ -646,7 +637,13 @@
       if (newCwd && newCwd !== terminalEnv.workingDirectory) {
         terminalEnv.workingDirectory = newCwd
         terminalStore.updateTerminalCwd(props.terminalId, newCwd)
-        console.log(`📁 Shell integration: CWD updated to ${newCwd}`)
+        // 同步更新后端状态
+        if (props.backendId != null) {
+          invoke('update_pane_cwd', {
+            paneId: props.backendId,
+            cwd: newCwd,
+          }).catch(() => {})
+        }
       }
     }
   }
@@ -661,40 +658,44 @@
 
       const [key, value] = parts
       switch (key) {
-        case 'Cwd':
+        case 'Cwd': {
           const decodedCwd = decodeURIComponent(value)
           if (decodedCwd && decodedCwd !== terminalEnv.workingDirectory) {
             terminalEnv.workingDirectory = decodedCwd
             terminalStore.updateTerminalCwd(props.terminalId, decodedCwd)
-            console.log(`📁 Shell integration: CWD property updated to ${decodedCwd}`)
+            // 同步更新后端状态
+            if (props.backendId != null) {
+              invoke('update_pane_cwd', {
+                paneId: props.backendId,
+                cwd: decodedCwd,
+              }).catch(() => {})
+            }
           }
           break
+        }
         case 'OSType':
-          console.log(`💻 Shell integration: OS Type detected as ${value}`)
           break
       }
-    } catch (error) {
-      console.warn('Failed to parse shell integration property:', payload)
+    } catch {
+      // 静默忽略解析错误
     }
   }
 
   /**
-   * 注入shell integration脚本 - VS Code风格的静默注入
-   * 通过后端API静默注入，用户完全感知不到
+   * 初始化shell integration - 静默模式
+   * 启用OSC序列解析，不注入任何脚本
    */
-  const injectShellIntegration = async () => {
+  const initShellIntegration = async () => {
     if (!terminal.value) return
 
     try {
       // 等待终端初始化完成
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await new Promise(resolve => setTimeout(resolve, 500))
 
-      // 通过后端API静默注入
+      // 启用静默模式的Shell Integration
       await silentShellIntegration()
-    } catch (error) {
-      console.warn('Failed to inject shell integration:', error)
-      // 如果静默注入失败，回退到OSC序列解析
-      console.log('Falling back to OSC sequence parsing only')
+    } catch {
+      // 静默失败
     }
   }
 
@@ -703,72 +704,25 @@
    */
   const silentShellIntegration = async () => {
     try {
-      // 尝试通过后端API静默注入
-      if (props.backendId) {
+      // 通过后端API静默注入Shell Integration脚本
+      if (props.backendId != null) {
         await invoke('setup_shell_integration', {
           paneId: props.backendId,
           silent: true,
         })
-        console.log('📡 Shell integration configured via backend API')
-      }
-    } catch (error) {
-      console.warn('Backend shell integration not available:', error)
-
-      // 回退到OSC序列监听模式
-      enableOSCSequenceMode()
-    }
-  }
-
-  /**
-   * 启用OSC序列监听模式（无需注入脚本）
-   */
-  const enableOSCSequenceMode = () => {
-    console.log('🔍 Enabled OSC sequence parsing mode')
-
-    // 设置环境变量标识
-    const envSetup = 'export TERM_PROGRAM=ClaudeCode TERM_PROGRAM_VERSION=1.0'
-
-    // 使用invisible character方式隐藏命令
-    setTimeout(() => {
-      emit('input', `\x1b[?25l${envSetup}\x1b[?25h\r`)
-    }, 100)
-  }
-
-  /**
-   * 检测工作目录变化
-   * 作为OSC序列解析的备选方案
-   */
-  const detectWorkingDirectoryChange = (data: string) => {
-    // 优先使用OSC序列，只在必要时使用正则表达式检测
-    if (data.includes('\x1b]')) {
-      parseOSCSequences(data)
-      return
-    }
-
-    // 备选的正则表达式检测（保持兼容性）
-    if (!data.includes('/') || data.length > 200) return
-
-    try {
-      const promptMatch = data.match(/([/\w\-.~]+)\s*[$#>]\s*$/)
-      if (promptMatch) {
-        const newPath = promptMatch[1]
-        if (newPath && newPath.startsWith('/') && newPath !== terminalEnv.workingDirectory) {
-          terminalEnv.workingDirectory = newPath
-          terminalStore.updateTerminalCwd(props.terminalId, newPath)
-
-          // 静默模式下，同步更新后端状态
-          if (props.backendId) {
-            invoke('update_pane_cwd', {
-              paneId: props.backendId,
-              cwd: newPath,
-            }).catch(() => {
-              // 静默忽略错误
-            })
-          }
-        }
       }
     } catch {
-      // 静默忽略错误
+      // 静默失败
+    }
+  }
+
+  /**
+   * 处理终端输出数据，专注于OSC序列解析
+   */
+  const processTerminalOutput = (data: string) => {
+    // 只使用OSC序列解析，移除正则表达式检测
+    if (data.includes('\x1b]')) {
+      parseOSCSequences(data)
     }
   }
 
@@ -800,14 +754,14 @@
       await initXterm()
 
       // 初始化工作目录 - 优先使用终端状态中保存的工作目录
-      const terminal = terminalStore.terminals.find(t => t.id === props.terminalId)
-      if (terminal && terminal.cwd) {
-        terminalEnv.workingDirectory = terminal.cwd
+      const tmeta = terminalStore.terminals.find(t => t.id === props.terminalId)
+      if (tmeta && tmeta.cwd) {
+        terminalEnv.workingDirectory = tmeta.cwd
       } else {
         // 如果没有保存的工作目录，使用系统默认
         windowApi
           .getHomeDirectory()
-          .then((dir: any) => {
+          .then((dir: string) => {
             terminalEnv.workingDirectory = dir
           })
           .catch(() => {
@@ -824,8 +778,8 @@
       // 注册到终端store的resize回调，避免每个终端都监听window resize
       terminalStore.registerResizeCallback(props.terminalId, resizeTerminal)
 
-      // 注入shell integration脚本（现在是静默的）
-      await injectShellIntegration()
+      // 初始化shell integration（静默模式）
+      await initShellIntegration()
     })
   })
 
@@ -905,6 +859,8 @@
     height: 100%;
     width: 100%;
     padding: 10px 10px 0 10px;
+    /* 确保为绝对定位的补全组件提供定位上下文 */
+    contain: layout style;
   }
 
   .terminal-container {

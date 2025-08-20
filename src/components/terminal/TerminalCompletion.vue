@@ -64,27 +64,33 @@
     if (!props.terminalElement || !showCompletion.value) return {}
 
     // 如果有传递的终端光标位置，直接使用
-    if (props.terminalCursorPosition) {
+    if (props.terminalCursorPosition && props.terminalCursorPosition.x > 0 && props.terminalCursorPosition.y > 0) {
       const { x, y } = props.terminalCursorPosition
 
-      // 微调偏移：x 向左 8px，y 向上 38px（与视觉对齐）
-      const adjustedX = x - 8
-      const adjustedY = y - 38
+      // 获取终端包装器的位置（补全组件的定位上下文）
+      const wrapperElement = props.terminalElement.parentElement
+      if (!wrapperElement) return {}
 
-      // 确保补全提示不会超出终端容器边界
-      const terminalRect = props.terminalElement.getBoundingClientRect()
-      const maxX = terminalRect.width - 200 // 预留补全提示的宽度
-      const maxY = terminalRect.height - 50 // 预留补全提示的高度
+      const wrapperRect = wrapperElement.getBoundingClientRect()
+
+      // 计算相对于包装器的位置
+      const relativeX = x - wrapperRect.left
+      const relativeY = y - wrapperRect.top
+
+      // 确保补全提示不会超出包装器边界
+      const maxX = wrapperRect.width - 200 // 预留补全提示的宽度
+      const maxY = wrapperRect.height - 30 // 预留补全提示的高度
+
+      const finalX = Math.min(Math.max(0, relativeX), maxX) + 20
+      const finalY = Math.min(Math.max(0, relativeY), maxY)
 
       return {
-        left: `${Math.min(adjustedX, maxX)}px`,
-        top: `${Math.min(adjustedY, maxY)}px`,
-        // 添加 z-index 确保补全提示在最上层
+        left: `${finalX}px`,
+        top: `${finalY}px`,
         zIndex: '1000',
       }
     }
 
-    // 如果没有精确的光标位置，不显示补全提示
     return {}
   })
 

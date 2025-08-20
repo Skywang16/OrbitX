@@ -26,14 +26,23 @@ pub struct FrontendCommandInfo {
 
 impl From<&CommandInfo> for FrontendCommandInfo {
     fn from(cmd: &CommandInfo) -> Self {
-        let start_timestamp = cmd.start_time.elapsed().as_secs();
-        let end_timestamp = cmd.end_time.map(|end| end.elapsed().as_secs());
+        use std::time::UNIX_EPOCH;
+        let start_timestamp = cmd
+            .start_time_wallclock
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let end_timestamp = cmd
+            .end_time_wallclock
+            .as_ref()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_secs());
         let duration_ms = if cmd.is_finished() {
             Some(cmd.duration().as_millis() as u64)
         } else {
             None
         };
-        
+
         Self {
             id: cmd.id,
             start_time: start_timestamp,
@@ -62,18 +71,32 @@ pub struct FrontendPaneState {
 impl From<&PaneShellState> for FrontendPaneState {
     fn from(state: &PaneShellState) -> Self {
         use std::time::UNIX_EPOCH;
-        
-        let last_activity = state.last_activity
+
+        let last_activity = state
+            .last_activity
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-            
+
         Self {
-            integration_enabled: matches!(state.integration_state, super::ShellIntegrationState::Enabled),
-            shell_type: state.shell_type.as_ref().map(|t| t.display_name().to_string()),
+            integration_enabled: matches!(
+                state.integration_state,
+                super::ShellIntegrationState::Enabled
+            ),
+            shell_type: state
+                .shell_type
+                .as_ref()
+                .map(|t| t.display_name().to_string()),
             current_working_directory: state.current_working_directory.clone(),
-            current_command: state.current_command.as_ref().map(FrontendCommandInfo::from),
-            command_history: state.command_history.iter().map(FrontendCommandInfo::from).collect(),
+            current_command: state
+                .current_command
+                .as_ref()
+                .map(FrontendCommandInfo::from),
+            command_history: state
+                .command_history
+                .iter()
+                .map(FrontendCommandInfo::from)
+                .collect(),
             window_title: state.window_title.clone(),
             last_activity,
         }
@@ -97,14 +120,16 @@ pub async fn check_shell_integration_status(
     Ok(status)
 }
 
-/// 设置Shell Integration（简化版，只是标记为已集成）
+/// 设置Shell Integration - 真正的脚本注入实现
 #[tauri::command]
 pub async fn setup_shell_integration(
     pane_id: u32,
+    silent: Option<bool>,
     state: State<'_, Arc<TerminalMux>>,
 ) -> Result<(), String> {
     let mux = &*state;
     let pane_id = PaneId::from(pane_id);
+    let silent = silent.unwrap_or(true);
 
     if !mux.pane_exists(pane_id) {
         let err = format!("Pane {} does not exist", pane_id);
@@ -112,12 +137,13 @@ pub async fn setup_shell_integration(
         return Err(err);
     }
 
-    // 简化：直接标记为已集成，实际功能通过OSC序列自动工作
-    mux.setup_pane_integration(pane_id).map_err(|e| {
-        let err = format!("Failed to setup shell integration: {}", e);
-        error!("{}", err);
-        err
-    })?;
+    // 真正的Shell Integration设置
+    mux.setup_pane_integration_with_script(pane_id, silent)
+        .map_err(|e| {
+            let err = format!("Failed to setup shell integration: {}", e);
+            error!("{}", err);
+            err
+        })?;
 
     Ok(())
 }
@@ -170,7 +196,8 @@ pub async fn get_pane_shell_state(
         return Err(format!("Pane {} does not exist", pane_id));
     }
 
-    let shell_state = mux.get_pane_shell_state(pane_id)
+    let shell_state = mux
+        .get_pane_shell_state(pane_id)
         .map(|state| FrontendPaneState::from(&state));
     Ok(shell_state)
 }
@@ -202,11 +229,14 @@ pub async fn generate_shell_integration_script(
 ) -> Result<String, String> {
     let mux = &*state;
     let shell_type = ShellType::from_program(&shell_type);
-    
+
     if !shell_type.supports_integration() {
-        return Err(format!("Shell type {} does not support integration", shell_type.display_name()));
+        return Err(format!(
+            "Shell type {} does not support integration",
+            shell_type.display_name()
+        ));
     }
-    
+
     mux.generate_shell_integration_script(&shell_type)
         .map_err(|e| format!("Failed to generate shell script: {}", e))
 }
@@ -219,7 +249,7 @@ pub async fn generate_shell_env_vars(
 ) -> Result<HashMap<String, String>, String> {
     let mux = &*state;
     let shell_type = ShellType::from_program(&shell_type);
-    
+
     let env_vars = mux.generate_shell_env_vars(&shell_type);
     Ok(env_vars)
 }
@@ -271,7 +301,8 @@ pub async fn get_pane_current_command(
         return Err(format!("Pane {} does not exist", pane_id));
     }
 
-    let command = mux.get_pane_current_command(pane_id)
+    let command = mux
+        .get_pane_current_command(pane_id)
         .map(|cmd| FrontendCommandInfo::from(&cmd));
     Ok(command)
 }
@@ -289,7 +320,8 @@ pub async fn get_pane_command_history(
         return Err(format!("Pane {} does not exist", pane_id));
     }
 
-    let history = mux.get_pane_command_history(pane_id)
+    let history = mux
+        .get_pane_command_history(pane_id)
         .into_iter()
         .map(|cmd| FrontendCommandInfo::from(&cmd))
         .collect();
@@ -298,18 +330,14 @@ pub async fn get_pane_command_history(
 
 /// 检测Shell类型
 #[tauri::command]
-pub async fn detect_shell_type(
-    shell_program: String,
-) -> Result<String, String> {
+pub async fn detect_shell_type(shell_program: String) -> Result<String, String> {
     let shell_type = ShellType::from_program(&shell_program);
     Ok(shell_type.display_name().to_string())
 }
 
 /// 检查Shell是否支持集成
 #[tauri::command]
-pub async fn check_shell_integration_support(
-    shell_program: String,
-) -> Result<bool, String> {
+pub async fn check_shell_integration_support(shell_program: String) -> Result<bool, String> {
     let shell_type = ShellType::from_program(&shell_program);
     Ok(shell_type.supports_integration())
 }

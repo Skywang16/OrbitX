@@ -678,7 +678,34 @@ impl TerminalMux {
 
     /// 设置面板的Shell Integration
     pub fn setup_pane_integration(&self, pane_id: PaneId) -> AppResult<()> {
-        info!("为面板 {} 设置Shell Integration", pane_id);
+        self.shell_integration.enable_integration(pane_id);
+        Ok(())
+    }
+
+    /// 设置面板的Shell Integration并注入脚本
+    pub fn setup_pane_integration_with_script(&self, pane_id: PaneId, silent: bool) -> AppResult<()> {
+        use crate::shell::ShellType;
+        
+        // 启用Shell Integration
+        self.shell_integration.enable_integration(pane_id);
+        
+        // 检测Shell类型
+        if let Ok(panes) = self.panes.read() {
+            if let Some(_pane) = panes.get(&pane_id) {
+                let shell_type = ShellType::Bash;
+                self.shell_integration.set_pane_shell_type(pane_id, shell_type.clone());
+                
+                if !silent {
+                    // 非静默模式：生成完整脚本
+                    if let Ok(script) = self.shell_integration.generate_shell_script(&shell_type) {
+                        self.write_to_pane(pane_id, script.as_bytes())?;
+                    }
+                }
+            } else {
+                return Err(anyhow::Error::msg(format!("面板 {} 不存在", pane_id)));
+            }
+        }
+        
         Ok(())
     }
 
