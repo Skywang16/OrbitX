@@ -256,7 +256,7 @@
         const startLine = selection ? selection.start.y + 1 : 1 // xterm行号从0开始
         const endLine = selection ? selection.end.y + 1 : undefined
 
-        terminalSelection.setSelectedText(selectedText, startLine, endLine)
+        terminalSelection.setSelectedText(selectedText, startLine, endLine, terminalEnv.workingDirectory)
       })
 
       // 初始化终端状态
@@ -399,6 +399,18 @@
    */
   const handleSuggestionChange = (suggestion: string) => {
     inputState.suggestion = suggestion
+  }
+
+  /**
+   * 处理快捷键触发的补全接受事件
+   */
+  const handleAcceptCompletionShortcut = () => {
+    if (completionRef.value?.hasCompletion()) {
+      const completionText = completionRef.value.acceptCompletion()
+      if (completionText && completionText.trim()) {
+        acceptCompletion(completionText)
+      }
+    }
   }
 
   /**
@@ -601,10 +613,10 @@
 
   /**
    * 解析OSC序列并处理shell integration事件
-   * 支持VS Code风格的shell integration协议
+   * 支持VSCode风格的shell integration协议
    */
   const parseOSCSequences = (data: string) => {
-    // OSC 633 序列匹配器（VS Code shell integration）
+    // OSC 633 序列匹配器（VSCode shell integration）
     // 允许无 payload 的 A/B/C 等标记（第二个分号可选），并兼容大小写
     const oscPattern = /\x1b]633;([A-Za-z]);?([^\x07\x1b]*?)(?:\x07|\x1b\\)/g
     let match
@@ -614,9 +626,9 @@
       const payload = match[2]
 
       switch (command) {
-        case 'A': // Command started
+        case 'A': // Prompt started
           break
-        case 'B': // Command finished
+        case 'B': // Command started
           break
         case 'C': // Command executed (start of output)
           break
@@ -628,21 +640,53 @@
       }
     }
 
-    // OSC 7 序列匹配器（CWD更新）
-    const cwdPattern = /\x1b]7;file:\/\/[^\/]*([^\x07\x1b]*?)(?:\x07|\x1b\\)/g
+    // OSC 7 序列匹配器（CWD更新）- 增强版
+    const cwdPattern = /\x1b]7;([^\x07\x1b]*?)(?:\x07|\x1b\\)/g
     let cwdMatch
 
     while ((cwdMatch = cwdPattern.exec(data)) !== null) {
-      const newCwd = decodeURIComponent(cwdMatch[1])
-      if (newCwd && newCwd !== terminalEnv.workingDirectory) {
-        terminalEnv.workingDirectory = newCwd
-        terminalStore.updateTerminalCwd(props.terminalId, newCwd)
-        // 同步更新后端状态
-        if (props.backendId != null) {
-          invoke('update_pane_cwd', {
-            paneId: props.backendId,
-            cwd: newCwd,
-          }).catch(() => {})
+      const fullData = cwdMatch[1]
+      let newCwd = ''
+
+      if (fullData) {
+        try {
+          // 尝试解析file://URL格式
+          if (fullData.startsWith('file://')) {
+            const url = new URL(fullData)
+            newCwd = decodeURIComponent(url.pathname)
+
+            // 处理Windows路径
+            if (
+              navigator.platform.toLowerCase().includes('win') &&
+              newCwd.startsWith('/') &&
+              newCwd.length > 3 &&
+              newCwd[2] === ':'
+            ) {
+              newCwd = newCwd.substring(1)
+            }
+          } else {
+            // 直接路径格式
+            newCwd = decodeURIComponent(fullData)
+          }
+
+          // 验证和更新CWD
+          if (newCwd && newCwd !== terminalEnv.workingDirectory) {
+            console.log(`📍 [Terminal] CWD更新: ${terminalEnv.workingDirectory} -> ${newCwd}`)
+            terminalEnv.workingDirectory = newCwd
+            terminalStore.updateTerminalCwd(props.terminalId, newCwd)
+
+            // 同步更新后端状态
+            if (props.backendId != null) {
+              invoke('update_pane_cwd', {
+                paneId: props.backendId,
+                cwd: newCwd,
+              }).catch(err => {
+                console.warn('同步CWD到后端失败:', err)
+              })
+            }
+          }
+        } catch (error) {
+          console.warn('CWD解析失败:', error, '原始数据:', fullData)
         }
       }
     }
@@ -778,6 +822,11 @@
       // 注册到终端store的resize回调，避免每个终端都监听window resize
       terminalStore.registerResizeCallback(props.terminalId, resizeTerminal)
 
+      // 添加快捷键事件监听
+      if (terminalRef.value) {
+        terminalRef.value.addEventListener('accept-completion', handleAcceptCompletionShortcut)
+      }
+
       // 初始化shell integration（静默模式）
       await initShellIntegration()
     })
@@ -786,6 +835,11 @@
   onBeforeUnmount(() => {
     if (hasDisposed) return
     hasDisposed = true
+
+    // 清理快捷键事件监听
+    if (terminalRef.value) {
+      terminalRef.value.removeEventListener('accept-completion', handleAcceptCompletionShortcut)
+    }
 
     terminalStore.unregisterTerminalCallbacks(props.terminalId)
 

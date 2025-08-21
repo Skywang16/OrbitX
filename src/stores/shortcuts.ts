@@ -90,22 +90,6 @@ export const useShortcutStore = defineStore('shortcuts', () => {
   }
 
   /**
-   * 更新配置
-   */
-  const updateConfig = async (newConfig: ShortcutsConfig): Promise<void> => {
-    return withLoading(async () => {
-      await shortcutsApi.updateConfig(newConfig)
-      config.value = newConfig
-
-      // 更新统计信息
-      statistics.value = await shortcutsApi.getStatistics()
-
-      // 重新验证和检测冲突
-      await Promise.all([validateCurrentConfig(), detectCurrentConflicts()])
-    })
-  }
-
-  /**
    * 验证当前配置
    */
   const validateCurrentConfig = async (): Promise<ShortcutValidationResult> => {
@@ -221,7 +205,6 @@ export const useShortcutStore = defineStore('shortcuts', () => {
     // 操作方法
     initialize,
     refreshConfig,
-    updateConfig,
     validateCurrentConfig,
     detectCurrentConflicts,
     addShortcut,

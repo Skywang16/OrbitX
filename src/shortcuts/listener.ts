@@ -9,7 +9,6 @@ import { shortcutsApi } from '@/api/shortcuts'
 import type { ShortcutsConfig, ShortcutBinding } from '@/types'
 import { shortcutActionsService } from './actions'
 import { formatKeyCombo, isShortcutMatch, extractActionName } from './utils'
-import { NON_BLOCKING_ACTIONS } from './constants'
 
 export function useShortcutListener() {
   const isListening = ref(false)
@@ -20,18 +19,14 @@ export function useShortcutListener() {
    * 初始化快捷键监听器
    */
   const initializeListener = async () => {
-    try {
-      config.value = await shortcutsApi.getConfig()
+    config.value = await shortcutsApi.getConfig()
 
-      keydownHandler = (event: KeyboardEvent) => {
-        handleKeyDown(event)
-      }
-
-      document.addEventListener('keydown', keydownHandler, true)
-      isListening.value = true
-    } catch (error) {
-      console.error('快捷键监听器初始化失败:', error)
+    keydownHandler = (event: KeyboardEvent) => {
+      handleKeyDown(event)
     }
+
+    document.addEventListener('keydown', keydownHandler, true)
+    isListening.value = true
   }
 
   /**
@@ -54,7 +49,8 @@ export function useShortcutListener() {
         return
       }
 
-      if (!NON_BLOCKING_ACTIONS.has(actionName)) {
+      // 复制粘贴不阻止默认行为，其他都阻止
+      if (actionName !== 'copy_to_clipboard' && actionName !== 'paste_from_clipboard') {
         event.preventDefault()
         event.stopPropagation()
       }
@@ -80,57 +76,73 @@ export function useShortcutListener() {
    * 执行快捷键动作
    */
   const executeShortcutAction = async (shortcut: ShortcutBinding, keyCombo: string) => {
-    try {
-      const actionName = extractActionName(shortcut.action)
-      let frontendResult = false
+    const actionName = extractActionName(shortcut.action)
+    let frontendResult = false
 
-      switch (actionName) {
-        case 'switch_to_tab_1':
-          frontendResult = shortcutActionsService.switchToTab(0)
-          break
-        case 'switch_to_tab_2':
-          frontendResult = shortcutActionsService.switchToTab(1)
-          break
-        case 'switch_to_tab_3':
-          frontendResult = shortcutActionsService.switchToTab(2)
-          break
-        case 'switch_to_tab_4':
-          frontendResult = shortcutActionsService.switchToTab(3)
-          break
-        case 'switch_to_tab_5':
-          frontendResult = shortcutActionsService.switchToTab(4)
-          break
-        case 'switch_to_last_tab':
-          frontendResult = shortcutActionsService.switchToLastTab()
-          break
-        case 'new_tab':
-          frontendResult = await shortcutActionsService.newTab()
-          break
-        case 'close_tab':
-          frontendResult = shortcutActionsService.closeCurrentTab()
-          break
-        case 'copy_to_clipboard':
-          frontendResult = await shortcutActionsService.copyToClipboard()
-          break
-        case 'paste_from_clipboard':
-          frontendResult = await shortcutActionsService.pasteFromClipboard()
-          break
-        case 'accept_completion':
-          frontendResult = shortcutActionsService.acceptCompletion()
-          break
-      }
-
-      await shortcutsApi.executeAction(shortcut.action, keyCombo, getCurrentTerminalId(), {
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-        frontendResult,
-      })
-
-      return frontendResult
-    } catch (error) {
-      console.error('快捷键动作执行失败:', error)
-      return false
+    switch (actionName) {
+      case 'switch_to_tab_1':
+        frontendResult = shortcutActionsService.switchToTab(0)
+        break
+      case 'switch_to_tab_2':
+        frontendResult = shortcutActionsService.switchToTab(1)
+        break
+      case 'switch_to_tab_3':
+        frontendResult = shortcutActionsService.switchToTab(2)
+        break
+      case 'switch_to_tab_4':
+        frontendResult = shortcutActionsService.switchToTab(3)
+        break
+      case 'switch_to_tab_5':
+        frontendResult = shortcutActionsService.switchToTab(4)
+        break
+      case 'switch_to_last_tab':
+        frontendResult = shortcutActionsService.switchToLastTab()
+        break
+      case 'new_tab':
+        frontendResult = await shortcutActionsService.newTab()
+        break
+      case 'close_tab':
+        frontendResult = shortcutActionsService.closeCurrentTab()
+        break
+      case 'copy_to_clipboard':
+        frontendResult = await shortcutActionsService.copyToClipboard()
+        break
+      case 'paste_from_clipboard':
+        frontendResult = await shortcutActionsService.pasteFromClipboard()
+        break
+      case 'accept_completion':
+        frontendResult = shortcutActionsService.acceptCompletion()
+        break
+      case 'terminal_search':
+        frontendResult = shortcutActionsService.terminalSearch()
+        break
+      case 'open_settings':
+        frontendResult = shortcutActionsService.openSettings()
+        break
+      case 'toggle_theme':
+        frontendResult = await shortcutActionsService.toggleTheme()
+        break
+      case 'new_window':
+        frontendResult = await shortcutActionsService.newWindow()
+        break
+      case 'clear_terminal':
+        frontendResult = shortcutActionsService.clearTerminal()
+        break
+      case 'increase_font_size':
+        frontendResult = shortcutActionsService.increaseFontSize()
+        break
+      case 'decrease_font_size':
+        frontendResult = shortcutActionsService.decreaseFontSize()
+        break
     }
+
+    await shortcutsApi.executeAction(shortcut.action, keyCombo, getCurrentTerminalId(), {
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      frontendResult,
+    })
+
+    return frontendResult
   }
 
   const getCurrentTerminalId = (): string | null => {
@@ -138,11 +150,7 @@ export function useShortcutListener() {
   }
 
   const reloadConfig = async () => {
-    try {
-      config.value = await shortcutsApi.getConfig()
-    } catch (error) {
-      console.error('快捷键配置重新加载失败:', error)
-    }
+    config.value = await shortcutsApi.getConfig()
   }
 
   const stopListener = () => {

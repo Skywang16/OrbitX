@@ -121,45 +121,11 @@ impl ConfigPaths {
         }
     }
 
-    /// 获取项目配置目录
-    ///
-    /// 返回项目根目录下的 config 目录路径
-    #[allow(dead_code)]
-    fn get_project_config_dir() -> AppResult<PathBuf> {
-        // 获取当前可执行文件的目录
-        let exe_path = std::env::current_exe().with_context(|| "无法获取可执行文件路径")?;
-
-        // 在开发环境中，可执行文件在 target/debug/ 或 target/release/ 下
-        // 我们需要找到项目根目录
-        let mut current_dir = exe_path
-            .parent()
-            .ok_or_else(|| anyhow!("无法获取可执行文件目录"))?
-            .to_path_buf();
-
-        // 向上查找，直到找到包含 src-tauri 目录的项目根目录
-        loop {
-            if current_dir.join("src-tauri").exists() {
-                return Ok(current_dir.join("config"));
-            }
-
-            if let Some(parent) = current_dir.parent() {
-                current_dir = parent.to_path_buf();
-            } else {
-                // 如果找不到项目根目录，就使用当前工作目录下的 config
-                let cwd = std::env::current_dir().with_context(|| "无法获取当前工作目录")?;
-                return Ok(cwd.join("config"));
-            }
-        }
-    }
 
     /// 获取项目主题目录
     ///
     /// 返回项目根目录下的 config/themes 目录路径
-    #[allow(dead_code)]
-    fn get_project_themes_dir() -> AppResult<PathBuf> {
-        let config_dir = Self::get_project_config_dir()?;
-        Ok(config_dir.join("themes"))
-    }
+
 
     /// 确保所有必要的目录存在
     fn ensure_directories_exist(&self) -> AppResult<()> {

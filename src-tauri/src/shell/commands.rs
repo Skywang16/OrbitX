@@ -341,3 +341,4 @@ pub async fn check_shell_integration_support(shell_program: String) -> Result<bo
     let shell_type = ShellType::from_program(&shell_program);
     Ok(shell_type.supports_integration())
 }
+

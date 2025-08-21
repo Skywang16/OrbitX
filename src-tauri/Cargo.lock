@@ -3578,6 +3578,7 @@ dependencies = [
  "oxc_parser",
  "oxc_span",
  "oxc_syntax",
+ "percent-encoding",
  "portable-pty",
  "quote",
  "rand 0.8.5",

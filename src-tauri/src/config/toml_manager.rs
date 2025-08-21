@@ -59,8 +59,6 @@ pub struct TomlConfigManager {
     /// 配置路径管理器
     #[allow(dead_code)]
     paths: ConfigPaths,
-
-
 }
 
 impl TomlConfigManager {
@@ -88,7 +86,7 @@ impl TomlConfigManager {
 
     /// 加载配置
     ///
-    /// 从文件系统加载TOML配置，如果文件不存在则创建默认配置。
+    /// 从文件系统加载TOML配置，如果文件不存在则尝试从资源文件复制，最后创建默认配置。
     ///
     /// # Returns
     /// 返回加载的配置结构
@@ -122,12 +120,19 @@ impl TomlConfigManager {
                 }
             }
         } else {
-            info!("配置文件不存在，创建默认配置");
-            let default_config = create_default_config();
+            info!("配置文件不存在，尝试复制打包的配置文件");
 
-            // 保存默认配置到文件
-            self.save_config_internal(&default_config).await?;
-            default_config
+            // 尝试从资源文件复制配置
+            if let Ok(config) = self.copy_bundled_config().await {
+                info!("成功复制打包的配置文件");
+                config
+            } else {
+                info!("未找到打包的配置文件，创建默认配置");
+                let default_config = create_default_config();
+                // 保存默认配置到文件
+                self.save_config_internal(&default_config).await?;
+                default_config
+            }
         };
 
         // 更新缓存
@@ -138,7 +143,6 @@ impl TomlConfigManager {
                 .map_err(|e| anyhow!("无法获取配置缓存写锁: {}", e))?;
             *cache = config.clone();
         }
-
 
         // 发送加载事件
         let event = ConfigEvent::Loaded {
@@ -372,11 +376,58 @@ impl TomlConfigManager {
         Ok(merged_config)
     }
 
-
-
     // ========================================================================
     // 私有方法
     // ========================================================================
+
+    /// 复制打包的配置文件到用户目录
+    async fn copy_bundled_config(&self) -> AppResult<AppConfig> {
+        // 尝试从应用资源中获取配置文件
+        let bundled_config_path = self.get_bundled_config_path()?;
+
+        if bundled_config_path.exists() {
+            // 复制文件到用户配置目录
+            tokio::fs::copy(&bundled_config_path, &self.config_path)
+                .await
+                .with_context(|| "复制打包配置文件失败")?;
+
+            // 读取并解析复制的配置文件
+            let content = tokio::fs::read_to_string(&self.config_path)
+                .await
+                .with_context(|| "读取复制的配置文件失败")?;
+
+            self.parse_toml_content(&content)
+        } else {
+            bail!("未找到打包的配置文件")
+        }
+    }
+
+    /// 获取打包配置文件的路径
+    fn get_bundled_config_path(&self) -> AppResult<std::path::PathBuf> {
+        // 在 Tauri 中，资源文件通常位于应用包中
+        let exe_dir = std::env::current_exe()
+            .with_context(|| "无法获取可执行文件路径")?
+            .parent()
+            .ok_or_else(|| anyhow!("无法获取可执行文件目录"))?
+            .to_path_buf();
+
+        // 在不同平台上，资源文件的位置可能不同
+        #[cfg(target_os = "macos")]
+        {
+            // macOS: 资源文件在 .app/Contents/Resources/ 目录下
+            let app_bundle = exe_dir
+                .parent()
+                .and_then(|p| p.parent())
+                .ok_or_else(|| anyhow!("无法找到 macOS 应用包路径"))?;
+            Ok(app_bundle.join("Resources").join("config.toml"))
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            // Windows/Linux: 资源文件可能在可执行文件同级目录
+            Ok(exe_dir.join("config.toml"))
+        }
+    }
 
     /// 解析TOML内容
     fn parse_toml_content(&self, content: &str) -> AppResult<AppConfig> {
@@ -450,7 +501,6 @@ impl TomlConfigManager {
 
         Ok(default_config)
     }
-
 
     /// 更新配置节
     fn update_config_section(
@@ -947,7 +997,6 @@ mod tests {
         let final_config = manager.get_config().await.unwrap();
         assert_eq!(final_config.version, "1.0.0");
     }
-
 
     #[tokio::test]
     async fn test_error_handling_comprehensive() {

@@ -4,12 +4,7 @@
 
 // ===== 基础快捷键类型 =====
 
-export type ShortcutAction =
-  | string
-  | {
-      action_type: string
-      text?: string
-    }
+export type ShortcutAction = string
 
 export interface ShortcutBinding {
   key: string
@@ -43,10 +38,16 @@ export interface ShortcutValidationError {
   shortcut?: ShortcutBinding
 }
 
+export interface ShortcutValidationWarning {
+  warning_type: string
+  message: string
+  shortcut?: ShortcutBinding
+}
+
 export interface ShortcutValidationResult {
   is_valid: boolean
   errors: ShortcutValidationError[]
-  warnings: ShortcutValidationError[]
+  warnings: ShortcutValidationWarning[]
 }
 
 export interface ConflictingShortcut {

@@ -4,6 +4,7 @@
 
 use anyhow::{anyhow, bail, Context};
 use std::io::{Read, Write};
+use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -113,16 +114,100 @@ impl LocalPane {
         cmd.env("LANG", "en_US.UTF-8");
         cmd.env("LC_ALL", "en_US.UTF-8");
         cmd.env("LC_CTYPE", "en_US.UTF-8");
+
+        // 自动注入Shell Integration脚本（VSCode风格环境变量方式）
+        let shell_type = crate::shell::ShellType::from_program(&config.shell_config.program);
+        if shell_type.supports_integration() {
+            let script_generator = crate::shell::ShellScriptGenerator::default();
+            if let Ok(integration_script) =
+                script_generator.generate_integration_script(&shell_type)
+            {
+                // 设置环境变量标识
+                cmd.env("ORBITX_SHELL_INTEGRATION", "1");
+
+                // VSCode风格的静默注入：通过环境变量和配置文件
+                match shell_type {
+                    crate::shell::ShellType::Zsh => {
+                        // 为zsh创建临时配置目录
+                        let temp_dir =
+                            std::env::temp_dir().join(format!("orbitx-{}", process::id()));
+                        if let Err(e) = std::fs::create_dir_all(&temp_dir) {
+                            tracing::warn!("创建临时目录失败: {}", e);
+                        } else {
+                            let temp_zshrc = temp_dir.join(".zshrc");
+                            if let Ok(mut file) = std::fs::File::create(&temp_zshrc) {
+                                use std::io::Write;
+                                let _ = writeln!(file, "# OrbitX Shell Integration");
+                                let _ = writeln!(file, "{}", integration_script);
+                                let _ = writeln!(file, "# Load user zshrc if exists");
+                                let _ = writeln!(file, "[[ -f ~/.zshrc ]] && source ~/.zshrc");
+
+                                // 设置ZDOTDIR指向临时目录
+                                if let Some(original_zdotdir) = std::env::var_os("ZDOTDIR") {
+                                    cmd.env("ORBITX_ORIGINAL_ZDOTDIR", original_zdotdir);
+                                }
+                                cmd.env("ZDOTDIR", temp_dir);
+                            }
+                        }
+                    }
+                    crate::shell::ShellType::Bash => {
+                        // 为bash创建临时初始化文件
+                        let temp_dir =
+                            std::env::temp_dir().join(format!("orbitx-{}", process::id()));
+                        if let Err(e) = std::fs::create_dir_all(&temp_dir) {
+                            tracing::warn!("创建临时目录失败: {}", e);
+                        } else {
+                            let temp_bashrc = temp_dir.join(".bashrc");
+                            if let Ok(mut file) = std::fs::File::create(&temp_bashrc) {
+                                use std::io::Write;
+                                let _ = writeln!(file, "# OrbitX Shell Integration");
+                                let _ = writeln!(file, "{}", integration_script);
+                                let _ = writeln!(file, "# Load user bashrc if exists");
+                                let _ = writeln!(file, "[[ -f ~/.bashrc ]] && source ~/.bashrc");
+
+                                // 设置BASH_ENV指向临时文件
+                                cmd.env("BASH_ENV", temp_bashrc);
+                            }
+                        }
+                    }
+                    crate::shell::ShellType::Fish => {
+                        // Fish shell集成
+                        cmd.env("ORBITX_INTEGRATION_SCRIPT", integration_script);
+                    }
+                    _ => {
+                        // 其他shell仅设置环境变量
+                        cmd.env("ORBITX_INTEGRATION_SCRIPT", integration_script);
+                    }
+                }
+
+                tracing::info!(
+                    "已为 {} 配置Shell Integration（修复版）",
+                    shell_type.display_name()
+                );
+            } else {
+                tracing::warn!(
+                    "无法生成 {} 的Shell Integration脚本",
+                    shell_type.display_name()
+                );
+            }
+        } else {
+            tracing::debug!("Shell {} 不支持自动集成", shell_type.display_name());
+        }
         // 设置输入法相关环境变量
         cmd.env("XMODIFIERS", "@im=ibus");
         cmd.env("GTK_IM_MODULE", "ibus");
         cmd.env("QT_IM_MODULE", "ibus");
 
-        // 启动子进程
-        pty_pair
-            .slave
-            .spawn_command(cmd)
-            .with_context(|| format!("启动进程失败: pane_id={:?}", pane_id))?;
+        // 启动子进程并监控
+        match pty_pair.slave.spawn_command(cmd) {
+            Ok(_child) => {
+                tracing::info!("Shell进程启动成功");
+            }
+            Err(e) => {
+                tracing::error!("Shell进程启动失败: {:?}", e);
+                return Err(e.into());
+            }
+        }
 
         tracing::debug!("子进程启动成功");
 

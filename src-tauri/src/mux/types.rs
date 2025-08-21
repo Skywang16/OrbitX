@@ -581,10 +581,6 @@ impl ShellManager {
         let exists = path_obj.exists();
         let is_executable = path_obj.is_file();
 
-        debug!(
-            "验证shell路径: {} -> exists: {}, executable: {}",
-            path, exists, is_executable
-        );
         exists && is_executable
     }
 
@@ -681,10 +677,7 @@ pub enum MuxNotification {
         exit_code: Option<i32>,
     },
     /// 面板工作目录已变化
-    PaneCwdChanged {
-        pane_id: PaneId,
-        cwd: String,
-    },
+    PaneCwdChanged { pane_id: PaneId, cwd: String },
 }
 
 // ===== 前端事件结构体 =====

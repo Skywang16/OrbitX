@@ -55,58 +55,77 @@ export const useTabManagerStore = defineStore('TabManager', () => {
   const getDisplayPath = (cwd: string): string => {
     if (!cwd || cwd === '~') return '~'
 
-    // 移除末尾的斜杠
-    const cleanPath = cwd.replace(/\/$/, '')
+    try {
+      // 移除末尾的斜杠
+      const cleanPath = cwd.replace(/\/$/, '')
 
-    // 处理home目录及其子目录
-    const homePattern = /^\/Users\/[^\/]+/
-    if (homePattern.test(cleanPath)) {
-      if (cleanPath.match(/^\/Users\/[^\/]+$/)) {
-        return '~' // 用户home目录
+      // 跨平台Home目录处理
+      const homePatterns = [
+        /^\/Users\/[^/]+/, // macOS
+        /^\/home\/[^/]+/, // Linux
+        /^C:\\Users\\[^\\]+/i, // Windows
+      ]
+
+      for (const homePattern of homePatterns) {
+        if (homePattern.test(cleanPath)) {
+          const homeMatch = cleanPath.match(homePattern)?.[0]
+          if (homeMatch && cleanPath === homeMatch) {
+            return '~' // 用户home目录
+          }
+          // home子目录显示相对路径
+          const relativePath = cleanPath.replace(homePattern, '~')
+          const pathParts = relativePath.split(/[/\\]/).filter(p => p.length > 0)
+          if (pathParts.length > 0) {
+            const lastPart = pathParts[pathParts.length - 1]
+            return lastPart.length > 20 ? lastPart.substring(0, 17) + '...' : lastPart
+          }
+          return '~'
+        }
       }
-      // home子目录显示相对路径
-      const relativePath = cleanPath.replace(homePattern, '~')
-      const pathParts = relativePath.split('/')
-      return pathParts[pathParts.length - 1] || '~'
-    }
 
-    // 处理系统重要目录
-    const systemDirs: Record<string, string> = {
-      '/': 'root',
-      '/usr': 'usr',
-      '/etc': 'etc',
-      '/var': 'var',
-      '/tmp': 'tmp',
-      '/opt': 'opt',
-      '/Applications': 'Apps',
-      '/System': 'System',
-      '/Library': 'Library',
-    }
+      // 处理系统重要目录
+      const systemDirs: Record<string, string> = {
+        '/': 'root',
+        '/usr': 'usr',
+        '/etc': 'etc',
+        '/var': 'var',
+        '/tmp': 'tmp',
+        '/opt': 'opt',
+        '/Applications': 'Apps',
+        '/System': 'System',
+        '/Library': 'Library',
+        'C:\\': 'C:',
+        'D:\\': 'D:',
+      }
 
-    if (systemDirs[cleanPath]) {
-      return systemDirs[cleanPath]
-    }
+      if (systemDirs[cleanPath]) {
+        return systemDirs[cleanPath]
+      }
 
-    // 对于其他路径，显示最后一级目录名
-    const pathParts = cleanPath.split('/')
-    const lastPart = pathParts[pathParts.length - 1]
+      // 对于其他路径，显示最后一级目录名
+      const pathParts = cleanPath.split(/[/\\]/).filter(p => p.length > 0)
 
-    // 如果是根目录下的直接子目录，显示带斜杠前缀
-    if (pathParts.length === 2 && pathParts[0] === '') {
-      return `/${lastPart}`
-    }
+      if (pathParts.length === 0) return '/'
 
-    // 特殊项目目录检测
-    if (lastPart.includes('-') || lastPart.includes('_')) {
+      const lastPart = pathParts[pathParts.length - 1]
+
+      // 如果是根目录下的直接子目录，显示带斜杠前缀
+      if (pathParts.length === 1 && (cleanPath.startsWith('/') || cleanPath.match(/^[A-Z]:\\/i))) {
+        return navigator.platform.toLowerCase().includes('win') ? lastPart : `/${lastPart}`
+      }
+
+      // 如果目录名太长，进行截断
+      if (lastPart.length > 20) {
+        return lastPart.substring(0, 17) + '...'
+      }
+
       return lastPart
+    } catch (error) {
+      console.warn('路径处理错误:', error, '原始路径:', cwd)
+      // 失败时的降级处理
+      const parts = cwd.split(/[/\\]/).filter(p => p.length > 0)
+      return parts.length > 0 ? parts[parts.length - 1] : '~'
     }
-
-    // 如果目录名太长，进行截断
-    if (lastPart.length > 15) {
-      return lastPart.substring(0, 12) + '...'
-    }
-
-    return lastPart || '/'
   }
 
   // --- 公共方法 ---
@@ -124,7 +143,6 @@ export const useTabManagerStore = defineStore('TabManager', () => {
       title: '设置',
       type: TabType.SETTINGS,
       closable: true,
-      icon: '⚙️',
       data: { section },
     })
     setActiveTab(id)

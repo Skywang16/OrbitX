@@ -7,13 +7,7 @@
 /**
  * 快捷键动作类型
  */
-export type ShortcutAction =
-  | string // 简单动作
-  | {
-      // 复杂动作
-      action_type: string
-      text?: string
-    }
+export type ShortcutAction = string
 
 /**
  * 快捷键绑定

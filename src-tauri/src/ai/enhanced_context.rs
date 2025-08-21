@@ -366,7 +366,6 @@ struct MessageImportance {
     pub index: usize,
     pub message: Message,
     pub importance_score: f64,
-    pub is_tool_execution: bool,
     pub is_system: bool,
 }
 
@@ -409,7 +408,6 @@ impl EfficientCompressionStrategy {
                     index,
                     message: msg.clone(),
                     importance_score,
-                    is_tool_execution: msg.steps_json.is_some(),
                     is_system: msg.role == "system",
                 }
             })
@@ -1088,7 +1086,7 @@ impl ContextManager {
         _up_to_msg_id: Option<i64>,
     ) -> AppResult<Vec<Message>> {
         // TODO: 实现up_to_message_id逻辑
-        let mut all = repos
+        let all = repos
             .conversations()
             .get_messages(conv_id, None, None)
             .await?;
@@ -1241,44 +1239,6 @@ impl ContextManager {
         summary
     }
 
-    /// 估算文本内容的token数
-    fn estimate_text_tokens(&self, text: &str) -> usize {
-        if text.is_empty() {
-            return 0;
-        }
-
-        let char_count = text.chars().count();
-        let word_count = text.split_whitespace().count();
-
-        // 中英文混合文本的token估算
-        let chinese_chars = text
-            .chars()
-            .filter(|c| c.is_ascii_punctuation() || (*c as u32) > 127)
-            .count();
-        let english_chars = char_count - chinese_chars;
-
-        // 中文字符约1个token，英文单词约0.75个token
-        let estimated_tokens = (chinese_chars as f64 * 1.0) + (word_count as f64 * 0.75);
-
-        // 代码块和特殊格式的token成本更高
-        let code_blocks = text.matches("```").count() / 2;
-        let json_objects = text.matches('{').count().min(text.matches('}').count());
-
-        (estimated_tokens + code_blocks as f64 * 5.0 + json_objects as f64 * 2.0) as usize
-    }
-
-    /// 估算JSON内容的token数
-    fn estimate_json_tokens(&self, json_str: &str) -> usize {
-        // JSON结构化数据的token成本通常比纯文本高
-        let base_tokens = self.estimate_text_tokens(json_str);
-
-        // JSON结构开销
-        let object_count = json_str.matches('{').count();
-        let array_count = json_str.matches('[').count();
-        let string_count = json_str.matches('"').count() / 2;
-
-        base_tokens + object_count * 2 + array_count + string_count
-    }
 
     fn format_message(&self, msg: &Message) -> String {
         if msg.role == "assistant" && msg.steps_json.is_some() {

@@ -1,122 +1,134 @@
-# OrbitX 终端应用配置文件
-# 版本: 1.0.0
-# 说明: 此文件包含应用的所有配置选项，修改后需重启应用生效
-
 version = "1.0.0"
 
-# ==================== 应用基础设置 ====================
 [app]
-language = "zh-CN"              # 界面语言 (zh-CN, en-US)
-confirm_on_exit = true          # 退出时是否显示确认对话框
-startup_behavior = "restore"    # 启动行为: restore(恢复上次会话), new(新建会话), last(打开最后一个会话)
+language = "zh-CN"
+confirm_on_exit = true
+startup_behavior = "restore"
 
-# ==================== 外观设置 ====================
 [appearance]
-ui_scale = 100                  # UI 缩放比例 (50-200)
-animations_enabled = true       # 是否启用界面动画效果
+ui_scale = 100
+animations_enabled = true
 
-# 主题配置
 [appearance.theme_config]
-auto_switch_time = "18:00"      # 自动切换深色主题的时间 (24小时制)
-terminal_theme = "solarized-light"  # 当前使用的终端主题名称
-light_theme = "light"           # 浅色模式使用的主题
-dark_theme = "dark"             # 深色模式使用的主题
-follow_system = false           # 是否跟随系统主题自动切换
+auto_switch_time = "18:00"
+terminal_theme = "tokyo-night"
+light_theme = "light"
+dark_theme = "dark"
+follow_system = false
 
-# 字体配置
 [appearance.font]
-family = "Menlo, Monaco, \"SF Mono\", \"Microsoft YaHei UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Source Han Sans CN\", \"WenQuanYi Micro Hei\", \"Courier New\", monospace"  # 字体族，支持多个备选字体（包含中文字体）
-size = 14.0                     # 字体大小 (8.0-72.0)
-weight = "normal"               # 字体粗细: normal, bold, light
-style = "normal"                # 字体样式: normal, italic
-lineHeight = 1.2                # 行高倍数 (0.8-3.0)
-letterSpacing = 0.0             # 字符间距 (-5.0-5.0)
+family = 'Menlo, Monaco, "SF Mono", "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", "Source Han Sans CN", "WenQuanYi Micro Hei", "Courier New", monospace'
+size = 14.0
+weight = "normal"
+style = "normal"
+lineHeight = 1.2000000476837158
+letterSpacing = 0.0
 
-# ==================== 终端设置 ====================
 [terminal]
-scrollback = 1000               # 回滚缓冲区行数 (100-100000)
+scrollback = 1000
 
-# Shell 配置
 [terminal.shell]
-default = "zsh"                 # 默认 Shell: bash, zsh, fish, powershell
-args = []                       # Shell 启动参数
-working_directory = "~"         # 默认工作目录 (~表示用户主目录)
+default = "zsh"
+args = []
+working_directory = "~"
 
-# 光标配置
 [terminal.cursor]
-style = "block"                 # 光标样式: block(块状), underline(下划线), bar(竖线)
-blink = true                    # 光标是否闪烁
-color = "#ffffff"               # 光标颜色 (十六进制颜色值)
-thickness = 0.15                # 光标粗细 (0.1-1.0，仅对 underline 和 bar 有效)
+style = "block"
+blink = true
+color = "#ffffff"
+thickness = 0.15000000596046448
 
-# 终端行为
 [terminal.behavior]
-close_on_exit = true            # Shell 退出时是否自动关闭标签页
-confirm_close = false           # 关闭标签页时是否显示确认对话框
+close_on_exit = true
+confirm_close = false
 
-# ==================== 快捷键设置 ====================
-# 全局快捷键
+[shortcuts]
+custom = []
+
 [[shortcuts.global]]
-key = "c"                       # 按键
-modifiers = ["cmd"]             # 修饰键: cmd, ctrl, alt, shift
-action = "copy_to_clipboard"    # 动作: 复制到剪贴板
+key = "c"
+modifiers = ["cmd"]
+action = "copy_to_clipboard"
 
 [[shortcuts.global]]
 key = "v"
 modifiers = ["cmd"]
-action = "paste_from_clipboard" # 动作: 从剪贴板粘贴
+action = "paste_from_clipboard"
 
-# 终端专用快捷键
+[[shortcuts.global]]
+key = "f"
+modifiers = ["cmd"]
+action = "terminal_search"
+
+[[shortcuts.global]]
+key = "s"
+modifiers = ["cmd"]
+action = "open_settings"
+
+[[shortcuts.global]]
+key = "d"
+modifiers = [
+    "cmd",
+    "shift",
+]
+action = "toggle_theme"
+
 [[shortcuts.terminal]]
 key = "t"
 modifiers = ["cmd"]
-action = "new_tab"              # 动作: 新建标签页
+action = "new_tab"
 
 [[shortcuts.terminal]]
 key = "w"
 modifiers = ["cmd"]
-action = "close_tab"            # 动作: 关闭当前标签页
+action = "close_tab"
 
-# 标签页切换
 [[shortcuts.terminal]]
 key = "1"
 modifiers = ["cmd"]
-action = "switch_to_tab_1"      # 动作: 切换到第1个标签页
+action = "switch_to_tab_1"
 
 [[shortcuts.terminal]]
 key = "2"
 modifiers = ["cmd"]
-action = "switch_to_tab_2"      # 动作: 切换到第2个标签页
+action = "switch_to_tab_2"
 
 [[shortcuts.terminal]]
 key = "3"
 modifiers = ["cmd"]
-action = "switch_to_tab_3"      # 动作: 切换到第3个标签页
+action = "switch_to_tab_3"
 
 [[shortcuts.terminal]]
 key = "4"
 modifiers = ["cmd"]
-action = "switch_to_tab_4"      # 动作: 切换到第4个标签页
+action = "switch_to_tab_4"
 
 [[shortcuts.terminal]]
 key = "5"
 modifiers = ["cmd"]
-action = "switch_to_tab_5"      # 动作: 切换到第5个标签页
+action = "switch_to_tab_5"
 
 [[shortcuts.terminal]]
 key = "9"
 modifiers = ["cmd"]
-action = "switch_to_last_tab"   # 动作: 切换到最后一个标签页
+action = "switch_to_last_tab"
 
-# 补全功能
 [[shortcuts.terminal]]
 key = "right"
 modifiers = ["cmd"]
-action = "accept_completion"    # 动作: 接受当前补全建议
+action = "accept_completion"
 
-# 自定义快捷键
-# 示例格式:
-# [[shortcuts.custom]]
-# key = "l"
-# modifiers = ["cmd", "shift"]
-# action = "custom_action_name"
+[[shortcuts.terminal]]
+key = "k"
+modifiers = ["cmd"]
+action = "clear_terminal"
+
+[[shortcuts.terminal]]
+key = "="
+modifiers = ["cmd"]
+action = "increase_font_size"
+
+[[shortcuts.terminal]]
+key = "-"
+modifiers = ["cmd"]
+action = "decrease_font_size"

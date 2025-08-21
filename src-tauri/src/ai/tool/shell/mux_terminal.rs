@@ -16,8 +16,8 @@ use tauri::{AppHandle, Emitter, Runtime, State};
 use tracing::{debug, error, info, warn};
 
 use crate::mux::{
-    get_mux, MuxNotification, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager,
-    ShellManagerStats, TerminalConfig, TerminalError, ErrorHandler, TerminalResult,
+    get_mux, ErrorHandler, MuxNotification, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager,
+    ShellManagerStats, TerminalConfig, TerminalError, TerminalResult,
 };
 
 /// 统一的错误处理函数（使用新的错误系统）
@@ -100,8 +100,7 @@ pub async fn create_terminal<R: Runtime>(
     debug!("当前Mux状态 - 面板数量: {}", get_mux().pane_count());
 
     // 参数验证
-    validate_terminal_size(rows, cols)
-        .map_err(handle_terminal_error)?;
+    validate_terminal_size(rows, cols).map_err(handle_terminal_error)?;
 
     let mux = get_mux();
     let size = PtySize::new(rows, cols);
@@ -112,11 +111,11 @@ pub async fn create_terminal<R: Runtime>(
         shell_config.working_directory = Some(working_dir.clone().into());
         let config = TerminalConfig::with_shell(shell_config);
 
-        mux.create_pane_with_config(size, &config).await
+        mux.create_pane_with_config(size, &config)
+            .await
             .map(|pane_id| (pane_id, Some(working_dir)))
     } else {
-        mux.create_pane(size).await
-            .map(|pane_id| (pane_id, None))
+        mux.create_pane(size).await.map(|pane_id| (pane_id, None))
     };
 
     match result {
@@ -135,9 +134,11 @@ pub async fn create_terminal<R: Runtime>(
             );
             Ok(pane_id.as_u32())
         }
-        Err(e) => Err(handle_terminal_error(
-            TerminalError::pane("创建终端", 0, e.to_string())
-        ))
+        Err(e) => Err(handle_terminal_error(TerminalError::pane(
+            "创建终端",
+            0,
+            e.to_string(),
+        ))),
     }
 }
 
@@ -163,12 +164,10 @@ pub async fn write_to_terminal(
 
     // 参数验证
     if data.is_empty() {
-        return Err(handle_terminal_error(
-            TerminalError::validation(
-                "terminal_data",
-                format!("写入数据不能为空 (面板ID: {})", pane_id)
-            )
-        ));
+        return Err(handle_terminal_error(TerminalError::validation(
+            "terminal_data",
+            format!("写入数据不能为空 (面板ID: {})", pane_id),
+        )));
     }
 
     let mux = get_mux();
@@ -177,16 +176,14 @@ pub async fn write_to_terminal(
     match mux.write_to_pane(pane_id_obj, data.as_bytes()) {
         Ok(_) => {
             let processing_time = start_time.elapsed().as_millis();
-            debug!(
-                "写入终端成功: ID={}, 耗时: {}ms",
-                pane_id,
-                processing_time
-            );
+            debug!("写入终端成功: ID={}, 耗时: {}ms", pane_id, processing_time);
             Ok(())
         }
-        Err(e) => Err(handle_terminal_error(
-            TerminalError::pane("写入终端", pane_id, e.to_string())
-        ))
+        Err(e) => Err(handle_terminal_error(TerminalError::pane(
+            "写入终端",
+            pane_id,
+            e.to_string(),
+        ))),
     }
 }
 
@@ -207,8 +204,7 @@ pub async fn resize_terminal(
     debug!("开始调整终端大小: ID={}, 大小={}x{}", pane_id, cols, rows);
 
     // 参数验证
-    validate_terminal_size(rows, cols)
-        .map_err(handle_terminal_error)?;
+    validate_terminal_size(rows, cols).map_err(handle_terminal_error)?;
 
     let mux = get_mux();
     let pane_id_obj = PaneId::from(pane_id);
@@ -219,14 +215,15 @@ pub async fn resize_terminal(
             let processing_time = start_time.elapsed().as_millis();
             debug!(
                 "调整终端大小成功: ID={}, 耗时: {}ms",
-                pane_id,
-                processing_time
+                pane_id, processing_time
             );
             Ok(())
         }
-        Err(e) => Err(handle_terminal_error(
-            TerminalError::pane("调整终端大小", pane_id, e.to_string())
-        ))
+        Err(e) => Err(handle_terminal_error(TerminalError::pane(
+            "调整终端大小",
+            pane_id,
+            e.to_string(),
+        ))),
     }
 }
 
@@ -269,15 +266,16 @@ pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> R
                 let processing_time = start_time.elapsed().as_millis();
                 warn!(
                     "尝试关闭不存在的面板: ID={}, 可能已被其他操作关闭, 耗时: {}ms",
-                    pane_id,
-                    processing_time
+                    pane_id, processing_time
                 );
                 Ok(())
             } else {
                 // 其他错误，返回失败
-                Err(handle_terminal_error(
-                    TerminalError::pane("关闭终端", pane_id, e.to_string())
-                ))
+                Err(handle_terminal_error(TerminalError::pane(
+                    "关闭终端",
+                    pane_id,
+                    e.to_string(),
+                )))
             }
         }
     }
@@ -354,10 +352,13 @@ fn notification_to_tauri_payload(
         }
         MuxNotification::PaneCwdChanged { pane_id, cwd } => {
             // 暂时忽略CWD变化事件，或者可以创建相应的事件结构
-            ("pane_cwd_changed", serde_json::json!({
-                "pane_id": pane_id,
-                "cwd": cwd
-            }))
+            (
+                "pane_cwd_changed",
+                serde_json::json!({
+                    "pane_id": pane_id,
+                    "cwd": cwd
+                }),
+            )
         }
     }
 }
@@ -506,7 +507,8 @@ pub async fn get_available_shells() -> Result<Vec<ShellInfo>, String> {
 
     let shells = ErrorHandler::handle_panic("获取可用shell列表", || {
         ShellManager::detect_available_shells()
-    }).map_err(handle_terminal_error)?;
+    })
+    .map_err(handle_terminal_error)?;
 
     let processing_time = start_time.elapsed().as_millis();
     debug!(
@@ -536,9 +538,9 @@ pub async fn get_default_shell() -> Result<ShellInfo, String> {
     let start_time = Instant::now();
     debug!("开始获取系统默认shell");
 
-    let default_shell = ErrorHandler::handle_panic("获取默认shell", || {
-        ShellManager::get_default_shell()
-    }).map_err(handle_terminal_error)?;
+    let default_shell =
+        ErrorHandler::handle_panic("获取默认shell", || ShellManager::get_default_shell())
+            .map_err(handle_terminal_error)?;
 
     let processing_time = start_time.elapsed().as_millis();
     debug!(
@@ -563,15 +565,13 @@ pub async fn get_default_shell() -> Result<ShellInfo, String> {
 #[tauri::command]
 pub async fn validate_shell_path(path: String) -> Result<bool, String> {
     let start_time = Instant::now();
-    debug!("开始验证shell路径: {}", path);
 
     // 参数验证
-    validate_non_empty_string(&path, "Shell路径")
-        .map_err(handle_terminal_error)?;
+    validate_non_empty_string(&path, "Shell路径").map_err(handle_terminal_error)?;
 
-    let is_valid = ErrorHandler::handle_panic("验证shell路径", || {
-        ShellManager::validate_shell(&path)
-    }).map_err(handle_terminal_error)?;
+    let is_valid =
+        ErrorHandler::handle_panic("验证shell路径", || ShellManager::validate_shell(&path))
+            .map_err(handle_terminal_error)?;
 
     let processing_time = start_time.elapsed().as_millis();
     debug!(

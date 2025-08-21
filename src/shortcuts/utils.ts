@@ -3,7 +3,7 @@
  */
 
 import { KEY_NORMALIZATION_MAP, MODIFIER_KEYS } from './constants'
-import type { ShortcutBinding } from './types'
+import type { ShortcutBinding } from '@/types'
 
 /**
  * 标准化按键名称
@@ -88,14 +88,8 @@ export function isShortcutMatch(event: KeyboardEvent, shortcut: ShortcutBinding)
 /**
  * 提取动作名称
  */
-export function extractActionName(action: any): string {
-  if (typeof action === 'string') {
-    return action
-  }
-  if (typeof action === 'object' && action.action_type) {
-    return action.action_type
-  }
-  return 'unknown'
+export function extractActionName(action: string): string {
+  return action
 }
 
 /**

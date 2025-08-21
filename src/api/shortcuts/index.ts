@@ -48,16 +48,6 @@ export class ShortcutsApi {
     }
   }
 
-  async validateBinding(binding: ShortcutBinding): Promise<ShortcutValidationResult> {
-    try {
-      return await invoke<ShortcutValidationResult>('validate_shortcut_binding', {
-        shortcutBinding: binding,
-      })
-    } catch (error) {
-      throw new Error(`验证快捷键绑定失败: ${error}`)
-    }
-  }
-
   async detectConflicts(config: ShortcutsConfig): Promise<ConflictDetectionResult> {
     try {
       return await invoke<ConflictDetectionResult>('detect_shortcuts_conflicts', {
@@ -65,17 +55,6 @@ export class ShortcutsApi {
       })
     } catch (error) {
       throw new Error(`检测快捷键冲突失败: ${error}`)
-    }
-  }
-
-  async adaptToPlatform(config: ShortcutsConfig, platform: Platform): Promise<ShortcutsConfig> {
-    try {
-      return await invoke<ShortcutsConfig>('adapt_shortcuts_for_platform', {
-        shortcutsConfig: config,
-        targetPlatform: platform,
-      })
-    } catch (error) {
-      throw new Error(`适配快捷键到平台失败: ${error}`)
     }
   }
 
@@ -105,7 +84,7 @@ export class ShortcutsApi {
 
   async addShortcut(category: ShortcutCategory, shortcut: ShortcutBinding): Promise<void> {
     try {
-      await invoke('add_shortcut', { category, shortcut })
+      await invoke('add_shortcut', { category, binding: shortcut })
     } catch (error) {
       throw new Error(`添加快捷键失败: ${error}`)
     }
@@ -121,7 +100,7 @@ export class ShortcutsApi {
 
   async updateShortcut(category: ShortcutCategory, index: number, shortcut: ShortcutBinding): Promise<void> {
     try {
-      await invoke('update_shortcut', { category, index, shortcut })
+      await invoke('update_shortcut', { category, index, binding: shortcut })
     } catch (error) {
       throw new Error(`更新快捷键失败: ${error}`)
     }

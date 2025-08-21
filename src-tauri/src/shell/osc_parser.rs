@@ -4,6 +4,7 @@
 //! 支持完整的Shell Integration协议，包括命令生命周期、CWD同步等
 
 use anyhow::Result;
+use percent_encoding;
 use regex::{Captures, Regex};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
@@ -42,8 +43,6 @@ pub enum OscSequence {
         marker: IntegrationMarker,
         data: Option<String>,
     },
-
-   
 
     /// OSC 9;9 序列 - Windows Terminal CWD
     WindowsTerminalCwd { path: String },
@@ -127,10 +126,8 @@ impl OscParser {
         })
     }
 
-
     /// 解析文本中的OSC序列
     pub fn parse(&self, data: &str) -> Vec<OscSequence> {
-        debug!("OSC Parser received data: {:?}", data);
         let mut sequences = Vec::new();
 
         // 解析 Shell Integration 序列 (OSC 633)
@@ -139,8 +136,8 @@ impl OscParser {
                 let marker_str = marker_match.as_str();
                 let data_str = captures.get(2).map(|m| m.as_str()).unwrap_or("");
 
-                if let Some(sequence) = self.parse_shell_integration_sequence(marker_str, data_str) {
-                    debug!("解析到 Shell Integration 序列: {:?}", sequence);
+                if let Some(sequence) = self.parse_shell_integration_sequence(marker_str, data_str)
+                {
                     sequences.push(sequence);
                 }
             }
@@ -150,54 +147,7 @@ impl OscParser {
         for captures in self.cwd_regex.captures_iter(data) {
             if let Some(data_match) = captures.get(1) {
                 if let Some(sequence) = self.parse_cwd_sequence(data_match.as_str()) {
-                    debug!("解析到CWD序列: {:?}", sequence);
                     sequences.push(sequence);
-                }
-            }
-        }
-
-        // 解析窗口标题序列 (OSC 0/1/2)
-        for captures in self.title_regex.captures_iter(data) {
-            if let (Some(type_match), Some(title_match)) = (captures.get(1), captures.get(2)) {
-                let title_type = match type_match.as_str() {
-                    "0" => WindowTitleType::Both,
-                    "1" => WindowTitleType::Icon,
-                    "2" => WindowTitleType::Window,
-                    _ => continue,
-                };
-                let title = title_match.as_str().to_string();
-
-                let sequence = OscSequence::WindowTitle { title_type, title };
-                debug!("解析到窗口标题序列: {:?}", sequence);
-                sequences.push(sequence);
-            }
-        }
-
-        // 解析其他OSC序列
-        for captures in self.osc_regex.captures_iter(data) {
-            if let (Some(number_match), Some(data_match)) = (captures.get(1), captures.get(2)) {
-                let number = number_match.as_str();
-                let sequence_data = data_match.as_str();
-
-                // 跳过已经处理过的序列
-                if matches!(number, "0" | "1" | "2" | "7" | "633" | "1337") {
-                    continue;
-                }
-
-                match self.parse_osc_sequence(number, sequence_data) {
-                    Some(sequence) => {
-                        debug!("解析到OSC序列: {:?}", sequence);
-                        sequences.push(sequence);
-                    }
-                    None => {
-                        // 记录未知序列用于调试
-                        let sequence = OscSequence::Unknown {
-                            number: number.to_string(),
-                            data: sequence_data.to_string(),
-                        };
-                        debug!("未识别的OSC序列: {:?}", sequence);
-                        sequences.push(sequence);
-                    }
                 }
             }
         }
@@ -278,16 +228,40 @@ impl OscParser {
         // 尝试解析file://格式的URL
         if let Ok(url) = Url::parse(data) {
             if url.scheme() == "file" {
-                let path = url.path().to_string();
+                let mut path = url.path().to_string();
+
+                // 处理Windows路径格式
+                #[cfg(windows)]
+                {
+                    if path.starts_with('/') && path.len() > 3 && path.chars().nth(2) == Some(':') {
+                        path = path[1..].to_string();
+                    }
+                }
+
                 return Some(OscSequence::CurrentWorkingDirectory { path });
             }
         }
 
-        // 如果不是URL格式，直接作为路径处理
+        // 处理直接路径格式
         if !data.is_empty() {
-            Some(OscSequence::CurrentWorkingDirectory {
-                path: data.to_string(),
-            })
+            let path = if data.starts_with("file://") {
+                let without_scheme = data.strip_prefix("file://").unwrap_or(data);
+                if let Some(slash_pos) = without_scheme.find('/') {
+                    without_scheme[slash_pos..].to_string()
+                } else {
+                    without_scheme.to_string()
+                }
+            } else {
+                data.to_string()
+            };
+
+            // URL解码
+            let decoded_path = percent_encoding::percent_decode_str(&path)
+                .decode_utf8()
+                .unwrap_or_else(|_| std::borrow::Cow::Borrowed(&path))
+                .to_string();
+
+            Some(OscSequence::CurrentWorkingDirectory { path: decoded_path })
         } else {
             None
         }
@@ -413,7 +387,6 @@ impl OscGenerator {
         format!("\x1b]7;file://{}\x07", path)
     }
 
-
     /// 生成Windows Terminal CWD序列
     pub fn windows_terminal_cwd_sequence(path: &str) -> String {
         format!("\x1b]9;9;{}\x07", path)
@@ -498,7 +471,8 @@ mod tests {
     #[test]
     fn test_osc_generator() {
         // 测试 Shell Integration 633 序列生成
-        let prompt_start = OscGenerator::shell_integration_sequence(&IntegrationMarker::PromptStart, None);
+        let prompt_start =
+            OscGenerator::shell_integration_sequence(&IntegrationMarker::PromptStart, None);
         assert_eq!(prompt_start, "\x1b]633;A\x07");
 
         let command_finished = OscGenerator::shell_integration_sequence(

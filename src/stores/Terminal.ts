@@ -1,10 +1,10 @@
 import { shellApi, terminalApi } from '@/api'
 import type { ShellInfo } from '@/api'
 import { useSessionStore } from '@/stores/session'
-import type { TerminalState } from '@/types/storage'
+import type { TerminalState } from '@/types/domain/storage'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { debounce } from 'lodash-es'
 
 // 组件可以注册的回调函数类型
@@ -30,7 +30,12 @@ interface ShellManagerState {
 }
 
 // 终端运行时状态，包含后端进程信息的 TerminalState
-export interface RuntimeTerminalState extends TerminalState {
+export interface RuntimeTerminalState {
+  id: string
+  title: string
+  cwd: string
+  active: boolean
+  shell?: string
   backendId: number | null // 后端进程ID
   shellInfo?: ShellInfo // Shell信息
 }
@@ -387,21 +392,25 @@ export const useTerminalStore = defineStore('Terminal', () => {
   }
 
   /**
-   * 更新终端的当前工作目录
+   * 更新终端的当前工作目录 - 增强版
    */
   const updateTerminalCwd = (id: string, cwd: string) => {
     const terminal = terminals.value.find(t => t.id === id)
-    if (terminal && terminal.cwd !== cwd) {
-      const oldCwd = terminal.cwd
-      terminal.cwd = cwd
-
-      // 智能更新终端标题
-      updateTerminalTitle(terminal, cwd)
-
-      console.log(`📁 [Terminal] 更新终端 ${id} 工作目录: ${oldCwd} -> ${cwd}`)
-      // 使用防抖同步
-      debouncedSync()
+    if (!terminal) {
+      console.warn(`终端 ${id} 不存在，无法更新CWD`)
+      return
     }
+
+    if (terminal.cwd === cwd) {
+      return // 路径没有变化，无需更新
+    }
+
+    terminal.cwd = cwd
+
+    // 智能更新终端标题
+    updateTerminalTitle(terminal, cwd)
+
+    debouncedSync()
   }
 
   /**

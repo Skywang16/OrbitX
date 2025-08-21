@@ -104,6 +104,21 @@ pub fn create_default_shortcuts_config() -> ShortcutsConfig {
                 modifiers: vec!["cmd".to_string()],
                 action: ShortcutAction::Simple("paste_from_clipboard".to_string()),
             },
+            ShortcutBinding {
+                key: "f".to_string(),
+                modifiers: vec!["cmd".to_string()],
+                action: ShortcutAction::Simple("terminal_search".to_string()),
+            },
+            ShortcutBinding {
+                key: "s".to_string(),
+                modifiers: vec!["cmd".to_string()],
+                action: ShortcutAction::Simple("open_settings".to_string()),
+            },
+            ShortcutBinding {
+                key: "d".to_string(),
+                modifiers: vec!["cmd".to_string(), "shift".to_string()],
+                action: ShortcutAction::Simple("toggle_theme".to_string()),
+            },
         ],
         terminal: vec![
             // 标签页管理
@@ -153,6 +168,23 @@ pub fn create_default_shortcuts_config() -> ShortcutsConfig {
                 key: "right".to_string(),
                 modifiers: vec!["cmd".to_string()],
                 action: ShortcutAction::Simple("accept_completion".to_string()),
+            },
+            // 终端清理
+            ShortcutBinding {
+                key: "k".to_string(),
+                modifiers: vec!["cmd".to_string()],
+                action: ShortcutAction::Simple("clear_terminal".to_string()),
+            },
+            // 字体大小调整
+            ShortcutBinding {
+                key: "=".to_string(),
+                modifiers: vec!["cmd".to_string()],
+                action: ShortcutAction::Simple("increase_font_size".to_string()),
+            },
+            ShortcutBinding {
+                key: "-".to_string(),
+                modifiers: vec!["cmd".to_string()],
+                action: ShortcutAction::Simple("decrease_font_size".to_string()),
             },
         ],
         custom: vec![],
@@ -208,7 +240,7 @@ mod tests {
         // 验证快捷键配置
         assert!(!config.shortcuts.global.is_empty());
         assert!(!config.shortcuts.terminal.is_empty());
-        assert!(!config.shortcuts.custom.is_empty());
+        assert!(config.shortcuts.custom.is_empty());
     }
 
     #[test]
@@ -249,6 +281,6 @@ mod tests {
         let shortcuts_config = create_default_shortcuts_config();
         assert!(!shortcuts_config.global.is_empty());
         assert!(!shortcuts_config.terminal.is_empty());
-        assert!(!shortcuts_config.custom.is_empty());
+        assert!(shortcuts_config.custom.is_empty());
     }
 }

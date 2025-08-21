@@ -384,7 +384,12 @@ pub fn run() {
             // AST代码分析命令
             analyze_code,
             // 文件拖拽处理命令
-            handle_file_open
+            handle_file_open,
+            // Shell integration命令
+            setup_shell_integration,
+            check_shell_integration_status,
+            get_pane_cwd,
+            update_pane_cwd
         ])
         .setup(|app| {
             // 使用统一的错误处理初始化各个状态管理器
@@ -513,42 +518,7 @@ pub fn run() {
                 app.manage(terminal_mux);
                 info!("TerminalMux状态管理器已初始化");
 
-                // 初始化Shell Integration
-                info!("开始设置Shell Integration");
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    let paths = app_handle
-                        .state::<config::paths::ConfigPaths>()
-                        .inner()
-                        .clone();
-                    let config_manager = app_handle.state::<ConfigManagerState>();
-                    match config_manager.toml_manager.get_config().await {
-                        Ok(config) => {
-                            let default_shell_path = config.terminal.shell.default_shell;
-                            let shell_type = shell::script_generator::ShellType::from_program(
-                                &default_shell_path,
-                            );
-
-                            let integration_config =
-                                shell::script_generator::ShellIntegrationConfig::default();
-                            let generator = shell::script_generator::ShellScriptGenerator::new(
-                                integration_config,
-                            );
-
-                            if let Err(e) = generator.setup_shell_integration(&shell_type, &paths) {
-                                warn!("Shell Integration设置失败: {}", e);
-                            } else {
-                                info!(
-                                    "Shell Integration设置成功 for shell: {:?}",
-                                    shell_type.display_name()
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            warn!("无法获取配置以设置Shell Integration: {}", e);
-                        }
-                    }
-                });
+                // Shell Integration现在通过环境变量自动启用，无需复杂初始化
 
                 // 设置Tauri集成
                 info!("开始设置Tauri事件集成");

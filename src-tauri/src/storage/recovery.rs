@@ -52,9 +52,7 @@ pub struct RecoveryManager {
     paths: StoragePaths,
     /// 恢复策略配置
     strategies: HashMap<StorageLayer, Vec<RecoveryStrategy>>,
-    /// 最大重试次数
-    #[allow(dead_code)]
-    max_retry_attempts: u32,
+
 }
 
 impl RecoveryManager {
@@ -109,7 +107,7 @@ impl RecoveryManager {
         Self {
             paths,
             strategies,
-            max_retry_attempts: 3,
+
         }
     }
 

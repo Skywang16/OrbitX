@@ -111,7 +111,7 @@ impl ShellScriptGenerator {
         Ok(script)
     }
 
-    /// 生成Bash集成脚本
+    /// 生成Bash集成脚本（优化版）
     fn generate_bash_script(&self) -> String {
         let mut script = String::new();
 
@@ -119,10 +119,10 @@ impl ShellScriptGenerator {
         script.push_str(
             r#"
 # OrbitX Shell Integration for Bash
-if [[ -n "$ORBITX_SHELL_INTEGRATION" ]]; then
+if [[ -n "$ORBITX_SHELL_INTEGRATION_LOADED" ]]; then
     return 0
 fi
-export ORBITX_SHELL_INTEGRATION=1
+export ORBITX_SHELL_INTEGRATION_LOADED=1
 "#,
         );
 
@@ -153,12 +153,7 @@ __orbitx_precmd() {
     printf '\e]633;D;%d\e\\' "$exit_code"
     __orbitx_update_cwd
 }
-"#,
-            );
 
-            // 集成到Bash钩子系统
-            script.push_str(
-                r#"
 # 集成到Bash提示符系统
 if [[ -z "$PROMPT_COMMAND" ]]; then
     PROMPT_COMMAND="__orbitx_precmd"
@@ -166,22 +161,14 @@ else
     PROMPT_COMMAND="__orbitx_precmd;$PROMPT_COMMAND"
 fi
 
-# 设置preexec钩子
-if [[ -z "$preexec_functions" ]]; then
-    preexec_functions=(__orbitx_preexec)
-else
-    preexec_functions+=(__orbitx_preexec)
-fi
-
-# 如果没有preexec支持，使用trap DEBUG的fallback
-if ! type preexec_invoke_exec &>/dev/null; then
-    __orbitx_debug_trap() {
-        if [[ "$BASH_COMMAND" != "__orbitx_precmd"* ]]; then
-            __orbitx_preexec
-        fi
-    }
-    trap '__orbitx_debug_trap' DEBUG
-fi
+# 设置preexec钩子（使用trap DEBUG）
+__orbitx_debug_trap() {
+    # 只在非提示符命令时触发
+    if [[ "$BASH_COMMAND" != "__orbitx_precmd"* && "$BASH_COMMAND" != "__orbitx_update_"* ]]; then
+        __orbitx_preexec
+    fi
+}
+trap '__orbitx_debug_trap' DEBUG
 "#,
             );
         } else if self.config.enable_cwd_sync {
@@ -216,104 +203,100 @@ fi
             );
         }
 
+        // 加载用户原始配置（保持用户环境）
+        script.push_str(
+            r#"
+# 加载用户原始配置
+[[ -f ~/.bashrc ]] && source ~/.bashrc
+
+# 初始化CWD和标题（静默执行）
+__orbitx_update_cwd 2>/dev/null || true
+[[ "$(type -t __orbitx_update_title)" == "function" ]] && __orbitx_update_title 2>/dev/null || true
+"#,
+        );
+
         script
     }
 
-    /// 生成Zsh集成脚本
+    /// 生成Zsh集成脚本（VSCode风格优化版）
     fn generate_zsh_script(&self) -> String {
         let mut script = String::new();
 
-        // Start of script and check for existing integration
+        // 检查是否已经注入过，防止重复加载
         script.push_str(
             r#"
-# OrbitX Shell Integration for Zsh
-if [[ -n "$ORBITX_SHELL_INTEGRATION" ]]; then
+# OrbitX Shell Integration for Zsh (VSCode style)
+if [[ -n "$ORBITX_SHELL_INTEGRATION_LOADED" ]]; then
     return 0
 fi
-export ORBITX_SHELL_INTEGRATION=1
-
-# Shell-side logging for debugging
-__orbitx_log() {
-    echo "$(date): $1" >> "${HOME}/.orbitx_shell_debug.log"
-}
-__orbitx_log "Zsh integration script started."
+export ORBITX_SHELL_INTEGRATION_LOADED=1
 "#,
         );
 
-        // Define core functions
-        script.push_str(
-            r#"
+        // CWD同步功能 - OSC 7序列
+        if self.config.enable_cwd_sync {
+            script.push_str(
+                r#"
+# CWD同步函数 (OSC 7)
 __orbitx_update_cwd() {
-    __orbitx_log "Updating CWD to $PWD"
     printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$PWD"
 }
-
-__orbitx_update_title() {
-    __orbitx_log "Updating title."
-    printf '\e]2;%s@%s:%s\e\\' "$USER" "$HOSTNAME" "${PWD/#$HOME/~}"
-}
 "#,
-        );
+            );
+        }
 
-        // Command tracking hooks
+        // 命令跟踪功能（VSCode OSC 633协议）
         if self.config.enable_command_tracking {
             script.push_str(
                 r#"
-__orbitx_prompt_start() { printf '\e]633;A\e\\'; }
-__orbitx_prompt_end() { printf '\e]633;B\e\\'; }
-__orbitx_command_start() { printf '\e]633;C\e\\'; }
-__orbitx_command_end() { printf '\e]633;D;%d\e\\' "$?"; }
-__orbitx_precmd() { __orbitx_command_end; }
-__orbitx_preexec() { __orbitx_command_start; }
-"#,
-            );
-        }
+# VSCode协议命令跟踪 (OSC 633)
+__orbitx_preexec() {
+    printf '\e]633;B\e\\'
+}
 
-        // Register hooks
-        script.push_str(
-            r#"
-# Ensure hook function arrays exist
-if ! (( ${+precmd_functions} )); then precmd_functions=(); fi
-if ! (( ${+preexec_functions} )); then preexec_functions=(); fi
-if ! (( ${+chpwd_functions} )); then chpwd_functions=(); fi
-"#,
-        );
-
-        let mut hooks: Vec<(&str, &str)> = Vec::new();
-        if self.config.enable_command_tracking {
-            hooks.push(("precmd_functions", "__orbitx_prompt_start"));
-            hooks.push(("precmd_functions", "__orbitx_precmd"));
-            hooks.push(("preexec_functions", "__orbitx_prompt_end"));
-            hooks.push(("preexec_functions", "__orbitx_preexec"));
-        }
-        if self.config.enable_cwd_sync {
-            hooks.push(("chpwd_functions", "__orbitx_update_cwd"));
-        }
-        if self.config.enable_title_updates {
-            hooks.push(("chpwd_functions", "__orbitx_update_title"));
-            hooks.push(("precmd_functions", "__orbitx_update_title"));
-        }
-
-        for (hook_array, function_name) in hooks {
-            // Use a more robust method to add hooks, checking for existence before adding.
-            let hook_line = format!(
-                "if [[ ! \" ${{{hook_array}[@]}} \" =~ \" {function_name} \" ]]; then {hook_array}+=({function_name}); fi\n",
-                hook_array = hook_array,
-                function_name = function_name
-            );
-            script.push_str(&hook_line);
-        }
-
-        // Final setup
-        script.push_str(
-            r#"
-__orbitx_log "Hook functions registered."
-
-# Initial update
-if [[ -n "$ZSH_VERSION" ]]; then
+__orbitx_precmd() {
+    local exit_code=$?
+    printf '\e]633;D;%d\e\\' "$exit_code"
     __orbitx_update_cwd
-    __orbitx_update_title
-fi
+}
+
+# 集成到zsh钩子系统
+autoload -U add-zsh-hook 2>/dev/null || return
+add-zsh-hook preexec __orbitx_preexec
+add-zsh-hook precmd __orbitx_precmd
+"#,
+            );
+        } else if self.config.enable_cwd_sync {
+            // 仅启用CWD同步
+            script.push_str(
+                r#"
+# 仅CWD同步
+autoload -U add-zsh-hook 2>/dev/null || return
+add-zsh-hook chpwd __orbitx_update_cwd
+"#,
+            );
+        }
+
+        // 窗口标题更新
+        if self.config.enable_title_updates {
+            script.push_str(
+                r#"
+# 窗口标题更新
+__orbitx_update_title() {
+    printf '\e]2;%s@%s:%s\e\\' "$USER" "$HOSTNAME" "${PWD/#$HOME/~}"
+}
+autoload -U add-zsh-hook 2>/dev/null || return
+add-zsh-hook chpwd __orbitx_update_title
+"#,
+            );
+        }
+
+        // 初始化 - 发送初始状态
+        script.push_str(
+            r#"
+# 初始化CWD和标题（静默执行）
+__orbitx_update_cwd 2>/dev/null || true
+[[ -n "$__orbitx_update_title" ]] && __orbitx_update_title 2>/dev/null || true
 "#,
         );
 
