@@ -1,5 +1,15 @@
 <script setup lang="ts">
   import TerminalView from '@/views/Terminal/TerminalView.vue'
+  import { useShortcutListener } from '@/shortcuts'
+  import { onMounted } from 'vue'
+
+  // 初始化快捷键监听器
+  const { isListening, reloadConfig } = useShortcutListener()
+
+  onMounted(() => {
+    // 暴露重新加载配置功能到控制台
+    ;(window as any).reloadShortcuts = reloadConfig
+  })
 </script>
 
 <template>

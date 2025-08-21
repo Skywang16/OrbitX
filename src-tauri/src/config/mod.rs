@@ -1,8 +1,8 @@
 /*!
  * 统一配置系统模块
  *
- * 提供基于 TOML 格式的统一配置管理功能，包括配置解析、验证、
- * 缓存和文件监听等核心功能。
+ * 提供基于 TOML 格式的统一配置管理功能，包括配置解析、验证和
+ * 缓存等核心功能。
  */
 
 pub mod commands;
@@ -23,10 +23,12 @@ pub use commands::{
 };
 pub use defaults::*;
 pub use paths::ConfigPaths;
-pub use shortcuts::commands::{
-    adapt_shortcuts_for_platform, add_shortcut, get_current_platform, get_shortcuts_config,
-    get_shortcuts_statistics, remove_shortcut, reset_shortcuts_to_defaults, update_shortcut,
-    update_shortcuts_config,
+pub use shortcuts::{
+    add_shortcut, detect_shortcuts_conflicts, execute_shortcut_action, export_shortcuts_config,
+    get_action_metadata, get_current_platform, get_registered_actions, get_shortcuts_config,
+    get_shortcuts_statistics, import_shortcuts_config, remove_shortcut, reset_shortcuts_to_defaults,
+    search_shortcuts, update_shortcut, update_shortcuts_config, validate_key_combination,
+    validate_shortcuts_config, ShortcutManagerState,
 };
 pub use terminal_commands::{
     detect_system_shells, get_shell_info, get_terminal_config, reset_terminal_config_to_defaults,

@@ -55,7 +55,7 @@ close_on_exit = true            # Shell 退出时是否自动关闭标签页
 confirm_close = false           # 关闭标签页时是否显示确认对话框
 
 # ==================== 快捷键设置 ====================
-# 全局快捷键 (在任何情况下都生效)
+# 全局快捷键
 [[shortcuts.global]]
 key = "c"                       # 按键
 modifiers = ["cmd"]             # 修饰键: cmd, ctrl, alt, shift
@@ -66,12 +66,7 @@ key = "v"
 modifiers = ["cmd"]
 action = "paste_from_clipboard" # 动作: 从剪贴板粘贴
 
-[[shortcuts.global]]
-key = "f"
-modifiers = ["cmd"]
-action = "search_forward"       # 动作: 向前搜索
-
-# 终端专用快捷键 (仅在终端界面生效)
+# 终端专用快捷键
 [[shortcuts.terminal]]
 key = "t"
 modifiers = ["cmd"]
@@ -81,40 +76,6 @@ action = "new_tab"              # 动作: 新建标签页
 key = "w"
 modifiers = ["cmd"]
 action = "close_tab"            # 动作: 关闭当前标签页
-
-[[shortcuts.terminal]]
-key = "n"
-modifiers = ["cmd"]
-action = "new_window"           # 动作: 新建窗口
-
-[[shortcuts.terminal]]
-key = "d"
-modifiers = ["cmd"]
-action = "split_vertical"       # 动作: 垂直分割面板
-
-[[shortcuts.terminal]]
-key = "d"
-modifiers = [
-    "cmd",
-    "shift",
-]
-action = "split_horizontal"     # 动作: 水平分割面板
-
-# 字体大小控制
-[[shortcuts.terminal]]
-key = "="
-modifiers = ["cmd"]
-action = "increase_font_size"   # 动作: 增大字体
-
-[[shortcuts.terminal]]
-key = "-"
-modifiers = ["cmd"]
-action = "decrease_font_size"   # 动作: 减小字体
-
-[[shortcuts.terminal]]
-key = "0"
-modifiers = ["cmd"]
-action = "reset_font_size"      # 动作: 重置字体大小
 
 # 标签页切换
 [[shortcuts.terminal]]
@@ -128,33 +89,34 @@ modifiers = ["cmd"]
 action = "switch_to_tab_2"      # 动作: 切换到第2个标签页
 
 [[shortcuts.terminal]]
+key = "3"
+modifiers = ["cmd"]
+action = "switch_to_tab_3"      # 动作: 切换到第3个标签页
+
+[[shortcuts.terminal]]
+key = "4"
+modifiers = ["cmd"]
+action = "switch_to_tab_4"      # 动作: 切换到第4个标签页
+
+[[shortcuts.terminal]]
+key = "5"
+modifiers = ["cmd"]
+action = "switch_to_tab_5"      # 动作: 切换到第5个标签页
+
+[[shortcuts.terminal]]
 key = "9"
 modifiers = ["cmd"]
 action = "switch_to_last_tab"   # 动作: 切换到最后一个标签页
 
-# 自定义快捷键 (用户可以自定义的快捷键)
-[[shortcuts.custom]]
-key = "l"
-modifiers = [
-    "cmd",
-    "shift",
-]
+# 补全功能
+[[shortcuts.terminal]]
+key = "right"
+modifiers = ["cmd"]
+action = "accept_completion"    # 动作: 接受当前补全建议
 
-[shortcuts.custom.action]
-type = "send_text"              # 动作类型: send_text(发送文本), run_command(运行命令)
-text = """
-ls -la
-"""                             # 要发送的文本内容
-
-[[shortcuts.custom]]
-key = "g"
-modifiers = [
-    "cmd",
-    "shift",
-]
-
-[shortcuts.custom.action]
-type = "send_text"
-text = """
-git status
-"""                             # 发送 git status 命令
+# 自定义快捷键
+# 示例格式:
+# [[shortcuts.custom]]
+# key = "l"
+# modifiers = ["cmd", "shift"]
+# action = "custom_action_name"

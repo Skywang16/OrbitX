@@ -32,7 +32,7 @@ export class ShortcutsApi {
 
   async updateConfig(config: ShortcutsConfig): Promise<void> {
     try {
-      await invoke('update_shortcuts_config', { shortcutsConfig: config })
+      await invoke('update_shortcuts_config', { config: config })
     } catch (error) {
       throw new Error(`更新快捷键配置失败: ${error}`)
     }
@@ -41,7 +41,7 @@ export class ShortcutsApi {
   async validateConfig(config: ShortcutsConfig): Promise<ShortcutValidationResult> {
     try {
       return await invoke<ShortcutValidationResult>('validate_shortcuts_config', {
-        shortcutsConfig: config,
+        config: config,
       })
     } catch (error) {
       throw new Error(`验证快捷键配置失败: ${error}`)
@@ -60,8 +60,8 @@ export class ShortcutsApi {
 
   async detectConflicts(config: ShortcutsConfig): Promise<ConflictDetectionResult> {
     try {
-      return await invoke<ConflictDetectionResult>('detect_shortcut_conflicts', {
-        shortcutsConfig: config,
+      return await invoke<ConflictDetectionResult>('detect_shortcuts_conflicts', {
+        config: config,
       })
     } catch (error) {
       throw new Error(`检测快捷键冲突失败: ${error}`)
@@ -124,6 +124,24 @@ export class ShortcutsApi {
       await invoke('update_shortcut', { category, index, shortcut })
     } catch (error) {
       throw new Error(`更新快捷键失败: ${error}`)
+    }
+  }
+
+  async executeAction(
+    action: any,
+    keyCombination: string,
+    activeTerminalId?: string | null,
+    metadata?: any
+  ): Promise<any> {
+    try {
+      return await invoke('execute_shortcut_action', {
+        action,
+        keyCombination,
+        activeTerminalId,
+        metadata,
+      })
+    } catch (error) {
+      throw new Error(`执行快捷键动作失败: ${error}`)
     }
   }
 }

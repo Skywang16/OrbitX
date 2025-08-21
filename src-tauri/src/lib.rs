@@ -74,17 +74,26 @@ use config::commands::{
     validate_theme,
     ConfigManagerState,
 };
-use config::shortcuts::commands::{
-    adapt_shortcuts_for_platform,
-    // 快捷键系统命令
+use config::shortcuts::{
+    // 全新快捷键系统命令
     add_shortcut,
+    detect_shortcuts_conflicts,
+    execute_shortcut_action,
+    export_shortcuts_config,
+    get_action_metadata,
     get_current_platform,
+    get_registered_actions,
     get_shortcuts_config,
     get_shortcuts_statistics,
+    import_shortcuts_config,
     remove_shortcut,
     reset_shortcuts_to_defaults,
+    search_shortcuts,
     update_shortcut,
     update_shortcuts_config,
+    validate_key_combination,
+    validate_shortcuts_config,
+    ShortcutManagerState,
 };
 use config::terminal_commands::{
     // 终端配置命令
@@ -346,16 +355,24 @@ pub fn run() {
             update_message_steps,
             update_message_status,
             truncate_conversation,
-            // 快捷键系统命令
+            // 全新快捷键系统命令
             get_shortcuts_config,
             update_shortcuts_config,
-            adapt_shortcuts_for_platform,
-            get_current_platform,
-            reset_shortcuts_to_defaults,
-            get_shortcuts_statistics,
+            validate_shortcuts_config,
+            detect_shortcuts_conflicts,
             add_shortcut,
             remove_shortcut,
             update_shortcut,
+            reset_shortcuts_to_defaults,
+            get_shortcuts_statistics,
+            search_shortcuts,
+            execute_shortcut_action,
+            get_current_platform,
+            export_shortcuts_config,
+            import_shortcuts_config,
+            get_registered_actions,
+            get_action_metadata,
+            validate_key_combination,
             // 存储系统命令
             storage_get_config,
             storage_update_config,
@@ -398,6 +415,19 @@ pub fn run() {
                 })?;
                 app.manage(config_state);
                 info!("配置管理器状态已初始化");
+
+                // 初始化快捷键管理器状态（依赖配置管理器）
+                info!("开始初始化快捷键管理器状态");
+                let shortcut_state = {
+                    let config_state = app.state::<ConfigManagerState>();
+                    tauri::async_runtime::block_on(async {
+                        ShortcutManagerState::new(&config_state)
+                            .await
+                            .map_err(|e| anyhow::anyhow!("快捷键管理器状态初始化失败: {}", e))
+                    })?
+                };
+                app.manage(shortcut_state);
+                info!("快捷键管理器状态已初始化");
 
                 // 提取并管理 TomlConfigManager，以便其他服务可以依赖它
                 let config_manager = app.state::<ConfigManagerState>().toml_manager.clone();

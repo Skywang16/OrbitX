@@ -325,10 +325,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
         setActiveTerminal(terminals.value[0].id)
       } else {
         activeTerminalId.value = null
-        // 异步创建新终端，避免阻塞当前操作
-        createTerminal().catch(error => {
-          console.error('自动创建新终端失败:', error)
-        })
+        // 不再自动创建新终端，避免在应用关闭时产生竞态条件
+        console.log('所有终端已关闭，等待用户操作或应用退出')
       }
     }
   }

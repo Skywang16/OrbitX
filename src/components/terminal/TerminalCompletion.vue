@@ -11,7 +11,7 @@
   import { completionApi } from '@/api'
   import type { CompletionRequest, CompletionResponse } from '@/api'
   import { handleError } from '@/utils/errorHandler'
-  import { computed, ref, watch } from 'vue'
+  import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
   import { debounce } from 'lodash-es'
 
   // Props
@@ -261,6 +261,34 @@
    * 检查是否有可用的补全建议
    */
   const hasCompletion = () => showCompletion.value && !!completionText.value && completionText.value.length > 0
+
+  // 处理快捷键触发的补全接受
+  const handleAcceptCompletionEvent = (event: Event) => {
+    if (event.type === 'accept-completion') {
+      const result = acceptCompletion()
+      if (result) {
+        // 触发一个自定义事件，让父组件（Terminal）知道有补全被接受
+        const detailEvent = new CustomEvent('completion-accepted', {
+          detail: { completion: result },
+          bubbles: true
+        })
+        event.target?.dispatchEvent(detailEvent)
+      }
+    }
+  }
+
+  // 添加事件监听
+  onMounted(() => {
+    if (props.terminalElement) {
+      props.terminalElement.addEventListener('accept-completion', handleAcceptCompletionEvent)
+    }
+  })
+
+  onUnmounted(() => {
+    if (props.terminalElement) {
+      props.terminalElement.removeEventListener('accept-completion', handleAcceptCompletionEvent)
+    }
+  })
 
   // 暴露方法给父组件
   defineExpose({

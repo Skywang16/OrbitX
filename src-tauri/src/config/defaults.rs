@@ -104,13 +104,9 @@ pub fn create_default_shortcuts_config() -> ShortcutsConfig {
                 modifiers: vec!["cmd".to_string()],
                 action: ShortcutAction::Simple("paste_from_clipboard".to_string()),
             },
-            ShortcutBinding {
-                key: "f".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("search_forward".to_string()),
-            },
         ],
         terminal: vec![
+            // 标签页管理
             ShortcutBinding {
                 key: "t".to_string(),
                 modifiers: vec!["cmd".to_string()],
@@ -121,36 +117,7 @@ pub fn create_default_shortcuts_config() -> ShortcutsConfig {
                 modifiers: vec!["cmd".to_string()],
                 action: ShortcutAction::Simple("close_tab".to_string()),
             },
-            ShortcutBinding {
-                key: "n".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("new_window".to_string()),
-            },
-            ShortcutBinding {
-                key: "d".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("split_vertical".to_string()),
-            },
-            ShortcutBinding {
-                key: "d".to_string(),
-                modifiers: vec!["cmd".to_string(), "shift".to_string()],
-                action: ShortcutAction::Simple("split_horizontal".to_string()),
-            },
-            ShortcutBinding {
-                key: "=".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("increase_font_size".to_string()),
-            },
-            ShortcutBinding {
-                key: "-".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("decrease_font_size".to_string()),
-            },
-            ShortcutBinding {
-                key: "0".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("reset_font_size".to_string()),
-            },
+            // 标签页切换
             ShortcutBinding {
                 key: "1".to_string(),
                 modifiers: vec!["cmd".to_string()],
@@ -162,29 +129,33 @@ pub fn create_default_shortcuts_config() -> ShortcutsConfig {
                 action: ShortcutAction::Simple("switch_to_tab_2".to_string()),
             },
             ShortcutBinding {
+                key: "3".to_string(),
+                modifiers: vec!["cmd".to_string()],
+                action: ShortcutAction::Simple("switch_to_tab_3".to_string()),
+            },
+            ShortcutBinding {
+                key: "4".to_string(),
+                modifiers: vec!["cmd".to_string()],
+                action: ShortcutAction::Simple("switch_to_tab_4".to_string()),
+            },
+            ShortcutBinding {
+                key: "5".to_string(),
+                modifiers: vec!["cmd".to_string()],
+                action: ShortcutAction::Simple("switch_to_tab_5".to_string()),
+            },
+            ShortcutBinding {
                 key: "9".to_string(),
                 modifiers: vec!["cmd".to_string()],
                 action: ShortcutAction::Simple("switch_to_last_tab".to_string()),
             },
-        ],
-        custom: vec![
+            // 补全功能
             ShortcutBinding {
-                key: "l".to_string(),
-                modifiers: vec!["cmd".to_string(), "shift".to_string()],
-                action: ShortcutAction::Complex {
-                    action_type: "send_text".to_string(),
-                    text: Some("ls -la\n".to_string()),
-                },
-            },
-            ShortcutBinding {
-                key: "g".to_string(),
-                modifiers: vec!["cmd".to_string(), "shift".to_string()],
-                action: ShortcutAction::Complex {
-                    action_type: "send_text".to_string(),
-                    text: Some("git status\n".to_string()),
-                },
+                key: "right".to_string(),
+                modifiers: vec!["cmd".to_string()],
+                action: ShortcutAction::Simple("accept_completion".to_string()),
             },
         ],
+        custom: vec![],
     }
 }
 
