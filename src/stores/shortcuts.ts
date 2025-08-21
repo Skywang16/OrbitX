@@ -15,7 +15,7 @@ import type {
   ShortcutValidationResult,
   ConflictDetectionResult,
   ShortcutStatistics,
-} from '@/api/shortcuts/types'
+} from '@/types'
 
 export const useShortcutStore = defineStore('shortcuts', () => {
   // 简化状态：扁平化结构

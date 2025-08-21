@@ -56,7 +56,7 @@
 
 <script setup lang="ts">
   import { ref, computed } from 'vue'
-  import type { ShortcutConflict, ShortcutAction } from '@/api/shortcuts/types'
+  import type { ShortcutConflict, ShortcutAction } from '@/types'
 
   interface Props {
     conflicts: ShortcutConflict[]

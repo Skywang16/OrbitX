@@ -9,7 +9,7 @@
 
 import { invoke } from '@/utils/request'
 import { handleError } from '@/utils/errorHandler'
-import { ConfigSection } from '@/types/storage'
+import { ConfigSection } from '@/types'
 import type { SessionState, DataQuery, SaveOptions } from './types'
 
 /**

@@ -43,8 +43,8 @@
 
 <script setup lang="ts">
   import { ref, computed } from 'vue'
-  import type { AIOutputStep } from '@/types/features/ai/chat'
-  import type { ToolExecution } from '@/eko/types/tool-metadata'
+  import type { AIOutputStep } from '@/types'
+  import type { ToolExecution } from '@/types'
   import EditResult from './components/EditResult.vue'
   import type { SimpleEditResult } from '@/eko/tools/toolList/edit-file'
 

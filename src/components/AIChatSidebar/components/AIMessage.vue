@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { marked } from 'marked'
-  import type { Message } from '@/types/features/ai/chat'
+  import type { Message } from '@/types'
   import ThinkingBlock from './msgBlock/ThinkingBlock.vue'
   import ToolBlock from './msgBlock/ToolBlock.vue'
 

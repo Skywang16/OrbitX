@@ -10,11 +10,11 @@ import { useSessionStore } from '@/stores/session'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
-import type { ChatMode } from './types'
+import type { ChatMode } from '@/types'
 import { createTerminalEko, createSidebarCallback, type TerminalEko } from '@/eko'
-import type { Conversation, Message } from '@/types/features/ai/chat'
+import type { Conversation, Message } from '@/types'
+import { createToolExecution } from '@/types'
 import { debounce } from 'lodash-es'
-import { createToolExecution } from '@/eko/types/tool-metadata'
 
 // 流式消息类型定义
 interface StreamMessage {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { Message } from '@/types/features/ai/chat'
+  import type { Message } from '@/types'
 
   interface Props {
     message: Message

@@ -78,8 +78,8 @@
 
 <script setup lang="ts">
   import { ref, computed, onMounted } from 'vue'
-  import { ShortcutEditorOptions, ShortcutEditorMode } from './types'
-  import { ShortcutBinding, ShortcutCategory, ShortcutAction } from '@/api/shortcuts/types'
+  import { ShortcutEditorOptions, ShortcutEditorMode } from '@/types'
+  import { ShortcutBinding, ShortcutCategory, ShortcutAction } from '@/types'
 
   interface Props {
     options: ShortcutEditorOptions

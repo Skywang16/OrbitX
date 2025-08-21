@@ -9,7 +9,7 @@ import { handleErrorWithMessage } from '@/utils/errorHandler'
 
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { AIModelConfig, AISettings } from './types'
+import type { AIModelConfig, AISettings } from '@/types'
 
 export const useAISettingsStore = defineStore('ai-settings', () => {
   // ===== 状态定义 =====

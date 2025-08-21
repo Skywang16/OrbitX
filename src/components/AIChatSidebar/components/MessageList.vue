@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { computed, nextTick, ref, watch } from 'vue'
-  import type { Message } from '@/types/features/ai/chat'
+  import type { Message } from '@/types'
   import UserMessage from './UserMessage.vue'
   import AIMessage from './AIMessage.vue'
 

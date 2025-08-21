@@ -6,7 +6,7 @@
 
 import { ref, onMounted, onUnmounted } from 'vue'
 import { shortcutsApi } from '@/api/shortcuts'
-import type { ShortcutsConfig, ShortcutBinding } from '@/api/shortcuts/types'
+import type { ShortcutsConfig, ShortcutBinding } from '@/types'
 import { shortcutActionsService } from './actions'
 import { formatKeyCombo, isShortcutMatch, extractActionName } from './utils'
 import { NON_BLOCKING_ACTIONS } from './constants'

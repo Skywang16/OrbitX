@@ -270,7 +270,7 @@
         // 触发一个自定义事件，让父组件（Terminal）知道有补全被接受
         const detailEvent = new CustomEvent('completion-accepted', {
           detail: { completion: result },
-          bubbles: true
+          bubbles: true,
         })
         event.target?.dispatchEvent(detailEvent)
       }

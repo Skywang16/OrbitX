@@ -21,7 +21,7 @@
 <script setup lang="ts">
   import { ref, onMounted, onUnmounted, computed } from 'vue'
 
-  import type { AIOutputStep } from '@/types/features/ai/chat'
+  import type { AIOutputStep } from '@/types'
 
   interface Props {
     step: AIOutputStep

@@ -126,8 +126,8 @@
   import { getActionDisplayName } from '@/shortcuts/constants'
   import ShortcutEditor from './ShortcutEditor.vue'
   import ShortcutConflictDialog from './ShortcutConflictDialog.vue'
-  import type { ShortcutBinding } from '@/api/shortcuts/types'
-  import { ShortcutCategory } from '@/api/shortcuts/types'
+  import type { ShortcutBinding } from '@/types'
+  import { ShortcutCategory } from '@/types'
 
   // 组合式API
   const {

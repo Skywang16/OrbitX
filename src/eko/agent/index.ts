@@ -10,5 +10,4 @@ export { CodeAgent, createCodeAgent, createCodeChatAgent } from './code-agent'
 export type { TerminalAgentMode } from './terminal-agent'
 export type { CodeAgentMode } from './code-agent'
 
-// 导出配置类型
-export type { TerminalAgentConfig, CodeAgentConfig } from '../types'
+// 配置类型已迁移到统一类型系统 @/types

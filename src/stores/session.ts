@@ -2,13 +2,13 @@ import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import {
-  createDefaultSessionState,
   type SessionState,
   type WindowState,
   type TerminalState,
   type UiState,
   type AiState,
-} from '@/types/storage'
+} from '@/types/domain/storage'
+import { createDefaultSessionState } from '@/types/utils/helpers'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
 
 /**

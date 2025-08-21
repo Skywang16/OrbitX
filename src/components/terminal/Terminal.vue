@@ -37,7 +37,7 @@
   import { Terminal } from '@xterm/xterm'
 
   // 项目内部模块
-  import type { Theme } from '@/types/theme'
+  import type { Theme } from '@/types'
   import { windowApi } from '@/api'
   import { useTheme } from '@/composables/useTheme'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'

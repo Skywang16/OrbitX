@@ -16,8 +16,7 @@ export * from './utils'
 // 常量定义
 export * from './constants'
 
-// 类型定义
-export type * from './types'
+// 类型已迁移到统一类型系统 @/types
 
 // 重新导出快捷键 API 和类型
 export { shortcutsApi, ShortcutsApi } from '@/api/shortcuts'

@@ -2,7 +2,7 @@
   import { computed } from 'vue'
   import { XSelect } from '@/ui'
   import type { SelectOption } from '@/ui'
-  import type { Conversation } from '@/types/features/ai/chat'
+  import type { Conversation } from '@/types'
 
   // Props定义
   interface Props {

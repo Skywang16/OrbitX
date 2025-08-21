@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import SessionSelect from './SessionSelect.vue'
-  import type { Conversation } from '@/types/features/ai/chat'
+  import type { Conversation } from '@/types'
 
   // Props定义
   interface Props {

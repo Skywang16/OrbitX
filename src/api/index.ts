@@ -27,7 +27,7 @@ export type { ShortcutsApi } from './shortcuts'
 export type { CompletionApi } from './completion'
 export type { WindowApi } from './window'
 
-// 重新导出需要的类型
+// 重新导出类型（从统一类型系统导入）
 export type {
   AIModelConfig,
   AISettings,
@@ -40,22 +40,11 @@ export type {
   CodeSymbol,
   WebFetchRequest,
   WebFetchResponse,
-} from './ai'
-
-export type { AppConfig, ConfigFileInfo } from './config'
-
-export { ConfigApiError } from './config/types'
-
-export type { ShellInfo } from './shell'
-
-export type {
   TerminalCreateOptions,
   TerminalWriteOptions,
   TerminalResizeOptions,
   CreateTerminalWithShellOptions,
-} from './terminal'
-
-export type {
+  ShellInfo,
   ShortcutsConfig,
   ShortcutBinding,
   ShortcutCategory,
@@ -63,19 +52,8 @@ export type {
   ShortcutValidationResult,
   ConflictDetectionResult,
   ShortcutStatistics,
-  ShortcutSearchOptions,
-  ShortcutOperationOptions,
-  ShortcutFormatOptions,
-} from './shortcuts'
-
-export type { CompletionRequest, CompletionResponse, CompletionStats, CompletionEngineStatus } from './completion'
-
-export type {
   WindowState,
-  CompleteWindowState,
-  DirectoryOptions,
-  PathInfo,
-  PlatformInfo,
-  WindowStateBatchRequest,
-  WindowStateBatchResponse,
-} from './window'
+} from '@/types'
+
+// 重新导出补全相关类型（从统一类型系统导入）
+export type { CompletionRequest, CompletionResponse, CompletionItem } from '@/types'

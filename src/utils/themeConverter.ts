@@ -4,7 +4,7 @@
  * 将项目的主题数据转换为 XTerm.js 可用的主题格式
  */
 
-import type { Theme } from '@/types/theme'
+import type { Theme } from '@/types'
 
 /**
  * 获取应用的主背景颜色

@@ -4,7 +4,7 @@
  * 负责将主题数据应用到前端界面，包括CSS变量更新和DOM属性设置
  */
 
-import type { Theme, ThemeType } from '@/types/theme'
+import type { Theme, ThemeType } from '@/types'
 
 /**
  * 将主题数据应用到前端界面
