@@ -613,10 +613,10 @@
 
   /**
    * 解析OSC序列并处理shell integration事件
-   * 支持VSCode风格的shell integration协议
+   * 支持shell integration协议
    */
   const parseOSCSequences = (data: string) => {
-    // OSC 633 序列匹配器（VSCode shell integration）
+    // OSC 633 序列匹配器（shell integration）
     // 允许无 payload 的 A/B/C 等标记（第二个分号可选），并兼容大小写
     const oscPattern = /\x1b]633;([A-Za-z]);?([^\x07\x1b]*?)(?:\x07|\x1b\\)/g
     let match

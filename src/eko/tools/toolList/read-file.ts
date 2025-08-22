@@ -3,7 +3,7 @@
  */
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
-import type { ToolResult } from '../../types'
+import type { ToolResult } from '@eko-ai/eko/types'
 import { FileNotFoundError } from '../tool-error'
 import { invoke } from '@tauri-apps/api/core'
 
@@ -20,9 +20,9 @@ export class ReadFileTool extends ModifiableTool {
   constructor() {
     super(
       'read_file',
-      `读取文件内容并显示。支持读取完整文件或指定行号范围。会自动添加行号便于定位。可以检测文件是否存在，如果路径是目录会提示使用read_directory工具。适用于查看代码文件、配置文件、日志文件等场景。path参数指定文件路径，startLine和endLine参数可选指定读取的行号范围。返回带行号的文件内容。
+      `读取文件内容并显示。支持读取完整文件或指定行号范围。会自动添加行号便于定位。可以检测文件是否存在，如果路径是目录会提示使用read_directory工具。适用于查看代码文件、配置文件、日志文件等场景。**必须使用绝对路径**，path参数指定文件的完整绝对路径，startLine和endLine参数可选指定读取的行号范围。返回带行号的文件内容。
 
-输入示例: {"path": "src/main.ts", "startLine": 10, "endLine": 20}
+输入示例: {"path": "/Users/user/project/src/main.ts", "startLine": 10, "endLine": 20}
 输出示例: {
   "content": [{
     "type": "text",
@@ -34,7 +34,8 @@ export class ReadFileTool extends ModifiableTool {
         properties: {
           path: {
             type: 'string',
-            description: '文件路径。示例："src/main.ts"、"package.json"',
+            description:
+              '文件的绝对路径。必须是完整路径，例如："/Users/user/project/src/main.ts"、"/home/user/config.json"',
           },
           startLine: {
             type: 'number',

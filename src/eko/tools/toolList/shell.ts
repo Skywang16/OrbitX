@@ -3,13 +3,12 @@
  */
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
-import type { ToolResult } from '../../types'
+import type { ToolResult } from '@eko-ai/eko/types'
 import { ValidationError, ToolError } from '../tool-error'
 import { terminalApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'
 export interface ShellParams {
   command: string
-  path?: string
 }
 
 /**
@@ -32,13 +31,25 @@ export class ShellTool extends ModifiableTool {
   constructor() {
     super(
       'shell',
-      `执行Shell命令并返回输出结果。支持各种系统命令如ls、cat、grep、npm、git等。会在指定的工作目录中执行命令，如果不指定则在当前目录执行。包含安全检查，会阻止危险命令如rm -rf /等。适用于文件操作、项目构建、版本控制等场景。command参数指定要执行的命令，path参数可选指定工作目录。执行成功返回命令输出，失败返回错误信息。
+      `在当前终端中执行Shell命令。适用于系统操作、构建部署、版本控制等场景。
 
-输入示例: {"command": "ls -la", "path": "./src"}
+**适用场景：**
+- 系统操作：ls、cd、mkdir、rm等
+- 项目构建：npm install、npm run build、cargo build等
+- 版本控制：git status、git commit、git push等
+- 环境操作：设置环境变量、检查进程等
+
+**不适用场景：**
+- **代码搜索** - 请使用orbit_search工具进行代码搜索
+- **文件内容查找** - 请使用orbit_search或read_file工具
+
+包含安全检查，会阻止危险命令。command参数指定要执行的命令，将在当前终端的工作目录中执行。
+
+输入示例: {"command": "npm install"}
 输出示例: {
   "content": [{
     "type": "text",
-    "text": "命令执行成功\\n\\n$ ls -la\\ntotal 24\\ndrwxr-xr-x  4 user  staff  128 Dec 15 10:30 .\\ndrwxr-xr-x  8 user  staff  256 Dec 15 10:29 ..\\n-rw-r--r--  1 user  staff  1234 Dec 15 10:30 main.ts\\n-rw-r--r--  1 user  staff  567 Dec 15 10:29 utils.ts"
+    "text": "命令执行成功\\n\\n$ npm install\\naudited 1234 packages in 3.2s\\nfound 0 vulnerabilities"
   }]
 }`,
       {
@@ -48,10 +59,6 @@ export class ShellTool extends ModifiableTool {
             type: 'string',
             description: '要执行的命令。示例："ls -la"、"npm install"、"git status"',
           },
-          path: {
-            type: 'string',
-            description: '工作目录。示例："./src"、"/Users/user/project"',
-          },
         },
         required: ['command'],
       }
@@ -59,20 +66,17 @@ export class ShellTool extends ModifiableTool {
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
-    const { command, path } = context.parameters as unknown as ShellParams
+    const { command } = context.parameters as unknown as ShellParams
 
     // 验证命令
     this.validateCommand(command)
 
-    // 获取终端实例
-    const targetTerminalId = await this.getOrCreateAgentTerminal()
+    // 获取当前活跃的终端ID
+    const targetTerminalId = await this.getActiveTerminal()
 
     try {
-      // 构建命令
-      const finalCommand = path ? `cd "${path}" && ${command}` : command
-
       // 使用事件驱动的方式等待命令完成
-      const result = await this.executeCommandWithCallback(targetTerminalId, finalCommand, 30000)
+      const result = await this.executeCommandWithCallback(targetTerminalId, command, 30000)
       return {
         content: [
           {
@@ -264,14 +268,19 @@ export class ShellTool extends ModifiableTool {
   }
 
   /**
-   * 获取或创建Agent专属终端
+   * 获取当前活跃的终端
    */
-  private async getOrCreateAgentTerminal(): Promise<number> {
-    const terminals = await terminalApi.listTerminals()
-    if (terminals.length === 0) {
-      throw new ToolError('没有可用的终端')
+  private async getActiveTerminal(): Promise<number> {
+    const terminalStore = useTerminalStore()
+
+    // 获取当前活跃的终端
+    const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
+
+    if (!activeTerminal || !activeTerminal.backendId) {
+      throw new ToolError('没有可用的活跃终端')
     }
-    return terminals[0]
+
+    return activeTerminal.backendId
   }
 }
 

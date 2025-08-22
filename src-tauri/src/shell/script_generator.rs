@@ -111,7 +111,7 @@ impl ShellScriptGenerator {
         Ok(script)
     }
 
-    /// 生成Bash集成脚本（优化版）
+    /// 生成Bash集成脚本
     fn generate_bash_script(&self) -> String {
         let mut script = String::new();
 
@@ -138,13 +138,12 @@ __orbitx_update_cwd() {
             );
         }
 
-        // 命令跟踪功能（仅 VS Code 协议）
+        // 命令跟踪功能
         if self.config.enable_command_tracking {
             script.push_str(
                 r#"
-# VS Code协议命令跟踪
+# 命令跟踪
 __orbitx_preexec() {
-    printf '\e]633;B\e\\'
     printf '\e]633;C\e\\'
 }
 
@@ -218,14 +217,14 @@ __orbitx_update_cwd 2>/dev/null || true
         script
     }
 
-    /// 生成Zsh集成脚本（VSCode风格优化版）
+    /// 生成Zsh集成脚本
     fn generate_zsh_script(&self) -> String {
         let mut script = String::new();
 
         // 检查是否已经注入过，防止重复加载
         script.push_str(
             r#"
-# OrbitX Shell Integration for Zsh (VSCode style)
+# OrbitX Shell Integration for Zsh
 if [[ -n "$ORBITX_SHELL_INTEGRATION_LOADED" ]]; then
     return 0
 fi
@@ -245,11 +244,11 @@ __orbitx_update_cwd() {
             );
         }
 
-        // 命令跟踪功能（VSCode OSC 633协议）
+        // 命令跟踪功能 (OSC 633协议)
         if self.config.enable_command_tracking {
             script.push_str(
                 r#"
-# VSCode协议命令跟踪 (OSC 633)
+# 协议命令跟踪 (OSC 633)
 __orbitx_preexec() {
     printf '\e]633;B\e\\'
 }
@@ -330,11 +329,11 @@ end
             );
         }
 
-        // 命令跟踪功能（仅 VS Code 协议）
+        // 命令跟踪功能
         if self.config.enable_command_tracking {
             script.push_str(
                 r#"
-# VS Code协议命令跟踪
+# 协议命令跟踪
 function __orbitx_preexec --on-event fish_preexec
     printf '\e]633;C\e\\'
 end
@@ -405,11 +404,11 @@ function Update-OrbitXCwd {
             );
         }
 
-        // 命令跟踪功能（仅 VS Code 协议）
+        // 命令跟踪功能
         if self.config.enable_command_tracking {
             script.push_str(
                 r#"
-# VS Code协议命令跟踪
+# 协议命令跟踪
 function Invoke-OrbitXPreCommand {
     Write-Host -NoNewline "`e]633;C`e\"
 }

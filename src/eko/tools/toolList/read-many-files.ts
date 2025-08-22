@@ -3,7 +3,7 @@
  */
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
-import type { ToolResult } from '../../types'
+import type { ToolResult } from '@eko-ai/eko/types'
 import { invoke } from '@tauri-apps/api/core'
 
 export interface ReadManyFilesParams {
@@ -28,13 +28,13 @@ export class ReadManyFilesTool extends ModifiableTool {
   constructor() {
     super(
       'read_many_files',
-      `批量读取多个文件的内容。一次性读取多个文件，比单独调用read_file更高效。支持显示行号，可设置文件大小限制避免读取过大文件。会跳过无法读取的文件并在结果中标记。适用于代码审查、批量文件分析、项目文件对比等场景。paths参数指定文件路径数组，showLineNumbers参数控制是否显示行号，maxFileSize参数设置单文件大小限制。返回所有文件的内容和读取状态。
+      `批量读取多个文件的内容。一次性读取多个文件，比单独调用read_file更高效。支持显示行号，可设置文件大小限制避免读取过大文件。会跳过无法读取的文件并在结果中标记。适用于代码审查、批量文件分析、项目文件对比等场景。**所有文件路径必须是绝对路径**，paths参数指定文件绝对路径数组，showLineNumbers参数控制是否显示行号，maxFileSize参数设置单文件大小限制。返回所有文件的内容和读取状态。
 
-输入示例: {"paths": ["src/main.ts", "src/utils.ts"], "showLineNumbers": true}
+输入示例: {"paths": ["/Users/user/project/src/main.ts", "/Users/user/project/src/utils.ts"], "showLineNumbers": true}
 输出示例: {
   "content": [{
     "type": "text",
-    "text": "批量读取 2 个文件\\n\\n=== src/main.ts (成功) ===\\n1: import { createApp } from 'vue'\\n2: import App from './App.vue'\\n\\n=== src/utils.ts (成功) ===\\n1: export function formatDate() {\\n2:   return new Date().toISOString()\\n3: }\\n\\n读取完成: 2个成功, 0个失败"
+    "text": "批量读取 2 个文件\\n\\n=== /Users/user/project/src/main.ts (成功) ===\\n1: import { createApp } from 'vue'\\n2: import App from './App.vue'\\n\\n=== /Users/user/project/src/utils.ts (成功) ===\\n1: export function formatDate() {\\n2:   return new Date().toISOString()\\n3: }\\n\\n读取完成: 2个成功, 0个失败"
   }]
 }`,
       {
@@ -43,7 +43,8 @@ export class ReadManyFilesTool extends ModifiableTool {
           paths: {
             type: 'array',
             items: { type: 'string' },
-            description: '文件路径列表。示例：["src/main.ts", "src/utils.ts", "package.json"]',
+            description:
+              '文件绝对路径列表。所有路径必须是完整路径，例如：["/Users/user/project/src/main.ts", "/home/user/project/utils.ts"]',
             minItems: 1,
           },
           showLineNumbers: {

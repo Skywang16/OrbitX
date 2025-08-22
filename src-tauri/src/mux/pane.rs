@@ -115,7 +115,7 @@ impl LocalPane {
         cmd.env("LC_ALL", "en_US.UTF-8");
         cmd.env("LC_CTYPE", "en_US.UTF-8");
 
-        // 自动注入Shell Integration脚本（VSCode风格环境变量方式）
+        // 自动注入Shell Integration脚本（环境变量方式）
         let shell_type = crate::shell::ShellType::from_program(&config.shell_config.program);
         if shell_type.supports_integration() {
             let script_generator = crate::shell::ShellScriptGenerator::default();
@@ -125,7 +125,7 @@ impl LocalPane {
                 // 设置环境变量标识
                 cmd.env("ORBITX_SHELL_INTEGRATION", "1");
 
-                // VSCode风格的静默注入：通过环境变量和配置文件
+                // 静默注入：通过环境变量和配置文件
                 match shell_type {
                     crate::shell::ShellType::Zsh => {
                         // 为zsh创建临时配置目录

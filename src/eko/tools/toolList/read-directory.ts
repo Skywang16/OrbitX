@@ -3,7 +3,7 @@
  */
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
-import type { ToolResult } from '../../types'
+import type { ToolResult } from '@eko-ai/eko/types'
 import { FileNotFoundError } from '../tool-error'
 import { invoke } from '@tauri-apps/api/core'
 
@@ -24,13 +24,13 @@ export class ReadDirectoryTool extends ModifiableTool {
   constructor() {
     super(
       'read_directory',
-      `列出目录中的文件和子目录。显示目录下的所有文件和文件夹，目录名以"/"结尾区分。会自动过滤隐藏文件（以.开头）。只显示第一层内容，不递归遍历子目录。适用于了解项目结构、浏览文件夹内容等场景。path参数指定目录路径。返回文件和目录列表，以及统计信息。
+      `列出目录中的文件和子目录。显示目录下的所有文件和文件夹，目录名以"/"结尾区分。会自动过滤隐藏文件（以.开头）。只显示第一层内容，不递归遍历子目录。适用于了解项目结构、浏览文件夹内容等场景。**必须使用绝对路径**，path参数指定目录的完整绝对路径。返回文件和目录列表，以及统计信息。
 
-输入示例: {"path": "./src"}
+输入示例: {"path": "/Users/user/project/src"}
 输出示例: {
   "content": [{
     "type": "text",
-    "text": "目录: ./src\\n\\ncomponents/\\nutils/\\nmain.ts\\nApp.vue\\nstyle.css\\n\\n总计: 2个目录, 3个文件"
+    "text": "目录: /Users/user/project/src\\n\\ncomponents/\\nutils/\\nmain.ts\\nApp.vue\\nstyle.css\\n\\n总计: 2个目录, 3个文件"
   }]
 }`,
       {
@@ -38,7 +38,8 @@ export class ReadDirectoryTool extends ModifiableTool {
         properties: {
           path: {
             type: 'string',
-            description: '目录路径。示例："./src"、"./components"、"/Users/user/project"',
+            description:
+              '目录的绝对路径。必须是完整路径，例如："/Users/user/project/src"、"/home/user/workspace/components"',
           },
         },
         required: ['path'],

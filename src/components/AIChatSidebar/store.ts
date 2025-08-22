@@ -7,6 +7,7 @@
 import { aiApi } from '@/api'
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useSessionStore } from '@/stores/session'
+import { useTerminalStore } from '@/stores/Terminal'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
@@ -224,8 +225,18 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         /* ignore */
       }
 
-      // 5. 获取后端构建的完整prompt（包含上下文）
-      const fullPrompt = await aiApi.buildPromptWithContext(currentConversationId.value, content)
+      // 5. 获取当前终端的工作目录
+      const terminalStore = useTerminalStore()
+      const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
+      const currentWorkingDirectory = activeTerminal?.cwd
+
+      // 6. 获取后端构建的完整prompt（包含上下文和环境信息）
+      const fullPrompt = await aiApi.buildPromptWithContext(
+        currentConversationId.value,
+        content,
+        undefined,
+        currentWorkingDirectory
+      )
 
       // 7. 立即创建AI消息记录到数据库，获取真实ID用于实时保存steps
       const messageId = await aiApi.saveMessage(currentConversationId.value, 'assistant', '正在生成回复...')

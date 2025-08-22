@@ -202,6 +202,7 @@ pub async fn build_prompt_with_context(
     conversation_id: i64,
     current_message: String,
     up_to_message_id: Option<i64>,
+    current_working_directory: Option<String>,
     state: State<'_, AIManagerState>,
 ) -> Result<String, String> {
     info!(
@@ -227,6 +228,7 @@ pub async fn build_prompt_with_context(
         conversation_id,
         &current_message,
         up_to_message_id,
+        current_working_directory.as_deref(),
     )
     .await
     .to_tauri()?;

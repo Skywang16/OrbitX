@@ -3,14 +3,12 @@
  */
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
-import type { ToolResult } from '../../types'
+import type { ToolResult } from '@eko-ai/eko/types'
 import { NetworkError, ValidationError } from '../tool-error'
 import { aiApi } from '@/api'
 
 export interface WebFetchParams {
   url: string
-  method?: 'GET' | 'POST'
-  body?: string
 }
 
 // WebFetchResponse 类型已在 @/api/ai/tool 中定义
@@ -22,13 +20,13 @@ export class WebFetchTool extends ModifiableTool {
   constructor() {
     super(
       'web_fetch',
-      `获取网页内容和API数据。支持GET、POST、PUT、DELETE等HTTP方法。优先使用Jina.ai Reader进行智能内容提取，可以获取网页的主要文本内容而非HTML源码。适用于获取API数据、网页内容、文档等场景。url参数指定目标URL，method参数指定HTTP方法（默认GET），body参数用于POST请求的数据。返回网页内容或API响应数据。
+      `获取网页内容和API数据。使用GET方法获取网页的主要文本内容，自动提取并清理内容。适用于获取API数据、网页内容、文档、技术文章等场景。url参数指定目标URL。返回清理后的网页内容或API响应数据。
 
-输入示例: {"url": "https://api.github.com/users/octocat", "method": "GET"}
+输入示例: {"url": "https://api.github.com/users/octocat"}
 输出示例: {
   "content": [{
     "type": "text",
-    "text": "网页内容获取成功\\n\\nURL: https://api.github.com/users/octocat\\n状态: 200 OK\\n内容类型: application/json\\n\\n内容:\\n{\\n  \\"login\\": \\"octocat\\",\\n  \\"id\\": 1,\\n  \\"name\\": \\"The Octocat\\"\\n}"
+    "text": "GitHub API Response\\n\\n{\\n  \\"login\\": \\"octocat\\",\\n  \\"id\\": 1,\\n  \\"name\\": \\"The Octocat\\",\\n  \\"company\\": \\"@github\\"\\n}"
   }]
 }`,
       {
@@ -36,17 +34,7 @@ export class WebFetchTool extends ModifiableTool {
         properties: {
           url: {
             type: 'string',
-            description: 'URL地址。示例："https://api.github.com/users/octocat"、"https://httpbin.org/get"',
-          },
-          method: {
-            type: 'string',
-            enum: ['GET', 'POST'],
-            description: 'HTTP方法。示例："GET"、"POST"',
-            default: 'GET',
-          },
-          body: {
-            type: 'string',
-            description: 'POST请求数据。示例：\'{"name": "test", "value": 123}\'',
+            description: 'URL地址。示例："https://api.github.com/users/octocat"、"https://docs.python.org/3/tutorial/"',
           },
         },
         required: ['url'],
@@ -55,35 +43,24 @@ export class WebFetchTool extends ModifiableTool {
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
-    const { url, method = 'GET', body } = context.parameters as unknown as WebFetchParams
+    const { url } = context.parameters as unknown as WebFetchParams
 
     // 验证URL
     this.validateUrl(url)
 
-    // 验证方法和请求体
-    if (body && method !== 'POST') {
-      throw new ValidationError(`只有POST方法支持请求体`)
-    }
-
-    // 优先尝试使用 Jina.ai Reader 进行智能内容提取（仅GET请求）
-    if (method === 'GET') {
-      try {
-        const jinaResult = await this.tryJinaReader(url)
-        if (jinaResult) {
-          return jinaResult
-        }
-      } catch (error) {
-        // Jina.ai Reader 失败，回退到本地算法
+    // 优先尝试使用 Jina.ai Reader 进行智能内容提取
+    try {
+      const jinaResult = await this.tryJinaReader(url)
+      if (jinaResult) {
+        return jinaResult
       }
+    } catch (error) {
+      // Jina.ai Reader 失败，回退到本地算法
     }
 
     // 回退到本地 Tauri 后端进行请求
     try {
-      const tauriResponse = await this.executeWithTauri({
-        url,
-        method,
-        body,
-      })
+      const tauriResponse = await this.executeWithTauri({ url })
 
       if (tauriResponse.success) {
         return this.formatTauriResponse(tauriResponse)
@@ -101,12 +78,11 @@ export class WebFetchTool extends ModifiableTool {
   /**
    * 使用 Tauri 后端执行请求
    */
-  private async executeWithTauri(params: { url: string; method: 'GET' | 'POST' | 'PUT' | 'DELETE'; body?: string }) {
+  private async executeWithTauri(params: { url: string }) {
     const response = await aiApi.webFetch({
       url: params.url,
-      method: params.method,
+      method: 'GET',
       headers: {},
-      body: params.body,
       timeout: 10000,
     })
 

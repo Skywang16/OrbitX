@@ -62,7 +62,7 @@ export function registerAllTools(): void {
       metadata: {
         description: readDirectoryTool.description,
         category: 'file',
-        tags: ['directory', 'list', 'folder', 'filesystem'],
+        tags: ['directory', 'list', 'folder'],
       },
     },
 

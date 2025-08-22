@@ -5,7 +5,7 @@
  */
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
-import type { ToolResult } from '../../types'
+import type { ToolResult } from '@eko-ai/eko/types'
 import { FileNotFoundError, ValidationError } from '../tool-error'
 import { invoke } from '@tauri-apps/api/core'
 import { aiApi, type AnalyzeCodeParams, type AnalysisResult, type CodeSymbol } from '@/api'
@@ -14,7 +14,7 @@ import { aiApi, type AnalyzeCodeParams, type AnalysisResult, type CodeSymbol } f
 
 export interface orbitSearchParams {
   query: string
-  path?: string
+  path: string
 }
 
 export interface SearchMatch {
@@ -60,9 +60,18 @@ export class OrbitSearchTool extends ModifiableTool {
   constructor() {
     super(
       'orbit_search',
-      `代码搜索工具，只能用于代码搜索，结合文本搜索、AST分析和语义理解。可以搜索函数定义、变量使用、类声明等代码符号，也可以进行普通文本搜索。支持多种编程语言的语法分析。比普通文本搜索更智能，能理解代码结构和上下文。适用于代码审查、函数查找、重构分析等场景。query参数指定搜索内容，path参数指定搜索路径（默认当前目录）。返回简洁的搜索结果，按相关性排序。
+      `**专业代码搜索工具** - 优先使用此工具进行所有代码相关搜索！结合文本搜索、AST分析和语义理解的智能搜索引擎。
 
-输入示例: {"query": "createUser", "path": "./src"}
+**何时使用此工具：**
+- 搜索函数定义、类、接口、变量
+- 查找代码引用和使用位置
+- 代码审查和重构分析
+- 查找特定的代码模式或关键词
+- 任何涉及代码内容的搜索需求
+
+**不要使用shell命令（如grep、find、rg）进行代码搜索**，此工具比shell命令更智能和准确。支持多种编程语言的语法分析，能理解代码结构和上下文，提供精确的搜索结果。**必须使用绝对路径**，query参数指定搜索内容，path参数指定搜索的绝对路径。
+
+输入示例: {"query": "createUser", "path": "/Users/user/project/src"}
 输出示例: {
   "content": [{
     "type": "text",
@@ -74,14 +83,14 @@ export class OrbitSearchTool extends ModifiableTool {
         properties: {
           query: {
             type: 'string',
-            description: '搜索查询内容',
+            description: '搜索查询内容。例如："createUser"、"function handleClick"、"interface User"',
           },
           path: {
             type: 'string',
-            description: '搜索路径，不填默认当前目录',
+            description: '搜索路径的绝对路径。必须是完整路径，例如："/Users/user/project/src"、"/home/user/workspace"',
           },
         },
-        required: ['query'],
+        required: ['query', 'path'],
       }
     )
   }
@@ -92,6 +101,10 @@ export class OrbitSearchTool extends ModifiableTool {
 
     if (!query || query.trim() === '') {
       throw new ValidationError('搜索查询不能为空')
+    }
+
+    if (!path || path.trim() === '') {
+      throw new ValidationError('搜索路径不能为空')
     }
 
     try {
@@ -129,22 +142,12 @@ export class OrbitSearchTool extends ModifiableTool {
   /**
    * 解析搜索路径
    */
-  private async resolveSearchPath(targetPath?: string): Promise<string> {
-    if (targetPath) {
-      const exists = await this.checkPathExists(targetPath)
-      if (!exists) {
-        throw new FileNotFoundError(targetPath)
-      }
-      return targetPath
-    }
-
-    const defaultPath = './tooltest'
-    const exists = await this.checkPathExists(defaultPath)
+  private async resolveSearchPath(targetPath: string): Promise<string> {
+    const exists = await this.checkPathExists(targetPath)
     if (!exists) {
-      throw new FileNotFoundError(defaultPath)
+      throw new FileNotFoundError(targetPath)
     }
-
-    return defaultPath
+    return targetPath
   }
 
   /**

@@ -83,13 +83,15 @@ class ConversationAPI {
   async buildPromptWithContext(
     conversationId: number,
     currentMessage: string,
-    upToMessageId?: number
+    upToMessageId?: number,
+    currentWorkingDirectory?: string
   ): Promise<string> {
     try {
       const prompt = await invoke<string>('build_prompt_with_context', {
         conversationId,
         currentMessage,
         upToMessageId,
+        currentWorkingDirectory,
       })
       return prompt
     } catch (error) {
@@ -344,8 +346,18 @@ export class AiApi {
     return this.conversationAPI.getCompressedContext(conversationId, upToMessageId)
   }
 
-  async buildPromptWithContext(conversationId: number, currentMessage: string, upToMessageId?: number) {
-    return this.conversationAPI.buildPromptWithContext(conversationId, currentMessage, upToMessageId)
+  async buildPromptWithContext(
+    conversationId: number,
+    currentMessage: string,
+    upToMessageId?: number,
+    currentWorkingDirectory?: string
+  ) {
+    return this.conversationAPI.buildPromptWithContext(
+      conversationId,
+      currentMessage,
+      upToMessageId,
+      currentWorkingDirectory
+    )
   }
 
   async saveMessage(conversationId: number, role: string, content: string) {

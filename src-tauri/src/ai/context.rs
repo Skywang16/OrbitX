@@ -48,6 +48,7 @@ pub async fn build_intelligent_prompt(
     conversation_id: i64,
     current_message: &str,
     up_to_message_id: Option<i64>,
+    current_working_directory: Option<&str>,
 ) -> AppResult<String> {
     CONTEXT_MANAGER
         .build_prompt(
@@ -55,6 +56,7 @@ pub async fn build_intelligent_prompt(
             conversation_id,
             current_message,
             up_to_message_id,
+            current_working_directory,
         )
         .await
 }

@@ -3,7 +3,7 @@
  */
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
-import type { ToolResult } from '../../types'
+import type { ToolResult } from '@eko-ai/eko/types'
 import { ValidationError } from '../tool-error'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 
@@ -19,13 +19,13 @@ export class CreateFileTool extends ModifiableTool {
   constructor() {
     super(
       'create_file',
-      `创建新文件并写入内容。支持创建任意类型的文件，包括代码文件、配置文件、文档等。会自动创建不存在的父目录。如果文件已存在会直接覆盖。适用于生成新的源码文件、配置文件、文档等场景。path参数指定文件路径（支持相对和绝对路径），content参数指定文件内容（支持多行文本，使用\\n表示换行）。创建成功后返回确认信息。
+      `创建新文件并写入内容。支持创建任意类型的文件，包括代码文件、配置文件、文档等。会自动创建不存在的父目录。如果文件已存在会直接覆盖。适用于生成新的源码文件、配置文件、文档等场景。**必须使用绝对路径**，path参数指定文件的完整绝对路径，content参数指定文件内容（支持多行文本，使用\\n表示换行）。创建成功后返回确认信息。
 
-输入示例: {"path": "src/utils.ts", "content": "export function hello() {\\n  return 'Hello World'\\n}"}
+输入示例: {"path": "/Users/user/project/src/utils.ts", "content": "export function hello() {\\n  return 'Hello World'\\n}"}
 输出示例: {
   "content": [{
     "type": "text",
-    "text": "文件已创建: src/utils.ts"
+    "text": "文件已创建: /Users/user/project/src/utils.ts"
   }]
 }`,
       {
@@ -33,7 +33,8 @@ export class CreateFileTool extends ModifiableTool {
         properties: {
           path: {
             type: 'string',
-            description: '文件路径。示例："src/utils.ts"、"config.json"',
+            description:
+              '文件的绝对路径。必须是完整路径，例如："/Users/user/project/src/utils.ts"、"/home/user/workspace/config.json"',
           },
           content: {
             type: 'string',

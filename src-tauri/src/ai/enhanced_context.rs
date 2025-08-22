@@ -1005,6 +1005,7 @@ impl ContextManager {
         conv_id: i64,
         current_msg: &str,
         up_to_msg_id: Option<i64>,
+        current_working_directory: Option<&str>,
     ) -> AppResult<String> {
         // 1. 获取历史消息用于缓存键计算（排除当前正在处理的消息）
         let raw_msgs = self.fetch_messages(repos, conv_id, up_to_msg_id).await?;
@@ -1017,8 +1018,21 @@ impl ContextManager {
         };
 
         // 2. 尝试从KV缓存获取
-        if let Some(cached_prompt) = self.kv_cache.get(conv_id, history_msgs) {
+        if let Some(mut cached_prompt) = self.kv_cache.get(conv_id, history_msgs) {
             info!("KV缓存命中: conv={}", conv_id);
+
+            // 如果有环境信息，需要插入到缓存的prompt中
+            if let Some(cwd) = current_working_directory {
+                if !cwd.trim().is_empty() {
+                    let env_info = format!("【当前环境】\n工作目录: {}\n\n", cwd);
+                    // 在前置提示词后插入环境信息
+                    if cached_prompt.contains("【对话历史】") {
+                        cached_prompt = cached_prompt.replace("【对话历史】", &format!("{}【对话历史】", env_info));
+                    } else {
+                        cached_prompt = format!("{}{}", env_info, cached_prompt);
+                    }
+                }
+            }
 
             // 缓存命中时，只需要添加当前消息
             return Ok(format!(
@@ -1044,6 +1058,13 @@ impl ContextManager {
         // 添加前置提示词 (稳定前缀)
         if !prefix.trim().is_empty() {
             parts.push(format!("【前置提示】\n{}\n", prefix));
+        }
+
+        // 添加环境信息
+        if let Some(cwd) = current_working_directory {
+            if !cwd.trim().is_empty() {
+                parts.push(format!("【当前环境】\n工作目录: {}\n", cwd));
+            }
         }
 
         // 构建历史对话 (可变部分)

@@ -3,7 +3,8 @@
  */
 
 import type { AgentContext } from '@eko-ai/eko'
-import type { Tool, ToolResult } from '../types'
+import type { Tool, ToolResult } from '@eko-ai/eko/types'
+
 import { ToolError, formatToolError } from './tool-error'
 
 export interface ToolParameters {
