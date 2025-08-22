@@ -138,7 +138,7 @@ fn init_logging() {
         let default_level = "debug";
         #[cfg(not(debug_assertions))]
         let default_level = "info";
-        
+
         EnvFilter::new(default_level)
     });
 

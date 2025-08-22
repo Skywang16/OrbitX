@@ -264,27 +264,61 @@ impl IoThreadPool {
             successful_sends, self.config.worker_threads
         );
 
-        // 等待所有工作线程完成（带超时）
+        // 等待所有工作线程完成（带更短的超时和并发等待）
         if let Ok(mut handles_guard) = self.worker_handles.lock() {
             if let Some(handles) = handles_guard.take() {
+                let timeout = Duration::from_millis(500); // 进一步缩短超时到500毫秒
                 let start_time = std::time::Instant::now();
-                let timeout = Duration::from_secs(5); // 5秒超时
-
-                for (worker_id, handle) in handles.into_iter().enumerate() {
-                    if start_time.elapsed() > timeout {
-                        warn!("等待工作线程退出超时，强制继续关闭");
+                
+                // 使用非阻塞的方式检查线程是否完成
+                let mut finished_threads = vec![false; handles.len()];
+                let mut active_handles: Vec<Option<std::thread::JoinHandle<()>>> = 
+                    handles.into_iter().map(Some).collect();
+                
+                // 轮询检查线程完成状态
+                while start_time.elapsed() < timeout {
+                    let mut all_finished = true;
+                    
+                    for (worker_id, (finished, handle_opt)) in 
+                        finished_threads.iter_mut().zip(active_handles.iter_mut()).enumerate() {
+                        
+                        if !*finished {
+                            if let Some(handle) = handle_opt.take() {
+                                // 非阻塞检查线程是否完成
+                                if handle.is_finished() {
+                                    match handle.join() {
+                                        Ok(_) => {
+                                            debug!("工作线程 {} 正常退出", worker_id);
+                                            *finished = true;
+                                        }
+                                        Err(e) => {
+                                            debug!("工作线程 {} 退出异常: {:?}", worker_id, e);
+                                            *finished = true;
+                                        }
+                                    }
+                                } else {
+                                    // 线程还在运行，放回去继续检查
+                                    *handle_opt = Some(handle);
+                                    all_finished = false;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if all_finished {
                         break;
                     }
-
-                    match handle.join() {
-                        Ok(_) => {
-                            debug!("工作线程 {} 正常退出", worker_id);
-                        }
-                        Err(e) => {
-                            // 线程退出异常不一定是错误，可能是正常的关闭过程
-                            debug!("工作线程 {} 退出: {:?}", worker_id, e);
-                        }
-                    }
+                    
+                    // 更短的休眠时间以提高响应速度
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                
+                // 检查是否有未完成的线程
+                let unfinished_count = finished_threads.iter().filter(|&&f| !f).count();
+                if unfinished_count > 0 {
+                    warn!("有 {} 个工作线程在超时后仍未退出，强制继续关闭", unfinished_count);
+                } else {
+                    debug!("所有工作线程已正常退出");
                 }
             }
         }
@@ -525,6 +559,10 @@ impl IoThreadPool {
                 break;
             }
 
+            // 早期退出机制：尝试发送一个测试消息来检查通道状态
+            // 注意：这里我们移除这个检查，因为crossbeam_channel::Sender没有is_disconnected方法
+            // 改为依赖其他退出条件
+
             // 根据 flush_interval 计算阻塞等待时间，避免忙等待
             let elapsed = last_flush.elapsed();
             let timeout = if batch_data.is_empty() {
@@ -535,7 +573,10 @@ impl IoThreadPool {
                 flush_interval.saturating_sub(elapsed)
             };
 
-            match data_receiver.recv_timeout(timeout) {
+            // 使用更短的超时来更频繁地检查面板状态
+            let recv_timeout = std::cmp::min(timeout, Duration::from_millis(50));
+            
+            match data_receiver.recv_timeout(recv_timeout) {
                 Ok(data) => {
                     batch_data.extend_from_slice(&data);
                     trace!(
@@ -546,6 +587,7 @@ impl IoThreadPool {
                 }
                 Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
                     // 超时：后续根据 should_flush 判断是否刷新
+                    // 更频繁地检查面板状态以便快速退出
                 }
                 Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
                     debug!("面板 {:?} 数据通道已断开", pane_id);

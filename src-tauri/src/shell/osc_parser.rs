@@ -7,7 +7,6 @@ use anyhow::Result;
 use percent_encoding;
 use regex::{Captures, Regex};
 use serde::{Deserialize, Serialize};
-use tracing::debug;
 use url::Url;
 
 /// Shell Integration状态
@@ -155,14 +154,6 @@ impl OscParser {
         sequences
     }
 
-    /// 解析具体的OSC序列
-    fn parse_osc_sequence(&self, number: &str, data: &str) -> Option<OscSequence> {
-        match number {
-            "9" => self.parse_windows_terminal_sequence(data),
-            _ => None,
-        }
-    }
-
     /// 解析Shell Integration（OSC 633）序列
     fn parse_shell_integration_sequence(&self, marker: &str, data: &str) -> Option<OscSequence> {
         // 统一大写，兼容大小写标记
@@ -212,23 +203,12 @@ impl OscParser {
         })
     }
 
-    /// 解析Windows Terminal序列
-    fn parse_windows_terminal_sequence(&self, data: &str) -> Option<OscSequence> {
-        // OSC 9;9;path 格式
-        if data.starts_with("9;") {
-            let path = data.strip_prefix("9;")?.to_string();
-            Some(OscSequence::WindowsTerminalCwd { path })
-        } else {
-            None
-        }
-    }
-
     /// 解析CWD序列 (OSC 7)
     fn parse_cwd_sequence(&self, data: &str) -> Option<OscSequence> {
         // 尝试解析file://格式的URL
         if let Ok(url) = Url::parse(data) {
             if url.scheme() == "file" {
-                let mut path = url.path().to_string();
+                let path = url.path().to_string();
 
                 // 处理Windows路径格式
                 #[cfg(windows)]

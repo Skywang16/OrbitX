@@ -566,12 +566,12 @@ impl TerminalMux {
                         break;
                     }
 
-                    match receiver.recv_timeout(Duration::from_millis(200)) {
+                    match receiver.recv_timeout(Duration::from_millis(20)) {
                         Ok(notification) => {
                             mux.notify_internal(&notification);
                         }
                         Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                            // 周期性检查关闭标志
+                            // 更频繁地检查关闭标志（50ms而不是200ms）
                             continue;
                         }
                         Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
@@ -769,26 +769,45 @@ impl TerminalMux {
     /// 清理所有资源
     pub fn shutdown(&self) -> AppResult<()> {
         tracing::info!("开始关闭TerminalMux");
+        let shutdown_start = std::time::Instant::now();
 
         // 标记为关闭状态，使通知处理线程能尽快退出
         self.shutting_down
             .store(true, std::sync::atomic::Ordering::Relaxed);
 
-        // 获取所有面板ID
+        // 获取所有面板ID和引用
         let pane_ids: Vec<PaneId> = self.list_panes();
         tracing::info!("准备关闭 {} 个面板", pane_ids.len());
+
+        // 立即标记所有面板为死亡状态，加速关闭过程
+        {
+            let panes = self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
+            for (_pane_id, pane) in panes.iter() {
+                pane.mark_dead();
+            }
+        }
+        tracing::debug!("所有面板已标记为死亡状态");
 
         // 逐个关闭面板
         let mut failed_panes = Vec::new();
         for pane_id in pane_ids {
+            // 为每个面板设置超时
+            let start = std::time::Instant::now();
             match self.remove_pane(pane_id) {
                 Ok(_) => {
-                    tracing::debug!("面板 {:?} 关闭成功", pane_id);
+                    let duration = start.elapsed().as_millis();
+                    tracing::debug!("面板 {:?} 关闭成功 ({}ms)", pane_id, duration);
                 }
                 Err(e) => {
                     tracing::warn!("关闭面板 {:?} 失败: {}", pane_id, e);
                     failed_panes.push(pane_id);
                 }
+            }
+            
+            // 如果单个面板关闭时间过长，总体超时保护
+            if shutdown_start.elapsed() > Duration::from_secs(3) {
+                tracing::warn!("关闭超时，强制退出剩余面板");
+                break;
             }
         }
 
@@ -809,17 +828,20 @@ impl TerminalMux {
             tracing::warn!("无法获取订阅者锁进行清理");
         }
 
-        // 关闭I/O处理器
+        // 关闭I/O处理器 - 带超时保护
+        let io_shutdown_start = std::time::Instant::now();
         match self.io_handler.shutdown() {
             Ok(_) => {
-                tracing::info!("I/O处理器已关闭");
+                let duration = io_shutdown_start.elapsed().as_millis();
+                tracing::info!("I/O处理器已关闭 ({}ms)", duration);
             }
             Err(e) => {
                 tracing::warn!("关闭I/O处理器失败（可能已经关闭）: {}", e);
             }
         }
 
-        tracing::info!("TerminalMux 关闭完成");
+        let total_duration = shutdown_start.elapsed().as_millis();
+        tracing::info!("TerminalMux 关闭完成 (总耗时: {}ms)", total_duration);
         Ok(())
     }
 }

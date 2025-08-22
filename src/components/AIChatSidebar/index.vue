@@ -14,6 +14,7 @@
 
   // 本地状态
   const messageInput = ref('')
+  const chatInputRef = ref<InstanceType<typeof ChatInput>>()
 
   // 拖拽调整功能状态
   const isDragging = ref(false)
@@ -28,12 +29,13 @@
   const sendMessage = async () => {
     if (!canSend.value) return
 
-    const message = messageInput.value.trim()
+    // 获取包含终端上下文的完整消息
+    const fullMessage = chatInputRef.value?.getMessageWithTerminalContext() || messageInput.value.trim()
     messageInput.value = ''
 
     try {
       // 普通聊天模式
-      await aiChatStore.sendMessage(message)
+      await aiChatStore.sendMessage(fullMessage)
     } catch (error) {
       // silent error
     }
@@ -198,6 +200,7 @@
 
     <!-- 输入区域 -->
     <ChatInput
+      ref="chatInputRef"
       v-model="messageInput"
       :loading="aiChatStore.isLoading"
       :can-send="canSend"

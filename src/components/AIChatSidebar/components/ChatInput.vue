@@ -97,6 +97,7 @@
     if (props.loading) {
       emit('stop')
     } else if (props.canSend) {
+      // 发送包含终端上下文的完整消息
       emit('send')
     }
   }
@@ -139,10 +140,28 @@
     })
   }
 
+  /**
+   * 获取包含终端选择内容的完整消息
+   */
+  const getMessageWithTerminalContext = () => {
+    let message = props.modelValue.trim()
+
+    // 如果有终端选择内容，自动添加到消息中
+    const selectedText = terminalSelection.getSelectedText()
+    if (selectedText.trim()) {
+      const selectionInfo = terminalSelection.selectionInfo.value
+      const contextPrompt = `\n\n**终端选中内容**${selectionInfo ? ` (${selectionInfo})` : ''}:\n\`\`\`\n${selectedText}\n\`\`\``
+      message += contextPrompt
+    }
+
+    return message
+  }
+
   // 暴露方法给父组件
   defineExpose({
     adjustTextareaHeight,
     focus: () => inputTextarea.value?.focus(),
+    getMessageWithTerminalContext,
   })
 </script>
 
