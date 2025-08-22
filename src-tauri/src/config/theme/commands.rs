@@ -113,7 +113,6 @@ pub async fn set_terminal_theme(
     theme_name: String,
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
-    app_handle: AppHandle,
 ) -> Result<(), String> {
     // 验证主题是否存在
     if !theme_service.theme_exists(&theme_name).await {
@@ -147,7 +146,6 @@ pub async fn set_follow_system_theme(
     dark_theme: Option<String>,
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
-    app_handle: AppHandle,
 ) -> Result<(), String> {
     // 验证主题是否存在
     if let Some(ref light) = light_theme {

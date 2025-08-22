@@ -17,8 +17,7 @@ use chacha20poly1305::{
 };
 use sqlx::{
     sqlite::{
-        SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions,
-        SqliteSynchronous,
+        SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
     },
     ConnectOptions, Executor,
 };
@@ -385,14 +384,6 @@ impl DatabaseManager {
 
             for (i, statement) in script.statements.iter().enumerate() {
                 if !statement.is_empty() {
-                    debug!(
-                        "执行SQL语句 {}/{} ({}): {}",
-                        i + 1,
-                        script.statements.len(),
-                        script.name,
-                        statement
-                    );
-
                     sqlx::query(statement)
                         .execute(&self.db_pool)
                         .await

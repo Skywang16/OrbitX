@@ -27,7 +27,6 @@ app.mount('#app')
 // 应用初始化
 // ============================================================================
 
-
 /**
  * 初始化应用状态管理
  */
@@ -88,11 +87,7 @@ const initializeServices = async () => {
 const initializeApplication = async () => {
   try {
     // 并行初始化各个系统
-    await Promise.allSettled([
-      initializeStores(),
-      initializeSettings(),
-      initializeServices(),
-    ])
+    await Promise.allSettled([initializeStores(), initializeSettings(), initializeServices()])
 
     // 设置窗口关闭监听器
     setupWindowCloseListener()

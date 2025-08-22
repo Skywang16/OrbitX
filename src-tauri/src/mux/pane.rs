@@ -179,11 +179,6 @@ impl LocalPane {
                         cmd.env("ORBITX_INTEGRATION_SCRIPT", integration_script);
                     }
                 }
-
-                tracing::info!(
-                    "已为 {} 配置Shell Integration（修复版）",
-                    shell_type.display_name()
-                );
             } else {
                 tracing::warn!(
                     "无法生成 {} 的Shell Integration脚本",
