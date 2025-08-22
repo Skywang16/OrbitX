@@ -6,7 +6,7 @@ import { useTheme } from '@/composables/useTheme'
 import { useSessionStore } from '@/stores/session'
 
 import { useTerminalStore } from '@/stores/Terminal'
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import App from './App.vue'
@@ -27,17 +27,6 @@ app.mount('#app')
 // 应用初始化
 // ============================================================================
 
-/**
- * 初始化存储系统
- */
-const initializeStorageSystem = async () => {
-  try {
-    // 存储系统已简化，无需预加载缓存
-    console.log('存储系统初始化完成')
-  } catch (error) {
-    console.warn('存储系统初始化失败:', error)
-  }
-}
 
 /**
  * 初始化应用状态管理
@@ -100,7 +89,6 @@ const initializeApplication = async () => {
   try {
     // 并行初始化各个系统
     await Promise.allSettled([
-      initializeStorageSystem(),
       initializeStores(),
       initializeSettings(),
       initializeServices(),
@@ -129,11 +117,11 @@ const handleAppClose = async () => {
     const terminalStore = useTerminalStore()
     await terminalStore.saveSessionState()
 
-    // 停止会话自动保存
+    // 清理会话存储资源
     const sessionStore = useSessionStore()
-    sessionStore.stopAutoSave()
+    sessionStore.cleanup()
   } catch (error) {
-    console.error('❌ [应用] 应用关闭清理失败:', error)
+    console.error('应用关闭清理失败:', error)
   }
 }
 
@@ -143,7 +131,7 @@ const handleAppClose = async () => {
 const setupWindowCloseListener = async () => {
   try {
     // 监听窗口关闭请求事件
-    const unlisten = await getCurrentWebviewWindow().onCloseRequested(async event => {
+    const unlisten = await getCurrentWindow().onCloseRequested(async event => {
       // 阻止默认关闭行为，这样我们可以先执行保存操作
       event.preventDefault()
 
@@ -151,11 +139,11 @@ const setupWindowCloseListener = async () => {
         // 执行保存操作
         await handleAppClose()
       } catch (error) {
-        console.error('❌ [应用] 保存失败:', error)
+        console.error('保存失败:', error)
       }
 
       unlisten()
-      await getCurrentWebviewWindow().close()
+      await getCurrentWindow().close()
     })
 
     return unlisten

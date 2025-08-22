@@ -114,9 +114,7 @@ export function useShortcutListener() {
       case 'open_settings':
         frontendResult = shortcutActionsService.openSettings()
         break
-      case 'toggle_theme':
-        frontendResult = await shortcutActionsService.toggleTheme()
-        break
+
       case 'new_window':
         frontendResult = await shortcutActionsService.newWindow()
         break

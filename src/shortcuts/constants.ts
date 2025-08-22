@@ -39,7 +39,6 @@ export const SHORTCUT_ACTIONS = {
   paste_from_clipboard: '从剪贴板粘贴',
   terminal_search: '终端搜索',
   open_settings: '打开设置',
-  toggle_theme: '切换主题',
 
   // 标签页管理
   new_tab: '新建标签页',

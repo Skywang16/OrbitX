@@ -95,8 +95,9 @@ export const useTheme = () => {
     error.value = null
 
     try {
+      // 1. 更新配置
       await themeAPI.setTerminalTheme(themeName)
-      // 重新加载配置状态
+      // 2. 重新查询最新状态 - 简单的增删改查模式
       await loadThemeConfigStatus()
       await loadCurrentTheme()
     } catch (err) {
@@ -115,8 +116,9 @@ export const useTheme = () => {
     error.value = null
 
     try {
+      // 1. 更新配置
       await themeAPI.setFollowSystemTheme(followSystem, lightTheme, darkTheme)
-      // 重新加载配置状态
+      // 2. 重新查询最新状态 - 简单的增删改查模式
       await loadThemeConfigStatus()
       await loadCurrentTheme()
     } catch (err) {
@@ -146,15 +148,19 @@ export const useTheme = () => {
   // ============================================================================
 
   /**
-   * 监听主题变化事件
+   * 监听主题变化事件（可选，用于外部主题变化同步）
    */
   const startThemeChangeListener = async () => {
     try {
-      themeChangeUnlisten = await listen<string>('theme-changed', async event => {
-        console.log('主题已变化:', event.payload)
-        // 重新加载配置状态和当前主题
-        await loadThemeConfigStatus()
-        await loadCurrentTheme()
+      themeChangeUnlisten = await listen<string>('theme-changed', async _event => {
+        // 如果需要响应外部主题变化，重新加载状态
+        try {
+          await loadThemeConfigStatus()
+          await loadCurrentTheme()
+        } catch (err) {
+          console.error('外部事件同步失败:', err)
+          error.value = err instanceof Error ? err.message : String(err)
+        }
       })
     } catch (err) {
       console.warn('启动主题变化监听失败:', err)

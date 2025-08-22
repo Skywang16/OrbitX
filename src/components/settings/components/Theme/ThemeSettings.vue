@@ -10,6 +10,16 @@
   onMounted(async () => {
     try {
       await theme.initialize()
+      // 确保组件状态与配置同步
+      const config = theme.themeConfig.value
+      if (config) {
+        if (config.lightTheme) {
+          selectedLightTheme.value = config.lightTheme
+        }
+        if (config.darkTheme) {
+          selectedDarkTheme.value = config.darkTheme
+        }
+      }
     } catch (error) {
       console.error('主题系统初始化失败:', error)
     }
@@ -19,17 +29,8 @@
   const selectedLightTheme = ref('light')
   const selectedDarkTheme = ref('dark')
 
-  // 本地模式状态，用于防止切换时的视觉冲突
-  const localMode = ref<'manual' | 'system'>('manual')
-  const isChangingMode = ref(false)
-
-  // 计算属性
+  // 简化模式计算 - 直接使用配置状态，移除复杂的本地状态逻辑
   const currentMode = computed(() => {
-    // 在模式切换过程中，使用本地状态
-    if (isChangingMode.value) {
-      return localMode.value
-    }
-
     const isFollowing = theme.isFollowingSystem.value
     return isFollowing ? 'system' : 'manual'
   })
@@ -84,25 +85,9 @@
         if (config.darkTheme) {
           selectedDarkTheme.value = config.darkTheme
         }
-        // 同步本地模式状态
-        if (!isChangingMode.value) {
-          localMode.value = config.followSystem ? 'system' : 'manual'
-        }
       }
     },
     { immediate: true }
-  )
-  // 监听模式切换完成，重置切换状态
-  watch(
-    () => theme.isFollowingSystem.value,
-    () => {
-      if (isChangingMode.value) {
-        // 延迟重置，确保UI更新完成
-        setTimeout(() => {
-          isChangingMode.value = false
-        }, 100)
-      }
-    }
   )
 
   // 获取主题图标
@@ -148,14 +133,11 @@
   // 事件处理
   const handleModeChange = async (mode: 'manual' | 'system') => {
     // 防止重复切换
-    if (isChangingMode.value || currentMode.value === mode) {
+    if (currentMode.value === mode) {
       return
     }
 
     try {
-      // 立即更新本地状态，避免视觉冲突
-      isChangingMode.value = true
-      localMode.value = mode
       if (mode === 'system') {
         // 确保有默认的浅色和深色主题
         const lightTheme = selectedLightTheme.value || 'light'
@@ -167,9 +149,6 @@
       }
     } catch (error) {
       console.error('切换主题模式失败:', error)
-      // 发生错误时恢复状态
-      isChangingMode.value = false
-      localMode.value = theme.isFollowingSystem.value ? 'system' : 'manual'
     }
   }
 
@@ -264,50 +243,65 @@
 
     <!-- 跟随系统模式设置 -->
     <div v-if="currentMode === 'system'" class="settings-card">
-      <h3 class="section-title">系统主题设置</h3>
+      <h3 class="section-title">选择主题</h3>
 
       <!-- 系统状态显示 -->
       <div class="system-status">
-        <div class="status-item">
-          <span class="status-label">当前系统主题:</span>
-          <span class="status-value">{{ systemStatus }}</span>
-        </div>
-        <div class="status-item">
-          <span class="status-label">正在使用:</span>
-          <span class="status-value">{{ currentThemeName }}</span>
+        <div class="status-content">
+          <div class="status-item">
+            <div class="status-item-icon" v-html="getIconSvg(theme.isSystemDark.value ? 'moon' : 'sun')"></div>
+            <div class="status-item-content">
+              <span class="status-label">当前系统主题</span>
+              <span class="status-value">{{ systemStatus }}</span>
+            </div>
+          </div>
+          <div class="status-item">
+            <div class="status-item-icon" v-html="getIconSvg('palette')"></div>
+            <div class="status-item-content">
+              <span class="status-label">正在使用</span>
+              <span class="status-value">{{ currentThemeName }}</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- 浅色主题选择 -->
-      <div class="theme-selector">
-        <h4 class="selector-title">
-          <div class="title-icon" v-html="getIconSvg('sun')"></div>
-          浅色主题
-        </h4>
-        <XSelect
-          v-model="selectedLightTheme"
-          :options="lightThemeOptions"
-          placeholder="选择浅色主题"
-          size="medium"
-          @change="handleSystemThemeChange"
-          class="theme-select"
-        />
-      </div>
+      <!-- 主题选择器组 -->
+      <div class="theme-selectors">
+        <!-- 浅色主题选择 -->
+        <div class="theme-selector">
+          <div class="selector-header">
+            <div class="selector-icon" v-html="getIconSvg('sun')"></div>
+            <h4 class="selector-title">浅色主题</h4>
+          </div>
+          <div class="selector-content">
+            <XSelect
+              v-model="selectedLightTheme"
+              :options="lightThemeOptions"
+              placeholder="选择浅色主题"
+              size="medium"
+              @change="handleSystemThemeChange"
+              class="theme-select"
+            />
+          </div>
+        </div>
 
-      <!-- 深色主题选择 -->
-      <div class="theme-selector">
-        <h4 class="selector-title">
-          <div class="title-icon" v-html="getIconSvg('moon')"></div>
-          深色主题
-        </h4>
-        <XSelect
-          v-model="selectedDarkTheme"
-          :options="darkThemeOptions"
-          placeholder="选择深色主题"
-          size="medium"
-          @change="handleSystemThemeChange"
-          class="theme-select"
-        />
+        <!-- 深色主题选择 -->
+        <div class="theme-selector">
+          <div class="selector-header">
+            <div class="selector-icon" v-html="getIconSvg('moon')"></div>
+            <h4 class="selector-title">深色主题</h4>
+          </div>
+          <div class="selector-content">
+            <XSelect
+              v-model="selectedDarkTheme"
+              :options="darkThemeOptions"
+              placeholder="选择深色主题"
+              size="medium"
+              @change="handleSystemThemeChange"
+              class="theme-select"
+            />
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -477,21 +471,35 @@
   }
 
   .system-status {
-    background-color: var(--bg-400);
-    border-radius: var(--border-radius);
-    padding: var(--spacing-md);
     margin-bottom: var(--spacing-lg);
+  }
+
+  .status-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
   }
 
   .status-item {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--spacing-xs);
   }
 
-  .status-item:last-child {
-    margin-bottom: 0;
+  .status-item-icon {
+    margin-right: var(--spacing-sm);
+    color: var(--text-400);
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .status-item-content {
+    display: flex;
+    justify-content: space-between;
+    flex: 1;
   }
 
   .status-label {
@@ -503,22 +511,38 @@
     color: var(--text-400);
   }
 
+  .theme-selectors {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-lg);
+    margin-top: var(--spacing-md);
+  }
+
   .theme-selector {
     margin-bottom: var(--spacing-md);
   }
 
-  .selector-title {
+  .selector-header {
     display: flex;
     align-items: center;
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .selector-icon {
+    margin-right: var(--spacing-sm);
+    color: var(--text-400);
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .selector-title {
     font-size: var(--font-size-sm);
     font-weight: 500;
     color: var(--text-200);
-    margin-bottom: var(--spacing-xs);
-  }
-
-  .title-icon {
-    margin-right: var(--spacing-xs);
-    color: var(--text-400);
+    margin: 0;
   }
 
   .theme-select {

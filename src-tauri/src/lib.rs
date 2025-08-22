@@ -525,6 +525,11 @@ pub fn run() {
                 setup_tauri_integration(app.handle().clone());
                 info!("Tauri事件集成设置完成");
 
+                // 启动系统主题监听器
+                info!("开始启动系统主题监听器");
+                start_system_theme_listener(app.handle().clone());
+                info!("系统主题监听器已启动");
+
                 // 在窗口关闭请求时优雅关闭 TerminalMux，释放后台线程
                 if let Some(window) = app.get_webview_window("main") {
                     use tauri::WindowEvent;
@@ -744,4 +749,31 @@ async fn copy_default_config_from_resources<R: tauri::Runtime>(
     }
 
     Ok(())
+}
+
+/// 启动系统主题监听器
+fn start_system_theme_listener<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>) {
+    use config::theme::{handle_system_theme_change, SystemThemeDetector};
+    use std::sync::Arc;
+
+    let handle = Arc::new(app_handle);
+    let _listener_handle = SystemThemeDetector::start_system_theme_listener({
+        let handle = Arc::clone(&handle);
+        move |is_dark| {
+            let handle = Arc::clone(&handle);
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = handle_system_theme_change(&*handle, is_dark).await {
+                    warn!("处理系统主题变化失败: {}", e);
+                } else {
+                    info!(
+                        "系统主题已更新为: {}",
+                        if is_dark { "深色" } else { "浅色" }
+                    );
+                }
+            });
+        }
+    });
+
+    // 存储监听器句柄，防止被drop
+    // 注意：在实际应用中，你可能需要在应用关闭时停止监听器
 }

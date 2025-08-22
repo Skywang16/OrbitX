@@ -104,14 +104,6 @@ export class ShortcutActionsService {
     return true
   }
 
-  async toggleTheme(): Promise<boolean> {
-    const themeManager = this.themeManager
-    const currentTheme = themeManager.currentThemeName.value
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark'
-    await themeManager.switchToTheme(newTheme)
-    return true
-  }
-
   clearTerminal(): boolean {
     const activeTerminal = document.querySelector('.terminal-active')
     if (activeTerminal) {

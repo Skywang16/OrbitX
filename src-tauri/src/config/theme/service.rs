@@ -186,8 +186,32 @@ impl SystemThemeDetector {
         #[cfg(target_os = "macos")]
         {
             // macOS 系统主题检测
-            // 使用环境变量检测，这是一个简化的实现
-            std::env::var("TERM_PROGRAM").ok().map(|_| false) // 默认返回浅色模式
+            // 使用 osascript 命令检测系统主题
+            use std::process::Command;
+            
+            let output = Command::new("osascript")
+                .args(["-e", "tell application \"System Events\" to tell appearance preferences to get dark mode"])
+                .output()
+                .ok()?;
+            
+            if output.status.success() {
+                let result = String::from_utf8_lossy(&output.stdout);
+                let is_dark = result.trim().eq_ignore_ascii_case("true");
+                Some(is_dark)
+            } else {
+                // 如果 osascript 失败，尝试检查系统设置的替代方法
+                let output = Command::new("defaults")
+                    .args(["read", "-g", "AppleInterfaceStyle"])
+                    .output()
+                    .ok()?;
+                
+                if output.status.success() {
+                    let result = String::from_utf8_lossy(&output.stdout);
+                    Some(result.trim().eq_ignore_ascii_case("dark"))
+                } else {
+                    None
+                }
+            }
         }
 
         #[cfg(target_os = "windows")]
@@ -214,6 +238,43 @@ impl SystemThemeDetector {
         {
             None
         }
+    }
+
+    /// 启动系统主题监听器（仅在 macOS 上）
+    #[cfg(target_os = "macos")]
+    pub fn start_system_theme_listener<F>(callback: F) -> Option<std::thread::JoinHandle<()>>
+    where
+        F: Fn(bool) + Send + 'static,
+    {
+        use std::thread;
+        use std::time::Duration;
+        
+        Some(thread::spawn(move || {
+            let mut last_dark_mode: Option<bool> = None;
+            
+            loop {
+                let current_dark_mode = Self::is_dark_mode();
+                
+                if current_dark_mode != last_dark_mode {
+                    if let Some(is_dark) = current_dark_mode {
+                        callback(is_dark);
+                    }
+                    last_dark_mode = current_dark_mode;
+                }
+                
+                // 每秒检查一次主题变化
+                thread::sleep(Duration::from_secs(1));
+            }
+        }))
+    }
+
+    /// 启动系统主题监听器（非 macOS 平台的空实现）
+    #[cfg(not(target_os = "macos"))]
+    pub fn start_system_theme_listener<F>(_callback: F) -> Option<std::thread::JoinHandle<()>>
+    where
+        F: Fn(bool) + Send + 'static,
+    {
+        None
     }
 }
 

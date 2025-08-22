@@ -130,10 +130,11 @@ pub async fn set_terminal_theme(
         .await
         .map_err(|e| format!("更新配置失败: {}", e))?;
 
-    // 通知前端主题已更改
-    app_handle
-        .emit("theme-changed", &theme_name)
-        .map_err(|e| format!("发送事件失败: {}", e))?;
+    // 在简单的增删改查模式中，不需要发送事件
+    // 前端会在API调用后立即查询最新状态
+    // app_handle
+    //     .emit("theme-changed", &theme_name)
+    //     .map_err(|e| format!("发送事件失败: {}", e))?;
 
     Ok(())
 }
@@ -148,8 +149,6 @@ pub async fn set_follow_system_theme(
     theme_service: State<'_, Arc<ThemeService>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    info!("设置跟随系统主题: {}", follow_system);
-
     // 验证主题是否存在
     if let Some(ref light) = light_theme {
         if !theme_service.theme_exists(light).await {
@@ -181,21 +180,8 @@ pub async fn set_follow_system_theme(
         .await
         .map_err(|e| format!("更新配置失败: {}", e))?;
 
-    // 获取当前应该使用的主题
-    let config = config_manager
-        .get_config()
-        .await
-        .map_err(|e| format!("获取配置失败: {}", e))?;
-
-    let is_system_dark = SystemThemeDetector::is_dark_mode();
-    let current_theme_name =
-        theme_service.get_current_theme_name(&config.appearance.theme_config, is_system_dark);
-
-    // 通知前端主题已更改
-    app_handle
-        .emit("theme-changed", &current_theme_name)
-        .map_err(|e| format!("发送事件失败: {}", e))?;
-
+    // 在简单的增删改查模式中，不需要发送事件
+    // 前端会在API调用后立即查询最新状态
     Ok(())
 }
 
@@ -223,7 +209,10 @@ pub async fn get_available_themes(
 }
 
 /// 系统主题变化处理
-pub async fn handle_system_theme_change(app_handle: &AppHandle, is_dark: bool) -> AppResult<()> {
+pub async fn handle_system_theme_change<R: tauri::Runtime>(
+    app_handle: &AppHandle<R>,
+    is_dark: bool,
+) -> AppResult<()> {
     debug!("系统主题变化: {}", if is_dark { "深色" } else { "浅色" });
 
     let config_manager = app_handle.state::<Arc<TomlConfigManager>>();

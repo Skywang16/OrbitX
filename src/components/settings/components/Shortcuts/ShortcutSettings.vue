@@ -145,13 +145,7 @@
   }
 
   // 全局动作定义
-  const globalActionKeys = [
-    'copy_to_clipboard',
-    'paste_from_clipboard',
-    'terminal_search',
-    'open_settings',
-    'toggle_theme',
-  ]
+  const globalActionKeys = ['copy_to_clipboard', 'paste_from_clipboard', 'terminal_search', 'open_settings'];
 
   // 终端动作定义
   const terminalActionKeys = [
@@ -166,8 +160,8 @@
     'switch_to_last_tab',
     'accept_completion',
     'increase_font_size',
-    'decrease_font_size',
-  ]
+    'decrease_font_size'
+  ];
 
   // 查找快捷键配置
   const findShortcut = (actionKey: string) => {

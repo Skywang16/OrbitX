@@ -114,11 +114,7 @@ pub fn create_default_shortcuts_config() -> ShortcutsConfig {
                 modifiers: vec!["cmd".to_string()],
                 action: ShortcutAction::Simple("open_settings".to_string()),
             },
-            ShortcutBinding {
-                key: "d".to_string(),
-                modifiers: vec!["cmd".to_string(), "shift".to_string()],
-                action: ShortcutAction::Simple("toggle_theme".to_string()),
-            },
+
         ],
         terminal: vec![
             // 标签页管理

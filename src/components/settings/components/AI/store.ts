@@ -91,7 +91,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
       // 从AI API获取模型数据
       const { models, defaultModelId } = await fetchModelsFromAPI()
 
-      // TODO: 这里应该从后端API获取完整的AISettings，而不是只获取模型
       // 目前先构造一个基本的设置对象
       settings.value = {
         models,

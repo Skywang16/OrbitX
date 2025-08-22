@@ -66,12 +66,7 @@ modifiers = ["cmd"]
 action = "open_settings"
 
 [[shortcuts.global]]
-key = "d"
-modifiers = [
-    "cmd",
-    "shift",
-]
-action = "toggle_theme"
+
 
 [[shortcuts.terminal]]
 key = "t"

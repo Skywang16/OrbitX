@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 /// 主题配置 (对应 TOML 中的 [appearance.theme_config] 节)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct ThemeConfig {
     /// 自动切换时间
     pub auto_switch_time: String,
