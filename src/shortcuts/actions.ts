@@ -1,6 +1,9 @@
 import { useTabManagerStore } from '@/stores/TabManager'
 import { useTerminalStore } from '@/stores/Terminal'
 import { useSettingsStore } from '@/components/settings/store'
+import { useTheme } from '@/composables/useTheme'
+import { createMessage } from '@/ui/composables/message-api'
+import { TabType } from '@/types'
 
 export class ShortcutActionsService {
   private get tabManagerStore() {
@@ -13,6 +16,10 @@ export class ShortcutActionsService {
 
   private get settingsStore() {
     return useSettingsStore()
+  }
+
+  private get themeManager() {
+    return useTheme()
   }
 
   switchToTab(index: number): boolean {
@@ -42,10 +49,20 @@ export class ShortcutActionsService {
     const tabs = this.tabManagerStore.tabs
     const activeTab = this.tabManagerStore.activeTab
 
-    if (tabs.length <= 1 || !activeTab) {
-      return false
+    if (!activeTab) {
+      return true // 没有活动标签页，阻止默认行为
     }
 
+    // 如果当前是终端标签页，检查是否为最后一个终端标签页
+    if (activeTab.type === TabType.TERMINAL) {
+      const terminalTabs = tabs.filter(tab => tab.type === TabType.TERMINAL)
+      if (terminalTabs.length <= 1) {
+        createMessage.warning('无法关闭最后一个终端标签页')
+        return true // 阻止关闭最后一个终端标签页
+      }
+    }
+
+    // 对于设置页等其他类型的标签页，可以直接关闭
     this.tabManagerStore.closeTab(activeTab.id)
     return true
   }
@@ -83,12 +100,12 @@ export class ShortcutActionsService {
   }
 
   openSettings(): boolean {
-    this.settingsStore.openSettings()
+    this.tabManagerStore.createSettingsTab('theme')
     return true
   }
 
   async toggleTheme(): Promise<boolean> {
-    const themeManager = this.settingsStore.themeManager
+    const themeManager = this.themeManager
     const currentTheme = themeManager.currentThemeName.value
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark'
     await themeManager.switchToTheme(newTheme)
@@ -96,7 +113,7 @@ export class ShortcutActionsService {
   }
 
   clearTerminal(): boolean {
-    const activeTerminal = document.querySelector('.terminal-active .xterm-terminal')
+    const activeTerminal = document.querySelector('.terminal-active')
     if (activeTerminal) {
       const event = new CustomEvent('clear-terminal', { bubbles: true })
       activeTerminal.dispatchEvent(event)

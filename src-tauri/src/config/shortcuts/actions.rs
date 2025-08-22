@@ -290,8 +290,8 @@ impl ActionRegistry {
         let _ = self
             .register_action(
                 ActionMetadata {
-                    name: "search_forward".to_string(),
-                    description: "向前搜索".to_string(),
+                    name: "terminal_search".to_string(),
+                    description: "终端搜索".to_string(),
                     category: "global".to_string(),
                     requires_terminal: false,
                     is_system_action: false,
@@ -549,7 +549,120 @@ impl ActionRegistry {
 
     /// 注册系统动作
     async fn register_system_actions(&mut self) {
-        // 暂时为空，等待实际需要的系统级功能
+        // 清空终端
+        let _ = self
+            .register_action(
+                ActionMetadata {
+                    name: "clear_terminal".to_string(),
+                    description: "清空终端".to_string(),
+                    category: "system".to_string(),
+                    requires_terminal: true,
+                    is_system_action: false,
+                    supported_platforms: vec![
+                        "windows".to_string(),
+                        "macos".to_string(),
+                        "linux".to_string(),
+                    ],
+                },
+                |context| {
+                    info!("🔥 执行清空终端动作");
+                    debug!("清空终端上下文: {:?}", context);
+                    Ok(serde_json::Value::String("🔥 清空终端功能已触发！".to_string()))
+                },
+            )
+            .await;
+
+        // 打开设置
+        let _ = self
+            .register_action(
+                ActionMetadata {
+                    name: "open_settings".to_string(),
+                    description: "打开设置".to_string(),
+                    category: "system".to_string(),
+                    requires_terminal: false,
+                    is_system_action: false,
+                    supported_platforms: vec![
+                        "windows".to_string(),
+                        "macos".to_string(),
+                        "linux".to_string(),
+                    ],
+                },
+                |context| {
+                    info!("🔥 执行打开设置动作");
+                    debug!("打开设置上下文: {:?}", context);
+                    Ok(serde_json::Value::String("🔥 打开设置功能已触发！".to_string()))
+                },
+            )
+            .await;
+
+        // 切换主题
+        let _ = self
+            .register_action(
+                ActionMetadata {
+                    name: "toggle_theme".to_string(),
+                    description: "切换主题".to_string(),
+                    category: "system".to_string(),
+                    requires_terminal: false,
+                    is_system_action: false,
+                    supported_platforms: vec![
+                        "windows".to_string(),
+                        "macos".to_string(),
+                        "linux".to_string(),
+                    ],
+                },
+                |context| {
+                    info!("🔥 执行切换主题动作");
+                    debug!("切换主题上下文: {:?}", context);
+                    Ok(serde_json::Value::String("🔥 切换主题功能已触发！".to_string()))
+                },
+            )
+            .await;
+
+        // 增大字体
+        let _ = self
+            .register_action(
+                ActionMetadata {
+                    name: "increase_font_size".to_string(),
+                    description: "增大字体".to_string(),
+                    category: "system".to_string(),
+                    requires_terminal: false,
+                    is_system_action: false,
+                    supported_platforms: vec![
+                        "windows".to_string(),
+                        "macos".to_string(),
+                        "linux".to_string(),
+                    ],
+                },
+                |context| {
+                    info!("🔥 执行增大字体动作");
+                    debug!("增大字体上下文: {:?}", context);
+                    Ok(serde_json::Value::String("🔥 增大字体功能已触发！".to_string()))
+                },
+            )
+            .await;
+
+        // 减小字体
+        let _ = self
+            .register_action(
+                ActionMetadata {
+                    name: "decrease_font_size".to_string(),
+                    description: "减小字体".to_string(),
+                    category: "system".to_string(),
+                    requires_terminal: false,
+                    is_system_action: false,
+                    supported_platforms: vec![
+                        "windows".to_string(),
+                        "macos".to_string(),
+                        "linux".to_string(),
+                    ],
+                },
+                |context| {
+                    info!("🔥 执行减小字体动作");
+                    debug!("减小字体上下文: {:?}", context);
+                    Ok(serde_json::Value::String("🔥 减小字体功能已触发！".to_string()))
+                },
+            )
+            .await;
     }
 }
 

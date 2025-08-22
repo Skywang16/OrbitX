@@ -23,17 +23,28 @@
 
     <!-- 提示消息 -->
     <XMessage :visible="toast.visible" :message="toast.message" :type="toast.type" @close="closeToast" />
+
+    <!-- 搜索组件 -->
+    <SearchBox
+      :visible="searchState.visible"
+      @close="() => closeSearch(searchAddon)"
+      @search="(query, options) => handleSearch(terminal, searchAddon, query, options)"
+      @find-next="() => findNext(searchAddon)"
+      @find-previous="() => findPrevious(searchAddon)"
+      ref="searchBoxRef"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
   // Vue 核心功能
-  import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
   // 第三方库
   import { openUrl } from '@tauri-apps/plugin-opener'
   import { FitAddon } from '@xterm/addon-fit'
   import { WebLinksAddon } from '@xterm/addon-web-links'
+  import { SearchAddon } from '@xterm/addon-search'
   import { Terminal } from '@xterm/xterm'
 
   // 项目内部模块
@@ -41,6 +52,10 @@
   import { windowApi } from '@/api'
   import { useTheme } from '@/composables/useTheme'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
+  import { useTerminalState } from '@/composables/useTerminalState'
+  import { useTerminalSearch } from '@/composables/useTerminalSearch'
+  import { useShellIntegration } from '@/composables/useShellIntegration'
+  import { useTerminalOutput } from '@/composables/useTerminalOutput'
   import { TERMINAL_CONFIG } from '@/constants/terminal'
   import { useTerminalStore } from '@/stores/Terminal'
   import { XMessage } from '@/ui/components'
@@ -48,6 +63,7 @@
   import { invoke } from '@tauri-apps/api/core'
   import type { ITheme } from '@xterm/xterm'
   import TerminalCompletion from './TerminalCompletion.vue'
+  import SearchBox from '@/components/SearchBox.vue'
 
   // XTerm.js 样式
   import '@xterm/xterm/css/xterm.css'
@@ -66,54 +82,34 @@
   }>()
 
   // === 状态管理 ===
-  const terminalStore = useTerminalStore() // 终端状态管理
-  const themeStore = useTheme() // 主题管理
-  const terminalSelection = useTerminalSelection() // 终端选择管理
+  const terminalStore = useTerminalStore()
+  const themeStore = useTheme()
+  const terminalSelection = useTerminalSelection()
+
+  // 使用新的composables
+  const { inputState, terminalEnv, toast, showToast, closeToast, updateInputLine, handleSuggestionChange } =
+    useTerminalState()
+  const { searchState, searchBoxRef, closeSearch, handleSearch, findNext, findPrevious, handleOpenTerminalSearch } =
+    useTerminalSearch()
+  const { handleOutput: handleTerminalOutput, handleExit, cleanup: cleanupOutput } = useTerminalOutput()
 
   // === 核心引用 ===
-  const terminalRef = ref<HTMLElement | null>(null) // 终端容器DOM引用
-  const terminal = ref<Terminal | null>(null) // XTerm.js 实例
+  const terminalRef = ref<HTMLElement | null>(null)
+  const terminal = ref<Terminal | null>(null)
   const completionRef = ref<{ hasCompletion: () => boolean; acceptCompletion: () => string } | null>(null)
 
-  const fitAddon = ref<FitAddon | null>(null) // 终端自适应大小插件
+  const fitAddon = ref<FitAddon | null>(null)
+  const searchAddon = ref<SearchAddon | null>(null)
 
-  // 防止重复清理的标记
   let hasDisposed = false
   let keyListener: { dispose: () => void } | null = null
 
-  // === 终端状态 ===
-  // 合并输入相关状态
-  const inputState = reactive({
-    currentLine: '', // 当前输入行内容
-    cursorCol: 0, // 光标列位置
-    suggestion: '', // 当前补全建议
-  })
-
-  // 合并终端环境状态
-  const terminalEnv = reactive({
-    workingDirectory: '/tmp', // 当前工作目录
-    cursorPosition: { x: 0, y: 0 }, // 终端光标屏幕坐标
-    isMac: false, // 是否为Mac系统
-  })
-
-  // === UI 状态 ===
-
-  // 提示消息状态
-  const toast = reactive({
-    visible: false, // 是否显示提示
-    message: '', // 提示消息内容
-    type: 'success' as 'success' | 'error', // 提示类型
-  })
-
   // === 性能优化 ===
-  // 合并定时器管理
   const timers = {
     resize: null as number | null,
     themeUpdate: null as number | null,
-    outputFlush: null as number | null,
   }
 
-  // 终端样式缓存，避免重复DOM查询
   const styleCache = ref<{
     charWidth: number
     lineHeight: number
@@ -121,53 +117,16 @@
     paddingTop: number
   } | null>(null)
 
-  // === 输出缓冲优化 ===
-  let outputBuffer = '' // 输出数据缓冲区，使用字符串而非数组提高性能
-  const OUTPUT_FLUSH_INTERVAL = 0 // 立即刷新，避免字符丢失
-  const MAX_BUFFER_LENGTH = 1024 // 降低缓冲区长度，减少延迟
-
-  // === 输出缓冲处理函数 ===
-
-  /**
-   * 刷新输出缓冲区到终端
-   * 将缓冲区中的所有数据一次性写入终端，减少DOM更新频率
-   */
-  const flushOutputBuffer = () => {
-    if (outputBuffer.length === 0 || !terminal.value) return
-
-    try {
-      // 一次性写入终端
-      terminal.value.write(outputBuffer)
-      outputBuffer = '' // 清空缓冲区
-    } catch {
-      outputBuffer = '' // 出错时也要清空缓冲区
-    }
-
-    // 清除定时器
-    if (timers.outputFlush) {
-      clearTimeout(timers.outputFlush)
-      timers.outputFlush = null
-    }
-  }
-
-  /**
-   * 调度输出缓冲区刷新
-   * 立即刷新以避免字符丢失
-   */
-  const scheduleOutputFlush = () => {
-    // 立即刷新，避免字符显示延迟
-    if (OUTPUT_FLUSH_INTERVAL === 0) {
-      flushOutputBuffer()
-      return
-    }
-
-    // 如果已经有定时器在运行，不需要重新调度
-    if (timers.outputFlush) return
-
-    timers.outputFlush = window.setTimeout(() => {
-      flushOutputBuffer()
-    }, OUTPUT_FLUSH_INTERVAL)
-  }
+  // Shell Integration 设置
+  const shellIntegration = useShellIntegration({
+    terminalId: props.terminalId,
+    backendId: props.backendId,
+    workingDirectory: terminalEnv.workingDirectory,
+    onCwdUpdate: (cwd: string) => {
+      terminalEnv.workingDirectory = cwd
+    },
+    onTerminalCwdUpdate: terminalStore.updateTerminalCwd,
+  })
 
   // === 核心功能函数 ===
 
@@ -198,6 +157,10 @@
       // 创建并加载插件
       fitAddon.value = new FitAddon() // 创建自适应大小插件实例
       terminal.value.loadAddon(fitAddon.value) // 自适应大小插件
+
+      searchAddon.value = new SearchAddon() // 创建搜索插件实例
+      terminal.value.loadAddon(searchAddon.value) // 搜索插件
+
       terminal.value.loadAddon(
         new WebLinksAddon((event, uri) => {
           // 支持 Ctrl+点击（Windows/Linux）或 Cmd+点击（Mac）打开链接
@@ -211,21 +174,10 @@
       // 设置核心事件监听
       terminal.value.onResize(({ rows, cols }) => emit('resize', rows, cols)) // 大小变化
 
-      // 合并输入监听：既向外发出输入事件，也维护当前行与光标
+      // 输入监听
       terminal.value.onData(data => {
         emit('input', data)
-        if (data === '\r') {
-          inputState.currentLine = ''
-          inputState.cursorCol = 0
-        } else if (data === '\x7f') {
-          if (inputState.cursorCol > 0) {
-            inputState.currentLine = inputState.currentLine.slice(0, -1)
-            inputState.cursorCol--
-          }
-        } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
-          inputState.currentLine += data
-          inputState.cursorCol++
-        }
+        updateInputLine(data)
         updateTerminalCursorPosition()
       })
 
@@ -395,13 +347,6 @@
   }
 
   /**
-   * 处理补全建议变化
-   */
-  const handleSuggestionChange = (suggestion: string) => {
-    inputState.suggestion = suggestion
-  }
-
-  /**
    * 处理快捷键触发的补全接受事件
    */
   const handleAcceptCompletionShortcut = () => {
@@ -410,6 +355,42 @@
       if (completionText && completionText.trim()) {
         acceptCompletion(completionText)
       }
+    }
+  }
+
+  /**
+   * 处理清空终端事件
+   */
+  const handleClearTerminal = () => {
+    if (terminal.value) {
+      terminal.value.clear()
+    }
+  }
+
+  /**
+   * 处理字体大小变化事件
+   */
+  const handleFontSizeChange = (event: Event) => {
+    const customEvent = event as CustomEvent<{ action: 'increase' | 'decrease' }>
+    if (!terminal.value || !fitAddon.value) return
+
+    const action = customEvent.detail?.action
+    if (action === 'increase') {
+      // 增大字体
+      const currentFontSize = terminal.value.options.fontSize || 12
+      const newFontSize = Math.min(currentFontSize + 1, 24)
+      terminal.value.options.fontSize = newFontSize
+      nextTick(() => {
+        fitAddon.value?.fit()
+      })
+    } else if (action === 'decrease') {
+      // 减小字体
+      const currentFontSize = terminal.value.options.fontSize || 12
+      const newFontSize = Math.max(currentFontSize - 1, 8)
+      terminal.value.options.fontSize = newFontSize
+      nextTick(() => {
+        fitAddon.value?.fit()
+      })
     }
   }
 
@@ -499,24 +480,15 @@
     }
   }
 
-  /**
-   * 切换到指定路径
-   * 发送 cd 命令到终端
-   */
   const handleGoToPath = (path: string) => {
     const cleanPath = path.trim().replace(/^["']|["']$/g, '')
     emit('input', `cd "${cleanPath}"\n`)
     showToast(`切换到: ${cleanPath}`, 'success')
   }
 
-  /**
-   * 处理文件拖拽到终端
-   */
   const handleFileDrop = async (filePath: string) => {
     try {
-      // 调用后端命令获取文件所在目录
       const directory = await invoke<string>('handle_file_open', { path: filePath })
-      // 切换到该目录
       handleGoToPath(directory)
     } catch {
       showToast('无法处理拖拽的文件', 'error')
@@ -563,222 +535,9 @@
     }
   }
 
-  /**
-   * 显示提示消息
-   */
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    toast.visible = true
-    toast.message = message
-    toast.type = type
-    setTimeout(() => {
-      toast.visible = false
-    }, 3000) // 3秒后自动隐藏
-  }
-
-  /**
-   * 关闭提示消息
-   */
-  const closeToast = () => {
-    toast.visible = false
-  }
-
   // === Event Handlers for Terminal ===
   const handleOutput = (data: string) => {
-    try {
-      if (terminal.value && typeof data === 'string') {
-        // 处理Shell Integration相关的OSC序列
-        processTerminalOutput(data)
-
-        // 如果设置为立即刷新，直接写入终端
-        if (OUTPUT_FLUSH_INTERVAL === 0) {
-          terminal.value.write(data)
-          return
-        }
-
-        // 否则使用缓冲机制
-        outputBuffer += data
-
-        // 在缓冲区过大时立即刷新
-        if (outputBuffer.length >= MAX_BUFFER_LENGTH) {
-          flushOutputBuffer()
-        } else {
-          // 调度延迟刷新
-          scheduleOutputFlush()
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  /**
-   * 解析OSC序列并处理shell integration事件
-   * 支持shell integration协议
-   */
-  const parseOSCSequences = (data: string) => {
-    // OSC 633 序列匹配器（shell integration）
-    // 允许无 payload 的 A/B/C 等标记（第二个分号可选），并兼容大小写
-    const oscPattern = /\x1b]633;([A-Za-z]);?([^\x07\x1b]*?)(?:\x07|\x1b\\)/g
-    let match
-
-    while ((match = oscPattern.exec(data)) !== null) {
-      const command = match[1].toUpperCase()
-      const payload = match[2]
-
-      switch (command) {
-        case 'A': // Prompt started
-          break
-        case 'B': // Command started
-          break
-        case 'C': // Command executed (start of output)
-          break
-        case 'D': // Command finished with exit code
-          break
-        case 'P': // Property update
-          handlePropertyUpdate(payload)
-          break
-      }
-    }
-
-    // OSC 7 序列匹配器（CWD更新）- 增强版
-    const cwdPattern = /\x1b]7;([^\x07\x1b]*?)(?:\x07|\x1b\\)/g
-    let cwdMatch
-
-    while ((cwdMatch = cwdPattern.exec(data)) !== null) {
-      const fullData = cwdMatch[1]
-      let newCwd = ''
-
-      if (fullData) {
-        try {
-          // 尝试解析file://URL格式
-          if (fullData.startsWith('file://')) {
-            const url = new URL(fullData)
-            newCwd = decodeURIComponent(url.pathname)
-
-            // 处理Windows路径
-            if (
-              navigator.platform.toLowerCase().includes('win') &&
-              newCwd.startsWith('/') &&
-              newCwd.length > 3 &&
-              newCwd[2] === ':'
-            ) {
-              newCwd = newCwd.substring(1)
-            }
-          } else {
-            // 直接路径格式
-            newCwd = decodeURIComponent(fullData)
-          }
-
-          // 验证和更新CWD
-          if (newCwd && newCwd !== terminalEnv.workingDirectory) {
-            console.log(`📍 [Terminal] CWD更新: ${terminalEnv.workingDirectory} -> ${newCwd}`)
-            terminalEnv.workingDirectory = newCwd
-            terminalStore.updateTerminalCwd(props.terminalId, newCwd)
-
-            // 同步更新后端状态
-            if (props.backendId != null) {
-              invoke('update_pane_cwd', {
-                paneId: props.backendId,
-                cwd: newCwd,
-              }).catch(err => {
-                console.warn('同步CWD到后端失败:', err)
-              })
-            }
-          }
-        } catch (error) {
-          console.warn('CWD解析失败:', error, '原始数据:', fullData)
-        }
-      }
-    }
-  }
-
-  /**
-   * 处理shell integration属性更新
-   */
-  const handlePropertyUpdate = (payload: string) => {
-    try {
-      const parts = payload.split('=')
-      if (parts.length !== 2) return
-
-      const [key, value] = parts
-      switch (key) {
-        case 'Cwd': {
-          const decodedCwd = decodeURIComponent(value)
-          if (decodedCwd && decodedCwd !== terminalEnv.workingDirectory) {
-            terminalEnv.workingDirectory = decodedCwd
-            terminalStore.updateTerminalCwd(props.terminalId, decodedCwd)
-            // 同步更新后端状态
-            if (props.backendId != null) {
-              invoke('update_pane_cwd', {
-                paneId: props.backendId,
-                cwd: decodedCwd,
-              }).catch(() => {})
-            }
-          }
-          break
-        }
-        case 'OSType':
-          break
-      }
-    } catch {
-      // 静默忽略解析错误
-    }
-  }
-
-  /**
-   * 初始化shell integration - 静默模式
-   * 启用OSC序列解析，不注入任何脚本
-   */
-  const initShellIntegration = async () => {
-    if (!terminal.value) return
-
-    try {
-      // 等待终端初始化完成
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      // 启用静默模式的Shell Integration
-      await silentShellIntegration()
-    } catch {
-      // 静默失败
-    }
-  }
-
-  /**
-   * 静默shell integration - 通过后端API实现
-   */
-  const silentShellIntegration = async () => {
-    try {
-      // 通过后端API静默注入Shell Integration脚本
-      if (props.backendId != null) {
-        await invoke('setup_shell_integration', {
-          paneId: props.backendId,
-          silent: true,
-        })
-      }
-    } catch {
-      // 静默失败
-    }
-  }
-
-  /**
-   * 处理终端输出数据，专注于OSC序列解析
-   */
-  const processTerminalOutput = (data: string) => {
-    // 只使用OSC序列解析，移除正则表达式检测
-    if (data.includes('\x1b]')) {
-      parseOSCSequences(data)
-    }
-  }
-
-  const handleExit = (exitCode: number | null) => {
-    try {
-      if (terminal.value) {
-        const message = `\r\n[进程已退出，退出码: ${exitCode ?? '未知'}]\r\n`
-        terminal.value.write(message)
-      }
-    } catch {
-      // ignore
-    }
+    handleTerminalOutput(terminal.value, data, shellIntegration.processTerminalOutput)
   }
 
   // === Lifecycle ===
@@ -825,10 +584,19 @@
       // 添加快捷键事件监听
       if (terminalRef.value) {
         terminalRef.value.addEventListener('accept-completion', handleAcceptCompletionShortcut)
+        terminalRef.value.addEventListener('clear-terminal', handleClearTerminal)
       }
 
+      // 添加全局字体大小变化监听
+      document.addEventListener('font-size-change', handleFontSizeChange)
+
+      // 添加终端搜索事件监听
+      document.addEventListener('open-terminal-search', () =>
+        handleOpenTerminalSearch(props.isActive, searchAddon.value)
+      )
+
       // 初始化shell integration（静默模式）
-      await initShellIntegration()
+      await shellIntegration.initShellIntegration(terminal.value)
     })
   })
 
@@ -839,18 +607,28 @@
     // 清理快捷键事件监听
     if (terminalRef.value) {
       terminalRef.value.removeEventListener('accept-completion', handleAcceptCompletionShortcut)
+      terminalRef.value.removeEventListener('clear-terminal', handleClearTerminal)
     }
+
+    // 清理全局字体大小变化监听
+    document.removeEventListener('font-size-change', handleFontSizeChange)
+
+    // 清理终端搜索事件监听
+    document.removeEventListener('open-terminal-search', () =>
+      handleOpenTerminalSearch(props.isActive, searchAddon.value)
+    )
 
     terminalStore.unregisterTerminalCallbacks(props.terminalId)
 
     // 清理主题监听器
     themeStore.cleanup()
 
-    // 清理所有定时器和缓冲区
+    // 清理所有定时器
     if (timers.resize) clearTimeout(timers.resize)
     if (timers.themeUpdate) clearTimeout(timers.themeUpdate)
-    if (timers.outputFlush) clearTimeout(timers.outputFlush)
-    outputBuffer = '' // 清空输出缓冲区
+
+    // 清理输出处理
+    cleanupOutput()
 
     // 从终端store注销resize回调
     terminalStore.unregisterResizeCallback(props.terminalId)

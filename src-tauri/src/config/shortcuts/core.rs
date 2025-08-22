@@ -564,6 +564,10 @@ impl ShortcutManager {
     /// 清除缓存
     async fn clear_cache(&self) {
         {
+            let mut cached = self.cached_config.write().await;
+            *cached = None;
+        }
+        {
             let mut cached = self.cached_validation.write().await;
             *cached = None;
         }

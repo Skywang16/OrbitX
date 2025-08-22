@@ -55,7 +55,7 @@
       return `${shell} • ${fullPath}`
     }
 
-    return tab.title
+    return tab.title || 'Tab'
   }
 
   const tabBarRef = ref<HTMLDivElement | null>(null)
@@ -86,6 +86,20 @@
 
   // 简化的滚动判断
   const needsScroll = computed(() => tabWidth.value <= MIN_TAB_WIDTH)
+
+  // 判断标签页是否可以显示关闭按钮
+  const canShowCloseButton = (tab: TabItem): boolean => {
+    if (!tab.closable) return false
+
+    // 如果是终端标签页，需要确保不是最后一个终端标签页
+    if (tab.type === TabType.TERMINAL) {
+      const terminalTabs = props.tabs.filter(t => t.type === TabType.TERMINAL)
+      return terminalTabs.length > 1
+    }
+
+    // 其他类型的标签页可以直接关闭
+    return true
+  }
 
   // 处理标签点击
   const handleTabClick = (id: string) => {
@@ -129,9 +143,12 @@
 
   // 处理鼠标按下事件（中键关闭）
   const handleMouseDown = (event: MouseEvent, id: string) => {
-    if (event.button === 1 && props.tabs.length > 1) {
-      event.preventDefault()
-      emit('close', id)
+    if (event.button === 1) {
+      const tab = props.tabs.find(t => t.id === id)
+      if (tab && canShowCloseButton(tab)) {
+        event.preventDefault()
+        emit('close', id)
+      }
     }
   }
 
@@ -161,7 +178,7 @@
           </template>
         </div>
         <button
-          v-if="tab.closable && tabs.length > 1"
+          v-if="canShowCloseButton(tab)"
           class="close-btn"
           @click="handleCloseClick($event, tab.id)"
           title="关闭标签"
@@ -417,7 +434,6 @@
   .terminal-info {
     display: flex;
     align-items: center;
-    gap: 8px;
     flex: 1;
     min-width: 0;
   }
@@ -426,14 +442,23 @@
     font-size: var(--font-size-xs);
     font-weight: 700;
     color: var(--text-100);
-    background: rgba(99, 102, 241, 0.15);
-    border: 1px solid rgba(99, 102, 241, 0.3);
-    padding: 2px 6px;
-    border-radius: 4px;
     text-transform: uppercase;
     letter-spacing: 0.3px;
     flex-shrink: 0;
     line-height: 1.2;
+    padding-right: 8px;
+    position: relative;
+  }
+
+  .shell-badge::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 12px;
+    width: 1px;
+    background-color: var(--text-400);
   }
 
   .path-info {
@@ -445,6 +470,7 @@
     white-space: nowrap;
     min-width: 0;
     flex: 1;
+    padding-left: 8px;
   }
 
   .close-btn {

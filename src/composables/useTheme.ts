@@ -8,7 +8,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
 import { computed, readonly, ref } from 'vue'
 import { themeAPI } from '@/api/config'
-import type { Theme, ThemeConfigStatus, ThemeInfo, ThemeOption } from '@/types/theme'
+import type { Theme, ThemeConfigStatus, ThemeInfo, ThemeOption } from '@/types/domain/theme'
 import { applyThemeToUI } from '../utils/themeApplier'
 
 // ============================================================================
@@ -190,9 +190,6 @@ export const useTheme = () => {
   const cleanup = () => {
     stopThemeChangeListener()
   }
-
-  // 注意：不在composable中直接使用生命周期钩子
-  // 组件应该手动调用 initialize() 和 cleanup() 方法
 
   // ============================================================================
   // 返回接口

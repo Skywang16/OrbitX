@@ -86,6 +86,7 @@
   }
 
   .settings-panel {
-    height: 100%;
+    min-height: 100%;
+    padding-bottom: var(--spacing-xl);
   }
 </style>

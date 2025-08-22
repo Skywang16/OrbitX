@@ -125,10 +125,7 @@ impl ShortcutService {
         // 检测冲突
         let conflict_result = self.detect_shortcuts_conflicts(&shortcuts)?;
         if conflict_result.has_conflicts {
-            warn!(
-                "发现快捷键冲突: {}",
-                conflict_result.conflicts.len()
-            );
+            warn!("发现快捷键冲突: {}", conflict_result.conflicts.len());
         }
 
         // 更新配置
@@ -541,31 +538,22 @@ impl ActionRegistry {
         // 全局动作
         self.register_action("copy_to_clipboard");
         self.register_action("paste_from_clipboard");
-        self.register_action("search_forward");
-        self.register_action("search_backward");
-        self.register_action("toggle_fullscreen");
-        self.register_action("quit_application");
+        self.register_action("terminal_search");
+        self.register_action("open_settings");
 
         // 终端动作
         self.register_action("new_tab");
         self.register_action("close_tab");
-        self.register_action("new_window");
-        self.register_action("close_window");
-        self.register_action("split_vertical");
-        self.register_action("split_horizontal");
+        self.register_action("switch_to_tab_1");
+        self.register_action("switch_to_tab_2");
+        self.register_action("switch_to_tab_3");
+        self.register_action("switch_to_tab_4");
+        self.register_action("switch_to_tab_5");
+        self.register_action("switch_to_last_tab");
+        self.register_action("accept_completion");
         self.register_action("clear_terminal");
-        self.register_action("scroll_up");
-        self.register_action("scroll_down");
-        self.register_action("next_tab");
-        self.register_action("previous_tab");
-
-        // AI相关动作
-        self.register_action("toggle_ai_chat");
-        self.register_action("send_to_ai");
-        self.register_action("clear_ai_chat");
-
-        // 设置相关动作
-        self.register_action("open_settings");
+        self.register_action("increase_font_size");
+        self.register_action("decrease_font_size");
         self.register_action("toggle_theme");
     }
 }
@@ -637,7 +625,7 @@ mod tests {
 
         // 创建有冲突的配置
         let mut config = create_default_shortcuts_config();
-        
+
         // 添加一个与现有快捷键冲突的快捷键
         config.custom.push(ShortcutBinding {
             key: "c".to_string(),

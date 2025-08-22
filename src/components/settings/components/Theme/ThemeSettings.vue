@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue'
   import { useTheme } from '../../../../composables/useTheme'
+  import { XSelect } from '@/ui'
+  import type { SelectOption } from '@/ui'
 
   const theme = useTheme()
 
@@ -17,8 +19,17 @@
   const selectedLightTheme = ref('light')
   const selectedDarkTheme = ref('dark')
 
+  // 本地模式状态，用于防止切换时的视觉冲突
+  const localMode = ref<'manual' | 'system'>('manual')
+  const isChangingMode = ref(false)
+
   // 计算属性
   const currentMode = computed(() => {
+    // 在模式切换过程中，使用本地状态
+    if (isChangingMode.value) {
+      return localMode.value
+    }
+
     const isFollowing = theme.isFollowingSystem.value
     return isFollowing ? 'system' : 'manual'
   })
@@ -43,12 +54,22 @@
   })
 
   // 系统主题选项
-  const lightThemeOptions = computed(() => {
-    return theme.themeOptions.value.filter((option: any) => option.type === 'light' || option.type === 'auto')
+  const lightThemeOptions = computed((): SelectOption[] => {
+    return theme.themeOptions.value
+      .filter((option: any) => option.type === 'light' || option.type === 'auto')
+      .map((option: any) => ({
+        label: option.label,
+        value: option.value,
+      }))
   })
 
-  const darkThemeOptions = computed(() => {
-    return theme.themeOptions.value.filter((option: any) => option.type === 'dark' || option.type === 'auto')
+  const darkThemeOptions = computed((): SelectOption[] => {
+    return theme.themeOptions.value
+      .filter((option: any) => option.type === 'dark' || option.type === 'auto')
+      .map((option: any) => ({
+        label: option.label,
+        value: option.value,
+      }))
   })
 
   // 监听主题配置变化，更新本地选择
@@ -63,9 +84,25 @@
         if (config.darkTheme) {
           selectedDarkTheme.value = config.darkTheme
         }
+        // 同步本地模式状态
+        if (!isChangingMode.value) {
+          localMode.value = config.followSystem ? 'system' : 'manual'
+        }
       }
     },
     { immediate: true }
+  )
+  // 监听模式切换完成，重置切换状态
+  watch(
+    () => theme.isFollowingSystem.value,
+    () => {
+      if (isChangingMode.value) {
+        // 延迟重置，确保UI更新完成
+        setTimeout(() => {
+          isChangingMode.value = false
+        }, 100)
+      }
+    }
   )
 
   // 获取主题图标
@@ -110,7 +147,15 @@
 
   // 事件处理
   const handleModeChange = async (mode: 'manual' | 'system') => {
+    // 防止重复切换
+    if (isChangingMode.value || currentMode.value === mode) {
+      return
+    }
+
     try {
+      // 立即更新本地状态，避免视觉冲突
+      isChangingMode.value = true
+      localMode.value = mode
       if (mode === 'system') {
         // 确保有默认的浅色和深色主题
         const lightTheme = selectedLightTheme.value || 'light'
@@ -122,6 +167,9 @@
       }
     } catch (error) {
       console.error('切换主题模式失败:', error)
+      // 发生错误时恢复状态
+      isChangingMode.value = false
+      localMode.value = theme.isFollowingSystem.value ? 'system' : 'manual'
     }
   }
 
@@ -236,11 +284,14 @@
           <div class="title-icon" v-html="getIconSvg('sun')"></div>
           浅色主题
         </h4>
-        <select v-model="selectedLightTheme" @change="handleSystemThemeChange" class="theme-select">
-          <option v-for="option in lightThemeOptions" :key="option.value" :value="option.value">
-            {{ option.label }}
-          </option>
-        </select>
+        <XSelect
+          v-model="selectedLightTheme"
+          :options="lightThemeOptions"
+          placeholder="选择浅色主题"
+          size="medium"
+          @change="handleSystemThemeChange"
+          class="theme-select"
+        />
       </div>
 
       <!-- 深色主题选择 -->
@@ -249,11 +300,14 @@
           <div class="title-icon" v-html="getIconSvg('moon')"></div>
           深色主题
         </h4>
-        <select v-model="selectedDarkTheme" @change="handleSystemThemeChange" class="theme-select">
-          <option v-for="option in darkThemeOptions" :key="option.value" :value="option.value">
-            {{ option.label }}
-          </option>
-        </select>
+        <XSelect
+          v-model="selectedDarkTheme"
+          :options="darkThemeOptions"
+          placeholder="选择深色主题"
+          size="medium"
+          @change="handleSystemThemeChange"
+          class="theme-select"
+        />
       </div>
     </div>
   </div>
@@ -469,16 +523,5 @@
 
   .theme-select {
     width: 100%;
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border: 1px solid var(--border-300);
-    border-radius: var(--border-radius);
-    background-color: var(--bg-400);
-    color: var(--text-300);
-    font-size: var(--font-size-sm);
-  }
-
-  .theme-select:focus {
-    outline: none;
-    border-color: var(--color-primary);
   }
 </style>

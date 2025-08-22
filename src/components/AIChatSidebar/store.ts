@@ -428,7 +428,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
             case 'workflow':
               if (message.workflow?.thought) {
                 let thinkingStep = tempMessage.steps?.find(step => step.type === 'thinking')
-                
+
                 if (thinkingStep) {
                   thinkingStep.content = message.workflow.thought
                   if (message.streamDone) {

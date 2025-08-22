@@ -136,18 +136,3 @@ export interface ShortcutEvent {
 }
 
 export type ShortcutEventListener = (event: ShortcutEvent) => void
-
-// ===== 快捷键编辑器类型 =====
-
-export enum ShortcutEditorMode {
-  Add = 'add',
-  Edit = 'edit',
-  View = 'view',
-}
-
-export interface ShortcutEditorOptions {
-  mode: ShortcutEditorMode
-  initialShortcut?: ShortcutBinding
-  initialCategory?: ShortcutCategory
-  initialIndex?: number
-}

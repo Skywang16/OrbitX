@@ -1,102 +1,83 @@
 <template>
   <div class="shortcut-settings">
-    <!-- 错误状态 -->
-    <div v-if="error" class="error-state">
-      <div class="error-icon">⚠️</div>
-      <p>加载快捷键设置失败: {{ error }}</p>
-      <x-button variant="primary" @click="initialize()">重试</x-button>
-    </div>
+    <div class="settings-card">
+      <h3 class="section-title">快捷键设置</h3>
+      <!-- 冲突警告 -->
+      <div v-if="hasConflicts" class="alert alert-warning">
+        <span class="alert-icon">⚠️</span>
+        <span>检测到 {{ conflictCount }} 个快捷键冲突</span>
+      </div>
 
-    <!-- 正常内容 -->
-    <template v-else>
-      <div class="settings-card">
-        <h3 class="section-title">快捷键设置</h3>
-        <!-- 冲突警告 -->
-        <div v-if="hasConflicts" class="alert alert-warning">
-          <span class="alert-icon">⚠️</span>
-          <span>检测到 {{ conflictCount }} 个快捷键冲突</span>
-          <x-button size="sm" variant="warning" @click="showConflictDialog = true">查看详情</x-button>
+      <!-- 动作列表 -->
+      <div class="actions-list">
+        <div v-if="loading" class="loading-state">
+          <div class="loading-spinner"></div>
+          <span>加载中...</span>
         </div>
-
-        <!-- 动作列表 -->
-        <div class="actions-list">
-          <div v-if="loading" class="loading-state">
-            <div class="loading-spinner"></div>
-            <span>加载中...</span>
-          </div>
-          <div v-else>
-            <div class="action-category">
-              <h4>全局快捷键</h4>
-              <div class="action-items">
-                <div v-for="action in globalActions" :key="action.key" class="action-item">
-                  <div class="action-name">{{ action.displayName }}</div>
-                  <div
-                    class="shortcut-key-editor"
-                    :class="{ editing: isEditing(action.key), configured: action.shortcut }"
-                    @click="startEdit(action.key)"
-                    @keydown="handleKeyDown($event, action.key)"
-                    @blur="stopEdit(action.key)"
-                    tabindex="0"
-                  >
-                    <span v-if="!isEditing(action.key)" class="shortcut-display">
-                      <template v-if="action.shortcut">
-                        <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="modifier">
-                          {{ modifier }}
-                        </span>
-                        <span class="key">{{ action.shortcut.key }}</span>
-                      </template>
-                      <span v-else class="not-configured">点击配置</span>
-                    </span>
-                    <span v-else class="editing-hint">按下新的快捷键组合...</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="action-category">
-              <h4>终端快捷键</h4>
-              <div class="action-items">
-                <div v-for="action in terminalActions" :key="action.key" class="action-item">
-                  <div class="action-name">{{ action.displayName }}</div>
-                  <div
-                    class="shortcut-key-editor"
-                    :class="{ editing: isEditing(action.key), configured: action.shortcut }"
-                    @click="startEdit(action.key)"
-                    @keydown="handleKeyDown($event, action.key)"
-                    @blur="stopEdit(action.key)"
-                    tabindex="0"
-                  >
-                    <span v-if="!isEditing(action.key)" class="shortcut-display">
-                      <template v-if="action.shortcut">
-                        <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="modifier">
-                          {{ modifier }}
-                        </span>
-                        <span class="key">{{ action.shortcut.key }}</span>
-                      </template>
-                      <span v-else class="not-configured">点击配置</span>
-                    </span>
-                    <span v-else class="editing-hint">按下新的快捷键组合...</span>
-                  </div>
+        <div v-else>
+          <div class="action-category">
+            <h4>全局快捷键</h4>
+            <div class="action-items">
+              <div v-for="action in globalActions" :key="action.key" class="action-item">
+                <div class="action-name">{{ action.displayName }}</div>
+                <div
+                  class="shortcut-key-editor"
+                  :class="{ editing: isEditing(action.key), configured: action.shortcut }"
+                  @click="startEdit(action.key)"
+                  @keydown="handleKeyDown($event, action.key)"
+                  @blur="stopEdit(action.key)"
+                  tabindex="0"
+                >
+                  <span v-if="!isEditing(action.key)" class="shortcut-display">
+                    <template v-if="action.shortcut">
+                      <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="modifier">
+                        {{ modifier }}
+                      </span>
+                      <span class="key">{{ action.shortcut.key }}</span>
+                    </template>
+                    <span v-else class="not-configured">点击配置</span>
+                  </span>
+                  <span v-else class="editing-hint">按下新的快捷键组合...</span>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- 操作按钮 -->
-        <div class="actions-section">
-          <x-button variant="outline" @click="handleReset" :disabled="loading">重置到默认</x-button>
+          <div class="action-category">
+            <h4>终端快捷键</h4>
+            <div class="action-items">
+              <div v-for="action in terminalActions" :key="action.key" class="action-item">
+                <div class="action-name">{{ action.displayName }}</div>
+                <div
+                  class="shortcut-key-editor"
+                  :class="{ editing: isEditing(action.key), configured: action.shortcut }"
+                  @click="startEdit(action.key)"
+                  @keydown="handleKeyDown($event, action.key)"
+                  @blur="stopEdit(action.key)"
+                  tabindex="0"
+                >
+                  <span v-if="!isEditing(action.key)" class="shortcut-display">
+                    <template v-if="action.shortcut">
+                      <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="modifier">
+                        {{ modifier }}
+                      </span>
+                      <span class="key">{{ action.shortcut.key }}</span>
+                    </template>
+                    <span v-else class="not-configured">点击配置</span>
+                  </span>
+                  <span v-else class="editing-hint">按下新的快捷键组合...</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </template>
 
-    <!-- 冲突详情对话框 -->
-    <ShortcutConflictDialog
-      v-if="showConflictDialog"
-      :conflicts="conflicts"
-      @resolve="handleResolveConflict"
-      @close="showConflictDialog = false"
-    />
+      <!-- 操作按钮 -->
+      <div class="actions-section">
+        <x-button variant="outline" @click="handleReset" :disabled="loading">重置到默认</x-button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -107,7 +88,8 @@
   import { createMessage } from '@/ui/composables/message-api'
   import { useShortcutStore } from '@/stores/shortcuts'
   import { SHORTCUT_ACTIONS } from '@/shortcuts/constants'
-  import ShortcutConflictDialog from './ShortcutConflictDialog.vue'
+  import { confirmWarning } from '@/ui/composables/confirm-api'
+
   import type { ShortcutBinding } from '@/types'
   import { ShortcutCategory } from '@/types'
 
@@ -115,7 +97,6 @@
   const {
     config,
     loading,
-    error,
     hasConflicts,
 
     initialize,
@@ -123,14 +104,12 @@
     removeShortcut,
     updateShortcut,
     resetToDefaults,
-    clearError,
   } = useShortcuts()
 
   const store = useShortcutStore()
   const lastConflictDetection = computed(() => store.lastConflictDetection)
 
   // 响应式状态
-  const showConflictDialog = ref(false)
   const editingActionKey = ref<string | null>(null)
   const capturedShortcut = ref<{ key: string; modifiers: string[] } | null>(null)
 
@@ -144,25 +123,25 @@
   }
 
   const handleReset = async () => {
-    if (confirm('确定要重置所有快捷键到默认配置吗？此操作不可撤销。')) {
-      try {
+    try {
+      const shouldReset = await confirmWarning(
+        '此操作将重置所有快捷键到默认配置，当前的自定义设置将会丢失。',
+        '重置快捷键配置'
+      )
+
+      if (shouldReset) {
         await resetToDefaults()
 
-        // 重新加载快捷键监听器配置
+        // 只更新监听器配置，不做其他操作
         if ((window as any).reloadShortcuts) {
           await (window as any).reloadShortcuts()
         }
 
         createMessage.success('快捷键配置已重置为默认')
-      } catch (error) {
-        handleErrorWithMessage(error, '重置配置失败')
       }
+    } catch (error) {
+      handleErrorWithMessage(error, '重置配置失败')
     }
-  }
-
-  const handleResolveConflict = (_conflictIndex: number) => {
-    // 处理冲突解决逻辑
-    showConflictDialog.value = false
   }
 
   // 全局动作定义
@@ -279,7 +258,7 @@
       // 添加新配置
       await addShortcut(category, shortcutBinding)
 
-      // 重新加载快捷键监听器配置
+      // 重新加载快捷键监听器配置（仅更新监听器，不刷新页面）
       if ((window as any).reloadShortcuts) {
         await (window as any).reloadShortcuts()
       }
@@ -326,22 +305,9 @@
 
 <style scoped>
   .shortcut-settings {
-    max-width: 800px;
     padding: var(--spacing-lg);
-  }
-
-  .error-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: var(--spacing-xl);
-    text-align: center;
-  }
-
-  .error-icon {
-    font-size: 2rem;
-    margin-bottom: var(--spacing-sm);
+    min-height: fit-content;
+    padding-bottom: var(--spacing-xl);
   }
 
   .settings-card {

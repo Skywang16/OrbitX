@@ -7,7 +7,7 @@
 import { computed, readonly, ref } from 'vue'
 import { formatLocaleDateTime } from '@/utils/dateFormatter'
 import { configApi } from '@/api'
-import { type AppConfig, type ConfigFileInfo, ConfigApiError } from '@/api'
+import { type AppConfig, type ConfigFileInfo, ConfigApiError } from '@/api/config'
 
 // ============================================================================
 // 工具函数

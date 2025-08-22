@@ -40,20 +40,15 @@ export function useShortcutListener() {
 
     if (matchedShortcut) {
       const actionName = extractActionName(matchedShortcut.action)
-      const frontendResult = await executeShortcutAction(matchedShortcut, keyCombo)
-
-      // 特殊处理 close_tab：如果前端返回 false（表示无法关闭），则不阻止默认行为
-      if (actionName === 'close_tab' && !frontendResult) {
-        // 不阻止默认行为，让 cmd+w 能够关闭窗口
-        console.log('最后一个标签页，允许 cmd+w 关闭窗口')
-        return
-      }
 
       // 复制粘贴不阻止默认行为，其他都阻止
+      // 必须在同步阶段调用 preventDefault，否则系统默认行为可能已经触发
       if (actionName !== 'copy_to_clipboard' && actionName !== 'paste_from_clipboard') {
         event.preventDefault()
         event.stopPropagation()
       }
+
+      const frontendResult = await executeShortcutAction(matchedShortcut, keyCombo)
     }
   }
 
