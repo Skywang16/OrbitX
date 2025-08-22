@@ -17,17 +17,19 @@ import type { Conversation, Message } from '@/types'
 import { createToolExecution } from '@/types'
 import { debounce } from 'lodash-es'
 
-// 流式消息类型定义
+// 流式消息类型定义（基于Eko源码）
 interface StreamMessage {
-  type: 'tool_use' | 'tool_result' | 'workflow' | 'text'
+  type: 'tool_use' | 'tool_result' | 'workflow' | 'text' | 'thinking'
   toolName?: string
   params?: Record<string, any>
   toolResult?: any
+  thought?: string
+  text?: string
+  streamId?: string
+  streamDone?: boolean
   workflow?: {
     thought?: string
   }
-  text?: string
-  streamDone?: boolean
 }
 
 // 工具函数
@@ -59,6 +61,15 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   // 初始化标志
   const isInitialized = ref(false)
 
+  // 防抖保存函数（在store顶层定义，避免重复创建）
+  const debouncedSaveSteps = debounce(async (messageId: number, steps: any[]) => {
+    try {
+      await aiApi.updateMessageSteps(messageId, steps)
+    } catch {
+      // 静默失败
+    }
+  }, 100)
+
   // 计算属性
   const hasMessages = computed(() => messageList.value.length > 0)
   const canSendMessage = computed(() => {
@@ -70,14 +81,10 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const toggleSidebar = async () => {
     isVisible.value = !isVisible.value
     if (isVisible.value) {
-      // 确保AI设置已加载
+      // 加载AI设置
       const aiSettingsStore = useAISettingsStore()
       if (!aiSettingsStore.hasModels && !aiSettingsStore.isLoading) {
-        try {
-          await aiSettingsStore.loadSettings()
-        } catch (_error) {
-          /* ignore: 静默处理加载失败，不影响用户体验 */
-        }
+        await aiSettingsStore.loadSettings()
       }
 
       // 加载会话列表
@@ -208,22 +215,13 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       }
       messageList.value.push(userMessage)
 
-      // 3. 确保Eko实例可用（如果未初始化则自动初始化）
+      // 3. 确保Eko实例可用
       if (!ekoInstance.value) {
         await initializeEko()
-
-        // 如果初始化后仍然没有实例，则抛出错误
-        if (!ekoInstance.value) {
-          throw new Error('Eko实例初始化失败')
-        }
       }
 
-      // 4. 根据模式设置只读/全权限工具（若失败不影响整体发送流程）
-      try {
-        await ekoInstance.value.setMode(chatMode.value)
-      } catch {
-        /* ignore */
-      }
+      // 4. 设置模式（基于Eko源码，setMode是同步的且不会失败）
+      ekoInstance.value?.setMode(chatMode.value)
 
       // 5. 获取当前终端的工作目录
       const terminalStore = useTerminalStore()
@@ -263,7 +261,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
       // 9. 通过eko处理消息（流式输出通过回调处理）
       streamingContent.value = ''
-      const response = await ekoInstance.value.run(fullPrompt)
+      const response = await ekoInstance.value!.run(fullPrompt)
 
       // 10. 更新AI回复内容和状态
       if (response.success && response.result) {
@@ -273,12 +271,10 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
 
         // 更新消息的最终内容和状态
-        try {
+        if (tempAIMessage.content) {
           await aiApi.updateMessageContent(tempAIMessage.id, tempAIMessage.content)
-          await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
-        } catch (error) {
-          // 更新失败时静默处理
         }
+        await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
       } else {
         tempAIMessage.status = 'error'
         tempAIMessage.steps?.push({
@@ -291,7 +287,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           },
         })
         if (tempAIMessage.steps) {
-          saveStepsToDatabase(tempAIMessage.id, tempAIMessage.steps)
+          try {
+            await aiApi.updateMessageSteps(tempAIMessage.id, tempAIMessage.steps)
+          } catch {
+            // 静默失败
+          }
         }
       }
 
@@ -348,142 +348,125 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     error.value = null
   }
 
-  // 实时保存队列 - 确保每次更新都立即保存，按顺序执行
-  const saveQueue: Array<() => Promise<void>> = []
-  let isProcessing = false
-
-  const processSaveQueue = async () => {
-    if (isProcessing) return
-    isProcessing = true
-
-    while (saveQueue.length > 0) {
-      const saveTask = saveQueue.shift()
-      if (saveTask) {
-        try {
-          await saveTask()
-        } catch (error) {
-          // 保存失败时静默处理，不影响用户体验
-        }
-      }
-    }
-
-    isProcessing = false
-  }
-
-  const saveStepsToDatabase = (messageId: number, steps: any[]) => {
-    if (messageId <= 0) return
-
-    // 添加保存任务到队列
-    saveQueue.push(async () => {
-      await aiApi.updateMessageSteps(messageId, [...steps])
-    })
-
-    // 立即开始处理队列
-    processSaveQueue()
-  }
-
   // 初始化Eko实例（带流式回调）
   const initializeEko = async (): Promise<void> => {
     try {
       if (!ekoInstance.value) {
-        // 处理流式消息更新UI
+        // 简化的流式消息处理
         const handleStreamMessage = async (message: StreamMessage) => {
           const tempMessage = messageList.value[messageList.value.length - 1]
           if (!tempMessage || tempMessage.role !== 'assistant') return
 
           // 确保steps数组存在
-          if (!tempMessage.steps) {
-            tempMessage.steps = []
+          tempMessage.steps = tempMessage.steps || []
+
+          // 统一的步骤更新函数
+          const updateOrCreateStep = (stepData: { type: string; content: string; streamId?: string }) => {
+            let targetStep: any = null
+
+            if (stepData.type === 'thinking') {
+              // thinking类型：如果有streamId就精确匹配，否则查找最后一个thinking步骤
+              if (stepData.streamId) {
+                targetStep = tempMessage.steps?.find(
+                  step => step.type === 'thinking' && step.metadata?.streamId === stepData.streamId
+                )
+              } else {
+                // 使用兼容的方式查找最后一个thinking步骤
+                const thinkingSteps = tempMessage.steps?.filter(step => step.type === 'thinking') || []
+                targetStep = thinkingSteps[thinkingSteps.length - 1] || null
+              }
+            } else {
+              // 其他类型：必须有streamId才能匹配
+              targetStep = stepData.streamId
+                ? tempMessage.steps?.find(
+                    step => step.type === stepData.type && step.metadata?.streamId === stepData.streamId
+                  )
+                : null
+            }
+
+            if (targetStep) {
+              targetStep.content = stepData.content
+            } else {
+              tempMessage.steps?.push({
+                type: stepData.type as any,
+                content: stepData.content,
+                timestamp: Date.now(),
+                metadata: stepData.streamId ? { streamId: stepData.streamId } : undefined,
+              })
+            }
           }
 
-          if (message.type === 'tool_use') {
-            // 创建统一的工具执行信息
-            const toolExecution = createToolExecution(message.toolName || '工具调用', message.params || {}, 'running')
+          switch (message.type) {
+            case 'tool_use':
+              tempMessage.steps.push({
+                type: 'tool_use',
+                content: '',
+                timestamp: Date.now(),
+                toolExecution: createToolExecution(message.toolName || '', message.params || {}, 'running'),
+              })
+              break
 
-            const newStep = {
-              type: 'tool_use' as const,
-              content: `正在调用工具: ${message.toolName}`,
-              timestamp: Date.now(),
-              toolExecution,
+            case 'tool_result': {
+              const toolSteps = tempMessage.steps.filter((step: any) => step.type === 'tool_use')
+              const toolStep = toolSteps[toolSteps.length - 1] as any
+              if (toolStep?.toolExecution) {
+                toolStep.toolExecution.status = 'completed'
+                toolStep.toolExecution.endTime = Date.now()
+                toolStep.toolExecution.result = message.toolResult
+              }
+              break
             }
 
-            tempMessage.steps.push(newStep)
-            // 🔥 tool开始时立即保存
-            saveStepsToDatabase(tempMessage.id, tempMessage.steps)
-          } else if (message.type === 'tool_result') {
-            const toolStep = tempMessage.steps.filter(step => step.type === 'tool_use').pop() as any
+            case 'thinking':
+              updateOrCreateStep({
+                type: 'thinking',
+                content: message.thought || message.text || '',
+                streamId: message.streamId,
+              })
+              break
 
-            if (toolStep?.toolExecution?.status === 'running') {
-              // 更新工具执行状态
-              toolStep.toolExecution.status = 'completed'
-              toolStep.toolExecution.endTime = Date.now()
-              toolStep.toolExecution.result = message.toolResult
-              toolStep.content = `工具执行完成: ${toolStep.toolExecution.name}`
-
-              // 🔥 tool完成时立即保存
-              saveStepsToDatabase(tempMessage.id, tempMessage.steps)
-            }
-          } else if (message.type === 'workflow' && message.workflow?.thought) {
-            let thinkingStep = tempMessage.steps?.find(step => step.type === 'thinking')
-
-            if (thinkingStep) {
-              thinkingStep.content = message.workflow.thought
-              if (message.streamDone) {
-                thinkingStep.metadata = {
-                  ...thinkingStep.metadata,
-                  thinkingDuration: Date.now() - thinkingStep.timestamp,
+            case 'workflow':
+              if (message.workflow?.thought) {
+                let thinkingStep = tempMessage.steps?.find(step => step.type === 'thinking')
+                
+                if (thinkingStep) {
+                  thinkingStep.content = message.workflow.thought
+                  if (message.streamDone) {
+                    thinkingStep.metadata = {
+                      ...thinkingStep.metadata,
+                      thinkingDuration: Date.now() - thinkingStep.timestamp,
+                    }
+                  }
+                } else {
+                  tempMessage.steps?.push({
+                    type: 'thinking' as any,
+                    content: message.workflow.thought,
+                    timestamp: Date.now(),
+                    metadata: {
+                      thinkingDuration: message.streamDone ? 0 : undefined,
+                    },
+                  })
                 }
               }
-              // 🔥 thinking内容更新时也要保存
-              saveStepsToDatabase(tempMessage.id, tempMessage.steps)
-            } else {
-              tempMessage.steps?.push({
-                type: 'thinking' as const,
-                content: message.workflow.thought,
-                timestamp: Date.now(),
-                metadata: {
-                  thinkingDuration: message.streamDone ? 0 : undefined,
-                },
-              })
-              // 🔥 新thinking步骤创建时保存
-              saveStepsToDatabase(tempMessage.id, tempMessage.steps)
-            }
-          } else if (message.type === 'text' && message.text !== undefined) {
-            const lastStep = tempMessage.steps?.[tempMessage.steps.length - 1]
-            const isCurrentRoundText = lastStep?.type === 'text'
+              break
 
-            if (isCurrentRoundText) {
-              // 更新现有text步骤内容
-              lastStep.content = message.text
-              lastStep.timestamp = Date.now()
-              // 🔥 text内容更新时也要保存
-              saveStepsToDatabase(tempMessage.id, tempMessage.steps)
-            } else {
-              // 新的text步骤
-              tempMessage.steps?.push({
+            case 'text':
+              updateOrCreateStep({
                 type: 'text',
-                content: message.text,
-                timestamp: Date.now(),
+                content: message.text || '',
+                streamId: message.streamId,
               })
-              // 🔥 新text步骤创建时保存
-              saveStepsToDatabase(tempMessage.id, tempMessage.steps)
-            }
 
-            streamingContent.value = message.text
-
-            if (message.streamDone) {
-              tempMessage.status = 'complete'
-              tempMessage.content = message.text
-              // 🔥 text完成时保存最终状态
-              saveStepsToDatabase(tempMessage.id, tempMessage.steps)
-              // 同时更新消息内容
-              try {
-                await aiApi.updateMessageContent(tempMessage.id, message.text)
-              } catch (error) {
-                console.error('更新消息内容失败:', error)
+              streamingContent.value = message.text || ''
+              if (message.streamDone) {
+                tempMessage.status = 'complete'
+                tempMessage.content = message.text
               }
-            }
+              break
           }
+
+          // 直接保存，去掉队列
+          debouncedSaveSteps(tempMessage.id, tempMessage.steps)
         }
 
         // 使用回调工厂
@@ -496,18 +479,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       }
     } catch (err) {
       // 创建fallback实例
-      try {
-        ekoInstance.value = await createTerminalEko({ debug: true })
-      } catch {
-        // 完全失败，保持null
-      }
+      ekoInstance.value = await createTerminalEko({ debug: true })
     }
   }
 
   // 从会话状态恢复 AI 状态
   const restoreFromSessionState = (): void => {
-    if (!sessionStore.initialized) return
-
     const aiState = sessionStore.aiState
     if (aiState) {
       isVisible.value = aiState.visible
@@ -519,9 +496,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   // 将当前状态保存到会话系统
   const saveToSessionState = (): void => {
-    if (!sessionStore.initialized) return
-
-    // 更新会话状态中的 AI 状态
     sessionStore.updateAiState({
       visible: isVisible.value,
       width: sidebarWidth.value,
@@ -544,31 +518,25 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const initialize = async (): Promise<void> => {
     if (isInitialized.value) return
 
-    try {
-      // 等待会话Store初始化
-      if (!sessionStore.initialized) {
-        await sessionStore.initialize()
+    // 等待会话Store初始化
+    await sessionStore.initialize()
+
+    // 从会话状态恢复
+    restoreFromSessionState()
+
+    // 如果恢复了当前会话ID，尝试加载会话
+    if (currentConversationId.value) {
+      try {
+        await switchToConversation(currentConversationId.value)
+      } catch {
+        currentConversationId.value = null
       }
-
-      // 从会话状态恢复
-      restoreFromSessionState()
-
-      // 如果恢复了当前会话ID，尝试加载会话
-      if (currentConversationId.value) {
-        try {
-          await switchToConversation(currentConversationId.value)
-        } catch (err) {
-          currentConversationId.value = null
-        }
-      }
-
-      // 加载会话列表
-      await refreshConversations()
-
-      isInitialized.value = true
-    } catch (err) {
-      handleErrorWithMessage(err, 'AI聊天初始化失败')
     }
+
+    // 加载会话列表
+    await refreshConversations()
+
+    isInitialized.value = true
   }
 
   return {

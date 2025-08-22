@@ -1,0 +1,35 @@
+{
+  "name": "@eko-ai/eko-extension-example",
+  "version": "3.0.0",
+  "description": "eko browser extension",
+  "scripts": {
+    "build": "webpack --config webpack.js"
+  },
+  "author": "FellouAI",
+  "license": "MIT",
+  "keywords": [
+    "fellou",
+    "eko"
+  ],
+  "dependencies": {
+    "antd": "^5.22.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@eko-ai/eko": "file:../../packages/eko-core",
+    "@eko-ai/eko-extension": "file:../../packages/eko-extension"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.0.158",
+    "@types/react": "^18.0.29",
+    "@types/react-dom": "^18.0.11",
+    "copy-webpack-plugin": "^9.0.1",
+    "glob": "^7.1.6",
+    "prettier": "^2.2.1",
+    "rimraf": "^3.0.2 ",
+    "ts-loader": "^8.0.0",
+    "typescript": "^5.0.4",
+    "webpack": "^5.94.0",
+    "webpack-cli": "^4.0.0",
+    "webpack-merge": "^5.0.0"
+  }
+}

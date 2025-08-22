@@ -1,0 +1,5 @@
+packages:
+  - "packages/eko-core"
+  - "packages/eko-extension"
+  - "packages/eko-nodejs"
+  - "packages/eko-web"
