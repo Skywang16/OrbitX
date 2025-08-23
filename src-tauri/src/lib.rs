@@ -7,12 +7,12 @@
 //! - 窗口管理功能
 
 // 模块声明
-pub mod ai; // AI集成功能模块
-mod commands; // Tauri 命令处理模块
+pub mod ai;
 pub mod completion; // 终端补全功能模块
 pub mod config; // 统一配置系统模块
                 // pub mod lock_optimization_demo; // 锁优化演示模块 - 暂时注释掉
 pub mod mux; // 终端多路复用器核心模块
+pub mod shell; // Shell Integration功能模块
 pub mod storage; // 统一存储系统模块
 pub mod utils; // 工具和错误处理模块
 pub mod window; // 窗口管理功能模块
@@ -21,23 +21,35 @@ use ai::commands::{
     // AI模型管理命令
     add_ai_model,
     // AI会话管理命令
+    build_prompt_with_context,
     create_conversation,
     delete_conversation,
     get_ai_models,
     get_compressed_context,
     get_conversation,
     get_conversations,
-
+    get_user_prefix_prompt,
     remove_ai_model,
     save_message,
     set_default_ai_model,
-    test_ai_connection,
+    set_user_prefix_prompt,
+
+    test_ai_connection_with_config,
     truncate_conversation,
     update_ai_model,
     update_conversation_title,
+    update_message_content,
+    update_message_status,
+    update_message_steps,
     AIManagerState,
 };
-use commands::{TerminalState, *};
+use ai::tool::ast::commands::analyze_code;
+use ai::tool::network::{simple_web_fetch, web_fetch_headless};
+use ai::tool::shell::{TerminalState, *};
+use ai::tool::storage::{
+    storage_get_config, storage_load_session_state, storage_save_session_state,
+    storage_update_config, StorageCoordinatorState,
+};
 use completion::commands::{
     clear_completion_cache, get_completion_stats, get_completions, get_enhanced_completions,
     init_completion_engine, CompletionState,
@@ -62,17 +74,26 @@ use config::commands::{
     validate_theme,
     ConfigManagerState,
 };
-use config::shortcuts::commands::{
-    adapt_shortcuts_for_platform,
-    // 快捷键系统命令
+use config::shortcuts::{
+    // 全新快捷键系统命令
     add_shortcut,
+    detect_shortcuts_conflicts,
+    execute_shortcut_action,
+    export_shortcuts_config,
+    get_action_metadata,
     get_current_platform,
+    get_registered_actions,
     get_shortcuts_config,
     get_shortcuts_statistics,
+    import_shortcuts_config,
     remove_shortcut,
     reset_shortcuts_to_defaults,
+    search_shortcuts,
     update_shortcut,
     update_shortcuts_config,
+    validate_key_combination,
+    validate_shortcuts_config,
+    ShortcutManagerState,
 };
 use config::terminal_commands::{
     // 终端配置命令
@@ -94,10 +115,8 @@ use config::{
     set_follow_system_theme,
     set_terminal_theme,
 };
-use storage::commands::{
-    storage_clear_cache, storage_get_cache_stats, storage_get_config, storage_get_storage_stats,
-    storage_health_check, storage_load_session_state, storage_preload_cache, storage_query_data,
-    storage_save_data, storage_save_session_state, storage_update_config, StorageCoordinatorState,
+use shell::commands::{
+    check_shell_integration_status, get_pane_cwd, setup_shell_integration, update_pane_cwd,
 };
 use window::commands::{
     clear_directory_cache, get_current_directory, get_home_directory, get_platform_info,
@@ -107,7 +126,42 @@ use window::commands::{
 use std::path::PathBuf;
 use tauri::{Emitter, Manager};
 use tracing::{info, warn};
-use utils::init_logging;
+use tracing_subscriber::{self, EnvFilter};
+
+/// 初始化日志系统
+fn init_logging() {
+    // 设置默认的日志级别，如果没有设置 RUST_LOG 环境变量
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        // 开发构建：显示 debug 级别及以上的日志
+        // 发布构建：显示 info 级别及以上的日志
+        #[cfg(debug_assertions)]
+        let default_level = "debug";
+        #[cfg(not(debug_assertions))]
+        let default_level = "info";
+
+        EnvFilter::new(default_level)
+    });
+
+    // 初始化日志订阅器
+    let result = tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .with_target(true)  // 显示模块路径
+        .with_thread_ids(false)  // 不显示线程ID
+        .with_file(false)  // 不显示文件名
+        .with_line_number(false)  // 不显示行号
+        .with_level(true)  // 显示日志级别
+        .try_init();
+
+    match result {
+        Ok(_) => {
+            println!("日志系统初始化成功");
+        }
+        Err(e) => {
+            eprintln!("日志系统初始化失败: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
 
 /// 处理文件打开事件，返回文件所在的目录路径
 #[tauri::command]
@@ -169,13 +223,17 @@ pub fn init_plugin<R: tauri::Runtime>(name: &'static str) -> tauri::plugin::Taur
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // 初始化日志系统
-    if let Err(e) = init_logging() {
-        eprintln!("日志系统初始化失败: {}", e);
-        std::process::exit(1);
-    }
+    init_logging();
 
     info!("OrbitX 应用程序启动");
     println!("OrbitX 应用程序启动 - 控制台输出");
+
+    // 测试不同级别的日志输出
+    tracing::trace!("这是 TRACE 级别的日志");
+    tracing::debug!("这是 DEBUG 级别的日志");
+    tracing::info!("这是 INFO 级别的日志");
+    tracing::warn!("这是 WARN 级别的日志");
+    tracing::error!("这是 ERROR 级别的日志");
 
     let mut builder = tauri::Builder::default();
 
@@ -197,7 +255,10 @@ pub fn run() {
     builder
         .plugin(init_plugin("init"))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             // 窗口管理命令
             manage_window_state,
@@ -268,13 +329,18 @@ pub fn run() {
             get_shell_info,
             update_cursor_config,
             update_terminal_behavior_config,
+            // Shell integration命令
+            setup_shell_integration,
+            check_shell_integration_status,
+            get_pane_cwd,
+            update_pane_cwd,
             // AI模型管理命令
             get_ai_models,
             add_ai_model,
             update_ai_model,
             remove_ai_model,
             set_default_ai_model,
-            test_ai_connection,
+            test_ai_connection_with_config,
             // AI会话上下文管理命令
             create_conversation,
             get_conversations,
@@ -282,32 +348,49 @@ pub fn run() {
             update_conversation_title,
             delete_conversation,
             get_compressed_context,
+            build_prompt_with_context,
+            get_user_prefix_prompt,
+            set_user_prefix_prompt,
             save_message,
+            update_message_content,
+            update_message_steps,
+            update_message_status,
             truncate_conversation,
-            // 快捷键系统命令
+            // 全新快捷键系统命令
             get_shortcuts_config,
             update_shortcuts_config,
-            adapt_shortcuts_for_platform,
-            get_current_platform,
-            reset_shortcuts_to_defaults,
-            get_shortcuts_statistics,
+            validate_shortcuts_config,
+            detect_shortcuts_conflicts,
             add_shortcut,
             remove_shortcut,
             update_shortcut,
+            reset_shortcuts_to_defaults,
+            get_shortcuts_statistics,
+            search_shortcuts,
+            execute_shortcut_action,
+            get_current_platform,
+            export_shortcuts_config,
+            import_shortcuts_config,
+            get_registered_actions,
+            get_action_metadata,
+            validate_key_combination,
             // 存储系统命令
             storage_get_config,
             storage_update_config,
             storage_save_session_state,
             storage_load_session_state,
-            storage_query_data,
-            storage_save_data,
-            storage_health_check,
-            storage_get_cache_stats,
-            storage_get_storage_stats,
-            storage_preload_cache,
-            storage_clear_cache,
+            // 网络请求命令
+            web_fetch_headless,
+            simple_web_fetch,
+            // AST代码分析命令
+            analyze_code,
             // 文件拖拽处理命令
-            handle_file_open
+            handle_file_open,
+            // Shell integration命令
+            setup_shell_integration,
+            check_shell_integration_status,
+            get_pane_cwd,
+            update_pane_cwd
         ])
         .setup(|app| {
             // 使用统一的错误处理初始化各个状态管理器
@@ -319,6 +402,16 @@ pub fn run() {
                 app.manage(terminal_state);
                 info!("终端状态管理器已初始化");
 
+                // 创建配置路径管理器
+                info!(
+                    "开始创建配置路径管理器
+"
+                );
+                let paths = config::paths::ConfigPaths::new()
+                    .map_err(|e| anyhow::anyhow!("配置路径创建失败: {}", e))?;
+                app.manage(paths);
+                info!("配置路径管理器已创建并管理");
+
                 // 初始化配置管理器状态（必须先初始化，因为其他组件依赖它）
                 info!("开始初始化配置管理器状态");
                 let config_state = tauri::async_runtime::block_on(async {
@@ -329,43 +422,61 @@ pub fn run() {
                 app.manage(config_state);
                 info!("配置管理器状态已初始化");
 
-                // 创建 ConfigManager 实例用于 AI 管理器和主题系统
-                info!("开始创建配置管理器实例");
-                // 从已初始化的ConfigManagerState中获取TomlConfigManager
-                let config_manager = {
+                // 初始化快捷键管理器状态（依赖配置管理器）
+                info!("开始初始化快捷键管理器状态");
+                let shortcut_state = {
                     let config_state = app.state::<ConfigManagerState>();
-                    config_state.toml_manager.clone()
+                    tauri::async_runtime::block_on(async {
+                        ShortcutManagerState::new(&config_state)
+                            .await
+                            .map_err(|e| anyhow::anyhow!("快捷键管理器状态初始化失败: {}", e))
+                    })?
                 };
+                app.manage(shortcut_state);
+                info!("快捷键管理器状态已初始化");
+
+                // 提取并管理 TomlConfigManager，以便其他服务可以依赖它
+                let config_manager = app.state::<ConfigManagerState>().toml_manager.clone();
+                app.manage(config_manager);
+                info!("TomlConfigManager 状态已管理");
+
+                // 初始化存储协调器状态（必须在依赖它的服务之前）
+                info!("开始初始化存储协调器状态");
+                let storage_state = {
+                    let config_manager = app.state::<ConfigManagerState>().toml_manager.clone();
+                    tauri::async_runtime::block_on(async {
+                        StorageCoordinatorState::new(config_manager)
+                            .await
+                            .map_err(|e| anyhow::anyhow!("存储协调器状态初始化失败: {}", e))
+                    })?
+                };
+                app.manage(storage_state);
+                info!("存储协调器状态已初始化");
 
                 // 创建 ThemeService 实例用于主题系统
                 info!("开始创建主题服务实例");
                 let theme_service = tauri::async_runtime::block_on(async {
                     use crate::config::{
-                        paths::ConfigPaths, theme::ThemeManager, theme::ThemeManagerOptions,
-                        theme::ThemeService,
+                        paths::ConfigPaths, theme::ThemeManagerOptions, theme::ThemeService,
                     };
 
-                    // 创建配置路径管理器
-                    let paths = ConfigPaths::new()
-                        .map_err(|e| anyhow::anyhow!("配置路径创建失败: {}", e))?;
+                    // 获取缓存实例
+                    let storage_state = app.state::<StorageCoordinatorState>();
+                    let cache = storage_state.coordinator.cache();
 
-                    // 创建主题管理器
+                    // 从状态中获取配置路径管理器
+                    let paths = app.state::<ConfigPaths>().inner().clone();
+
+                    // 创建主题管理器选项
                     let theme_manager_options = ThemeManagerOptions::default();
-                    let theme_manager = ThemeManager::new(paths, theme_manager_options)
-                        .await
-                        .map_err(|e| anyhow::anyhow!("主题管理器创建失败: {}", e))?;
-                    let theme_manager = std::sync::Arc::new(theme_manager);
 
                     // 创建主题服务
-                    let theme_service = ThemeService::new(theme_manager);
+                    let theme_service =
+                        ThemeService::new(paths, theme_manager_options, cache).await?;
                     Ok::<ThemeService, anyhow::Error>(theme_service)
                 })?;
-                let theme_service = std::sync::Arc::new(theme_service);
-
-                // 管理状态
-                app.manage(config_manager.clone());
-                app.manage(theme_service);
-                info!("配置管理器和主题服务状态已管理");
+                app.manage(std::sync::Arc::new(theme_service));
+                info!("主题服务状态已管理");
 
                 // 初始化补全引擎状态
                 info!("开始初始化补全引擎状态管理器");
@@ -373,22 +484,13 @@ pub fn run() {
                 app.manage(completion_state);
                 info!("补全引擎状态管理器已初始化");
 
-                // 初始化存储协调器状态（必须在AI管理器之前）
-                info!("开始初始化存储协调器状态");
-                let storage_state = tauri::async_runtime::block_on(async {
-                    StorageCoordinatorState::new(config_manager.clone())
-                        .await
-                        .map_err(|e| anyhow::anyhow!("存储协调器状态初始化失败: {}", e))
-                })?;
-                app.manage(storage_state);
-                info!("存储协调器状态已初始化");
-
-                // 初始化AI管理器状态（使用存储协调器中的SQLite管理器）
+                // 初始化AI管理器状态（使用存储协调器中的SQLite管理器和缓存）
                 info!("开始初始化AI管理器状态");
                 let ai_state = {
                     let storage_state = app.state::<StorageCoordinatorState>();
-                    let sqlite_manager = storage_state.coordinator.sqlite_manager();
-                    let ai_state = AIManagerState::new(Some(sqlite_manager))
+                    let repositories = storage_state.coordinator.repositories();
+                    let cache = storage_state.coordinator.cache();
+                    let ai_state = AIManagerState::new(repositories, cache)
                         .map_err(|e| anyhow::anyhow!("AI管理器状态初始化失败: {}", e))?;
 
                     // 初始化AI服务
@@ -411,10 +513,38 @@ pub fn run() {
                 app.manage(window_state);
                 info!("窗口状态管理器已初始化");
 
+                // 初始化TerminalMux状态（用于shell integration命令）
+                info!("开始初始化TerminalMux状态管理器");
+                let terminal_mux = crate::mux::singleton::get_mux();
+                app.manage(terminal_mux);
+                info!("TerminalMux状态管理器已初始化");
+
+                // Shell Integration现在通过环境变量自动启用，无需复杂初始化
+
                 // 设置Tauri集成
                 info!("开始设置Tauri事件集成");
                 setup_tauri_integration(app.handle().clone());
                 info!("Tauri事件集成设置完成");
+
+                // 启动系统主题监听器
+                info!("开始启动系统主题监听器");
+                start_system_theme_listener(app.handle().clone());
+                info!("系统主题监听器已启动");
+
+                // 在窗口关闭请求时优雅关闭 TerminalMux，释放后台线程
+                if let Some(window) = app.get_webview_window("main") {
+                    use tauri::WindowEvent;
+                    window.on_window_event(|event| {
+                        if let WindowEvent::CloseRequested { .. } = event {
+                            info!("检测到窗口关闭请求，开始关闭 TerminalMux");
+                            if let Err(e) = crate::mux::singleton::shutdown_mux() {
+                                warn!("关闭 TerminalMux 失败: {}", e);
+                            } else {
+                                info!("TerminalMux 已关闭");
+                            }
+                        }
+                    });
+                }
 
                 // 设置deep-link事件处理
                 #[cfg(desktop)]
@@ -620,4 +750,31 @@ async fn copy_default_config_from_resources<R: tauri::Runtime>(
     }
 
     Ok(())
+}
+
+/// 启动系统主题监听器
+fn start_system_theme_listener<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>) {
+    use config::theme::{handle_system_theme_change, SystemThemeDetector};
+    use std::sync::Arc;
+
+    let handle = Arc::new(app_handle);
+    let _listener_handle = SystemThemeDetector::start_system_theme_listener({
+        let handle = Arc::clone(&handle);
+        move |is_dark| {
+            let handle = Arc::clone(&handle);
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = handle_system_theme_change(&*handle, is_dark).await {
+                    warn!("处理系统主题变化失败: {}", e);
+                } else {
+                    info!(
+                        "系统主题已更新为: {}",
+                        if is_dark { "深色" } else { "浅色" }
+                    );
+                }
+            });
+        }
+    });
+
+    // 存储监听器句柄，防止被drop
+    // 注意：在实际应用中，你可能需要在应用关闭时停止监听器
 }

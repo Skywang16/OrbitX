@@ -5,12 +5,12 @@
  * 支持内置主题和用户自定义主题的统一管理。
  */
 
-use super::types::{AnsiColors, ColorScheme, SyntaxHighlight, Theme, ThemeType, UIColors};
+use super::types::{AnsiColors, SyntaxHighlight, Theme, ThemeType, UIColors};
+use crate::storage::cache::UnifiedCache;
 use crate::{config::paths::ConfigPaths, utils::error::AppResult};
 use anyhow::{anyhow, bail, Context};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
@@ -92,49 +92,21 @@ pub struct ThemeDefaults {
     pub default_theme: String,
 }
 
-/// 主题缓存条目
-#[derive(Debug, Clone)]
-pub struct ThemeCacheEntry {
-    /// 主题数据
-    pub theme: Theme,
-
-    /// 缓存时间
-    pub cached_at: Instant,
-
-    /// 文件修改时间
-    pub file_modified: SystemTime,
-
-    /// 文件校验和
-    pub checksum: String,
-}
-
 /// 主题管理器选项
 #[derive(Debug, Clone)]
 pub struct ThemeManagerOptions {
-    /// 启用缓存
-    pub enable_cache: bool,
-
-    /// 缓存 TTL（秒）
-    pub cache_ttl: u64,
-
     /// 自动刷新索引
     pub auto_refresh_index: bool,
 
     /// 索引刷新间隔（秒）
     pub index_refresh_interval: u64,
-
-    /// 最大缓存条目数
-    pub max_cache_entries: usize,
 }
 
 impl Default for ThemeManagerOptions {
     fn default() -> Self {
         Self {
-            enable_cache: true,
-            cache_ttl: 1800, // 30分钟
             auto_refresh_index: true,
             index_refresh_interval: 300, // 5分钟
-            max_cache_entries: 50,
         }
     }
 }
@@ -150,13 +122,14 @@ pub struct ThemeManager {
     /// 配置路径管理器
     paths: ConfigPaths,
 
-    /// 主题缓存
-    cache: Arc<Mutex<HashMap<String, ThemeCacheEntry>>>,
-
     /// 主题索引
     index: Arc<RwLock<Option<ThemeIndex>>>,
 
+    /// 统一缓存
+    cache: Arc<UnifiedCache>,
+
     /// 管理器选项
+    #[allow(dead_code)]
     options: ThemeManagerOptions,
 
     /// 最后索引刷新时间
@@ -172,11 +145,15 @@ impl ThemeManager {
     ///
     /// # Returns
     /// 返回主题管理器实例
-    pub async fn new(paths: ConfigPaths, options: ThemeManagerOptions) -> AppResult<Self> {
+    pub async fn new(
+        paths: ConfigPaths,
+        options: ThemeManagerOptions,
+        cache: Arc<UnifiedCache>,
+    ) -> AppResult<Self> {
         let manager = Self {
             paths,
-            cache: Arc::new(Mutex::new(HashMap::new())),
             index: Arc::new(RwLock::new(None)),
+            cache,
             options,
             last_index_refresh: Arc::new(Mutex::new(None)),
         };
@@ -187,8 +164,8 @@ impl ThemeManager {
         // 创建内置主题文件（如果不存在）
         manager.create_builtin_themes().await?;
 
-        // 加载主题索引
-        manager.load_theme_index().await?;
+        // 直接刷新索引而不是加载现有索引（确保索引与实际文件同步）
+        manager.refresh_index().await?;
 
         info!("主题管理器初始化完成");
         Ok(manager)
@@ -202,14 +179,6 @@ impl ThemeManager {
             fs::create_dir_all(themes_dir)
                 .with_context(|| format!("无法创建主题目录: {}", themes_dir.display()))?;
             info!("创建主题目录: {}", themes_dir.display());
-        }
-
-        // 创建内置主题子目录
-        let builtin_dir = themes_dir.join("builtin");
-        if !builtin_dir.exists() {
-            fs::create_dir_all(&builtin_dir)
-                .with_context(|| format!("无法创建内置主题目录: {}", builtin_dir.display()))?;
-            info!("创建内置主题目录: {}", builtin_dir.display());
         }
 
         Ok(())
@@ -299,19 +268,21 @@ impl ThemeManager {
     /// # Returns
     /// 返回主题数据
     pub async fn load_theme(&self, theme_name: &str) -> AppResult<Theme> {
-        // 检查缓存
-        if self.options.enable_cache {
-            if let Some(cached_theme) = self.get_cached_theme(theme_name).await? {
-                return Ok(cached_theme);
+        let cache_key = format!("theme:{}", theme_name);
+
+        // 尝试从缓存获取
+        if let Some(cached_value) = self.cache.get(&cache_key).await {
+            if let Ok(theme) = serde_json::from_value(cached_value) {
+                return Ok(theme);
             }
         }
 
-        // 从文件加载主题
+        // 缓存未命中，从文件加载
         let theme = self.load_theme_from_file(theme_name).await?;
 
-        // 更新缓存
-        if self.options.enable_cache {
-            self.cache_theme(theme_name, &theme).await?;
+        // 存入缓存
+        if let Ok(theme_value) = serde_json::to_value(&theme) {
+            let _ = self.cache.set(&cache_key, theme_value).await;
         }
 
         Ok(theme)
@@ -367,71 +338,6 @@ impl ThemeManager {
             theme_name,
             themes_dir.display()
         );
-    }
-
-    /// 从缓存获取主题
-    async fn get_cached_theme(&self, theme_name: &str) -> AppResult<Option<Theme>> {
-        let cache = self.cache.lock().await;
-
-        if let Some(entry) = cache.get(theme_name) {
-            // 检查缓存是否过期
-            let cache_age = entry.cached_at.elapsed().as_secs();
-            if cache_age < self.options.cache_ttl {
-                // 检查文件是否被修改
-                if let Ok(theme_path) = self.get_theme_file_path(theme_name).await {
-                    if let Ok(metadata) = fs::metadata(&theme_path) {
-                        if let Ok(modified) = metadata.modified() {
-                            if modified == entry.file_modified {
-                                return Ok(Some(entry.theme.clone()));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(None)
-    }
-
-    /// 缓存主题
-    async fn cache_theme(&self, theme_name: &str, theme: &Theme) -> AppResult<()> {
-        let theme_path = self.get_theme_file_path(theme_name).await?;
-        let metadata = fs::metadata(&theme_path)
-            .with_context(|| format!("无法获取主题文件元数据: {}", theme_path.display()))?;
-
-        let file_modified = metadata
-            .modified()
-            .with_context(|| "无法获取文件修改时间")?;
-
-        // 计算文件校验和
-        let content = fs::read_to_string(&theme_path)
-            .with_context(|| format!("无法读取主题文件: {}", theme_path.display()))?;
-        let checksum = format!("{:x}", md5::compute(content.as_bytes()));
-
-        let entry = ThemeCacheEntry {
-            theme: theme.clone(),
-            cached_at: Instant::now(),
-            file_modified,
-            checksum,
-        };
-
-        let mut cache = self.cache.lock().await;
-
-        // 检查缓存大小限制
-        if cache.len() >= self.options.max_cache_entries {
-            // 移除最旧的缓存条目
-            if let Some(oldest_key) = cache
-                .iter()
-                .min_by_key(|(_, entry)| entry.cached_at)
-                .map(|(key, _)| key.clone())
-            {
-                cache.remove(&oldest_key);
-            }
-        }
-
-        cache.insert(theme_name.to_string(), entry);
-
-        Ok(())
     }
 
     /// 获取所有可用主题列表
@@ -522,24 +428,39 @@ impl ThemeManager {
     pub async fn refresh_index(&self) -> AppResult<()> {
         info!("开始刷新主题索引");
 
-        // 扫描主题目录下的所有主题文件
+        // 只扫描主题目录，不区分内置和自定义主题
         let themes_dir = self.paths.themes_dir();
-        let all_themes = self.scan_theme_directory(themes_dir, true).await?;
+        let all_themes = self.scan_theme_directory(themes_dir, false).await?;
+
+        // 根据主题索引文件中的信息区分内置和自定义主题
+        let (builtin_themes, custom_themes) = self.categorize_themes(all_themes).await;
 
         // 创建新索引
-        let total_themes = all_themes.len();
+        let total_themes = custom_themes.len() + builtin_themes.len();
         let new_index = ThemeIndex {
             version: "1.0.0".to_string(),
             last_updated: SystemTime::now(),
             total_themes,
-            builtin_themes: all_themes,
-            custom_themes: Vec::new(),
+            builtin_themes,
+            custom_themes,
             defaults: ThemeDefaults {
                 light_theme: "light".to_string(),
                 dark_theme: "dark".to_string(),
                 default_theme: "dark".to_string(),
             },
         };
+
+        // 清空旧的主题缓存
+        let theme_keys_to_remove: Vec<String> = self
+            .cache
+            .keys()
+            .await
+            .into_iter()
+            .filter(|k| k.starts_with("theme:"))
+            .collect();
+        for key in theme_keys_to_remove {
+            self.cache.remove(&key).await;
+        }
 
         // 保存索引到文件
         self.save_index_to_file(&new_index).await?;
@@ -626,7 +547,7 @@ impl ThemeManager {
             .with_context(|| format!("无法读取主题文件: {}", path.display()))?;
 
         let theme_wrapper: ThemeFileWrapper = toml::from_str(&content)
-            .with_context(|| format!("无法解析主题文件: {}", path.display()))?;
+            .map_err(|e| anyhow!("无法解析主题文件: {} - {}", path.display(), e))?;
 
         let theme = theme_wrapper.theme;
 
@@ -747,13 +668,9 @@ impl ThemeManager {
 name = "dark"
 theme_type = "dark"
 
-[theme.colors]
-foreground = "#e6e6e6"
-background = "#1e1e1e"
-cursor = "#ffffff"
-selection = "#3391ff"
 
-[theme.colors.ansi]
+
+[theme.ansi]
 black = "#000000"
 red = "#cd3131"
 green = "#0dbc79"
@@ -763,7 +680,7 @@ magenta = "#bc3fbc"
 cyan = "#11a8cd"
 white = "#e5e5e5"
 
-[theme.colors.bright]
+[theme.bright]
 black = "#666666"
 red = "#f14c4c"
 green = "#23d18b"
@@ -784,14 +701,41 @@ type_name = "#4ec9b0"
 operator = "#d4d4d4"
 
 [theme.ui]
+# 背景色层次
+bg_100 = "#1a1a1a"
+bg_200 = "#1e1e1e"
+bg_300 = "#252526"
+bg_400 = "#2d2d30"
+bg_500 = "#3c3c3c"
+bg_600 = "#4d4d4d"
+bg_700 = "#5a5a5a"
+
+# 边框层次
+border_200 = "rgba(255, 255, 255, 0.08)"
+border_300 = "rgba(255, 255, 255, 0.12)"
+border_400 = "rgba(255, 255, 255, 0.16)"
+
+# 文本层次
+text_100 = "#ffffff"
+text_200 = "#e0e0e0"
+text_300 = "#cccccc"
+text_400 = "#999999"
+text_500 = "#666666"
+
+# 状态颜色
 primary = "#007acc"
-secondary = "#6c757d"
-success = "#28a745"
-warning = "#ffc107"
-error = "#dc3545"
-info = "#17a2b8"
-border = "#3c3c3c"
-divider = "#404040"
+primary_hover = "#005a9e"
+primary_alpha = "rgba(0, 122, 204, 0.1)"
+success = "#0dbc79"
+warning = "#ffcc02"
+error = "#f44747"
+info = "#75beff"
+
+# 交互状态
+hover = "#2a2d2e"
+active = "#3c3c3c"
+focus = "#007acc"
+selection = "rgba(173, 214, 255, 0.3)"
 "##;
 
         let dark_theme_path = themes_dir.join("dark.toml");
@@ -804,31 +748,25 @@ divider = "#404040"
 name = "light"
 theme_type = "light"
 
-[theme.colors]
-foreground = "#24292e"
-background = "#ffffff"
-cursor = "#044289"
-selection = "#0366d6"
-
-[theme.colors.ansi]
+[theme.ansi]
 black = "#24292e"
 red = "#d73a49"
 green = "#28a745"
-yellow = "#b08800"
+yellow = "#ffd33d"
 blue = "#0366d6"
 magenta = "#ea4aaa"
 cyan = "#17a2b8"
-white = "#586069"
+white = "#f6f8fa"
 
-[theme.colors.bright]
-black = "#6a737d"
+[theme.bright]
+black = "#586069"
 red = "#cb2431"
 green = "#22863a"
-yellow = "#e36209"
+yellow = "#b08800"
 blue = "#005cc5"
-magenta = "#b392f0"
+magenta = "#e36209"
 cyan = "#0598bc"
-white = "#24292e"
+white = "#fafbfc"
 
 [theme.syntax]
 comment = "#6a737d"
@@ -841,14 +779,41 @@ type_name = "#005cc5"
 operator = "#d73a49"
 
 [theme.ui]
+# 浅色主题的背景色层次
+bg_100 = "#ffffff"
+bg_200 = "#fafafa"
+bg_300 = "#f5f5f5"
+bg_400 = "#f0f0f0"
+bg_500 = "#e8e8e8"
+bg_600 = "#e0e0e0"
+bg_700 = "#d8d8d8"
+
+# 浅色主题的边框层次
+border_200 = "rgba(0, 0, 0, 0.08)"
+border_300 = "rgba(0, 0, 0, 0.12)"
+border_400 = "rgba(0, 0, 0, 0.16)"
+
+# 浅色主题的文本层次
+text_100 = "#000000"
+text_200 = "#1a1a1a"
+text_300 = "#333333"
+text_400 = "#666666"
+text_500 = "#999999"
+
+# 状态颜色
 primary = "#0366d6"
-secondary = "#6c757d"
+primary_hover = "#005cc5"
+primary_alpha = "rgba(3, 102, 214, 0.1)"
 success = "#28a745"
 warning = "#ffc107"
 error = "#dc3545"
 info = "#17a2b8"
-border = "#e1e4e8"
-divider = "#d1d5da"
+
+# 交互状态
+hover = "#e8e8e8"
+active = "#e0e0e0"
+focus = "#0366d6"
+selection = "rgba(3, 102, 214, 0.3)"
 "##;
 
         let light_theme_path = themes_dir.join("light.toml");
@@ -878,6 +843,24 @@ divider = "#d1d5da"
         }
 
         Ok(())
+    }
+
+    /// 根据实际存在的主题文件动态分类主题
+    /// 所有在 themes 目录中找到的主题文件都被视为可用主题
+    async fn categorize_themes(
+        &self,
+        themes: Vec<ThemeIndexEntry>,
+    ) -> (Vec<ThemeIndexEntry>, Vec<ThemeIndexEntry>) {
+        let mut builtin_themes = Vec::new();
+        let custom_themes = Vec::new();
+
+        for mut theme in themes {
+            // 将所有找到的主题都标记为内置主题
+            theme.builtin = true;
+            builtin_themes.push(theme);
+        }
+
+        (builtin_themes, custom_themes)
     }
 }
 
@@ -932,38 +915,15 @@ impl ThemeValidator {
 
     /// 验证主题数据
     fn validate_theme_data(theme: &Theme, errors: &mut Vec<String>, warnings: &mut [String]) {
-        // 验证颜色值
-        Self::validate_color_scheme(&theme.colors, errors, warnings);
+        // 验证 ANSI 颜色
+        Self::validate_ansi_colors(&theme.ansi, "ansi", errors);
+        Self::validate_ansi_colors(&theme.bright, "bright", errors);
 
         // 验证语法高亮
         Self::validate_syntax_highlight(&theme.syntax, errors, warnings);
 
         // 验证UI颜色
         Self::validate_ui_colors(&theme.ui, errors, warnings);
-    }
-
-    /// 验证颜色方案
-    fn validate_color_scheme(
-        colors: &ColorScheme,
-        errors: &mut Vec<String>,
-        _warnings: &mut [String],
-    ) {
-        let color_fields = [
-            ("foreground", &colors.foreground),
-            ("background", &colors.background),
-            ("cursor", &colors.cursor),
-            ("selection", &colors.selection),
-        ];
-
-        for (field_name, color_value) in color_fields.iter() {
-            if !Self::is_valid_color(color_value) {
-                errors.push(format!("无效的颜色值 {}: {}", field_name, color_value));
-            }
-        }
-
-        // 验证 ANSI 颜色
-        Self::validate_ansi_colors(&colors.ansi, "ansi", errors);
-        Self::validate_ansi_colors(&colors.bright, "bright", errors);
     }
 
     /// 验证 ANSI 颜色
@@ -1016,17 +976,40 @@ impl ThemeValidator {
         }
     }
 
-    /// 验证UI颜色
+    /// 验证UI颜色 - 支持新的层次系统
     fn validate_ui_colors(ui: &UIColors, errors: &mut Vec<String>, _warnings: &mut [String]) {
         let ui_fields = [
+            // 背景色层次
+            ("bg_100", &ui.bg_100),
+            ("bg_200", &ui.bg_200),
+            ("bg_300", &ui.bg_300),
+            ("bg_400", &ui.bg_400),
+            ("bg_500", &ui.bg_500),
+            ("bg_600", &ui.bg_600),
+            ("bg_700", &ui.bg_700),
+            // 边框层次
+            ("border_200", &ui.border_200),
+            ("border_300", &ui.border_300),
+            ("border_400", &ui.border_400),
+            // 文本层次
+            ("text_100", &ui.text_100),
+            ("text_200", &ui.text_200),
+            ("text_300", &ui.text_300),
+            ("text_400", &ui.text_400),
+            ("text_500", &ui.text_500),
+            // 状态颜色
             ("primary", &ui.primary),
-            ("secondary", &ui.secondary),
+            ("primary_hover", &ui.primary_hover),
+            ("primary_alpha", &ui.primary_alpha),
             ("success", &ui.success),
             ("warning", &ui.warning),
             ("error", &ui.error),
             ("info", &ui.info),
-            ("border", &ui.border),
-            ("divider", &ui.divider),
+            // 交互状态
+            ("hover", &ui.hover),
+            ("active", &ui.active),
+            ("focus", &ui.focus),
+            ("selection", &ui.selection),
         ];
 
         for (field_name, color_value) in ui_fields.iter() {

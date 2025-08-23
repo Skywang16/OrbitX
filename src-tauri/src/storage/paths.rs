@@ -5,7 +5,6 @@
  * 支持跨平台路径处理和路径验证
  */
 
-use crate::storage::types::StorageStats;
 use crate::utils::error::AppResult;
 use anyhow::{anyhow, Context};
 use std::fs;
@@ -22,8 +21,7 @@ pub struct StoragePaths {
     pub state_dir: PathBuf,
     /// 数据目录
     pub data_dir: PathBuf,
-    /// 缓存目录
-    pub cache_dir: PathBuf,
+
     /// 备份目录
     pub backups_dir: PathBuf,
     /// 日志目录
@@ -36,7 +34,7 @@ impl StoragePaths {
         let config_dir = app_dir.join(super::CONFIG_DIR_NAME);
         let state_dir = app_dir.join(super::STATE_DIR_NAME);
         let data_dir = app_dir.join(super::DATA_DIR_NAME);
-        let cache_dir = app_dir.join(super::CACHE_DIR_NAME);
+
         let backups_dir = app_dir.join(super::BACKUPS_DIR_NAME);
         let logs_dir = app_dir.join("logs");
 
@@ -45,7 +43,7 @@ impl StoragePaths {
             config_dir,
             state_dir,
             data_dir,
-            cache_dir,
+
             backups_dir,
             logs_dir,
         };
@@ -76,11 +74,6 @@ impl StoragePaths {
         self.backups_dir.join(filename)
     }
 
-    /// 获取缓存文件路径
-    pub fn cache_file(&self, filename: &str) -> PathBuf {
-        self.cache_dir.join(filename)
-    }
-
     /// 获取日志文件路径
     pub fn log_file(&self, filename: &str) -> PathBuf {
         self.logs_dir.join(filename)
@@ -93,7 +86,6 @@ impl StoragePaths {
             &self.config_dir,
             &self.state_dir,
             &self.data_dir,
-            &self.cache_dir,
             &self.backups_dir,
             &self.logs_dir,
         ];
@@ -129,20 +121,6 @@ impl StoragePaths {
         Ok(())
     }
 
-    /// 清理缓存目录
-    pub fn clean_cache(&self) -> AppResult<()> {
-        if self.cache_dir.exists() {
-            fs::remove_dir_all(&self.cache_dir)
-                .with_context(|| format!("清理缓存目录失败: {}", self.cache_dir.display()))?;
-
-            fs::create_dir_all(&self.cache_dir)
-                .with_context(|| format!("重新创建缓存目录失败: {}", self.cache_dir.display()))?;
-
-            // 缓存目录已清理
-        }
-        Ok(())
-    }
-
     /// 获取目录大小（字节）
     pub fn get_directory_size(&self, dir: &Path) -> AppResult<u64> {
         if !dir.exists() {
@@ -171,31 +149,6 @@ impl StoragePaths {
 
         Ok(total_size)
     }
-
-    /// 获取存储统计信息
-    pub fn get_storage_stats(&self) -> AppResult<StorageStats> {
-        let config_size = self.get_directory_size(&self.config_dir)?;
-        let state_size = self.get_directory_size(&self.state_dir)?;
-        let data_size = self.get_directory_size(&self.data_dir)?;
-        let cache_size = self.get_directory_size(&self.cache_dir)?;
-        let backups_size = self.get_directory_size(&self.backups_dir)?;
-        let logs_size = self.get_directory_size(&self.logs_dir)?;
-
-        Ok(StorageStats {
-            total_size: config_size
-                + state_size
-                + data_size
-                + cache_size
-                + backups_size
-                + logs_size,
-            config_size,
-            state_size,
-            data_size,
-            cache_size,
-            backups_size,
-            logs_size,
-        })
-    }
 }
 
 /// 存储路径构建器
@@ -204,7 +157,6 @@ pub struct StoragePathsBuilder {
     custom_config_dir: Option<PathBuf>,
     custom_state_dir: Option<PathBuf>,
     custom_data_dir: Option<PathBuf>,
-    custom_cache_dir: Option<PathBuf>,
 }
 
 impl StoragePathsBuilder {
@@ -214,7 +166,6 @@ impl StoragePathsBuilder {
             custom_config_dir: None,
             custom_state_dir: None,
             custom_data_dir: None,
-            custom_cache_dir: None,
         }
     }
 
@@ -238,11 +189,6 @@ impl StoragePathsBuilder {
         self
     }
 
-    pub fn cache_dir(mut self, dir: PathBuf) -> Self {
-        self.custom_cache_dir = Some(dir);
-        self
-    }
-
     pub fn build(self) -> AppResult<StoragePaths> {
         let app_dir = self
             .app_dir
@@ -257,9 +203,7 @@ impl StoragePathsBuilder {
         let data_dir = self
             .custom_data_dir
             .unwrap_or_else(|| app_dir.join(super::DATA_DIR_NAME));
-        let cache_dir = self
-            .custom_cache_dir
-            .unwrap_or_else(|| app_dir.join(super::CACHE_DIR_NAME));
+
         let backups_dir = app_dir.join(super::BACKUPS_DIR_NAME);
         let logs_dir = app_dir.join("logs");
 
@@ -268,7 +212,7 @@ impl StoragePathsBuilder {
             config_dir,
             state_dir,
             data_dir,
-            cache_dir,
+
             backups_dir,
             logs_dir,
         };

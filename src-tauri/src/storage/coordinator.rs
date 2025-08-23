@@ -1,17 +1,19 @@
 /*!
  * 存储协调器模块
  *
- * 简化的存储协调器，管理三层存储的交互和数据流
- * 集成现有的配置管理器、MessagePack状态层和SQLite数据层
- * 遵循"不过度工程化"原则，只保留核心协调功能
+ * 管理三层存储架构的协调器，采用Repository模式
+ * 集成配置管理器、MessagePack状态层和数据库层
+ * 提供统一的存储访问接口
  */
 
 use crate::config::TomlConfigManager;
+use crate::storage::cache::UnifiedCache;
+use crate::storage::database::{DatabaseManager, DatabaseOptions};
 use crate::storage::messagepack::{MessagePackManager, MessagePackOptions};
 use crate::storage::paths::StoragePaths;
-use crate::storage::sqlite::{SqliteManager, SqliteOptions};
-use crate::storage::types::{CacheStats, DataQuery, SaveOptions, SessionState, StorageStats};
-use crate::storage::{CacheConfig, HealthCheckResult, MultiLayerCache, RecoveryManager};
+use crate::storage::repositories::RepositoryManager;
+use crate::storage::types::SessionState;
+
 use crate::utils::error::AppResult;
 use anyhow::Context;
 use serde_json::Value;
@@ -23,22 +25,22 @@ use tracing::{debug, info};
 pub struct StorageCoordinatorOptions {
     /// MessagePack管理器选项
     pub messagepack_options: MessagePackOptions,
-    /// SQLite管理器选项
-    pub sqlite_options: SqliteOptions,
+    /// 数据库管理器选项
+    pub database_options: DatabaseOptions,
 }
 
 impl Default for StorageCoordinatorOptions {
     fn default() -> Self {
         Self {
             messagepack_options: MessagePackOptions::default(),
-            sqlite_options: SqliteOptions::default(),
+            database_options: DatabaseOptions::default(),
         }
     }
 }
 
 /// 存储协调器
 ///
-/// 简化的三层存储系统协调器，只保留核心功能
+/// 三层存储系统协调器，采用Repository模式管理数据访问
 pub struct StorageCoordinator {
     /// 存储路径管理器
     paths: StoragePaths,
@@ -48,12 +50,12 @@ pub struct StorageCoordinator {
     config_manager: Arc<TomlConfigManager>,
     /// MessagePack状态管理器
     messagepack_manager: Arc<MessagePackManager>,
-    /// SQLite数据管理器
-    sqlite_manager: Arc<SqliteManager>,
-    /// 多层缓存管理器
-    cache: Arc<MultiLayerCache>,
-    /// 恢复管理器
-    recovery_manager: Arc<RecoveryManager>,
+    /// 数据库管理器
+    database_manager: Arc<DatabaseManager>,
+    /// Repository管理器
+    repository_manager: Arc<RepositoryManager>,
+    /// 统一缓存
+    cache: Arc<UnifiedCache>,
 }
 
 impl StorageCoordinator {
@@ -68,45 +70,48 @@ impl StorageCoordinator {
         // 确保所有目录存在
         paths.ensure_directories().context("创建存储目录失败")?;
 
+        // 先解构options避免partial move
+        let StorageCoordinatorOptions {
+            messagepack_options,
+            database_options,
+        } = options;
+
         // 初始化MessagePack状态管理器
         let messagepack_manager = Arc::new(
-            MessagePackManager::new(paths.clone(), options.messagepack_options.clone())
+            MessagePackManager::new(paths.clone(), messagepack_options)
                 .await
                 .context("初始化MessagePack管理器失败")?,
         );
 
-        // 初始化SQLite数据管理器
-        let sqlite_manager = Arc::new(
-            SqliteManager::new(paths.clone(), options.sqlite_options.clone())
+        // 初始化数据库管理器  
+        let database_manager = Arc::new(
+            DatabaseManager::new(paths.clone(), database_options)
                 .await
-                .context("初始化SQLite管理器失败")?,
+                .context("初始化数据库管理器失败")?,
         );
 
         // 初始化数据库
-        sqlite_manager
-            .initialize_database()
+        database_manager
+            .initialize()
             .await
             .context("初始化数据库失败")?;
 
-        // 初始化缓存系统
-        let cache_config = CacheConfig::default();
-        let cache = Arc::new(
-            MultiLayerCache::new(&paths, cache_config)
-                .await
-                .context("初始化缓存系统失败")?,
-        );
+        // 初始化Repository管理器
+        let repository_manager = Arc::new(RepositoryManager::new(Arc::clone(&database_manager)));
 
-        // 初始化恢复管理器
-        let recovery_manager = Arc::new(RecoveryManager::new(paths.clone()));
+
 
         let coordinator = Self {
             paths,
-            options,
+            options: StorageCoordinatorOptions {
+                messagepack_options: MessagePackOptions::default(),
+                database_options: DatabaseOptions::default(),
+            },
             config_manager,
             messagepack_manager,
-            sqlite_manager,
-            cache,
-            recovery_manager,
+            database_manager,
+            repository_manager,
+            cache: Arc::new(UnifiedCache::new()),
         };
 
         info!("存储协调器初始化完成");
@@ -166,17 +171,7 @@ impl StorageCoordinator {
         self.messagepack_manager.load_state().await
     }
 
-    /// 查询数据
-    pub async fn query_data(&self, query: &DataQuery) -> AppResult<Vec<Value>> {
-        debug!("查询数据: {}", query.query);
-        self.sqlite_manager.query_data(query).await
-    }
 
-    /// 保存数据
-    pub async fn save_data(&self, data: &Value, options: &SaveOptions) -> AppResult<()> {
-        debug!("保存数据到表: {:?}", options.table);
-        self.sqlite_manager.save_data(data, options).await
-    }
 
     /// 获取存储路径管理器的引用
     pub fn paths(&self) -> &StoragePaths {
@@ -188,99 +183,18 @@ impl StorageCoordinator {
         &self.options
     }
 
-    /// 获取SQLite管理器的引用
-    pub fn sqlite_manager(&self) -> Arc<SqliteManager> {
-        self.sqlite_manager.clone()
+    /// 获取数据库管理器的引用
+    pub fn database_manager(&self) -> Arc<DatabaseManager> {
+        Arc::clone(&self.database_manager)
     }
 
-    /// 健康检查
-    pub async fn health_check(&self) -> AppResult<HealthCheckResult> {
-        debug!("执行存储系统健康检查");
-        let system_health = self.recovery_manager.health_check().await?;
-
-        // 转换SystemHealth为HealthCheckResult
-        Ok(HealthCheckResult {
-            name: "storage_system".to_string(),
-            healthy: system_health.overall_healthy,
-            message: if system_health.overall_healthy {
-                "存储系统健康".to_string()
-            } else {
-                format!(
-                    "存储系统存在问题: {} 个检查项失败",
-                    system_health.unhealthy_checks().len()
-                )
-            },
-            checked_at: system_health.checked_at,
-            duration: system_health.total_duration,
-        })
+    /// 获取Repository管理器的引用
+    pub fn repositories(&self) -> Arc<RepositoryManager> {
+        Arc::clone(&self.repository_manager)
     }
 
-    /// 获取缓存统计信息
-    pub async fn get_cache_stats(&self) -> AppResult<CacheStats> {
-        debug!("获取缓存统计信息");
-        Ok(self.cache.get_stats().await)
-    }
-
-    /// 获取存储统计信息
-    pub async fn get_storage_stats(&self) -> AppResult<StorageStats> {
-        debug!("获取存储统计信息");
-
-        let cache_stats = self.cache.get_stats().await;
-        let config_size = self
-            .paths
-            .config_file()
-            .metadata()
-            .map(|m| m.len())
-            .unwrap_or(0);
-        let state_size = self
-            .paths
-            .session_state_file()
-            .metadata()
-            .map(|m| m.len())
-            .unwrap_or(0);
-        let db_size = self
-            .paths
-            .database_file()
-            .metadata()
-            .map(|m| m.len())
-            .unwrap_or(0);
-
-        Ok(StorageStats {
-            total_size: config_size + state_size + db_size,
-            config_size,
-            state_size,
-            data_size: db_size,
-            cache_size: cache_stats.total_memory_usage,
-            backups_size: 0, // 简化实现
-            logs_size: 0,    // 简化实现
-        })
-    }
-
-    /// 预加载缓存
-    pub async fn preload_cache(&self) -> AppResult<()> {
-        debug!("预加载缓存");
-
-        // 预加载配置数据
-        if let Ok(config) = self.config_manager.load_config().await {
-            let config_value = serde_json::to_value(&config)?;
-            self.cache.set("config:all", config_value).await?;
-        }
-
-        // 预加载会话状态
-        if let Ok(Some(state)) = self.messagepack_manager.load_state().await {
-            let state_value = serde_json::to_value(&state)?;
-            self.cache.set("session:state", state_value).await?;
-        }
-
-        info!("缓存预加载完成");
-        Ok(())
-    }
-
-    /// 清空缓存
-    pub async fn clear_cache(&self) -> AppResult<()> {
-        debug!("清空缓存");
-        self.cache.clear().await?;
-        info!("缓存已清空");
-        Ok(())
+    /// 获取缓存管理器的引用
+    pub fn cache(&self) -> Arc<UnifiedCache> {
+        Arc::clone(&self.cache)
     }
 }

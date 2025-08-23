@@ -1,7 +1,9 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
-  import { reactive, ref, watch } from 'vue'
-
+  import { reactive, ref } from 'vue'
+  import { createMessage } from '@/ui'
+  import { handleError } from '@/utils/errorHandler'
+  import { aiApi } from '@/api'
   interface Props {
     model?: AIModelConfig | null
   }
@@ -32,6 +34,7 @@
   // 表单验证状态
   const errors = ref<Record<string, string>>({})
   const isSubmitting = ref(false)
+  const isTesting = ref(false)
 
   // 提供商选项
   const providerOptions = [
@@ -97,6 +100,43 @@
   const handleCancel = () => {
     emit('cancel')
   }
+
+  // 测试连接
+  const handleTestConnection = async () => {
+    // 验证必填字段
+    if (!formData.apiUrl || !formData.apiKey || !formData.model) {
+      createMessage.warning('请先填写API地址、API密钥和模型名称')
+      return
+    }
+
+    isTesting.value = true
+    try {
+      // 构造临时的模型配置用于测试
+      const testConfig: AIModelConfig = {
+        id: 'test-' + Date.now(), // 临时ID
+        name: formData.name || 'Test Model',
+        provider: formData.provider,
+        apiUrl: formData.apiUrl,
+        apiKey: formData.apiKey,
+        model: formData.model,
+        isDefault: false,
+        options: formData.options,
+      }
+
+      // 调用连接测试 API
+      const isConnected = await aiApi.testConnectionWithConfig(testConfig)
+
+      if (isConnected) {
+        createMessage.success('连接测试成功！')
+      } else {
+        createMessage.error('连接测试失败，请检查配置')
+      }
+    } catch (error) {
+      createMessage.error(handleError(error, '连接测试失败'))
+    } finally {
+      isTesting.value = false
+    }
+  }
 </script>
 
 <template>
@@ -105,23 +145,30 @@
     :title="props.model ? '编辑AI模型' : '添加AI模型'"
     size="large"
     show-footer
-    :show-cancel-button="true"
-    :show-confirm-button="true"
-    cancel-text="取消"
-    :confirm-text="props.model ? '保存' : '添加'"
-    :loading="isSubmitting"
-    loading-text="保存中..."
-    @cancel="handleCancel"
-    @confirm="handleSubmit"
+    :show-cancel-button="false"
+    :show-confirm-button="false"
     @close="handleCancel"
   >
+    <template #footer>
+      <div class="modal-footer">
+        <x-button variant="secondary" :loading="isTesting" @click="handleTestConnection">
+          {{ isTesting ? '测试中...' : '测试连接' }}
+        </x-button>
+        <div class="footer-right">
+          <x-button variant="secondary" @click="handleCancel">取消</x-button>
+          <x-button variant="primary" :loading="isSubmitting" @click="handleSubmit">
+            {{ props.model ? '保存' : '添加' }}
+          </x-button>
+        </div>
+      </div>
+    </template>
     <form @submit.prevent="handleSubmit">
       <!-- 基本信息 -->
       <div class="form-section">
         <h4 class="section-title">基本信息</h4>
 
         <div class="form-group">
-          <label class="form-label">模型名称</label>
+          <label class="form-label">配置名称</label>
           <input
             v-model="formData.name"
             type="text"
@@ -142,16 +189,30 @@
       <div class="form-section">
         <h4 class="section-title">连接配置</h4>
 
-        <div class="form-group">
-          <label class="form-label">API地址</label>
-          <input
-            v-model="formData.apiUrl"
-            type="url"
-            class="form-input"
-            :class="{ error: errors.apiUrl }"
-            placeholder="https://api.openai.com/v1"
-          />
-          <div v-if="errors.apiUrl" class="error-message">{{ errors.apiUrl }}</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">API地址</label>
+            <input
+              v-model="formData.apiUrl"
+              type="url"
+              class="form-input"
+              :class="{ error: errors.apiUrl }"
+              placeholder="https://api.openai.com/v1"
+            />
+            <div v-if="errors.apiUrl" class="error-message">{{ errors.apiUrl }}</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">模型名称</label>
+            <input
+              v-model="formData.model"
+              type="text"
+              class="form-input"
+              :class="{ error: errors.model }"
+              placeholder="gpt-4"
+            />
+            <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
+          </div>
         </div>
 
         <div class="form-group">
@@ -165,18 +226,6 @@
           />
           <div v-if="errors.apiKey" class="error-message">{{ errors.apiKey }}</div>
         </div>
-
-        <div class="form-group">
-          <label class="form-label">模型名称</label>
-          <input
-            v-model="formData.model"
-            type="text"
-            class="form-input"
-            :class="{ error: errors.model }"
-            placeholder="gpt-4"
-          />
-          <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
-        </div>
       </div>
     </form>
   </x-modal>
@@ -184,37 +233,58 @@
 
 <style scoped>
   .form-section {
-    margin-bottom: var(--spacing-xl);
+    margin-bottom: 1.5rem;
+    padding: 1.25rem;
+    background: var(--bg-500);
+    border: 1px solid var(--border-300);
+    border-radius: 8px;
+  }
+
+  .form-section:last-of-type {
+    margin-bottom: 0;
   }
 
   .section-title {
-    font-size: var(--font-size-md);
+    font-size: 1rem;
     font-weight: 600;
-    color: var(--text-primary);
-    margin: 0 0 var(--spacing-md) 0;
+    color: var(--text-200);
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-300);
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
   }
 
   .form-group {
-    margin-bottom: var(--spacing-md);
+    margin-bottom: 1rem;
+  }
+
+  .form-group:last-child {
+    margin-bottom: 0;
   }
 
   .form-label {
     display: block;
-    font-size: var(--font-size-sm);
+    font-size: 0.875rem;
     font-weight: 500;
-    color: var(--text-primary);
-    margin-bottom: var(--spacing-xs);
+    color: var(--text-200);
+    margin-bottom: 0.5rem;
   }
 
   .form-input {
     width: 100%;
-    padding: var(--spacing-sm);
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    background-color: var(--color-background);
-    color: var(--text-primary);
-    font-size: var(--font-size-sm);
-    transition: all 0.2s ease;
+    padding: 0.75rem;
+    border: 1px solid var(--border-300);
+    border-radius: 6px;
+    background-color: var(--bg-400);
+    color: var(--text-200);
+    font-size: 0.875rem;
+    transition: border-color 0.2s ease;
   }
 
   .form-input:focus {
@@ -226,9 +296,45 @@
     border-color: var(--color-danger);
   }
 
+  .form-hint {
+    font-size: 0.75rem;
+    color: var(--text-400);
+    margin-top: 0.25rem;
+  }
+
   .error-message {
-    font-size: var(--font-size-xs);
+    font-size: 0.75rem;
     color: var(--color-danger);
-    margin-top: var(--spacing-xs);
+    margin-top: 0.25rem;
+  }
+
+  .modal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .footer-right {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  /* 响应式设计 */
+  @media (max-width: 768px) {
+    .form-row {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .modal-footer {
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .footer-right {
+      width: 100%;
+      justify-content: flex-end;
+    }
   }
 </style>

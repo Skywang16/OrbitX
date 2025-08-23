@@ -1,58 +1,76 @@
-# OrbitX 深色主题配置文件
+# OrbitX 深色主题配置文件 - 全新层次系统
 # 主题名称: Dark
 # 适用场景: 深色模式，护眼，夜间使用
 
 [theme]
-name = "dark"                   # 主题名称，必须与文件名一致
-theme_type = "dark"             # 主题类型: dark(深色), light(浅色)
+name = "dark"
+theme_type = "dark"
 
-# 基础颜色配置
-[theme.colors]
-foreground = "#e6e6e6"          # 前景色 (文字颜色)
-background = "#1e1e1e"          # 背景色
-cursor = "#ffffff"              # 光标颜色
-selection = "#3391ff"           # 选中文本的背景色
 
-# ANSI 标准颜色 (普通亮度)
-[theme.colors.ansi]
-black = "#000000"               # 黑色 (ANSI 0)
-red = "#cd3131"                 # 红色 (ANSI 1)
-green = "#0dbc79"               # 绿色 (ANSI 2)
-yellow = "#e5e510"              # 黄色 (ANSI 3)
-blue = "#2472c8"                # 蓝色 (ANSI 4)
-magenta = "#bc3fbc"             # 洋红色 (ANSI 5)
-cyan = "#11a8cd"                # 青色 (ANSI 6)
-white = "#e5e5e5"               # 白色 (ANSI 7)
 
-# ANSI 明亮颜色 (高亮度)
-[theme.colors.bright]
-black = "#666666"               # 明亮黑色 (ANSI 8)
-red = "#f14c4c"                 # 明亮红色 (ANSI 9)
-green = "#23d18b"               # 明亮绿色 (ANSI 10)
-yellow = "#f5f543"              # 明亮黄色 (ANSI 11)
-blue = "#3b8eea"                # 明亮蓝色 (ANSI 12)
-magenta = "#d670d6"             # 明亮洋红色 (ANSI 13)
-cyan = "#29b8db"                # 明亮青色 (ANSI 14)
-white = "#ffffff"               # 明亮白色 (ANSI 15)
+[theme.ansi]
+black = "#000000"
+red = "#cd3131"
+green = "#0dbc79"
+yellow = "#e5e510"
+blue = "#2472c8"
+magenta = "#bc3fbc"
+cyan = "#11a8cd"
+white = "#e5e5e5"
 
-# 语法高亮颜色配置
+[theme.bright]
+black = "#666666"
+red = "#f14c4c"
+green = "#23d18b"
+yellow = "#f5f543"
+blue = "#3b8eea"
+magenta = "#d670d6"
+cyan = "#29b8db"
+white = "#ffffff"
+
 [theme.syntax]
-comment = "#6a9955"             # 注释颜色
-string = "#ce9178"              # 字符串颜色
-number = "#b5cea8"              # 数字颜色
-keyword = "#569cd6"             # 关键字颜色 (如 if, for, class)
-function = "#dcdcaa"            # 函数名颜色
-variable = "#9cdcfe"            # 变量名颜色
-type_name = "#4ec9b0"           # 类型名颜色
-operator = "#d4d4d4"            # 操作符颜色 (+, -, =, 等)
+comment = "#6a9955"
+keyword = "#569cd6"
+string = "#ce9178"
+number = "#b5cea8"
+function = "#dcdcaa"
+variable = "#9cdcfe"
+type_name = "#4ec9b0"
+operator = "#d4d4d4"
 
-# UI 界面颜色配置
 [theme.ui]
-primary = "#007acc"             # 主色调 (按钮、链接等)
-secondary = "#6c757d"           # 次要色调
-success = "#28a745"             # 成功状态颜色 (绿色)
-warning = "#ffc107"             # 警告状态颜色 (黄色)
-error = "#dc3545"               # 错误状态颜色 (红色)
-info = "#17a2b8"                # 信息状态颜色 (蓝色)
-border = "#3c3c3c"              # 边框颜色
-divider = "#404040"             # 分割线颜色
+# 背景色层次
+bg_100 = "#1a1a1a"
+bg_200 = "#1e1e1e"
+bg_300 = "#252526"
+bg_400 = "#2d2d30"
+bg_500 = "#3c3c3c"
+bg_600 = "#4d4d4d"
+bg_700 = "#5a5a5a"
+
+# 边框层次
+border_200 = "rgba(255, 255, 255, 0.08)"
+border_300 = "rgba(255, 255, 255, 0.12)"
+border_400 = "rgba(255, 255, 255, 0.16)"
+
+# 文本层次
+text_100 = "#ffffff"
+text_200 = "#e0e0e0"
+text_300 = "#cccccc"
+text_400 = "#999999"
+text_500 = "#666666"
+
+# 状态颜色
+primary = "#007acc"
+primary_hover = "#005a9e"
+primary_alpha = "rgba(0, 122, 204, 0.1)"
+success = "#0dbc79"
+warning = "#ffcc02"
+error = "#f44747"
+info = "#75beff"
+
+# 交互状态
+hover = "#2a2d2e"
+active = "#3c3c3c"
+focus = "#007acc"
+selection = "rgba(173, 214, 255, 0.3)"

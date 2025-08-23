@@ -1,7 +1,6 @@
 <script setup lang="ts">
   import SessionSelect from './SessionSelect.vue'
-  import type { Conversation } from '@/types/features/ai/chat'
-  import type { ChatMode } from '../types'
+  import type { Conversation } from '@/types'
 
   // Props定义
   interface Props {
@@ -18,7 +17,7 @@
     (e: 'refresh-sessions'): void
   }
 
-  const props = withDefaults(defineProps<Props>(), {
+  withDefaults(defineProps<Props>(), {
     isLoading: false,
   })
 
@@ -33,7 +32,7 @@
     emit('create-new-session')
   }
 
-  const handleDeleteSession = (sessionId: string) => {
+  const handleDeleteSession = (sessionId: number) => {
     emit('delete-session', sessionId)
   }
 
@@ -59,7 +58,7 @@
 
     <div class="header-actions">
       <!-- 新建会话按钮 -->
-      <button class="new-session-btn" :disabled="isLoading" @click="handleCreateNewSession" title="新建会话">
+      <button class="new-session-btn" @click="handleCreateNewSession" title="新建会话">
         <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
@@ -74,8 +73,8 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    border-bottom: 1px solid var(--color-border);
-    background-color: var(--color-ai-sidebar-background);
+    border-bottom: 1px solid var(--border-300);
+    background-color: var(--bg-300);
     padding: 0.5em 0.8em;
     gap: 0.5em;
   }
@@ -103,7 +102,7 @@
     height: 2em;
     border: none;
     background: none;
-    color: var(--color-text-secondary);
+    color: var(--text-400);
     cursor: pointer;
     transition: all 0.2s ease;
     padding: 0;
@@ -112,8 +111,8 @@
   }
 
   .new-session-btn:hover {
-    color: var(--color-text);
-    background-color: var(--color-background-hover, rgba(0, 0, 0, 0.05));
+    color: var(--text-200);
+    background-color: var(--bg-500);
   }
 
   .new-session-btn:disabled {

@@ -1,129 +1,139 @@
 <script setup lang="ts">
-  import { ref, nextTick } from 'vue'
-  import type { Message } from '@/types/features/ai/chat'
-  import ChatMessageItem from './ChatMessageItem.vue'
+  import { computed, nextTick, onMounted, ref, watch } from 'vue'
+  import type { Message } from '@/types'
+  import UserMessage from './UserMessage.vue'
+  import AIMessage from './AIMessage.vue'
+  import lottie, { type AnimationItem } from 'lottie-web'
 
-  // Props定义
   interface Props {
     messages: Message[]
-    hasMessages?: boolean
-    isLoading?: boolean
-
-    emptyStateTitle?: string
-    emptyStateDescription?: string
   }
 
-  const props = withDefaults(defineProps<Props>(), {
-    hasMessages: false,
-    isLoading: false,
+  const props = defineProps<Props>()
 
-    emptyStateTitle: '开始与AI对话',
-    emptyStateDescription: '请先配置AI模型',
+  // 消息列表容器引用
+  const messageListRef = ref<HTMLElement | null>(null)
+  // Lottie动画容器引用
+  const lottieContainer = ref<HTMLElement | null>(null)
+
+  // 消息列表
+  const msgList = computed(() => {
+    return props.messages.map(msg => ({
+      ...msg,
+      type: msg.role as 'user' | 'assistant',
+    }))
   })
 
-  // 响应式引用
-  const messagesContainer = ref<HTMLElement>()
-
-  // 方法
-  /**
-   * 滚动到底部
-   */
+  // 自动滚动到底部
   const scrollToBottom = async () => {
     await nextTick()
-    if (messagesContainer.value) {
-      // 使用 smooth 滚动，但在流式过程中使用 auto 以提高性能
-      const behavior = 'auto'
-      messagesContainer.value.scrollTo({
-        top: messagesContainer.value.scrollHeight,
-        behavior,
-      })
+    if (messageListRef.value) {
+      messageListRef.value.scrollTop = messageListRef.value.scrollHeight
     }
   }
 
-  // 暴露方法给父组件
-  defineExpose({
-    scrollToBottom,
-    messagesContainer,
+  // 监听消息变化，自动滚动到底部
+  watch(
+    () => msgList.value.length,
+    () => {
+      scrollToBottom()
+    },
+    { immediate: true }
+  )
+
+  // 当空状态容器挂载时初始化动画
+  onMounted(() => {
+    if (msgList.value.length === 0 && lottieContainer.value) {
+      lottie.loadAnimation({
+        container: lottieContainer.value,
+        renderer: 'svg',
+        loop: true,
+        autoplay: true,
+        path: '/Circle.json',
+      })
+    }
   })
 </script>
 
 <template>
-  <div ref="messagesContainer" class="messages-container">
-    <!-- 空状态 -->
-    <div v-if="!hasMessages" class="empty-state">
+  <div ref="messageListRef" class="message-list">
+    <div v-if="msgList.length === 0" class="empty-state">
+      <!-- Lottie动画容器 -->
       <div class="empty-icon">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
+        <div ref="lottieContainer" class="lottie-animation"></div>
       </div>
-      <div class="empty-title">{{ emptyStateTitle }}</div>
-      <div class="empty-description">{{ emptyStateDescription }}</div>
+      <div class="empty-text">开始对话吧</div>
+      <div class="empty-hint">发送消息开始与Orbit对话</div>
     </div>
 
-    <!-- 消息列表 -->
-    <div v-else class="messages-list">
-      <ChatMessageItem
-        v-for="(message, index) in messages"
-        :key="message.id"
-        :message="message"
-        :is-streaming="isLoading && index === messages.length - 1"
-      />
+    <div v-else class="message-container">
+      <template v-for="message in msgList" :key="message.id">
+        <!-- 用户消息 -->
+        <UserMessage v-if="message.type === 'user'" :message="message" />
+
+        <!-- AI消息 -->
+        <AIMessage v-else-if="message.type === 'assistant'" :message="message" />
+      </template>
     </div>
   </div>
 </template>
 
 <style scoped>
-  .messages-container {
+  .message-list {
     flex: 1;
     overflow-y: auto;
-    padding: 16px;
+    padding: var(--spacing-md);
     display: flex;
     flex-direction: column;
-    background-color: var(--color-ai-sidebar-background);
-  }
-
-  .messages-container::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  .messages-container::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 2px;
   }
 
   .empty-state {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100%;
     text-align: center;
-    color: var(--color-text-secondary);
-    padding: 40px 20px;
+    color: var(--text-400);
+    gap: var(--spacing-lg);
   }
 
   .empty-icon {
-    margin-bottom: 16px;
-    opacity: 0.6;
+    margin-bottom: var(--spacing-md);
   }
 
-  .empty-title {
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 12px;
-    color: var(--color-text);
+  .lottie-animation {
+    width: 120px;
+    height: 120px;
+    filter: drop-shadow(0 0 12px rgba(var(--color-primary-rgb, 59, 130, 246), 0.4));
   }
 
-  .empty-description {
-    font-size: 14px;
+  /* Lottie动画中的SVG元素自动继承主题色彩 */
+  .lottie-animation svg {
+    color: var(--color-primary);
+  }
+
+  .lottie-animation svg path,
+  .lottie-animation svg circle,
+  .lottie-animation svg ellipse {
+    stroke: var(--color-primary) !important;
+    fill: var(--color-primary) !important;
+  }
+
+  .empty-text {
+    font-size: var(--font-size-lg);
+    font-weight: 500;
+    color: var(--text-200);
+  }
+
+  .empty-hint {
+    font-size: var(--font-size-sm);
     opacity: 0.7;
-    line-height: 1.5;
   }
 
-  .messages-list {
+  .message-container {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding-bottom: 16px;
+    gap: var(--spacing-md);
   }
 </style>

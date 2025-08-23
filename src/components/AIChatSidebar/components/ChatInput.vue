@@ -1,5 +1,7 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { computed, ref, nextTick } from 'vue'
+  import { useTerminalSelection } from '@/composables/useTerminalSelection'
+  import TerminalSelectionTag from './TerminalSelectionTag.vue'
 
   // Props定义
   interface Props {
@@ -37,6 +39,9 @@
 
   // 响应式引用
   const inputTextarea = ref<HTMLTextAreaElement>()
+
+  // 终端选择管理
+  const terminalSelection = useTerminalSelection()
 
   // 计算属性
   const inputValue = computed({
@@ -92,6 +97,7 @@
     if (props.loading) {
       emit('stop')
     } else if (props.canSend) {
+      // 发送包含终端上下文的完整消息
       emit('send')
     }
   }
@@ -109,25 +115,67 @@
    * 处理模式切换
    */
   const handleModeChange = (value: string | number | null) => {
-    console.log('🔄 [ChatInput] 模式切换事件触发:', value)
     const mode = value as 'chat' | 'agent'
-    if (mode && (mode === 'chat' || mode === 'agent')) {
-      console.log('✅ [ChatInput] 发送模式切换事件:', mode)
+    if (mode === 'chat' || mode === 'agent') {
       emit('mode-change', mode)
-    } else {
-      console.log('❌ [ChatInput] 无效的模式值:', value)
     }
+  }
+
+  /**
+   * 处理插入选定文本 - 优化逻辑
+   */
+  const handleInsertSelectedText = () => {
+    const selectedText = terminalSelection.getSelectedText()
+    if (!selectedText.trim()) return
+
+    // 智能拼接：有内容时添加空格分隔
+    const newValue = props.modelValue ? `${props.modelValue} ${selectedText}` : selectedText
+
+    emit('update:modelValue', newValue)
+
+    // 异步聚焦和调整高度
+    nextTick(() => {
+      inputTextarea.value?.focus()
+      adjustTextareaHeight()
+    })
+  }
+
+  /**
+   * 获取包含终端选择内容的完整消息
+   */
+  const getMessageWithTerminalContext = () => {
+    let message = props.modelValue.trim()
+
+    // 如果有终端选择内容，自动添加到消息中
+    const selectedText = terminalSelection.getSelectedText()
+    if (selectedText.trim()) {
+      const selectionInfo = terminalSelection.selectionInfo.value
+      const contextPrompt = `\n\n**终端选中内容**${selectionInfo ? ` (${selectionInfo})` : ''}:\n\`\`\`\n${selectedText}\n\`\`\``
+      message += contextPrompt
+    }
+
+    return message
   }
 
   // 暴露方法给父组件
   defineExpose({
     adjustTextareaHeight,
     focus: () => inputTextarea.value?.focus(),
+    getMessageWithTerminalContext,
   })
 </script>
 
 <template>
   <div class="chat-input">
+    <!-- 终端选择标签 -->
+    <TerminalSelectionTag
+      :visible="terminalSelection.hasSelection.value"
+      :selected-text="terminalSelection.selectedText.value"
+      :selection-info="terminalSelection.selectionInfo.value"
+      @clear="terminalSelection.clearSelection"
+      @insert="handleInsertSelectedText"
+    />
+
     <!-- 主输入区域 -->
     <div class="input-main">
       <div class="input-content">
@@ -148,8 +196,7 @@
           circle
           class="send-button"
           :class="{ 'stop-button': loading }"
-          :disabled="loading ? false : !canSend"
-          :loading="loading"
+          :disabled="!loading && !canSend"
           @click="handleButtonClick"
         >
           <template #icon>
@@ -197,9 +244,9 @@
     margin: auto;
     width: 90%;
     margin-bottom: 10px;
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--border-300);
     border-radius: 8px;
-    background-color: var(--color-background);
+    background-color: var(--bg-400);
     transition: border-color 0.1s ease;
   }
 
@@ -223,7 +270,7 @@
     max-height: 150px;
     border: none;
     background: transparent;
-    color: var(--color-text);
+    color: var(--text-300);
     font-size: 14px;
     outline: none;
     resize: none;
@@ -240,7 +287,7 @@
   }
 
   .message-input::placeholder {
-    color: var(--color-text-secondary);
+    color: var(--text-400);
     opacity: 0.6;
   }
 
@@ -251,11 +298,12 @@
   }
 
   .stop-button {
-    background-color: #ff4d4f !important;
+    background-color: var(--color-error) !important;
   }
 
   .stop-button:hover:not(:disabled) {
-    background-color: #ff7875 !important;
+    background-color: var(--color-error) !important;
+    opacity: 0.8;
   }
 
   .input-bottom {
@@ -282,72 +330,5 @@
 
   .model-selector {
     width: 110px;
-  }
-
-  /* 智能体模式开关样式 */
-  .agent-mode-toggle {
-    display: flex;
-    align-items: center;
-  }
-
-  .toggle-label {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    user-select: none;
-    font-size: 12px;
-    color: var(--color-text-secondary);
-    gap: 6px;
-  }
-
-  .toggle-checkbox {
-    display: none;
-  }
-
-  .toggle-slider {
-    position: relative;
-    width: 32px;
-    height: 18px;
-    background-color: var(--color-border);
-    border-radius: 9px;
-    transition: background-color 0.2s ease;
-  }
-
-  .toggle-slider::before {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 14px;
-    height: 14px;
-    background-color: white;
-    border-radius: 50%;
-    transition: transform 0.2s ease;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  }
-
-  .toggle-checkbox:checked + .toggle-slider {
-    background-color: var(--color-primary);
-  }
-
-  .toggle-checkbox:checked + .toggle-slider::before {
-    transform: translateX(14px);
-  }
-
-  .toggle-label:hover .toggle-slider {
-    background-color: var(--color-primary-hover);
-  }
-
-  .toggle-checkbox:checked + .toggle-slider:hover {
-    background-color: var(--color-primary-active);
-  }
-
-  .toggle-text {
-    font-weight: 500;
-    white-space: nowrap;
-  }
-
-  .toggle-checkbox:checked ~ .toggle-text {
-    color: var(--color-primary);
   }
 </style>

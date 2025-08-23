@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+  import { computed, ref } from 'vue'
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType, type TabItem } from '@/types'
 
@@ -18,7 +18,6 @@
 
   // 使用store
   const terminalStore = useTerminalStore()
-  // 移除未使用的 tabManagerStore 引用
 
   // 弹出菜单状态
   const showAddMenuPopover = ref(false)
@@ -33,7 +32,8 @@
   const getTabClass = (tab: TabItem): string[] => {
     const classes = ['tab']
 
-    if (tab.isActive) {
+    // 使用activeTabId作为激活状态的唯一判断依据，确保状态一致性
+    if (tab.id === props.activeTabId) {
       classes.push('active')
     }
 
@@ -44,50 +44,62 @@
     return classes
   }
 
+  // 获取标签提示信息
+  const getTabTooltip = (tab: TabItem): string => {
+    if (tab.type === TabType.TERMINAL) {
+      // 获取完整路径信息
+      const terminal = terminalStore.terminals.find(t => t.id === tab.id)
+      const fullPath = terminal?.cwd || '~'
+      const shell = tab.shell || 'shell'
+
+      return `${shell} • ${fullPath}`
+    }
+
+    return tab.title || 'Tab'
+  }
+
   const tabBarRef = ref<HTMLDivElement | null>(null)
   const tabBarWrapperRef = ref<HTMLDivElement | null>(null)
 
-  // 标签宽度配置
-  const TAB_CONFIG = {
-    minWidth: 60, // 最小宽度
-    maxWidth: 200, // 最大宽度
-    addBtnWidth: 32, // 添加按钮宽度
-    margin: 6, // 标签右边距
-    padding: 12, // 容器内边距
-  }
+  // 简化的标签宽度配置
+  const MIN_TAB_WIDTH = 60
+  const MAX_TAB_WIDTH = 200
 
-  // 计算动态标签宽度
-  const dynamicTabWidth = computed(() => {
+  // 简化的标签宽度计算
+  const tabWidth = computed(() => {
     const tabCount = props.tabs.length
-    if (tabCount === 0) return TAB_CONFIG.maxWidth
+    if (tabCount === 0) return MAX_TAB_WIDTH
 
     const containerWidth = tabBarWrapperRef.value?.clientWidth || 400
-    let availableWidth = containerWidth - TAB_CONFIG.padding * 2
 
-    const totalMarginWidth = (tabCount - 1) * TAB_CONFIG.margin
-    const inlineButtonWidth = TAB_CONFIG.addBtnWidth + 4
-    const widthForTabs = availableWidth - totalMarginWidth - inlineButtonWidth
-    const widthPerTab = widthForTabs / tabCount
+    // 计算实际占用空间：
+    // - padding-left: 6px (--spacing-sm)
+    // - gap: 4px (--spacing-xs)
+    // - add按钮: 28px + margin(4px或6px) = 32px-34px
+    // - 每个tab的右边距: 6px * tabCount
+    const paddingAndGaps = 6 + 4 + 34 + 6 * tabCount
+    const availableWidth = containerWidth - paddingAndGaps
+    const widthPerTab = availableWidth / tabCount
 
-    if (widthPerTab < TAB_CONFIG.maxWidth) {
-      availableWidth = containerWidth - TAB_CONFIG.addBtnWidth - TAB_CONFIG.padding * 2 - 4
-      const widthForTabsFixed = availableWidth - totalMarginWidth
-      const widthPerTabFixed = widthForTabsFixed / tabCount
-      return Math.max(TAB_CONFIG.minWidth, widthPerTabFixed)
+    return Math.max(MIN_TAB_WIDTH, Math.min(MAX_TAB_WIDTH, widthPerTab))
+  })
+
+  // 简化的滚动判断
+  const needsScroll = computed(() => tabWidth.value <= MIN_TAB_WIDTH)
+
+  // 判断标签页是否可以显示关闭按钮
+  const canShowCloseButton = (tab: TabItem): boolean => {
+    if (!tab.closable) return false
+
+    // 如果是终端标签页，需要确保不是最后一个终端标签页
+    if (tab.type === TabType.TERMINAL) {
+      const terminalTabs = props.tabs.filter(t => t.type === TabType.TERMINAL)
+      return terminalTabs.length > 1
     }
 
-    return Math.max(TAB_CONFIG.minWidth, Math.min(TAB_CONFIG.maxWidth, widthPerTab))
-  })
-
-  // 判断是否需要滚动
-  const needsScroll = computed(() => {
-    return dynamicTabWidth.value <= TAB_CONFIG.minWidth
-  })
-
-  // 判断标签是否被压缩
-  const isCompressed = computed(() => {
-    return dynamicTabWidth.value < TAB_CONFIG.maxWidth && !needsScroll.value
-  })
+    // 其他类型的标签页可以直接关闭
+    return true
+  }
 
   // 处理标签点击
   const handleTabClick = (id: string) => {
@@ -122,7 +134,7 @@
     showAddMenuPopover.value = false
 
     try {
-      // value 直接为 shell 名称
+      // 创建终端标签页
       await terminalStore.createTerminalWithShell(item.value)
     } catch (error) {
       // 静默处理错误
@@ -131,41 +143,16 @@
 
   // 处理鼠标按下事件（中键关闭）
   const handleMouseDown = (event: MouseEvent, id: string) => {
-    if (event.button === 1 && props.tabs.length > 1) {
-      event.preventDefault()
-      emit('close', id)
+    if (event.button === 1) {
+      const tab = props.tabs.find(t => t.id === id)
+      if (tab && canShowCloseButton(tab)) {
+        event.preventDefault()
+        emit('close', id)
+      }
     }
   }
 
-  // 处理鼠标滚轮事件（水平滚动）
-  const handleWheel = (event: WheelEvent) => {
-    const el = tabBarRef.value
-    if (!el) return
-
-    // 如果用户按住shift键，让浏览器处理原生水平滚动
-    if (event.shiftKey) return
-
-    // 阻止默认垂直滚动，改为水平滚动
-    if (el.scrollWidth > el.clientWidth) {
-      event.preventDefault()
-      el.scrollLeft += event.deltaY
-    }
-  }
-
-  // 处理窗口大小变化
-  const handleResize = () => {
-    // 触发重新计算，Vue的响应式系统会自动处理
-  }
-
-  onMounted(() => {
-    tabBarRef.value?.addEventListener('wheel', handleWheel, { passive: false })
-    window.addEventListener('resize', handleResize)
-  })
-
-  onBeforeUnmount(() => {
-    tabBarRef.value?.removeEventListener('wheel', handleWheel)
-    window.removeEventListener('resize', handleResize)
-  })
+  // 移除JavaScript滚轮处理，改用CSS实现
 </script>
 
 <template>
@@ -175,13 +162,23 @@
         v-for="tab in tabs"
         :key="tab.id"
         :class="getTabClass(tab)"
-        :style="{ width: needsScroll ? `${TAB_CONFIG.minWidth}px` : `${dynamicTabWidth}px` }"
+        :style="{ width: needsScroll ? `${MIN_TAB_WIDTH}px` : `${tabWidth}px` }"
         @mousedown="handleMouseDown($event, tab.id)"
         @click="handleTabClick(tab.id)"
       >
-        <span class="tab-title" :title="tab.title">{{ tab.title }}</span>
+        <div class="tab-content" :title="getTabTooltip(tab)">
+          <template v-if="tab.type === TabType.TERMINAL && tab.shell && tab.path">
+            <div class="terminal-info">
+              <span class="shell-badge">{{ tab.shell }}</span>
+              <span class="path-info">{{ tab.path }}</span>
+            </div>
+          </template>
+          <template v-else>
+            <span class="tab-title">{{ tab.title }}</span>
+          </template>
+        </div>
         <button
-          v-if="tab.closable && tabs.length > 1"
+          v-if="canShowCloseButton(tab)"
           class="close-btn"
           @click="handleCloseClick($event, tab.id)"
           title="关闭标签"
@@ -204,7 +201,7 @@
 
       <!-- 内联添加按钮 -->
       <x-popover
-        v-if="!needsScroll && !isCompressed"
+        v-if="!needsScroll && tabWidth >= MAX_TAB_WIDTH"
         v-model="showAddMenuPopover"
         placement="bottom-start"
         trigger="manual"
@@ -238,7 +235,7 @@
 
     <!-- 固定添加按钮 -->
     <x-popover
-      v-if="needsScroll || isCompressed"
+      v-if="needsScroll || tabWidth < MAX_TAB_WIDTH"
       v-model="showAddMenuPopover"
       placement="bottom-end"
       trigger="manual"
@@ -311,22 +308,22 @@
     margin: 0 6px 0 0;
     padding: 0 8px;
     border-radius: var(--border-radius-md);
-    color: var(--text-muted);
+    color: var(--text-400);
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
     border: 1px solid transparent;
+    will-change: background-color, border-color, color;
   }
 
   .tab:hover {
     background-color: var(--color-hover);
-    color: var(--text-secondary);
+    color: var(--text-300);
   }
 
   .tab.active {
-    background-color: var(--color-background);
-    color: var(--text-primary);
-    border-color: var(--color-border);
+    color: var(--text-200);
+    border-color: var(--border-300);
     box-shadow: none; /* 仅移除阴影，其他保持不变 */
   }
 
@@ -338,53 +335,57 @@
     transform: translateX(-50%);
     width: 40%;
     height: 2px;
-    background: linear-gradient(90deg, var(--color-primary), #4fc3f7);
+    background: var(--color-primary);
     border-radius: 2px 2px 0 0;
-    box-shadow: 0 -1px 4px rgba(0, 122, 204, 0.3);
+    box-shadow: 0 -1px 4px var(--color-primary-alpha);
   }
 
   /* 终端Tab样式 */
   .tab:not(.agent-tab) {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.08));
-    border: 1px solid rgba(59, 130, 246, 0.2);
+    background: var(--color-primary-alpha);
+    border: 1px solid var(--color-primary-alpha);
   }
 
   .tab:not(.agent-tab):hover {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.12));
-    border-color: rgba(59, 130, 246, 0.3);
+    background: var(--color-primary-alpha);
+    border-color: var(--color-primary-alpha);
+    opacity: 0.8;
   }
 
   .tab:not(.agent-tab).active {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(37, 99, 235, 0.06));
-    border-color: rgba(59, 130, 246, 0.4);
+    background: var(--color-primary-alpha);
+    border-color: var(--color-primary);
     box-shadow: none; /* 移除阴影 */
   }
 
   .tab:not(.agent-tab).active::before {
-    background: linear-gradient(90deg, #3b82f6, #2563eb, #1d4ed8);
-    box-shadow: 0 -1px 4px rgba(59, 130, 246, 0.4);
+    background: var(--color-primary);
+    box-shadow: 0 -1px 4px var(--color-primary-alpha);
   }
 
   /* Agent专属终端Tab样式 */
   .tab.agent-tab {
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(99, 102, 241, 0.08));
-    border: 1px solid rgba(124, 58, 237, 0.2);
+    background: var(--color-info);
+    opacity: 0.1;
+    border: 1px solid var(--color-info);
     position: relative;
   }
 
   .tab.agent-tab:hover {
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.15), rgba(99, 102, 241, 0.12));
-    border-color: rgba(124, 58, 237, 0.3);
+    background: var(--color-info);
+    opacity: 0.15;
+    border-color: var(--color-info);
   }
 
   .tab.agent-tab.active {
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(99, 102, 241, 0.06));
-    border-color: rgba(124, 58, 237, 0.4);
+    background: var(--color-info);
+    opacity: 0.08;
+    border-color: var(--color-info);
   }
 
   .tab.agent-tab.active::before {
-    background: linear-gradient(90deg, #7c3aed, #6366f1, #3b82f6);
-    box-shadow: 0 -1px 4px rgba(124, 58, 237, 0.4);
+    background: var(--color-info);
+    box-shadow: 0 -1px 4px var(--color-primary-alpha);
   }
 
   /* Agent终端Tab的特殊标识 */
@@ -395,9 +396,9 @@
     right: 2px;
     width: 6px;
     height: 6px;
-    background: linear-gradient(45deg, #7c3aed, #6366f1);
+    background: var(--color-info);
     border-radius: 50%;
-    box-shadow: 0 0 6px rgba(124, 58, 237, 0.6);
+    box-shadow: 0 0 6px var(--color-primary-alpha);
     animation: pulse-glow 2s infinite;
   }
 
@@ -413,15 +414,63 @@
     }
   }
 
+  .tab-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    height: 100%;
+  }
+
   .tab-title {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--font-size-sm);
     font-weight: 500;
+    color: var(--text-200);
+  }
+
+  .terminal-info {
+    display: flex;
+    align-items: center;
     flex: 1;
-    text-align: left;
     min-width: 0;
+  }
+
+  .shell-badge {
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    color: var(--text-100);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+    line-height: 1.2;
+    padding-right: 8px;
+    position: relative;
+  }
+
+  .shell-badge::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 12px;
+    width: 1px;
+    background-color: var(--text-400);
+  }
+
+  .path-info {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-300);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+    padding-left: 8px;
   }
 
   .close-btn {
@@ -432,8 +481,8 @@
     height: 16px;
     padding: 0;
     border: none;
-    background-color: transparent;
-    color: var(--text-muted);
+    background: none;
+    color: var(--text-400);
     border-radius: var(--border-radius-sm);
     transition: all 0.2s ease;
     cursor: pointer;
@@ -444,12 +493,11 @@
 
   .tab:hover .close-btn {
     opacity: 1;
-    color: var(--text-secondary);
+    color: var(--text-300);
   }
 
   .close-btn:hover {
-    background-color: var(--color-hover);
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .add-tab-btn {
@@ -459,8 +507,8 @@
     width: 28px;
     height: var(--titlebar-element-height);
     border: none;
-    background-color: transparent;
-    color: var(--text-muted);
+    background: none;
+    color: var(--text-400);
     border-radius: var(--border-radius-md);
     cursor: pointer;
     transition: all 0.2s ease;
@@ -474,13 +522,5 @@
 
   .add-tab-btn.fixed {
     margin-right: var(--spacing-sm);
-  }
-
-  .add-tab-btn:hover {
-    background-color: var(--color-hover);
-    color: var(--text-primary);
-    opacity: 1;
-    transform: scale(1.05);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 </style>

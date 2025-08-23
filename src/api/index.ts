@@ -1,21 +1,59 @@
 /**
- * API模块主入口文件
+ * API 模块主入口
  *
- * 重新导出所有API模块，提供统一的访问接口
+ * 统一导出所有 API 接口，提供简洁的访问方式
  */
 
 // 重新导出请求相关功能
 export * from '../utils/request'
 
-// 导出各个功能模块
-export * from './ai' // AI功能模块
-export * from './completion' // 补全功能模块
-export * from './config' // 配置管理模块
-export * from './shell' // Shell管理模块
-export * from './shortcuts' // 快捷键管理模块
-export * from './storage' // 存储管理模块
-export * from './terminal' // 终端管理模块
-export * from './terminal-config' // 终端配置管理模块
-export * from './window' // 窗口管理模块
+// 导出各个功能模块的 API 实例
+export { aiApi } from './ai'
+export { configApi } from './config'
+export { storageApi } from './storage'
+export { terminalApi } from './terminal'
+export { shellApi } from './shell'
+export { shortcutsApi } from './shortcuts'
+export { completionApi } from './completion'
+export { windowApi } from './window'
 
-// 类型定义现在统一从 @/types 导入，不在此处重复导出
+// 导出所有类型（避免冲突）
+export type { AiApi } from './ai'
+export type { ConfigApi } from './config'
+export type { StorageApi } from './storage'
+export type { TerminalApi } from './terminal'
+export type { ShellApi } from './shell'
+export type { ShortcutsApi } from './shortcuts'
+export type { CompletionApi } from './completion'
+export type { WindowApi } from './window'
+
+// 重新导出类型（从统一类型系统导入）
+export type {
+  AIModelConfig,
+  AISettings,
+  AIStats,
+  AIHealthStatus,
+  Conversation,
+  Message,
+  AnalyzeCodeParams,
+  AnalysisResult,
+  CodeSymbol,
+  WebFetchRequest,
+  WebFetchResponse,
+  TerminalCreateOptions,
+  TerminalWriteOptions,
+  TerminalResizeOptions,
+  CreateTerminalWithShellOptions,
+  ShellInfo,
+  ShortcutsConfig,
+  ShortcutBinding,
+  ShortcutCategory,
+  Platform,
+  ShortcutValidationResult,
+  ConflictDetectionResult,
+  ShortcutStatistics,
+  WindowState,
+} from '@/types'
+
+// 重新导出补全相关类型（从统一类型系统导入）
+export type { CompletionRequest, CompletionResponse, CompletionItem } from '@/types'

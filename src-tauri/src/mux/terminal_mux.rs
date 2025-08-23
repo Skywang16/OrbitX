@@ -8,12 +8,13 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::mux::{
     IoHandler, IoThreadPoolStats, LocalPane, MuxNotification, Pane, PaneId, PtySize, TerminalConfig,
 };
+use crate::shell::ShellIntegrationManager;
 use crate::utils::error::AppResult;
 
 /// 订阅者回调函数类型
@@ -59,6 +60,12 @@ pub struct TerminalMux {
 
     /// I/O 处理器
     io_handler: IoHandler,
+
+    /// Shell Integration管理器
+    shell_integration: Arc<ShellIntegrationManager>,
+
+    /// 是否正在关闭（用于通知处理线程优雅退出）
+    shutting_down: std::sync::atomic::AtomicBool,
 }
 
 impl TerminalMux {
@@ -69,15 +76,23 @@ impl TerminalMux {
     /// - 验证配置和依赖关系
     /// - 提供详细的错误信息
     pub fn new() -> Self {
-        info!("开始初始化TerminalMux");
-
         let (notification_sender, notification_receiver) = unbounded();
         debug!("创建通知通道成功");
 
-        let io_handler = IoHandler::new(notification_sender.clone());
-        debug!("创建I/O处理器成功");
+        let shell_integration =
+            Arc::new(ShellIntegrationManager::new().expect("创建Shell Integration管理器失败"));
+        let io_handler = IoHandler::new(notification_sender.clone(), shell_integration.clone());
 
-        let mux = Self {
+        let notification_sender_clone = notification_sender.clone();
+        shell_integration.register_cwd_callback(move |pane_id, new_cwd| {
+            let notification = MuxNotification::PaneCwdChanged {
+                pane_id,
+                cwd: new_cwd.to_string(),
+            };
+            let _ = notification_sender_clone.send(notification);
+        });
+
+        Self {
             panes: RwLock::new(HashMap::new()),
             subscribers: RwLock::new(HashMap::new()),
             main_thread_id: thread::current().id(),
@@ -86,10 +101,9 @@ impl TerminalMux {
             notification_sender,
             notification_receiver: Arc::new(RwLock::new(Some(notification_receiver))),
             io_handler,
-        };
-
-        info!("TerminalMux初始化完成");
-        mux
+            shell_integration,
+            shutting_down: std::sync::atomic::AtomicBool::new(false),
+        }
     }
 
     /// 统一的初始化方法
@@ -117,18 +131,18 @@ impl TerminalMux {
         debug!("开始验证TerminalMux状态");
 
         // 验证面板映射是否可访问
-        let _panes = self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
+        let _unused = self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
         debug!("面板映射验证通过");
 
         // 验证订阅者映射是否可访问
-        let _subscribers = self
+        let _unused = self
             .subscribers
             .read()
             .map_err(|_| anyhow!("无法获取订阅者读锁"))?;
         debug!("订阅者映射验证通过");
 
         // 验证通知接收器是否可访问
-        let _receiver = self
+        let _unused = self
             .notification_receiver
             .read()
             .map_err(|_| anyhow!("无法获取通知接收器读锁"))?;
@@ -547,11 +561,20 @@ impl TerminalMux {
 
             if let Some(receiver) = receiver {
                 loop {
-                    match receiver.recv() {
+                    if mux.shutting_down.load(std::sync::atomic::Ordering::Relaxed) {
+                        tracing::info!("检测到关闭信号，退出通知处理线程");
+                        break;
+                    }
+
+                    match receiver.recv_timeout(Duration::from_millis(20)) {
                         Ok(notification) => {
                             mux.notify_internal(&notification);
                         }
-                        Err(_) => {
+                        Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                            // 更频繁地检查关闭标志（50ms而不是200ms）
+                            continue;
+                        }
+                        Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
                             tracing::info!("通知通道已关闭，退出处理线程");
                             break;
                         }
@@ -583,21 +606,34 @@ impl TerminalMux {
             TerminalResizedEvent,
         };
 
+        fn safe_serialize<T: serde::Serialize>(event: &T, fallback: &str) -> String {
+            serde_json::to_string(event).unwrap_or_else(|e| {
+                tracing::error!("JSON序列化失败: {}, 使用默认值", e);
+                fallback.to_string()
+            })
+        }
+
         match notification {
             MuxNotification::PaneOutput { pane_id, data } => {
                 let event = TerminalOutputEvent {
                     pane_id: *pane_id,
                     data: String::from_utf8_lossy(data).to_string(),
                 };
-                ("terminal_output", serde_json::to_string(&event).unwrap())
+                (
+                    "terminal_output",
+                    safe_serialize(&event, "{\"pane_id\":0,\"data\":\"\"}"),
+                )
             }
             MuxNotification::PaneAdded(pane_id) => {
                 let event = TerminalCreatedEvent { pane_id: *pane_id };
-                ("terminal_created", serde_json::to_string(&event).unwrap())
+                (
+                    "terminal_created",
+                    safe_serialize(&event, "{\"pane_id\":0}"),
+                )
             }
             MuxNotification::PaneRemoved(pane_id) => {
                 let event = TerminalClosedEvent { pane_id: *pane_id };
-                ("terminal_closed", serde_json::to_string(&event).unwrap())
+                ("terminal_closed", safe_serialize(&event, "{\"pane_id\":0}"))
             }
             MuxNotification::PaneResized { pane_id, size } => {
                 let event = TerminalResizedEvent {
@@ -605,14 +641,26 @@ impl TerminalMux {
                     rows: size.rows,
                     cols: size.cols,
                 };
-                ("terminal_resized", serde_json::to_string(&event).unwrap())
+                (
+                    "terminal_resized",
+                    safe_serialize(&event, "{\"pane_id\":0,\"rows\":24,\"cols\":80}"),
+                )
             }
             MuxNotification::PaneExited { pane_id, exit_code } => {
                 let event = TerminalExitEvent {
                     pane_id: *pane_id,
                     exit_code: *exit_code,
                 };
-                ("terminal_exit", serde_json::to_string(&event).unwrap())
+                (
+                    "terminal_exit",
+                    safe_serialize(&event, "{\"pane_id\":0,\"exit_code\":0}"),
+                )
+            }
+            MuxNotification::PaneCwdChanged { pane_id, cwd } => {
+                (
+                    "pane_cwd_changed",
+                    format!("{{\"pane_id\":{},\"cwd\":\"{}\"}}", pane_id.as_u32(), cwd),
+                )
             }
         }
     }
@@ -622,8 +670,98 @@ impl TerminalMux {
         Box::new(|notification| {
             let (event_name, payload) = Self::notification_to_tauri_event(&notification);
             tracing::info!("事件: {} -> {}", event_name, payload);
-            true // 继续保持订阅
+            true
         })
+    }
+
+    // === Shell Integration 方法 ===
+
+    /// 设置面板的Shell Integration
+    pub fn setup_pane_integration(&self, pane_id: PaneId) -> AppResult<()> {
+        self.shell_integration.enable_integration(pane_id);
+        Ok(())
+    }
+
+    /// 设置面板的Shell Integration并注入脚本
+    pub fn setup_pane_integration_with_script(&self, pane_id: PaneId, silent: bool) -> AppResult<()> {
+        use crate::shell::ShellType;
+        
+        // 启用Shell Integration
+        self.shell_integration.enable_integration(pane_id);
+        
+        // 检测Shell类型
+        if let Ok(panes) = self.panes.read() {
+            if let Some(_pane) = panes.get(&pane_id) {
+                let shell_type = ShellType::Bash;
+                self.shell_integration.set_pane_shell_type(pane_id, shell_type.clone());
+                
+                if !silent {
+                    // 非静默模式：生成完整脚本
+                    if let Ok(script) = self.shell_integration.generate_shell_script(&shell_type) {
+                        self.write_to_pane(pane_id, script.as_bytes())?;
+                    }
+                }
+            } else {
+                return Err(anyhow::Error::msg(format!("面板 {} 不存在", pane_id)));
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// 检查面板是否已集成Shell Integration
+    pub fn is_pane_integrated(&self, pane_id: PaneId) -> bool {
+        self.shell_integration.get_pane_state(pane_id).is_some()
+    }
+
+    /// 获取面板的当前工作目录
+    pub fn get_pane_cwd(&self, pane_id: PaneId) -> Option<String> {
+        self.shell_integration.get_current_working_directory(pane_id)
+    }
+
+    /// 更新面板的当前工作目录
+    pub fn update_pane_cwd(&self, pane_id: PaneId, cwd: String) {
+        self.shell_integration.update_current_working_directory(pane_id, cwd);
+    }
+
+    /// 获取面板的完整Shell状态
+    pub fn get_pane_shell_state(&self, pane_id: PaneId) -> Option<crate::shell::PaneShellState> {
+        self.shell_integration.get_pane_shell_state(pane_id)
+    }
+
+    /// 设置面板的Shell类型
+    pub fn set_pane_shell_type(&self, pane_id: PaneId, shell_type: crate::shell::ShellType) {
+        self.shell_integration.set_pane_shell_type(pane_id, shell_type);
+    }
+
+    /// 生成Shell集成脚本
+    pub fn generate_shell_integration_script(&self, shell_type: &crate::shell::ShellType) -> anyhow::Result<String> {
+        self.shell_integration.generate_shell_script(shell_type)
+    }
+
+    /// 生成Shell环境变量
+    pub fn generate_shell_env_vars(&self, shell_type: &crate::shell::ShellType) -> std::collections::HashMap<String, String> {
+        self.shell_integration.generate_shell_env_vars(shell_type)
+    }
+
+    /// 启用面板Shell Integration
+    pub fn enable_pane_integration(&self, pane_id: PaneId) {
+        self.shell_integration.enable_integration(pane_id);
+    }
+
+    /// 禁用面板Shell Integration
+    pub fn disable_pane_integration(&self, pane_id: PaneId) {
+        self.shell_integration.disable_integration(pane_id);
+    }
+
+    /// 获取面板的当前命令信息
+    pub fn get_pane_current_command(&self, pane_id: PaneId) -> Option<crate::shell::CommandInfo> {
+        self.shell_integration.get_current_command(pane_id)
+    }
+
+    /// 获取面板的命令历史
+    pub fn get_pane_command_history(&self, pane_id: PaneId) -> Vec<crate::shell::CommandInfo> {
+        self.shell_integration.get_command_history(pane_id)
     }
 
     // === 生命周期管理 ===
@@ -631,15 +769,54 @@ impl TerminalMux {
     /// 清理所有资源
     pub fn shutdown(&self) -> AppResult<()> {
         tracing::info!("开始关闭TerminalMux");
+        let shutdown_start = std::time::Instant::now();
 
-        // 获取所有面板ID
+        // 标记为关闭状态，使通知处理线程能尽快退出
+        self.shutting_down
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+
+        // 获取所有面板ID和引用
         let pane_ids: Vec<PaneId> = self.list_panes();
+        tracing::info!("准备关闭 {} 个面板", pane_ids.len());
+
+        // 立即标记所有面板为死亡状态，加速关闭过程
+        {
+            let panes = self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
+            for (_pane_id, pane) in panes.iter() {
+                pane.mark_dead();
+            }
+        }
+        tracing::debug!("所有面板已标记为死亡状态");
 
         // 逐个关闭面板
+        let mut failed_panes = Vec::new();
         for pane_id in pane_ids {
-            if let Err(e) = self.remove_pane(pane_id) {
-                tracing::error!("关闭面板 {:?} 失败: {}", pane_id, e);
+            // 为每个面板设置超时
+            let start = std::time::Instant::now();
+            match self.remove_pane(pane_id) {
+                Ok(_) => {
+                    let duration = start.elapsed().as_millis();
+                    tracing::debug!("面板 {:?} 关闭成功 ({}ms)", pane_id, duration);
+                }
+                Err(e) => {
+                    tracing::warn!("关闭面板 {:?} 失败: {}", pane_id, e);
+                    failed_panes.push(pane_id);
+                }
             }
+            
+            // 如果单个面板关闭时间过长，总体超时保护
+            if shutdown_start.elapsed() > Duration::from_secs(3) {
+                tracing::warn!("关闭超时，强制退出剩余面板");
+                break;
+            }
+        }
+
+        if !failed_panes.is_empty() {
+            tracing::warn!(
+                "有 {} 个面板关闭失败: {:?}",
+                failed_panes.len(),
+                failed_panes
+            );
         }
 
         // 清理所有订阅者
@@ -647,16 +824,24 @@ impl TerminalMux {
             let count = subscribers.len();
             subscribers.clear();
             tracing::info!("清理了 {} 个订阅者", count);
-        }
-
-        // 关闭I/O处理器
-        if let Err(e) = self.io_handler.shutdown() {
-            tracing::error!("关闭I/O处理器失败: {}", e);
         } else {
-            tracing::info!("I/O处理器已关闭");
+            tracing::warn!("无法获取订阅者锁进行清理");
         }
 
-        tracing::info!("TerminalMux 关闭完成");
+        // 关闭I/O处理器 - 带超时保护
+        let io_shutdown_start = std::time::Instant::now();
+        match self.io_handler.shutdown() {
+            Ok(_) => {
+                let duration = io_shutdown_start.elapsed().as_millis();
+                tracing::info!("I/O处理器已关闭 ({}ms)", duration);
+            }
+            Err(e) => {
+                tracing::warn!("关闭I/O处理器失败（可能已经关闭）: {}", e);
+            }
+        }
+
+        let total_duration = shutdown_start.elapsed().as_millis();
+        tracing::info!("TerminalMux 关闭完成 (总耗时: {}ms)", total_duration);
         Ok(())
     }
 }

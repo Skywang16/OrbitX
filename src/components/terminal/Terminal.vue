@@ -13,51 +13,57 @@
     <!-- 补全组件 -->
     <TerminalCompletion
       ref="completionRef"
-      :input="currentLine"
-      :cursor-position="cursorCol"
-      :working-directory="workingDirectory"
+      :input="inputState.currentLine"
+      :working-directory="terminalEnv.workingDirectory"
       :terminal-element="terminalRef"
-      :terminal-cursor-position="terminalCursorPosition"
-      :is-mac="isMac"
+      :terminal-cursor-position="terminalEnv.cursorPosition"
+      :is-mac="terminalEnv.isMac"
       @suggestion-change="handleSuggestionChange"
-    />
-
-    <!-- 右键菜单 -->
-    <XPopover
-      :visible="contextMenu.visible"
-      :x="contextMenu.x"
-      :y="contextMenu.y"
-      :menu-items="contextMenu.menuItems"
-      @menu-item-click="handleContextMenuItemClick"
-      @close="closeContextMenu"
     />
 
     <!-- 提示消息 -->
     <XMessage :visible="toast.visible" :message="toast.message" :type="toast.type" @close="closeToast" />
+
+    <!-- 搜索组件 -->
+    <SearchBox
+      :visible="searchState.visible"
+      @close="() => closeSearch(searchAddon)"
+      @search="(query, options) => handleSearch(terminal, searchAddon, query, options)"
+      @find-next="() => findNext(searchAddon)"
+      @find-previous="() => findPrevious(searchAddon)"
+      ref="searchBoxRef"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
   // Vue 核心功能
-  import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
   // 第三方库
-  import { openPath } from '@tauri-apps/plugin-opener'
+  import { openUrl } from '@tauri-apps/plugin-opener'
   import { FitAddon } from '@xterm/addon-fit'
   import { WebLinksAddon } from '@xterm/addon-web-links'
+  import { SearchAddon } from '@xterm/addon-search'
   import { Terminal } from '@xterm/xterm'
 
   // 项目内部模块
-  import type { Theme } from '@/api/config/types'
-  import { window as windowAPI } from '@/api/window'
+  import type { Theme } from '@/types'
+  import { windowApi } from '@/api'
   import { useTheme } from '@/composables/useTheme'
+  import { useTerminalSelection } from '@/composables/useTerminalSelection'
+  import { useTerminalState } from '@/composables/useTerminalState'
+  import { useTerminalSearch } from '@/composables/useTerminalSearch'
+  import { useShellIntegration } from '@/composables/useShellIntegration'
+  import { useTerminalOutput } from '@/composables/useTerminalOutput'
   import { TERMINAL_CONFIG } from '@/constants/terminal'
   import { useTerminalStore } from '@/stores/Terminal'
-  import { XMessage, XPopover } from '@/ui/components'
+  import { XMessage } from '@/ui/components'
   import { convertThemeToXTerm, createDefaultXTermTheme } from '@/utils/themeConverter'
   import { invoke } from '@tauri-apps/api/core'
   import type { ITheme } from '@xterm/xterm'
   import TerminalCompletion from './TerminalCompletion.vue'
+  import SearchBox from '@/components/SearchBox.vue'
 
   // XTerm.js 样式
   import '@xterm/xterm/css/xterm.css'
@@ -76,54 +82,51 @@
   }>()
 
   // === 状态管理 ===
-  const terminalStore = useTerminalStore() // 终端状态管理
-  const themeStore = useTheme() // 主题管理
+  const terminalStore = useTerminalStore()
+  const themeStore = useTheme()
+  const terminalSelection = useTerminalSelection()
+
+  // 使用新的composables
+  const { inputState, terminalEnv, toast, showToast, closeToast, updateInputLine, handleSuggestionChange } =
+    useTerminalState()
+  const { searchState, searchBoxRef, closeSearch, handleSearch, findNext, findPrevious, handleOpenTerminalSearch } =
+    useTerminalSearch()
+  const { handleOutput: handleTerminalOutput, handleExit, cleanup: cleanupOutput } = useTerminalOutput()
 
   // === 核心引用 ===
-  const terminalRef = ref<HTMLElement | null>(null) // 终端容器DOM引用
-  const terminal = ref<Terminal | null>(null) // XTerm.js 实例
-  const completionRef = ref<any>(null) // 补全组件引用
+  const terminalRef = ref<HTMLElement | null>(null)
+  const terminal = ref<Terminal | null>(null)
+  const completionRef = ref<{ hasCompletion: () => boolean; acceptCompletion: () => string } | null>(null)
 
-  const fitAddon = ref<FitAddon | null>(null) // 终端自适应大小插件
+  const fitAddon = ref<FitAddon | null>(null)
+  const searchAddon = ref<SearchAddon | null>(null)
 
-  // 防止重复清理的标记
   let hasDisposed = false
-
-  // === 终端状态 ===
-  const currentLine = ref('') // 当前输入行内容
-  const cursorCol = ref(0) // 光标列位置
-  const workingDirectory = ref('/tmp') // 当前工作目录
-  const terminalCursorPosition = ref({ x: 0, y: 0 }) // 终端光标屏幕坐标
-  const currentSuggestion = ref('') // 当前补全建议
-  const isMac = ref(false) // 是否为Mac系统
-
-  // === UI 状态 ===
-  // 右键菜单状态
-  const contextMenu = reactive({
-    visible: false, // 是否显示菜单
-    x: 0, // 菜单X坐标
-    y: 0, // 菜单Y坐标
-    menuItems: [] as Array<{ label: string; value: string }>, // 菜单项
-    currentPath: '', // 当前选中的路径
-  })
-
-  // 提示消息状态
-  const toast = reactive({
-    visible: false, // 是否显示提示
-    message: '', // 提示消息内容
-    type: 'success' as 'success' | 'error', // 提示类型
-  })
+  let keyListener: { dispose: () => void } | null = null
 
   // === 性能优化 ===
-  let resizeTimeout: number | null = null // 防抖定时器
+  const timers = {
+    resize: null as number | null,
+    themeUpdate: null as number | null,
+  }
 
-  // 终端样式缓存，避免重复DOM查询
-  const terminalStyleCache = ref<{
-    charWidth: number // 字符宽度
-    lineHeight: number // 行高
-    paddingLeft: number // 左边距
-    paddingTop: number // 上边距
+  const styleCache = ref<{
+    charWidth: number
+    lineHeight: number
+    paddingLeft: number
+    paddingTop: number
   } | null>(null)
+
+  // Shell Integration 设置
+  const shellIntegration = useShellIntegration({
+    terminalId: props.terminalId,
+    backendId: props.backendId,
+    workingDirectory: terminalEnv.workingDirectory,
+    onCwdUpdate: (cwd: string) => {
+      terminalEnv.workingDirectory = cwd
+    },
+    onTerminalCwdUpdate: terminalStore.updateTerminalCwd,
+  })
 
   // === 核心功能函数 ===
 
@@ -134,7 +137,7 @@
   const initXterm = async () => {
     try {
       if (!terminalRef.value) {
-        console.warn('终端容器引用不存在，无法初始化终端')
+        // 容器缺失，放弃初始化
         return
       }
 
@@ -145,52 +148,41 @@
       // 创建终端实例，应用配置和主题
       terminal.value = new Terminal({
         ...TERMINAL_CONFIG,
+        // 明确指定数值以匹配 XTerm 的 FontWeight 类型
+        fontWeight: 400,
+        fontWeightBold: 700,
         theme: xtermTheme,
       })
 
       // 创建并加载插件
       fitAddon.value = new FitAddon() // 创建自适应大小插件实例
       terminal.value.loadAddon(fitAddon.value) // 自适应大小插件
+
+      searchAddon.value = new SearchAddon() // 创建搜索插件实例
+      terminal.value.loadAddon(searchAddon.value) // 搜索插件
+
       terminal.value.loadAddon(
         new WebLinksAddon((event, uri) => {
-          // 适配 openPath 函数的签名
-          openPath(uri).catch(error => {
-            console.warn('打开链接失败:', error)
-          })
+          // 支持 Ctrl+点击（Windows/Linux）或 Cmd+点击（Mac）打开链接
+          if (event.ctrlKey || event.metaKey) {
+            openUrl(uri).catch(() => {})
+          }
         })
       ) // 链接点击插件
       terminal.value.open(terminalRef.value)
 
       // 设置核心事件监听
-      terminal.value.onData(data => emit('input', data)) // 用户输入
       terminal.value.onResize(({ rows, cols }) => emit('resize', rows, cols)) // 大小变化
 
-      // 监听输入变化，用于补全功能
+      // 输入监听
       terminal.value.onData(data => {
-        if (data === '\r') {
-          // 回车键
-          currentLine.value = ''
-          cursorCol.value = 0
-        } else if (data === '\x7f') {
-          // 退格键
-          if (cursorCol.value > 0) {
-            currentLine.value = currentLine.value.slice(0, -1)
-            cursorCol.value--
-          }
-        } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
-          // 可打印字符
-          currentLine.value += data
-          cursorCol.value++
-        }
+        emit('input', data)
+        updateInputLine(data)
         updateTerminalCursorPosition()
       })
 
-      // 添加键盘事件监听器，处理补全快捷键
-      // Mac系统监听 Cmd+右箭头键，其他系统监听 Ctrl+右箭头键 来接受内联补全建议
-      terminal.value.element?.addEventListener('keydown', handleKeyDown)
-
-      // 添加右键菜单支持
-      terminal.value.element?.addEventListener('contextmenu', handleRightClick)
+      // 使用 XTerm 的 onKey 处理补全快捷键
+      keyListener = terminal.value.onKey(e => handleKeyDown(e.domEvent))
 
       // 监听终端滚动事件，实时更新光标位置
       const viewportElement = terminalRef.value.querySelector('.xterm-viewport')
@@ -202,20 +194,33 @@
       terminal.value.onCursorMove(updateTerminalCursorPosition)
       terminal.value.onScroll(updateTerminalCursorPosition)
 
+      // 监听文本选择事件 - 简化逻辑
+      terminal.value.onSelectionChange(() => {
+        const selectedText = terminal.value?.getSelection()
+
+        if (!selectedText?.trim()) {
+          terminalSelection.clearSelection()
+          return
+        }
+
+        // 尝试获取选择位置信息
+        const selection = terminal.value?.getSelectionPosition()
+        const startLine = selection ? selection.start.y + 1 : 1 // xterm行号从0开始
+        const endLine = selection ? selection.end.y + 1 : undefined
+
+        terminalSelection.setSelectedText(selectedText, startLine, endLine, terminalEnv.workingDirectory)
+      })
+
       // 初始化终端状态
       resizeTerminal()
       focusTerminal()
-    } catch (error) {
-      console.error('初始化终端时发生错误:', error)
+    } catch {
       // 清理可能已创建的资源（注意与卸载生命周期的竞争条件）
       if (!hasDisposed && terminal.value) {
         try {
           terminal.value.dispose()
-        } catch (disposeError: any) {
-          const msg = String(disposeError?.message || disposeError)
-          if (!/addon.*not been loaded/i.test(msg)) {
-            console.warn('清理终端实例时发生错误:', disposeError)
-          }
+        } catch {
+          // ignore
         }
         terminal.value = null
         hasDisposed = true
@@ -243,28 +248,30 @@
       // 更新主题选项
       terminal.value.options.theme = xtermTheme
 
-      // 强制刷新终端以应用主题，使用更彻底的刷新方式
-      terminal.value.refresh(0, terminal.value.rows - 1)
-
-      // 额外的刷新操作，确保主题完全应用
-      nextTick(() => {
-        if (terminal.value) {
-          // 重新调整大小以确保样式正确应用
-          resizeTerminal()
-          // 再次刷新确保主题完全生效
-          terminal.value.refresh(0, terminal.value.rows - 1)
-        }
-      })
-    } catch (error) {
-      console.warn('更新终端主题时发生错误:', error)
+      // 简单刷新，避免频繁刷新导致闪烁
+      if (terminal.value.rows > 0) {
+        terminal.value.refresh(0, terminal.value.rows - 1)
+      }
+    } catch {
+      // ignore
     }
   }
 
-  // 监听主题变化
+  // 监听主题变化 - 使用防抖优化，减少频繁更新
   watch(
     () => themeStore.currentThemeData.value,
-    updateTerminalTheme,
-    { immediate: true, deep: true } // 立即执行并深度监听
+    newTheme => {
+      // 清除之前的定时器
+      if (timers.themeUpdate) {
+        clearTimeout(timers.themeUpdate)
+      }
+
+      // 使用防抖，避免频繁更新
+      timers.themeUpdate = window.setTimeout(() => {
+        updateTerminalTheme(newTheme)
+      }, 16) // 16ms 防抖，与输出刷新频率保持一致
+    },
+    { immediate: true } // 移除深度监听，只在主题对象引用变化时更新
   )
 
   // === 事件处理器 ===
@@ -274,11 +281,10 @@
    */
   const initPlatformInfo = async () => {
     try {
-      isMac.value = await windowAPI.isMac()
-    } catch (error) {
-      console.warn('获取平台信息失败，使用默认值:', error)
+      terminalEnv.isMac = await windowApi.isMac()
+    } catch {
       // 降级到浏览器检测
-      isMac.value = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+      terminalEnv.isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
     }
   }
 
@@ -288,7 +294,7 @@
    */
   const handleKeyDown = (event: KeyboardEvent) => {
     // 根据操作系统检查相应的修饰键组合
-    const isCompletionShortcut = isMac.value
+    const isCompletionShortcut = terminalEnv.isMac
       ? event.metaKey && event.key === 'ArrowRight' // Mac: Cmd + 右箭头
       : event.ctrlKey && event.key === 'ArrowRight' // Windows/Linux: Ctrl + 右箭头
 
@@ -306,8 +312,7 @@
           }
         }
         // 如果没有补全建议，让事件正常传播，不做任何处理
-      } catch (error) {
-        console.warn('处理补全快捷键时发生错误:', error)
+      } catch {
         // 发生错误时不阻止默认行为，让键盘事件正常处理
       }
     }
@@ -324,8 +329,8 @@
 
     try {
       // 更新当前输入行状态
-      currentLine.value += completionText
-      cursorCol.value += completionText.length
+      inputState.currentLine += completionText
+      inputState.cursorCol += completionText.length
 
       // 将补全文本发送到终端，这会显示在终端中
       emit('input', completionText)
@@ -335,18 +340,58 @@
 
       // 可选：显示简短的成功反馈（可以根据需要启用）
       // showToast('补全已接受', 'success')
-    } catch (error) {
-      console.warn('接受补全时发生错误:', error)
+    } catch {
       // 发生错误时尝试恢复状态
       // 这里可以添加状态恢复逻辑，但通常不需要
     }
   }
 
   /**
-   * 处理补全建议变化
+   * 处理快捷键触发的补全接受事件
    */
-  const handleSuggestionChange = (suggestion: string) => {
-    currentSuggestion.value = suggestion
+  const handleAcceptCompletionShortcut = () => {
+    if (completionRef.value?.hasCompletion()) {
+      const completionText = completionRef.value.acceptCompletion()
+      if (completionText && completionText.trim()) {
+        acceptCompletion(completionText)
+      }
+    }
+  }
+
+  /**
+   * 处理清空终端事件
+   */
+  const handleClearTerminal = () => {
+    if (terminal.value) {
+      terminal.value.clear()
+    }
+  }
+
+  /**
+   * 处理字体大小变化事件
+   */
+  const handleFontSizeChange = (event: Event) => {
+    const customEvent = event as CustomEvent<{ action: 'increase' | 'decrease' }>
+    if (!terminal.value || !fitAddon.value) return
+
+    const action = customEvent.detail?.action
+    if (action === 'increase') {
+      // 增大字体
+      const currentFontSize = terminal.value.options.fontSize || 12
+      const newFontSize = Math.min(currentFontSize + 1, 24)
+      terminal.value.options.fontSize = newFontSize
+      nextTick(() => {
+        fitAddon.value?.fit()
+      })
+    } else if (action === 'decrease') {
+      // 减小字体
+      const currentFontSize = terminal.value.options.fontSize || 12
+      const newFontSize = Math.max(currentFontSize - 1, 8)
+      terminal.value.options.fontSize = newFontSize
+      nextTick(() => {
+        fitAddon.value?.fit()
+      })
+    }
   }
 
   /**
@@ -358,8 +403,8 @@
       if (terminal.value && terminal.value.element) {
         terminal.value.focus()
       }
-    } catch (error) {
-      console.warn('聚焦终端时发生错误:', error)
+    } catch {
+      // ignore
     }
   }
 
@@ -371,164 +416,81 @@
     try {
       if (terminal.value && fitAddon.value && terminalRef.value) {
         // 使用防抖避免频繁调整大小
-        if (resizeTimeout) {
-          clearTimeout(resizeTimeout)
+        if (timers.resize) {
+          clearTimeout(timers.resize)
         }
 
-        resizeTimeout = window.setTimeout(() => {
+        timers.resize = window.setTimeout(() => {
           try {
             fitAddon.value?.fit()
-            // 清除缓存，强制重新计算样式
-            terminalStyleCache.value = null
-          } catch (error) {
-            console.warn('调整终端大小时发生错误:', error)
+            // 尺寸变化后无条件清空缓存，避免使用旧的字符宽高数据
+            styleCache.value = null
+          } catch {
+            // ignore
           }
-        }, 100)
+        }, 50) // 减少防抖时间，提高响应性
       }
-    } catch (error) {
-      console.warn('设置终端大小调整时发生错误:', error)
+    } catch {
+      // ignore
     }
   }
 
   /**
    * 更新终端光标位置
-   * 计算并更新光标在屏幕上的坐标位置
+   * 使用更精确的方法计算光标在屏幕上的坐标位置
    */
   const updateTerminalCursorPosition = () => {
     try {
       if (!terminal.value || !terminalRef.value) return
 
-      // 获取或计算终端样式信息
-      if (!terminalStyleCache.value) {
-        const computedStyle = window.getComputedStyle(terminalRef.value)
-        const testElement = terminalRef.value.querySelector('.xterm-rows')
-
-        if (testElement) {
-          const testChar = testElement.querySelector('.xterm-row')?.querySelector('span')
-          if (testChar) {
-            const charRect = testChar.getBoundingClientRect()
-            terminalStyleCache.value = {
-              charWidth: charRect.width || 9,
-              lineHeight: charRect.height || 17,
-              paddingLeft: parseInt(computedStyle.paddingLeft) || 0,
-              paddingTop: parseInt(computedStyle.paddingTop) || 0,
-            }
-          }
-        }
-
-        // 如果无法获取准确值，使用默认值
-        if (!terminalStyleCache.value) {
-          terminalStyleCache.value = {
-            charWidth: 9,
-            lineHeight: 17,
-            paddingLeft: 0,
-            paddingTop: 0,
-          }
-        }
-      }
-
-      const cache = terminalStyleCache.value
       const buffer = terminal.value.buffer.active
       const terminalRect = terminalRef.value.getBoundingClientRect()
 
-      // 计算光标位置
-      const x = terminalRect.left + cache.paddingLeft + buffer.cursorX * cache.charWidth
-      const y = terminalRect.top + cache.paddingTop + buffer.cursorY * cache.lineHeight
+      // 尝试直接从XTerm的DOM结构获取光标元素
+      const cursorElement = terminalRef.value.querySelector('.xterm-cursor')
+      if (cursorElement) {
+        const cursorRect = cursorElement.getBoundingClientRect()
+        terminalEnv.cursorPosition = {
+          x: cursorRect.left,
+          y: cursorRect.top,
+        }
+        return
+      }
 
-      terminalCursorPosition.value = { x, y }
-    } catch (error) {
-      console.warn('更新终端光标位置时发生错误:', error)
-      // 设置默认位置
-      terminalCursorPosition.value = { x: 0, y: 0 }
-    }
-  }
+      // 如果没有光标元素，使用更精确的字符尺寸计算
+      const xtermScreen = terminalRef.value.querySelector('.xterm-screen')
+      if (!xtermScreen) return
 
-  /**
-   * 处理终端右键点击事件
-   * 检测选中的文本是否为路径，显示相应的上下文菜单
-   */
-  const handleRightClick = (event: MouseEvent) => {
-    event.preventDefault()
+      // 计算字符尺寸 - 使用终端实际尺寸除以行列数
+      const terminalCols = terminal.value.cols
+      const terminalRows = terminal.value.rows
+      const screenRect = xtermScreen.getBoundingClientRect()
 
-    const selection = terminal.value?.getSelection()
-    if (!selection) return
+      const charWidth = screenRect.width / terminalCols
+      const lineHeight = screenRect.height / terminalRows
 
-    // 简单的路径检测：非空白字符序列
-    const pathMatch = selection.match(/[^\s]+/)
-    if (pathMatch) {
-      showContextMenu(event.clientX, event.clientY, pathMatch[0])
-    }
-  }
+      // 计算光标位置，基于屏幕区域而不是整个容器
+      const x = screenRect.left + buffer.cursorX * charWidth
+      const y = screenRect.top + buffer.cursorY * lineHeight
 
-  /**
-   * 显示右键上下文菜单
-   */
-  const showContextMenu = (x: number, y: number, path: string) => {
-    contextMenu.visible = true
-    contextMenu.x = x
-    contextMenu.y = y
-    contextMenu.currentPath = path
-    contextMenu.menuItems = [
-      { label: '打开', value: 'open' }, // 在系统中打开路径
-      { label: '到这去', value: 'goto' }, // 切换到该目录
-    ]
-  }
-
-  /**
-   * 关闭右键菜单
-   */
-  const closeContextMenu = () => {
-    contextMenu.visible = false
-  }
-
-  /**
-   * 处理右键菜单项点击
-   */
-  const handleContextMenuItemClick = (item: { value: string }) => {
-    const path = contextMenu.currentPath
-
-    if (item.value === 'open') {
-      handlePathOpen(path)
-    } else if (item.value === 'goto') {
-      handleGoToPath(path)
-    }
-
-    closeContextMenu()
-  }
-
-  /**
-   * 在系统中打开路径
-   */
-  const handlePathOpen = async (path: string) => {
-    try {
-      await openPath(path.trim().replace(/^["']|["']$/g, '')) // 清理引号
-      showToast('已打开路径', 'success')
+      terminalEnv.cursorPosition = { x, y }
     } catch {
-      showToast('无法打开路径', 'error')
+      // 设置默认位置
+      terminalEnv.cursorPosition = { x: 0, y: 0 }
     }
   }
 
-  /**
-   * 切换到指定路径
-   * 发送 cd 命令到终端
-   */
   const handleGoToPath = (path: string) => {
     const cleanPath = path.trim().replace(/^["']|["']$/g, '')
     emit('input', `cd "${cleanPath}"\n`)
     showToast(`切换到: ${cleanPath}`, 'success')
   }
 
-  /**
-   * 处理文件拖拽到终端
-   */
   const handleFileDrop = async (filePath: string) => {
     try {
-      // 调用后端命令获取文件所在目录
       const directory = await invoke<string>('handle_file_open', { path: filePath })
-      // 切换到该目录
       handleGoToPath(directory)
-    } catch (error) {
-      console.error('处理文件拖拽失败:', error)
+    } catch {
       showToast('无法处理拖拽的文件', 'error')
     }
   }
@@ -573,45 +535,9 @@
     }
   }
 
-  /**
-   * 显示提示消息
-   */
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    toast.visible = true
-    toast.message = message
-    toast.type = type
-    setTimeout(() => {
-      toast.visible = false
-    }, 3000) // 3秒后自动隐藏
-  }
-
-  /**
-   * 关闭提示消息
-   */
-  const closeToast = () => {
-    toast.visible = false
-  }
-
   // === Event Handlers for Terminal ===
   const handleOutput = (data: string) => {
-    try {
-      if (terminal.value && typeof data === 'string') {
-        terminal.value.write(data)
-      }
-    } catch (error) {
-      console.warn('处理终端输出时发生错误:', error)
-    }
-  }
-
-  const handleExit = (exitCode: number | null) => {
-    try {
-      if (terminal.value) {
-        const message = `\r\n[进程已退出，退出码: ${exitCode ?? '未知'}]\r\n`
-        terminal.value.write(message)
-      }
-    } catch (error) {
-      console.warn('处理终端退出时发生错误:', error)
-    }
+    handleTerminalOutput(terminal.value, data, shellIntegration.processTerminalOutput)
   }
 
   // === Lifecycle ===
@@ -623,22 +549,28 @@
       // 初始化主题系统
       try {
         await themeStore.initialize()
-      } catch (error) {
-        console.warn('主题系统初始化失败:', error)
+      } catch {
+        // ignore
       }
 
       // 初始化终端（现在是异步的）
       await initXterm()
 
-      // 初始化工作目录
-      windowAPI
-        .getHomeDir()
-        .then(dir => {
-          workingDirectory.value = dir
-        })
-        .catch(() => {
-          workingDirectory.value = '/tmp'
-        })
+      // 初始化工作目录 - 优先使用终端状态中保存的工作目录
+      const tmeta = terminalStore.terminals.find(t => t.id === props.terminalId)
+      if (tmeta && tmeta.cwd) {
+        terminalEnv.workingDirectory = tmeta.cwd
+      } else {
+        // 如果没有保存的工作目录，使用系统默认
+        windowApi
+          .getHomeDirectory()
+          .then((dir: string) => {
+            terminalEnv.workingDirectory = dir
+          })
+          .catch(() => {
+            terminalEnv.workingDirectory = '/tmp'
+          })
+      }
 
       // 注册回调
       terminalStore.registerTerminalCallbacks(props.terminalId, {
@@ -646,8 +578,25 @@
         onExit: handleExit,
       })
 
-      // 窗口大小变化监听
-      window.addEventListener('resize', resizeTerminal)
+      // 注册到终端store的resize回调，避免每个终端都监听window resize
+      terminalStore.registerResizeCallback(props.terminalId, resizeTerminal)
+
+      // 添加快捷键事件监听
+      if (terminalRef.value) {
+        terminalRef.value.addEventListener('accept-completion', handleAcceptCompletionShortcut)
+        terminalRef.value.addEventListener('clear-terminal', handleClearTerminal)
+      }
+
+      // 添加全局字体大小变化监听
+      document.addEventListener('font-size-change', handleFontSizeChange)
+
+      // 添加终端搜索事件监听
+      document.addEventListener('open-terminal-search', () =>
+        handleOpenTerminalSearch(props.isActive, searchAddon.value)
+      )
+
+      // 初始化shell integration（静默模式）
+      await shellIntegration.initShellIntegration(terminal.value)
     })
   })
 
@@ -655,16 +604,44 @@
     if (hasDisposed) return
     hasDisposed = true
 
+    // 清理快捷键事件监听
+    if (terminalRef.value) {
+      terminalRef.value.removeEventListener('accept-completion', handleAcceptCompletionShortcut)
+      terminalRef.value.removeEventListener('clear-terminal', handleClearTerminal)
+    }
+
+    // 清理全局字体大小变化监听
+    document.removeEventListener('font-size-change', handleFontSizeChange)
+
+    // 清理终端搜索事件监听
+    document.removeEventListener('open-terminal-search', () =>
+      handleOpenTerminalSearch(props.isActive, searchAddon.value)
+    )
+
     terminalStore.unregisterTerminalCallbacks(props.terminalId)
 
     // 清理主题监听器
     themeStore.cleanup()
 
-    if (resizeTimeout) clearTimeout(resizeTimeout)
-    window.removeEventListener('resize', resizeTerminal)
+    // 清理所有定时器
+    if (timers.resize) clearTimeout(timers.resize)
+    if (timers.themeUpdate) clearTimeout(timers.themeUpdate)
+
+    // 清理输出处理
+    cleanupOutput()
+
+    // 从终端store注销resize回调
+    terminalStore.unregisterResizeCallback(props.terminalId)
 
     // 清理键盘事件监听器
-    terminal.value?.element?.removeEventListener('keydown', handleKeyDown)
+    if (keyListener) {
+      try {
+        keyListener.dispose()
+      } catch (_) {
+        // ignore
+      }
+      keyListener = null
+    }
 
     // 清理滚动事件监听器
     const viewportElement = terminalRef.value?.querySelector('.xterm-viewport')
@@ -676,19 +653,15 @@
     if (terminal.value) {
       try {
         terminal.value.dispose()
-      } catch (error: any) {
-        const msg = String(error?.message || error)
-        if (!/addon.*not been loaded/i.test(msg)) {
-          console.warn('清理终端实例时发生错误:', error)
-        }
+      } catch {
+        // ignore
       }
       terminal.value = null
     }
 
     // 清理插件引用
     fitAddon.value = null
-    terminalStyleCache.value = null
-    closeContextMenu()
+    styleCache.value = null
   })
 
   // === Watchers ===
@@ -697,9 +670,8 @@
     isActive => {
       if (isActive) {
         nextTick(() => {
-          resizeTerminal()
           focusTerminal()
-          terminal.value?.refresh(0, terminal.value.rows - 1)
+          resizeTerminal() // resize会触发必要的重绘，不需要额外的refresh
         })
       }
     },
@@ -719,12 +691,14 @@
     height: 100%;
     width: 100%;
     padding: 10px 10px 0 10px;
+    /* 确保为绝对定位的补全组件提供定位上下文 */
+    contain: layout style;
   }
 
   .terminal-container {
     height: 100%;
     width: 100%;
-    background: var(--color-background);
+    background: var(--bg-100);
     overflow: hidden;
   }
 
@@ -739,6 +713,6 @@
   :global(.xterm-link-layer a) {
     text-decoration: underline !important;
     text-decoration-style: dotted !important;
-    text-decoration-color: #888 !important;
+    text-decoration-color: var(--text-400) !important;
   }
 </style>

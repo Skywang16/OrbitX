@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", toml_content);
 
     // 保存到文件
-    let config_dir = dirs::config_dir().ok_or("无法获取配置目录")?.join("termx");
+    let config_dir = dirs::config_dir().ok_or("无法获取配置目录")?.join("OrbitX");
 
     if !config_dir.exists() {
         std::fs::create_dir_all(&config_dir)?;

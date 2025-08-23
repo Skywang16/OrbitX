@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 /// 主题配置 (对应 TOML 中的 [appearance.theme_config] 节)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct ThemeConfig {
     /// 自动切换时间
     pub auto_switch_time: String,
@@ -53,37 +54,17 @@ pub struct Theme {
     /// 主题类型
     pub theme_type: ThemeType,
 
-    /// 颜色配置
-    pub colors: ColorScheme,
+    /// ANSI 颜色
+    pub ansi: AnsiColors,
+
+    /// 明亮 ANSI 颜色
+    pub bright: AnsiColors,
 
     /// 语法高亮
     pub syntax: SyntaxHighlight,
 
     /// UI 颜色
     pub ui: UIColors,
-}
-
-/// 颜色方案
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub struct ColorScheme {
-    /// 前景色
-    pub foreground: String,
-
-    /// 背景色
-    pub background: String,
-
-    /// 光标颜色
-    pub cursor: String,
-
-    /// 选择颜色
-    pub selection: String,
-
-    /// ANSI 颜色
-    pub ansi: AnsiColors,
-
-    /// 明亮 ANSI 颜色
-    pub bright: AnsiColors,
 }
 
 /// ANSI 颜色
@@ -129,31 +110,43 @@ pub struct SyntaxHighlight {
     pub operator: String,
 }
 
-/// UI 颜色
+/// UI 颜色 - 全新的数字层次系统
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct UIColors {
-    /// 主色调
+    // 背景色层次
+    pub bg_100: String,
+    pub bg_200: String,
+    pub bg_300: String,
+    pub bg_400: String,
+    pub bg_500: String,
+    pub bg_600: String,
+    pub bg_700: String,
+
+    // 边框层次
+    pub border_200: String,
+    pub border_300: String,
+    pub border_400: String,
+
+    // 文本层次
+    pub text_100: String,
+    pub text_200: String,
+    pub text_300: String,
+    pub text_400: String,
+    pub text_500: String,
+
+    // 状态颜色
     pub primary: String,
-
-    /// 次要色调
-    pub secondary: String,
-
-    /// 成功色
+    pub primary_hover: String,
+    pub primary_alpha: String,
     pub success: String,
-
-    /// 警告色
     pub warning: String,
-
-    /// 错误色
     pub error: String,
-
-    /// 信息色
     pub info: String,
 
-    /// 边框色
-    pub border: String,
-
-    /// 分割线色
-    pub divider: String,
+    // 交互状态
+    pub hover: String,
+    pub active: String,
+    pub focus: String,
+    pub selection: String,
 }

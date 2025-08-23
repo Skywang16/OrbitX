@@ -2,7 +2,7 @@
   import { computed } from 'vue'
   import { XSelect } from '@/ui'
   import type { SelectOption } from '@/ui'
-  import type { Conversation } from '@/types/features/ai/chat'
+  import type { Conversation } from '@/types'
 
   // Props定义
   interface Props {
@@ -29,13 +29,8 @@
     return props.sessions.map(session => ({
       label: session.title || '未命名会话',
       value: session.id,
-      description: `${session.messageCount} 条消息 · ${formatDate(session.updatedAt)}`,
+      description: `${session.messageCount} 条消息 · ${formatSessionTime(session.updatedAt)}`,
     }))
-  })
-
-  const currentValue = computed(() => {
-    if (!props.currentSessionId) return null
-    return props.currentSessionId
   })
 
   const displayValue = computed(() => {
@@ -44,27 +39,11 @@
     return session?.title || '当前会话'
   })
 
-  // 方法
-  const formatDate = (date: Date | string) => {
-    const d = new Date(date)
-    const now = new Date()
-    const diffMs = now.getTime() - d.getTime()
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  import { formatSessionTime } from '@/utils/dateFormatter'
 
-    if (diffDays === 0) {
-      return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    } else if (diffDays === 1) {
-      return '昨天'
-    } else if (diffDays < 7) {
-      return `${diffDays}天前`
-    } else {
-      return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
-    }
-  }
-
-  const handleSelectChange = (value: string | number | null) => {
-    if (value) {
-      emit('select-session', value as string)
+  const handleSelectChange = (value: string | number | null | Array<string | number>) => {
+    if (value !== null && !Array.isArray(value)) {
+      emit('select-session', Number(value))
     }
   }
 
@@ -78,17 +57,16 @@
 <template>
   <div class="session-select">
     <XSelect
-      :model-value="currentValue"
+      :model-value="props.currentSessionId"
       :options="selectOptions"
       :placeholder="displayValue"
-      :disabled="loading"
       size="small"
       borderless
       filterable
       filter-placeholder="搜索会话..."
       no-data-text="暂无会话历史"
       max-height="300px"
-      @update:model-value="handleSelectChange"
+      @update:modelValue="handleSelectChange"
       @visible-change="handleVisibleChange"
     />
   </div>
@@ -114,20 +92,20 @@
   }
 
   .session-select :deep(.x-select__input:hover) {
-    background-color: var(--color-background-hover, rgba(0, 0, 0, 0.05));
+    background-color: var(--color-hover, rgba(0, 0, 0, 0.05));
   }
 
   .session-select :deep(.x-select--open .x-select__input) {
-    background-color: var(--color-background-hover, rgba(0, 0, 0, 0.05));
+    background-color: var(--color-hover, rgba(0, 0, 0, 0.05));
   }
 
   .session-select :deep(.x-select__value) {
     font-weight: 500;
-    color: var(--color-text);
+    color: var(--text-200);
   }
 
   .session-select :deep(.x-select__placeholder) {
-    color: var(--color-text-secondary);
+    color: var(--text-400);
     font-weight: 400;
   }
 

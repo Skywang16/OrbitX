@@ -1,58 +1,42 @@
 /**
- * 工具错误处理模块
+ * 工具错误类型定义
  */
 
 export class ToolError extends Error {
   public readonly code: string
-  public readonly details?: unknown
 
-  constructor(message: string, code = 'TOOL_ERROR', details?: unknown) {
+  constructor(message: string, code: string = 'TOOL_ERROR') {
     super(message)
     this.name = 'ToolError'
     this.code = code
-    this.details = details
+  }
+}
+
+export class ValidationError extends ToolError {
+  constructor(message: string) {
+    super(message, 'VALIDATION_ERROR')
+    this.name = 'ValidationError'
   }
 }
 
 export class FileNotFoundError extends ToolError {
   constructor(path: string) {
-    super(`文件不存在: ${path}`, 'FILE_NOT_FOUND', { path })
+    super(`文件或目录不存在: ${path}`, 'FILE_NOT_FOUND')
+    this.name = 'FileNotFoundError'
   }
 }
 
-export class FileAlreadyExistsError extends ToolError {
-  constructor(path: string) {
-    super(`文件已存在: ${path}`, 'FILE_ALREADY_EXISTS', { path })
-  }
-}
-
-export class DirectoryNotFoundError extends ToolError {
-  constructor(path: string) {
-    super(`目录不存在: ${path}`, 'DIRECTORY_NOT_FOUND', { path })
-  }
-}
-
-export class PermissionDeniedError extends ToolError {
-  constructor(path: string) {
-    super(`权限被拒绝: ${path}`, 'PERMISSION_DENIED', { path })
+export class PermissionError extends ToolError {
+  constructor(message: string) {
+    super(message, 'PERMISSION_ERROR')
+    this.name = 'PermissionError'
   }
 }
 
 export class NetworkError extends ToolError {
-  constructor(message: string, details?: unknown) {
-    super(`网络错误: ${message}`, 'NETWORK_ERROR', details)
-  }
-}
-
-export class ValidationError extends ToolError {
-  constructor(message: string, details?: unknown) {
-    super(`验证失败: ${message}`, 'VALIDATION_ERROR', details)
-  }
-}
-
-export class TerminalError extends ToolError {
-  constructor(message: string, details?: unknown) {
-    super(`终端错误: ${message}`, 'TERMINAL_ERROR', details)
+  constructor(message: string) {
+    super(message, 'NETWORK_ERROR')
+    this.name = 'NetworkError'
   }
 }
 
@@ -61,29 +45,12 @@ export class TerminalError extends ToolError {
  */
 export function formatToolError(error: unknown): string {
   if (error instanceof ToolError) {
-    return `❌ ${error.message}`
+    return `[${error.code}] ${error.message}`
   }
 
   if (error instanceof Error) {
-    return `❌ ${error.message}`
+    return error.message
   }
 
-  return `❌ 未知错误: ${String(error)}`
+  return String(error)
 }
-
-/**
- * 包装工具执行结果
- */
-export function wrapToolResult<T>(
-  operation: () => Promise<T> | T,
-  errorMessage?: string
-): Promise<{ success: true; data: T } | { success: false; error: string }> {
-  return Promise.resolve()
-    .then(() => operation())
-    .then(data => ({ success: true as const, data }))
-    .catch(error => ({
-      success: false as const,
-      error: errorMessage || formatToolError(error),
-    }))
-}
-

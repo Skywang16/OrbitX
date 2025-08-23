@@ -7,15 +7,11 @@ import { Eko } from '@eko-ai/eko'
 
 // 导入核心模块
 import { getEkoConfig, type EkoConfigOptions } from './core/config'
-import { createDefaultCallback, createSilentCallback } from './core/callbacks'
+import { createCallback, createSidebarCallback } from './core/callbacks'
 
 // 导入Agent
-import {
-  TerminalAgent,
-  createTerminalAgent,
-  createSafeTerminalAgent,
-  createDeveloperTerminalAgent,
-} from './agent/terminal-agent'
+import { TerminalAgent, createTerminalAgent, createTerminalChatAgent } from './agent/terminal-agent'
+import { CodeAgent, createCodeAgent, createCodeChatAgent } from './agent/code-agent'
 
 // 导入工具
 import { allTools } from './tools'
@@ -24,26 +20,34 @@ import { allTools } from './tools'
 import type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult } from './types'
 
 /**
- * 终端Eko实例类
- * 封装Eko框架，专门为终端模拟器优化
+ * OrbitX Eko实例类
+ * 封装Eko框架，支持智能Agent选择
  */
-export class TerminalEko {
+export class OrbitXEko {
   private eko: Eko | null = null
-  private agent: TerminalAgent
+  private terminalChatAgent: TerminalAgent
+  private terminalAgent: TerminalAgent
+  private codeChatAgent: CodeAgent
+  private codeAgent: CodeAgent
   private callback: TerminalCallback
   private config: EkoInstanceConfig
   private mode: 'chat' | 'agent' = 'chat'
+  private currentTaskId: string | null = null
+  private isRunning: boolean = false
 
   constructor(config: EkoInstanceConfig = {}) {
     this.config = { ...config }
 
     // 创建回调
-    this.callback = config.callback || createDefaultCallback()
+    this.callback = config.callback || createCallback()
 
-    // 创建Agent
-    this.agent = createTerminalAgent(config.agentConfig)
+    // 创建Chat模式的Agent（只读）
+    this.terminalChatAgent = createTerminalChatAgent(config.agentConfig)
+    this.codeChatAgent = createCodeChatAgent(config.codeAgentConfig)
 
-    // 取消冗余初始化日志，保持控制台整洁
+    // 创建Agent模式的Agent（全权限）
+    this.terminalAgent = createTerminalAgent('agent', config.agentConfig)
+    this.codeAgent = createCodeAgent('agent', config.codeAgentConfig)
   }
 
   /**
@@ -56,16 +60,19 @@ export class TerminalEko {
         ...options,
       })
 
+      // 根据模式选择对应的Agent
+      const agents =
+        this.mode === 'chat'
+          ? [this.terminalChatAgent, this.codeChatAgent] // Chat模式：只读Agent
+          : [this.terminalAgent, this.codeAgent] // Agent模式：全权限Agent
+
       // 创建Eko实例
       this.eko = new Eko({
         llms: ekoConfig.llms,
-        agents: [this.agent],
+        agents: agents, // 根据模式选择不同的Agent
         planLlms: ekoConfig.planLlms,
         callback: this.callback,
       })
-
-      // 初始化模式（默认chat）
-      this.agent.setMode(this.mode)
 
       // 初始化完成，无需输出额外日志
     } catch (error) {
@@ -85,21 +92,33 @@ export class TerminalEko {
         await this.initialize()
       }
 
+      // 设置运行状态
+      this.isRunning = true
+
       // 设置终端上下文
       if (options.terminalId) {
-        this.agent.setDefaultTerminalId(options.terminalId)
+        this.terminalAgent.setDefaultTerminalId(options.terminalId)
       }
 
       if (options.workingDirectory) {
-        this.agent.setDefaultWorkingDirectory(options.workingDirectory)
+        this.terminalAgent.setDefaultWorkingDirectory(options.workingDirectory)
+        this.codeAgent.updateConfig({ defaultWorkingDirectory: options.workingDirectory })
       }
 
       // 构建用户请求prompt
       const enhancedPrompt = `🎯 **用户请求**
 ${prompt}`
 
-      // 执行任务
-      const result = await this.eko!.run(enhancedPrompt)
+      // 打印调试信息
+      console.log('🚀 [Eko] 运行任务 - 原始Prompt:', prompt)
+      console.log('🚀 [Eko] 运行任务 - 增强Prompt:', enhancedPrompt)
+
+      // 生成唯一的taskId
+      const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      this.currentTaskId = taskId
+
+      // 执行任务，使用eko的原生run方法（内部会生成taskId）
+      const result = await this.eko!.run(enhancedPrompt, taskId)
 
       const duration = Date.now() - startTime
 
@@ -111,7 +130,6 @@ ${prompt}`
     } catch (error) {
       const duration = Date.now() - startTime
       const errorMessage = error instanceof Error ? error.message : String(error)
-      console.error('❌ 任务执行失败:', errorMessage)
 
       return {
         result: '',
@@ -119,6 +137,9 @@ ${prompt}`
         success: false,
         error: errorMessage,
       }
+    } finally {
+      this.isRunning = false
+      this.currentTaskId = null
     }
   }
 
@@ -153,11 +174,12 @@ ${prompt}`
 
       // 设置终端上下文
       if (options.terminalId) {
-        this.agent.setDefaultTerminalId(options.terminalId)
+        this.terminalAgent.setDefaultTerminalId(options.terminalId)
       }
 
       if (options.workingDirectory) {
-        this.agent.setDefaultWorkingDirectory(options.workingDirectory)
+        this.terminalAgent.setDefaultWorkingDirectory(options.workingDirectory)
+        this.codeAgent.updateConfig({ defaultWorkingDirectory: options.workingDirectory })
       }
 
       // 执行工作流
@@ -185,10 +207,17 @@ ${prompt}`
   }
 
   /**
-   * 获取Agent实例
+   * 获取终端Agent实例
    */
-  getAgent(): TerminalAgent {
-    return this.agent
+  getTerminalAgent(): TerminalAgent {
+    return this.terminalAgent
+  }
+
+  /**
+   * 获取代码Agent实例
+   */
+  getCodeAgent(): CodeAgent {
+    return this.codeAgent
   }
 
   /**
@@ -216,23 +245,40 @@ ${prompt}`
     }
 
     if (updates.agentConfig) {
-      this.agent.updateConfig(updates.agentConfig)
+      this.terminalAgent.updateConfig(updates.agentConfig)
+    }
+
+    if (updates.codeAgentConfig) {
+      this.codeAgent.updateConfig(updates.codeAgentConfig)
     }
   }
 
   /**
-   * 设置工作模式（chat/agent）并同步到Agent
+   * 设置工作模式（chat/agent）并重新初始化Eko实例
    */
-  setMode(mode: 'chat' | 'agent'): void {
+  async setMode(mode: 'chat' | 'agent'): Promise<void> {
+    if (this.mode === mode) {
+      return // 模式未改变，无需重新初始化
+    }
+
     this.mode = mode
-    this.agent.setMode(mode)
+
+    // 重新初始化Eko实例以使用对应模式的Agent
+    if (this.eko) {
+      await this.initialize()
+    }
   }
 
   /**
    * 获取Agent专属终端ID
    */
   getAgentTerminalId(): number | null {
-    return this.agent.getAgentTerminalId()
+    // 根据当前模式返回对应Agent的终端ID
+    if (this.mode === 'agent') {
+      return this.terminalAgent.getAgentTerminalId()
+    } else {
+      return this.terminalChatAgent.getAgentTerminalId()
+    }
   }
 
   /**
@@ -240,69 +286,95 @@ ${prompt}`
    */
   async cleanup(): Promise<void> {
     try {
-      await this.agent.cleanupAgentTerminal()
+      // 根据当前模式清理对应Agent的终端资源
+      if (this.mode === 'agent') {
+        await this.terminalAgent.cleanupAgentTerminal()
+      } else {
+        await this.terminalChatAgent.cleanupAgentTerminal()
+      }
     } catch (error) {
-      console.error('清理TerminalEko资源失败:', error)
+      // 清理失败不影响程序运行
     }
+  }
+
+  /**
+   * 中断当前正在运行的任务
+   */
+  abort(): boolean {
+    if (this.eko && this.currentTaskId && this.isRunning) {
+      console.log('🛑 中断当前AI任务:', this.currentTaskId)
+      const success = this.eko.abortTask(this.currentTaskId)
+      if (success) {
+        this.isRunning = false
+        this.currentTaskId = null
+      }
+      return success
+    }
+    return false
+  }
+
+  /**
+   * 检查是否有任务正在运行
+   */
+  isTaskRunning(): boolean {
+    return this.isRunning
+  }
+
+  /**
+   * 获取当前任务ID
+   */
+  getCurrentTaskId(): string | null {
+    return this.currentTaskId
   }
 
   /**
    * 销毁实例
    */
   destroy(): void {
+    // 中断任何正在运行的任务
+    this.abort()
     this.eko = null
     // 保持静默销毁，避免冗余日志
   }
 }
 
 /**
- * 创建TerminalEko实例的便捷函数
+ * 创建OrbitXEko实例
  */
-export const createTerminalEko = async (config: EkoInstanceConfig = {}): Promise<TerminalEko> => {
-  const instance = new TerminalEko(config)
+const createOrbitXEko = async (config: EkoInstanceConfig = {}): Promise<OrbitXEko> => {
+  const instance = new OrbitXEko(config)
   await instance.initialize()
   return instance
 }
 
 /**
- * 创建调试模式的TerminalEko实例
+ * 创建终端Eko实例（createOrbitXEko的别名）
  */
-export const createDebugTerminalEko = async (config: EkoInstanceConfig = {}): Promise<TerminalEko> => {
-  return createTerminalEko({
-    ...config,
-    debug: true,
-  })
-}
-
-/**
- * 创建静默模式的TerminalEko实例
- */
-export const createSilentTerminalEko = async (config: EkoInstanceConfig = {}): Promise<TerminalEko> => {
-  return createTerminalEko({
-    ...config,
-    callback: createSilentCallback(),
-  })
-}
+const createTerminalEko = createOrbitXEko
 
 // 导出所有类型和工具
 export type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult, EkoConfigOptions }
 
+// 类型别名
+export type TerminalEko = OrbitXEko
+
 export {
   // 核心类
   TerminalAgent,
+  CodeAgent,
 
   // 工厂函数
+  createOrbitXEko,
+  createTerminalEko,
   createTerminalAgent,
-  createSafeTerminalAgent,
-  createDeveloperTerminalAgent,
+  createCodeAgent,
 
   // 回调
-  createDefaultCallback,
-  createSilentCallback,
+  createCallback,
+  createSidebarCallback,
 
   // 工具
   allTools,
-  allTools as terminalTools, // 向后兼容性别名
 
   // 配置
   getEkoConfig,

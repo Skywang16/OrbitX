@@ -11,6 +11,9 @@ export interface CompletionItem {
   kind: string
   score: number
   source: string
+  icon?: string
+  category?: string
+  priority?: number
 }
 
 export interface CompletionRequest {
@@ -28,16 +31,7 @@ export interface CompletionResponse {
 }
 
 // ===== 增强补全相关类型 =====
-
-export interface EnhancedCompletionItem {
-  text: string
-  displayText?: string
-  description: string
-  icon: string
-  category: string
-  priority: number
-  metadata: Record<string, string>
-}
+// 使用统一的CompletionItem类型
 
 export interface EnhancedCompletionPosition {
   x: number
@@ -45,7 +39,7 @@ export interface EnhancedCompletionPosition {
 }
 
 export interface EnhancedCompletionResponse {
-  completions: EnhancedCompletionItem[]
+  completions: CompletionItem[]
   position: EnhancedCompletionPosition
   hasShellCompletions: boolean
 }

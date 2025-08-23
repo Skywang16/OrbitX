@@ -80,6 +80,54 @@ export interface BatchTerminalResize {
   cols: number
 }
 
+// ===== 终端配置类型 =====
+
+export interface TerminalConfig {
+  scrollback: number
+  shell: ShellConfig
+  cursor: CursorConfig
+  behavior: TerminalBehaviorConfig
+}
+
+export interface ShellConfig {
+  default: string
+  args: string[]
+  workingDirectory: string
+}
+
+export interface CursorConfig {
+  style: 'block' | 'underline' | 'beam'
+  blink: boolean
+  color: string
+  thickness: number
+}
+
+export interface TerminalBehaviorConfig {
+  closeOnExit: boolean
+  confirmOnExit: boolean
+  scrollOnOutput: boolean
+  copyOnSelect: boolean
+}
+
+export interface TerminalConfigValidationResult {
+  valid: boolean
+  errors?: string[]
+  warnings?: string[]
+}
+
+export interface SystemShellsResult {
+  shells: DetectedShell[]
+  currentDefault?: string
+}
+
+export interface DetectedShell {
+  name: string
+  path: string
+  version?: string
+  description?: string
+  available: boolean
+}
+
 // ===== 通用响应类型 =====
 
 export interface APIResponse<T = unknown> {

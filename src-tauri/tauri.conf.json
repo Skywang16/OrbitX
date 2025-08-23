@@ -21,7 +21,8 @@
         "fullscreen": false,
         "decorations": true,
         "titleBarStyle": "Overlay",
-        "dragDropEnabled": true
+        "dragDropEnabled": true,
+        "visible": false
       }
     ],
     "security": {
@@ -40,7 +41,7 @@
       ]
     },
     "fs": {
-      "scope": ["$HOME/**", "$APPDATA/**", "$APPCONFIG/**", "$APPLOCALDATA/**"]
+      "requireLiteralLeadingDot": false
     },
     "deep-link": {
       "desktop": {
@@ -52,7 +53,7 @@
     "active": true,
     "targets": "all",
     "icon": ["icons/icon.icns", "icons/icon.ico"],
-    "resources": ["../config/themes/*", "../config/config.toml"],
+    "resources": ["../config/themes/*", "../config/config.toml", "sql/*"],
     "fileAssociations": [
       {
         "ext": ["*"],
@@ -67,6 +68,21 @@
       "providerShortName": null,
       "signingIdentity": null,
       "minimumSystemVersion": "10.13"
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": null,
+      "tsp": false,
+      "wix": {
+        "language": "en-US",
+        "template": null
+      },
+      "nsis": {
+        "displayLanguageSelector": false,
+        "languages": ["English"],
+        "template": null
+      }
     }
   }
 }

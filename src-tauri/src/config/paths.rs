@@ -30,6 +30,9 @@ pub struct ConfigPaths {
 
     /// 日志目录
     logs_dir: PathBuf,
+
+    /// Shell集成脚本目录
+    shell_dir: PathBuf,
 }
 
 impl ConfigPaths {
@@ -62,6 +65,7 @@ impl ConfigPaths {
         let backups_dir = app_data_dir.join(crate::config::BACKUPS_DIR_NAME);
         let cache_dir = app_data_dir.join(crate::config::CACHE_DIR_NAME);
         let logs_dir = app_data_dir.join(crate::config::LOGS_DIR_NAME);
+        let shell_dir = app_data_dir.join("shell");
 
         let paths = Self {
             app_data_dir,
@@ -70,6 +74,7 @@ impl ConfigPaths {
             backups_dir,
             cache_dir,
             logs_dir,
+            shell_dir,
         };
 
         // 确保所有必要的目录存在
@@ -116,45 +121,11 @@ impl ConfigPaths {
         }
     }
 
-    /// 获取项目配置目录
-    ///
-    /// 返回项目根目录下的 config 目录路径
-    #[allow(dead_code)]
-    fn get_project_config_dir() -> AppResult<PathBuf> {
-        // 获取当前可执行文件的目录
-        let exe_path = std::env::current_exe().with_context(|| "无法获取可执行文件路径")?;
-
-        // 在开发环境中，可执行文件在 target/debug/ 或 target/release/ 下
-        // 我们需要找到项目根目录
-        let mut current_dir = exe_path
-            .parent()
-            .ok_or_else(|| anyhow!("无法获取可执行文件目录"))?
-            .to_path_buf();
-
-        // 向上查找，直到找到包含 src-tauri 目录的项目根目录
-        loop {
-            if current_dir.join("src-tauri").exists() {
-                return Ok(current_dir.join("config"));
-            }
-
-            if let Some(parent) = current_dir.parent() {
-                current_dir = parent.to_path_buf();
-            } else {
-                // 如果找不到项目根目录，就使用当前工作目录下的 config
-                let cwd = std::env::current_dir().with_context(|| "无法获取当前工作目录")?;
-                return Ok(cwd.join("config"));
-            }
-        }
-    }
 
     /// 获取项目主题目录
     ///
     /// 返回项目根目录下的 config/themes 目录路径
-    #[allow(dead_code)]
-    fn get_project_themes_dir() -> AppResult<PathBuf> {
-        let config_dir = Self::get_project_config_dir()?;
-        Ok(config_dir.join("themes"))
-    }
+
 
     /// 确保所有必要的目录存在
     fn ensure_directories_exist(&self) -> AppResult<()> {
@@ -165,6 +136,7 @@ impl ConfigPaths {
             &self.backups_dir,
             &self.cache_dir,
             &self.logs_dir,
+            &self.shell_dir,
         ];
 
         for dir in &directories {
@@ -245,6 +217,16 @@ impl ConfigPaths {
     /// 获取错误日志文件路径
     pub fn error_log_file(&self) -> PathBuf {
         self.logs_dir.join("error.log")
+    }
+
+    /// 获取Shell集成脚本目录路径
+    pub fn shell_dir(&self) -> &Path {
+        &self.shell_dir
+    }
+
+    /// 获取指定shell的集成脚本文件路径
+    pub fn shell_integration_script_path(&self, shell_name: &str) -> PathBuf {
+        self.shell_dir.join(format!("integration.{}", shell_name))
     }
 
     // ========================================================================
@@ -489,6 +471,7 @@ impl ConfigPaths {
             backups_dir: base_dir.join("backups"),
             cache_dir: base_dir.join("cache"),
             logs_dir: base_dir.join("logs"),
+            shell_dir: base_dir.join("shell"),
         }
     }
 }

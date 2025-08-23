@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue'
   import { useTheme } from '../../../../composables/useTheme'
+  import { XSelect } from '@/ui'
+  import type { SelectOption } from '@/ui'
 
   const theme = useTheme()
 
@@ -8,6 +10,16 @@
   onMounted(async () => {
     try {
       await theme.initialize()
+      // 确保组件状态与配置同步
+      const config = theme.themeConfig.value
+      if (config) {
+        if (config.lightTheme) {
+          selectedLightTheme.value = config.lightTheme
+        }
+        if (config.darkTheme) {
+          selectedDarkTheme.value = config.darkTheme
+        }
+      }
     } catch (error) {
       console.error('主题系统初始化失败:', error)
     }
@@ -17,14 +29,9 @@
   const selectedLightTheme = ref('light')
   const selectedDarkTheme = ref('dark')
 
-  // 计算属性
+  // 简化模式计算 - 直接使用配置状态，移除复杂的本地状态逻辑
   const currentMode = computed(() => {
     const isFollowing = theme.isFollowingSystem.value
-    console.log('currentMode 计算:', {
-      isFollowing,
-      themeConfig: theme.themeConfig.value,
-      configStatus: theme.configStatus.value,
-    })
     return isFollowing ? 'system' : 'manual'
   })
 
@@ -48,12 +55,22 @@
   })
 
   // 系统主题选项
-  const lightThemeOptions = computed(() => {
-    return theme.themeOptions.value.filter((option: any) => option.type === 'light' || option.type === 'auto')
+  const lightThemeOptions = computed((): SelectOption[] => {
+    return theme.themeOptions.value
+      .filter((option: any) => option.type === 'light' || option.type === 'auto')
+      .map((option: any) => ({
+        label: option.label,
+        value: option.value,
+      }))
   })
 
-  const darkThemeOptions = computed(() => {
-    return theme.themeOptions.value.filter((option: any) => option.type === 'dark' || option.type === 'auto')
+  const darkThemeOptions = computed((): SelectOption[] => {
+    return theme.themeOptions.value
+      .filter((option: any) => option.type === 'dark' || option.type === 'auto')
+      .map((option: any) => ({
+        label: option.label,
+        value: option.value,
+      }))
   })
 
   // 监听主题配置变化，更新本地选择
@@ -115,26 +132,20 @@
 
   // 事件处理
   const handleModeChange = async (mode: 'manual' | 'system') => {
-    console.log('handleModeChange 调用:', { mode, currentMode: currentMode.value })
+    // 防止重复切换
+    if (currentMode.value === mode) {
+      return
+    }
+
     try {
       if (mode === 'system') {
         // 确保有默认的浅色和深色主题
         const lightTheme = selectedLightTheme.value || 'light'
         const darkTheme = selectedDarkTheme.value || 'dark'
 
-        console.log('启用跟随系统模式:', { lightTheme, darkTheme })
         await theme.enableFollowSystem(lightTheme, darkTheme)
-        console.log('跟随系统模式启用完成，新状态:', {
-          isFollowing: theme.isFollowingSystem.value,
-          currentMode: currentMode.value,
-        })
       } else {
-        console.log('禁用跟随系统模式')
         await theme.disableFollowSystem()
-        console.log('跟随系统模式禁用完成，新状态:', {
-          isFollowing: theme.isFollowingSystem.value,
-          currentMode: currentMode.value,
-        })
       }
     } catch (error) {
       console.error('切换主题模式失败:', error)
@@ -154,7 +165,7 @@
       try {
         await theme.setFollowSystem(true, selectedLightTheme.value, selectedDarkTheme.value)
       } catch (error) {
-        console.error('更新系统主题设置失败:', error)
+        console.error('设置跟随系统主题失败:', error)
       }
     }
   }
@@ -162,126 +173,134 @@
 
 <template>
   <div class="theme-settings">
-    <!-- 主题设置 -->
-    <div class="settings-content">
-      <!-- 模式选择 -->
-      <div class="settings-section">
-        <h3 class="section-title">主题模式</h3>
-        <div class="mode-selector">
-          <label class="mode-option">
-            <input
-              type="radio"
-              value="manual"
-              :checked="currentMode === 'manual'"
-              @change="handleModeChange('manual')"
-            />
-            <div class="mode-content">
-              <div class="mode-left">
-                <div class="mode-icon" v-html="getIconSvg('palette')"></div>
-                <div class="mode-info">
-                  <div class="mode-label">手动选择</div>
-                  <div class="mode-description">手动选择一个固定主题</div>
-                </div>
-              </div>
-              <div class="option-radio">
-                <div class="radio-button" :class="{ checked: currentMode === 'manual' }">
-                  <div class="radio-dot"></div>
-                </div>
-              </div>
-            </div>
-          </label>
-
-          <label class="mode-option">
-            <input
-              type="radio"
-              value="system"
-              :checked="currentMode === 'system'"
-              @change="handleModeChange('system')"
-            />
-            <div class="mode-content">
-              <div class="mode-left">
-                <div class="mode-icon" v-html="getIconSvg('monitor')"></div>
-                <div class="mode-info">
-                  <div class="mode-label">跟随系统</div>
-                  <div class="mode-description">根据系统设置自动切换浅色/深色主题</div>
-                </div>
-              </div>
-              <div class="option-radio">
-                <div class="radio-button" :class="{ checked: currentMode === 'system' }">
-                  <div class="radio-dot"></div>
-                </div>
-              </div>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <!-- 手动模式设置 -->
-      <div v-if="currentMode === 'manual'" class="settings-section">
-        <h3 class="section-title">选择主题</h3>
-        <div class="theme-grid">
-          <div
-            v-for="option in manualThemeOptions"
-            :key="option.value"
-            class="theme-card"
-            :class="{ active: option.isCurrent }"
-            @click="handleThemeSelect(option.value)"
-          >
-            <div class="theme-left">
-              <div class="theme-icon" v-html="getIconSvg(option.icon)"></div>
-              <div class="theme-info">
-                <div class="theme-name">{{ option.label }}</div>
+    <!-- 模式选择 -->
+    <div class="settings-card">
+      <h3 class="section-title">主题模式</h3>
+      <div class="mode-selector">
+        <label class="mode-option">
+          <input type="radio" value="manual" :checked="currentMode === 'manual'" @change="handleModeChange('manual')" />
+          <div class="mode-content">
+            <div class="mode-left">
+              <div class="mode-icon" v-html="getIconSvg('palette')"></div>
+              <div class="mode-info">
+                <div class="mode-label">手动选择</div>
+                <div class="mode-description">手动选择一个固定主题</div>
               </div>
             </div>
             <div class="option-radio">
-              <div class="radio-button" :class="{ checked: option.isCurrent }">
+              <div class="radio-button" :class="{ checked: currentMode === 'manual' }">
                 <div class="radio-dot"></div>
               </div>
             </div>
           </div>
+        </label>
+
+        <label class="mode-option">
+          <input type="radio" value="system" :checked="currentMode === 'system'" @change="handleModeChange('system')" />
+          <div class="mode-content">
+            <div class="mode-left">
+              <div class="mode-icon" v-html="getIconSvg('monitor')"></div>
+              <div class="mode-info">
+                <div class="mode-label">跟随系统</div>
+                <div class="mode-description">根据系统设置自动切换主题</div>
+              </div>
+            </div>
+            <div class="option-radio">
+              <div class="radio-button" :class="{ checked: currentMode === 'system' }">
+                <div class="radio-dot"></div>
+              </div>
+            </div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- 手动模式设置 -->
+    <div v-if="currentMode === 'manual'" class="settings-card">
+      <h3 class="section-title">选择主题</h3>
+      <div class="theme-grid">
+        <div
+          v-for="option in manualThemeOptions"
+          :key="option.value"
+          class="theme-card"
+          :class="{ active: option.isCurrent }"
+          @click="handleThemeSelect(option.value)"
+        >
+          <div class="theme-left">
+            <div class="theme-icon" v-html="getIconSvg(option.icon)"></div>
+            <div class="theme-info">
+              <div class="theme-name">{{ option.label }}</div>
+            </div>
+          </div>
+          <div class="option-radio">
+            <div class="radio-button" :class="{ checked: option.isCurrent }">
+              <div class="radio-dot"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 跟随系统模式设置 -->
+    <div v-if="currentMode === 'system'" class="settings-card">
+      <h3 class="section-title">选择主题</h3>
+
+      <!-- 系统状态显示 -->
+      <div class="system-status">
+        <div class="status-content">
+          <div class="status-item">
+            <div class="status-item-icon" v-html="getIconSvg(theme.isSystemDark.value ? 'moon' : 'sun')"></div>
+            <div class="status-item-content">
+              <span class="status-label">当前系统主题</span>
+              <span class="status-value">{{ systemStatus }}</span>
+            </div>
+          </div>
+          <div class="status-item">
+            <div class="status-item-icon" v-html="getIconSvg('palette')"></div>
+            <div class="status-item-content">
+              <span class="status-label">正在使用</span>
+              <span class="status-value">{{ currentThemeName }}</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- 跟随系统模式设置 -->
-      <div v-if="currentMode === 'system'" class="settings-section">
-        <h3 class="section-title">系统主题设置</h3>
-
-        <!-- 系统状态显示 -->
-        <div class="system-status">
-          <div class="status-item">
-            <span class="status-label">当前系统主题:</span>
-            <span class="status-value">{{ systemStatus }}</span>
-          </div>
-          <div class="status-item">
-            <span class="status-label">正在使用:</span>
-            <span class="status-value">{{ currentThemeName }}</span>
-          </div>
-        </div>
-
+      <!-- 主题选择器组 -->
+      <div class="theme-selectors">
         <!-- 浅色主题选择 -->
         <div class="theme-selector">
-          <h4 class="selector-title">
-            <div class="title-icon" v-html="getIconSvg('sun')"></div>
-            浅色主题
-          </h4>
-          <select v-model="selectedLightTheme" @change="handleSystemThemeChange" class="theme-select">
-            <option v-for="option in lightThemeOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
+          <div class="selector-header">
+            <div class="selector-icon" v-html="getIconSvg('sun')"></div>
+            <h4 class="selector-title">浅色主题</h4>
+          </div>
+          <div class="selector-content">
+            <XSelect
+              v-model="selectedLightTheme"
+              :options="lightThemeOptions"
+              placeholder="选择浅色主题"
+              size="medium"
+              @change="handleSystemThemeChange"
+              class="theme-select"
+            />
+          </div>
         </div>
 
         <!-- 深色主题选择 -->
         <div class="theme-selector">
-          <h4 class="selector-title">
-            <div class="title-icon" v-html="getIconSvg('moon')"></div>
-            深色主题
-          </h4>
-          <select v-model="selectedDarkTheme" @change="handleSystemThemeChange" class="theme-select">
-            <option v-for="option in darkThemeOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
+          <div class="selector-header">
+            <div class="selector-icon" v-html="getIconSvg('moon')"></div>
+            <h4 class="selector-title">深色主题</h4>
+          </div>
+          <div class="selector-content">
+            <XSelect
+              v-model="selectedDarkTheme"
+              :options="darkThemeOptions"
+              placeholder="选择深色主题"
+              size="medium"
+              @change="handleSystemThemeChange"
+              class="theme-select"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -290,46 +309,28 @@
 
 <style scoped>
   .theme-settings {
-    padding: 20px;
     max-width: 800px;
+    padding: var(--spacing-lg);
   }
 
-  .action-button {
-    padding: 8px 16px;
-    background: #3b82f6;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-  }
-
-  .action-button:hover {
-    background: #2563eb;
-  }
-
-  .settings-section {
-    margin-bottom: 32px;
+  .settings-card {
+    background-color: var(--color-primary-alpha);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
   }
 
   .section-title {
-    font-size: 18px;
+    font-size: var(--font-size-md);
     font-weight: 600;
-    margin-bottom: 16px;
-    color: var(--text-primary);
-  }
-
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
+    color: var(--text-200);
+    margin: 0 0 var(--spacing-md) 0;
   }
 
   .mode-selector {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    gap: var(--spacing-md);
   }
 
   .mode-option {
@@ -345,9 +346,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--spacing-sm) var(--spacing-md);
-    border: 2px solid var(--border-color);
-    border-radius: var(--border-radius-lg);
+    padding: var(--spacing-md);
+    border: 1px solid var(--border-300);
+    border-radius: var(--border-radius);
     transition: all 0.2s ease;
   }
 
@@ -358,8 +359,7 @@
   }
 
   .mode-content:hover {
-    border-color: var(--border-color-hover);
-    background-color: var(--color-background-hover);
+    border-color: var(--color-primary);
   }
 
   .mode-option input[type='radio']:checked + .mode-content {
@@ -369,7 +369,7 @@
 
   .mode-icon {
     margin-right: 12px;
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .mode-option input[type='radio']:checked + .mode-content .mode-icon {
@@ -378,12 +378,12 @@
 
   .mode-label {
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .mode-description {
     font-size: 14px;
-    color: var(--text-secondary);
+    color: var(--text-400);
     margin-top: 4px;
   }
 
@@ -394,7 +394,7 @@
   .radio-button {
     width: 20px;
     height: 20px;
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--border-300);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -422,21 +422,18 @@
   .theme-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
+    gap: var(--spacing-md);
   }
 
   .theme-card {
-    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--spacing-sm) var(--spacing-md);
-    border: 2px solid var(--border-color);
-    border-radius: var(--border-radius-lg);
+    padding: var(--spacing-md);
+    border: 1px solid var(--border-300);
+    border-radius: var(--border-radius);
     cursor: pointer;
     transition: all 0.2s ease;
-    background-color: var(--color-background);
-    min-height: 60px;
   }
 
   .theme-left {
@@ -446,8 +443,7 @@
   }
 
   .theme-card:hover {
-    border-color: var(--border-color-hover);
-    background-color: var(--color-background-hover);
+    border-color: var(--color-primary);
   }
 
   .theme-card.active {
@@ -457,7 +453,7 @@
 
   .theme-icon {
     margin-right: 12px;
-    color: var(--text-secondary);
+    color: var(--text-400);
   }
 
   .theme-card.active .theme-icon {
@@ -470,68 +466,86 @@
 
   .theme-name {
     font-weight: 500;
-    color: var(--text-secondary);
+    color: var(--text-300);
     margin-bottom: 4px;
   }
 
   .system-status {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    padding: 16px;
-    margin-bottom: 24px;
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .status-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
   }
 
   .status-item {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
   }
 
-  .status-item:last-child {
-    margin-bottom: 0;
+  .status-item-icon {
+    margin-right: var(--spacing-sm);
+    color: var(--text-400);
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .status-item-content {
+    display: flex;
+    justify-content: space-between;
+    flex: 1;
   }
 
   .status-label {
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-200);
   }
 
   .status-value {
-    color: var(--text-secondary);
+    color: var(--text-400);
+  }
+
+  .theme-selectors {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-lg);
+    margin-top: var(--spacing-md);
   }
 
   .theme-selector {
-    margin-bottom: 20px;
+    margin-bottom: var(--spacing-md);
+  }
+
+  .selector-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .selector-icon {
+    margin-right: var(--spacing-sm);
+    color: var(--text-400);
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .selector-title {
-    display: flex;
-    align-items: center;
-    font-size: 16px;
+    font-size: var(--font-size-sm);
     font-weight: 500;
-    color: var(--text-primary);
-    margin-bottom: 8px;
-  }
-
-  .title-icon {
-    margin-right: 8px;
-    color: var(--text-secondary);
+    color: var(--text-200);
+    margin: 0;
   }
 
   .theme-select {
     width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    background: white;
-    font-size: 14px;
-  }
-
-  .theme-select:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
 </style>

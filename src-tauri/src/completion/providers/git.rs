@@ -11,36 +11,37 @@ use crate::completion::types::{CompletionContext, CompletionItem, CompletionType
 use crate::utils::error::AppResult;
 use anyhow::Context;
 use async_trait::async_trait;
-use std::collections::HashMap;
+
 use std::path::Path;
 use tokio::process::Command as AsyncCommand;
 
 /// Git补全提供者
 pub struct GitCompletionProvider {
-    /// 缓存git仓库状态
-    cache: std::sync::Mutex<HashMap<String, bool>>,
+    /// 使用统一缓存
+    cache: crate::storage::cache::UnifiedCache,
 }
 
 impl GitCompletionProvider {
     /// 创建新的Git补全提供者
     pub fn new() -> Self {
         Self {
-            cache: std::sync::Mutex::new(HashMap::new()),
+            cache: crate::storage::cache::UnifiedCache::new(),
         }
     }
 
     /// 检查是否在git仓库中
     async fn is_git_repository(&self, working_directory: &Path) -> AppResult<bool> {
         let path_str = working_directory.to_string_lossy().to_string();
+        let cache_key = format!("git_repo:{}", path_str);
 
         // 检查缓存
-        {
-            let cache = self.cache.lock().unwrap();
-            if let Some(&is_repo) = cache.get(&path_str) {
+        if let Some(cached_result) = self.cache.get(&cache_key).await {
+            if let Some(is_repo) = cached_result.as_bool() {
                 return Ok(is_repo);
             }
         }
 
+        // 执行git命令
         let output = AsyncCommand::new("git")
             .args(["rev-parse", "--git-dir"])
             .current_dir(working_directory)
@@ -50,11 +51,11 @@ impl GitCompletionProvider {
 
         let is_repo = output.status.success();
 
-        // 更新缓存
-        {
-            let mut cache = self.cache.lock().unwrap();
-            cache.insert(path_str, is_repo);
-        }
+        // 缓存结果
+        let _ = self
+            .cache
+            .set(&cache_key, serde_json::Value::Bool(is_repo))
+            .await;
 
         Ok(is_repo)
     }

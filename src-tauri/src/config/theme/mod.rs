@@ -5,7 +5,6 @@
  */
 
 pub mod commands;
-pub mod css_parser;
 pub mod defaults;
 pub mod manager;
 pub mod service;
@@ -16,13 +15,10 @@ pub use commands::{
     get_available_themes, get_current_theme, get_theme_config_status, handle_system_theme_change,
     set_follow_system_theme, set_terminal_theme, ThemeConfigStatus, ThemeInfo,
 };
-pub use css_parser::CssThemeParser;
 pub use defaults::create_default_theme_config;
 pub use manager::{
     ThemeIndex, ThemeIndexEntry, ThemeManager, ThemeManagerOptions, ThemeValidationResult,
     ThemeValidator,
 };
 pub use service::{SystemThemeDetector, ThemeService};
-pub use types::{
-    AnsiColors, ColorScheme, SyntaxHighlight, Theme, ThemeConfig, ThemeType, UIColors,
-};
+pub use types::{AnsiColors, SyntaxHighlight, Theme, ThemeConfig, ThemeType, UIColors};

@@ -1,418 +1,330 @@
 <template>
   <div class="shortcut-settings">
-    <!-- 标题和统计信息 -->
-    <div class="settings-header">
-      <h2 class="settings-title">快捷键设置</h2>
-      <ShortcutStatistics />
-    </div>
+    <div class="settings-card">
+      <h3 class="section-title">快捷键设置</h3>
+      <!-- 冲突警告 -->
+      <div v-if="hasConflicts" class="alert alert-warning">
+        <span class="alert-icon">⚠️</span>
+        <span>检测到 {{ conflictCount }} 个快捷键冲突</span>
+      </div>
 
-    <!-- 搜索和过滤 -->
-    <div class="settings-toolbar">
-      <ShortcutSearchBar v-model:filter="searchFilter" @search="handleSearch" @clear="handleClearSearch" />
+      <!-- 动作列表 -->
+      <div class="actions-list">
+        <div v-if="loading" class="loading-state">
+          <div class="loading-spinner"></div>
+          <span>加载中...</span>
+        </div>
+        <div v-else>
+          <div class="action-category">
+            <h4>全局快捷键</h4>
+            <div class="action-items">
+              <div v-for="action in globalActions" :key="action.key" class="action-item">
+                <div class="action-name">{{ action.displayName }}</div>
+                <div
+                  class="shortcut-key-editor"
+                  :class="{ editing: isEditing(action.key), configured: action.shortcut }"
+                  @click="startEdit(action.key)"
+                  @keydown="handleKeyDown($event, action.key)"
+                  @blur="stopEdit(action.key)"
+                  tabindex="0"
+                >
+                  <span v-if="!isEditing(action.key)" class="shortcut-display">
+                    <template v-if="action.shortcut">
+                      <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="modifier">
+                        {{ modifier }}
+                      </span>
+                      <span class="key">{{ action.shortcut.key }}</span>
+                    </template>
+                    <span v-else class="not-configured">点击配置</span>
+                  </span>
+                  <span v-else class="editing-hint">按下新的快捷键组合...</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-      <div class="toolbar-actions">
-        <button class="btn btn-primary" @click="handleAddShortcut" :disabled="loading">
-          <i class="icon-plus"></i>
-          添加快捷键
-        </button>
-
-        <div class="dropdown">
-          <button class="btn btn-secondary dropdown-toggle" :disabled="loading">
-            <i class="icon-more"></i>
-            更多操作
-          </button>
-          <div class="dropdown-menu">
-            <button @click="handleExport" :disabled="loading">
-              <i class="icon-export"></i>
-              导出配置
-            </button>
-            <button @click="handleImport" :disabled="loading">
-              <i class="icon-import"></i>
-              导入配置
-            </button>
-            <div class="dropdown-divider"></div>
-            <button @click="handleReset" :disabled="loading" class="text-danger">
-              <i class="icon-reset"></i>
-              重置到默认
-            </button>
+          <div class="action-category">
+            <h4>终端快捷键</h4>
+            <div class="action-items">
+              <div v-for="action in terminalActions" :key="action.key" class="action-item">
+                <div class="action-name">{{ action.displayName }}</div>
+                <div
+                  class="shortcut-key-editor"
+                  :class="{ editing: isEditing(action.key), configured: action.shortcut }"
+                  @click="startEdit(action.key)"
+                  @keydown="handleKeyDown($event, action.key)"
+                  @blur="stopEdit(action.key)"
+                  tabindex="0"
+                >
+                  <span v-if="!isEditing(action.key)" class="shortcut-display">
+                    <template v-if="action.shortcut">
+                      <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="modifier">
+                        {{ modifier }}
+                      </span>
+                      <span class="key">{{ action.shortcut.key }}</span>
+                    </template>
+                    <span v-else class="not-configured">点击配置</span>
+                  </span>
+                  <span v-else class="editing-hint">按下新的快捷键组合...</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
+
+      <!-- 操作按钮 -->
+      <div class="actions-section">
+        <x-button variant="outline" @click="handleReset" :disabled="loading">重置到默认</x-button>
+      </div>
     </div>
-
-    <!-- 错误提示 -->
-    <div v-if="error" class="alert alert-danger">
-      <i class="icon-error"></i>
-      {{ error }}
-      <button class="btn-close" @click="clearError"></button>
-    </div>
-
-    <!-- 冲突警告 -->
-    <div v-if="hasConflicts" class="alert alert-warning">
-      <i class="icon-warning"></i>
-      检测到 {{ conflictCount }} 个快捷键冲突，请及时处理
-      <button class="btn btn-sm btn-warning" @click="showConflictDialog = true">查看详情</button>
-    </div>
-
-    <!-- 快捷键列表 -->
-    <div class="settings-content">
-      <ShortcutList :items="filteredShortcuts" :loading="loading" @action="handleShortcutAction" />
-    </div>
-
-    <!-- 快捷键编辑器对话框 -->
-    <ShortcutEditor v-if="showEditor" :options="editorOptions" @save="handleSaveShortcut" @cancel="handleCancelEdit" />
-
-    <!-- 冲突详情对话框 -->
-    <ShortcutConflictDialog
-      v-if="showConflictDialog"
-      :conflicts="conflicts"
-      @resolve="handleResolveConflict"
-      @close="showConflictDialog = false"
-    />
-
-    <!-- 导入文件输入 -->
-    <input ref="importFileInput" type="file" accept=".json" style="display: none" @change="handleImportFile" />
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted, watch } from 'vue'
-  import { useShortcuts, useShortcutValidation } from '@/composables/useShortcuts'
-  import { ShortcutList, ShortcutEditor, ShortcutConflictDialog, ShortcutSearchBar, ShortcutStatistics } from './index'
-  import type {
-    ShortcutListItem,
-    ShortcutSearchFilter,
-    ShortcutEditorOptions,
-    ShortcutActionEvent,
-    ShortcutEditorMode,
-    ShortcutActionType,
-  } from './types'
-  import type { ShortcutBinding, ShortcutCategory } from '@/api/shortcuts/types'
+  import { ref, computed, onMounted } from 'vue'
+  import { handleErrorWithMessage } from '@/utils/errorHandler'
+  import { useShortcuts } from '@/composables/useShortcuts'
+  import { createMessage } from '@/ui/composables/message-api'
+  import { useShortcutStore } from '@/stores/shortcuts'
+  import { SHORTCUT_ACTIONS } from '@/shortcuts/constants'
+  import { confirmWarning } from '@/ui/composables/confirm-api'
+
+  import type { ShortcutBinding } from '@/types'
+  import { ShortcutCategory } from '@/types'
 
   // 组合式API
   const {
     config,
     loading,
-    error,
     hasConflicts,
-    statistics,
+
     initialize,
     addShortcut,
     removeShortcut,
     updateShortcut,
     resetToDefaults,
-    exportConfig,
-    importConfig,
-    clearError,
   } = useShortcuts()
 
-  const { lastConflictDetection } = useShortcutValidation()
+  const store = useShortcutStore()
+  const lastConflictDetection = computed(() => store.lastConflictDetection)
 
   // 响应式状态
-  const searchFilter = ref<ShortcutSearchFilter>({
-    query: '',
-    categories: [],
-    conflictsOnly: false,
-    errorsOnly: false,
-  })
-
-  const showEditor = ref(false)
-  const showConflictDialog = ref(false)
-  const editorOptions = ref<ShortcutEditorOptions>({
-    mode: ShortcutEditorMode.Add,
-  })
-
-  const importFileInput = ref<HTMLInputElement>()
+  const editingActionKey = ref<string | null>(null)
+  const capturedShortcut = ref<{ key: string; modifiers: string[] } | null>(null)
 
   // 计算属性
   const conflicts = computed(() => lastConflictDetection.value?.conflicts || [])
   const conflictCount = computed(() => conflicts.value.length)
 
-  const allShortcuts = computed((): ShortcutListItem[] => {
-    if (!config.value) return []
-
-    const items: ShortcutListItem[] = []
-
-    // 添加全局快捷键
-    config.value.global.forEach((binding, index) => {
-      items.push({
-        binding,
-        category: 'Global' as ShortcutCategory,
-        index,
-        hasConflict: hasShortcutConflict(binding, 'Global', index),
-      })
-    })
-
-    // 添加终端快捷键
-    config.value.terminal.forEach((binding, index) => {
-      items.push({
-        binding,
-        category: 'Terminal' as ShortcutCategory,
-        index,
-        hasConflict: hasShortcutConflict(binding, 'Terminal', index),
-      })
-    })
-
-    // 添加自定义快捷键
-    config.value.custom.forEach((binding, index) => {
-      items.push({
-        binding,
-        category: 'Custom' as ShortcutCategory,
-        index,
-        hasConflict: hasShortcutConflict(binding, 'Custom', index),
-      })
-    })
-
-    return items
-  })
-
-  const filteredShortcuts = computed(() => {
-    let items = allShortcuts.value
-
-    // 按查询关键词过滤
-    if (searchFilter.value.query) {
-      const query = searchFilter.value.query.toLowerCase()
-      items = items.filter(item => {
-        const keyMatches = item.binding.key.toLowerCase().includes(query)
-        const modifierMatches = item.binding.modifiers.some(m => m.toLowerCase().includes(query))
-        const actionMatches =
-          typeof item.binding.action === 'string'
-            ? item.binding.action.toLowerCase().includes(query)
-            : item.binding.action.action_type.toLowerCase().includes(query)
-
-        return keyMatches || modifierMatches || actionMatches
-      })
-    }
-
-    // 按类别过滤
-    if (searchFilter.value.categories.length > 0) {
-      items = items.filter(item => searchFilter.value.categories.includes(item.category))
-    }
-
-    // 只显示有冲突的
-    if (searchFilter.value.conflictsOnly) {
-      items = items.filter(item => item.hasConflict)
-    }
-
-    // 只显示有错误的
-    if (searchFilter.value.errorsOnly) {
-      items = items.filter(item => item.hasError)
-    }
-
-    return items
-  })
-
   // 方法
-  const hasShortcutConflict = (binding: ShortcutBinding, category: ShortcutCategory, index: number): boolean => {
-    if (!lastConflictDetection.value) return false
-
-    return lastConflictDetection.value.conflicts.some(conflict =>
-      conflict.conflicting_shortcuts.some(
-        cs =>
-          cs.category === category &&
-          cs.binding.key === binding.key &&
-          JSON.stringify(cs.binding.modifiers) === JSON.stringify(binding.modifiers)
-      )
-    )
-  }
-
-  const handleSearch = () => {
-    // 搜索逻辑已在计算属性中处理
-  }
-
-  const handleClearSearch = () => {
-    searchFilter.value = {
-      query: '',
-      categories: [],
-      conflictsOnly: false,
-      errorsOnly: false,
-    }
-  }
-
-  const handleAddShortcut = () => {
-    editorOptions.value = {
-      mode: ShortcutEditorMode.Add,
-    }
-    showEditor.value = true
-  }
-
-  const handleShortcutAction = (event: ShortcutActionEvent) => {
-    switch (event.type) {
-      case ShortcutActionType.Edit:
-        if (event.item) {
-          editorOptions.value = {
-            mode: ShortcutEditorMode.Edit,
-            initialShortcut: event.item.binding,
-            initialCategory: event.item.category,
-            initialIndex: event.item.index,
-          }
-          showEditor.value = true
-        }
-        break
-
-      case ShortcutActionType.Delete:
-        if (event.item) {
-          handleDeleteShortcut(event.item)
-        }
-        break
-
-      case ShortcutActionType.Duplicate:
-        if (event.item) {
-          handleDuplicateShortcut(event.item)
-        }
-        break
-    }
-  }
-
-  const handleSaveShortcut = async (shortcut: ShortcutBinding, category: ShortcutCategory, index?: number) => {
-    try {
-      if (index !== undefined) {
-        await updateShortcut(category, index, shortcut)
-      } else {
-        await addShortcut(category, shortcut)
-      }
-      showEditor.value = false
-    } catch (error) {
-      console.error('保存快捷键失败:', error)
-    }
-  }
-
-  const handleCancelEdit = () => {
-    showEditor.value = false
-  }
-
-  const handleDeleteShortcut = async (item: ShortcutListItem) => {
-    if (await confirm('确定要删除这个快捷键吗？')) {
-      try {
-        await removeShortcut(item.category, item.index)
-      } catch (error) {
-        console.error('删除快捷键失败:', error)
-      }
-    }
-  }
-
-  const handleDuplicateShortcut = (item: ShortcutListItem) => {
-    editorOptions.value = {
-      mode: ShortcutEditorMode.Add,
-      initialShortcut: { ...item.binding },
-      initialCategory: item.category,
-    }
-    showEditor.value = true
-  }
-
-  const handleExport = async () => {
-    try {
-      const configJson = await exportConfig()
-      const blob = new Blob([configJson], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'shortcuts-config.json'
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('导出配置失败:', error)
-    }
-  }
-
-  const handleImport = () => {
-    importFileInput.value?.click()
-  }
-
-  const handleImportFile = async (event: Event) => {
-    const target = event.target as HTMLInputElement
-    const file = target.files?.[0]
-
-    if (file) {
-      try {
-        const text = await file.text()
-        await importConfig(text)
-      } catch (error) {
-        console.error('导入配置失败:', error)
-      }
-    }
-
-    // 清空文件输入
-    target.value = ''
+  const getActionName = (action: string): string => {
+    return SHORTCUT_ACTIONS[action as keyof typeof SHORTCUT_ACTIONS] || action
   }
 
   const handleReset = async () => {
-    if (await confirm('确定要重置所有快捷键到默认配置吗？此操作不可撤销。')) {
-      try {
+    try {
+      const shouldReset = await confirmWarning(
+        '此操作将重置所有快捷键到默认配置，当前的自定义设置将会丢失。',
+        '重置快捷键配置'
+      )
+
+      if (shouldReset) {
         await resetToDefaults()
-      } catch (error) {
-        console.error('重置配置失败:', error)
+
+        // 只更新监听器配置，不做其他操作
+        if ((window as any).reloadShortcuts) {
+          await (window as any).reloadShortcuts()
+        }
+
+        createMessage.success('快捷键配置已重置为默认')
       }
+    } catch (error) {
+      handleErrorWithMessage(error, '重置配置失败')
     }
   }
 
-  const handleResolveConflict = (conflictIndex: number) => {
-    // 处理冲突解决逻辑
-    showConflictDialog.value = false
+  // 全局动作定义
+  const globalActionKeys = ['copy_to_clipboard', 'paste_from_clipboard', 'terminal_search', 'open_settings']
+
+  // 终端动作定义
+  const terminalActionKeys = [
+    'new_tab',
+    'close_tab',
+    'clear_terminal',
+    'switch_to_tab_1',
+    'switch_to_tab_2',
+    'switch_to_tab_3',
+    'switch_to_tab_4',
+    'switch_to_tab_5',
+    'switch_to_last_tab',
+    'accept_completion',
+    'increase_font_size',
+    'decrease_font_size',
+  ]
+
+  // 查找快捷键配置
+  const findShortcut = (actionKey: string) => {
+    if (!config.value) return null
+
+    // 在所有类别中查找
+    for (const shortcut of [...config.value.global, ...config.value.terminal, ...config.value.custom]) {
+      if (shortcut.action === actionKey) {
+        return shortcut
+      }
+    }
+    return null
+  }
+
+  // 计算全局动作列表
+  const globalActions = computed(() => {
+    return globalActionKeys.map(actionKey => ({
+      key: actionKey,
+      displayName: SHORTCUT_ACTIONS[actionKey as keyof typeof SHORTCUT_ACTIONS] || actionKey,
+      shortcut: findShortcut(actionKey),
+    }))
+  })
+
+  // 计算终端动作列表
+  const terminalActions = computed(() => {
+    return terminalActionKeys.map(actionKey => ({
+      key: actionKey,
+      displayName: SHORTCUT_ACTIONS[actionKey as keyof typeof SHORTCUT_ACTIONS] || actionKey,
+      shortcut: findShortcut(actionKey),
+    }))
+  })
+
+  // 编辑状态管理
+  const isEditing = (actionKey: string) => editingActionKey.value === actionKey
+
+  const startEdit = (actionKey: string) => {
+    editingActionKey.value = actionKey
+    capturedShortcut.value = null
+  }
+
+  const stopEdit = (actionKey: string) => {
+    if (editingActionKey.value === actionKey) {
+      editingActionKey.value = null
+      if (capturedShortcut.value) {
+        // 保存新的快捷键
+        saveShortcut(actionKey, capturedShortcut.value)
+      }
+      capturedShortcut.value = null
+    }
+  }
+
+  const handleKeyDown = (event: KeyboardEvent, actionKey: string) => {
+    if (!isEditing(actionKey)) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const modifiers: string[] = []
+    if (event.ctrlKey) modifiers.push('ctrl')
+    if (event.metaKey) modifiers.push('cmd')
+    if (event.altKey) modifiers.push('alt')
+    if (event.shiftKey) modifiers.push('shift')
+
+    let key = event.key
+    if (key === ' ') key = 'Space'
+    if (key === 'Control' || key === 'Meta' || key === 'Alt' || key === 'Shift') return
+
+    capturedShortcut.value = { key, modifiers }
+
+    // 自动保存并退出编辑模式
+    setTimeout(() => stopEdit(actionKey), 100)
+  }
+
+  const saveShortcut = async (actionKey: string, shortcut: { key: string; modifiers: string[] }) => {
+    try {
+      const shortcutBinding: ShortcutBinding = {
+        key: shortcut.key,
+        modifiers: shortcut.modifiers,
+        action: actionKey,
+      }
+
+      // 确定类别
+      const category = globalActionKeys.includes(actionKey) ? ShortcutCategory.Global : ShortcutCategory.Terminal
+
+      // 先删除现有的配置（内部处理）
+      await removeExistingShortcut(actionKey)
+
+      // 添加新配置
+      await addShortcut(category, shortcutBinding)
+
+      // 重新加载快捷键监听器配置（仅更新监听器，不刷新页面）
+      if ((window as any).reloadShortcuts) {
+        await (window as any).reloadShortcuts()
+      }
+
+      createMessage.success(
+        `${SHORTCUT_ACTIONS[actionKey as keyof typeof SHORTCUT_ACTIONS] || actionKey} 快捷键设置成功`
+      )
+    } catch (error) {
+      handleErrorWithMessage(error, '保存快捷键失败')
+    }
+  }
+
+  const removeExistingShortcut = async (actionKey: string) => {
+    if (!config.value) return
+
+    // 在所有类别中查找并删除现有配置（静默处理）
+    const categories = [
+      { name: ShortcutCategory.Global, shortcuts: config.value.global },
+      { name: ShortcutCategory.Terminal, shortcuts: config.value.terminal },
+      { name: ShortcutCategory.Custom, shortcuts: config.value.custom },
+    ]
+
+    for (const cat of categories) {
+      const index = cat.shortcuts.findIndex(s => s.action === actionKey)
+      if (index !== -1) {
+        await removeShortcut(cat.name, index)
+        return
+      }
+    }
   }
 
   // 生命周期
   onMounted(async () => {
-    try {
-      await initialize()
-    } catch (err) {
-      console.error('快捷键设置初始化失败:', err)
+    // 使用新的初始化检查机制
+    if (!store.initialized && !loading.value) {
+      try {
+        await initialize()
+      } catch (err) {
+        handleErrorWithMessage(err, '快捷键设置初始化失败')
+      }
     }
   })
 </script>
 
 <style scoped>
   .shortcut-settings {
-    padding: 20px;
-    max-width: 1200px;
-    margin: 0 auto;
+    padding: var(--spacing-lg);
+    min-height: fit-content;
+    padding-bottom: var(--spacing-xl);
   }
 
-  .settings-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
+  .settings-card {
+    background-color: var(--color-primary-alpha);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
   }
 
-  .settings-title {
-    font-size: 24px;
+  .section-title {
+    font-size: var(--font-size-md);
     font-weight: 600;
-    margin: 0;
-  }
-
-  .settings-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    gap: 16px;
-  }
-
-  .toolbar-actions {
-    display: flex;
-    gap: 12px;
-  }
-
-  .settings-content {
-    background: var(--bg-secondary);
-    border-radius: 8px;
-    padding: 20px;
+    color: var(--text-200);
+    margin: 0 0 var(--spacing-md) 0;
   }
 
   .alert {
-    padding: 12px 16px;
-    border-radius: 6px;
-    margin-bottom: 16px;
     display: flex;
     align-items: center;
-    gap: 8px;
-  }
-
-  .alert-danger {
-    background: var(--error-bg);
-    color: var(--error-text);
-    border: 1px solid var(--error-border);
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius);
+    margin-bottom: var(--spacing-md);
   }
 
   .alert-warning {
@@ -421,99 +333,140 @@
     border: 1px solid var(--warning-border);
   }
 
-  .btn {
-    padding: 8px 16px;
-    border-radius: 6px;
-    border: none;
-    cursor: pointer;
-    font-size: 14px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.2s;
+  .alert-icon {
+    font-size: var(--font-size-md);
   }
 
-  .btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
+  .actions-list {
+    margin-bottom: var(--spacing-lg);
   }
 
-  .btn-primary {
-    background: var(--primary);
-    color: white;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--primary-hover);
-  }
-
-  .btn-secondary {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: var(--bg-hover);
-  }
-
-  .btn-warning {
-    background: var(--warning);
-    color: white;
-  }
-
-  .btn-close {
-    background: none;
-    border: none;
-    color: inherit;
-    cursor: pointer;
-    margin-left: auto;
-  }
-
-  .dropdown {
-    position: relative;
-  }
-
-  .dropdown-menu {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    box-shadow: var(--shadow-lg);
-    min-width: 160px;
-    z-index: 1000;
-    display: none;
-  }
-
-  .dropdown:hover .dropdown-menu {
-    display: block;
-  }
-
-  .dropdown-menu button {
-    width: 100%;
-    padding: 8px 12px;
-    border: none;
-    background: none;
-    text-align: left;
-    cursor: pointer;
+  .loading-state,
+  .empty-state {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-xl);
+    color: var(--text-400);
   }
 
-  .dropdown-menu button:hover {
-    background: var(--bg-hover);
+  .loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-300);
+    border-top: 2px solid var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
   }
 
-  .dropdown-divider {
-    height: 1px;
-    background: var(--border);
-    margin: 4px 0;
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
   }
 
-  .text-danger {
-    color: var(--error-text);
+  .action-category {
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .action-category h4 {
+    margin: 0 0 var(--spacing-md) 0;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-200);
+  }
+
+  .action-items {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .action-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md);
+    background-color: var(--bg-400);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-300);
+    gap: var(--spacing-md);
+  }
+
+  .action-name {
+    flex: 1;
+    color: var(--text-200);
+    font-weight: 500;
+  }
+
+  .shortcut-key-editor {
+    flex: 2;
+    min-width: 200px;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background-color: var(--bg-500);
+    border: 2px solid var(--border-300);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: all 0.2s;
+    outline: none;
+  }
+
+  .shortcut-key-editor:hover {
+    border-color: var(--border-200);
+  }
+
+  .shortcut-key-editor.configured {
+    border-color: var(--color-primary-alpha);
+  }
+
+  .shortcut-key-editor.editing {
+    border-color: var(--color-primary);
+    background-color: var(--color-primary-alpha);
+    box-shadow: 0 0 0 2px var(--color-primary-alpha);
+  }
+
+  .shortcut-display {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+  }
+
+  .not-configured {
+    color: var(--text-400);
+    font-style: italic;
+  }
+
+  .editing-hint {
+    color: var(--color-primary);
+    font-weight: 500;
+  }
+
+  .modifier,
+  .key {
+    padding: 2px 6px;
+    background-color: var(--bg-500);
+    border: 1px solid var(--border-300);
+    border-radius: var(--border-radius);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-mono);
+    color: var(--text-200);
+  }
+
+  .key {
+    background-color: var(--color-primary-alpha);
+    color: var(--color-primary);
+    border-color: var(--color-primary-alpha);
+  }
+
+  .actions-section {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-md);
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--border-300);
   }
 </style>

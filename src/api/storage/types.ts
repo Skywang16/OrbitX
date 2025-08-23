@@ -3,7 +3,7 @@
  */
 
 // 重新导出存储类型
-export * from '@/types/storage'
+export type { SessionState, DataQuery, SaveOptions, ConfigSection } from '@/types'
 
 /**
  * 存储操作结果

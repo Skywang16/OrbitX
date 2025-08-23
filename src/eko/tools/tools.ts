@@ -6,58 +6,35 @@ import type { Tool } from '../types'
 import { globalToolRegistry } from './tool-registry'
 
 // 导入所有工具
-import { readFileTool } from './read-file'
-import { readManyFilesTool } from './read-many-files'
-import { writeFileTool } from './write-file'
-import { shellTool } from './shell'
-import { webFetchTool } from './web-fetch'
-import { webSearchTool } from './web-search'
-import { memoryTool } from './memoryTool'
+import { readFileTool } from './toolList/read-file'
+import { readManyFilesTool } from './toolList/read-many-files'
+import { readDirectoryTool } from './toolList/read-directory'
+
+import { createFileTool } from './toolList/create-file'
+import { editFileTool } from './toolList/edit-file'
+import { shellTool } from './toolList/shell'
+import { webFetchTool } from './toolList/web-fetch'
+
+import { orbitSearchTool } from './toolList/orbit-search'
 
 /**
- * 所有可用工具的数组
+ * 只读工具 - Chat模式可以使用
  */
-export const allTools: Tool[] = [
-  // 文件操作工具
+export const readOnlyTools: Tool[] = [readFileTool, readManyFilesTool, readDirectoryTool, webFetchTool, orbitSearchTool]
+
+/**
+ * 所有工具 - Agent模式可以使用
+ */
+export const allTools: Tool<unknown>[] = [
   readFileTool,
   readManyFilesTool,
-  writeFileTool,
-
-  // 系统工具
+  readDirectoryTool,
+  createFileTool,
+  editFileTool,
   shellTool,
-
-  // 网络工具
   webFetchTool,
-  webSearchTool,
-
-  // 内存管理工具
-  memoryTool,
+  orbitSearchTool,
 ]
-
-/**
- * 按分类组织的工具
- */
-export const toolsByCategory = {
-  file: [readFileTool, readManyFilesTool, writeFileTool],
-  system: [shellTool],
-  network: [webFetchTool, webSearchTool],
-  memory: [memoryTool],
-}
-
-/**
- * 核心工具（最常用的工具）
- */
-export const coreTools: Tool[] = [readFileTool, writeFileTool, shellTool, memoryTool]
-
-/**
- * 网络工具
- */
-export const networkTools: Tool[] = [webFetchTool, webSearchTool]
-
-/**
- * 文件操作工具
- */
-export const fileTools: Tool[] = [readFileTool, readManyFilesTool, writeFileTool]
 
 /**
  * 注册所有工具到全局注册表
@@ -69,7 +46,6 @@ export function registerAllTools(): void {
       metadata: {
         description: readFileTool.description,
         category: 'file',
-        version: '1.0.0',
         tags: ['file', 'read', 'content'],
       },
     },
@@ -78,17 +54,32 @@ export function registerAllTools(): void {
       metadata: {
         description: readManyFilesTool.description,
         category: 'file',
-        version: '1.0.0',
         tags: ['file', 'read', 'batch', 'multiple'],
       },
     },
     {
-      tool: writeFileTool,
+      tool: readDirectoryTool,
       metadata: {
-        description: writeFileTool.description,
+        description: readDirectoryTool.description,
         category: 'file',
-        version: '1.0.0',
-        tags: ['file', 'write', 'create'],
+        tags: ['directory', 'list', 'folder'],
+      },
+    },
+
+    {
+      tool: createFileTool,
+      metadata: {
+        description: createFileTool.description,
+        category: 'file',
+        tags: ['file', 'create', 'new'],
+      },
+    },
+    {
+      tool: editFileTool,
+      metadata: {
+        description: editFileTool.description,
+        category: 'file',
+        tags: ['file', 'edit', 'modify', 'replace', 'line'],
       },
     },
     {
@@ -96,7 +87,6 @@ export function registerAllTools(): void {
       metadata: {
         description: shellTool.description,
         category: 'system',
-        version: '1.0.0',
         tags: ['shell', 'command', 'execute', 'terminal'],
       },
     },
@@ -105,26 +95,15 @@ export function registerAllTools(): void {
       metadata: {
         description: webFetchTool.description,
         category: 'network',
-        version: '1.0.0',
         tags: ['web', 'http', 'fetch', 'api'],
       },
     },
     {
-      tool: webSearchTool,
+      tool: orbitSearchTool,
       metadata: {
-        description: webSearchTool.description,
-        category: 'network',
-        version: '1.0.0',
-        tags: ['web', 'search', 'internet', 'information'],
-      },
-    },
-    {
-      tool: memoryTool,
-      metadata: {
-        description: memoryTool.description,
-        category: 'memory',
-        version: '1.0.0',
-        tags: ['memory', 'storage', 'cache', 'data'],
+        description: orbitSearchTool.description,
+        category: 'search',
+        tags: ['search', 'semantic', 'code', 'context', 'intelligent', 'analysis'],
       },
     },
   ]
@@ -133,64 +112,10 @@ export function registerAllTools(): void {
 }
 
 /**
- * 获取工具by名称
- */
-export function getToolByName(name: string): Tool | undefined {
-  return allTools.find(tool => tool.name === name)
-}
-
-/**
- * 获取工具by分类
- */
-export function getToolsByCategory(category: keyof typeof toolsByCategory): Tool[] {
-  return toolsByCategory[category] || []
-}
-
-/**
- * 搜索工具
- */
-export function searchTools(query: string): Tool[] {
-  const lowerQuery = query.toLowerCase()
-  return allTools.filter(
-    tool => tool.name.toLowerCase().includes(lowerQuery) || tool.description.toLowerCase().includes(lowerQuery)
-  )
-}
-
-/**
- * 获取工具统计信息
- */
-export function getToolsStats(): {
-  total: number
-  byCategory: Record<string, number>
-  mostUsed: string[]
-} {
-  const total = allTools.length
-  const byCategory: Record<string, number> = {}
-
-  for (const [category, tools] of Object.entries(toolsByCategory)) {
-    byCategory[category] = tools.length
-  }
-
-  // 假设的使用频率排序（实际应用中可以根据真实使用数据排序）
-  const mostUsed = ['read_file', 'write_file', 'shell', 'memory', 'web_fetch', 'read_many_files', 'web_search']
-
-  return {
-    total,
-    byCategory,
-    mostUsed,
-  }
-}
-
-/**
  * 按模式筛选工具
- * - chat 模式：仅允许读取类工具，禁止任何写入/执行类工具
- * - agent 模式：允许所有工具
  */
 export function getToolsForMode(mode: 'chat' | 'agent'): Tool[] {
-  if (mode === 'agent') return allTools
-
-  // 只读集合：文件读取、多文件读取、网络获取/搜索
-  return [readFileTool, readManyFilesTool, webFetchTool, webSearchTool]
+  return mode === 'agent' ? allTools : readOnlyTools
 }
 
 // 自动注册所有工具

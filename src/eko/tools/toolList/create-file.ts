@@ -1,0 +1,68 @@
+/**
+ * 文件创建工具
+ */
+
+import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
+import type { ToolResult } from '@eko-ai/eko/types'
+import { ValidationError } from '../tool-error'
+import { writeTextFile } from '@tauri-apps/plugin-fs'
+
+export interface CreateFileParams {
+  path: string
+  content: string
+}
+
+/**
+ * 文件创建工具
+ */
+export class CreateFileTool extends ModifiableTool {
+  constructor() {
+    super(
+      'create_file',
+      `创建新文件并写入内容。支持创建任意类型的文件，包括代码文件、配置文件、文档等。会自动创建不存在的父目录。如果文件已存在会直接覆盖。必须使用绝对路径。`,
+      {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description:
+              '文件的绝对路径。必须是完整路径，例如："/Users/user/project/src/utils.ts"、"/home/user/workspace/config.json"',
+          },
+          content: {
+            type: 'string',
+            description: '文件内容。示例："export function hello() { return \'Hello\' }"',
+          },
+        },
+        required: ['path', 'content'],
+      }
+    )
+  }
+
+  protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
+    const { path, content } = context.parameters as unknown as CreateFileParams
+
+    if (!path?.trim()) {
+      throw new ValidationError('文件路径不能为空')
+    }
+
+    try {
+      await writeTextFile(path, content)
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `文件创建成功: ${path}
+状态：新文件已成功创建。
+建议：使用 read_file 工具验证文件内容，或使用 edit_file 工具进行进一步修改。`,
+          },
+        ],
+      }
+    } catch (error) {
+      throw new Error(`创建文件失败: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+}
+
+// 导出工具实例
+export const createFileTool = new CreateFileTool()

@@ -1,18 +1,20 @@
 /*!
- * 快捷键配置系统模块
- *
- * 提供快捷键的验证、冲突检测、平台适配和管理功能。
+ * 全新快捷键系统
+ * 
+ * 采用配置驱动设计，支持：
+ * - 统一的快捷键管理
+ * - 动态功能映射  
+ * - 冲突检测和验证
+ * - 运行时配置更新
  */
 
+pub mod actions;
 pub mod commands;
-pub mod conflict_detector;
-pub mod manager;
-pub mod platform_adapter;
-pub mod validator;
+pub mod core;
+pub mod types;
 
-// 重新导出核心类型和函数
+// 重新导出核心模块  
+pub use actions::*;
 pub use commands::*;
-pub use conflict_detector::*;
-pub use manager::*;
-pub use platform_adapter::*;
-pub use validator::*;
+pub use core::*;
+pub use types::*;

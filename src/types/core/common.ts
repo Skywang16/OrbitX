@@ -1,6 +1,6 @@
 /**
  * 核心通用类型定义
- * 包含项目中通用的基础类型
+ * 不依赖任何业务类型，作为整个类型系统的基础
  */
 
 // ===== 基础通用类型 =====
@@ -118,14 +118,6 @@ export interface PluginInfo {
   version: string
   enabled: boolean
   description?: string
-}
-
-// ===== 主题相关类型 =====
-
-export interface ThemeInfo {
-  name: string
-  colors: Record<string, string>
-  isDark: boolean
 }
 
 // ===== 快捷键相关类型 =====

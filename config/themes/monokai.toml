@@ -2,13 +2,9 @@
 name = "monokai"
 theme_type = "dark"
 
-[theme.colors]
-foreground = "#f8f8f2"
-background = "#272822"
-cursor = "#f8f8f0"
-selection = "#49483e"
 
-[theme.colors.ansi]
+
+[theme.ansi]
 black = "#272822"
 red = "#f92672"
 green = "#a6e22e"
@@ -18,7 +14,7 @@ magenta = "#ae81ff"
 cyan = "#a1efe4"
 white = "#f8f8f2"
 
-[theme.colors.bright]
+[theme.bright]
 black = "#75715e"
 red = "#f92672"
 green = "#a6e22e"
@@ -39,11 +35,44 @@ type_name = "#66d9ef"
 operator = "#f92672"
 
 [theme.ui]
+# Monokai 背景色层次
+bg_100 = "#1e1f1c"
+bg_200 = "#272822"
+bg_300 = "#2f3129"
+bg_400 = "#383a2e"
+bg_500 = "#49483e"
+bg_600 = "#5a5954"
+bg_700 = "#75715e"
+
+# 边框层次
+border_200 = "rgba(73, 72, 62, 0.3)"
+border_300 = "rgba(73, 72, 62, 0.5)"
+border_400 = "rgba(73, 72, 62, 0.7)"
+
+# 文本层次
+text_100 = "#f9f8f5"
+text_200 = "#f8f8f2"
+text_300 = "#e6e6e6"
+text_400 = "#bfbfbf"
+text_500 = "#75715e"
+
+# 状态颜色
 primary = "#66d9ef"
-secondary = "#75715e"
+primary_hover = "#4fc3d7"
+primary_alpha = "rgba(102, 217, 239, 0.1)"
 success = "#a6e22e"
 warning = "#f4bf75"
 error = "#f92672"
 info = "#66d9ef"
-border = "#49483e"
-divider = "#49483e"
+
+# 交互状态
+hover = "#383a2e"
+active = "#49483e"
+focus = "#66d9ef"
+selection = "rgba(73, 72, 62, 0.8)"
+
+# 阴影和其他UI变量
+shadow_sm = "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
+font_family = "'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace"
+border_radius = "6px"
+border_radius_lg = "8px"

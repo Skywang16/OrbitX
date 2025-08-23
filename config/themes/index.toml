@@ -3,118 +3,118 @@ totalThemes = 10
 customThemes = []
 
 [lastUpdated]
-secs_since_epoch = 1753845493
-nanos_since_epoch = 570375000
+secs_since_epoch = 1755799109
+nanos_since_epoch = 43865000
 
 [[builtinThemes]]
 name = "light"
 file = "light.toml"
 type = "light"
 builtin = true
-fileSize = 824
+fileSize = 1414
 
 [builtinThemes.lastModified]
-secs_since_epoch = 1753840037
-nanos_since_epoch = 690538839
+secs_since_epoch = 1755067778
+nanos_since_epoch = 656688940
 
 [[builtinThemes]]
 name = "solarized-dark"
 file = "solarized-dark.toml"
 type = "dark"
 builtin = true
-fileSize = 832
+fileSize = 1257
 
 [builtinThemes.lastModified]
-secs_since_epoch = 1753840907
-nanos_since_epoch = 448955936
+secs_since_epoch = 1755067818
+nanos_since_epoch = 941779822
 
 [[builtinThemes]]
 name = "dark"
 file = "dark.toml"
 type = "dark"
 builtin = true
-fileSize = 822
+fileSize = 1380
 
 [builtinThemes.lastModified]
-secs_since_epoch = 1753840023
-nanos_since_epoch = 886319761
+secs_since_epoch = 1755067775
+nanos_since_epoch = 106386189
 
 [[builtinThemes]]
 name = "one-dark"
 file = "one-dark.toml"
 type = "dark"
 builtin = true
-fileSize = 826
+fileSize = 1249
 
 [builtinThemes.lastModified]
-secs_since_epoch = 1753840875
-nanos_since_epoch = 196547806
+secs_since_epoch = 1755067785
+nanos_since_epoch = 691702671
 
 [[builtinThemes]]
 name = "gruvbox-dark"
 file = "gruvbox-dark.toml"
 type = "dark"
 builtin = true
-fileSize = 830
+fileSize = 1257
 
 [builtinThemes.lastModified]
-secs_since_epoch = 1753840926
-nanos_since_epoch = 760034969
+secs_since_epoch = 1755067814
+nanos_since_epoch = 924253390
 
 [[builtinThemes]]
 name = "solarized-light"
 file = "solarized-light.toml"
 type = "light"
 builtin = true
-fileSize = 834
+fileSize = 1275
 
 [builtinThemes.lastModified]
-secs_since_epoch = 1753840915
-nanos_since_epoch = 532911505
+secs_since_epoch = 1755067822
+nanos_since_epoch = 488899867
 
 [[builtinThemes]]
 name = "tokyo-night"
 file = "tokyo-night.toml"
 type = "dark"
 builtin = true
-fileSize = 829
+fileSize = 1257
 
 [builtinThemes.lastModified]
-secs_since_epoch = 1753840946
-nanos_since_epoch = 7989290
+secs_since_epoch = 1755067766
+nanos_since_epoch = 369585825
 
 [[builtinThemes]]
 name = "dracula"
 file = "dracula.toml"
 type = "dark"
 builtin = true
-fileSize = 825
+fileSize = 1248
 
 [builtinThemes.lastModified]
-secs_since_epoch = 1753840885
-nanos_since_epoch = 833839899
+secs_since_epoch = 1755067943
+nanos_since_epoch = 527266130
 
 [[builtinThemes]]
 name = "monokai"
 file = "monokai.toml"
 type = "dark"
 builtin = true
-fileSize = 825
+fileSize = 1248
 
 [builtinThemes.lastModified]
-secs_since_epoch = 1753840896
-nanos_since_epoch = 489064319
+secs_since_epoch = 1755067782
+nanos_since_epoch = 164093190
 
 [[builtinThemes]]
 name = "nord"
 file = "nord.toml"
 type = "dark"
 builtin = true
-fileSize = 822
+fileSize = 1241
 
 [builtinThemes.lastModified]
-secs_since_epoch = 1753840936
-nanos_since_epoch = 856661927
+secs_since_epoch = 1755067811
+nanos_since_epoch = 356357322
 
 [defaults]
 lightTheme = "light"

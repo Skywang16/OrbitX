@@ -42,7 +42,7 @@ export class APIClient {
    * 执行Tauri命令调用
    */
   async invoke<T>(command: string, args?: Record<string, unknown>, options?: APIOptions): Promise<T> {
-    const startTime = Date.now()
+    // const startTime = Date.now()
 
     try {
       // 检查是否已被取消
@@ -75,7 +75,7 @@ export class APIClient {
         reject(new APIError('Request was aborted', 'ABORTED'))
       }
 
-      const timeoutId = setTimeout(() => {
+      const timeoutId: NodeJS.Timeout = setTimeout(() => {
         reject(new APIError(`Request timeout after ${timeout}ms`, 'TIMEOUT'))
       }, timeout)
 
@@ -102,7 +102,7 @@ export class APIClient {
   /**
    * 清理资源
    */
-  private cleanup(signal?: AbortSignal, abortHandler?: () => void, timeoutId?: number) {
+  private cleanup(signal?: AbortSignal, abortHandler?: () => void, timeoutId?: NodeJS.Timeout) {
     if (timeoutId) {
       clearTimeout(timeoutId)
     }

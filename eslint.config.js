@@ -41,7 +41,7 @@ export default [
       '@typescript-eslint/no-unused-vars': 'off', // 禁用未使用变量检查，防止自动删除导入
       '@typescript-eslint/no-explicit-any': 'warn',
       'no-unused-vars': 'off', // 关闭基础规则，使用 TypeScript 版本
-      'no-console': 'warn',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-undef': 'off',
     },
   },
@@ -63,7 +63,7 @@ export default [
       '@typescript-eslint/no-unused-vars': 'off', // 禁用未使用变量检查，防止自动删除导入
       '@typescript-eslint/no-explicit-any': 'warn',
       'no-unused-vars': 'off', // 关闭基础规则，使用 TypeScript 版本
-      'no-console': 'warn',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-undef': 'off',
     },
   },
@@ -86,7 +86,7 @@ export default [
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-      'no-console': 'warn',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-undef': 'off',
     },
   },

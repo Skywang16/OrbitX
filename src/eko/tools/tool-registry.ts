@@ -9,7 +9,6 @@ export interface ToolMetadata {
   name: string
   description: string
   category: string
-  version: string
   author?: string
   tags?: string[]
   deprecated?: boolean
@@ -220,4 +219,3 @@ export class ToolRegistry {
 
 // 全局工具注册表实例
 export const globalToolRegistry = new ToolRegistry()
-

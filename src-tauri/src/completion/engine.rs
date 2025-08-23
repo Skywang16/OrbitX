@@ -2,13 +2,13 @@
 //!
 //! 协调各种补全提供者，提供统一的补全接口
 
-use crate::completion::cache::CompletionCache;
 use crate::completion::providers::{
     CompletionProvider, ContextAwareProviderWrapper, FilesystemProvider, GitCompletionProvider,
     HistoryProvider, NpmCompletionProvider, SystemCommandsProvider,
 };
 use crate::completion::smart_provider::SmartCompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionResponse};
+use crate::storage::cache::UnifiedCache;
 use crate::utils::error::AppResult;
 use anyhow::anyhow;
 use std::sync::Arc;
@@ -23,12 +23,7 @@ pub struct CompletionEngineConfig {
     pub max_results: usize,
     /// 单个提供者的超时时间
     pub provider_timeout: Duration,
-    /// 是否启用缓存
-    pub enable_cache: bool,
-    /// 缓存容量
-    pub cache_capacity: usize,
-    /// 缓存TTL
-    pub cache_ttl: Duration,
+
     /// 最大重试次数
     pub max_retries: u32,
     /// 重试间隔
@@ -40,9 +35,7 @@ impl Default for CompletionEngineConfig {
         Self {
             max_results: 50,
             provider_timeout: Duration::from_millis(500),
-            enable_cache: true,
-            cache_capacity: 1000,
-            cache_ttl: Duration::from_secs(300),
+
             max_retries: 2,
             retry_interval: Duration::from_millis(100),
         }
@@ -53,8 +46,6 @@ impl Default for CompletionEngineConfig {
 pub struct CompletionEngine {
     /// 补全提供者列表
     providers: Vec<Arc<dyn CompletionProvider>>,
-    /// 缓存
-    cache: Option<CompletionCache>,
     /// 配置
     config: CompletionEngineConfig,
 }
@@ -62,18 +53,8 @@ pub struct CompletionEngine {
 impl CompletionEngine {
     /// 创建新的补全引擎
     pub fn new(config: CompletionEngineConfig) -> AppResult<Self> {
-        let cache = if config.enable_cache {
-            Some(CompletionCache::new(
-                config.cache_capacity,
-                config.cache_ttl,
-            )?)
-        } else {
-            None
-        };
-
         Ok(Self {
             providers: Vec::new(),
-            cache,
             config,
         })
     }
@@ -88,13 +69,16 @@ impl CompletionEngine {
     }
 
     /// 创建默认的补全引擎（包含所有标准提供者）
-    pub async fn with_default_providers(config: CompletionEngineConfig) -> AppResult<Self> {
+    pub async fn with_default_providers(
+        config: CompletionEngineConfig,
+        cache: Arc<UnifiedCache>,
+    ) -> AppResult<Self> {
         let mut engine = Self::new(config)?;
 
         // 创建基础提供者
         let filesystem_provider = Arc::new(FilesystemProvider::default());
         let system_commands_provider = Arc::new(SystemCommandsProvider::default());
-        let history_provider = Arc::new(HistoryProvider::default());
+        let history_provider = Arc::new(HistoryProvider::new(cache));
 
         // 创建增强提供者
         let git_provider = Arc::new(GitCompletionProvider::default());
@@ -151,19 +135,6 @@ impl CompletionEngine {
                 continue;
             }
 
-            // 检查缓存
-            if let Some(cache) = &self.cache {
-                if let Some(cached_items) = cache.get(
-                    &context.input,
-                    &context.working_directory.to_string_lossy(),
-                    provider.name(),
-                ) {
-                    provider_stats.push((provider.name(), cached_items.len(), 0, "cached"));
-                    all_items.extend(cached_items);
-                    continue;
-                }
-            }
-
             // 执行提供者（带重试和超时）
             let result = self.execute_provider_with_retry(provider, context).await;
 
@@ -171,16 +142,6 @@ impl CompletionEngine {
 
             match result {
                 Ok(Ok(items)) => {
-                    // 存储到缓存
-                    if let Some(cache) = &self.cache {
-                        let _ = cache.put(
-                            &context.input,
-                            &context.working_directory.to_string_lossy(),
-                            provider.name(),
-                            items.clone(),
-                        );
-                    }
-
                     provider_stats.push((provider.name(), items.len(), provider_time, "success"));
                     all_items.extend(items);
                 }
@@ -311,25 +272,10 @@ impl CompletionEngine {
         })))
     }
 
-    /// 清理缓存
-    pub fn clear_cache(&self) -> AppResult<()> {
-        if let Some(cache) = &self.cache {
-            cache.clear()?;
-        }
-        Ok(())
-    }
-
     /// 获取引擎统计信息
     pub fn get_stats(&self) -> AppResult<EngineStats> {
-        let cache_stats = if let Some(cache) = &self.cache {
-            Some(cache.stats()?)
-        } else {
-            None
-        };
-
         Ok(EngineStats {
             provider_count: self.providers.len(),
-            cache_stats,
         })
     }
 }
@@ -339,8 +285,6 @@ impl CompletionEngine {
 pub struct EngineStats {
     /// 提供者数量
     pub provider_count: usize,
-    /// 缓存统计
-    pub cache_stats: Option<crate::completion::cache::CacheStats>,
 }
 
 impl Default for CompletionEngine {

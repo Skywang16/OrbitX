@@ -192,11 +192,8 @@ impl MessagePackManager {
 
         // 反序列化会话状态
         let mut de = Deserializer::new(&state_data[..]);
-        let mut state: SessionState = Deserialize::deserialize(&mut de)
+        let state: SessionState = Deserialize::deserialize(&mut de)
             .map_err(|e| anyhow!("会话状态反序列化失败: {}", e))?;
-
-        // 更新校验和
-        state.checksum = Some(serialized.checksum);
 
         info!("会话状态反序列化完成");
         Ok(state)

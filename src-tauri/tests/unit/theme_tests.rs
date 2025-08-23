@@ -14,13 +14,15 @@ use tauri_app::config::{
     theme_service::ThemeService,
     types::{Theme, ThemeConfig, ThemeType},
 };
+use tauri_app::storage::cache::UnifiedCache;
 
 /// 创建测试用的主题管理器
 async fn create_test_theme_manager() -> (ThemeManager, TempDir) {
     let temp_dir = TempDir::new().unwrap();
     let paths = ConfigPaths::new_for_test(temp_dir.path().to_path_buf());
     let options = ThemeManagerOptions::default();
-    let manager = ThemeManager::new(paths, options).await.unwrap();
+    let cache = std::sync::Arc::new(UnifiedCache::new());
+    let manager = ThemeManager::new(paths, options, cache).await.unwrap();
     (manager, temp_dir)
 }
 

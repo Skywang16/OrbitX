@@ -1,10 +1,9 @@
 <script setup lang="ts">
-  import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+  import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
   import { useAIChatStore } from './store'
   import { useAISettingsStore } from '@/components/settings/components/AI'
 
   import ChatHeader from './components/ChatHeader.vue'
-
   import MessageList from './components/MessageList.vue'
   import ChatInput from './components/ChatInput.vue'
   import ResizeHandle from './components/ResizeHandle.vue'
@@ -15,6 +14,7 @@
 
   // 本地状态
   const messageInput = ref('')
+  const chatInputRef = ref<InstanceType<typeof ChatInput>>()
 
   // 拖拽调整功能状态
   const isDragging = ref(false)
@@ -25,25 +25,24 @@
     return messageInput.value.trim().length > 0 && aiChatStore.canSendMessage
   })
 
-  const hasMessages = computed(() => aiChatStore.messages.length > 0)
-
   // 方法
   const sendMessage = async () => {
     if (!canSend.value) return
 
-    const message = messageInput.value.trim()
+    // 获取包含终端上下文的完整消息
+    const fullMessage = chatInputRef.value?.getMessageWithTerminalContext() || messageInput.value.trim()
     messageInput.value = ''
 
     try {
       // 普通聊天模式
-      await aiChatStore.sendMessage(message)
+      await aiChatStore.sendMessage(fullMessage)
     } catch (error) {
       // silent error
     }
   }
 
   const selectSession = (sessionId: number) => {
-    aiChatStore.loadConversation(sessionId)
+    aiChatStore.switchToConversation(sessionId)
   }
 
   const deleteSession = (sessionId: number) => {
@@ -53,8 +52,8 @@
   const refreshSessions = async () => {
     try {
       await aiChatStore.refreshConversations()
-    } catch (error) {
-      // 刷新会话列表失败
+    } catch {
+      // ignore
     }
   }
 
@@ -67,7 +66,7 @@
     // 无论哪种模式都通过eko处理，确保eko已初始化
     await aiChatStore.initializeEko()
     // 同步模式到 Eko，确保工具权限生效
-    aiChatStore.ekoInstance?.setMode(mode)
+    await aiChatStore.ekoInstance?.setMode(mode)
     // 状态变化会自动触发保存（通过 watch 监听器）
   }
 
@@ -132,10 +131,6 @@
   }
 
   // ===== 响应式数据 =====
-  const showMessage = ref(false) // 是否显示消息提示
-  const messageText = ref('') // 消息提示内容
-  const messageType = ref<'success' | 'error' | 'warning' | 'info'>('success') // 消息提示类型
-  const messageListRef = ref() // MessageList组件引用
 
   // ===== 方法 =====
   /**
@@ -150,43 +145,6 @@
       aiChatStore.isLoading = false
     }
   }
-
-  // 滚动到底部
-  const scrollToBottom = () => {
-    if (messageListRef.value) {
-      messageListRef.value.scrollToBottom()
-    }
-  }
-
-  // 监听消息变化，自动滚动到底部
-  watch(
-    () => aiChatStore.messages,
-    () => {
-      // 使用 nextTick 确保 DOM 更新后再滚动
-      nextTick(scrollToBottom)
-    },
-    { deep: true }
-  )
-
-  // 监听加载状态变化，确保加载过程中也能滚动
-  watch(
-    () => aiChatStore.isLoading,
-    isLoading => {
-      if (isLoading) {
-        messageListRef.value?.scrollToBottom()
-      }
-    }
-  )
-
-  watch(
-    () => aiChatStore.streamingContent,
-    () => {
-      if (aiChatStore.isLoading) {
-        // 流式过程中实时滚动
-        nextTick(scrollToBottom)
-      }
-    }
-  )
 
   // 监听默认模型变化，同步选中状态
   watch(
@@ -207,8 +165,6 @@
     if (!aiChatStore.isInitialized) {
       await aiChatStore.initialize()
     }
-
-    scrollToBottom()
   })
 
   onUnmounted(() => {
@@ -239,49 +195,32 @@
       @refresh-sessions="refreshSessions"
     />
 
-    <!-- 消息列表区域 -->
-    <MessageList
-      ref="messageListRef"
-      :messages="aiChatStore.messages"
-      :has-messages="hasMessages"
-      :is-loading="aiChatStore.isLoading"
-      :empty-state-title="aiChatStore.chatMode === 'agent' ? '开始使用 Orbit Agent' : '开始与 Orbit 对话'"
-      :empty-state-description="
-        aiChatStore.chatMode === 'agent'
-          ? 'Orbit 可以执行终端命令、分析文件、处理数据等。试试问我：「当前在哪个目录？」'
-          : aiSettingsStore.defaultModel
-            ? `使用 ${aiSettingsStore.defaultModel.name} 模型`
-            : '请先配置 AI 模型'
-      "
-    />
+    <!-- 消息区域 -->
+    <MessageList :messages="aiChatStore.messageList" />
 
     <!-- 输入区域 -->
     <ChatInput
+      ref="chatInputRef"
       v-model="messageInput"
       :loading="aiChatStore.isLoading"
       :can-send="canSend"
       :selected-model="selectedModelId"
       :model-options="modelOptions"
       :chat-mode="aiChatStore.chatMode"
-      :placeholder="
-        aiChatStore.chatMode === 'agent' ? '问 Orbit 任何终端问题，如：当前在哪个目录？列出文件？' : '与 Orbit 对话...'
-      "
+      placeholder="与 Orbit 对话..."
       @send="sendMessage"
       @stop="stopMessage"
       @model-change="handleModelChange"
       @mode-change="handleSwitchMode"
     />
-
-    <!-- 消息提示 -->
-    <x-message :visible="showMessage" :message="messageText" :type="messageType" @close="showMessage = false" />
   </div>
 </template>
 
 <style scoped>
   .ai-chat-sidebar {
     height: 100%;
-    background-color: var(--color-ai-sidebar-background);
-    border-left: 1px solid var(--color-border);
+    background-color: var(--bg-300);
+    border-left: 1px solid var(--border-300);
     display: flex;
     flex-direction: column;
     position: relative;
@@ -298,11 +237,11 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: var(--color-background);
-    color: var(--text-primary);
+    background: var(--bg-500);
+    color: var(--text-200);
     padding: 8px 16px;
     border-radius: 4px;
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--border-300);
     font-size: 12px;
     z-index: 100;
     white-space: nowrap;

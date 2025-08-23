@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use tracing::{debug, error, info, trace, warn};
 
 use crate::mux::{MuxNotification, Pane, PaneId};
+use crate::shell::ShellIntegrationManager;
 use crate::utils::error::AppResult;
 use bytes::Bytes;
 
@@ -101,21 +102,16 @@ struct PaneIoState {
 pub struct IoThreadPool {
     config: IoThreadPoolConfig,
     task_sender: Sender<IoTask>,
-    #[allow(dead_code)]
-    notification_sender: Sender<MuxNotification>,
     worker_handles: Arc<std::sync::Mutex<Option<Vec<JoinHandle<()>>>>>,
     stats: Arc<std::sync::Mutex<IoThreadPoolStats>>,
+    pane_registry: Arc<std::sync::Mutex<HashMap<PaneId, Weak<dyn Pane>>>>,
 }
 
 impl IoThreadPool {
-    /// 创建新的I/O线程池
-    pub fn new(notification_sender: Sender<MuxNotification>) -> Self {
-        Self::with_config(notification_sender, IoThreadPoolConfig::default())
-    }
-
     /// 使用自定义配置创建I/O线程池
     pub fn with_config(
         notification_sender: Sender<MuxNotification>,
+        shell_integration: Arc<ShellIntegrationManager>,
         config: IoThreadPoolConfig,
     ) -> Self {
         info!("创建I/O线程池，工作线程数: {}", config.worker_threads);
@@ -129,6 +125,9 @@ impl IoThreadPool {
             total_batches_processed: 0,
         }));
 
+        let pane_registry: Arc<std::sync::Mutex<HashMap<PaneId, Weak<dyn Pane>>>> =
+            Arc::new(std::sync::Mutex::new(HashMap::new()));
+
         // 启动工作线程
         let mut worker_handles = Vec::new();
         for worker_id in 0..config.worker_threads {
@@ -138,6 +137,8 @@ impl IoThreadPool {
                 notification_sender.clone(),
                 config.clone(),
                 Arc::clone(&stats),
+                Arc::clone(&shell_integration),
+                Arc::clone(&pane_registry),
             );
             worker_handles.push(handle);
         }
@@ -147,9 +148,9 @@ impl IoThreadPool {
         Self {
             config,
             task_sender,
-            notification_sender,
             worker_handles: Arc::new(std::sync::Mutex::new(Some(worker_handles))),
             stats,
+            pane_registry,
         }
     }
 
@@ -163,15 +164,19 @@ impl IoThreadPool {
             .reader()
             .with_context(|| format!("无法获取面板 {:?} 的读取器", pane_id))?;
 
+        // 先记录到全局注册表，便于 stop/shutdown 能够标记退出
+        if let Ok(mut reg) = self.pane_registry.lock() {
+            reg.insert(pane_id, Arc::downgrade(&pane));
+        }
+
         // 发送启动任务
         let task = IoTask::StartPaneIo { pane, reader };
         self.task_sender
             .send(task)
             .map_err(|e| anyhow!("发送启动任务失败: {}", e))?;
 
-        // 更新统计信息
+        // 更新统计信息（仅标记有一个启动任务待处理）
         if let Ok(mut stats) = self.stats.lock() {
-            stats.active_panes += 1;
             stats.pending_tasks += 1;
         }
 
@@ -183,14 +188,22 @@ impl IoThreadPool {
     pub fn stop_pane_io(&self, pane_id: PaneId) -> AppResult<()> {
         debug!("停止面板 {:?} 的I/O处理", pane_id);
 
+        // 直接通过注册表标记 pane 为死亡，促使批处理循环尽快退出
+        if let Ok(reg) = self.pane_registry.lock() {
+            if let Some(weak) = reg.get(&pane_id) {
+                if let Some(pane_arc) = weak.upgrade() {
+                    pane_arc.mark_dead();
+                }
+            }
+        }
+
         let task = IoTask::StopPaneIo { pane_id };
         self.task_sender
             .send(task)
             .map_err(|e| anyhow!("发送停止任务失败: {}", e))?;
 
-        // 更新统计信息
+        // 更新统计信息（仅标记有一个停止任务待处理）
         if let Ok(mut stats) = self.stats.lock() {
-            stats.active_panes = stats.active_panes.saturating_sub(1);
             stats.pending_tasks += 1;
         }
 
@@ -216,27 +229,106 @@ impl IoThreadPool {
     pub fn shutdown(&self) -> AppResult<()> {
         info!("开始关闭I/O线程池");
 
+        // 优先标记所有pane为死亡，促使批处理循环尽快退出
+        let mut marked = 0usize;
+        if let Ok(reg) = self.pane_registry.lock() {
+            for (_id, weak) in reg.iter() {
+                if let Some(pane) = weak.upgrade() {
+                    pane.mark_dead();
+                    marked += 1;
+                }
+            }
+        }
+        debug!("在关闭前已标记 {} 个pane为死亡", marked);
+
         // 发送关闭信号给所有工作线程
-        for _ in 0..self.config.worker_threads {
-            if let Err(e) = self.task_sender.send(IoTask::Shutdown) {
-                warn!("发送关闭信号失败: {}", e);
+        let mut successful_sends = 0;
+        for worker_id in 0..self.config.worker_threads {
+            match self.task_sender.send(IoTask::Shutdown) {
+                Ok(_) => {
+                    successful_sends += 1;
+                    debug!("成功向工作线程 {} 发送关闭信号", worker_id);
+                }
+                Err(e) => {
+                    // 通道已断开，说明工作线程可能已经退出了
+                    debug!(
+                        "向工作线程 {} 发送关闭信号失败（通道已断开）: {}",
+                        worker_id, e
+                    );
+                }
             }
         }
 
-        // 等待所有工作线程完成
+        info!(
+            "已向 {}/{} 个工作线程发送关闭信号",
+            successful_sends, self.config.worker_threads
+        );
+
+        // 等待所有工作线程完成（带更短的超时和并发等待）
         if let Ok(mut handles_guard) = self.worker_handles.lock() {
             if let Some(handles) = handles_guard.take() {
-                for (worker_id, handle) in handles.into_iter().enumerate() {
-                    if let Err(e) = handle.join() {
-                        error!("工作线程 {} 退出异常: {:?}", worker_id, e);
-                    } else {
-                        debug!("工作线程 {} 正常退出", worker_id);
+                let timeout = Duration::from_millis(500); // 进一步缩短超时到500毫秒
+                let start_time = std::time::Instant::now();
+                
+                // 使用非阻塞的方式检查线程是否完成
+                let mut finished_threads = vec![false; handles.len()];
+                let mut active_handles: Vec<Option<std::thread::JoinHandle<()>>> = 
+                    handles.into_iter().map(Some).collect();
+                
+                // 轮询检查线程完成状态
+                while start_time.elapsed() < timeout {
+                    let mut all_finished = true;
+                    
+                    for (worker_id, (finished, handle_opt)) in 
+                        finished_threads.iter_mut().zip(active_handles.iter_mut()).enumerate() {
+                        
+                        if !*finished {
+                            if let Some(handle) = handle_opt.take() {
+                                // 非阻塞检查线程是否完成
+                                if handle.is_finished() {
+                                    match handle.join() {
+                                        Ok(_) => {
+                                            debug!("工作线程 {} 正常退出", worker_id);
+                                            *finished = true;
+                                        }
+                                        Err(e) => {
+                                            debug!("工作线程 {} 退出异常: {:?}", worker_id, e);
+                                            *finished = true;
+                                        }
+                                    }
+                                } else {
+                                    // 线程还在运行，放回去继续检查
+                                    *handle_opt = Some(handle);
+                                    all_finished = false;
+                                }
+                            }
+                        }
                     }
+                    
+                    if all_finished {
+                        break;
+                    }
+                    
+                    // 更短的休眠时间以提高响应速度
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                
+                // 检查是否有未完成的线程
+                let unfinished_count = finished_threads.iter().filter(|&&f| !f).count();
+                if unfinished_count > 0 {
+                    warn!("有 {} 个工作线程在超时后仍未退出，强制继续关闭", unfinished_count);
+                } else {
+                    debug!("所有工作线程已正常退出");
                 }
             }
         }
 
         info!("I/O线程池关闭完成");
+
+        // 清空注册表以避免残留
+        if let Ok(mut reg) = self.pane_registry.lock() {
+            reg.clear();
+        }
         Ok(())
     }
 
@@ -247,6 +339,8 @@ impl IoThreadPool {
         notification_sender: Sender<MuxNotification>,
         config: IoThreadPoolConfig,
         stats: Arc<std::sync::Mutex<IoThreadPoolStats>>,
+        shell_integration: Arc<ShellIntegrationManager>,
+        pane_registry: Arc<std::sync::Mutex<HashMap<PaneId, Weak<dyn Pane>>>>,
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             info!("I/O工作线程 {} 已启动", worker_id);
@@ -263,8 +357,12 @@ impl IoThreadPool {
                         if let Some(old_state) = active_panes.remove(&pane_id) {
                             warn!("面板 {:?} 已在处理中，停止旧的处理", pane_id);
                             if let Some(handle) = old_state.reader_handle {
-                                // 不等待旧线程，让它自然退出
+                                // 等待旧读线程退出，避免资源泄漏
                                 let _ = handle.join();
+                            }
+                            // 重启路径：活跃面板-1（随后新的启动会再次登记为活跃）
+                            if let Ok(mut stats) = stats.lock() {
+                                stats.active_panes = stats.active_panes.saturating_sub(1);
                             }
                         }
 
@@ -279,17 +377,7 @@ impl IoThreadPool {
                             config.buffer_size,
                         );
 
-                        // 启动批处理协程
-                        Self::spawn_batch_processor(
-                            Arc::downgrade(&pane),
-                            data_receiver,
-                            notification_sender.clone(),
-                            config.batch_size,
-                            Duration::from_millis(config.flush_interval_ms),
-                            Arc::clone(&stats),
-                        );
-
-                        // 记录面板状态
+                        // 记录面板状态（先登记，后运行批处理）
                         let pane_state = PaneIoState {
                             pane: Arc::downgrade(&pane),
                             data_sender,
@@ -297,12 +385,43 @@ impl IoThreadPool {
                         };
                         active_panes.insert(pane_id, pane_state);
 
-                        // 更新统计信息
+                        // 更新统计信息：活跃面板+1（真正开始处理时）
+                        if let Ok(mut stats) = stats.lock() {
+                            stats.active_panes += 1;
+                        }
+
+                        // 更新统计信息（Start 任务完成：此刻任务已由工作线程受理完成）
                         if let Ok(mut stats) = stats.lock() {
                             stats.pending_tasks = stats.pending_tasks.saturating_sub(1);
                         }
 
-                        debug!("工作线程 {} 完成启动面板 {:?}", worker_id, pane_id);
+                        // 启动批处理（在当前工作线程中阻塞运行，直到 pane 结束或通道断开）
+                        Self::spawn_batch_processor(
+                            Arc::downgrade(&pane),
+                            data_receiver,
+                            notification_sender.clone(),
+                            config.batch_size,
+                            Duration::from_millis(config.flush_interval_ms),
+                            Arc::clone(&stats),
+                            Arc::clone(&shell_integration),
+                        );
+
+                        // 批处理返回后执行清理：移除并等待读取线程结束
+                        if let Some(mut pane_state) = active_panes.remove(&pane_id) {
+                            if let Some(handle) = pane_state.reader_handle.take() {
+                                let _ = handle.join();
+                            }
+                            // EOF/自然退出路径：活跃面板-1
+                            if let Ok(mut stats) = stats.lock() {
+                                stats.active_panes = stats.active_panes.saturating_sub(1);
+                            }
+                            // 从注册表移除
+                            if let Ok(mut reg) = pane_registry.lock() {
+                                reg.remove(&pane_id);
+                            }
+                        }
+
+                        debug!("工作线程 {} 完成面板 {:?} 的处理", worker_id, pane_id);
                     }
                     Ok(IoTask::StopPaneIo { pane_id }) => {
                         debug!("工作线程 {} 处理停止面板 {:?}", worker_id, pane_id);
@@ -311,6 +430,14 @@ impl IoThreadPool {
                             // 等待读取线程完成
                             if let Some(handle) = pane_state.reader_handle {
                                 let _ = handle.join();
+                            }
+                            // 更新统计信息：停止任务完成，活跃面板-1
+                            if let Ok(mut stats) = stats.lock() {
+                                stats.active_panes = stats.active_panes.saturating_sub(1);
+                            }
+                            // 从注册表移除
+                            if let Ok(mut reg) = pane_registry.lock() {
+                                reg.remove(&pane_id);
                             }
                             debug!("工作线程 {} 完成停止面板 {:?}", worker_id, pane_id);
                         } else {
@@ -338,6 +465,10 @@ impl IoThreadPool {
                 debug!("工作线程 {} 清理面板 {:?}", worker_id, pane_id);
                 if let Some(handle) = pane_state.reader_handle {
                     let _ = handle.join();
+                }
+                // 从注册表移除
+                if let Ok(mut reg) = pane_registry.lock() {
+                    reg.remove(&pane_id);
                 }
             }
 
@@ -400,6 +531,7 @@ impl IoThreadPool {
         batch_size: usize,
         flush_interval: Duration,
         stats: Arc<std::sync::Mutex<IoThreadPoolStats>>,
+        shell_integration: Arc<ShellIntegrationManager>,
     ) {
         // 在当前工作线程中运行批处理逻辑，而不是启动新线程
         let pane_id = if let Some(pane) = weak_pane.upgrade() {
@@ -427,8 +559,24 @@ impl IoThreadPool {
                 break;
             }
 
-            // 尝试接收数据（非阻塞）
-            match data_receiver.try_recv() {
+            // 早期退出机制：尝试发送一个测试消息来检查通道状态
+            // 注意：这里我们移除这个检查，因为crossbeam_channel::Sender没有is_disconnected方法
+            // 改为依赖其他退出条件
+
+            // 根据 flush_interval 计算阻塞等待时间，避免忙等待
+            let elapsed = last_flush.elapsed();
+            let timeout = if batch_data.is_empty() {
+                // 没有数据时，等待一个完整的 flush 周期
+                flush_interval
+            } else {
+                // 已有数据时，等待到达时间阈值（或为0，立即检查刷新）
+                flush_interval.saturating_sub(elapsed)
+            };
+
+            // 使用更短的超时来更频繁地检查面板状态
+            let recv_timeout = std::cmp::min(timeout, Duration::from_millis(50));
+            
+            match data_receiver.recv_timeout(recv_timeout) {
                 Ok(data) => {
                     batch_data.extend_from_slice(&data);
                     trace!(
@@ -437,21 +585,24 @@ impl IoThreadPool {
                         batch_data.len()
                     );
                 }
-                Err(crossbeam_channel::TryRecvError::Empty) => {
-                    // 没有数据，检查是否需要超时刷新
+                Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                    // 超时：后续根据 should_flush 判断是否刷新
+                    // 更频繁地检查面板状态以便快速退出
                 }
-                Err(crossbeam_channel::TryRecvError::Disconnected) => {
+                Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
                     debug!("面板 {:?} 数据通道已断开", pane_id);
                     break;
                 }
             }
 
-            // 检查是否需要刷新批处理数据
+            // 检查是否需要刷新批处理数据（大小阈值或时间阈值）
             let should_flush = !batch_data.is_empty()
                 && (batch_data.len() >= batch_size || last_flush.elapsed() >= flush_interval);
 
             if should_flush {
                 let data_to_send = std::mem::take(&mut batch_data);
+                let data_str = String::from_utf8_lossy(&data_to_send);
+                shell_integration.process_output(pane_id, &data_str);
                 let send_len = data_to_send.len();
                 let notification = MuxNotification::PaneOutput {
                     pane_id,
@@ -461,7 +612,7 @@ impl IoThreadPool {
                 debug!("面板 {:?} 发送批处理数据: {} 字节", pane_id, send_len);
 
                 if let Err(e) = notification_sender.send(notification) {
-                    error!("面板 {:?} 发送通知失败: {}", pane_id, e);
+                    debug!("面板 {:?} 发送通知失败（可能是正在关闭）: {}", pane_id, e);
                     break;
                 }
 
@@ -472,21 +623,33 @@ impl IoThreadPool {
                 }
 
                 last_flush = Instant::now();
-            } else if batch_data.is_empty() {
-                // 没有数据时短暂休眠，避免忙等待
-                thread::sleep(Duration::from_millis(1));
             }
         }
 
         // 退出前发送剩余数据
         if !batch_data.is_empty() {
+            let send_len = batch_data.len();
+            let data_str = String::from_utf8_lossy(&batch_data);
+            shell_integration.process_output(pane_id, &data_str);
+
             let notification = MuxNotification::PaneOutput {
                 pane_id,
                 data: Bytes::from(batch_data),
             };
 
-            if let Err(e) = notification_sender.send(notification) {
-                error!("面板 {:?} 发送最后的批处理数据失败: {}", pane_id, e);
+            match notification_sender.send(notification) {
+                Ok(_) => {
+                    if let Ok(mut stats) = stats.lock() {
+                        stats.total_bytes_processed += send_len as u64;
+                        stats.total_batches_processed += 1;
+                    }
+                }
+                Err(e) => {
+                    debug!(
+                        "面板 {:?} 发送最后的批处理数据失败（可能是正在关闭）: {}",
+                        pane_id, e
+                    );
+                }
             }
         }
 
@@ -497,7 +660,10 @@ impl IoThreadPool {
         };
 
         if let Err(e) = notification_sender.send(exit_notification) {
-            error!("面板 {:?} 发送退出通知失败: {}", pane_id, e);
+            debug!(
+                "面板 {:?} 发送退出通知失败（可能是正在关闭）: {}",
+                pane_id, e
+            );
         }
 
         debug!("面板 {:?} 批处理器已退出", pane_id);

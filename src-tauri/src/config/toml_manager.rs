@@ -12,15 +12,13 @@ use crate::{
     utils::error::AppResult,
 };
 use anyhow::{anyhow, bail, Context};
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
-    time::SystemTime,
 };
 use tokio::sync::broadcast;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// 配置事件类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,11 +41,6 @@ pub enum ConfigEvent {
         timestamp: chrono::DateTime<chrono::Utc>,
         errors: Vec<String>,
     },
-    /// 配置文件已更改（文件系统事件）
-    FileChanged {
-        timestamp: chrono::DateTime<chrono::Utc>,
-        path: PathBuf,
-    },
 }
 
 /// TOML配置管理器
@@ -66,12 +59,6 @@ pub struct TomlConfigManager {
     /// 配置路径管理器
     #[allow(dead_code)]
     paths: ConfigPaths,
-
-    /// 最后修改时间
-    last_modified: Arc<RwLock<Option<SystemTime>>>,
-
-    /// 文件监控器
-    file_watcher: Arc<RwLock<Option<RecommendedWatcher>>>,
 }
 
 impl TomlConfigManager {
@@ -91,8 +78,6 @@ impl TomlConfigManager {
             config_cache: Arc::new(RwLock::new(create_default_config())),
             event_sender,
             paths,
-            last_modified: Arc::new(RwLock::new(None)),
-            file_watcher: Arc::new(RwLock::new(None)),
         };
 
         info!("TOML配置管理器初始化完成");
@@ -101,7 +86,7 @@ impl TomlConfigManager {
 
     /// 加载配置
     ///
-    /// 从文件系统加载TOML配置，如果文件不存在则创建默认配置。
+    /// 从文件系统加载TOML配置，如果文件不存在则尝试从资源文件复制，最后创建默认配置。
     ///
     /// # Returns
     /// 返回加载的配置结构
@@ -135,12 +120,19 @@ impl TomlConfigManager {
                 }
             }
         } else {
-            info!("配置文件不存在，创建默认配置");
-            let default_config = create_default_config();
+            info!("配置文件不存在，尝试复制打包的配置文件");
 
-            // 保存默认配置到文件
-            self.save_config_internal(&default_config).await?;
-            default_config
+            // 尝试从资源文件复制配置
+            if let Ok(config) = self.copy_bundled_config().await {
+                info!("成功复制打包的配置文件");
+                config
+            } else {
+                info!("未找到打包的配置文件，创建默认配置");
+                let default_config = create_default_config();
+                // 保存默认配置到文件
+                self.save_config_internal(&default_config).await?;
+                default_config
+            }
         };
 
         // 更新缓存
@@ -150,17 +142,6 @@ impl TomlConfigManager {
                 .write()
                 .map_err(|e| anyhow!("无法获取配置缓存写锁: {}", e))?;
             *cache = config.clone();
-        }
-
-        // 更新最后修改时间
-        if let Ok(metadata) = tokio::fs::metadata(&self.config_path).await {
-            if let Ok(modified) = metadata.modified() {
-                let mut last_modified = self
-                    .last_modified
-                    .write()
-                    .map_err(|e| anyhow!("无法获取修改时间写锁: {}", e))?;
-                *last_modified = Some(modified);
-            }
         }
 
         // 发送加载事件
@@ -395,152 +376,58 @@ impl TomlConfigManager {
         Ok(merged_config)
     }
 
-    /// 启动文件监控
-    ///
-    /// 启动配置文件的热重载监控。
-    ///
-    /// # Returns
-    /// 返回操作结果
-    pub async fn start_file_watching(&self) -> AppResult<()> {
-        let mut watcher_guard = self
-            .file_watcher
-            .write()
-            .map_err(|e| anyhow!("无法获取文件监控器写锁: {}", e))?;
-
-        if watcher_guard.is_some() {
-            warn!("文件监控已经启动");
-            return Ok(());
-        }
-
-        let event_sender = self.event_sender.clone();
-        let config_path = self.config_path.clone();
-        let config_cache = Arc::clone(&self.config_cache);
-        let last_modified = Arc::clone(&self.last_modified);
-
-        let watcher =
-            notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
-                match res {
-                    Ok(event) => {
-                        debug!("文件系统事件: {:?}", event);
-
-                        // 检查是否是配置文件的修改事件
-                        if event.paths.iter().any(|p| p == &config_path) {
-                            // 检查文件修改时间，避免重复处理
-                            if let Ok(metadata) = std::fs::metadata(&config_path) {
-                                if let Ok(modified) = metadata.modified() {
-                                    let should_reload = {
-                                        match last_modified.read() {
-                                            Ok(last_mod) => {
-                                                last_mod.map_or(true, |last| modified > last)
-                                            }
-                                            Err(e) => {
-                                                error!(
-                                                    "无法获取最后修改时间读锁，跳过重载检查: {}",
-                                                    e
-                                                );
-                                                false
-                                            }
-                                        }
-                                    };
-
-                                    if should_reload {
-                                        // 更新最后修改时间
-                                        match last_modified.write() {
-                                            Ok(mut last_mod) => {
-                                                *last_mod = Some(modified);
-                                            }
-                                            Err(e) => {
-                                                error!(
-                                                    "无法获取最后修改时间写锁，跳过时间更新: {}",
-                                                    e
-                                                );
-                                                return; // 跳过本次处理，避免重复触发
-                                            }
-                                        }
-
-                                        // 发送文件更改事件
-                                        let file_event = ConfigEvent::FileChanged {
-                                            timestamp: chrono::Utc::now(),
-                                            path: config_path.clone(),
-                                        };
-                                        let _ = event_sender.send(file_event);
-
-                                        // 异步重新加载配置
-                                        let config_cache_clone = Arc::clone(&config_cache);
-                                        let config_path_clone = config_path.clone();
-                                        let event_sender_clone = event_sender.clone();
-
-                                        tokio::spawn(async move {
-                                            match Self::reload_config_from_file(&config_path_clone)
-                                                .await
-                                            {
-                                                Ok(new_config) => {
-                                                    // 更新缓存
-                                                    if let Ok(mut cache) =
-                                                        config_cache_clone.write()
-                                                    {
-                                                        *cache = new_config;
-                                                    }
-
-                                                    // 发送重新加载事件
-                                                    let reload_event = ConfigEvent::Loaded {
-                                                        timestamp: chrono::Utc::now(),
-                                                    };
-                                                    let _ = event_sender_clone.send(reload_event);
-
-                                                    info!("配置文件热重载成功");
-                                                }
-                                                Err(e) => {
-                                                    error!("配置文件热重载失败: {}", e);
-
-                                                    let error_event =
-                                                        ConfigEvent::ValidationFailed {
-                                                            timestamp: chrono::Utc::now(),
-                                                            errors: vec![e.to_string()],
-                                                        };
-                                                    let _ = event_sender_clone.send(error_event);
-                                                }
-                                            }
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("文件监控错误: {}", e);
-                    }
-                }
-            })?;
-
-        // 监控配置文件目录
-        if let Some(parent) = self.config_path.parent() {
-            let mut watcher_mut = watcher;
-            watcher_mut.watch(parent, RecursiveMode::NonRecursive)?;
-            info!("开始监控配置文件: {:?}", self.config_path);
-            *watcher_guard = Some(watcher_mut);
-        }
-
-        Ok(())
-    }
-
-    /// 停止文件监控
-    pub async fn stop_file_watching(&self) -> AppResult<()> {
-        let mut watcher_guard = self
-            .file_watcher
-            .write()
-            .map_err(|e| anyhow!("无法获取文件监控器写锁: {}", e))?;
-
-        if let Some(_watcher) = watcher_guard.take() {
-            info!("停止文件监控");
-        }
-
-        Ok(())
-    }
-
     // ========================================================================
     // 私有方法
     // ========================================================================
+
+    /// 复制打包的配置文件到用户目录
+    async fn copy_bundled_config(&self) -> AppResult<AppConfig> {
+        // 尝试从应用资源中获取配置文件
+        let bundled_config_path = self.get_bundled_config_path()?;
+
+        if bundled_config_path.exists() {
+            // 复制文件到用户配置目录
+            tokio::fs::copy(&bundled_config_path, &self.config_path)
+                .await
+                .with_context(|| "复制打包配置文件失败")?;
+
+            // 读取并解析复制的配置文件
+            let content = tokio::fs::read_to_string(&self.config_path)
+                .await
+                .with_context(|| "读取复制的配置文件失败")?;
+
+            self.parse_toml_content(&content)
+        } else {
+            bail!("未找到打包的配置文件")
+        }
+    }
+
+    /// 获取打包配置文件的路径
+    fn get_bundled_config_path(&self) -> AppResult<std::path::PathBuf> {
+        // 在 Tauri 中，资源文件通常位于应用包中
+        let exe_dir = std::env::current_exe()
+            .with_context(|| "无法获取可执行文件路径")?
+            .parent()
+            .ok_or_else(|| anyhow!("无法获取可执行文件目录"))?
+            .to_path_buf();
+
+        // 在不同平台上，资源文件的位置可能不同
+        #[cfg(target_os = "macos")]
+        {
+            // macOS: 资源文件在 .app/Contents/Resources/ 目录下
+            let app_bundle = exe_dir
+                .parent()
+                .and_then(|p| p.parent())
+                .ok_or_else(|| anyhow!("无法找到 macOS 应用包路径"))?;
+            Ok(app_bundle.join("Resources").join("config.toml"))
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            // Windows/Linux: 资源文件可能在可执行文件同级目录
+            Ok(exe_dir.join("config.toml"))
+        }
+    }
 
     /// 解析TOML内容
     fn parse_toml_content(&self, content: &str) -> AppResult<AppConfig> {
@@ -613,16 +500,6 @@ impl TomlConfigManager {
         self.save_config_internal(&default_config).await?;
 
         Ok(default_config)
-    }
-
-    /// 从文件重新加载配置（静态方法，用于热重载）
-    async fn reload_config_from_file(config_path: &PathBuf) -> AppResult<AppConfig> {
-        let content = tokio::fs::read_to_string(config_path)
-            .await
-            .with_context(|| format!("无法读取配置文件: {}", config_path.display()))?;
-
-        toml::from_str::<AppConfig>(&content)
-            .with_context(|| format!("TOML配置解析失败 (文件: {})", config_path.display()))
     }
 
     /// 更新配置节
@@ -894,8 +771,6 @@ mod tests {
             config_cache: Arc::new(RwLock::new(create_default_config())),
             event_sender,
             paths,
-            last_modified: Arc::new(RwLock::new(None)),
-            file_watcher: Arc::new(RwLock::new(None)),
         };
 
         (manager, temp_dir)
@@ -1124,81 +999,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_file_watching() {
-        let (manager, _temp_dir) = create_test_manager().await;
-
-        // 加载初始配置
-        manager.load_config().await.unwrap();
-
-        // 订阅事件（在启动监控之前）
-        let mut event_receiver = manager.subscribe_changes();
-
-        // 启动文件监控
-        manager.start_file_watching().await.unwrap();
-
-        // 等待一小段时间让监控器启动
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        // 修改配置文件
-        let new_config = {
-            let mut config = manager.get_config().await.unwrap();
-            config.app.language = "en-US".to_string();
-            config
-        };
-
-        // 直接写入文件（模拟外部修改）
-        let toml_content = toml::to_string_pretty(&new_config).unwrap();
-        tokio::fs::write(&manager.config_path, toml_content)
-            .await
-            .unwrap();
-
-        // 等待文件监控事件，增加超时时间
-        let mut events_received = Vec::new();
-
-        for _ in 0..10 {
-            match tokio::time::timeout(Duration::from_millis(500), event_receiver.recv()).await {
-                Ok(Ok(event)) => {
-                    events_received.push(event);
-
-                    // 检查是否收到了预期的事件
-                    let has_file_changed = events_received
-                        .iter()
-                        .any(|e| matches!(e, ConfigEvent::FileChanged { .. }));
-                    let has_config_loaded = events_received
-                        .iter()
-                        .any(|e| matches!(e, ConfigEvent::Loaded { .. }));
-
-                    if has_file_changed && has_config_loaded {
-                        break;
-                    }
-                }
-                _ => break,
-            }
-        }
-
-        // 打印收到的事件用于调试
-        println!("收到的事件: {:?}", events_received);
-
-        // 验证至少收到了一些事件（文件监控可能因为系统差异而表现不同）
-        if !events_received.is_empty() {
-            // 如果收到了事件，验证配置是否已更新
-            tokio::time::sleep(Duration::from_millis(100)).await; // 等待配置更新
-            let updated_config = manager.get_config().await.unwrap();
-            if updated_config.app.language == "en-US" {
-                println!("文件监控功能正常工作");
-            }
-        } else {
-            println!("文件监控可能在测试环境中不工作，这是正常的");
-        }
-
-        // 停止文件监控
-        manager.stop_file_watching().await.unwrap();
-
-        // 测试通过（文件监控在某些测试环境中可能不工作）
-        // 测试通过
-    }
-
-    #[tokio::test]
     async fn test_error_handling_comprehensive() {
         let (manager, _temp_dir) = create_test_manager().await;
 
@@ -1253,8 +1053,6 @@ mod tests {
             config_cache: Arc::new(RwLock::new(create_default_config())),
             event_sender,
             paths,
-            last_modified: Arc::new(RwLock::new(None)),
-            file_watcher: Arc::new(RwLock::new(None)),
         };
 
         // 加载配置

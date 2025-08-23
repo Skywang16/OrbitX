@@ -23,12 +23,58 @@
         }
       ]
     },
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "http://localhost:*"
+        },
+        {
+          "url": "https://localhost:*"
+        },
+        {
+          "url": "http://127.0.0.1:*"
+        },
+        {
+          "url": "https://127.0.0.1:*"
+        },
+        {
+          "url": "http://*.*.*.*:*"
+        },
+        {
+          "url": "https://*.*.*.*:*"
+        }
+      ]
+    },
+    "fs:default",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-read-dir",
+    "fs:allow-create",
+    "fs:allow-exists",
+    "fs:allow-stat",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "/Users/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$APPCONFIG/**" },
+        { "path": "$APPLOCALDATA/**" }
+      ]
+    },
     "core:event:default",
     "core:event:allow-emit",
     "core:window:default",
     "core:window:allow-start-dragging",
     "core:window:allow-close",
     "core:window:allow-destroy",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-is-maximized",
+    "window-state:default",
     "deep-link:default"
   ]
 }

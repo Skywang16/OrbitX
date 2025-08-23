@@ -84,7 +84,7 @@
 
 <script setup lang="ts">
   import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-  import type { SelectEmits, SelectProps, SelectOption } from '../types/index'
+  import type { SelectProps, SelectOption } from '../types/index'
 
   const props = withDefaults(defineProps<SelectProps>(), {
     placeholder: '请选择',
@@ -105,7 +105,15 @@
     remote: false,
   })
 
-  const emit = defineEmits<SelectEmits>()
+  const emit = defineEmits<{
+    'update:modelValue': [value: string | number | null | Array<string | number>]
+    change: [value: string | number | null | Array<string | number>]
+    focus: [event: FocusEvent]
+    blur: [event: FocusEvent]
+    clear: []
+    'visible-change': [visible: boolean]
+    'remove-tag': [value: string | number]
+  }>()
 
   // 响应式引用
   const selectRef = ref<HTMLElement>()
@@ -373,10 +381,10 @@
     width: 100%;
     min-height: 32px;
     padding: 6px 32px 6px 12px;
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--border-300);
     border-radius: 3px;
-    background-color: var(--color-background);
-    color: var(--color-text);
+    background-color: var(--bg-400);
+    color: var(--text-200);
     font-size: 14px;
     line-height: 1.5;
     cursor: pointer;
@@ -390,17 +398,17 @@
 
   .x-select--open .x-select__input {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px var(--color-primary-background);
+    box-shadow: 0 0 0 2px var(--color-primary-alpha);
   }
 
   .x-select--disabled .x-select__input {
     cursor: not-allowed;
-    background-color: var(--color-background-disabled);
-    color: var(--color-text-disabled);
+    background-color: var(--bg-500);
+    color: var(--text-500);
   }
 
   .x-select--disabled .x-select__input:hover {
-    border-color: var(--color-border);
+    border-color: var(--border-300);
   }
 
   /* 尺寸变体 */
@@ -423,12 +431,12 @@
   }
 
   .x-select--borderless .x-select__input:hover {
-    background-color: var(--color-background-hover, rgba(0, 0, 0, 0.05));
+    background-color: var(--color-hover, rgba(0, 0, 0, 0.05));
     border: none;
   }
 
   .x-select--borderless.x-select--open .x-select__input {
-    background-color: var(--color-background-hover, rgba(0, 0, 0, 0.05));
+    background-color: var(--color-hover, rgba(0, 0, 0, 0.05));
     box-shadow: none;
     border: none;
   }
@@ -443,7 +451,7 @@
 
   .x-select__placeholder {
     flex: 1;
-    color: var(--color-text-placeholder);
+    color: var(--text-400);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -459,7 +467,7 @@
     height: 14px;
     border: none;
     background: none;
-    color: var(--color-text-secondary);
+    color: var(--text-400);
     cursor: pointer;
     opacity: 0;
     transition: all 0.2s ease;
@@ -478,7 +486,7 @@
   }
 
   .x-select__clear:hover {
-    color: var(--color-text);
+    color: var(--text-200);
   }
 
   /* 下拉箭头 */
@@ -489,7 +497,7 @@
     transform: translateY(-50%);
     width: 14px;
     height: 14px;
-    color: var(--color-text-secondary);
+    color: var(--text-400);
     transition: transform 0.2s ease;
     display: flex;
     align-items: center;
@@ -507,8 +515,8 @@
 
   /* 下拉面板 */
   .x-select__dropdown {
-    background-color: var(--color-background);
-    border: 1px solid var(--color-border);
+    background-color: var(--bg-400);
+    border: 1px solid var(--border-300);
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     overflow: hidden;
@@ -537,16 +545,16 @@
   /* 搜索框 */
   .x-select__filter {
     padding: 8px;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--border-300);
   }
 
   .x-select__filter-input {
     width: 100%;
     padding: 6px 8px;
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--border-300);
     border-radius: 4px;
-    background-color: var(--color-background);
-    color: var(--color-text);
+    background-color: var(--bg-400);
+    color: var(--text-200);
     font-size: 12px;
     outline: none;
     transition: border-color 0.2s ease;
@@ -572,12 +580,12 @@
   }
 
   .x-select__options::-webkit-scrollbar-thumb {
-    background-color: var(--color-border);
+    background-color: var(--border-300);
     border-radius: 3px;
   }
 
   .x-select__options::-webkit-scrollbar-thumb:hover {
-    background-color: var(--color-text-secondary);
+    background-color: var(--text-400);
   }
 
   /* 选项 */
@@ -594,11 +602,11 @@
 
   .x-select__option:hover,
   .x-select__option--highlighted {
-    background-color: var(--color-primary-background, rgba(59, 130, 246, 0.1));
+    background-color: var(--color-primary-alpha, rgba(59, 130, 246, 0.1));
   }
 
   .x-select__option--selected {
-    background-color: var(--color-primary-background, rgba(59, 130, 246, 0.1));
+    background-color: var(--color-primary-alpha, rgba(59, 130, 246, 0.1));
     color: var(--color-primary, #3b82f6);
     font-weight: 500;
   }
@@ -645,7 +653,7 @@
   .x-select__option-description {
     display: block;
     font-size: 12px;
-    color: var(--color-text-secondary);
+    color: var(--text-400);
     margin-top: 2px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -673,7 +681,7 @@
   .x-select__no-data {
     padding: 16px 12px;
     text-align: center;
-    color: var(--color-text-secondary);
+    color: var(--text-400);
     font-size: 12px;
   }
 

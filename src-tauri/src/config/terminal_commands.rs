@@ -10,6 +10,8 @@ use crate::config::{
     defaults::create_default_terminal_config,
     types::{CursorConfig, ShellConfig, TerminalBehaviorConfig, TerminalConfig},
 };
+use crate::utils::error::ToTauriResult;
+
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tracing::{debug, info, warn};
@@ -63,14 +65,10 @@ pub async fn get_terminal_config(
 ) -> Result<TerminalConfig, String> {
     debug!("开始获取终端配置");
 
-    let config = state
-        .toml_manager
-        .get_config()
-        .await
-        .map_err(|e| e.to_string())?;
+    let config = state.toml_manager.get_config().await.to_tauri()?;
     let terminal_config = config.terminal.clone();
 
-    info!("成功获取终端配置");
+    info!("获取终端配置成功");
     Ok(terminal_config)
 }
 
@@ -109,7 +107,7 @@ pub async fn update_terminal_config(
             Ok(())
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     info!("终端配置更新成功");
     Ok(())
@@ -122,11 +120,7 @@ pub async fn validate_terminal_config(
 ) -> Result<TerminalConfigValidationResult, String> {
     debug!("开始验证终端配置");
 
-    let config = state
-        .toml_manager
-        .get_config()
-        .await
-        .map_err(|e| e.to_string())?;
+    let config = state.toml_manager.get_config().await.to_tauri()?;
     let terminal_config = &config.terminal;
 
     let mut errors = Vec::new();
@@ -193,9 +187,9 @@ pub async fn reset_terminal_config_to_defaults(
             Ok(())
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
-    info!("终端配置已重置为默认值");
+    info!("终端重置配置更新成功");
     Ok(())
 }
 
@@ -204,7 +198,7 @@ pub async fn reset_terminal_config_to_defaults(
 pub async fn detect_system_shells(
     _state: State<'_, ConfigManagerState>,
 ) -> Result<SystemShellsResult, String> {
-    debug!("开始检测系统可用的 Shell");
+    debug!("开始检测系统可用的Shell");
 
     let mut available_shells = Vec::new();
 
@@ -245,12 +239,18 @@ pub async fn detect_system_shells(
     };
 
     // 获取用户当前Shell
-    let user_shell = std::env::var("SHELL")
-        .unwrap_or_else(|_| default_shell.clone())
-        .split('/')
-        .last()
-        .unwrap_or(&default_shell)
-        .to_string();
+    let user_shell = if cfg!(windows) {
+        // Windows平台通常没有SHELL环境变量，使用默认shell
+        default_shell.clone()
+    } else {
+        // Unix平台从SHELL环境变量获取
+        std::env::var("SHELL")
+            .unwrap_or_else(|_| default_shell.clone())
+            .split('/')
+            .last()
+            .unwrap_or(&default_shell)
+            .to_string()
+    };
 
     info!(
         "检测到 {} 个可用Shell: {:?}",
@@ -281,7 +281,7 @@ pub async fn update_cursor_config(
             Ok(())
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     info!("光标配置更新成功");
     Ok(())
@@ -303,7 +303,7 @@ pub async fn update_terminal_behavior_config(
             Ok(())
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     info!("终端行为配置更新成功");
     Ok(())
@@ -315,7 +315,7 @@ pub async fn update_terminal_behavior_config(
 /// 获取Shell信息（存根实现）
 #[tauri::command]
 pub async fn get_shell_info(_state: State<'_, ConfigManagerState>) -> Result<String, String> {
-    debug!("获取Shell信息");
+    debug!("开始获取Shell信息");
     Ok("zsh".to_string())
 }
 

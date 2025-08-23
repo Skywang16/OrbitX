@@ -67,8 +67,8 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: var(--color-background-secondary);
-    border: 1px solid var(--border-color);
+    background-color: var(--bg-500);
+    border: 1px solid var(--border-300);
     transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
     border-radius: 22px;
     display: flex;
@@ -82,8 +82,8 @@
     height: 18px;
     width: 18px;
     left: 2px;
-    background-color: var(--color-background);
-    border: 1px solid var(--border-color);
+    background-color: var(--bg-200);
+    border: 1px solid var(--border-300);
     transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
     border-radius: 50%;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -103,7 +103,7 @@
 
   /* 悬停状态 */
   .base-switch:hover:not(.is-disabled) .slider {
-    border-color: var(--border-color-hover);
+    border-color: var(--border-400);
   }
 
   .base-switch:hover:not(.is-disabled) input:checked + .slider {
@@ -124,8 +124,8 @@
     transform: translate(-50%, -50%);
     width: 12px;
     height: 12px;
-    border: 2px solid var(--text-muted);
-    border-top-color: var(--text-secondary);
+    border: 2px solid var(--text-500);
+    border-top-color: var(--text-400);
     border-radius: 50%;
     animation: x-switch-spin 1s linear infinite;
   }
@@ -177,7 +177,7 @@
     transform: translateY(-50%);
     font-size: var(--font-size-xs);
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-200);
     pointer-events: none;
     transition: opacity 0.3s ease;
   }

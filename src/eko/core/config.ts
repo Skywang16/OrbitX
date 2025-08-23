@@ -5,7 +5,7 @@
 
 import type { LLMs } from '@eko-ai/eko'
 import type { AIModelConfig } from '@/types'
-import { aiAPI } from '@/api/ai'
+import { aiApi } from '@/api'
 
 /**
  * 将项目的AIModelConfig转换为Eko的LLM配置
@@ -39,7 +39,7 @@ export const convertToEkoLLMConfig = (modelConfig: AIModelConfig) => {
 export const getEkoLLMsConfig = async (): Promise<LLMs> => {
   try {
     // 获取所有模型配置
-    const models = await aiAPI.getModels()
+    const models = await aiApi.getModels()
 
     if (models.length === 0) {
       throw new Error('没有配置任何AI模型，请先在设置中添加模型配置')
@@ -47,7 +47,6 @@ export const getEkoLLMsConfig = async (): Promise<LLMs> => {
 
     // 找到默认模型
     const defaultModel = models.find(model => model.isDefault) || models[0]
-
     // 构建LLMs配置对象
     const llms: LLMs = {
       default: convertToEkoLLMConfig(defaultModel),
@@ -60,7 +59,6 @@ export const getEkoLLMsConfig = async (): Promise<LLMs> => {
       }
     })
 
-    console.log('Eko LLMs配置:', llms)
     return llms
   } catch (error) {
     console.error('获取Eko LLMs配置失败:', error)
@@ -73,7 +71,7 @@ export const getEkoLLMsConfig = async (): Promise<LLMs> => {
  */
 export const getDefaultModelId = async (): Promise<string> => {
   try {
-    const models = await aiAPI.getModels()
+    const models = await aiApi.getModels()
     const defaultModel = models.find(model => model.isDefault) || models[0]
 
     if (!defaultModel) {
@@ -84,23 +82,6 @@ export const getDefaultModelId = async (): Promise<string> => {
   } catch (error) {
     console.error('获取默认模型ID失败:', error)
     throw error
-  }
-}
-
-/**
- * 验证模型配置是否有效
- */
-export const validateModelConfig = async (modelId?: string): Promise<boolean> => {
-  try {
-    if (modelId) {
-      return await aiAPI.testConnection(modelId)
-    } else {
-      const defaultModelId = await getDefaultModelId()
-      return await aiAPI.testConnection(defaultModelId)
-    }
-  } catch (error) {
-    console.error('验证模型配置失败:', error)
-    return false
   }
 }
 
@@ -127,12 +108,6 @@ export const getEkoConfig = async (options: EkoConfigOptions = {}) => {
   try {
     // 获取LLM配置
     const llms = await getEkoLLMsConfig()
-
-    // 验证模型配置
-    const isValid = await validateModelConfig(modelId)
-    if (!isValid) {
-      console.warn('模型配置验证失败，但继续使用')
-    }
 
     return {
       llms,

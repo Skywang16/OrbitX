@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
   import { ref, watch } from 'vue'
+  import { debounce } from 'lodash-es'
 
   interface Props {
     modelValue?: string
@@ -58,7 +59,11 @@
 
   const inputRef = ref<HTMLInputElement>()
   const inputValue = ref(props.modelValue)
-  let debounceTimer: number | undefined
+
+  // 使用lodash防抖搜索
+  const debouncedSearch = debounce((value: string) => {
+    emit('search', value)
+  }, props.debounce)
 
   // 监听外部值变化
   watch(
@@ -71,10 +76,7 @@
   // 处理输入
   const handleInput = () => {
     emit('update:modelValue', inputValue.value)
-    clearTimeout(debounceTimer)
-    debounceTimer = window.setTimeout(() => {
-      emit('search', inputValue.value)
-    }, props.debounce)
+    debouncedSearch(inputValue.value)
   }
 
   // 处理焦点
@@ -88,7 +90,7 @@
 
   // 处理回车
   const handleEnter = () => {
-    clearTimeout(debounceTimer)
+    debouncedSearch.cancel() // 取消防抖，立即搜索
     emit('search', inputValue.value)
   }
 
@@ -101,7 +103,7 @@
 
   // 清除输入
   const handleClear = () => {
-    clearTimeout(debounceTimer)
+    debouncedSearch.cancel() // 取消防抖
     inputValue.value = ''
     emit('update:modelValue', '')
     emit('search', '')
@@ -126,8 +128,8 @@
     position: relative;
     display: flex;
     align-items: center;
-    background-color: var(--color-background);
-    border: 1px solid var(--border-color);
+    background-color: var(--bg-400);
+    border: 1px solid var(--border-300);
     border-radius: var(--border-radius);
     transition: all 0.2s ease;
     height: 32px;
@@ -135,7 +137,7 @@
   }
 
   .search-input:hover {
-    border-color: var(--border-color-hover);
+    border-color: var(--border-400);
   }
 
   /* 搜索图标 */
@@ -146,7 +148,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-secondary);
+    color: var(--text-400);
     flex-shrink: 0;
   }
 
@@ -162,14 +164,14 @@
     background: transparent;
     border: none;
     outline: none;
-    color: var(--text-primary);
+    color: var(--text-200);
     font-size: var(--font-size-md);
     font-family: var(--font-family);
     line-height: 1.5;
   }
 
   .search-field::placeholder {
-    color: var(--text-muted);
+    color: var(--text-400);
   }
 
   /* 清除按钮 */
@@ -184,15 +186,15 @@
     background: transparent;
     border: none;
     border-radius: var(--border-radius-sm);
-    color: var(--text-secondary);
+    color: var(--text-400);
     cursor: pointer;
     transition: all 0.2s ease;
     flex-shrink: 0;
   }
 
   .clear-button:hover {
-    background-color: var(--color-background-hover);
-    color: var(--text-primary);
+    background-color: var(--color-hover);
+    color: var(--text-200);
   }
 
   .clear-button svg {
@@ -219,8 +221,8 @@
 
   /* 禁用状态 */
   .search-input--disabled {
-    background-color: var(--color-background-secondary);
-    border-color: var(--border-color);
+    background-color: var(--bg-500);
+    border-color: var(--border-300);
     cursor: not-allowed;
     opacity: 0.6;
   }

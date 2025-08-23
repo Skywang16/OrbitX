@@ -149,7 +149,7 @@ impl PerformanceMonitor {
 
         format!(
             r#"
-=== TermX 性能报告 ===
+=== OrbitX 性能报告 ===
 运行时长: {} 秒
 活跃面板: {}
 工作线程: {}

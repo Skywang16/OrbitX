@@ -178,3 +178,46 @@ macro_rules! app_error_msg {
         anyhow::anyhow!($fmt, $($arg)*)
     };
 }
+// ============================================================================
+// 统一的参数验证工具
+// ============================================================================
+
+/// 参数验证器
+pub struct Validator;
+
+impl Validator {
+    /// 验证ID是否有效（大于0）
+    pub fn validate_id(id: i64, name: &str) -> Result<(), String> {
+        if id <= 0 {
+            Err(format!("无效的{}: {}", name, id))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// 验证字符串不为空
+    pub fn validate_not_empty(value: &str, name: &str) -> Result<(), String> {
+        if value.trim().is_empty() {
+            Err(format!("{}不能为空", name))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+// ============================================================================
+// 序列化辅助工具
+// ============================================================================
+
+/// 序列化辅助函数
+pub fn serialize_to_json<T: serde::Serialize>(value: &T, context: &str) -> Result<String, String> {
+    serde_json::to_string(value).map_err(|e| format!("{}序列化失败: {}", context, e))
+}
+
+/// 序列化为JSON值的辅助函数
+pub fn serialize_to_value<T: serde::Serialize>(
+    value: &T,
+    context: &str,
+) -> Result<serde_json::Value, String> {
+    serde_json::to_value(value).map_err(|e| format!("{}序列化失败: {}", context, e))
+}

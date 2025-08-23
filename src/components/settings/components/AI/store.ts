@@ -4,12 +4,12 @@
  * 使用新的统一存储系统管理 AI 设置
  */
 
-import { ai } from '@/api/ai'
+import { aiApi } from '@/api'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
 
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { AIModelConfig, AISettings } from './types'
+import type { AIModelConfig, AISettings } from '@/types'
 
 export const useAISettingsStore = defineStore('ai-settings', () => {
   // ===== 状态定义 =====
@@ -46,7 +46,7 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
    * 从API获取模型数据
    */
   const fetchModelsFromAPI = async () => {
-    const models = await ai.getModels()
+    const models = await aiApi.getModels()
     const defaultModelId = models.find(m => m.isDefault)?.id || null
     return { models, defaultModelId }
   }
@@ -68,7 +68,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
       }
 
       dataVersion.value++
-      await saveSettings()
     } catch (err) {
       error.value = handleErrorWithMessage(err, '刷新模型列表失败')
       throw err
@@ -92,7 +91,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
       // 从AI API获取模型数据
       const { models, defaultModelId } = await fetchModelsFromAPI()
 
-      // TODO: 这里应该从后端API获取完整的AISettings，而不是只获取模型
       // 目前先构造一个基本的设置对象
       settings.value = {
         models,
@@ -119,15 +117,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
   }
 
   /**
-   * 保存设置（AI配置已迁移到SQLite）
-   * 所有配置都通过后端API保存
-   */
-  const saveSettings = async () => {
-    // TODO: 实现通过后端API保存完整的AI设置
-    // 目前模型配置通过AI API自动保存，功能和性能配置需要新的API
-  }
-
-  /**
    * 更新AI设置
    * @param newSettings 要更新的设置项（部分更新）
    */
@@ -145,9 +134,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
 
       // 乐观更新本地状态
       settings.value = updatedSettings
-
-      // 保存设置到后端
-      await saveSettings()
     } catch (err) {
       error.value = err instanceof Error ? err.message : '更新AI设置失败'
       throw err
@@ -162,7 +148,7 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
    */
   const addModel = async (model: AIModelConfig) => {
     // 直接使用AI API添加模型（存储到SQLite）
-    await ai.addModel(model)
+    await aiApi.addModel(model)
 
     // 刷新模型数据，确保所有组件同步更新
     await refreshModels()
@@ -174,8 +160,17 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
    * @param updates 要更新的配置项（部分更新）
    */
   const updateModel = async (modelId: string, updates: Partial<AIModelConfig>) => {
+    // 先获取现有模型配置
+    const existingModel = models.value.find(m => m.id === modelId)
+    if (!existingModel) {
+      throw new Error(`模型 ${modelId} 不存在`)
+    }
+
+    // 合并更新
+    const updatedModel = { ...existingModel, ...updates }
+
     // 直接使用AI API更新模型（存储到SQLite）
-    await ai.updateModel(modelId, updates)
+    await aiApi.updateModel(updatedModel)
 
     // 刷新模型数据，确保所有组件同步更新
     await refreshModels()
@@ -187,7 +182,7 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
    */
   const removeModel = async (modelId: string) => {
     // 直接使用AI API删除模型（从SQLite中删除）
-    await ai.removeModel(modelId)
+    await aiApi.deleteModel(modelId)
 
     // 刷新模型数据，确保所有组件同步更新
     await refreshModels()
@@ -200,7 +195,7 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
   const setDefaultModel = async (modelId: string | null) => {
     // 使用AI API设置默认模型
     if (modelId) {
-      await ai.setDefaultModel(modelId)
+      await aiApi.setDefaultModel(modelId)
     }
 
     // 刷新模型数据，确保所有组件同步更新

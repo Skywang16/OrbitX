@@ -2,13 +2,9 @@
 name = "dracula"
 theme_type = "dark"
 
-[theme.colors]
-foreground = "#f8f8f2"
-background = "#282a36"
-cursor = "#f8f8f0"
-selection = "#44475a"
 
-[theme.colors.ansi]
+
+[theme.ansi]
 black = "#21222c"
 red = "#ff5555"
 green = "#50fa7b"
@@ -18,7 +14,7 @@ magenta = "#ff79c6"
 cyan = "#8be9fd"
 white = "#f8f8f2"
 
-[theme.colors.bright]
+[theme.bright]
 black = "#6272a4"
 red = "#ff6e6e"
 green = "#69ff94"
@@ -39,11 +35,44 @@ type_name = "#8be9fd"
 operator = "#ff79c6"
 
 [theme.ui]
+# Dracula 背景色层次
+bg_100 = "#21222c"
+bg_200 = "#282a36"
+bg_300 = "#2f3349"
+bg_400 = "#373844"
+bg_500 = "#44475a"
+bg_600 = "#565869"
+bg_700 = "#6272a4"
+
+# 边框层次
+border_200 = "rgba(68, 71, 90, 0.3)"
+border_300 = "rgba(68, 71, 90, 0.5)"
+border_400 = "rgba(68, 71, 90, 0.7)"
+
+# 文本层次
+text_100 = "#ffffff"
+text_200 = "#f8f8f2"
+text_300 = "#e6e6e6"
+text_400 = "#bfbfbf"
+text_500 = "#6272a4"
+
+# 状态颜色
 primary = "#bd93f9"
-secondary = "#6272a4"
+primary_hover = "#a578e8"
+primary_alpha = "rgba(189, 147, 249, 0.1)"
 success = "#50fa7b"
 warning = "#f1fa8c"
 error = "#ff5555"
 info = "#8be9fd"
-border = "#44475a"
-divider = "#44475a"
+
+# 交互状态
+hover = "#373844"
+active = "#44475a"
+focus = "#bd93f9"
+selection = "rgba(68, 71, 90, 0.8)"
+
+# 阴影和其他UI变量
+shadow_sm = "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
+font_family = "'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace"
+border_radius = "6px"
+border_radius_lg = "8px"

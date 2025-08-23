@@ -20,9 +20,7 @@ struct PerformanceTestConfig {
     writes_per_terminal: usize,
     /// 写入数据大小（字节）
     write_data_size: usize,
-    /// 测试持续时间（秒）
-    #[allow(dead_code)]
-    test_duration_secs: u64,
+
 }
 
 impl Default for PerformanceTestConfig {
@@ -31,7 +29,7 @@ impl Default for PerformanceTestConfig {
             concurrent_terminals: 5,
             writes_per_terminal: 100,
             write_data_size: 1024,
-            test_duration_secs: 30,
+
         }
     }
 }
@@ -45,13 +43,11 @@ pub(crate) struct PerformanceTestResult {
     successful_writes: usize,
     /// 失败的写入操作数量
     failed_writes: usize,
-    /// 总测试时间
-    #[allow(dead_code)]
-    total_duration: Duration,
+
     /// 平均每秒写入次数
     writes_per_second: f64,
-    /// 内存使用情况（如果可获取）
-    #[allow(dead_code)]
+
+    /// 内存使用（MB），可能在部分平台不可用
     memory_usage_mb: Option<f64>,
 }
 
@@ -192,7 +188,7 @@ pub(crate) async fn run_basic_performance_test(
         terminals_created,
         successful_writes,
         failed_writes,
-        total_duration,
+
         writes_per_second,
         memory_usage_mb: get_memory_usage(),
     };

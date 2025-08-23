@@ -8,17 +8,17 @@
  * 📁 文件操作工具：
  * - read-file: 📖 单文件读取（支持行号、范围、文件信息）
  * - read-many-files: 📚 批量文件读取（支持模式匹配、大小限制）
- * - write-file: 💾 文件写入（支持创建目录、权限设置、备份）
+ * - create-file: 📄 文件创建（创建新文件或覆盖现有文件）
+ * - edit-file: 📝 文件编辑（精确替换、行号定位、多种编辑模式）
  *
  * 🖥️ 系统工具：
  * - shell: 🔧 Shell命令执行（支持工作目录、环境变量、超时）
  *
  * 🌐 网络工具：
  * - web-fetch: 🌐 HTTP请求（支持各种方法、头部、超时）
- * - web-search: 🔍 网络搜索（支持多引擎、语言地区、安全搜索）
  *
- * 🧠 内存管理工具：
- * - memory: 🧠 会话内存管理（支持TTL、标签、模式匹配）
+ * 🔍 搜索工具：
+ * - orbit-search: 🧠 智能语义搜索（融合文本搜索、AST分析、语义理解）
  *
  * 🔧 基础设施：
  * - tool-error: 错误处理和类型定义
@@ -39,27 +39,17 @@ export * from './modifiable-tool'
 export * from './tool-error'
 
 // 导出具体工具实例
-export { readFileTool } from './read-file'
-export { readManyFilesTool } from './read-many-files'
-export { writeFileTool } from './write-file'
-export { shellTool } from './shell'
-export { webFetchTool } from './web-fetch'
-export { webSearchTool } from './web-search'
-export { memoryTool } from './memoryTool'
+export { readFileTool } from './toolList/read-file'
+export { readManyFilesTool } from './toolList/read-many-files'
+export { createFileTool } from './toolList/create-file'
+export { editFileTool } from './toolList/edit-file'
+export { shellTool } from './toolList/shell'
+export { webFetchTool } from './toolList/web-fetch'
+
+export { orbitSearchTool } from './toolList/orbit-search'
 
 // 导出主要的工具集合
-export {
-  allTools,
-  coreTools,
-  networkTools,
-  fileTools,
-  toolsByCategory,
-  getToolByName,
-  getToolsByCategory,
-  searchTools,
-  getToolsStats,
-  registerAllTools,
-} from './tools'
+export { allTools, readOnlyTools, registerAllTools, getToolsForMode } from './tools'
 
-// 默认导出核心工具
-export { coreTools as default } from './tools'
+// 默认导出所有工具
+export { allTools as default } from './tools'

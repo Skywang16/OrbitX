@@ -2,13 +2,9 @@
 name = "nord"
 theme_type = "dark"
 
-[theme.colors]
-foreground = "#d8dee9"
-background = "#2e3440"
-cursor = "#d8dee9"
-selection = "#434c5e"
 
-[theme.colors.ansi]
+
+[theme.ansi]
 black = "#3b4252"
 red = "#bf616a"
 green = "#a3be8c"
@@ -18,7 +14,7 @@ magenta = "#b48ead"
 cyan = "#88c0d0"
 white = "#e5e9f0"
 
-[theme.colors.bright]
+[theme.bright]
 black = "#4c566a"
 red = "#bf616a"
 green = "#a3be8c"
@@ -39,11 +35,44 @@ type_name = "#8fbcbb"
 operator = "#81a1c1"
 
 [theme.ui]
+# Nord 背景色层次
+bg_100 = "#242933"
+bg_200 = "#2e3440"
+bg_300 = "#3b4252"
+bg_400 = "#434c5e"
+bg_500 = "#4c566a"
+bg_600 = "#5e81ac"
+bg_700 = "#616e88"
+
+# 边框层次
+border_200 = "rgba(67, 76, 94, 0.3)"
+border_300 = "rgba(67, 76, 94, 0.5)"
+border_400 = "rgba(67, 76, 94, 0.7)"
+
+# 文本层次
+text_100 = "#ffffff"
+text_200 = "#eceff4"
+text_300 = "#e5e9f0"
+text_400 = "#d8dee9"
+text_500 = "#616e88"
+
+# 状态颜色
 primary = "#5e81ac"
-secondary = "#616e88"
+primary_hover = "#4c7399"
+primary_alpha = "rgba(94, 129, 172, 0.1)"
 success = "#a3be8c"
 warning = "#ebcb8b"
 error = "#bf616a"
 info = "#88c0d0"
-border = "#434c5e"
-divider = "#434c5e"
+
+# 交互状态
+hover = "#3b4252"
+active = "#434c5e"
+focus = "#5e81ac"
+selection = "rgba(67, 76, 94, 0.8)"
+
+# 阴影和其他UI变量
+shadow_sm = "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
+font_family = "'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace"
+border_radius = "6px"
+border_radius_lg = "8px"

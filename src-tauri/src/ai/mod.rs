@@ -10,7 +10,11 @@
 
 pub mod commands;
 pub mod context;
+pub mod enhanced_context;
+#[cfg(test)]
+pub mod enhanced_context_tests;
 pub mod service;
+pub mod tool;
 pub mod types;
 
 // 重新导出主要类型和功能
@@ -18,6 +22,12 @@ pub use commands::*;
 pub use context::*;
 pub use service::*;
 pub use types::*;
+
+// 智能上下文管理功能
+pub use enhanced_context::{
+    create_context_manager, create_context_manager_with_config, ContextConfig, ContextManager,
+    ContextResult,
+};
 
 // 重新导出统一的错误处理类型
 pub use crate::utils::error::{AppError, AppResult};

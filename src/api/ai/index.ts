@@ -1,27 +1,270 @@
 /**
- * AI功能相关的API接口 - 重构版本
+ * AI 模块 API
  *
- * 集成新的会话上下文管理系统
+ * 提供 AI 相关功能的统一接口，包括：
+ * - 模型管理
+ * - 会话管理
+ * - 工具调用
+ * - 设置管理
  */
 
-import type { AIHealthStatus, AIModelConfig, AISettings, AIStats } from '@/types'
+import type { AIHealthStatus, AIModelConfig, AISettings, AIStats, Conversation, Message } from '@/types'
 import { invoke } from '@/utils/request'
-
-import { handleError } from '../../utils/errorHandler'
-// 导入新的会话管理API
-import { conversationAPI, conversations } from './conversations'
+import { handleError } from '@/utils/errorHandler'
+import type {
+  RawConversation,
+  RawMessage,
+  AnalyzeCodeParams,
+  AnalysisResult,
+  WebFetchRequest,
+  WebFetchResponse,
+} from './types'
 
 /**
- * AI管理API类
- * 提供AI相关的功能和管理操作，包括模型管理、聊天、补全等功能
+ * AI 会话管理 API 类
  */
-export class AIAPI {
-  // ===== AI配置管理 =====
+class ConversationAPI {
+  // ===== 会话管理 =====
+
+  async createConversation(title?: string): Promise<number> {
+    try {
+      return await invoke('create_conversation', { title })
+    } catch (error) {
+      throw new Error(handleError(error, '创建会话失败'))
+    }
+  }
+
+  async getConversations(limit?: number, offset?: number): Promise<Conversation[]> {
+    try {
+      const conversations = await invoke<RawConversation[]>('get_conversations', { limit, offset })
+      return conversations.map(this.convertConversation)
+    } catch (error) {
+      throw new Error(handleError(error, '获取会话列表失败'))
+    }
+  }
+
+  async getConversation(conversationId: number): Promise<Conversation> {
+    try {
+      const conversation = await invoke<RawConversation>('get_conversation', { conversationId })
+      return this.convertConversation(conversation)
+    } catch (error) {
+      throw new Error(handleError(error, '获取会话失败'))
+    }
+  }
+
+  async updateConversationTitle(conversationId: number, title: string): Promise<void> {
+    try {
+      await invoke('update_conversation_title', { conversationId, title })
+    } catch (error) {
+      throw new Error(handleError(error, '更新会话标题失败'))
+    }
+  }
+
+  async deleteConversation(conversationId: number): Promise<void> {
+    try {
+      await invoke('delete_conversation', { conversationId })
+    } catch (error) {
+      throw new Error(handleError(error, '删除会话失败'))
+    }
+  }
+
+  async getCompressedContext(conversationId: number, upToMessageId?: number): Promise<Message[]> {
+    try {
+      const messages = await invoke<RawMessage[]>('get_compressed_context', {
+        conversationId,
+        upToMessageId,
+      })
+      return messages.map(this.convertMessage)
+    } catch (error) {
+      throw new Error(handleError(error, '获取会话上下文失败'))
+    }
+  }
+
+  async buildPromptWithContext(
+    conversationId: number,
+    currentMessage: string,
+    upToMessageId?: number,
+    currentWorkingDirectory?: string
+  ): Promise<string> {
+    try {
+      const prompt = await invoke<string>('build_prompt_with_context', {
+        conversationId,
+        currentMessage,
+        upToMessageId,
+        currentWorkingDirectory,
+      })
+      return prompt
+    } catch (error) {
+      throw new Error(handleError(error, '构建prompt失败'))
+    }
+  }
+
+  async saveMessage(conversationId: number, role: string, content: string): Promise<number> {
+    try {
+      return await invoke('save_message', { conversationId, role, content })
+    } catch (error) {
+      throw new Error(handleError(error, '保存消息失败'))
+    }
+  }
+
+  async updateMessageContent(messageId: number, content: string): Promise<void> {
+    try {
+      await invoke('update_message_content', { messageId, content })
+    } catch (error) {
+      throw new Error(handleError(error, '更新消息内容失败'))
+    }
+  }
+
+  async updateMessageSteps(messageId: number, steps: any[]): Promise<void> {
+    try {
+      // 清理工具输出中的JSON转义噪音
+      const cleanedSteps = this.cleanStepsData(steps)
+
+      const stepsJson = JSON.stringify(cleanedSteps)
+      await invoke('update_message_steps', {
+        messageId,
+        stepsJson,
+      })
+    } catch (error) {
+      throw new Error(handleError(error, '更新消息步骤失败'))
+    }
+  }
+
+  async updateMessageStatus(
+    messageId: number,
+    status?: 'pending' | 'streaming' | 'complete' | 'error',
+    duration?: number
+  ): Promise<void> {
+    try {
+      await invoke('update_message_status', {
+        messageId,
+        status,
+        durationMs: duration,
+      })
+    } catch (error) {
+      throw new Error(handleError(error, '更新消息状态失败'))
+    }
+  }
+
+  async truncateConversation(conversationId: number, truncateAfterMessageId: number): Promise<void> {
+    try {
+      await invoke('truncate_conversation', { conversationId, truncateAfterMessageId })
+    } catch (error) {
+      throw new Error(handleError(error, '截断会话失败'))
+    }
+  }
+
+  // ===== 数据清理方法 =====
 
   /**
-   * 获取所有AI模型配置
-   * @returns 返回所有已配置的AI模型列表
+   * 清理工具步骤数据中的JSON转义噪音
    */
+  private cleanStepsData(steps: any[]): any[] {
+    return steps.map(step => {
+      if (step && typeof step === 'object') {
+        const cleanedStep = { ...step }
+
+        // 清理result字段中的字符串转义
+        if (cleanedStep.result && typeof cleanedStep.result === 'object') {
+          if (typeof cleanedStep.result.text === 'string') {
+            cleanedStep.result.text = this.cleanJsonEscapes(cleanedStep.result.text)
+          }
+
+          // 清理content数组中的text字段
+          if (Array.isArray(cleanedStep.result.content)) {
+            cleanedStep.result.content = cleanedStep.result.content.map((item: any) => {
+              if (item && typeof item.text === 'string') {
+                return { ...item, text: this.cleanJsonEscapes(item.text) }
+              }
+              return item
+            })
+          }
+        }
+
+        return cleanedStep
+      }
+      return step
+    })
+  }
+
+  /**
+   * 清理JSON转义字符
+   */
+  private cleanJsonEscapes(text: string): string {
+    return text
+      .replace(/\\"/g, '"') // 清理转义的引号
+      .replace(/\\n/g, '\n') // 清理转义的换行
+      .replace(/\\t/g, '\t') // 清理转义的制表符
+      .replace(/\\\\/g, '\\') // 清理转义的反斜杠
+  }
+
+  // ===== 数据转换方法 =====
+
+  private convertConversation(raw: RawConversation): Conversation {
+    return {
+      id: raw.id,
+      title: raw.title,
+      messageCount: raw.messageCount,
+      createdAt: new Date(raw.createdAt),
+      updatedAt: new Date(raw.updatedAt),
+    }
+  }
+
+  private convertMessage(raw: RawMessage): Message {
+    let steps: any[] | undefined = undefined
+    if (raw.stepsJson) {
+      try {
+        steps = JSON.parse(raw.stepsJson)
+      } catch (error) {
+        console.error('steps解析失败:', error)
+      }
+    }
+
+    return {
+      id: raw.id,
+      conversationId: raw.conversationId,
+      role: raw.role,
+      content: raw.content,
+      steps,
+      status: raw.status,
+      duration: raw.durationMs || undefined,
+      createdAt: new Date(raw.createdAt),
+    }
+  }
+}
+
+/**
+ * 工具调用 API
+ */
+
+// ===== AST代码分析 =====
+
+export async function analyzeCode(params: AnalyzeCodeParams): Promise<AnalysisResult> {
+  try {
+    return await invoke<AnalysisResult>('analyze_code', params as unknown as Record<string, unknown>)
+  } catch (error) {
+    throw new Error(handleError(error, '代码分析失败'))
+  }
+}
+
+// ===== 网络请求 =====
+
+export async function webFetchHeadless(request: WebFetchRequest): Promise<WebFetchResponse> {
+  try {
+    return await invoke<WebFetchResponse>('web_fetch_headless', { request })
+  } catch (error) {
+    throw new Error(handleError(error, '网络请求失败'))
+  }
+}
+
+/**
+ * AI API 接口类
+ */
+export class AiApi {
+  private conversationAPI = new ConversationAPI()
+
+  // ===== 模型管理 =====
+
   async getModels(): Promise<AIModelConfig[]> {
     try {
       return await invoke<AIModelConfig[]>('get_ai_models')
@@ -30,203 +273,176 @@ export class AIAPI {
     }
   }
 
-  /**
-   * 添加AI模型配置
-   * @param config AI模型配置对象，包含模型ID、名称、API密钥等信息
-   */
-  async addModel(config: AIModelConfig): Promise<void> {
+  async addModel(model: Omit<AIModelConfig, 'id'>): Promise<AIModelConfig> {
     try {
-      await invoke('add_ai_model', { config })
+      return await invoke<AIModelConfig>('add_ai_model', { config: model })
     } catch (error) {
       throw new Error(handleError(error, '添加AI模型失败'))
     }
   }
 
-  /**
-   * 更新AI模型配置
-   * @param modelId 要更新的模型ID
-   * @param updates 要更新的配置项（部分更新）
-   */
-  async updateModel(modelId: string, updates: Partial<AIModelConfig>): Promise<void> {
+  async updateModel(model: AIModelConfig): Promise<void> {
     try {
-      await invoke('update_ai_model', { modelId, updates })
+      // 将完整的模型对象分解为 model_id 和 updates
+      const { id: model_id, ...updates } = model
+      await invoke('update_ai_model', { model_id, updates })
     } catch (error) {
       throw new Error(handleError(error, '更新AI模型失败'))
     }
   }
 
-  /**
-   * 删除AI模型配置
-   * @param modelId 要删除的模型ID
-   */
-  async removeModel(modelId: string): Promise<void> {
+  async deleteModel(id: string): Promise<void> {
     try {
-      await invoke('remove_ai_model', { modelId })
+      await invoke('remove_ai_model', { model_id: id })
     } catch (error) {
       throw new Error(handleError(error, '删除AI模型失败'))
     }
   }
 
-  /**
-   * 设置默认AI模型
-   * @param modelId 要设置为默认的模型ID
-   */
-  async setDefaultModel(modelId: string): Promise<void> {
+  async setDefaultModel(id: string): Promise<void> {
     try {
-      await invoke('set_default_ai_model', { modelId })
+      await invoke('set_default_ai_model', { model_id: id })
     } catch (error) {
-      throw new Error(handleError(error, '设置默认模型失败'))
+      throw new Error(handleError(error, '设置默认AI模型失败'))
     }
   }
 
-  /**
-   * 测试AI模型连接
-   * @param modelId 要测试的模型ID
-   * @returns 连接是否成功
-   */
-  async testConnection(modelId: string): Promise<boolean> {
+  async testConnectionWithConfig(config: AIModelConfig): Promise<boolean> {
     try {
-      return await invoke('test_ai_connection', { modelId })
+      return await invoke<boolean>('test_ai_connection_with_config', { config })
     } catch (error) {
-      const errorMessage = handleError(error)
-      // 处理未实现的适配器
-      if (errorMessage.includes('not implemented yet')) {
-        return false
-      }
-      throw new Error(errorMessage)
+      throw new Error(handleError(error, 'AI模型连接测试失败'))
     }
   }
 
-  // ===== AI功能接口 =====
-
-  // ===== AI设置管理 =====
-
-  /**
-   * 获取AI设置配置
-   * @returns 返回当前的AI设置配置
-   */
-  async getSettings(): Promise<AISettings> {
-    try {
-      return await invoke('get_ai_settings')
-    } catch (error) {
-      throw new Error(handleError(error, '获取AI设置失败'))
-    }
-  }
-
-  /**
-   * 更新AI设置配置
-   * @param settings 要更新的设置项（部分更新）
-   */
-  async updateSettings(settings: Partial<AISettings>): Promise<void> {
-    try {
-      return await invoke('update_ai_settings', { settings })
-    } catch (error) {
-      throw new Error(handleError(error, '更新AI设置失败'))
-    }
-  }
-
-  // ===== 统计和监控 =====
-
-  /**
-   * 获取AI使用统计数据
-   * @returns 返回AI功能的使用统计信息
-   */
-  async getStats(): Promise<AIStats> {
-    try {
-      return await invoke('get_ai_stats')
-    } catch (error) {
-      throw new Error(handleError(error, '获取AI统计失败'))
-    }
-  }
-
-  /**
-   * 获取AI服务健康状态
-   * @returns 返回所有AI模型的健康状态列表
-   */
-  async getHealthStatus(): Promise<AIHealthStatus[]> {
-    try {
-      return await invoke('get_ai_health_status')
-    } catch (error) {
-      throw new Error(handleError(error, '获取AI健康状态失败'))
-    }
-  }
-
-  // ===== 用户前置提示词管理 =====
-
-  /**
-   * 获取用户前置提示词
-   * @returns 返回用户设置的前置提示词，如果没有设置则返回null
-   */
   async getUserPrefixPrompt(): Promise<string | null> {
     try {
-      return await invoke('get_user_prefix_prompt')
+      return await invoke<string | null>('get_user_prefix_prompt')
     } catch (error) {
       throw new Error(handleError(error, '获取用户前置提示词失败'))
     }
   }
 
-  /**
-   * 设置用户前置提示词
-   * @param prompt 要设置的前置提示词，传入null表示清除
-   */
   async setUserPrefixPrompt(prompt: string | null): Promise<void> {
     try {
-      return await invoke('set_user_prefix_prompt', { prompt })
+      await invoke('set_user_prefix_prompt', { prompt })
     } catch (error) {
       throw new Error(handleError(error, '设置用户前置提示词失败'))
     }
   }
+
+  // ===== 设置管理 =====
+
+  async getSettings(): Promise<AISettings> {
+    try {
+      return await invoke<AISettings>('get_ai_settings')
+    } catch (error) {
+      throw new Error(handleError(error, '获取AI设置失败'))
+    }
+  }
+
+  async updateSettings(settings: Partial<AISettings>): Promise<void> {
+    try {
+      await invoke('update_ai_settings', { settings })
+    } catch (error) {
+      throw new Error(handleError(error, '更新AI设置失败'))
+    }
+  }
+
+  // ===== 统计信息 =====
+
+  async getStats(): Promise<AIStats> {
+    try {
+      return await invoke<AIStats>('get_ai_stats')
+    } catch (error) {
+      throw new Error(handleError(error, '获取AI统计信息失败'))
+    }
+  }
+
+  async getHealthStatus(): Promise<AIHealthStatus> {
+    try {
+      return await invoke<AIHealthStatus>('get_ai_health_status')
+    } catch (error) {
+      throw new Error(handleError(error, '获取AI健康状态失败'))
+    }
+  }
+
+  // ===== 会话管理（代理到 ConversationAPI） =====
+
+  async createConversation(title?: string) {
+    return this.conversationAPI.createConversation(title)
+  }
+
+  async getConversations(limit?: number, offset?: number) {
+    return this.conversationAPI.getConversations(limit, offset)
+  }
+
+  async getConversation(conversationId: number) {
+    return this.conversationAPI.getConversation(conversationId)
+  }
+
+  async updateConversationTitle(conversationId: number, title: string) {
+    return this.conversationAPI.updateConversationTitle(conversationId, title)
+  }
+
+  async deleteConversation(conversationId: number) {
+    return this.conversationAPI.deleteConversation(conversationId)
+  }
+
+  async getCompressedContext(conversationId: number, upToMessageId?: number) {
+    return this.conversationAPI.getCompressedContext(conversationId, upToMessageId)
+  }
+
+  async buildPromptWithContext(
+    conversationId: number,
+    currentMessage: string,
+    upToMessageId?: number,
+    currentWorkingDirectory?: string
+  ) {
+    return this.conversationAPI.buildPromptWithContext(
+      conversationId,
+      currentMessage,
+      upToMessageId,
+      currentWorkingDirectory
+    )
+  }
+
+  async saveMessage(conversationId: number, role: string, content: string) {
+    return this.conversationAPI.saveMessage(conversationId, role, content)
+  }
+
+  async updateMessageContent(messageId: number, content: string) {
+    return this.conversationAPI.updateMessageContent(messageId, content)
+  }
+
+  async updateMessageSteps(messageId: number, steps: any[]) {
+    return this.conversationAPI.updateMessageSteps(messageId, steps)
+  }
+
+  async updateMessageStatus(messageId: number, status?: string, duration?: number) {
+    return this.conversationAPI.updateMessageStatus(messageId, status as any, duration)
+  }
+
+  async truncateConversation(conversationId: number, truncateAfterMessageId: number) {
+    return this.conversationAPI.truncateConversation(conversationId, truncateAfterMessageId)
+  }
+
+  // ===== 工具调用 =====
+
+  async analyzeCode(params: AnalyzeCodeParams): Promise<AnalysisResult> {
+    return analyzeCode(params)
+  }
+
+  async webFetch(request: WebFetchRequest): Promise<WebFetchResponse> {
+    return webFetchHeadless(request)
+  }
 }
 
-/**
- * AI API单例实例
- * 全局唯一的AI API实例，用于所有AI相关操作
- */
-export const aiAPI = new AIAPI()
+// 导出单例实例
+export const aiApi = new AiApi()
 
-/**
- * 便捷的AI操作函数集合 - 重构版本
- * 提供简化的AI功能调用接口，集成新的会话管理系统
- */
-export const ai = {
-  // 模型管理
-  getModels: () => aiAPI.getModels(),
-  addModel: (config: AIModelConfig) => aiAPI.addModel(config),
-  updateModel: (modelId: string, updates: Partial<AIModelConfig>) => aiAPI.updateModel(modelId, updates),
-  removeModel: (modelId: string) => aiAPI.removeModel(modelId),
-  deleteModel: (modelId: string) => aiAPI.removeModel(modelId), // 别名
-  setDefaultModel: (modelId: string) => aiAPI.setDefaultModel(modelId),
-  testConnection: (modelId: string) => aiAPI.testConnection(modelId),
-
-  // 新的会话管理功能
-  conversations: {
-    create: conversations.create,
-    getList: conversations.getList,
-    get: conversations.get,
-    updateTitle: conversations.updateTitle,
-    delete: conversations.delete,
-    getCompressedContext: conversations.getCompressedContext,
-    saveMessage: conversations.saveMessage,
-    truncateConversation: conversations.truncateConversation,
-  },
-
-  // 设置管理
-  getSettings: () => aiAPI.getSettings(),
-  updateSettings: (settings: Partial<AISettings>) => aiAPI.updateSettings(settings),
-
-  // 统计监控
-  getStats: () => aiAPI.getStats(),
-  getHealthStatus: () => aiAPI.getHealthStatus(),
-
-  // 用户前置提示词管理
-  getUserPrefixPrompt: () => aiAPI.getUserPrefixPrompt(),
-  setUserPrefixPrompt: (prompt: string | null) => aiAPI.setUserPrefixPrompt(prompt),
-}
-
-// 导出会话管理API
-export { conversationAPI, conversations }
+// 导出类型
+export type * from './types'
 
 // 默认导出
-export default aiAPI
-
-// 类型定义现在统一从 @/types 导入，不在此处重复导出
+export default aiApi

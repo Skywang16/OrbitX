@@ -1,15 +1,17 @@
-import { completionAPI } from '@/api'
-import { storage } from '@/api/storage'
+import { completionApi } from '@/api'
+
 import { useAISettingsStore } from '@/components/settings/components/AI'
+import { useAIChatStore } from '@/components/AIChatSidebar/store'
 import { useTheme } from '@/composables/useTheme'
 import { useSessionStore } from '@/stores/session'
-import { useSystemStore } from '@/stores/system'
+
 import { useTerminalStore } from '@/stores/Terminal'
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { saveWindowState, StateFlags } from '@tauri-apps/plugin-window-state'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import App from './App.vue'
-import router from './router'
+
 import './styles/variables.css'
 import ui from './ui'
 
@@ -17,7 +19,6 @@ const app = createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
-app.use(router)
 app.use(ui)
 
 // 挂载应用
@@ -28,19 +29,6 @@ app.mount('#app')
 // ============================================================================
 
 /**
- * 初始化存储系统
- */
-const initializeStorageSystem = async () => {
-  try {
-    // 预加载缓存，提升后续访问性能
-    await storage.preloadCache()
-    console.log('存储系统缓存预加载完成')
-  } catch (error) {
-    console.warn('存储系统缓存预加载失败:', error)
-  }
-}
-
-/**
  * 初始化应用状态管理
  */
 const initializeStores = async () => {
@@ -48,17 +36,14 @@ const initializeStores = async () => {
     // 初始化会话状态管理
     const sessionStore = useSessionStore()
     await sessionStore.initialize()
-    console.log('会话状态管理初始化完成')
-
-    // 初始化系统监控
-    const systemStore = useSystemStore()
-    await systemStore.initialize()
-    console.log('系统监控初始化完成')
 
     // 初始化终端Store（包括会话恢复）
     const terminalStore = useTerminalStore()
     await terminalStore.initializeTerminalStore()
-    console.log('终端Store初始化完成')
+
+    // 初始化AI聊天Store
+    const aiChatStore = useAIChatStore()
+    await aiChatStore.initialize()
   } catch (error) {
     console.error('应用状态管理初始化失败:', error)
   }
@@ -72,12 +57,10 @@ const initializeSettings = async () => {
     // 初始化AI设置
     const aiSettingsStore = useAISettingsStore()
     await aiSettingsStore.loadSettings()
-    console.log('AI设置初始化完成')
 
     // 初始化主题系统
     const themeManager = useTheme()
     await themeManager.initialize()
-    console.log('主题系统初始化完成')
   } catch (error) {
     console.warn('应用设置初始化失败:', error)
   }
@@ -89,10 +72,13 @@ const initializeSettings = async () => {
 const initializeServices = async () => {
   try {
     // 初始化补全引擎
-    await completionAPI.initEngine()
-    console.log('补全引擎初始化完成')
+    await completionApi.initEngine()
+
+    // 初始化AI聊天服务（包括Eko实例）
+    const aiChatStore = useAIChatStore()
+    await aiChatStore.initializeEko()
   } catch (error) {
-    console.warn('补全引擎初始化失败，使用本地补全作为后备:', error)
+    console.warn('服务初始化失败:', error)
   }
 }
 
@@ -100,18 +86,9 @@ const initializeServices = async () => {
  * 应用启动初始化
  */
 const initializeApplication = async () => {
-  console.log('开始初始化应用...')
-
   try {
     // 并行初始化各个系统
-    await Promise.allSettled([
-      initializeStorageSystem(),
-      initializeStores(),
-      initializeSettings(),
-      initializeServices(),
-    ])
-
-    console.log('应用初始化完成')
+    await Promise.allSettled([initializeStores(), initializeSettings(), initializeServices()])
 
     // 设置窗口关闭监听器
     setupWindowCloseListener()
@@ -124,6 +101,39 @@ const initializeApplication = async () => {
 initializeApplication()
 
 // ============================================================================
+// 生产环境安全设置
+// ============================================================================
+
+/**
+ * 在生产环境中禁用右键菜单
+ */
+const disableContextMenuInProduction = () => {
+  // 只在生产环境（打包后）禁用右键菜单
+  if (import.meta.env.PROD) {
+    document.addEventListener('contextmenu', event => {
+      event.preventDefault()
+      return false
+    })
+
+    // 禁用F12开发者工具
+    document.addEventListener('keydown', event => {
+      if (
+        event.key === 'F12' ||
+        (event.ctrlKey && event.shiftKey && event.key === 'I') ||
+        (event.ctrlKey && event.shiftKey && event.key === 'C') ||
+        (event.ctrlKey && event.key === 'U')
+      ) {
+        event.preventDefault()
+        return false
+      }
+    })
+  }
+}
+
+// 应用安全设置
+disableContextMenuInProduction()
+
+// ============================================================================
 // 应用生命周期管理
 // ============================================================================
 
@@ -132,23 +142,18 @@ initializeApplication()
  */
 const handleAppClose = async () => {
   try {
-    console.log('🔄 [应用] 开始应用关闭清理...')
+    // 保存窗口状态（使用官方插件）
+    await saveWindowState(StateFlags.ALL)
 
     // 保存终端状态（这会自动同步并保存会话状态）
     const terminalStore = useTerminalStore()
     await terminalStore.saveSessionState()
 
-    // 停止自动刷新
-    const systemStore = useSystemStore()
-    systemStore.stopAutoRefresh()
-
-    // 停止会话自动保存
+    // 清理会话存储资源
     const sessionStore = useSessionStore()
-    sessionStore.stopAutoSave()
-
-    console.log('✅ [应用] 应用关闭清理完成')
+    sessionStore.cleanup()
   } catch (error) {
-    console.error('❌ [应用] 应用关闭清理失败:', error)
+    console.error('应用关闭清理失败:', error)
   }
 }
 
@@ -158,30 +163,23 @@ const handleAppClose = async () => {
 const setupWindowCloseListener = async () => {
   try {
     // 监听窗口关闭请求事件
-    const unlisten = await getCurrentWebviewWindow().onCloseRequested(async event => {
-      console.log('🔄 [应用] 收到窗口关闭请求')
-
+    const unlisten = await getCurrentWindow().onCloseRequested(async event => {
       // 阻止默认关闭行为，这样我们可以先执行保存操作
       event.preventDefault()
 
       try {
         // 执行保存操作
         await handleAppClose()
-        console.log('✅ [应用] 保存完成')
       } catch (error) {
-        console.error('❌ [应用] 保存失败:', error)
+        console.error('保存失败:', error)
       }
 
-      // 但要避免循环，所以我们移除监听器后再关闭
       unlisten()
-      await getCurrentWebviewWindow().close()
+      await getCurrentWindow().close()
     })
 
-    console.log('✅ [应用] 窗口关闭监听器已设置')
-
-    // 返回取消监听的函数，以便在需要时清理
     return unlisten
   } catch (error) {
-    console.error('❌ [应用] 设置窗口关闭监听器失败:', error)
+    console.error(error)
   }
 }

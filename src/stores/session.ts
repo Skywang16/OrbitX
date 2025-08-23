@@ -1,24 +1,13 @@
-/**
- * 会话状态管理Store
- *
- * 管理应用的会话状态，包括窗口状态、标签页、终端会话等
- * 支持自动保存、恢复和状态同步
- */
-
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
-import { storage } from '@/api/storage'
-import {
-  createDefaultSessionState,
-  type SessionState,
-  type WindowState,
-  type TabState,
-  type TerminalSession,
-} from '@/types/storage'
+import { ref, computed, readonly } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
+import { restoreStateCurrent, StateFlags } from '@tauri-apps/plugin-window-state'
+import { type SessionState, type TerminalState, type UiState, type AiState } from '@/types/domain/storage'
+import { createDefaultSessionState } from '@/types/utils/helpers'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
 
 /**
- * 会话状态管理Store
+ * 精简版会话状态管理Store
  */
 export const useSessionStore = defineStore('session', () => {
   // ============================================================================
@@ -33,9 +22,6 @@ export const useSessionStore = defineStore('session', () => {
 
   /** 是否正在保存 */
   const isSaving = ref(false)
-
-  /** 是否正在恢复 */
-  const isRestoring = ref(false)
 
   /** 错误信息 */
   const error = ref<string | null>(null)
@@ -53,64 +39,44 @@ export const useSessionStore = defineStore('session', () => {
   // 计算属性
   // ============================================================================
 
-  /** 是否有任何操作正在进行 */
-  const isOperating = computed(() => isLoading.value || isSaving.value || isRestoring.value)
+  /** 是否正在执行操作 */
+  const isOperating = computed(() => isLoading.value || isSaving.value)
 
-  /** 当前窗口状态 */
-  const windowState = computed(() => sessionState.value.windowState)
+  /** 终端状态列表 */
+  const terminals = computed(() => sessionState.value.terminals)
 
-  /** 当前标签页列表 */
-  const tabs = computed(() => sessionState.value.tabs)
-
-  /** 活跃的标签页 */
-  const activeTab = computed(() => sessionState.value.tabs.find(tab => tab.isActive) || null)
-
-  /** 终端会话列表 */
-  const terminalSessions = computed(() => sessionState.value.terminalSessions)
-
-  /** 活跃的终端会话 */
-  const activeTerminalSessions = computed(() =>
-    Object.values(sessionState.value.terminalSessions).filter(session => session.isActive)
-  )
+  /** 活跃的终端 */
+  const activeTerminal = computed(() => sessionState.value.terminals.find(t => t.active) || null)
 
   /** UI状态 */
-  const uiState = computed(() => sessionState.value.uiState)
+  const uiState = computed(() => sessionState.value.ui)
+
+  /** AI状态 */
+  const aiState = computed(() => sessionState.value.ai)
 
   // ============================================================================
   // 核心方法
   // ============================================================================
 
   /**
-   * 保存会话状态
+   * 保存会话状态到后端
    */
   const saveSessionState = async (): Promise<void> => {
     if (isSaving.value) return
 
-    console.log('🔄 [前端] 开始保存会话状态')
-    console.log('📊 [前端] 会话状态统计:', {
-      终端会话数量: Object.keys(sessionState.value.terminalSessions).length,
-      标签页数量: sessionState.value.tabs.length,
-      版本: sessionState.value.version,
-    })
-
-    isSaving.value = true
-    error.value = null
-
     try {
-      // 更新时间戳和校验和
-      const stateToSave = {
-        ...sessionState.value,
-        createdAt: new Date().toISOString(),
-        checksum: generateChecksum(sessionState.value),
-      }
+      isSaving.value = true
+      error.value = null
 
-      console.log('📤 [前端] 调用后端保存接口')
-      await storage.saveSessionState(stateToSave)
-      sessionState.value = stateToSave
-      console.log('✅ [前端] 会话状态保存成功')
+      // 更新时间戳
+      sessionState.value.timestamp = new Date().toISOString()
+
+      await invoke('storage_save_session_state', {
+        sessionState: sessionState.value,
+      })
     } catch (err) {
-      error.value = handleErrorWithMessage(err, '保存会话状态失败')
-      console.error('❌ [前端] 保存会话状态失败:', err)
+      const message = handleErrorWithMessage(err, '保存会话状态失败')
+      error.value = message
       throw err
     } finally {
       isSaving.value = false
@@ -118,75 +84,30 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   /**
-   * 加载会话状态
+   * 从后端加载会话状态
    */
-  const loadSessionState = async (): Promise<SessionState | null> => {
-    if (isLoading.value) return null
-
-    console.log('🔍 [前端] 开始加载会话状态')
-    isLoading.value = true
-    error.value = null
+  const loadSessionState = async (): Promise<void> => {
+    if (isLoading.value) return
 
     try {
-      console.log('📥 [前端] 调用后端加载接口')
-      const savedState = await storage.loadSessionState()
+      isLoading.value = true
+      error.value = null
 
-      if (savedState) {
-        console.log('✅ [前端] 会话状态加载成功')
-        console.log('📊 [前端] 加载的会话状态统计:', {
-          终端会话数量: Object.keys(savedState.terminalSessions).length,
-          标签页数量: savedState.tabs.length,
-          版本: savedState.version,
-        })
+      const state = await invoke<SessionState | null>('storage_load_session_state')
 
-        // 验证状态完整性
-        if (validateSessionState(savedState)) {
-          sessionState.value = savedState
-          return savedState
-        } else {
-          console.warn('⚠️ [前端] 会话状态验证失败，使用默认状态')
-          sessionState.value = createDefaultSessionState()
-          return null
-        }
-      } else {
-        console.log('ℹ️ [前端] 没有找到保存的会话状态，使用默认状态')
-        sessionState.value = createDefaultSessionState()
-        return null
+      if (state) {
+        sessionState.value = state
       }
+
+      // 窗口状态由官方插件自动恢复
+      await restoreWindowState()
     } catch (err) {
-      error.value = handleErrorWithMessage(err, '加载会话状态失败')
-      console.error('❌ [前端] 加载会话状态失败:', err)
+      const message = handleErrorWithMessage(err, '加载会话状态失败')
+      error.value = message
+      // 加载失败时使用默认状态
       sessionState.value = createDefaultSessionState()
-      return null
     } finally {
       isLoading.value = false
-    }
-  }
-
-  /**
-   * 恢复会话状态
-   */
-  const restoreSession = async (): Promise<boolean> => {
-    if (isRestoring.value) return false
-
-    isRestoring.value = true
-    error.value = null
-
-    try {
-      const restoredState = await loadSessionState()
-      if (restoredState) {
-        console.log('会话状态恢复成功')
-        return true
-      } else {
-        console.log('没有找到可恢复的会话状态')
-        return false
-      }
-    } catch (err) {
-      error.value = handleErrorWithMessage(err, '恢复会话状态失败')
-      console.error('恢复会话状态失败:', err)
-      return false
-    } finally {
-      isRestoring.value = false
     }
   }
 
@@ -195,223 +116,85 @@ export const useSessionStore = defineStore('session', () => {
   // ============================================================================
 
   /**
-   * 更新窗口状态
+   * 更新终端状态
    */
-  const updateWindowState = (newWindowState: Partial<WindowState>): void => {
-    sessionState.value.windowState = {
-      ...sessionState.value.windowState,
-      ...newWindowState,
-    }
+  const updateTerminals = (terminals: TerminalState[]): void => {
+    sessionState.value.terminals = terminals
     scheduleAutoSave()
   }
 
   /**
-   * 添加标签页
+   * 添加终端
    */
-  const addTab = (tab: TabState): void => {
-    // 如果是第一个标签页，设为活跃
-    if (sessionState.value.tabs.length === 0) {
-      tab.isActive = true
-    }
-
-    sessionState.value.tabs.push(tab)
+  const addTerminal = (terminal: TerminalState): void => {
+    // 先将其他终端设为非活跃
+    sessionState.value.terminals.forEach(t => (t.active = false))
+    sessionState.value.terminals.push(terminal)
     scheduleAutoSave()
   }
 
   /**
-   * 移除标签页
+   * 移除终端
    */
-  const removeTab = (tabId: string): void => {
-    const tabIndex = sessionState.value.tabs.findIndex(tab => tab.id === tabId)
-    if (tabIndex === -1) return
+  const removeTerminal = (terminalId: string): void => {
+    const index = sessionState.value.terminals.findIndex(t => t.id === terminalId)
+    if (index !== -1) {
+      sessionState.value.terminals.splice(index, 1)
 
-    const removedTab = sessionState.value.tabs[tabIndex]
-    sessionState.value.tabs.splice(tabIndex, 1)
+      // 如果移除的是活跃终端，激活第一个终端
+      if (!sessionState.value.terminals.some(t => t.active) && sessionState.value.terminals.length > 0) {
+        sessionState.value.terminals[0].active = true
+      }
 
-    // 如果移除的是活跃标签页，激活下一个
-    if (removedTab.isActive && sessionState.value.tabs.length > 0) {
-      const nextIndex = Math.min(tabIndex, sessionState.value.tabs.length - 1)
-      sessionState.value.tabs[nextIndex].isActive = true
+      scheduleAutoSave()
     }
-
-    scheduleAutoSave()
   }
 
   /**
-   * 激活标签页
+   * 激活终端
    */
-  const activateTab = (tabId: string): void => {
-    sessionState.value.tabs.forEach(tab => {
-      tab.isActive = tab.id === tabId
+  const activateTerminal = (terminalId: string): void => {
+    sessionState.value.terminals.forEach(t => {
+      t.active = t.id === terminalId
     })
+    // 同时更新活跃标签页ID
+    sessionState.value.activeTabId = terminalId
     scheduleAutoSave()
   }
 
   /**
-   * 更新标签页
+   * 设置活跃标签页ID
    */
-  const updateTab = (tabId: string, updates: Partial<TabState>): void => {
-    const tab = sessionState.value.tabs.find(tab => tab.id === tabId)
-    if (tab) {
-      Object.assign(tab, updates)
-      scheduleAutoSave()
-    }
-  }
-
-  /**
-   * 添加终端会话
-   */
-  const addTerminalSession = (session: TerminalSession): void => {
-    sessionState.value.terminalSessions[session.id] = session
+  const setActiveTabId = (tabId: string | null | undefined): void => {
+    sessionState.value.activeTabId = tabId || undefined
     scheduleAutoSave()
-  }
-
-  /**
-   * 移除终端会话
-   */
-  const removeTerminalSession = (sessionId: string): void => {
-    delete sessionState.value.terminalSessions[sessionId]
-    scheduleAutoSave()
-  }
-
-  /**
-   * 更新终端会话
-   */
-  const updateTerminalSession = (sessionId: string, updates: Partial<TerminalSession>): void => {
-    const session = sessionState.value.terminalSessions[sessionId]
-    if (session) {
-      Object.assign(session, updates)
-      scheduleAutoSave()
-    }
   }
 
   /**
    * 更新UI状态
    */
-  const updateUiState = (updates: Partial<typeof sessionState.value.uiState>): void => {
-    sessionState.value.uiState = {
-      ...sessionState.value.uiState,
+  const updateUiState = (updates: Partial<UiState>): void => {
+    sessionState.value.ui = {
+      ...sessionState.value.ui,
+      ...updates,
+    }
+    scheduleAutoSave()
+  }
+
+  /**
+   * 更新AI状态
+   */
+  const updateAiState = (updates: Partial<AiState>): void => {
+    sessionState.value.ai = {
+      ...sessionState.value.ai,
       ...updates,
     }
     scheduleAutoSave()
   }
 
   // ============================================================================
-  // 工具方法
+  // 自动保存
   // ============================================================================
-
-  /**
-   * 生成状态校验和
-   */
-  const generateChecksum = (state: SessionState): string => {
-    // 简单的校验和生成，实际项目中可以使用更复杂的算法
-    const stateString = JSON.stringify({
-      version: state.version,
-      tabs: state.tabs.length,
-      sessions: Object.keys(state.terminalSessions).length,
-      timestamp: state.createdAt,
-    })
-
-    let hash = 0
-    for (let i = 0; i < stateString.length; i++) {
-      const char = stateString.charCodeAt(i)
-      hash = (hash << 5) - hash + char
-      hash = hash & hash // 转换为32位整数
-    }
-
-    return hash.toString(16)
-  }
-
-  /**
-   * 验证会话状态
-   */
-  const validateSessionState = (state: SessionState): boolean => {
-    try {
-      // 基本结构验证
-      if (
-        typeof state.version !== 'number' ||
-        !Array.isArray(state.tabs) ||
-        typeof state.terminalSessions !== 'object' ||
-        state.terminalSessions === null ||
-        typeof state.uiState !== 'object' ||
-        state.uiState === null ||
-        typeof state.windowState !== 'object' ||
-        state.windowState === null
-      ) {
-        console.warn('会话状态基本结构验证失败')
-        return false
-      }
-
-      // 验证终端会话结构
-      for (const [sessionId, session] of Object.entries(state.terminalSessions)) {
-        if (
-          !session ||
-          typeof session.id !== 'string' ||
-          typeof session.title !== 'string' ||
-          typeof session.isActive !== 'boolean' ||
-          typeof session.workingDirectory !== 'string' ||
-          typeof session.createdAt !== 'string' ||
-          typeof session.lastActive !== 'string' ||
-          !Array.isArray(session.commandHistory) ||
-          typeof session.environment !== 'object' ||
-          session.environment === null
-        ) {
-          console.warn(`终端会话 ${sessionId} 结构验证失败:`, session)
-          return false
-        }
-      }
-
-      // 验证标签页结构
-      for (const tab of state.tabs) {
-        if (
-          !tab ||
-          typeof tab.id !== 'string' ||
-          typeof tab.title !== 'string' ||
-          typeof tab.isActive !== 'boolean' ||
-          typeof tab.workingDirectory !== 'string' ||
-          typeof tab.customData !== 'object'
-        ) {
-          console.warn('标签页结构验证失败:', tab)
-          return false
-        }
-      }
-
-      // 验证窗口状态结构
-      const ws = state.windowState
-      if (
-        !Array.isArray(ws.position) ||
-        ws.position.length !== 2 ||
-        !Array.isArray(ws.size) ||
-        ws.size.length !== 2 ||
-        typeof ws.isMaximized !== 'boolean' ||
-        typeof ws.isFullscreen !== 'boolean' ||
-        typeof ws.isAlwaysOnTop !== 'boolean'
-      ) {
-        console.warn('窗口状态结构验证失败:', ws)
-        return false
-      }
-
-      // 验证UI状态结构
-      const ui = state.uiState
-      if (
-        typeof ui.sidebarVisible !== 'boolean' ||
-        typeof ui.sidebarWidth !== 'number' ||
-        typeof ui.currentTheme !== 'string' ||
-        typeof ui.fontSize !== 'number' ||
-        typeof ui.zoomLevel !== 'number' ||
-        typeof ui.panelLayout !== 'object' ||
-        ui.panelLayout === null
-      ) {
-        console.warn('UI状态结构验证失败:', ui)
-        return false
-      }
-
-      return true
-    } catch (error) {
-      console.error('会话状态验证过程中发生错误:', error)
-      return false
-    }
-  }
 
   /**
    * 调度自动保存
@@ -422,14 +205,25 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     autoSaveTimer = setTimeout(() => {
-      saveSessionState().catch(err => {
-        console.warn('自动保存会话状态失败:', err)
+      saveSessionState().catch(() => {
+        // 自动保存失败静默处理
       })
     }, AUTO_SAVE_INTERVAL)
   }
 
   /**
-   * 启动自动保存
+   * 立即保存（用于重要状态变化）
+   */
+  const saveImmediately = async (): Promise<void> => {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer)
+      autoSaveTimer = null
+    }
+    await saveSessionState()
+  }
+
+  /**
+   * 开始自动保存
    */
   const startAutoSave = (): void => {
     scheduleAutoSave()
@@ -453,61 +247,79 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   /**
-   * 初始化会话Store
+   * 恢复窗口状态到实际窗口 (使用官方window-state插件)
+   */
+  const restoreWindowState = async (): Promise<void> => {
+    try {
+      // 使用官方插件恢复窗口状态
+      await restoreStateCurrent(StateFlags.ALL)
+    } catch (error) {
+      // 窗口状态恢复失败不应阻止应用启动，只记录警告
+      console.warn('窗口状态恢复失败:', error)
+    }
+  }
+
+  /**
+   * 清理资源
+   */
+  const cleanup = (): void => {
+    stopAutoSave()
+  }
+  /**
+   * 初始化会话状态管理
    */
   const initialize = async (): Promise<void> => {
     if (initialized.value) return
 
     try {
-      await restoreSession()
+      await loadSessionState()
       startAutoSave()
       initialized.value = true
     } catch (err) {
-      console.error('会话Store初始化失败:', err)
+      console.error('会话状态管理初始化失败:', err)
       throw err
     }
   }
 
+  // ============================================================================
+  // 返回Store接口
+  // ============================================================================
+
   return {
     // 状态
-    sessionState,
-    isLoading,
-    isSaving,
-    isRestoring,
-    error,
-    initialized,
+    sessionState: readonly(sessionState),
+    isLoading: readonly(isLoading),
+    isSaving: readonly(isSaving),
+    error: readonly(error),
+    initialized: readonly(initialized),
 
     // 计算属性
     isOperating,
-    windowState,
-    tabs,
-    activeTab,
-    terminalSessions,
-    activeTerminalSessions,
+    terminals,
+    activeTerminal,
     uiState,
+    aiState,
 
     // 核心方法
     saveSessionState,
     loadSessionState,
-    restoreSession,
+    restoreWindowState,
+    initialize,
+    cleanup,
 
     // 状态更新方法
-    updateWindowState,
-    addTab,
-    removeTab,
-    activateTab,
-    updateTab,
-    addTerminalSession,
-    removeTerminalSession,
-    updateTerminalSession,
+    updateTerminals,
+    addTerminal,
+    removeTerminal,
+    activateTerminal,
+    setActiveTabId,
     updateUiState,
+    updateAiState,
 
     // 工具方法
     startAutoSave,
     stopAutoSave,
+    saveImmediately,
     clearError,
-    initialize,
   }
 })
-
-export default useSessionStore

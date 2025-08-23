@@ -8,7 +8,7 @@
   import { invoke } from '@tauri-apps/api/core'
   import { listen, UnlistenFn } from '@tauri-apps/api/event'
   import { getCurrentWebview } from '@tauri-apps/api/webview'
-  import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+  import { onBeforeUnmount, onMounted, watch } from 'vue'
 
   const terminalStore = useTerminalStore()
   const aiChatStore = useAIChatStore()
@@ -33,7 +33,7 @@
         insertFilePathToCurrentTerminal(filePath)
       }
     } catch (error) {
-      console.error('处理文件路径失败:', error)
+      console.warn('处理文件路径失败:', error)
     }
   }
 
@@ -53,7 +53,6 @@
     terminalStore.writeToTerminal(terminalStore.activeTerminalId, processedPath)
   }
 
-  // 监听终端状态变化，同步到标签管理器
   watch(
     () => terminalStore.terminals,
     () => {
@@ -62,47 +61,25 @@
     { deep: true }
   )
 
-  watch(
-    () => terminalStore.activeTerminalId,
-    newActiveId => {
-      if (newActiveId && tabManagerStore.activeTabId !== newActiveId) {
-        tabManagerStore.setActiveTab(newActiveId)
-      }
-    }
-  )
-
-  // 当主应用组件挂载时，设置全局监听器
+  // 当主应用组件挂载时，初始化应用状态
   onMounted(async () => {
-    await terminalStore.setupGlobalListeners()
-
-    // 初始化shell管理器
-    await terminalStore.initializeShellManager()
-
-    // 初始化标签管理器
-    tabManagerStore.initialize()
-
-    // 如果没有终端，创建一个初始终端
-    if (terminalStore.terminals.length === 0) {
-      await terminalStore.createTerminal()
+    // 统一的文件处理函数
+    const handleAppIconFileDrop = (event: { payload: string }) => {
+      handleFilePath(event.payload, 'app-icon')
     }
 
-    // 监听应用启动时的文件参数（拖动到应用图标）
-    unlistenStartupFile = await listen<string>('startup-file', event => {
-      handleFilePath(event.payload, 'app-icon')
-    })
+    // 监听应用启动时的文件参数和文件拖拽事件（合并处理）
+    unlistenStartupFile = await listen<string>('startup-file', handleAppIconFileDrop)
+    unlistenFileDropped = await listen<string>('file-dropped', handleAppIconFileDrop)
 
-    // 监听文件拖拽事件（从single instance插件，拖动到应用图标）
-    unlistenFileDropped = await listen<string>('file-dropped', event => {
-      handleFilePath(event.payload, 'app-icon')
-    })
-
-    // 监听 Tauri 原生文件拖拽事件
+    // 监听 Tauri 原生文件拖拽事件（窗口内拖拽）
     const webview = getCurrentWebview()
     unlistenFileDrop = await webview.onDragDropEvent(event => {
       // 只处理文件拖拽放置事件
       if (
         event.event === 'tauri://drag-drop' &&
         event.payload &&
+        'paths' in event.payload &&
         event.payload.paths &&
         event.payload.paths.length > 0
       ) {
@@ -112,8 +89,11 @@
     })
   })
 
-  // 应用关闭/卸载时清理监听器
+  // 应用关闭/卸载时清理监听器并保存状态
   onBeforeUnmount(() => {
+    console.log('🔄 [TerminalView] 应用关闭，开始清理')
+
+    // 先立即清理监听器，确保不阻塞关闭
     terminalStore.teardownGlobalListeners()
 
     // 清理文件拖拽事件监听器
@@ -126,6 +106,19 @@
     if (unlistenFileDrop) {
       unlistenFileDrop()
     }
+
+    // 异步保存状态，不阻塞关闭流程
+    Promise.resolve().then(async () => {
+      try {
+        console.log('🤖 [TerminalView] 保存AI聊天状态')
+        aiChatStore.saveToSessionState()
+
+        await terminalStore.saveSessionState()
+      } catch (error) {
+        console.error('❌ [TerminalView] 状态保存失败:', error)
+        // 保存失败不影响应用关闭
+      }
+    })
   })
 </script>
 
@@ -155,7 +148,7 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background-color: var(--color-background);
+    background-color: var(--bg-200);
   }
 
   .main-content {
