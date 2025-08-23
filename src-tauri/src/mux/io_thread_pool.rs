@@ -9,7 +9,7 @@ use std::io::Read;
 use std::sync::{Arc, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use tracing::{debug, error, info, trace, warn};
+use tracing::error;
 
 use crate::mux::{BatchProcessor, BatchProcessorConfig, MuxNotification, Pane, PaneId};
 use crate::shell::ShellIntegrationManager;
@@ -208,7 +208,7 @@ impl IoThreadPool {
 
     /// 获取统计信息
     pub fn get_stats(&self) -> IoThreadPoolStats {
-        let mut stats = self
+        let stats = self
             .stats
             .lock()
             .map(|stats| stats.clone())
@@ -255,7 +255,7 @@ impl IoThreadPool {
 
     /// 启动工作线程
     fn spawn_worker_thread(
-        worker_id: usize,
+        _worker_id: usize,
         task_receiver: Receiver<IoTask>,
         config: IoThreadPoolConfig,
         stats: Arc<std::sync::Mutex<IoThreadPoolStats>>,
@@ -359,7 +359,7 @@ impl IoThreadPool {
 
     /// 启动读取线程
     fn spawn_reader_thread(
-        pane_id: PaneId,
+        _pane_id: PaneId,
         mut reader: Box<dyn Read + Send>,
         data_sender: Sender<Vec<u8>>,
         buffer_size: usize,

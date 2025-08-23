@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-use tracing::{debug, error, info};
+use tracing::error;
 
 use crate::mux::{MuxNotification, Pane, PaneId};
 use crate::shell::ShellIntegrationManager;
@@ -67,7 +67,9 @@ pub struct BatchProcessor {
     config: BatchProcessorConfig,
     task_sender: Sender<BatchTask>,
     processor_handles: Arc<std::sync::Mutex<Option<Vec<JoinHandle<()>>>>>,
+    #[allow(dead_code)]
     notification_sender: Sender<MuxNotification>,
+    #[allow(dead_code)]
     shell_integration: Arc<ShellIntegrationManager>,
 }
 
@@ -107,7 +109,7 @@ impl BatchProcessor {
         pane: Weak<dyn Pane>,
         data_receiver: Receiver<Vec<u8>>,
     ) -> AppResult<()> {
-        let pane_id = if let Some(p) = pane.upgrade() {
+        let _pane_id = if let Some(p) = pane.upgrade() {
             p.pane_id()
         } else {
             return Err(anyhow!("面板已被释放"));
