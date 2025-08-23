@@ -133,7 +133,16 @@ mod tests {
             flush_interval_ms: 8,
         };
 
-        let handler = terminal_lib::mux::IoHandler::with_config(sender, config.clone());
+        // IoHandler 需要一个 ShellIntegrationManager 实例
+        let shell_mgr = std::sync::Arc::new(
+            terminal_lib::shell::integration::ShellIntegrationManager::new().unwrap(),
+        );
+        let handler = terminal_lib::mux::IoHandler::with_config_and_mode(
+            sender,
+            config.clone(),
+            terminal_lib::mux::IoMode::ThreadPool,
+            shell_mgr,
+        );
 
         // 验证配置被正确应用
         assert_eq!(handler.config().buffer_size, 8192);

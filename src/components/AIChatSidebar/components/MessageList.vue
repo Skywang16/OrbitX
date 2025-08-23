@@ -1,8 +1,9 @@
 <script setup lang="ts">
-  import { computed, nextTick, ref, watch } from 'vue'
+  import { computed, nextTick, onMounted, ref, watch } from 'vue'
   import type { Message } from '@/types'
   import UserMessage from './UserMessage.vue'
   import AIMessage from './AIMessage.vue'
+  import lottie, { type AnimationItem } from 'lottie-web'
 
   interface Props {
     messages: Message[]
@@ -12,6 +13,8 @@
 
   // 消息列表容器引用
   const messageListRef = ref<HTMLElement | null>(null)
+  // Lottie动画容器引用
+  const lottieContainer = ref<HTMLElement | null>(null)
 
   // 消息列表
   const msgList = computed(() => {
@@ -37,13 +40,30 @@
     },
     { immediate: true }
   )
+
+  // 当空状态容器挂载时初始化动画
+  onMounted(() => {
+    if (msgList.value.length === 0 && lottieContainer.value) {
+      lottie.loadAnimation({
+        container: lottieContainer.value,
+        renderer: 'svg',
+        loop: true,
+        autoplay: true,
+        path: '/Circle.json',
+      })
+    }
+  })
 </script>
 
 <template>
   <div ref="messageListRef" class="message-list">
     <div v-if="msgList.length === 0" class="empty-state">
+      <!-- Lottie动画容器 -->
+      <div class="empty-icon">
+        <div ref="lottieContainer" class="lottie-animation"></div>
+      </div>
       <div class="empty-text">开始对话吧</div>
-      <div class="empty-hint">发送消息开始与AI助手对话</div>
+      <div class="empty-hint">发送消息开始与Orbit对话</div>
     </div>
 
     <div v-else class="message-container">
@@ -75,7 +95,29 @@
     justify-content: center;
     text-align: center;
     color: var(--text-400);
-    gap: var(--spacing-md);
+    gap: var(--spacing-lg);
+  }
+
+  .empty-icon {
+    margin-bottom: var(--spacing-md);
+  }
+
+  .lottie-animation {
+    width: 120px;
+    height: 120px;
+    filter: drop-shadow(0 0 12px rgba(var(--color-primary-rgb, 59, 130, 246), 0.4));
+  }
+
+  /* Lottie动画中的SVG元素自动继承主题色彩 */
+  .lottie-animation svg {
+    color: var(--color-primary);
+  }
+
+  .lottie-animation svg path,
+  .lottie-animation svg circle,
+  .lottie-animation svg ellipse {
+    stroke: var(--color-primary) !important;
+    fill: var(--color-primary) !important;
   }
 
   .empty-text {

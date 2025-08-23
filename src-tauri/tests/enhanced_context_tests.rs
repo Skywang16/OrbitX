@@ -11,9 +11,12 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::ai::enhanced_context::*;
-    use crate::ai::types::Message;
     use chrono::Utc;
+    use terminal_lib::ai::enhanced_context::{
+        CompressionStrategy, ContextConfig, EfficientCompressionStrategy, KVCache, KVCacheConfig,
+        LoopDetector, MessageScorer,
+    };
+    use terminal_lib::ai::types::Message;
 
     // ============= 测试辅助函数 =============
 
@@ -69,7 +72,7 @@ mod tests {
     #[test]
     fn test_kv_cache_basic_operations() {
         let config = KVCacheConfig::default();
-        let cache = KVCache::new(config);
+        let cache = KVCache::new(config, None);
 
         let messages = vec![
             create_test_message(1, 100, "user", "Hello"),
@@ -96,7 +99,7 @@ mod tests {
     #[test]
     fn test_kv_cache_hash_invalidation() {
         let config = KVCacheConfig::default();
-        let cache = KVCache::new(config);
+        let cache = KVCache::new(config, None);
 
         let messages1 = vec![
             create_test_message(1, 100, "user", "Hello"),
@@ -121,7 +124,7 @@ mod tests {
     fn test_kv_cache_ttl_expiration() {
         let mut config = KVCacheConfig::default();
         config.ttl_seconds = 1; // 1秒过期
-        let cache = KVCache::new(config);
+        let cache = KVCache::new(config, None);
 
         let messages = vec![create_test_message(1, 100, "user", "Hello")];
 
@@ -139,7 +142,7 @@ mod tests {
     fn test_kv_cache_lru_eviction() {
         let mut config = KVCacheConfig::default();
         config.max_entries = 2; // 最多2个条目
-        let cache = KVCache::new(config);
+        let cache = KVCache::new(config, None);
 
         let messages1 = vec![create_test_message(1, 100, "user", "Message 1")];
         let messages2 = vec![create_test_message(2, 200, "user", "Message 2")];
@@ -164,7 +167,7 @@ mod tests {
     fn test_kv_cache_stable_prefix_extraction() {
         let mut config = KVCacheConfig::default();
         config.stable_prefix_max_tokens = 10; // 限制为10个token
-        let cache = KVCache::new(config);
+        let cache = KVCache::new(config, None);
 
         let messages = vec![
             create_test_message(1, 100, "user", "Short"), // ~1 token
@@ -265,7 +268,7 @@ mod tests {
 
     #[test]
     fn test_hybrid_strategy_preserves_system_messages() {
-        let strategy = HybridStrategy;
+        let strategy = EfficientCompressionStrategy;
         let config = ContextConfig::default();
 
         let messages = vec![
@@ -285,7 +288,7 @@ mod tests {
 
     #[test]
     fn test_hybrid_strategy_preserves_recent_messages() {
-        let strategy = HybridStrategy;
+        let strategy = EfficientCompressionStrategy;
         let mut config = ContextConfig::default();
         config.keep_recent = 2;
         config.keep_important = 0; // 不保留重要消息，只测试最近消息
@@ -306,7 +309,7 @@ mod tests {
 
     #[test]
     fn test_hybrid_strategy_preserves_important_messages() {
-        let strategy = HybridStrategy;
+        let strategy = EfficientCompressionStrategy;
         let mut config = ContextConfig::default();
         config.keep_recent = 0; // 不保留最近消息，只测试重要消息
         config.keep_important = 2;
@@ -327,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_hybrid_strategy_deduplication() {
-        let strategy = HybridStrategy;
+        let strategy = EfficientCompressionStrategy;
         let config = ContextConfig::default();
 
         let duplicate_msg = create_test_message(1, 100, "user", "Duplicate message");
@@ -415,10 +418,10 @@ mod tests {
     fn test_context_config_default_values() {
         let config = ContextConfig::default();
 
-        assert_eq!(config.max_tokens, 32000);
-        assert_eq!(config.compress_threshold, 0.7);
-        assert_eq!(config.keep_recent, 10);
-        assert_eq!(config.keep_important, 5);
+        assert_eq!(config.max_tokens, 100000);
+        assert!((config.compress_threshold - 0.92).abs() < f32::EPSILON);
+        assert_eq!(config.keep_recent, 12);
+        assert_eq!(config.keep_important, 8);
         assert!(config.kv_cache.enabled);
         assert_eq!(config.kv_cache.ttl_seconds, 3600);
         assert_eq!(config.kv_cache.max_entries, 100);
@@ -438,7 +441,7 @@ mod tests {
 
     #[test]
     fn test_empty_message_list() {
-        let strategy = HybridStrategy;
+        let strategy = EfficientCompressionStrategy;
         let config = ContextConfig::default();
         let messages: Vec<Message> = vec![];
 
@@ -449,7 +452,7 @@ mod tests {
 
     #[test]
     fn test_single_message() {
-        let strategy = HybridStrategy;
+        let strategy = EfficientCompressionStrategy;
         let config = ContextConfig::default();
         let messages = vec![create_test_message(1, 100, "user", "Single message")];
 
@@ -462,7 +465,7 @@ mod tests {
     fn test_cache_disabled() {
         let mut config = KVCacheConfig::default();
         config.enabled = false;
-        let cache = KVCache::new(config);
+        let cache = KVCache::new(config, None);
 
         let messages = vec![create_test_message(1, 100, "user", "Test")];
 
@@ -502,7 +505,7 @@ mod tests {
 
     #[test]
     fn test_large_message_list_performance() {
-        let strategy = HybridStrategy;
+        let strategy = EfficientCompressionStrategy;
         let config = ContextConfig::default();
 
         // 创建1000条消息
@@ -525,7 +528,7 @@ mod tests {
         use std::thread;
 
         let config = KVCacheConfig::default();
-        let cache = Arc::new(KVCache::new(config));
+        let cache: std::sync::Arc<KVCache> = std::sync::Arc::new(KVCache::new(config, None));
         let messages = vec![create_test_message(1, 100, "user", "Test")];
 
         let mut handles = vec![];

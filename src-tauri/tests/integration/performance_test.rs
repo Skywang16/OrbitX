@@ -47,6 +47,8 @@ pub(crate) struct PerformanceTestResult {
     /// 平均每秒写入次数
     writes_per_second: f64,
 
+    /// 内存使用（MB），可能在部分平台不可用
+    memory_usage_mb: Option<f64>,
 }
 
 /// 执行基本性能测试

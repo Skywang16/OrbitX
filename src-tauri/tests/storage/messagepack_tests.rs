@@ -13,7 +13,7 @@ use tokio::fs;
 use terminal_lib::storage::{
     messagepack::{MessagePackManager, MessagePackOptions},
     paths::StoragePaths,
-    types::{SessionState, TabState, TerminalSession, UiState, WindowState},
+    types::{SessionState, TerminalState, UiState, WindowState},
 };
 use terminal_lib::utils::error::AppResult;
 
@@ -27,85 +27,39 @@ async fn create_test_paths() -> AppResult<(TempDir, StoragePaths)> {
 
 /// 创建测试用的会话状态
 fn create_test_session_state() -> SessionState {
-    let mut terminal_sessions = HashMap::new();
-    terminal_sessions.insert(
-        "session1".to_string(),
-        TerminalSession {
-            id: "session1".to_string(),
-            title: "Test Terminal".to_string(),
-            working_directory: "/tmp".to_string(),
-            environment: {
-                let mut env = HashMap::new();
-                env.insert("PATH".to_string(), "/usr/bin:/bin".to_string());
-                env.insert("HOME".to_string(), "/home/user".to_string());
-                env
-            },
-            command_history: vec![
-                "ls -la".to_string(),
-                "cd /tmp".to_string(),
-                "echo hello".to_string(),
-            ],
-            is_active: true,
-            created_at: SystemTime::now().into(),
-            last_active: SystemTime::now().into(),
-        },
-    );
-
-    let tabs = vec![
-        TabState {
-            id: "tab1".to_string(),
+    let terminals = vec![
+        TerminalState {
+            id: "t1".to_string(),
             title: "Terminal 1".to_string(),
-            is_active: true,
-            working_directory: "/tmp".to_string(),
-            terminal_session_id: Some("session1".to_string()),
-            custom_data: {
-                let mut data = HashMap::new();
-                data.insert(
-                    "color".to_string(),
-                    serde_json::Value::String("blue".to_string()),
-                );
-                data
-            },
+            cwd: "/tmp".to_string(),
+            active: true,
+            shell: Some("bash".to_string()),
         },
-        TabState {
-            id: "tab2".to_string(),
+        TerminalState {
+            id: "t2".to_string(),
             title: "Terminal 2".to_string(),
-            is_active: false,
-            working_directory: "/home".to_string(),
-            terminal_session_id: None,
-            custom_data: HashMap::new(),
+            cwd: "/home".to_string(),
+            active: false,
+            shell: None,
         },
     ];
 
     SessionState {
         version: 1,
-        window_state: WindowState {
-            position: (100, 200),
-            size: (1200, 800),
-            is_maximized: false,
-            is_fullscreen: false,
-            is_always_on_top: false,
+        window: WindowState {
+            x: 100,
+            y: 200,
+            width: 1200,
+            height: 800,
+            maximized: false,
         },
-        tabs,
-        terminal_sessions,
-        ui_state: UiState {
-            sidebar_visible: true,
-            sidebar_width: 300,
-            current_theme: "dark".to_string(),
+        terminals,
+        ui: UiState {
+            theme: "dark".to_string(),
             font_size: 14.0,
-            zoom_level: 1.0,
-            panel_layout: {
-                let mut layout = HashMap::new();
-                layout.insert(
-                    "main".to_string(),
-                    serde_json::Value::String("terminal".to_string()),
-                );
-                layout
-            },
-            orbitx_chat: Some(Default::default()),
+            sidebar_width: 300,
         },
-        created_at: SystemTime::now().into(),
-        checksum: None,
+        ..Default::default()
     }
 }
 
@@ -143,26 +97,12 @@ async fn test_session_state_serialization() {
 
     // 验证数据完整性
     assert_eq!(original_state.version, deserialized_state.version);
-    assert_eq!(
-        original_state.window_state.position,
-        deserialized_state.window_state.position
-    );
-    assert_eq!(
-        original_state.window_state.size,
-        deserialized_state.window_state.size
-    );
-    assert_eq!(original_state.tabs.len(), deserialized_state.tabs.len());
-    assert_eq!(
-        original_state.terminal_sessions.len(),
-        deserialized_state.terminal_sessions.len()
-    );
-    assert_eq!(
-        original_state.ui_state.current_theme,
-        deserialized_state.ui_state.current_theme
-    );
-
-    // 验证校验和已设置
-    assert!(deserialized_state.checksum.is_some(), "校验和应该被设置");
+    assert_eq!(original_state.window.x, deserialized_state.window.x);
+    assert_eq!(original_state.window.y, deserialized_state.window.y);
+    assert_eq!(original_state.window.width, deserialized_state.window.width);
+    assert_eq!(original_state.window.height, deserialized_state.window.height);
+    assert_eq!(original_state.terminals.len(), deserialized_state.terminals.len());
+    assert_eq!(original_state.ui.theme, deserialized_state.ui.theme);
 }
 
 /// 测试压缩功能
@@ -206,7 +146,7 @@ async fn test_compression() {
         .unwrap();
 
     assert_eq!(compressed_result.version, uncompressed_result.version);
-    assert_eq!(compressed_result.tabs.len(), uncompressed_result.tabs.len());
+    assert_eq!(compressed_result.terminals.len(), uncompressed_result.terminals.len());
 }
 
 /// 测试状态保存和加载
@@ -233,15 +173,9 @@ async fn test_save_and_load_state() {
 
     // 验证加载的数据与原始数据一致
     assert_eq!(original_state.version, loaded_state.version);
-    assert_eq!(
-        original_state.window_state.position,
-        loaded_state.window_state.position
-    );
-    assert_eq!(original_state.tabs.len(), loaded_state.tabs.len());
-    assert_eq!(
-        original_state.terminal_sessions.len(),
-        loaded_state.terminal_sessions.len()
-    );
+    assert_eq!(original_state.window.x, loaded_state.window.x);
+    assert_eq!(original_state.window.y, loaded_state.window.y);
+    assert_eq!(original_state.terminals.len(), loaded_state.terminals.len());
 }
 
 /// 测试不存在状态文件时的加载
@@ -545,49 +479,16 @@ async fn test_large_data_performance() {
     // 创建包含大量数据的状态
     let mut large_state = create_test_session_state();
 
-    // 添加大量终端会话
+    // 添加大量终端
     for i in 0..100 {
-        let session = TerminalSession {
-            id: format!("session_{}", i),
+        let term = TerminalState {
+            id: format!("t_{}", i),
             title: format!("Terminal {}", i),
-            working_directory: format!("/tmp/dir_{}", i),
-            environment: {
-                let mut env = HashMap::new();
-                for j in 0..10 {
-                    env.insert(format!("VAR_{}", j), format!("value_{}", j));
-                }
-                env
-            },
-            command_history: (0..50).map(|j| format!("command_{}_{}", i, j)).collect(),
-            is_active: i == 0,
-            created_at: SystemTime::now().into(),
-            last_active: SystemTime::now().into(),
+            cwd: format!("/tmp/dir_{}", i),
+            active: i == 0,
+            shell: Some("bash".to_string()),
         };
-        large_state
-            .terminal_sessions
-            .insert(format!("session_{}", i), session);
-    }
-
-    // 添加大量标签页
-    for i in 0..50 {
-        let tab = TabState {
-            id: format!("tab_{}", i),
-            title: format!("Tab {}", i),
-            is_active: i == 0,
-            working_directory: format!("/tmp/tab_{}", i),
-            terminal_session_id: Some(format!("session_{}", i % 100)),
-            custom_data: {
-                let mut data = HashMap::new();
-                for j in 0..5 {
-                    data.insert(
-                        format!("key_{}", j),
-                        serde_json::Value::String(format!("value_{}_{}", i, j)),
-                    );
-                }
-                data
-            },
-        };
-        large_state.tabs.push(tab);
+        large_state.terminals.push(term);
     }
 
     let start_time = std::time::Instant::now();
@@ -608,11 +509,7 @@ async fn test_large_data_performance() {
 
     // 验证数据完整性
     assert_eq!(large_state.version, deserialized.version);
-    assert_eq!(large_state.tabs.len(), deserialized.tabs.len());
-    assert_eq!(
-        large_state.terminal_sessions.len(),
-        deserialized.terminal_sessions.len()
-    );
+    assert_eq!(large_state.terminals.len(), deserialized.terminals.len());
 
     // 性能断言（这些值可能需要根据实际情况调整）
     assert!(

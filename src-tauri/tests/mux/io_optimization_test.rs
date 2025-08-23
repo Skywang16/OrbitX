@@ -10,12 +10,32 @@ fn test_io_handler_mode_switching() {
     let (notification_sender, _notification_receiver) = crossbeam_channel::unbounded();
 
     // 测试传统模式
-    let legacy_handler = IoHandler::with_mode(notification_sender.clone(), IoMode::Legacy);
+    let legacy_handler = {
+        let shell_mgr = std::sync::Arc::new(
+            terminal_lib::shell::integration::ShellIntegrationManager::new().unwrap(),
+        );
+        IoHandler::with_config_and_mode(
+            notification_sender.clone(),
+            IoConfig::default(),
+            IoMode::Legacy,
+            shell_mgr,
+        )
+    };
     assert!(matches!(legacy_handler.mode(), IoMode::Legacy));
     assert!(legacy_handler.get_stats().is_none());
 
     // 测试线程池模式
-    let pool_handler = IoHandler::with_mode(notification_sender.clone(), IoMode::ThreadPool);
+    let pool_handler = {
+        let shell_mgr = std::sync::Arc::new(
+            terminal_lib::shell::integration::ShellIntegrationManager::new().unwrap(),
+        );
+        IoHandler::with_config_and_mode(
+            notification_sender.clone(),
+            IoConfig::default(),
+            IoMode::ThreadPool,
+            shell_mgr,
+        )
+    };
     assert!(matches!(pool_handler.mode(), IoMode::ThreadPool));
     assert!(pool_handler.get_stats().is_some());
 
@@ -57,7 +77,17 @@ fn test_io_configuration() {
         flush_interval_ms: 8,
     };
 
-    let handler = IoHandler::with_config(sender, config.clone());
+    let handler = {
+        let shell_mgr = std::sync::Arc::new(
+            terminal_lib::shell::integration::ShellIntegrationManager::new().unwrap(),
+        );
+        IoHandler::with_config_and_mode(
+            sender,
+            config.clone(),
+            IoMode::ThreadPool,
+            shell_mgr,
+        )
+    };
 
     // 验证配置被正确应用
     assert_eq!(handler.config().buffer_size, 8192);

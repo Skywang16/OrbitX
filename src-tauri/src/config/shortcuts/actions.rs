@@ -686,6 +686,7 @@ impl Default for ActionRegistry {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use crate::config::shortcuts::KeyCombination;
 
     #[tokio::test]
     async fn test_action_registration() {
