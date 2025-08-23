@@ -93,9 +93,8 @@ impl IoHandler {
                 let pool_config = IoThreadPoolConfig {
                     worker_threads: std::thread::available_parallelism()
                         .map(|n| n.get())
-                        .unwrap_or(4)
-                        .clamp(2, 4),
-                    task_queue_capacity: 1000,
+                        .unwrap_or(8),
+                    task_queue_capacity: 2000,
                     buffer_size: config.buffer_size,
                     batch_size: config.batch_size,
                     flush_interval_ms: config.flush_interval_ms,
@@ -212,7 +211,6 @@ impl IoHandler {
         let shell_integration = self.shell_integration.clone();
 
         thread::spawn(move || {
-            debug!("传统模式读线程已为面板 {:?} 启动", pane_id);
             let mut buffer = vec![0; buffer_size];
             let mut batch_data = Vec::with_capacity(batch_size);
             let mut last_flush = Instant::now();
@@ -275,7 +273,10 @@ impl IoHandler {
                 exit_code: None,
             };
             if let Err(e) = notification_sender.send(exit_notification) {
-                debug!("面板 {:?} 发送退出通知失败（可能是正在关闭）: {}", pane_id, e);
+                debug!(
+                    "面板 {:?} 发送退出通知失败（可能是正在关闭）: {}",
+                    pane_id, e
+                );
             }
             debug!("面板 {:?} 的读线程已终止", pane_id);
         });

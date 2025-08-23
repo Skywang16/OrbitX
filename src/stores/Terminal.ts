@@ -64,6 +64,21 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
   let nextId = 0
 
+  // 并发控制
+  const _pendingOperations = ref<Set<string>>(new Set())
+  const _operationQueue = ref<Array<() => Promise<void>>>([])
+  let _isProcessingQueue = false
+  const MAX_CONCURRENT_OPERATIONS = 2 // 最多同时进行2个终端操作
+
+  // 性能监控
+  const _performanceStats = ref({
+    totalTerminalsCreated: 0,
+    totalTerminalsClosed: 0,
+    averageCreationTime: 0,
+    maxConcurrentTerminals: 0,
+    creationTimes: [] as number[],
+  })
+
   // 会话状态管理
   const sessionStore = useSessionStore()
 
@@ -90,6 +105,108 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
   const generateId = (): string => {
     return `terminal-${nextId++}`
+  }
+
+  /**
+   * 并发控制：将操作加入队列并按顺序执行
+   */
+  const queueOperation = async <T>(operation: () => Promise<T>): Promise<T> => {
+    return new Promise((resolve, reject) => {
+      const wrappedOperation = async () => {
+        try {
+          const result = await operation()
+          resolve(result)
+        } catch (error) {
+          reject(error)
+        }
+      }
+
+      _operationQueue.value.push(wrappedOperation)
+      processQueue()
+    })
+  }
+
+  /**
+   * 处理操作队列
+   */
+  const processQueue = async () => {
+    if (_isProcessingQueue || _operationQueue.value.length === 0) {
+      return
+    }
+
+    if (_pendingOperations.value.size >= MAX_CONCURRENT_OPERATIONS) {
+      return
+    }
+
+    _isProcessingQueue = true
+
+    while (_operationQueue.value.length > 0 && _pendingOperations.value.size < MAX_CONCURRENT_OPERATIONS) {
+      const operation = _operationQueue.value.shift()
+      if (operation) {
+        const operationId = `op-${Date.now()}-${Math.random()}`
+        _pendingOperations.value.add(operationId)
+
+        // 异步执行操作
+        operation().finally(() => {
+          _pendingOperations.value.delete(operationId)
+          // 继续处理队列
+          nextTick(() => processQueue())
+        })
+      }
+    }
+
+    _isProcessingQueue = false
+  }
+
+  /**
+   * 记录性能指标
+   */
+  const recordPerformanceMetric = (type: 'create' | 'close', duration?: number) => {
+    const stats = _performanceStats.value
+
+    if (type === 'create') {
+      stats.totalTerminalsCreated++
+      if (duration) {
+        stats.creationTimes.push(duration)
+        // 保持最近100次的记录
+        if (stats.creationTimes.length > 100) {
+          stats.creationTimes.shift()
+        }
+        // 计算平均创建时间
+        stats.averageCreationTime = stats.creationTimes.reduce((a, b) => a + b, 0) / stats.creationTimes.length
+      }
+    } else if (type === 'close') {
+      stats.totalTerminalsClosed++
+    }
+
+    // 更新最大并发数
+    const currentCount = terminals.value.length
+    if (currentCount > stats.maxConcurrentTerminals) {
+      stats.maxConcurrentTerminals = currentCount
+    }
+
+    // 每20个操作输出一次统计
+    if ((stats.totalTerminalsCreated + stats.totalTerminalsClosed) % 20 === 0) {
+      console.log(`性能统计:`, {
+        已创建: stats.totalTerminalsCreated,
+        已关闭: stats.totalTerminalsClosed,
+        当前数量: currentCount,
+        最大并发: stats.maxConcurrentTerminals,
+        平均创建时间: `${stats.averageCreationTime.toFixed(0)}ms`,
+      })
+    }
+  }
+
+  /**
+   * 获取性能统计
+   */
+  const getPerformanceStats = () => {
+    return {
+      ..._performanceStats.value,
+      currentTerminals: terminals.value.length,
+      pendingOperations: _operationQueue.value.length,
+      activeOperations: _pendingOperations.value.size,
+    }
   }
 
   /**
@@ -240,78 +357,74 @@ export const useTerminalStore = defineStore('Terminal', () => {
    * 创建一个新的终端会话（使用系统默认shell）。
    */
   const createTerminal = async (initialDirectory?: string): Promise<string> => {
-    const id = generateId()
+    return queueOperation(async () => {
+      const id = generateId()
+      const startTime = Date.now()
 
-    try {
-      // 先创建后端终端，确保成功后再添加到前端状态
-      const backendId = await terminalApi.createTerminal({
-        rows: 24,
-        cols: 80,
-        cwd: initialDirectory,
-      })
+      try {
+        const backendId = await terminalApi.createTerminal({
+          rows: 24,
+          cols: 80,
+          cwd: initialDirectory,
+        })
 
-      // 获取系统默认shell信息
-      const defaultShell = await shellApi.getDefaultShell()
+        const defaultShell = await shellApi.getDefaultShell()
 
-      // 只有在后端创建成功后才创建前端会话记录
-      const terminal: RuntimeTerminalState = {
-        id,
-        title: defaultShell.name,
-        cwd: initialDirectory || '~',
-        active: false,
-        shell: defaultShell.name,
-        backendId, // 直接设置有效的backendId
-        shellInfo: defaultShell as ShellInfo,
+        const terminal: RuntimeTerminalState = {
+          id,
+          title: defaultShell.name,
+          cwd: initialDirectory || '~',
+          active: false,
+          shell: defaultShell.name,
+          backendId,
+          shellInfo: defaultShell as ShellInfo,
+        }
+
+        terminals.value.push(terminal)
+        setActiveTerminal(id)
+
+        const duration = Date.now() - startTime
+        recordPerformanceMetric('create', duration)
+
+        return id
+      } catch (error) {
+        console.error(`创建终端失败:`, error)
+        throw error
       }
-
-      // 添加到terminals数组，此时backendId已经有效
-      terminals.value.push(terminal)
-      setActiveTerminal(id)
-      return id
-    } catch (error) {
-      console.error(`创建终端 '${id}' 失败:`, error)
-      throw error
-    }
+    })
   }
 
   /**
    * 关闭终端会话。
    */
   const closeTerminal = async (id: string) => {
-    const terminal = terminals.value.find(t => t.id === id)
-    if (!terminal) {
-      console.warn(`尝试关闭不存在的终端: ${id}`)
-      return
-    }
+    return queueOperation(async () => {
+      const terminal = terminals.value.find(t => t.id === id)
+      if (!terminal) {
+        console.warn(`尝试关闭不存在的终端: ${id}`)
+        return
+      }
 
-    // 防止重复关闭：如果终端正在关闭过程中，直接返回
-    if (terminal.backendId === null) {
-      console.log(`终端 '${id}' 已经关闭或正在关闭中`)
-      // 仍然需要清理前端状态
+      if (terminal.backendId === null) {
+        cleanupTerminalState(id)
+        return
+      }
+
+      unregisterTerminalCallbacks(id)
+
+      const backendId = terminal.backendId
+      terminal.backendId = null
+
+      try {
+        await terminalApi.closeTerminal(backendId)
+      } catch (error) {
+        console.error(`关闭终端失败:`, error)
+      }
+
       cleanupTerminalState(id)
-      return
-    }
-
-    unregisterTerminalCallbacks(id)
-
-    // 先将 backendId 设为 null，防止重复关闭
-    const backendId = terminal.backendId
-    terminal.backendId = null
-
-    try {
-      await terminalApi.closeTerminal(backendId)
-      console.log(`成功关闭终端后端: ${id} (backendId: ${backendId})`)
-    } catch (error) {
-      console.error(`关闭终端 '${id}' 的后端失败:`, error)
-      // 即使后端关闭失败，也要清理前端状态
-      // 这通常意味着后端面板已经不存在了
-    }
-
-    // 清理前端状态
-    cleanupTerminalState(id)
-
-    // 立即保存状态变化
-    await saveSessionState()
+      await saveSessionState()
+      recordPerformanceMetric('close')
+    })
   }
 
   /**
@@ -506,98 +619,87 @@ export const useTerminalStore = defineStore('Terminal', () => {
    * 创建AI Agent专属终端
    */
   const createAgentTerminal = async (agentName: string = 'AI Agent', initialDirectory?: string): Promise<string> => {
-    const id = generateId()
-    const agentTerminalTitle = agentName
+    return queueOperation(async () => {
+      const id = generateId()
+      const agentTerminalTitle = agentName
 
-    // 检查是否已存在Agent专属终端（精确匹配Agent名称）
-    const existingAgentTerminal = terminals.value.find(terminal => terminal.title === agentName)
+      // 检查是否已存在Agent专属终端（精确匹配Agent名称）
+      const existingAgentTerminal = terminals.value.find(terminal => terminal.title === agentName)
 
-    if (existingAgentTerminal) {
-      // 如果已存在，静默激活现有终端
-      setActiveTerminal(existingAgentTerminal.id)
-      existingAgentTerminal.title = agentTerminalTitle
-
-      // 不再输出重新激活信息，保持终端清洁
-
-      return existingAgentTerminal.id
-    }
-
-    try {
-      // 先创建后端终端，确保成功后再添加到前端状态
-      const backendId = await terminalApi.createTerminal({
-        rows: 24,
-        cols: 80,
-        cwd: initialDirectory,
-      })
-
-      // 只有在后端创建成功后才创建前端会话记录
-      const terminal: RuntimeTerminalState = {
-        id,
-        title: agentTerminalTitle,
-        cwd: initialDirectory || '~',
-        active: false,
-        shell: 'agent',
-        backendId, // 直接设置有效的backendId
+      if (existingAgentTerminal) {
+        setActiveTerminal(existingAgentTerminal.id)
+        existingAgentTerminal.title = agentTerminalTitle
+        return existingAgentTerminal.id
       }
 
-      // 添加到terminals数组，此时backendId已经有效
-      terminals.value.push(terminal)
+      try {
+        const backendId = await terminalApi.createTerminal({
+          rows: 24,
+          cols: 80,
+          cwd: initialDirectory,
+        })
 
-      // 等待终端创建完成（可选的稳定性延迟）
-      await new Promise(resolve => setTimeout(resolve, 100))
+        const terminal: RuntimeTerminalState = {
+          id,
+          title: agentTerminalTitle,
+          cwd: initialDirectory || '~',
+          active: false,
+          shell: 'agent',
+          backendId,
+        }
 
-      setActiveTerminal(id)
-      return id
-    } catch (error) {
-      console.error(`创建Agent终端 '${id}' 失败:`, error)
-      throw error
-    }
+        terminals.value.push(terminal)
+        await new Promise(resolve => setTimeout(resolve, 100))
+        setActiveTerminal(id)
+        return id
+      } catch (error) {
+        console.error(`创建Agent终端失败:`, error)
+        throw error
+      }
+    })
   }
 
   /**
    * 使用指定shell创建终端
    */
   const createTerminalWithShell = async (shellName: string): Promise<string> => {
-    const id = generateId()
-    const title = shellName
+    return queueOperation(async () => {
+      const id = generateId()
+      const title = shellName
 
-    // 查找shell信息
-    const shellInfo = shellManager.value.availableShells.find(s => s.name === shellName)
-    if (!shellInfo) {
-      throw new Error(`未找到shell: ${shellName}`)
-    }
-
-    try {
-      // 先创建后端终端，确保成功后再添加到前端状态
-      const backendId = await terminalApi.createTerminalWithShell({
-        shellName,
-        rows: 24,
-        cols: 80,
-      })
-
-      // 只有在后端创建成功后才创建前端会话记录
-      const terminal: RuntimeTerminalState = {
-        id,
-        title,
-        cwd: shellInfo.path || '~',
-        active: false,
-        shell: shellInfo.name,
-        backendId, // 直接设置有效的backendId
-        shellInfo,
+      // 查找shell信息
+      const shellInfo = shellManager.value.availableShells.find(s => s.name === shellName)
+      if (!shellInfo) {
+        throw new Error(`未找到shell: ${shellName}`)
       }
 
-      // 添加到terminals数组，此时backendId已经有效
-      terminals.value.push(terminal)
-      setActiveTerminal(id)
+      try {
+        const backendId = await terminalApi.createTerminalWithShell({
+          shellName,
+          rows: 24,
+          cols: 80,
+        })
 
-      // 立即保存新终端状态
-      await saveSessionState()
+        const terminal: RuntimeTerminalState = {
+          id,
+          title,
+          cwd: shellInfo.path || '~',
+          active: false,
+          shell: shellInfo.name,
+          backendId,
+          shellInfo,
+        }
 
-      return id
-    } catch (error) {
-      console.error(`创建终端 '${id}' 失败:`, error)
-      throw error
-    }
+        terminals.value.push(terminal)
+        setActiveTerminal(id)
+        await saveSessionState()
+
+        return id
+      } catch (error) {
+        console.error(`创建终端失败:`, error)
+        throw error
+      }
+    })
   }
 
   /**
@@ -806,5 +908,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
     restoreFromSessionState,
     saveSessionState,
     initializeTerminalStore,
+
+    // 性能监控方法
+    getPerformanceStats,
   }
 })

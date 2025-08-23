@@ -2,6 +2,7 @@
 //!
 //! 提供统一的终端会话管理、事件通知和PTY I/O处理
 
+pub mod batch_processor;
 pub mod config;
 pub mod error;
 pub mod io_handler;
@@ -13,6 +14,7 @@ pub mod tauri_integration;
 pub mod terminal_mux;
 pub mod types;
 
+pub use batch_processor::*;
 pub use config::*;
 pub use error::*;
 pub use io_handler::*;

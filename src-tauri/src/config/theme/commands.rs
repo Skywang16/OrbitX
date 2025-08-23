@@ -111,6 +111,7 @@ pub async fn get_current_theme(
 #[tauri::command]
 pub async fn set_terminal_theme(
     theme_name: String,
+    app_handle: AppHandle,
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
 ) -> Result<(), String> {
@@ -129,11 +130,10 @@ pub async fn set_terminal_theme(
         .await
         .map_err(|e| format!("更新配置失败: {}", e))?;
 
-    // 在简单的增删改查模式中，不需要发送事件
-    // 前端会在API调用后立即查询最新状态
-    // app_handle
-    //     .emit("theme-changed", &theme_name)
-    //     .map_err(|e| format!("发送事件失败: {}", e))?;
+    // 发送主题变化事件，确保前端能立即响应
+    app_handle
+        .emit("theme-changed", &theme_name)
+        .map_err(|e| format!("发送事件失败: {}", e))?;
 
     Ok(())
 }
@@ -144,6 +144,7 @@ pub async fn set_follow_system_theme(
     follow_system: bool,
     light_theme: Option<String>,
     dark_theme: Option<String>,
+    app_handle: AppHandle,
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
 ) -> Result<(), String> {
@@ -178,8 +179,23 @@ pub async fn set_follow_system_theme(
         .await
         .map_err(|e| format!("更新配置失败: {}", e))?;
 
-    // 在简单的增删改查模式中，不需要发送事件
-    // 前端会在API调用后立即查询最新状态
+    // 如果启用跟随系统主题，需要获取当前应该使用的主题并发送事件
+    if follow_system {
+        // 获取当前系统主题状态
+        let config = config_manager
+            .get_config()
+            .await
+            .map_err(|e| format!("获取配置失败: {}", e))?;
+        let is_system_dark = SystemThemeDetector::is_dark_mode();
+        let current_theme_name =
+            theme_service.get_current_theme_name(&config.appearance.theme_config, is_system_dark);
+
+        // 发送主题变化事件
+        app_handle
+            .emit("theme-changed", &current_theme_name)
+            .map_err(|e| format!("发送事件失败: {}", e))?;
+    }
+
     Ok(())
 }
 

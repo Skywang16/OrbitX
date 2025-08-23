@@ -47,15 +47,6 @@
         <!-- 工具调用块 -->
         <ToolBlock v-else-if="step.type === 'tool_use'" :step="step" class="step-block" />
 
-        <!-- 错误块 -->
-        <div v-else-if="step.type === 'error'" class="error-block step-block">
-          <div class="error-header">{{ step.metadata?.errorType || '错误' }}</div>
-          <div class="error-content">{{ step.content }}</div>
-          <div v-if="step.metadata?.errorDetails" class="error-details">
-            {{ step.metadata.errorDetails }}
-          </div>
-        </div>
-
         <!-- AI文本回复 -->
         <div v-else-if="step.type === 'text'" class="ai-message-text step-block">
           <div v-html="renderMarkdown(step.content)"></div>
