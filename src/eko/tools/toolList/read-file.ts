@@ -9,8 +9,8 @@ import { invoke } from '@tauri-apps/api/core'
 
 export interface ReadFileParams {
   path: string
-  startLine?: number
-  endLine?: number
+  offset?: number // 0-based行号，从哪一行开始读取
+  limit?: number // 读取多少行
 }
 
 /**
@@ -20,15 +20,7 @@ export class ReadFileTool extends ModifiableTool {
   constructor() {
     super(
       'read_file',
-      `读取文件内容并显示。支持读取完整文件或指定行号范围。会自动添加行号便于定位。可以检测文件是否存在，如果路径是目录会提示使用read_directory工具。适用于查看代码文件、配置文件、日志文件等场景。**必须使用绝对路径**，path参数指定文件的完整绝对路径，startLine和endLine参数可选指定读取的行号范围。返回带行号的文件内容。
-
-输入示例: {"path": "/Users/user/project/src/main.ts", "startLine": 10, "endLine": 20}
-输出示例: {
-  "content": [{
-    "type": "text",
-    "text": "  10  import { createApp } from 'vue'\\n  11  import App from './App.vue'\\n  12  \\n  13  const app = createApp(App)\\n  14  app.mount('#app')"
-  }]
-}`,
+      `读取文件内容并显示。如果文件较大，内容会被截断。工具响应会明确指示是否发生了截断，并提供如何使用'offset'和'limit'参数读取更多文件内容的详细信息。支持文本文件的特定行范围读取。必须使用绝对路径。`,
       {
         type: 'object',
         properties: {
@@ -37,14 +29,16 @@ export class ReadFileTool extends ModifiableTool {
             description:
               '文件的绝对路径。必须是完整路径，例如："/Users/user/project/src/main.ts"、"/home/user/config.json"',
           },
-          startLine: {
+          offset: {
             type: 'number',
-            description: '开始行号。示例：10、1',
-            minimum: 1,
+            description:
+              '可选：0-based行号，从哪一行开始读取。用于分页浏览大文件。需要与limit一起使用。示例：0、50、100',
+            minimum: 0,
           },
-          endLine: {
+          limit: {
             type: 'number',
-            description: '结束行号。示例：20、50',
+            description:
+              '可选：最大读取行数。与offset一起使用可分页浏览大文件。如果省略，读取整个文件（最多2000行）。示例：50、100',
             minimum: 1,
           },
         },
@@ -54,11 +48,14 @@ export class ReadFileTool extends ModifiableTool {
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
-    const { path, startLine, endLine } = context.parameters as unknown as ReadFileParams
+    const { path, offset, limit } = context.parameters as unknown as ReadFileParams
 
     // 验证参数
-    if (startLine && endLine && startLine > endLine) {
-      throw new Error('开始行号不能大于结束行号')
+    if (offset !== undefined && offset < 0) {
+      throw new Error('offset必须大于等于0')
+    }
+    if (limit !== undefined && limit <= 0) {
+      throw new Error('limit必须大于0')
     }
 
     try {
@@ -89,24 +86,38 @@ export class ReadFileTool extends ModifiableTool {
 
       // 处理文件内容
       const lines = content.split('\n')
-      let processedLines = lines
+      const originalLineCount = lines.length
 
-      // 应用行范围过滤
-      if (startLine || endLine) {
-        const start = startLine ? startLine - 1 : 0
-        const end = endLine ? endLine : lines.length
-        processedLines = lines.slice(start, end)
-      }
+      // 设置默认值
+      const DEFAULT_MAX_LINES = 2000
+      const MAX_LINE_LENGTH = 2000
 
-      // 添加行号
-      const startNum = startLine || 1
-      processedLines = processedLines.map((line, index) => `${(startNum + index).toString().padStart(4, ' ')}  ${line}`)
+      const startLine = offset || 0
+      const effectiveLimit = limit === undefined ? DEFAULT_MAX_LINES : limit
+      const endLine = Math.min(startLine + effectiveLimit, originalLineCount)
+      const actualStartLine = Math.min(startLine, originalLineCount)
+
+      // 选择行范围
+      const selectedLines = lines.slice(actualStartLine, endLine)
+
+      // 处理过长的行
+      const processedLines = selectedLines.map((line, index) => {
+        if (line.length > MAX_LINE_LENGTH) {
+          line = line.substring(0, MAX_LINE_LENGTH) + '... [truncated]'
+        }
+        // 添加行号 (1-based显示)
+        const lineNum = actualStartLine + index + 1
+        return `${lineNum.toString().padStart(4, ' ')}  ${line}`
+      })
+
+      // 返回结果，不添加额外信息
+      const resultText = processedLines.join('\n')
 
       return {
         content: [
           {
             type: 'text',
-            text: processedLines.join('\n'),
+            text: resultText,
           },
         ],
       }

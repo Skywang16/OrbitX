@@ -117,7 +117,10 @@ class ConversationAPI {
 
   async updateMessageSteps(messageId: number, steps: any[]): Promise<void> {
     try {
-      const stepsJson = JSON.stringify(steps)
+      // 清理工具输出中的JSON转义噪音
+      const cleanedSteps = this.cleanStepsData(steps)
+
+      const stepsJson = JSON.stringify(cleanedSteps)
       await invoke('update_message_steps', {
         messageId,
         stepsJson,
@@ -149,6 +152,50 @@ class ConversationAPI {
     } catch (error) {
       throw new Error(handleError(error, '截断会话失败'))
     }
+  }
+
+  // ===== 数据清理方法 =====
+
+  /**
+   * 清理工具步骤数据中的JSON转义噪音
+   */
+  private cleanStepsData(steps: any[]): any[] {
+    return steps.map(step => {
+      if (step && typeof step === 'object') {
+        const cleanedStep = { ...step }
+
+        // 清理result字段中的字符串转义
+        if (cleanedStep.result && typeof cleanedStep.result === 'object') {
+          if (typeof cleanedStep.result.text === 'string') {
+            cleanedStep.result.text = this.cleanJsonEscapes(cleanedStep.result.text)
+          }
+
+          // 清理content数组中的text字段
+          if (Array.isArray(cleanedStep.result.content)) {
+            cleanedStep.result.content = cleanedStep.result.content.map((item: any) => {
+              if (item && typeof item.text === 'string') {
+                return { ...item, text: this.cleanJsonEscapes(item.text) }
+              }
+              return item
+            })
+          }
+        }
+
+        return cleanedStep
+      }
+      return step
+    })
+  }
+
+  /**
+   * 清理JSON转义字符
+   */
+  private cleanJsonEscapes(text: string): string {
+    return text
+      .replace(/\\"/g, '"') // 清理转义的引号
+      .replace(/\\n/g, '\n') // 清理转义的换行
+      .replace(/\\t/g, '\t') // 清理转义的制表符
+      .replace(/\\\\/g, '\\') // 清理转义的反斜杠
   }
 
   // ===== 数据转换方法 =====

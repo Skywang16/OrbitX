@@ -19,15 +19,7 @@ export class CreateFileTool extends ModifiableTool {
   constructor() {
     super(
       'create_file',
-      `创建新文件并写入内容。支持创建任意类型的文件，包括代码文件、配置文件、文档等。会自动创建不存在的父目录。如果文件已存在会直接覆盖。适用于生成新的源码文件、配置文件、文档等场景。**必须使用绝对路径**，path参数指定文件的完整绝对路径，content参数指定文件内容（支持多行文本，使用\\n表示换行）。创建成功后返回确认信息。
-
-输入示例: {"path": "/Users/user/project/src/utils.ts", "content": "export function hello() {\\n  return 'Hello World'\\n}"}
-输出示例: {
-  "content": [{
-    "type": "text",
-    "text": "文件已创建: /Users/user/project/src/utils.ts"
-  }]
-}`,
+      `创建新文件并写入内容。支持创建任意类型的文件，包括代码文件、配置文件、文档等。会自动创建不存在的父目录。如果文件已存在会直接覆盖。必须使用绝对路径。`,
       {
         type: 'object',
         properties: {
@@ -60,7 +52,9 @@ export class CreateFileTool extends ModifiableTool {
         content: [
           {
             type: 'text',
-            text: `文件已创建: ${path}`,
+            text: `文件创建成功: ${path}
+状态：新文件已成功创建。
+建议：使用 read_file 工具验证文件内容，或使用 edit_file 工具进行进一步修改。`,
           },
         ],
       }

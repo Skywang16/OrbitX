@@ -20,15 +20,7 @@ export class WebFetchTool extends ModifiableTool {
   constructor() {
     super(
       'web_fetch',
-      `获取网页内容和API数据。使用GET方法获取网页的主要文本内容，自动提取并清理内容。适用于获取API数据、网页内容、文档、技术文章等场景。url参数指定目标URL。返回清理后的网页内容或API响应数据。
-
-输入示例: {"url": "https://api.github.com/users/octocat"}
-输出示例: {
-  "content": [{
-    "type": "text",
-    "text": "GitHub API Response\\n\\n{\\n  \\"login\\": \\"octocat\\",\\n  \\"id\\": 1,\\n  \\"name\\": \\"The Octocat\\",\\n  \\"company\\": \\"@github\\"\\n}"
-  }]
-}`,
+      `获取网页内容和API数据。使用GET方法获取网页的主要文本内容，自动提取并清理内容。适用于获取API数据、网页内容、文档、技术文章等场景。返回清理后的网页内容或API响应数据。`,
       {
         type: 'object',
         properties: {

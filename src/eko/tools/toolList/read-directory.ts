@@ -24,15 +24,7 @@ export class ReadDirectoryTool extends ModifiableTool {
   constructor() {
     super(
       'read_directory',
-      `列出目录中的文件和子目录。显示目录下的所有文件和文件夹，目录名以"/"结尾区分。会自动过滤隐藏文件（以.开头）。只显示第一层内容，不递归遍历子目录。适用于了解项目结构、浏览文件夹内容等场景。**必须使用绝对路径**，path参数指定目录的完整绝对路径。返回文件和目录列表，以及统计信息。
-
-输入示例: {"path": "/Users/user/project/src"}
-输出示例: {
-  "content": [{
-    "type": "text",
-    "text": "目录: /Users/user/project/src\\n\\ncomponents/\\nutils/\\nmain.ts\\nApp.vue\\nstyle.css\\n\\n总计: 2个目录, 3个文件"
-  }]
-}`,
+      `列出目录中的文件和子目录。显示目录下的文件和文件夹，目录名以"/"结尾区分。会自动过滤隐藏文件。只显示第一层内容，不递归遍历子目录。如果目录内容过多会显示前500项并提示总数。必须使用绝对路径。`,
       {
         type: 'object',
         properties: {
@@ -133,20 +125,44 @@ export class ReadDirectoryTool extends ModifiableTool {
       return `目录为空`
     }
 
+    const MAX_DISPLAY_ITEMS = 500 // 增加到500项
     const lines: string[] = []
 
     // 按目录和文件分组
     const directories = entries.filter(e => e.isDirectory)
     const files = entries.filter(e => !e.isDirectory)
 
+    const totalItems = directories.length + files.length
+    const shouldTruncate = totalItems > MAX_DISPLAY_ITEMS
+
+    // 计算显示数量
+    let displayDirs = directories
+    let displayFiles = files
+
+    if (shouldTruncate) {
+      const dirCount = Math.min(directories.length, Math.floor(MAX_DISPLAY_ITEMS * 0.4)) // 40%给目录
+      const fileCount = Math.min(files.length, MAX_DISPLAY_ITEMS - dirCount)
+
+      displayDirs = directories.slice(0, dirCount)
+      displayFiles = files.slice(0, fileCount)
+    }
+
     // 显示目录
-    for (const dir of directories) {
+    for (const dir of displayDirs) {
       lines.push(`目录: ${dir.name}/`)
     }
 
     // 显示文件
-    for (const file of files) {
+    for (const file of displayFiles) {
       lines.push(`文件: ${file.name}`)
+    }
+
+    // 如果被截断，添加LLM友好的提示
+    if (shouldTruncate) {
+      lines.push('')
+      lines.push(`重要提示：目录列表已被截断。`)
+      lines.push(`状态：显示了 ${displayDirs.length + displayFiles.length} 项，总共 ${totalItems} 项。`)
+      lines.push(`建议：目录包含更多文件。使用 read_file 工具检查感兴趣的特定文件。`)
     }
 
     return lines.join('\n')

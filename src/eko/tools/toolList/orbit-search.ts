@@ -37,7 +37,7 @@ export interface SymbolMatch {
 }
 
 export interface orbitSearchResponse {
-  query: string
+  query: string[]
   targetPath: string
   totalMatches: number
   filesSearched: number
@@ -60,30 +60,14 @@ export class OrbitSearchTool extends ModifiableTool {
   constructor() {
     super(
       'orbit_search',
-      `**专业代码搜索工具** - 优先使用此工具进行所有代码相关搜索！结合文本搜索、AST分析和语义理解的智能搜索引擎。
-
-**何时使用此工具：**
-- 搜索函数定义、类、接口、变量
-- 查找代码引用和使用位置
-- 代码审查和重构分析
-- 查找特定的代码模式或关键词
-- 任何涉及代码内容的搜索需求
-
-**不要使用shell命令（如grep、find、rg）进行代码搜索**，此工具比shell命令更智能和准确。支持多种编程语言的语法分析，能理解代码结构和上下文，提供精确的搜索结果。**必须使用绝对路径**，query参数指定搜索内容，path参数指定搜索的绝对路径。
-
-输入示例: {"query": "createUser", "path": "/Users/user/project/src"}
-输出示例: {
-  "content": [{
-    "type": "text",
-    "text": "找到 \\"createUser\\":\\n\\nuser.ts:15\\nexport async function createUser(userData: UserData) {\\n\\nauth.ts:45\\n// TODO: 调用 createUser 创建新用户\\n\\nservice.ts:23\\nconst result = await createUser(data)"
-  }]
-}`,
+      `专业代码搜索工具 - 优先使用此工具进行所有代码相关搜索！结合文本搜索、AST分析和语义理解的智能搜索引擎。支持单个关键词或多关键词 OR 搜索（如："gemini-cli OR xxxgemini OR gemini"）。适用于搜索函数定义、类、接口、变量、代码引用和使用位置、代码审查和重构分析等。不要使用shell命令进行代码搜索，此工具比shell命令更智能和准确。支持多种编程语言的语法分析，能理解代码结构和上下文。必须使用绝对路径。`,
       {
         type: 'object',
         properties: {
           query: {
             type: 'string',
-            description: '搜索查询内容。例如："createUser"、"function handleClick"、"interface User"',
+            description:
+              '搜索查询内容。支持单个关键词或多关键词 OR 搜索。例如："createUser" 或 "gemini-cli OR xxxgemini OR gemini"',
           },
           path: {
             type: 'string',
@@ -99,7 +83,9 @@ export class OrbitSearchTool extends ModifiableTool {
     const params = context.parameters as unknown as orbitSearchParams
     const { query, path } = params
 
-    if (!query || query.trim() === '') {
+    // 解析查询参数
+    const keywords = this.parseQuery(query)
+    if (keywords.length === 0) {
       throw new ValidationError('搜索查询不能为空')
     }
 
@@ -111,10 +97,10 @@ export class OrbitSearchTool extends ModifiableTool {
       const startTime = Date.now()
       const searchPath = await this.resolveSearchPath(path)
       const searchResult = await this.performorbitSearch({
-        query,
+        query: keywords,
         searchPath,
         fileExtensions: undefined,
-        maxResults: 30,
+        maxResults: 20, // 减少结果数量，避免输出过长
         includeContext: true,
         contextLines: 2,
       })
@@ -163,10 +149,31 @@ export class OrbitSearchTool extends ModifiableTool {
   }
 
   /**
+   * 解析查询参数，支持 "keyword1 OR keyword2 OR keyword3" 格式
+   */
+  private parseQuery(query: string): string[] {
+    if (!query || query.trim() === '') {
+      return []
+    }
+
+    // 检查是否包含 OR 操作符
+    if (query.includes(' OR ')) {
+      // 分割并清理关键词
+      return query
+        .split(' OR ')
+        .map(keyword => keyword.trim())
+        .filter(keyword => keyword !== '')
+    }
+
+    // 单个关键词
+    return [query.trim()]
+  }
+
+  /**
    * 执行语义搜索 - 核心搜索引擎
    */
   private async performorbitSearch(options: {
-    query: string
+    query: string[]
     searchPath: string
     fileExtensions?: string[]
     maxResults: number
@@ -247,46 +254,65 @@ export class OrbitSearchTool extends ModifiableTool {
   /**
    * 搜索符号定义和引用
    */
-  private async searchSymbols(query: string, analysis: AnalysisResult, maxResults: number): Promise<SymbolMatch[]> {
+  private async searchSymbols(
+    keywords: string[],
+    analysis: AnalysisResult,
+    maxResults: number
+  ): Promise<SymbolMatch[]> {
     const matches: SymbolMatch[] = []
-    const queryLower = query.toLowerCase()
 
     for (const fileAnalysis of analysis.analyses) {
       for (const symbol of fileAnalysis.symbols) {
         const symbolName = symbol.name.toLowerCase()
 
-        // 计算相关性评分
-        let relevanceScore = 0
+        // 计算相关性评分 - 检查所有关键词
+        let bestScore = 0
+        let matchedKeywords = 0
 
-        // 精确匹配
-        if (symbolName === queryLower) {
-          relevanceScore = 100
-        }
-        // 开头匹配
-        else if (symbolName.startsWith(queryLower)) {
-          relevanceScore = 80
-        }
-        // 包含匹配
-        else if (symbolName.includes(queryLower)) {
-          relevanceScore = 60
-        }
-        // 驼峰匹配
-        else if (this.matchesCamelCase(symbol.name, query)) {
-          relevanceScore = 70
-        }
-        // 模糊匹配
-        else if (this.fuzzyMatch(symbolName, queryLower)) {
-          relevanceScore = 40
+        for (const keyword of keywords) {
+          const keywordLower = keyword.toLowerCase()
+          let keywordScore = 0
+
+          // 精确匹配
+          if (symbolName === keywordLower) {
+            keywordScore = 100
+          }
+          // 开头匹配
+          else if (symbolName.startsWith(keywordLower)) {
+            keywordScore = 80
+          }
+          // 包含匹配
+          else if (symbolName.includes(keywordLower)) {
+            keywordScore = 60
+          }
+          // 驼峰匹配
+          else if (this.matchesCamelCase(symbol.name, keyword)) {
+            keywordScore = 70
+          }
+          // 模糊匹配
+          else if (this.fuzzyMatch(symbolName, keywordLower)) {
+            keywordScore = 40
+          }
+
+          if (keywordScore > 0) {
+            matchedKeywords++
+            bestScore = Math.max(bestScore, keywordScore)
+          }
         }
 
-        if (relevanceScore > 0) {
+        if (bestScore > 0) {
           // 根据符号类型调整评分
-          relevanceScore = this.adjustScoreBySymbolType(relevanceScore, symbol.type)
+          let finalScore = this.adjustScoreBySymbolType(bestScore, symbol.type)
+
+          // 匹配多个关键词的额外加分
+          if (matchedKeywords > 1) {
+            finalScore += (matchedKeywords - 1) * 10
+          }
 
           matches.push({
             symbol,
             filePath: fileAnalysis.file,
-            relevanceScore,
+            relevanceScore: Math.min(finalScore, 100),
             context: await this.getSymbolContext(fileAnalysis.file, symbol),
           })
         }
@@ -383,7 +409,7 @@ export class OrbitSearchTool extends ModifiableTool {
    * 执行文本搜索
    */
   private async searchText(options: {
-    query: string
+    query: string[]
     searchPath: string
     fileExtensions?: string[]
     maxResults: number
@@ -568,11 +594,12 @@ export class OrbitSearchTool extends ModifiableTool {
     return allowedExtensions.some(ext => fileName.toLowerCase().endsWith(ext.toLowerCase()))
   }
 
-  private createSearchFunction(query: string): (line: string, lineNumber: number) => boolean {
-    const queryLower = query.toLowerCase()
+  private createSearchFunction(keywords: string[]): (line: string, lineNumber: number) => boolean {
+    const keywordsLower = keywords.map(k => k.toLowerCase())
     return (line: string) => {
       const lineLower = line.toLowerCase()
-      return lineLower.includes(queryLower)
+      // OR 逻辑：任一关键词匹配即返回 true
+      return keywordsLower.some(keyword => lineLower.includes(keyword))
     }
   }
 
@@ -583,7 +610,7 @@ export class OrbitSearchTool extends ModifiableTool {
     filePath: string,
     searchFunction: (line: string, lineNumber: number) => boolean,
     contextLines: number,
-    query: string
+    keywords: string[]
   ): Promise<SearchMatch[]> {
     try {
       const content = await this.readFileContent(filePath)
@@ -599,7 +626,7 @@ export class OrbitSearchTool extends ModifiableTool {
         }
 
         if (searchFunction(line, i + 1)) {
-          const relevanceScore = this.calculateTextRelevanceScore(line, query, filePath)
+          const relevanceScore = this.calculateTextRelevanceScore(line, keywords, filePath)
           const contextBefore = lines.slice(Math.max(0, i - contextLines), i)
           const contextAfter = lines.slice(i + 1, Math.min(lines.length, i + 1 + contextLines))
 
@@ -612,7 +639,7 @@ export class OrbitSearchTool extends ModifiableTool {
               before: contextBefore,
               after: contextAfter,
             },
-            highlightedLine: this.highlightMatch(line, query),
+            highlightedLine: this.highlightMatch(line, keywords),
           })
         }
       }
@@ -626,22 +653,33 @@ export class OrbitSearchTool extends ModifiableTool {
   /**
    * 计算文本相关性评分
    */
-  private calculateTextRelevanceScore(line: string, query: string, filePath: string): number {
+  private calculateTextRelevanceScore(line: string, keywords: string[], filePath: string): number {
     let score = 50 // 基础分数
+    let matchedKeywords = 0
 
     const lineLower = line.toLowerCase()
-    const queryLower = query.toLowerCase()
 
-    // 精确匹配
-    if (lineLower.includes(queryLower)) {
-      score += 30
+    // 检查每个关键词的匹配情况
+    for (const keyword of keywords) {
+      const keywordLower = keyword.toLowerCase()
+
+      // 精确匹配
+      if (lineLower.includes(keywordLower)) {
+        score += 30
+        matchedKeywords++
+
+        // 单词边界匹配额外加分
+        const escapedKeyword = keywordLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const wordRegex = new RegExp(`\\b${escapedKeyword}\\b`, 'i')
+        if (wordRegex.test(line)) {
+          score += 20
+        }
+      }
     }
 
-    // 单词边界匹配
-    const escapedQuery = queryLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const wordRegex = new RegExp(`\\b${escapedQuery}\\b`, 'i')
-    if (wordRegex.test(line)) {
-      score += 20
+    // 匹配多个关键词的额外加分
+    if (matchedKeywords > 1) {
+      score += (matchedKeywords - 1) * 15
     }
 
     // 文件类型权重
@@ -662,10 +700,17 @@ export class OrbitSearchTool extends ModifiableTool {
   /**
    * 高亮匹配内容
    */
-  private highlightMatch(line: string, query: string): string {
-    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const regex = new RegExp(`(${escapedQuery})`, 'gi')
-    return line.replace(regex, '**$1**')
+  private highlightMatch(line: string, keywords: string[]): string {
+    let highlightedLine = line
+
+    // 对每个关键词进行高亮
+    for (const keyword of keywords) {
+      const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(`(${escapedKeyword})`, 'gi')
+      highlightedLine = highlightedLine.replace(regex, '**$1**')
+    }
+
+    return highlightedLine
   }
 
   /**
@@ -673,23 +718,27 @@ export class OrbitSearchTool extends ModifiableTool {
    */
   private formatSearchResults(response: orbitSearchResponse): string {
     if (response.totalMatches === 0) {
-      return `未找到 "${response.query}"`
+      return `未找到关键词: ${response.query.join(', ')}`
     }
 
-    let result = ''
+    let result = `搜索关键词: ${response.query.join(' OR ')}\n\n`
 
     // 显示符号匹配
-    for (const match of response.symbolMatches.slice(0, 5)) {
-      // 显示完整路径而不是只显示文件名
-      result += `${match.filePath}:${match.symbol.line}\n`
-      result += `${match.symbol.name} (${match.symbol.type})\n\n`
+    if (response.symbolMatches.length > 0) {
+      result += `符号匹配 (${response.symbolMatches.length}):\n`
+      for (const match of response.symbolMatches.slice(0, 5)) {
+        result += `${match.filePath}:${match.symbol.line}\n`
+        result += `${match.symbol.name} (${match.symbol.type}) - 评分: ${match.relevanceScore}\n\n`
+      }
     }
 
     // 显示文本匹配
-    for (const match of response.textMatches.slice(0, 5)) {
-      // 显示完整路径而不是只显示文件名
-      result += `${match.filePath}:${match.lineNumber}\n`
-      result += `${match.line.trim()}\n\n`
+    if (response.textMatches.length > 0) {
+      result += `文本匹配 (${response.textMatches.length}):\n`
+      for (const match of response.textMatches.slice(0, 5)) {
+        result += `${match.filePath}:${match.lineNumber}\n`
+        result += `${match.line.trim()} - 评分: ${match.relevanceScore}\n\n`
+      }
     }
 
     return result.trim()

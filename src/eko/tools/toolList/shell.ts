@@ -31,27 +31,7 @@ export class ShellTool extends ModifiableTool {
   constructor() {
     super(
       'shell',
-      `在当前终端中执行Shell命令。适用于系统操作、构建部署、版本控制等场景。
-
-**适用场景：**
-- 系统操作：ls、cd、mkdir、rm等
-- 项目构建：npm install、npm run build、cargo build等
-- 版本控制：git status、git commit、git push等
-- 环境操作：设置环境变量、检查进程等
-
-**不适用场景：**
-- **代码搜索** - 请使用orbit_search工具进行代码搜索
-- **文件内容查找** - 请使用orbit_search或read_file工具
-
-包含安全检查，会阻止危险命令。command参数指定要执行的命令，将在当前终端的工作目录中执行。
-
-输入示例: {"command": "npm install"}
-输出示例: {
-  "content": [{
-    "type": "text",
-    "text": "命令执行成功\\n\\n$ npm install\\naudited 1234 packages in 3.2s\\nfound 0 vulnerabilities"
-  }]
-}`,
+      `在当前终端中执行Shell命令。适用于系统操作、构建部署、版本控制等场景。包含安全检查，会阻止危险命令。注意：代码搜索请使用orbit_search工具，文件内容查找请使用orbit_search或read_file工具。`,
       {
         type: 'object',
         properties: {

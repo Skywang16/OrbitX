@@ -229,10 +229,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       const currentWorkingDirectory = activeTerminal?.cwd
 
       // 6. 获取后端构建的完整prompt（包含上下文和环境信息）
+      // 传递用户消息ID，确保上下文构建时包含刚保存的用户消息
       const fullPrompt = await aiApi.buildPromptWithContext(
         currentConversationId.value,
         content,
-        undefined,
+        userMessageId, // 传递用户消息ID作为上下文边界
         currentWorkingDirectory
       )
 

@@ -28,15 +28,7 @@ export class ReadManyFilesTool extends ModifiableTool {
   constructor() {
     super(
       'read_many_files',
-      `批量读取多个文件的内容。一次性读取多个文件，比单独调用read_file更高效。支持显示行号，可设置文件大小限制避免读取过大文件。会跳过无法读取的文件并在结果中标记。适用于代码审查、批量文件分析、项目文件对比等场景。**所有文件路径必须是绝对路径**，paths参数指定文件绝对路径数组，showLineNumbers参数控制是否显示行号，maxFileSize参数设置单文件大小限制。返回所有文件的内容和读取状态。
-
-输入示例: {"paths": ["/Users/user/project/src/main.ts", "/Users/user/project/src/utils.ts"], "showLineNumbers": true}
-输出示例: {
-  "content": [{
-    "type": "text",
-    "text": "批量读取 2 个文件\\n\\n=== /Users/user/project/src/main.ts (成功) ===\\n1: import { createApp } from 'vue'\\n2: import App from './App.vue'\\n\\n=== /Users/user/project/src/utils.ts (成功) ===\\n1: export function formatDate() {\\n2:   return new Date().toISOString()\\n3: }\\n\\n读取完成: 2个成功, 0个失败"
-  }]
-}`,
+      `批量读取多个文件的内容。建议一次最多读取5-10个文件，避免输出过长。每个文件会自动截断到合理长度。支持显示行号，可设置文件大小限制。会跳过无法读取的文件并在结果中标记。所有文件路径必须是绝对路径。`,
       {
         type: 'object',
         properties: {
@@ -72,6 +64,8 @@ export class ReadManyFilesTool extends ModifiableTool {
     } = context.parameters as unknown as ReadManyFilesParams
 
     const results: FileReadResult[] = []
+    const MAX_LINES_PER_FILE = 2000
+    const MAX_LINE_LENGTH = 2000
 
     for (const filePath of paths) {
       try {
@@ -99,11 +93,38 @@ export class ReadManyFilesTool extends ModifiableTool {
         const content = new TextDecoder('utf-8').decode(rawContent)
         const lines = content.split('\n')
 
-        let processedContent = content
+        // 应用截断逻辑
+        let processedLines = lines
+
+        // 限制行数
+        let wasTruncated = false
+        if (lines.length > MAX_LINES_PER_FILE) {
+          processedLines = lines.slice(0, MAX_LINES_PER_FILE)
+          wasTruncated = true
+        }
+
+        // 限制行长度
+        processedLines = processedLines.map(line => {
+          if (line.length > MAX_LINE_LENGTH) {
+            return line.substring(0, MAX_LINE_LENGTH) + '... [truncated]'
+          }
+          return line
+        })
+
+        // 添加行号
         if (showLineNumbers) {
-          processedContent = lines
-            .map((line, index) => `${(index + 1).toString().padStart(4, ' ')}  ${line}`)
-            .join('\n')
+          processedLines = processedLines.map((line, index) => `${(index + 1).toString().padStart(4, ' ')}  ${line}`)
+        }
+
+        let processedContent = processedLines.join('\n')
+
+        // 如果被截断，添加提示
+        if (wasTruncated) {
+          processedContent = `重要提示：文件内容已被截断。
+状态：显示了前 ${MAX_LINES_PER_FILE} 行，总共 ${lines.length} 行。
+建议：使用 read_file 工具的 offset 和 limit 参数读取完整内容。
+
+${processedContent}`
         }
 
         results.push({

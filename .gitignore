@@ -31,6 +31,3 @@ src-tauri/target/
 *.njsproj
 *.sln
 *.sw?
-
-# Kiro files
-.kiro

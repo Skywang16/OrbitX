@@ -147,7 +147,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
           const oldCwd = terminal.cwd
           terminal.cwd = event.payload.cwd
 
-          // 智能更新终端标题（参考 VS Code Shell Integration 思路）
+          // 智能更新终端标题
           updateTerminalTitle(terminal, event.payload.cwd)
 
           console.log(`终端 ${terminal.id} CWD 更新: ${oldCwd} -> ${event.payload.cwd}`)
@@ -414,7 +414,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
   }
 
   /**
-   * 智能更新终端标题（参考 VS Code Shell Integration 思路）
+   * 智能更新终端标题
    * 根据当前工作目录智能生成终端标题
    */
   const updateTerminalTitle = (terminal: RuntimeTerminalState, cwd: string) => {

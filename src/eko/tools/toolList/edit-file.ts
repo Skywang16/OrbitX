@@ -26,15 +26,7 @@ export class EditFileTool extends ModifiableTool {
   constructor() {
     super(
       'edit_file',
-      `编辑文件内容，通过精确的字符串替换修改文件。会查找文件中所有匹配oldString的内容并替换为newString。替换是全局的，会替换文件中的所有匹配项。必须完全匹配，区分大小写。适用于代码重构、配置更新、版本号修改等场景。**必须使用绝对路径**，path参数指定文件的完整绝对路径，oldString参数指定要替换的原始文本，newString参数指定替换后的新文本。如果未找到匹配内容会提示，成功替换会返回确认信息。
-
-输入示例: {"path": "/Users/user/project/src/main.ts", "oldString": "const app = createApp()", "newString": "const app = createApp(App)"}
-输出示例: {
-  "content": [{
-    "type": "text",
-    "text": "文件已修改: /Users/user/project/src/main.ts"
-  }]
-}`,
+      `编辑文件内容，通过精确的字符串替换修改文件。会查找文件中所有匹配oldString的内容并替换为newString。替换是全局的，必须完全匹配，区分大小写。建议先使用read_file工具检查当前文件内容以确保精确匹配。必须使用绝对路径。`,
       {
         type: 'object',
         properties: {
@@ -64,28 +56,29 @@ export class EditFileTool extends ModifiableTool {
     const modifiedContent = originalContent.replace(oldString, newString)
 
     if (modifiedContent === originalContent) {
-      const editResult: SimpleEditResult = {
-        file: path,
-        success: false,
-        old: oldString,
-        new: newString,
-      }
       return {
-        content: [{ type: 'text', text: `未找到匹配的内容`, data: editResult }],
+        content: [
+          {
+            type: 'text',
+            text: `编辑失败：在文件 ${path} 中未找到匹配的内容。
+状态：指定的 oldString 在文件中不存在。
+建议：使用 read_file 工具检查当前文件内容，确保 oldString 与要替换的文本完全匹配。`,
+          },
+        ],
       }
     }
 
     await writeTextFile(path, modifiedContent)
 
-    const editResult: SimpleEditResult = {
-      file: path,
-      success: true,
-      old: oldString,
-      new: newString,
-    }
-
     return {
-      content: [{ type: 'text', text: `文件已修改: ${path}`, data: editResult }],
+      content: [
+        {
+          type: 'text',
+          text: `文件编辑成功: ${path}
+状态：内容已成功替换。
+建议：使用 read_file 工具验证更改结果。`,
+        },
+      ],
     }
   }
 }

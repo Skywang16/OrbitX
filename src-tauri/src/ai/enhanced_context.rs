@@ -2,850 +2,103 @@ use crate::ai::types::Message;
 use crate::storage::repositories::RepositoryManager;
 use crate::utils::error::AppResult;
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-use tracing::{debug, info};
 use tiktoken_rs::{cl100k_base, CoreBPE};
+use tracing::{debug, info};
 
 // ============= 配置层 =============
 
-/// 上下文管理配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// 简化的上下文管理配置
+#[derive(Debug, Clone)]
 pub struct ContextConfig {
     /// 最大token数量
     pub max_tokens: usize,
     /// 压缩触发阈值(0.0-1.0)
     pub compress_threshold: f32,
-    /// 保留最近消息数
-    pub keep_recent: usize,
-    /// 保留重要消息数
-    pub keep_important: usize,
-    /// 最小压缩批次大小
-    pub min_compress_batch: usize,
-    /// 摘要窗口大小
-    pub summary_window_size: usize,
-    /// 重要性阈值
-    pub importance_threshold: f32,
-    /// KV缓存配置
-    pub kv_cache: KVCacheConfig,
-}
-
-/// KV缓存配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KVCacheConfig {
-    /// 是否启用KV缓存
-    pub enabled: bool,
-    /// 缓存TTL（秒）
-    pub ttl_seconds: u64,
-    /// 最大缓存条目数
-    pub max_entries: usize,
-    /// 稳定前缀最大长度
-    pub stable_prefix_max_tokens: usize,
-}
-
-impl Default for KVCacheConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            ttl_seconds: 3600, // 1小时
-            max_entries: 100,
-            stable_prefix_max_tokens: 1000,
-        }
-    }
 }
 
 impl Default for ContextConfig {
     fn default() -> Self {
         Self {
-            max_tokens: 100000,
-            compress_threshold: 0.92,  // 92%触发阈值 (Claude Code标准)
-            keep_recent: 12,           // 保留最近12条消息
-            keep_important: 8,         // 重要消息数量优化
-            min_compress_batch: 3,     // 减少最小批次
-            summary_window_size: 8,    // 优化窗口大小
-            importance_threshold: 0.7, // 提高重要性阈值
-            kv_cache: KVCacheConfig::default(),
+            max_tokens: 120000,       // 适当的token上限
+            compress_threshold: 0.70, // 70%触发压缩
         }
     }
 }
 
-// ============= KV缓存层 =============
+// ============= 简化的缓存层 =============
 
-/// KV缓存项
+/// 简单的缓存项
 #[derive(Debug, Clone)]
 pub struct CacheEntry {
-    /// 缓存的上下文内容
     pub content: String,
-    /// 消息列表的哈希值
-    pub messages_hash: u64,
-    /// 创建时间
     pub created_at: DateTime<Utc>,
-    /// 最后访问时间
-    pub last_accessed: DateTime<Utc>,
-    /// 命中次数
-    pub hit_count: u64,
-    /// 稳定前缀长度
-    pub stable_prefix_len: usize,
-    /// 语义哈希（基于消息语义而非简单文本）
-    pub semantic_hash: u64,
-    /// 访问频率权重
-    pub access_weight: f64,
 }
 
-/// KV缓存管理器 - 基于Manus原理
-pub struct KVCache {
-    /// 缓存存储
+/// 简化的缓存管理器
+pub struct SimpleCache {
     cache: Arc<Mutex<HashMap<String, CacheEntry>>>,
-    /// 配置
-    config: KVCacheConfig,
-    /// 分词器（可选）
-    tokenizer: Option<Arc<CoreBPE>>,
 }
 
-impl KVCache {
-    pub fn new(config: KVCacheConfig, tokenizer: Option<Arc<CoreBPE>>) -> Self {
+impl SimpleCache {
+    pub fn new() -> Self {
         Self {
             cache: Arc::new(Mutex::new(HashMap::new())),
-            config,
-            tokenizer,
         }
     }
 
-    /// 生成缓存键 - 基于对话ID和前缀哈希
-    fn generate_cache_key(&self, conv_id: i64, prefix_hash: u64) -> String {
-        format!("ctx_{}_{}", conv_id, prefix_hash)
+    /// 简单的缓存获取
+    pub fn get(&self, key: &str) -> Option<String> {
+        let cache = self.cache.lock().ok()?;
+        cache.get(key).map(|entry| entry.content.clone())
     }
 
-    /// 计算消息列表的哈希值（结构化哈希）
-    fn hash_messages(&self, msgs: &[Message]) -> u64 {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        for msg in msgs {
-            msg.id.hash(&mut hasher);
-            msg.role.hash(&mut hasher);
-            // 对内容进行规范化处理，忽略空白字符差异
-            msg.content.trim().hash(&mut hasher);
-            // 哈希工具调用信息
-            if let Some(ref steps) = msg.steps_json {
-                steps.hash(&mut hasher);
-            }
-            // 纳入状态（用于滚动摘要版本，确保缓存失效）
-            if let Some(ref st) = msg.status {
-                st.hash(&mut hasher);
-            }
-        }
-        hasher.finish()
-    }
-
-    /// 智能提取稳定前缀 - 考虑语义边界
-    pub fn extract_stable_prefix(&self, msgs: &[Message]) -> Vec<Message> {
-        if msgs.is_empty() {
-            return Vec::new();
-        }
-
-        let mut stable_msgs = Vec::new();
-        let mut token_count = 0;
-        let mut last_system_index = None;
-
-        // 首先找到最后一个系统消息位置作为潜在边界
-        for (i, msg) in msgs.iter().enumerate() {
-            if msg.role == "system" {
-                last_system_index = Some(i);
-            }
-        }
-
-        // 优先保留系统消息和早期对话建立上下文
-        for (i, msg) in msgs.iter().enumerate() {
-            let msg_tokens = self.estimate_message_tokens(msg);
-
-            // 如果超出token限制，检查是否在语义边界
-            if token_count + msg_tokens > self.config.stable_prefix_max_tokens {
-                // 如果当前位置接近系统消息边界，继续到系统消息
-                if let Some(sys_idx) = last_system_index {
-                    if i <= sys_idx + 2 && token_count < self.config.stable_prefix_max_tokens * 2 {
-                        // 允许适度超出以保持语义完整性
-                    } else {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            stable_msgs.push(msg.clone());
-            token_count += msg_tokens;
-
-            // 如果已经包含了系统消息及其后续2-3条消息，考虑停止
-            if let Some(sys_idx) = last_system_index {
-                if i > sys_idx + 3 && token_count > self.config.stable_prefix_max_tokens / 2 {
-                    break;
-                }
-            }
-        }
-
-        debug!(
-            "提取稳定前缀: {} -> {} 条消息, {} tokens",
-            msgs.len(),
-            stable_msgs.len(),
-            token_count
-        );
-
-        stable_msgs
-    }
-
-    /// 更准确的token估算
-    fn estimate_message_tokens(&self, msg: &Message) -> usize {
-        // 使用真实分词器；若不可用则回退到简单估算
-        if let Some(tok) = &self.tokenizer {
-            let mut tokens = tok.encode_ordinary(&msg.content).len();
-            if let Some(ref steps) = msg.steps_json {
-                tokens += tok.encode_ordinary(steps).len();
-            }
-            // 角色与结构额外开销
-            tokens += match msg.role.as_str() {
-                "system" => 6,
-                "assistant" => 4,
-                "user" => 3,
-                _ => 2,
-            };
-            return tokens;
-        }
-
-        // fallback
-        let content_tokens = msg.content.len() / 3;
-        let steps_tokens = msg.steps_json.as_ref().map(|s| s.len() / 4).unwrap_or(0);
-        content_tokens + steps_tokens
-    }
-
-    /// 高效缓存获取 - 精确匹配优先
-    pub fn get(&self, conv_id: i64, msgs: &[Message]) -> Option<String> {
-        if !self.config.enabled || msgs.is_empty() {
-            return None;
-        }
-
-        let stable_prefix = self.extract_stable_prefix(msgs);
-        let prefix_hash = self.hash_messages(&stable_prefix);
-        let cache_key = self.generate_cache_key(conv_id, prefix_hash);
-
-        let mut cache = self.cache.lock().ok()?;
-
-        if let Some(entry) = cache.get_mut(&cache_key) {
-            if self.is_entry_valid(entry) {
-                self.update_entry_access(entry);
-                debug!("缓存命中: {} (hits: {})", cache_key, entry.hit_count);
-                return Some(entry.content.clone());
-            } else {
-                cache.remove(&cache_key);
-                debug!("清理过期缓存: {}", cache_key);
-            }
-        }
-
-        debug!("缓存未命中: {}", cache_key);
-        None
-    }
-
-    /// 检查缓存条目是否有效（TTL和其他条件）
-    fn is_entry_valid(&self, entry: &CacheEntry) -> bool {
-        let now = Utc::now();
-        let elapsed = now.signed_duration_since(entry.created_at).num_seconds();
-        elapsed >= 0 && (elapsed as u64) <= self.config.ttl_seconds
-    }
-
-    /// 更新缓存条目的访问信息
-    fn update_entry_access(&self, entry: &mut CacheEntry) {
-        let now = Utc::now();
-        entry.hit_count += 1;
-        entry.last_accessed = now;
-
-        // 动态调整访问权重：最近访问 + 频率
-        let recency_weight = 1.0
-            / (1.0 + (now.signed_duration_since(entry.last_accessed).num_minutes() as f64 / 60.0));
-        let frequency_weight = (entry.hit_count as f64).ln() / 10.0;
-        entry.access_weight = recency_weight + frequency_weight;
-    }
-
-    /// 高效缓存存储 - 简化的LRU机制
-    pub fn put(&self, conv_id: i64, msgs: &[Message], content: String) {
-        if !self.config.enabled || msgs.is_empty() {
-            return;
-        }
-
-        let stable_prefix = self.extract_stable_prefix(msgs);
-        let prefix_hash = self.hash_messages(&stable_prefix);
-        let cache_key = self.generate_cache_key(conv_id, prefix_hash);
-        let messages_hash = self.hash_messages(msgs);
-
-        let mut cache = self.cache.lock().unwrap();
-
-        // 简化的缓存空间管理
-        if cache.len() >= self.config.max_entries {
-            let oldest_key = cache
-                .iter()
-                .min_by_key(|(_, entry)| entry.last_accessed)
-                .map(|(k, _)| k.clone());
-            if let Some(key) = oldest_key {
-                cache.remove(&key);
-                debug!("LRU清理缓存: {}", key);
-            }
-        }
-
-        let now = Utc::now();
-        let entry = CacheEntry {
-            content,
-            messages_hash,
-            created_at: now,
-            last_accessed: now,
-            hit_count: 0,
-            stable_prefix_len: stable_prefix.len(),
-            semantic_hash: 0, // 简化，不使用语义哈希
-            access_weight: 1.0,
-        };
-
-        cache.insert(cache_key.clone(), entry);
-        debug!("缓存存储: {}", cache_key);
-    }
-
-    /// 获取缓存统计
-    pub fn stats(&self) -> CacheStats {
-        let cache = self.cache.lock().unwrap();
-        let total_hits: u64 = cache.values().map(|e| e.hit_count).sum();
-        let total_entries = cache.len();
-
-        CacheStats {
-            total_entries,
-            total_hits,
-            hit_rate: if total_entries > 0 {
-                total_hits as f64 / (total_entries as f64 + total_hits as f64)
-            } else {
-                0.0
-            },
+    /// 简单的缓存设置
+    pub fn set(&self, key: String, content: String) {
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.insert(
+                key,
+                CacheEntry {
+                    content,
+                    created_at: Utc::now(),
+                },
+            );
         }
     }
 
     /// 清理过期缓存
     pub fn cleanup_expired(&self) {
-        let mut cache = self.cache.lock().unwrap();
-        let now = Utc::now();
-
-        cache.retain(|key, entry| {
-            let elapsed = now.signed_duration_since(entry.created_at).num_seconds();
-            if elapsed as u64 > self.config.ttl_seconds {
-                debug!("清理过期缓存: {}", key);
-                false
-            } else {
-                true
-            }
-        });
+        if let Ok(mut cache) = self.cache.lock() {
+            let now = Utc::now();
+            cache.retain(|_, entry| {
+                now.signed_duration_since(entry.created_at).num_seconds() < 3600
+                // 1小时过期
+            });
+        }
     }
 }
 
-/// 缓存统计
+/// 简化的缓存统计
 #[derive(Debug, Clone)]
 pub struct CacheStats {
     pub total_entries: usize,
-    pub total_hits: u64,
-    pub hit_rate: f64,
-}
-
-// ============= 策略层 =============
-
-/// 压缩策略特征
-pub trait CompressionStrategy: Send + Sync {
-    fn compress(&self, msgs: &[Message], config: &ContextConfig) -> AppResult<Vec<Message>>;
-}
-
-/// 高效压缩策略 - 基于Claude Code的30%保留率实现
-pub struct EfficientCompressionStrategy;
-
-/// 消息重要性评估
-#[derive(Debug, Clone)]
-struct MessageImportance {
-    pub index: usize,
-    pub message: Message,
-    pub importance_score: f64,
-    pub is_system: bool,
-}
-
-impl CompressionStrategy for EfficientCompressionStrategy {
-    fn compress(&self, msgs: &[Message], config: &ContextConfig) -> AppResult<Vec<Message>> {
-        if msgs.len() < config.min_compress_batch {
-            debug!("消息数量不足，跳过压缩: {}", msgs.len());
-            return Ok(msgs.to_vec());
-        }
-
-        debug!("开始高效压缩: {} 条消息", msgs.len());
-
-        // 计算30%保留目标数量 (Claude Code标准)
-        let target_count =
-            (msgs.len() as f64 * 0.30).max(config.min_compress_batch as f64) as usize;
-
-        // 1. 分析消息重要性
-        let importance_analysis = self.analyze_message_importance(msgs);
-
-        // 2. 应用保留策略
-        let preserved_messages =
-            self.apply_retention_strategy(importance_analysis, target_count, config)?;
-
-        // 3. 最终排序和去重
-        self.finalize_result(preserved_messages, msgs.len())
-    }
-}
-
-impl EfficientCompressionStrategy {
-    /// 快速重要性分析
-    fn analyze_message_importance(&self, msgs: &[Message]) -> Vec<MessageImportance> {
-        let scorer = AdvancedMessageScorer::new();
-
-        msgs.iter()
-            .enumerate()
-            .map(|(index, msg)| {
-                let importance_score = scorer.compute_comprehensive_score(msg, index, msgs.len());
-
-                MessageImportance {
-                    index,
-                    message: msg.clone(),
-                    importance_score,
-                    is_system: msg.role == "system",
-                }
-            })
-            .collect()
-    }
-
-    /// 高效保留策略 - 基于30%目标
-    fn apply_retention_strategy(
-        &self,
-        mut analysis: Vec<MessageImportance>,
-        target_count: usize,
-        config: &ContextConfig,
-    ) -> AppResult<Vec<MessageImportance>> {
-        let mut result = Vec::new();
-
-        // 1. 强制保留系统消息
-        for item in &analysis {
-            if item.is_system {
-                result.push(item.clone());
-            }
-        }
-
-        // 2. 保留最近的消息（保证连续性）
-        let recent_start = analysis.len().saturating_sub(config.keep_recent);
-        for item in &analysis[recent_start..] {
-            if !item.is_system && !result.iter().any(|r| r.index == item.index) {
-                result.push(item.clone());
-            }
-        }
-
-        // 3. 如果还需要更多消息，按重要性选择
-        if result.len() < target_count {
-            analysis.sort_by(|a, b| {
-                b.importance_score
-                    .partial_cmp(&a.importance_score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-
-            let needed = target_count - result.len();
-            for item in analysis.iter().take(needed * 2) {
-                if result.len() >= target_count {
-                    break;
-                }
-                if !result.iter().any(|r| r.index == item.index) {
-                    result.push(item.clone());
-                }
-            }
-        }
-
-        // 排序和去重
-        result.sort_by_key(|m| m.index);
-        result.dedup_by_key(|m| m.message.id);
-
-        debug!(
-            "保留策略结果: {} -> {} 条消息",
-            analysis.len(),
-            result.len()
-        );
-        Ok(result)
-    }
-
-    /// 最终结果处理
-    fn finalize_result(
-        &self,
-        mut messages: Vec<MessageImportance>,
-        original_count: usize,
-    ) -> AppResult<Vec<Message>> {
-        // 按时间顺序排序
-        messages.sort_by_key(|m| m.index);
-
-        let result: Vec<Message> = messages.into_iter().map(|m| m.message).collect();
-        let compression_rate = (1.0 - result.len() as f64 / original_count as f64) * 100.0;
-
-        debug!(
-            "高效压缩完成: {} -> {} 条消息 (压缩率: {:.1}%)",
-            original_count,
-            result.len(),
-            compression_rate
-        );
-
-        Ok(result)
-    }
-}
-
-/// 循环检测策略
-pub struct LoopDetector {
-    window_size: usize,
-}
-
-impl LoopDetector {
-    pub fn new(window_size: usize) -> Self {
-        Self { window_size }
-    }
-
-    pub fn remove_loops(&self, msgs: Vec<Message>) -> Vec<Message> {
-        let mut result = Vec::new();
-        let mut seen_hashes = HashMap::new();
-
-        for (idx, msg) in msgs.into_iter().enumerate() {
-            let hash = self.content_hash(&msg.content);
-
-            if let Some(&last_idx) = seen_hashes.get(&hash) {
-                if idx - last_idx <= self.window_size {
-                    debug!("跳过循环消息: {:?}", msg.id);
-                    continue;
-                }
-            }
-
-            seen_hashes.insert(hash, idx);
-            result.push(msg);
-        }
-
-        result
-    }
-
-    fn content_hash(&self, content: &str) -> u64 {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        content.hash(&mut hasher);
-        hasher.finish()
-    }
-}
-
-// ============= 评分层 =============
-
-/// 高级消息评分器 - 多维度评分
-pub struct AdvancedMessageScorer {
-    keyword_weights: HashMap<&'static str, f32>,
-    semantic_weights: HashMap<&'static str, f32>,
-}
-
-/// 简单消息评分器（兼容性保留）
-pub struct MessageScorer {
-    keyword_weights: HashMap<&'static str, f32>,
-}
-
-impl AdvancedMessageScorer {
-    pub fn new() -> Self {
-        let mut keyword_weights = HashMap::new();
-        keyword_weights.insert("error", 3.0);
-        keyword_weights.insert("warning", 2.5);
-        keyword_weights.insert("failed", 2.8);
-        keyword_weights.insert("success", 2.0);
-        keyword_weights.insert("config", 1.8);
-        keyword_weights.insert("install", 1.6);
-        keyword_weights.insert("debug", 1.4);
-        keyword_weights.insert("important", 2.2);
-        keyword_weights.insert("critical", 3.2);
-
-        let mut semantic_weights = HashMap::new();
-        semantic_weights.insert("question", 1.5);
-        semantic_weights.insert("solution", 2.0);
-        semantic_weights.insert("problem", 1.8);
-        semantic_weights.insert("implement", 1.6);
-        semantic_weights.insert("fix", 2.2);
-        semantic_weights.insert("optimize", 1.7);
-
-        Self {
-            keyword_weights,
-            semantic_weights,
-        }
-    }
-
-    /// 计算综合重要性评分
-    pub fn compute_comprehensive_score(
-        &self,
-        msg: &Message,
-        index: usize,
-        total_msgs: usize,
-    ) -> f64 {
-        let mut score = 0.0;
-
-        // 1. 基础角色权重
-        score += match msg.role.as_str() {
-            "system" => 4.0,
-            "assistant" => 1.8,
-            "user" => 1.2,
-            _ => 0.8,
-        };
-
-        // 2. 工具执行高权重（确保保留重要执行结果）
-        if msg.steps_json.is_some() {
-            score += self.evaluate_tool_execution_importance(msg);
-        }
-
-        // 3. 内容语义评分
-        score += self.evaluate_content_semantics(&msg.content);
-
-        // 4. 位置权重（最近和最早的消息更重要）
-        let position_weight = self.compute_position_weight(index, total_msgs);
-        score *= position_weight;
-
-        // 5. 内容长度评分（适中长度最优）
-        score += self.evaluate_content_length(&msg.content);
-
-        // 6. 时间衰减（较新的消息权重更高）
-        score *= self.compute_time_decay(msg);
-
-        // 7. 对话连续性评分（考虑上下文关联）
-        score += self.evaluate_conversational_continuity(msg);
-
-        score.max(0.0).min(10.0)
-    }
-
-    /// 评估工具执行重要性
-    fn evaluate_tool_execution_importance(&self, msg: &Message) -> f64 {
-        let base_score = 4.0; // 工具执行基础高分
-
-        if let Some(ref steps_json) = msg.steps_json {
-            // 检查是否有错误
-            if steps_json.contains("ToolError") || steps_json.contains("failed") {
-                return base_score + 2.0; // 错误信息很重要
-            }
-
-            // 检查工具类型重要性
-            if steps_json.contains("Read")
-                || steps_json.contains("Write")
-                || steps_json.contains("Edit")
-            {
-                return base_score + 1.5; // 文件操作重要
-            }
-
-            if steps_json.contains("Bash") || steps_json.contains("Execute") {
-                return base_score + 1.0; // 命令执行重要
-            }
-        }
-
-        base_score
-    }
-
-    /// 评估内容语义
-    fn evaluate_content_semantics(&self, content: &str) -> f64 {
-        let mut score = 0.0f64;
-        let content_lower = content.to_lowercase();
-
-        // 关键词权重
-        for (&keyword, &weight) in &self.keyword_weights {
-            if content_lower.contains(keyword) {
-                score += weight as f64;
-            }
-        }
-
-        // 语义模式权重
-        for (&pattern, &weight) in &self.semantic_weights {
-            if content_lower.contains(pattern) {
-                score += weight as f64;
-            }
-        }
-
-        // 问号表示问题，重要性较高
-        let question_count = content.matches('?').count() as f64;
-        score += question_count * 0.5;
-
-        // 代码块表示技术内容，适度加分
-        let code_block_count = content.matches("```").count() as f64 / 2.0;
-        score += code_block_count * 0.8;
-
-        score
-    }
-
-    /// 计算位置权重
-    fn compute_position_weight(&self, index: usize, total_msgs: usize) -> f64 {
-        if total_msgs <= 1 {
-            return 1.0;
-        }
-
-        let relative_position = index as f64 / (total_msgs - 1) as f64;
-
-        // 最近的消息权重最高，最早的消息也有一定权重
-        if relative_position > 0.8 {
-            1.4 // 最近20%的消息
-        } else if relative_position < 0.2 {
-            1.2 // 最早20%的消息
-        } else {
-            1.0 // 中间消息正常权重
-        }
-    }
-
-    /// 评估内容长度
-    fn evaluate_content_length(&self, content: &str) -> f64 {
-        match content.len() {
-            0..=20 => 0.3,    // 太短，信息量少
-            21..=100 => 1.2,  // 适中，信息密度高
-            101..=300 => 1.5, // 较长，信息丰富
-            301..=800 => 1.0, // 很长，可能有冗余
-            _ => 0.6,         // 过长，可能信息冗余
-        }
-    }
-
-    /// 计算时间衰减
-    fn compute_time_decay(&self, msg: &Message) -> f64 {
-        let created_at = chrono::DateTime::parse_from_rfc3339(&msg.created_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now());
-
-        let hours_ago = chrono::Utc::now()
-            .signed_duration_since(created_at)
-            .num_hours() as f64;
-
-        // 48小时半衰期，但最低保持30%权重
-        let decay_factor = (-hours_ago / 48.0).exp();
-        decay_factor.max(0.3)
-    }
-
-    /// 评估对话连续性
-    fn evaluate_conversational_continuity(&self, msg: &Message) -> f64 {
-        let mut score = 0.0;
-
-        // 回复指示词加分
-        let content_lower = msg.content.to_lowercase();
-        if content_lower.contains("thanks") || content_lower.contains("thank you") {
-            score += 0.5;
-        }
-
-        if content_lower.contains("please") || content_lower.contains("help") {
-            score += 0.8;
-        }
-
-        // 确认或否定词汇
-        if content_lower.contains("yes")
-            || content_lower.contains("no")
-            || content_lower.contains("ok")
-            || content_lower.contains("sure")
-        {
-            score += 0.3;
-        }
-
-        score
-    }
-}
-
-impl MessageScorer {
-    pub fn new() -> Self {
-        let mut weights = HashMap::new();
-        weights.insert("error", 2.0);
-        weights.insert("warning", 1.5);
-        weights.insert("config", 1.3);
-        weights.insert("install", 1.2);
-        weights.insert("debug", 1.1);
-
-        Self {
-            keyword_weights: weights,
-        }
-    }
-
-    pub fn score(&self, msg: &Message) -> f32 {
-        let mut score = 0.0;
-
-        // 基础分：角色权重
-        score += match msg.role.as_str() {
-            "system" => 3.0,
-            "assistant" => 1.5,
-            "user" => 1.0,
-            _ => 0.5,
-        };
-
-        // 工具调用加分（大幅提高分数，确保重要工具结果不被丢失）
-        if msg.steps_json.is_some() {
-            score += 5.0; // 从2.0提高到5.0，确保工具执行消息优先保留
-        }
-
-        // 长度分 (适中长度得分高)
-        let len_score = match msg.content.len() {
-            0..=50 => 0.5,
-            51..=200 => 1.5,
-            201..=500 => 2.0,
-            501..=1000 => 1.0,
-            _ => 0.5,
-        };
-        score += len_score;
-
-        // 关键词分
-        let content_lower = msg.content.to_lowercase();
-        for (&keyword, &weight) in &self.keyword_weights {
-            if content_lower.contains(keyword) {
-                score += weight;
-            }
-        }
-
-        // 时间衰减 (24小时半衰期)
-        let created_at = chrono::DateTime::parse_from_rfc3339(&msg.created_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now());
-        let hours = chrono::Utc::now()
-            .signed_duration_since(created_at)
-            .num_hours() as f32;
-        score *= (-hours / 24.0).exp();
-
-        score.max(0.0).min(10.0)
-    }
 }
 
 // ============= 管理层 =============
 
-/// 压缩决策类型
-#[derive(Debug, Clone, PartialEq)]
-enum CompressionDecision {
-    /// 无需压缩
-    NoCompression,
-    /// 轻量压缩（去除冗余，保留核心）
-    LightCompression,
-    /// 深度压缩（使用智能策略大幅压缩）
-    HeavyCompression,
-}
-
-/// 智能上下文管理器 - 主要入口
+/// 简化的上下文管理器
 pub struct ContextManager {
     config: ContextConfig,
-    strategy: Box<dyn CompressionStrategy>,
-    loop_detector: LoopDetector,
-    kv_cache: KVCache,
-    /// 实际分词器
+    cache: SimpleCache,
     tokenizer: Arc<CoreBPE>,
 }
 
 impl ContextManager {
     pub fn new(config: ContextConfig) -> Self {
         let tokenizer = Arc::new(cl100k_base().expect("failed to init cl100k_base tokenizer"));
-        let kv_cache = KVCache::new(config.kv_cache.clone(), Some(tokenizer.clone()));
         Self {
-            loop_detector: LoopDetector::new(6), // 优化循环检测窗口
-            strategy: Box::new(EfficientCompressionStrategy), // 使用高效压缩策略
-            kv_cache,
-            tokenizer,
-            config,
-        }
-    }
-
-    /// 创建带自定义策略的管理器
-    pub fn with_strategy(config: ContextConfig, strategy: Box<dyn CompressionStrategy>) -> Self {
-        let tokenizer = Arc::new(cl100k_base().expect("failed to init cl100k_base tokenizer"));
-        let kv_cache = KVCache::new(config.kv_cache.clone(), Some(tokenizer.clone()));
-        Self {
-            loop_detector: LoopDetector::new(8),
-            strategy,
-            kv_cache,
+            cache: SimpleCache::new(),
             tokenizer,
             config,
         }
@@ -861,7 +114,7 @@ impl ContextManager {
         info!("构建智能上下文: conv={}, up_to={:?}", conv_id, up_to_msg_id);
 
         // 1. 获取原始消息
-        let mut raw_msgs = self.fetch_messages(repos, conv_id, up_to_msg_id).await?;
+        let raw_msgs = self.fetch_messages(repos, conv_id, up_to_msg_id).await?;
         if raw_msgs.is_empty() {
             debug!("消息列表为空");
             return Ok(ContextResult {
@@ -872,41 +125,50 @@ impl ContextManager {
             });
         }
 
-        let mut token_count = self.estimate_tokens(&raw_msgs);
+        debug!("获取到原始消息: {} 条", raw_msgs.len());
+
+        let token_count = self.estimate_tokens(&raw_msgs);
         let original_count = raw_msgs.len();
 
-        // 如果超过硬上限，生成并持久化滚动摘要，然后重新加载
-        if token_count > self.config.max_tokens {
+        // 2. 统一的压缩逻辑
+        let processed_msgs = if token_count as f32
+            > self.config.max_tokens as f32 * self.config.compress_threshold
+        {
             info!(
-                "超过token上限，触发滚动摘要: {}>{}",
-                token_count, self.config.max_tokens
+                "触发压缩: tokens={}/{} ({}%), 消息数={}",
+                token_count,
+                self.config.max_tokens,
+                (token_count as f32 / self.config.max_tokens as f32 * 100.0) as u32,
+                original_count
             );
-            raw_msgs = self
-                .rollup_and_persist_summary(repos, conv_id, &raw_msgs)
-                .await?;
-            token_count = self.estimate_tokens(&raw_msgs);
-        }
 
-        // 2. 智能压缩判断逻辑
-        let compression_decision = self.make_compression_decision(&raw_msgs, token_count);
+            // 使用30%保留策略，但确保最少保留8条消息
+            let keep_ratio = 0.3; // 保留30%
+            let min_keep = 8; // 最少保留8条消息
+            let keep_count = (raw_msgs.len() as f32 * keep_ratio)
+                .max(min_keep as f32)
+                .min(raw_msgs.len() as f32) as usize;
 
-        let processed_msgs = match compression_decision {
-            CompressionDecision::NoCompression => {
-                debug!("无需压缩，执行循环检测");
-                self.loop_detector.remove_loops(raw_msgs)
+            let compress_from = raw_msgs.len().saturating_sub(keep_count);
+
+            debug!("保留最后{}条消息，压缩前{}条", keep_count, compress_from);
+
+            if compress_from > 0 {
+                // 生成摘要并替换早期消息
+                self.compress_with_summary(repos, conv_id, &raw_msgs, compress_from)
+                    .await?
+            } else {
+                debug!("无需压缩：消息数量太少");
+                raw_msgs
             }
-            CompressionDecision::LightCompression => {
-                debug!("执行轻量压缩");
-                self.apply_light_compression(&raw_msgs)?
-            }
-            CompressionDecision::HeavyCompression => {
-                info!(
-                    "执行深度压缩: tokens={}/{}, 消息数={}",
-                    token_count, self.config.max_tokens, original_count
-                );
-                let compressed = self.strategy.compress(&raw_msgs, &self.config)?;
-                self.loop_detector.remove_loops(compressed)
-            }
+        } else {
+            debug!(
+                "无需压缩: tokens={}/{} ({}%)",
+                token_count,
+                self.config.max_tokens,
+                (token_count as f32 / self.config.max_tokens as f32 * 100.0) as u32
+            );
+            raw_msgs
         };
 
         let final_token_count = self.estimate_tokens(&processed_msgs);
@@ -923,82 +185,12 @@ impl ContextManager {
             messages: processed_msgs,
             original_count,
             token_count: final_token_count,
-            compressed: !matches!(compression_decision, CompressionDecision::NoCompression),
+            compressed: token_count as f32
+                > self.config.max_tokens as f32 * self.config.compress_threshold,
         })
     }
 
-    /// 智能压缩决策
-    fn make_compression_decision(
-        &self,
-        msgs: &[Message],
-        token_count: usize,
-    ) -> CompressionDecision {
-        let token_ratio = token_count as f32 / self.config.max_tokens as f32;
-        let msg_count = msgs.len();
-
-        // 计算压力指标
-        let token_pressure = token_ratio > self.config.compress_threshold;
-        let message_pressure = msg_count > self.config.keep_recent + self.config.keep_important;
-        let tool_message_ratio =
-            msgs.iter().filter(|m| m.steps_json.is_some()).count() as f32 / msg_count as f32;
-
-        match (token_pressure, message_pressure, tool_message_ratio > 0.6) {
-            (false, false, _) => CompressionDecision::NoCompression,
-            (false, true, false) => CompressionDecision::LightCompression,
-            (true, _, _) | (_, true, true) => CompressionDecision::HeavyCompression,
-        }
-    }
-
-    /// 轻量压缩 - 保留核心信息，移除冗余
-    fn apply_light_compression(&self, msgs: &[Message]) -> AppResult<Vec<Message>> {
-        let mut result = Vec::new();
-        let _scorer = AdvancedMessageScorer::new();
-
-        // 1. 保留所有系统消息
-        result.extend(msgs.iter().filter(|m| m.role == "system").cloned());
-
-        // 2. 保留所有工具执行消息（工具链完整性重要）
-        result.extend(msgs.iter().filter(|m| m.steps_json.is_some()).cloned());
-
-        // 3. 保留最近的对话
-        let recent_start = msgs.len().saturating_sub(self.config.keep_recent);
-        for msg in &msgs[recent_start..] {
-            if !result.iter().any(|m| m.id == msg.id) {
-                result.push(msg.clone());
-            }
-        }
-
-        // 4. 移除低质量重复消息
-        result.sort_by(|a, b| a.created_at.cmp(&b.created_at));
-        result.dedup_by(|a, b| {
-            if a.id == b.id {
-                return true;
-            }
-            // 内容相似度去重
-            let similarity = self.content_similarity(&a.content, &b.content);
-            similarity > 0.9 && (a.content.len() < b.content.len())
-        });
-
-        debug!("轻量压缩: {} -> {} 条消息", msgs.len(), result.len());
-        Ok(result)
-    }
-
-    /// 计算内容相似度
-    fn content_similarity(&self, content1: &str, content2: &str) -> f64 {
-        let words1: std::collections::HashSet<_> = content1.split_whitespace().collect();
-        let words2: std::collections::HashSet<_> = content2.split_whitespace().collect();
-
-        let intersection = words1.intersection(&words2).count();
-        let union = words1.union(&words2).count();
-
-        if union == 0 {
-            0.0
-        } else {
-            intersection as f64 / union as f64
-        }
-    }
-
-    /// 构建带摘要的prompt - 集成KV Cache
+    /// 构建简化的prompt
     pub async fn build_prompt(
         &self,
         repos: &RepositoryManager,
@@ -1007,57 +199,24 @@ impl ContextManager {
         up_to_msg_id: Option<i64>,
         current_working_directory: Option<&str>,
     ) -> AppResult<String> {
-        // 1. 获取历史消息用于缓存键计算（排除当前正在处理的消息）
-        let raw_msgs = self.fetch_messages(repos, conv_id, up_to_msg_id).await?;
+        debug!(
+            "构建prompt: conv_id={}, up_to_msg_id={:?}, current_msg_len={}",
+            conv_id,
+            up_to_msg_id,
+            current_msg.len()
+        );
 
-        // 排除最后一条消息（当前用户消息），只对历史消息做缓存
-        let history_msgs = if raw_msgs.len() > 1 {
-            &raw_msgs[..raw_msgs.len() - 1]
-        } else {
-            &raw_msgs[..]
-        };
-
-        // 2. 尝试从KV缓存获取
-        if let Some(mut cached_prompt) = self.kv_cache.get(conv_id, history_msgs) {
-            info!("KV缓存命中: conv={}", conv_id);
-
-            // 如果有环境信息，需要插入到缓存的prompt中
-            if let Some(cwd) = current_working_directory {
-                if !cwd.trim().is_empty() {
-                    let env_info = format!("【当前环境】\n工作目录: {}\n\n", cwd);
-                    // 在前置提示词后插入环境信息
-                    if cached_prompt.contains("【对话历史】") {
-                        cached_prompt = cached_prompt.replace("【对话历史】", &format!("{}【对话历史】", env_info));
-                    } else {
-                        cached_prompt = format!("{}{}", env_info, cached_prompt);
-                    }
-                }
-            }
-
-            // 缓存命中时，只需要添加当前消息
-            return Ok(format!(
-                "{}\n\n【当前问题】\n{}",
-                cached_prompt, current_msg
-            ));
-        }
-
-        // 3. 缓存未命中，构建完整prompt
-        info!("KV缓存未命中，构建新prompt: conv={}", conv_id);
-
+        // 1. 获取上下文消息
         let ctx = self.build_context(repos, conv_id, up_to_msg_id).await?;
 
-        // 获取用户前置提示词
-        let prefix = repos
-            .ai_models()
-            .get_user_prefix_prompt()
-            .await?
-            .unwrap_or_default();
-
+        // 2. 构建简单的prompt
         let mut parts = Vec::new();
 
-        // 添加前置提示词 (稳定前缀)
-        if !prefix.trim().is_empty() {
-            parts.push(format!("【前置提示】\n{}\n", prefix));
+        // 添加前置提示词
+        if let Ok(Some(prefix)) = repos.ai_models().get_user_prefix_prompt().await {
+            if !prefix.trim().is_empty() {
+                parts.push(format!("【前置提示】\n{}\n", prefix));
+            }
         }
 
         // 添加环境信息
@@ -1067,7 +226,7 @@ impl ContextManager {
             }
         }
 
-        // 构建历史对话 (可变部分)
+        // 添加对话历史
         if !ctx.messages.is_empty() {
             let history = ctx
                 .messages
@@ -1077,7 +236,7 @@ impl ContextManager {
                 .join("\n");
 
             let compression_info = if ctx.compressed {
-                format!("，已智能压缩至{}条", ctx.messages.len())
+                format!("，已压缩至{}条", ctx.messages.len())
             } else {
                 String::new()
             };
@@ -1088,46 +247,238 @@ impl ContextManager {
             ));
         }
 
-        // 4. 缓存稳定部分 (前缀 + 历史对话)
-        let stable_content = parts.join("\n");
-        self.kv_cache
-            .put(conv_id, history_msgs, stable_content.clone());
-
-        // 5. 添加当前问题并返回
+        // 添加当前问题
         parts.push(format!("【当前问题】\n{}", current_msg));
+
         Ok(parts.join("\n"))
     }
 
     // ============= 私有方法 =============
 
+    /// 简化的压缩函数
+    async fn compress_with_summary(
+        &self,
+        repos: &RepositoryManager,
+        conv_id: i64,
+        messages: &[Message],
+        compress_from: usize,
+    ) -> AppResult<Vec<Message>> {
+        debug!(
+            "开始压缩: 总消息={}, 压缩前{}条",
+            messages.len(),
+            compress_from
+        );
+
+        let (to_compress, to_keep) = messages.split_at(compress_from);
+
+        if to_compress.is_empty() {
+            return Ok(messages.to_vec());
+        }
+
+        // 生成简单的摘要
+        let summary = self.generate_simple_summary(to_compress);
+
+        // 创建摘要消息
+        let summary_msg = Message {
+            id: None,
+            conversation_id: conv_id,
+            role: "system".to_string(),
+            content: summary,
+            steps_json: None,
+            status: Some("complete".to_string()), // 使用数据库允许的status值
+            duration_ms: None,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        };
+
+        // 保存摘要消息到数据库
+        let _summary_id = repos.conversations().save_message(&summary_msg).await?;
+
+        // 构建新的消息列表：摘要 + 保留的消息
+        let mut result = vec![summary_msg];
+        result.extend_from_slice(to_keep);
+
+        info!(
+            "压缩完成: {}条 -> {}条 (摘要+{}条保留)",
+            messages.len(),
+            result.len(),
+            to_keep.len()
+        );
+        Ok(result)
+    }
+
+    /// 生成智能摘要
+    fn generate_simple_summary(&self, messages: &[Message]) -> String {
+        let mut summary_parts = Vec::new();
+
+        // 1. 摘要头部
+        summary_parts.push("=== 对话摘要 ===".to_string());
+
+        // 2. 统计信息
+        let user_msgs = messages.iter().filter(|m| m.role == "user").count();
+        let assistant_msgs = messages.iter().filter(|m| m.role == "assistant").count();
+        let tool_msgs = messages.iter().filter(|m| m.steps_json.is_some()).count();
+
+        summary_parts.push(format!(
+            "压缩了{}条消息: {}条用户消息, {}条助手回复, {}条工具调用",
+            messages.len(),
+            user_msgs,
+            assistant_msgs,
+            tool_msgs
+        ));
+
+        // 3. 智能提取关键信息
+        let key_points = self.extract_key_conversation_points(messages);
+
+        if !key_points.is_empty() {
+            summary_parts.push("关键信息:".to_string());
+            summary_parts.extend(key_points);
+        }
+
+        // 4. 控制摘要长度，避免过长
+        let mut summary = summary_parts.join("\n");
+        let token_count = self.tokenizer.encode_ordinary(&summary).len();
+
+        if token_count > 1500 {
+            // 提高token限制，允许更详细的摘要
+            // 如果摘要太长，进行截断
+            let max_chars = (summary.chars().count() * 1500) / token_count;
+            if max_chars < summary.chars().count() {
+                summary = summary.chars().take(max_chars).collect();
+                summary.push_str("\n... (摘要已截断)");
+            }
+        }
+
+        summary_parts.push("=== 摘要结束 ===".to_string());
+        summary
+    }
+
+    /// 智能提取对话关键点
+    fn extract_key_conversation_points(&self, messages: &[Message]) -> Vec<String> {
+        let mut key_points = Vec::new();
+        let mut seen_topics = HashSet::new();
+
+        // 优先处理最近的消息，但限制数量避免摘要过长
+        for msg in messages.iter().rev().take(8) {
+            match msg.role.as_str() {
+                "user" => {
+                    let content = self.truncate_content(&msg.content, 120);
+                    // 简单去重：避免相似的用户问题重复
+                    let topic_key = self.extract_topic_key(&content);
+                    if !seen_topics.contains(&topic_key) {
+                        key_points.push(format!("• 用户: {}", content));
+                        seen_topics.insert(topic_key);
+                    }
+                }
+                "assistant" => {
+                    // 优先保留工具调用信息
+                    if let Some(steps) = &msg.steps_json {
+                        if let Ok(steps_value) = serde_json::from_str::<serde_json::Value>(steps) {
+                            let tool_summary = self.extract_tool_summary(&steps_value);
+                            if !tool_summary.is_empty() && tool_summary != "Completed" {
+                                key_points.push(format!("• 工具: {}", tool_summary));
+                            }
+                        }
+                    }
+
+                    // 保留有意义的助手回复
+                    if !msg.content.trim().is_empty()
+                        && !msg.content.contains("AbortError")
+                        && !msg.content.contains("我来帮你")
+                    // 过滤常见的开场白
+                    {
+                        let content = self.truncate_content(&msg.content, 120);
+                        key_points.push(format!("• 助手: {}", content));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // 反转以保持时间顺序
+        key_points.reverse();
+        key_points
+    }
+
+    /// 智能截断内容
+    fn truncate_content(&self, content: &str, max_len: usize) -> String {
+        if content.chars().count() <= max_len {
+            return content.to_string();
+        }
+
+        // 先按字符数截断到安全长度
+        let safe_content: String = content.chars().take(max_len).collect();
+
+        // 尝试在句号或换行处截断
+        let truncate_at = safe_content
+            .rfind('。')
+            .or_else(|| safe_content.rfind('\n'))
+            .or_else(|| safe_content.rfind(' '))
+            .unwrap_or_else(|| {
+                // 如果找不到合适的截断点，就截断到max_len-3个字符
+                std::cmp::max(3, max_len.saturating_sub(3))
+            });
+
+        let truncated: String = safe_content.chars().take(truncate_at).collect();
+        format!("{}...", truncated)
+    }
+
+    /// 提取话题关键词用于去重
+    fn extract_topic_key(&self, content: &str) -> String {
+        // 简单的话题提取：取前20个字符作为话题标识
+        content.chars().take(20).collect()
+    }
+
     async fn fetch_messages(
         &self,
         repos: &RepositoryManager,
         conv_id: i64,
-        _up_to_msg_id: Option<i64>,
+        up_to_msg_id: Option<i64>,
     ) -> AppResult<Vec<Message>> {
-        // TODO: 实现up_to_message_id逻辑
+        debug!(
+            "获取消息: conv_id={}, up_to_msg_id={:?}",
+            conv_id, up_to_msg_id
+        );
+
         let all = repos
             .conversations()
             .get_messages(conv_id, None, None)
             .await?;
 
-        // 查找最新摘要消息（status 以 "summary" 开头的 system 消息）
-        let latest_summary_idx = all
+        // 如果指定了up_to_message_id，只获取到该消息为止的历史
+        let filtered_msgs = if let Some(up_to_id) = up_to_msg_id {
+            all.into_iter()
+                .filter(|m| {
+                    if let Some(msg_id) = m.id {
+                        msg_id <= up_to_id
+                    } else {
+                        true // 保留没有ID的消息（不应该发生，但为了安全）
+                    }
+                })
+                .collect::<Vec<_>>()
+        } else {
+            all
+        };
+
+        debug!("过滤后消息数量: {}", filtered_msgs.len());
+
+        // 查找最新摘要消息（内容以"=== 对话摘要 ==="开头的 system 消息）
+        let latest_summary_idx = filtered_msgs
             .iter()
             .enumerate()
             .rev()
-            .find(|(_, m)| m.role == "system" && m.status.as_deref().map(|s| s.starts_with("summary")).unwrap_or(false))
+            .find(|(_, m)| m.role == "system" && m.content.starts_with("=== 对话摘要 ==="))
             .map(|(i, _)| i);
 
         if let Some(idx) = latest_summary_idx {
             // 仅保留该摘要以及其后的消息
             let mut compacted = Vec::new();
-            compacted.push(all[idx].clone());
-            compacted.extend(all.into_iter().skip(idx + 1));
+            compacted.push(filtered_msgs[idx].clone());
+            compacted.extend(filtered_msgs.into_iter().skip(idx + 1));
+            debug!("使用摘要压缩，最终消息数量: {}", compacted.len());
             Ok(compacted)
         } else {
-            Ok(all)
+            debug!("未找到摘要，返回所有消息: {}", filtered_msgs.len());
+            Ok(filtered_msgs)
         }
     }
 
@@ -1153,113 +504,6 @@ impl ContextManager {
         };
         tokens
     }
-
-    /// 生成滚动摘要并持久化，返回紧凑后的消息序列
-    async fn rollup_and_persist_summary(
-        &self,
-        repos: &RepositoryManager,
-        conv_id: i64,
-        msgs: &[Message],
-    ) -> AppResult<Vec<Message>> {
-        // 策略：保留最近 keep_recent 条和所有系统消息，对更早的用户/助手对话做摘要
-        let keep_recent = self.config.keep_recent;
-
-        let recent_start = msgs.len().saturating_sub(keep_recent);
-        let (head, tail) = msgs.split_at(recent_start);
-
-        // 使用集合高效去重：系统消息 + 最近消息
-        let mut preserved_ids: HashSet<Option<i64>> = HashSet::new();
-        for m in msgs.iter().filter(|m| m.role == "system") {
-            preserved_ids.insert(m.id);
-        }
-        for m in tail.iter() {
-            preserved_ids.insert(m.id);
-        }
-
-        // 需要被摘要的区间：head（早期部分）中非系统且不在保留集合的消息
-        let to_summarize: Vec<Message> = head
-            .iter()
-            .filter(|m| m.role != "system" && !preserved_ids.contains(&m.id))
-            .cloned()
-            .collect();
-
-        if to_summarize.is_empty() {
-            // 没有需要摘要的内容，直接返回原始
-            return Ok(msgs.to_vec());
-        }
-
-        let summary_text = self.generate_rolling_summary(&to_summarize);
-
-        // 计算版本号
-        let latest_version = msgs
-            .iter()
-            .filter_map(|m| m.status.as_deref())
-            .filter(|s| s.starts_with("summary_v"))
-            .filter_map(|s| s.trim_start_matches("summary_v").parse::<u32>().ok())
-            .max()
-            .unwrap_or(0);
-        let next_version = latest_version + 1;
-
-        // 持久化摘要为system消息
-        let mut summary_msg = crate::storage::repositories::conversations::Message::new(
-            conv_id,
-            "system".to_string(),
-            summary_text,
-        );
-        summary_msg.status = Some(format!("summary_v{}", next_version));
-        repos.conversations().save_message(&summary_msg).await?;
-
-        // 重新获取并压缩（fetch_messages会根据最新摘要进行折叠）
-        let compacted = self.fetch_messages(repos, conv_id, None).await?;
-        Ok(compacted)
-    }
-
-    /// 简洁的滚动摘要生成
-    fn generate_rolling_summary(&self, msgs: &[Message]) -> String {
-        // 提取关键信息：
-        // - 用户提问要点
-        // - 助手结论/答案
-        // - 工具执行摘要
-        // 控制长度：~400-600 tokens 以内（依靠分词器约束）
-        let mut bullets: Vec<String> = Vec::new();
-
-        for m in msgs {
-            match m.role.as_str() {
-                "user" => {
-                    bullets.push(format!("[User] {}", truncate_for_summary(&m.content)));
-                }
-                "assistant" => {
-                    if let Some(steps) = &m.steps_json {
-                        // 粗略提取工具摘要
-                        bullets.push(format!(
-                            "[Tool] {}",
-                            truncate_for_summary(steps)
-                        ));
-                    }
-                    bullets.push(format!(
-                        "[Assistant] {}",
-                        truncate_for_summary(&m.content)
-                    ));
-                }
-                _ => {}
-            }
-        }
-
-        // 合成摘要文本，限制最大token数（粗略控制）
-        let mut summary = String::from("Rolling Summary:\n");
-        for b in bullets {
-            summary.push_str("- ");
-            summary.push_str(&b);
-            summary.push('\n');
-            // 简单防爆：超过一定长度就停止
-            if self.tokenizer.encode_ordinary(&summary).len() > 1200 {
-                summary.push_str("... (truncated)\n");
-                break;
-            }
-        }
-        summary
-    }
-
 
     fn format_message(&self, msg: &Message) -> String {
         if msg.role == "assistant" && msg.steps_json.is_some() {
@@ -1299,6 +543,13 @@ impl ContextManager {
                             .and_then(|s| s.as_str())
                             .unwrap_or("completed");
 
+                        // 提取工具输入参数
+                        let mut input_text = String::new();
+                        if let Some(params) = tool_exec.get("params") {
+                            input_text = self.format_tool_params(tool_name, params);
+                            debug!("🔧 工具参数格式化: {} -> {}", tool_name, input_text);
+                        }
+
                         // 提取工具输出文本
                         let mut output_text = String::new();
                         if let Some(result) = tool_exec.get("result") {
@@ -1309,14 +560,20 @@ impl ContextManager {
                             } else if let Some(text) = result.get("text").and_then(|t| t.as_str()) {
                                 output_text = text.to_string();
                             // 3) 标准对象数组内容
-                            } else if let Some(contents) = result.get("content").and_then(|c| c.as_array()) {
+                            } else if let Some(contents) =
+                                result.get("content").and_then(|c| c.as_array())
+                            {
                                 let mut pieces: Vec<String> = Vec::new();
                                 for item in contents {
                                     if let Some(t) = item.get("text").and_then(|t| t.as_str()) {
                                         pieces.push(t.to_string());
-                                    } else if let Some(p) = item.get("path").and_then(|p| p.as_str()) {
+                                    } else if let Some(p) =
+                                        item.get("path").and_then(|p| p.as_str())
+                                    {
                                         pieces.push(format!("[file] {}", p));
-                                    } else if let Some(url) = item.get("url").and_then(|u| u.as_str()) {
+                                    } else if let Some(url) =
+                                        item.get("url").and_then(|u| u.as_str())
+                                    {
                                         pieces.push(format!("[url] {}", url));
                                     }
                                 }
@@ -1329,7 +586,10 @@ impl ContextManager {
                             || tool_exec
                                 .get("status")
                                 .and_then(|s| s.as_str())
-                                .map(|s| s.eq_ignore_ascii_case("failed") || s.eq_ignore_ascii_case("error"))
+                                .map(|s| {
+                                    s.eq_ignore_ascii_case("failed")
+                                        || s.eq_ignore_ascii_case("error")
+                                })
                                 .unwrap_or(false);
 
                         let header = if is_error {
@@ -1338,28 +598,21 @@ impl ContextManager {
                             format!("{}({})", tool_name, status)
                         };
 
-                        // 安全截断：限制字符数与行数
+                        // 构建完整的工具信息（输入 + 输出）
+                        let mut tool_info_parts = Vec::new();
+
+                        // 添加输入参数（如果有）
+                        if !input_text.trim().is_empty() {
+                            tool_info_parts.push(format!("Input: {}", input_text));
+                        }
+
+                        // 添加输出结果（如果有）
                         if !output_text.trim().is_empty() {
-                            let max_chars: usize = 800;
-                            let max_lines: usize = 20;
+                            tool_info_parts.push(format!("Output: {}", output_text));
+                        }
 
-                            // 先按字符截断
-                            let mut truncated = if output_text.chars().count() > max_chars {
-                                let mut s: String = output_text.chars().take(max_chars).collect();
-                                s.push_str("\n…(truncated)");
-                                s
-                            } else {
-                                output_text
-                            };
-
-                            // 再按行截断
-                            let mut lines: Vec<&str> = truncated.lines().collect();
-                            if lines.len() > max_lines {
-                                lines.truncate(max_lines);
-                                truncated = format!("{}\n…(truncated)", lines.join("\n"));
-                            }
-
-                            segments.push(format!("{}:\n{}", header, truncated));
+                        if !tool_info_parts.is_empty() {
+                            segments.push(format!("{}:\n{}", header, tool_info_parts.join("\n")));
                         } else {
                             segments.push(header);
                         }
@@ -1375,54 +628,179 @@ impl ContextManager {
         "Completed".to_string()
     }
 
-    /// 获取KV缓存统计
+    /// 格式化工具参数为可读文本
+    fn format_tool_params(&self, tool_name: &str, params: &serde_json::Value) -> String {
+        match tool_name {
+            // 文件操作工具
+            "read_file" | "edit_file" | "create_file" | "write_file" => {
+                if let Some(path) = params.get("path").and_then(|p| p.as_str()) {
+                    let mut parts = vec![format!("path: {}", path)];
+
+                    if let Some(start) = params.get("startLine").and_then(|s| s.as_u64()) {
+                        parts.push(format!("startLine: {}", start));
+                    }
+                    if let Some(end) = params.get("endLine").and_then(|e| e.as_u64()) {
+                        parts.push(format!("endLine: {}", end));
+                    }
+                    if let Some(content) = params.get("content").and_then(|c| c.as_str()) {
+                        let preview = if content.chars().count() > 50 {
+                            format!("{}...", content.chars().take(47).collect::<String>())
+                        } else {
+                            content.to_string()
+                        };
+                        parts.push(format!("content: {}", preview));
+                    }
+
+                    parts.join(", ")
+                } else {
+                    self.format_generic_params(params)
+                }
+            }
+            "read_many_files" => {
+                if let Some(paths) = params.get("paths").and_then(|p| p.as_array()) {
+                    format!("paths: {} files", paths.len())
+                } else {
+                    self.format_generic_params(params)
+                }
+            }
+            // 命令执行工具
+            "shell" | "bash" | "execute" | "run_command" => {
+                if let Some(command) = params.get("command").and_then(|c| c.as_str()) {
+                    let cmd_preview = if command.chars().count() > 80 {
+                        format!("{}...", command.chars().take(77).collect::<String>())
+                    } else {
+                        command.to_string()
+                    };
+                    format!("command: {}", cmd_preview)
+                } else {
+                    self.format_generic_params(params)
+                }
+            }
+            // 网络工具
+            "web_fetch" | "fetch_url" | "http_get" => {
+                if let Some(url) = params.get("url").and_then(|u| u.as_str()) {
+                    format!("url: {}", url)
+                } else {
+                    self.format_generic_params(params)
+                }
+            }
+            // 搜索工具
+            "orbit_search" | "search" | "web_search" => {
+                if let Some(query) = params.get("query").and_then(|q| q.as_str()) {
+                    format!("query: {}", query)
+                } else {
+                    self.format_generic_params(params)
+                }
+            }
+            // 代码分析工具
+            "analyze_code" | "code_review" => {
+                let mut parts = Vec::new();
+                if let Some(path) = params.get("path").and_then(|p| p.as_str()) {
+                    parts.push(format!("path: {}", path));
+                }
+                if let Some(lang) = params.get("language").and_then(|l| l.as_str()) {
+                    parts.push(format!("language: {}", lang));
+                }
+                if parts.is_empty() {
+                    self.format_generic_params(params)
+                } else {
+                    parts.join(", ")
+                }
+            }
+            _ => {
+                // 对于未知工具，使用通用格式化
+                self.format_generic_params(params)
+            }
+        }
+    }
+
+    /// 通用参数格式化函数
+    fn format_generic_params(&self, params: &serde_json::Value) -> String {
+        if let Some(obj) = params.as_object() {
+            let mut parts = Vec::new();
+
+            // 优先显示常见的重要参数
+            let priority_keys = [
+                "path", "command", "query", "url", "file", "content", "input",
+            ];
+
+            // 先处理优先参数
+            for &key in &priority_keys {
+                if let Some(value) = obj.get(key) {
+                    let value_str = self.format_param_value(value);
+                    parts.push(format!("{}: {}", key, value_str));
+                }
+            }
+
+            // 再处理其他参数，但限制总数
+            for (key, value) in obj.iter() {
+                if parts.len() >= 3 {
+                    break;
+                } // 最多显示3个参数
+                if !priority_keys.contains(&key.as_str()) {
+                    let value_str = self.format_param_value(value);
+                    parts.push(format!("{}: {}", key, value_str));
+                }
+            }
+
+            if parts.is_empty() {
+                "[no params]".to_string()
+            } else {
+                parts.join(", ")
+            }
+        } else {
+            // 非对象类型的参数
+            self.format_param_value(params)
+        }
+    }
+
+    /// 格式化单个参数值
+    fn format_param_value(&self, value: &serde_json::Value) -> String {
+        match value {
+            serde_json::Value::String(s) => {
+                if s.chars().count() > 60 {
+                    format!("{}...", s.chars().take(57).collect::<String>())
+                } else {
+                    s.clone()
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                if arr.len() <= 3 {
+                    format!(
+                        "[{}]",
+                        arr.iter()
+                            .map(|v| self.format_param_value(v))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                } else {
+                    format!("[{} items]", arr.len())
+                }
+            }
+            serde_json::Value::Object(_) => "[object]".to_string(),
+            serde_json::Value::Bool(b) => b.to_string(),
+            serde_json::Value::Number(n) => n.to_string(),
+            serde_json::Value::Null => "null".to_string(),
+        }
+    }
+
+    /// 获取缓存统计
     pub fn cache_stats(&self) -> CacheStats {
-        self.kv_cache.stats()
+        CacheStats {
+            total_entries: 0, // 简化版本，不统计具体数量
+        }
     }
 
-    /// 清理过期缓存
+    /// 清理缓存
     pub fn cleanup_cache(&self) {
-        self.kv_cache.cleanup_expired()
+        self.cache.cleanup_expired()
     }
 
-    /// 手动失效缓存 (当对话被修改时调用)
-    pub fn invalidate_cache(&self, conv_id: i64) {
-        let mut cache = self.kv_cache.cache.lock().unwrap();
-        cache.retain(|key, _| !key.contains(&format!("ctx_{}_", conv_id)));
-        info!("手动失效缓存: conv={}", conv_id);
+    /// 失效缓存（兼容性方法）
+    pub fn invalidate_cache(&self, _conv_id: i64) {
+        // 简化版本，不做具体操作
+        info!("缓存失效请求已忽略（简化版本）");
     }
-}
-
-/// 将长文本安全截断用于摘要：
-/// - 去除围栏代码标记
-/// - 限制最大行数与字符数
-/// - 在被截断时追加省略标记
-fn truncate_for_summary<T: AsRef<str>>(text: T) -> String {
-    let mut s = text.as_ref().trim().to_string();
-    if s.is_empty() {
-        return s;
-    }
-
-    // 去除```围栏，减少无效token
-    if s.contains("```") {
-        s = s.replace("```", "");
-    }
-
-    // 按行截断（优先保留前几行要点）
-    let max_lines: usize = 8;
-    let mut lines: Vec<&str> = s.lines().map(|l| l.trim_end()).collect();
-    if lines.len() > max_lines {
-        lines.truncate(max_lines);
-    }
-    let mut out = lines.join("\n");
-
-    // 按字符截断（控制片段长度）
-    let max_chars: usize = 320;
-    if out.chars().count() > max_chars {
-        out = out.chars().take(max_chars).collect();
-        out.push_str("\n…(truncated)");
-    }
-    out
 }
 
 // ============= 结果类型 =============
