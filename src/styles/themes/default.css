@@ -1,70 +1,70 @@
-/* 全新的颜色层次系统 - 仅定义变量名，值由后端动态设置 */
+/* 全新的颜色层次系统 - 提供默认值，避免闪烁 */
 :root {
-  /* 背景色层次 */
-  --bg-100: ;
-  --bg-200: ;
-  --bg-300: ;
-  --bg-400: ;
-  --bg-500: ;
-  --bg-600: ;
-  --bg-700: ;
+  /* 背景色层次 - 默认深色主题值 */
+  --bg-100: #1a1a1a;
+  --bg-200: #1e1e1e;
+  --bg-300: #252526;
+  --bg-400: #2d2d30;
+  --bg-500: #3c3c3c;
+  --bg-600: #4d4d4d;
+  --bg-700: #5a5a5a;
 
   /* 边框层次 */
-  --border-200: ;
-  --border-300: ;
-  --border-400: ;
+  --border-200: rgba(255, 255, 255, 0.08);
+  --border-300: rgba(255, 255, 255, 0.12);
+  --border-400: rgba(255, 255, 255, 0.16);
 
   /* 文本层次 */
-  --text-100: ;
-  --text-200: ;
-  --text-300: ;
-  --text-400: ;
-  --text-500: ;
+  --text-100: #ffffff;
+  --text-200: #e0e0e0;
+  --text-300: #cccccc;
+  --text-400: #999999;
+  --text-500: #666666;
 
   /* 状态颜色 */
-  --color-primary: ;
-  --color-primary-hover: ;
-  --color-primary-alpha: ;
-  --color-success: ;
-  --color-warning: ;
-  --color-error: ;
-  --color-info: ;
+  --color-primary: #007acc;
+  --color-primary-hover: #005a9e;
+  --color-primary-alpha: rgba(0, 122, 204, 0.1);
+  --color-success: #0dbc79;
+  --color-warning: #ffcc02;
+  --color-error: #f44747;
+  --color-info: #75beff;
 
   /* 交互状态 */
-  --color-hover: ;
-  --color-active: ;
-  --color-focus: ;
-  --color-selection: ;
+  --color-hover: rgba(255, 255, 255, 0.1);
+  --color-active: rgba(255, 255, 255, 0.2);
+  --color-focus: #007acc;
+  --color-selection: rgba(51, 145, 255, 0.3);
 
   /* ANSI 颜色 */
-  --ansi-black: ;
-  --ansi-red: ;
-  --ansi-green: ;
-  --ansi-yellow: ;
-  --ansi-blue: ;
-  --ansi-magenta: ;
-  --ansi-cyan: ;
-  --ansi-white: ;
+  --ansi-black: #000000;
+  --ansi-red: #cd3131;
+  --ansi-green: #0dbc79;
+  --ansi-yellow: #e5e510;
+  --ansi-blue: #2472c8;
+  --ansi-magenta: #bc3fbc;
+  --ansi-cyan: #11a8cd;
+  --ansi-white: #e5e5e5;
 
   /* 明亮 ANSI 颜色 */
-  --ansi-bright-black: ;
-  --ansi-bright-red: ;
-  --ansi-bright-green: ;
-  --ansi-bright-yellow: ;
-  --ansi-bright-blue: ;
-  --ansi-bright-magenta: ;
-  --ansi-bright-cyan: ;
-  --ansi-bright-white: ;
+  --ansi-bright-black: #666666;
+  --ansi-bright-red: #f14c4c;
+  --ansi-bright-green: #23d18b;
+  --ansi-bright-yellow: #f5f543;
+  --ansi-bright-blue: #3b8eea;
+  --ansi-bright-magenta: #d670d6;
+  --ansi-bright-cyan: #29b8db;
+  --ansi-bright-white: #ffffff;
 
   /* 语法高亮颜色 */
-  --syntax-comment: ;
-  --syntax-keyword: ;
-  --syntax-string: ;
-  --syntax-number: ;
-  --syntax-function: ;
-  --syntax-variable: ;
-  --syntax-type: ;
-  --syntax-operator: ;
+  --syntax-comment: #6a9955;
+  --syntax-keyword: #569cd6;
+  --syntax-string: #ce9178;
+  --syntax-number: #b5cea8;
+  --syntax-function: #dcdcaa;
+  --syntax-variable: #9cdcfe;
+  --syntax-type: #4ec9b0;
+  --syntax-operator: #d4d4d4;
 
   /* 阴影 */
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);

@@ -546,14 +546,7 @@
       // 初始化平台信息
       await initPlatformInfo()
 
-      // 初始化主题系统
-      try {
-        await themeStore.initialize()
-      } catch {
-        // ignore
-      }
-
-      // 初始化终端（现在是异步的）
+      // 初始化终端（主题系统已在应用启动时初始化）
       await initXterm()
 
       // 初始化工作目录 - 优先使用终端状态中保存的工作目录
