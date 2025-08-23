@@ -16,8 +16,37 @@
       <!-- 图标 -->
       <div v-if="showIcon" class="x-message__icon">
         <slot name="icon">
-          <svg class="x-message__icon-svg" viewBox="0 0 24 24">
-            <use :href="`#${iconName}`"></use>
+          <!-- 成功图标 -->
+          <svg v-if="type === 'success'" class="x-message__icon-svg" viewBox="0 0 20 20" fill="currentColor">
+            <path
+              fill-rule="evenodd"
+              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          <!-- 错误图标 -->
+          <svg v-else-if="type === 'error'" class="x-message__icon-svg" viewBox="0 0 20 20" fill="currentColor">
+            <path
+              fill-rule="evenodd"
+              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          <!-- 警告图标 -->
+          <svg v-else-if="type === 'warning'" class="x-message__icon-svg" viewBox="0 0 20 20" fill="currentColor">
+            <path
+              fill-rule="evenodd"
+              d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          <!-- 信息图标 -->
+          <svg v-else class="x-message__icon-svg" viewBox="0 0 20 20" fill="currentColor">
+            <path
+              fill-rule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+              clip-rule="evenodd"
+            />
           </svg>
         </slot>
       </div>
@@ -71,17 +100,6 @@
 
   // 计算消息样式
   const messageStyle = computed(() => ({}))
-
-  // 计算图标名称
-  const iconName = computed(() => {
-    const iconMap = {
-      success: 'check-circle',
-      error: 'x-circle',
-      warning: 'alert-triangle',
-      info: 'info-circle',
-    }
-    return iconMap[props.type] || 'info-circle'
-  })
 
   // 关闭按钮文本
   const closeButtonText = computed(() => '关闭消息')
@@ -148,62 +166,61 @@
 </script>
 
 <style scoped>
-  /* 消息组件样式 - 使用全局主题变量 */
+  /* 消息组件样式 */
   .x-message {
-    position: relative;
     display: flex;
-    align-items: flex-start;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md) var(--spacing-lg);
-    margin-bottom: var(--spacing-sm);
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
     background: var(--bg-400);
-    border: 1px solid var(--border-300);
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow-sm);
-    font-family: var(--font-family);
-    font-size: var(--font-size-md);
-    line-height: 1.5;
+    border-radius: 14px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    font-size: 14px;
     color: var(--text-200);
-    transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
-    max-width: 400px;
-    word-wrap: break-word;
+    max-width: 320px;
+    min-width: 240px;
   }
 
-  /* 消息类型样式 */
+  /* 消息类型样式 - 现代设计 */
   .x-message--success {
-    border-color: var(--color-success);
-    background: var(--bg-400);
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05));
+    border: 1px solid rgba(16, 185, 129, 0.2);
   }
 
   .x-message--success .x-message__icon {
-    color: var(--color-success);
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.15);
   }
 
   .x-message--error {
-    border-color: var(--color-error);
-    background: var(--bg-400);
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
+    border: 1px solid rgba(239, 68, 68, 0.2);
   }
 
   .x-message--error .x-message__icon {
-    color: var(--color-error);
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.15);
   }
 
   .x-message--warning {
-    border-color: var(--color-warning);
-    background: var(--bg-400);
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05));
+    border: 1px solid rgba(245, 158, 11, 0.2);
   }
 
   .x-message--warning .x-message__icon {
-    color: var(--color-warning);
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.15);
   }
 
   .x-message--info {
-    border-color: var(--color-info);
-    background: var(--bg-400);
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.05));
+    border: 1px solid rgba(59, 130, 246, 0.2);
   }
 
   .x-message--info .x-message__icon {
-    color: var(--color-info);
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.15);
   }
 
   /* 图标样式 */
@@ -212,21 +229,22 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    width: 16px;
-    height: 16px;
-    margin-top: 2px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    padding: 6px;
+    box-sizing: border-box;
   }
 
   .x-message__icon-svg {
-    width: 100%;
-    height: 100%;
+    width: 12px;
+    height: 12px;
     fill: currentColor;
   }
 
   /* 内容样式 */
   .x-message__content {
     flex: 1;
-    min-width: 0;
   }
 
   .x-message__text {
@@ -239,22 +257,20 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
-    width: 16px;
-    height: 16px;
-    margin-top: 2px;
-    padding: 0;
-    background: transparent;
+    width: 20px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.1);
     border: none;
     color: var(--text-400);
     cursor: pointer;
-    border-radius: var(--border-radius-sm);
-    transition: all 0.2s ease;
+    border-radius: 50%;
+    opacity: 0.7;
   }
 
   .x-message__close:hover {
     color: var(--text-200);
-    background: var(--color-hover);
+    background: rgba(255, 255, 255, 0.2);
+    opacity: 1;
   }
 
   .x-message__close-icon {
@@ -264,56 +280,22 @@
     fill: none;
   }
 
-  /* 可关闭消息的样式调整 */
-  .x-message--closable {
-    padding-right: var(--spacing-md);
-  }
-
-  /* 带图标消息的样式调整 */
-  .x-message--with-icon .x-message__content {
-    margin-left: 0;
-  }
-
   /* 动画效果 */
   .x-message-enter-active,
   .x-message-leave-active {
-    transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
+    transition: all 0.3s ease;
   }
 
-  .x-message-enter-from {
-    opacity: 0;
-    transform: translateY(-20px) scale(0.8);
-  }
-
-  .x-message-enter-to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-
-  .x-message-leave-from {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-
+  .x-message-enter-from,
   .x-message-leave-to {
     opacity: 0;
-    transform: translateY(-20px) scale(0.8);
+    transform: translateY(-20px);
   }
 
   /* 响应式设计 */
   @media (max-width: 768px) {
     .x-message {
       max-width: calc(100vw - 32px);
-      margin: 0 var(--spacing-lg);
-    }
-  }
-
-  /* 减少动画模式支持 */
-  @media (prefers-reduced-motion: reduce) {
-    .x-message,
-    .x-message-enter-active,
-    .x-message-leave-active {
-      transition: none;
     }
   }
 </style>

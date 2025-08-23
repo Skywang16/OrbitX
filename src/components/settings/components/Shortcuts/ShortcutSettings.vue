@@ -145,7 +145,7 @@
   }
 
   // 全局动作定义
-  const globalActionKeys = ['copy_to_clipboard', 'paste_from_clipboard', 'terminal_search', 'open_settings'];
+  const globalActionKeys = ['copy_to_clipboard', 'paste_from_clipboard', 'terminal_search', 'open_settings']
 
   // 终端动作定义
   const terminalActionKeys = [
@@ -160,8 +160,8 @@
     'switch_to_last_tab',
     'accept_completion',
     'increase_font_size',
-    'decrease_font_size'
-  ];
+    'decrease_font_size',
+  ]
 
   // 查找快捷键配置
   const findShortcut = (actionKey: string) => {
@@ -408,7 +408,7 @@
     min-width: 200px;
     padding: var(--spacing-sm) var(--spacing-md);
     background-color: var(--bg-500);
-    border: 2px solid transparent;
+    border: 2px solid var(--border-300);
     border-radius: var(--border-radius);
     cursor: pointer;
     transition: all 0.2s;

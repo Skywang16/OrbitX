@@ -20,13 +20,6 @@ export const createSaveOptions = (table?: string) => ({
 
 export const createDefaultSessionState = () => ({
   version: 1,
-  window: {
-    x: 100,
-    y: 100,
-    width: 1200,
-    height: 800,
-    maximized: false,
-  },
   terminals: [],
   activeTabId: undefined,
   ui: {

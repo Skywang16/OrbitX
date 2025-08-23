@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="modal-overlay" @click.self="handleOverlayClick">
+    <div v-if="visible" class="modal-overlay" @mousedown="handleOverlayMouseDown" @mouseup="handleOverlayMouseUp">
       <div ref="modalRef" class="modal-container" :class="sizeClass" role="dialog" aria-modal="true">
         <!-- 模态框头部 -->
         <div v-if="showHeader" class="modal-header">
@@ -64,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, onUnmounted, watch } from 'vue'
+  import { computed, onMounted, onUnmounted, watch, ref } from 'vue'
 
   interface Props {
     visible?: boolean
@@ -115,14 +115,27 @@
 
   const emit = defineEmits<Emits>()
 
+  // 用于跟踪鼠标按下状态，防止拖拽误触关闭
+  const isMouseDownOnOverlay = ref(false)
+
   // 计算尺寸类名
   const sizeClass = computed(() => `modal-${props.size}`)
 
-  // 处理遮罩点击
-  const handleOverlayClick = () => {
-    if (props.maskClosable) {
+  // 处理遮罩鼠标按下
+  const handleOverlayMouseDown = (event: MouseEvent) => {
+    // 只有直接点击遮罩层才标记为true
+    if (event.target === event.currentTarget) {
+      isMouseDownOnOverlay.value = true
+    }
+  }
+
+  // 处理遮罩鼠标释放
+  const handleOverlayMouseUp = (event: MouseEvent) => {
+    // 只有在遮罩层按下且在遮罩层释放时才关闭弹窗
+    if (isMouseDownOnOverlay.value && event.target === event.currentTarget && props.maskClosable) {
       handleClose()
     }
+    isMouseDownOnOverlay.value = false
   }
 
   // 处理关闭

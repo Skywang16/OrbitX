@@ -97,11 +97,10 @@ async fn test_session_state_serialization() {
 
     // 验证数据完整性
     assert_eq!(original_state.version, deserialized_state.version);
-    assert_eq!(original_state.window.x, deserialized_state.window.x);
-    assert_eq!(original_state.window.y, deserialized_state.window.y);
-    assert_eq!(original_state.window.width, deserialized_state.window.width);
-    assert_eq!(original_state.window.height, deserialized_state.window.height);
-    assert_eq!(original_state.terminals.len(), deserialized_state.terminals.len());
+    assert_eq!(
+        original_state.terminals.len(),
+        deserialized_state.terminals.len()
+    );
     assert_eq!(original_state.ui.theme, deserialized_state.ui.theme);
 }
 
@@ -146,7 +145,10 @@ async fn test_compression() {
         .unwrap();
 
     assert_eq!(compressed_result.version, uncompressed_result.version);
-    assert_eq!(compressed_result.terminals.len(), uncompressed_result.terminals.len());
+    assert_eq!(
+        compressed_result.terminals.len(),
+        uncompressed_result.terminals.len()
+    );
 }
 
 /// 测试状态保存和加载

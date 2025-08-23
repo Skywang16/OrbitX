@@ -28,20 +28,12 @@ impl StorageLayer {
     }
 }
 
-
-
-
-
-
-
 /// 会话状态数据结构 - 精简版
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionState {
     /// 版本号
     pub version: u32,
-    /// 窗口状态
-    pub window: WindowState,
     /// 终端状态列表
     pub terminals: Vec<TerminalState>,
     /// UI状态
@@ -56,7 +48,6 @@ impl Default for SessionState {
     fn default() -> Self {
         Self {
             version: 1,
-            window: WindowState::default(),
             terminals: Vec::new(),
             ui: UiState::default(),
             ai: AiState::default(),
@@ -155,8 +146,6 @@ impl Default for AiState {
         }
     }
 }
-
-
 
 /// 配置节类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

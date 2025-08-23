@@ -6,6 +6,13 @@ import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '@eko-ai/eko/types'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
 
+// 扩展的内容项类型，支持 data 字段
+interface ExtendedContentItem {
+  type: 'text'
+  text: string
+  data?: SimpleEditResult
+}
+
 export interface EditFileParams {
   path: string
   oldString: string
@@ -56,6 +63,12 @@ export class EditFileTool extends ModifiableTool {
     const modifiedContent = originalContent.replace(oldString, newString)
 
     if (modifiedContent === originalContent) {
+      const editResult: SimpleEditResult = {
+        file: path,
+        success: false,
+        old: oldString,
+        new: newString,
+      }
       return {
         content: [
           {
@@ -63,12 +76,20 @@ export class EditFileTool extends ModifiableTool {
             text: `编辑失败：在文件 ${path} 中未找到匹配的内容。
 状态：指定的 oldString 在文件中不存在。
 建议：使用 read_file 工具检查当前文件内容，确保 oldString 与要替换的文本完全匹配。`,
-          },
+            data: editResult,
+          } as ExtendedContentItem,
         ],
       }
     }
 
     await writeTextFile(path, modifiedContent)
+
+    const editResult: SimpleEditResult = {
+      file: path,
+      success: true,
+      old: oldString,
+      new: newString,
+    }
 
     return {
       content: [
@@ -77,7 +98,8 @@ export class EditFileTool extends ModifiableTool {
           text: `文件编辑成功: ${path}
 状态：内容已成功替换。
 建议：使用 read_file 工具验证更改结果。`,
-        },
+          data: editResult,
+        } as ExtendedContentItem,
       ],
     }
   }

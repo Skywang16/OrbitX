@@ -44,10 +44,10 @@ bg_500 = "#eee8d5"
 bg_600 = "#e5dcc3"
 bg_700 = "#ddd6c1"
 
-# 边框层次
-border_200 = "rgba(238, 232, 213, 0.3)"
-border_300 = "rgba(238, 232, 213, 0.5)"
-border_400 = "rgba(238, 232, 213, 0.7)"
+# 边框层次 - 提高对比度
+border_200 = "rgba(88, 110, 117, 0.15)"
+border_300 = "rgba(88, 110, 117, 0.25)"
+border_400 = "rgba(88, 110, 117, 0.35)"
 
 # 文本层次
 text_100 = "#002b36"
@@ -65,8 +65,14 @@ warning = "#b58900"
 error = "#dc322f"
 info = "#2aa198"
 
-# 交互状态
-hover = "#f7f1e8"
-active = "#eee8d5"
+# 交互状态 - 增强可见性
+hover = "#f0ead7"
+active = "#e5dcc3"
 focus = "#268bd2"
 selection = "rgba(38, 139, 210, 0.3)"
+
+# 阴影和其他UI变量
+shadow_sm = "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
+font_family = "'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace"
+border_radius = "6px"
+border_radius_lg = "8px"

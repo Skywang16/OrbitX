@@ -168,7 +168,7 @@
         <h4 class="section-title">基本信息</h4>
 
         <div class="form-group">
-          <label class="form-label">模型名称</label>
+          <label class="form-label">配置名称</label>
           <input
             v-model="formData.name"
             type="text"
@@ -189,16 +189,30 @@
       <div class="form-section">
         <h4 class="section-title">连接配置</h4>
 
-        <div class="form-group">
-          <label class="form-label">API地址</label>
-          <input
-            v-model="formData.apiUrl"
-            type="url"
-            class="form-input"
-            :class="{ error: errors.apiUrl }"
-            placeholder="https://api.openai.com/v1"
-          />
-          <div v-if="errors.apiUrl" class="error-message">{{ errors.apiUrl }}</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">API地址</label>
+            <input
+              v-model="formData.apiUrl"
+              type="url"
+              class="form-input"
+              :class="{ error: errors.apiUrl }"
+              placeholder="https://api.openai.com/v1"
+            />
+            <div v-if="errors.apiUrl" class="error-message">{{ errors.apiUrl }}</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">模型名称</label>
+            <input
+              v-model="formData.model"
+              type="text"
+              class="form-input"
+              :class="{ error: errors.model }"
+              placeholder="gpt-4"
+            />
+            <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
+          </div>
         </div>
 
         <div class="form-group">
@@ -212,18 +226,6 @@
           />
           <div v-if="errors.apiKey" class="error-message">{{ errors.apiKey }}</div>
         </div>
-
-        <div class="form-group">
-          <label class="form-label">模型名称</label>
-          <input
-            v-model="formData.model"
-            type="text"
-            class="form-input"
-            :class="{ error: errors.model }"
-            placeholder="gpt-4"
-          />
-          <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
-        </div>
       </div>
     </form>
   </x-modal>
@@ -231,37 +233,58 @@
 
 <style scoped>
   .form-section {
-    margin-bottom: var(--spacing-xl);
+    margin-bottom: 1.5rem;
+    padding: 1.25rem;
+    background: var(--bg-500);
+    border: 1px solid var(--border-300);
+    border-radius: 8px;
+  }
+
+  .form-section:last-of-type {
+    margin-bottom: 0;
   }
 
   .section-title {
-    font-size: var(--font-size-md);
+    font-size: 1rem;
     font-weight: 600;
     color: var(--text-200);
-    margin: 0 0 var(--spacing-md) 0;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-300);
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
   }
 
   .form-group {
-    margin-bottom: var(--spacing-md);
+    margin-bottom: 1rem;
+  }
+
+  .form-group:last-child {
+    margin-bottom: 0;
   }
 
   .form-label {
     display: block;
-    font-size: var(--font-size-sm);
+    font-size: 0.875rem;
     font-weight: 500;
     color: var(--text-200);
-    margin-bottom: var(--spacing-xs);
+    margin-bottom: 0.5rem;
   }
 
   .form-input {
     width: 100%;
-    padding: var(--spacing-sm);
+    padding: 0.75rem;
     border: 1px solid var(--border-300);
-    border-radius: var(--border-radius);
+    border-radius: 6px;
     background-color: var(--bg-400);
     color: var(--text-200);
-    font-size: var(--font-size-sm);
-    transition: all 0.2s ease;
+    font-size: 0.875rem;
+    transition: border-color 0.2s ease;
   }
 
   .form-input:focus {
@@ -273,21 +296,45 @@
     border-color: var(--color-danger);
   }
 
+  .form-hint {
+    font-size: 0.75rem;
+    color: var(--text-400);
+    margin-top: 0.25rem;
+  }
+
   .error-message {
-    font-size: var(--font-size-xs);
+    font-size: 0.75rem;
     color: var(--color-danger);
-    margin-top: var(--spacing-xs);
+    margin-top: 0.25rem;
   }
 
   .modal-footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: var(--spacing-md);
+    gap: 1rem;
   }
 
   .footer-right {
     display: flex;
-    gap: var(--spacing-sm);
+    gap: 0.75rem;
+  }
+
+  /* 响应式设计 */
+  @media (max-width: 768px) {
+    .form-row {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .modal-footer {
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .footer-right {
+      width: 100%;
+      justify-content: flex-end;
+    }
   }
 </style>

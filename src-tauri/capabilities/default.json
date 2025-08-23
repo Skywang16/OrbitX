@@ -69,6 +69,12 @@
     "core:window:allow-start-dragging",
     "core:window:allow-close",
     "core:window:allow-destroy",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-is-maximized",
+    "window-state:default",
     "deep-link:default"
   ]
 }

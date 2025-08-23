@@ -1,15 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi'
-import {
-  type SessionState,
-  type WindowState,
-  type TerminalState,
-  type UiState,
-  type AiState,
-} from '@/types/domain/storage'
+import { restoreStateCurrent, StateFlags } from '@tauri-apps/plugin-window-state'
+import { type SessionState, type TerminalState, type UiState, type AiState } from '@/types/domain/storage'
 import { createDefaultSessionState } from '@/types/utils/helpers'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
 
@@ -42,18 +35,12 @@ export const useSessionStore = defineStore('session', () => {
   /** 自动保存间隔（毫秒） */
   const AUTO_SAVE_INTERVAL = 30000 // 30秒
 
-  /** 窗口事件监听器取消函数 */
-  let windowEventUnlisteners: (() => void)[] = []
-
   // ============================================================================
   // 计算属性
   // ============================================================================
 
   /** 是否正在执行操作 */
   const isOperating = computed(() => isLoading.value || isSaving.value)
-
-  /** 当前窗口状态 */
-  const windowState = computed(() => sessionState.value.window)
 
   /** 终端状态列表 */
   const terminals = computed(() => sessionState.value.terminals)
@@ -110,9 +97,10 @@ export const useSessionStore = defineStore('session', () => {
 
       if (state) {
         sessionState.value = state
-        // 恢复窗口状态到实际窗口
-        await restoreWindowState(state.window)
       }
+
+      // 窗口状态由官方插件自动恢复
+      await restoreWindowState()
     } catch (err) {
       const message = handleErrorWithMessage(err, '加载会话状态失败')
       error.value = message
@@ -126,17 +114,6 @@ export const useSessionStore = defineStore('session', () => {
   // ============================================================================
   // 状态更新方法
   // ============================================================================
-
-  /**
-   * 更新窗口状态
-   */
-  const updateWindowState = (updates: Partial<WindowState>): void => {
-    sessionState.value.window = {
-      ...sessionState.value.window,
-      ...updates,
-    }
-    scheduleAutoSave()
-  }
 
   /**
    * 更新终端状态
@@ -270,81 +247,15 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   /**
-   * 恢复窗口状态到实际窗口
+   * 恢复窗口状态到实际窗口 (使用官方window-state插件)
    */
-  const restoreWindowState = async (windowState: WindowState): Promise<void> => {
+  const restoreWindowState = async (): Promise<void> => {
     try {
-      const window = getCurrentWindow()
-
-      // 如果窗口是最大化状态，先恢复到正常状态再设置位置和大小
-      if (windowState.maximized) {
-        await window.maximize()
-      } else {
-        // 设置窗口位置
-        await window.setPosition(new LogicalPosition(windowState.x, windowState.y))
-        // 设置窗口大小
-        await window.setSize(new LogicalSize(windowState.width, windowState.height))
-      }
+      // 使用官方插件恢复窗口状态
+      await restoreStateCurrent(StateFlags.ALL)
     } catch (error) {
       // 窗口状态恢复失败不应阻止应用启动，只记录警告
       console.warn('窗口状态恢复失败:', error)
-    }
-  }
-
-  /**
-   * 监听窗口状态变化并保存
-   */
-  const startWindowStateTracking = async (): Promise<void> => {
-    try {
-      const window = getCurrentWindow()
-
-      // 监听窗口位置变化
-      const unlistenPosition = await window.onMoved(({ payload }) => {
-        updateWindowState({
-          x: payload.x,
-          y: payload.y,
-        })
-      })
-
-      // 监听窗口大小/最大化状态变化
-      const unlistenSizeWithMaximize = await window.onResized(async ({ payload }) => {
-        try {
-          const isMaximized = await window.isMaximized()
-          updateWindowState({
-            width: payload.width,
-            height: payload.height,
-            maximized: isMaximized,
-          })
-        } catch (err) {
-          updateWindowState({
-            width: payload.width,
-            height: payload.height,
-          })
-        }
-      })
-
-      // 保存取消监听函数
-      windowEventUnlisteners = [unlistenPosition, unlistenSizeWithMaximize]
-    } catch (error) {
-      console.warn('启动窗口状态监听失败:', error)
-    }
-  }
-
-  /**
-   * 停止窗口状态监听
-   */
-  const stopWindowStateTracking = (): void => {
-    try {
-      windowEventUnlisteners.forEach(unlisten => {
-        try {
-          unlisten()
-        } catch (error) {
-          console.warn('取消窗口事件监听失败:', error)
-        }
-      })
-      windowEventUnlisteners = []
-    } catch (error) {
-      console.warn('停止窗口状态监听失败:', error)
     }
   }
 
@@ -353,7 +264,6 @@ export const useSessionStore = defineStore('session', () => {
    */
   const cleanup = (): void => {
     stopAutoSave()
-    stopWindowStateTracking()
   }
   /**
    * 初始化会话状态管理
@@ -363,7 +273,6 @@ export const useSessionStore = defineStore('session', () => {
 
     try {
       await loadSessionState()
-      await startWindowStateTracking()
       startAutoSave()
       initialized.value = true
     } catch (err) {
@@ -386,7 +295,6 @@ export const useSessionStore = defineStore('session', () => {
 
     // 计算属性
     isOperating,
-    windowState,
     terminals,
     activeTerminal,
     uiState,
@@ -396,13 +304,10 @@ export const useSessionStore = defineStore('session', () => {
     saveSessionState,
     loadSessionState,
     restoreWindowState,
-    startWindowStateTracking,
-    stopWindowStateTracking,
     initialize,
     cleanup,
 
     // 状态更新方法
-    updateWindowState,
     updateTerminals,
     addTerminal,
     removeTerminal,

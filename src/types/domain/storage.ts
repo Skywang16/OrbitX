@@ -70,7 +70,6 @@ export interface AiState {
 
 export interface SessionState {
   version: number
-  window: WindowState
   terminals: TerminalState[]
   activeTabId?: string
   ui: UiState

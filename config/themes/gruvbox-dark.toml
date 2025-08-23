@@ -70,3 +70,9 @@ hover = "#32302f"
 active = "#3c3836"
 focus = "#458588"
 selection = "rgba(60, 56, 54, 0.8)"
+
+# 阴影和其他UI变量
+shadow_sm = "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
+font_family = "'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace"
+border_radius = "6px"
+border_radius_lg = "8px"

@@ -7,6 +7,7 @@ import { useSessionStore } from '@/stores/session'
 
 import { useTerminalStore } from '@/stores/Terminal'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { saveWindowState, StateFlags } from '@tauri-apps/plugin-window-state'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import App from './App.vue'
@@ -100,6 +101,39 @@ const initializeApplication = async () => {
 initializeApplication()
 
 // ============================================================================
+// 生产环境安全设置
+// ============================================================================
+
+/**
+ * 在生产环境中禁用右键菜单
+ */
+const disableContextMenuInProduction = () => {
+  // 只在生产环境（打包后）禁用右键菜单
+  if (import.meta.env.PROD) {
+    document.addEventListener('contextmenu', event => {
+      event.preventDefault()
+      return false
+    })
+
+    // 禁用F12开发者工具
+    document.addEventListener('keydown', event => {
+      if (
+        event.key === 'F12' ||
+        (event.ctrlKey && event.shiftKey && event.key === 'I') ||
+        (event.ctrlKey && event.shiftKey && event.key === 'C') ||
+        (event.ctrlKey && event.key === 'U')
+      ) {
+        event.preventDefault()
+        return false
+      }
+    })
+  }
+}
+
+// 应用安全设置
+disableContextMenuInProduction()
+
+// ============================================================================
 // 应用生命周期管理
 // ============================================================================
 
@@ -108,6 +142,9 @@ initializeApplication()
  */
 const handleAppClose = async () => {
   try {
+    // 保存窗口状态（使用官方插件）
+    await saveWindowState(StateFlags.ALL)
+
     // 保存终端状态（这会自动同步并保存会话状态）
     const terminalStore = useTerminalStore()
     await terminalStore.saveSessionState()
