@@ -1,52 +1,50 @@
 # OrbitX
 
-一个现代化的智能终端应用程序，集成 AI 助手，基于 Vue.js 和 Tauri 构建。
+一款跨平台终端应用，内置基础 AI 助手能力。基于 Vue 3 与 Tauri 构建。
 
-## 🚀 特性
+![CI](https://img.shields.io/github/actions/workflow/status/Skywang16/OrbitX/ci.yml?branch=main&label=CI)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-- 🖥️ 跨平台支持 (Windows, macOS, Linux)
-- ⚡ 基于 Tauri 的高性能桌面应用
-- 🎨 现代化的用户界面
-- 🔧 可自定义配置
-- 📱 响应式设计
+## 特性
 
-## 🛠️ 技术栈
+- 跨平台：Windows / macOS / Linux
+- 基于 Tauri，体积小、资源占用低
+- xterm.js 终端，支持常用插件（搜索、链接、自适应尺寸）
+- 主题与配置可定制（见 `config/`）
+- Pinia 管理应用状态
 
-- **前端**: Vue.js 3 + TypeScript + Vite
-- **桌面框架**: Tauri 2.0
-- **终端组件**: xterm.js
-- **状态管理**: Pinia
-- **路由**: Vue Router
-- **样式**: CSS3 + 自定义组件库
+## 技术栈
 
-## 📦 安装
+- 前端：Vue 3 + TypeScript + Vite
+- 桌面框架：Tauri 2
+- 终端：xterm.js
+- 状态管理：Pinia
+- 后端（Tauri）：Rust
 
-### 开发环境要求
+## 开发环境与依赖
 
 - Node.js 18+
-- Rust 1.70+
-- 系统依赖 (根据操作系统)
+- Rust stable（建议与 CI 一致）
+- 系统依赖：
+  - macOS：Xcode Command Line Tools
+  - Windows：Visual Studio Build Tools（含 C++ 工具集）、WebView2 Runtime
+  - Ubuntu/Debian：`libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf`
 
-### 克隆项目
+## 安装
 
 ```bash
 git clone https://github.com/Skywang16/OrbitX.git
 cd OrbitX
+npm install
 ```
 
-### 安装依赖
+### 可选：安装 Tauri CLI
 
 ```bash
-# 安装前端依赖
-npm install
-
-# 安装 Tauri CLI (如果还没有安装)
 npm install -g @tauri-apps/cli
 ```
 
-## 🚀 开发
-
-### 启动开发服务器
+## 本地开发
 
 ```bash
 # 启动前端开发服务器
@@ -56,73 +54,70 @@ npm run dev
 npm run tauri dev
 ```
 
-### 构建项目
+## 构建
 
 ```bash
-# 构建前端
+# 构建前端（类型检查 + 打包）
 npm run build
 
-# 构建 Tauri 应用
+# 构建 Tauri 应用（多平台依赖见下文 CI/Release）
 npm run tauri build
 ```
 
-## 📁 项目结构
+## 项目结构
 
-```
+```text
 orbitx/
-├── src/                    # Vue.js 前端源码
-│   ├── components/         # Vue 组件
-│   ├── views/             # 页面视图
-│   ├── stores/            # Pinia 状态管理
-│   ├── router/            # Vue Router 配置
-│   ├── ui/                # 自定义 UI 组件库
-│   ├── utils/             # 工具函数
-│   └── types/             # TypeScript 类型定义
-├── src-tauri/             # Tauri 后端源码
-│   ├── src/               # Rust 源码
-│   ├── icons/             # 应用图标
-│   └── tauri.conf.json    # Tauri 配置
-├── config/                # 应用配置文件
-├── docs/                  # 项目文档
-└── scripts/               # 构建脚本
+├── src/                     # 前端源代码（Vue 3 + TS + Vite）
+│   ├── api/                 # 前端与 Tauri/Rust 的 API 调用
+│   ├── components/          # Vue 组件
+│   ├── composables/         # 可复用 hooks（useXxx）
+│   ├── constants/           # 常量
+│   ├── stores/              # Pinia 状态管理
+│   ├── types/               # TypeScript 类型定义
+│   └── ...
+├── src-tauri/               # Tauri/Rust 后端
 ```
 
-## 🎯 使用说明
+## 配置
 
-1. 启动应用后，你将看到一个现代化的终端界面
-2. 支持多标签页管理
-3. 可以通过配置文件自定义主题和行为
-4. 支持常用的终端功能和快捷键
+- 主题：`config/themes/*.toml`
+- 全局配置：`config/config.toml`
 
-## 🤝 贡献
+## 使用
 
-欢迎贡献代码！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解详细的贡献指南。
+常见操作：
 
-### 开发流程
+- 多标签页、分屏与搜索（xterm.js 插件）
+- 主题切换与跟随系统
+- 快捷键（复制/粘贴/搜索、标签页管理等）
 
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 创建 Pull Request
+## 脚本
 
-## 📄 许可证
+- `npm run dev`：前端开发（结合 `npm run tauri dev`）
+- `npm run build`：类型检查 + 打包
+- `npm run lint:check`：ESLint 检查
+- `npm run format:check`：Prettier 检查
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+## CI/Release
 
-## 🙏 致谢
+- CI：见 `.github/workflows/ci.yml`（lint/format/build）
+- Release：推送 `v*` 标签将触发 `.github/workflows/release.yml`，在 macOS/Windows/Ubuntu 构建并发布
 
-- [Tauri](https://tauri.app/) - 跨平台桌面应用框架
-- [Vue.js](https://vuejs.org/) - 渐进式 JavaScript 框架
-- [xterm.js](https://xtermjs.org/) - 终端组件库
+Note: If the repository name or owner changes, please update badges and links accordingly.
 
-## 📞 联系
+## 致谢
 
-如果你有任何问题或建议，请通过以下方式联系：
+- [Tauri](https://tauri.app/)
+- [Vue.js](https://vuejs.org/)
+- [xterm.js](https://xtermjs.org/)
 
-- 创建 [Issue](https://github.com/Skywang16/OrbitX/issues)
-- 发送邮件到: your.email@example.com
+- [eko](https://github.com/FellouAI/eko)
+
+## Contact
+
+For issues and suggestions, please create an [Issue](https://github.com/Skywang16/OrbitX/issues).
 
 ---
 
-⭐ 如果这个项目对你有帮助，请给它一个星标！
+⭐ If this project helps you, please give it a star!
