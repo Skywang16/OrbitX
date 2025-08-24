@@ -6,7 +6,7 @@
 import { Eko } from '@eko-ai/eko'
 
 // 导入核心模块
-import { getEkoConfig, type EkoConfigOptions } from './core/config'
+import { getEkoConfig, getEkoLLMsConfig, type EkoConfigOptions } from './core/config'
 import { createCallback, createSidebarCallback } from './core/callbacks'
 
 // 导入Agent
@@ -82,6 +82,30 @@ export class OrbitXEko {
   }
 
   /**
+   * 更新LLM配置（重新创建Eko实例以使用最新的AI模型配置）
+   */
+  private async updateLLMConfig(): Promise<void> {
+    try {
+      // 重新获取最新的LLM配置
+      const newLLMsConfig = await getEkoLLMsConfig()
+
+      // 重新创建Eko实例（简单可靠）
+      const agents =
+        this.mode === 'chat' ? [this.terminalChatAgent, this.codeChatAgent] : [this.terminalAgent, this.codeAgent]
+
+      this.eko = new Eko({
+        llms: newLLMsConfig,
+        agents: agents,
+        planLlms: ['default'],
+        callback: this.callback,
+      })
+    } catch (error) {
+      console.error('❌ 更新LLM配置失败:', error)
+      // 不抛出错误，避免影响正常运行
+    }
+  }
+
+  /**
    * 运行AI任务
    */
   async run(prompt: string, options: EkoRunOptions = {}): Promise<EkoRunResult> {
@@ -90,6 +114,9 @@ export class OrbitXEko {
     try {
       if (!this.eko) {
         await this.initialize()
+      } else {
+        // 每次运行时都更新LLM配置，确保使用最新的AI模型配置
+        await this.updateLLMConfig()
       }
 
       // 设置运行状态
