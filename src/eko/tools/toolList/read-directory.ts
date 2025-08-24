@@ -4,7 +4,7 @@
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '@eko-ai/eko/types'
-import { FileNotFoundError } from '../tool-error'
+import { FileNotFoundError, ToolError } from '../tool-error'
 import { invoke } from '@tauri-apps/api/core'
 
 export interface ReadDirectoryParams {

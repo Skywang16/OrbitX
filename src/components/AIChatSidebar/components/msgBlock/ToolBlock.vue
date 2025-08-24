@@ -26,7 +26,7 @@
       <!-- 特殊渲染edit_file工具的结果 -->
       <EditResult v-if="isEditResult()" :editData="getEditData(step.toolExecution.result)" />
       <!-- 普通工具结果 -->
-      <div v-else class="tool-result-content">{{ step.toolExecution.result }}</div>
+      <div v-else class="tool-result-content">{{ cleanToolResult }}</div>
     </div>
   </div>
 
@@ -47,6 +47,7 @@
   import type { ToolExecution } from '@/types'
   import EditResult from './components/EditResult.vue'
   import type { SimpleEditResult } from '@/eko/tools/toolList/edit-file'
+  import stripAnsi from 'strip-ansi'
 
   const props = defineProps<{
     step: AIOutputStep & { toolExecution?: ToolExecution }
@@ -190,6 +191,15 @@
   const getEditData = (result: unknown): SimpleEditResult => {
     return (result as { content?: { data?: SimpleEditResult }[] })?.content?.[0]?.data || ({} as SimpleEditResult)
   }
+
+  // 清理工具结果中的ANSI序列
+  const cleanToolResult = computed(() => {
+    const result = props.step?.toolExecution?.result
+    if (typeof result === 'string') {
+      return stripAnsi(result)
+    }
+    return result
+  })
 </script>
 
 <style scoped>

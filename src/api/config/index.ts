@@ -212,6 +212,8 @@ export const themeAPI = configApi.theme
 
 // 导出类型
 export type * from './types'
+// 导出错误类作为值
+export { ConfigApiError } from './types'
 
 // 默认导出
 export default configApi

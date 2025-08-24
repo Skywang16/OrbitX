@@ -48,7 +48,7 @@ export function useShortcutListener() {
         event.stopPropagation()
       }
 
-      const frontendResult = await executeShortcutAction(matchedShortcut, keyCombo)
+      await executeShortcutAction(matchedShortcut, keyCombo)
     }
   }
 

@@ -102,7 +102,6 @@
     initialize,
     addShortcut,
     removeShortcut,
-    updateShortcut,
     resetToDefaults,
   } = useShortcuts()
 
@@ -118,10 +117,6 @@
   const conflictCount = computed(() => conflicts.value.length)
 
   // 方法
-  const getActionName = (action: string): string => {
-    return SHORTCUT_ACTIONS[action as keyof typeof SHORTCUT_ACTIONS] || action
-  }
-
   const handleReset = async () => {
     try {
       const shouldReset = await confirmWarning(

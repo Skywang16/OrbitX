@@ -16,6 +16,7 @@ import { createTerminalEko, createSidebarCallback, type TerminalEko } from '@/ek
 import type { Conversation, Message } from '@/types'
 import { createToolExecution } from '@/types'
 import { debounce } from 'lodash-es'
+import stripAnsi from 'strip-ansi'
 
 // 流式消息类型定义（基于Eko源码）
 interface StreamMessage {
@@ -272,7 +273,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       const response = await ekoInstance.value!.run(fullPrompt)
 
       // 10. 更新AI回复内容和状态
-      if (response.success && response.result) {
+      if (response.success && response.result && tempAIMessage) {
         // 更新消息的内容和状态
         tempAIMessage.content = response.result
         tempAIMessage.status = 'complete'
@@ -283,16 +284,17 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           await aiApi.updateMessageContent(tempAIMessage.id, tempAIMessage.content)
         }
         await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
-      } else {
+      } else if (tempAIMessage) {
         // 处理eko返回的错误结果
         tempAIMessage.status = 'error'
         tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
 
-        // 添加具体的错误信息
-        const errorMessage = response.result || response.error || '未知错误'
+        // 添加具体的错误信息（清理ANSI序列）
+        const rawErrorMessage = response.result || response.error || '未知错误'
+        const errorMessage = typeof rawErrorMessage === 'string' ? stripAnsi(rawErrorMessage) : rawErrorMessage
         tempAIMessage.steps?.push({
           type: 'error',
-          content: `AI任务执行失败: ${errorMessage}`,
+          content: ``,
           timestamp: Date.now(),
           metadata: {
             errorType: 'EkoError',
@@ -300,19 +302,21 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           },
         })
 
-        // 强制触发Vue响应式更新
-        const messageIndex = messageList.value.findIndex(m => m.id === tempAIMessage.id)
-        if (messageIndex !== -1) {
-          messageList.value[messageIndex] = { ...tempAIMessage }
-        }
+        // 强制触发Vue响应式更新和数据库更新
+        if (tempAIMessage) {
+          const messageIndex = messageList.value.findIndex(m => m.id === tempAIMessage!.id)
+          if (messageIndex !== -1) {
+            messageList.value[messageIndex] = { ...tempAIMessage }
+          }
 
-        // 更新数据库
-        if (tempAIMessage.steps) {
-          try {
-            await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
-            await aiApi.updateMessageSteps(tempAIMessage.id, tempAIMessage.steps)
-          } catch {
-            // 静默失败
+          // 更新数据库
+          if (tempAIMessage.steps) {
+            try {
+              await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
+              await aiApi.updateMessageSteps(tempAIMessage.id, tempAIMessage.steps)
+            } catch {
+              // 静默失败
+            }
           }
         }
       }

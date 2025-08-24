@@ -7,6 +7,7 @@ import type { ToolResult } from '@eko-ai/eko/types'
 import { ValidationError, ToolError } from '../tool-error'
 import { terminalApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'
+import stripAnsi from 'strip-ansi'
 export interface ShellParams {
   command: string
 }
@@ -93,7 +94,9 @@ export class ShellTool extends ModifiableTool {
   private cleanOutput(output: string, command: string): string {
     if (!output) return ''
 
-    const lines = output.split('\n')
+    // 先清理ANSI序列
+    const cleanedOutput = stripAnsi(output)
+    const lines = cleanedOutput.split('\n')
     const cleanLines: string[] = []
     let foundCommand = false
 
@@ -158,13 +161,8 @@ export class ShellTool extends ModifiableTool {
       const detectCommandCompletion = (output: string): boolean => {
         if (!output || output.trim() === '') return false
 
-        // 彻底清理ANSI转义序列
-        let cleanOutput = output
-          .replace(/\x1B\[[0-9;?]*[a-zA-Z]/g, '') // 标准ANSI序列
-          .replace(/\x1B\[[?][0-9]*[a-zA-Z]/g, '') // ?开头的序列
-          .replace(/\x1B\[K/g, '') // 清除行序列
-          .replace(/\x1B\[[0-9]*[mK]/g, '') // m和K结尾的序列
-          .replace(/\r/g, '') // 回车符
+        // 去除 ANSI 转义序列与回车符
+        const cleanOutput = stripAnsi(output).replace(/\r/g, '')
 
         // 按行分割，检查最后几行
         const lines = cleanOutput.split('\n').filter(line => line.trim() !== '')

@@ -3,7 +3,8 @@
  * 只保留核心功能，移除冗余代码
  */
 
-import type { TerminalCallback } from '../types'
+import type { TerminalCallback, StreamMessage, StreamCallbackMessage } from '../types'
+import type { AgentContext } from '@eko-ai/eko'
 
 /**
  * 智能文件选择 - 根据提示内容推断合适的文件
@@ -41,30 +42,34 @@ const isDangerousCommand = (command: string): boolean => {
  */
 export const createCallback = (): TerminalCallback => {
   return {
-    onMessage: async _message => {
+    onMessage: async (_message: StreamCallbackMessage, _agentContext?: AgentContext): Promise<void> => {
       // 静默处理消息
     },
-    onHumanConfirm: async (_, _prompt) => {
+    onHumanConfirm: async (_agentContext: AgentContext, _prompt: string): Promise<boolean> => {
       return true
     },
-    onHumanInput: async (_, _prompt) => {
+    onHumanInput: async (_agentContext: AgentContext, _prompt: string): Promise<string> => {
       return ''
     },
-    onHumanSelect: async (_, _prompt, options) => {
-      return [options?.[0] || '']
+    onHumanSelect: async (
+      _agentContext: AgentContext,
+      _prompt: string,
+      options: readonly string[]
+    ): Promise<string[]> => {
+      return [options?.[0] ?? '']
     },
-    onHumanHelp: async (_, _helpType, _prompt) => {
+    onHumanHelp: async (_agentContext: AgentContext, _helpType: string, _prompt: string): Promise<boolean> => {
       return true
     },
-    onCommandConfirm: async (_, command) => {
+    onCommandConfirm: async (_agentContext: AgentContext, command: string): Promise<boolean> => {
       const safe = !isDangerousCommand(command)
       return safe
     },
-    onFileSelect: async (_, prompt, directory) => {
+    onFileSelect: async (_agentContext: AgentContext, prompt: string, directory?: string): Promise<string> => {
       const file = smartFileSelect(prompt, directory)
       return file
     },
-    onPathInput: async (_, _prompt, defaultPath) => {
+    onPathInput: async (_agentContext: AgentContext, _prompt: string, defaultPath?: string): Promise<string> => {
       const path = defaultPath || './default-path'
       return path
     },
@@ -75,20 +80,42 @@ export const createCallback = (): TerminalCallback => {
  * 创建侧边栏专用回调
  * @param onMessage 自定义消息处理函数
  */
-export const createSidebarCallback = (onMessage?: (message: any) => Promise<void>): TerminalCallback => {
+export const createSidebarCallback = (onMessage?: (message: StreamMessage) => Promise<void>): TerminalCallback => {
   return {
-    onMessage: async (message: any) => {
+    onMessage: async (message: StreamCallbackMessage, _agentContext?: AgentContext): Promise<void> => {
       console.log('🔥 [DEBUG] createSidebarCallback收到消息:', message.type, message)
       if (onMessage) {
-        await onMessage(message)
+        // Convert StreamCallbackMessage to StreamMessage for backward compatibility
+        const streamMessage: StreamMessage = {
+          type:
+            message.type === 'agent_start'
+              ? 'workflow'
+              : (message.type as 'tool_use' | 'tool_result' | 'workflow' | 'text' | 'thinking'),
+          toolName: (message as Record<string, unknown>).toolName as string,
+          params: (message as Record<string, unknown>).params as Record<string, unknown>,
+          toolResult: (message as Record<string, unknown>).toolResult,
+          thought: (message as Record<string, unknown>).thought as string,
+          text: (message as Record<string, unknown>).text as string,
+          streamId: (message as Record<string, unknown>).streamId as string,
+          streamDone: (message as Record<string, unknown>).streamDone as boolean,
+          workflow: (message as Record<string, unknown>).workflow as { thought?: string },
+        }
+        await onMessage(streamMessage)
       }
     },
-    onHumanConfirm: async () => true,
-    onHumanInput: async () => '',
-    onHumanSelect: async (_, __, options) => [options?.[0] || ''],
-    onHumanHelp: async () => true,
-    onCommandConfirm: async (_, command) => !isDangerousCommand(command),
-    onFileSelect: async (_, prompt, directory) => smartFileSelect(prompt, directory),
-    onPathInput: async (_, __, defaultPath) => defaultPath || './',
+    onHumanConfirm: async (): Promise<boolean> => true,
+    onHumanInput: async (): Promise<string> => '',
+    onHumanSelect: async (
+      _agentContext: AgentContext,
+      _prompt: string,
+      options: readonly string[]
+    ): Promise<string[]> => [options?.[0] ?? ''],
+    onHumanHelp: async (): Promise<boolean> => true,
+    onCommandConfirm: async (_agentContext: AgentContext, command: string): Promise<boolean> =>
+      !isDangerousCommand(command),
+    onFileSelect: async (_agentContext: AgentContext, prompt: string, directory?: string): Promise<string> =>
+      smartFileSelect(prompt, directory),
+    onPathInput: async (_agentContext: AgentContext, __: string, defaultPath?: string): Promise<string> =>
+      defaultPath || './',
   }
 }

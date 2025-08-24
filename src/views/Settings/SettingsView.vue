@@ -73,10 +73,13 @@
   }
 
   .settings-sidebar {
-    width: 280px;
+    min-width: 200px;
+    max-width: 320px;
+    width: 25%;
     background-color: var(--bg-300);
     border-right: 1px solid var(--border-300);
     overflow-y: auto;
+    flex-shrink: 0;
   }
 
   .settings-main {

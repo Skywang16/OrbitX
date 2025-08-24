@@ -1,7 +1,5 @@
 import { useTabManagerStore } from '@/stores/TabManager'
 import { useTerminalStore } from '@/stores/Terminal'
-import { useSettingsStore } from '@/components/settings/store'
-import { useTheme } from '@/composables/useTheme'
 import { createMessage } from '@/ui/composables/message-api'
 import { TabType } from '@/types'
 
@@ -12,14 +10,6 @@ export class ShortcutActionsService {
 
   private get terminalStore() {
     return useTerminalStore()
-  }
-
-  private get settingsStore() {
-    return useSettingsStore()
-  }
-
-  private get themeManager() {
-    return useTheme()
   }
 
   switchToTab(index: number): boolean {

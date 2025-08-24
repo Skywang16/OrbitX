@@ -4,7 +4,7 @@
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '@eko-ai/eko/types'
-import { ValidationError } from '../tool-error'
+import { ValidationError, ToolError } from '../tool-error'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 
 export interface CreateFileParams {

@@ -1,6 +1,5 @@
 <script setup lang="ts">
   import { useAIChatStore } from '@/components/AIChatSidebar'
-  import AIChatSidebar from '@/components/AIChatSidebar/index.vue'
   import ContentRenderer from '@/components/ui/ContentRenderer.vue'
   import TitleBar from '@/components/ui/TitleBar.vue'
   import { useTerminalStore } from '@/stores/Terminal'
@@ -9,6 +8,7 @@
   import { listen, UnlistenFn } from '@tauri-apps/api/event'
   import { getCurrentWebview } from '@tauri-apps/api/webview'
   import { onBeforeUnmount, onMounted, watch } from 'vue'
+  import AIChatSidebar from '@/components/AIChatSidebar/index.vue'
 
   const terminalStore = useTerminalStore()
   const aiChatStore = useAIChatStore()
@@ -91,8 +91,6 @@
 
   // 应用关闭/卸载时清理监听器并保存状态
   onBeforeUnmount(() => {
-    console.log('🔄 [TerminalView] 应用关闭，开始清理')
-
     // 先立即清理监听器，确保不阻塞关闭
     terminalStore.teardownGlobalListeners()
 
@@ -110,12 +108,11 @@
     // 异步保存状态，不阻塞关闭流程
     Promise.resolve().then(async () => {
       try {
-        console.log('🤖 [TerminalView] 保存AI聊天状态')
         aiChatStore.saveToSessionState()
 
         await terminalStore.saveSessionState()
       } catch (error) {
-        console.error('❌ [TerminalView] 状态保存失败:', error)
+        console.error(' [TerminalView] 状态保存失败:', error)
         // 保存失败不影响应用关闭
       }
     })

@@ -444,7 +444,6 @@
       if (!terminal.value || !terminalRef.value) return
 
       const buffer = terminal.value.buffer.active
-      const terminalRect = terminalRef.value.getBoundingClientRect()
 
       // 尝试直接从XTerm的DOM结构获取光标元素
       const cursorElement = terminalRef.value.querySelector('.xterm-cursor')
@@ -568,7 +567,7 @@
       // 注册回调
       terminalStore.registerTerminalCallbacks(props.terminalId, {
         onOutput: handleOutput,
-        onExit: handleExit,
+        onExit: (exitCode: number | null) => handleExit(terminal.value, exitCode),
       })
 
       // 注册到终端store的resize回调，避免每个终端都监听window resize

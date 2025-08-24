@@ -4,7 +4,7 @@
   import { onMounted } from 'vue'
 
   // 初始化快捷键监听器
-  const { isListening, reloadConfig } = useShortcutListener()
+  const { reloadConfig } = useShortcutListener()
 
   onMounted(() => {
     // 暴露重新加载配置功能到控制台

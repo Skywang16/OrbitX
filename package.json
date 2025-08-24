@@ -25,6 +25,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
+    "build:analyze": "vue-tsc --noEmit && ANALYZE=true vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
@@ -53,12 +54,14 @@
     "marked": "^16.1.1",
     "pinia": "^3.0.3",
     "sharp": "^0.34.3",
+    "strip-ansi": "^7.1.0",
     "uuid": "^11.1.0",
     "vue": "^3.5.13"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "@types/node": "^24.2.0",
+    "@types/strip-ansi": "^3.0.0",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.38.0",
     "@typescript-eslint/parser": "^8.39.1",

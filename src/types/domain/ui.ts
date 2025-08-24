@@ -18,6 +18,7 @@ export interface TabItem {
   closable?: boolean
   shell?: string
   path?: string
+  data?: { section?: string; backendId?: number | null; [key: string]: any }
 }
 
 // ===== 应用设置类型 =====

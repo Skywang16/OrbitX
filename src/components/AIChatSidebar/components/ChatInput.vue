@@ -82,8 +82,8 @@
     textarea.style.height = 'auto'
 
     const scrollHeight = textarea.scrollHeight
-    const maxHeight = 120
-    const minHeight = 44
+    const maxHeight = 100
+    const minHeight = 32
     const newHeight = Math.max(minHeight, Math.min(scrollHeight, maxHeight))
 
     textarea.style.height = newHeight + 'px'
@@ -262,12 +262,12 @@
 
   .input-content {
     flex: 1;
-    min-height: 44px;
+    min-height: 32px;
   }
   .message-input {
     width: 100%;
-    min-height: 44px;
-    max-height: 150px;
+    min-height: 32px;
+    max-height: 100px;
     border: none;
     background: transparent;
     color: var(--text-300);

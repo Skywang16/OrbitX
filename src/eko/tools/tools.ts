@@ -25,7 +25,7 @@ export const readOnlyTools: Tool[] = [readFileTool, readManyFilesTool, readDirec
 /**
  * 所有工具 - Agent模式可以使用
  */
-export const allTools: Tool<unknown>[] = [
+export const allTools: Tool[] = [
   readFileTool,
   readManyFilesTool,
   readDirectoryTool,

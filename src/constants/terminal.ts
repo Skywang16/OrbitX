@@ -2,6 +2,11 @@ import type { TerminalConfig } from '@/types'
 
 // 终端配置 - 针对性能和渲染优化
 export const TERMINAL_CONFIG: TerminalConfig = {
+  // BaseConfig properties
+  version: '1.0.0',
+  lastModified: new Date().toISOString(),
+  enabled: true,
+
   fontFamily:
     'Menlo, Monaco, "SF Mono", "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", "Source Han Sans CN", "WenQuanYi Micro Hei", "Courier New", monospace',
   fontSize: 14,
@@ -9,6 +14,26 @@ export const TERMINAL_CONFIG: TerminalConfig = {
   theme: {
     background: '#1e1e1e',
     foreground: '#f0f0f0',
+  },
+  scrollback: 2000,
+
+  // Required configuration objects
+  shell: {
+    default: '/bin/zsh',
+    args: [],
+    workingDirectory: '~',
+  },
+  cursor: {
+    style: 'block',
+    blink: true,
+    color: '#f0f0f0',
+    thickness: 1,
+  },
+  behavior: {
+    closeOnExit: false,
+    confirmOnExit: true,
+    scrollOnOutput: true,
+    copyOnSelect: false,
   },
 
   convertEol: true, // 自动转换行尾符，有助于处理不同系统的换行符
@@ -26,7 +51,7 @@ export const TERMINAL_CONFIG: TerminalConfig = {
   wordSeparator: ' ()[]{}\'",;', // 为中文优化的词分隔符
 
   // 滚动和缓冲区优化
-  scrollback: 2000, // 增加滚动缓冲区，提高实用性
+  // scrollback已在上面定义
   scrollSensitivity: 3, // 提高滚动灵敏度，改善用户体验
   fastScrollSensitivity: 5, // 快速滚动灵敏度
   smoothScrollDuration: 0, // 禁用平滑滚动，减少渲染开销

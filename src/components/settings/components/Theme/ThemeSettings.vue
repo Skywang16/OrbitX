@@ -309,8 +309,10 @@
 
 <style scoped>
   .theme-settings {
-    max-width: 800px;
+    width: 100%;
+    max-width: min(800px, calc(100vw - 400px));
     padding: var(--spacing-lg);
+    box-sizing: border-box;
   }
 
   .settings-card {
@@ -329,7 +331,7 @@
 
   .mode-selector {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: var(--spacing-md);
   }
 
@@ -421,7 +423,7 @@
 
   .theme-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: var(--spacing-md);
   }
 
@@ -513,7 +515,7 @@
 
   .theme-selectors {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: var(--spacing-lg);
     margin-top: var(--spacing-md);
   }
