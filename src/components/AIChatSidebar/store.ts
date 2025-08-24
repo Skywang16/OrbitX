@@ -505,6 +505,30 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                 tempMessage.content = message.text
               }
               break
+
+            case 'error':
+              // 处理错误消息，立即更新UI状态
+              console.error('🚨 Eko错误:', (message as any).error)
+
+              // 立即更新UI中的消息状态
+              tempMessage.status = 'error'
+              tempMessage.duration = Date.now() - tempMessage.createdAt.getTime()
+
+              // 添加错误步骤到UI（数据库保存由其他地方处理）
+              tempMessage.steps = tempMessage.steps || []
+              tempMessage.steps.push({
+                type: 'error',
+                content: `AI任务执行失败: ${(message as any).error}`,
+                timestamp: Date.now(),
+                metadata: {
+                  errorType: 'LLMError',
+                  errorDetails: String((message as any).error),
+                },
+              })
+
+              // 清除流式内容
+              streamingContent.value = ''
+              break
           }
 
           // 直接保存，去掉队列
