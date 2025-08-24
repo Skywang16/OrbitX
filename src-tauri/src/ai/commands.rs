@@ -13,7 +13,7 @@ use crate::utils::error::{ToTauriResult, Validator};
 
 use std::sync::Arc;
 use tauri::State;
-use tracing::{debug, info};
+use tracing::debug;
 
 /// AI管理器状态 - 重构版本
 pub struct AIManagerState {
@@ -70,8 +70,6 @@ pub async fn create_conversation(
         .save(&conversation)
         .await
         .to_tauri()?;
-
-    info!("创建会话成功, ID: {}", conversation_id);
     Ok(conversation_id)
 }
 
@@ -153,8 +151,6 @@ pub async fn delete_conversation(
         .delete(conversation_id)
         .await
         .to_tauri()?;
-
-    info!("删除会话成功, ID: {}", conversation_id);
     Ok(())
 }
 
@@ -165,10 +161,6 @@ pub async fn get_compressed_context(
     up_to_message_id: Option<i64>,
     state: State<'_, AIManagerState>,
 ) -> Result<Vec<Message>, String> {
-    info!(
-        "获取压缩上下文: conversation_id={}, up_to_message_id={:?}",
-        conversation_id, up_to_message_id
-    );
 
     if conversation_id <= 0 {
         return Err("无效的会话ID".to_string());
@@ -187,12 +179,6 @@ pub async fn get_compressed_context(
     .await
     .to_tauri()?;
 
-    info!(
-        "压缩上下文获取完成: conversation_id={}, 消息数量={}",
-        conversation_id,
-        messages.len()
-    );
-
     Ok(messages)
 }
 
@@ -205,12 +191,6 @@ pub async fn build_prompt_with_context(
     current_working_directory: Option<String>,
     state: State<'_, AIManagerState>,
 ) -> Result<String, String> {
-    info!(
-        "构建智能prompt: conversation_id={}, current_message length={}, up_to_message_id={:?}",
-        conversation_id,
-        current_message.len(),
-        up_to_message_id
-    );
 
     // 参数验证
     if conversation_id <= 0 {
@@ -233,7 +213,6 @@ pub async fn build_prompt_with_context(
     .await
     .to_tauri()?;
 
-    info!("智能prompt构建完成: conversation_id={}", conversation_id);
     Ok(intelligent_prompt)
 }
 
@@ -244,10 +223,6 @@ pub async fn truncate_conversation(
     truncate_after_message_id: i64,
     state: State<'_, AIManagerState>,
 ) -> Result<(), String> {
-    info!(
-        "截断会话: conversation_id={}, truncate_after={}",
-        conversation_id, truncate_after_message_id
-    );
 
     if conversation_id <= 0 {
         return Err("无效的会话ID".to_string());
@@ -263,7 +238,6 @@ pub async fn truncate_conversation(
         .await
         .to_tauri()?;
 
-    info!("会话截断完成: conversation_id={}", conversation_id);
     Ok(())
 }
 
@@ -275,10 +249,6 @@ pub async fn save_message(
     content: String,
     state: State<'_, AIManagerState>,
 ) -> Result<i64, String> {
-    info!(
-        "保存消息: conversation_id={}, role={}",
-        conversation_id, role
-    );
 
     if conversation_id <= 0 {
         return Err("无效的会话ID".to_string());
@@ -301,8 +271,6 @@ pub async fn save_message(
         .save_message(&message)
         .await
         .to_tauri()?;
-
-    info!("消息保存成功: message_id={}", message_id);
     Ok(message_id)
 }
 
@@ -385,8 +353,6 @@ pub async fn add_ai_model(
     config: AIModelConfig,
     state: State<'_, AIManagerState>,
 ) -> Result<(), String> {
-    info!("添加AI模型: {}", config.id);
-
     state.ai_service.add_model(config).await.to_tauri()
 }
 
@@ -396,8 +362,6 @@ pub async fn remove_ai_model(
     model_id: String,
     state: State<'_, AIManagerState>,
 ) -> Result<(), String> {
-    info!("删除AI模型: {}", model_id);
-
     state.ai_service.remove_model(&model_id).await.to_tauri()
 }
 
@@ -408,8 +372,6 @@ pub async fn update_ai_model(
     updates: serde_json::Value,
     state: State<'_, AIManagerState>,
 ) -> Result<(), String> {
-    info!("更新AI模型: {}", model_id);
-
     state
         .ai_service
         .update_model(&model_id, updates)
@@ -423,8 +385,6 @@ pub async fn test_ai_connection_with_config(
     config: AIModelConfig,
     state: State<'_, AIManagerState>,
 ) -> Result<bool, String> {
-    info!("测试AI模型连接（表单数据）: {}", config.name);
-
     // 参数验证
     if config.api_url.trim().is_empty() {
         return Err("API URL不能为空".to_string());
@@ -468,8 +428,6 @@ pub async fn set_user_prefix_prompt(
     prompt: Option<String>,
     state: State<'_, AIManagerState>,
 ) -> Result<(), String> {
-    info!("设置用户前置提示词: {:?}", prompt.as_ref().map(|p| p.len()));
-
     let repositories = state.repositories();
 
     repositories
@@ -492,11 +450,6 @@ pub async fn get_context_config() -> Result<crate::ai::enhanced_context::Context
 pub async fn update_context_config(
     config: crate::ai::enhanced_context::ContextConfig,
 ) -> Result<(), String> {
-    info!(
-        "更新上下文配置: max_tokens={}, compress_threshold={}",
-        config.max_tokens, config.compress_threshold
-    );
-
     // TODO: 实现配置持久化
     // 可以保存到数据库或配置文件
 
@@ -515,7 +468,6 @@ pub async fn get_kv_cache_stats() -> Result<crate::ai::enhanced_context::CacheSt
 pub async fn cleanup_kv_cache() -> Result<(), String> {
     let manager = &*crate::ai::context::CONTEXT_MANAGER;
     manager.cleanup_cache();
-    info!("KV缓存清理完成");
     Ok(())
 }
 

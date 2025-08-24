@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 /// 动作执行器函数类型
 pub type ActionHandler = Box<dyn Fn(&ActionContext) -> AnyResult<serde_json::Value> + Send + Sync>;
@@ -89,7 +89,7 @@ impl ActionRegistry {
             handler_map.insert(action_name.clone(), Box::new(handler));
         }
 
-        info!("动作注册成功: {}", action_name);
+        // 动作注册成功（静默，避免日志噪声）
         Ok(())
     }
 
@@ -149,8 +149,6 @@ impl ActionRegistry {
 
         match result {
             Ok(value) => {
-                info!("动作执行成功: {}", action_name);
-
                 self.emit_event(ShortcutEvent {
                     event_type: ShortcutEventType::ActionExecuted,
                     key_combination: Some(context.key_combination.clone()),
@@ -254,7 +252,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行复制到剪贴板动作");
                     debug!("复制动作上下文: {:?}", context);
                     // 这里应该实现实际的复制逻辑
                     Ok(serde_json::Value::String("🔥 复制功能已触发！".to_string()))
@@ -278,7 +275,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行从剪贴板粘贴动作");
                     debug!("粘贴动作上下文: {:?}", context);
                     // 这里应该实现实际的粘贴逻辑
                     Ok(serde_json::Value::String("🔥 粘贴功能已触发！".to_string()))
@@ -302,7 +298,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行搜索动作");
                     debug!("搜索动作上下文: {:?}", context);
                     // 这里应该实现搜索逻辑
                     Ok(serde_json::Value::String("🔥 搜索功能已触发！".to_string()))
@@ -329,7 +324,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行新建标签页动作");
                     debug!("新建标签页上下文: {:?}", context);
                     Ok(serde_json::Value::String(
                         "🔥 新建标签页功能已触发！".to_string(),
@@ -354,7 +348,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行关闭标签页动作");
                     debug!("关闭标签页上下文: {:?}", context);
 
                     // 检查前端执行结果，如果前端成功处理了关闭操作，就不继续处理
@@ -392,7 +385,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行切换到标签页1动作");
                     debug!("标签页切换上下文: {:?}", context);
                     Ok(serde_json::Value::String(
                         "🔥 切换到标签页1功能已触发！".to_string(),
@@ -416,7 +408,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行切换到标签页2动作");
                     debug!("标签页切换上下文: {:?}", context);
                     Ok(serde_json::Value::String(
                         "🔥 切换到标签页2功能已触发！".to_string(),
@@ -440,7 +431,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行切换到标签页3动作");
                     debug!("标签页切换上下文: {:?}", context);
                     Ok(serde_json::Value::String(
                         "🔥 切换到标签页3功能已触发！".to_string(),
@@ -464,7 +454,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行切换到标签页4动作");
                     debug!("标签页切换上下文: {:?}", context);
                     Ok(serde_json::Value::String(
                         "🔥 切换到标签页4功能已触发！".to_string(),
@@ -488,7 +477,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行切换到标签页5动作");
                     debug!("标签页切换上下文: {:?}", context);
                     Ok(serde_json::Value::String(
                         "🔥 切换到标签页5功能已触发！".to_string(),
@@ -512,7 +500,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行切换到最后一个标签页动作");
                     debug!("标签页切换上下文: {:?}", context);
                     Ok(serde_json::Value::String(
                         "🔥 切换到最后一个标签页功能已触发！".to_string(),
@@ -537,7 +524,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行接受补全动作");
                     debug!("补全接受上下文: {:?}", context);
                     Ok(serde_json::Value::String(
                         "🔥 补全接受功能已触发！".to_string(),
@@ -565,7 +551,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行清空终端动作");
                     debug!("清空终端上下文: {:?}", context);
                     Ok(serde_json::Value::String("🔥 清空终端功能已触发！".to_string()))
                 },
@@ -588,7 +573,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行打开设置动作");
                     debug!("打开设置上下文: {:?}", context);
                     Ok(serde_json::Value::String("🔥 打开设置功能已触发！".to_string()))
                 },
@@ -611,7 +595,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行切换主题动作");
                     debug!("切换主题上下文: {:?}", context);
                     Ok(serde_json::Value::String("🔥 切换主题功能已触发！".to_string()))
                 },
@@ -634,7 +617,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行增大字体动作");
                     debug!("增大字体上下文: {:?}", context);
                     Ok(serde_json::Value::String("🔥 增大字体功能已触发！".to_string()))
                 },
@@ -657,7 +639,6 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    info!("🔥 执行减小字体动作");
                     debug!("减小字体上下文: {:?}", context);
                     Ok(serde_json::Value::String("🔥 减小字体功能已触发！".to_string()))
                 },

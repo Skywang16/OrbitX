@@ -18,7 +18,7 @@ use crate::utils::error::AppResult;
 use anyhow::Context;
 use serde_json::Value;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::debug;
 
 /// 存储协调器选项
 #[derive(Debug, Clone)]
@@ -65,7 +65,7 @@ impl StorageCoordinator {
         options: StorageCoordinatorOptions,
         config_manager: Arc<TomlConfigManager>,
     ) -> AppResult<Self> {
-        info!("初始化简化的存储协调器");
+        debug!("初始化简化的存储协调器");
 
         // 确保所有目录存在
         paths.ensure_directories().context("创建存储目录失败")?;
@@ -114,7 +114,7 @@ impl StorageCoordinator {
             cache: Arc::new(UnifiedCache::new()),
         };
 
-        info!("存储协调器初始化完成");
+        debug!("存储协调器初始化完成");
         Ok(coordinator)
     }
 

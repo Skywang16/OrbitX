@@ -19,7 +19,7 @@ use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tokio::fs as async_fs;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 /// MessagePack管理器选项
 #[derive(Debug, Clone)]
@@ -105,7 +105,6 @@ impl MessagePackManager {
         // 确保状态目录存在
         manager.ensure_state_directory().await?;
 
-        info!("MessagePack管理器初始化完成");
         debug!(
             "配置: compression={}, backup_count={}, checksum_validation={}",
             manager.options.compression,
@@ -159,7 +158,6 @@ impl MessagePackManager {
             ));
         }
 
-        info!("会话状态序列化完成，最终大小: {} bytes", result.len());
         Ok(result)
     }
 
@@ -195,7 +193,6 @@ impl MessagePackManager {
         let state: SessionState = Deserialize::deserialize(&mut de)
             .map_err(|e| anyhow!("会话状态反序列化失败: {}", e))?;
 
-        info!("会话状态反序列化完成");
         Ok(state)
     }
 
@@ -220,7 +217,7 @@ impl MessagePackManager {
 
     /// 保存状态
     pub async fn save_state(&self, state: &SessionState) -> AppResult<()> {
-        info!("开始保存会话状态");
+        // 开始保存会话状态（静默）
 
         // 确保状态目录存在
         self.ensure_state_directory().await?;
@@ -242,7 +239,7 @@ impl MessagePackManager {
         // 清理旧备份
         self.cleanup_old_backups().await?;
 
-        info!("会话状态保存完成: {}", state_file.display());
+        // 会话状态保存完成（静默）
         Ok(())
     }
 
@@ -255,7 +252,7 @@ impl MessagePackManager {
             return Ok(None);
         }
 
-        info!("开始加载会话状态: {}", state_file.display());
+        // 开始加载会话状态（静默）: {}
 
         // 读取文件
         let data = async_fs::read(&state_file)
@@ -264,10 +261,7 @@ impl MessagePackManager {
 
         // 尝试反序列化
         match self.deserialize_state(&data) {
-            Ok(state) => {
-                info!("会话状态加载成功");
-                Ok(Some(state))
-            }
+            Ok(state) => Ok(Some(state)),
             Err(e) => {
                 error!("状态文件反序列化失败: {}", e);
 
@@ -331,14 +325,10 @@ impl MessagePackManager {
 
         // 尝试从最新的备份开始恢复
         for (backup_path, _) in backups {
-            info!("尝试从备份恢复: {}", backup_path.display());
 
             match async_fs::read(&backup_path).await {
                 Ok(data) => match self.deserialize_state(&data) {
-                    Ok(state) => {
-                        info!("从备份恢复成功: {}", backup_path.display());
-                        return Ok(Some(state));
-                    }
+                    Ok(state) => return Ok(Some(state)),
                     Err(e) => {
                         warn!(
                             "备份文件损坏，尝试下一个: {} - {}",

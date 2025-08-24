@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
 use std::sync::{Arc, Mutex};
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 /// 简单的内存缓存存储用户前置提示词
 static USER_PREFIX_PROMPT: Mutex<Option<String>> = Mutex::new(None);
@@ -275,7 +275,7 @@ impl AIModelRepository {
 
         let result = query_builder.execute(self.database.pool()).await?;
 
-        info!("AI模型保存成功: {}", model.name);
+        debug!("AI模型保存成功: {}", model.name);
         Ok(result.last_insert_rowid())
     }
 }
@@ -323,7 +323,7 @@ impl AIModelRepository {
             return Err(anyhow!("模型ID不存在: {}", id));
         }
 
-        info!("AI模型删除成功: {}", id);
+        debug!("AI模型删除成功: {}", id);
         Ok(())
     }
 
@@ -345,7 +345,7 @@ impl AIModelRepository {
 
         *USER_PREFIX_PROMPT.lock().unwrap() = prompt;
 
-        info!("用户前置提示词设置成功");
+        debug!("用户前置提示词设置成功");
         Ok(())
     }
 }

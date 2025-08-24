@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use tiktoken_rs::{cl100k_base, CoreBPE};
-use tracing::{debug, info};
+use tracing::debug;
 
 // ============= 配置层 =============
 
@@ -111,7 +111,7 @@ impl ContextManager {
         conv_id: i64,
         up_to_msg_id: Option<i64>,
     ) -> AppResult<ContextResult> {
-        info!("构建智能上下文: conv={}, up_to={:?}", conv_id, up_to_msg_id);
+        debug!("构建智能上下文: conv={}, up_to={:?}", conv_id, up_to_msg_id);
 
         // 1. 获取原始消息
         let raw_msgs = self.fetch_messages(repos, conv_id, up_to_msg_id).await?;
@@ -134,7 +134,7 @@ impl ContextManager {
         let processed_msgs = if token_count as f32
             > self.config.max_tokens as f32 * self.config.compress_threshold
         {
-            info!(
+            debug!(
                 "触发压缩: tokens={}/{} ({}%), 消息数={}",
                 token_count,
                 self.config.max_tokens,
@@ -297,7 +297,7 @@ impl ContextManager {
         let mut result = vec![summary_msg];
         result.extend_from_slice(to_keep);
 
-        info!(
+        debug!(
             "压缩完成: {}条 -> {}条 (摘要+{}条保留)",
             messages.len(),
             result.len(),
@@ -508,7 +508,7 @@ impl ContextManager {
     fn format_message(&self, msg: &Message) -> String {
         if msg.role == "assistant" && msg.steps_json.is_some() {
             let steps_json = msg.steps_json.as_ref().unwrap();
-            info!("🔍 原始steps_json: {}", steps_json);
+            debug!("🔍 原始steps_json: {}", steps_json);
 
             if let Ok(steps_value) = serde_json::from_str(steps_json) {
                 let tool_summary = self.extract_tool_summary(&steps_value);
@@ -799,7 +799,7 @@ impl ContextManager {
     /// 失效缓存（兼容性方法）
     pub fn invalidate_cache(&self, _conv_id: i64) {
         // 简化版本，不做具体操作
-        info!("缓存失效请求已忽略（简化版本）");
+        debug!("缓存失效请求已忽略（简化版本）");
     }
 }
 

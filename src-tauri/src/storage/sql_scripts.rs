@@ -9,7 +9,7 @@ use crate::utils::error::AppResult;
 use anyhow::{anyhow, Context};
 use std::path::{Path, PathBuf};
 use tokio::fs;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 /// SQL脚本加载器
 pub struct SqlScriptLoader {
@@ -40,7 +40,7 @@ impl SqlScriptLoader {
 
     /// 加载所有SQL脚本文件
     pub async fn load_all_scripts(&self) -> AppResult<Vec<SqlScript>> {
-        info!("开始加载SQL脚本文件，目录: {}", self.sql_dir.display());
+        debug!("开始加载SQL脚本文件，目录: {}", self.sql_dir.display());
 
         // 确保SQL目录存在
         if !self.sql_dir.exists() {
@@ -74,7 +74,7 @@ impl SqlScriptLoader {
         // 按执行顺序排序
         scripts.sort_by_key(|s| s.order);
 
-        info!("成功加载 {} 个SQL脚本", scripts.len());
+        debug!("成功加载 {} 个SQL脚本", scripts.len());
         Ok(scripts)
     }
 
