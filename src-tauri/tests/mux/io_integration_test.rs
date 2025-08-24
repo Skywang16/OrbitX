@@ -19,10 +19,10 @@ mod tests {
 
         // 设置通知计数器
         let output_count = Arc::new(AtomicUsize::new(0));
-        let exit_count = Arc::new(AtomicUsize::new(0));
+        let removed_count = Arc::new(AtomicUsize::new(0));
 
         let output_count_clone = Arc::clone(&output_count);
-        let exit_count_clone = Arc::clone(&exit_count);
+        let removed_count_clone = Arc::clone(&removed_count);
 
         // 订阅通知
         let _subscriber_id = mux.subscribe(move |notification| {
@@ -30,8 +30,8 @@ mod tests {
                 MuxNotification::PaneOutput { .. } => {
                     output_count_clone.fetch_add(1, Ordering::Relaxed);
                 }
-                MuxNotification::PaneExited { .. } => {
-                    exit_count_clone.fetch_add(1, Ordering::Relaxed);
+                MuxNotification::PaneRemoved { .. } => {
+                    removed_count_clone.fetch_add(1, Ordering::Relaxed);
                 }
                 _ => {}
             }
@@ -61,13 +61,13 @@ mod tests {
 
         // 验证收到了输出和退出通知
         let output_received = output_count.load(Ordering::Relaxed);
-        let exit_received = exit_count.load(Ordering::Relaxed);
+        let exit_received = removed_count.load(Ordering::Relaxed);
 
-        println!("收到 {output_received} 个输出通知, {exit_received} 个退出通知");
+        println!("收到 {output_received} 个输出通知, {exit_received} 个移除通知");
 
         // 应该至少收到一些输出（具体数量取决于系统和命令执行）
         assert!(output_received > 0, "应该收到至少一个输出通知");
-        assert_eq!(exit_received, 1, "应该收到一个退出通知");
+        assert_eq!(exit_received, 1, "应该收到一个移除通知");
     }
 
     #[tokio::test]

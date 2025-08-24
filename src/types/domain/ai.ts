@@ -35,7 +35,6 @@ export interface AIModelConfig {
   apiUrl: string
   apiKey: string
   model: string
-  isDefault?: boolean
   options?: {
     maxTokens?: number
     temperature?: number
@@ -65,7 +64,6 @@ export interface AIResponse {
 
 export interface AISettings {
   models: AIModelConfig[]
-  defaultModelId: string | null
   features: {
     chat: {
       enabled: boolean

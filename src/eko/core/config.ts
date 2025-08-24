@@ -45,8 +45,8 @@ export const getEkoLLMsConfig = async (): Promise<LLMs> => {
       throw new Error('没有配置任何AI模型，请先在设置中添加模型配置')
     }
 
-    // 找到默认模型
-    const defaultModel = models.find(model => model.isDefault) || models[0]
+    // 使用第一个模型作为默认模型
+    const defaultModel = models[0]
     // 构建LLMs配置对象
     const llms: LLMs = {
       default: convertToEkoLLMConfig(defaultModel),
@@ -72,7 +72,7 @@ export const getEkoLLMsConfig = async (): Promise<LLMs> => {
 export const getDefaultModelId = async (): Promise<string> => {
   try {
     const models = await aiApi.getModels()
-    const defaultModel = models.find(model => model.isDefault) || models[0]
+    const defaultModel = models[0]
 
     if (!defaultModel) {
       throw new Error('没有找到可用的AI模型')

@@ -23,7 +23,6 @@
     apiUrl: '',
     apiKey: '',
     model: '',
-    isDefault: false,
     options: {
       maxTokens: 4096,
       temperature: 0.7,
@@ -63,7 +62,6 @@
       apiUrl: props.model.apiUrl,
       apiKey: props.model.apiKey,
       model: props.model.model,
-      isDefault: props.model.isDefault || false,
       options: {
         maxTokens: props.model.options?.maxTokens || 4096,
         temperature: props.model.options?.temperature || 0.7,
@@ -119,7 +117,6 @@
         apiUrl: formData.apiUrl,
         apiKey: formData.apiKey,
         model: formData.model,
-        isDefault: false,
         options: formData.options,
       }
 

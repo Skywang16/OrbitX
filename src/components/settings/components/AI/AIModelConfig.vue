@@ -51,19 +51,6 @@
     }
   }
 
-  // 处理设置默认模型
-  const handleSetDefault = async (modelId: string, isDefault: boolean) => {
-    if (isDefault) {
-      return
-    }
-    try {
-      await aiSettingsStore.setDefaultModel(modelId)
-      createMessage.success('默认模型设置成功')
-    } catch (error) {
-      createMessage.error(handleError(error, '设置默认模型失败'))
-    }
-  }
-
   // 处理表单提交
   const handleFormSubmit = async (modelData: Omit<AIModelConfig, 'id'>) => {
     try {
@@ -78,13 +65,8 @@
           id: Date.now().toString(),
         }
 
-        // 如果这是第一个模型，自动设置为默认
-        if (models.value.length === 0) {
-          newModel.isDefault = true
-          createMessage.success('模型添加成功')
-        }
-
         await aiSettingsStore.addModel(newModel)
+        createMessage.success('模型添加成功')
       }
       showAddForm.value = false
       editingModel.value = null
@@ -140,20 +122,8 @@
       </div>
 
       <div v-else class="model-cards">
-        <div
-          v-for="model in models"
-          :key="model.id"
-          class="model-card"
-          :class="{
-            default: model.isDefault,
-          }"
-        >
-          <div class="model-left" @click="handleSetDefault(model.id, model.isDefault || false)">
-            <div class="option-radio">
-              <div class="radio-button" :class="{ checked: model.isDefault }">
-                <div class="radio-dot"></div>
-              </div>
-            </div>
+        <div v-for="model in models" :key="model.id" class="model-card">
+          <div class="model-left">
             <div class="model-name">{{ model.name }}</div>
           </div>
 
@@ -241,15 +211,10 @@
     border-color: var(--color-primary);
   }
 
-  .model-card.default {
-    border-color: var(--color-primary);
-  }
-
   .model-left {
     display: flex;
     align-items: center;
     flex: 1;
-    cursor: pointer;
   }
 
   .model-name {
@@ -263,38 +228,6 @@
     display: flex;
     gap: var(--spacing-xs);
     flex-shrink: 0;
-  }
-
-  .option-radio {
-    flex-shrink: 0;
-  }
-
-  .radio-button {
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--border-300);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
-  }
-
-  .radio-button.checked {
-    border-color: var(--color-primary);
-  }
-
-  .radio-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background-color: var(--color-primary);
-    opacity: 0;
-    transition: opacity 0.2s ease;
-  }
-
-  .radio-button.checked .radio-dot {
-    opacity: 1;
   }
 
   /* 加载状态 */

@@ -8,14 +8,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::pin::Pin;
 
-
 // ===== AI提供商类型 =====
 
 // ===== AI模型配置 =====
 // 重新导出Repository中的类型
 pub use crate::storage::repositories::ai_models::{AIModelConfig, AIProvider};
-
-
 
 // ===== AI请求和响应类型 =====
 
@@ -82,21 +79,11 @@ pub struct AIResponseMetadata {
 #[serde(rename_all = "camelCase")]
 pub struct AISettings {
     pub models: Vec<AIModelConfig>,
-    pub default_model_id: Option<String>,
     pub features: AIFeatureSettings,
     pub performance: AIPerformanceSettings,
 }
 
 impl AISettings {
-    /// 获取默认模型
-    pub fn default_model(&self) -> Option<&AIModelConfig> {
-        if let Some(default_id) = &self.default_model_id {
-            self.models.iter().find(|m| &m.id == default_id)
-        } else {
-            self.models.iter().find(|m| m.is_default())
-        }
-    }
-
     /// 根据ID查找模型
     pub fn find_model(&self, id: &str) -> Option<&AIModelConfig> {
         self.models.iter().find(|m| m.id == id)
@@ -109,16 +96,9 @@ impl AISettings {
 
     /// 添加模型
     pub fn add_model(&mut self, model: AIModelConfig) -> Result<(), String> {
-
-
         // 检查ID是否已存在
         if self.models.iter().any(|m| m.id == model.id) {
             return Err(format!("Model with ID '{}' already exists", model.id));
-        }
-
-        // 如果这是第一个模型，设置为默认
-        if self.models.is_empty() {
-            self.default_model_id = Some(model.id.clone());
         }
 
         self.models.push(model);
@@ -133,51 +113,12 @@ impl AISettings {
             .position(|m| m.id == id)
             .ok_or_else(|| format!("Model with ID '{id}' not found"))?;
 
-        let removed_model = self.models.remove(index);
-
-        // 如果移除的是默认模型，清除默认设置
-        if Some(&removed_model.id) == self.default_model_id.as_ref() {
-            self.default_model_id = None;
-            // 如果还有其他模型，选择第一个作为默认
-            if let Some(first_model) = self.models.first() {
-                self.default_model_id = Some(first_model.id.clone());
-            }
-        }
-
-        Ok(())
-    }
-
-    /// 设置默认模型
-    pub fn set_default_model(&mut self, id: &str) -> Result<(), String> {
-        if !self.models.iter().any(|m| m.id == id) {
-            return Err(format!("Model with ID '{id}' not found"));
-        }
-
-        // 清除所有模型的默认标记
-        for model in &mut self.models {
-            model.set_default(false);
-        }
-
-        // 设置新的默认模型
-        if let Some(model) = self.find_model_mut(id) {
-            model.set_default(true);
-        }
-
-        self.default_model_id = Some(id.to_string());
+        self.models.remove(index);
         Ok(())
     }
 
     /// 验证设置
     pub fn validate(&self) -> Result<(), String> {
-
-
-        // 验证默认模型ID是否存在
-        if let Some(default_id) = &self.default_model_id {
-            if !self.models.iter().any(|m| &m.id == default_id) {
-                return Err("Default model ID does not exist".to_string());
-            }
-        }
-
         Ok(())
     }
 }

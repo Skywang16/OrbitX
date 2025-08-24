@@ -417,21 +417,6 @@ pub async fn update_ai_model(
         .to_tauri()
 }
 
-/// 设置默认AI模型
-#[tauri::command]
-pub async fn set_default_ai_model(
-    model_id: String,
-    state: State<'_, AIManagerState>,
-) -> Result<(), String> {
-    info!("设置默认AI模型: {}", model_id);
-
-    state
-        .ai_service
-        .set_default_model(&model_id)
-        .await
-        .to_tauri()
-}
-
 /// 测试AI模型连接（基于表单数据）
 #[tauri::command]
 pub async fn test_ai_connection_with_config(
@@ -507,12 +492,14 @@ pub async fn get_context_config() -> Result<crate::ai::enhanced_context::Context
 pub async fn update_context_config(
     config: crate::ai::enhanced_context::ContextConfig,
 ) -> Result<(), String> {
-    info!("更新上下文配置: max_tokens={}, compress_threshold={}", 
-        config.max_tokens, config.compress_threshold);
-    
+    info!(
+        "更新上下文配置: max_tokens={}, compress_threshold={}",
+        config.max_tokens, config.compress_threshold
+    );
+
     // TODO: 实现配置持久化
     // 可以保存到数据库或配置文件
-    
+
     Ok(())
 }
 
@@ -538,7 +525,7 @@ pub async fn invalidate_conversation_cache(conversation_id: i64) -> Result<(), S
     if conversation_id <= 0 {
         return Err("无效的会话ID".to_string());
     }
-    
+
     let manager = &*crate::ai::context::CONTEXT_MANAGER;
     manager.invalidate_cache(conversation_id);
     Ok(())

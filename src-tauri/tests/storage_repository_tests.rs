@@ -63,7 +63,6 @@ fn create_test_ai_model() -> AIModelConfig {
         api_key: "test-api-key-12345".to_string(),
         model: "gpt-4".to_string(),
         enabled: true,
-        is_default: Some(false),
         options: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),

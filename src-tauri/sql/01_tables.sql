@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS ai_models (
     api_url TEXT,
     api_key_encrypted TEXT,
     model_name TEXT NOT NULL,
-    is_default BOOLEAN DEFAULT FALSE,
     enabled BOOLEAN DEFAULT TRUE,
     config_json TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

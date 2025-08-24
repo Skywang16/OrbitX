@@ -9,7 +9,7 @@ use std::io::Read;
 use std::sync::{Arc, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use tracing::error;
+use tracing::debug;
 
 use crate::mux::{BatchProcessor, BatchProcessorConfig, MuxNotification, Pane, PaneId};
 use crate::shell::ShellIntegrationManager;
@@ -338,7 +338,8 @@ impl IoThreadPool {
                         break;
                     }
                     Err(e) => {
-                        error!("工作线程接收任务失败: {}", e);
+                        // 正常关闭路径：任务通道断开，降低为 debug 以减少测试噪音
+                        debug!("工作线程接收任务失败: {}", e);
                         break;
                     }
                 }

@@ -92,14 +92,6 @@ impl AIService {
         result
     }
 
-    pub async fn set_default_model(&self, model_id: &str) -> AppResult<()> {
-        let result = self.repositories.ai_models().set_default(model_id).await;
-        if result.is_ok() {
-            self.cache.remove("ai_models_list").await;
-        }
-        result
-    }
-
     pub async fn test_connection(&self, model_id: &str) -> AppResult<bool> {
         let model = self
             .repositories

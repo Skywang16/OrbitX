@@ -31,7 +31,6 @@ use ai::commands::{
     get_user_prefix_prompt,
     remove_ai_model,
     save_message,
-    set_default_ai_model,
     set_user_prefix_prompt,
 
     test_ai_connection_with_config,
@@ -339,7 +338,6 @@ pub fn run() {
             add_ai_model,
             update_ai_model,
             remove_ai_model,
-            set_default_ai_model,
             test_ai_connection_with_config,
             // AI会话上下文管理命令
             create_conversation,

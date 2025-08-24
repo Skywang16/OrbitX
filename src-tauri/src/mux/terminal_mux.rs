@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::mux::{
     IoHandler, IoThreadPoolStats, LocalPane, MuxNotification, Pane, PaneId, PtySize, TerminalConfig,
@@ -110,14 +110,12 @@ impl TerminalMux {
     ///
     /// 提供更高级的初始化，包括验证和错误处理
     pub fn new_with_validation() -> AppResult<Self> {
-        info!("开始带验证的TerminalMux初始化");
-
         let mux = Self::new();
 
         // 验证状态完整性
         mux.validate()?;
 
-        info!("带验证的TerminalMux初始化完成");
+        debug!("带验证的TerminalMux初始化完成");
         Ok(mux)
     }
 
@@ -128,8 +126,6 @@ impl TerminalMux {
     /// - 检查内部状态一致性
     /// - 提供详细的错误信息
     pub fn validate(&self) -> AppResult<()> {
-        debug!("开始验证TerminalMux状态");
-
         // 验证面板映射是否可访问
         let _unused = self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
         debug!("面板映射验证通过");
@@ -165,7 +161,7 @@ impl TerminalMux {
             pane_id_counter, subscriber_id_counter
         );
 
-        info!("TerminalMux状态验证完成");
+        debug!("TerminalMux状态验证完成");
         Ok(())
     }
 
@@ -230,11 +226,6 @@ impl TerminalMux {
         let start_time = Instant::now();
         let pane_id = self.next_pane_id();
 
-        info!(
-            "开始创建面板: pane_id={:?}, size={}x{}, shell={}",
-            pane_id, size.cols, size.rows, config.shell_config.program
-        );
-
         // 创建面板实例
         debug!("创建LocalPane实例: pane_id={:?}", pane_id);
         let pane = Arc::new(
@@ -274,7 +265,7 @@ impl TerminalMux {
         self.notify(MuxNotification::PaneAdded(pane_id));
 
         let processing_time = start_time.elapsed().as_millis();
-        info!(
+        debug!(
             "创建面板成功: pane_id={:?}, size={}x{}, shell={}, total_panes={}, 耗时={}ms",
             pane_id,
             size.cols,
@@ -309,7 +300,6 @@ impl TerminalMux {
     #[instrument(skip(self), fields(pane_id = ?pane_id))]
     pub fn remove_pane(&self, pane_id: PaneId) -> AppResult<()> {
         let start_time = Instant::now();
-        info!("开始移除面板: pane_id={:?}", pane_id);
 
         let pane = {
             debug!("获取面板写锁: pane_id={:?}", pane_id);
@@ -379,11 +369,6 @@ impl TerminalMux {
     #[instrument(skip(self, data), fields(pane_id = ?pane_id, data_len = data.len()))]
     pub fn write_to_pane(&self, pane_id: PaneId, data: &[u8]) -> AppResult<()> {
         let start_time = Instant::now();
-        debug!(
-            "开始写入数据到面板: pane_id={:?}, data_len={}",
-            pane_id,
-            data.len()
-        );
 
         let pane = self.get_pane(pane_id).ok_or_else(|| {
             error!("面板不存在: pane_id={:?}", pane_id);
@@ -412,10 +397,6 @@ impl TerminalMux {
     #[instrument(skip(self), fields(pane_id = ?pane_id, size = ?size))]
     pub fn resize_pane(&self, pane_id: PaneId, size: PtySize) -> AppResult<()> {
         let start_time = Instant::now();
-        info!(
-            "开始调整面板大小: pane_id={:?}, size={}x{}",
-            pane_id, size.cols, size.rows
-        );
 
         let pane = self.get_pane(pane_id).ok_or_else(|| {
             error!("面板不存在: pane_id={:?}", pane_id);
@@ -430,7 +411,7 @@ impl TerminalMux {
         self.notify(MuxNotification::PaneResized { pane_id, size });
 
         let processing_time = start_time.elapsed().as_millis();
-        info!(
+        debug!(
             "调整面板大小成功: pane_id={:?}, size={}x{}, 耗时={}ms",
             pane_id, size.cols, size.rows, processing_time
         );
@@ -448,9 +429,9 @@ impl TerminalMux {
 
         if let Ok(mut subscribers) = self.subscribers.write() {
             subscribers.insert(subscriber_id, Box::new(subscriber));
-            tracing::debug!("添加订阅者: {}", subscriber_id);
+            debug!("添加订阅者: {}", subscriber_id);
         } else {
-            tracing::error!("无法获取订阅者写锁");
+            error!("无法获取订阅者写锁");
         }
 
         subscriber_id
@@ -461,11 +442,11 @@ impl TerminalMux {
         if let Ok(mut subscribers) = self.subscribers.write() {
             let removed = subscribers.remove(&subscriber_id).is_some();
             if removed {
-                tracing::debug!("移除订阅者: {}", subscriber_id);
+                debug!("移除订阅者: {}", subscriber_id);
             }
             removed
         } else {
-            tracing::error!("无法获取订阅者写锁");
+            error!("无法获取订阅者写锁");
             false
         }
     }
@@ -477,9 +458,9 @@ impl TerminalMux {
         } else {
             // 从其他线程发送通知，使用通道发送到主线程
             if let Err(e) = self.notification_sender.send(notification) {
-                tracing::error!("跨线程通知发送失败: {}", e);
+                error!("跨线程通知发送失败: {}", e);
             } else {
-                tracing::debug!("跨线程通知已发送");
+                debug!("跨线程通知已发送");
             }
         }
     }
@@ -495,16 +476,16 @@ impl TerminalMux {
                 })) {
                     Ok(true) => {
                         // 订阅者处理成功，继续保持订阅
-                        tracing::trace!("订阅者 {} 处理通知成功", subscriber_id);
+                        trace!("订阅者 {} 处理通知成功", subscriber_id);
                     }
                     Ok(false) => {
                         // 订阅者返回false，标记为需要移除
-                        tracing::debug!("订阅者 {} 请求取消订阅", subscriber_id);
+                        debug!("订阅者 {} 请求取消订阅", subscriber_id);
                         dead_subscribers.push(subscriber_id);
                     }
                     Err(_) => {
                         // 订阅者回调panic，标记为需要移除
-                        tracing::error!("订阅者 {} 回调panic", subscriber_id);
+                        error!("订阅者 {} 回调panic", subscriber_id);
                         dead_subscribers.push(subscriber_id);
                     }
                 }
@@ -516,7 +497,7 @@ impl TerminalMux {
             if let Ok(mut subscribers) = self.subscribers.write() {
                 for subscriber_id in dead_subscribers {
                     subscribers.remove(&subscriber_id);
-                    tracing::debug!("清理无效订阅者: {}", subscriber_id);
+                    debug!("清理无效订阅者: {}", subscriber_id);
                 }
             }
         }
@@ -525,9 +506,9 @@ impl TerminalMux {
     /// 从任意线程发送通知到主线程
     pub fn notify_from_any_thread(&self, notification: MuxNotification) {
         if let Err(e) = self.notification_sender.send(notification) {
-            tracing::error!("跨线程通知发送失败: {}", e);
+            error!("跨线程通知发送失败: {}", e);
         } else {
-            tracing::debug!("跨线程通知已发送");
+            debug!("跨线程通知已发送");
         }
     }
 
@@ -547,14 +528,12 @@ impl TerminalMux {
     pub fn start_notification_processor(self: Arc<Self>) -> thread::JoinHandle<()> {
         let mux = Arc::clone(&self);
         thread::spawn(move || {
-            tracing::info!("通知处理线程已启动");
-
             // 取出接收器，避免重复访问
             let receiver = {
                 if let Ok(mut receiver_guard) = mux.notification_receiver.write() {
                     receiver_guard.take()
                 } else {
-                    tracing::error!("无法获取通知接收器");
+                    error!("无法获取通知接收器");
                     return;
                 }
             };
@@ -562,7 +541,6 @@ impl TerminalMux {
             if let Some(receiver) = receiver {
                 loop {
                     if mux.shutting_down.load(std::sync::atomic::Ordering::Relaxed) {
-                        tracing::info!("检测到关闭信号，退出通知处理线程");
                         break;
                     }
 
@@ -575,14 +553,11 @@ impl TerminalMux {
                             continue;
                         }
                         Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
-                            tracing::info!("通知通道已关闭，退出处理线程");
                             break;
                         }
                     }
                 }
             }
-
-            tracing::info!("通知处理线程已退出");
         })
     }
 
@@ -669,7 +644,7 @@ impl TerminalMux {
     pub fn create_debug_subscriber() -> SubscriberCallback {
         Box::new(|notification| {
             let (event_name, payload) = Self::notification_to_tauri_event(&notification);
-            tracing::info!("事件: {} -> {}", event_name, payload);
+            tracing::debug!("事件: {} -> {}", event_name, payload);
             true
         })
     }
@@ -768,7 +743,6 @@ impl TerminalMux {
 
     /// 清理所有资源
     pub fn shutdown(&self) -> AppResult<()> {
-        tracing::info!("开始关闭TerminalMux");
         let shutdown_start = std::time::Instant::now();
 
         // 标记为关闭状态，使通知处理线程能尽快退出
@@ -777,7 +751,7 @@ impl TerminalMux {
 
         // 获取所有面板ID和引用
         let pane_ids: Vec<PaneId> = self.list_panes();
-        tracing::info!("准备关闭 {} 个面板", pane_ids.len());
+        tracing::debug!("准备关闭 {} 个面板", pane_ids.len());
 
         // 立即标记所有面板为死亡状态，加速关闭过程
         {
@@ -823,7 +797,7 @@ impl TerminalMux {
         if let Ok(mut subscribers) = self.subscribers.write() {
             let count = subscribers.len();
             subscribers.clear();
-            tracing::info!("清理了 {} 个订阅者", count);
+            tracing::debug!("清理了 {} 个订阅者", count);
         } else {
             tracing::warn!("无法获取订阅者锁进行清理");
         }

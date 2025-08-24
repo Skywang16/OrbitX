@@ -13,7 +13,7 @@
 
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Runtime, State};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 use crate::mux::{
     get_mux, ErrorHandler, MuxNotification, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager,
@@ -96,7 +96,7 @@ pub async fn create_terminal<R: Runtime>(
     _state: State<'_, TerminalState>,
 ) -> Result<u32, String> {
     let start_time = Instant::now();
-    debug!("开始创建终端会话: {}x{}, 初始目录: {:?}", cols, rows, cwd);
+    debug!("创建终端会话: {}x{}, 初始目录: {:?}", cols, rows, cwd);
     debug!("当前Mux状态 - 面板数量: {}", get_mux().pane_count());
 
     // 参数验证
@@ -156,7 +156,7 @@ pub async fn write_to_terminal(
 ) -> Result<(), String> {
     let start_time = Instant::now();
     debug!(
-        "开始写入终端数据: ID={}, 数据长度={}, 数据预览: {:?}",
+        "写入终端数据: ID={}, 数据长度={}, 数据预览: {:?}",
         pane_id,
         data.len(),
         &data[..std::cmp::min(50, data.len())]
@@ -201,7 +201,7 @@ pub async fn resize_terminal(
     _state: State<'_, TerminalState>,
 ) -> Result<(), String> {
     let start_time = Instant::now();
-    debug!("开始调整终端大小: ID={}, 大小={}x{}", pane_id, cols, rows);
+    debug!("调整终端大小: ID={}, 大小={}x{}", pane_id, cols, rows);
 
     // 参数验证
     validate_terminal_size(rows, cols).map_err(handle_terminal_error)?;
@@ -241,7 +241,7 @@ pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> R
     let pane_id_obj = PaneId::from(pane_id);
 
     debug!(
-        "开始关闭终端会话: ID={}, 当前面板数量: {}",
+        "关闭终端会话: ID={}, 当前面板数量: {}",
         pane_id,
         mux.pane_count()
     );
@@ -290,7 +290,7 @@ pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> R
 #[tauri::command]
 pub async fn list_terminals(_state: State<'_, TerminalState>) -> Result<Vec<u32>, String> {
     let start_time = Instant::now();
-    debug!("开始获取终端列表");
+    debug!("获取终端列表");
 
     let mux = get_mux();
     let pane_ids: Vec<u32> = mux.list_panes().into_iter().map(|id| id.as_u32()).collect();
@@ -503,7 +503,7 @@ pub async fn set_terminal_buffer(pane_id: u32, content: String) -> Result<(), St
 #[tauri::command]
 pub async fn get_available_shells() -> Result<Vec<ShellInfo>, String> {
     let start_time = Instant::now();
-    debug!("开始获取可用shell列表");
+    debug!("获取可用shell列表");
 
     let shells = ErrorHandler::handle_panic("获取可用shell列表", || {
         ShellManager::detect_available_shells()
@@ -536,7 +536,7 @@ pub async fn get_available_shells() -> Result<Vec<ShellInfo>, String> {
 #[tauri::command]
 pub async fn get_default_shell() -> Result<ShellInfo, String> {
     let start_time = Instant::now();
-    debug!("开始获取系统默认shell");
+    debug!("获取系统默认shell");
 
     let default_shell =
         ErrorHandler::handle_panic("获取默认shell", || ShellManager::get_default_shell())
@@ -575,10 +575,9 @@ pub async fn validate_shell_path(path: String) -> Result<bool, String> {
 
     let processing_time = start_time.elapsed().as_millis();
     debug!(
-        "验证shell路径完成: path={}, valid={}, 耗时: {}ms",
+        "验证shell路径: path={}, valid={}, 耗时: {}ms",
         path, is_valid, processing_time
     );
-
     debug!("Shell路径验证详情: {} -> {}", path, is_valid);
     Ok(is_valid)
 }
@@ -611,15 +610,12 @@ pub async fn create_terminal_with_shell<R: Runtime>(
 
     let shell_info = match shell_name {
         Some(name) => {
-            info!(
-                "开始使用指定shell创建终端: {}, 大小: {}x{}",
-                name, cols, rows
-            );
+            debug!("使用指定shell创建终端: {}, 大小: {}x{}", name, cols, rows);
             ShellManager::find_shell_by_name(&name)
                 .ok_or_else(|| format!("Shell查找错误: 未找到shell '{}'", name))?
         }
         None => {
-            info!("开始使用默认shell创建终端, 大小: {}x{}", cols, rows);
+            debug!("使用默认shell创建终端, 大小: {}x{}", cols, rows);
             ShellManager::get_default_shell()
         }
     };
@@ -637,7 +633,7 @@ pub async fn create_terminal_with_shell<R: Runtime>(
     match mux.create_pane_with_config(size, &config).await {
         Ok(pane_id) => {
             let processing_time = start_time.elapsed().as_millis();
-            info!(
+            debug!(
                 "终端创建成功: ID={}, shell={}, 新的面板数量: {}, 耗时: {}ms",
                 pane_id.as_u32(),
                 config.shell_config.program,
@@ -663,7 +659,7 @@ pub async fn create_terminal_with_shell<R: Runtime>(
 #[tauri::command]
 pub async fn find_shell_by_name(shell_name: String) -> Result<Option<ShellInfo>, String> {
     let start_time = Instant::now();
-    info!("开始查找shell: {}", shell_name);
+    debug!("查找shell: {}", shell_name);
 
     // 参数验证
     if shell_name.trim().is_empty() {
@@ -678,14 +674,14 @@ pub async fn find_shell_by_name(shell_name: String) -> Result<Option<ShellInfo>,
 
             match &shell_info {
                 Some(shell) => {
-                    info!(
+                    debug!(
                         "查找shell成功: name={}, path={}, 耗时: {}ms",
                         shell.name, shell.path, processing_time
                     );
                     debug!("找到shell详情: {:?}", shell);
                 }
                 None => {
-                    info!(
+                    debug!(
                         "未找到shell: name={}, 耗时: {}ms",
                         shell_name, processing_time
                     );
@@ -711,7 +707,7 @@ pub async fn find_shell_by_name(shell_name: String) -> Result<Option<ShellInfo>,
 #[tauri::command]
 pub async fn find_shell_by_path(shell_path: String) -> Result<Option<ShellInfo>, String> {
     let start_time = Instant::now();
-    info!("开始根据路径查找shell: {}", shell_path);
+    debug!("根据路径查找shell: {}", shell_path);
 
     // 参数验证
     if shell_path.trim().is_empty() {
@@ -726,14 +722,14 @@ pub async fn find_shell_by_path(shell_path: String) -> Result<Option<ShellInfo>,
 
             match &shell_info {
                 Some(shell) => {
-                    info!(
+                    debug!(
                         "根据路径查找shell成功: path={}, name={}, 耗时: {}ms",
                         shell.path, shell.name, processing_time
                     );
                     debug!("找到shell详情: {:?}", shell);
                 }
                 None => {
-                    info!(
+                    debug!(
                         "根据路径未找到shell: path={}, 耗时: {}ms",
                         shell_path, processing_time
                     );
@@ -759,7 +755,7 @@ pub async fn find_shell_by_path(shell_path: String) -> Result<Option<ShellInfo>,
 #[tauri::command]
 pub async fn get_shell_stats() -> Result<ShellManagerStats, String> {
     let start_time = Instant::now();
-    info!("开始获取Shell管理器统计信息");
+    debug!("获取Shell管理器统计信息");
 
     match std::panic::catch_unwind(|| {
         let manager = ShellManager::new();
@@ -767,7 +763,7 @@ pub async fn get_shell_stats() -> Result<ShellManagerStats, String> {
     }) {
         Ok(stats) => {
             let processing_time = start_time.elapsed().as_millis();
-            info!(
+            debug!(
                 "获取Shell统计信息成功: available={}, default={:?}, 耗时: {}ms",
                 stats.available_shells, stats.default_shell, processing_time
             );
@@ -792,7 +788,7 @@ pub async fn get_shell_stats() -> Result<ShellManagerStats, String> {
 #[tauri::command]
 pub async fn initialize_shell_manager() -> Result<(), String> {
     let start_time = Instant::now();
-    info!("开始初始化Shell管理器");
+    debug!("初始化Shell管理器");
 
     // ShellManager 不需要单独的初始化方法，创建实例时自动初始化
     match std::panic::catch_unwind(|| {
@@ -800,7 +796,7 @@ pub async fn initialize_shell_manager() -> Result<(), String> {
     }) {
         Ok(()) => {
             let processing_time = start_time.elapsed().as_millis();
-            info!("Shell管理器初始化成功, 耗时: {}ms", processing_time);
+            debug!("Shell管理器初始化成功, 耗时: {}ms", processing_time);
             Ok(())
         }
         Err(_) => {
@@ -820,7 +816,7 @@ pub async fn initialize_shell_manager() -> Result<(), String> {
 #[tauri::command]
 pub async fn validate_shell_manager() -> Result<(), String> {
     let start_time = Instant::now();
-    info!("开始验证Shell管理器状态");
+    debug!("验证Shell管理器状态");
 
     // ShellManager 不需要单独的验证方法，创建实例时自动验证
     match std::panic::catch_unwind(|| {
@@ -829,7 +825,7 @@ pub async fn validate_shell_manager() -> Result<(), String> {
     }) {
         Ok(()) => {
             let processing_time = start_time.elapsed().as_millis();
-            info!("Shell管理器验证成功, 耗时: {}ms", processing_time);
+            debug!("Shell管理器验证成功, 耗时: {}ms", processing_time);
             Ok(())
         }
         Err(_) => {

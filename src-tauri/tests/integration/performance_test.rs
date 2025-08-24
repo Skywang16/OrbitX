@@ -46,9 +46,6 @@ pub(crate) struct PerformanceTestResult {
 
     /// 平均每秒写入次数
     writes_per_second: f64,
-
-    /// 内存使用（MB），可能在部分平台不可用
-    memory_usage_mb: Option<f64>,
 }
 
 /// 执行基本性能测试
@@ -177,7 +174,7 @@ pub(crate) async fn run_basic_performance_test(
         info!("面板清理验证通过");
     }
 
-    let total_duration = start_time.elapsed();
+    let _total_duration = start_time.elapsed();
     let writes_per_second = if write_duration.as_secs_f64() > 0.0 {
         successful_writes as f64 / write_duration.as_secs_f64()
     } else {
@@ -190,7 +187,6 @@ pub(crate) async fn run_basic_performance_test(
         failed_writes,
 
         writes_per_second,
-        memory_usage_mb: get_memory_usage(),
     };
 
     info!("性能测试完成: {:?}", result);
@@ -296,12 +292,7 @@ pub async fn run_concurrent_stability_test() -> Result<(), Box<dyn std::error::E
     Ok(())
 }
 
-/// 获取内存使用情况（简化版本）
-fn get_memory_usage() -> Option<f64> {
-    // 在实际应用中，可以使用 sysinfo 或其他库获取内存使用情况
-    // 这里返回 None 表示暂不支持
-    None
-}
+// 已移除内存占用调试字段与辅助函数，避免无意义代码噪音
 
 /// 运行所有性能测试
 pub async fn run_all_performance_tests() -> Result<(), Box<dyn std::error::Error>> {

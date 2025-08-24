@@ -20,12 +20,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
   const isInitialized = ref(false) // 是否已初始化
 
   // ===== 计算属性 =====
-  // 获取当前默认模型配置
-  const defaultModel = computed(() => {
-    if (!settings.value?.defaultModelId) return null
-    return settings.value?.models.find(m => m.id === settings.value?.defaultModelId) || null
-  })
-
   // 检查是否有配置的模型
   const hasModels = computed(() => {
     return (settings.value?.models?.length || 0) > 0
@@ -43,27 +37,17 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
 
   // ===== 操作方法 =====
   /**
-   * 从API获取模型数据
-   */
-  const fetchModelsFromAPI = async () => {
-    const models = await aiApi.getModels()
-    const defaultModelId = models.find(m => m.isDefault)?.id || null
-    return { models, defaultModelId }
-  }
-
-  /**
    * 刷新模型数据
    * 强制从API重新获取模型列表
    */
   const refreshModels = async () => {
     try {
-      const { models, defaultModelId } = await fetchModelsFromAPI()
+      const models = await aiApi.getModels()
 
       if (settings.value) {
         settings.value = {
           ...settings.value,
           models,
-          defaultModelId,
         }
       }
 
@@ -89,12 +73,11 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
 
     try {
       // 从AI API获取模型数据
-      const { models, defaultModelId } = await fetchModelsFromAPI()
+      const models = await aiApi.getModels()
 
       // 目前先构造一个基本的设置对象
       settings.value = {
         models,
-        defaultModelId,
         features: {
           chat: { enabled: true, maxHistoryLength: 1000, autoSaveHistory: true, contextWindowSize: 4000 },
         },
@@ -189,20 +172,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
   }
 
   /**
-   * 设置默认AI模型
-   * @param modelId 要设为默认的模型ID，null表示清除默认模型
-   */
-  const setDefaultModel = async (modelId: string | null) => {
-    // 使用AI API设置默认模型
-    if (modelId) {
-      await aiApi.setDefaultModel(modelId)
-    }
-
-    // 刷新模型数据，确保所有组件同步更新
-    await refreshModels()
-  }
-
-  /**
    * 重置所有设置为默认值
    */
   const resetToDefaults = async () => {
@@ -226,7 +195,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
     isInitialized, // 是否已初始化
 
     // ===== 计算属性 =====
-    defaultModel, // 当前默认模型
     hasModels, // 是否有配置的模型
     enabledModels, // 所有启用的模型
     models, // 模型列表（供AI设置页面使用）
@@ -238,7 +206,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
     addModel, // 添加模型
     updateModel, // 更新模型
     removeModel, // 删除模型
-    setDefaultModel, // 设置默认模型
     resetToDefaults, // 重置为默认设置
     clearError, // 清除错误
   }

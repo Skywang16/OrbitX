@@ -72,8 +72,6 @@ pub struct AIModelConfig {
     pub api_url: String,
     pub api_key: String,
     pub model: String,
-    #[serde(default)]
-    pub is_default: Option<bool>,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
     #[serde(default)]
@@ -100,21 +98,11 @@ impl AIModelConfig {
             api_url,
             api_key,
             model,
-            is_default: Some(false),
             enabled: true,
             options: None,
             created_at: now,
             updated_at: now,
         }
-    }
-
-    pub fn is_default(&self) -> bool {
-        self.is_default.unwrap_or(false)
-    }
-
-    pub fn set_default(&mut self, is_default: bool) {
-        self.is_default = Some(is_default);
-        self.updated_at = Utc::now();
     }
 }
 
@@ -136,7 +124,6 @@ impl RowMapper<AIModelConfig> for AIModelConfig {
             api_url: row.try_get("api_url")?,
             api_key: String::new(), // 加密的API密钥需要单独解密
             model: row.try_get("model_name")?,
-            is_default: Some(row.try_get("is_default")?),
             enabled: row.try_get("enabled")?,
             options,
             created_at: row.try_get("created_at")?,
@@ -165,7 +152,6 @@ impl AIModelRepository {
                 "api_url",
                 "api_key_encrypted",
                 "model_name",
-                "is_default",
                 "enabled",
                 "config_json",
                 "created_at",
@@ -233,35 +219,6 @@ impl AIModelRepository {
         Ok(models)
     }
 
-    /// 获取默认AI模型
-    pub async fn find_default(&self) -> AppResult<Option<AIModelConfig>> {
-        let models = self.find_all_with_decrypted_keys().await?;
-        Ok(models.into_iter().find(|m| m.is_default()))
-    }
-
-    /// 设置默认AI模型
-    pub async fn set_default(&self, model_id: &str) -> AppResult<()> {
-        let mut tx = self.database.pool().begin().await?;
-
-        // 清除所有默认标记
-        sqlx::query("UPDATE ai_models SET is_default = FALSE")
-            .execute(&mut *tx)
-            .await?;
-
-        // 设置新的默认模型
-        let result = sqlx::query("UPDATE ai_models SET is_default = TRUE WHERE id = ?")
-            .bind(model_id)
-            .execute(&mut *tx)
-            .await?;
-
-        if result.rows_affected() == 0 {
-            return Err(anyhow!("模型ID不存在: {}", model_id));
-        }
-
-        tx.commit().await?;
-        Ok(())
-    }
-
     /// 保存AI模型（加密API密钥）
     pub async fn save_with_encryption(&self, model: &AIModelConfig) -> AppResult<i64> {
         debug!("保存AI模型: {}", model.name);
@@ -297,7 +254,6 @@ impl AIModelRepository {
                     .unwrap_or(Value::Null),
             )
             .set("model_name", Value::String(model.model.clone()))
-            .set("is_default", Value::Bool(model.is_default()))
             .set("enabled", Value::Bool(model.enabled))
             .set(
                 "config_json",

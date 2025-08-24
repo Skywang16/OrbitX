@@ -299,14 +299,6 @@ export class AiApi {
     }
   }
 
-  async setDefaultModel(id: string): Promise<void> {
-    try {
-      await invoke('set_default_ai_model', { model_id: id })
-    } catch (error) {
-      throw new Error(handleError(error, '设置默认AI模型失败'))
-    }
-  }
-
   async testConnectionWithConfig(config: AIModelConfig): Promise<boolean> {
     try {
       return await invoke<boolean>('test_ai_connection_with_config', { config })

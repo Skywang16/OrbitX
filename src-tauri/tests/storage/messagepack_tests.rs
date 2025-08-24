@@ -5,15 +5,13 @@
  * 验证数据完整性、错误处理和性能表现
  */
 
-use std::collections::HashMap;
-use std::time::SystemTime;
 use tempfile::TempDir;
 use tokio::fs;
 
 use terminal_lib::storage::{
     messagepack::{MessagePackManager, MessagePackOptions},
     paths::StoragePaths,
-    types::{SessionState, TerminalState, UiState, WindowState},
+    types::{SessionState, TerminalState, UiState},
 };
 use terminal_lib::utils::error::AppResult;
 
@@ -46,13 +44,6 @@ fn create_test_session_state() -> SessionState {
 
     SessionState {
         version: 1,
-        window: WindowState {
-            x: 100,
-            y: 200,
-            width: 1200,
-            height: 800,
-            maximized: false,
-        },
         terminals,
         ui: UiState {
             theme: "dark".to_string(),
@@ -175,8 +166,6 @@ async fn test_save_and_load_state() {
 
     // 验证加载的数据与原始数据一致
     assert_eq!(original_state.version, loaded_state.version);
-    assert_eq!(original_state.window.x, loaded_state.window.x);
-    assert_eq!(original_state.window.y, loaded_state.window.y);
     assert_eq!(original_state.terminals.len(), loaded_state.terminals.len());
 }
 

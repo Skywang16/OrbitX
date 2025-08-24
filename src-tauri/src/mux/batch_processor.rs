@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-use tracing::error;
+use tracing::debug;
 
 use crate::mux::{MuxNotification, Pane, PaneId};
 use crate::shell::ShellIntegrationManager;
@@ -199,7 +199,8 @@ impl BatchProcessor {
                         // 没有新任务，继续处理现有面板
                     }
                     Err(crossbeam_channel::TryRecvError::Disconnected) => {
-                        error!("批处理线程 {} 任务通道已断开", processor_id);
+                        // 正常关闭路径：任务通道断开，使用 debug 降低噪音
+                        debug!("批处理线程 {} 任务通道已断开", processor_id);
                         break;
                     }
                 }

@@ -112,7 +112,7 @@
   }
 
   // ===== 模型选择器相关 =====
-  const selectedModelId = ref<string | null>(aiSettingsStore.defaultModel?.id || null)
+  const selectedModelId = ref<string | null>(aiSettingsStore.enabledModels[0]?.id || null)
 
   // 计算模型选项
   const modelOptions = computed(() => {
@@ -125,9 +125,7 @@
   // 处理模型切换
   const handleModelChange = (modelId: string | null) => {
     selectedModelId.value = modelId
-    if (modelId) {
-      aiSettingsStore.setDefaultModel(modelId)
-    }
+    // 注意：这里只是更新本地选中状态，不再设置全局默认模型
   }
 
   // ===== 响应式数据 =====
@@ -146,11 +144,13 @@
     }
   }
 
-  // 监听默认模型变化，同步选中状态
+  // 监听模型列表变化，确保选中的模型仍然有效
   watch(
-    () => aiSettingsStore.defaultModel?.id,
-    newModelId => {
-      selectedModelId.value = newModelId || null
+    () => aiSettingsStore.enabledModels,
+    newModels => {
+      if (newModels.length > 0 && !newModels.find(m => m.id === selectedModelId.value)) {
+        selectedModelId.value = newModels[0].id
+      }
     }
   )
 

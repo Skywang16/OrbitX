@@ -11,8 +11,6 @@
 pub mod commands;
 pub mod context;
 pub mod enhanced_context;
-#[cfg(test)]
-pub mod enhanced_context_tests;
 pub mod service;
 pub mod tool;
 pub mod types;
