@@ -284,18 +284,32 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         }
         await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
       } else {
+        // 处理eko返回的错误结果
         tempAIMessage.status = 'error'
+        tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
+
+        // 添加具体的错误信息
+        const errorMessage = response.result || response.error || '未知错误'
         tempAIMessage.steps?.push({
           type: 'error',
-          content: '消息发送失败',
+          content: `AI任务执行失败: ${errorMessage}`,
           timestamp: Date.now(),
           metadata: {
-            errorType: 'SendError',
-            errorDetails: response.error || '未知错误',
+            errorType: 'EkoError',
+            errorDetails: response.error,
           },
         })
+
+        // 强制触发Vue响应式更新
+        const messageIndex = messageList.value.findIndex(m => m.id === tempAIMessage.id)
+        if (messageIndex !== -1) {
+          messageList.value[messageIndex] = { ...tempAIMessage }
+        }
+
+        // 更新数据库
         if (tempAIMessage.steps) {
           try {
+            await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
             await aiApi.updateMessageSteps(tempAIMessage.id, tempAIMessage.steps)
           } catch {
             // 静默失败
@@ -306,32 +320,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       // 11. 刷新会话列表以更新预览（不重新加载消息，保持步骤信息）
       await refreshConversations()
     } catch (err) {
-      // 修复UI状态同步问题：确保在异常情况下也更新消息状态
-      if (tempAIMessage) {
-        tempAIMessage.status = 'error'
-        tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
-
-        // 添加错误步骤，显示具体错误信息
-        tempAIMessage.steps = tempAIMessage.steps || []
-        tempAIMessage.steps.push({
-          type: 'error',
-          content: `AI任务执行失败: ${err instanceof Error ? err.message : '未知错误'}`,
-          timestamp: Date.now(),
-          metadata: {
-            errorType: 'ExecutionError',
-            errorDetails: err instanceof Error ? err.stack : String(err),
-          },
-        })
-
-        // 尝试更新数据库中的消息状态
-        try {
-          await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
-          await aiApi.updateMessageSteps(tempAIMessage.id, tempAIMessage.steps)
-        } catch {
-          // 静默失败，避免二次错误
-        }
-      }
-
       error.value = handleErrorWithMessage(err, '发送消息失败')
       throw err
     } finally {
@@ -504,30 +492,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               if (message.streamDone) {
                 tempMessage.content = message.text
               }
-              break
-
-            case 'error':
-              // 处理错误消息，立即更新UI状态
-              console.error('🚨 Eko错误:', (message as any).error)
-
-              // 立即更新UI中的消息状态
-              tempMessage.status = 'error'
-              tempMessage.duration = Date.now() - tempMessage.createdAt.getTime()
-
-              // 添加错误步骤到UI（数据库保存由其他地方处理）
-              tempMessage.steps = tempMessage.steps || []
-              tempMessage.steps.push({
-                type: 'error',
-                content: `AI任务执行失败: ${(message as any).error}`,
-                timestamp: Date.now(),
-                metadata: {
-                  errorType: 'LLMError',
-                  errorDetails: String((message as any).error),
-                },
-              })
-
-              // 清除流式内容
-              streamingContent.value = ''
               break
           }
 

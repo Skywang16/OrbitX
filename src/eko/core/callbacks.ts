@@ -77,7 +77,12 @@ export const createCallback = (): TerminalCallback => {
  */
 export const createSidebarCallback = (onMessage?: (message: any) => Promise<void>): TerminalCallback => {
   return {
-    onMessage: onMessage || (async () => {}),
+    onMessage: async (message: any) => {
+      console.log('🔥 [DEBUG] createSidebarCallback收到消息:', message.type, message)
+      if (onMessage) {
+        await onMessage(message)
+      }
+    },
     onHumanConfirm: async () => true,
     onHumanInput: async () => '',
     onHumanSelect: async (_, __, options) => [options?.[0] || ''],
