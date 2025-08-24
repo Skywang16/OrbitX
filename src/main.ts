@@ -95,7 +95,7 @@ const initializeApplication = async () => {
     console.log('应用挂载完成')
 
     // 并行初始化其他系统
-    await Promise.allSettled([initializeStores(), initializeServices()])
+    await Promise.allSettled([initializeStores(), initializeSettings(), initializeServices()])
 
     // 设置窗口关闭监听器
     setupWindowCloseListener()
