@@ -73,9 +73,7 @@
   }
 
   .settings-sidebar {
-    min-width: 200px;
-    max-width: 320px;
-    width: 25%;
+    width: 220px;
     background-color: var(--bg-300);
     border-right: 1px solid var(--border-300);
     overflow-y: auto;
@@ -90,6 +88,6 @@
 
   .settings-panel {
     min-height: 100%;
-    padding-bottom: var(--spacing-xl);
+    padding: 0;
   }
 </style>

@@ -26,10 +26,10 @@
 
     <!-- 正常内容 -->
     <template v-else>
-      <div class="settings-card">
+      <div class="settings-group">
         <AIModelConfig />
       </div>
-      <div class="settings-card">
+      <div class="settings-group">
         <AIFeatureSettings />
       </div>
     </template>
@@ -38,13 +38,21 @@
 
 <style scoped>
   .ai-settings {
-    padding: 24px;
-    background: var(--bg-600);
-    min-height: 100vh;
+    padding: 24px 28px;
+    background: var(--bg-200);
+    min-height: 100%;
   }
 
-  .settings-card {
+  .settings-group {
     margin-bottom: 32px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border-300);
+  }
+
+  .settings-group:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
   }
 
   .loading-state,
@@ -52,8 +60,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 48px 24px;
-    background: var(--bg-500);
+    padding: 40px 32px;
+    background: var(--bg-300);
     border-radius: 4px;
     text-align: center;
   }
@@ -75,13 +83,13 @@
   }
 
   .error-icon {
-    font-size: 32px;
+    font-size: 28px;
     margin-bottom: 12px;
   }
 
   .error-state p {
-    color: var(--error-text);
-    font-size: 14px;
+    color: var(--text-200);
+    font-size: 15px;
     margin-bottom: 16px;
   }
 
@@ -91,7 +99,7 @@
     color: white;
     border-radius: 4px;
     padding: 8px 16px;
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .error-state :deep(.x-button:hover) {

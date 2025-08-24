@@ -37,12 +37,6 @@
 
   const currentThemeName = computed(() => theme.currentThemeName.value)
 
-  const systemStatus = computed(() => {
-    const isDark = theme.isSystemDark.value
-    if (isDark === null) return '未知'
-    return isDark ? '深色模式' : '浅色模式'
-  })
-
   // 主题选项 - 用于手动模式
   const manualThemeOptions = computed(() => {
     return theme.themeOptions.value.map((option: any) => ({
@@ -174,7 +168,7 @@
 <template>
   <div class="theme-settings">
     <!-- 模式选择 -->
-    <div class="settings-card">
+    <div class="settings-group">
       <h3 class="section-title">主题模式</h3>
       <div class="mode-selector">
         <label class="mode-option">
@@ -216,7 +210,7 @@
     </div>
 
     <!-- 手动模式设置 -->
-    <div v-if="currentMode === 'manual'" class="settings-card">
+    <div v-if="currentMode === 'manual'" class="settings-group">
       <h3 class="section-title">选择主题</h3>
       <div class="theme-grid">
         <div
@@ -242,28 +236,8 @@
     </div>
 
     <!-- 跟随系统模式设置 -->
-    <div v-if="currentMode === 'system'" class="settings-card">
+    <div v-if="currentMode === 'system'" class="settings-group">
       <h3 class="section-title">选择主题</h3>
-
-      <!-- 系统状态显示 -->
-      <div class="system-status">
-        <div class="status-content">
-          <div class="status-item">
-            <div class="status-item-icon" v-html="getIconSvg(theme.isSystemDark.value ? 'moon' : 'sun')"></div>
-            <div class="status-item-content">
-              <span class="status-label">当前系统主题</span>
-              <span class="status-value">{{ systemStatus }}</span>
-            </div>
-          </div>
-          <div class="status-item">
-            <div class="status-item-icon" v-html="getIconSvg('palette')"></div>
-            <div class="status-item-content">
-              <span class="status-label">正在使用</span>
-              <span class="status-value">{{ currentThemeName }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <!-- 主题选择器组 -->
       <div class="theme-selectors">
@@ -309,18 +283,28 @@
 
 <style scoped>
   .theme-settings {
-    padding: 24px;
-    background: var(--bg-600);
+    padding: 24px 28px;
+    background: var(--bg-200);
   }
 
-  .settings-card {
+  .settings-group {
     margin-bottom: 32px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border-300);
+  }
+
+  .settings-group:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
   }
 
   .section-title {
-    font-size: 20px;
+    font-size: 18px;
+    font-weight: 600;
     color: var(--text-100);
-    margin-bottom: 16px;
+    margin: 0 0 16px 0;
+    padding: 0;
   }
 
   .mode-selector {
@@ -336,8 +320,9 @@
   .mode-content {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     padding: 12px 16px;
-    background: var(--bg-500);
+    background: var(--bg-300);
     border-radius: 4px;
     cursor: pointer;
     transition: background 0.15s;
@@ -348,7 +333,7 @@
   }
 
   .mode-option input[type='radio']:checked + .mode-content {
-    background: var(--color-primary);
+    background: var(--color-primary-alpha);
   }
 
   .mode-left {
@@ -359,42 +344,79 @@
 
   .mode-icon {
     color: var(--text-300);
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
   }
 
   .mode-option input[type='radio']:checked + .mode-content .mode-icon {
-    color: white;
+    color: var(--color-primary);
   }
 
   .mode-label {
     color: var(--text-200);
-    font-size: 14px;
+    font-size: 15px;
+    font-weight: 500;
   }
 
   .mode-description {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-400);
-    margin-top: 2px;
+    margin-top: 4px;
   }
 
   .mode-option input[type='radio']:checked + .mode-content .mode-label,
   .mode-option input[type='radio']:checked + .mode-content .mode-description {
-    color: white;
+    color: var(--color-primary);
+  }
+
+  .option-radio {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .radio-button {
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--border-400);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .radio-button.checked {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+  }
+
+  .radio-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: white;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .radio-button.checked .radio-dot {
+    opacity: 1;
   }
 
   .theme-grid {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-top: 8px;
+    margin-top: 12px;
   }
 
   .theme-card {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     padding: 12px 16px;
-    background: var(--bg-500);
+    background: var(--bg-300);
     border-radius: 4px;
     cursor: pointer;
     transition: background 0.15s;
@@ -405,7 +427,7 @@
   }
 
   .theme-card.active {
-    background: var(--color-primary);
+    background: var(--color-primary-alpha);
   }
 
   .theme-left {
@@ -416,63 +438,22 @@
 
   .theme-icon {
     color: var(--text-300);
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
   }
 
   .theme-card.active .theme-icon {
-    color: white;
+    color: var(--color-primary);
   }
 
   .theme-name {
     color: var(--text-200);
-    font-size: 14px;
+    font-size: 15px;
+    font-weight: 500;
   }
 
   .theme-card.active .theme-name {
-    color: white;
-  }
-
-  .system-status {
-    margin-bottom: 24px;
-    padding: 16px;
-    background: var(--bg-500);
-    border-radius: 4px;
-    border-left: 3px solid var(--color-primary);
-  }
-
-  .status-content {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .status-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .status-item-icon {
-    color: var(--text-300);
-    width: 16px;
-    height: 16px;
-  }
-
-  .status-item-content {
-    display: flex;
-    justify-content: space-between;
-    flex: 1;
-  }
-
-  .status-label {
-    color: var(--text-200);
-    font-size: 13px;
-  }
-
-  .status-value {
     color: var(--color-primary);
-    font-size: 13px;
   }
 
   .theme-selectors {
@@ -485,52 +466,20 @@
   .selector-header {
     display: flex;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
     gap: 8px;
   }
 
   .selector-icon {
     color: var(--text-300);
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
   }
 
   .selector-title {
-    font-size: 14px;
+    font-size: 15px;
+    font-weight: 500;
     color: var(--text-200);
-  }
-
-  :deep(.x-select) {
-    background: var(--bg-500);
-    border: 1px solid var(--border-300);
-    border-radius: 4px;
-    color: var(--text-200);
-    font-size: 13px;
-  }
-
-  :deep(.x-select:focus) {
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px var(--color-primary-alpha);
-  }
-
-  :deep(.x-select-dropdown) {
-    background: var(--bg-400);
-    border: 1px solid var(--border-300);
-    border-radius: 4px;
-  }
-
-  :deep(.x-select-option) {
-    padding: 8px 12px;
-    font-size: 13px;
-    color: var(--text-200);
-  }
-
-  :deep(.x-select-option:hover) {
-    background: var(--bg-300);
-  }
-
-  :deep(.x-select-option.selected) {
-    background: var(--color-primary);
-    color: white;
+    margin: 0;
   }
 </style>

@@ -1,6 +1,6 @@
 <template>
   <div class="shortcut-settings">
-    <div class="settings-card">
+    <div class="settings-group">
       <h3 class="section-title">快捷键设置</h3>
       <!-- 冲突警告 -->
       <div v-if="hasConflicts" class="alert alert-warning">
@@ -294,29 +294,41 @@
 
 <style scoped>
   .shortcut-settings {
-    padding: 24px;
-    background: var(--bg-600);
+    padding: 24px 28px;
+    background: var(--bg-200);
+    margin-bottom: 24px;
   }
 
-  .settings-card {
+  .settings-group {
     margin-bottom: 32px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border-300);
+  }
+
+  .settings-group:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
   }
 
   .section-title {
-    font-size: 20px;
+    font-size: 18px;
+    font-weight: 600;
     color: var(--text-100);
-    margin-bottom: 16px;
+    margin: 0 0 16px 0;
+    padding: 0;
   }
 
   .alert {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
+    gap: 10px;
+    padding: 10px 14px;
     border-radius: 4px;
     margin-bottom: 16px;
-    background: var(--warning-bg);
-    color: var(--warning-text);
+    background: var(--color-warning);
+    color: white;
+    font-size: 14px;
   }
 
   .actions-list {
@@ -328,15 +340,15 @@
     align-items: center;
     justify-content: center;
     gap: 12px;
-    padding: 48px 24px;
+    padding: 32px;
     color: var(--text-400);
-    background: var(--bg-500);
+    background: var(--bg-300);
     border-radius: 4px;
   }
 
   .loading-spinner {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     border: 2px solid var(--border-300);
     border-top: 2px solid var(--color-primary);
     border-radius: 50%;
@@ -354,11 +366,12 @@
   }
 
   .action-category h4 {
-    margin-bottom: 12px;
+    margin: 0 0 12px 0;
     font-size: 16px;
-    color: var(--text-100);
+    font-weight: 500;
+    color: var(--text-200);
+    padding-bottom: 6px;
     border-bottom: 1px solid var(--border-300);
-    padding-bottom: 8px;
   }
 
   .action-items {
@@ -372,9 +385,9 @@
     justify-content: space-between;
     align-items: center;
     padding: 12px 16px;
-    background: var(--bg-500);
+    background: var(--bg-300);
     border-radius: 4px;
-    gap: 16px;
+    gap: 20px;
   }
 
   .action-item:hover {
@@ -384,15 +397,15 @@
   .action-name {
     flex: 1;
     color: var(--text-200);
-    font-size: 14px;
+    font-size: 15px;
   }
 
   .shortcut-key-editor {
     flex: 2;
-    min-width: 200px;
-    padding: 8px 12px;
+    min-width: 220px;
+    padding: 10px 14px;
     background: var(--bg-400);
-    border: 1px solid var(--border-300);
+    border: 1px solid transparent;
     border-radius: 4px;
     cursor: pointer;
     display: flex;
@@ -400,13 +413,13 @@
   }
 
   .shortcut-key-editor:hover {
-    background: var(--bg-300);
+    background: var(--bg-500);
   }
 
   .shortcut-key-editor.editing {
     border-color: var(--color-primary);
     background: var(--color-primary-alpha);
-    box-shadow: 0 0 0 2px var(--color-primary-alpha);
+    box-shadow: 0 0 0 1px var(--color-primary);
   }
 
   .shortcut-display {
@@ -417,21 +430,16 @@
 
   .not-configured {
     color: var(--text-400);
-    font-size: 13px;
-  }
-
-  .editing-hint {
-    color: var(--color-primary);
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .modifier,
   .key {
-    padding: 3px 8px;
-    background: var(--bg-300);
-    border-radius: 4px;
-    font-size: 11px;
-    font-family: var(--font-mono);
+    padding: 4px 8px;
+    background: var(--bg-500);
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: var(--font-family-mono);
     color: var(--text-200);
   }
 
@@ -445,21 +453,21 @@
     justify-content: flex-end;
     gap: 12px;
     padding-top: 16px;
-    border-top: 1px solid var(--border-300);
   }
 
   .actions-section :deep(.x-button) {
     background: transparent;
-    border: 1px solid var(--border-200);
+    border: 1px solid var(--border-300);
     color: var(--text-300);
     border-radius: 4px;
     padding: 8px 16px;
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .actions-section :deep(.x-button:hover) {
     background: var(--bg-400);
     color: var(--text-200);
+    border-color: var(--border-400);
   }
 
   .actions-section :deep(.x-button:disabled) {
