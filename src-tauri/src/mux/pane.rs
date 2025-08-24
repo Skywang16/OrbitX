@@ -196,7 +196,7 @@ impl LocalPane {
         // 启动子进程并监控
         match pty_pair.slave.spawn_command(cmd) {
             Ok(_child) => {
-                tracing::info!("Shell进程启动成功");
+                tracing::debug!("Shell进程启动成功");
             }
             Err(e) => {
                 tracing::error!("Shell进程启动失败: {:?}", e);
@@ -320,7 +320,7 @@ impl Pane for LocalPane {
     }
 
     fn mark_dead(&self) {
-        tracing::info!("标记面板为死亡状态: {:?}", self.pane_id);
+        tracing::debug!("标记面板为死亡状态: {:?}", self.pane_id);
         self.dead.store(true, Ordering::Relaxed);
     }
 

@@ -10,7 +10,7 @@ use crate::utils::error::{AppResult, ToTauriResult};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
-use tracing::{debug, info};
+use tracing::debug;
 
 /// 配置管理器状态
 pub struct ConfigManagerState {
@@ -105,7 +105,7 @@ pub async fn open_config_file<R: tauri::Runtime>(
     _app: tauri::AppHandle<R>,
     _state: State<'_, ConfigManagerState>,
 ) -> Result<(), String> {
-    info!("打开配置文件功能需要重新实现");
+    debug!("打开配置文件功能需要重新实现");
     Ok(())
 }
 

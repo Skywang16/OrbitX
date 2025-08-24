@@ -1,6 +1,6 @@
 /*!
  * 快捷键系统 Tauri 命令接口
- * 
+ *
  * 提供前端调用的快捷键管理API
  */
 
@@ -76,7 +76,7 @@ pub async fn validate_shortcuts_config(
     let manager = state.manager.lock().await;
     let result = manager.validate_config(&config).await.to_tauri()?;
 
-    info!("快捷键配置验证完成");
+    debug!("快捷键配置验证完成");
     Ok(result)
 }
 
@@ -91,7 +91,7 @@ pub async fn detect_shortcuts_conflicts(
     let manager = state.manager.lock().await;
     let result = manager.detect_conflicts(&config).await.to_tauri()?;
 
-    info!("快捷键冲突检测完成，发现 {} 个冲突", result.conflicts.len());
+    debug!("快捷键冲突检测完成，发现 {} 个冲突", result.conflicts.len());
     Ok(result)
 }
 
@@ -104,7 +104,9 @@ pub async fn add_shortcut(
 ) -> Result<(), String> {
     debug!("添加快捷键: {:?} 到类别 {}", binding, category);
 
-    let category = category.parse::<ShortcutCategory>().map_err(|e| e.to_string())?;
+    let category = category
+        .parse::<ShortcutCategory>()
+        .map_err(|e| e.to_string())?;
     let manager = state.manager.lock().await;
     manager.add_shortcut(category, binding).await.to_tauri()?;
 
@@ -121,7 +123,9 @@ pub async fn remove_shortcut(
 ) -> Result<ShortcutBinding, String> {
     debug!("删除快捷键: 类别 {}, 索引 {}", category, index);
 
-    let category = category.parse::<ShortcutCategory>().map_err(|e| e.to_string())?;
+    let category = category
+        .parse::<ShortcutCategory>()
+        .map_err(|e| e.to_string())?;
     let manager = state.manager.lock().await;
     let removed = manager.remove_shortcut(category, index).await.to_tauri()?;
 
@@ -137,11 +141,19 @@ pub async fn update_shortcut(
     binding: ShortcutBinding,
     state: State<'_, ShortcutManagerState>,
 ) -> Result<(), String> {
-    debug!("更新快捷键: 类别 {}, 索引 {}, 新绑定 {:?}", category, index, binding);
+    debug!(
+        "更新快捷键: 类别 {}, 索引 {}, 新绑定 {:?}",
+        category, index, binding
+    );
 
-    let category = category.parse::<ShortcutCategory>().map_err(|e| e.to_string())?;
+    let category = category
+        .parse::<ShortcutCategory>()
+        .map_err(|e| e.to_string())?;
     let manager = state.manager.lock().await;
-    manager.update_shortcut(category, index, binding).await.to_tauri()?;
+    manager
+        .update_shortcut(category, index, binding)
+        .await
+        .to_tauri()?;
 
     info!("更新快捷键成功");
     Ok(())
@@ -171,7 +183,7 @@ pub async fn get_shortcuts_statistics(
     let manager = state.manager.lock().await;
     let stats = manager.get_statistics().await.to_tauri()?;
 
-    info!("获取快捷键统计信息成功");
+    debug!("获取快捷键统计信息成功");
     Ok(stats)
 }
 
@@ -186,7 +198,7 @@ pub async fn search_shortcuts(
     let manager = state.manager.lock().await;
     let result = manager.search_shortcuts(options).await.to_tauri()?;
 
-    info!("快捷键搜索完成，找到 {} 个匹配项", result.total);
+    debug!("快捷键搜索完成，找到 {} 个匹配项", result.total);
     Ok(result)
 }
 
@@ -204,7 +216,11 @@ pub async fn execute_shortcut_action(
     // 解析按键组合
     let parts: Vec<&str> = key_combination.split('+').collect();
     let key = parts.last().map(|s| s.to_string()).unwrap_or_default();
-    let modifiers: Vec<String> = parts.iter().take(parts.len().saturating_sub(1)).map(|s| s.to_string()).collect();
+    let modifiers: Vec<String> = parts
+        .iter()
+        .take(parts.len().saturating_sub(1))
+        .map(|s| s.to_string())
+        .collect();
 
     let context = ActionContext {
         key_combination: KeyCombination::new(key, modifiers),
@@ -215,7 +231,7 @@ pub async fn execute_shortcut_action(
     let manager = state.manager.lock().await;
     let result = manager.execute_action(&action, &context).await;
 
-    info!("快捷键动作执行完成");
+    debug!("快捷键动作执行完成");
     Ok(result)
 }
 
@@ -245,8 +261,8 @@ pub async fn export_shortcuts_config(
     let manager = state.manager.lock().await;
     let config = manager.get_config().await.to_tauri()?;
 
-    let json_config = serde_json::to_string_pretty(&config)
-        .map_err(|e| format!("序列化配置失败: {}", e))?;
+    let json_config =
+        serde_json::to_string_pretty(&config).map_err(|e| format!("序列化配置失败: {}", e))?;
 
     info!("快捷键配置导出成功");
     Ok(json_config)
@@ -260,8 +276,8 @@ pub async fn import_shortcuts_config(
 ) -> Result<(), String> {
     debug!("导入快捷键配置");
 
-    let config: ShortcutsConfig = serde_json::from_str(&config_json)
-        .map_err(|e| format!("解析配置失败: {}", e))?;
+    let config: ShortcutsConfig =
+        serde_json::from_str(&config_json).map_err(|e| format!("解析配置失败: {}", e))?;
 
     let manager = state.manager.lock().await;
     manager.update_config(config).await.to_tauri()?;
@@ -282,7 +298,7 @@ pub async fn get_registered_actions(
     let registry_guard = registry.read().await;
     let actions = registry_guard.get_registered_actions().await;
 
-    info!("获取已注册动作列表成功，共 {} 个动作", actions.len());
+    debug!("获取已注册动作列表成功，共 {} 个动作", actions.len());
     Ok(actions)
 }
 
@@ -336,10 +352,10 @@ pub async fn validate_key_combination(
 
     // 检查是否为系统保留快捷键
     let system_reserved = [
-        ("alt", "f4"),     // Windows关闭窗口
-        ("cmd", "q"),      // macOS退出应用
-        ("cmd", "tab"),    // macOS切换应用
-        ("alt", "tab"),    // Windows/Linux切换窗口
+        ("alt", "f4"),  // Windows关闭窗口
+        ("cmd", "q"),   // macOS退出应用
+        ("cmd", "tab"), // macOS切换应用
+        ("alt", "tab"), // Windows/Linux切换窗口
     ];
 
     for (mod_key, reserved_key) in system_reserved {
@@ -385,10 +401,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_key_combination_validation() {
-        let result = validate_key_combination(
-            "c".to_string(),
-            vec!["cmd".to_string()],
-        ).await.unwrap();
+        let result = validate_key_combination("c".to_string(), vec!["cmd".to_string()])
+            .await
+            .unwrap();
 
         assert!(result.is_valid);
         assert!(result.errors.is_empty());
@@ -396,10 +411,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_key_validation() {
-        let result = validate_key_combination(
-            "".to_string(),
-            vec!["invalid".to_string()],
-        ).await.unwrap();
+        let result = validate_key_combination("".to_string(), vec!["invalid".to_string()])
+            .await
+            .unwrap();
 
         assert!(!result.is_valid);
         assert!(!result.errors.is_empty());

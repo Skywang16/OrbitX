@@ -11,7 +11,6 @@
 
 // 注意：移除未使用的 anyhow 导入，因为所有 Tauri 命令都直接返回 Result<T, String>
 
-use std::time::Instant;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tracing::{debug, error, warn};
 
@@ -95,7 +94,6 @@ pub async fn create_terminal<R: Runtime>(
     _app: AppHandle<R>,
     _state: State<'_, TerminalState>,
 ) -> Result<u32, String> {
-    let start_time = Instant::now();
     debug!("创建终端会话: {}x{}, 初始目录: {:?}", cols, rows, cwd);
     debug!("当前Mux状态 - 面板数量: {}", get_mux().pane_count());
 
@@ -120,17 +118,15 @@ pub async fn create_terminal<R: Runtime>(
 
     match result {
         Ok((pane_id, working_dir)) => {
-            let processing_time = start_time.elapsed().as_millis();
             let dir_info = working_dir
                 .map(|dir| format!(", 初始目录: {}", dir))
                 .unwrap_or_default();
 
             debug!(
-                "终端创建成功: ID={}{}, 新的面板数量: {}, 耗时: {}ms",
+                "终端创建成功: ID={}{}, 新的面板数量: {}",
                 pane_id.as_u32(),
                 dir_info,
-                mux.pane_count(),
-                processing_time
+                mux.pane_count()
             );
             Ok(pane_id.as_u32())
         }
@@ -154,7 +150,6 @@ pub async fn write_to_terminal(
     data: String,
     _state: State<'_, TerminalState>,
 ) -> Result<(), String> {
-    let start_time = Instant::now();
     debug!(
         "写入终端数据: ID={}, 数据长度={}, 数据预览: {:?}",
         pane_id,
@@ -175,8 +170,7 @@ pub async fn write_to_terminal(
 
     match mux.write_to_pane(pane_id_obj, data.as_bytes()) {
         Ok(_) => {
-            let processing_time = start_time.elapsed().as_millis();
-            debug!("写入终端成功: ID={}, 耗时: {}ms", pane_id, processing_time);
+            debug!("写入终端成功: ID={}", pane_id);
             Ok(())
         }
         Err(e) => Err(handle_terminal_error(TerminalError::pane(
@@ -200,7 +194,6 @@ pub async fn resize_terminal(
     cols: u16,
     _state: State<'_, TerminalState>,
 ) -> Result<(), String> {
-    let start_time = Instant::now();
     debug!("调整终端大小: ID={}, 大小={}x{}", pane_id, cols, rows);
 
     // 参数验证
@@ -212,11 +205,7 @@ pub async fn resize_terminal(
 
     match mux.resize_pane(pane_id_obj, size) {
         Ok(_) => {
-            let processing_time = start_time.elapsed().as_millis();
-            debug!(
-                "调整终端大小成功: ID={}, 耗时: {}ms",
-                pane_id, processing_time
-            );
+            debug!("调整终端大小成功: ID={}", pane_id);
             Ok(())
         }
         Err(e) => Err(handle_terminal_error(TerminalError::pane(
@@ -236,7 +225,6 @@ pub async fn resize_terminal(
 /// - 防御性编程：优雅处理面板不存在的情况
 #[tauri::command]
 pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> Result<(), String> {
-    let start_time = Instant::now();
     let mux = get_mux();
     let pane_id_obj = PaneId::from(pane_id);
 
@@ -249,12 +237,10 @@ pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> R
     // 原子操作：直接尝试删除面板，避免检查和删除之间的竞态条件
     match mux.remove_pane(pane_id_obj) {
         Ok(_) => {
-            let processing_time = start_time.elapsed().as_millis();
             debug!(
-                "关闭终端成功: ID={}, 剩余面板数量: {}, 耗时: {}ms",
+                "关闭终端成功: ID={}, 剩余面板数量: {}",
                 pane_id,
-                mux.pane_count(),
-                processing_time
+                mux.pane_count()
             );
             Ok(())
         }
@@ -263,11 +249,7 @@ pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> R
             let error_str = e.to_string();
             if error_str.contains("not found") || error_str.contains("不存在") {
                 // 面板不存在，认为操作成功
-                let processing_time = start_time.elapsed().as_millis();
-                warn!(
-                    "尝试关闭不存在的面板: ID={}, 可能已被其他操作关闭, 耗时: {}ms",
-                    pane_id, processing_time
-                );
+                warn!("尝试关闭不存在的面板: ID={}, 可能已被其他操作关闭", pane_id);
                 Ok(())
             } else {
                 // 其他错误，返回失败
@@ -289,18 +271,12 @@ pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> R
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn list_terminals(_state: State<'_, TerminalState>) -> Result<Vec<u32>, String> {
-    let start_time = Instant::now();
     debug!("获取终端列表");
 
     let mux = get_mux();
     let pane_ids: Vec<u32> = mux.list_panes().into_iter().map(|id| id.as_u32()).collect();
 
-    let processing_time = start_time.elapsed().as_millis();
-    debug!(
-        "获取终端列表成功: count={}, 耗时: {}ms",
-        pane_ids.len(),
-        processing_time
-    );
+    debug!("获取终端列表成功: count={}", pane_ids.len());
     debug!("当前终端列表: {:?}", pane_ids);
     Ok(pane_ids)
 }
@@ -502,7 +478,6 @@ pub async fn set_terminal_buffer(pane_id: u32, content: String) -> Result<(), St
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn get_available_shells() -> Result<Vec<ShellInfo>, String> {
-    let start_time = Instant::now();
     debug!("获取可用shell列表");
 
     let shells = ErrorHandler::handle_panic("获取可用shell列表", || {
@@ -510,12 +485,7 @@ pub async fn get_available_shells() -> Result<Vec<ShellInfo>, String> {
     })
     .map_err(handle_terminal_error)?;
 
-    let processing_time = start_time.elapsed().as_millis();
-    debug!(
-        "获取可用shell列表成功: count={}, 耗时: {}ms",
-        shells.len(),
-        processing_time
-    );
+    debug!("获取可用shell列表成功: count={}", shells.len());
 
     for shell in &shells {
         debug!(
@@ -535,17 +505,15 @@ pub async fn get_available_shells() -> Result<Vec<ShellInfo>, String> {
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn get_default_shell() -> Result<ShellInfo, String> {
-    let start_time = Instant::now();
     debug!("获取系统默认shell");
 
     let default_shell =
         ErrorHandler::handle_panic("获取默认shell", || ShellManager::get_default_shell())
             .map_err(handle_terminal_error)?;
 
-    let processing_time = start_time.elapsed().as_millis();
     debug!(
-        "获取默认shell成功: {} -> {}, 耗时: {}ms",
-        default_shell.name, default_shell.path, processing_time
+        "获取默认shell成功: {} -> {}",
+        default_shell.name, default_shell.path
     );
 
     debug!(
@@ -564,8 +532,6 @@ pub async fn get_default_shell() -> Result<ShellInfo, String> {
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn validate_shell_path(path: String) -> Result<bool, String> {
-    let start_time = Instant::now();
-
     // 参数验证
     validate_non_empty_string(&path, "Shell路径").map_err(handle_terminal_error)?;
 
@@ -573,11 +539,7 @@ pub async fn validate_shell_path(path: String) -> Result<bool, String> {
         ErrorHandler::handle_panic("验证shell路径", || ShellManager::validate_shell(&path))
             .map_err(handle_terminal_error)?;
 
-    let processing_time = start_time.elapsed().as_millis();
-    debug!(
-        "验证shell路径: path={}, valid={}, 耗时: {}ms",
-        path, is_valid, processing_time
-    );
+    debug!("验证shell路径: path={}, valid={}", path, is_valid);
     debug!("Shell路径验证详情: {} -> {}", path, is_valid);
     Ok(is_valid)
 }
@@ -596,8 +558,6 @@ pub async fn create_terminal_with_shell<R: Runtime>(
     _app: AppHandle<R>,
     _state: State<'_, TerminalState>,
 ) -> Result<u32, String> {
-    let start_time = Instant::now();
-
     // 参数验证
     if rows == 0 || cols == 0 {
         let error_msg = format!(
@@ -632,13 +592,11 @@ pub async fn create_terminal_with_shell<R: Runtime>(
     // 使用配置创建面板
     match mux.create_pane_with_config(size, &config).await {
         Ok(pane_id) => {
-            let processing_time = start_time.elapsed().as_millis();
             debug!(
-                "终端创建成功: ID={}, shell={}, 新的面板数量: {}, 耗时: {}ms",
+                "终端创建成功: ID={}, shell={}, 新的面板数量: {}",
                 pane_id.as_u32(),
                 config.shell_config.program,
-                mux.pane_count(),
-                processing_time
+                mux.pane_count()
             );
             Ok(pane_id.as_u32())
         }
@@ -658,7 +616,6 @@ pub async fn create_terminal_with_shell<R: Runtime>(
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn find_shell_by_name(shell_name: String) -> Result<Option<ShellInfo>, String> {
-    let start_time = Instant::now();
     debug!("查找shell: {}", shell_name);
 
     // 参数验证
@@ -670,21 +627,13 @@ pub async fn find_shell_by_name(shell_name: String) -> Result<Option<ShellInfo>,
 
     match std::panic::catch_unwind(|| ShellManager::find_shell_by_name(&shell_name)) {
         Ok(shell_info) => {
-            let processing_time = start_time.elapsed().as_millis();
-
             match &shell_info {
                 Some(shell) => {
-                    debug!(
-                        "查找shell成功: name={}, path={}, 耗时: {}ms",
-                        shell.name, shell.path, processing_time
-                    );
+                    debug!("查找shell成功: name={}, path={}", shell.name, shell.path);
                     debug!("找到shell详情: {:?}", shell);
                 }
                 None => {
-                    debug!(
-                        "未找到shell: name={}, 耗时: {}ms",
-                        shell_name, processing_time
-                    );
+                    debug!("未找到shell: name={}", shell_name);
                 }
             }
 
@@ -706,7 +655,6 @@ pub async fn find_shell_by_name(shell_name: String) -> Result<Option<ShellInfo>,
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn find_shell_by_path(shell_path: String) -> Result<Option<ShellInfo>, String> {
-    let start_time = Instant::now();
     debug!("根据路径查找shell: {}", shell_path);
 
     // 参数验证
@@ -718,21 +666,16 @@ pub async fn find_shell_by_path(shell_path: String) -> Result<Option<ShellInfo>,
 
     match std::panic::catch_unwind(|| ShellManager::find_shell_by_path(&shell_path)) {
         Ok(shell_info) => {
-            let processing_time = start_time.elapsed().as_millis();
-
             match &shell_info {
                 Some(shell) => {
                     debug!(
-                        "根据路径查找shell成功: path={}, name={}, 耗时: {}ms",
-                        shell.path, shell.name, processing_time
+                        "根据路径查找shell成功: path={}, name={}",
+                        shell.path, shell.name
                     );
                     debug!("找到shell详情: {:?}", shell);
                 }
                 None => {
-                    debug!(
-                        "根据路径未找到shell: path={}, 耗时: {}ms",
-                        shell_path, processing_time
-                    );
+                    debug!("根据路径未找到shell: path={}", shell_path);
                 }
             }
 
@@ -754,7 +697,6 @@ pub async fn find_shell_by_path(shell_path: String) -> Result<Option<ShellInfo>,
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn get_shell_stats() -> Result<ShellManagerStats, String> {
-    let start_time = Instant::now();
     debug!("获取Shell管理器统计信息");
 
     match std::panic::catch_unwind(|| {
@@ -762,10 +704,9 @@ pub async fn get_shell_stats() -> Result<ShellManagerStats, String> {
         manager.get_stats().clone()
     }) {
         Ok(stats) => {
-            let processing_time = start_time.elapsed().as_millis();
             debug!(
-                "获取Shell统计信息成功: available={}, default={:?}, 耗时: {}ms",
-                stats.available_shells, stats.default_shell, processing_time
+                "获取Shell统计信息成功: available={}, default={:?}",
+                stats.available_shells, stats.default_shell
             );
 
             debug!("Shell统计详情: {:?}", stats);
@@ -787,7 +728,6 @@ pub async fn get_shell_stats() -> Result<ShellManagerStats, String> {
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn initialize_shell_manager() -> Result<(), String> {
-    let start_time = Instant::now();
     debug!("初始化Shell管理器");
 
     // ShellManager 不需要单独的初始化方法，创建实例时自动初始化
@@ -795,8 +735,7 @@ pub async fn initialize_shell_manager() -> Result<(), String> {
         ShellManager::new();
     }) {
         Ok(()) => {
-            let processing_time = start_time.elapsed().as_millis();
-            debug!("Shell管理器初始化成功, 耗时: {}ms", processing_time);
+            debug!("Shell管理器初始化成功");
             Ok(())
         }
         Err(_) => {
@@ -815,7 +754,6 @@ pub async fn initialize_shell_manager() -> Result<(), String> {
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn validate_shell_manager() -> Result<(), String> {
-    let start_time = Instant::now();
     debug!("验证Shell管理器状态");
 
     // ShellManager 不需要单独的验证方法，创建实例时自动验证
@@ -824,8 +762,7 @@ pub async fn validate_shell_manager() -> Result<(), String> {
         manager.get_stats();
     }) {
         Ok(()) => {
-            let processing_time = start_time.elapsed().as_millis();
-            debug!("Shell管理器验证成功, 耗时: {}ms", processing_time);
+            debug!("Shell管理器验证成功");
             Ok(())
         }
         Err(_) => {

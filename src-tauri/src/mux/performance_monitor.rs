@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use crate::mux::{IoThreadPoolStats, TerminalMuxStatus};
 
@@ -38,7 +38,7 @@ pub struct PerformanceMonitor {
 impl PerformanceMonitor {
     /// 创建新的性能监控器
     pub fn new() -> Self {
-        info!("启动性能监控器");
+        debug!("启动性能监控器");
         Self {
             start_time: Instant::now(),
             last_metrics: Arc::new(std::sync::Mutex::new(None)),

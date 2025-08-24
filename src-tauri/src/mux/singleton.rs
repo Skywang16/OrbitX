@@ -17,7 +17,7 @@ static GLOBAL_MUX: OnceLock<Arc<TerminalMux>> = OnceLock::new();
 pub fn get_mux() -> Arc<TerminalMux> {
     GLOBAL_MUX
         .get_or_init(|| {
-            tracing::info!("初始化全局TerminalMux实例");
+            tracing::debug!("初始化全局TerminalMux实例");
             Arc::new(TerminalMux::new())
         })
         .clone()
@@ -37,7 +37,7 @@ pub fn init_mux() -> Arc<TerminalMux> {
 /// 调用后，get_mux()仍然会返回已关闭的实例
 pub fn shutdown_mux() -> AppResult<()> {
     if let Some(mux) = GLOBAL_MUX.get() {
-        tracing::info!("关闭全局TerminalMux实例");
+        tracing::debug!("关闭全局TerminalMux实例");
         mux.shutdown()
     } else {
         tracing::warn!("尝试关闭未初始化的TerminalMux");

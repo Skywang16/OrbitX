@@ -385,7 +385,7 @@ impl ShellManager {
         *cache_guard = None;
         drop(cache_guard);
 
-        info!("Shell缓存已清空，下次访问时将重新检测");
+        debug!("Shell缓存已清空，下次访问时将重新检测");
     }
 
     /// 检查缓存状态

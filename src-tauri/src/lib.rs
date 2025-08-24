@@ -124,7 +124,7 @@ use window::commands::{
 
 use std::path::PathBuf;
 use tauri::{Emitter, Manager};
-use tracing::{info, warn};
+use tracing::{debug, warn};
 use tracing_subscriber::{self, EnvFilter};
 
 /// 初始化日志系统
@@ -165,8 +165,6 @@ fn init_logging() {
 /// 处理文件打开事件，返回文件所在的目录路径
 #[tauri::command]
 async fn handle_file_open(path: String) -> Result<String, String> {
-    info!("处理文件打开事件: {}", path);
-
     // 确保路径字符串正确处理中文字符
     let path_buf = PathBuf::from(&path);
 
@@ -187,7 +185,6 @@ async fn handle_file_open(path: String) -> Result<String, String> {
 
         // 使用 to_string_lossy() 确保中文字符正确转换
         let dir_str = dir.to_string_lossy().to_string();
-        info!("文件所在目录: {}", dir_str);
         Ok(dir_str)
     } else {
         let error_msg = format!("路径不存在: {}", path);
@@ -224,15 +221,10 @@ pub fn run() {
     // 初始化日志系统
     init_logging();
 
-    info!("OrbitX 应用程序启动");
+    debug!("OrbitX 应用程序启动");
     println!("OrbitX 应用程序启动 - 控制台输出");
 
-    // 测试不同级别的日志输出
-    tracing::trace!("这是 TRACE 级别的日志");
-    tracing::debug!("这是 DEBUG 级别的日志");
-    tracing::info!("这是 INFO 级别的日志");
-    tracing::warn!("这是 WARN 级别的日志");
-    tracing::error!("这是 ERROR 级别的日志");
+    // 测试日志输出（移除以减少启动噪声）
 
     let mut builder = tauri::Builder::default();
 
@@ -240,7 +232,6 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            info!("New app instance opened with args: {:?}", argv);
             // 处理命令行参数中的文件路径
             if argv.len() > 1 {
                 let file_path = &argv[1];
@@ -394,34 +385,24 @@ pub fn run() {
             // 使用统一的错误处理初始化各个状态管理器
             let init_result = || -> anyhow::Result<()> {
                 // 初始化终端状态
-                info!("开始初始化终端状态管理器");
                 let terminal_state = TerminalState::new()
                     .map_err(|e| anyhow::anyhow!("终端状态初始化失败: {}", e))?;
                 app.manage(terminal_state);
-                info!("终端状态管理器已初始化");
 
                 // 创建配置路径管理器
-                info!(
-                    "开始创建配置路径管理器
-"
-                );
                 let paths = config::paths::ConfigPaths::new()
                     .map_err(|e| anyhow::anyhow!("配置路径创建失败: {}", e))?;
                 app.manage(paths);
-                info!("配置路径管理器已创建并管理");
 
                 // 初始化配置管理器状态（必须先初始化，因为其他组件依赖它）
-                info!("开始初始化配置管理器状态");
                 let config_state = tauri::async_runtime::block_on(async {
                     ConfigManagerState::new()
                         .await
                         .map_err(|e| anyhow::anyhow!("配置管理器状态初始化失败: {}", e))
                 })?;
                 app.manage(config_state);
-                info!("配置管理器状态已初始化");
 
                 // 初始化快捷键管理器状态（依赖配置管理器）
-                info!("开始初始化快捷键管理器状态");
                 let shortcut_state = {
                     let config_state = app.state::<ConfigManagerState>();
                     tauri::async_runtime::block_on(async {
@@ -431,15 +412,12 @@ pub fn run() {
                     })?
                 };
                 app.manage(shortcut_state);
-                info!("快捷键管理器状态已初始化");
 
                 // 提取并管理 TomlConfigManager，以便其他服务可以依赖它
                 let config_manager = app.state::<ConfigManagerState>().toml_manager.clone();
                 app.manage(config_manager);
-                info!("TomlConfigManager 状态已管理");
 
                 // 初始化存储协调器状态（必须在依赖它的服务之前）
-                info!("开始初始化存储协调器状态");
                 let storage_state = {
                     let config_manager = app.state::<ConfigManagerState>().toml_manager.clone();
                     tauri::async_runtime::block_on(async {
@@ -449,10 +427,8 @@ pub fn run() {
                     })?
                 };
                 app.manage(storage_state);
-                info!("存储协调器状态已初始化");
 
                 // 创建 ThemeService 实例用于主题系统
-                info!("开始创建主题服务实例");
                 let theme_service = tauri::async_runtime::block_on(async {
                     use crate::config::{
                         paths::ConfigPaths, theme::ThemeManagerOptions, theme::ThemeService,
@@ -474,16 +450,12 @@ pub fn run() {
                     Ok::<ThemeService, anyhow::Error>(theme_service)
                 })?;
                 app.manage(std::sync::Arc::new(theme_service));
-                info!("主题服务状态已管理");
 
                 // 初始化补全引擎状态
-                info!("开始初始化补全引擎状态管理器");
                 let completion_state = CompletionState::new();
                 app.manage(completion_state);
-                info!("补全引擎状态管理器已初始化");
 
                 // 初始化AI管理器状态（使用存储协调器中的SQLite管理器和缓存）
-                info!("开始初始化AI管理器状态");
                 let ai_state = {
                     let storage_state = app.state::<StorageCoordinatorState>();
                     let repositories = storage_state.coordinator.repositories();
@@ -502,43 +474,32 @@ pub fn run() {
                     ai_state
                 };
                 app.manage(ai_state);
-                info!("AI管理器状态已初始化");
 
                 // 初始化窗口状态
-                info!("开始初始化窗口状态管理器");
                 let window_state =
                     WindowState::new().map_err(|e| anyhow::anyhow!("窗口状态初始化失败: {}", e))?;
                 app.manage(window_state);
-                info!("窗口状态管理器已初始化");
 
                 // 初始化TerminalMux状态（用于shell integration命令）
-                info!("开始初始化TerminalMux状态管理器");
                 let terminal_mux = crate::mux::singleton::get_mux();
                 app.manage(terminal_mux);
-                info!("TerminalMux状态管理器已初始化");
 
                 // Shell Integration现在通过环境变量自动启用，无需复杂初始化
 
                 // 设置Tauri集成
-                info!("开始设置Tauri事件集成");
                 setup_tauri_integration(app.handle().clone());
-                info!("Tauri事件集成设置完成");
 
                 // 启动系统主题监听器
-                info!("开始启动系统主题监听器");
                 start_system_theme_listener(app.handle().clone());
-                info!("系统主题监听器已启动");
 
                 // 在窗口关闭请求时优雅关闭 TerminalMux，释放后台线程
                 if let Some(window) = app.get_webview_window("main") {
                     use tauri::WindowEvent;
                     window.on_window_event(|event| {
                         if let WindowEvent::CloseRequested { .. } = event {
-                            info!("检测到窗口关闭请求，开始关闭 TerminalMux");
                             if let Err(e) = crate::mux::singleton::shutdown_mux() {
                                 warn!("关闭 TerminalMux 失败: {}", e);
                             } else {
-                                info!("TerminalMux 已关闭");
                             }
                         }
                     });
@@ -552,8 +513,6 @@ pub fn run() {
                     let app_handle = app.handle().clone();
                     app.deep_link().on_open_url(move |event| {
                         let urls = event.urls();
-                        info!("Deep link URLs: {:?}", urls);
-
                         // 处理 file:// URL
                         for url in urls {
                             if url.scheme() == "file" {
@@ -561,7 +520,6 @@ pub fn run() {
                                 match url.to_file_path() {
                                     Ok(path_buf) => {
                                         let path_str = path_buf.to_string_lossy().to_string();
-                                        info!("处理 Deep link 文件路径: {}", path_str);
 
                                         // 发送到前端
                                         if let Some(window) = app_handle.get_webview_window("main")
@@ -576,7 +534,6 @@ pub fn run() {
                                         let file_path = url.path();
                                         if let Ok(decoded_path) = urlencoding::decode(file_path) {
                                             let path_str = decoded_path.to_string();
-                                            info!("降级解码后的文件路径: {}", path_str);
 
                                             if let Some(window) =
                                                 app_handle.get_webview_window("main")
@@ -605,7 +562,6 @@ pub fn run() {
                     let file_path = &env.args_os[1];
                     if let Some(window) = app.get_webview_window("main") {
                         let path_str = file_path.to_string_lossy().to_string();
-                        info!("Startup file argument: {}", path_str);
                         let _ = window.emit("startup-file", path_str);
                     }
                 }
@@ -659,7 +615,7 @@ async fn copy_themes_from_resources<R: tauri::Runtime>(
         "tokyo-night.toml",
     ];
 
-    let mut copied_count = 0;
+    let mut _copied_count = 0;
 
     for theme_file in &theme_files {
         let dest_path = themes_dir.join(theme_file);
@@ -677,7 +633,7 @@ async fn copy_themes_from_resources<R: tauri::Runtime>(
             Ok(resource_path) => match fs::read_to_string(&resource_path) {
                 Ok(content) => match fs::write(&dest_path, content) {
                     Ok(_) => {
-                        copied_count += 1;
+                        _copied_count += 1;
                     }
                     Err(_) => {
                         // 静默处理写入失败，不影响应用启动
@@ -693,10 +649,7 @@ async fn copy_themes_from_resources<R: tauri::Runtime>(
         }
     }
 
-    // 只在有复制文件时才输出日志
-    if copied_count > 0 {
-        info!("已复制 {} 个默认主题文件", copied_count);
-    }
+    // 仅内部计数，不输出日志以减少噪声
 
     Ok(())
 }
@@ -732,7 +685,7 @@ async fn copy_default_config_from_resources<R: tauri::Runtime>(
         Ok(resource_path) => match fs::read_to_string(&resource_path) {
             Ok(content) => match fs::write(&config_file_path, content) {
                 Ok(_) => {
-                    info!("成功从资源目录复制默认配置文件");
+                    // 成功复制默认配置文件（静默）
                 }
                 Err(e) => {
                     warn!("写入默认配置文件失败: {}", e);
@@ -764,10 +717,7 @@ fn start_system_theme_listener<R: tauri::Runtime>(app_handle: tauri::AppHandle<R
                 if let Err(e) = handle_system_theme_change(&*handle, is_dark).await {
                     warn!("处理系统主题变化失败: {}", e);
                 } else {
-                    info!(
-                        "系统主题已更新为: {}",
-                        if is_dark { "深色" } else { "浅色" }
-                    );
+                    // 系统主题已更新（静默）
                 }
             });
         }

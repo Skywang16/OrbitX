@@ -35,7 +35,7 @@ impl<R: Runtime> TauriEventIntegrator<R> {
         let subscriber_id = mux.subscribe(subscriber);
 
         self.subscriber_id = Some(subscriber_id);
-        tracing::info!("Tauri 事件集成已启动，订阅者 ID: {}", subscriber_id);
+        tracing::debug!("Tauri 事件集成已启动，订阅者 ID: {}", subscriber_id);
 
         Ok(())
     }
@@ -44,7 +44,7 @@ impl<R: Runtime> TauriEventIntegrator<R> {
     pub fn stop_integration(&mut self, mux: &Arc<TerminalMux>) -> AppResult<()> {
         if let Some(subscriber_id) = self.subscriber_id.take() {
             if mux.unsubscribe(subscriber_id) {
-                tracing::info!("Tauri 事件集成已停止，订阅者 ID: {}", subscriber_id);
+                tracing::debug!("Tauri 事件集成已停止，订阅者 ID: {}", subscriber_id);
                 Ok(())
             } else {
                 anyhow::bail!("无法取消订阅者 {}", subscriber_id);

@@ -46,7 +46,7 @@ pub struct WebFetchResponse {
 /// 执行无头 HTTP 请求
 #[command]
 pub async fn web_fetch_headless(request: WebFetchRequest) -> Result<WebFetchResponse, String> {
-    tracing::info!("🌐 [WebFetch] 开始无头请求: {}", request.url);
+    tracing::debug!("🌐 [WebFetch] 开始无头请求: {}", request.url);
 
     let start_time = std::time::Instant::now();
 
@@ -170,7 +170,7 @@ pub async fn web_fetch_headless(request: WebFetchRequest) -> Result<WebFetchResp
                 }
             }
 
-            tracing::info!("📡 [WebFetch] 收到响应: {} {}", status, status_text);
+            tracing::debug!("📡 [WebFetch] 收到响应: {} {}", status, status_text);
 
             // 获取内容类型
             let content_type = headers.get("content-type").cloned();
@@ -242,8 +242,6 @@ pub async fn web_fetch_headless(request: WebFetchRequest) -> Result<WebFetchResp
             };
 
             let response_time = start_time.elapsed().as_millis() as u64;
-
-            tracing::info!("✅ [WebFetch] 请求完成，响应时间: {}ms", response_time);
 
             Ok(WebFetchResponse {
                 status,
