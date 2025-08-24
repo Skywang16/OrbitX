@@ -9,7 +9,7 @@ use crate::ai::types::{AIConfig, AIContext, Message};
 use crate::storage::repositories::RepositoryManager;
 use crate::utils::error::AppResult;
 use std::sync::LazyLock;
-use tracing::{debug, info};
+use tracing::debug;
 
 // 全局上下文管理器实例
 pub static CONTEXT_MANAGER: LazyLock<ContextManager> = LazyLock::new(|| create_context_manager());
@@ -32,7 +32,7 @@ pub async fn build_context_for_request(
         .build_context(repositories, conversation_id, up_to_message_id)
         .await?;
 
-    info!(
+    debug!(
         "智能上下文构建完成: 原始={}, 优化后={}, 压缩={}",
         context_result.original_count,
         context_result.messages.len(),
@@ -81,7 +81,7 @@ pub async fn handle_truncate_conversation(
     conversation_id: i64,
     truncate_after_message_id: i64,
 ) -> AppResult<()> {
-    info!(
+    debug!(
         "处理截断重问: conversation_id={}, truncate_after={}",
         conversation_id, truncate_after_message_id
     );
@@ -95,7 +95,7 @@ pub async fn handle_truncate_conversation(
     // 2. 更新会话统计（触发器会自动处理message_count）
     // 删除消息后，会话统计会通过数据库触发器自动更新
 
-    info!(
+    debug!(
         "会话 {} 截断完成，删除了 {} 条消息",
         conversation_id, deleted_count
     );

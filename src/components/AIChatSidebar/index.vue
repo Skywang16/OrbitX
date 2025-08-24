@@ -2,6 +2,7 @@
   import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
   import { useAIChatStore } from './store'
   import { useAISettingsStore } from '@/components/settings/components/AI'
+  import { useSessionStore } from '@/stores/session'
 
   import ChatHeader from './components/ChatHeader.vue'
   import MessageList from './components/MessageList.vue'
@@ -11,6 +12,7 @@
   // 状态管理
   const aiChatStore = useAIChatStore() // AI聊天状态管理
   const aiSettingsStore = useAISettingsStore() // AI设置状态管理
+  const sessionStore = useSessionStore() // 会话状态管理
 
   // 本地状态
   const messageInput = ref('')
@@ -112,7 +114,21 @@
   }
 
   // ===== 模型选择器相关 =====
-  const selectedModelId = ref<string | null>(aiSettingsStore.enabledModels[0]?.id || null)
+  // 从会话状态中获取上次选择的模型，如果没有则使用第一个可用模型
+  const getInitialModelId = () => {
+    const cachedModelId = sessionStore.sessionState.ai.selectedModelId
+    const availableModels = aiSettingsStore.enabledModels
+
+    // 检查缓存的模型是否仍然可用
+    if (cachedModelId && availableModels.find(m => m.id === cachedModelId)) {
+      return cachedModelId
+    }
+
+    // 如果缓存的模型不可用，使用第一个可用模型
+    return availableModels[0]?.id || null
+  }
+
+  const selectedModelId = ref<string | null>(getInitialModelId())
 
   // 计算模型选项
   const modelOptions = computed(() => {
@@ -125,7 +141,8 @@
   // 处理模型切换
   const handleModelChange = (modelId: string | null) => {
     selectedModelId.value = modelId
-    // 注意：这里只是更新本地选中状态，不再设置全局默认模型
+    // 保存到会话状态中，利用现有的缓存系统
+    sessionStore.updateAiState({ selectedModelId: modelId })
   }
 
   // ===== 响应式数据 =====
@@ -149,7 +166,10 @@
     () => aiSettingsStore.enabledModels,
     newModels => {
       if (newModels.length > 0 && !newModels.find(m => m.id === selectedModelId.value)) {
-        selectedModelId.value = newModels[0].id
+        const newModelId = newModels[0].id
+        selectedModelId.value = newModelId
+        // 同时更新会话状态
+        sessionStore.updateAiState({ selectedModelId: newModelId })
       }
     }
   )
@@ -160,6 +180,9 @@
     if (!aiSettingsStore.isInitialized) {
       await aiSettingsStore.loadSettings()
     }
+
+    // 重新初始化选中的模型（基于最新的模型列表和会话状态）
+    selectedModelId.value = getInitialModelId()
 
     // 初始化 OrbitX Store（恢复状态）
     if (!aiChatStore.isInitialized) {

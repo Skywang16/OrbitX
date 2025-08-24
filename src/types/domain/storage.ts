@@ -66,6 +66,7 @@ export interface AiState {
   width: number
   mode: 'chat' | 'agent'
   conversationId?: number
+  selectedModelId?: string | null
 }
 
 export interface SessionState {

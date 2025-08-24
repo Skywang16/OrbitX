@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 /// 窗口状态管理
 ///
@@ -298,7 +298,7 @@ impl Default for WindowConfigManager {
 impl WindowState {
     /// 统一的初始化方法
     pub fn new() -> AppResult<Self> {
-        info!("开始初始化窗口状态");
+        debug!("开始初始化窗口状态");
 
         let config_manager = Arc::new(Mutex::new(WindowConfigManager::new()));
         let state_manager = Arc::new(Mutex::new(WindowStateManager::new()));
@@ -309,19 +309,19 @@ impl WindowState {
             state_manager,
         };
 
-        info!("窗口状态初始化完成");
+        debug!("窗口状态初始化完成");
         Ok(state)
     }
 
     /// 验证状态完整性
     pub async fn validate(&self) -> AppResult<()> {
-        info!("开始验证窗口状态");
+        debug!("开始验证窗口状态");
 
         // 验证各组件是否可访问
         let _unused = self.config_manager.lock().await;
         let _unused = self.state_manager.lock().await;
 
-        info!("窗口状态验证通过");
+        debug!("窗口状态验证通过");
         Ok(())
     }
 
@@ -359,7 +359,7 @@ pub async fn manage_window_state<R: Runtime>(
     state: State<'_, WindowState>,
 ) -> Result<WindowStateBatchResponse, String> {
     let start_time = Instant::now();
-    info!(
+    debug!(
         "开始批量窗口状态管理: operations_count={}",
         request.operations.len()
     );
@@ -395,7 +395,7 @@ pub async fn manage_window_state<R: Runtime>(
     let processing_time = start_time.elapsed().as_millis();
 
     if overall_success {
-        info!(
+        debug!(
             "批量窗口状态管理成功: operations_count={}, 耗时: {}ms",
             results.len(),
             processing_time
@@ -608,7 +608,7 @@ pub async fn get_current_directory(
     state: State<'_, WindowState>,
 ) -> Result<String, String> {
     let use_cache = use_cache.unwrap_or(true);
-    info!("开始获取当前目录: use_cache={}", use_cache);
+    debug!("开始获取当前目录: use_cache={}", use_cache);
 
     // 如果启用缓存，先尝试从缓存获取
     if use_cache {
@@ -642,7 +642,7 @@ pub async fn get_current_directory(
         warn!("更新目录缓存失败: {}", e);
     }
 
-    info!("当前目录获取成功: {}", current_dir);
+    debug!("当前目录获取成功: {}", current_dir);
     Ok(current_dir)
 }
 
@@ -658,7 +658,7 @@ pub async fn get_home_directory(
     state: State<'_, WindowState>,
 ) -> Result<String, String> {
     let use_cache = use_cache.unwrap_or(true);
-    info!("开始获取家目录: use_cache={}", use_cache);
+    debug!("开始获取家目录: use_cache={}", use_cache);
 
     // 如果启用缓存，先尝试从缓存获取
     if use_cache {
@@ -701,7 +701,7 @@ pub async fn get_home_directory(
         warn!("更新目录缓存失败: {}", e);
     }
 
-    info!("家目录获取成功: {}", home_dir);
+    debug!("家目录获取成功: {}", home_dir);
     Ok(home_dir)
 }
 
@@ -713,13 +713,13 @@ pub async fn get_home_directory(
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn clear_directory_cache(state: State<'_, WindowState>) -> Result<(), String> {
-    info!("开始清除目录缓存");
+    debug!("开始清除目录缓存");
 
     // 清除目录相关的缓存
     let _ = state.cache.remove("current_dir").await;
     let _ = state.cache.remove("home_dir").await;
 
-    info!("目录缓存清除成功");
+    debug!("目录缓存清除成功");
     Ok(())
 }
 
@@ -728,7 +728,7 @@ pub async fn clear_directory_cache(state: State<'_, WindowState>) -> Result<(), 
 /// 规范化路径
 #[tauri::command]
 pub async fn normalize_path(path: String) -> Result<String, String> {
-    info!("开始规范化路径: {}", path);
+    debug!("开始规范化路径: {}", path);
 
     if path.is_empty() {
         return Err("输入验证错误: 路径不能为空".to_string());
@@ -740,14 +740,14 @@ pub async fn normalize_path(path: String) -> Result<String, String> {
         .to_string_lossy()
         .to_string();
 
-    info!("路径规范化成功: {} -> {}", path, normalized);
+    debug!("路径规范化成功: {} -> {}", path, normalized);
     Ok(normalized)
 }
 
 /// 连接路径
 #[tauri::command]
 pub async fn join_paths(paths: Vec<String>) -> Result<String, String> {
-    info!("开始连接路径: {:?}", paths);
+    debug!("开始连接路径: {:?}", paths);
 
     if paths.is_empty() {
         return Err("输入验证错误: 路径列表不能为空".to_string());
@@ -762,21 +762,21 @@ pub async fn join_paths(paths: Vec<String>) -> Result<String, String> {
     }
 
     let joined = result.to_string_lossy().to_string();
-    info!("路径连接成功: {:?} -> {}", paths, joined);
+    debug!("路径连接成功: {:?} -> {}", paths, joined);
     Ok(joined)
 }
 
 /// 检查路径是否存在
 #[tauri::command]
 pub async fn path_exists(path: String) -> Result<bool, String> {
-    info!("开始检查路径是否存在: {}", path);
+    debug!("开始检查路径是否存在: {}", path);
 
     if path.is_empty() {
         return Err("输入验证错误: 路径不能为空".to_string());
     }
 
     let exists = Path::new(&path).exists();
-    info!("路径存在性检查完成: {} -> {}", path, exists);
+    debug!("路径存在性检查完成: {} -> {}", path, exists);
     Ok(exists)
 }
 
@@ -791,7 +791,7 @@ pub async fn path_exists(path: String) -> Result<bool, String> {
 /// - 缓存机制：首次检测后缓存结果，后续直接返回缓存
 #[tauri::command]
 pub async fn get_platform_info(state: State<'_, WindowState>) -> Result<PlatformInfo, String> {
-    info!("开始获取平台信息");
+    debug!("开始获取平台信息");
 
     let platform_info = state
         .with_config_manager(|config| {
@@ -801,7 +801,7 @@ pub async fn get_platform_info(state: State<'_, WindowState>) -> Result<Platform
         .await
         .to_tauri()?;
 
-    info!(
+    debug!(
         "平台信息获取成功: platform={}, arch={}, is_mac={}",
         platform_info.platform, platform_info.arch, platform_info.is_mac
     );

@@ -134,6 +134,8 @@ pub struct AiState {
     pub mode: String, // "chat" | "agent"
     /// 当前会话ID
     pub conversation_id: Option<i64>,
+    /// 选中的模型ID
+    pub selected_model_id: Option<String>,
 }
 
 impl Default for AiState {
@@ -143,6 +145,7 @@ impl Default for AiState {
             width: 350,
             mode: "chat".to_string(),
             conversation_id: None,
+            selected_model_id: None,
         }
     }
 }

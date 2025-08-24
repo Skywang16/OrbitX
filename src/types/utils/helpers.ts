@@ -32,6 +32,7 @@ export const createDefaultSessionState = () => ({
     width: 350,
     mode: 'chat' as const,
     conversationId: undefined,
+    selectedModelId: undefined,
   },
   timestamp: new Date().toISOString(),
 })
