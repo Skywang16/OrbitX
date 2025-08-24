@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, nextTick, onMounted, ref, watch } from 'vue'
+  import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
   import type { Message } from '@/types'
   import UserMessage from './UserMessage.vue'
   import AIMessage from './AIMessage.vue'
@@ -15,6 +15,8 @@
   const messageListRef = ref<HTMLElement | null>(null)
   // Lottie动画容器引用
   const lottieContainer = ref<HTMLElement | null>(null)
+  // Lottie动画实例引用
+  const lottieAnimation = ref<AnimationItem | null>(null)
 
   // 消息列表
   const msgList = computed(() => {
@@ -32,26 +34,75 @@
     }
   }
 
-  // 监听消息变化，自动滚动到底部
-  watch(
-    () => msgList.value.length,
-    () => {
-      scrollToBottom()
-    },
-    { immediate: true }
-  )
+  // 销毁 Lottie 动画
+  const destroyLottieAnimation = () => {
+    if (lottieAnimation.value) {
+      try {
+        lottieAnimation.value.destroy()
+      } catch (error) {
+        console.warn('Lottie 动画销毁失败:', error)
+      } finally {
+        lottieAnimation.value = null
+      }
+    }
+  }
 
-  // 当空状态容器挂载时初始化动画
-  onMounted(() => {
-    if (msgList.value.length === 0 && lottieContainer.value) {
-      lottie.loadAnimation({
+  // 初始化 Lottie 动画
+  const initLottieAnimation = async () => {
+    // 确保 DOM 已更新
+    await nextTick()
+
+    // 检查容器是否可用
+    if (!lottieContainer.value) {
+      return
+    }
+
+    // 如果已有动画实例，先销毁
+    destroyLottieAnimation()
+
+    // 创建新的动画实例
+    try {
+      lottieAnimation.value = lottie.loadAnimation({
         container: lottieContainer.value,
         renderer: 'svg',
         loop: true,
         autoplay: true,
         path: '/Circle.json',
       })
+    } catch (error) {
+      console.warn('Lottie 动画初始化失败:', error)
     }
+  }
+
+  // 监听消息列表变化，处理滚动和 Lottie 动画
+  watch(
+    () => msgList.value.length,
+    async newLength => {
+      // 自动滚动到底部
+      scrollToBottom()
+
+      // 处理 Lottie 动画
+      if (newLength === 0) {
+        // 消息列表为空时，初始化动画
+        await initLottieAnimation()
+      } else {
+        // 消息列表不为空时，销毁动画
+        destroyLottieAnimation()
+      }
+    },
+    { immediate: true }
+  )
+
+  // 组件挂载时的初始化
+  onMounted(async () => {
+    if (msgList.value.length === 0) {
+      await initLottieAnimation()
+    }
+  })
+
+  // 组件卸载时清理动画
+  onUnmounted(() => {
+    destroyLottieAnimation()
   })
 </script>
 

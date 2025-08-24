@@ -67,7 +67,7 @@ export class ReadDirectoryTool extends ModifiableTool {
       if (error instanceof FileNotFoundError) {
         throw error
       }
-      throw new Error(`读取目录失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`读取目录失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 

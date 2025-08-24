@@ -39,6 +39,11 @@ const generateSessionTitle = (content: string): string => {
   return title.length < content.trim().length ? title + '...' : title
 }
 
+// 检测工具执行结果是否包含错误
+const isToolResultError = (toolResult: any): boolean => {
+  return toolResult?.isError === true
+}
+
 export const useAIChatStore = defineStore('ai-chat', () => {
   const sessionStore = useSessionStore()
 
@@ -411,9 +416,16 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               const toolSteps = tempMessage.steps.filter((step: any) => step.type === 'tool_use')
               const toolStep = toolSteps[toolSteps.length - 1] as any
               if (toolStep?.toolExecution) {
-                toolStep.toolExecution.status = 'completed'
+                // 检查工具执行结果是否包含错误
+                const hasError = isToolResultError(message.toolResult)
+                toolStep.toolExecution.status = hasError ? 'error' : 'completed'
                 toolStep.toolExecution.endTime = Date.now()
                 toolStep.toolExecution.result = message.toolResult
+
+                // 如果有错误，记录错误信息
+                if (hasError) {
+                  toolStep.toolExecution.error = '工具执行失败'
+                }
               }
               break
             }
@@ -459,8 +471,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               })
 
               streamingContent.value = message.text || ''
+              // 注意：不在这里设置 status 为 'complete'
+              // 状态更新由 sendMessage 方法的最终处理来完成
               if (message.streamDone) {
-                tempMessage.status = 'complete'
                 tempMessage.content = message.text
               }
               break

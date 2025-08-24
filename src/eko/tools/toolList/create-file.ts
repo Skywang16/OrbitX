@@ -59,7 +59,7 @@ export class CreateFileTool extends ModifiableTool {
         ],
       }
     } catch (error) {
-      throw new Error(`创建文件失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`创建文件失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 }

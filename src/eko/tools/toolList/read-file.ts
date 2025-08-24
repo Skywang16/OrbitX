@@ -68,7 +68,7 @@ export class ReadFileTool extends ModifiableTool {
       // 检查是否为目录
       const isDirectory = await this.checkIsDirectory(path)
       if (isDirectory) {
-        throw new Error(`路径 ${path} 是一个目录，请使用 read_directory 工具读取目录内容`)
+        throw new ValidationError(`路径 ${path} 是一个目录，请使用 read_directory 工具读取目录内容`)
       }
 
       // 使用Tauri API读取文件
@@ -78,7 +78,7 @@ export class ReadFileTool extends ModifiableTool {
 
       // 确保内容不为空
       if (rawContent === null || rawContent === undefined) {
-        throw new Error('文件内容为空或无法读取')
+        throw new ToolError('文件内容为空或无法读取')
       }
 
       // 将ArrayBuffer转换为字符串
@@ -122,10 +122,10 @@ export class ReadFileTool extends ModifiableTool {
         ],
       }
     } catch (error) {
-      if (error instanceof FileNotFoundError) {
+      if (error instanceof FileNotFoundError || error instanceof ValidationError || error instanceof ToolError) {
         throw error
       }
-      throw new Error(`读取文件失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`读取文件失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 

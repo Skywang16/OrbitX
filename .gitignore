@@ -31,3 +31,4 @@ src-tauri/target/
 *.njsproj
 *.sln
 *.sw?
+*npm-file

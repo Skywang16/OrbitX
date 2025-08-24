@@ -121,7 +121,7 @@ export class OrbitSearchTool extends ModifiableTool {
       if (error instanceof ValidationError || error instanceof FileNotFoundError) {
         throw error
       }
-      throw new Error(`语义搜索失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`语义搜索失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -225,7 +225,7 @@ export class OrbitSearchTool extends ModifiableTool {
 
       return response
     } catch (error) {
-      throw new Error(`搜索执行失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`搜索执行失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -401,7 +401,7 @@ export class OrbitSearchTool extends ModifiableTool {
       const content = new TextDecoder('utf-8').decode(rawContent)
       return content
     } catch (error) {
-      throw new Error(`无法读取文件 ${filePath}: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`无法读取文件 ${filePath}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -437,7 +437,7 @@ export class OrbitSearchTool extends ModifiableTool {
 
       return matches.sort((a, b) => b.relevanceScore - a.relevanceScore)
     } catch (error) {
-      throw new Error(`文本搜索失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`文本搜索失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
