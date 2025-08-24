@@ -91,8 +91,6 @@ export const getDefaultModelId = async (): Promise<string> => {
 export interface EkoConfigOptions {
   /** 是否启用调试模式 */
   debug?: boolean
-  /** 自定义模型ID */
-  modelId?: string
   /** 最大重试次数 */
   maxRetries?: number
   /** 请求超时时间(毫秒) */
@@ -103,7 +101,7 @@ export interface EkoConfigOptions {
  * 获取完整的Eko配置
  */
 export const getEkoConfig = async (options: EkoConfigOptions = {}) => {
-  const { debug = false, modelId, maxRetries = 3, timeout = 30000 } = options
+  const { debug = false, maxRetries = 3, timeout = 30000 } = options
 
   try {
     // 获取LLM配置
