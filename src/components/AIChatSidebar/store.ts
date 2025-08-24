@@ -289,9 +289,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         tempAIMessage.status = 'error'
         tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
 
-        // 添加具体的错误信息（清理ANSI序列）
-        const rawErrorMessage = response.result || response.error || '未知错误'
-        const errorMessage = typeof rawErrorMessage === 'string' ? stripAnsi(rawErrorMessage) : rawErrorMessage
         tempAIMessage.steps?.push({
           type: 'error',
           content: ``,
