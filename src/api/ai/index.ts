@@ -283,9 +283,9 @@ export class AiApi {
 
   async updateModel(model: AIModelConfig): Promise<void> {
     try {
-      // 将完整的模型对象分解为 model_id 和 updates
-      const { id: model_id, ...updates } = model
-      await invoke('update_ai_model', { model_id, updates })
+      // 将完整的模型对象分解为 modelId 和 updates
+      const { id: modelId, ...updates } = model
+      await invoke('update_ai_model', { modelId, updates })
     } catch (error) {
       throw new Error(handleError(error, '更新AI模型失败'))
     }
@@ -293,7 +293,7 @@ export class AiApi {
 
   async deleteModel(id: string): Promise<void> {
     try {
-      await invoke('remove_ai_model', { model_id: id })
+      await invoke('remove_ai_model', { modelId: id })
     } catch (error) {
       throw new Error(handleError(error, '删除AI模型失败'))
     }
