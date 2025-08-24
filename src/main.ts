@@ -85,14 +85,11 @@ const initializeServices = async () => {
 const initializeApplication = async () => {
   try {
     // 先初始化主题系统，确保在DOM渲染前主题就绪
-    console.log('开始初始化主题系统...')
     const themeManager = useTheme()
     await themeManager.initialize()
-    console.log('主题系统初始化完成')
 
     // 挂载应用 - 此时主题已就绪
     app.mount('#app')
-    console.log('应用挂载完成')
 
     // 并行初始化其他系统
     await Promise.allSettled([initializeStores(), initializeSettings(), initializeServices()])

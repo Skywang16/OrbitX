@@ -184,17 +184,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     if (currentCount > stats.maxConcurrentTerminals) {
       stats.maxConcurrentTerminals = currentCount
     }
-
-    // 每20个操作输出一次统计
-    if ((stats.totalTerminalsCreated + stats.totalTerminalsClosed) % 20 === 0) {
-      console.log(`性能统计:`, {
-        已创建: stats.totalTerminalsCreated,
-        已关闭: stats.totalTerminalsClosed,
-        当前数量: currentCount,
-        最大并发: stats.maxConcurrentTerminals,
-        平均创建时间: `${stats.averageCreationTime.toFixed(0)}ms`,
-      })
-    }
   }
 
   /**
@@ -266,8 +255,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
           // 智能更新终端标题
           updateTerminalTitle(terminal, event.payload.cwd)
-
-          console.log(`终端 ${terminal.id} CWD 更新: ${oldCwd} -> ${event.payload.cwd}`)
         }
       } catch (error) {
         console.error('处理终端CWD变化事件时发生错误:', error)
@@ -747,8 +734,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
    */
   const restoreFromSessionState = async () => {
     try {
-      console.log('🔄 [Terminal Store] 开始恢复终端状态')
-
       // 等待Session Store初始化
       if (!sessionStore.initialized) {
         await sessionStore.initialize()
@@ -757,7 +742,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
       const terminalStates = sessionStore.terminals
 
       if (!terminalStates || terminalStates.length === 0) {
-        console.log('ℹ️ [Terminal Store] 没有找到可恢复的终端状态')
         return false
       }
 
@@ -771,8 +755,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
       // 恢复终端
       for (const terminalState of terminalStates) {
         try {
-          console.log(`🔄 [Terminal Store] 恢复终端: ${terminalState.id}`)
-
           // 创建新的终端会话
           const id = await createTerminal(terminalState.cwd)
 
@@ -785,7 +767,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
           // 记录应该激活的终端
           if (terminalState.active && shouldActivateTerminalId === null) {
             shouldActivateTerminalId = id
-            console.log(`🎯 [Terminal Store] 标记终端 ${id} 为应激活状态`)
           }
         } catch (error) {
           console.error(`恢复终端 ${terminalState.id} 失败:`, error)
@@ -798,13 +779,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       if (savedActiveTabId && terminals.value.find(t => t.id === savedActiveTabId)) {
         terminalToActivate = savedActiveTabId
-        console.log(`🎯 [Terminal Store] 使用保存的活跃标签页: ${savedActiveTabId}`)
       } else if (shouldActivateTerminalId) {
         terminalToActivate = shouldActivateTerminalId
-        console.log(`✅ [Terminal Store] 使用终端状态中的活跃终端: ${shouldActivateTerminalId}`)
       } else if (terminals.value.length > 0) {
         terminalToActivate = terminals.value[0].id
-        console.log(`⚠️ [Terminal Store] 未找到活跃标签，激活第一个终端: ${terminals.value[0].id}`)
       }
 
       if (terminalToActivate) {
@@ -814,12 +792,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       // 如果没有任何终端，创建一个默认的
       if (terminals.value.length === 0) {
         await createTerminal()
-        console.log('📝 [Terminal Store] 没有终端会话，创建默认终端')
       }
-
-      console.log(
-        `✅ [Terminal Store] 成功恢复 ${terminals.value.length} 个终端会话，活跃终端: ${activeTerminalId.value}`
-      )
       return true
     } catch (error) {
       console.error('恢复终端会话状态失败:', error)
@@ -832,10 +805,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
    */
   const saveSessionState = async () => {
     try {
-      console.log('💾 [Terminal Store] 开始保存终端会话状态')
       syncToSessionStore()
       await sessionStore.saveSessionState()
-      console.log('✅ [Terminal Store] 终端会话状态保存完成')
     } catch (error) {
       console.error('❌ [Terminal Store] 保存终端会话状态失败:', error)
     }
@@ -861,8 +832,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       // 设置全局监听器
       await setupGlobalListeners()
-
-      console.log('终端Store初始化完成')
     } catch (error) {
       console.error('终端Store初始化失败:', error)
       // 确保至少有一个终端

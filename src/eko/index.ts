@@ -136,10 +136,6 @@ export class OrbitXEko {
       const enhancedPrompt = `🎯 **用户请求**
 ${prompt}`
 
-      // 打印调试信息
-      console.log('🚀 [Eko] 运行任务 - 原始Prompt:', prompt)
-      console.log('🚀 [Eko] 运行任务 - 增强Prompt:', enhancedPrompt)
-
       // 生成唯一的taskId
       const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       this.currentTaskId = taskId
@@ -329,7 +325,6 @@ ${prompt}`
    */
   abort(): boolean {
     if (this.eko && this.currentTaskId && this.isRunning) {
-      console.log('🛑 中断当前AI任务:', this.currentTaskId)
       const success = this.eko.abortTask(this.currentTaskId)
       if (success) {
         this.isRunning = false

@@ -83,7 +83,6 @@ export const createCallback = (): TerminalCallback => {
 export const createSidebarCallback = (onMessage?: (message: StreamMessage) => Promise<void>): TerminalCallback => {
   return {
     onMessage: async (message: StreamCallbackMessage, _agentContext?: AgentContext): Promise<void> => {
-      console.log('🔥 [DEBUG] createSidebarCallback收到消息:', message.type, message)
       if (onMessage) {
         // Convert StreamCallbackMessage to StreamMessage for backward compatibility
         const streamMessage: StreamMessage = {
