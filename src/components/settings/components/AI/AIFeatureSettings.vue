@@ -62,61 +62,45 @@
 </template>
 
 <style scoped>
-  .ai-feature-settings {
-    width: 100%;
-  }
-
   .prefix-prompt-section {
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 32px;
   }
 
   .section-title {
-    font-size: var(--font-size-md);
-    font-weight: 600;
-    color: var(--text-200);
-    margin: 0 0 var(--spacing-xs) 0;
+    font-size: 20px;
+    color: var(--text-100);
+    margin-bottom: 8px;
   }
 
   .section-description {
-    font-size: var(--font-size-sm);
+    font-size: 13px;
     color: var(--text-400);
-    margin: 0 0 var(--spacing-md) 0;
-    line-height: 1.5;
+    margin-bottom: 16px;
   }
 
   .prompt-textarea {
     width: 100%;
-    min-height: 100px;
-    padding: var(--spacing-sm);
+    min-height: 120px;
+    padding: 12px;
     border: 1px solid var(--border-300);
-    border-radius: var(--border-radius);
-    background-color: var(--bg-400);
+    border-radius: 4px;
+    background: var(--bg-500);
     color: var(--text-200);
-    font-size: var(--font-size-sm);
-    font-family: inherit;
-    line-height: 1.5;
+    font-size: 13px;
+    font-family: var(--font-mono);
     resize: vertical;
-    transition: border-color 0.2s ease;
   }
 
   .prompt-textarea:focus {
-    outline: none;
     border-color: var(--color-primary);
     box-shadow: 0 0 0 2px var(--color-primary-alpha);
   }
 
   .prompt-textarea:disabled {
     opacity: 0.6;
-    cursor: not-allowed;
   }
 
   .prompt-textarea::placeholder {
     color: var(--text-400);
-  }
-
-  .prompt-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--spacing-sm);
   }
 </style>

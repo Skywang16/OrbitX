@@ -38,15 +38,13 @@
 
 <style scoped>
   .ai-settings {
-    max-width: 800px;
-    padding: var(--spacing-lg);
+    padding: 24px;
+    background: var(--bg-600);
+    min-height: 100vh;
   }
 
   .settings-card {
-    background-color: var(--color-primary-alpha);
-    border-radius: var(--border-radius);
-    padding: var(--spacing-lg);
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 32px;
   }
 
   .loading-state,
@@ -54,32 +52,49 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: var(--spacing-xl);
+    padding: 48px 24px;
+    background: var(--bg-500);
+    border-radius: 4px;
     text-align: center;
   }
 
   .loading-spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--border-300);
-    border-top: 3px solid var(--color-primary);
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border-300);
+    border-top: 2px solid var(--color-primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
-    margin-bottom: var(--spacing-md);
+    margin-bottom: 16px;
   }
 
   @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
+    to {
       transform: rotate(360deg);
     }
   }
 
   .error-icon {
-    font-size: 2rem;
-    margin-bottom: var(--spacing-sm);
+    font-size: 32px;
+    margin-bottom: 12px;
+  }
+
+  .error-state p {
+    color: var(--error-text);
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+
+  .error-state :deep(.x-button) {
+    background: var(--color-primary);
+    border: 1px solid var(--color-primary);
+    color: white;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
+  .error-state :deep(.x-button:hover) {
+    background: var(--color-primary-hover);
   }
 </style>

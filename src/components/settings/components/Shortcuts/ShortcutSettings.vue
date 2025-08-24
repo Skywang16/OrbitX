@@ -294,61 +294,49 @@
 
 <style scoped>
   .shortcut-settings {
-    padding: var(--spacing-lg);
-    min-height: fit-content;
-    padding-bottom: var(--spacing-xl);
+    padding: 24px;
+    background: var(--bg-600);
   }
 
   .settings-card {
-    background-color: var(--color-primary-alpha);
-    border-radius: var(--border-radius);
-    padding: var(--spacing-lg);
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 32px;
   }
 
   .section-title {
-    font-size: var(--font-size-md);
-    font-weight: 600;
-    color: var(--text-200);
-    margin: 0 0 var(--spacing-md) 0;
+    font-size: 20px;
+    color: var(--text-100);
+    margin-bottom: 16px;
   }
 
   .alert {
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md);
-    border-radius: var(--border-radius);
-    margin-bottom: var(--spacing-md);
-  }
-
-  .alert-warning {
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 16px;
     background: var(--warning-bg);
     color: var(--warning-text);
-    border: 1px solid var(--warning-border);
-  }
-
-  .alert-icon {
-    font-size: var(--font-size-md);
   }
 
   .actions-list {
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 24px;
   }
 
-  .loading-state,
-  .empty-state {
+  .loading-state {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-xl);
+    gap: 12px;
+    padding: 48px 24px;
     color: var(--text-400);
+    background: var(--bg-500);
+    border-radius: 4px;
   }
 
   .loading-spinner {
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
     border: 2px solid var(--border-300);
     border-top: 2px solid var(--color-primary);
     border-radius: 50%;
@@ -356,112 +344,125 @@
   }
 
   @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
+    to {
       transform: rotate(360deg);
     }
   }
 
   .action-category {
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 24px;
   }
 
   .action-category h4 {
-    margin: 0 0 var(--spacing-md) 0;
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    color: var(--text-200);
+    margin-bottom: 12px;
+    font-size: 16px;
+    color: var(--text-100);
+    border-bottom: 1px solid var(--border-300);
+    padding-bottom: 8px;
   }
 
   .action-items {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-sm);
+    gap: 8px;
   }
 
   .action-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--spacing-md);
-    background-color: var(--bg-400);
-    border-radius: var(--border-radius);
-    border: 1px solid var(--border-300);
-    gap: var(--spacing-md);
+    padding: 12px 16px;
+    background: var(--bg-500);
+    border-radius: 4px;
+    gap: 16px;
+  }
+
+  .action-item:hover {
+    background: var(--bg-400);
   }
 
   .action-name {
     flex: 1;
     color: var(--text-200);
-    font-weight: 500;
+    font-size: 14px;
   }
 
   .shortcut-key-editor {
     flex: 2;
     min-width: 200px;
-    padding: var(--spacing-sm) var(--spacing-md);
-    background-color: var(--bg-500);
-    border: 2px solid var(--border-300);
-    border-radius: var(--border-radius);
+    padding: 8px 12px;
+    background: var(--bg-400);
+    border: 1px solid var(--border-300);
+    border-radius: 4px;
     cursor: pointer;
-    transition: all 0.2s;
-    outline: none;
+    display: flex;
+    align-items: center;
   }
 
   .shortcut-key-editor:hover {
-    border-color: var(--border-200);
-  }
-
-  .shortcut-key-editor.configured {
-    border-color: var(--color-primary-alpha);
+    background: var(--bg-300);
   }
 
   .shortcut-key-editor.editing {
     border-color: var(--color-primary);
-    background-color: var(--color-primary-alpha);
+    background: var(--color-primary-alpha);
     box-shadow: 0 0 0 2px var(--color-primary-alpha);
   }
 
   .shortcut-display {
     display: flex;
     align-items: center;
-    gap: var(--spacing-xs);
+    gap: 6px;
   }
 
   .not-configured {
     color: var(--text-400);
-    font-style: italic;
+    font-size: 13px;
   }
 
   .editing-hint {
     color: var(--color-primary);
-    font-weight: 500;
+    font-size: 13px;
   }
 
   .modifier,
   .key {
-    padding: 2px 6px;
-    background-color: var(--bg-500);
-    border: 1px solid var(--border-300);
-    border-radius: var(--border-radius);
-    font-size: var(--font-size-xs);
+    padding: 3px 8px;
+    background: var(--bg-300);
+    border-radius: 4px;
+    font-size: 11px;
     font-family: var(--font-mono);
     color: var(--text-200);
   }
 
   .key {
-    background-color: var(--color-primary-alpha);
-    color: var(--color-primary);
-    border-color: var(--color-primary-alpha);
+    background: var(--color-primary);
+    color: white;
   }
 
   .actions-section {
     display: flex;
     justify-content: flex-end;
-    gap: var(--spacing-md);
-    padding-top: var(--spacing-md);
+    gap: 12px;
+    padding-top: 16px;
     border-top: 1px solid var(--border-300);
+  }
+
+  .actions-section :deep(.x-button) {
+    background: transparent;
+    border: 1px solid var(--border-200);
+    color: var(--text-300);
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
+  .actions-section :deep(.x-button:hover) {
+    background: var(--bg-400);
+    color: var(--text-200);
+  }
+
+  .actions-section :deep(.x-button:disabled) {
+    opacity: 0.5;
   }
 </style>

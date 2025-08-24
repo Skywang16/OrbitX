@@ -1,8 +1,4 @@
-/**
- * 主题管理组合式 API
- *
- * 提供响应式的主题管理功能，支持手动选择主题和跟随系统主题两种模式。
- */
+// 主题管理（单例）
 
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '@tauri-apps/api/event'
@@ -11,44 +7,33 @@ import { themeAPI } from '@/api/config'
 import type { Theme, ThemeConfigStatus, ThemeInfo, ThemeOption } from '@/types/domain/theme'
 import { applyThemeToUI } from '../utils/themeApplier'
 
-// ============================================================================
-// 主题管理 Composable
-// ============================================================================
+// 状态（全局共享）
+const configStatus = ref<ThemeConfigStatus | null>(null)
+const currentThemeData = ref<Theme | null>(null)
+const availableThemes = ref<ThemeInfo[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
+// 事件监听句柄（全局唯一）
+let themeChangeUnlisten: UnlistenFn | null = null
+
+// 计算属性
+const themeConfig = computed(() => configStatus.value?.themeConfig || null)
+const currentThemeName = computed(() => configStatus.value?.currentThemeName || '')
+const isSystemDark = computed(() => configStatus.value?.isSystemDark)
+const isFollowingSystem = computed(() => themeConfig.value?.followSystem || false)
+
+// UI 选择项
+const themeOptions = computed((): ThemeOption[] => {
+  return availableThemes.value.map(theme => ({
+    value: theme.name,
+    label: theme.name,
+    type: theme.themeType,
+    isCurrent: theme.isCurrent,
+  }))
+})
 
 export const useTheme = () => {
-  // 状态管理
-  const configStatus = ref<ThemeConfigStatus | null>(null)
-  const currentThemeData = ref<Theme | null>(null)
-  const availableThemes = ref<ThemeInfo[]>([])
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-
-  // 事件监听器
-  let themeChangeUnlisten: UnlistenFn | null = null
-
-  // 计算属性
-  const themeConfig = computed(() => configStatus.value?.themeConfig || null)
-  const currentThemeName = computed(() => configStatus.value?.currentThemeName || '')
-  const isSystemDark = computed(() => configStatus.value?.isSystemDark)
-  const isFollowingSystem = computed(() => themeConfig.value?.followSystem || false)
-
-  // 主题选项（用于UI显示）
-  const themeOptions = computed((): ThemeOption[] => {
-    return availableThemes.value.map(theme => ({
-      value: theme.name,
-      label: theme.name, // 直接使用主题名称作为显示标签
-      type: theme.themeType,
-      isCurrent: theme.isCurrent,
-    }))
-  })
-
-  // ============================================================================
-  // 核心方法
-  // ============================================================================
-
-  /**
-   * 加载主题配置状态
-   */
+  // 加载主题配置
   const loadThemeConfigStatus = async () => {
     loading.value = true
     error.value = null
@@ -65,16 +50,13 @@ export const useTheme = () => {
     }
   }
 
-  /**
-   * 加载当前主题数据
-   */
+  // 加载当前主题并应用到 UI
   const loadCurrentTheme = async () => {
     try {
       const theme = await themeAPI.getCurrentTheme()
-      currentThemeData.value = theme
-
-      // 应用主题到 UI
+      // 先应用 CSS 变量，再发布状态，确保监听者读取到已生效的样式
       applyThemeToUI(theme)
+      currentThemeData.value = theme
 
       return theme
     } catch (err) {
@@ -83,21 +65,13 @@ export const useTheme = () => {
     }
   }
 
-  // ============================================================================
-  // 主题切换方法
-  // ============================================================================
-
-  /**
-   * 设置终端主题（手动模式）
-   */
+  // 手动切换主题
   const switchToTheme = async (themeName: string) => {
     loading.value = true
     error.value = null
 
     try {
-      // 1. 更新配置
       await themeAPI.setTerminalTheme(themeName)
-      // 2. 重新查询最新状态 - 简单的增删改查模式
       await loadThemeConfigStatus()
       await loadCurrentTheme()
     } catch (err) {
@@ -108,17 +82,12 @@ export const useTheme = () => {
     }
   }
 
-  /**
-   * 设置跟随系统主题
-   */
   const setFollowSystem = async (followSystem: boolean, lightTheme?: string, darkTheme?: string) => {
     loading.value = true
     error.value = null
 
     try {
-      // 1. 更新配置
       await themeAPI.setFollowSystemTheme(followSystem, lightTheme, darkTheme)
-      // 2. 重新查询最新状态 - 简单的增删改查模式
       await loadThemeConfigStatus()
       await loadCurrentTheme()
     } catch (err) {
@@ -129,31 +98,19 @@ export const useTheme = () => {
     }
   }
 
-  /**
-   * 启用跟随系统主题
-   */
   const enableFollowSystem = async (lightTheme: string, darkTheme: string) => {
     return setFollowSystem(true, lightTheme, darkTheme)
   }
 
-  /**
-   * 禁用跟随系统主题
-   */
   const disableFollowSystem = async () => {
     return setFollowSystem(false)
   }
 
-  // ============================================================================
-  // 事件监听
-  // ============================================================================
-
-  /**
-   * 监听主题变化事件（可选，用于外部主题变化同步）
-   */
+  // 监听外部主题变化
   const startThemeChangeListener = async () => {
     try {
+      if (themeChangeUnlisten) return
       themeChangeUnlisten = await listen<string>('theme-changed', async _event => {
-        // 如果需要响应外部主题变化，重新加载状态
         try {
           await loadThemeConfigStatus()
           await loadCurrentTheme()
@@ -167,39 +124,29 @@ export const useTheme = () => {
     }
   }
 
-  /**
-   * 停止监听主题变化事件
-   */
-  const stopThemeChangeListener = () => {
-    if (themeChangeUnlisten) {
-      themeChangeUnlisten()
-      themeChangeUnlisten = null
-    }
-  }
-
-  // ============================================================================
-  // 生命周期管理
-  // ============================================================================
-
-  /**
-   * 初始化主题管理
-   */
+  // 初始化
   const initialize = async () => {
     await loadThemeConfigStatus()
     await loadCurrentTheme()
     await startThemeChangeListener()
   }
 
-  /**
-   * 清理资源
-   */
+  // 停止监听（用于应用退出时）
+  const stopThemeChangeListener = () => {
+    if (themeChangeUnlisten) {
+      try {
+        themeChangeUnlisten()
+      } catch {
+        /* noop */
+      }
+      themeChangeUnlisten = null
+    }
+  }
+
+  // 清理（可在全局退出时调用）
   const cleanup = () => {
     stopThemeChangeListener()
   }
-
-  // ============================================================================
-  // 返回接口
-  // ============================================================================
 
   return {
     // 状态
@@ -224,10 +171,8 @@ export const useTheme = () => {
     enableFollowSystem,
     disableFollowSystem,
     initialize,
-    cleanup,
-
-    // 事件监听
     startThemeChangeListener,
     stopThemeChangeListener,
+    cleanup,
   }
 }

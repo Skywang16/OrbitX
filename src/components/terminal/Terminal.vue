@@ -613,7 +613,7 @@
     terminalStore.unregisterTerminalCallbacks(props.terminalId)
 
     // 清理主题监听器
-    themeStore.cleanup()
+    // 主题监听器为全局单例，不在组件层面清理，避免影响其他实例
 
     // 清理所有定时器
     if (timers.resize) clearTimeout(timers.resize)

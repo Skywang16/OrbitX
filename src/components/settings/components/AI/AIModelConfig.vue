@@ -146,115 +146,138 @@
   }
 
   .action-header {
-    margin-bottom: var(--spacing-md);
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-300);
   }
 
-  .header-content {
-    flex: 1;
+  .action-header :deep(.x-button) {
+    background: var(--color-primary);
+    color: white;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .action-header :deep(.x-button:hover) {
+    background: var(--color-primary-hover);
   }
 
   .section-title {
-    font-size: var(--font-size-lg);
-    font-weight: 600;
-    color: var(--text-200);
-    margin: 0 0 var(--spacing-xs) 0;
+    font-size: 20px;
+    color: var(--text-100);
+    margin-bottom: 8px;
   }
 
   .section-description {
-    font-size: var(--font-size-sm);
+    font-size: 13px;
     color: var(--text-400);
-    margin: 0;
-    line-height: 1.5;
   }
 
   .empty-state {
     text-align: center;
-    padding: var(--spacing-xl) var(--spacing-lg);
+    padding: 48px 24px;
     color: var(--text-400);
+    background: var(--bg-500);
+    border-radius: 4px;
   }
 
   .empty-icon {
-    margin-bottom: var(--spacing-md);
-    opacity: 0.5;
+    margin-bottom: 16px;
+    color: var(--text-300);
   }
 
   .empty-title {
-    font-size: var(--font-size-md);
-    font-weight: 500;
+    font-size: 16px;
     color: var(--text-200);
-    margin: 0 0 var(--spacing-xs) 0;
+    margin-bottom: 8px;
   }
 
   .empty-description {
-    font-size: var(--font-size-sm);
-    margin: 0;
-    line-height: 1.5;
+    font-size: 13px;
   }
 
   .model-cards {
-    display: grid;
-    gap: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .model-card {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border: 1px solid var(--border-300);
-    border-radius: var(--border-radius);
-    padding: var(--spacing-md);
-    transition: all 0.2s ease;
-    margin-bottom: var(--spacing-sm);
+    background: var(--bg-500);
+    border-radius: 4px;
+    padding: 12px 16px;
   }
 
   .model-card:hover {
-    border-color: var(--color-primary);
-  }
-
-  .model-left {
-    display: flex;
-    align-items: center;
-    flex: 1;
+    background: var(--bg-400);
   }
 
   .model-name {
-    font-size: var(--font-size-md);
-    font-weight: 600;
+    font-size: 14px;
     color: var(--text-200);
-    margin-left: var(--spacing-sm);
   }
 
   .model-actions {
     display: flex;
-    gap: var(--spacing-xs);
-    flex-shrink: 0;
+    gap: 8px;
   }
 
-  /* 加载状态 */
+  .model-actions :deep(.x-button) {
+    background: transparent;
+    border: 1px solid var(--border-200);
+    color: var(--text-300);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .model-actions :deep(.x-button:hover) {
+    background: var(--bg-300);
+    color: var(--text-200);
+  }
+
+  .model-actions :deep(.x-button[variant='danger']) {
+    border-color: var(--error-border);
+    color: var(--error-text);
+  }
+
+  .model-actions :deep(.x-button[variant='danger']:hover) {
+    background: var(--error-bg);
+  }
+
   .loading-state {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: var(--spacing-xl);
+    padding: 48px 24px;
     color: var(--text-400);
+    background: var(--bg-500);
+    border-radius: 4px;
+  }
+
+  .loading-state p {
+    font-size: 13px;
   }
 
   .loading-spinner {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     border: 2px solid var(--border-300);
     border-top: 2px solid var(--color-primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
-    margin-bottom: var(--spacing-md);
+    margin-bottom: 12px;
   }
 
   @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
+    to {
       transform: rotate(360deg);
     }
   }
