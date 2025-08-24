@@ -16,7 +16,6 @@ import { createTerminalEko, createSidebarCallback, type TerminalEko } from '@/ek
 import type { Conversation, Message } from '@/types'
 import { createToolExecution } from '@/types'
 import { debounce } from 'lodash-es'
-import stripAnsi from 'strip-ansi'
 
 // 流式消息类型定义（基于Eko源码）
 interface StreamMessage {
