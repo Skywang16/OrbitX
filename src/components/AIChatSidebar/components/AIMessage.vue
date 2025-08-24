@@ -51,6 +51,16 @@
         <div v-else-if="step.type === 'text'" class="ai-message-text step-block">
           <div v-html="renderMarkdown(step.content)"></div>
         </div>
+
+        <!-- 错误信息显示 -->
+        <div v-else-if="step.type === 'error'" class="error-message step-block">
+          <div class="error-header">
+            <span class="error-icon">⚠️</span>
+            <span class="error-title">执行失败</span>
+          </div>
+          <div class="error-content">{{ step.content }}</div>
+          <div v-if="step.metadata?.errorDetails" class="error-details">详细信息: {{ step.metadata.errorDetails }}</div>
+        </div>
       </template>
     </template>
 
@@ -145,10 +155,30 @@
     font-size: var(--font-size-sm);
   }
 
+  /* 错误消息样式 */
+  .error-message {
+    padding: var(--spacing-sm);
+    border-radius: var(--border-radius);
+    background: rgba(239, 68, 68, 0.05);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    font-size: var(--font-size-sm);
+  }
+
   .error-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
     font-weight: 600;
     margin-bottom: var(--spacing-xs);
     color: var(--color-error);
+  }
+
+  .error-icon {
+    font-size: var(--font-size-md);
+  }
+
+  .error-title {
+    font-size: var(--font-size-sm);
   }
 
   .error-content,

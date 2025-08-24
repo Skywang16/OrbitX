@@ -203,6 +203,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       throw new Error('无法创建会话')
     }
 
+    let tempAIMessage: Message | null = null
+
     try {
       isLoading.value = true
       error.value = null
@@ -246,7 +248,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       const messageId = await aiApi.saveMessage(currentConversationId.value, 'assistant', '正在生成回复...')
 
       // 创建AI消息对象，使用真实的数据库ID
-      const tempAIMessage: Message = {
+      tempAIMessage = {
         id: messageId,
         conversationId: currentConversationId.value,
         role: 'assistant',
@@ -304,6 +306,32 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       // 11. 刷新会话列表以更新预览（不重新加载消息，保持步骤信息）
       await refreshConversations()
     } catch (err) {
+      // 修复UI状态同步问题：确保在异常情况下也更新消息状态
+      if (tempAIMessage) {
+        tempAIMessage.status = 'error'
+        tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
+
+        // 添加错误步骤，显示具体错误信息
+        tempAIMessage.steps = tempAIMessage.steps || []
+        tempAIMessage.steps.push({
+          type: 'error',
+          content: `AI任务执行失败: ${err instanceof Error ? err.message : '未知错误'}`,
+          timestamp: Date.now(),
+          metadata: {
+            errorType: 'ExecutionError',
+            errorDetails: err instanceof Error ? err.stack : String(err),
+          },
+        })
+
+        // 尝试更新数据库中的消息状态
+        try {
+          await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
+          await aiApi.updateMessageSteps(tempAIMessage.id, tempAIMessage.steps)
+        } catch {
+          // 静默失败，避免二次错误
+        }
+      }
+
       error.value = handleErrorWithMessage(err, '发送消息失败')
       throw err
     } finally {
