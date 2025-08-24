@@ -223,7 +223,6 @@ impl TerminalMux {
         size: PtySize,
         config: &TerminalConfig,
     ) -> AppResult<PaneId> {
-        let start_time = Instant::now();
         let pane_id = self.next_pane_id();
 
         // 创建面板实例
@@ -297,8 +296,6 @@ impl TerminalMux {
     /// - 包含性能指标
     #[instrument(skip(self), fields(pane_id = ?pane_id))]
     pub fn remove_pane(&self, pane_id: PaneId) -> AppResult<()> {
-        let start_time = Instant::now();
-
         let pane = {
             debug!("获取面板写锁: pane_id={:?}", pane_id);
             let mut panes = self.panes.write().map_err(|_| {
@@ -364,8 +361,6 @@ impl TerminalMux {
     /// - 包含性能指标
     #[instrument(skip(self, data), fields(pane_id = ?pane_id, data_len = data.len()))]
     pub fn write_to_pane(&self, pane_id: PaneId, data: &[u8]) -> AppResult<()> {
-        let start_time = Instant::now();
-
         let pane = self.get_pane(pane_id).ok_or_else(|| {
             error!("面板不存在: pane_id={:?}", pane_id);
             anyhow!("面板 {:?} 不存在", pane_id)
@@ -390,8 +385,6 @@ impl TerminalMux {
     /// - 包含性能指标
     #[instrument(skip(self), fields(pane_id = ?pane_id, size = ?size))]
     pub fn resize_pane(&self, pane_id: PaneId, size: PtySize) -> AppResult<()> {
-        let start_time = Instant::now();
-
         let pane = self.get_pane(pane_id).ok_or_else(|| {
             error!("面板不存在: pane_id={:?}", pane_id);
             anyhow!("面板 {:?} 不存在", pane_id)

@@ -161,7 +161,6 @@ pub async fn get_compressed_context(
     up_to_message_id: Option<i64>,
     state: State<'_, AIManagerState>,
 ) -> Result<Vec<Message>, String> {
-
     if conversation_id <= 0 {
         return Err("无效的会话ID".to_string());
     }
@@ -191,7 +190,6 @@ pub async fn build_prompt_with_context(
     current_working_directory: Option<String>,
     state: State<'_, AIManagerState>,
 ) -> Result<String, String> {
-
     // 参数验证
     if conversation_id <= 0 {
         return Err("无效的会话ID".to_string());
@@ -223,7 +221,6 @@ pub async fn truncate_conversation(
     truncate_after_message_id: i64,
     state: State<'_, AIManagerState>,
 ) -> Result<(), String> {
-
     if conversation_id <= 0 {
         return Err("无效的会话ID".to_string());
     }
@@ -249,7 +246,6 @@ pub async fn save_message(
     content: String,
     state: State<'_, AIManagerState>,
 ) -> Result<i64, String> {
-
     if conversation_id <= 0 {
         return Err("无效的会话ID".to_string());
     }
@@ -448,7 +444,7 @@ pub async fn get_context_config() -> Result<crate::ai::enhanced_context::Context
 /// 更新上下文配置
 #[tauri::command]
 pub async fn update_context_config(
-    config: crate::ai::enhanced_context::ContextConfig,
+    _config: crate::ai::enhanced_context::ContextConfig,
 ) -> Result<(), String> {
     // TODO: 实现配置持久化
     // 可以保存到数据库或配置文件
