@@ -5,7 +5,7 @@
   "description": "OrbitX - A modern terminal application with AI assistant built with Vue.js and Tauri",
   "type": "module",
   "author": "Your Name <your.email@example.com>",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "repository": {
     "type": "git",
     "url": "https://github.com/Skywang16/OrbitX.git"

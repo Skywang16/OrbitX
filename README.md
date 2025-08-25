@@ -3,11 +3,13 @@
 一款跨平台终端应用，内置基础 AI 助手能力。基于 Vue 3 与 Tauri 构建。
 
 ![CI](https://img.shields.io/github/actions/workflow/status/Skywang16/OrbitX/ci.yml?branch=main&label=CI)
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+[![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
+> 平台支持：当前仅适配 macOS（Windows/Linux 正在适配中）
 
 ## 特性
 
-- 跨平台：Windows / macOS / Linux
+- 跨平台目标：Windows / macOS / Linux（当前仅适配 macOS）
 - 基于 Tauri，体积小、资源占用低
 - xterm.js 终端，支持常用插件（搜索、链接、自适应尺寸）
 - 主题与配置可定制（见 `config/`）
@@ -69,7 +71,7 @@ npm run tauri build
 ```text
 orbitx/
 ├── src/                     # 前端源代码（Vue 3 + TS + Vite）
-│   ├── api/                 # 前端与 Tauri/Rust 的 API 调用
+│   ├── api/                 # 前端与 Tauri/Rust 的 API 声明
 │   ├── components/          # Vue 组件
 │   ├── composables/         # 可复用 hooks（useXxx）
 │   ├── constants/           # 常量
@@ -88,7 +90,7 @@ orbitx/
 
 常见操作：
 
-- 多标签页、分屏与搜索（xterm.js 插件）
+- 多标签页与搜索（xterm.js 插件）
 - 主题切换与跟随系统
 - 快捷键（复制/粘贴/搜索、标签页管理等）
 
@@ -117,6 +119,10 @@ Note: If the repository name or owner changes, please update badges and links ac
 ## Contact
 
 For issues and suggestions, please create an [Issue](https://github.com/Skywang16/OrbitX/issues).
+
+## 许可
+
+- 本项目以 GPL-3.0-or-later 授权。详见 `LICENSE` 文件。
 
 ---
 

@@ -278,6 +278,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         tempAIMessage.status = 'complete'
         tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
 
+        // 强制触发Vue响应式更新
+        const messageIndex = messageList.value.findIndex(m => m.id === tempAIMessage!.id)
+        if (messageIndex !== -1) {
+          messageList.value[messageIndex] = { ...tempAIMessage }
+        }
+
         await aiApi.updateMessageContent(tempAIMessage.id, tempAIMessage.content)
         await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
       } else if (tempAIMessage) {
@@ -483,11 +489,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                 streamId: message.streamId,
               })
 
-              // 累计最新文本，但不在这里结束状态，避免多路流片段导致过早完成
-              streamingContent.value = message.text || ''
+              // 累计最终内容用于显示
               if (message.streamDone) {
-                // 仅更新内容，不改变状态；最终完成由 sendMessage 成功分支统一处理
-                tempMessage.content = message.text || tempMessage.content || ''
+                tempMessage.content = message.text || ''
               }
               break
           }

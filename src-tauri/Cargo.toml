@@ -5,6 +5,7 @@ description = "OrbitX - A modern terminal application with AI assistant"
 authors = ["you"]
 edition = "2021"
 default-run = "orbitx"
+license = "GPL-3.0-or-later"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

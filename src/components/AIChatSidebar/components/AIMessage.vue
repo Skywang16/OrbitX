@@ -4,12 +4,14 @@
   import type { Message } from '@/types'
   import ThinkingBlock from './msgBlock/ThinkingBlock.vue'
   import ToolBlock from './msgBlock/ToolBlock.vue'
+  import { useAIChatStore } from '../store'
 
   interface Props {
     message: Message
   }
 
   const props = defineProps<Props>()
+  const aiChatStore = useAIChatStore()
 
   // 按时间戳排序步骤，确保瀑布式显示顺序
   const sortedSteps = computed(() => {
@@ -67,10 +69,19 @@
     <!-- 消息时间和状态 -->
     <div class="ai-message-footer">
       <div class="ai-message-time">{{ formatTime(message.createdAt) }}</div>
-      <div v-if="message.status === 'streaming'" class="streaming-indicator">
+
+      <div
+        v-if="
+          aiChatStore.isLoading &&
+          message.role === 'assistant' &&
+          aiChatStore.messageList[aiChatStore.messageList.length - 1]?.id === message.id
+        "
+        class="streaming-indicator"
+      >
         <span class="streaming-dot"></span>
         正在生成...
       </div>
+
       <div v-else-if="message.duration" class="duration-info">耗时 {{ formatDuration(message.duration) }}</div>
     </div>
   </div>

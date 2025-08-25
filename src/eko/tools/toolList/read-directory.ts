@@ -24,7 +24,7 @@ export class ReadDirectoryTool extends ModifiableTool {
   constructor() {
     super(
       'read_directory',
-      `列出目录中的文件和子目录。显示目录下的文件和文件夹，目录名以"/"结尾区分。会自动过滤隐藏文件。只显示第一层内容，不递归遍历子目录。如果目录内容过多会显示前500项并提示总数。必须使用绝对路径。`,
+      `递归列出目录中的所有文件和子目录，最多5层深度。以树形结构显示，目录以"/"结尾，会自动过滤隐藏文件。输出为LLM友好的树形格式。必须使用绝对路径。`,
       {
         type: 'object',
         properties: {
@@ -49,11 +49,11 @@ export class ReadDirectoryTool extends ModifiableTool {
         throw new FileNotFoundError(path)
       }
 
-      // 读取目录内容
-      const entries = await this.readDirectorySimple(path)
+      // 递归读取目录内容（最多5层）
+      const entries = await this.readDirectoryRecursive(path, 0, 5)
 
-      // 格式化输出
-      const output = this.formatDirectoryOutput(entries)
+      // 格式化为树形输出
+      const output = await this.formatTreeOutput(path, entries)
 
       return {
         content: [
@@ -80,8 +80,12 @@ export class ReadDirectoryTool extends ModifiableTool {
     }
   }
 
-  private async readDirectorySimple(dirPath: string): Promise<FileEntry[]> {
+  private async readDirectoryRecursive(dirPath: string, currentDepth: number, maxDepth: number): Promise<FileEntry[]> {
     const entries: FileEntry[] = []
+
+    if (currentDepth >= maxDepth) {
+      return entries
+    }
 
     try {
       // 使用Tauri API读取目录
@@ -113,59 +117,83 @@ export class ReadDirectoryTool extends ModifiableTool {
 
         entries.push(fileEntry)
       }
+
+      // 对目录排序，目录在前，文件在后
+      entries.sort((a, b) => {
+        if (a.isDirectory && !b.isDirectory) return -1
+        if (!a.isDirectory && b.isDirectory) return 1
+        return a.name.localeCompare(b.name)
+      })
     } catch (error) {
-      throw new Error(`读取目录 ${dirPath} 失败: ${error instanceof Error ? error.message : String(error)}`)
+      // 如果读取失败，返回已有的entries
+      console.warn(`读取目录 ${dirPath} 失败: ${error instanceof Error ? error.message : String(error)}`)
     }
 
     return entries
   }
 
-  private formatDirectoryOutput(entries: FileEntry[]): string {
+  private async formatTreeOutput(rootPath: string, entries: FileEntry[]): Promise<string> {
     if (entries.length === 0) {
       return `目录为空`
     }
 
-    const MAX_DISPLAY_ITEMS = 500 // 增加到500项
     const lines: string[] = []
+    const rootName = rootPath.split('/').pop() || rootPath
+    lines.push(`${rootName}/`)
 
-    // 按目录和文件分组
-    const directories = entries.filter(e => e.isDirectory)
-    const files = entries.filter(e => !e.isDirectory)
+    const totalItems = await this.buildTree(rootPath, entries, lines, '', 0, 5)
 
-    const totalItems = directories.length + files.length
-    const shouldTruncate = totalItems > MAX_DISPLAY_ITEMS
-
-    // 计算显示数量
-    let displayDirs = directories
-    let displayFiles = files
-
-    if (shouldTruncate) {
-      const dirCount = Math.min(directories.length, Math.floor(MAX_DISPLAY_ITEMS * 0.4)) // 40%给目录
-      const fileCount = Math.min(files.length, MAX_DISPLAY_ITEMS - dirCount)
-
-      displayDirs = directories.slice(0, dirCount)
-      displayFiles = files.slice(0, fileCount)
-    }
-
-    // 显示目录
-    for (const dir of displayDirs) {
-      lines.push(`目录: ${dir.name}/`)
-    }
-
-    // 显示文件
-    for (const file of displayFiles) {
-      lines.push(`文件: ${file.name}`)
-    }
-
-    // 如果被截断，添加LLM友好的提示
-    if (shouldTruncate) {
+    // 添加LLM友好的提示
+    const MAX_DISPLAY_ITEMS = 1000
+    if (totalItems > MAX_DISPLAY_ITEMS) {
       lines.push('')
-      lines.push(`重要提示：目录列表已被截断。`)
-      lines.push(`状态：显示了 ${displayDirs.length + displayFiles.length} 项，总共 ${totalItems} 项。`)
-      lines.push(`建议：目录包含更多文件。使用 read_file 工具检查感兴趣的特定文件。`)
+      lines.push(`重要提示：目录结构已被截断（最多5层深度）。`)
+      lines.push(`状态：显示了部分内容，实际项目可能包含更多文件。`)
+      lines.push(`建议：如需查看特定文件，请使用 read_file 工具。`)
     }
 
     return lines.join('\n')
+  }
+
+  private async buildTree(
+    _currentPath: string,
+    entries: FileEntry[],
+    lines: string[],
+    prefix: string,
+    currentDepth: number,
+    maxDepth: number
+  ): Promise<number> {
+    if (currentDepth >= maxDepth) {
+      return 0
+    }
+
+    let totalItems = entries.length
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]
+      const isLast = i === entries.length - 1
+      const currentPrefix = isLast ? '└── ' : '├── '
+      const nextPrefix = prefix + (isLast ? '    ' : '│   ')
+
+      if (entry.isDirectory) {
+        lines.push(`${prefix}${currentPrefix}${entry.name}/`)
+
+        // 递归读取子目录
+        try {
+          const subEntries = await this.readDirectoryRecursive(entry.path, currentDepth + 1, maxDepth)
+          if (subEntries.length > 0) {
+            const subTotal = await this.buildTree(entry.path, subEntries, lines, nextPrefix, currentDepth + 1, maxDepth)
+            totalItems += subTotal
+          }
+        } catch (error) {
+          // 忽略无法读取的目录
+        }
+      } else {
+        lines.push(`${prefix}${currentPrefix}${entry.name}`)
+      }
+    }
+
+    return totalItems
   }
 }
 
