@@ -271,17 +271,14 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       streamingContent.value = ''
       const response = await ekoInstance.value!.run(fullPrompt)
 
-      // 10. 更新AI回复内容和状态
-      if (response.success && response.result && tempAIMessage) {
-        // 更新消息的内容和状态
-        tempAIMessage.content = response.result
+      // 10. 更新AI回复内容和状态（简化版）
+      if (tempAIMessage && response.success) {
+        // 成功完成：优先保留流回调中已累计的内容
+        tempAIMessage.content = (tempAIMessage.content as string | undefined) ?? ((response.result as string) || '')
         tempAIMessage.status = 'complete'
         tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
 
-        // 更新消息的最终内容和状态
-        if (tempAIMessage.content) {
-          await aiApi.updateMessageContent(tempAIMessage.id, tempAIMessage.content)
-        }
+        await aiApi.updateMessageContent(tempAIMessage.id, tempAIMessage.content)
         await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
       } else if (tempAIMessage) {
         // 处理eko返回的错误结果
@@ -486,11 +483,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                 streamId: message.streamId,
               })
 
+              // 累计最新文本，但不在这里结束状态，避免多路流片段导致过早完成
               streamingContent.value = message.text || ''
-              // 注意：不在这里设置 status 为 'complete'
-              // 状态更新由 sendMessage 方法的最终处理来完成
               if (message.streamDone) {
-                tempMessage.content = message.text
+                // 仅更新内容，不改变状态；最终完成由 sendMessage 成功分支统一处理
+                tempMessage.content = message.text || tempMessage.content || ''
               }
               break
           }
