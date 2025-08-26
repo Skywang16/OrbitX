@@ -597,6 +597,52 @@ impl ActionRegistry {
                 },
             )
             .await;
+
+        let _ = self
+            .register_action(
+                ActionMetadata {
+                    name: "toggle_ai_sidebar".to_string(),
+                    description: "开启/关闭AI侧边栏".to_string(),
+
+                    requires_terminal: false,
+                    is_system_action: false,
+                    supported_platforms: vec![
+                        "windows".to_string(),
+                        "macos".to_string(),
+                        "linux".to_string(),
+                    ],
+                },
+                |context| {
+                    debug!("切换AI侧边栏上下文: {:?}", context);
+                    Ok(serde_json::Value::String(
+                        "🔥 AI侧边栏切换功能已触发！".to_string(),
+                    ))
+                },
+            )
+            .await;
+
+        let _ = self
+            .register_action(
+                ActionMetadata {
+                    name: "toggle_window_pin".to_string(),
+                    description: "钉住/取消钉住窗口".to_string(),
+
+                    requires_terminal: false,
+                    is_system_action: false,
+                    supported_platforms: vec![
+                        "windows".to_string(),
+                        "macos".to_string(),
+                        "linux".to_string(),
+                    ],
+                },
+                |context| {
+                    debug!("切换窗口钉住状态上下文: {:?}", context);
+                    Ok(serde_json::Value::String(
+                        "🔥 窗口钉住切换功能已触发！".to_string(),
+                    ))
+                },
+            )
+            .await;
     }
 }
 

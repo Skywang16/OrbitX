@@ -1,5 +1,9 @@
 <template>
   <div class="content-renderer">
+    <!-- 当没有任何tab时显示空状态页面 -->
+    <EmptyState v-if="tabManagerStore.tabs.length === 0" />
+
+    <!-- 终端标签页 -->
     <Terminal
       v-for="tab in tabManagerStore.tabs.filter(t => t.type === TabType.TERMINAL)"
       v-show="tab.id === tabManagerStore.activeTabId"
@@ -11,6 +15,7 @@
       @resize="handleResize"
     />
 
+    <!-- 设置页面 -->
     <SettingsView
       v-for="tab in tabManagerStore.tabs.filter(t => t.type === TabType.SETTINGS)"
       v-show="tab.id === tabManagerStore.activeTabId"
@@ -25,6 +30,7 @@
   import { useTerminalStore } from '@/stores/Terminal'
   import Terminal from '@/components/terminal/Terminal.vue'
   import SettingsView from '@/views/Settings/SettingsView.vue'
+  import EmptyState from '@/components/ui/EmptyState.vue'
 
   const tabManagerStore = useTabManagerStore()
   const terminalStore = useTerminalStore()

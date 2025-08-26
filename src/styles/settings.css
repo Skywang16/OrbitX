@@ -599,19 +599,24 @@
 
 .shortcut-modifier,
 .shortcut-key {
-  padding: 2px 6px;
-  background: var(--bg-400);
-  border-radius: 4px;
-  font-size: 10px;
-  color: var(--text-300);
-  border: 1px solid var(--border-200);
+  padding: 4px 8px;
+  background: var(--bg-600);
+  border: 1px solid var(--border-400);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-200);
+  font-weight: 500;
+  min-width: 24px;
+  text-align: center;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
 .shortcut-key {
-  background: var(--color-primary);
-  color: white;
-  border-color: var(--color-primary);
-  font-weight: 500;
+  background: var(--bg-600);
+  border: 1px solid var(--border-400);
+  color: var(--text-200);
 }
 
 .settings-item--stacked {

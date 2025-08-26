@@ -165,6 +165,16 @@ pub fn create_default_shortcuts_config() -> ShortcutsConfig {
             modifiers: vec!["cmd".to_string()],
             action: ShortcutAction::Simple("decrease_font_size".to_string()),
         },
+        ShortcutBinding {
+            key: "i".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("toggle_ai_sidebar".to_string()),
+        },
+        ShortcutBinding {
+            key: "p".to_string(),
+            modifiers: vec!["cmd".to_string(), "shift".to_string()],
+            action: ShortcutAction::Simple("toggle_window_pin".to_string()),
+        },
     ]
 }
 

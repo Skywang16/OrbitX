@@ -149,6 +149,12 @@ export function useShortcutListener() {
       case 'decrease_opacity':
         frontendResult = await shortcutActionsService.decreaseOpacity()
         break
+      case 'toggle_ai_sidebar':
+        frontendResult = shortcutActionsService.toggleAISidebar()
+        break
+      case 'toggle_window_pin':
+        frontendResult = await shortcutActionsService.toggleWindowPin()
+        break
     }
 
     await shortcutsApi.executeAction(shortcut.action, keyCombo, getCurrentTerminalId(), {

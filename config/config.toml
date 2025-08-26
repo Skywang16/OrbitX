@@ -122,3 +122,13 @@ action = "increase_font_size"
 key = "-"
 modifiers = ["cmd"]
 action = "decrease_font_size"
+
+[[shortcuts]]
+key = "i"
+modifiers = ["cmd"]
+action = "toggle_ai_sidebar"
+
+[[shortcuts]]
+key = "p"
+modifiers = ["cmd"]
+action = "toggle_window_pin"

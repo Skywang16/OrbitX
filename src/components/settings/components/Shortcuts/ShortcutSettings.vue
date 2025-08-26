@@ -13,33 +13,33 @@
     </div>
     <div v-else class="settings-group">
       <h3 class="settings-group-title">{{ t('shortcuts.title') }}</h3>
-      <div v-for="action in allActions" :key="action.key" class="settings-item">
+      <div
+        v-for="action in allActions"
+        :key="action.key"
+        class="settings-item shortcut-item"
+        :class="{
+          'shortcut-item--editing': isEditing(action.key),
+          'shortcut-item--configured': action.shortcut,
+        }"
+        @click="startEdit(action.key)"
+        @keydown="handleKeyDown($event, action.key)"
+        @blur="stopEdit(action.key)"
+        tabindex="0"
+      >
         <div class="settings-item-header">
           <div class="settings-label">{{ action.displayName }}</div>
         </div>
         <div class="settings-item-control">
-          <div
-            class="shortcut-editor"
-            :class="{
-              'shortcut-editor--editing': isEditing(action.key),
-              'shortcut-editor--configured': action.shortcut,
-            }"
-            @click="startEdit(action.key)"
-            @keydown="handleKeyDown($event, action.key)"
-            @blur="stopEdit(action.key)"
-            tabindex="0"
-          >
-            <span v-if="!isEditing(action.key)" class="shortcut-display">
-              <template v-if="action.shortcut">
-                <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="shortcut-modifier">
-                  {{ modifier }}
-                </span>
-                <span class="shortcut-key">{{ action.shortcut.key }}</span>
-              </template>
-              <span v-else class="shortcut-not-configured">{{ t('shortcuts.not_configured') }}</span>
-            </span>
-            <span v-else class="shortcut-editing-hint">{{ t('shortcuts.editing_hint') }}</span>
-          </div>
+          <span v-if="!isEditing(action.key)" class="shortcut-display">
+            <template v-if="action.shortcut">
+              <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="shortcut-modifier">
+                {{ modifier }}
+              </span>
+              <span class="shortcut-key">{{ action.shortcut.key }}</span>
+            </template>
+            <span v-else class="shortcut-not-configured">{{ t('shortcuts.not_configured') }}</span>
+          </span>
+          <span v-else class="shortcut-editing-hint">{{ t('shortcuts.editing_hint') }}</span>
         </div>
       </div>
     </div>
@@ -128,6 +128,8 @@
     'accept_completion',
     'increase_font_size',
     'decrease_font_size',
+    'toggle_ai_sidebar',
+    'toggle_window_pin',
   ]
 
   const findShortcut = (actionKey: string) => {
@@ -236,79 +238,90 @@
 </script>
 
 <style scoped>
-  .shortcut-editor {
-    min-width: 100px;
-    width: 100%;
-    max-width: 200px;
-    padding: 6px 12px;
-    background: var(--bg-500);
-    border: 1px solid var(--border-300);
-    border-radius: var(--border-radius);
-    color: var(--text-200);
-    font-size: 12px;
-    font-family: var(--font-family-mono);
+  .shortcut-item {
     cursor: pointer;
     transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
+    border-radius: var(--border-radius);
+    min-height: 60px; /* 固定最小高度防止抖动 */
   }
 
-  .shortcut-editor:hover {
-    border-color: var(--border-400);
-    background: var(--bg-600);
-  }
-
-  .shortcut-editor:focus {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px var(--color-primary-alpha);
-  }
-
-  .shortcut-editor--editing {
-    border-color: var(--color-primary);
-    background: var(--color-primary-alpha);
-    animation: pulse 1.5s infinite;
-  }
-
-  .shortcut-editor--configured {
+  .shortcut-item:hover {
     background: var(--bg-400);
+  }
+
+  .shortcut-item:focus {
+    outline: none;
+    background: var(--bg-400);
+    border: 1px solid var(--color-primary);
+  }
+
+  .shortcut-item--editing {
+    background: var(--color-primary-alpha);
+    border: 1px solid var(--color-primary);
+    animation: pulse 1.5s infinite;
   }
 
   .shortcut-display {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     flex-wrap: wrap;
-    justify-content: center;
+    justify-content: flex-end;
+    min-height: 28px; /* 确保有固定高度 */
   }
 
   .shortcut-modifier {
     background: var(--bg-600);
-    padding: 2px 4px;
-    border-radius: 2px;
-    font-size: 10px;
-    color: var(--text-300);
+    border: 1px solid var(--border-400);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-200);
+    font-weight: 500;
+    min-width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.05) inset;
   }
 
   .shortcut-key {
-    background: var(--color-primary);
-    color: var(--color-primary-text);
-    padding: 2px 6px;
-    border-radius: 2px;
-    font-size: 10px;
+    background: var(--bg-600);
+    border: 1px solid var(--border-400);
+    color: var(--text-200);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
     font-weight: 500;
+    min-width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.05) inset;
   }
 
   .shortcut-not-configured {
     color: var(--text-400);
     font-style: italic;
+    min-height: 28px; /* 与按键相同高度 */
+    display: flex;
+    align-items: center;
   }
 
   .shortcut-editing-hint {
     color: var(--color-primary);
     font-style: italic;
+    min-height: 28px; /* 与按键相同高度 */
+    display: flex;
+    align-items: center;
   }
 
   .settings-warning {
@@ -367,12 +380,6 @@
 
   /* 响应式设计 */
   @media (max-width: 480px) {
-    .shortcut-editor {
-      min-width: 100px;
-      padding: 8px 10px;
-      font-size: 11px;
-    }
-
     .shortcut-display {
       gap: 1px;
     }
@@ -385,12 +392,6 @@
   }
 
   @media (max-width: 320px) {
-    .shortcut-editor {
-      min-width: 60px;
-      padding: 4px 6px;
-      font-size: 9px;
-    }
-
     .settings-warning {
       padding: 6px 8px;
       font-size: 10px;

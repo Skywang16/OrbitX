@@ -55,7 +55,6 @@ export default defineConfig(() => ({
           ],
           ai: ['@eko-ai/eko'],
           utils: ['lodash-es', 'dayjs', 'uuid', 'marked', 'strip-ansi'],
-          lottie: ['lottie-web'],
           validation: ['ajv'],
         },
         chunkFileNames: () => {

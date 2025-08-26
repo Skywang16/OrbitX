@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, computed } from 'vue'
+  import { ref, computed, onMounted, onUnmounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { windowApi } from '@/api'
   import { handleErrorWithMessage } from '@/utils/errorHandler'
@@ -68,6 +68,23 @@
   const toggleAIChat = () => {
     aiChatStore.toggleSidebar()
   }
+
+  // 监听快捷键触发的窗口状态变化
+  const handleShortcutToggle = (event: CustomEvent) => {
+    if (event.detail?.action === 'toggle_window_pin') {
+      // 快捷键触发时，直接切换状态
+      isAlwaysOnTop.value = !isAlwaysOnTop.value
+    }
+  }
+
+  onMounted(() => {
+    // 监听快捷键事件
+    window.addEventListener('shortcut-action', handleShortcutToggle as EventListener)
+  })
+
+  onUnmounted(() => {
+    window.removeEventListener('shortcut-action', handleShortcutToggle as EventListener)
+  })
 </script>
 
 <template>

@@ -4,6 +4,9 @@
 
 import { createApp, h, ref } from 'vue'
 import XModal from '../components/Modal.vue'
+import { createI18n } from 'vue-i18n'
+import zhMessages from '@/i18n/locales/zh.json'
+import enMessages from '@/i18n/locales/en.json'
 
 export interface ConfirmConfig {
   /** 确认消息内容 */
@@ -104,6 +107,17 @@ export const confirm = (config: string | ConfirmConfig): Promise<boolean> => {
     const handleClose = () => {
       handleResult(false)
     }
+
+    // 创建i18n实例
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh',
+      fallbackLocale: 'en',
+      messages: {
+        zh: zhMessages,
+        en: enMessages,
+      },
+    })
 
     // 创建Vue应用实例
     const app = createApp({
@@ -235,6 +249,9 @@ export const confirm = (config: string | ConfirmConfig): Promise<boolean> => {
           )
       },
     })
+
+    // 安装i18n插件
+    app.use(i18n)
 
     // 挂载应用
     app.mount(container)

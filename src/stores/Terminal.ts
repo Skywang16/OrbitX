@@ -650,18 +650,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       const restored = await restoreFromSessionState()
 
-      if (!restored) {
-        if (terminals.value.length === 0) {
-          await createTerminal()
-        }
-      }
-
       await setupGlobalListeners()
     } catch (error) {
       console.error('终端Store初始化失败:', error)
-      if (terminals.value.length === 0) {
-        await createTerminal()
-      }
     }
   }
 

@@ -140,7 +140,9 @@
       "clear_terminal": "清空终端",
       "accept_completion": "接受补全",
       "increase_font_size": "增大字体",
-      "decrease_font_size": "减小字体"
+      "decrease_font_size": "减小字体",
+      "toggle_ai_sidebar": "开启/关闭AI侧边栏",
+      "toggle_window_pin": "钉住/取消钉住窗口"
     }
   },
   "tab": {

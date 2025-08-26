@@ -102,6 +102,8 @@ export type SupportedShortcutAction =
   | 'accept_completion'
   | 'increase_opacity'
   | 'decrease_opacity'
+  | 'toggle_ai_sidebar'
+  | 'toggle_window_pin'
 
 export interface ShortcutExecutionResult {
   success: boolean

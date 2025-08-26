@@ -52,6 +52,7 @@
     height: var(--titlebar-height);
     background-color: var(--bg-200);
     cursor: default;
+    border-bottom: 1px solid var(--border-200);
   }
 
   .left-buttons-space {

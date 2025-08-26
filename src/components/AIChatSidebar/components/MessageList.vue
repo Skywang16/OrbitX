@@ -4,7 +4,6 @@
   import type { Message } from '@/types'
   import UserMessage from './UserMessage.vue'
   import AIMessage from './AIMessage.vue'
-  import lottie, { type AnimationItem } from 'lottie-web'
 
   const { t } = useI18n()
 
@@ -16,10 +15,6 @@
 
   // 消息列表容器引用
   const messageListRef = ref<HTMLElement | null>(null)
-  // Lottie动画容器引用
-  const lottieContainer = ref<HTMLElement | null>(null)
-  // Lottie动画实例引用
-  const lottieAnimation = ref<AnimationItem | null>(null)
 
   // 消息列表
   const msgList = computed(() => {
@@ -37,84 +32,24 @@
     }
   }
 
-  // 销毁 Lottie 动画
-  const destroyLottieAnimation = () => {
-    if (lottieAnimation.value) {
-      try {
-        lottieAnimation.value.destroy()
-      } catch (error) {
-        console.warn('Lottie 动画销毁失败:', error)
-      } finally {
-        lottieAnimation.value = null
-      }
-    }
-  }
-
-  // 初始化 Lottie 动画
-  const initLottieAnimation = async () => {
-    // 确保 DOM 已更新
-    await nextTick()
-
-    // 检查容器是否可用
-    if (!lottieContainer.value) {
-      return
-    }
-
-    // 如果已有动画实例，先销毁
-    destroyLottieAnimation()
-
-    // 创建新的动画实例
-    try {
-      lottieAnimation.value = lottie.loadAnimation({
-        container: lottieContainer.value,
-        renderer: 'svg',
-        loop: true,
-        autoplay: true,
-        path: '/Circle.json',
-      })
-    } catch (error) {
-      console.warn('Lottie 动画初始化失败:', error)
-    }
-  }
-
-  // 监听消息列表变化，处理滚动和 Lottie 动画
+  // 监听消息列表变化，处理滚动
   watch(
     () => msgList.value.length,
-    async newLength => {
+    () => {
       // 自动滚动到底部
       scrollToBottom()
-
-      // 处理 Lottie 动画
-      if (newLength === 0) {
-        // 消息列表为空时，初始化动画
-        await initLottieAnimation()
-      } else {
-        // 消息列表不为空时，销毁动画
-        destroyLottieAnimation()
-      }
     },
     { immediate: true }
   )
-
-  // 组件挂载时的初始化
-  onMounted(async () => {
-    if (msgList.value.length === 0) {
-      await initLottieAnimation()
-    }
-  })
-
-  // 组件卸载时清理动画
-  onUnmounted(() => {
-    destroyLottieAnimation()
-  })
 </script>
 
 <template>
   <div ref="messageListRef" class="message-list">
     <div v-if="msgList.length === 0" class="empty-state">
-      <!-- Lottie动画容器 -->
       <div class="empty-icon">
-        <div ref="lottieContainer" class="lottie-animation"></div>
+        <svg class="empty-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H9l-3 3-1-3H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
       </div>
       <div class="empty-text">{{ t('message_list.start_conversation') }}</div>
       <div class="empty-hint">{{ t('message_list.send_message_hint') }}</div>
@@ -156,22 +91,11 @@
     margin-bottom: var(--spacing-md);
   }
 
-  .lottie-animation {
-    width: 120px;
-    height: 120px;
-    filter: drop-shadow(0 0 12px rgba(var(--color-primary-rgb, 59, 130, 246), 0.4));
-  }
-
-  /* Lottie动画中的SVG元素自动继承主题色彩 */
-  .lottie-animation svg {
+  .empty-icon-svg {
+    width: 64px;
+    height: 64px;
     color: var(--color-primary);
-  }
-
-  .lottie-animation svg path,
-  .lottie-animation svg circle,
-  .lottie-animation svg ellipse {
-    stroke: var(--color-primary) !important;
-    fill: var(--color-primary) !important;
+    opacity: 0.6;
   }
 
   .empty-text {

@@ -140,7 +140,9 @@
       "clear_terminal": "Clear Terminal",
       "accept_completion": "Accept Completion",
       "increase_font_size": "Increase Font Size",
-      "decrease_font_size": "Decrease Font Size"
+      "decrease_font_size": "Decrease Font Size",
+      "toggle_ai_sidebar": "Open/Close AI Sidebar",
+      "toggle_window_pin": "Pin/Unpin Window"
     }
   },
   "tab": {
