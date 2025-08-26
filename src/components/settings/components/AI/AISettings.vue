@@ -40,7 +40,7 @@
 
 <style scoped>
   .ai-settings {
-    padding: 24px 28px;
+    padding: 32px 28px;
     background: var(--bg-200);
     min-height: 100%;
   }
@@ -57,7 +57,6 @@
     border-bottom: none;
   }
 
-  .loading-state,
   .error-state {
     display: flex;
     flex-direction: column;
@@ -66,22 +65,6 @@
     background: var(--bg-300);
     border-radius: 4px;
     text-align: center;
-  }
-
-  .loading-spinner {
-    width: 24px;
-    height: 24px;
-    border: 2px solid var(--border-300);
-    border-top: 2px solid var(--color-primary);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-bottom: 16px;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 
   .error-icon {
@@ -93,18 +76,5 @@
     color: var(--text-200);
     font-size: 15px;
     margin-bottom: 16px;
-  }
-
-  .error-state :deep(.x-button) {
-    background: var(--color-primary);
-    border: 1px solid var(--color-primary);
-    color: white;
-    border-radius: 4px;
-    padding: 8px 16px;
-    font-size: 14px;
-  }
-
-  .error-state :deep(.x-button:hover) {
-    background: var(--color-primary-hover);
   }
 </style>

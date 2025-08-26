@@ -116,7 +116,6 @@
         <div class="item-icon" v-html="getIconSvg(item.icon)"></div>
         <div class="item-content">
           <div class="item-label">{{ item.label }}</div>
-          <div class="item-description">{{ item.description }}</div>
         </div>
       </li>
     </ul>
@@ -125,33 +124,40 @@
 
 <style scoped>
   .settings-navigation {
-    padding: var(--spacing-lg) 0;
+    padding: var(--spacing-md) 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   .navigation-header {
-    padding: var(--spacing-lg);
+    padding: var(--spacing-md) var(--spacing-lg);
     border-bottom: 1px solid var(--border-300);
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-sm);
+    flex-shrink: 0;
   }
 
   .navigation-list {
     list-style: none;
     margin: 0;
     padding: 0;
+    flex: 1;
+    overflow-y: auto;
   }
 
   .navigation-item {
     display: flex;
     align-items: center;
     gap: var(--spacing-md);
-    padding: var(--spacing-md) var(--spacing-lg);
+    padding: var(--spacing-sm) var(--spacing-lg);
     cursor: pointer;
     transition: all 0.2s ease;
     border-left: 2px solid transparent;
+    min-height: 40px;
   }
 
   .navigation-item:hover {
-    background-color: var(--color-hover);
+    background-color: var(--bg-400);
   }
 
   .navigation-item.active {
@@ -161,7 +167,7 @@
 
   .navigation-item.active .item-label {
     color: var(--color-primary);
-    font-weight: 500;
+    font-weight: 600;
   }
 
   .item-icon {
@@ -185,12 +191,5 @@
     font-size: var(--font-size-md);
     font-weight: 500;
     color: var(--text-200);
-    margin-bottom: 4px;
-  }
-
-  .item-description {
-    font-size: var(--font-size-sm);
-    color: var(--text-400);
-    line-height: 1.4;
   }
 </style>

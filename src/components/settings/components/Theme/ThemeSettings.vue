@@ -45,8 +45,6 @@
     return isFollowing ? 'system' : 'manual'
   })
 
-  // const currentThemeName = computed(() => theme.currentThemeName.value)
-
   // 主题选项 - 用于手动模式
   const manualThemeOptions = computed(() => {
     return theme.themeOptions.value.map((option: any) => ({
@@ -222,7 +220,7 @@
 
 <template>
   <div class="theme-settings">
-    <!-- 模式选择 -->
+    <!-- 主题模式选择 -->
     <div class="settings-group">
       <h3 class="section-title">{{ t('theme_settings.theme_mode') }}</h3>
       <div class="mode-selector">
@@ -300,7 +298,7 @@
         <div class="theme-selector">
           <div class="selector-header">
             <div class="selector-icon" v-html="getIconSvg('sun')"></div>
-            <h4 class="selector-title">{{ t('theme_settings.light_theme') }}</h4>
+            <span class="selector-label">{{ t('theme_settings.light_theme') }}</span>
           </div>
           <div class="selector-content">
             <XSelect
@@ -318,7 +316,7 @@
         <div class="theme-selector">
           <div class="selector-header">
             <div class="selector-icon" v-html="getIconSvg('moon')"></div>
-            <h4 class="selector-title">{{ t('theme_settings.dark_theme') }}</h4>
+            <span class="selector-label">{{ t('theme_settings.dark_theme') }}</span>
           </div>
           <div class="selector-content">
             <XSelect
@@ -336,12 +334,10 @@
 
     <!-- 窗口透明度设置 -->
     <div class="settings-group">
-      <div class="setting-item">
-        <div class="setting-label">
-          <span class="label-text">窗口透明度</span>
-          <span class="label-value">{{ Math.round(opacity * 100) }}%</span>
-        </div>
-        <div class="setting-control">
+      <h3 class="section-title">窗口透明度</h3>
+      <div class="opacity-setting">
+        <span class="opacity-label">透明度</span>
+        <div class="opacity-control">
           <input
             v-model.number="opacity"
             type="range"
@@ -351,6 +347,7 @@
             class="opacity-slider"
             @input="handleOpacityChange"
           />
+          <span class="opacity-value">{{ Math.round(opacity * 100) }}%</span>
         </div>
       </div>
     </div>
@@ -358,8 +355,9 @@
 </template>
 
 <style scoped>
+  /* 主题设置特有样式 */
   .theme-settings {
-    padding: 24px 28px;
+    padding: 32px 28px;
     background: var(--bg-200);
   }
 
@@ -381,6 +379,75 @@
     color: var(--text-100);
     margin: 0 0 16px 0;
     padding: 0;
+  }
+
+  .opacity-setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .opacity-label {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-200);
+  }
+
+  /* 透明度控制 */
+  .opacity-control {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .opacity-slider {
+    width: 120px;
+    height: 4px;
+    background: var(--bg-400);
+    border-radius: 2px;
+    outline: none;
+    appearance: none;
+    cursor: pointer;
+  }
+
+  .opacity-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--color-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .opacity-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+  }
+
+  .opacity-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--color-primary);
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .opacity-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-200);
+    min-width: 40px;
+    text-align: right;
+  }
+
+  /* 主题选择器标签样式 */
+  .selector-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-200);
   }
 
   .mode-selector {

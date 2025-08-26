@@ -1,7 +1,7 @@
 <template>
   <div class="shortcut-settings">
     <div class="settings-group">
-      <h3 class="section-title">{{ t('shortcuts.title') }}</h3>
+      <h3 class="section-title">{{ t('settings.shortcuts.title') }}</h3>
       <!-- 冲突警告 -->
       <div v-if="hasConflicts" class="alert alert-warning">
         <span class="alert-icon">⚠️</span>
@@ -16,7 +16,6 @@
         </div>
         <div v-else>
           <div class="action-category">
-            <h4>{{ t('shortcuts.global') }}</h4>
             <div class="action-items">
               <div v-for="action in globalActions" :key="action.key" class="action-item">
                 <div class="action-name">{{ action.displayName }}</div>
@@ -297,9 +296,8 @@
 
 <style scoped>
   .shortcut-settings {
-    padding: 24px 28px;
+    padding: 32px 28px;
     background: var(--bg-200);
-    margin-bottom: 24px;
   }
 
   .settings-group {
@@ -332,6 +330,124 @@
     background: var(--color-warning);
     color: white;
     font-size: 14px;
+  }
+
+  .actions-list {
+    margin-bottom: 24px;
+  }
+
+  .loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 32px;
+    color: var(--text-400);
+    background: var(--bg-300);
+    border-radius: 4px;
+  }
+
+  .loading-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border-300);
+    border-top: 2px solid var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .action-category {
+    margin-bottom: 24px;
+  }
+
+  .action-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .action-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-300);
+    border: 1px solid var(--border-200);
+    border-radius: 6px;
+    transition: all 0.2s ease;
+  }
+
+  .action-item:hover {
+    background: var(--bg-350);
+    border-color: var(--border-300);
+  }
+
+  .action-name {
+    font-size: 14px;
+    color: var(--text-200);
+    font-weight: 500;
+  }
+
+  .shortcut-key-editor {
+    min-width: 120px;
+    padding: 6px 12px;
+    background: var(--bg-400);
+    border: 1px solid var(--border-300);
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: var(--font-family-mono);
+    color: var(--text-300);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+  }
+
+  .shortcut-key-editor:hover {
+    background: var(--bg-450);
+    border-color: var(--border-400);
+  }
+
+  .shortcut-key-editor.editing {
+    background: var(--color-primary-alpha);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .shortcut-key-editor.configured {
+    background: var(--bg-500);
+    color: var(--text-200);
+  }
+
+  .shortcut-display {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    justify-content: center;
+  }
+
+  .modifier,
+  .key {
+    padding: 2px 6px;
+    background: var(--bg-600);
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--text-200);
+  }
+
+  .key {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .not-configured {
+    color: var(--text-400);
+    font-style: italic;
   }
 
   .actions-list {

@@ -7,12 +7,11 @@
 
 <template>
   <div class="language-settings">
-    <div class="settings-section">
+    <div class="settings-group">
       <h3 class="section-title">{{ t('language.title') }}</h3>
-      <div class="section-content">
-        <div class="language-switch-container">
-          <LanguageSwitch />
-        </div>
+      <div class="language-item">
+        <span class="language-label">界面语言</span>
+        <LanguageSwitch />
       </div>
     </div>
   </div>
@@ -20,38 +19,41 @@
 
 <style scoped>
   .language-settings {
-    padding: 24px 28px;
+    padding: 32px 28px;
     background: var(--bg-200);
     min-height: 100%;
   }
 
-  .settings-section {
+  .settings-group {
     margin-bottom: 32px;
     padding-bottom: 32px;
     border-bottom: 1px solid var(--border-300);
   }
 
-  .settings-section:last-child {
+  .settings-group:last-child {
     margin-bottom: 0;
     padding-bottom: 0;
     border-bottom: none;
   }
 
   .section-title {
-    font-size: var(--font-size-lg);
+    font-size: 18px;
     font-weight: 600;
     color: var(--text-100);
-    margin-bottom: 16px;
-    margin-top: 0;
+    margin: 0 0 16px 0;
+    padding: 0;
   }
 
-  .section-content {
+  .language-item {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
     gap: 16px;
   }
 
-  .language-switch-container {
-    max-width: 200px;
+  .language-label {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-200);
   }
 </style>

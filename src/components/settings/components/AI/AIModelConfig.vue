@@ -87,6 +87,9 @@
 
 <template>
   <div class="ai-model-config">
+    <!-- 分组标题 -->
+    <h3 class="section-title">{{ t('settings.ai.model_config') }}</h3>
+
     <!-- 操作按钮 -->
     <div class="action-header">
       <x-button variant="primary" @click="handleAddModel">
@@ -131,8 +134,12 @@
           </div>
 
           <div class="model-actions">
-            <x-button variant="secondary" size="small" @click.stop="handleEditModel(model)">{{ t('ai_model.edit') }}</x-button>
-            <x-button variant="danger" size="small" @click.stop="handleDeleteModel(model.id)">{{ t('ai_model.delete') }}</x-button>
+            <x-button variant="secondary" size="small" @click.stop="handleEditModel(model)">
+              {{ t('ai_model.edit') }}
+            </x-button>
+            <x-button variant="danger" size="small" @click.stop="handleDeleteModel(model.id)">
+              {{ t('ai_model.delete') }}
+            </x-button>
           </div>
         </div>
       </div>

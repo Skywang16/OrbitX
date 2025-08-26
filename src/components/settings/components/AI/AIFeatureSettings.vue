@@ -48,11 +48,11 @@
 
 <template>
   <div class="ai-feature-settings">
+    <!-- 分组标题 -->
+    <h3 class="section-title">{{ t('ai_feature.user_system_prompt') }}</h3>
+
     <!-- 用户前置提示词设置 -->
     <div class="prefix-prompt-section">
-      <h3 class="section-title">{{ t('ai_feature.user_system_prompt') }}</h3>
-      <p class="section-description">{{ t('ai_feature.prompt_description') }}</p>
-
       <textarea
         v-model="userPrefixPrompt"
         class="prompt-textarea"
