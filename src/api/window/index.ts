@@ -26,6 +26,7 @@ import type {
  */
 export class WindowApi {
   private alwaysOnTopState = false
+  private currentOpacity = 1.0
   private platformInfoCache: PlatformInfo | null = null
 
   // ===== 窗口状态管理 =====
@@ -228,6 +229,39 @@ export class WindowApi {
     } catch (error) {
       throw new Error(handleError(error, '获取窗口状态失败'))
     }
+  }
+
+  // ===== 透明度管理 =====
+
+  async setWindowOpacity(opacity: number): Promise<void> {
+    if (opacity < 0 || opacity > 1) {
+      throw new Error('透明度值必须在 0 到 1 之间')
+    }
+
+    try {
+      await invoke('set_window_opacity', { opacity })
+      this.currentOpacity = opacity
+    } catch (error) {
+      throw new Error(handleError(error, '设置窗口透明度失败'))
+    }
+  }
+
+  async getWindowOpacity(): Promise<number> {
+    try {
+      const opacity = await invoke<number>('get_window_opacity')
+      this.currentOpacity = opacity
+      return opacity
+    } catch (error) {
+      throw new Error(handleError(error, '获取窗口透明度失败'))
+    }
+  }
+
+  async resetWindowOpacity(): Promise<void> {
+    await this.setWindowOpacity(1.0)
+  }
+
+  getCurrentOpacity(): number {
+    return this.currentOpacity
   }
 }
 

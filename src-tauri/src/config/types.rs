@@ -61,6 +61,9 @@ pub struct AppearanceConfig {
 
     /// 字体配置
     pub font: FontConfig,
+
+    /// 窗口透明度 (0.0 - 1.0)
+    pub opacity: f64,
 }
 
 /// 终端配置 (对应 TOML 中的 [terminal] 节)

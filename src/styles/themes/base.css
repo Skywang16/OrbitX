@@ -30,6 +30,9 @@
   --split-divider-size: 4px;
   --split-panel-min-width: 200px;
   --split-panel-min-height: 100px;
+
+  /* 窗口透明度 */
+  --window-opacity: 1;
 }
 
 /* Custom Scrollbar Styles */

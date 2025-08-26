@@ -34,6 +34,7 @@ fn create_default_appearance_config() -> AppearanceConfig {
         animations_enabled: true,
         theme_config: crate::config::theme::create_default_theme_config(),
         font: create_default_font_config(),
+        opacity: 1.0,
     }
 }
 
@@ -114,7 +115,6 @@ pub fn create_default_shortcuts_config() -> ShortcutsConfig {
                 modifiers: vec!["cmd".to_string()],
                 action: ShortcutAction::Simple("open_settings".to_string()),
             },
-
         ],
         terminal: vec![
             // 标签页管理
@@ -206,6 +206,7 @@ mod tests {
         // 验证外观配置
         assert_eq!(config.appearance.ui_scale, 100);
         assert!(config.appearance.animations_enabled);
+        assert_eq!(config.appearance.opacity, 1.0);
         assert_eq!(
             config.appearance.font.family,
             "Menlo, Monaco, \"SF Mono\", \"Microsoft YaHei UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Source Han Sans CN\", \"WenQuanYi Micro Hei\", \"Courier New\", monospace"
@@ -270,6 +271,7 @@ mod tests {
 
         let appearance_config = create_default_appearance_config();
         assert_eq!(appearance_config.ui_scale, 100);
+        assert_eq!(appearance_config.opacity, 1.0);
 
         let terminal_config = create_default_terminal_config();
         assert_eq!(terminal_config.scrollback, 1000);

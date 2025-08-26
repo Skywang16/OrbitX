@@ -8,6 +8,7 @@ startup_behavior = "restore"
 [appearance]
 ui_scale = 100
 animations_enabled = true
+opacity = 1.0
 
 [appearance.theme_config]
 auto_switch_time = "18:00"

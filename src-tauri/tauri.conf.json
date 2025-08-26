@@ -22,9 +22,11 @@
         "decorations": true,
         "titleBarStyle": "Overlay",
         "dragDropEnabled": true,
-        "visible": false
+        "visible": false,
+        "transparent": true
       }
     ],
+    "macOSPrivateApi": true,
     "security": {
       "csp": null
     },

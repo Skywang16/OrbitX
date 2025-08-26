@@ -136,7 +136,8 @@ use shell::commands::{
 };
 use window::commands::{
     clear_directory_cache, get_current_directory, get_home_directory, get_platform_info,
-    join_paths, manage_window_state, normalize_path, path_exists, WindowState,
+    get_window_opacity, join_paths, manage_window_state, normalize_path, path_exists,
+    set_window_opacity, WindowState,
 };
 
 use std::path::PathBuf;
@@ -276,6 +277,9 @@ pub fn run() {
             join_paths,
             path_exists,
             get_platform_info,
+            // 窗口透明度命令
+            set_window_opacity,
+            get_window_opacity,
             // 文件拖拽命令
             handle_file_open,
             // 终端管理命令
@@ -588,18 +592,20 @@ pub fn run() {
                     let window_clone = window.clone();
                     tauri::async_runtime::spawn(async move {
                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                        
+
                         // 检查窗口位置是否异常
                         if let Ok(position) = window_clone.outer_position() {
                             let x = position.x;
                             let y = position.y;
-                            
+
                             // 如果位置异常，重置到安全位置
                             if x < -500 || y < -500 || x > 5000 || y > 5000 {
-                                let _ = window_clone.set_position(tauri::Position::Logical(tauri::LogicalPosition { x: 100.0, y: 100.0 }));
+                                let _ = window_clone.set_position(tauri::Position::Logical(
+                                    tauri::LogicalPosition { x: 100.0, y: 100.0 },
+                                ));
                             }
                         }
-                        
+
                         let _ = window_clone.show();
                         let _ = window_clone.set_focus();
                     });

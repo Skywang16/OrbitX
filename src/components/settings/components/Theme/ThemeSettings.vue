@@ -2,6 +2,9 @@
   import { computed, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useTheme } from '../../../../composables/useTheme'
+  import { windowApi } from '@/api/window'
+  import { configApi } from '@/api/config'
+  import { createMessage } from '@/ui'
   import { XSelect } from '@/ui'
   import type { SelectOption } from '@/ui'
 
@@ -22,6 +25,8 @@
           selectedDarkTheme.value = config.darkTheme
         }
       }
+      // 初始化透明度
+      await initializeOpacity()
     } catch (error) {
       console.error('主题系统初始化失败:', error)
     }
@@ -30,6 +35,9 @@
   // 本地状态 - 设置默认值
   const selectedLightTheme = ref('light')
   const selectedDarkTheme = ref('dark')
+
+  // 透明度相关状态
+  const opacity = ref(1.0)
 
   // 简化模式计算 - 直接使用配置状态，移除复杂的本地状态逻辑
   const currentMode = computed(() => {
@@ -165,6 +173,51 @@
       }
     }
   }
+
+  // 透明度相关方法
+  let opacityTimeout: NodeJS.Timeout | null = null
+
+  const handleOpacityChange = async () => {
+    if (opacityTimeout) {
+      clearTimeout(opacityTimeout)
+    }
+
+    opacityTimeout = setTimeout(async () => {
+      try {
+        await windowApi.setWindowOpacity(opacity.value)
+        await saveOpacityToConfig()
+      } catch (error) {
+        createMessage.error(`设置透明度失败: ${error}`)
+      }
+    }, 100) // 100ms 防抖
+  }
+
+  const saveOpacityToConfig = async () => {
+    try {
+      const config = await configApi.getConfig()
+      config.appearance.opacity = opacity.value
+      await configApi.updateConfig(config)
+    } catch (error) {
+      console.warn('保存透明度配置失败:', error)
+    }
+  }
+
+  const initializeOpacity = async () => {
+    try {
+      // 优先从配置文件读取
+      const config = await configApi.getConfig()
+      if (config.appearance.opacity !== undefined) {
+        opacity.value = config.appearance.opacity
+        await windowApi.setWindowOpacity(opacity.value)
+      } else {
+        // 从窗口获取当前透明度
+        const currentOpacity = await windowApi.getWindowOpacity()
+        opacity.value = currentOpacity
+      }
+    } catch (error) {
+      console.warn('初始化透明度失败:', error)
+    }
+  }
 </script>
 
 <template>
@@ -277,6 +330,27 @@
               class="theme-select"
             />
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 窗口透明度设置 -->
+    <div class="settings-group">
+      <div class="setting-item">
+        <div class="setting-label">
+          <span class="label-text">窗口透明度</span>
+          <span class="label-value">{{ Math.round(opacity * 100) }}%</span>
+        </div>
+        <div class="setting-control">
+          <input
+            v-model.number="opacity"
+            type="range"
+            min="0.1"
+            max="1.0"
+            step="0.01"
+            class="opacity-slider"
+            @input="handleOpacityChange"
+          />
         </div>
       </div>
     </div>
@@ -483,5 +557,102 @@
     font-weight: 500;
     color: var(--text-200);
     margin: 0;
+  }
+
+  /* VSCode 风格的设置项 */
+  .setting-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-400);
+  }
+
+  .setting-item:last-child {
+    border-bottom: none;
+  }
+
+  .setting-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 140px;
+  }
+
+  .label-text {
+    font-size: 13px;
+    color: var(--text-200);
+    font-weight: 400;
+  }
+
+  .label-value {
+    font-size: 12px;
+    color: var(--text-400);
+    background: var(--bg-400);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: var(--font-mono, 'SF Mono', 'Monaco', 'Consolas', monospace);
+  }
+
+  .setting-control {
+    flex: 1;
+    max-width: 200px;
+    margin-left: 16px;
+  }
+
+  /* VSCode 风格的滑块 */
+  .opacity-slider {
+    width: 100%;
+    height: 4px;
+    background: var(--bg-500);
+    border-radius: 2px;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+
+  .opacity-slider:hover {
+    background: var(--bg-400);
+  }
+
+  .opacity-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--accent-500);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid var(--bg-100);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .opacity-slider::-webkit-slider-thumb:hover {
+    background: var(--accent-400);
+    transform: scale(1.1);
+  }
+
+  .opacity-slider::-webkit-slider-thumb:active {
+    transform: scale(1.2);
+  }
+
+  /* Firefox 滑块样式 */
+  .opacity-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--accent-500);
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid var(--bg-100);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .opacity-slider::-moz-range-track {
+    height: 4px;
+    background: var(--bg-500);
+    border-radius: 2px;
   }
 </style>
