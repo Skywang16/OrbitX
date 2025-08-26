@@ -21,133 +21,86 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, warn};
 
 /// 窗口状态管理
-///
-/// 统一状态管理规范：
-/// 1. 虽然窗口模块相对无状态，但提供统一的初始化和验证方法
-/// 2. 包含配置验证和错误处理
-/// 3. 支持组件间的依赖注入
-/// 4. 提供缓存和性能优化
 pub struct WindowState {
-    /// 统一缓存
     pub cache: crate::storage::cache::UnifiedCache,
-    /// 窗口配置管理器
     pub config_manager: Arc<Mutex<WindowConfigManager>>,
-    /// 窗口状态管理器
     pub state_manager: Arc<Mutex<WindowStateManager>>,
 }
 
-/// 平台信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlatformInfo {
-    /// 操作系统平台 (windows, macos, linux)
     pub platform: String,
-    /// 系统架构 (x86_64, aarch64, etc.)
     pub arch: String,
-    /// 操作系统版本
     pub os_version: String,
-    /// 是否为Mac系统
     pub is_mac: bool,
 }
 
 // ===== 新的批量窗口状态管理类型 =====
 
-/// 窗口状态操作类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WindowStateOperation {
-    /// 获取窗口状态
     GetState,
-    /// 设置置顶状态
     SetAlwaysOnTop,
-    /// 切换置顶状态
     ToggleAlwaysOnTop,
-    /// 重置窗口状态
     ResetState,
 }
 
-/// 窗口状态操作参数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowStateOperationParams {
-    /// 置顶状态参数
     pub always_on_top: Option<bool>,
 }
 
-/// 窗口状态操作请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowStateOperationRequest {
-    /// 操作类型
     pub operation: WindowStateOperation,
-    /// 操作参数
     pub params: Option<WindowStateOperationParams>,
 }
 
-/// 批量窗口状态操作请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowStateBatchRequest {
-    /// 操作列表
     pub operations: Vec<WindowStateOperationRequest>,
 }
 
-/// 窗口状态操作结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowStateOperationResult {
-    /// 操作类型
     pub operation: WindowStateOperation,
-    /// 操作是否成功
     pub success: bool,
-    /// 操作结果数据
     pub data: Option<serde_json::Value>,
-    /// 错误信息
     pub error: Option<String>,
 }
 
-/// 批量窗口状态操作响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowStateBatchResponse {
-    /// 操作结果列表
     pub results: Vec<WindowStateOperationResult>,
-    /// 整体操作是否成功
     pub overall_success: bool,
 }
 
-/// 完整的窗口状态信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompleteWindowState {
-    /// 置顶状态
     pub always_on_top: bool,
-    /// 当前目录
     pub current_directory: String,
-    /// 家目录
     pub home_directory: String,
-    /// 平台信息
     pub platform_info: PlatformInfo,
-    /// 时间戳
     pub timestamp: u64,
 }
 
-/// 窗口配置管理器
 #[derive(Debug)]
 pub struct WindowConfigManager {
-    /// 平台信息缓存
     platform_info: Option<PlatformInfo>,
-    /// 默认窗口ID
     default_window_id: String,
-    /// 窗口操作超时时间
     operation_timeout: u64,
 }
 
-/// 窗口状态管理器
 #[derive(Debug)]
 pub struct WindowStateManager {
-    /// 当前窗口置顶状态
     always_on_top: bool,
-    /// 状态最后更新时间
     last_updated: Instant,
 }
 
@@ -158,7 +111,6 @@ impl Default for WindowStateManager {
 }
 
 impl WindowStateManager {
-    /// 创建新的窗口状态管理器
     pub fn new() -> Self {
         Self {
             always_on_top: false,
@@ -166,31 +118,26 @@ impl WindowStateManager {
         }
     }
 
-    /// 获取当前置顶状态
     pub fn get_always_on_top(&self) -> bool {
         self.always_on_top
     }
 
-    /// 设置置顶状态
     pub fn set_always_on_top(&mut self, always_on_top: bool) {
         self.always_on_top = always_on_top;
         self.last_updated = Instant::now();
     }
 
-    /// 切换置顶状态
     pub fn toggle_always_on_top(&mut self) -> bool {
         self.always_on_top = !self.always_on_top;
         self.last_updated = Instant::now();
         self.always_on_top
     }
 
-    /// 重置状态
     pub fn reset(&mut self) {
         self.always_on_top = false;
         self.last_updated = Instant::now();
     }
 
-    /// 获取最后更新时间
     pub fn get_last_updated(&self) -> Instant {
         self.last_updated
     }
@@ -205,13 +152,11 @@ impl WindowConfigManager {
         }
     }
 
-    /// 获取平台信息，如果缓存中没有则检测并缓存
     pub fn get_platform_info(&mut self) -> &PlatformInfo {
         self.platform_info
             .get_or_insert_with(Self::detect_platform_info)
     }
 
-    /// 检测平台信息
     fn detect_platform_info() -> PlatformInfo {
         let platform = if cfg!(target_os = "windows") {
             "windows".to_string()
@@ -245,7 +190,6 @@ impl WindowConfigManager {
         }
     }
 
-    /// 获取准确的操作系统版本信息
     fn get_accurate_os_version() -> String {
         let info = os_info::get();
 
@@ -296,7 +240,6 @@ impl Default for WindowConfigManager {
 }
 
 impl WindowState {
-    /// 统一的初始化方法
     pub fn new() -> AppResult<Self> {
         debug!("开始初始化窗口状态");
 
@@ -313,7 +256,6 @@ impl WindowState {
         Ok(state)
     }
 
-    /// 验证状态完整性
     pub async fn validate(&self) -> AppResult<()> {
         debug!("开始验证窗口状态");
 
@@ -333,7 +275,6 @@ impl WindowState {
         f(&mut config)
     }
 
-    /// 统一的状态管理器访问方法
     pub async fn with_state_manager<F, R>(&self, f: F) -> AppResult<R>
     where
         F: FnOnce(&mut WindowStateManager) -> AppResult<R>,

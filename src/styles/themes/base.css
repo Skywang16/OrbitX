@@ -1,19 +1,15 @@
-/* 基础样式和通用变量 */
 :root {
-  /* Spacing */
   --spacing-xs: 4px;
   --spacing-sm: 6px;
   --spacing-md: 10px;
   --spacing-lg: 16px;
   --spacing-xl: 24px;
 
-  /* Border Radius */
   --border-radius: 6px;
   --border-radius-sm: 4px;
   --border-radius-md: 6px;
   --border-radius-lg: 10px;
 
-  /* Typography */
   --font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
   --font-family-mono: Menlo, Monaco, 'Courier New', monospace;
   --font-size-xs: 12px;
@@ -22,20 +18,17 @@
   --font-size-lg: 16px;
   --font-size-xl: 18px;
 
-  /* TitleBar */
   --titlebar-height: 36px;
   --titlebar-element-height: 28px;
 
-  /* 分屏相关 - 只保留尺寸，颜色由组件直接使用层次变量 */
+  /* Split pane dimensions */
   --split-divider-size: 4px;
-  --split-panel-min-width: 200px;
-  --split-panel-min-height: 100px;
+  --split-panel-min-width: 100px;
+  --split-panel-min-height: 60px;
 
-  /* 窗口透明度 */
   --window-opacity: 1;
 }
 
-/* Custom Scrollbar Styles */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;

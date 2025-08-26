@@ -1,3 +1,4 @@
-/* 导入基础样式和主题 */
 @import './themes/base.css';
 @import './themes/default.css';
+
+@import './settings.css';

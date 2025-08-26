@@ -3,6 +3,7 @@ import { useTerminalStore } from '@/stores/Terminal'
 import { createMessage } from '@/ui/composables/message-api'
 import { TabType } from '@/types'
 import { useI18n } from 'vue-i18n'
+import { windowApi } from '@/api/window'
 
 export class ShortcutActionsService {
   private get tabManagerStore() {
@@ -63,7 +64,7 @@ export class ShortcutActionsService {
   }
 
   async newWindow(): Promise<boolean> {
-    if ((window as any).__TAURI__) {
+    if ((window as unknown as { __TAURI__?: unknown }).__TAURI__) {
       return false
     }
     window.open(window.location.href, '_blank')
@@ -95,7 +96,7 @@ export class ShortcutActionsService {
   }
 
   openSettings(): boolean {
-    this.tabManagerStore.createSettingsTab('theme')
+    this.tabManagerStore.createSettingsTab()
     return true
   }
 
@@ -125,6 +126,30 @@ export class ShortcutActionsService {
       })
     )
     return true
+  }
+
+  async increaseOpacity(): Promise<boolean> {
+    try {
+      const currentOpacity = await windowApi.getWindowOpacity()
+      const newOpacity = Math.min(currentOpacity + 0.05, 1.0)
+      await windowApi.setWindowOpacity(newOpacity)
+      return true
+    } catch (error) {
+      console.error('增加透明度失败:', error)
+      return false
+    }
+  }
+
+  async decreaseOpacity(): Promise<boolean> {
+    try {
+      const currentOpacity = await windowApi.getWindowOpacity()
+      const newOpacity = Math.max(currentOpacity - 0.05, 0.1)
+      await windowApi.setWindowOpacity(newOpacity)
+      return true
+    } catch (error) {
+      console.error('减少透明度失败:', error)
+      return false
+    }
   }
 }
 

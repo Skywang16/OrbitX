@@ -23,21 +23,18 @@
 //! - 终端输入输出处理
 //! - 窗口管理功能
 
-// 模块声明
 pub mod ai;
-pub mod completion; // 终端补全功能模块
-pub mod config; // 统一配置系统模块
-                // pub mod lock_optimization_demo; // 锁优化演示模块 - 暂时注释掉
-pub mod mux; // 终端多路复用器核心模块
-pub mod shell; // Shell Integration功能模块
-pub mod storage; // 统一存储系统模块
-pub mod utils; // 工具和错误处理模块
-pub mod window; // 窗口管理功能模块
+pub mod completion;
+pub mod config;
+// pub mod lock_optimization_demo;
+pub mod mux;
+pub mod shell;
+pub mod storage;
+pub mod utils;
+pub mod window;
 
 use ai::commands::{
-    // AI模型管理命令
     add_ai_model,
-    // AI会话管理命令
     build_prompt_with_context,
     create_conversation,
     delete_conversation,

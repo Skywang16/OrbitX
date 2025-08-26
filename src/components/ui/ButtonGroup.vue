@@ -49,7 +49,7 @@
     if (item.value === 'settings') {
       tabManagerStore.createSettingsTab()
     } else if (item.value === 'shortcuts') {
-      tabManagerStore.createSettingsTab('shortcuts')
+      tabManagerStore.createSettingsTab()
     } else if (item.value === 'feedback') {
       try {
         // 使用Tauri的opener插件在外部浏览器中打开GitHub Issues页面

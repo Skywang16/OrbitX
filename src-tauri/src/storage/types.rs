@@ -10,11 +10,8 @@ use serde::{Deserialize, Serialize};
 /// 存储层类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum StorageLayer {
-    /// TOML配置层
     Config,
-    /// MessagePack状态层
     State,
-    /// SQLite数据层
     Data,
 }
 
@@ -32,15 +29,10 @@ impl StorageLayer {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionState {
-    /// 版本号
     pub version: u32,
-    /// 终端状态列表
     pub terminals: Vec<TerminalState>,
-    /// UI状态
     pub ui: UiState,
-    /// AI状态
     pub ai: AiState,
-    /// 时间戳
     pub timestamp: DateTime<Utc>,
 }
 
@@ -60,15 +52,10 @@ impl Default for SessionState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowState {
-    /// X坐标
     pub x: i32,
-    /// Y坐标
     pub y: i32,
-    /// 宽度
     pub width: u32,
-    /// 高度
     pub height: u32,
-    /// 是否最大化
     pub maximized: bool,
 }
 

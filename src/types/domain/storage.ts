@@ -1,9 +1,3 @@
-/**
- * 存储业务领域类型定义
- */
-
-// ===== 存储层类型 =====
-
 export enum StorageLayer {
   Config = 'config',
   State = 'state',
@@ -17,8 +11,6 @@ export enum ConfigSection {
   Shortcuts = 'shortcuts',
   Ai = 'ai',
 }
-
-// ===== 查询和保存类型 =====
 
 export interface DataQuery {
   query: string
@@ -36,8 +28,6 @@ export interface SaveOptions {
   validate: boolean
   metadata: Record<string, unknown>
 }
-
-// ===== 会话状态类型 =====
 
 export interface WindowState {
   x: number
@@ -59,6 +49,8 @@ export interface UiState {
   theme: string
   fontSize: number
   sidebarWidth: number
+  opacity?: number
+  language?: string
 }
 
 export interface AiState {
@@ -78,15 +70,11 @@ export interface SessionState {
   timestamp: string
 }
 
-// ===== 事件类型 =====
-
 export interface StorageEvent {
   type: 'config_changed' | 'state_saved' | 'state_loaded' | 'data_updated' | 'error'
   data: unknown
   timestamp: number
 }
-
-// ===== 操作结果类型 =====
 
 export interface StorageOperationResult {
   success: boolean

@@ -20,12 +20,9 @@ use serde_json::Value;
 use std::sync::Arc;
 use tracing::debug;
 
-/// 存储协调器选项
 #[derive(Debug, Clone)]
 pub struct StorageCoordinatorOptions {
-    /// MessagePack管理器选项
     pub messagepack_options: MessagePackOptions,
-    /// 数据库管理器选项
     pub database_options: DatabaseOptions,
 }
 
@@ -38,28 +35,18 @@ impl Default for StorageCoordinatorOptions {
     }
 }
 
-/// 存储协调器
-///
 /// 三层存储系统协调器，采用Repository模式管理数据访问
 pub struct StorageCoordinator {
-    /// 存储路径管理器
     paths: StoragePaths,
-    /// 协调器选项
     options: StorageCoordinatorOptions,
-    /// TOML配置管理器
     config_manager: Arc<TomlConfigManager>,
-    /// MessagePack状态管理器
     messagepack_manager: Arc<MessagePackManager>,
-    /// 数据库管理器
     database_manager: Arc<DatabaseManager>,
-    /// Repository管理器
     repository_manager: Arc<RepositoryManager>,
-    /// 统一缓存
     cache: Arc<UnifiedCache>,
 }
 
 impl StorageCoordinator {
-    /// 创建新的存储协调器
     pub async fn new(
         paths: StoragePaths,
         options: StorageCoordinatorOptions,
@@ -118,7 +105,6 @@ impl StorageCoordinator {
         Ok(coordinator)
     }
 
-    /// 获取配置数据
     pub async fn get_config(&self, section: &str) -> AppResult<Value> {
         debug!("获取配置节: {}", section);
 
@@ -146,7 +132,6 @@ impl StorageCoordinator {
         Ok(section_value)
     }
 
-    /// 更新配置数据
     pub async fn update_config(&self, section: &str, data: Value) -> AppResult<()> {
         debug!("更新配置节: {}", section);
 
@@ -159,13 +144,11 @@ impl StorageCoordinator {
         Ok(())
     }
 
-    /// 保存会话状态
     pub async fn save_session_state(&self, state: &SessionState) -> AppResult<()> {
         debug!("保存会话状态");
         self.messagepack_manager.save_state(state).await
     }
 
-    /// 加载会话状态
     pub async fn load_session_state(&self) -> AppResult<Option<SessionState>> {
         debug!("加载会话状态");
         self.messagepack_manager.load_state().await
@@ -173,27 +156,22 @@ impl StorageCoordinator {
 
 
 
-    /// 获取存储路径管理器的引用
     pub fn paths(&self) -> &StoragePaths {
         &self.paths
     }
 
-    /// 获取协调器选项的引用
     pub fn options(&self) -> &StorageCoordinatorOptions {
         &self.options
     }
 
-    /// 获取数据库管理器的引用
     pub fn database_manager(&self) -> Arc<DatabaseManager> {
         Arc::clone(&self.database_manager)
     }
 
-    /// 获取Repository管理器的引用
     pub fn repositories(&self) -> Arc<RepositoryManager> {
         Arc::clone(&self.repository_manager)
     }
 
-    /// 获取缓存管理器的引用
     pub fn cache(&self) -> Arc<UnifiedCache> {
         Arc::clone(&self.cache)
     }

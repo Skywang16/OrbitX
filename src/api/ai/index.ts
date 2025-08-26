@@ -1,13 +1,3 @@
-/**
- * AI 模块 API
- *
- * 提供 AI 相关功能的统一接口，包括：
- * - 模型管理
- * - 会话管理
- * - 工具调用
- * - 设置管理
- */
-
 import type { AIHealthStatus, AIModelConfig, AISettings, AIStats, Conversation, Message } from '@/types'
 import { invoke } from '@/utils/request'
 import { handleError } from '@/utils/errorHandler'
@@ -20,17 +10,13 @@ import type {
   WebFetchResponse,
 } from './types'
 
-/**
- * AI 会话管理 API 类
- */
 class ConversationAPI {
-  // ===== 会话管理 =====
 
   async createConversation(title?: string): Promise<number> {
     try {
       return await invoke('create_conversation', { title })
     } catch (error) {
-      throw new Error(handleError(error, '创建会话失败'))
+      throw new Error(handleError(error, 'Failed to create conversation'))
     }
   }
 
@@ -39,7 +25,7 @@ class ConversationAPI {
       const conversations = await invoke<RawConversation[]>('get_conversations', { limit, offset })
       return conversations.map(this.convertConversation)
     } catch (error) {
-      throw new Error(handleError(error, '获取会话列表失败'))
+      throw new Error(handleError(error, 'Failed to get conversations'))
     }
   }
 
@@ -48,7 +34,7 @@ class ConversationAPI {
       const conversation = await invoke<RawConversation>('get_conversation', { conversationId })
       return this.convertConversation(conversation)
     } catch (error) {
-      throw new Error(handleError(error, '获取会话失败'))
+      throw new Error(handleError(error, 'Failed to get conversation'))
     }
   }
 
@@ -56,7 +42,7 @@ class ConversationAPI {
     try {
       await invoke('update_conversation_title', { conversationId, title })
     } catch (error) {
-      throw new Error(handleError(error, '更新会话标题失败'))
+      throw new Error(handleError(error, 'Failed to update conversation title'))
     }
   }
 
@@ -64,7 +50,7 @@ class ConversationAPI {
     try {
       await invoke('delete_conversation', { conversationId })
     } catch (error) {
-      throw new Error(handleError(error, '删除会话失败'))
+      throw new Error(handleError(error, 'Failed to delete conversation'))
     }
   }
 
@@ -76,7 +62,7 @@ class ConversationAPI {
       })
       return messages.map(this.convertMessage)
     } catch (error) {
-      throw new Error(handleError(error, '获取会话上下文失败'))
+      throw new Error(handleError(error, 'Failed to get conversation context'))
     }
   }
 
@@ -103,7 +89,7 @@ class ConversationAPI {
     try {
       return await invoke('save_message', { conversationId, role, content })
     } catch (error) {
-      throw new Error(handleError(error, '保存消息失败'))
+      throw new Error(handleError(error, 'Failed to save message'))
     }
   }
 
@@ -111,13 +97,12 @@ class ConversationAPI {
     try {
       await invoke('update_message_content', { messageId, content })
     } catch (error) {
-      throw new Error(handleError(error, '更新消息内容失败'))
+      throw new Error(handleError(error, 'Failed to update message content'))
     }
   }
 
   async updateMessageSteps(messageId: number, steps: any[]): Promise<void> {
     try {
-      // 清理工具输出中的JSON转义噪音
       const cleanedSteps = this.cleanStepsData(steps)
 
       const stepsJson = JSON.stringify(cleanedSteps)
@@ -126,7 +111,7 @@ class ConversationAPI {
         stepsJson,
       })
     } catch (error) {
-      throw new Error(handleError(error, '更新消息步骤失败'))
+      throw new Error(handleError(error, 'Failed to update message steps'))
     }
   }
 
@@ -142,7 +127,7 @@ class ConversationAPI {
         durationMs: duration,
       })
     } catch (error) {
-      throw new Error(handleError(error, '更新消息状态失败'))
+      throw new Error(handleError(error, 'Failed to update message status'))
     }
   }
 
@@ -150,27 +135,20 @@ class ConversationAPI {
     try {
       await invoke('truncate_conversation', { conversationId, truncateAfterMessageId })
     } catch (error) {
-      throw new Error(handleError(error, '截断会话失败'))
+      throw new Error(handleError(error, 'Failed to truncate conversation'))
     }
   }
 
-  // ===== 数据清理方法 =====
-
-  /**
-   * 清理工具步骤数据中的JSON转义噪音
-   */
   private cleanStepsData(steps: any[]): any[] {
     return steps.map(step => {
       if (step && typeof step === 'object') {
         const cleanedStep = { ...step }
 
-        // 清理result字段中的字符串转义
         if (cleanedStep.result && typeof cleanedStep.result === 'object') {
           if (typeof cleanedStep.result.text === 'string') {
             cleanedStep.result.text = this.cleanJsonEscapes(cleanedStep.result.text)
           }
 
-          // 清理content数组中的text字段
           if (Array.isArray(cleanedStep.result.content)) {
             cleanedStep.result.content = cleanedStep.result.content.map((item: any) => {
               if (item && typeof item.text === 'string') {
@@ -187,18 +165,14 @@ class ConversationAPI {
     })
   }
 
-  /**
-   * 清理JSON转义字符
-   */
   private cleanJsonEscapes(text: string): string {
     return text
-      .replace(/\\"/g, '"') // 清理转义的引号
-      .replace(/\\n/g, '\n') // 清理转义的换行
-      .replace(/\\t/g, '\t') // 清理转义的制表符
-      .replace(/\\\\/g, '\\') // 清理转义的反斜杠
+      .replace(/\\"/g, '"')
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\\\/g, '\\')
   }
 
-  // ===== 数据转换方法 =====
 
   private convertConversation(raw: RawConversation): Conversation {
     return {
@@ -216,7 +190,7 @@ class ConversationAPI {
       try {
         steps = JSON.parse(raw.stepsJson)
       } catch (error) {
-        console.error('steps解析失败:', error)
+        console.error('Failed to parse steps:', error)
       }
     }
 
@@ -233,43 +207,32 @@ class ConversationAPI {
   }
 }
 
-/**
- * 工具调用 API
- */
-
-// ===== AST代码分析 =====
 
 export async function analyzeCode(params: AnalyzeCodeParams): Promise<AnalysisResult> {
   try {
     return await invoke<AnalysisResult>('analyze_code', params as unknown as Record<string, unknown>)
   } catch (error) {
-    throw new Error(handleError(error, '代码分析失败'))
+    throw new Error(handleError(error, 'Code analysis failed'))
   }
 }
 
-// ===== 网络请求 =====
 
 export async function webFetchHeadless(request: WebFetchRequest): Promise<WebFetchResponse> {
   try {
     return await invoke<WebFetchResponse>('web_fetch_headless', { request })
   } catch (error) {
-    throw new Error(handleError(error, '网络请求失败'))
+    throw new Error(handleError(error, 'Web request failed'))
   }
 }
 
-/**
- * AI API 接口类
- */
 export class AiApi {
   private conversationAPI = new ConversationAPI()
-
-  // ===== 模型管理 =====
 
   async getModels(): Promise<AIModelConfig[]> {
     try {
       return await invoke<AIModelConfig[]>('get_ai_models')
     } catch (error) {
-      throw new Error(handleError(error, '获取AI模型失败'))
+      throw new Error(handleError(error, 'Failed to get AI models'))
     }
   }
 
@@ -277,17 +240,16 @@ export class AiApi {
     try {
       return await invoke<AIModelConfig>('add_ai_model', { config: model })
     } catch (error) {
-      throw new Error(handleError(error, '添加AI模型失败'))
+      throw new Error(handleError(error, 'Failed to add AI model'))
     }
   }
 
   async updateModel(model: AIModelConfig): Promise<void> {
     try {
-      // 将完整的模型对象分解为 modelId 和 updates
       const { id: modelId, ...updates } = model
       await invoke('update_ai_model', { modelId, updates })
     } catch (error) {
-      throw new Error(handleError(error, '更新AI模型失败'))
+      throw new Error(handleError(error, 'Failed to update AI model'))
     }
   }
 
@@ -295,7 +257,7 @@ export class AiApi {
     try {
       await invoke('remove_ai_model', { modelId: id })
     } catch (error) {
-      throw new Error(handleError(error, '删除AI模型失败'))
+      throw new Error(handleError(error, 'Failed to delete AI model'))
     }
   }
 
@@ -303,7 +265,7 @@ export class AiApi {
     try {
       return await invoke<boolean>('test_ai_connection_with_config', { config })
     } catch (error) {
-      throw new Error(handleError(error, 'AI模型连接测试失败'))
+      throw new Error(handleError(error, 'AI model connection test failed'))
     }
   }
 
@@ -311,7 +273,7 @@ export class AiApi {
     try {
       return await invoke<string | null>('get_user_prefix_prompt')
     } catch (error) {
-      throw new Error(handleError(error, '获取用户前置提示词失败'))
+      throw new Error(handleError(error, 'Failed to get user prefix prompt'))
     }
   }
 
@@ -319,17 +281,16 @@ export class AiApi {
     try {
       await invoke('set_user_prefix_prompt', { prompt })
     } catch (error) {
-      throw new Error(handleError(error, '设置用户前置提示词失败'))
+      throw new Error(handleError(error, 'Failed to set user prefix prompt'))
     }
   }
 
-  // ===== 设置管理 =====
 
   async getSettings(): Promise<AISettings> {
     try {
       return await invoke<AISettings>('get_ai_settings')
     } catch (error) {
-      throw new Error(handleError(error, '获取AI设置失败'))
+      throw new Error(handleError(error, 'Failed to get AI settings'))
     }
   }
 
@@ -337,17 +298,16 @@ export class AiApi {
     try {
       await invoke('update_ai_settings', { settings })
     } catch (error) {
-      throw new Error(handleError(error, '更新AI设置失败'))
+      throw new Error(handleError(error, 'Failed to update AI settings'))
     }
   }
 
-  // ===== 统计信息 =====
 
   async getStats(): Promise<AIStats> {
     try {
       return await invoke<AIStats>('get_ai_stats')
     } catch (error) {
-      throw new Error(handleError(error, '获取AI统计信息失败'))
+      throw new Error(handleError(error, 'Failed to get AI stats'))
     }
   }
 
@@ -355,11 +315,10 @@ export class AiApi {
     try {
       return await invoke<AIHealthStatus>('get_ai_health_status')
     } catch (error) {
-      throw new Error(handleError(error, '获取AI健康状态失败'))
+      throw new Error(handleError(error, 'Failed to get AI health status'))
     }
   }
 
-  // ===== 会话管理（代理到 ConversationAPI） =====
 
   async createConversation(title?: string) {
     return this.conversationAPI.createConversation(title)
@@ -419,7 +378,6 @@ export class AiApi {
     return this.conversationAPI.truncateConversation(conversationId, truncateAfterMessageId)
   }
 
-  // ===== 工具调用 =====
 
   async analyzeCode(params: AnalyzeCodeParams): Promise<AnalysisResult> {
     return analyzeCode(params)
@@ -430,11 +388,8 @@ export class AiApi {
   }
 }
 
-// 导出单例实例
 export const aiApi = new AiApi()
 
-// 导出类型
 export type * from './types'
 
-// 默认导出
 export default aiApi

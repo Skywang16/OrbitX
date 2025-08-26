@@ -48,6 +48,7 @@
       "description": "配置和管理快捷键"
     },
     "language": {
+      "title": "语言设置",
       "description": "选择界面显示语言"
     }
   },
@@ -121,6 +122,8 @@
     "save_success": "{action} 快捷键设置成功",
     "save_failed": "保存快捷键失败",
     "init_failed": "快捷键设置初始化失败",
+    "reset_shortcuts": "重置快捷键",
+    "reset_description": "将所有快捷键恢复为默认设置",
     "actions": {
       "copy_to_clipboard": "复制到剪贴板",
       "paste_from_clipboard": "从剪贴板粘贴",
@@ -148,7 +151,8 @@
   "language": {
     "title": "语言",
     "chinese": "中文",
-    "english": "English"
+    "english": "English",
+    "interface_language": "界面语言"
   },
   "dialog": {
     "cancel": "取消",
@@ -172,6 +176,10 @@
     "testing": "测试中...",
     "save": "保存",
     "add": "添加",
+    "add_new_model": "添加新模型",
+    "add_model_description": "配置AI模型连接信息",
+    "no_models": "暂无模型配置",
+    "default_provider": "AI模型",
     "providers": {
       "openai_description": "OpenAI GPT 模型",
       "claude_description": "Anthropic Claude 模型",
@@ -228,7 +236,13 @@
     "follow_system_description": "根据系统设置自动切换主题",
     "select_theme": "选择主题",
     "light_theme": "浅色主题",
-    "dark_theme": "深色主题"
+    "dark_theme": "深色主题",
+    "light_theme_description": "系统浅色模式时使用的主题",
+    "dark_theme_description": "系统深色模式时使用的主题",
+    "window_opacity": "窗口透明度",
+    "opacity": "透明度",
+    "opacity_description": "调整窗口的透明度 ({percentage}%)",
+    "opacity_error": "设置透明度失败: {error}"
   },
   "ui": {
     "clear": "清除",

@@ -21,16 +21,11 @@ use std::path::{Path, PathBuf};
 use tokio::fs as async_fs;
 use tracing::{debug, error, warn};
 
-/// MessagePack管理器选项
 #[derive(Debug, Clone)]
 pub struct MessagePackOptions {
-    /// 是否启用压缩
     pub compression: bool,
-    /// 备份数量
     pub backup_count: usize,
-    /// 是否启用校验和验证
     pub checksum_validation: bool,
-    /// 最大文件大小（字节）
     pub max_file_size: usize,
 }
 
@@ -45,23 +40,16 @@ impl Default for MessagePackOptions {
     }
 }
 
-/// 序列化包装器，包含版本和校验和信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SerializedSessionState {
-    /// 数据版本
     version: u32,
-    /// 序列化时间戳
     timestamp: DateTime<Utc>,
-    /// 数据校验和
     checksum: String,
-    /// 是否压缩
     compressed: bool,
-    /// 实际的会话状态数据
     data: Vec<u8>,
 }
 
 impl SerializedSessionState {
-    /// 创建新的序列化状态
     fn new(state: &SessionState, compressed: bool, data: Vec<u8>) -> AppResult<Self> {
         let checksum = Self::calculate_checksum(&data)?;
 
@@ -74,7 +62,6 @@ impl SerializedSessionState {
         })
     }
 
-    /// 计算数据校验和
     fn calculate_checksum(data: &[u8]) -> AppResult<String> {
         let mut hasher = Sha256::new();
         hasher.update(data);
@@ -82,15 +69,12 @@ impl SerializedSessionState {
         Ok(format!("{:x}", result))
     }
 
-    /// 验证数据完整性
     fn verify_checksum(&self) -> AppResult<bool> {
         let calculated = Self::calculate_checksum(&self.data)?;
         Ok(calculated == self.checksum)
     }
 }
 
-/// MessagePack状态管理器
-///
 /// 负责会话状态的序列化、压缩存储和恢复
 pub struct MessagePackManager {
     paths: StoragePaths,
@@ -98,7 +82,6 @@ pub struct MessagePackManager {
 }
 
 impl MessagePackManager {
-    /// 创建新的MessagePack管理器
     pub async fn new(paths: StoragePaths, options: MessagePackOptions) -> AppResult<Self> {
         let manager = Self { paths, options };
 
@@ -115,7 +98,6 @@ impl MessagePackManager {
         Ok(manager)
     }
 
-    /// 序列化会话状态
     pub fn serialize_state(&self, state: &SessionState) -> AppResult<Vec<u8>> {
         debug!("开始序列化会话状态");
 
@@ -161,7 +143,6 @@ impl MessagePackManager {
         Ok(result)
     }
 
-    /// 反序列化会话状态
     pub fn deserialize_state(&self, data: &[u8]) -> AppResult<SessionState> {
         debug!("开始反序列化会话状态，数据大小: {} bytes", data.len());
 
@@ -196,7 +177,6 @@ impl MessagePackManager {
         Ok(state)
     }
 
-    /// 压缩数据
     fn compress_data(&self, data: &[u8]) -> AppResult<Vec<u8>> {
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
         encoder
@@ -205,7 +185,6 @@ impl MessagePackManager {
         encoder.finish().map_err(|e| anyhow!("压缩完成失败: {}", e))
     }
 
-    /// 解压缩数据
     fn decompress_data(&self, data: &[u8]) -> AppResult<Vec<u8>> {
         let mut decoder = GzDecoder::new(data);
         let mut result = Vec::new();
@@ -215,7 +194,6 @@ impl MessagePackManager {
         Ok(result)
     }
 
-    /// 保存状态
     pub async fn save_state(&self, state: &SessionState) -> AppResult<()> {
         // 开始保存会话状态（静默）
 
@@ -243,7 +221,6 @@ impl MessagePackManager {
         Ok(())
     }
 
-    /// 加载状态
     pub async fn load_state(&self) -> AppResult<Option<SessionState>> {
         let state_file = self.get_state_file_path();
 
@@ -272,7 +249,6 @@ impl MessagePackManager {
         }
     }
 
-    /// 创建备份
     pub async fn create_backup(&self, source_file: &Path) -> AppResult<PathBuf> {
         let backup_dir = self.get_backup_directory();
         async_fs::create_dir_all(&backup_dir)
@@ -290,7 +266,6 @@ impl MessagePackManager {
         Ok(backup_file)
     }
 
-    /// 从备份恢复
     pub async fn restore_from_backup(&self) -> AppResult<Option<SessionState>> {
         let backup_dir = self.get_backup_directory();
 
@@ -349,7 +324,6 @@ impl MessagePackManager {
         Ok(None)
     }
 
-    /// 原子写入文件
     async fn atomic_write(&self, target_path: &Path, data: &[u8]) -> AppResult<()> {
         let temp_path = target_path.with_extension("tmp");
 
@@ -375,7 +349,6 @@ impl MessagePackManager {
         Ok(())
     }
 
-    /// 清理旧备份
     async fn cleanup_old_backups(&self) -> AppResult<()> {
         let backup_dir = self.get_backup_directory();
 
@@ -421,7 +394,6 @@ impl MessagePackManager {
         Ok(())
     }
 
-    /// 确保状态目录存在
     async fn ensure_state_directory(&self) -> AppResult<()> {
         let state_dir = &self.paths.state_dir;
         async_fs::create_dir_all(&state_dir)
@@ -430,17 +402,14 @@ impl MessagePackManager {
         Ok(())
     }
 
-    /// 获取状态文件路径
     fn get_state_file_path(&self) -> PathBuf {
         self.paths.state_dir.join(SESSION_STATE_FILE_NAME)
     }
 
-    /// 获取备份目录路径
     fn get_backup_directory(&self) -> PathBuf {
         self.paths.backups_dir.join("state")
     }
 
-    /// 获取状态文件统计信息
     pub async fn get_state_stats(&self) -> AppResult<StateStats> {
         let state_file = self.get_state_file_path();
         let backup_dir = self.get_backup_directory();
@@ -487,36 +456,26 @@ impl MessagePackManager {
     }
 }
 
-/// 状态统计信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StateStats {
-    /// 状态文件是否存在
     pub state_file_exists: bool,
-    /// 状态文件大小（字节）
     pub state_file_size: u64,
-    /// 备份文件数量
     pub backup_count: usize,
-    /// 备份文件总大小（字节）
     pub backup_total_size: u64,
-    /// 是否启用压缩
     pub compression_enabled: bool,
-    /// 是否启用校验和验证
     pub checksum_validation_enabled: bool,
 }
 
 impl StateStats {
-    /// 格式化状态文件大小
     pub fn state_file_size_formatted(&self) -> String {
         format_bytes(self.state_file_size)
     }
 
-    /// 格式化备份总大小
     pub fn backup_total_size_formatted(&self) -> String {
         format_bytes(self.backup_total_size)
     }
 }
 
-/// 格式化字节数为人类可读的字符串
 fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB"];
     let mut size = bytes as f64;

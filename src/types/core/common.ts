@@ -1,14 +1,5 @@
-/**
- * 核心通用类型定义
- * 不依赖任何业务类型，作为整个类型系统的基础
- */
-
-// ===== 基础通用类型 =====
-
 export type Size = 'small' | 'medium' | 'large'
 export type Status = 'idle' | 'loading' | 'success' | 'error'
-
-// ===== 通用操作结果类型 =====
 
 export interface OperationResult<T = void> {
   success: boolean
@@ -16,8 +7,6 @@ export interface OperationResult<T = void> {
   error?: string
   timestamp?: string
 }
-
-// ===== 通用分页类型 =====
 
 export interface PaginationOptions {
   page?: number
@@ -34,8 +23,6 @@ export interface PaginatedResponse<T> {
   totalPages: number
 }
 
-// ===== 通用缓存类型 =====
-
 export interface CacheOptions {
   ttl?: number
   maxSize?: number
@@ -49,8 +36,6 @@ export interface BaseCacheStats {
   hitRate: number
 }
 
-// ===== 通用文件系统类型 =====
-
 export interface FileInfo {
   name: string
   path: string
@@ -58,8 +43,6 @@ export interface FileInfo {
   size?: number
   modified?: number
 }
-
-// ===== 通用系统信息类型 =====
 
 export interface SystemInfo {
   platform: string
@@ -69,8 +52,6 @@ export interface SystemInfo {
   currentDir: string
 }
 
-// ===== 通用进程信息类型 =====
-
 export interface ProcessInfo {
   pid: number
   name: string
@@ -78,15 +59,11 @@ export interface ProcessInfo {
   status: 'running' | 'stopped' | 'zombie'
 }
 
-// ===== 通用权限信息类型 =====
-
 export interface PermissionInfo {
   read: boolean
   write: boolean
   execute: boolean
 }
-
-// ===== 通用事件类型 =====
 
 export interface BaseEvent {
   type: string
@@ -94,15 +71,11 @@ export interface BaseEvent {
   source?: string
 }
 
-// ===== 通用配置类型 =====
-
 export interface BaseConfig {
   version: string
   lastModified: string
   enabled: boolean
 }
-
-// ===== 日志相关类型 =====
 
 export interface LogEntry {
   timestamp: string
@@ -111,8 +84,6 @@ export interface LogEntry {
   module?: string
 }
 
-// ===== 插件相关类型 =====
-
 export interface PluginInfo {
   name: string
   version: string
@@ -120,16 +91,12 @@ export interface PluginInfo {
   description?: string
 }
 
-// ===== 快捷键相关类型 =====
-
 export interface KeyBinding {
   key: string
   modifiers: string[]
   action: string
   description?: string
 }
-
-// ===== 搜索相关类型 =====
 
 export interface SearchOptions {
   query: string

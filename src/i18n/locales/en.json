@@ -48,6 +48,7 @@
       "description": "Configure and manage shortcuts"
     },
     "language": {
+      "title": "Language Settings",
       "description": "Select interface display language"
     }
   },
@@ -121,6 +122,8 @@
     "save_success": "{action} shortcut configured successfully",
     "save_failed": "Failed to save shortcut",
     "init_failed": "Failed to initialize shortcut settings",
+    "reset_shortcuts": "Reset Shortcuts",
+    "reset_description": "Restore all shortcuts to default settings",
     "actions": {
       "copy_to_clipboard": "Copy to Clipboard",
       "paste_from_clipboard": "Paste from Clipboard",
@@ -148,7 +151,8 @@
   "language": {
     "title": "Language",
     "chinese": "中文",
-    "english": "English"
+    "english": "English",
+    "interface_language": "Interface Language"
   },
   "dialog": {
     "cancel": "Cancel",
@@ -172,6 +176,10 @@
     "testing": "Testing...",
     "save": "Save",
     "add": "Add",
+    "add_new_model": "Add New Model",
+    "add_model_description": "Configure AI model connection information",
+    "no_models": "No Model Configuration",
+    "default_provider": "AI Model",
     "providers": {
       "openai_description": "OpenAI GPT Models",
       "claude_description": "Anthropic Claude Models",
@@ -228,7 +236,13 @@
     "follow_system_description": "Automatically switch theme based on system settings",
     "select_theme": "Select Theme",
     "light_theme": "Light Theme",
-    "dark_theme": "Dark Theme"
+    "dark_theme": "Dark Theme",
+    "light_theme_description": "Theme to use when system is in light mode",
+    "dark_theme_description": "Theme to use when system is in dark mode",
+    "window_opacity": "Window Opacity",
+    "opacity": "Opacity",
+    "opacity_description": "Adjust window transparency ({percentage}%)",
+    "opacity_error": "Failed to set opacity: {error}"
   },
   "ui": {
     "clear": "Clear",

@@ -359,7 +359,7 @@
     min-height: 32px;
     padding: 6px 32px 6px 12px;
     border: 1px solid var(--border-300);
-    border-radius: 3px;
+    border-radius: 6px;
     background-color: var(--bg-400);
     color: var(--text-200);
     font-size: 14px;
@@ -522,7 +522,7 @@
     width: 100%;
     padding: 6px 8px;
     border: 1px solid var(--border-300);
-    border-radius: 4px;
+    border-radius: 6px;
     background-color: var(--bg-400);
     color: var(--text-200);
     font-size: 12px;

@@ -1,13 +1,5 @@
-/**
- * API 模块主入口
- *
- * 统一导出所有 API 接口，提供简洁的访问方式
- */
-
-// 重新导出请求相关功能
 export * from '../utils/request'
 
-// 导出各个功能模块的 API 实例
 export { aiApi } from './ai'
 export { configApi } from './config'
 export { storageApi } from './storage'
@@ -17,7 +9,6 @@ export { shortcutsApi } from './shortcuts'
 export { completionApi } from './completion'
 export { windowApi } from './window'
 
-// 导出所有类型（避免冲突）
 export type { AiApi } from './ai'
 export type { ConfigApi } from './config'
 export type { StorageApi } from './storage'
@@ -27,7 +18,6 @@ export type { ShortcutsApi } from './shortcuts'
 export type { CompletionApi } from './completion'
 export type { WindowApi } from './window'
 
-// 重新导出类型（从统一类型系统导入）
 export type {
   AIModelConfig,
   AISettings,
@@ -47,7 +37,6 @@ export type {
   ShellInfo,
   ShortcutsConfig,
   ShortcutBinding,
-  ShortcutCategory,
   Platform,
   ShortcutValidationResult,
   ConflictDetectionResult,
@@ -55,5 +44,4 @@ export type {
   WindowState,
 } from '@/types'
 
-// 重新导出补全相关类型（从统一类型系统导入）
 export type { CompletionRequest, CompletionResponse, CompletionItem } from '@/types'

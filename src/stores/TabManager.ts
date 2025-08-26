@@ -105,7 +105,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     }
   }
 
-  const createSettingsTab = (section = 'theme'): string => {
+  const createSettingsTab = (): string => {
     const existing = tabs.value.find(tab => tab.type === TabType.SETTINGS)
     if (existing) {
       setActiveTab(existing.id)
@@ -118,7 +118,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
       title: 'settings',
       type: TabType.SETTINGS,
       closable: true,
-      data: { section },
+      data: {},
     })
     setActiveTab(id)
     return id

@@ -10,10 +10,6 @@ import { handleErrorWithMessage } from '@/utils/errorHandler'
  * 精简版会话状态管理Store
  */
 export const useSessionStore = defineStore('session', () => {
-  // ============================================================================
-  // 状态定义
-  // ============================================================================
-
   /** 当前会话状态 */
   const sessionState = ref<SessionState>(createDefaultSessionState())
 
@@ -28,16 +24,6 @@ export const useSessionStore = defineStore('session', () => {
 
   /** 是否已初始化 */
   const initialized = ref(false)
-
-  /** 自动保存定时器 */
-  let autoSaveTimer: NodeJS.Timeout | null = null
-
-  /** 自动保存间隔（毫秒） */
-  const AUTO_SAVE_INTERVAL = 30000 // 30秒
-
-  // ============================================================================
-  // 计算属性
-  // ============================================================================
 
   /** 是否正在执行操作 */
   const isOperating = computed(() => isLoading.value || isSaving.value)
@@ -54,13 +40,6 @@ export const useSessionStore = defineStore('session', () => {
   /** AI状态 */
   const aiState = computed(() => sessionState.value.ai)
 
-  // ============================================================================
-  // 核心方法
-  // ============================================================================
-
-  /**
-   * 保存会话状态到后端
-   */
   const saveSessionState = async (): Promise<void> => {
     if (isSaving.value) return
 
@@ -68,7 +47,6 @@ export const useSessionStore = defineStore('session', () => {
       isSaving.value = true
       error.value = null
 
-      // 更新时间戳
       sessionState.value.timestamp = new Date().toISOString()
 
       await invoke('storage_save_session_state', {
@@ -83,9 +61,6 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  /**
-   * 从后端加载会话状态
-   */
   const loadSessionState = async (): Promise<void> => {
     if (isLoading.value) return
 
@@ -99,191 +74,93 @@ export const useSessionStore = defineStore('session', () => {
         sessionState.value = state
       }
 
-      // 窗口状态由官方插件自动恢复
       await restoreWindowState()
     } catch (err) {
       const message = handleErrorWithMessage(err, '加载会话状态失败')
       error.value = message
-      // 加载失败时使用默认状态
       sessionState.value = createDefaultSessionState()
     } finally {
       isLoading.value = false
     }
   }
 
-  // ============================================================================
-  // 状态更新方法
-  // ============================================================================
-
-  /**
-   * 更新终端状态
-   */
   const updateTerminals = (terminals: TerminalState[]): void => {
     sessionState.value.terminals = terminals
-    scheduleAutoSave()
+    saveSessionState().catch(() => {})
   }
 
-  /**
-   * 添加终端
-   */
   const addTerminal = (terminal: TerminalState): void => {
-    // 先将其他终端设为非活跃
     sessionState.value.terminals.forEach(t => (t.active = false))
     sessionState.value.terminals.push(terminal)
-    scheduleAutoSave()
+    saveSessionState().catch(() => {})
   }
 
-  /**
-   * 移除终端
-   */
   const removeTerminal = (terminalId: string): void => {
     const index = sessionState.value.terminals.findIndex(t => t.id === terminalId)
     if (index !== -1) {
       sessionState.value.terminals.splice(index, 1)
 
-      // 如果移除的是活跃终端，激活第一个终端
       if (!sessionState.value.terminals.some(t => t.active) && sessionState.value.terminals.length > 0) {
         sessionState.value.terminals[0].active = true
       }
 
-      scheduleAutoSave()
+      saveSessionState().catch(() => {})
     }
   }
 
-  /**
-   * 激活终端
-   */
   const activateTerminal = (terminalId: string): void => {
     sessionState.value.terminals.forEach(t => {
       t.active = t.id === terminalId
     })
-    // 同时更新活跃标签页ID
     sessionState.value.activeTabId = terminalId
-    scheduleAutoSave()
+    saveSessionState().catch(() => {})
   }
 
-  /**
-   * 设置活跃标签页ID
-   */
   const setActiveTabId = (tabId: string | null | undefined): void => {
     sessionState.value.activeTabId = tabId || undefined
-    scheduleAutoSave()
+    saveSessionState().catch(() => {})
   }
 
-  /**
-   * 更新UI状态
-   */
   const updateUiState = (updates: Partial<UiState>): void => {
     sessionState.value.ui = {
       ...sessionState.value.ui,
       ...updates,
     }
-    scheduleAutoSave()
+    saveSessionState().catch(() => {})
   }
 
-  /**
-   * 更新AI状态
-   */
   const updateAiState = (updates: Partial<AiState>): void => {
     sessionState.value.ai = {
       ...sessionState.value.ai,
       ...updates,
     }
-    scheduleAutoSave()
+    saveSessionState().catch(() => {})
   }
 
-  // ============================================================================
-  // 自动保存
-  // ============================================================================
-
-  /**
-   * 调度自动保存
-   */
-  const scheduleAutoSave = (): void => {
-    if (autoSaveTimer) {
-      clearTimeout(autoSaveTimer)
-    }
-
-    autoSaveTimer = setTimeout(() => {
-      saveSessionState().catch(() => {
-        // 自动保存失败静默处理
-      })
-    }, AUTO_SAVE_INTERVAL)
-  }
-
-  /**
-   * 立即保存（用于重要状态变化）
-   */
-  const saveImmediately = async (): Promise<void> => {
-    if (autoSaveTimer) {
-      clearTimeout(autoSaveTimer)
-      autoSaveTimer = null
-    }
-    await saveSessionState()
-  }
-
-  /**
-   * 开始自动保存
-   */
-  const startAutoSave = (): void => {
-    scheduleAutoSave()
-  }
-
-  /**
-   * 停止自动保存
-   */
-  const stopAutoSave = (): void => {
-    if (autoSaveTimer) {
-      clearTimeout(autoSaveTimer)
-      autoSaveTimer = null
-    }
-  }
-
-  /**
-   * 清除错误
-   */
   const clearError = (): void => {
     error.value = null
   }
 
-  /**
-   * 恢复窗口状态到实际窗口 (使用官方window-state插件)
-   */
   const restoreWindowState = async (): Promise<void> => {
     try {
-      // 使用官方插件恢复窗口状态
       await restoreStateCurrent(StateFlags.ALL)
     } catch (error) {
-      // 窗口状态恢复失败不应阻止应用启动，只记录警告
       console.warn('窗口状态恢复失败:', error)
     }
   }
 
-  /**
-   * 清理资源
-   */
-  const cleanup = (): void => {
-    stopAutoSave()
-  }
-  /**
-   * 初始化会话状态管理
-   */
+  const cleanup = (): void => {}
   const initialize = async (): Promise<void> => {
     if (initialized.value) return
 
     try {
       await loadSessionState()
-      startAutoSave()
       initialized.value = true
     } catch (err) {
       console.error('会话状态管理初始化失败:', err)
       throw err
     }
   }
-
-  // ============================================================================
-  // 返回Store接口
-  // ============================================================================
 
   return {
     // 状态
@@ -317,9 +194,6 @@ export const useSessionStore = defineStore('session', () => {
     updateAiState,
 
     // 工具方法
-    startAutoSave,
-    stopAutoSave,
-    saveImmediately,
     clearError,
   }
 })

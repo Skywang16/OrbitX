@@ -11,7 +11,6 @@ use tracing::error;
 use super::{CommandInfo, PaneShellState, ShellType};
 use crate::mux::{PaneId, TerminalMux};
 
-/// 前端命令信息结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrontendCommandInfo {
     pub id: u64,
@@ -56,7 +55,6 @@ impl From<&CommandInfo> for FrontendCommandInfo {
     }
 }
 
-/// 前端面板状态结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrontendPaneState {
     pub integration_enabled: bool,
@@ -103,7 +101,6 @@ impl From<&PaneShellState> for FrontendPaneState {
     }
 }
 
-/// 检查Shell Integration状态（简化版）
 #[tauri::command]
 pub async fn check_shell_integration_status(
     pane_id: u32,
@@ -120,7 +117,6 @@ pub async fn check_shell_integration_status(
     Ok(status)
 }
 
-/// 设置Shell Integration - 真正的脚本注入实现
 #[tauri::command]
 pub async fn setup_shell_integration(
     pane_id: u32,
@@ -148,7 +144,6 @@ pub async fn setup_shell_integration(
     Ok(())
 }
 
-/// 获取pane的当前工作目录
 #[tauri::command]
 pub async fn get_pane_cwd(
     pane_id: u32,
@@ -165,7 +160,6 @@ pub async fn get_pane_cwd(
     Ok(cwd)
 }
 
-/// 更新pane的当前工作目录（用于静默模式）
 #[tauri::command]
 pub async fn update_pane_cwd(
     pane_id: u32,
@@ -183,7 +177,6 @@ pub async fn update_pane_cwd(
     Ok(())
 }
 
-/// 获取面板的完整Shell状态
 #[tauri::command]
 pub async fn get_pane_shell_state(
     pane_id: u32,
@@ -202,7 +195,6 @@ pub async fn get_pane_shell_state(
     Ok(shell_state)
 }
 
-/// 设置面板的Shell类型
 #[tauri::command]
 pub async fn set_pane_shell_type(
     pane_id: u32,
@@ -221,7 +213,6 @@ pub async fn set_pane_shell_type(
     Ok(())
 }
 
-/// 生成Shell集成脚本
 #[tauri::command]
 pub async fn generate_shell_integration_script(
     shell_type: String,
@@ -241,7 +232,6 @@ pub async fn generate_shell_integration_script(
         .map_err(|e| format!("Failed to generate shell script: {}", e))
 }
 
-/// 生成Shell环境变量
 #[tauri::command]
 pub async fn generate_shell_env_vars(
     shell_type: String,
@@ -254,7 +244,6 @@ pub async fn generate_shell_env_vars(
     Ok(env_vars)
 }
 
-/// 启用面板Shell Integration
 #[tauri::command]
 pub async fn enable_pane_integration(
     pane_id: u32,
@@ -271,7 +260,6 @@ pub async fn enable_pane_integration(
     Ok(())
 }
 
-/// 禁用面板Shell Integration
 #[tauri::command]
 pub async fn disable_pane_integration(
     pane_id: u32,
@@ -288,7 +276,6 @@ pub async fn disable_pane_integration(
     Ok(())
 }
 
-/// 获取面板的当前命令信息
 #[tauri::command]
 pub async fn get_pane_current_command(
     pane_id: u32,
@@ -307,7 +294,6 @@ pub async fn get_pane_current_command(
     Ok(command)
 }
 
-/// 获取面板的命令历史
 #[tauri::command]
 pub async fn get_pane_command_history(
     pane_id: u32,
@@ -328,14 +314,12 @@ pub async fn get_pane_command_history(
     Ok(history)
 }
 
-/// 检测Shell类型
 #[tauri::command]
 pub async fn detect_shell_type(shell_program: String) -> Result<String, String> {
     let shell_type = ShellType::from_program(&shell_program);
     Ok(shell_type.display_name().to_string())
 }
 
-/// 检查Shell是否支持集成
 #[tauri::command]
 pub async fn check_shell_integration_support(shell_program: String) -> Result<bool, String> {
     let shell_type = ShellType::from_program(&shell_program);

@@ -70,6 +70,11 @@ export async function setLocale(locale: string) {
       ...currentConfig,
       language: locale,
     })
+
+    // 立即保存会话状态
+    const { useSessionStore } = await import('@/stores/session')
+    const sessionStore = useSessionStore()
+    sessionStore.updateUiState({ language: locale })
   } catch (error) {
     console.error('Failed to save locale to backend:', error)
   }

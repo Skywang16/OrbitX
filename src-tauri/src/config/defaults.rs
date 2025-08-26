@@ -6,7 +6,6 @@
 
 use crate::config::types::*;
 
-/// 创建默认配置
 pub fn create_default_config() -> AppConfig {
     AppConfig {
         version: "1.0.0".to_string(),
@@ -18,7 +17,6 @@ pub fn create_default_config() -> AppConfig {
     }
 }
 
-/// 创建默认应用配置
 fn create_default_app_config() -> AppConfigApp {
     AppConfigApp {
         language: "zh-CN".to_string(),
@@ -27,7 +25,6 @@ fn create_default_app_config() -> AppConfigApp {
     }
 }
 
-/// 创建默认外观配置
 fn create_default_appearance_config() -> AppearanceConfig {
     AppearanceConfig {
         ui_scale: 100,
@@ -38,7 +35,6 @@ fn create_default_appearance_config() -> AppearanceConfig {
     }
 }
 
-/// 创建默认终端配置
 pub fn create_default_terminal_config() -> TerminalConfig {
     TerminalConfig {
         scrollback: 1000,
@@ -48,7 +44,6 @@ pub fn create_default_terminal_config() -> TerminalConfig {
     }
 }
 
-/// 创建默认 Shell 配置
 fn create_default_shell_config() -> ShellConfig {
     ShellConfig {
         default_shell: if cfg!(windows) {
@@ -61,7 +56,6 @@ fn create_default_shell_config() -> ShellConfig {
     }
 }
 
-/// 创建默认终端行为配置
 fn create_default_terminal_behavior_config() -> TerminalBehaviorConfig {
     TerminalBehaviorConfig {
         close_on_exit: true,
@@ -69,7 +63,6 @@ fn create_default_terminal_behavior_config() -> TerminalBehaviorConfig {
     }
 }
 
-/// 创建默认字体配置
 fn create_default_font_config() -> FontConfig {
     FontConfig {
         family: "Menlo, Monaco, \"SF Mono\", \"Microsoft YaHei UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Source Han Sans CN\", \"WenQuanYi Micro Hei\", \"Courier New\", monospace".to_string(),
@@ -81,7 +74,6 @@ fn create_default_font_config() -> FontConfig {
     }
 }
 
-/// 创建默认光标配置
 fn create_default_cursor_config() -> CursorConfig {
     CursorConfig {
         style: CursorStyle::Block,
@@ -91,100 +83,89 @@ fn create_default_cursor_config() -> CursorConfig {
     }
 }
 
-/// 创建默认快捷键配置
 pub fn create_default_shortcuts_config() -> ShortcutsConfig {
-    ShortcutsConfig {
-        global: vec![
-            ShortcutBinding {
-                key: "c".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("copy_to_clipboard".to_string()),
-            },
-            ShortcutBinding {
-                key: "v".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("paste_from_clipboard".to_string()),
-            },
-            ShortcutBinding {
-                key: "f".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("terminal_search".to_string()),
-            },
-            ShortcutBinding {
-                key: "s".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("open_settings".to_string()),
-            },
-        ],
-        terminal: vec![
-            // 标签页管理
-            ShortcutBinding {
-                key: "t".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("new_tab".to_string()),
-            },
-            ShortcutBinding {
-                key: "w".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("close_tab".to_string()),
-            },
-            // 标签页切换
-            ShortcutBinding {
-                key: "1".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("switch_to_tab_1".to_string()),
-            },
-            ShortcutBinding {
-                key: "2".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("switch_to_tab_2".to_string()),
-            },
-            ShortcutBinding {
-                key: "3".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("switch_to_tab_3".to_string()),
-            },
-            ShortcutBinding {
-                key: "4".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("switch_to_tab_4".to_string()),
-            },
-            ShortcutBinding {
-                key: "5".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("switch_to_tab_5".to_string()),
-            },
-            ShortcutBinding {
-                key: "9".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("switch_to_last_tab".to_string()),
-            },
-            // 补全功能
-            ShortcutBinding {
-                key: "right".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("accept_completion".to_string()),
-            },
-            // 终端清理
-            ShortcutBinding {
-                key: "k".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("clear_terminal".to_string()),
-            },
-            // 字体大小调整
-            ShortcutBinding {
-                key: "=".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("increase_font_size".to_string()),
-            },
-            ShortcutBinding {
-                key: "-".to_string(),
-                modifiers: vec!["cmd".to_string()],
-                action: ShortcutAction::Simple("decrease_font_size".to_string()),
-            },
-        ],
-        custom: vec![],
-    }
+    vec![
+        ShortcutBinding {
+            key: "c".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("copy_to_clipboard".to_string()),
+        },
+        ShortcutBinding {
+            key: "v".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("paste_from_clipboard".to_string()),
+        },
+        ShortcutBinding {
+            key: "f".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("terminal_search".to_string()),
+        },
+        ShortcutBinding {
+            key: "s".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("open_settings".to_string()),
+        },
+        ShortcutBinding {
+            key: "t".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("new_tab".to_string()),
+        },
+        ShortcutBinding {
+            key: "w".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("close_tab".to_string()),
+        },
+        ShortcutBinding {
+            key: "1".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("switch_to_tab_1".to_string()),
+        },
+        ShortcutBinding {
+            key: "2".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("switch_to_tab_2".to_string()),
+        },
+        ShortcutBinding {
+            key: "3".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("switch_to_tab_3".to_string()),
+        },
+        ShortcutBinding {
+            key: "4".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("switch_to_tab_4".to_string()),
+        },
+        ShortcutBinding {
+            key: "5".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("switch_to_tab_5".to_string()),
+        },
+        ShortcutBinding {
+            key: "9".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("switch_to_last_tab".to_string()),
+        },
+        ShortcutBinding {
+            key: "right".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("accept_completion".to_string()),
+        },
+        ShortcutBinding {
+            key: "k".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("clear_terminal".to_string()),
+        },
+        ShortcutBinding {
+            key: "=".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("increase_font_size".to_string()),
+        },
+        ShortcutBinding {
+            key: "-".to_string(),
+            modifiers: vec!["cmd".to_string()],
+            action: ShortcutAction::Simple("decrease_font_size".to_string()),
+        },
+    ]
 }
 
 #[cfg(test)]
@@ -195,15 +176,11 @@ mod tests {
     fn test_default_config_completeness() {
         let config = create_default_config();
 
-        // 验证版本
         assert_eq!(config.version, "1.0.0");
-
-        // 验证应用配置
         assert_eq!(config.app.language, "zh-CN");
         assert!(config.app.confirm_on_exit);
         assert_eq!(config.app.startup_behavior, "restore");
 
-        // 验证外观配置
         assert_eq!(config.appearance.ui_scale, 100);
         assert!(config.appearance.animations_enabled);
         assert_eq!(config.appearance.opacity, 1.0);
@@ -213,13 +190,11 @@ mod tests {
         );
         assert_eq!(config.appearance.font.size, 14.0);
 
-        // 验证主题配置
         assert_eq!(config.appearance.theme_config.terminal_theme, "dark");
         assert_eq!(config.appearance.theme_config.light_theme, "light");
         assert_eq!(config.appearance.theme_config.dark_theme, "dark");
         assert!(config.appearance.theme_config.follow_system);
 
-        // 验证终端配置
         assert_eq!(config.terminal.scrollback, 1000);
         assert_eq!(
             config.terminal.shell.default_shell,
@@ -232,40 +207,29 @@ mod tests {
         assert!(config.terminal.behavior.close_on_exit);
         assert!(!config.terminal.behavior.confirm_close);
 
-        // AI配置已迁移到SQLite，不再在TOML配置中验证
-
-        // 验证快捷键配置
-        assert!(!config.shortcuts.global.is_empty());
-        assert!(!config.shortcuts.terminal.is_empty());
-        assert!(config.shortcuts.custom.is_empty());
+        assert!(!config.shortcuts.is_empty());
     }
 
     #[test]
     fn test_default_config_serialization() {
         let config = create_default_config();
 
-        // 测试能否序列化为TOML
         let toml_string =
             toml::to_string_pretty(&config).expect("Failed to serialize config to TOML");
 
-        // 验证关键字段在TOML中存在（AI配置已迁移到SQLite，因此不再包含 [ai]）
         assert!(toml_string.contains("version = \"1.0.0\""));
         assert!(toml_string.contains("[app]"));
         assert!(toml_string.contains("language = \"zh-CN\""));
         assert!(toml_string.contains("[appearance]"));
         assert!(toml_string.contains("[terminal]"));
-        // 移除对 [ai] 的断言
-        // Note: shortcuts might be serialized differently, let's check for the content instead
         assert!(toml_string.contains("global") || toml_string.contains("shortcuts"));
 
-        // 测试能否反序列化
         let _deserialized: AppConfig =
             toml::from_str(&toml_string).expect("Failed to deserialize TOML back to config");
     }
 
     #[test]
     fn test_individual_default_functions() {
-        // 测试各个默认配置函数
         let app_config = create_default_app_config();
         assert_eq!(app_config.language, "zh-CN");
 
@@ -277,8 +241,6 @@ mod tests {
         assert_eq!(terminal_config.scrollback, 1000);
 
         let shortcuts_config = create_default_shortcuts_config();
-        assert!(!shortcuts_config.global.is_empty());
-        assert!(!shortcuts_config.terminal.is_empty());
-        assert!(shortcuts_config.custom.is_empty());
+        assert!(!shortcuts_config.is_empty());
     }
 }

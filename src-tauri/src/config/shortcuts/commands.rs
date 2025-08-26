@@ -16,14 +16,11 @@ use tauri::State;
 use tokio::sync::Mutex;
 use tracing::{debug, info};
 
-/// 快捷键管理器状态
 pub struct ShortcutManagerState {
-    /// 快捷键管理器实例
     pub manager: Arc<Mutex<ShortcutManager>>,
 }
 
 impl ShortcutManagerState {
-    /// 创建新的快捷键管理器状态
     pub async fn new(config_state: &ConfigManagerState) -> crate::utils::error::AppResult<Self> {
         let manager = ShortcutManager::new(Arc::clone(&config_state.toml_manager)).await?;
         Ok(Self {
@@ -32,11 +29,7 @@ impl ShortcutManagerState {
     }
 }
 
-// ============================================================================
 // Tauri 命令
-// ============================================================================
-
-/// 获取快捷键配置
 #[tauri::command]
 pub async fn get_shortcuts_config(
     state: State<'_, ShortcutManagerState>,
@@ -50,7 +43,6 @@ pub async fn get_shortcuts_config(
     Ok(config)
 }
 
-/// 更新快捷键配置
 #[tauri::command]
 pub async fn update_shortcuts_config(
     config: ShortcutsConfig,
@@ -65,7 +57,6 @@ pub async fn update_shortcuts_config(
     Ok(())
 }
 
-/// 验证快捷键配置
 #[tauri::command]
 pub async fn validate_shortcuts_config(
     config: ShortcutsConfig,
@@ -80,7 +71,6 @@ pub async fn validate_shortcuts_config(
     Ok(result)
 }
 
-/// 检测快捷键冲突
 #[tauri::command]
 pub async fn detect_shortcuts_conflicts(
     config: ShortcutsConfig,
@@ -95,71 +85,49 @@ pub async fn detect_shortcuts_conflicts(
     Ok(result)
 }
 
-/// 添加快捷键
 #[tauri::command]
 pub async fn add_shortcut(
-    category: String,
     binding: ShortcutBinding,
     state: State<'_, ShortcutManagerState>,
 ) -> Result<(), String> {
-    debug!("添加快捷键: {:?} 到类别 {}", binding, category);
+    debug!("添加快捷键: {:?}", binding);
 
-    let category = category
-        .parse::<ShortcutCategory>()
-        .map_err(|e| e.to_string())?;
     let manager = state.manager.lock().await;
-    manager.add_shortcut(category, binding).await.to_tauri()?;
+    manager.add_shortcut(binding).await.to_tauri()?;
 
     info!("添加快捷键成功");
     Ok(())
 }
 
-/// 删除快捷键
 #[tauri::command]
 pub async fn remove_shortcut(
-    category: String,
     index: usize,
     state: State<'_, ShortcutManagerState>,
 ) -> Result<ShortcutBinding, String> {
-    debug!("删除快捷键: 类别 {}, 索引 {}", category, index);
+    debug!("删除快捷键: 索引 {}", index);
 
-    let category = category
-        .parse::<ShortcutCategory>()
-        .map_err(|e| e.to_string())?;
     let manager = state.manager.lock().await;
-    let removed = manager.remove_shortcut(category, index).await.to_tauri()?;
+    let removed = manager.remove_shortcut(index).await.to_tauri()?;
 
     info!("删除快捷键成功");
     Ok(removed)
 }
 
-/// 更新快捷键
 #[tauri::command]
 pub async fn update_shortcut(
-    category: String,
     index: usize,
     binding: ShortcutBinding,
     state: State<'_, ShortcutManagerState>,
 ) -> Result<(), String> {
-    debug!(
-        "更新快捷键: 类别 {}, 索引 {}, 新绑定 {:?}",
-        category, index, binding
-    );
+    debug!("更新快捷键: 索引 {}, 新绑定 {:?}", index, binding);
 
-    let category = category
-        .parse::<ShortcutCategory>()
-        .map_err(|e| e.to_string())?;
     let manager = state.manager.lock().await;
-    manager
-        .update_shortcut(category, index, binding)
-        .await
-        .to_tauri()?;
+    manager.update_shortcut(index, binding).await.to_tauri()?;
 
     info!("更新快捷键成功");
     Ok(())
 }
 
-/// 重置快捷键到默认配置
 #[tauri::command]
 pub async fn reset_shortcuts_to_defaults(
     state: State<'_, ShortcutManagerState>,
@@ -173,7 +141,6 @@ pub async fn reset_shortcuts_to_defaults(
     Ok(())
 }
 
-/// 获取快捷键统计信息
 #[tauri::command]
 pub async fn get_shortcuts_statistics(
     state: State<'_, ShortcutManagerState>,
@@ -187,7 +154,6 @@ pub async fn get_shortcuts_statistics(
     Ok(stats)
 }
 
-/// 搜索快捷键
 #[tauri::command]
 pub async fn search_shortcuts(
     options: SearchOptions,
@@ -202,7 +168,6 @@ pub async fn search_shortcuts(
     Ok(result)
 }
 
-/// 执行快捷键动作
 #[tauri::command]
 pub async fn execute_shortcut_action(
     action: crate::config::types::ShortcutAction,
@@ -212,8 +177,6 @@ pub async fn execute_shortcut_action(
     state: State<'_, ShortcutManagerState>,
 ) -> Result<OperationResult<serde_json::Value>, String> {
     debug!("执行快捷键动作: {:?}", action);
-
-    // 解析按键组合
     let parts: Vec<&str> = key_combination.split('+').collect();
     let key = parts.last().map(|s| s.to_string()).unwrap_or_default();
     let modifiers: Vec<String> = parts
@@ -235,7 +198,6 @@ pub async fn execute_shortcut_action(
     Ok(result)
 }
 
-/// 获取当前平台信息
 #[tauri::command]
 pub async fn get_current_platform() -> Result<Platform, String> {
     debug!("获取当前平台信息");
@@ -251,7 +213,6 @@ pub async fn get_current_platform() -> Result<Platform, String> {
     Ok(platform)
 }
 
-/// 导出快捷键配置
 #[tauri::command]
 pub async fn export_shortcuts_config(
     state: State<'_, ShortcutManagerState>,
@@ -268,7 +229,6 @@ pub async fn export_shortcuts_config(
     Ok(json_config)
 }
 
-/// 导入快捷键配置
 #[tauri::command]
 pub async fn import_shortcuts_config(
     config_json: String,
@@ -286,7 +246,6 @@ pub async fn import_shortcuts_config(
     Ok(())
 }
 
-/// 获取已注册的动作列表
 #[tauri::command]
 pub async fn get_registered_actions(
     state: State<'_, ShortcutManagerState>,
@@ -302,7 +261,6 @@ pub async fn get_registered_actions(
     Ok(actions)
 }
 
-/// 获取动作元数据
 #[tauri::command]
 pub async fn get_action_metadata(
     action_name: String,
@@ -318,7 +276,6 @@ pub async fn get_action_metadata(
     Ok(metadata)
 }
 
-/// 检查快捷键组合是否有效
 #[tauri::command]
 pub async fn validate_key_combination(
     key: String,
@@ -328,8 +285,6 @@ pub async fn validate_key_combination(
 
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
-
-    // 验证按键
     if key.is_empty() {
         errors.push(ValidationError {
             error_type: ValidationErrorType::EmptyKey,
@@ -338,7 +293,6 @@ pub async fn validate_key_combination(
         });
     }
 
-    // 验证修饰键
     let valid_modifiers = ["ctrl", "alt", "shift", "cmd", "meta", "super"];
     for modifier in &modifiers {
         if !valid_modifiers.contains(&modifier.to_lowercase().as_str()) {
@@ -350,13 +304,7 @@ pub async fn validate_key_combination(
         }
     }
 
-    // 检查是否为系统保留快捷键
-    let system_reserved = [
-        ("alt", "f4"),  // Windows关闭窗口
-        ("cmd", "q"),   // macOS退出应用
-        ("cmd", "tab"), // macOS切换应用
-        ("alt", "tab"), // Windows/Linux切换窗口
-    ];
+    let system_reserved = [("alt", "f4"), ("cmd", "q"), ("cmd", "tab"), ("alt", "tab")];
 
     for (mod_key, reserved_key) in system_reserved {
         if modifiers.contains(&mod_key.to_string()) && key.to_lowercase() == reserved_key {
@@ -391,7 +339,6 @@ mod tests {
             Platform::Linux
         };
 
-        // 测试平台检测逻辑
         match platform {
             Platform::MacOS => assert!(cfg!(target_os = "macos")),
             Platform::Windows => assert!(cfg!(target_os = "windows")),

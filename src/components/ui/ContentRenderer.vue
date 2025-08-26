@@ -15,7 +15,6 @@
       v-for="tab in tabManagerStore.tabs.filter(t => t.type === TabType.SETTINGS)"
       v-show="tab.id === tabManagerStore.activeTabId"
       :key="tab.id"
-      :section="tab.data?.section || 'theme'"
     />
   </div>
 </template>

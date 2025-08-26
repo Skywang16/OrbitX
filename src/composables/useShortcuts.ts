@@ -6,7 +6,7 @@
 
 import { computed } from 'vue'
 import { useShortcutStore } from '@/stores/shortcuts'
-import type { ShortcutBinding, ShortcutCategory } from '@/api'
+import type { ShortcutBinding } from '@/api'
 
 /**
  * 快捷键管理组合式API
@@ -31,12 +31,11 @@ export const useShortcuts = () => {
   const currentPlatform = computed(() => store.currentPlatform)
 
   // 快捷键操作
-  const addShortcut = (category: ShortcutCategory, shortcut: ShortcutBinding) => store.addShortcut(category, shortcut)
+  const addShortcut = (shortcut: ShortcutBinding) => store.addShortcut(shortcut)
 
-  const removeShortcut = (category: ShortcutCategory, index: number) => store.removeShortcut(category, index)
+  const removeShortcut = (index: number) => store.removeShortcut(index)
 
-  const updateShortcut = (category: ShortcutCategory, index: number, shortcut: ShortcutBinding) =>
-    store.updateShortcut(category, index, shortcut)
+  const updateShortcut = (index: number, shortcut: ShortcutBinding) => store.updateShortcut(index, shortcut)
 
   const resetToDefaults = () => store.resetToDefaults()
 

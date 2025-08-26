@@ -5,7 +5,6 @@ import type { TerminalState } from '@/types/domain/storage'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
 import { computed, ref, watch, nextTick } from 'vue'
-import { debounce } from 'lodash-es'
 interface TerminalEventListeners {
   onOutput: (data: string) => void
   onExit: (exitCode: number | null) => void
@@ -30,8 +29,8 @@ export interface RuntimeTerminalState {
   cwd: string
   active: boolean
   shell?: string
-  backendId: number | null // 后端进程ID
-  shellInfo?: ShellInfo // Shell信息
+  backendId: number | null
+  shellInfo?: ShellInfo
 }
 
 export const useTerminalStore = defineStore('Terminal', () => {
@@ -57,7 +56,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
   const _pendingOperations = ref<Set<string>>(new Set())
   const _operationQueue = ref<Array<() => Promise<void>>>([])
   let _isProcessingQueue = false
-  const MAX_CONCURRENT_OPERATIONS = 2 // 最多同时进行2个终端操作
+  const MAX_CONCURRENT_OPERATIONS = 2
 
   const _performanceStats = ref({
     totalTerminalsCreated: 0,
@@ -69,14 +68,15 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
   const sessionStore = useSessionStore()
 
-  const debouncedSync = debounce(() => {
+  const immediateSync = () => {
     syncToSessionStore()
-  }, 500)
+    sessionStore.saveSessionState().catch(() => {})
+  }
 
   watch(
     [terminals, activeTerminalId],
     () => {
-      debouncedSync()
+      immediateSync()
     },
     { deep: true }
   )
@@ -87,9 +87,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     return `terminal-${nextId++}`
   }
 
-  /**
-   * 并发控制：将操作加入队列并按顺序执行
-   */
   const queueOperation = async <T>(operation: () => Promise<T>): Promise<T> => {
     return new Promise((resolve, reject) => {
       const wrappedOperation = async () => {
@@ -106,9 +103,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     })
   }
 
-  /**
-   * 处理操作队列
-   */
   const processQueue = async () => {
     if (_isProcessingQueue || _operationQueue.value.length === 0) {
       return
@@ -136,9 +130,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     _isProcessingQueue = false
   }
 
-  /**
-   * 记录性能指标
-   */
   const recordPerformanceMetric = (type: 'create' | 'close', duration?: number) => {
     const stats = _performanceStats.value
 
@@ -146,28 +137,21 @@ export const useTerminalStore = defineStore('Terminal', () => {
       stats.totalTerminalsCreated++
       if (duration) {
         stats.creationTimes.push(duration)
-        // 保持最近100次的记录
         if (stats.creationTimes.length > 100) {
           stats.creationTimes.shift()
         }
-        // 计算平均创建时间
         stats.averageCreationTime = stats.creationTimes.reduce((a, b) => a + b, 0) / stats.creationTimes.length
       }
     } else if (type === 'close') {
       stats.totalTerminalsClosed++
     }
 
-    // 更新最大并发数
     const currentCount = terminals.value.length
     if (currentCount > stats.maxConcurrentTerminals) {
       stats.maxConcurrentTerminals = currentCount
     }
   }
 
-  /**
-   * 设置全局监听器，用于监听来自 Tauri 的所有终端事件。
-   * 这个函数应该在应用启动时只调用一次。
-   */
   const setupGlobalListeners = async () => {
     if (_isListenerSetup) return
 
@@ -215,7 +199,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
           updateTerminalTitle(terminal, event.payload.cwd)
         }
       } catch (error) {
-        console.error('处理终端CWD变化事件时发生错误:', error)
+        console.error('Error handling terminal CWD change event:', error)
       }
     })
 
@@ -223,18 +207,12 @@ export const useTerminalStore = defineStore('Terminal', () => {
     _isListenerSetup = true
   }
 
-  /**
-   * 关闭全局监听器。
-   */
   const teardownGlobalListeners = () => {
     _globalListenersUnlisten.forEach(unlisten => unlisten())
     _globalListenersUnlisten = []
     _isListenerSetup = false
   }
 
-  /**
-   * 由终端组件调用，用于注册其事件处理程序。
-   */
   const registerTerminalCallbacks = (id: string, callbacks: TerminalEventListeners) => {
     const listeners = _listeners.value.get(id) || []
     const entry: ListenerEntry = {
@@ -245,9 +223,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     _listeners.value.set(id, listeners)
   }
 
-  /**
-   * 当终端组件卸载时调用，用于清理资源。
-   */
   const unregisterTerminalCallbacks = (id: string, callbacks?: TerminalEventListeners) => {
     if (!callbacks) {
       // 如果没有指定回调，清除所有监听器
@@ -264,7 +239,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  /** 注册终端resize回调，统一管理window resize监听器 */
   const registerResizeCallback = (terminalId: string, callback: ResizeCallback) => {
     _resizeCallbacks.value.set(terminalId, callback)
 
@@ -281,7 +255,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  /** 注销终端resize回调 */
   const unregisterResizeCallback = (terminalId: string) => {
     _resizeCallbacks.value.delete(terminalId)
 
@@ -291,9 +264,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  /**
-   * 创建一个新的终端会话（使用系统默认shell）。
-   */
   const createTerminal = async (initialDirectory?: string): Promise<string> => {
     return queueOperation(async () => {
       const id = generateId()
@@ -320,6 +290,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
         terminals.value.push(terminal)
         setActiveTerminal(id)
+        immediateSync()
 
         const duration = Date.now() - startTime
         recordPerformanceMetric('create', duration)
@@ -332,9 +303,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     })
   }
 
-  /**
-   * 关闭终端会话。
-   */
   const closeTerminal = async (id: string) => {
     return queueOperation(async () => {
       const terminal = terminals.value.find(t => t.id === id)
@@ -360,14 +328,11 @@ export const useTerminalStore = defineStore('Terminal', () => {
       }
 
       cleanupTerminalState(id)
-      await saveSessionState()
+      immediateSync()
       recordPerformanceMetric('close')
     })
   }
 
-  /**
-   * 清理终端的前端状态
-   */
   const cleanupTerminalState = (id: string) => {
     const index = terminals.value.findIndex(t => t.id === id)
     if (index !== -1) {
@@ -380,14 +345,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
         setActiveTerminal(terminals.value[0].id)
       } else {
         activeTerminalId.value = null
-        // 不再自动创建新终端，避免在应用关闭时产生竞态条件
       }
     }
   }
 
-  /**
-   * 设置活动终端。
-   */
   const setActiveTerminal = (id: string) => {
     // 确保终端存在
     const targetTerminal = terminals.value.find(t => t.id === id)
@@ -400,11 +361,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
     // 同步活跃标签页ID到会话状态
     sessionStore.setActiveTabId(id)
+    immediateSync()
   }
 
-  /**
-   * 向终端写入数据。
-   */
   const writeToTerminal = async (id: string, data: string) => {
     const terminal = terminals.value.find(t => t.id === id)
     if (!terminal || terminal.backendId === null) {
@@ -419,9 +378,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  /**
-   * 调整终端大小。
-   */
   const resizeTerminal = async (id: string, rows: number, cols: number) => {
     const terminalSession = terminals.value.find(t => t.id === id)
     if (!terminalSession || terminalSession.backendId === null) {
@@ -440,9 +396,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  /**
-   * 更新终端的当前工作目录 - 增强版
-   */
   const updateTerminalCwd = (id: string, cwd: string) => {
     const terminal = terminals.value.find(t => t.id === id)
     if (!terminal) {
@@ -451,18 +404,16 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
 
     if (terminal.cwd === cwd) {
-      return // 路径没有变化，无需更新
+      return
     }
 
     terminal.cwd = cwd
 
     // 智能更新终端标题
     updateTerminalTitle(terminal, cwd)
-
-    debouncedSync()
+    immediateSync()
   }
 
-  /** 根据当前工作目录生成更可读的终端标题 */
   const updateTerminalTitle = (terminal: RuntimeTerminalState, cwd: string) => {
     try {
       if (terminal.shell === 'agent') {
@@ -512,9 +463,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  /**
-   * 获取可用的shell列表
-   */
   const loadAvailableShells = async () => {
     shellManager.value.isLoading = true
     shellManager.value.error = null
@@ -530,9 +478,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  /**
-   * 创建AI Agent专属终端
-   */
   const createAgentTerminal = async (agentName: string = 'AI Agent', initialDirectory?: string): Promise<string> => {
     return queueOperation(async () => {
       const id = generateId()
@@ -566,6 +511,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
         terminals.value.push(terminal)
         await new Promise(resolve => setTimeout(resolve, 100))
         setActiveTerminal(id)
+        immediateSync()
         return id
       } catch (error) {
         console.error(`创建Agent终端失败:`, error)
@@ -574,7 +520,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     })
   }
 
-  /** 使用指定shell创建终端 */
   const createTerminalWithShell = async (shellName: string): Promise<string> => {
     return queueOperation(async () => {
       const id = generateId()
@@ -604,7 +549,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
         terminals.value.push(terminal)
         setActiveTerminal(id)
-        await saveSessionState()
+        immediateSync()
 
         return id
       } catch (error) {
@@ -614,15 +559,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
     })
   }
 
-  /**
-   * 初始化shell管理器 */
   const initializeShellManager = async () => {
     await loadAvailableShells()
   }
 
-  /**
-   * 同步终端状态到会话存储
-   */
   const syncToSessionStore = () => {
     const terminalStates: TerminalState[] = terminals.value.map(terminal => ({
       id: terminal.id,
@@ -636,9 +576,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     sessionStore.setActiveTabId(activeTerminalId.value)
   }
 
-  /**
-   * 从会话状态恢复终端
-   */
   const restoreFromSessionState = async () => {
     try {
       if (!sessionStore.initialized) {
@@ -698,9 +635,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  /**
-   * 保存当前终端状态到会话
-   */
   const saveSessionState = async () => {
     try {
       syncToSessionStore()
@@ -710,9 +644,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  /**
-   * 初始化终端Store（包括会话恢复）
-   */
   const initializeTerminalStore = async () => {
     try {
       await initializeShellManager()

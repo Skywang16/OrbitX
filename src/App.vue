@@ -20,18 +20,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
   import { useShortcutListener } from '@/shortcuts'
   import { onMounted } from 'vue'
 
-  // 初始化快捷键监听器
   const { reloadConfig } = useShortcutListener()
 
   onMounted(() => {
-    // 暴露重新加载配置功能到控制台
     ;(window as any).reloadShortcuts = reloadConfig
   })
 </script>
 
 <template>
   <div class="app-layout">
-    <!-- 直接显示终端视图，所有内容都通过标签系统管理 -->
     <TerminalView />
   </div>
 </template>
