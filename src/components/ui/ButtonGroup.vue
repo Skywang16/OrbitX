@@ -99,7 +99,9 @@
         title="AI助手"
       >
         <svg class="ai-chat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          <path
+            d="M21 15a2 2 0 0 1-2 2H10l-3 5c-.3.4-.8.1-.8-.4v-4.6H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z"
+          />
         </svg>
       </button>
       <!-- 设置按钮 -->
