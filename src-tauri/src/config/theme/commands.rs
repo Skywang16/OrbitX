@@ -8,7 +8,7 @@
 use super::service::{SystemThemeDetector, ThemeService};
 use super::types::{Theme, ThemeConfig};
 use crate::config::TomlConfigManager;
-use crate::utils::error::AppResult;
+use crate::utils::error::{AppResult, ToTauriResult};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -52,10 +52,7 @@ pub async fn get_theme_config_status(
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
 ) -> Result<ThemeConfigStatus, String> {
-    let config = config_manager
-        .get_config()
-        .await
-        .map_err(|e| format!("获取配置失败: {}", e))?;
+    let config = config_manager.get_config().await.to_tauri()?;
 
     let theme_config = &config.appearance.theme_config;
     let is_system_dark = SystemThemeDetector::is_dark_mode();
@@ -68,7 +65,7 @@ pub async fn get_theme_config_status(
         .theme_manager()
         .list_themes()
         .await
-        .map_err(|e| format!("获取主题列表失败: {}", e))?;
+        .to_tauri()?;
 
     let available_themes = theme_list
         .into_iter()
@@ -93,10 +90,7 @@ pub async fn get_current_theme(
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
 ) -> Result<Theme, String> {
-    let config = config_manager
-        .get_config()
-        .await
-        .map_err(|e| format!("获取配置失败: {}", e))?;
+    let config = config_manager.get_config().await.to_tauri()?;
 
     let theme_config = &config.appearance.theme_config;
     let is_system_dark = SystemThemeDetector::is_dark_mode();
@@ -104,7 +98,7 @@ pub async fn get_current_theme(
     theme_service
         .load_current_theme(theme_config, is_system_dark)
         .await
-        .map_err(|e| format!("加载主题失败: {}", e))
+        .to_tauri()
 }
 
 /// 设置终端主题（手动模式）
@@ -128,7 +122,7 @@ pub async fn set_terminal_theme(
             Ok(())
         })
         .await
-        .map_err(|e| format!("更新配置失败: {}", e))?;
+        .to_tauri()?;
 
     // 发送主题变化事件，确保前端能立即响应
     app_handle
@@ -208,7 +202,7 @@ pub async fn get_available_themes(
         .theme_manager()
         .list_themes()
         .await
-        .map_err(|e| format!("获取主题列表失败: {}", e))?;
+        .to_tauri()?;
 
     let themes = theme_list
         .into_iter()

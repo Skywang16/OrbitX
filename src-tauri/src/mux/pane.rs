@@ -242,9 +242,13 @@ impl Pane for LocalPane {
         tracing::debug!("面板 {:?} 写入 {} 字节数据", self.pane_id, data.len());
 
         // 获取writer锁并写入数据
-        let mut writer = self.writer.lock().map_err(|_| {
-            tracing::error!("面板 {:?} 无法获取writer锁", self.pane_id);
-            anyhow!("无法获取writer锁")
+        let mut writer = crate::mux::error::ErrorHandler::handle_poison_error(
+            "获取writer锁",
+            self.writer.lock(),
+        )
+        .map_err(|e| {
+            tracing::error!("面板 {:?} 无法获取writer锁: {}", self.pane_id, e);
+            anyhow!("无法获取writer锁: {}", e)
         })?;
 
         // 使用Write trait写入数据

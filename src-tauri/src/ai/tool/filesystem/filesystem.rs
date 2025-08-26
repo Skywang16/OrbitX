@@ -12,7 +12,7 @@ use std::fs;
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::fs as async_fs;
+use tokio::fs as tokio_fs;
 
 /// 文件系统管理器选项
 #[derive(Debug, Clone)]
@@ -67,7 +67,7 @@ impl FileSystemManager {
 
     /// 异步读取文件内容
     pub async fn read_file(&self, path: &Path) -> AppResult<Vec<u8>> {
-        async_fs::read(path)
+        tokio_fs::read(path)
             .await
             .with_context(|| format!("读取文件失败: {}", path.display()))
     }
@@ -79,7 +79,7 @@ impl FileSystemManager {
 
     /// 异步读取文件内容为字符串
     pub async fn read_file_to_string(&self, path: &Path) -> AppResult<String> {
-        async_fs::read_to_string(path)
+        tokio_fs::read_to_string(path)
             .await
             .with_context(|| format!("读取文件失败: {}", path.display()))
     }
@@ -158,13 +158,13 @@ impl FileSystemManager {
 
         // 确保父目录存在
         if let Some(parent) = path.parent() {
-            async_fs::create_dir_all(parent)
+            tokio_fs::create_dir_all(parent)
                 .await
                 .with_context(|| format!("创建父目录失败: {}", parent.display()))?;
         }
 
         // 写入临时文件
-        async_fs::write(&temp_path, content)
+        tokio_fs::write(&temp_path, content)
             .await
             .with_context(|| format!("写入临时文件失败: {}", temp_path.display()))?;
 
@@ -173,18 +173,18 @@ impl FileSystemManager {
         if let Some(permissions) = self.options.file_permissions {
             use std::os::unix::fs::PermissionsExt;
             let perms = fs::Permissions::from_mode(permissions);
-            async_fs::set_permissions(&temp_path, perms)
+            tokio_fs::set_permissions(&temp_path, perms)
                 .await
                 .map_err(|e| anyhow!("设置文件权限失败: {}", e))?;
         }
 
         // 创建备份
-        if self.options.backup_enabled && async_fs::try_exists(path).await.unwrap_or(false) {
+        if self.options.backup_enabled && tokio_fs::try_exists(path).await.unwrap_or(false) {
             self.create_backup(path).await?;
         }
 
         // 原子移动
-        async_fs::rename(&temp_path, path).await.map_err(|e| {
+        tokio_fs::rename(&temp_path, path).await.map_err(|e| {
             // 清理临时文件
             let _ = std::fs::remove_file(&temp_path);
             anyhow!("原子移动失败: {}", e)
@@ -223,18 +223,18 @@ impl FileSystemManager {
     async fn direct_write(&self, path: &Path, content: &[u8]) -> AppResult<()> {
         // 确保父目录存在
         if let Some(parent) = path.parent() {
-            async_fs::create_dir_all(parent)
+            tokio_fs::create_dir_all(parent)
                 .await
                 .map_err(|e| anyhow!("创建父目录失败: {}", e))?;
         }
 
         // 创建备份
-        if self.options.backup_enabled && async_fs::try_exists(path).await.unwrap_or(false) {
+        if self.options.backup_enabled && tokio_fs::try_exists(path).await.unwrap_or(false) {
             self.create_backup(path).await?;
         }
 
         // 直接写入
-        async_fs::write(path, content)
+        tokio_fs::write(path, content)
             .await
             .with_context(|| format!("写入文件失败: {}", path.display()))?;
 
@@ -243,7 +243,7 @@ impl FileSystemManager {
         if let Some(permissions) = self.options.file_permissions {
             use std::os::unix::fs::PermissionsExt;
             let perms = fs::Permissions::from_mode(permissions);
-            async_fs::set_permissions(path, perms)
+            tokio_fs::set_permissions(path, perms)
                 .await
                 .map_err(|e| anyhow!("设置文件权限失败: {}", e))?;
         }
@@ -274,7 +274,7 @@ impl FileSystemManager {
     async fn create_backup(&self, path: &Path) -> AppResult<PathBuf> {
         let backup_path = self.get_backup_path(path);
 
-        async_fs::copy(path, &backup_path).await.with_context(|| {
+        tokio_fs::copy(path, &backup_path).await.with_context(|| {
             format!(
                 "创建备份失败: {} -> {}",
                 path.display(),
@@ -331,7 +331,7 @@ impl FileSystemManager {
         let mut backups = Vec::new();
 
         // 收集所有备份文件
-        if let Ok(mut entries) = async_fs::read_dir(&self.paths.backups_dir).await {
+        if let Ok(mut entries) = tokio_fs::read_dir(&self.paths.backups_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let path = entry.path();
                 if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
@@ -351,7 +351,7 @@ impl FileSystemManager {
 
         // 删除超出保留数量的备份
         for (path, _) in backups.iter().skip(self.options.backup_count) {
-            if let Err(_e) = async_fs::remove_file(path).await {
+            if let Err(_e) = tokio_fs::remove_file(path).await {
                 // 删除旧备份失败，继续处理其他文件
             } else {
                 // 删除旧备份成功
@@ -363,7 +363,7 @@ impl FileSystemManager {
 
     /// 检查文件是否存在
     pub async fn exists(&self, path: &Path) -> bool {
-        async_fs::try_exists(path).await.unwrap_or(false)
+        tokio_fs::try_exists(path).await.unwrap_or(false)
     }
 
     /// 检查文件是否存在（同步）
@@ -374,7 +374,7 @@ impl FileSystemManager {
     /// 删除文件
     pub async fn remove_file(&self, path: &Path) -> AppResult<()> {
         if self.exists(path).await {
-            async_fs::remove_file(path)
+            tokio_fs::remove_file(path)
                 .await
                 .map_err(|e| anyhow!("删除文件失败: {}", e))?;
             // 文件删除成功

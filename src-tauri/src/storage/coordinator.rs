@@ -133,9 +133,14 @@ impl StorageCoordinator {
     pub async fn update_config(&self, section: &str, data: Value) -> AppResult<()> {
         debug!("更新配置节: {}", section);
 
-        // 使用配置管理器的 update_section 方法
+        // 使用配置管理器的 update_config 闭包模式，确保原子性操作
         self.config_manager
-            .update_section(section, data)
+            .update_config(|config| {
+                // 使用内部方法更新指定配置节
+                self.config_manager
+                    .update_config_section(config, section, data.clone())?;
+                Ok(())
+            })
             .await
             .context("更新配置节失败")?;
 

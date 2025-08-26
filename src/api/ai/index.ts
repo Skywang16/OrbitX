@@ -11,7 +11,6 @@ import type {
 } from './types'
 
 class ConversationAPI {
-
   async createConversation(title?: string): Promise<number> {
     try {
       return await invoke('create_conversation', { title })
@@ -166,13 +165,8 @@ class ConversationAPI {
   }
 
   private cleanJsonEscapes(text: string): string {
-    return text
-      .replace(/\\"/g, '"')
-      .replace(/\\n/g, '\n')
-      .replace(/\\t/g, '\t')
-      .replace(/\\\\/g, '\\')
+    return text.replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\')
   }
-
 
   private convertConversation(raw: RawConversation): Conversation {
     return {
@@ -207,7 +201,6 @@ class ConversationAPI {
   }
 }
 
-
 export async function analyzeCode(params: AnalyzeCodeParams): Promise<AnalysisResult> {
   try {
     return await invoke<AnalysisResult>('analyze_code', params as unknown as Record<string, unknown>)
@@ -215,7 +208,6 @@ export async function analyzeCode(params: AnalyzeCodeParams): Promise<AnalysisRe
     throw new Error(handleError(error, 'Code analysis failed'))
   }
 }
-
 
 export async function webFetchHeadless(request: WebFetchRequest): Promise<WebFetchResponse> {
   try {
@@ -285,7 +277,6 @@ export class AiApi {
     }
   }
 
-
   async getSettings(): Promise<AISettings> {
     try {
       return await invoke<AISettings>('get_ai_settings')
@@ -302,7 +293,6 @@ export class AiApi {
     }
   }
 
-
   async getStats(): Promise<AIStats> {
     try {
       return await invoke<AIStats>('get_ai_stats')
@@ -318,7 +308,6 @@ export class AiApi {
       throw new Error(handleError(error, 'Failed to get AI health status'))
     }
   }
-
 
   async createConversation(title?: string) {
     return this.conversationAPI.createConversation(title)
@@ -377,7 +366,6 @@ export class AiApi {
   async truncateConversation(conversationId: number, truncateAfterMessageId: number) {
     return this.conversationAPI.truncateConversation(conversationId, truncateAfterMessageId)
   }
-
 
   async analyzeCode(params: AnalyzeCodeParams): Promise<AnalysisResult> {
     return analyzeCode(params)

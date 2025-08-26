@@ -419,7 +419,7 @@ impl TomlConfigManager {
         Ok(default_config)
     }
 
-    fn update_config_section(
+    pub fn update_config_section(
         &self,
         config: &mut AppConfig,
         section: &str,
