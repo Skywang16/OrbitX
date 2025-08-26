@@ -60,18 +60,19 @@ export class OrbitSearchTool extends ModifiableTool {
   constructor() {
     super(
       'orbit_search',
-      `专业代码搜索工具 - 优先使用此工具进行所有代码相关搜索！结合文本搜索、AST分析和语义理解的智能搜索引擎。支持单个关键词或多关键词 OR 搜索（如："gemini-cli OR xxxgemini OR gemini"）。适用于搜索函数定义、类、接口、变量、代码引用和使用位置、代码审查和重构分析等。不要使用shell命令进行代码搜索，此工具比shell命令更智能和准确。支持多种编程语言的语法分析，能理解代码结构和上下文。必须使用绝对路径。`,
+      `Professional code search tool - prioritize using this tool for all code-related searches! Intelligent search engine combining text search, AST analysis, and semantic understanding. Supports single keyword or multi-keyword OR search (e.g., "gemini-cli OR xxxgemini OR gemini"). Suitable for searching function definitions, classes, interfaces, variables, code references and usage locations, code review and refactoring analysis, etc. Do not use shell commands for code search; this tool is smarter and more accurate than shell commands. Supports syntax analysis for multiple programming languages and can understand code structure and context. Must use absolute paths.`,
       {
         type: 'object',
         properties: {
           query: {
             type: 'string',
             description:
-              '搜索查询内容。支持单个关键词或多关键词 OR 搜索。例如："createUser" 或 "gemini-cli OR xxxgemini OR gemini"',
+              'Search query content. Supports single keyword or multi-keyword OR search. For example: "createUser" or "gemini-cli OR xxxgemini OR gemini"',
           },
           path: {
             type: 'string',
-            description: '搜索路径的绝对路径。必须是完整路径，例如："/Users/user/project/src"、"/home/user/workspace"',
+            description:
+              'Absolute path for the search directory. Must be a complete path, for example: "/Users/user/project/src", "/home/user/workspace"',
           },
         },
         required: ['query', 'path'],
@@ -121,7 +122,7 @@ export class OrbitSearchTool extends ModifiableTool {
       if (error instanceof ValidationError || error instanceof FileNotFoundError) {
         throw error
       }
-      throw new ToolError(`语义搜索失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`Semantic search failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -225,7 +226,7 @@ export class OrbitSearchTool extends ModifiableTool {
 
       return response
     } catch (error) {
-      throw new ToolError(`搜索执行失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`Search execution failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -437,7 +438,7 @@ export class OrbitSearchTool extends ModifiableTool {
 
       return matches.sort((a, b) => b.relevanceScore - a.relevanceScore)
     } catch (error) {
-      throw new ToolError(`文本搜索失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`Text search failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -464,7 +465,7 @@ export class OrbitSearchTool extends ModifiableTool {
       await this.walkDirectory(searchPath, files, fileExtensions, defaultIgnorePatterns, false)
       return files
     } catch (error) {
-      throw new Error(`获取文件列表失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(`Failed to get file list: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 

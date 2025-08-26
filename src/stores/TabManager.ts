@@ -10,7 +10,6 @@ export const useTabManagerStore = defineStore('TabManager', () => {
 
   const activeTab = computed(() => tabs.value.find(tab => tab.id === activeTabId.value))
 
-  // 监听终端状态变化，自动同步标签
   watch(
     () => terminalStore.terminals,
     () => {
@@ -26,13 +25,11 @@ export const useTabManagerStore = defineStore('TabManager', () => {
       ...terminalStore.terminals.map(terminal => {
         const shellName = terminal.shell || 'shell'
         const cwd = terminal.cwd || '~'
-
-        // 智能路径显示逻辑
         const displayPath = getDisplayPath(cwd)
 
         return {
           id: terminal.id,
-          title: '', // 终端标签不再使用title字段
+          title: '',
           type: TabType.TERMINAL,
           closable: true,
           icon: '🖥️',
@@ -48,31 +45,20 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     }
   }
 
-  /**
-   * 智能路径显示逻辑
-   * 根据路径特征返回合适的显示名称
-   */
+  /** 格式化工作目录为短显示名 */
   const getDisplayPath = (cwd: string): string => {
     if (!cwd || cwd === '~') return '~'
 
     try {
-      // 移除末尾的斜杠
       const cleanPath = cwd.replace(/\/$/, '')
-
-      // 跨平台Home目录处理
-      const homePatterns = [
-        /^\/Users\/[^/]+/, // macOS
-        /^\/home\/[^/]+/, // Linux
-        /^C:\\Users\\[^\\]+/i, // Windows
-      ]
+      const homePatterns = [/^\/Users\/[^/]+/, /^\/home\/[^/]+/, /^C:\\Users\\[^\\]+/i]
 
       for (const homePattern of homePatterns) {
         if (homePattern.test(cleanPath)) {
           const homeMatch = cleanPath.match(homePattern)?.[0]
           if (homeMatch && cleanPath === homeMatch) {
-            return '~' // 用户home目录
+            return '~'
           }
-          // home子目录显示相对路径
           const relativePath = cleanPath.replace(homePattern, '~')
           const pathParts = relativePath.split(/[/\\]/).filter(p => p.length > 0)
           if (pathParts.length > 0) {
@@ -82,8 +68,6 @@ export const useTabManagerStore = defineStore('TabManager', () => {
           return '~'
         }
       }
-
-      // 处理系统重要目录
       const systemDirs: Record<string, string> = {
         '/': 'root',
         '/usr': 'usr',
@@ -101,20 +85,14 @@ export const useTabManagerStore = defineStore('TabManager', () => {
       if (systemDirs[cleanPath]) {
         return systemDirs[cleanPath]
       }
-
-      // 对于其他路径，显示最后一级目录名
       const pathParts = cleanPath.split(/[/\\]/).filter(p => p.length > 0)
 
       if (pathParts.length === 0) return '/'
 
       const lastPart = pathParts[pathParts.length - 1]
-
-      // 如果是根目录下的直接子目录，显示带斜杠前缀
       if (pathParts.length === 1 && (cleanPath.startsWith('/') || cleanPath.match(/^[A-Z]:\\/i))) {
         return navigator.platform.toLowerCase().includes('win') ? lastPart : `/${lastPart}`
       }
-
-      // 如果目录名太长，进行截断
       if (lastPart.length > 20) {
         return lastPart.substring(0, 17) + '...'
       }
@@ -122,13 +100,10 @@ export const useTabManagerStore = defineStore('TabManager', () => {
       return lastPart
     } catch (error) {
       console.warn('路径处理错误:', error, '原始路径:', cwd)
-      // 失败时的降级处理
       const parts = cwd.split(/[/\\]/).filter(p => p.length > 0)
       return parts.length > 0 ? parts[parts.length - 1] : '~'
     }
   }
-
-  // --- 公共方法 ---
 
   const createSettingsTab = (section = 'theme'): string => {
     const existing = tabs.value.find(tab => tab.type === TabType.SETTINGS)
@@ -140,7 +115,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     const id = `settings-${Date.now()}`
     tabs.value.push({
       id,
-      title: '设置',
+      title: 'settings',
       type: TabType.SETTINGS,
       closable: true,
       data: { section },

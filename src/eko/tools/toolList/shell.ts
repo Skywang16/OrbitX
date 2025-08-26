@@ -32,13 +32,13 @@ export class ShellTool extends ModifiableTool {
   constructor() {
     super(
       'shell',
-      `在当前终端中执行Shell命令。适用于系统操作、构建部署、版本控制等场景。包含安全检查，会阻止危险命令。注意：代码搜索请使用orbit_search工具，文件内容查找请使用orbit_search或read_file工具。`,
+      `Execute Shell commands in the current terminal. Suitable for system operations, build deployment, version control, and other scenarios. Includes security checks that will block dangerous commands. Note: For code search, use the orbit_search tool; for file content lookup, use orbit_search or read_file tools.`,
       {
         type: 'object',
         properties: {
           command: {
             type: 'string',
-            description: '要执行的命令。示例："ls -la"、"npm install"、"git status"',
+            description: 'Command to execute. Examples: "ls -la", "npm install", "git status"',
           },
         },
         required: ['command'],
@@ -67,7 +67,7 @@ export class ShellTool extends ModifiableTool {
         ],
       }
     } catch (error) {
-      throw new ToolError(`命令执行失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`Command execution failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -220,7 +220,7 @@ export class ShellTool extends ModifiableTool {
               const cleanOutput = cleanOutputFn(outputBuffer, command)
               resolve(cleanOutput)
             } else {
-              reject(new ToolError(`命令执行失败，退出码: ${exitCode}`))
+              reject(new ToolError(`Command execution failed with exit code: ${exitCode}`))
             }
           }
         },
@@ -239,7 +239,7 @@ export class ShellTool extends ModifiableTool {
           if (!isCompleted) {
             isCompleted = true
             cleanup()
-            reject(new ToolError(`写入命令失败: ${error.message}`))
+            reject(new ToolError(`Failed to write command: ${error.message}`))
           }
         })
     })

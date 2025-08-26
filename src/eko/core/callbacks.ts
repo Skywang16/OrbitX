@@ -12,20 +12,20 @@ import type { AgentContext } from '@eko-ai/eko'
 const smartFileSelect = (prompt: string, directory?: string): string => {
   const baseDir = directory || './'
 
-  // 根据提示内容推断文件类型
-  if (prompt.includes('package') || prompt.includes('依赖')) {
+  // Infer file type based on prompt content
+  if (prompt.includes('package') || prompt.includes('dependency') || prompt.includes('依赖')) {
     return `${baseDir}package.json`
   }
 
-  if (prompt.includes('config') || prompt.includes('配置')) {
+  if (prompt.includes('config') || prompt.includes('configuration') || prompt.includes('配置')) {
     return `${baseDir}vite.config.ts`
   }
 
-  if (prompt.includes('readme') || prompt.includes('文档')) {
+  if (prompt.includes('readme') || prompt.includes('documentation') || prompt.includes('文档')) {
     return `${baseDir}README.md`
   }
 
-  // 默认返回package.json
+  // Default to package.json
   return `${baseDir}package.json`
 }
 

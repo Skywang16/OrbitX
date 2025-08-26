@@ -5,7 +5,7 @@
 import type { Tool } from '../types'
 import { globalToolRegistry } from './tool-registry'
 
-// 导入所有工具
+// Import all tools
 import { readFileTool } from './toolList/read-file'
 import { readManyFilesTool } from './toolList/read-many-files'
 import { readDirectoryTool } from './toolList/read-directory'
@@ -18,12 +18,12 @@ import { webFetchTool } from './toolList/web-fetch'
 import { orbitSearchTool } from './toolList/orbit-search'
 
 /**
- * 只读工具 - Chat模式可以使用
+ * Read-only tools - available in Chat mode
  */
 export const readOnlyTools: Tool[] = [readFileTool, readManyFilesTool, readDirectoryTool, webFetchTool, orbitSearchTool]
 
 /**
- * 所有工具 - Agent模式可以使用
+ * All tools - available in Agent mode
  */
 export const allTools: Tool[] = [
   readFileTool,
@@ -37,7 +37,7 @@ export const allTools: Tool[] = [
 ]
 
 /**
- * 注册所有工具到全局注册表
+ * Register all tools to global registry
  */
 export function registerAllTools(): void {
   const toolsToRegister = [
@@ -112,7 +112,7 @@ export function registerAllTools(): void {
 }
 
 /**
- * 按模式筛选工具
+ * Filter tools by mode
  */
 export function getToolsForMode(mode: 'chat' | 'agent'): Tool[] {
   return mode === 'agent' ? allTools : readOnlyTools

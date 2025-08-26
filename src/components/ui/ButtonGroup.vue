@@ -1,11 +1,14 @@
 <script setup lang="ts">
-  import { ref } from 'vue'
+  import { ref, computed } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { windowApi } from '@/api'
   import { handleErrorWithMessage } from '@/utils/errorHandler'
   import { useAIChatStore } from '@/components/AIChatSidebar'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { openUrl } from '@tauri-apps/plugin-opener'
   import { createMessage } from '@/ui/composables/message-api'
+
+  const { t } = useI18n()
   type ButtonGroup = { alwaysOnTop?: boolean }
 
   interface Props {
@@ -20,6 +23,12 @@
   const tabManagerStore = useTabManagerStore()
   const isAlwaysOnTop = ref(false)
   const showSettingsPopover = ref(false)
+
+  // 设置菜单项 - 使用计算属性确保响应式更新
+  const settingsMenuItems = computed(() => [
+    { label: t('ui.open_settings'), value: 'settings' },
+    { label: t('ui.feedback'), value: 'feedback' },
+  ])
 
   // 切换窗口置顶状态
   // 使用新的批量操作接口，提供更好的性能
@@ -80,14 +89,11 @@
       <x-popover
         v-model="showSettingsPopover"
         placement="bottom-end"
-        :menu-items="[
-          { label: '打开设置', value: 'settings' },
-          { label: '问题反馈', value: 'feedback' },
-        ]"
+        :menu-items="settingsMenuItems"
         @menu-item-click="handleSettingsAction"
       >
         <template #trigger>
-          <button class="control-btn settings-btn" title="设置">
+          <button class="control-btn settings-btn" :title="t('ui.settings')">
             <svg class="settings-icon" viewBox="0 0 1024 1024" fill="currentColor">
               <path
                 d="M449.194667 82.346667a128 128 0 0 1 125.610666 0l284.16 160a128 128 0 0 1 65.194667 111.530666v316.245334a128 128 0 0 1-65.194667 111.530666l-284.16 160a128 128 0 0 1-125.610666 0l-284.16-160a128 128 0 0 1-65.194667-111.530666V353.877333A128 128 0 0 1 165.034667 242.346667z m83.754666 74.410666a42.666667 42.666667 0 0 0-41.898666 0L206.933333 316.714667a42.666667 42.666667 0 0 0-21.76 37.162666v316.245334a42.666667 42.666667 0 0 0 21.76 37.162666l284.16 160a42.666667 42.666667 0 0 0 41.898667 0l284.16-160a42.666667 42.666667 0 0 0 21.76-37.162666V353.877333a42.666667 42.666667 0 0 0-21.76-37.162666zM512 341.333333a170.666667 170.666667 0 1 1 0 341.333334 170.666667 170.666667 0 0 1 0-341.333334z m0 85.333334a85.333333 85.333333 0 1 0 0 170.666666 85.333333 85.333333 0 0 0 0-170.666666z"
@@ -102,7 +108,7 @@
         class="control-btn pin-btn"
         :class="{ active: isAlwaysOnTop }"
         @click="toggleAlwaysOnTop"
-        title="置顶"
+        :title="t('ui.pin')"
       >
         <svg class="pin-icon" viewBox="0 0 1024 1024" fill="currentColor">
           <path

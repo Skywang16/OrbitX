@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
+  import { useI18n } from 'vue-i18n'
 
   interface Props {
     activeSection?: string
@@ -14,30 +15,37 @@
   })
 
   const emit = defineEmits<Emits>()
+  const { t } = useI18n()
 
   const searchQuery = ref('')
 
-  // 设置导航项目列表
-  const navigationItems = [
+  // 设置导航项目列表 - 使用计算属性确保语言切换时能实时更新
+  const navigationItems = computed(() => [
     {
       id: 'theme',
-      label: '主题设置',
+      label: t('settings.theme.title'),
       icon: 'palette',
-      description: '外观和主题配置',
+      description: t('settings.theme.description'),
     },
     {
       id: 'ai',
-      label: 'AI 设置',
+      label: t('settings.ai.title'),
       icon: 'brain',
-      description: 'AI模型和功能配置',
+      description: t('settings.ai.description'),
     },
     {
       id: 'shortcuts',
-      label: '快捷键设置',
+      label: t('settings.shortcuts.title'),
       icon: 'keyboard',
-      description: '配置和管理快捷键',
+      description: t('settings.shortcuts.description'),
     },
-  ]
+    {
+      id: 'language',
+      label: t('language.title'),
+      icon: 'globe',
+      description: t('settings.language.description'),
+    },
+  ])
 
   // 处理导航项点击
   const handleItemClick = (sectionId: string) => {
@@ -49,11 +57,11 @@
   // 过滤后的导航项目
   const filteredNavigationItems = computed(() => {
     if (!searchQuery.value) {
-      return navigationItems
+      return navigationItems.value
     }
 
     const query = searchQuery.value.toLowerCase()
-    return navigationItems.filter(
+    return navigationItems.value.filter(
       item => item.label.toLowerCase().includes(query) || item.description.toLowerCase().includes(query)
     )
   })
@@ -81,6 +89,11 @@
         <circle cx="12" cy="16" r="1"/>
         <circle cx="17" cy="16" r="1"/>
       </svg>`,
+      globe: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>`,
     }
     return icons[iconName] || ''
   }
@@ -89,7 +102,7 @@
 <template>
   <nav class="settings-navigation">
     <div class="navigation-header">
-      <x-search-input v-model="searchQuery" placeholder="搜索设置" />
+      <x-search-input v-model="searchQuery" :placeholder="t('settings.search_placeholder')" />
     </div>
 
     <ul class="navigation-list">

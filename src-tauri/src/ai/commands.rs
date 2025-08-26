@@ -63,7 +63,8 @@ pub async fn create_conversation(
 
     let repositories = state.repositories();
 
-    let conversation = Conversation::new(title.unwrap_or_else(|| "新对话".to_string()));
+    // 默认使用空标题，前端渲染时用 i18n 占位文案显示
+    let conversation = Conversation::new(title.unwrap_or_else(|| "".to_string()));
 
     let conversation_id = repositories
         .conversations()

@@ -1,10 +1,12 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { useTheme } from '../../../../composables/useTheme'
   import { XSelect } from '@/ui'
   import type { SelectOption } from '@/ui'
 
   const theme = useTheme()
+  const { t } = useI18n()
 
   // 组件挂载时初始化主题系统
   onMounted(async () => {
@@ -35,7 +37,7 @@
     return isFollowing ? 'system' : 'manual'
   })
 
-  const currentThemeName = computed(() => theme.currentThemeName.value)
+  // const currentThemeName = computed(() => theme.currentThemeName.value)
 
   // 主题选项 - 用于手动模式
   const manualThemeOptions = computed(() => {
@@ -169,7 +171,7 @@
   <div class="theme-settings">
     <!-- 模式选择 -->
     <div class="settings-group">
-      <h3 class="section-title">主题模式</h3>
+      <h3 class="section-title">{{ t('theme_settings.theme_mode') }}</h3>
       <div class="mode-selector">
         <label class="mode-option">
           <input type="radio" value="manual" :checked="currentMode === 'manual'" @change="handleModeChange('manual')" />
@@ -177,8 +179,8 @@
             <div class="mode-left">
               <div class="mode-icon" v-html="getIconSvg('palette')"></div>
               <div class="mode-info">
-                <div class="mode-label">手动选择</div>
-                <div class="mode-description">手动选择一个固定主题</div>
+                <div class="mode-label">{{ t('theme_settings.manual_selection') }}</div>
+                <div class="mode-description">{{ t('theme_settings.manual_description') }}</div>
               </div>
             </div>
             <div class="option-radio">
@@ -195,8 +197,8 @@
             <div class="mode-left">
               <div class="mode-icon" v-html="getIconSvg('monitor')"></div>
               <div class="mode-info">
-                <div class="mode-label">跟随系统</div>
-                <div class="mode-description">根据系统设置自动切换主题</div>
+                <div class="mode-label">{{ t('theme_settings.follow_system') }}</div>
+                <div class="mode-description">{{ t('theme_settings.follow_system_description') }}</div>
               </div>
             </div>
             <div class="option-radio">
@@ -211,7 +213,7 @@
 
     <!-- 手动模式设置 -->
     <div v-if="currentMode === 'manual'" class="settings-group">
-      <h3 class="section-title">选择主题</h3>
+      <h3 class="section-title">{{ t('theme_settings.select_theme') }}</h3>
       <div class="theme-grid">
         <div
           v-for="option in manualThemeOptions"
@@ -237,7 +239,7 @@
 
     <!-- 跟随系统模式设置 -->
     <div v-if="currentMode === 'system'" class="settings-group">
-      <h3 class="section-title">选择主题</h3>
+      <h3 class="section-title">{{ t('theme_settings.select_theme') }}</h3>
 
       <!-- 主题选择器组 -->
       <div class="theme-selectors">
@@ -245,13 +247,13 @@
         <div class="theme-selector">
           <div class="selector-header">
             <div class="selector-icon" v-html="getIconSvg('sun')"></div>
-            <h4 class="selector-title">浅色主题</h4>
+            <h4 class="selector-title">{{ t('theme_settings.light_theme') }}</h4>
           </div>
           <div class="selector-content">
             <XSelect
               v-model="selectedLightTheme"
               :options="lightThemeOptions"
-              placeholder="选择浅色主题"
+              :placeholder="t('theme.select_light')"
               size="medium"
               @change="handleSystemThemeChange"
               class="theme-select"
@@ -263,13 +265,13 @@
         <div class="theme-selector">
           <div class="selector-header">
             <div class="selector-icon" v-html="getIconSvg('moon')"></div>
-            <h4 class="selector-title">深色主题</h4>
+            <h4 class="selector-title">{{ t('theme_settings.dark_theme') }}</h4>
           </div>
           <div class="selector-content">
             <XSelect
               v-model="selectedDarkTheme"
               :options="darkThemeOptions"
-              placeholder="选择深色主题"
+              :placeholder="t('theme.select_dark')"
               size="medium"
               @change="handleSystemThemeChange"
               class="theme-select"

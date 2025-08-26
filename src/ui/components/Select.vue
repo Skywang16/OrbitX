@@ -1,21 +1,15 @@
 <template>
   <div ref="selectRef" :class="selectClasses" @click="handleClick" @keydown="handleKeydown" tabindex="0">
-    <!-- 选择器输入框 -->
     <div class="x-select__input-wrapper">
       <div class="x-select__input">
-        <!-- 显示选中的值 -->
         <span v-if="displayValue" class="x-select__value">{{ displayValue }}</span>
-        <span v-else class="x-select__placeholder">{{ placeholder }}</span>
-
-        <!-- 清除按钮 -->
+        <span v-else class="x-select__placeholder">{{ actualPlaceholder }}</span>
         <button v-if="clearable && modelValue && !disabled" class="x-select__clear" @click.stop="handleClear">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
-
-        <!-- 下拉箭头 -->
         <div class="x-select__arrow" :class="{ 'x-select__arrow--open': visible }">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="6,9 12,15 18,9"></polyline>
@@ -23,23 +17,18 @@
         </div>
       </div>
     </div>
-
-    <!-- 下拉选项面板 -->
     <Teleport to="body">
       <div v-if="visible" ref="dropdownRef" :class="dropdownClasses" :style="dropdownStyle">
-        <!-- 搜索框 -->
         <div v-if="filterable" class="x-select__filter">
           <input
             ref="filterInputRef"
             v-model="filterQuery"
             type="text"
             class="x-select__filter-input"
-            :placeholder="filterPlaceholder"
+            :placeholder="actualFilterPlaceholder"
             @keydown.stop="handleFilterKeydown"
           />
         </div>
-
-        <!-- 选项列表 -->
         <div class="x-select__options" :style="{ maxHeight: maxHeight }">
           <div
             v-for="(option, index) in filteredOptions"
@@ -48,33 +37,26 @@
             @click="handleOptionClick(option)"
             @mouseenter="highlightedIndex = index"
           >
-            <!-- 选项图标 -->
             <span v-if="option.icon" class="x-select__option-icon">
               <svg v-if="typeof option.icon === 'string'" viewBox="0 0 24 24">
                 <use :href="`#${option.icon}`"></use>
               </svg>
               <component v-else :is="option.icon" />
             </span>
-
-            <!-- 选项内容 -->
             <div class="x-select__option-content">
               <span class="x-select__option-label">{{ option.label }}</span>
               <span v-if="option.description" class="x-select__option-description">
                 {{ option.description }}
               </span>
             </div>
-
-            <!-- 选中标记 -->
             <span v-if="isSelected(option)" class="x-select__option-check">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="20,6 9,17 4,12"></polyline>
               </svg>
             </span>
           </div>
-
-          <!-- 无数据提示 -->
           <div v-if="filteredOptions.length === 0" class="x-select__no-data">
-            {{ noDataText }}
+            {{ actualNoDataText }}
           </div>
         </div>
       </div>
@@ -84,10 +66,13 @@
 
 <script setup lang="ts">
   import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import type { SelectProps, SelectOption } from '../types/index'
 
+  const { t } = useI18n()
+
   const props = withDefaults(defineProps<SelectProps>(), {
-    placeholder: '请选择',
+    placeholder: '',
     disabled: false,
     clearable: false,
     filterable: false,
@@ -95,8 +80,8 @@
     borderless: false,
     placement: 'auto',
     maxHeight: '200px',
-    noDataText: '无数据',
-    filterPlaceholder: '搜索选项',
+    noDataText: '',
+    filterPlaceholder: '',
     loading: false,
     multiple: false,
     multipleLimit: 0,
@@ -115,15 +100,12 @@
     'remove-tag': [value: string | number]
   }>()
 
-  // 响应式引用
   const selectRef = ref<HTMLElement>()
   const dropdownRef = ref<HTMLElement>()
   const filterInputRef = ref<HTMLInputElement>()
   const visible = ref(false)
   const filterQuery = ref('')
   const highlightedIndex = ref(-1)
-
-  // 计算属性
   const selectClasses = computed(() => [
     'x-select',
     `x-select--${props.size}`,
@@ -143,6 +125,10 @@
     return option?.label || ''
   })
 
+  const actualPlaceholder = computed(() => props.placeholder || t('common.select_placeholder'))
+  const actualNoDataText = computed(() => props.noDataText || t('common.no_data'))
+  const actualFilterPlaceholder = computed(() => props.filterPlaceholder || t('common.search_options'))
+
   const filteredOptions = computed(() => {
     if (!props.filterable || !filterQuery.value) {
       return props.options
@@ -159,7 +145,6 @@
   const actualPlacement = ref<'top' | 'bottom'>('bottom')
   const dropdownStyle = ref<Record<string, string>>({})
 
-  // 方法
   const isSelected = (option: SelectOption) => {
     return option.value === props.modelValue
   }
@@ -223,7 +208,6 @@
     const dropdownRect = dropdownRef.value.getBoundingClientRect()
     const viewportHeight = window.innerHeight
 
-    // 计算放置位置
     let placement = props.placement
     if (placement === 'auto') {
       const spaceBelow = viewportHeight - selectRect.bottom
@@ -232,8 +216,6 @@
     }
 
     actualPlacement.value = placement
-
-    // 设置位置样式
     const style: Record<string, string> = {
       position: 'fixed',
       left: `${selectRect.left}px`,
@@ -322,7 +304,6 @@
     }
   }
 
-  // 生命周期
   onMounted(() => {
     document.addEventListener('click', handleClickOutside)
     window.addEventListener('resize', updateDropdownPosition)
@@ -335,7 +316,6 @@
     window.removeEventListener('scroll', updateDropdownPosition)
   })
 
-  // 监听器
   watch(visible, newVisible => {
     if (newVisible) {
       nextTick(updateDropdownPosition)
@@ -346,7 +326,6 @@
     highlightedIndex.value = -1
   })
 
-  // 暴露方法
   defineExpose({
     focus: () => selectRef.value?.focus(),
     blur: () => selectRef.value?.blur(),
@@ -356,7 +335,6 @@
 </script>
 
 <style scoped>
-  /* 选择器主容器 */
   .x-select {
     position: relative;
     display: inline-block;
@@ -369,7 +347,6 @@
     opacity: 0.6;
   }
 
-  /* 输入框包装器 */
   .x-select__input-wrapper {
     position: relative;
     width: 100%;
@@ -411,7 +388,6 @@
     border-color: var(--border-300);
   }
 
-  /* 尺寸变体 */
   .x-select--small .x-select__input {
     min-height: 20px;
     padding: 2px 24px 2px 6px;
@@ -424,7 +400,6 @@
     font-size: 16px;
   }
 
-  /* 无边框变体 */
   .x-select--borderless .x-select__input {
     border: none;
     background-color: transparent;
@@ -441,7 +416,6 @@
     border: none;
   }
 
-  /* 显示值和占位符 */
   .x-select__value {
     flex: 1;
     overflow: hidden;
@@ -457,7 +431,6 @@
     white-space: nowrap;
   }
 
-  /* 清除按钮 */
   .x-select__clear {
     position: absolute;
     right: 24px;
@@ -489,7 +462,6 @@
     color: var(--text-200);
   }
 
-  /* 下拉箭头 */
   .x-select__arrow {
     position: absolute;
     right: 6px;
@@ -513,7 +485,6 @@
     transform: translateY(-50%) rotate(180deg);
   }
 
-  /* 下拉面板 */
   .x-select__dropdown {
     background-color: var(--bg-400);
     border: 1px solid var(--border-300);
@@ -542,7 +513,6 @@
     }
   }
 
-  /* 搜索框 */
   .x-select__filter {
     padding: 8px;
     border-bottom: 1px solid var(--border-300);
@@ -564,7 +534,6 @@
     border-color: var(--color-primary);
   }
 
-  /* 选项列表 */
   .x-select__options {
     max-height: 200px;
     overflow-y: auto;
@@ -585,10 +554,9 @@
   }
 
   .x-select__options::-webkit-scrollbar-thumb:hover {
-    background-color: var(--text-400);
+    background-color: var(--text-200);
   }
 
-  /* 选项 */
   .x-select__option {
     display: flex;
     align-items: center;
@@ -620,7 +588,6 @@
     background-color: transparent;
   }
 
-  /* 选项图标 */
   .x-select__option-icon {
     margin-right: 8px;
     width: 16px;
@@ -636,7 +603,6 @@
     height: 14px;
   }
 
-  /* 选项内容 */
   .x-select__option-content {
     flex: 1;
     min-width: 0;
@@ -660,7 +626,6 @@
     white-space: nowrap;
   }
 
-  /* 选中标记 */
   .x-select__option-check {
     margin-left: 8px;
     width: 16px;
@@ -677,38 +642,10 @@
     height: 14px;
   }
 
-  /* 无数据提示 */
   .x-select__no-data {
     padding: 16px 12px;
     text-align: center;
     color: var(--text-400);
     font-size: 12px;
-  }
-
-  /* 响应式调整 */
-  @media (max-width: 768px) {
-    .x-select__dropdown {
-      max-width: calc(100vw - 32px);
-    }
-
-    .x-select__option {
-      padding: 12px;
-      min-height: 44px;
-    }
-
-    .x-select__option-icon {
-      width: 20px;
-      height: 20px;
-    }
-
-    .x-select__option-icon svg {
-      width: 16px;
-      height: 16px;
-    }
-
-    .x-select--borderless {
-      width: 45%;
-      max-width: none;
-    }
   }
 </style>

@@ -2,26 +2,27 @@
   <Teleport to="body">
     <div v-if="visible" class="modal-overlay" @mousedown="handleOverlayMouseDown" @mouseup="handleOverlayMouseUp">
       <div ref="modalRef" class="modal-container" :class="sizeClass" role="dialog" aria-modal="true">
-        <!-- 模态框头部 -->
         <div v-if="showHeader" class="modal-header">
           <div class="modal-title-section">
             <h3 v-if="title" class="modal-title">{{ title }}</h3>
             <slot name="title"></slot>
           </div>
-          <button v-if="closable" class="modal-close-button" @click="handleClose" :title="closeButtonTitle">
+          <button
+            v-if="closable"
+            class="modal-close-button"
+            @click="handleClose"
+            :title="closeButtonTitle || t('dialog.close')"
+          >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
         </div>
-
-        <!-- 模态框内容 -->
         <div class="modal-body" :class="{ 'no-padding': noPadding }">
           <slot></slot>
         </div>
 
-        <!-- 模态框底部 -->
         <div v-if="showFooter" class="modal-footer">
           <slot name="footer">
             <div class="modal-actions">
@@ -32,7 +33,7 @@
                 @click="handleCancel"
                 :disabled="loading"
               >
-                {{ cancelText }}
+                {{ cancelText || t('dialog.cancel') }}
               </button>
               <button
                 v-if="showConfirmButton"
@@ -53,7 +54,7 @@
                 >
                   <path d="M21 12a9 9 0 11-6.219-8.56" />
                 </svg>
-                {{ loading ? loadingText : confirmText }}
+                {{ loading ? loadingText || $t('common.processing') : confirmText || $t('dialog.confirm') }}
               </button>
             </div>
           </slot>
@@ -65,6 +66,7 @@
 
 <script setup lang="ts">
   import { computed, onMounted, onUnmounted, watch, ref } from 'vue'
+  import { useI18n } from 'vue-i18n'
 
   interface Props {
     visible?: boolean
@@ -104,47 +106,40 @@
     showFooter: false,
     showCancelButton: true,
     showConfirmButton: true,
-    cancelText: '取消',
-    confirmText: '确定',
-    loadingText: '处理中...',
-    closeButtonTitle: '关闭',
+    cancelText: '',
+    confirmText: '',
+    loadingText: '',
+    closeButtonTitle: '',
     loading: false,
     noPadding: false,
     zIndex: 1000,
   })
 
   const emit = defineEmits<Emits>()
+  const { t } = useI18n()
 
-  // 用于跟踪鼠标按下状态，防止拖拽误触关闭
   const isMouseDownOnOverlay = ref(false)
 
-  // 计算尺寸类名
   const sizeClass = computed(() => `modal-${props.size}`)
 
-  // 处理遮罩鼠标按下
   const handleOverlayMouseDown = (event: MouseEvent) => {
-    // 只有直接点击遮罩层才标记为true
     if (event.target === event.currentTarget) {
       isMouseDownOnOverlay.value = true
     }
   }
 
-  // 处理遮罩鼠标释放
   const handleOverlayMouseUp = (event: MouseEvent) => {
-    // 只有在遮罩层按下且在遮罩层释放时才关闭弹窗
     if (isMouseDownOnOverlay.value && event.target === event.currentTarget && props.maskClosable) {
       handleClose()
     }
     isMouseDownOnOverlay.value = false
   }
 
-  // 处理关闭
   const handleClose = () => {
     emit('update:visible', false)
     emit('close')
   }
 
-  // 处理取消
   const handleCancel = () => {
     emit('cancel')
     if (!props.loading) {
@@ -152,19 +147,16 @@
     }
   }
 
-  // 处理确认
   const handleConfirm = () => {
     emit('confirm')
   }
 
-  // 处理ESC键
   const handleKeydown = (event: KeyboardEvent) => {
     if (event.key === 'Escape' && props.visible && props.closable) {
       handleClose()
     }
   }
 
-  // 监听visible变化
   watch(
     () => props.visible,
     newVisible => {
@@ -178,12 +170,10 @@
     }
   )
 
-  // 组件挂载时添加键盘监听
   onMounted(() => {
     document.addEventListener('keydown', handleKeydown)
   })
 
-  // 组件卸载时清理
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown)
     document.body.style.overflow = ''
@@ -191,7 +181,6 @@
 </script>
 
 <style scoped>
-  /* 模态框样式 - 使用全局主题变量 */
   .modal-overlay {
     position: fixed;
     top: 0;
@@ -231,7 +220,6 @@
     }
   }
 
-  /* 尺寸变体 */
   .modal-small {
     width: 100%;
     max-width: 400px;
@@ -368,7 +356,6 @@
     }
   }
 
-  /* 响应式设计 */
   @media (max-width: 768px) {
     .modal-overlay {
       padding: var(--spacing-md);

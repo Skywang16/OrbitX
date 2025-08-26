@@ -1,0 +1,260 @@
+{
+  "common": {
+    "ok": "确定",
+    "cancel": "取消",
+    "confirm": "确认",
+    "delete": "删除",
+    "edit": "编辑",
+    "save": "保存",
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "retry": "重试",
+    "search": "搜索",
+    "refresh": "刷新",
+    "close": "关闭",
+    "processing": "处理中...",
+    "new": "新建",
+    "copy": "复制",
+    "paste": "粘贴",
+    "cut": "剪切",
+    "undo": "撤销",
+    "redo": "重做",
+    "settings": "设置",
+    "help": "帮助",
+    "about": "关于",
+    "select_placeholder": "请选择",
+    "no_data": "无数据",
+    "search_options": "搜索选项",
+    "open_feedback_error": "无法打开问题反馈页面",
+    "visit_manually": "请手动访问：https://github.com/Skywang16/OrbitX/issues"
+  },
+  "settings": {
+    "title": "设置",
+    "search_placeholder": "搜索设置",
+    "theme": {
+      "title": "主题设置",
+      "description": "外观和主题配置"
+    },
+    "ai": {
+      "title": "AI 设置",
+      "description": "AI模型和功能配置",
+      "load_error": "加载AI设置失败: {error}",
+      "model_config": "模型配置",
+      "feature_settings": "功能设置"
+    },
+    "shortcuts": {
+      "title": "快捷键设置",
+      "description": "配置和管理快捷键"
+    },
+    "language": {
+      "description": "选择界面显示语言"
+    }
+  },
+  "chat": {
+    "new_session": "新建会话",
+    "session_select": "选择会话",
+    "input_placeholder": "输入消息...",
+    "thinking": "思考中...",
+    "tool_execution": "工具执行",
+    "error_occurred": "发生错误",
+    "retry_message": "重试消息",
+    "copy_message": "复制消息",
+    "delete_message": "删除消息"
+  },
+  "terminal": {
+    "title": "终端",
+    "new_tab": "新标签页",
+    "close_tab": "关闭标签页",
+    "rename_tab": "重命名标签页",
+    "duplicate_tab": "复制标签页",
+    "search_placeholder": "搜索...",
+    "completion_available": "自动补全可用",
+    "command_not_found": "命令未找到"
+  },
+  "search": {
+    "placeholder": "搜索",
+    "case_sensitive": "区分大小写",
+    "whole_word": "全字匹配",
+    "previous": "上一个",
+    "next": "下一个",
+    "close": "关闭",
+    "clear": "清除"
+  },
+  "ai": {
+    "select_mode": "选择模式",
+    "select_model": "选择AI模型",
+    "provider": "选择AI提供商",
+    "model_name_placeholder": "例如：GPT-4 生产环境",
+    "system_prompt_placeholder": "在这里输入你的前置提示词，例如：请用中文回答所有问题...",
+    "add_model": "添加模型",
+    "empty_description": "点击 \\\"添加模型\\\" 按钮开始配置您的第一个AI模型"
+  },
+  "session": {
+    "search_placeholder": "搜索会话...",
+    "no_data": "暂无会话历史",
+    "chat_placeholder": "与 Orbit 对话...",
+    "clear_selection": "清除选择",
+    "unnamed_session": "未命名会话",
+    "messages": "条消息",
+    "current_session": "当前会话",
+    "selected_content": "已选择内容",
+    "click_to_insert": "点击插入到输入框"
+  },
+  "theme": {
+    "select_light": "选择浅色主题",
+    "select_dark": "选择深色主题"
+  },
+  "shortcuts": {
+    "title": "快捷键设置",
+    "conflicts": "检测到 {count} 个快捷键冲突",
+    "loading": "加载中...",
+    "global": "全局快捷键",
+    "terminal": "终端快捷键",
+    "not_configured": "点击配置",
+    "editing_hint": "按下新的快捷键组合...",
+    "reset_to_default": "重置到默认",
+    "reset_confirm_title": "重置快捷键配置",
+    "reset_confirm_message": "此操作将重置所有快捷键到默认配置，当前的自定义设置将会丢失。",
+    "reset_success": "快捷键配置已重置为默认",
+    "reset_failed": "重置配置失败",
+    "save_success": "{action} 快捷键设置成功",
+    "save_failed": "保存快捷键失败",
+    "init_failed": "快捷键设置初始化失败",
+    "actions": {
+      "copy_to_clipboard": "复制到剪贴板",
+      "paste_from_clipboard": "从剪贴板粘贴",
+      "terminal_search": "终端搜索",
+      "open_settings": "打开设置",
+      "new_tab": "新建标签页",
+      "close_tab": "关闭标签页",
+      "switch_to_tab_1": "切换到标签页 1",
+      "switch_to_tab_2": "切换到标签页 2",
+      "switch_to_tab_3": "切换到标签页 3",
+      "switch_to_tab_4": "切换到标签页 4",
+      "switch_to_tab_5": "切换到标签页 5",
+      "switch_to_last_tab": "切换到最后标签页",
+      "clear_terminal": "清空终端",
+      "accept_completion": "接受补全",
+      "increase_font_size": "增大字体",
+      "decrease_font_size": "减小字体"
+    }
+  },
+  "tab": {
+    "close": "关闭标签",
+    "new_terminal": "新建终端（左键） / 选择Shell（右键）",
+    "pin": "置顶"
+  },
+  "language": {
+    "title": "语言",
+    "chinese": "中文",
+    "english": "English"
+  },
+  "dialog": {
+    "cancel": "取消",
+    "confirm": "确认",
+    "close": "关闭"
+  },
+  "ai_model": {
+    "add_model": "添加模型",
+    "loading": "加载中...",
+    "empty_title": "暂无AI模型",
+    "empty_description": "点击\"添加模型\"按钮开始配置您的第一个AI模型",
+    "edit": "编辑",
+    "delete": "删除",
+    "delete_confirm": "确定要删除这个AI模型配置吗？",
+    "delete_success": "模型删除成功",
+    "delete_failed": "删除失败",
+    "update_success": "模型更新成功",
+    "add_success": "模型添加成功",
+    "operation_failed": "操作失败",
+    "test_connection": "测试连接",
+    "testing": "测试中...",
+    "save": "保存",
+    "add": "添加",
+    "providers": {
+      "openai_description": "OpenAI GPT 模型",
+      "claude_description": "Anthropic Claude 模型",
+      "custom_description": "自定义 API 端点"
+    },
+    "validation": {
+      "required_fields": "请先填写API地址、API密钥和模型名称"
+    },
+    "connection_test": {
+      "success": "连接测试成功！",
+      "failed": "连接测试失败，请检查配置",
+      "error": "连接测试失败"
+    }
+  },
+  "message": {
+    "execution_failed": "执行失败",
+    "generating": "正在生成...",
+    "duration_info": "耗时 {duration}",
+    "error_details": "详细信息: {details}"
+  },
+  "tool": {
+    "data_error": "数据错误"
+  },
+  "ai_feature": {
+    "user_system_prompt": "用户前置提示词",
+    "prompt_description": "设置一个通用的前置提示词，它会自动添加到所有AI请求的前面",
+    "prompt_placeholder": "在这里输入你的前置提示词，例如：请用中文回答所有问题..."
+  },
+  "ai_model_form": {
+    "basic_info": "基本信息",
+    "config_name": "配置名称",
+    "provider": "提供商",
+    "connection_config": "连接配置",
+    "model_name": "模型名称",
+    "config_name_placeholder": "例如：GPT-4 生产环境",
+    "provider_placeholder": "选择AI提供商",
+    "api_url": "API地址",
+    "api_key": "API密钥",
+    "edit_title": "编辑AI模型",
+    "add_title": "添加AI模型",
+    "api_url_required": "请输入API地址",
+    "api_key_required": "请输入API密钥",
+    "model_name_required": "请输入模型名称"
+  },
+  "message_list": {
+    "start_conversation": "开始对话吧",
+    "send_message_hint": "发送消息开始与Orbit对话"
+  },
+  "theme_settings": {
+    "theme_mode": "主题模式",
+    "manual_selection": "手动选择",
+    "manual_description": "手动选择一个固定主题",
+    "follow_system": "跟随系统",
+    "follow_system_description": "根据系统设置自动切换主题",
+    "select_theme": "选择主题",
+    "light_theme": "浅色主题",
+    "dark_theme": "深色主题"
+  },
+  "ui": {
+    "clear": "清除",
+    "close_tab": "关闭标签",
+    "new_terminal_tip": "新建终端（左键） / 选择Shell（右键）",
+    "settings": "设置",
+    "open_settings": "打开设置",
+    "feedback": "问题反馈",
+    "pin": "置顶"
+  },
+  "ai_model_config": {
+    "empty_description": "点击\"添加模型\"按钮开始配置您的第一个AI模型"
+  },
+  "process": {
+    "exited": "进程已退出，退出码: {code}",
+    "unknown_exit_code": "未知"
+  },
+  "shortcuts_actions": {
+    "cannot_close_last_tab": "无法关闭最后一个终端标签页"
+  },
+  "cache": {
+    "directory_cleared": "目录缓存已清除"
+  },
+  "config": {
+    "unknown_size": "未知",
+    "unknown_time": "未知",
+    "invalid_time": "无效时间"
+  }
+}

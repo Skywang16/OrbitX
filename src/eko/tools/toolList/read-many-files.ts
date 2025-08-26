@@ -28,7 +28,7 @@ export class ReadManyFilesTool extends ModifiableTool {
   constructor() {
     super(
       'read_many_files',
-      `批量读取多个文件的内容。建议一次最多读取5-10个文件，避免输出过长。每个文件会自动截断到合理长度。支持显示行号，可设置文件大小限制。会跳过无法读取的文件并在结果中标记。所有文件路径必须是绝对路径。`,
+      `Batch read contents of multiple files. Recommended to read at most 5-10 files at once to avoid overly long output. Each file will be automatically truncated to a reasonable length. Supports showing line numbers and setting file size limits. Will skip unreadable files and mark them in results. All file paths must be absolute paths.`,
       {
         type: 'object',
         properties: {
@@ -36,17 +36,17 @@ export class ReadManyFilesTool extends ModifiableTool {
             type: 'array',
             items: { type: 'string' },
             description:
-              '文件绝对路径列表。所有路径必须是完整路径，例如：["/Users/user/project/src/main.ts", "/home/user/project/utils.ts"]',
+              'List of absolute file paths. All paths must be complete paths, for example: ["/Users/user/project/src/main.ts", "/home/user/project/utils.ts"]',
             minItems: 1,
           },
           showLineNumbers: {
             type: 'boolean',
-            description: '是否显示行号。示例：true、false',
+            description: 'Whether to show line numbers. Examples: true, false',
             default: false,
           },
           maxFileSize: {
             type: 'number',
-            description: '最大文件大小（字节）。示例：1048576、2097152',
+            description: 'Maximum file size (bytes). Examples: 1048576, 2097152',
             default: 1048576,
             minimum: 1024,
           },
@@ -120,9 +120,9 @@ export class ReadManyFilesTool extends ModifiableTool {
 
         // 如果被截断，添加提示
         if (wasTruncated) {
-          processedContent = `重要提示：文件内容已被截断。
-状态：显示了前 ${MAX_LINES_PER_FILE} 行，总共 ${lines.length} 行。
-建议：使用 read_file 工具的 offset 和 limit 参数读取完整内容。
+          processedContent = `Important note: File content has been truncated.
+Status: Showing first ${MAX_LINES_PER_FILE} lines out of ${lines.length} total lines.
+Suggestion: Use read_file tool with offset and limit parameters to read complete content.
 
 ${processedContent}`
         }
@@ -148,11 +148,11 @@ ${processedContent}`
 
     for (const result of results) {
       if (result.success) {
-        resultText += `成功 ${result.path} (${result.size} bytes, ${result.lines} lines)\n`
+        resultText += `Success ${result.path} (${result.size} bytes, ${result.lines} lines)\n`
         resultText += `${'─'.repeat(50)}\n`
         resultText += `${result.content}\n\n`
       } else {
-        resultText += `失败 ${result.path}: ${result.error}\n\n`
+        resultText += `Failed ${result.path}: ${result.error}\n\n`
       }
     }
 

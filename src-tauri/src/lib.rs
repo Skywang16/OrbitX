@@ -583,6 +583,28 @@ pub fn run() {
                     }
                 }
 
+                // 确保主窗口可见并处于正确位置
+                if let Some(window) = app.get_webview_window("main") {
+                    let window_clone = window.clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        
+                        // 检查窗口位置是否异常
+                        if let Ok(position) = window_clone.outer_position() {
+                            let x = position.x;
+                            let y = position.y;
+                            
+                            // 如果位置异常，重置到安全位置
+                            if x < -500 || y < -500 || x > 5000 || y > 5000 {
+                                let _ = window_clone.set_position(tauri::Position::Logical(tauri::LogicalPosition { x: 100.0, y: 100.0 }));
+                            }
+                        }
+                        
+                        let _ = window_clone.show();
+                        let _ = window_clone.set_focus();
+                    });
+                }
+
                 Ok(())
             };
 

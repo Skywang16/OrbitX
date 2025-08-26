@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { useAIChatStore } from './store'
   import { useAISettingsStore } from '@/components/settings/components/AI'
   import { useSessionStore } from '@/stores/session'
@@ -13,6 +14,7 @@
   const aiChatStore = useAIChatStore() // AI聊天状态管理
   const aiSettingsStore = useAISettingsStore() // AI设置状态管理
   const sessionStore = useSessionStore() // 会话状态管理
+  const { t } = useI18n()
 
   // 本地状态
   const messageInput = ref('')
@@ -218,7 +220,7 @@
       :selected-model="selectedModelId"
       :model-options="modelOptions"
       :chat-mode="aiChatStore.chatMode"
-      placeholder="与 Orbit 对话..."
+      :placeholder="t('session.chat_placeholder')"
       @send="sendMessage"
       @stop="stopMessage"
       @model-change="handleModelChange"

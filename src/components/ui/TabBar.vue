@@ -1,7 +1,10 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType, type TabItem } from '@/types'
+
+  const { t } = useI18n()
 
   interface Props {
     tabs: TabItem[]
@@ -114,6 +117,14 @@
     emit('close', id)
   }
 
+  // 获取 tab 标题的显示文本
+  const getTabTitle = (tab: TabItem): string => {
+    if (tab.type === TabType.SETTINGS && tab.title === 'settings') {
+      return t('settings.title')
+    }
+    return tab.title || 'Tab'
+  }
+
   // 左键点击：直接新建默认终端
   const handleAddClick = async () => {
     try {
@@ -174,14 +185,14 @@
             </div>
           </template>
           <template v-else>
-            <span class="tab-title">{{ tab.title }}</span>
+            <span class="tab-title">{{ getTabTitle(tab) }}</span>
           </template>
         </div>
         <button
           v-if="canShowCloseButton(tab)"
           class="close-btn"
           @click="handleCloseClick($event, tab.id)"
-          title="关闭标签"
+          :title="t('ui.close_tab')"
         >
           <svg
             width="12"
@@ -211,7 +222,7 @@
         <template #trigger>
           <button
             class="add-tab-btn inline"
-            title="新建终端（左键） / 选择Shell（右键）"
+            :title="t('ui.new_terminal_tip')"
             @click="handleAddClick"
             @contextmenu="handleAddContextMenu"
           >
@@ -245,7 +256,7 @@
       <template #trigger>
         <button
           class="add-tab-btn fixed"
-          title="新建终端（左键） / 选择Shell（右键）"
+          :title="t('ui.new_terminal_tip')"
           @click="handleAddClick"
           @contextmenu="handleAddContextMenu"
         >

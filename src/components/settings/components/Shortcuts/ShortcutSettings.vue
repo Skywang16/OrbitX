@@ -1,22 +1,22 @@
 <template>
   <div class="shortcut-settings">
     <div class="settings-group">
-      <h3 class="section-title">快捷键设置</h3>
+      <h3 class="section-title">{{ t('shortcuts.title') }}</h3>
       <!-- 冲突警告 -->
       <div v-if="hasConflicts" class="alert alert-warning">
         <span class="alert-icon">⚠️</span>
-        <span>检测到 {{ conflictCount }} 个快捷键冲突</span>
+        <span>{{ t('shortcuts.conflicts', { count: conflictCount }) }}</span>
       </div>
 
       <!-- 动作列表 -->
       <div class="actions-list">
         <div v-if="loading" class="loading-state">
           <div class="loading-spinner"></div>
-          <span>加载中...</span>
+          <span>{{ t('shortcuts.loading') }}</span>
         </div>
         <div v-else>
           <div class="action-category">
-            <h4>全局快捷键</h4>
+            <h4>{{ t('shortcuts.global') }}</h4>
             <div class="action-items">
               <div v-for="action in globalActions" :key="action.key" class="action-item">
                 <div class="action-name">{{ action.displayName }}</div>
@@ -35,16 +35,16 @@
                       </span>
                       <span class="key">{{ action.shortcut.key }}</span>
                     </template>
-                    <span v-else class="not-configured">点击配置</span>
+                    <span v-else class="not-configured">{{ t('shortcuts.not_configured') }}</span>
                   </span>
-                  <span v-else class="editing-hint">按下新的快捷键组合...</span>
+                  <span v-else class="editing-hint">{{ t('shortcuts.editing_hint') }}</span>
                 </div>
               </div>
             </div>
           </div>
 
           <div class="action-category">
-            <h4>终端快捷键</h4>
+            <h4>{{ t('shortcuts.terminal') }}</h4>
             <div class="action-items">
               <div v-for="action in terminalActions" :key="action.key" class="action-item">
                 <div class="action-name">{{ action.displayName }}</div>
@@ -63,9 +63,9 @@
                       </span>
                       <span class="key">{{ action.shortcut.key }}</span>
                     </template>
-                    <span v-else class="not-configured">点击配置</span>
+                    <span v-else class="not-configured">{{ t('shortcuts.not_configured') }}</span>
                   </span>
-                  <span v-else class="editing-hint">按下新的快捷键组合...</span>
+                  <span v-else class="editing-hint">{{ t('shortcuts.editing_hint') }}</span>
                 </div>
               </div>
             </div>
@@ -75,7 +75,9 @@
 
       <!-- 操作按钮 -->
       <div class="actions-section">
-        <x-button variant="outline" @click="handleReset" :disabled="loading">重置到默认</x-button>
+        <x-button variant="outline" @click="handleReset" :disabled="loading">
+          {{ t('shortcuts.reset_to_default') }}
+        </x-button>
       </div>
     </div>
   </div>
@@ -83,11 +85,12 @@
 
 <script setup lang="ts">
   import { ref, computed, onMounted } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { handleErrorWithMessage } from '@/utils/errorHandler'
   import { useShortcuts } from '@/composables/useShortcuts'
   import { createMessage } from '@/ui/composables/message-api'
   import { useShortcutStore } from '@/stores/shortcuts'
-  import { SHORTCUT_ACTIONS } from '@/shortcuts/constants'
+
   import { confirmWarning } from '@/ui/composables/confirm-api'
 
   import type { ShortcutBinding } from '@/types'
@@ -111,6 +114,7 @@
   // 响应式状态
   const editingActionKey = ref<string | null>(null)
   const capturedShortcut = ref<{ key: string; modifiers: string[] } | null>(null)
+  const { t } = useI18n()
 
   // 计算属性
   const conflicts = computed(() => lastConflictDetection.value?.conflicts || [])
@@ -119,10 +123,7 @@
   // 方法
   const handleReset = async () => {
     try {
-      const shouldReset = await confirmWarning(
-        '此操作将重置所有快捷键到默认配置，当前的自定义设置将会丢失。',
-        '重置快捷键配置'
-      )
+      const shouldReset = await confirmWarning(t('shortcuts.reset_confirm_message'), t('shortcuts.reset_confirm_title'))
 
       if (shouldReset) {
         await resetToDefaults()
@@ -132,10 +133,10 @@
           await (window as any).reloadShortcuts()
         }
 
-        createMessage.success('快捷键配置已重置为默认')
+        createMessage.success(t('shortcuts.reset_success'))
       }
     } catch (error) {
-      handleErrorWithMessage(error, '重置配置失败')
+      handleErrorWithMessage(error, t('shortcuts.reset_failed'))
     }
   }
 
@@ -175,7 +176,7 @@
   const globalActions = computed(() => {
     return globalActionKeys.map(actionKey => ({
       key: actionKey,
-      displayName: SHORTCUT_ACTIONS[actionKey as keyof typeof SHORTCUT_ACTIONS] || actionKey,
+      displayName: t(`shortcuts.actions.${actionKey}`) || actionKey,
       shortcut: findShortcut(actionKey),
     }))
   })
@@ -184,7 +185,7 @@
   const terminalActions = computed(() => {
     return terminalActionKeys.map(actionKey => ({
       key: actionKey,
-      displayName: SHORTCUT_ACTIONS[actionKey as keyof typeof SHORTCUT_ACTIONS] || actionKey,
+      displayName: t(`shortcuts.actions.${actionKey}`) || actionKey,
       shortcut: findShortcut(actionKey),
     }))
   })
@@ -253,10 +254,12 @@
       }
 
       createMessage.success(
-        `${SHORTCUT_ACTIONS[actionKey as keyof typeof SHORTCUT_ACTIONS] || actionKey} 快捷键设置成功`
+        t('shortcuts.save_success', {
+          action: t(`shortcuts.actions.${actionKey}`) || actionKey,
+        })
       )
     } catch (error) {
-      handleErrorWithMessage(error, '保存快捷键失败')
+      handleErrorWithMessage(error, t('shortcuts.save_failed'))
     }
   }
 
@@ -286,7 +289,7 @@
       try {
         await initialize()
       } catch (err) {
-        handleErrorWithMessage(err, '快捷键设置初始化失败')
+        handleErrorWithMessage(err, t('shortcuts.init_failed'))
       }
     }
   })

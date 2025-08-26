@@ -95,7 +95,7 @@ class ConversationAPI {
       })
       return prompt
     } catch (error) {
-      throw new Error(handleError(error, '构建prompt失败'))
+      throw new Error(handleError(error, 'Failed to build prompt'))
     }
   }
 

@@ -4,6 +4,7 @@
   import { createMessage } from '@/ui'
   import { handleError } from '@/utils/errorHandler'
   import { aiApi } from '@/api'
+  import { useI18n } from 'vue-i18n'
   interface Props {
     model?: AIModelConfig | null
   }
@@ -15,6 +16,7 @@
 
   const props = defineProps<Props>()
   const emit = defineEmits<Emits>()
+  const { t } = useI18n()
 
   // 表单数据
   const formData = reactive({
@@ -40,17 +42,17 @@
     {
       value: 'openAI',
       label: 'OpenAI',
-      description: 'OpenAI GPT 模型',
+      description: t('ai_model.providers.openai_description'),
     },
     {
       value: 'claude',
       label: 'Claude',
-      description: 'Anthropic Claude 模型',
+      description: t('ai_model.providers.claude_description'),
     },
     {
       value: 'custom',
-      label: '自定义',
-      description: '自定义API端点',
+      label: 'Custom',
+      description: t('ai_model.providers.custom_description'),
     },
   ]
 
@@ -74,10 +76,10 @@
   const validateForm = () => {
     errors.value = {}
 
-    if (!formData.name.trim()) errors.value.name = '请输入模型名称'
-    if (!formData.apiUrl.trim()) errors.value.apiUrl = '请输入API地址'
-    if (!formData.apiKey.trim()) errors.value.apiKey = '请输入API密钥'
-    if (!formData.model.trim()) errors.value.model = '请输入模型名称'
+    if (!formData.name.trim()) errors.value.name = t('ai_model_form.model_name_required')
+    if (!formData.apiUrl.trim()) errors.value.apiUrl = t('ai_model_form.api_url_required')
+    if (!formData.apiKey.trim()) errors.value.apiKey = t('ai_model_form.api_key_required')
+    if (!formData.model.trim()) errors.value.model = t('ai_model_form.model_name_required')
 
     return Object.keys(errors.value).length === 0
   }
@@ -103,7 +105,7 @@
   const handleTestConnection = async () => {
     // 验证必填字段
     if (!formData.apiUrl || !formData.apiKey || !formData.model) {
-      createMessage.warning('请先填写API地址、API密钥和模型名称')
+      createMessage.warning(t('ai_model.validation.required_fields'))
       return
     }
 
@@ -124,12 +126,12 @@
       const isConnected = await aiApi.testConnectionWithConfig(testConfig)
 
       if (isConnected) {
-        createMessage.success('连接测试成功！')
+        createMessage.success(t('ai_model.connection_test.success'))
       } else {
-        createMessage.error('连接测试失败，请检查配置')
+        createMessage.error(t('ai_model.connection_test.failed'))
       }
     } catch (error) {
-      createMessage.error(handleError(error, '连接测试失败'))
+      createMessage.error(handleError(error, t('ai_model.connection_test.error')))
     } finally {
       isTesting.value = false
     }
@@ -139,7 +141,7 @@
 <template>
   <x-modal
     :visible="true"
-    :title="props.model ? '编辑AI模型' : '添加AI模型'"
+    :title="props.model ? t('ai_model_form.edit_title') : t('ai_model_form.add_title')"
     size="large"
     show-footer
     :show-cancel-button="false"
@@ -149,12 +151,12 @@
     <template #footer>
       <div class="modal-footer">
         <x-button variant="secondary" :loading="isTesting" @click="handleTestConnection">
-          {{ isTesting ? '测试中...' : '测试连接' }}
+          {{ isTesting ? $t('ai_model.testing') : $t('ai_model.test_connection') }}
         </x-button>
         <div class="footer-right">
-          <x-button variant="secondary" @click="handleCancel">取消</x-button>
+          <x-button variant="secondary" @click="handleCancel">{{ $t('dialog.cancel') }}</x-button>
           <x-button variant="primary" :loading="isSubmitting" @click="handleSubmit">
-            {{ props.model ? '保存' : '添加' }}
+            {{ props.model ? $t('ai_model.save') : $t('ai_model.add') }}
           </x-button>
         </div>
       </div>
@@ -162,33 +164,37 @@
     <form @submit.prevent="handleSubmit">
       <!-- 基本信息 -->
       <div class="form-section">
-        <h4 class="section-title">基本信息</h4>
+        <h4 class="section-title">{{ t('ai_model_form.basic_info') }}</h4>
 
         <div class="form-group">
-          <label class="form-label">配置名称</label>
+          <label class="form-label">{{ t('ai_model_form.config_name') }}</label>
           <input
             v-model="formData.name"
             type="text"
             class="form-input"
             :class="{ error: errors.name }"
-            placeholder="例如：GPT-4 生产环境"
+            :placeholder="t('ai_model_form.config_name_placeholder')"
           />
           <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
         </div>
 
         <div class="form-group">
-          <label class="form-label">提供商</label>
-          <x-select v-model="formData.provider" :options="providerOptions" placeholder="选择AI提供商" />
+          <label class="form-label">{{ t('ai_model_form.provider') }}</label>
+          <x-select
+            v-model="formData.provider"
+            :options="providerOptions"
+            :placeholder="t('ai_model_form.provider_placeholder')"
+          />
         </div>
       </div>
 
       <!-- 连接配置 -->
       <div class="form-section">
-        <h4 class="section-title">连接配置</h4>
+        <h4 class="section-title">{{ t('ai_model_form.connection_config') }}</h4>
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">API地址</label>
+            <label class="form-label">{{ t('ai_model_form.api_url') }}</label>
             <input
               v-model="formData.apiUrl"
               type="url"
@@ -200,7 +206,7 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label">模型名称</label>
+            <label class="form-label">{{ t('ai_model_form.model_name') }}</label>
             <input
               v-model="formData.model"
               type="text"
@@ -213,7 +219,7 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">API密钥</label>
+          <label class="form-label">{{ t('ai_model_form.api_key') }}</label>
           <input
             v-model="formData.apiKey"
             type="password"

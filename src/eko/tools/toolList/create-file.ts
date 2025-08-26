@@ -19,18 +19,18 @@ export class CreateFileTool extends ModifiableTool {
   constructor() {
     super(
       'create_file',
-      `创建新文件并写入内容。支持创建任意类型的文件，包括代码文件、配置文件、文档等。会自动创建不存在的父目录。如果文件已存在会直接覆盖。必须使用绝对路径。`,
+      `Create a new file and write content to it. Supports creating any type of file, including code files, configuration files, documents, etc. Automatically creates non-existent parent directories. Will directly overwrite if the file already exists. Must use absolute paths.`,
       {
         type: 'object',
         properties: {
           path: {
             type: 'string',
             description:
-              '文件的绝对路径。必须是完整路径，例如："/Users/user/project/src/utils.ts"、"/home/user/workspace/config.json"',
+              'Absolute path to the file. Must be a complete path, for example: "/Users/user/project/src/utils.ts", "/home/user/workspace/config.json"',
           },
           content: {
             type: 'string',
-            description: '文件内容。示例："export function hello() { return \'Hello\' }"',
+            description: 'File content. Example: "export function hello() { return \'Hello\' }"',
           },
         },
         required: ['path', 'content'],
@@ -42,7 +42,7 @@ export class CreateFileTool extends ModifiableTool {
     const { path, content } = context.parameters as unknown as CreateFileParams
 
     if (!path?.trim()) {
-      throw new ValidationError('文件路径不能为空')
+      throw new ValidationError('File path cannot be empty')
     }
 
     try {
@@ -52,14 +52,14 @@ export class CreateFileTool extends ModifiableTool {
         content: [
           {
             type: 'text',
-            text: `文件创建成功: ${path}
-状态：新文件已成功创建。
-建议：使用 read_file 工具验证文件内容，或使用 edit_file 工具进行进一步修改。`,
+            text: `File created successfully: ${path}
+Status: New file has been successfully created.
+Suggestion: Use read_file tool to verify file content, or use edit_file tool for further modifications.`,
           },
         ],
       }
     } catch (error) {
-      throw new ToolError(`创建文件失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`Failed to create file: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 }

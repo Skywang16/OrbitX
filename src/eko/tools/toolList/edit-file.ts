@@ -33,22 +33,22 @@ export class EditFileTool extends ModifiableTool {
   constructor() {
     super(
       'edit_file',
-      `编辑文件内容，通过精确的字符串替换修改文件。会查找文件中所有匹配oldString的内容并替换为newString。替换是全局的，必须完全匹配，区分大小写。建议先使用read_file工具检查当前文件内容以确保精确匹配。必须使用绝对路径。`,
+      `Edit file contents by precise string replacement. Searches for all content in the file that matches oldString and replaces it with newString. Replacement is global, must match exactly, and is case-sensitive. It's recommended to use the read_file tool first to check current file content to ensure precise matching. Must use absolute paths.`,
       {
         type: 'object',
         properties: {
           path: {
             type: 'string',
             description:
-              '文件的绝对路径。必须是完整路径，例如："/Users/user/project/src/main.ts"、"/home/user/workspace/config.json"',
+              'Absolute path to the file. Must be a complete path, for example: "/Users/user/project/src/main.ts", "/home/user/workspace/config.json"',
           },
           oldString: {
             type: 'string',
-            description: '要替换的原始文本。示例："const app = createApp()"',
+            description: 'Original text to be replaced. Example: "const app = createApp()"',
           },
           newString: {
             type: 'string',
-            description: '替换后的新文本。示例："const app = createApp(App)"',
+            description: 'New text after replacement. Example: "const app = createApp(App)"',
           },
         },
         required: ['path', 'oldString', 'newString'],
@@ -73,9 +73,9 @@ export class EditFileTool extends ModifiableTool {
         content: [
           {
             type: 'text',
-            text: `编辑失败：在文件 ${path} 中未找到匹配的内容。
-状态：指定的 oldString 在文件中不存在。
-建议：使用 read_file 工具检查当前文件内容，确保 oldString 与要替换的文本完全匹配。`,
+            text: `Edit failed: No matching content found in file ${path}.
+Status: The specified oldString does not exist in the file.
+Suggestion: Use read_file tool to check current file content, ensure oldString exactly matches the text to be replaced.`,
             data: editResult,
           } as ExtendedContentItem,
         ],
@@ -95,9 +95,9 @@ export class EditFileTool extends ModifiableTool {
       content: [
         {
           type: 'text',
-          text: `文件编辑成功: ${path}
-状态：内容已成功替换。
-建议：使用 read_file 工具验证更改结果。`,
+          text: `File edited successfully: ${path}
+Status: Content has been successfully replaced.
+Suggestion: Use read_file tool to verify the changes.`,
           data: editResult,
         } as ExtendedContentItem,
       ],

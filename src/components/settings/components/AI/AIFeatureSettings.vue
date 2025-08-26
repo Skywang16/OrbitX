@@ -1,7 +1,10 @@
 <script setup lang="ts">
   import { onMounted, ref, watch } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { aiApi } from '@/api'
   import { debounce } from 'lodash-es'
+
+  const { t } = useI18n()
 
   // 用户前置提示词
   const userPrefixPrompt = ref<string>('')
@@ -47,13 +50,13 @@
   <div class="ai-feature-settings">
     <!-- 用户前置提示词设置 -->
     <div class="prefix-prompt-section">
-      <h3 class="section-title">用户前置提示词</h3>
-      <p class="section-description">设置一个通用的前置提示词，它会自动添加到所有AI请求的前面</p>
+      <h3 class="section-title">{{ t('ai_feature.user_system_prompt') }}</h3>
+      <p class="section-description">{{ t('ai_feature.prompt_description') }}</p>
 
       <textarea
         v-model="userPrefixPrompt"
         class="prompt-textarea"
-        placeholder="在这里输入你的前置提示词，例如：请用中文回答所有问题..."
+        :placeholder="t('ai_feature.prompt_placeholder')"
         rows="4"
         :disabled="isLoadingPrefix"
       ></textarea>

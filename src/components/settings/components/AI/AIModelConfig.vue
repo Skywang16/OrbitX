@@ -3,8 +3,11 @@
   import { confirm, createMessage } from '@/ui'
   import { handleError } from '@/utils/errorHandler'
   import { computed, onMounted, ref } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import AIModelForm from './AIModelForm.vue'
   import { useAISettingsStore } from './store'
+
+  const { t } = useI18n()
 
   // 使用AI设置store
   const aiSettingsStore = useAISettingsStore()
@@ -39,14 +42,14 @@
 
   // 处理删除模型
   const handleDeleteModel = async (modelId: string) => {
-    const confirmed = await confirm('确定要删除这个AI模型配置吗？')
+    const confirmed = await confirm(t('ai_model.delete_confirm'))
 
     if (confirmed) {
       try {
         await aiSettingsStore.removeModel(modelId)
-        createMessage.success('模型删除成功')
+        createMessage.success(t('ai_model.delete_success'))
       } catch (error) {
-        createMessage.error(handleError(error, '删除失败'))
+        createMessage.error(handleError(error, t('ai_model.delete_failed')))
       }
     }
   }
@@ -93,7 +96,7 @@
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
         </template>
-        添加模型
+        {{ t('ai_model.add_model') }}
       </x-button>
     </div>
 
@@ -102,7 +105,7 @@
       <!-- 加载状态 -->
       <div v-if="loading" class="loading-state">
         <div class="loading-spinner"></div>
-        <p>加载中...</p>
+        <p>{{ t('ai_model.loading') }}</p>
       </div>
 
       <!-- 空状态 -->
@@ -117,8 +120,8 @@
             />
           </svg>
         </div>
-        <h3 class="empty-title">暂无AI模型</h3>
-        <p class="empty-description">点击"添加模型"按钮开始配置您的第一个AI模型</p>
+        <h3 class="empty-title">{{ t('ai_model.empty_title') }}</h3>
+        <p class="empty-description">{{ t('ai_model_config.empty_description') }}</p>
       </div>
 
       <div v-else class="model-cards">
@@ -128,8 +131,8 @@
           </div>
 
           <div class="model-actions">
-            <x-button variant="secondary" size="small" @click.stop="handleEditModel(model)">编辑</x-button>
-            <x-button variant="danger" size="small" @click.stop="handleDeleteModel(model.id)">删除</x-button>
+            <x-button variant="secondary" size="small" @click.stop="handleEditModel(model)">{{ t('ai_model.edit') }}</x-button>
+            <x-button variant="danger" size="small" @click.stop="handleDeleteModel(model.id)">{{ t('ai_model.delete') }}</x-button>
           </div>
         </div>
       </div>

@@ -56,7 +56,8 @@
     "sharp": "^0.34.3",
     "strip-ansi": "^7.1.0",
     "uuid": "^11.1.0",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "vue-i18n": "^9.14.5"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

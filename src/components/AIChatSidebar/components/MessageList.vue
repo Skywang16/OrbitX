@@ -1,9 +1,12 @@
 <script setup lang="ts">
   import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import type { Message } from '@/types'
   import UserMessage from './UserMessage.vue'
   import AIMessage from './AIMessage.vue'
   import lottie, { type AnimationItem } from 'lottie-web'
+
+  const { t } = useI18n()
 
   interface Props {
     messages: Message[]
@@ -113,8 +116,8 @@
       <div class="empty-icon">
         <div ref="lottieContainer" class="lottie-animation"></div>
       </div>
-      <div class="empty-text">开始对话吧</div>
-      <div class="empty-hint">发送消息开始与Orbit对话</div>
+      <div class="empty-text">{{ t('message_list.start_conversation') }}</div>
+      <div class="empty-hint">{{ t('message_list.send_message_hint') }}</div>
     </div>
 
     <div v-else class="message-container">

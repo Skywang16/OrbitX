@@ -10,6 +10,7 @@
 import { createMessage } from '@/ui'
 import { invoke } from '@/utils/request'
 import { handleError } from '@/utils/errorHandler'
+import { useI18n } from 'vue-i18n'
 import type {
   CompleteWindowState,
   DirectoryOptions,
@@ -116,7 +117,7 @@ export class WindowApi {
   async clearDirectoryCache(): Promise<void> {
     try {
       await invoke('clear_directory_cache')
-      createMessage.success('目录缓存已清除')
+      createMessage.success(useI18n().t('cache.directory_cleared'))
     } catch (error) {
       throw new Error(handleError(error, '清除目录缓存失败'))
     }

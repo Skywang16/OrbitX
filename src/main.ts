@@ -31,12 +31,14 @@ import App from './App.vue'
 
 import './styles/variables.css'
 import ui from './ui'
+import { i18n, initLocale } from './i18n'
 
 const app = createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
 app.use(ui)
+app.use(i18n)
 
 // ============================================================================
 // 应用初始化 - 在挂载前完成关键初始化
@@ -101,11 +103,11 @@ const initializeServices = async () => {
  */
 const initializeApplication = async () => {
   try {
-    // 先初始化主题系统，确保在DOM渲染前主题就绪
+    // 先初始化主题系统和国际化，确保在DOM渲染前就绪
     const themeManager = useTheme()
-    await themeManager.initialize()
+    await Promise.allSettled([themeManager.initialize(), initLocale()])
 
-    // 挂载应用 - 此时主题已就绪
+    // 挂载应用 - 此时主题和国际化已就绪
     app.mount('#app')
 
     // 并行初始化其他系统
@@ -115,7 +117,7 @@ const initializeApplication = async () => {
     setupWindowCloseListener()
   } catch (error) {
     console.error('应用初始化过程中发生错误:', error)
-    // 即使主题初始化失败，也要挂载应用
+    // 即使初始化失败，也要挂载应用
     if (!document.getElementById('app')?.hasChildNodes()) {
       app.mount('#app')
     }

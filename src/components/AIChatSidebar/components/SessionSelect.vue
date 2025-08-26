@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { XSelect } from '@/ui'
   import type { SelectOption } from '@/ui'
   import type { Conversation } from '@/types'
@@ -24,19 +25,20 @@
   })
 
   const emit = defineEmits<Emits>()
+  const { t } = useI18n()
 
   const selectOptions = computed<SelectOption[]>(() => {
     return props.sessions.map(session => ({
-      label: session.title || '未命名会话',
+      label: session.title || t('session.unnamed_session'),
       value: session.id,
-      description: `${session.messageCount} 条消息 · ${formatSessionTime(session.updatedAt)}`,
+      description: `${session.messageCount} ${t('session.messages')} · ${formatSessionTime(session.updatedAt)}`,
     }))
   })
 
   const displayValue = computed(() => {
-    if (!props.currentSessionId) return '选择会话'
+    if (!props.currentSessionId) return t('chat.session_select')
     const session = props.sessions.find(s => s.id === props.currentSessionId)
-    return session?.title || '当前会话'
+    return session?.title || t('session.current_session')
   })
 
   import { formatSessionTime } from '@/utils/dateFormatter'
@@ -63,8 +65,8 @@
       size="small"
       borderless
       filterable
-      filter-placeholder="搜索会话..."
-      no-data-text="暂无会话历史"
+      :filter-placeholder="t('session.search_placeholder')"
+      :no-data-text="t('session.no_data')"
       max-height="300px"
       @update:modelValue="handleSelectChange"
       @visible-change="handleVisibleChange"

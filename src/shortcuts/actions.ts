@@ -2,6 +2,7 @@ import { useTabManagerStore } from '@/stores/TabManager'
 import { useTerminalStore } from '@/stores/Terminal'
 import { createMessage } from '@/ui/composables/message-api'
 import { TabType } from '@/types'
+import { useI18n } from 'vue-i18n'
 
 export class ShortcutActionsService {
   private get tabManagerStore() {
@@ -10,6 +11,10 @@ export class ShortcutActionsService {
 
   private get terminalStore() {
     return useTerminalStore()
+  }
+
+  private get t() {
+    return useI18n().t
   }
 
   switchToTab(index: number): boolean {
@@ -47,7 +52,7 @@ export class ShortcutActionsService {
     if (activeTab.type === TabType.TERMINAL) {
       const terminalTabs = tabs.filter(tab => tab.type === TabType.TERMINAL)
       if (terminalTabs.length <= 1) {
-        createMessage.warning('无法关闭最后一个终端标签页')
+        createMessage.warning(this.t('shortcuts_actions.cannot_close_last_tab'))
         return true // 阻止关闭最后一个终端标签页
       }
     }

@@ -13,10 +13,8 @@
       role="alert"
       :aria-live="type === 'error' ? 'assertive' : 'polite'"
     >
-      <!-- 图标 -->
       <div v-if="showIcon" class="x-message__icon">
         <slot name="icon">
-          <!-- 成功图标 -->
           <svg v-if="type === 'success'" class="x-message__icon-svg" viewBox="0 0 20 20" fill="currentColor">
             <path
               fill-rule="evenodd"
@@ -24,7 +22,6 @@
               clip-rule="evenodd"
             />
           </svg>
-          <!-- 错误图标 -->
           <svg v-else-if="type === 'error'" class="x-message__icon-svg" viewBox="0 0 20 20" fill="currentColor">
             <path
               fill-rule="evenodd"
@@ -32,7 +29,6 @@
               clip-rule="evenodd"
             />
           </svg>
-          <!-- 警告图标 -->
           <svg v-else-if="type === 'warning'" class="x-message__icon-svg" viewBox="0 0 20 20" fill="currentColor">
             <path
               fill-rule="evenodd"
@@ -40,7 +36,6 @@
               clip-rule="evenodd"
             />
           </svg>
-          <!-- 信息图标 -->
           <svg v-else class="x-message__icon-svg" viewBox="0 0 20 20" fill="currentColor">
             <path
               fill-rule="evenodd"
@@ -50,14 +45,10 @@
           </svg>
         </slot>
       </div>
-
-      <!-- 消息内容 -->
       <div class="x-message__content">
         <div v-if="dangerouslyUseHTMLString" class="x-message__text" v-html="message"></div>
         <div v-else class="x-message__text">{{ message }}</div>
       </div>
-
-      <!-- 关闭按钮 -->
       <button v-if="closable" class="x-message__close" type="button" :aria-label="closeButtonText" @click="handleClose">
         <svg class="x-message__close-icon" viewBox="0 0 24 24">
           <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
@@ -83,12 +74,10 @@
     close: []
   }>()
 
-  // 注入全局配置
   inject('xui-config', {})
 
   let timer: number | null = null
 
-  // 计算消息类名
   const messageClasses = computed(() => [
     'x-message',
     `x-message--${props.type}`,
@@ -98,19 +87,15 @@
     },
   ])
 
-  // 计算消息样式
   const messageStyle = computed(() => ({}))
 
-  // 关闭按钮文本
   const closeButtonText = computed(() => '关闭消息')
 
-  // 处理关闭
   const handleClose = () => {
     clearTimer()
     emit('close')
   }
 
-  // 清除定时器
   const clearTimer = () => {
     if (timer) {
       clearTimeout(timer)
@@ -118,7 +103,6 @@
     }
   }
 
-  // 启动定时器
   const startTimer = () => {
     if (props.duration > 0) {
       timer = window.setTimeout(() => {
@@ -127,7 +111,6 @@
     }
   }
 
-  // 进入动画处理
   const onEnter = (el: Element) => {
     const element = el as HTMLElement
     element.style.opacity = '0'
@@ -138,21 +121,16 @@
     const element = el as HTMLElement
     element.style.opacity = '1'
     element.style.transform = 'translateY(0) scale(1)'
-
-    // 启动自动关闭定时器
     startTimer()
   }
 
-  // 离开动画处理
   const onLeave = (el: Element) => {
     const element = el as HTMLElement
     element.style.opacity = '0'
     element.style.transform = 'translateY(-20px) scale(0.8)'
   }
 
-  const onAfterLeave = () => {
-    // 动画完成后的清理工作
-  }
+  const onAfterLeave = () => {}
 
   onMounted(() => {
     if (props.visible) {
@@ -166,7 +144,6 @@
 </script>
 
 <style scoped>
-  /* 消息组件样式 */
   .x-message {
     display: flex;
     align-items: center;
@@ -182,7 +159,6 @@
     min-width: 240px;
   }
 
-  /* 消息类型样式 - 现代设计 */
   .x-message--success {
     background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05));
     border: 1px solid rgba(16, 185, 129, 0.2);
@@ -223,7 +199,6 @@
     background: rgba(59, 130, 246, 0.15);
   }
 
-  /* 图标样式 */
   .x-message__icon {
     display: flex;
     align-items: center;
@@ -242,7 +217,6 @@
     fill: currentColor;
   }
 
-  /* 内容样式 */
   .x-message__content {
     flex: 1;
   }
@@ -252,7 +226,6 @@
     color: var(--text-200);
   }
 
-  /* 关闭按钮样式 */
   .x-message__close {
     display: flex;
     align-items: center;
@@ -280,7 +253,6 @@
     fill: none;
   }
 
-  /* 动画效果 */
   .x-message-enter-active,
   .x-message-leave-active {
     transition: all 0.3s ease;
@@ -292,7 +264,6 @@
     transform: translateY(-20px);
   }
 
-  /* 响应式设计 */
   @media (max-width: 768px) {
     .x-message {
       max-width: calc(100vw - 32px);

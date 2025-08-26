@@ -100,7 +100,7 @@ export class OrbitXEko {
         callback: this.callback,
       })
     } catch (error) {
-      console.error('❌ 更新LLM配置失败:', error)
+      console.error('❌ Failed to update LLM configuration:', error)
       // 不抛出错误，避免影响正常运行
     }
   }
@@ -132,8 +132,8 @@ export class OrbitXEko {
         this.codeAgent.updateConfig({ defaultWorkingDirectory: options.workingDirectory })
       }
 
-      // 构建用户请求prompt
-      const enhancedPrompt = `🎯 **用户请求**
+      // Build user request prompt
+      const enhancedPrompt = `🎯 **User Request**
 ${prompt}`
 
       // 生成唯一的taskId

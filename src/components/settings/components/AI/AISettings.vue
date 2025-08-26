@@ -1,10 +1,12 @@
 <script setup lang="ts">
   import { onMounted } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { useAISettingsStore } from './store'
   import AIFeatureSettings from './AIFeatureSettings.vue'
   import AIModelConfig from './AIModelConfig.vue'
 
   const aiSettingsStore = useAISettingsStore()
+  const { t } = useI18n()
 
   // 在父组件中统一加载设置（只在必要时加载）
   onMounted(async () => {
@@ -20,8 +22,8 @@
     <!-- 错误状态 -->
     <div v-if="aiSettingsStore.error" class="error-state">
       <div class="error-icon">⚠️</div>
-      <p>加载AI设置失败: {{ aiSettingsStore.error }}</p>
-      <x-button variant="primary" @click="aiSettingsStore.loadSettings()">重试</x-button>
+      <p>{{ t('settings.ai.load_error', { error: aiSettingsStore.error }) }}</p>
+      <x-button variant="primary" @click="aiSettingsStore.loadSettings()">{{ t('common.retry') }}</x-button>
     </div>
 
     <!-- 正常内容 -->

@@ -42,7 +42,7 @@ export const getEkoLLMsConfig = async (): Promise<LLMs> => {
     const models = await aiApi.getModels()
 
     if (models.length === 0) {
-      throw new Error('没有配置任何AI模型，请先在设置中添加模型配置')
+      throw new Error('No AI models configured. Please add model configuration in settings first.')
     }
 
     // 使用第一个模型作为默认模型

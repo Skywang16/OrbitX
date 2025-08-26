@@ -2,6 +2,7 @@
   import AISettings from '@/components/settings/components/AI/AISettings.vue'
   import ThemeSettings from '@/components/settings/components/Theme/ThemeSettings.vue'
   import ShortcutSettings from '@/components/settings/components/Shortcuts/ShortcutSettings.vue'
+  import { LanguageSettings } from '@/components/settings/components/Language'
   import SettingsNav from '@/components/settings/SettingsNav.vue'
   import { useSettingsStore } from '@/components/settings/store'
   import { onMounted, watch, toRef } from 'vue'
@@ -51,6 +52,7 @@
           <ThemeSettings v-if="settingsStore.activeSection === 'theme'" />
           <AISettings v-if="settingsStore.activeSection === 'ai'" />
           <ShortcutSettings v-if="settingsStore.activeSection === 'shortcuts'" />
+          <LanguageSettings v-if="settingsStore.activeSection === 'language'" />
 
           <!-- 默认显示主题设置 -->
           <ThemeSettings v-if="!settingsStore.activeSection" />

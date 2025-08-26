@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { useI18n } from 'vue-i18n'
   import SessionSelect from './SessionSelect.vue'
   import type { Conversation } from '@/types'
 
@@ -22,6 +23,7 @@
   })
 
   const emit = defineEmits<Emits>()
+  const { t } = useI18n()
 
   // 方法
   const handleSelectSession = (sessionId: number) => {
@@ -58,7 +60,7 @@
 
     <div class="header-actions">
       <!-- 新建会话按钮 -->
-      <button class="new-session-btn" @click="handleCreateNewSession" title="新建会话">
+      <button class="new-session-btn" @click="handleCreateNewSession" :title="t('chat.new_session')">
         <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />

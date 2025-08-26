@@ -32,13 +32,6 @@ interface StreamMessage {
   }
 }
 
-// 工具函数
-const generateSessionTitle = (content: string): string => {
-  const title = content.trim().slice(0, 20)
-  if (title.length === 0) return '新对话'
-  return title.length < content.trim().length ? title + '...' : title
-}
-
 // 检测工具执行结果是否包含错误
 const isToolResultError = (toolResult: any): boolean => {
   return toolResult?.isError === true
@@ -195,8 +188,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const sendMessage = async (content: string): Promise<void> => {
     if (!currentConversationId.value) {
       // 如果没有当前会话，创建一个新会话
-      const title = generateSessionTitle(content)
-      await createConversation(title)
+      await createConversation()
     }
 
     if (!currentConversationId.value) {

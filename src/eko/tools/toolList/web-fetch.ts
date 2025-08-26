@@ -20,13 +20,14 @@ export class WebFetchTool extends ModifiableTool {
   constructor() {
     super(
       'web_fetch',
-      `获取网页内容和API数据。使用GET方法获取网页的主要文本内容，自动提取并清理内容。适用于获取API数据、网页内容、文档、技术文章等场景。返回清理后的网页内容或API响应数据。`,
+      `Fetch web content and API data. Uses GET method to retrieve main text content from web pages, automatically extracts and cleans content. Suitable for getting API data, web content, documentation, technical articles, and other scenarios. Returns cleaned web content or API response data.`,
       {
         type: 'object',
         properties: {
           url: {
             type: 'string',
-            description: 'URL地址。示例："https://api.github.com/users/octocat"、"https://docs.python.org/3/tutorial/"',
+            description:
+              'URL address. Examples: "https://api.github.com/users/octocat", "https://docs.python.org/3/tutorial/"',
           },
         },
         required: ['url'],
@@ -57,13 +58,13 @@ export class WebFetchTool extends ModifiableTool {
       if (tauriResponse.success) {
         return this.formatTauriResponse(tauriResponse)
       } else {
-        throw new NetworkError(tauriResponse.error || '请求失败')
+        throw new NetworkError(tauriResponse.error || 'Request failed')
       }
     } catch (error) {
       if (error instanceof NetworkError) {
         throw error
       }
-      throw new NetworkError(`请求失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new NetworkError(`Request failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -123,7 +124,7 @@ export class WebFetchTool extends ModifiableTool {
 
       // 检查协议
       if (!['http:', 'https:'].includes(urlObj.protocol)) {
-        throw new ValidationError('只支持HTTP和HTTPS协议')
+        throw new ValidationError('Only HTTP and HTTPS protocols are supported')
       }
 
       // 检查是否为本地地址（安全考虑）

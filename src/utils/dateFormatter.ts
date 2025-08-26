@@ -6,10 +6,18 @@
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/zh-cn'
+import 'dayjs/locale/en'
+import { getCurrentLocale } from '@/i18n'
 
 // 配置dayjs
 dayjs.extend(relativeTime)
-dayjs.locale('zh-cn')
+
+// 动态设置locale
+const updateDayjsLocale = () => {
+  const currentLocale = getCurrentLocale()
+  dayjs.locale(currentLocale === 'zh-CN' ? 'zh-cn' : 'en')
+}
+updateDayjsLocale()
 
 /**
  * 格式化时间为 HH:mm 格式
@@ -26,23 +34,35 @@ export const formatTime = (date: Date | string | number): string => {
  * @returns 相对时间字符串，如 "2小时前"、"昨天"、"3天前"
  */
 export const formatRelativeTime = (date: Date | string | number): string => {
+  // 确保使用当前语言设置
+  updateDayjsLocale()
+  
   const target = dayjs(date)
   const now = dayjs()
   const diffDays = now.diff(target, 'day')
+  const currentLocale = getCurrentLocale()
 
   if (diffDays === 0) {
     // 今天，显示具体时间
     return target.format('HH:mm')
   } else if (diffDays === 1) {
     // 昨天
-    return '昨天'
+    return currentLocale === 'zh-CN' ? '昨天' : 'Yesterday'
   } else if (diffDays < 7) {
     // 一周内，显示天数
-    return `${diffDays}天前`
+    if (currentLocale === 'zh-CN') {
+      return `${diffDays}天前`
+    } else {
+      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`
+    }
   } else if (diffDays < 30) {
     // 一个月内，显示周数
     const weeks = Math.floor(diffDays / 7)
-    return `${weeks}周前`
+    if (currentLocale === 'zh-CN') {
+      return `${weeks}周前`
+    } else {
+      return `${weeks} week${weeks > 1 ? 's' : ''} ago`
+    }
   } else {
     // 超过一个月，显示具体日期
     return target.format('MM-DD')
