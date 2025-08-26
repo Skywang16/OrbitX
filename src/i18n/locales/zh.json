@@ -241,7 +241,7 @@
     "dark_theme_description": "系统深色模式时使用的主题",
     "window_opacity": "窗口透明度",
     "opacity": "透明度",
-    "opacity_description": "调整窗口的透明度 ({percentage}%)",
+    "opacity_description": "调整窗口的透明度",
     "opacity_error": "设置透明度失败: {error}"
   },
   "ui": {

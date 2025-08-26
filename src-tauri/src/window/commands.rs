@@ -758,6 +758,7 @@ pub async fn set_window_opacity<R: Runtime>(
     opacity: f64,
     app: AppHandle<R>,
     state: State<'_, WindowState>,
+    config_state: State<'_, crate::config::ConfigManagerState>,
 ) -> Result<(), String> {
     debug!("设置窗口透明度: {}", opacity);
 
@@ -783,7 +784,17 @@ pub async fn set_window_opacity<R: Runtime>(
         .eval(&script)
         .map_err(|e| format!("设置窗口透明度失败: {}", e))?;
 
-    debug!("窗口透明度设置成功: {}", opacity);
+    // 使用统一的配置更新风格
+    config_state
+        .toml_manager
+        .update_config(|config| {
+            config.appearance.opacity = opacity;
+            Ok(())
+        })
+        .await
+        .to_tauri()?;
+
+    debug!("窗口透明度设置成功并已保存到配置: {}", opacity);
     Ok(())
 }
 

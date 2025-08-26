@@ -45,14 +45,29 @@ pub async fn update_config(
     new_config: AppConfig,
     state: State<'_, ConfigManagerState>,
 ) -> Result<(), String> {
-    state.toml_manager.save_config(&new_config).await.to_tauri()
+    state
+        .toml_manager
+        .update_config(|config| {
+            *config = new_config.clone();
+            Ok(())
+        })
+        .await
+        .to_tauri()
 }
 
-/// 保存配置
+/// 保存配置（强制保存当前缓存的配置到文件）
 #[tauri::command]
 pub async fn save_config(state: State<'_, ConfigManagerState>) -> Result<(), String> {
-    let config = state.toml_manager.get_config().await.to_tauri()?;
-    state.toml_manager.save_config(&config).await.to_tauri()
+    // 这个命令主要用于强制保存当前缓存的配置到文件
+    // 使用 update_config 确保原子性操作
+    state
+        .toml_manager
+        .update_config(|_config| {
+            // 不修改配置，只是触发保存操作
+            Ok(())
+        })
+        .await
+        .to_tauri()
 }
 
 /// 验证配置
@@ -70,7 +85,10 @@ pub async fn reset_config_to_defaults(state: State<'_, ConfigManagerState>) -> R
     let default_config = create_default_config();
     state
         .toml_manager
-        .save_config(&default_config)
+        .update_config(|config| {
+            *config = default_config.clone();
+            Ok(())
+        })
         .await
         .to_tauri()
 }

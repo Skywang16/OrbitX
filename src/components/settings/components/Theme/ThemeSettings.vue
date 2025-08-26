@@ -296,7 +296,7 @@
         <div class="settings-item-header">
           <div class="settings-label">{{ t('theme_settings.opacity') }}</div>
           <div class="settings-description">
-            {{ t('theme_settings.opacity_description', { percentage: Math.round(opacity * 100) }) }}
+            {{ t('theme_settings.opacity_description') }}
           </div>
         </div>
         <div class="settings-item-control">

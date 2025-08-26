@@ -241,7 +241,7 @@
     "dark_theme_description": "Theme to use when system is in dark mode",
     "window_opacity": "Window Opacity",
     "opacity": "Opacity",
-    "opacity_description": "Adjust window transparency ({percentage}%)",
+    "opacity_description": "Adjust window transparency",
     "opacity_error": "Failed to set opacity: {error}"
   },
   "ui": {

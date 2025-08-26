@@ -70,7 +70,7 @@ impl StorageCoordinator {
                 .context("初始化MessagePack管理器失败")?,
         );
 
-        // 初始化数据库管理器  
+        // 初始化数据库管理器
         let database_manager = Arc::new(
             DatabaseManager::new(paths.clone(), database_options)
                 .await
@@ -85,8 +85,6 @@ impl StorageCoordinator {
 
         // 初始化Repository管理器
         let repository_manager = Arc::new(RepositoryManager::new(Arc::clone(&database_manager)));
-
-
 
         let coordinator = Self {
             paths,
@@ -153,8 +151,6 @@ impl StorageCoordinator {
         debug!("加载会话状态");
         self.messagepack_manager.load_state().await
     }
-
-
 
     pub fn paths(&self) -> &StoragePaths {
         &self.paths
