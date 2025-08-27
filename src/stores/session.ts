@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
 import { restoreStateCurrent, StateFlags } from '@tauri-apps/plugin-window-state'
 import { type SessionState, type TerminalState, type UiState, type AiState } from '@/types/domain/storage'
 import { createDefaultSessionState } from '@/types/utils/helpers'
 import { handleErrorWithMessage } from '@/utils/errorHandler'
+import { storageApi } from '@/api/storage'
 
 /**
  * 精简版会话状态管理Store
@@ -49,9 +49,7 @@ export const useSessionStore = defineStore('session', () => {
 
       sessionState.value.timestamp = new Date().toISOString()
 
-      await invoke('storage_save_session_state', {
-        sessionState: sessionState.value,
-      })
+      await storageApi.saveSessionState(sessionState.value)
     } catch (err) {
       const message = handleErrorWithMessage(err, '保存会话状态失败')
       error.value = message
@@ -68,7 +66,7 @@ export const useSessionStore = defineStore('session', () => {
       isLoading.value = true
       error.value = null
 
-      const state = await invoke<SessionState | null>('storage_load_session_state')
+      const state = await storageApi.loadSessionState()
 
       if (state) {
         sessionState.value = state

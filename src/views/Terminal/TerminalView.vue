@@ -4,7 +4,7 @@
   import TitleBar from '@/components/ui/TitleBar.vue'
   import { useTerminalStore } from '@/stores/Terminal'
   import { useTabManagerStore } from '@/stores/TabManager'
-  import { invoke } from '@tauri-apps/api/core'
+  import { windowApi } from '@/api'
   import { listen, UnlistenFn } from '@tauri-apps/api/event'
   import { getCurrentWebview } from '@tauri-apps/api/webview'
   import { onBeforeUnmount, onMounted, watch } from 'vue'
@@ -26,7 +26,7 @@
     try {
       if (source === 'app-icon') {
         // 拖动到应用图标：新建终端tab并定位到文件所在目录
-        const directory = await invoke<string>('handle_file_open', { path: filePath })
+        const directory = await windowApi.handleFileOpen(filePath)
         await terminalStore.createTerminal(directory)
       } else {
         // 拖动到窗口内：将文件路径插入到当前终端输入行

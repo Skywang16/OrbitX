@@ -1,22 +1,22 @@
 <script setup lang="ts">
-  import { ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import AISettings from '@/components/settings/components/AI/AISettings.vue'
   import ThemeSettings from '@/components/settings/components/Theme/ThemeSettings.vue'
   import ShortcutSettings from '@/components/settings/components/Shortcuts/ShortcutSettings.vue'
   import { LanguageSettings } from '@/components/settings/components/Language'
+  import { GeneralSettings } from '@/components/settings/components/General'
   import SettingsNav from '@/components/settings/SettingsNav.vue'
   import { useSettingsStore } from '@/components/settings/store'
   import { createMessage, XButton } from '@/ui'
   import { configApi } from '@/api/config'
   import { onMounted } from 'vue'
+  import { debounce } from 'lodash-es'
 
   const { t } = useI18n()
   const settingsStore = useSettingsStore()
-  const isOpeningFolder = ref(false)
 
   onMounted(async () => {
-    settingsStore.setActiveSection('ai')
+    settingsStore.setActiveSection('general')
     await settingsStore.initializeSettings()
   })
 
@@ -24,20 +24,18 @@
     settingsStore.setActiveSection(section)
   }
 
-  const handleOpenConfigFolder = async () => {
-    if (isOpeningFolder.value) return
-
-    isOpeningFolder.value = true
+  const openConfigFolder = async () => {
     try {
       await configApi.openConfigFolder()
       createMessage.success(t('settings.general.config_folder_opened'))
     } catch (error) {
       console.error('Failed to open config folder:', error)
       createMessage.error(t('settings.general.config_folder_error'))
-    } finally {
-      isOpeningFolder.value = false
     }
   }
+
+  // 创建防抖版本的函数，防止用户快速点击导致重复调用
+  const handleOpenConfigFolder = debounce(openConfigFolder, 500)
 </script>
 
 <template>
@@ -49,7 +47,7 @@
 
         <!-- 底部按钮区域 -->
         <div class="settings-sidebar-footer">
-          <XButton :loading="isOpeningFolder" variant="primary" size="medium" @click="handleOpenConfigFolder">
+          <XButton variant="primary" size="medium" @click="handleOpenConfigFolder">
             {{ t('settings.general.open_config_folder') }}
           </XButton>
         </div>
@@ -58,7 +56,8 @@
       <!-- 右侧内容区域 -->
       <div class="settings-main">
         <div class="settings-panel">
-          <AISettings v-if="settingsStore.activeSection === 'ai'" />
+          <GeneralSettings v-if="settingsStore.activeSection === 'general'" />
+          <AISettings v-else-if="settingsStore.activeSection === 'ai'" />
           <ThemeSettings v-else-if="settingsStore.activeSection === 'theme'" />
           <ShortcutSettings v-else-if="settingsStore.activeSection === 'shortcuts'" />
           <LanguageSettings v-else-if="settingsStore.activeSection === 'language'" />

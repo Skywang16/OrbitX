@@ -77,7 +77,7 @@
     content: '';
     height: 18px;
     width: 18px;
-    left: 2px;
+    left: 1px;
     background-color: var(--bg-200);
     border: 1px solid var(--border-300);
     transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
@@ -134,7 +134,7 @@
   .base-switch--small .slider:before {
     height: 12px;
     width: 12px;
-    left: 2px;
+    left: 1px;
   }
 
   .base-switch--small input:checked + .slider:before {
@@ -153,7 +153,7 @@
   .base-switch--large .slider:before {
     height: 24px;
     width: 24px;
-    left: 2px;
+    left: 1px;
   }
 
   .base-switch--large input:checked + .slider:before {

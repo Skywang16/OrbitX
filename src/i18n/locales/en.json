@@ -40,7 +40,10 @@
       "config_folder_description": "Open the folder containing application configuration files",
       "open_config_folder": "Open Config Folder",
       "config_folder_opened": "Configuration folder opened",
-      "config_folder_error": "Unable to open configuration folder"
+      "config_folder_error": "Unable to open configuration folder",
+      "autostart_title": "Auto Start",
+      "autostart_enabled": "Auto start enabled",
+      "autostart_disabled": "Auto start disabled"
     },
     "theme": {
       "title": "Theme Settings",

@@ -251,6 +251,20 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin({
+            #[cfg(target_os = "macos")]
+            {
+                tauri_plugin_autostart::init(
+                    tauri_plugin_autostart::MacosLauncher::AppleScript,
+                    None,
+                )
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                // Windows 和 Linux 使用默认配置
+                tauri_plugin_autostart::Builder::new().build()
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             // 窗口管理命令
             manage_window_state,
@@ -615,6 +629,68 @@ pub fn run() {
         });
 }
 
+/// 获取回退的主题文件列表
+fn get_fallback_theme_list() -> Vec<String> {
+    vec![
+        "dark.toml".to_string(),
+        "light.toml".to_string(),
+        "dracula.toml".to_string(),
+        "gruvbox-dark.toml".to_string(),
+        "index.toml".to_string(),
+        "monokai.toml".to_string(),
+        "nord.toml".to_string(),
+        "one-dark.toml".to_string(),
+        "solarized-dark.toml".to_string(),
+        "solarized-light.toml".to_string(),
+        "tokyo-night.toml".to_string(),
+    ]
+}
+
+/// 动态获取资源目录中的所有主题文件
+async fn get_theme_files_from_resources<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    use std::path::PathBuf;
+    use tauri::path::BaseDirectory;
+
+    // 开发模式直接从项目根目录读取，生产模式从资源读取
+    let themes_resource_path = if cfg!(debug_assertions) {
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        current_dir.join("..").join("config").join("themes")
+    } else {
+        app_handle
+            .path()
+            .resolve("themes", BaseDirectory::Resource)
+            .map_err(|_| "无法解析资源路径")?
+    };
+    match std::fs::read_dir(&themes_resource_path) {
+        Ok(entries) => {
+            let mut theme_files = Vec::new();
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.is_file() {
+                        if let Some(file_name) = path.file_name() {
+                            if let Some(file_name_str) = file_name.to_str() {
+                                if file_name_str.ends_with(".toml") {
+                                    theme_files.push(file_name_str.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if theme_files.is_empty() {
+                Ok(get_fallback_theme_list())
+            } else {
+                Ok(theme_files)
+            }
+        }
+        Err(_) => Ok(get_fallback_theme_list()),
+    }
+}
+
 /// 从资源目录复制主题文件到用户配置目录
 async fn copy_themes_from_resources<R: tauri::Runtime>(
     app_handle: &tauri::AppHandle<R>,
@@ -632,19 +708,8 @@ async fn copy_themes_from_resources<R: tauri::Runtime>(
         fs::create_dir_all(themes_dir)?;
     }
 
-    // 定义需要复制的主题文件列表
-    let theme_files = [
-        "dark.toml",
-        "light.toml",
-        "dracula.toml",
-        "gruvbox-dark.toml",
-        "monokai.toml",
-        "nord.toml",
-        "one-dark.toml",
-        "solarized-dark.toml",
-        "solarized-light.toml",
-        "tokyo-night.toml",
-    ];
+    // 动态获取所有主题文件，避免硬编码列表
+    let theme_files = get_theme_files_from_resources(app_handle).await?;
 
     let mut _copied_count = 0;
 
@@ -656,31 +721,31 @@ async fn copy_themes_from_resources<R: tauri::Runtime>(
             continue;
         }
 
-        // 尝试从资源目录读取文件
-        match app_handle
-            .path()
-            .resolve(theme_file, BaseDirectory::Resource)
-        {
-            Ok(resource_path) => match fs::read_to_string(&resource_path) {
-                Ok(content) => match fs::write(&dest_path, content) {
-                    Ok(_) => {
-                        _copied_count += 1;
-                    }
-                    Err(_) => {
-                        // 静默处理写入失败，不影响应用启动
-                    }
-                },
-                Err(_) => {
-                    // 静默处理读取失败，不影响应用启动
+        // 开发模式直接从项目根目录读取，生产模式从资源读取
+        let source_path = if cfg!(debug_assertions) {
+            let current_dir =
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let dev_file_path = current_dir
+                .join("..")
+                .join("config")
+                .join("themes")
+                .join(theme_file);
+            Some(dev_file_path)
+        } else {
+            app_handle
+                .path()
+                .resolve(theme_file, BaseDirectory::Resource)
+                .ok()
+        };
+
+        if let Some(resource_path) = source_path {
+            if let Ok(content) = fs::read_to_string(&resource_path) {
+                if fs::write(&dest_path, content).is_ok() {
+                    _copied_count += 1;
                 }
-            },
-            Err(_) => {
-                // 静默处理路径解析失败，不影响应用启动
             }
         }
     }
-
-    // 仅内部计数，不输出日志以减少噪声
 
     Ok(())
 }

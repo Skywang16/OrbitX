@@ -256,6 +256,16 @@ export class WindowApi {
   async resetWindowOpacity(): Promise<void> {
     await this.setWindowOpacity(1.0)
   }
+
+  // ===== 文件处理 =====
+
+  async handleFileOpen(path: string): Promise<string> {
+    try {
+      return await invoke<string>('handle_file_open', { path })
+    } catch (error) {
+      throw new Error(handleError(error, '处理文件打开失败'))
+    }
+  }
 }
 
 // 导出单例实例

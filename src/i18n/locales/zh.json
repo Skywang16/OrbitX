@@ -40,7 +40,10 @@
       "config_folder_description": "打开应用程序配置文件所在的文件夹",
       "open_config_folder": "打开配置文件夹",
       "config_folder_opened": "配置文件夹已打开",
-      "config_folder_error": "无法打开配置文件夹"
+      "config_folder_error": "无法打开配置文件夹",
+      "autostart_title": "开机自启动",
+      "autostart_enabled": "开机自启动已开启",
+      "autostart_disabled": "开机自启动已关闭"
     },
     "theme": {
       "title": "主题设置",

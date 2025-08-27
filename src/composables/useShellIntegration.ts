@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core'
 import type { Terminal } from '@xterm/xterm'
+import { terminalApi } from '@/api'
 
 export interface ShellIntegrationOptions {
   terminalId: string
@@ -64,10 +64,7 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
             options.onTerminalCwdUpdate(options.terminalId, newCwd)
 
             if (options.backendId != null) {
-              invoke('update_pane_cwd', {
-                paneId: options.backendId,
-                cwd: newCwd,
-              }).catch(err => {
+              terminalApi.updatePaneCwd(options.backendId, newCwd).catch(err => {
                 console.warn('同步CWD到后端失败:', err)
               })
             }
@@ -92,10 +89,7 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
             options.onCwdUpdate(decodedCwd)
             options.onTerminalCwdUpdate(options.terminalId, decodedCwd)
             if (options.backendId != null) {
-              invoke('update_pane_cwd', {
-                paneId: options.backendId,
-                cwd: decodedCwd,
-              }).catch(() => {})
+              terminalApi.updatePaneCwd(options.backendId, decodedCwd).catch(() => {})
             }
           }
           break
@@ -128,10 +122,7 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
   const silentShellIntegration = async () => {
     try {
       if (options.backendId != null) {
-        await invoke('setup_shell_integration', {
-          paneId: options.backendId,
-          silent: true,
-        })
+        await terminalApi.setupShellIntegration(options.backendId, true)
       }
     } catch {
       // 静默失败
