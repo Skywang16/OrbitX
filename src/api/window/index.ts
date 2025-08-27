@@ -10,6 +10,7 @@
 import { createMessage } from '@/ui'
 import { invoke } from '@/utils/request'
 import { handleError } from '@/utils/errorHandler'
+import { useI18n } from 'vue-i18n'
 import type {
   CompleteWindowState,
   DirectoryOptions,
@@ -116,7 +117,7 @@ export class WindowApi {
   async clearDirectoryCache(): Promise<void> {
     try {
       await invoke('clear_directory_cache')
-      createMessage.success('目录缓存已清除')
+      createMessage.success(useI18n().t('cache.directory_cleared'))
     } catch (error) {
       throw new Error(handleError(error, '清除目录缓存失败'))
     }
@@ -226,6 +227,43 @@ export class WindowApi {
       }
     } catch (error) {
       throw new Error(handleError(error, '获取窗口状态失败'))
+    }
+  }
+
+  // ===== 透明度管理 =====
+
+  async setWindowOpacity(opacity: number): Promise<void> {
+    if (opacity < 0 || opacity > 1) {
+      throw new Error('透明度值必须在 0 到 1 之间')
+    }
+
+    try {
+      await invoke('set_window_opacity', { opacity })
+    } catch (error) {
+      throw new Error(handleError(error, '设置窗口透明度失败'))
+    }
+  }
+
+  async getWindowOpacity(): Promise<number> {
+    try {
+      const opacity = await invoke<number>('get_window_opacity')
+      return opacity
+    } catch (error) {
+      throw new Error(handleError(error, '获取窗口透明度失败'))
+    }
+  }
+
+  async resetWindowOpacity(): Promise<void> {
+    await this.setWindowOpacity(1.0)
+  }
+
+  // ===== 文件处理 =====
+
+  async handleFileOpen(path: string): Promise<string> {
+    try {
+      return await invoke<string>('handle_file_open', { path })
+    } catch (error) {
+      throw new Error(handleError(error, '处理文件打开失败'))
     }
   }
 }

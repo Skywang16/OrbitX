@@ -1,24 +1,18 @@
-/* X-UI 组件库全局样式 */
 
-/* 组件库专用CSS变量 - 基于现有主题系统 */
 :root {
-  /* 组件库特定的阴影系统 */
   --x-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
   --x-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
   --x-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
   --x-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1), 0 10px 10px rgba(0, 0, 0, 0.04);
 
-  /* 组件库特定的动画时长 */
   --x-duration-fast: 0.15s;
   --x-duration-normal: 0.2s;
   --x-duration-slow: 0.3s;
 
-  /* 组件库特定的缓动函数 */
   --x-ease-out: cubic-bezier(0.215, 0.61, 0.355, 1);
   --x-ease-in: cubic-bezier(0.55, 0.055, 0.675, 0.19);
   --x-ease-in-out: cubic-bezier(0.645, 0.045, 0.355, 1);
 
-  /* 组件库特定的层级 */
   --x-z-dropdown: 1050;
   --x-z-sticky: 1020;
   --x-z-fixed: 1030;
@@ -29,7 +23,6 @@
   --x-z-toast: 1080;
 }
 
-/* 深色主题下的阴影调整 */
 [data-theme='dark'] {
   --x-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
   --x-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -37,7 +30,6 @@
   --x-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.3), 0 10px 10px rgba(0, 0, 0, 0.2);
 }
 
-/* 其他主题的阴影调整 */
 [data-theme='one-dark'],
 [data-theme='dracula'],
 [data-theme='monokai'] {
@@ -47,7 +39,6 @@
   --x-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.4), 0 10px 10px rgba(0, 0, 0, 0.3);
 }
 
-/* 组件库通用样式重置 */
 .x-button,
 .x-message,
 .x-modal,

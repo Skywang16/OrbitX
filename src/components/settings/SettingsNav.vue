@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
+  import { useI18n } from 'vue-i18n'
 
   interface Props {
     activeSection?: string
@@ -10,55 +11,63 @@
   }
 
   const props = withDefaults(defineProps<Props>(), {
-    activeSection: 'theme',
+    activeSection: 'ai',
   })
 
   const emit = defineEmits<Emits>()
+  const { t } = useI18n()
 
   const searchQuery = ref('')
 
-  // 设置导航项目列表
-  const navigationItems = [
+  const navigationItems = computed(() => [
     {
-      id: 'theme',
-      label: '主题设置',
-      icon: 'palette',
-      description: '外观和主题配置',
+      id: 'general',
+      label: t('settings.general.title'),
+      icon: 'settings',
+      description: t('settings.general.description'),
     },
     {
       id: 'ai',
-      label: 'AI 设置',
+      label: t('settings.ai.title'),
       icon: 'brain',
-      description: 'AI模型和功能配置',
+      description: t('settings.ai.description'),
+    },
+    {
+      id: 'theme',
+      label: t('settings.theme.title'),
+      icon: 'palette',
+      description: t('settings.theme.description'),
     },
     {
       id: 'shortcuts',
-      label: '快捷键设置',
+      label: t('settings.shortcuts.title'),
       icon: 'keyboard',
-      description: '配置和管理快捷键',
+      description: t('settings.shortcuts.description'),
     },
-  ]
+    {
+      id: 'language',
+      label: t('language.title'),
+      icon: 'globe',
+      description: t('settings.language.description'),
+    },
+  ])
 
-  // 处理导航项点击
   const handleItemClick = (sectionId: string) => {
     if (sectionId !== props.activeSection) {
       emit('change', sectionId)
     }
   }
-
-  // 过滤后的导航项目
   const filteredNavigationItems = computed(() => {
     if (!searchQuery.value) {
-      return navigationItems
+      return navigationItems.value
     }
 
     const query = searchQuery.value.toLowerCase()
-    return navigationItems.filter(
+    return navigationItems.value.filter(
       item => item.label.toLowerCase().includes(query) || item.description.toLowerCase().includes(query)
     )
   })
 
-  // 获取图标SVG
   const getIconSvg = (iconName: string) => {
     const icons: Record<string, string> = {
       palette: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -81,6 +90,15 @@
         <circle cx="12" cy="16" r="1"/>
         <circle cx="17" cy="16" r="1"/>
       </svg>`,
+      globe: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>`,
+      settings: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>`,
     }
     return icons[iconName] || ''
   }
@@ -88,22 +106,21 @@
 
 <template>
   <nav class="settings-navigation">
-    <div class="navigation-header">
-      <x-search-input v-model="searchQuery" placeholder="搜索设置" />
+    <div class="settings-navigation-header">
+      <x-search-input v-model="searchQuery" :placeholder="t('settings.search_placeholder')" />
     </div>
 
-    <ul class="navigation-list">
+    <ul class="settings-navigation-list">
       <li
         v-for="item in filteredNavigationItems"
         :key="item.id"
-        class="navigation-item"
+        class="settings-navigation-item"
         :class="{ active: item.id === activeSection }"
         @click="handleItemClick(item.id)"
       >
-        <div class="item-icon" v-html="getIconSvg(item.icon)"></div>
-        <div class="item-content">
-          <div class="item-label">{{ item.label }}</div>
-          <div class="item-description">{{ item.description }}</div>
+        <div class="settings-navigation-icon" v-html="getIconSvg(item.icon)"></div>
+        <div class="settings-navigation-content">
+          <div class="settings-navigation-label">{{ item.label }}</div>
         </div>
       </li>
     </ul>
@@ -111,73 +128,71 @@
 </template>
 
 <style scoped>
-  .settings-navigation {
-    padding: var(--spacing-lg) 0;
+  /* 响应式设计 */
+  @media (max-width: 480px) {
+    .settings-navigation {
+      padding: 8px 0;
+    }
+
+    .settings-navigation-header {
+      padding: 8px 12px;
+      margin-bottom: 4px;
+    }
+
+    .settings-navigation-list {
+      display: flex;
+      flex-direction: row;
+      overflow-x: auto;
+      overflow-y: hidden;
+      gap: 8px;
+      padding: 0 12px;
+      max-height: none;
+    }
+
+    .settings-navigation-item {
+      flex: 0 0 auto;
+      min-width: 120px;
+      padding: 8px 12px;
+      border-radius: var(--border-radius);
+      background: var(--bg-400);
+      border: 1px solid var(--border-300);
+      transition: all 0.2s ease;
+    }
+
+    .settings-navigation-item:hover {
+      background: var(--bg-500);
+      border-color: var(--border-400);
+    }
+
+    .settings-navigation-item.active {
+      background: var(--color-primary-alpha);
+      border-color: var(--color-primary);
+    }
+
+    .settings-navigation-content {
+      text-align: center;
+    }
+
+    .settings-navigation-label {
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .settings-navigation-icon {
+      display: none;
+    }
   }
 
-  .navigation-header {
-    padding: var(--spacing-lg);
-    border-bottom: 1px solid var(--border-300);
-    margin-bottom: var(--spacing-lg);
-  }
+  @media (max-width: 320px) {
+    .settings-navigation-item {
+      min-width: 80px;
+      padding: 4px 6px;
+    }
 
-  .navigation-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  .navigation-item {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-md) var(--spacing-lg);
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border-left: 2px solid transparent;
-  }
-
-  .navigation-item:hover {
-    background-color: var(--color-hover);
-  }
-
-  .navigation-item.active {
-    background-color: var(--color-primary-alpha);
-    border-left: 2px solid var(--color-primary);
-  }
-
-  .navigation-item.active .item-label {
-    color: var(--color-primary);
-    font-weight: 500;
-  }
-
-  .item-icon {
-    flex-shrink: 0;
-    color: var(--text-400);
-    transition: color 0.2s ease;
-    width: 18px;
-    height: 18px;
-  }
-
-  .navigation-item.active .item-icon {
-    color: var(--color-primary);
-  }
-
-  .item-content {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .item-label {
-    font-size: var(--font-size-md);
-    font-weight: 500;
-    color: var(--text-200);
-    margin-bottom: 4px;
-  }
-
-  .item-description {
-    font-size: var(--font-size-sm);
-    color: var(--text-400);
-    line-height: 1.4;
+    .settings-navigation-label {
+      font-size: 10px;
+    }
   }
 </style>

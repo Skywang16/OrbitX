@@ -10,7 +10,6 @@ import { shortcutsApi } from '@/api'
 import type {
   ShortcutsConfig,
   ShortcutBinding,
-  ShortcutCategory,
   Platform,
   ShortcutValidationResult,
   ConflictDetectionResult,
@@ -128,9 +127,9 @@ export const useShortcutStore = defineStore('shortcuts', () => {
   /**
    * 添加快捷键
    */
-  const addShortcut = async (category: ShortcutCategory, shortcut: ShortcutBinding): Promise<void> => {
+  const addShortcut = async (shortcut: ShortcutBinding): Promise<void> => {
     return withLoading(async () => {
-      await shortcutsApi.addShortcut(category, shortcut)
+      await shortcutsApi.addShortcut(shortcut)
       await refreshConfig()
     })
   }
@@ -138,9 +137,9 @@ export const useShortcutStore = defineStore('shortcuts', () => {
   /**
    * 删除快捷键
    */
-  const removeShortcut = async (category: ShortcutCategory, index: number): Promise<ShortcutBinding> => {
+  const removeShortcut = async (index: number): Promise<ShortcutBinding> => {
     return withLoading(async () => {
-      const removedShortcut = await shortcutsApi.removeShortcut(category, index)
+      const removedShortcut = await shortcutsApi.removeShortcut(index)
       await refreshConfig()
       return removedShortcut
     })
@@ -149,13 +148,9 @@ export const useShortcutStore = defineStore('shortcuts', () => {
   /**
    * 更新快捷键
    */
-  const updateShortcut = async (
-    category: ShortcutCategory,
-    index: number,
-    shortcut: ShortcutBinding
-  ): Promise<void> => {
+  const updateShortcut = async (index: number, shortcut: ShortcutBinding): Promise<void> => {
     return withLoading(async () => {
-      await shortcutsApi.updateShortcut(category, index, shortcut)
+      await shortcutsApi.updateShortcut(index, shortcut)
       await refreshConfig()
     })
   }

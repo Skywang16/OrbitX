@@ -17,20 +17,16 @@ use sqlx::Row;
 use std::sync::{Arc, Mutex};
 use tracing::{debug, error};
 
-/// 简单的内存缓存存储用户前置提示词
 static USER_PREFIX_PROMPT: Mutex<Option<String>> = Mutex::new(None);
 
-/// 默认启用状态
 fn default_enabled() -> bool {
     true
 }
 
-/// 默认时间戳
 fn default_timestamp() -> DateTime<Utc> {
     Utc::now()
 }
 
-/// AI提供商类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum AIProvider {
@@ -62,7 +58,6 @@ impl std::str::FromStr for AIProvider {
     }
 }
 
-/// AI模型配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AIModelConfig {
@@ -132,7 +127,6 @@ impl RowMapper<AIModelConfig> for AIModelConfig {
     }
 }
 
-/// AI模型Repository
 pub struct AIModelRepository {
     database: Arc<DatabaseManager>,
 }
@@ -142,7 +136,6 @@ impl AIModelRepository {
         Self { database }
     }
 
-    /// 获取所有AI模型
     pub async fn find_all_with_decrypted_keys(&self) -> AppResult<Vec<AIModelConfig>> {
         let (query, params) = SafeQueryBuilder::new("ai_models")
             .select(&[
@@ -219,7 +212,6 @@ impl AIModelRepository {
         Ok(models)
     }
 
-    /// 保存AI模型（加密API密钥）
     pub async fn save_with_encryption(&self, model: &AIModelConfig) -> AppResult<i64> {
         debug!("保存AI模型: {}", model.name);
 
@@ -306,13 +298,11 @@ impl Repository<AIModelConfig> for AIModelRepository {
 }
 
 impl AIModelRepository {
-    /// 根据字符串ID查找
     pub async fn find_by_string_id(&self, id: &str) -> AppResult<Option<AIModelConfig>> {
         let models = self.find_all_with_decrypted_keys().await?;
         Ok(models.into_iter().find(|m| m.id == id))
     }
 
-    /// 根据字符串ID删除
     pub async fn delete_by_string_id(&self, id: &str) -> AppResult<()> {
         let result = sqlx::query("DELETE FROM ai_models WHERE id = ?")
             .bind(id)
@@ -327,7 +317,6 @@ impl AIModelRepository {
         Ok(())
     }
 
-    /// 获取用户前置提示词
     pub async fn get_user_prefix_prompt(&self) -> AppResult<Option<String>> {
         debug!("从内存缓存获取用户前置提示词");
 
@@ -339,7 +328,6 @@ impl AIModelRepository {
         Ok(prompt)
     }
 
-    /// 设置用户前置提示词
     pub async fn set_user_prefix_prompt(&self, prompt: Option<String>) -> AppResult<()> {
         debug!("设置用户前置提示词: {:?}", prompt.as_ref().map(|p| p.len()));
 

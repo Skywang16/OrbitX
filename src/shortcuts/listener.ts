@@ -14,10 +14,8 @@ export function useShortcutListener() {
   const isListening = ref(false)
   const config = ref<ShortcutsConfig | null>(null)
   let keydownHandler: ((event: KeyboardEvent) => void) | null = null
+  let wheelHandler: ((event: WheelEvent) => void) | null = null
 
-  /**
-   * 初始化快捷键监听器
-   */
   const initializeListener = async () => {
     config.value = await shortcutsApi.getConfig()
 
@@ -25,13 +23,15 @@ export function useShortcutListener() {
       handleKeyDown(event)
     }
 
+    wheelHandler = (event: WheelEvent) => {
+      handleWheel(event)
+    }
+
     document.addEventListener('keydown', keydownHandler, true)
+    document.addEventListener('wheel', wheelHandler, true)
     isListening.value = true
   }
 
-  /**
-   * 处理键盘按下事件
-   */
   const handleKeyDown = async (event: KeyboardEvent) => {
     if (!config.value) return
 
@@ -52,13 +52,32 @@ export function useShortcutListener() {
     }
   }
 
-  /**
-   * 查找匹配的快捷键
-   */
-  const findMatchingShortcut = (event: KeyboardEvent, config: ShortcutsConfig): ShortcutBinding | null => {
-    const allShortcuts = [...config.global, ...config.terminal, ...config.custom]
+  const handleWheel = async (event: WheelEvent) => {
+    // 检查是否按下了 Cmd (Mac) 或 Ctrl (Windows/Linux)
+    const isModifierPressed = event.metaKey || event.ctrlKey
 
-    for (const shortcut of allShortcuts) {
+    if (!isModifierPressed) return
+
+    // 阻止默认滚轮行为
+    event.preventDefault()
+    event.stopPropagation()
+
+    // 根据滚轮方向确定动作
+    const action = event.deltaY < 0 ? 'increase_opacity' : 'decrease_opacity'
+    const keyCombo = `${event.metaKey ? 'cmd' : 'ctrl'}+wheel`
+
+    // 创建虚拟快捷键绑定
+    const virtualShortcut: ShortcutBinding = {
+      key: 'wheel',
+      modifiers: [event.metaKey ? 'cmd' : 'ctrl'],
+      action,
+    }
+
+    await executeShortcutAction(virtualShortcut, keyCombo)
+  }
+
+  const findMatchingShortcut = (event: KeyboardEvent, config: ShortcutsConfig): ShortcutBinding | null => {
+    for (const shortcut of config) {
       if (isShortcutMatch(event, shortcut)) {
         return shortcut
       }
@@ -67,9 +86,6 @@ export function useShortcutListener() {
     return null
   }
 
-  /**
-   * 执行快捷键动作
-   */
   const executeShortcutAction = async (shortcut: ShortcutBinding, keyCombo: string) => {
     const actionName = extractActionName(shortcut.action)
     let frontendResult = false
@@ -127,6 +143,18 @@ export function useShortcutListener() {
       case 'decrease_font_size':
         frontendResult = shortcutActionsService.decreaseFontSize()
         break
+      case 'increase_opacity':
+        frontendResult = await shortcutActionsService.increaseOpacity()
+        break
+      case 'decrease_opacity':
+        frontendResult = await shortcutActionsService.decreaseOpacity()
+        break
+      case 'toggle_ai_sidebar':
+        frontendResult = shortcutActionsService.toggleAISidebar()
+        break
+      case 'toggle_window_pin':
+        frontendResult = await shortcutActionsService.toggleWindowPin()
+        break
     }
 
     await shortcutsApi.executeAction(shortcut.action, keyCombo, getCurrentTerminalId(), {
@@ -150,6 +178,10 @@ export function useShortcutListener() {
     if (keydownHandler) {
       document.removeEventListener('keydown', keydownHandler, true)
       keydownHandler = null
+    }
+    if (wheelHandler) {
+      document.removeEventListener('wheel', wheelHandler, true)
+      wheelHandler = null
     }
     isListening.value = false
   }

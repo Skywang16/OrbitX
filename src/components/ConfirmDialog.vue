@@ -15,8 +15,8 @@
         />
       </div>
       <div class="confirm-actions">
-        <button @click="cancel" class="btn btn-cancel">取消</button>
-        <button @click="confirm" class="btn btn-confirm" :class="type">确认</button>
+        <button @click="cancel" class="btn btn-cancel">{{ $t('dialog.cancel') }}</button>
+        <button @click="confirm" class="btn btn-confirm" :class="type">{{ $t('dialog.confirm') }}</button>
       </div>
     </div>
   </div>

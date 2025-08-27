@@ -1,30 +1,14 @@
-/**
- * AI业务领域类型定义 - 统一合并版本
- * 包含所有AI相关类型，消除循环依赖
- */
-
 import type { BaseConfig } from '../core'
 
-// ===== 工具执行相关类型 =====
-
 export interface ToolExecution {
-  /** 工具名称 */
   name: string
-  /** 所有参数 */
   params: Record<string, unknown>
-  /** 执行状态 */
   status: 'running' | 'completed' | 'error'
-  /** 开始时间 */
   startTime: number
-  /** 结束时间 */
   endTime?: number
-  /** 工具执行结果 */
   result?: unknown
-  /** 错误信息 */
   error?: string
 }
-
-// ===== AI提供商和模型类型 =====
 
 export type AIProvider = 'openAI' | 'claude' | 'custom'
 
@@ -60,8 +44,6 @@ export interface AIResponse {
   }
 }
 
-// ===== AI设置类型 =====
-
 export interface AISettings {
   models: AIModelConfig[]
   features: {
@@ -81,8 +63,6 @@ export interface AISettings {
     cacheTtl: number
   }
 }
-
-// ===== 错误处理类型 =====
 
 export enum AIErrorType {
   CONFIGURATION_ERROR = 'CONFIGURATION_ERROR',
@@ -107,8 +87,6 @@ export class AIError extends Error {
   }
 }
 
-// ===== 统计和监控类型 =====
-
 export interface AIStats {
   totalRequests: number
   successfulRequests: number
@@ -127,34 +105,23 @@ export interface AIHealthStatus {
   error?: string
 }
 
-// ===== 流式通信类型 =====
-
 export interface StreamChunk {
-  /** 流式内容 */
   content: string
-  /** 是否完成 */
   isComplete: boolean
-  /** 元数据 */
   metadata?: Record<string, any>
 }
 
 export type StreamCallback = (chunk: StreamChunk) => void
 
 export interface ChannelStreamOptions {
-  /** 模型ID */
   modelId?: string
-  /** 超时时间(毫秒) */
   timeout?: number
-  /** 最大重试次数 */
   maxRetries?: number
 }
 
 export interface CancellableStream {
-  /** 取消流式请求 */
   cancel: () => void
 }
-
-// ===== 会话管理类型 =====
 
 export interface Conversation {
   id: number
@@ -192,16 +159,12 @@ export interface Message {
   role: 'user' | 'assistant' | 'system'
   createdAt: Date
 
-  // AI消息的扩展字段
   steps?: AIOutputStep[]
   status?: 'pending' | 'streaming' | 'complete' | 'error'
   duration?: number
 
-  // 用户消息内容
   content?: string
 }
-
-// ===== 聊天状态类型 =====
 
 export type ChatStatus = 'idle' | 'loading' | 'streaming' | 'error'
 export type ChatMode = 'chat' | 'agent'
@@ -221,8 +184,6 @@ export interface ConversationState {
   error: string | null
 }
 
-// ===== 请求和响应类型 =====
-
 export interface SendMessageRequest {
   conversationId: number
   content: string
@@ -235,8 +196,6 @@ export interface TruncateAndResendRequest {
   newContent: string
   modelId?: string
 }
-
-// ===== 代码分析类型 =====
 
 export interface CodeSymbol {
   name: string
@@ -273,8 +232,6 @@ export interface AnalyzeCodeParams {
 
 export type AnalysisResult = BatchCodeAnalysis
 
-// ===== Web请求类型 =====
-
 export interface WebFetchRequest {
   url: string
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
@@ -296,8 +253,6 @@ export interface WebFetchResponse {
   content_length?: number
 }
 
-// ===== 原始数据格式类型 =====
-
 export interface RawConversation {
   id: number
   title: string
@@ -317,8 +272,6 @@ export interface RawMessage {
   createdAt: string
 }
 
-// ===== AI配置类型 =====
-
 export interface AIConfig extends BaseConfig {
   maxContextTokens: number
   modelName: string
@@ -332,8 +285,6 @@ export interface ContextStats {
   lastSummaryAt?: Date
 }
 
-// ===== 聊天配置类型 =====
-
 export interface ChatSidebarConfig {
   width: number
   minWidth: number
@@ -342,8 +293,6 @@ export interface ChatSidebarConfig {
   resizable: boolean
   collapsible: boolean
 }
-
-// ===== Agent消息类型 =====
 
 export interface AgentTextMessage {
   type: 'text'
@@ -361,8 +310,6 @@ export interface AgentWorkflowMessage {
 }
 
 export type AgentMessageData = AgentTextMessage | AgentWorkflowMessage
-
-// ===== 工具函数 =====
 
 export function createToolExecution(
   name: string,
@@ -384,7 +331,7 @@ export function getExecutionDuration(toolExecution: ToolExecution): number | nul
 
 export function formatExecutionDuration(toolExecution: ToolExecution): string {
   const duration = getExecutionDuration(toolExecution)
-  if (duration === null) return '执行中...'
+  if (duration === null) return 'Running...'
 
   if (duration < 1000) return `${duration}ms`
   if (duration < 60000) return `${(duration / 1000).toFixed(1)}s`

@@ -45,14 +45,29 @@ pub async fn update_config(
     new_config: AppConfig,
     state: State<'_, ConfigManagerState>,
 ) -> Result<(), String> {
-    state.toml_manager.save_config(&new_config).await.to_tauri()
+    state
+        .toml_manager
+        .update_config(|config| {
+            *config = new_config.clone();
+            Ok(())
+        })
+        .await
+        .to_tauri()
 }
 
-/// 保存配置
+/// 保存配置（强制保存当前缓存的配置到文件）
 #[tauri::command]
 pub async fn save_config(state: State<'_, ConfigManagerState>) -> Result<(), String> {
-    let config = state.toml_manager.get_config().await.to_tauri()?;
-    state.toml_manager.save_config(&config).await.to_tauri()
+    // 这个命令主要用于强制保存当前缓存的配置到文件
+    // 使用 update_config 确保原子性操作
+    state
+        .toml_manager
+        .update_config(|_config| {
+            // 不修改配置，只是触发保存操作
+            Ok(())
+        })
+        .await
+        .to_tauri()
 }
 
 /// 验证配置
@@ -70,7 +85,10 @@ pub async fn reset_config_to_defaults(state: State<'_, ConfigManagerState>) -> R
     let default_config = create_default_config();
     state
         .toml_manager
-        .save_config(&default_config)
+        .update_config(|config| {
+            *config = default_config.clone();
+            Ok(())
+        })
         .await
         .to_tauri()
 }
@@ -113,6 +131,57 @@ pub async fn open_config_file<R: tauri::Runtime>(
 #[tauri::command]
 pub async fn subscribe_config_events(_state: State<'_, ConfigManagerState>) -> Result<(), String> {
     debug!("订阅配置事件");
+    Ok(())
+}
+
+/// 获取配置文件夹路径
+#[tauri::command]
+pub async fn get_config_folder_path(
+    state: State<'_, ConfigManagerState>,
+) -> Result<String, String> {
+    debug!("获取配置文件夹路径");
+
+    // 通过toml_manager获取配置路径
+    let config_path = state.toml_manager.get_config_path().await;
+
+    // 获取配置文件的父目录（即配置文件夹）
+    if let Some(config_dir) = config_path.parent() {
+        Ok(config_dir.to_string_lossy().to_string())
+    } else {
+        Err("无法获取配置文件夹路径".to_string())
+    }
+}
+
+/// 打开配置文件夹
+#[tauri::command]
+pub async fn open_config_folder<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, ConfigManagerState>,
+) -> Result<(), String> {
+    debug!("打开配置文件夹");
+
+    // 通过toml_manager获取配置路径
+    let config_path = state.toml_manager.get_config_path().await;
+
+    // 获取配置文件的父目录（即配置文件夹）
+    let config_dir = if let Some(dir) = config_path.parent() {
+        dir
+    } else {
+        return Err("无法获取配置文件夹路径".to_string());
+    };
+
+    // 确保配置目录存在
+    if !config_dir.exists() {
+        return Err("配置目录不存在".to_string());
+    }
+
+    // 使用 tauri-plugin-opener 打开文件夹
+    use tauri_plugin_opener::OpenerExt;
+
+    app.opener()
+        .open_path(config_dir.to_string_lossy().to_string(), None::<String>)
+        .map_err(|e| format!("无法打开配置文件夹: {}", e))?;
+
     Ok(())
 }
 

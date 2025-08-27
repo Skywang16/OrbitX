@@ -12,17 +12,7 @@ export interface ShortcutBinding {
   action: ShortcutAction
 }
 
-export interface ShortcutsConfig {
-  global: ShortcutBinding[]
-  terminal: ShortcutBinding[]
-  custom: ShortcutBinding[]
-}
-
-export enum ShortcutCategory {
-  Global = 'Global',
-  Terminal = 'Terminal',
-  Custom = 'Custom',
-}
+export type ShortcutsConfig = ShortcutBinding[]
 
 export enum Platform {
   Windows = 'Windows',
@@ -110,6 +100,10 @@ export type SupportedShortcutAction =
   | 'switch_to_tab_5'
   | 'switch_to_last_tab'
   | 'accept_completion'
+  | 'increase_opacity'
+  | 'decrease_opacity'
+  | 'toggle_ai_sidebar'
+  | 'toggle_window_pin'
 
 export interface ShortcutExecutionResult {
   success: boolean

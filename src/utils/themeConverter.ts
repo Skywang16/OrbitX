@@ -1,9 +1,3 @@
-/**
- * 主题转换工具
- *
- * 将项目的主题数据转换为 XTerm.js 可用的主题格式
- */
-
 import type { Theme } from '@/types'
 
 /**
@@ -108,18 +102,14 @@ export interface XTermTheme {
  * @returns XTerm.js 主题对象
  */
 export const convertThemeToXTerm = (theme: Theme): XTermTheme => {
-  // 使用应用的主背景颜色，而不是终端特定的背景颜色
-  // 这样可以确保终端背景与应用背景保持一致
   const appBackground = getAppBackgroundColor()
 
   return {
-    // 基础颜色 - 使用应用背景颜色和新的主题结构
-    foreground: theme.ui.text_200, // 使用新的文本颜色
-    background: appBackground || theme.ui.bg_100, // 使用应用背景或终端背景
-    cursor: theme.ui.text_100, // 使用最亮的文本颜色作为光标
-    selectionBackground: theme.ui.selection, // 使用新的选择背景色
+    foreground: theme.ui.text_200,
+    background: appBackground || theme.ui.bg_100,
+    cursor: theme.ui.text_100,
+    selectionBackground: theme.ui.selection,
 
-    // ANSI 标准颜色 (0-7) - 使用新的ansi结构
     black: theme.ansi.black,
     red: theme.ansi.red,
     green: theme.ansi.green,
@@ -129,7 +119,6 @@ export const convertThemeToXTerm = (theme: Theme): XTermTheme => {
     cyan: theme.ansi.cyan,
     white: theme.ansi.white,
 
-    // ANSI 明亮颜色 (8-15) - 使用新的bright结构
     brightBlack: theme.bright.black,
     brightRed: theme.bright.red,
     brightGreen: theme.bright.green,

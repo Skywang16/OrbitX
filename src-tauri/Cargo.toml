@@ -21,7 +21,7 @@ doctest = false
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-deep-link = "2.0.0"
@@ -101,6 +101,7 @@ tree-sitter-rust = "0.23"
 syn = { version = "2.0", features = ["full", "visit"] }
 quote = "1.0"
 tauri-plugin-window-state = "2.4.0"
+tauri-plugin-autostart = "2.5.0"
 
 [dev-dependencies]
 tempfile = "3.8"

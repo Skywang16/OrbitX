@@ -42,7 +42,6 @@ pub async fn build_context_for_request(
     Ok(context_result.messages)
 }
 
-/// 构建智能Prompt - 替代原有的简单拼接
 pub async fn build_intelligent_prompt(
     repositories: &RepositoryManager,
     conversation_id: i64,
@@ -61,9 +60,6 @@ pub async fn build_intelligent_prompt(
         .await
 }
 
-/// 将历史消息转换为AIContext结构
-///
-/// 将数据库中的消息列表转换为AI请求所需的上下文结构
 pub fn messages_to_ai_context(messages: Vec<Message>, _conversation_id: i64) -> AIContext {
     debug!("转换消息为AI上下文: 消息数量={}", messages.len());
 
@@ -73,8 +69,6 @@ pub fn messages_to_ai_context(messages: Vec<Message>, _conversation_id: i64) -> 
     }
 }
 
-/// 处理截断重新提问
-///
 /// 删除指定消息ID之后的所有消息，并更新会话统计
 pub async fn handle_truncate_conversation(
     repositories: &RepositoryManager,
@@ -102,7 +96,6 @@ pub async fn handle_truncate_conversation(
     Ok(())
 }
 
-/// 截断字符串到指定长度
 pub fn truncate_string(content: &str, max_length: usize) -> String {
     if content.len() <= max_length {
         content.to_string()

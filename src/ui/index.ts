@@ -4,7 +4,7 @@ import type { App, Plugin } from 'vue'
 import './styles/index.css'
 
 // 导入所有组件
-import { XButton, XMessage, XModal, XPopover, XSearchInput, XSelect, XSwitch } from './components'
+import { XButton, XMessage, XModal, XPopconfirm, XPopover, XSearchInput, XSelect, XSwitch } from './components'
 
 // 导入函数式API
 import {
@@ -21,7 +21,7 @@ import {
 // ==================== 组件导出 ====================
 
 // 主要组件导出（推荐使用）
-export { XButton, XMessage, XModal, XPopover, XSearchInput, XSelect, XSwitch }
+export { XButton, XMessage, XModal, XPopconfirm, XPopover, XSearchInput, XSelect, XSwitch }
 
 // ==================== 函数式API导出 ====================
 
@@ -98,6 +98,9 @@ const install = (app: App, options: Partial<XUIGlobalConfig> = {}): void => {
   app.component('XModal', XModal)
   app.component('x-modal', XModal)
 
+  app.component('XPopconfirm', XPopconfirm)
+  app.component('x-popconfirm', XPopconfirm)
+
   app.component('XPopover', XPopover)
   app.component('x-popover', XPopover)
 
@@ -149,6 +152,8 @@ export type {
   ModalEmits,
   ModalProps,
   Placement,
+  PopconfirmEmits,
+  PopconfirmProps,
   PopoverEmits,
   PopoverProps,
   SearchInputEmits,

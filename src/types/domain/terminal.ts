@@ -1,10 +1,4 @@
-/**
- * 终端业务领域类型定义
- */
-
 import type { BaseConfig } from '../core'
-
-// ===== 基础终端类型 =====
 
 export interface TerminalCreateOptions {
   rows: number
@@ -29,8 +23,6 @@ export interface CreateTerminalWithShellOptions {
   cols: number
 }
 
-// ===== 事件类型 =====
-
 export interface TerminalOutputEvent {
   paneId: number
   data: string
@@ -47,15 +39,11 @@ export interface TerminalResizeEvent {
   cols: number
 }
 
-// ===== 统计信息类型 =====
-
 export interface TerminalStats {
   total: number
   active: number
   ids: number[]
 }
-
-// ===== 操作结果类型 =====
 
 export interface TerminalOperationResult<T = void> {
   success: boolean
@@ -63,22 +51,16 @@ export interface TerminalOperationResult<T = void> {
   error?: string
 }
 
-// ===== 批量操作类型 =====
-
 export interface BatchTerminalResize {
   paneId: number
   rows: number
   cols: number
 }
 
-// ===== 主题配置类型 =====
-
 export interface TerminalTheme {
   background: string
   foreground: string
 }
-
-// ===== Shell配置类型 =====
 
 export interface ShellConfig {
   default: string
@@ -106,8 +88,6 @@ export interface ShellInfo {
   isDefault?: boolean
 }
 
-// ===== 光标配置类型 =====
-
 export interface CursorConfig {
   style: 'block' | 'underline' | 'beam'
   blink: boolean
@@ -115,16 +95,12 @@ export interface CursorConfig {
   thickness: number
 }
 
-// ===== 行为配置类型 =====
-
 export interface TerminalBehaviorConfig {
   closeOnExit: boolean
   confirmOnExit: boolean
   scrollOnOutput: boolean
   copyOnSelect: boolean
 }
-
-// ===== 完整终端配置类型 =====
 
 export interface TerminalConfig extends BaseConfig {
   fontFamily: string
@@ -136,7 +112,7 @@ export interface TerminalConfig extends BaseConfig {
   cursor: CursorConfig
   behavior: TerminalBehaviorConfig
 
-  // 高级配置
+  // Advanced terminal configuration options
   allowTransparency?: boolean
   allowProposedApi?: boolean
   altClickMovesCursor?: boolean
@@ -165,22 +141,16 @@ export interface TerminalConfig extends BaseConfig {
   wordSeparator?: string
 }
 
-// ===== 配置验证类型 =====
-
 export interface TerminalConfigValidationResult {
   valid: boolean
   errors?: string[]
   warnings?: string[]
 }
 
-// ===== 重试选项类型 =====
-
 export interface TerminalRetryOptions {
   retries?: number
   retryDelay?: number
 }
-
-// ===== 事件常量类型 =====
 
 export interface TerminalEvents {
   OUTPUT: 'terminal_output'

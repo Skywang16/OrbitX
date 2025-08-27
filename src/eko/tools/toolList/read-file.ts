@@ -20,25 +20,25 @@ export class ReadFileTool extends ModifiableTool {
   constructor() {
     super(
       'read_file',
-      `读取文件内容并显示。如果文件较大，内容会被截断。工具响应会明确指示是否发生了截断，并提供如何使用'offset'和'limit'参数读取更多文件内容的详细信息。支持文本文件的特定行范围读取。必须使用绝对路径。`,
+      `Read and display file contents. If the file is large, content will be truncated. Tool responses will clearly indicate if truncation occurred and provide detailed information on how to use 'offset' and 'limit' parameters to read more file content. Supports reading specific line ranges from text files. Must use absolute paths.`,
       {
         type: 'object',
         properties: {
           path: {
             type: 'string',
             description:
-              '文件的绝对路径。必须是完整路径，例如："/Users/user/project/src/main.ts"、"/home/user/config.json"',
+              'Absolute path to the file. Must be a complete path, for example: "/Users/user/project/src/main.ts", "/home/user/config.json"',
           },
           offset: {
             type: 'number',
             description:
-              '可选：0-based行号，从哪一行开始读取。用于分页浏览大文件。需要与limit一起使用。示例：0、50、100',
+              'Optional: 0-based line number, from which line to start reading. Used for paginated browsing of large files. Should be used together with limit. Examples: 0, 50, 100',
             minimum: 0,
           },
           limit: {
             type: 'number',
             description:
-              '可选：最大读取行数。与offset一起使用可分页浏览大文件。如果省略，读取整个文件（最多2000行）。示例：50、100',
+              'Optional: Maximum number of lines to read. Used together with offset for paginated browsing of large files. If omitted, reads the entire file (up to 2000 lines). Examples: 50, 100',
             minimum: 1,
           },
         },
@@ -52,10 +52,10 @@ export class ReadFileTool extends ModifiableTool {
 
     // 验证参数
     if (offset !== undefined && offset < 0) {
-      throw new Error('offset必须大于等于0')
+      throw new Error('offset must be greater than or equal to 0')
     }
     if (limit !== undefined && limit <= 0) {
-      throw new Error('limit必须大于0')
+      throw new Error('limit must be greater than 0')
     }
 
     try {
@@ -125,7 +125,7 @@ export class ReadFileTool extends ModifiableTool {
       if (error instanceof FileNotFoundError || error instanceof ValidationError || error instanceof ToolError) {
         throw error
       }
-      throw new ToolError(`读取文件失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`Failed to read file: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 

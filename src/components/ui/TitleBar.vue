@@ -21,10 +21,22 @@
   const startDrag = async () => {
     await getCurrentWindow().startDragging()
   }
+
+  // 双击切换窗口最大化状态
+  const handleDoubleClick = async () => {
+    const window = getCurrentWindow()
+    const isMaximized = await window.isMaximized()
+
+    if (isMaximized) {
+      await window.unmaximize()
+    } else {
+      await window.maximize()
+    }
+  }
 </script>
 
 <template>
-  <div class="title-bar" data-tauri-drag-region @mousedown="startDrag">
+  <div class="title-bar" data-tauri-drag-region @mousedown="startDrag" @dblclick="handleDoubleClick">
     <!-- 左侧按钮区域预留空间 -->
     <div class="left-buttons-space"></div>
 
@@ -52,6 +64,7 @@
     height: var(--titlebar-height);
     background-color: var(--bg-200);
     cursor: default;
+    border-bottom: 1px solid var(--border-200);
   }
 
   .left-buttons-space {

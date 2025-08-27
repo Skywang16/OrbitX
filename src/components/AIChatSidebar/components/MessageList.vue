@@ -1,9 +1,13 @@
 <script setup lang="ts">
-  import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+  import { computed, nextTick, ref, watch, onMounted } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import type { Message } from '@/types'
   import UserMessage from './UserMessage.vue'
   import AIMessage from './AIMessage.vue'
-  import lottie, { type AnimationItem } from 'lottie-web'
+  import { useAISettingsStore } from '@/components/settings/components/AI/store'
+
+  const { t } = useI18n()
+  const aiSettingsStore = useAISettingsStore()
 
   interface Props {
     messages: Message[]
@@ -13,10 +17,6 @@
 
   // 消息列表容器引用
   const messageListRef = ref<HTMLElement | null>(null)
-  // Lottie动画容器引用
-  const lottieContainer = ref<HTMLElement | null>(null)
-  // Lottie动画实例引用
-  const lottieAnimation = ref<AnimationItem | null>(null)
 
   // 消息列表
   const msgList = computed(() => {
@@ -34,87 +34,46 @@
     }
   }
 
-  // 销毁 Lottie 动画
-  const destroyLottieAnimation = () => {
-    if (lottieAnimation.value) {
-      try {
-        lottieAnimation.value.destroy()
-      } catch (error) {
-        console.warn('Lottie 动画销毁失败:', error)
-      } finally {
-        lottieAnimation.value = null
-      }
-    }
-  }
-
-  // 初始化 Lottie 动画
-  const initLottieAnimation = async () => {
-    // 确保 DOM 已更新
-    await nextTick()
-
-    // 检查容器是否可用
-    if (!lottieContainer.value) {
-      return
-    }
-
-    // 如果已有动画实例，先销毁
-    destroyLottieAnimation()
-
-    // 创建新的动画实例
-    try {
-      lottieAnimation.value = lottie.loadAnimation({
-        container: lottieContainer.value,
-        renderer: 'svg',
-        loop: true,
-        autoplay: true,
-        path: '/Circle.json',
-      })
-    } catch (error) {
-      console.warn('Lottie 动画初始化失败:', error)
-    }
-  }
-
-  // 监听消息列表变化，处理滚动和 Lottie 动画
+  // 监听消息列表变化，处理滚动
   watch(
     () => msgList.value.length,
-    async newLength => {
+    () => {
       // 自动滚动到底部
       scrollToBottom()
-
-      // 处理 Lottie 动画
-      if (newLength === 0) {
-        // 消息列表为空时，初始化动画
-        await initLottieAnimation()
-      } else {
-        // 消息列表不为空时，销毁动画
-        destroyLottieAnimation()
-      }
     },
     { immediate: true }
   )
 
-  // 组件挂载时的初始化
+  // 初始化AI设置
   onMounted(async () => {
-    if (msgList.value.length === 0) {
-      await initLottieAnimation()
+    if (!aiSettingsStore.isInitialized) {
+      await aiSettingsStore.loadSettings()
     }
   })
 
-  // 组件卸载时清理动画
-  onUnmounted(() => {
-    destroyLottieAnimation()
-  })
 </script>
 
 <template>
   <div ref="messageListRef" class="message-list">
     <div v-if="msgList.length === 0" class="empty-state">
-      <!-- Lottie动画容器 -->
-      <div class="empty-icon">
-        <div ref="lottieContainer" class="lottie-animation"></div>
+      <!-- 没有配置模型时的提醒 -->
+      <div v-if="!aiSettingsStore.hasModels && aiSettingsStore.isInitialized" class="no-model-state">
+        <div class="empty-text">{{ t('message_list.no_model_configured') }}</div>
+        <div class="empty-hint">{{ t('message_list.configure_model_hint') }}</div>
       </div>
-      <div class="empty-text">开始对话吧</div>
-      <div class="empty-hint">发送消息开始与Orbit对话</div>
+      
+      <!-- 正常的空状态 -->
+      <div v-else class="normal-empty-state">
+        <div class="empty-icon">
+          <svg class="empty-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path
+              d="M21 15a2 2 0 0 1-2 2H10l-3 5c-.3.4-.8.1-.8-.4v-4.6H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z"
+            />
+          </svg>
+        </div>
+        <div class="empty-text">{{ t('message_list.start_conversation') }}</div>
+        <div class="empty-hint">{{ t('message_list.send_message_hint') }}</div>
+      </div>
     </div>
 
     <div v-else class="message-container">
@@ -149,26 +108,23 @@
     gap: var(--spacing-lg);
   }
 
+  .no-model-state,
+  .normal-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-lg);
+  }
+
   .empty-icon {
     margin-bottom: var(--spacing-md);
   }
 
-  .lottie-animation {
-    width: 120px;
-    height: 120px;
-    filter: drop-shadow(0 0 12px rgba(var(--color-primary-rgb, 59, 130, 246), 0.4));
-  }
-
-  /* Lottie动画中的SVG元素自动继承主题色彩 */
-  .lottie-animation svg {
+  .empty-icon-svg {
+    width: 64px;
+    height: 64px;
     color: var(--color-primary);
-  }
-
-  .lottie-animation svg path,
-  .lottie-animation svg circle,
-  .lottie-animation svg ellipse {
-    stroke: var(--color-primary) !important;
-    fill: var(--color-primary) !important;
+    opacity: 0.6;
   }
 
   .empty-text {
@@ -187,4 +143,5 @@
     flex-direction: column;
     gap: var(--spacing-md);
   }
+
 </style>

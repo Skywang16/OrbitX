@@ -8,6 +8,7 @@ startup_behavior = "restore"
 [appearance]
 ui_scale = 100
 animations_enabled = true
+opacity = 1.0
 
 [appearance.theme_config]
 auto_switch_time = "18:00"
@@ -42,88 +43,92 @@ thickness = 0.15000000596046448
 close_on_exit = true
 confirm_close = false
 
-[shortcuts]
-custom = []
-
-[[shortcuts.global]]
+[[shortcuts]]
 key = "c"
 modifiers = ["cmd"]
 action = "copy_to_clipboard"
 
-[[shortcuts.global]]
+[[shortcuts]]
 key = "v"
 modifiers = ["cmd"]
 action = "paste_from_clipboard"
 
-[[shortcuts.global]]
+[[shortcuts]]
 key = "f"
 modifiers = ["cmd"]
 action = "terminal_search"
 
-[[shortcuts.global]]
+[[shortcuts]]
 key = "s"
 modifiers = ["cmd"]
 action = "open_settings"
 
-[[shortcuts.global]]
-
-
-[[shortcuts.terminal]]
+[[shortcuts]]
 key = "t"
 modifiers = ["cmd"]
 action = "new_tab"
 
-[[shortcuts.terminal]]
+[[shortcuts]]
 key = "w"
 modifiers = ["cmd"]
 action = "close_tab"
 
-[[shortcuts.terminal]]
+[[shortcuts]]
 key = "1"
 modifiers = ["cmd"]
 action = "switch_to_tab_1"
 
-[[shortcuts.terminal]]
+[[shortcuts]]
 key = "2"
 modifiers = ["cmd"]
 action = "switch_to_tab_2"
 
-[[shortcuts.terminal]]
+[[shortcuts]]
 key = "3"
 modifiers = ["cmd"]
 action = "switch_to_tab_3"
 
-[[shortcuts.terminal]]
+[[shortcuts]]
 key = "4"
 modifiers = ["cmd"]
 action = "switch_to_tab_4"
 
-[[shortcuts.terminal]]
+[[shortcuts]]
 key = "5"
 modifiers = ["cmd"]
 action = "switch_to_tab_5"
 
-[[shortcuts.terminal]]
+[[shortcuts]]
 key = "9"
 modifiers = ["cmd"]
 action = "switch_to_last_tab"
 
-[[shortcuts.terminal]]
+[[shortcuts]]
 key = "right"
 modifiers = ["cmd"]
 action = "accept_completion"
 
-[[shortcuts.terminal]]
+[[shortcuts]]
 key = "k"
 modifiers = ["cmd"]
 action = "clear_terminal"
 
-[[shortcuts.terminal]]
+[[shortcuts]]
 key = "="
 modifiers = ["cmd"]
 action = "increase_font_size"
 
-[[shortcuts.terminal]]
+[[shortcuts]]
 key = "-"
 modifiers = ["cmd"]
 action = "decrease_font_size"
+
+[[shortcuts]]
+key = "i"
+modifiers = ["cmd"]
+action = "toggle_ai_sidebar"
+
+[[shortcuts]]
+key = "p"
+modifiers = ["cmd"]
+action = "toggle_window_pin"

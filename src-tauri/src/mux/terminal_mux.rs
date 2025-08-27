@@ -298,10 +298,11 @@ impl TerminalMux {
     pub fn remove_pane(&self, pane_id: PaneId) -> AppResult<()> {
         let pane = {
             debug!("获取面板写锁: pane_id={:?}", pane_id);
-            let mut panes = self.panes.write().map_err(|_| {
-                error!("无法获取面板写锁: pane_id={:?}", pane_id);
-                anyhow!("无法获取面板写锁")
-            })?;
+            let mut panes = crate::mux::error::ErrorHandler::handle_poison_error(
+                "获取面板写锁",
+                self.panes.write(),
+            )
+            .map_err(|e| anyhow!("无法获取面板写锁: {}", e))?;
 
             debug!("从映射中移除面板: pane_id={:?}", pane_id);
             let pane = panes.remove(&pane_id).ok_or_else(|| {

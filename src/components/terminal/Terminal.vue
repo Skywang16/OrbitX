@@ -60,7 +60,7 @@
   import { useTerminalStore } from '@/stores/Terminal'
   import { XMessage } from '@/ui/components'
   import { convertThemeToXTerm, createDefaultXTermTheme } from '@/utils/themeConverter'
-  import { invoke } from '@tauri-apps/api/core'
+
   import type { ITheme } from '@xterm/xterm'
   import TerminalCompletion from './TerminalCompletion.vue'
   import SearchBox from '@/components/SearchBox.vue'
@@ -487,7 +487,7 @@
 
   const handleFileDrop = async (filePath: string) => {
     try {
-      const directory = await invoke<string>('handle_file_open', { path: filePath })
+      const directory = await windowApi.handleFileOpen(filePath)
       handleGoToPath(directory)
     } catch {
       showToast('无法处理拖拽的文件', 'error')

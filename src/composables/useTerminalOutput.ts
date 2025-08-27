@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import type { Terminal } from '@xterm/xterm'
+import { useI18n } from 'vue-i18n'
 
 export const useTerminalOutput = () => {
   const OUTPUT_FLUSH_INTERVAL = 0
@@ -65,7 +66,9 @@ export const useTerminalOutput = () => {
   const handleExit = (terminal: Terminal | null, exitCode: number | null) => {
     try {
       if (terminal) {
-        const message = `\r\n[进程已退出，退出码: ${exitCode ?? '未知'}]\r\n`
+        const { t } = useI18n()
+        const exitCodeText = exitCode ?? t('process.unknown_exit_code')
+        const message = `\r\n[${t('process.exited', { code: exitCodeText })}]\r\n`
         terminal.write(message)
       }
     } catch {

@@ -11,34 +11,25 @@ use std::path::{Path, PathBuf};
 use tokio::fs;
 use tracing::{debug, warn};
 
-/// SQL脚本加载器
 pub struct SqlScriptLoader {
-    /// SQL脚本文件目录
     sql_dir: PathBuf,
 }
 
-/// SQL脚本文件信息
 #[derive(Debug, Clone)]
 pub struct SqlScript {
-    /// 文件路径
     pub path: PathBuf,
-    /// 文件名（不含扩展名）
     pub name: String,
-    /// 执行顺序（从文件名解析）
     pub order: u32,
-    /// SQL语句列表
     pub statements: Vec<String>,
 }
 
 impl SqlScriptLoader {
-    /// 创建新的SQL脚本加载器
     pub fn new<P: AsRef<Path>>(sql_dir: P) -> Self {
         Self {
             sql_dir: sql_dir.as_ref().to_path_buf(),
         }
     }
 
-    /// 加载所有SQL脚本文件
     pub async fn load_all_scripts(&self) -> AppResult<Vec<SqlScript>> {
         debug!("开始加载SQL脚本文件，目录: {}", self.sql_dir.display());
 
@@ -78,7 +69,6 @@ impl SqlScriptLoader {
         Ok(scripts)
     }
 
-    /// 加载单个SQL脚本文件
     pub async fn load_script_file(&self, path: &Path) -> AppResult<SqlScript> {
         let file_name = path
             .file_stem()
@@ -104,7 +94,6 @@ impl SqlScriptLoader {
         })
     }
 
-    /// 从文件名解析执行顺序
     fn parse_order_from_filename(&self, filename: &str) -> AppResult<u32> {
         // 假设文件名格式为 "01_tables" 或 "01-tables"
         let raw = filename
@@ -123,7 +112,6 @@ impl SqlScriptLoader {
             .with_context(|| format!("执行顺序解析失败: {}", raw))
     }
 
-    /// 解析SQL语句
     fn parse_sql_statements(&self, content: &str) -> AppResult<Vec<String>> {
         let mut statements = Vec::new();
         let mut current_statement = String::new();
@@ -213,13 +201,11 @@ impl SqlScriptLoader {
         Ok(statements)
     }
 
-    /// 加载指定顺序的SQL脚本
     pub async fn load_script_by_order(&self, order: u32) -> AppResult<Option<SqlScript>> {
         let scripts = self.load_all_scripts().await?;
         Ok(scripts.into_iter().find(|s| s.order == order))
     }
 
-    /// 获取最大执行顺序号
     pub async fn get_max_order(&self) -> AppResult<u32> {
         let scripts = self.load_all_scripts().await?;
         Ok(scripts.iter().map(|s| s.order).max().unwrap_or(0))

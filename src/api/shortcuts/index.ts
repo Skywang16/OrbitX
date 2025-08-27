@@ -82,25 +82,25 @@ export class ShortcutsApi {
     }
   }
 
-  async addShortcut(category: ShortcutCategory, shortcut: ShortcutBinding): Promise<void> {
+  async addShortcut(shortcut: ShortcutBinding): Promise<void> {
     try {
-      await invoke('add_shortcut', { category, binding: shortcut })
+      await invoke('add_shortcut', { binding: shortcut })
     } catch (error) {
       throw new Error(`添加快捷键失败: ${error}`)
     }
   }
 
-  async removeShortcut(category: ShortcutCategory, index: number): Promise<ShortcutBinding> {
+  async removeShortcut(index: number): Promise<ShortcutBinding> {
     try {
-      return await invoke<ShortcutBinding>('remove_shortcut', { category, index })
+      return await invoke<ShortcutBinding>('remove_shortcut', { index })
     } catch (error) {
       throw new Error(`删除快捷键失败: ${error}`)
     }
   }
 
-  async updateShortcut(category: ShortcutCategory, index: number, shortcut: ShortcutBinding): Promise<void> {
+  async updateShortcut(index: number, shortcut: ShortcutBinding): Promise<void> {
     try {
-      await invoke('update_shortcut', { category, index, binding: shortcut })
+      await invoke('update_shortcut', { index, binding: shortcut })
     } catch (error) {
       throw new Error(`更新快捷键失败: ${error}`)
     }

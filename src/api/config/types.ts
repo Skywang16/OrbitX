@@ -21,9 +21,55 @@ export interface AIConfig {
 }
 
 export interface AppConfig {
-  theme: string
-  language: string
-  ai: AIConfig
+  version: string
+  app: {
+    language: string
+    confirm_on_exit: boolean
+    startup_behavior: string
+  }
+  appearance: {
+    ui_scale: number
+    animations_enabled: boolean
+    opacity: number
+    theme_config: {
+      auto_switch_time: string
+      terminal_theme: string
+      light_theme: string
+      dark_theme: string
+      follow_system: boolean
+    }
+    font: {
+      family: string
+      size: number
+      weight: string
+      style: string
+      lineHeight: number
+      letterSpacing: number
+    }
+  }
+  terminal: {
+    scrollback: number
+    shell: {
+      default: string
+      args: string[]
+      working_directory: string
+    }
+    cursor: {
+      style: string
+      blink: boolean
+      color: string
+      thickness: number
+    }
+    behavior: {
+      close_on_exit: boolean
+      confirm_close: boolean
+    }
+  }
+  shortcuts: {
+    global: any[]
+    terminal: any[]
+    custom: any[]
+  }
 }
 
 export interface ConfigFileInfo {

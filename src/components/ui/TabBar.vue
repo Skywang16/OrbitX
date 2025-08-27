@@ -1,7 +1,10 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType, type TabItem } from '@/types'
+
+  const { t } = useI18n()
 
   interface Props {
     tabs: TabItem[]
@@ -63,7 +66,7 @@
 
   // 简化的标签宽度配置
   const MIN_TAB_WIDTH = 60
-  const MAX_TAB_WIDTH = 200
+  const MAX_TAB_WIDTH = 150
 
   // 简化的标签宽度计算
   const tabWidth = computed(() => {
@@ -72,11 +75,6 @@
 
     const containerWidth = tabBarWrapperRef.value?.clientWidth || 400
 
-    // 计算实际占用空间：
-    // - padding-left: 6px (--spacing-sm)
-    // - gap: 4px (--spacing-xs)
-    // - add按钮: 28px + margin(4px或6px) = 32px-34px
-    // - 每个tab的右边距: 6px * tabCount
     const paddingAndGaps = 6 + 4 + 34 + 6 * tabCount
     const availableWidth = containerWidth - paddingAndGaps
     const widthPerTab = availableWidth / tabCount
@@ -89,16 +87,8 @@
 
   // 判断标签页是否可以显示关闭按钮
   const canShowCloseButton = (tab: TabItem): boolean => {
-    if (!tab.closable) return false
-
-    // 如果是终端标签页，需要确保不是最后一个终端标签页
-    if (tab.type === TabType.TERMINAL) {
-      const terminalTabs = props.tabs.filter(t => t.type === TabType.TERMINAL)
-      return terminalTabs.length > 1
-    }
-
-    // 其他类型的标签页可以直接关闭
-    return true
+    // 只要标签页是可关闭的，就显示关闭按钮
+    return tab.closable
   }
 
   // 处理标签点击
@@ -112,6 +102,14 @@
   const handleCloseClick = (event: MouseEvent, id: string) => {
     event.stopPropagation()
     emit('close', id)
+  }
+
+  // 获取 tab 标题的显示文本
+  const getTabTitle = (tab: TabItem): string => {
+    if (tab.type === TabType.SETTINGS && tab.title === 'settings') {
+      return t('settings.title')
+    }
+    return tab.title || 'Tab'
   }
 
   // 左键点击：直接新建默认终端
@@ -174,14 +172,14 @@
             </div>
           </template>
           <template v-else>
-            <span class="tab-title">{{ tab.title }}</span>
+            <span class="tab-title">{{ getTabTitle(tab) }}</span>
           </template>
         </div>
         <button
           v-if="canShowCloseButton(tab)"
           class="close-btn"
           @click="handleCloseClick($event, tab.id)"
-          title="关闭标签"
+          :title="t('ui.close_tab')"
         >
           <svg
             width="12"
@@ -211,7 +209,7 @@
         <template #trigger>
           <button
             class="add-tab-btn inline"
-            title="新建终端（左键） / 选择Shell（右键）"
+            :title="t('ui.new_terminal_tip')"
             @click="handleAddClick"
             @contextmenu="handleAddContextMenu"
           >
@@ -245,7 +243,7 @@
       <template #trigger>
         <button
           class="add-tab-btn fixed"
-          title="新建终端（左键） / 选择Shell（右键）"
+          :title="t('ui.new_terminal_tip')"
           @click="handleAddClick"
           @contextmenu="handleAddContextMenu"
         >
@@ -276,6 +274,8 @@
     height: 100%;
     padding-left: var(--spacing-sm);
     gap: var(--spacing-xs);
+    position: relative;
+    background: var(--bg-200);
   }
 
   .tab-bar {
@@ -305,26 +305,27 @@
     height: var(--titlebar-element-height);
     min-width: 60px;
     max-width: 200px;
-    margin: 0 6px 0 0;
-    padding: 0 8px;
+    margin: 0 2px 0 0;
+    padding: 0 12px;
     border-radius: var(--border-radius-md);
     color: var(--text-400);
     cursor: pointer;
     transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
     border: 1px solid transparent;
-    will-change: background-color, border-color, color;
+    background: transparent;
+    will-change: background-color, color;
   }
 
   .tab:hover {
-    background-color: var(--color-hover);
+    background-color: var(--bg-300);
     color: var(--text-300);
   }
 
   .tab.active {
-    color: var(--text-200);
-    border-color: var(--border-300);
-    box-shadow: none; /* 仅移除阴影，其他保持不变 */
+    color: var(--text-100);
+    position: relative;
+    border: 1px solid var(--color-primary);
   }
 
   .tab.active::before {
@@ -340,22 +341,16 @@
     box-shadow: 0 -1px 4px var(--color-primary-alpha);
   }
 
-  /* 终端Tab样式 */
   .tab:not(.agent-tab) {
-    background: var(--color-primary-alpha);
-    border: 1px solid var(--color-primary-alpha);
+    background: var(--bg-400);
   }
 
   .tab:not(.agent-tab):hover {
-    background: var(--color-primary-alpha);
-    border-color: var(--color-primary-alpha);
-    opacity: 0.8;
+    background: var(--bg-500);
   }
 
   .tab:not(.agent-tab).active {
     background: var(--color-primary-alpha);
-    border-color: var(--color-primary);
-    box-shadow: none; /* 移除阴影 */
   }
 
   .tab:not(.agent-tab).active::before {
@@ -363,23 +358,17 @@
     box-shadow: 0 -1px 4px var(--color-primary-alpha);
   }
 
-  /* Agent专属终端Tab样式 */
   .tab.agent-tab {
-    background: var(--color-info);
-    opacity: 0.1;
-    border: 1px solid var(--color-info);
+    background: rgba(117, 190, 255, 0.1);
     position: relative;
   }
 
   .tab.agent-tab:hover {
-    background: var(--color-info);
-    opacity: 0.15;
-    border-color: var(--color-info);
+    background: rgba(117, 190, 255, 0.15);
   }
 
   .tab.agent-tab.active {
-    background: var(--color-info);
-    opacity: 0.08;
+    background: rgba(117, 190, 255, 0.15);
     border-color: var(--color-info);
   }
 
@@ -388,7 +377,6 @@
     box-shadow: 0 -1px 4px var(--color-primary-alpha);
   }
 
-  /* Agent终端Tab的特殊标识 */
   .tab.agent-tab::after {
     content: '';
     position: absolute;
@@ -439,14 +427,14 @@
   }
 
   .shell-badge {
-    font-size: var(--font-size-xs);
-    font-weight: 700;
-    color: var(--text-100);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-200);
     text-transform: uppercase;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.5px;
     flex-shrink: 0;
     line-height: 1.2;
-    padding-right: 8px;
+    padding-right: 6px;
     position: relative;
   }
 
@@ -456,21 +444,21 @@
     right: 0;
     top: 50%;
     transform: translateY(-50%);
-    height: 12px;
+    height: 10px;
     width: 1px;
-    background-color: var(--text-400);
+    background-color: var(--text-500);
   }
 
   .path-info {
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    color: var(--text-300);
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-400);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
     flex: 1;
-    padding-left: 8px;
+    padding-left: 6px;
   }
 
   .close-btn {
@@ -509,7 +497,7 @@
     border: none;
     background: none;
     color: var(--text-400);
-    border-radius: var(--border-radius-md);
+    border-radius: var(--border-radius-sm);
     cursor: pointer;
     transition: all 0.2s ease;
     opacity: 0.8;

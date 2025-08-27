@@ -13,18 +13,20 @@
     "windows": [
       {
         "title": "",
-        "width": 1024,
-        "height": 768,
-        "minWidth": 640,
-        "minHeight": 480,
+        "width": 800,
+        "height": 600,
+        "minWidth": 320,
+        "minHeight": 240,
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
         "titleBarStyle": "Overlay",
         "dragDropEnabled": true,
-        "visible": false
+        "visible": false,
+        "transparent": true
       }
     ],
+    "macOSPrivateApi": true,
     "security": {
       "csp": null
     },

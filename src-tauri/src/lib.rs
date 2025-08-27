@@ -23,40 +23,22 @@
 //! - 终端输入输出处理
 //! - 窗口管理功能
 
-// 模块声明
 pub mod ai;
-pub mod completion; // 终端补全功能模块
-pub mod config; // 统一配置系统模块
-                // pub mod lock_optimization_demo; // 锁优化演示模块 - 暂时注释掉
-pub mod mux; // 终端多路复用器核心模块
-pub mod shell; // Shell Integration功能模块
-pub mod storage; // 统一存储系统模块
-pub mod utils; // 工具和错误处理模块
-pub mod window; // 窗口管理功能模块
+pub mod completion;
+pub mod config;
+// pub mod lock_optimization_demo;
+pub mod mux;
+pub mod shell;
+pub mod storage;
+pub mod utils;
+pub mod window;
 
 use ai::commands::{
-    // AI模型管理命令
-    add_ai_model,
-    // AI会话管理命令
-    build_prompt_with_context,
-    create_conversation,
-    delete_conversation,
-    get_ai_models,
-    get_compressed_context,
-    get_conversation,
-    get_conversations,
-    get_user_prefix_prompt,
-    remove_ai_model,
-    save_message,
-    set_user_prefix_prompt,
-
-    test_ai_connection_with_config,
-    truncate_conversation,
-    update_ai_model,
-    update_conversation_title,
-    update_message_content,
-    update_message_status,
-    update_message_steps,
+    add_ai_model, build_prompt_with_context, create_conversation, delete_conversation,
+    get_ai_models, get_compressed_context, get_conversation, get_conversations,
+    get_user_prefix_prompt, remove_ai_model, save_message, set_user_prefix_prompt,
+    test_ai_connection_with_config, truncate_conversation, update_ai_model,
+    update_conversation_title, update_message_content, update_message_status, update_message_steps,
     AIManagerState,
 };
 use ai::tool::ast::commands::analyze_code;
@@ -76,10 +58,12 @@ use config::commands::{
     get_config,
     get_config_file_info,
     get_config_file_path,
+    get_config_folder_path,
     get_theme_index,
     get_theme_list,
     load_theme,
     open_config_file,
+    open_config_folder,
     refresh_theme_index,
     reset_config_to_defaults,
     save_config,
@@ -136,7 +120,8 @@ use shell::commands::{
 };
 use window::commands::{
     clear_directory_cache, get_current_directory, get_home_directory, get_platform_info,
-    join_paths, manage_window_state, normalize_path, path_exists, WindowState,
+    get_window_opacity, join_paths, manage_window_state, normalize_path, path_exists,
+    set_window_opacity, WindowState,
 };
 
 use std::path::PathBuf;
@@ -266,6 +251,20 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin({
+            #[cfg(target_os = "macos")]
+            {
+                tauri_plugin_autostart::init(
+                    tauri_plugin_autostart::MacosLauncher::AppleScript,
+                    None,
+                )
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                // Windows 和 Linux 使用默认配置
+                tauri_plugin_autostart::Builder::new().build()
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             // 窗口管理命令
             manage_window_state,
@@ -276,6 +275,9 @@ pub fn run() {
             join_paths,
             path_exists,
             get_platform_info,
+            // 窗口透明度命令
+            set_window_opacity,
+            get_window_opacity,
             // 文件拖拽命令
             handle_file_open,
             // 终端管理命令
@@ -312,6 +314,8 @@ pub fn run() {
             get_config_file_info,
             open_config_file,
             subscribe_config_events,
+            get_config_folder_path,
+            open_config_folder,
             // 主题系统命令
             get_theme_list,
             get_theme_index,
@@ -583,6 +587,30 @@ pub fn run() {
                     }
                 }
 
+                // 确保主窗口可见并处于正确位置
+                if let Some(window) = app.get_webview_window("main") {
+                    let window_clone = window.clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+                        // 检查窗口位置是否异常
+                        if let Ok(position) = window_clone.outer_position() {
+                            let x = position.x;
+                            let y = position.y;
+
+                            // 如果位置异常，重置到安全位置
+                            if x < -500 || y < -500 || x > 5000 || y > 5000 {
+                                let _ = window_clone.set_position(tauri::Position::Logical(
+                                    tauri::LogicalPosition { x: 100.0, y: 100.0 },
+                                ));
+                            }
+                        }
+
+                        let _ = window_clone.show();
+                        let _ = window_clone.set_focus();
+                    });
+                }
+
                 Ok(())
             };
 
@@ -599,6 +627,68 @@ pub fn run() {
             eprintln!("启动 Tauri 应用程序时发生错误: {}", e);
             std::process::exit(1);
         });
+}
+
+/// 获取回退的主题文件列表
+fn get_fallback_theme_list() -> Vec<String> {
+    vec![
+        "dark.toml".to_string(),
+        "light.toml".to_string(),
+        "dracula.toml".to_string(),
+        "gruvbox-dark.toml".to_string(),
+        "index.toml".to_string(),
+        "monokai.toml".to_string(),
+        "nord.toml".to_string(),
+        "one-dark.toml".to_string(),
+        "solarized-dark.toml".to_string(),
+        "solarized-light.toml".to_string(),
+        "tokyo-night.toml".to_string(),
+    ]
+}
+
+/// 动态获取资源目录中的所有主题文件
+async fn get_theme_files_from_resources<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    use std::path::PathBuf;
+    use tauri::path::BaseDirectory;
+
+    // 开发模式直接从项目根目录读取，生产模式从资源读取
+    let themes_resource_path = if cfg!(debug_assertions) {
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        current_dir.join("..").join("config").join("themes")
+    } else {
+        app_handle
+            .path()
+            .resolve("themes", BaseDirectory::Resource)
+            .map_err(|_| "无法解析资源路径")?
+    };
+    match std::fs::read_dir(&themes_resource_path) {
+        Ok(entries) => {
+            let mut theme_files = Vec::new();
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.is_file() {
+                        if let Some(file_name) = path.file_name() {
+                            if let Some(file_name_str) = file_name.to_str() {
+                                if file_name_str.ends_with(".toml") {
+                                    theme_files.push(file_name_str.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if theme_files.is_empty() {
+                Ok(get_fallback_theme_list())
+            } else {
+                Ok(theme_files)
+            }
+        }
+        Err(_) => Ok(get_fallback_theme_list()),
+    }
 }
 
 /// 从资源目录复制主题文件到用户配置目录
@@ -618,19 +708,8 @@ async fn copy_themes_from_resources<R: tauri::Runtime>(
         fs::create_dir_all(themes_dir)?;
     }
 
-    // 定义需要复制的主题文件列表
-    let theme_files = [
-        "dark.toml",
-        "light.toml",
-        "dracula.toml",
-        "gruvbox-dark.toml",
-        "monokai.toml",
-        "nord.toml",
-        "one-dark.toml",
-        "solarized-dark.toml",
-        "solarized-light.toml",
-        "tokyo-night.toml",
-    ];
+    // 动态获取所有主题文件，避免硬编码列表
+    let theme_files = get_theme_files_from_resources(app_handle).await?;
 
     let mut _copied_count = 0;
 
@@ -642,31 +721,31 @@ async fn copy_themes_from_resources<R: tauri::Runtime>(
             continue;
         }
 
-        // 尝试从资源目录读取文件
-        match app_handle
-            .path()
-            .resolve(theme_file, BaseDirectory::Resource)
-        {
-            Ok(resource_path) => match fs::read_to_string(&resource_path) {
-                Ok(content) => match fs::write(&dest_path, content) {
-                    Ok(_) => {
-                        _copied_count += 1;
-                    }
-                    Err(_) => {
-                        // 静默处理写入失败，不影响应用启动
-                    }
-                },
-                Err(_) => {
-                    // 静默处理读取失败，不影响应用启动
+        // 开发模式直接从项目根目录读取，生产模式从资源读取
+        let source_path = if cfg!(debug_assertions) {
+            let current_dir =
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let dev_file_path = current_dir
+                .join("..")
+                .join("config")
+                .join("themes")
+                .join(theme_file);
+            Some(dev_file_path)
+        } else {
+            app_handle
+                .path()
+                .resolve(theme_file, BaseDirectory::Resource)
+                .ok()
+        };
+
+        if let Some(resource_path) = source_path {
+            if let Ok(content) = fs::read_to_string(&resource_path) {
+                if fs::write(&dest_path, content).is_ok() {
+                    _copied_count += 1;
                 }
-            },
-            Err(_) => {
-                // 静默处理路径解析失败，不影响应用启动
             }
         }
     }
-
-    // 仅内部计数，不输出日志以减少噪声
 
     Ok(())
 }

@@ -10,7 +10,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, info, warn};
 
-/// 面板唯一标识符
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaneId(pub u32);
@@ -43,7 +42,6 @@ impl std::fmt::Display for PaneId {
     }
 }
 
-/// PTY 终端尺寸
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PtySize {
@@ -79,7 +77,6 @@ impl Default for PtySize {
     }
 }
 
-/// 面板信息
 #[derive(Debug, Clone)]
 pub struct PaneInfo {
     pub pane_id: PaneId,
@@ -101,7 +98,6 @@ impl PaneInfo {
     }
 }
 
-/// 终端配置
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalConfig {
@@ -112,7 +108,6 @@ pub struct TerminalConfig {
 }
 
 impl TerminalConfig {
-    /// 创建带有指定shell的配置
     pub fn with_shell(shell_config: ShellConfig) -> Self {
         Self {
             shell_config,
@@ -132,7 +127,6 @@ impl Default for TerminalConfig {
     }
 }
 
-/// Shell 配置
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShellConfig {
@@ -155,7 +149,6 @@ impl Default for ShellConfig {
 }
 
 impl ShellConfig {
-    /// 获取安全的默认shell路径，避免循环依赖
     fn get_safe_default_shell() -> String {
         #[cfg(windows)]
         {
@@ -179,7 +172,6 @@ impl ShellConfig {
         }
     }
 
-    /// 使用默认shell创建配置（推荐使用此方法而非Default）
     pub fn with_default_shell() -> Self {
         Self {
             program: ShellManager::get_default_shell().path,
@@ -189,7 +181,6 @@ impl ShellConfig {
         }
     }
 
-    /// 使用指定shell创建配置
     pub fn with_shell(shell_info: &ShellInfo) -> Self {
         Self {
             program: shell_info.path.clone(),
@@ -199,7 +190,6 @@ impl ShellConfig {
         }
     }
 
-    /// 使用指定shell路径创建配置
     pub fn with_shell_path(path: String) -> Self {
         Self {
             program: path,
@@ -210,7 +200,6 @@ impl ShellConfig {
     }
 }
 
-/// Shell 信息
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShellInfo {
@@ -229,7 +218,6 @@ impl ShellInfo {
     }
 }
 
-/// Shell管理器统计信息
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShellManagerStats {
@@ -240,7 +228,6 @@ pub struct ShellManagerStats {
     pub cache_misses: u64,
 }
 
-/// Shell缓存条目
 #[derive(Debug, Clone)]
 struct ShellCacheEntry {
     shells: Vec<ShellInfo>,
@@ -268,10 +255,8 @@ impl ShellCacheEntry {
     }
 }
 
-/// 全局Shell缓存
 static SHELL_CACHE: OnceLock<Arc<Mutex<Option<ShellCacheEntry>>>> = OnceLock::new();
 
-/// Shell管理器
 #[derive(Debug)]
 pub struct ShellManager {
     stats: ShellManagerStats,
@@ -288,7 +273,6 @@ impl ShellManager {
         manager
     }
 
-    /// 更新统计信息
     fn update_stats(&mut self) {
         let cache = Self::get_cache();
         let cache_guard = cache.lock().unwrap();
@@ -315,12 +299,10 @@ impl ShellManager {
         &self.stats
     }
 
-    /// 获取缓存实例
     fn get_cache() -> &'static Arc<Mutex<Option<ShellCacheEntry>>> {
         SHELL_CACHE.get_or_init(|| Arc::new(Mutex::new(None)))
     }
 
-    /// 获取缓存的shell列表
     pub fn get_cached_shells() -> Vec<ShellInfo> {
         let cache = Self::get_cache();
         let mut cache_guard = cache.lock().unwrap();
@@ -351,7 +333,6 @@ impl ShellManager {
         shells
     }
 
-    /// 获取缓存的默认shell
     pub fn get_cached_default_shell() -> ShellInfo {
         let cache = Self::get_cache();
         let mut cache_guard = cache.lock().unwrap();
@@ -378,7 +359,6 @@ impl ShellManager {
             .unwrap_or_else(|| Self::get_default_shell_internal())
     }
 
-    /// 强制刷新缓存
     pub fn refresh_cache() {
         let cache = Self::get_cache();
         let mut cache_guard = cache.lock().unwrap();

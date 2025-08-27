@@ -5,7 +5,7 @@
         ref="input"
         v-model="query"
         type="text"
-        placeholder="搜索"
+        :placeholder="t('search.placeholder')"
         class="search-input"
         @keydown="handleKeydown"
         @input="search"
@@ -16,16 +16,23 @@
           class="search-btn toggle-btn"
           :class="{ active: caseSensitive }"
           @click="toggleCaseSensitive"
-          title="区分大小写"
+          :title="t('search.case_sensitive')"
         >
           Aa
         </button>
-        <button class="search-btn toggle-btn" :class="{ active: wholeWord }" @click="toggleWholeWord" title="全字匹配">
+        <button
+          class="search-btn toggle-btn"
+          :class="{ active: wholeWord }"
+          @click="toggleWholeWord"
+          :title="t('search.whole_word')"
+        >
           ab
         </button>
-        <button class="search-btn" :disabled="totalResults === 0" @click="findPrevious" title="上一个">↑</button>
-        <button class="search-btn" :disabled="totalResults === 0" @click="findNext" title="下一个">↓</button>
-        <button class="search-btn close-btn" @click="close" title="关闭">×</button>
+        <button class="search-btn" :disabled="totalResults === 0" @click="findPrevious" :title="t('search.previous')">
+          ↑
+        </button>
+        <button class="search-btn" :disabled="totalResults === 0" @click="findNext" :title="t('search.next')">↓</button>
+        <button class="search-btn close-btn" @click="close" :title="t('search.close')">×</button>
       </div>
     </div>
   </div>
@@ -33,6 +40,9 @@
 
 <script setup lang="ts">
   import { ref, nextTick, watch } from 'vue'
+  import { useI18n } from 'vue-i18n'
+
+  const { t } = useI18n()
 
   interface Props {
     visible: boolean

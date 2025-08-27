@@ -8,6 +8,7 @@ import { computed, readonly, ref } from 'vue'
 import { formatLocaleDateTime } from '@/utils/dateFormatter'
 import { configApi } from '@/api'
 import { type AppConfig, type ConfigFileInfo, ConfigApiError } from '@/api/config'
+import { useI18n } from 'vue-i18n'
 
 // ============================================================================
 // 工具函数
@@ -17,7 +18,7 @@ import { type AppConfig, type ConfigFileInfo, ConfigApiError } from '@/api/confi
  * 格式化文件大小
  */
 const formatFileSize = (size?: number): string => {
-  if (!size) return '未知'
+  if (!size) return useI18n().t('config.unknown_size')
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
@@ -27,11 +28,11 @@ const formatFileSize = (size?: number): string => {
  * 格式化时间戳
  */
 const formatTimestamp = (timestamp?: string): string => {
-  if (!timestamp) return '未知'
+  if (!timestamp) return useI18n().t('config.unknown_time')
   try {
     return formatLocaleDateTime(timestamp)
   } catch {
-    return '无效时间'
+    return useI18n().t('config.invalid_time')
   }
 }
 

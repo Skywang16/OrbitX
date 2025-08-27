@@ -24,23 +24,7 @@ export interface ShortcutBinding {
 /**
  * 快捷键配置
  */
-export interface ShortcutsConfig {
-  /** 全局快捷键 */
-  global: ShortcutBinding[]
-  /** 终端快捷键 */
-  terminal: ShortcutBinding[]
-  /** 自定义快捷键 */
-  custom: ShortcutBinding[]
-}
-
-/**
- * 快捷键类别
- */
-export enum ShortcutCategory {
-  Global = 'Global',
-  Terminal = 'Terminal',
-  Custom = 'Custom',
-}
+export type ShortcutsConfig = ShortcutBinding[]
 
 /**
  * 支持的平台类型

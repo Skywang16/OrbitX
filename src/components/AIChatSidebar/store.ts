@@ -1,9 +1,3 @@
-/**
- * AI聊天功能的状态管理 - 完全重构版本
- *
- * 使用新的会话上下文管理系统，不再向后兼容
- */
-
 import { aiApi } from '@/api'
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useSessionStore } from '@/stores/session'
@@ -17,9 +11,20 @@ import type { Conversation, Message } from '@/types'
 import { createToolExecution } from '@/types'
 import { debounce } from 'lodash-es'
 
-// 流式消息类型定义（基于Eko源码）
 interface StreamMessage {
-  type: 'tool_use' | 'tool_result' | 'workflow' | 'text' | 'thinking'
+  type:
+    | 'tool_use'
+    | 'tool_result'
+    | 'workflow'
+    | 'text'
+    | 'thinking'
+    | 'agent_start'
+    | 'agent_result'
+    | 'tool_streaming'
+    | 'tool_running'
+    | 'file'
+    | 'error'
+    | 'finish'
   toolName?: string
   params?: Record<string, any>
   toolResult?: any
@@ -30,16 +35,36 @@ interface StreamMessage {
   workflow?: {
     thought?: string
   }
+  // 新增字段支持更多回调类型
+  agentName?: string
+  agentResult?: any
+  toolStreaming?: {
+    paramName?: string
+    paramValue?: any
+    isComplete?: boolean
+  }
+  fileData?: {
+    fileName?: string
+    filePath?: string
+    content?: string
+    mimeType?: string
+  }
+  error?: {
+    message?: string
+    code?: string
+    details?: any
+  }
+  finish?: {
+    tokenUsage?: {
+      promptTokens?: number
+      completionTokens?: number
+      totalTokens?: number
+    }
+    duration?: number
+    status?: 'success' | 'error' | 'cancelled'
+  }
 }
 
-// 工具函数
-const generateSessionTitle = (content: string): string => {
-  const title = content.trim().slice(0, 20)
-  if (title.length === 0) return '新对话'
-  return title.length < content.trim().length ? title + '...' : title
-}
-
-// 检测工具执行结果是否包含错误
 const isToolResultError = (toolResult: any): boolean => {
   return toolResult?.isError === true
 }
@@ -47,7 +72,6 @@ const isToolResultError = (toolResult: any): boolean => {
 export const useAIChatStore = defineStore('ai-chat', () => {
   const sessionStore = useSessionStore()
 
-  // 状态
   const isVisible = ref(false)
   const sidebarWidth = ref(350)
   const currentConversationId = ref<number | null>(null)
@@ -58,41 +82,34 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const conversations = ref<Conversation[]>([])
   const cancelFunction = ref<(() => void) | null>(null)
 
-  // 聊天模式相关状态
   const chatMode = ref<ChatMode>('chat')
   const ekoInstance = ref<TerminalEko | null>(null)
   const currentAgentId = ref<string | null>(null)
 
-  // 初始化标志
   const isInitialized = ref(false)
 
-  // 防抖保存函数（在store顶层定义，避免重复创建）
   const debouncedSaveSteps = debounce(async (messageId: number, steps: any[]) => {
     try {
       await aiApi.updateMessageSteps(messageId, steps)
     } catch {
-      // 静默失败
+      // Ignore non-critical step save failures
     }
   }, 100)
 
-  // 计算属性
   const hasMessages = computed(() => messageList.value.length > 0)
   const canSendMessage = computed(() => {
     const aiSettingsStore = useAISettingsStore()
     return !isLoading.value && aiSettingsStore.hasModels
   })
 
-  // 操作方法
   const toggleSidebar = async () => {
     isVisible.value = !isVisible.value
     if (isVisible.value) {
-      // 加载AI设置
       const aiSettingsStore = useAISettingsStore()
       if (!aiSettingsStore.hasModels && !aiSettingsStore.isLoading) {
         await aiSettingsStore.loadSettings()
       }
 
-      // 加载会话列表
       await refreshConversations()
     }
   }
@@ -101,21 +118,16 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     sidebarWidth.value = Math.max(300, Math.min(800, width))
   }
 
-  // 辅助函数：查找空会话（messageCount为0的会话）
   const findEmptyConversation = (): Conversation | null => {
     return conversations.value.find(conv => conv.messageCount === 0) || null
   }
 
-  // 会话管理方法
   const createConversation = async (title?: string): Promise<void> => {
     try {
-      // 如果有正在进行的对话，先中断
       stopCurrentConversation()
 
-      // 检查是否已经存在空会话
       const existingEmptyConversation = findEmptyConversation()
       if (existingEmptyConversation) {
-        // 如果存在空会话，直接切换到该会话
         currentConversationId.value = existingEmptyConversation.id
         messageList.value = []
         return
@@ -142,10 +154,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       const loadedMessages = await aiApi.getCompressedContext(conversationId)
 
       if (forceReload) {
-        // 强制重新加载：完全替换消息列表
         messageList.value = loadedMessages
       } else {
-        // 增量更新：保留现有消息的步骤信息，只添加新消息
         const existingIds = new Set(messageList.value.map(msg => msg.id))
         const newMessages = loadedMessages.filter(msg => !existingIds.has(msg.id))
 
@@ -160,11 +170,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  // 会话切换方法
   const switchToConversation = async (conversationId: number): Promise<void> => {
-    // 如果有正在进行的对话，先中断
     stopCurrentConversation()
-
     messageList.value = []
     await loadConversation(conversationId, true)
   }
@@ -191,12 +198,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  // 发送消息方法（统一通过eko处理）
   const sendMessage = async (content: string): Promise<void> => {
     if (!currentConversationId.value) {
-      // 如果没有当前会话，创建一个新会话
-      const title = generateSessionTitle(content)
-      await createConversation(title)
+      await createConversation()
     }
 
     if (!currentConversationId.value) {
@@ -209,10 +213,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       isLoading.value = true
       error.value = null
 
-      // 1. 立即保存用户消息（不等待Eko初始化）
       const userMessageId = await aiApi.saveMessage(currentConversationId.value, 'user', content)
 
-      // 2. 立即更新UI显示用户消息（添加到当前消息列表而不是重新加载）
       const userMessage: Message = {
         id: userMessageId,
         conversationId: currentConversationId.value,
@@ -222,32 +224,25 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       }
       messageList.value.push(userMessage)
 
-      // 3. 确保Eko实例可用
       if (!ekoInstance.value) {
         await initializeEko()
       }
 
-      // 4. 设置模式（基于Eko源码，setMode是同步的且不会失败）
       ekoInstance.value?.setMode(chatMode.value)
 
-      // 5. 获取当前终端的工作目录
       const terminalStore = useTerminalStore()
       const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
       const currentWorkingDirectory = activeTerminal?.cwd
 
-      // 6. 获取后端构建的完整prompt（包含上下文和环境信息）
-      // 传递用户消息ID，确保上下文构建时包含刚保存的用户消息
       const fullPrompt = await aiApi.buildPromptWithContext(
         currentConversationId.value,
         content,
-        userMessageId, // 传递用户消息ID作为上下文边界
+        userMessageId,
         currentWorkingDirectory
       )
 
-      // 7. 立即创建AI消息记录到数据库，获取真实ID用于实时保存steps
       const messageId = await aiApi.saveMessage(currentConversationId.value, 'assistant', '正在生成回复...')
 
-      // 创建AI消息对象，使用真实的数据库ID
       tempAIMessage = {
         id: messageId,
         conversationId: currentConversationId.value,
@@ -257,28 +252,22 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         status: 'streaming',
       }
 
-      // 添加消息到列表
       messageList.value.push(tempAIMessage)
 
-      // 8. 设置取消函数
       cancelFunction.value = () => {
         if (ekoInstance.value) {
           ekoInstance.value.abort()
         }
       }
 
-      // 9. 通过eko处理消息（流式输出通过回调处理）
       streamingContent.value = ''
       const response = await ekoInstance.value!.run(fullPrompt)
 
-      // 10. 更新AI回复内容和状态（简化版）
       if (tempAIMessage && response.success) {
-        // 成功完成：优先保留流回调中已累计的内容
         tempAIMessage.content = (tempAIMessage.content as string | undefined) ?? ((response.result as string) || '')
         tempAIMessage.status = 'complete'
         tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
 
-        // 强制触发Vue响应式更新
         const messageIndex = messageList.value.findIndex(m => m.id === tempAIMessage!.id)
         if (messageIndex !== -1) {
           messageList.value[messageIndex] = { ...tempAIMessage }
@@ -287,7 +276,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         await aiApi.updateMessageContent(tempAIMessage.id, tempAIMessage.content)
         await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
       } else if (tempAIMessage) {
-        // 处理eko返回的错误结果
         tempAIMessage.status = 'error'
         tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
 
@@ -301,26 +289,23 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           },
         })
 
-        // 强制触发Vue响应式更新和数据库更新
         if (tempAIMessage) {
           const messageIndex = messageList.value.findIndex(m => m.id === tempAIMessage!.id)
           if (messageIndex !== -1) {
             messageList.value[messageIndex] = { ...tempAIMessage }
           }
 
-          // 更新数据库
           if (tempAIMessage.steps) {
             try {
               await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
               await aiApi.updateMessageSteps(tempAIMessage.id, tempAIMessage.steps)
             } catch {
-              // 静默失败
+              // Ignore non-critical database failures
             }
           }
         }
       }
 
-      // 11. 刷新会话列表以更新预览（不重新加载消息，保持步骤信息）
       await refreshConversations()
     } catch (err) {
       error.value = handleErrorWithMessage(err, '发送消息失败')
@@ -331,7 +316,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  // 截断重问方法（使用新的eko架构）
   const truncateAndResend = async (truncateAfterMessageId: number, newContent: string): Promise<void> => {
     if (!currentConversationId.value) {
       throw new Error('没有选择会话')
@@ -341,10 +325,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       isLoading.value = true
       error.value = null
 
-      // 1. 截断会话
       await aiApi.truncateConversation(currentConversationId.value, truncateAfterMessageId)
-
-      // 2. 发送新消息（复用sendMessage逻辑）
       await sendMessage(newContent)
     } catch (err) {
       error.value = handleErrorWithMessage(err, '截断重问失败')
@@ -354,7 +335,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  // 中断当前正在进行的对话
   const stopCurrentConversation = (): void => {
     if (isLoading.value && cancelFunction.value) {
       try {
@@ -368,40 +348,31 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  // 清空错误
   const clearError = (): void => {
     error.value = null
   }
-
-  // 初始化Eko实例（带流式回调）
   const initializeEko = async (): Promise<void> => {
     try {
       if (!ekoInstance.value) {
-        // 简化的流式消息处理
         const handleStreamMessage = async (message: StreamMessage) => {
           const tempMessage = messageList.value[messageList.value.length - 1]
           if (!tempMessage || tempMessage.role !== 'assistant') return
 
-          // 确保steps数组存在
           tempMessage.steps = tempMessage.steps || []
 
-          // 统一的步骤更新函数
           const updateOrCreateStep = (stepData: { type: string; content: string; streamId?: string }) => {
             let targetStep: any = null
 
             if (stepData.type === 'thinking') {
-              // thinking类型：如果有streamId就精确匹配，否则查找最后一个thinking步骤
               if (stepData.streamId) {
                 targetStep = tempMessage.steps?.find(
                   step => step.type === 'thinking' && step.metadata?.streamId === stepData.streamId
                 )
               } else {
-                // 使用兼容的方式查找最后一个thinking步骤
                 const thinkingSteps = tempMessage.steps?.filter(step => step.type === 'thinking') || []
                 targetStep = thinkingSteps[thinkingSteps.length - 1] || null
               }
             } else {
-              // 其他类型：必须有streamId才能匹配
               targetStep = stepData.streamId
                 ? tempMessage.steps?.find(
                     step => step.type === stepData.type && step.metadata?.streamId === stepData.streamId
@@ -435,13 +406,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               const toolSteps = tempMessage.steps.filter((step: any) => step.type === 'tool_use')
               const toolStep = toolSteps[toolSteps.length - 1] as any
               if (toolStep?.toolExecution) {
-                // 检查工具执行结果是否包含错误
                 const hasError = isToolResultError(message.toolResult)
                 toolStep.toolExecution.status = hasError ? 'error' : 'completed'
                 toolStep.toolExecution.endTime = Date.now()
                 toolStep.toolExecution.result = message.toolResult
 
-                // 如果有错误，记录错误信息
                 if (hasError) {
                   toolStep.toolExecution.error = '工具执行失败'
                 }
@@ -489,18 +458,67 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                 streamId: message.streamId,
               })
 
-              // 累计最终内容用于显示
               if (message.streamDone) {
                 tempMessage.content = message.text || ''
               }
               break
+
+            case 'agent_start':
+              console.log('🚀 [侧边栏] Agent开始执行:', {
+                agentName: message.agentName,
+                timestamp: new Date().toISOString(),
+              })
+              break
+
+            case 'agent_result':
+              console.log('✅ [侧边栏] Agent执行结果:', {
+                agentName: message.agentName,
+                result: message.agentResult,
+                timestamp: new Date().toISOString(),
+              })
+              break
+
+            case 'tool_streaming':
+              console.log('📡 [侧边栏] 工具参数流式输出:', {
+                toolName: message.toolName,
+                streaming: message.toolStreaming,
+                timestamp: new Date().toISOString(),
+              })
+              break
+
+            case 'tool_running':
+              console.log('⚙️ [侧边栏] 工具执行中:', {
+                toolName: message.toolName,
+                params: message.params,
+                timestamp: new Date().toISOString(),
+              })
+              break
+
+            case 'file':
+              console.log('📁 [侧边栏] 文件输出:', {
+                fileData: message.fileData,
+                timestamp: new Date().toISOString(),
+              })
+              break
+
+            case 'error':
+              console.log('❌ [侧边栏] 错误信息:', {
+                error: message.error,
+                timestamp: new Date().toISOString(),
+              })
+              break
+
+            case 'finish':
+              console.log('🏁 [侧边栏] 完成信息:', {
+                finish: message.finish,
+                timestamp: new Date().toISOString(),
+              })
+              break
           }
 
-          // 直接保存，去掉队列
           debouncedSaveSteps(tempMessage.id, tempMessage.steps)
         }
 
-        // 使用回调工厂
         const callback = createSidebarCallback(handleStreamMessage)
 
         ekoInstance.value = await createTerminalEko({
@@ -509,12 +527,10 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         })
       }
     } catch (err) {
-      // 创建fallback实例
       ekoInstance.value = await createTerminalEko({ debug: true })
     }
   }
 
-  // 从会话状态恢复 AI 状态
   const restoreFromSessionState = (): void => {
     const aiState = sessionStore.aiState
     if (aiState) {
@@ -525,7 +541,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  // 将当前状态保存到会话系统
   const saveToSessionState = (): void => {
     sessionStore.updateAiState({
       visible: isVisible.value,
@@ -535,27 +550,20 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     })
   }
 
-  // 使用lodash防抖保存函数，避免频繁保存
-  const debouncedSave = debounce(() => {
+  const handleStateChange = () => {
     if (isInitialized.value) {
       saveToSessionState()
     }
-  }, 300)
+  }
 
-  // 监听状态变化并自动保存（防抖）
-  watch([isVisible, sidebarWidth, chatMode, currentConversationId], debouncedSave)
+  watch([isVisible, sidebarWidth, chatMode, currentConversationId], handleStateChange)
 
-  // 初始化方法
   const initialize = async (): Promise<void> => {
     if (isInitialized.value) return
 
-    // 等待会话Store初始化
     await sessionStore.initialize()
-
-    // 从会话状态恢复
     restoreFromSessionState()
 
-    // 如果恢复了当前会话ID，尝试加载会话
     if (currentConversationId.value) {
       try {
         await switchToConversation(currentConversationId.value)
@@ -564,14 +572,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       }
     }
 
-    // 加载会话列表
     await refreshConversations()
-
     isInitialized.value = true
   }
 
   return {
-    // 状态
     isVisible,
     sidebarWidth,
     currentConversationId,
@@ -585,12 +590,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     ekoInstance,
     currentAgentId,
     isInitialized,
-
-    // 计算属性
     hasMessages,
     canSendMessage,
-
-    // 方法
     toggleSidebar,
     setSidebarWidth,
     createConversation,

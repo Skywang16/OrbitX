@@ -17,22 +17,49 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 <script setup lang="ts">
   import TerminalView from '@/views/Terminal/TerminalView.vue'
+  import { OnboardingView } from '@/components/Onboarding'
   import { useShortcutListener } from '@/shortcuts'
-  import { onMounted } from 'vue'
+  import { createStorage } from '@/utils/storage'
+  import { onMounted, ref } from 'vue'
 
-  // 初始化快捷键监听器
   const { reloadConfig } = useShortcutListener()
 
+  // 首次启动状态管理
+  const showOnboarding = ref(false)
+  const onboardingStorage = createStorage<boolean>('orbitx-onboarding-completed')
+
+  const handleOnboardingComplete = () => {
+    onboardingStorage.save(true)
+    showOnboarding.value = false
+  }
+
+  // 测试按钮：重新打开引导页面
+  const showOnboardingForTesting = () => {
+    onboardingStorage.remove()
+    showOnboarding.value = true
+  }
+
+  // 开发环境下暴露到全局
+  if (import.meta.env.DEV) {
+    ;(window as any).showOnboarding = showOnboardingForTesting
+  }
+
   onMounted(() => {
-    // 暴露重新加载配置功能到控制台
     ;(window as any).reloadShortcuts = reloadConfig
+
+    // 检查是否是首次启动
+    const hasCompletedOnboarding = onboardingStorage.exists()
+    showOnboarding.value = !hasCompletedOnboarding
   })
 </script>
 
 <template>
   <div class="app-layout">
-    <!-- 直接显示终端视图，所有内容都通过标签系统管理 -->
-    <TerminalView />
+    <!-- 引导页面 -->
+    <OnboardingView v-if="showOnboarding" @complete="handleOnboardingComplete" />
+
+    <!-- 主应用界面 -->
+    <TerminalView v-else />
   </div>
 </template>
 

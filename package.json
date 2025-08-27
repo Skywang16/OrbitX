@@ -34,8 +34,9 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@eko-ai/eko": "^3.0.0-alpha.4",
+    "@eko-ai/eko": "file:npm-file/eko-ai-eko-3.0.1-alpha.2.tgz",
     "@tauri-apps/api": "^2.7.0",
+    "@tauri-apps/plugin-autostart": "^2.5.0",
     "@tauri-apps/plugin-fs": "^2.4.1",
     "@tauri-apps/plugin-http": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2.4.0",
@@ -50,13 +51,13 @@
     "ajv": "^8.17.1",
     "dayjs": "^1.11.13",
     "lodash-es": "^4.17.21",
-    "lottie-web": "^5.13.0",
     "marked": "^16.1.1",
     "pinia": "^3.0.3",
     "sharp": "^0.34.3",
     "strip-ansi": "^7.1.0",
     "uuid": "^11.1.0",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "vue-i18n": "^9.14.5"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

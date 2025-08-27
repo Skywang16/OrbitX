@@ -23,7 +23,6 @@ pub struct AIManagerState {
 }
 
 impl AIManagerState {
-    /// 创建新的AI管理器状态
     pub fn new(
         repositories: Arc<RepositoryManager>,
         cache: Arc<UnifiedCache>,
@@ -37,12 +36,10 @@ impl AIManagerState {
         })
     }
 
-    /// 初始化AI服务
     pub async fn initialize(&self) -> Result<(), String> {
         self.ai_service.initialize().await.to_tauri()
     }
 
-    /// 获取Repository管理器的辅助方法
     pub fn repositories(&self) -> &Arc<RepositoryManager> {
         &self.repositories
     }
@@ -63,7 +60,8 @@ pub async fn create_conversation(
 
     let repositories = state.repositories();
 
-    let conversation = Conversation::new(title.unwrap_or_else(|| "新对话".to_string()));
+    // 默认使用空标题，前端渲染时用 i18n 占位文案显示
+    let conversation = Conversation::new(title.unwrap_or_else(|| "".to_string()));
 
     let conversation_id = repositories
         .conversations()

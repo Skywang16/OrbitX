@@ -20,23 +20,18 @@ use std::{
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
-/// 配置事件类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConfigEvent {
-    /// 配置已加载
     Loaded {
         timestamp: chrono::DateTime<chrono::Utc>,
     },
-    /// 配置已更新
     Updated {
         timestamp: chrono::DateTime<chrono::Utc>,
         section: Option<String>,
     },
-    /// 配置已保存
     Saved {
         timestamp: chrono::DateTime<chrono::Utc>,
     },
-    /// 配置验证失败
     ValidationFailed {
         timestamp: chrono::DateTime<chrono::Utc>,
         errors: Vec<String>,
@@ -47,25 +42,14 @@ pub enum ConfigEvent {
 ///
 /// 负责TOML配置文件的完整生命周期管理，包括读写、验证和事件通知。
 pub struct TomlConfigManager {
-    /// 配置文件路径
     config_path: PathBuf,
-
-    /// 当前配置缓存（线程安全）
     config_cache: Arc<RwLock<AppConfig>>,
-
-    /// 事件广播发送器
     event_sender: broadcast::Sender<ConfigEvent>,
-
-    /// 配置路径管理器
     #[allow(dead_code)]
     paths: ConfigPaths,
 }
 
 impl TomlConfigManager {
-    /// 创建新的TOML配置管理器
-    ///
-    /// # Returns
-    /// 返回配置管理器实例
     pub async fn new() -> AppResult<Self> {
         let paths = ConfigPaths::new()?;
         let config_path = paths.config_file();
@@ -84,12 +68,7 @@ impl TomlConfigManager {
         Ok(manager)
     }
 
-    /// 加载配置
-    ///
-    /// 从文件系统加载TOML配置，如果文件不存在则尝试从资源文件复制，最后创建默认配置。
-    ///
-    /// # Returns
-    /// 返回加载的配置结构
+    /// 从文件系统加载TOML配置，如果文件不存在则尝试从资源文件复制，最后创建默认配置
     pub async fn load_config(&self) -> AppResult<AppConfig> {
         debug!("开始加载TOML配置: {:?}", self.config_path);
 
@@ -153,15 +132,6 @@ impl TomlConfigManager {
         Ok(config)
     }
 
-    /// 保存配置
-    ///
-    /// 将配置保存到TOML文件，支持原子写入。
-    ///
-    /// # Arguments
-    /// * `config` - 要保存的配置结构
-    ///
-    /// # Returns
-    /// 返回操作结果
     pub async fn save_config(&self, config: &AppConfig) -> AppResult<()> {
         // 验证配置
         self.validate_config(config)?;
@@ -187,16 +157,6 @@ impl TomlConfigManager {
         Ok(())
     }
 
-    /// 更新配置节
-    ///
-    /// 更新配置的特定节，支持部分更新。
-    ///
-    /// # Arguments
-    /// * `section` - 配置节名称
-    /// * `data` - 要更新的数据
-    ///
-    /// # Returns
-    /// 返回操作结果
     pub async fn update_section<T>(&self, section: &str, data: T) -> AppResult<()>
     where
         T: Serialize,
@@ -243,10 +203,6 @@ impl TomlConfigManager {
         Ok(())
     }
 
-    /// 获取当前配置
-    ///
-    /// # Returns
-    /// 返回当前配置的副本
     pub async fn get_config(&self) -> AppResult<AppConfig> {
         let cache = self
             .config_cache
@@ -255,15 +211,11 @@ impl TomlConfigManager {
         Ok(cache.clone())
     }
 
-    /// 验证配置
-    ///
-    /// 验证配置的有效性和一致性。
-    ///
-    /// # Arguments
-    /// * `config` - 要验证的配置
-    ///
-    /// # Returns
-    /// 返回验证结果
+    /// 获取配置文件路径
+    pub async fn get_config_path(&self) -> PathBuf {
+        self.config_path.clone()
+    }
+
     pub fn validate_config(&self, config: &AppConfig) -> AppResult<()> {
         debug!("开始验证配置");
 
@@ -304,23 +256,10 @@ impl TomlConfigManager {
         Ok(())
     }
 
-    /// 订阅配置事件
-    ///
-    /// # Returns
-    /// 返回事件接收器
     pub fn subscribe_changes(&self) -> broadcast::Receiver<ConfigEvent> {
         self.event_sender.subscribe()
     }
 
-    /// 更新配置（使用更新函数）
-    ///
-    /// 使用提供的更新函数修改配置，支持事务性更新。
-    ///
-    /// # Arguments
-    /// * `updater` - 配置更新函数
-    ///
-    /// # Returns
-    /// 返回操作结果
     pub async fn update_config<F>(&self, updater: F) -> AppResult<()>
     where
         F: FnOnce(&mut AppConfig) -> AppResult<()> + Send,
@@ -346,16 +285,6 @@ impl TomlConfigManager {
         Ok(())
     }
 
-    /// 合并配置
-    ///
-    /// 将部分配置合并到完整配置中。
-    ///
-    /// # Arguments
-    /// * `base_config` - 基础配置
-    /// * `partial_config` - 部分配置
-    ///
-    /// # Returns
-    /// 返回合并后的配置
     pub fn merge_config(
         &self,
         base_config: &AppConfig,
@@ -380,7 +309,6 @@ impl TomlConfigManager {
     // 私有方法
     // ========================================================================
 
-    /// 复制打包的配置文件到用户目录
     async fn copy_bundled_config(&self) -> AppResult<AppConfig> {
         // 尝试从应用资源中获取配置文件
         let bundled_config_path = self.get_bundled_config_path()?;
@@ -402,7 +330,6 @@ impl TomlConfigManager {
         }
     }
 
-    /// 获取打包配置文件的路径
     fn get_bundled_config_path(&self) -> AppResult<std::path::PathBuf> {
         // 在 Tauri 中，资源文件通常位于应用包中
         let exe_dir = std::env::current_exe()
@@ -429,13 +356,11 @@ impl TomlConfigManager {
         }
     }
 
-    /// 解析TOML内容
     fn parse_toml_content(&self, content: &str) -> AppResult<AppConfig> {
         toml::from_str::<AppConfig>(content)
             .with_context(|| format!("TOML配置解析失败 (文件: {})", self.config_path.display()))
     }
 
-    /// 内部保存配置实现
     async fn save_config_internal(&self, config: &AppConfig) -> AppResult<()> {
         // 确保配置目录存在
         self.ensure_config_directory().await?;
@@ -449,7 +374,6 @@ impl TomlConfigManager {
         Ok(())
     }
 
-    /// 确保配置目录存在
     async fn ensure_config_directory(&self) -> AppResult<()> {
         if let Some(parent) = self.config_path.parent() {
             tokio::fs::create_dir_all(parent)
@@ -459,7 +383,6 @@ impl TomlConfigManager {
         Ok(())
     }
 
-    /// 原子写入配置文件
     async fn atomic_write_config(&self, content: &str) -> AppResult<()> {
         // 创建临时文件
         let temp_path = self.config_path.with_extension("tmp");
@@ -483,7 +406,6 @@ impl TomlConfigManager {
         Ok(())
     }
 
-    /// 创建备份并使用默认配置
     async fn create_backup_and_use_default(&self) -> AppResult<AppConfig> {
         // 创建备份
         if self.config_path.exists() {
@@ -502,8 +424,7 @@ impl TomlConfigManager {
         Ok(default_config)
     }
 
-    /// 更新配置节
-    fn update_config_section(
+    pub fn update_config_section(
         &self,
         config: &mut AppConfig,
         section: &str,

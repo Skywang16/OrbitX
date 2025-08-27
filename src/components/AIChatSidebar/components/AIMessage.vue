@@ -1,10 +1,13 @@
 <script setup lang="ts">
   import { computed } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { marked } from 'marked'
   import type { Message } from '@/types'
   import ThinkingBlock from './msgBlock/ThinkingBlock.vue'
   import ToolBlock from './msgBlock/ToolBlock.vue'
   import { useAIChatStore } from '../store'
+
+  const { t } = useI18n()
 
   interface Props {
     message: Message
@@ -58,10 +61,12 @@
         <div v-else-if="step.type === 'error'" class="error-message step-block">
           <div class="error-header">
             <span class="error-icon">⚠️</span>
-            <span class="error-title">执行失败</span>
+            <span class="error-title">{{ t('message.execution_failed') }}</span>
           </div>
           <div class="error-content">{{ step.content }}</div>
-          <div v-if="step.metadata?.errorDetails" class="error-details">详细信息: {{ step.metadata.errorDetails }}</div>
+          <div v-if="step.metadata?.errorDetails" class="error-details">
+            {{ t('message.error_details', { details: step.metadata.errorDetails }) }}
+          </div>
         </div>
       </template>
     </template>
@@ -79,10 +84,12 @@
         class="streaming-indicator"
       >
         <span class="streaming-dot"></span>
-        正在生成...
+        {{ t('message.generating') }}
       </div>
 
-      <div v-else-if="message.duration" class="duration-info">耗时 {{ formatDuration(message.duration) }}</div>
+      <div v-else-if="message.duration" class="duration-info">
+        {{ t('message.duration_info', { duration: formatDuration(message.duration) }) }}
+      </div>
     </div>
   </div>
 </template>

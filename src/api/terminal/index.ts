@@ -133,6 +133,42 @@ export class TerminalApi {
     }
   }
 
+  // ===== Shell Integration 操作 =====
+
+  async updatePaneCwd(paneId: number, cwd: string): Promise<void> {
+    try {
+      await invoke('update_pane_cwd', { paneId, cwd })
+    } catch (error) {
+      throw new Error(handleError(error, '更新面板工作目录失败'))
+    }
+  }
+
+  async setupShellIntegration(paneId: number, silent: boolean = true): Promise<void> {
+    try {
+      await invoke('setup_shell_integration', { paneId, silent })
+    } catch (error) {
+      throw new Error(handleError(error, '设置Shell集成失败'))
+    }
+  }
+
+  async getPaneCwd(paneId: number): Promise<string | null> {
+    try {
+      return await invoke<string | null>('get_pane_cwd', { paneId })
+    } catch (error) {
+      console.warn('获取面板工作目录失败:', handleError(error))
+      return null
+    }
+  }
+
+  async checkShellIntegrationStatus(paneId: number): Promise<boolean> {
+    try {
+      return await invoke<boolean>('check_shell_integration_status', { paneId })
+    } catch (error) {
+      console.warn('检查Shell集成状态失败:', handleError(error))
+      return false
+    }
+  }
+
   // ===== 工具方法 =====
 
   async terminalExists(paneId: number): Promise<boolean> {

@@ -9,21 +9,11 @@ import { useAISettingsStore } from './components/AI'
 
 export const useSettingsStore = defineStore('settings', () => {
   // 设置页面状态
-  const isSettingsOpen = ref(false)
-  const activeSection = ref<string>('theme')
+  const activeSection = ref<string>('ai')
 
   // 子stores和组合函数
   const aiSettings = useAISettingsStore()
   const themeManager = useTheme()
-
-  // 操作方法
-  const openSettings = () => {
-    isSettingsOpen.value = true
-  }
-
-  const closeSettings = () => {
-    isSettingsOpen.value = false
-  }
 
   const setActiveSection = (section: string) => {
     activeSection.value = section
@@ -37,8 +27,7 @@ export const useSettingsStore = defineStore('settings', () => {
       // 加载AI设置
       await aiSettings.loadSettings()
     } catch (error) {
-      // 统一错误提示
-      // 使用懒加载 UI 层提示，避免打断初始化流程
+      console.error('Failed to initialize settings:', error)
     }
   }
 
@@ -51,7 +40,6 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     // 状态
-    isSettingsOpen,
     activeSection,
 
     // 子stores和组合函数
@@ -59,8 +47,6 @@ export const useSettingsStore = defineStore('settings', () => {
     themeManager,
 
     // 方法
-    openSettings,
-    closeSettings,
     setActiveSection,
     initializeSettings,
     resetAllSettings,

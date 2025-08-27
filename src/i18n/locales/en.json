@@ -1,0 +1,384 @@
+{
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "save": "Save",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "retry": "Retry",
+    "search": "Search",
+    "refresh": "Refresh",
+    "close": "Close",
+    "processing": "Processing...",
+    "new": "New",
+    "copy": "Copy",
+    "paste": "Paste",
+    "cut": "Cut",
+    "undo": "Undo",
+    "redo": "Redo",
+    "settings": "Settings",
+    "help": "Help",
+    "about": "About",
+    "select_placeholder": "Please select",
+    "no_data": "No data",
+    "search_options": "Search options",
+    "open_feedback_error": "Unable to open feedback page",
+    "visit_manually": "Please visit manually: https://github.com/Skywang16/OrbitX/issues"
+  },
+  "settings": {
+    "title": "Settings",
+    "search_placeholder": "Search settings",
+    "general": {
+      "title": "General Settings",
+      "description": "General application configuration",
+      "config_management": "Configuration Management",
+      "config_folder": "Configuration Folder",
+      "config_folder_description": "Open the folder containing application configuration files",
+      "open_config_folder": "Open Config Folder",
+      "config_folder_opened": "Configuration folder opened",
+      "config_folder_error": "Unable to open configuration folder",
+      "autostart_title": "Auto Start",
+      "autostart_enabled": "Auto start enabled",
+      "autostart_disabled": "Auto start disabled"
+    },
+    "theme": {
+      "title": "Theme Settings",
+      "description": "Appearance and theme configuration"
+    },
+    "ai": {
+      "title": "AI Settings",
+      "description": "AI model and feature configuration",
+      "load_error": "Failed to load AI settings: {error}",
+      "model_config": "Model Configuration",
+      "feature_settings": "Feature Settings"
+    },
+    "shortcuts": {
+      "title": "Shortcut Settings",
+      "description": "Configure and manage shortcuts"
+    },
+    "language": {
+      "title": "Language Settings",
+      "description": "Select interface display language"
+    }
+  },
+  "chat": {
+    "new_session": "New Session",
+    "session_select": "Select Session",
+    "input_placeholder": "Type a message...",
+    "thinking": "Thinking...",
+    "tool_execution": "Tool Execution",
+    "error_occurred": "An error occurred",
+    "retry_message": "Retry Message",
+    "copy_message": "Copy Message",
+    "delete_message": "Delete Message"
+  },
+  "terminal": {
+    "title": "Terminal",
+    "new_tab": "New Tab",
+    "close_tab": "Close Tab",
+    "rename_tab": "Rename Tab",
+    "duplicate_tab": "Duplicate Tab",
+    "search_placeholder": "Search...",
+    "completion_available": "Auto-completion available",
+    "command_not_found": "Command not found"
+  },
+  "search": {
+    "placeholder": "Search",
+    "case_sensitive": "Case sensitive",
+    "whole_word": "Whole word",
+    "previous": "Previous",
+    "next": "Next",
+    "close": "Close",
+    "clear": "Clear"
+  },
+  "onboarding": {
+    "navigation": {
+      "previous": "Previous",
+      "next": "Next",
+      "finish": "Get Started",
+      "save_config": "Save Configuration",
+      "skip_temporarily": "Skip for Now"
+    },
+    "language": {
+      "title": "Choose Your Language",
+      "description": "Select your preferred language"
+    },
+    "welcome": {
+      "title": "Welcome to OrbitX",
+      "subtitle": "A powerful terminal simulator with AI assistance",
+      "get_started": "Get Started",
+      "features": {
+        "terminal": {
+          "title": "Modern Terminal",
+          "description": "Fast and efficient terminal experience"
+        },
+        "ai": {
+          "title": "AI Assistant",
+          "description": "Smart coding companion and command helper"
+        },
+        "customize": {
+          "title": "Fully Customizable",
+          "description": "Themes, shortcuts, and personalization"
+        }
+      }
+    },
+    "theme": {
+      "title": "Choose Your Theme",
+      "description": "Select a theme that matches your style",
+      "options": {
+        "dark": {
+          "name": "Dark Theme",
+          "description": "Perfect for low-light environments"
+        },
+        "light": {
+          "name": "Light Theme",
+          "description": "Clean and bright appearance"
+        },
+        "auto": {
+          "name": "Auto Theme",
+          "description": "Follow system preferences"
+        }
+      }
+    },
+    "ai": {
+      "title": "AI Assistant Setup",
+      "description": "Configure your AI coding companion",
+      "enable_title": "Enable AI Assistant",
+      "enable_description": "Get help with commands, coding, and terminal tasks",
+      "model_title": "Choose AI Model",
+      "model_description": "Select your preferred AI model",
+      "voice_title": "Voice Features",
+      "voice_description": "Enable voice interaction with AI",
+      "recommended": "Recommended",
+      "config_name": "Configuration Name",
+      "config_name_placeholder": "e.g., Claude Production",
+      "save_config": "Save Configuration",
+      "skip_temporarily": "Skip for Now",
+      "select_provider_first": "Please select an AI provider first, or click \"Skip for Now\"",
+      "config_name_required": "Configuration name is required",
+      "api_key_required": "API key is required",
+      "model_name_required": "Model name is required",
+      "api_url_required": "API URL is required",
+      "save_config_success": "Configuration saved successfully!",
+      "save_config_failed": "Failed to save configuration",
+      "skip_config_message": "AI configuration skipped. You can configure it later in settings",
+      "models": {
+        "claude": {
+          "description": "Anthropic AI Assistant"
+        },
+        "openai": {
+          "description": "ChatGPT & GPT Models"
+        },
+        "custom": {
+          "name": "Custom",
+          "description": "Configure custom AI service"
+        }
+      },
+      "preview_title": "Preview",
+      "preview_user_message": "How do I list files in a directory?",
+      "preview_ai_message": "Use the `ls` command to list files, or `ls -la` for detailed view including hidden files.",
+      "start_using": "Start Using OrbitX"
+    }
+  },
+  "ai": {
+    "select_mode": "Select mode",
+    "select_model": "Select AI model",
+    "provider": "Select AI provider",
+    "model_name_placeholder": "e.g., GPT-4 Production",
+    "system_prompt_placeholder": "Enter your system prompt here, e.g.: Please answer all questions in English...",
+    "add_model": "Add Model",
+    "empty_description": "Click \\\"Add Model\\\" button to start configuring your first AI model"
+  },
+  "session": {
+    "search_placeholder": "Search sessions...",
+    "no_data": "No session history",
+    "chat_placeholder": "Chat with Orbit...",
+    "clear_selection": "Clear selection",
+    "unnamed_session": "Unnamed session",
+    "messages": "messages",
+    "current_session": "Current session",
+    "selected_content": "selected content",
+    "click_to_insert": "Click to insert to input"
+  },
+  "theme": {
+    "select_light": "Select light theme",
+    "select_dark": "Select dark theme"
+  },
+  "shortcuts": {
+    "title": "Shortcut Settings",
+    "conflicts": "Detected {count} shortcut conflicts",
+    "loading": "Loading...",
+    "global": "Global Shortcuts",
+    "terminal": "Terminal Shortcuts",
+    "not_configured": "Click to configure",
+    "editing_hint": "Press new key combination...",
+    "reset_to_default": "Reset to Default",
+    "reset_confirm_title": "Reset Shortcut Configuration",
+    "reset_confirm_message": "This will reset all shortcuts to default configuration, current custom settings will be lost.",
+    "reset_success": "Shortcut configuration has been reset to default",
+    "reset_failed": "Failed to reset configuration",
+    "save_success": "{action} shortcut configured successfully",
+    "save_failed": "Failed to save shortcut",
+    "init_failed": "Failed to initialize shortcut settings",
+    "reset_shortcuts": "Reset Shortcuts",
+    "reset_description": "Restore all shortcuts to default settings",
+    "actions": {
+      "copy_to_clipboard": "Copy to Clipboard",
+      "paste_from_clipboard": "Paste from Clipboard",
+      "terminal_search": "Terminal Search",
+      "open_settings": "Open Settings",
+      "new_tab": "New Tab",
+      "close_tab": "Close Tab",
+      "switch_to_tab_1": "Switch to Tab 1",
+      "switch_to_tab_2": "Switch to Tab 2",
+      "switch_to_tab_3": "Switch to Tab 3",
+      "switch_to_tab_4": "Switch to Tab 4",
+      "switch_to_tab_5": "Switch to Tab 5",
+      "switch_to_last_tab": "Switch to Last Tab",
+      "clear_terminal": "Clear Terminal",
+      "accept_completion": "Accept Completion",
+      "increase_font_size": "Increase Font Size",
+      "decrease_font_size": "Decrease Font Size",
+      "toggle_ai_sidebar": "Open/Close AI Sidebar",
+      "toggle_window_pin": "Pin/Unpin Window"
+    }
+  },
+  "tab": {
+    "close": "Close tab",
+    "new_terminal": "New terminal (Left click) / Select Shell (Right click)",
+    "pin": "Pin to top"
+  },
+  "language": {
+    "title": "Language",
+    "chinese": "中文",
+    "english": "English",
+    "interface_language": "Interface Language"
+  },
+  "dialog": {
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "close": "Close"
+  },
+  "ai_model": {
+    "add_model": "Add Model",
+    "loading": "Loading...",
+    "empty_title": "No AI Models",
+    "empty_description": "Click \"Add Model\" button to configure your first AI model",
+    "edit": "Edit",
+    "delete": "Delete",
+    "delete_confirm": "Delete this model?",
+    "delete_description": "Cannot be undone",
+    "delete_confirm_text": "Confirm Delete",
+    "cancel": "Cancel",
+    "delete_success": "Model deleted successfully",
+    "delete_failed": "Failed to delete",
+    "update_success": "Model updated successfully",
+    "add_success": "Model added successfully",
+    "operation_failed": "Operation failed",
+    "test_connection": "Test Connection",
+    "testing": "Testing...",
+    "save": "Save",
+    "add": "Add",
+    "add_new_model": "Add New Model",
+    "add_model_description": "Configure AI model connection information",
+    "no_models": "No Model Configuration",
+    "default_provider": "AI Model",
+    "providers": {
+      "openai_description": "OpenAI GPT Models",
+      "claude_description": "Anthropic Claude Models",
+      "custom_description": "Custom API Endpoint"
+    },
+    "validation": {
+      "required_fields": "Please fill in API URL, API Key and Model Name first"
+    },
+    "connection_test": {
+      "success": "Connection test successful!",
+      "failed": "Connection test failed, please check configuration",
+      "error": "Connection test failed"
+    }
+  },
+  "message": {
+    "execution_failed": "Execution Failed",
+    "generating": "Generating...",
+    "duration_info": "Duration: {duration}",
+    "error_details": "Details: {details}"
+  },
+  "tool": {
+    "data_error": "Data Error"
+  },
+  "ai_feature": {
+    "user_system_prompt": "User System Prompt",
+    "prompt_description": "Set a universal system prompt that will be automatically added to all AI requests",
+    "prompt_placeholder": "Enter your system prompt here, e.g., Please answer all questions in Chinese..."
+  },
+  "ai_model_form": {
+    "basic_info": "Basic Information",
+    "config_name": "Configuration Name",
+    "provider": "Provider",
+    "connection_config": "Connection Configuration",
+    "model_name": "Model Name",
+    "config_name_placeholder": "e.g., GPT-4 Production",
+    "provider_placeholder": "Select AI Provider",
+    "api_url": "API URL",
+    "api_key": "API Key",
+    "edit_title": "Edit AI Model",
+    "add_title": "Add AI Model",
+    "api_url_required": "Please enter API URL",
+    "api_key_required": "Please enter API Key",
+    "model_name_required": "Please enter model name"
+  },
+  "message_list": {
+    "start_conversation": "Start conversation",
+    "send_message_hint": "Send a message to start chatting with Orbit",
+    "no_model_configured": "No AI model configured",
+    "configure_model_hint": "Please configure an AI model in settings before starting a conversation",
+    "go_to_settings": "Go to Settings"
+  },
+  "theme_settings": {
+    "theme_mode": "Theme Mode",
+    "manual_selection": "Manual Selection",
+    "manual_description": "Manually select a fixed theme",
+    "follow_system": "Follow System",
+    "follow_system_description": "Automatically switch theme based on system settings",
+    "select_theme": "Select Theme",
+    "light_theme": "Light Theme",
+    "dark_theme": "Dark Theme",
+    "light_theme_description": "Theme to use when system is in light mode",
+    "dark_theme_description": "Theme to use when system is in dark mode",
+    "window_opacity": "Window Opacity",
+    "opacity": "Opacity",
+    "opacity_description": "Adjust window transparency",
+    "opacity_error": "Failed to set opacity: {error}"
+  },
+  "ui": {
+    "clear": "Clear",
+    "close_tab": "Close Tab",
+    "new_terminal_tip": "New Terminal (Left Click) / Select Shell (Right Click)",
+    "settings": "Settings",
+    "open_settings": "Open Settings",
+    "feedback": "Feedback",
+    "pin": "Pin"
+  },
+  "ai_model_config": {
+    "empty_description": "Click \"Add Model\" button to configure your first AI model"
+  },
+  "process": {
+    "exited": "Process exited, exit code: {code}",
+    "unknown_exit_code": "unknown"
+  },
+  "shortcuts_actions": {
+    "cannot_close_last_tab": "Cannot close the last terminal tab"
+  },
+  "cache": {
+    "directory_cleared": "Directory cache cleared"
+  },
+  "config": {
+    "unknown_size": "Unknown",
+    "unknown_time": "Unknown",
+    "invalid_time": "Invalid time"
+  }
+}

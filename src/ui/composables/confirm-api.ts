@@ -4,6 +4,9 @@
 
 import { createApp, h, ref } from 'vue'
 import XModal from '../components/Modal.vue'
+import { createI18n } from 'vue-i18n'
+import zhMessages from '@/i18n/locales/zh.json'
+import enMessages from '@/i18n/locales/en.json'
 
 export interface ConfirmConfig {
   /** 确认消息内容 */
@@ -105,6 +108,17 @@ export const confirm = (config: string | ConfirmConfig): Promise<boolean> => {
       handleResult(false)
     }
 
+    // 创建i18n实例
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh',
+      fallbackLocale: 'en',
+      messages: {
+        zh: zhMessages,
+        en: enMessages,
+      },
+    })
+
     // 创建Vue应用实例
     const app = createApp({
       setup() {
@@ -131,6 +145,7 @@ export const confirm = (config: string | ConfirmConfig): Promise<boolean> => {
               onCancel: handleCancel,
               onClose: handleClose,
               class: `confirm-modal confirm-modal--${normalizedConfig.type}`,
+              confirmButtonClass: normalizedConfig.type === 'danger' ? 'danger' : '',
             },
             {
               default: () =>
@@ -235,6 +250,63 @@ export const confirm = (config: string | ConfirmConfig): Promise<boolean> => {
           )
       },
     })
+
+    // 安装i18n插件
+    app.use(i18n)
+
+    // 添加全局样式
+    const style = document.createElement('style')
+    style.textContent = `
+      .confirm-content {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 13px;
+        line-height: 1.4;
+        min-height: 24px;
+      }
+      
+      .confirm-icon {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      .confirm-icon--warning {
+        color: #f9c74f;
+      }
+      
+      .confirm-icon--danger {
+        color: #f85149;
+      }
+      
+      .confirm-icon--info {
+        color: #58a6ff;
+      }
+      
+      .confirm-message {
+        color: var(--text-100);
+        flex: 1;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      
+      .confirm-modal .modal-button-primary.danger {
+        background-color: #da3633;
+        border-color: #da3633;
+      }
+      
+      .confirm-modal .modal-button-primary.danger:hover:not(:disabled) {
+        background-color: #e5484d;
+        border-color: #e5484d;
+      }
+      
+      .confirm-modal .modal-button-primary.danger:active:not(:disabled) {
+        background-color: #cd2b31;
+      }
+    `
+    document.head.appendChild(style)
 
     // 挂载应用
     app.mount(container)

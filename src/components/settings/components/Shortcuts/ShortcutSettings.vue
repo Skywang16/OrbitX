@@ -1,81 +1,60 @@
 <template>
-  <div class="shortcut-settings">
-    <div class="settings-group">
-      <h3 class="section-title">快捷键设置</h3>
-      <!-- 冲突警告 -->
-      <div v-if="hasConflicts" class="alert alert-warning">
-        <span class="alert-icon">⚠️</span>
-        <span>检测到 {{ conflictCount }} 个快捷键冲突</span>
-      </div>
+  <div class="settings-group">
+    <h2 class="settings-section-title">{{ t('settings.shortcuts.title') }}</h2>
 
-      <!-- 动作列表 -->
-      <div class="actions-list">
-        <div v-if="loading" class="loading-state">
-          <div class="loading-spinner"></div>
-          <span>加载中...</span>
+    <div v-if="hasConflicts" class="settings-warning">
+      <span class="settings-warning-icon">⚠️</span>
+      <span>{{ t('shortcuts.conflicts', { count: conflictCount }) }}</span>
+    </div>
+
+    <div v-if="loading" class="settings-loading">
+      <div class="settings-loading-spinner"></div>
+      <span>{{ t('shortcuts.loading') }}</span>
+    </div>
+    <div v-else class="settings-group">
+      <h3 class="settings-group-title">{{ t('shortcuts.title') }}</h3>
+      <div
+        v-for="action in allActions"
+        :key="action.key"
+        class="settings-item shortcut-item"
+        :class="{
+          'shortcut-item--editing': isEditing(action.key),
+          'shortcut-item--configured': action.shortcut,
+        }"
+        @click="startEdit(action.key)"
+        @keydown="handleKeyDown($event, action.key)"
+        @blur="stopEdit(action.key)"
+        tabindex="0"
+      >
+        <div class="settings-item-header">
+          <div class="settings-label">{{ action.displayName }}</div>
         </div>
-        <div v-else>
-          <div class="action-category">
-            <h4>全局快捷键</h4>
-            <div class="action-items">
-              <div v-for="action in globalActions" :key="action.key" class="action-item">
-                <div class="action-name">{{ action.displayName }}</div>
-                <div
-                  class="shortcut-key-editor"
-                  :class="{ editing: isEditing(action.key), configured: action.shortcut }"
-                  @click="startEdit(action.key)"
-                  @keydown="handleKeyDown($event, action.key)"
-                  @blur="stopEdit(action.key)"
-                  tabindex="0"
-                >
-                  <span v-if="!isEditing(action.key)" class="shortcut-display">
-                    <template v-if="action.shortcut">
-                      <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="modifier">
-                        {{ modifier }}
-                      </span>
-                      <span class="key">{{ action.shortcut.key }}</span>
-                    </template>
-                    <span v-else class="not-configured">点击配置</span>
-                  </span>
-                  <span v-else class="editing-hint">按下新的快捷键组合...</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="action-category">
-            <h4>终端快捷键</h4>
-            <div class="action-items">
-              <div v-for="action in terminalActions" :key="action.key" class="action-item">
-                <div class="action-name">{{ action.displayName }}</div>
-                <div
-                  class="shortcut-key-editor"
-                  :class="{ editing: isEditing(action.key), configured: action.shortcut }"
-                  @click="startEdit(action.key)"
-                  @keydown="handleKeyDown($event, action.key)"
-                  @blur="stopEdit(action.key)"
-                  tabindex="0"
-                >
-                  <span v-if="!isEditing(action.key)" class="shortcut-display">
-                    <template v-if="action.shortcut">
-                      <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="modifier">
-                        {{ modifier }}
-                      </span>
-                      <span class="key">{{ action.shortcut.key }}</span>
-                    </template>
-                    <span v-else class="not-configured">点击配置</span>
-                  </span>
-                  <span v-else class="editing-hint">按下新的快捷键组合...</span>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div class="settings-item-control">
+          <span v-if="!isEditing(action.key)" class="shortcut-display">
+            <template v-if="action.shortcut">
+              <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="shortcut-modifier">
+                {{ modifier }}
+              </span>
+              <span class="shortcut-key">{{ action.shortcut.key }}</span>
+            </template>
+            <span v-else class="shortcut-not-configured">{{ t('shortcuts.not_configured') }}</span>
+          </span>
+          <span v-else class="shortcut-editing-hint">{{ t('shortcuts.editing_hint') }}</span>
         </div>
       </div>
+    </div>
 
-      <!-- 操作按钮 -->
-      <div class="actions-section">
-        <x-button variant="outline" @click="handleReset" :disabled="loading">重置到默认</x-button>
+    <div v-if="!loading" class="settings-group">
+      <div class="settings-item">
+        <div class="settings-item-header">
+          <div class="settings-label">{{ t('shortcuts.reset_shortcuts') }}</div>
+          <div class="settings-description">{{ t('shortcuts.reset_description') }}</div>
+        </div>
+        <div class="settings-item-control">
+          <x-button variant="outline" @click="handleReset" :disabled="loading">
+            {{ t('shortcuts.reset_to_default') }}
+          </x-button>
+        </div>
       </div>
     </div>
   </div>
@@ -83,17 +62,16 @@
 
 <script setup lang="ts">
   import { ref, computed, onMounted } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { handleErrorWithMessage } from '@/utils/errorHandler'
   import { useShortcuts } from '@/composables/useShortcuts'
   import { createMessage } from '@/ui/composables/message-api'
   import { useShortcutStore } from '@/stores/shortcuts'
-  import { SHORTCUT_ACTIONS } from '@/shortcuts/constants'
+
   import { confirmWarning } from '@/ui/composables/confirm-api'
 
   import type { ShortcutBinding } from '@/types'
-  import { ShortcutCategory } from '@/types'
 
-  // 组合式API
   const {
     config,
     loading,
@@ -108,42 +86,36 @@
   const store = useShortcutStore()
   const lastConflictDetection = computed(() => store.lastConflictDetection)
 
-  // 响应式状态
   const editingActionKey = ref<string | null>(null)
   const capturedShortcut = ref<{ key: string; modifiers: string[] } | null>(null)
+  const { t } = useI18n()
 
-  // 计算属性
   const conflicts = computed(() => lastConflictDetection.value?.conflicts || [])
   const conflictCount = computed(() => conflicts.value.length)
 
-  // 方法
   const handleReset = async () => {
     try {
-      const shouldReset = await confirmWarning(
-        '此操作将重置所有快捷键到默认配置，当前的自定义设置将会丢失。',
-        '重置快捷键配置'
-      )
+      const shouldReset = await confirmWarning(t('shortcuts.reset_confirm_message'), t('shortcuts.reset_confirm_title'))
 
       if (shouldReset) {
         await resetToDefaults()
 
-        // 只更新监听器配置，不做其他操作
         if ((window as any).reloadShortcuts) {
           await (window as any).reloadShortcuts()
         }
 
-        createMessage.success('快捷键配置已重置为默认')
+        createMessage.success(t('shortcuts.reset_success'))
       }
     } catch (error) {
-      handleErrorWithMessage(error, '重置配置失败')
+      handleErrorWithMessage(error, t('shortcuts.reset_failed'))
     }
   }
 
-  // 全局动作定义
-  const globalActionKeys = ['copy_to_clipboard', 'paste_from_clipboard', 'terminal_search', 'open_settings']
-
-  // 终端动作定义
-  const terminalActionKeys = [
+  const allActionKeys = [
+    'copy_to_clipboard',
+    'paste_from_clipboard',
+    'terminal_search',
+    'open_settings',
     'new_tab',
     'close_tab',
     'clear_terminal',
@@ -156,14 +128,14 @@
     'accept_completion',
     'increase_font_size',
     'decrease_font_size',
+    'toggle_ai_sidebar',
+    'toggle_window_pin',
   ]
 
-  // 查找快捷键配置
   const findShortcut = (actionKey: string) => {
     if (!config.value) return null
 
-    // 在所有类别中查找
-    for (const shortcut of [...config.value.global, ...config.value.terminal, ...config.value.custom]) {
+    for (const shortcut of config.value) {
       if (shortcut.action === actionKey) {
         return shortcut
       }
@@ -171,25 +143,14 @@
     return null
   }
 
-  // 计算全局动作列表
-  const globalActions = computed(() => {
-    return globalActionKeys.map(actionKey => ({
+  const allActions = computed(() => {
+    return allActionKeys.map(actionKey => ({
       key: actionKey,
-      displayName: SHORTCUT_ACTIONS[actionKey as keyof typeof SHORTCUT_ACTIONS] || actionKey,
+      displayName: t(`shortcuts.actions.${actionKey}`) || actionKey,
       shortcut: findShortcut(actionKey),
     }))
   })
 
-  // 计算终端动作列表
-  const terminalActions = computed(() => {
-    return terminalActionKeys.map(actionKey => ({
-      key: actionKey,
-      displayName: SHORTCUT_ACTIONS[actionKey as keyof typeof SHORTCUT_ACTIONS] || actionKey,
-      shortcut: findShortcut(actionKey),
-    }))
-  })
-
-  // 编辑状态管理
   const isEditing = (actionKey: string) => editingActionKey.value === actionKey
 
   const startEdit = (actionKey: string) => {
@@ -201,7 +162,6 @@
     if (editingActionKey.value === actionKey) {
       editingActionKey.value = null
       if (capturedShortcut.value) {
-        // 保存新的快捷键
         saveShortcut(actionKey, capturedShortcut.value)
       }
       capturedShortcut.value = null
@@ -226,7 +186,6 @@
 
     capturedShortcut.value = { key, modifiers }
 
-    // 自动保存并退出编辑模式
     setTimeout(() => stopEdit(actionKey), 100)
   }
 
@@ -238,239 +197,204 @@
         action: actionKey,
       }
 
-      // 确定类别
-      const category = globalActionKeys.includes(actionKey) ? ShortcutCategory.Global : ShortcutCategory.Terminal
-
-      // 先删除现有的配置（内部处理）
       await removeExistingShortcut(actionKey)
 
-      // 添加新配置
-      await addShortcut(category, shortcutBinding)
+      await addShortcut(shortcutBinding)
 
-      // 重新加载快捷键监听器配置（仅更新监听器，不刷新页面）
       if ((window as any).reloadShortcuts) {
         await (window as any).reloadShortcuts()
       }
 
       createMessage.success(
-        `${SHORTCUT_ACTIONS[actionKey as keyof typeof SHORTCUT_ACTIONS] || actionKey} 快捷键设置成功`
+        t('shortcuts.save_success', {
+          action: t(`shortcuts.actions.${actionKey}`) || actionKey,
+        })
       )
     } catch (error) {
-      handleErrorWithMessage(error, '保存快捷键失败')
+      handleErrorWithMessage(error, t('shortcuts.save_failed'))
     }
   }
 
   const removeExistingShortcut = async (actionKey: string) => {
     if (!config.value) return
 
-    // 在所有类别中查找并删除现有配置（静默处理）
-    const categories = [
-      { name: ShortcutCategory.Global, shortcuts: config.value.global },
-      { name: ShortcutCategory.Terminal, shortcuts: config.value.terminal },
-      { name: ShortcutCategory.Custom, shortcuts: config.value.custom },
-    ]
-
-    for (const cat of categories) {
-      const index = cat.shortcuts.findIndex(s => s.action === actionKey)
-      if (index !== -1) {
-        await removeShortcut(cat.name, index)
+    for (let i = 0; i < config.value.length; i++) {
+      if (config.value[i].action === actionKey) {
+        await removeShortcut(i)
         return
       }
     }
   }
 
-  // 生命周期
   onMounted(async () => {
-    // 使用新的初始化检查机制
     if (!store.initialized && !loading.value) {
       try {
         await initialize()
       } catch (err) {
-        handleErrorWithMessage(err, '快捷键设置初始化失败')
+        handleErrorWithMessage(err, t('shortcuts.init_failed'))
       }
     }
   })
 </script>
 
 <style scoped>
-  .shortcut-settings {
-    padding: 24px 28px;
-    background: var(--bg-200);
-    margin-bottom: 24px;
+  .shortcut-item {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: var(--border-radius);
+    min-height: 60px; /* 固定最小高度防止抖动 */
   }
 
-  .settings-group {
-    margin-bottom: 32px;
-    padding-bottom: 32px;
-    border-bottom: 1px solid var(--border-300);
+  .shortcut-item:hover {
+    background: var(--bg-400);
   }
 
-  .settings-group:last-child {
-    margin-bottom: 0;
-    padding-bottom: 0;
-    border-bottom: none;
+  .shortcut-item:focus {
+    outline: none;
+    background: var(--bg-400);
+    border: 1px solid var(--color-primary);
   }
 
-  .section-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--text-100);
-    margin: 0 0 16px 0;
-    padding: 0;
+  .shortcut-item--editing {
+    background: var(--color-primary-alpha);
+    border: 1px solid var(--color-primary);
+    animation: pulse 1.5s infinite;
   }
 
-  .alert {
+  .shortcut-display {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    border-radius: 4px;
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    min-height: 28px; /* 确保有固定高度 */
+  }
+
+  .shortcut-modifier {
+    background: var(--bg-600);
+    border: 1px solid var(--border-400);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-200);
+    font-weight: 500;
+    min-width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  }
+
+  .shortcut-key {
+    background: var(--bg-600);
+    border: 1px solid var(--border-400);
+    color: var(--text-200);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    min-width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  }
+
+  .shortcut-not-configured {
+    color: var(--text-400);
+    font-style: italic;
+    min-height: 28px; /* 与按键相同高度 */
+    display: flex;
+    align-items: center;
+  }
+
+  .shortcut-editing-hint {
+    color: var(--color-primary);
+    font-style: italic;
+    min-height: 28px; /* 与按键相同高度 */
+    display: flex;
+    align-items: center;
+  }
+
+  .settings-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--color-warning-alpha);
+    border: 1px solid var(--color-warning);
+    border-radius: var(--border-radius);
+    color: var(--color-warning-text);
     margin-bottom: 16px;
-    background: var(--color-warning);
-    color: white;
-    font-size: 14px;
+    font-size: 13px;
   }
 
-  .actions-list {
-    margin-bottom: 24px;
+  .settings-warning-icon {
+    font-size: 16px;
   }
 
-  .loading-state {
+  .settings-loading {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 12px;
-    padding: 32px;
-    color: var(--text-400);
-    background: var(--bg-300);
-    border-radius: 4px;
+    padding: 40px;
+    color: var(--text-300);
   }
 
-  .loading-spinner {
-    width: 24px;
-    height: 24px;
+  .settings-loading-spinner {
+    width: 20px;
+    height: 20px;
     border: 2px solid var(--border-300);
     border-top: 2px solid var(--color-primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
 
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+
   @keyframes spin {
-    to {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
       transform: rotate(360deg);
     }
   }
 
-  .action-category {
-    margin-bottom: 24px;
+  /* 响应式设计 */
+  @media (max-width: 480px) {
+    .shortcut-display {
+      gap: 1px;
+    }
+
+    .shortcut-modifier,
+    .shortcut-key {
+      padding: 1px 3px;
+      font-size: 9px;
+    }
   }
 
-  .action-category h4 {
-    margin: 0 0 12px 0;
-    font-size: 16px;
-    font-weight: 500;
-    color: var(--text-200);
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--border-300);
-  }
-
-  .action-items {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .action-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    background: var(--bg-300);
-    border-radius: 4px;
-    gap: 20px;
-  }
-
-  .action-item:hover {
-    background: var(--bg-400);
-  }
-
-  .action-name {
-    flex: 1;
-    color: var(--text-200);
-    font-size: 15px;
-  }
-
-  .shortcut-key-editor {
-    flex: 2;
-    min-width: 220px;
-    padding: 10px 14px;
-    background: var(--bg-400);
-    border: 1px solid transparent;
-    border-radius: 4px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-  }
-
-  .shortcut-key-editor:hover {
-    background: var(--bg-500);
-  }
-
-  .shortcut-key-editor.editing {
-    border-color: var(--color-primary);
-    background: var(--color-primary-alpha);
-    box-shadow: 0 0 0 1px var(--color-primary);
-  }
-
-  .shortcut-display {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .not-configured {
-    color: var(--text-400);
-    font-size: 14px;
-  }
-
-  .modifier,
-  .key {
-    padding: 4px 8px;
-    background: var(--bg-500);
-    border-radius: 3px;
-    font-size: 12px;
-    font-family: var(--font-family-mono);
-    color: var(--text-200);
-  }
-
-  .key {
-    background: var(--color-primary);
-    color: white;
-  }
-
-  .actions-section {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    padding-top: 16px;
-  }
-
-  .actions-section :deep(.x-button) {
-    background: transparent;
-    border: 1px solid var(--border-300);
-    color: var(--text-300);
-    border-radius: 4px;
-    padding: 8px 16px;
-    font-size: 14px;
-  }
-
-  .actions-section :deep(.x-button:hover) {
-    background: var(--bg-400);
-    color: var(--text-200);
-    border-color: var(--border-400);
-  }
-
-  .actions-section :deep(.x-button:disabled) {
-    opacity: 0.5;
+  @media (max-width: 320px) {
+    .settings-warning {
+      padding: 6px 8px;
+      font-size: 10px;
+    }
   }
 </style>

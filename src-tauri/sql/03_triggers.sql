@@ -15,9 +15,9 @@ BEGIN
     UPDATE ai_conversations
     SET message_count = message_count + 1,
         updated_at = CURRENT_TIMESTAMP,
-        -- 如果是第一条用户消息且标题仍为"新对话"，则自动更新标题
+        -- 如果是第一条用户消息且标题为空，则自动更新标题
         title = CASE
-            WHEN NEW.role = 'user' AND title = '新对话' THEN
+            WHEN NEW.role = 'user' AND (title IS NULL OR title = '') THEN
                 CASE
                     WHEN LENGTH(NEW.content) > 20 THEN SUBSTR(NEW.content, 1, 20) || '...'
                     ELSE NEW.content

@@ -1,81 +1,68 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
-  import { confirm, createMessage } from '@/ui'
+  import { createMessage } from '@/ui'
   import { handleError } from '@/utils/errorHandler'
   import { computed, onMounted, ref } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import AIModelForm from './AIModelForm.vue'
   import { useAISettingsStore } from './store'
 
-  // 使用AI设置store
+  const { t } = useI18n()
+
   const aiSettingsStore = useAISettingsStore()
 
-  // 响应式数据
   const showAddForm = ref(false)
   const editingModel = ref<AIModelConfig | null>(null)
 
-  // 使用store中的数据和状态
   const models = computed(() => aiSettingsStore.models)
   const loading = computed(() => aiSettingsStore.isLoading)
 
-  // 生命周期
   onMounted(async () => {
-    // 确保数据已加载
     if (!aiSettingsStore.isInitialized) {
       await aiSettingsStore.loadSettings()
     }
   })
 
-  // 处理添加模型
   const handleAddModel = () => {
     editingModel.value = null
     showAddForm.value = true
   }
 
-  // 处理编辑模型
   const handleEditModel = (model: AIModelConfig) => {
     editingModel.value = { ...model }
     showAddForm.value = true
   }
 
-  // 处理删除模型
   const handleDeleteModel = async (modelId: string) => {
-    const confirmed = await confirm('确定要删除这个AI模型配置吗？')
-
-    if (confirmed) {
-      try {
-        await aiSettingsStore.removeModel(modelId)
-        createMessage.success('模型删除成功')
-      } catch (error) {
-        createMessage.error(handleError(error, '删除失败'))
-      }
+    try {
+      await aiSettingsStore.removeModel(modelId)
+      createMessage.success(t('ai_model.delete_success'))
+    } catch (error) {
+      createMessage.error(handleError(error, t('ai_model.delete_failed')))
     }
   }
 
-  // 处理表单提交
   const handleFormSubmit = async (modelData: Omit<AIModelConfig, 'id'>) => {
     try {
       if (editingModel.value) {
-        // 编辑模式
         await aiSettingsStore.updateModel(editingModel.value.id, modelData)
-        createMessage.success('模型更新成功')
+        createMessage.success(t('ai_model.update_success'))
       } else {
-        // 添加模式
         const newModel: AIModelConfig = {
           ...modelData,
           id: Date.now().toString(),
         }
 
         await aiSettingsStore.addModel(newModel)
-        createMessage.success('模型添加成功')
+        createMessage.success(t('ai_model.add_success'))
       }
       showAddForm.value = false
       editingModel.value = null
     } catch (error) {
-      createMessage.error(handleError(error, '操作失败'))
+      createMessage.error(handleError(error, t('ai_model.operation_failed')))
     }
   }
 
-  // 处理表单取消
   const handleFormCancel = () => {
     showAddForm.value = false
     editingModel.value = null
@@ -83,59 +70,60 @@
 </script>
 
 <template>
-  <div class="ai-model-config">
-    <!-- 操作按钮 -->
-    <div class="action-header">
-      <x-button variant="primary" @click="handleAddModel">
-        <template #icon>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </template>
-        添加模型
-      </x-button>
-    </div>
-
-    <!-- 模型列表 -->
-    <div class="models-list">
-      <!-- 加载状态 -->
-      <div v-if="loading" class="loading-state">
-        <div class="loading-spinner"></div>
-        <p>加载中...</p>
+  <div class="settings-group">
+    <h3 class="settings-group-title">{{ t('settings.ai.model_config') }}</h3>
+    <div class="settings-item">
+      <div class="settings-item-header">
+        <div class="settings-label">{{ t('ai_model.add_new_model') }}</div>
+        <div class="settings-description">{{ t('ai_model.add_model_description') }}</div>
       </div>
-
-      <!-- 空状态 -->
-      <div v-else-if="models.length === 0" class="empty-state">
-        <div class="empty-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path
-              d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"
-            />
-            <path
-              d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"
-            />
-          </svg>
-        </div>
-        <h3 class="empty-title">暂无AI模型</h3>
-        <p class="empty-description">点击"添加模型"按钮开始配置您的第一个AI模型</p>
-      </div>
-
-      <div v-else class="model-cards">
-        <div v-for="model in models" :key="model.id" class="model-card">
-          <div class="model-left">
-            <div class="model-name">{{ model.name }}</div>
-          </div>
-
-          <div class="model-actions">
-            <x-button variant="secondary" size="small" @click.stop="handleEditModel(model)">编辑</x-button>
-            <x-button variant="danger" size="small" @click.stop="handleDeleteModel(model.id)">删除</x-button>
-          </div>
-        </div>
+      <div class="settings-item-control">
+        <x-button variant="primary" @click="handleAddModel">
+          {{ t('ai_model.add_model') }}
+        </x-button>
       </div>
     </div>
 
-    <!-- 模型表单弹窗 -->
+    <div v-if="loading" class="settings-loading">
+      <div class="settings-loading-spinner"></div>
+      <span>{{ t('ai_model.loading') }}</span>
+    </div>
+
+    <div v-else-if="models.length === 0" class="settings-item">
+      <div class="settings-item-header">
+        <div class="settings-label">{{ t('ai_model.no_models') }}</div>
+        <div class="settings-description">{{ t('ai_model_config.empty_description') }}</div>
+      </div>
+    </div>
+    <div v-else>
+      <div v-for="model in models" :key="model.id" class="settings-item">
+        <div class="settings-item-header">
+          <div class="settings-label">{{ model.name }}</div>
+          <div class="settings-description">{{ model.provider || t('ai_model.default_provider') }}</div>
+        </div>
+        <div class="settings-item-control">
+          <x-button variant="secondary" size="small" @click="handleEditModel(model)">
+            {{ t('ai_model.edit') }}
+          </x-button>
+          <x-popconfirm
+            :title="t('ai_model.delete_confirm')"
+            :description="t('ai_model.delete_description', { name: model.name })"
+            type="danger"
+            :confirm-text="t('ai_model.delete_confirm_text')"
+            :cancel-text="t('ai_model.cancel')"
+            placement="top"
+            @confirm="handleDeleteModel(model.id)"
+          >
+            <template #trigger>
+              <x-button variant="danger" size="small">
+                {{ t('ai_model.delete') }}
+              </x-button>
+            </template>
+          </x-popconfirm>
+        </div>
+      </div>
+    </div>
+
     <AIModelForm v-if="showAddForm" :model="editingModel" @submit="handleFormSubmit" @cancel="handleFormCancel" />
   </div>
 </template>

@@ -57,9 +57,9 @@ text_400 = "#d5c4a1"
 text_500 = "#928374"
 
 # 状态颜色
-primary = "#458588"
-primary_hover = "#327074"
-primary_alpha = "rgba(69, 133, 136, 0.1)"
+primary = "#80c7ff"
+primary_hover = "#66b3ff"
+primary_alpha = "rgba(128, 199, 255, 0.1)"
 success = "#98971a"
 warning = "#d79921"
 error = "#cc241d"

@@ -1,17 +1,7 @@
-/**
- * 统一的错误处理工具
- */
-
 import { AIError, AIErrorType } from '@/types'
 import { createMessage } from '@/ui'
 
-/**
- * 统一的错误处理函数
- * @param error 错误对象
- * @param defaultMessage 默认错误消息
- * @returns 用户友好的错误消息
- */
-export const handleError = (error: unknown, defaultMessage = '操作失败'): string => {
+export const handleError = (error: unknown, defaultMessage = 'Operation failed'): string => {
   if (typeof error === 'string') {
     return error
   }
@@ -27,38 +17,29 @@ export const handleError = (error: unknown, defaultMessage = '操作失败'): st
   return defaultMessage
 }
 
-/**
- * 获取AI错误的用户友好消息
- */
 const getAIErrorMessage = (error: AIError): string => {
   switch (error.type) {
     case AIErrorType.AUTHENTICATION_ERROR:
-      return '认证失败，请检查API密钥'
+      return 'Authentication failed, please check API key'
     case AIErrorType.NETWORK_ERROR:
-      return '网络连接失败，请检查网络设置'
+      return 'Network connection failed, please check network settings'
     case AIErrorType.RATE_LIMIT_ERROR:
-      return '请求过于频繁，请稍后再试'
+      return 'Too many requests, please try again later'
     case AIErrorType.TIMEOUT_ERROR:
-      return '请求超时，请稍后再试'
+      return 'Request timeout, please try again later'
     case AIErrorType.MODEL_ERROR:
-      return '模型配置错误，请检查模型设置'
+      return 'Model configuration error, please check model settings'
     default:
-      return error.message || '未知错误'
+      return error.message || 'Unknown error'
   }
 }
 
-/**
- * 处理错误并显示消息
- */
-export const handleErrorWithMessage = (error: unknown, defaultMessage = '操作失败') => {
+export const handleErrorWithMessage = (error: unknown, defaultMessage = 'Operation failed') => {
   const errorMessage = handleError(error, defaultMessage)
   createMessage.error(errorMessage)
   return errorMessage
 }
 
-/**
- * API调用装饰器，统一处理错误
- */
 export const withErrorHandling = <T extends (...args: unknown[]) => Promise<unknown>>(
   fn: T,
   errorMessage?: string

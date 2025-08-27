@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType } from '@/types'
@@ -23,6 +24,7 @@
 
   const tabManagerStore = useTabManagerStore()
   const terminalStore = useTerminalStore()
+  const { t } = useI18n()
 
   // 获取当前活跃tab的路径信息
   const currentTabPath = computed(() => {
@@ -62,7 +64,7 @@
         return `${currentTabPath.value} ${parts.slice(1).join(' ')}`
       }
     }
-    return `${currentTabPath.value} 已选择内容`
+    return `${currentTabPath.value} ${t('session.selected_content')}`
   })
 </script>
 
@@ -76,10 +78,10 @@
           <line x1="12" y1="17" x2="12" y2="21" />
         </svg>
       </div>
-      <span class="tag-text" @click="emit('insert')" :title="`点击插入到输入框: ${displayText}`">
+      <span class="tag-text" @click="emit('insert')" :title="`${t('session.click_to_insert')}: ${displayText}`">
         {{ displayText }}
       </span>
-      <button class="tag-close" @click="emit('clear')" title="清除选择">
+      <button class="tag-close" @click="emit('clear')" :title="t('session.clear_selection')">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="18" y1="6" x2="6" y2="18" />
           <line x1="6" y1="6" x2="18" y2="18" />

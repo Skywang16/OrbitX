@@ -1,59 +1,66 @@
 <script setup lang="ts">
+  import { useI18n } from 'vue-i18n'
   import AISettings from '@/components/settings/components/AI/AISettings.vue'
   import ThemeSettings from '@/components/settings/components/Theme/ThemeSettings.vue'
   import ShortcutSettings from '@/components/settings/components/Shortcuts/ShortcutSettings.vue'
+  import { LanguageSettings } from '@/components/settings/components/Language'
+  import { GeneralSettings } from '@/components/settings/components/General'
   import SettingsNav from '@/components/settings/SettingsNav.vue'
   import { useSettingsStore } from '@/components/settings/store'
-  import { onMounted, watch, toRef } from 'vue'
+  import { createMessage, XButton } from '@/ui'
+  import { configApi } from '@/api/config'
+  import { onMounted } from 'vue'
+  import { debounce } from 'lodash-es'
 
-  interface Props {
-    section?: string
-  }
-
-  const props = defineProps<Props>()
+  const { t } = useI18n()
   const settingsStore = useSettingsStore()
 
-  // 组件挂载时设置设置页面为打开状态并初始化设置
   onMounted(async () => {
-    settingsStore.openSettings()
-    if (props.section) {
-      settingsStore.setActiveSection(props.section)
-    }
-    // 初始化所有设置
+    settingsStore.setActiveSection('general')
     await settingsStore.initializeSettings()
   })
 
-  // 外部传入的 section 变化时同步到 store
-  const sectionRef = toRef(props, 'section')
-  watch(sectionRef, newVal => {
-    if (newVal) settingsStore.setActiveSection(newVal)
-  })
-
-  // 处理导航项切换
   const handleNavigationChange = (section: string) => {
     settingsStore.setActiveSection(section)
   }
+
+  const openConfigFolder = async () => {
+    try {
+      await configApi.openConfigFolder()
+      createMessage.success(t('settings.general.config_folder_opened'))
+    } catch (error) {
+      console.error('Failed to open config folder:', error)
+      createMessage.error(t('settings.general.config_folder_error'))
+    }
+  }
+
+  // 创建防抖版本的函数，防止用户快速点击导致重复调用
+  const handleOpenConfigFolder = debounce(openConfigFolder, 500)
 </script>
 
 <template>
-  <div class="settings-view">
-    <!-- 设置页面主体 -->
+  <div class="settings-container">
     <div class="settings-content">
       <!-- 左侧导航 -->
       <div class="settings-sidebar">
         <SettingsNav :activeSection="settingsStore.activeSection" @change="handleNavigationChange" />
+
+        <!-- 底部按钮区域 -->
+        <div class="settings-sidebar-footer">
+          <XButton variant="primary" size="medium" @click="handleOpenConfigFolder">
+            {{ t('settings.general.open_config_folder') }}
+          </XButton>
+        </div>
       </div>
 
       <!-- 右侧内容区域 -->
       <div class="settings-main">
         <div class="settings-panel">
-          <!-- 根据当前选中的设置项显示对应组件 -->
-          <ThemeSettings v-if="settingsStore.activeSection === 'theme'" />
-          <AISettings v-if="settingsStore.activeSection === 'ai'" />
-          <ShortcutSettings v-if="settingsStore.activeSection === 'shortcuts'" />
-
-          <!-- 默认显示主题设置 -->
-          <ThemeSettings v-if="!settingsStore.activeSection" />
+          <GeneralSettings v-if="settingsStore.activeSection === 'general'" />
+          <AISettings v-else-if="settingsStore.activeSection === 'ai'" />
+          <ThemeSettings v-else-if="settingsStore.activeSection === 'theme'" />
+          <ShortcutSettings v-else-if="settingsStore.activeSection === 'shortcuts'" />
+          <LanguageSettings v-else-if="settingsStore.activeSection === 'language'" />
         </div>
       </div>
     </div>
@@ -61,33 +68,22 @@
 </template>
 
 <style scoped>
-  .settings-view {
-    height: 100vh;
-    background-color: var(--bg-200);
-    overflow: hidden;
-  }
-
-  .settings-content {
+  .settings-sidebar {
     display: flex;
+    flex-direction: column;
     height: 100%;
   }
 
-  .settings-sidebar {
-    width: 220px;
-    background-color: var(--bg-300);
-    border-right: 1px solid var(--border-300);
-    overflow-y: auto;
-    flex-shrink: 0;
+  .settings-sidebar-footer {
+    display: flex;
+    justify-content: center;
+    padding: var(--spacing-md);
   }
 
-  .settings-main {
-    flex: 1;
-    overflow-y: auto;
-    background-color: var(--bg-200);
-  }
-
-  .settings-panel {
-    min-height: 100%;
-    padding: 0;
+  /* 响应式设计 */
+  @media (max-width: 480px) {
+    .settings-sidebar-footer {
+      padding: var(--spacing-sm);
+    }
   }
 </style>

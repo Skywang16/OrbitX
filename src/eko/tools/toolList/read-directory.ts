@@ -24,14 +24,14 @@ export class ReadDirectoryTool extends ModifiableTool {
   constructor() {
     super(
       'read_directory',
-      `递归列出目录中的所有文件和子目录，最多5层深度。以树形结构显示，目录以"/"结尾，会自动过滤隐藏文件。输出为LLM友好的树形格式。必须使用绝对路径。`,
+      `Recursively list all files and subdirectories in a directory, up to 5 levels deep. Displays in tree structure format, directories end with "/", automatically filters hidden files. Output is in LLM-friendly tree format. Must use absolute paths.`,
       {
         type: 'object',
         properties: {
           path: {
             type: 'string',
             description:
-              '目录的绝对路径。必须是完整路径，例如："/Users/user/project/src"、"/home/user/workspace/components"',
+              'Absolute path to the directory. Must be a complete path, for example: "/Users/user/project/src", "/home/user/workspace/components"',
           },
         },
         required: ['path'],
@@ -67,7 +67,7 @@ export class ReadDirectoryTool extends ModifiableTool {
       if (error instanceof FileNotFoundError) {
         throw error
       }
-      throw new ToolError(`读取目录失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ToolError(`Failed to read directory: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -126,7 +126,7 @@ export class ReadDirectoryTool extends ModifiableTool {
       })
     } catch (error) {
       // 如果读取失败，返回已有的entries
-      console.warn(`读取目录 ${dirPath} 失败: ${error instanceof Error ? error.message : String(error)}`)
+      console.warn(`Failed to read directory ${dirPath}: ${error instanceof Error ? error.message : String(error)}`)
     }
 
     return entries
@@ -134,7 +134,7 @@ export class ReadDirectoryTool extends ModifiableTool {
 
   private async formatTreeOutput(rootPath: string, entries: FileEntry[]): Promise<string> {
     if (entries.length === 0) {
-      return `目录为空`
+      return `Directory is empty`
     }
 
     const lines: string[] = []
@@ -147,9 +147,9 @@ export class ReadDirectoryTool extends ModifiableTool {
     const MAX_DISPLAY_ITEMS = 1000
     if (totalItems > MAX_DISPLAY_ITEMS) {
       lines.push('')
-      lines.push(`重要提示：目录结构已被截断（最多5层深度）。`)
-      lines.push(`状态：显示了部分内容，实际项目可能包含更多文件。`)
-      lines.push(`建议：如需查看特定文件，请使用 read_file 工具。`)
+      lines.push(`Important note: Directory structure has been truncated (maximum 5 levels deep).`)
+      lines.push(`Status: Partial content shown, actual project may contain more files.`)
+      lines.push(`Suggestion: To view specific files, please use the read_file tool.`)
     }
 
     return lines.join('\n')

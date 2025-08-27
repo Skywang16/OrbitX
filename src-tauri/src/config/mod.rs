@@ -16,19 +16,20 @@ pub mod types;
 
 // 重新导出核心类型和函数
 pub use commands::{
-    create_builtin_themes, get_config, get_config_file_info, get_config_file_path, get_theme_index,
-    get_theme_list, load_theme, open_config_file, refresh_theme_index, reset_config_to_defaults,
-    save_config, subscribe_config_events, switch_theme, update_config, validate_config,
-    validate_theme, ConfigManagerState,
+    create_builtin_themes, get_config, get_config_file_info, get_config_file_path,
+    get_config_folder_path, get_theme_index, get_theme_list, load_theme, open_config_file,
+    open_config_folder, refresh_theme_index, reset_config_to_defaults, save_config,
+    subscribe_config_events, switch_theme, update_config, validate_config, validate_theme,
+    ConfigManagerState,
 };
 pub use defaults::*;
 pub use paths::ConfigPaths;
 pub use shortcuts::{
     add_shortcut, detect_shortcuts_conflicts, execute_shortcut_action, export_shortcuts_config,
     get_action_metadata, get_current_platform, get_registered_actions, get_shortcuts_config,
-    get_shortcuts_statistics, import_shortcuts_config, remove_shortcut, reset_shortcuts_to_defaults,
-    search_shortcuts, update_shortcut, update_shortcuts_config, validate_key_combination,
-    validate_shortcuts_config, ShortcutManagerState,
+    get_shortcuts_statistics, import_shortcuts_config, remove_shortcut,
+    reset_shortcuts_to_defaults, search_shortcuts, update_shortcut, update_shortcuts_config,
+    validate_key_combination, validate_shortcuts_config, ShortcutManagerState,
 };
 pub use terminal_commands::{
     detect_system_shells, get_shell_info, get_terminal_config, reset_terminal_config_to_defaults,

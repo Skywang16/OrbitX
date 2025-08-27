@@ -2,59 +2,49 @@
   <Teleport to="body">
     <div v-if="visible" class="modal-overlay" @mousedown="handleOverlayMouseDown" @mouseup="handleOverlayMouseUp">
       <div ref="modalRef" class="modal-container" :class="sizeClass" role="dialog" aria-modal="true">
-        <!-- 模态框头部 -->
         <div v-if="showHeader" class="modal-header">
           <div class="modal-title-section">
             <h3 v-if="title" class="modal-title">{{ title }}</h3>
             <slot name="title"></slot>
           </div>
-          <button v-if="closable" class="modal-close-button" @click="handleClose" :title="closeButtonTitle">
+          <button
+            v-if="closable"
+            class="modal-close-button"
+            @click="handleClose"
+            :title="closeButtonTitle || t('dialog.close')"
+          >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
         </div>
-
-        <!-- 模态框内容 -->
         <div class="modal-body" :class="{ 'no-padding': noPadding }">
           <slot></slot>
         </div>
 
-        <!-- 模态框底部 -->
         <div v-if="showFooter" class="modal-footer">
           <slot name="footer">
             <div class="modal-actions">
-              <button
+              <XButton
                 v-if="showCancelButton"
-                type="button"
-                class="modal-button modal-button-secondary"
+                variant="secondary"
+                size="small"
                 @click="handleCancel"
                 :disabled="loading"
               >
-                {{ cancelText }}
-              </button>
-              <button
+                {{ cancelText || t('dialog.cancel') }}
+              </XButton>
+              <XButton
                 v-if="showConfirmButton"
-                type="button"
-                class="modal-button modal-button-primary"
+                :variant="confirmButtonClass === 'danger' ? 'danger' : 'primary'"
+                size="small"
                 @click="handleConfirm"
+                :loading="loading"
                 :disabled="loading"
               >
-                <svg
-                  v-if="loading"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  class="spinning"
-                >
-                  <path d="M21 12a9 9 0 11-6.219-8.56" />
-                </svg>
-                {{ loading ? loadingText : confirmText }}
-              </button>
+                {{ confirmText || t('dialog.confirm') }}
+              </XButton>
             </div>
           </slot>
         </div>
@@ -65,6 +55,8 @@
 
 <script setup lang="ts">
   import { computed, onMounted, onUnmounted, watch, ref } from 'vue'
+  import { useI18n } from 'vue-i18n'
+  import XButton from './Button.vue'
 
   interface Props {
     visible?: boolean
@@ -83,6 +75,7 @@
     loading?: boolean
     noPadding?: boolean
     zIndex?: number
+    confirmButtonClass?: string
   }
 
   interface Emits {
@@ -104,47 +97,41 @@
     showFooter: false,
     showCancelButton: true,
     showConfirmButton: true,
-    cancelText: '取消',
-    confirmText: '确定',
-    loadingText: '处理中...',
-    closeButtonTitle: '关闭',
+    cancelText: '',
+    confirmText: '',
+    loadingText: '',
+    closeButtonTitle: '',
     loading: false,
     noPadding: false,
     zIndex: 1000,
+    confirmButtonClass: '',
   })
 
   const emit = defineEmits<Emits>()
+  const { t } = useI18n()
 
-  // 用于跟踪鼠标按下状态，防止拖拽误触关闭
   const isMouseDownOnOverlay = ref(false)
 
-  // 计算尺寸类名
   const sizeClass = computed(() => `modal-${props.size}`)
 
-  // 处理遮罩鼠标按下
   const handleOverlayMouseDown = (event: MouseEvent) => {
-    // 只有直接点击遮罩层才标记为true
     if (event.target === event.currentTarget) {
       isMouseDownOnOverlay.value = true
     }
   }
 
-  // 处理遮罩鼠标释放
   const handleOverlayMouseUp = (event: MouseEvent) => {
-    // 只有在遮罩层按下且在遮罩层释放时才关闭弹窗
     if (isMouseDownOnOverlay.value && event.target === event.currentTarget && props.maskClosable) {
       handleClose()
     }
     isMouseDownOnOverlay.value = false
   }
 
-  // 处理关闭
   const handleClose = () => {
     emit('update:visible', false)
     emit('close')
   }
 
-  // 处理取消
   const handleCancel = () => {
     emit('cancel')
     if (!props.loading) {
@@ -152,19 +139,16 @@
     }
   }
 
-  // 处理确认
   const handleConfirm = () => {
     emit('confirm')
   }
 
-  // 处理ESC键
   const handleKeydown = (event: KeyboardEvent) => {
     if (event.key === 'Escape' && props.visible && props.closable) {
       handleClose()
     }
   }
 
-  // 监听visible变化
   watch(
     () => props.visible,
     newVisible => {
@@ -178,12 +162,10 @@
     }
   )
 
-  // 组件挂载时添加键盘监听
   onMounted(() => {
     document.addEventListener('keydown', handleKeydown)
   })
 
-  // 组件卸载时清理
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown)
     document.body.style.overflow = ''
@@ -191,27 +173,36 @@
 </script>
 
 <style scoped>
-  /* 模态框样式 - 使用全局主题变量 */
   .modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: var(--color-selection);
+    background-color: rgba(0, 0, 0, 0.6);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: v-bind(zIndex);
-    padding: var(--spacing-lg);
+    padding: 16px;
     backdrop-filter: blur(2px);
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   .modal-container {
-    background-color: var(--bg-400);
-    border: 1px solid var(--border-300);
-    border-radius: var(--border-radius-lg);
-    box-shadow: var(--shadow-sm);
+    background-color: var(--bg-100);
+    border: 1px solid var(--border-100);
+    border-radius: 6px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.32);
     max-height: 90vh;
     overflow: hidden;
     display: flex;
@@ -223,18 +214,17 @@
   @keyframes modalSlideIn {
     from {
       opacity: 0;
-      transform: translateY(-20px) scale(0.95);
+      transform: translateY(10px);
     }
     to {
       opacity: 1;
-      transform: translateY(0) scale(1);
+      transform: translateY(0);
     }
   }
 
-  /* 尺寸变体 */
   .modal-small {
     width: 100%;
-    max-width: 400px;
+    max-width: min(480px, calc(100vw - 32px));
   }
 
   .modal-medium {
@@ -258,8 +248,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--spacing-lg);
-    border-bottom: 1px solid var(--border-300);
+    padding: 20px 24px 16px 24px;
+    border-bottom: 1px solid var(--border-200);
     flex-shrink: 0;
   }
 
@@ -271,31 +261,35 @@
   .modal-title {
     font-size: var(--font-size-lg);
     font-weight: 600;
-    color: var(--text-200);
+    color: var(--text-100);
     margin: 0;
+    line-height: 1.3;
   }
 
   .modal-close-button {
     background: none;
     border: none;
-    color: var(--text-400);
+    color: var(--text-300);
     cursor: pointer;
-    padding: var(--spacing-xs);
-    border-radius: var(--border-radius);
-    transition: all 0.2s ease;
+    padding: 4px;
+    border-radius: 3px;
+    transition: all 0.1s ease;
     flex-shrink: 0;
-    margin-left: var(--spacing-md);
+    margin-left: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .modal-close-button:hover {
-    background-color: var(--color-hover);
-    color: var(--text-200);
+    background-color: var(--bg-300);
+    color: var(--text-100);
   }
 
   .modal-body {
     flex: 1;
     overflow-y: auto;
-    padding: var(--spacing-lg);
+    padding: 0 20px 20px 20px;
   }
 
   .modal-body.no-padding {
@@ -304,55 +298,14 @@
 
   .modal-footer {
     flex-shrink: 0;
-    padding: var(--spacing-lg);
-    border-top: 1px solid var(--border-300);
-    background-color: var(--bg-500);
+    padding: 12px 24px 24px 24px;
+    background-color: var(--bg-100);
   }
 
   .modal-actions {
     display: flex;
     justify-content: flex-end;
-    gap: var(--spacing-sm);
-  }
-
-  .modal-button {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-    padding: var(--spacing-sm) var(--spacing-lg);
-    border-radius: var(--border-radius);
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border: 1px solid;
-    min-width: 80px;
-    justify-content: center;
-  }
-
-  .modal-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .modal-button-secondary {
-    background-color: transparent;
-    border-color: var(--border-300);
-    color: var(--text-200);
-  }
-
-  .modal-button-secondary:hover:not(:disabled) {
-    background-color: var(--color-hover);
-  }
-
-  .modal-button-primary {
-    background-color: var(--color-primary);
-    border-color: var(--color-primary);
-    color: white;
-  }
-
-  .modal-button-primary:hover:not(:disabled) {
-    background-color: var(--color-primary-hover);
+    gap: 8px;
   }
 
   .spinning {
@@ -368,10 +321,9 @@
     }
   }
 
-  /* 响应式设计 */
-  @media (max-width: 768px) {
+  @media (max-width: 480px) {
     .modal-overlay {
-      padding: var(--spacing-md);
+      padding: 12px;
     }
 
     .modal-container {
@@ -382,20 +334,26 @@
     .modal-medium,
     .modal-large {
       width: 100%;
-      max-width: none;
+      max-width: calc(100vw - 24px);
     }
 
-    .modal-header,
-    .modal-body,
+    .modal-header {
+      padding: 16px 16px 12px 16px;
+    }
+
+    .modal-body {
+      padding: 0 16px 16px 16px;
+    }
+
     .modal-footer {
-      padding: var(--spacing-md);
+      padding: 8px 16px 16px 16px;
     }
 
     .modal-actions {
       flex-direction: column-reverse;
     }
 
-    .modal-button {
+    .modal-actions :deep(.x-button) {
       width: 100%;
     }
   }

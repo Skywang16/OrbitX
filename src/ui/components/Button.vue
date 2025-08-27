@@ -9,7 +9,6 @@
     @focus="handleFocus"
     @blur="handleBlur"
   >
-    <!-- 加载状态图标 -->
     <span v-if="loading" class="x-button__loading">
       <svg class="x-button__loading-icon" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25" />
@@ -17,7 +16,6 @@
       </svg>
     </span>
 
-    <!-- 左侧图标 -->
     <span v-if="showLeftIcon" class="x-button__icon x-button__icon--left">
       <slot name="icon">
         <svg v-if="icon" class="x-button__icon-svg" viewBox="0 0 24 24">
@@ -26,12 +24,10 @@
       </slot>
     </span>
 
-    <!-- 按钮内容 -->
     <span v-if="!circle && $slots.default" class="x-button__content">
       <slot></slot>
     </span>
 
-    <!-- 右侧图标 -->
     <span v-if="showRightIcon" class="x-button__icon x-button__icon--right">
       <slot name="icon">
         <svg v-if="icon" class="x-button__icon-svg" viewBox="0 0 24 24">
@@ -62,13 +58,9 @@
     click: [event: MouseEvent]
   }>()
 
-  // 获取插槽
   const slots = useSlots()
-
-  // 注入全局配置
   inject('xui-config', {})
 
-  // 计算按钮类名
   const buttonClasses = computed(() => [
     'x-button',
     `x-button--${props.variant}`,
@@ -83,17 +75,14 @@
     },
   ])
 
-  // 计算是否显示左侧图标
   const showLeftIcon = computed(() => {
     return !props.loading && (props.icon || slots.icon) && props.iconPosition === 'left'
   })
 
-  // 计算是否显示右侧图标
   const showRightIcon = computed(() => {
     return !props.loading && (props.icon || slots.icon) && props.iconPosition === 'right'
   })
 
-  // 计算aria-label
   const ariaLabel = computed(() => {
     if (props.loading) {
       return '加载中'
@@ -101,7 +90,6 @@
     return undefined
   })
 
-  // 处理点击事件
   const handleClick = (event: MouseEvent) => {
     if (props.disabled || props.loading) {
       event.preventDefault()
@@ -110,27 +98,19 @@
     emit('click', event)
   }
 
-  // 处理焦点事件
-  const handleFocus = (_event: FocusEvent) => {
-    // 可以在这里添加焦点处理逻辑
-  }
+  const handleFocus = (_event: FocusEvent) => {}
 
-  const handleBlur = (_event: FocusEvent) => {
-    // 可以在这里添加失焦处理逻辑
-  }
+  const handleBlur = (_event: FocusEvent) => {}
 </script>
 
 <style scoped>
-  /* 基础按钮样式 - 使用全局主题变量 */
   .x-button {
-    /* 基础变量 */
     --x-button-font-weight: 400;
     --x-button-border-width: 1px;
     --x-button-border-style: solid;
     --x-button-border-radius: var(--border-radius);
     --x-button-transition: all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
 
-    /* 尺寸变量 */
     --x-button-height-small: 24px;
     --x-button-padding-small: 0 var(--spacing-sm);
     --x-button-font-size-small: var(--font-size-xs);
@@ -144,7 +124,6 @@
     --x-button-font-size-large: var(--font-size-lg);
   }
 
-  /* 基础按钮样式 */
   .x-button {
     position: relative;
     display: inline-flex;
@@ -188,7 +167,6 @@
     background: var(--color-hover);
   }
 
-  /* 尺寸变体 */
   .x-button--small {
     height: var(--x-button-height-small);
     padding: var(--x-button-padding-small);
@@ -202,8 +180,6 @@
     font-size: var(--x-button-font-size-large);
     border-radius: var(--border-radius-lg);
   }
-
-  /* 主要按钮 */
   .x-button--primary {
     color: var(--text-100);
     background: var(--color-primary);
@@ -231,7 +207,6 @@
     opacity: 0.9;
   }
 
-  /* 次要按钮 */
   .x-button--secondary {
     color: var(--text-200);
     background: var(--bg-500);
@@ -242,8 +217,6 @@
     background: var(--color-hover);
     border-color: var(--border-400);
   }
-
-  /* 危险按钮 */
   .x-button--danger {
     color: var(--text-100);
     background: var(--color-error);
@@ -271,7 +244,6 @@
     opacity: 0.9;
   }
 
-  /* 幽灵按钮 */
   .x-button--ghost {
     color: var(--text-200);
     background: transparent;
@@ -283,8 +255,6 @@
     border-color: var(--color-primary);
     background: var(--color-primary-alpha);
   }
-
-  /* 链接按钮 */
   .x-button--link {
     color: var(--color-primary);
     background: transparent;
@@ -311,7 +281,6 @@
     opacity: 0.9;
   }
 
-  /* 禁用状态 */
   .x-button--disabled,
   .x-button:disabled {
     color: var(--text-500) !important;
@@ -328,8 +297,6 @@
     background: transparent !important;
     border-color: transparent !important;
   }
-
-  /* 加载状态 */
   .x-button--loading {
     position: relative;
     pointer-events: none;
@@ -339,12 +306,9 @@
     opacity: 0.6;
   }
 
-  /* 块级按钮 */
   .x-button--block {
     width: 100%;
   }
-
-  /* 圆角按钮 */
   .x-button--round {
     border-radius: 32px;
   }
@@ -357,7 +321,6 @@
     border-radius: 40px;
   }
 
-  /* 圆形按钮 */
   .x-button--circle {
     min-width: var(--x-button-height-medium);
     padding: 0;
@@ -371,8 +334,6 @@
   .x-button--circle.x-button--large {
     min-width: var(--x-button-height-large);
   }
-
-  /* 仅图标按钮 */
   .x-button--icon-only {
     padding: 0;
     min-width: var(--x-button-height-medium);
@@ -386,7 +347,6 @@
     min-width: var(--x-button-height-large);
   }
 
-  /* 加载图标 */
   .x-button__loading {
     display: inline-flex;
     align-items: center;
@@ -408,8 +368,6 @@
     width: 16px;
     height: 16px;
   }
-
-  /* 图标 */
   .x-button__icon {
     display: inline-flex;
     align-items: center;
@@ -432,14 +390,11 @@
     height: 16px;
   }
 
-  /* 内容 */
   .x-button__content {
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
-
-  /* 动画 */
   @keyframes x-button-spin {
     0% {
       transform: rotate(0deg);
@@ -449,21 +404,18 @@
     }
   }
 
-  /* 响应式设计 */
   @media (max-width: 768px) {
     .x-button--block {
       width: 100%;
     }
   }
 
-  /* 高对比度模式支持 */
   @media (prefers-contrast: high) {
     .x-button {
       border-width: 2px;
     }
   }
 
-  /* 减少动画模式支持 */
   @media (prefers-reduced-motion: reduce) {
     .x-button {
       transition: none;
@@ -473,8 +425,6 @@
       animation: none;
     }
   }
-
-  /* 深色模式支持 */
   @media (prefers-color-scheme: dark) {
     .x-button {
       --x-color-text: rgba(255, 255, 255, 0.85);

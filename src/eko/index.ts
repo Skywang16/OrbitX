@@ -1,28 +1,11 @@
-/**
- * Eko框架主入口模块
- * 整合所有模块并提供统一的API接口
- */
-
 import { Eko } from '@eko-ai/eko'
-
-// 导入核心模块
 import { getEkoConfig, getEkoLLMsConfig, type EkoConfigOptions } from './core/config'
 import { createCallback, createSidebarCallback } from './core/callbacks'
-
-// 导入Agent
 import { TerminalAgent, createTerminalAgent, createTerminalChatAgent } from './agent/terminal-agent'
 import { CodeAgent, createCodeAgent, createCodeChatAgent } from './agent/code-agent'
-
-// 导入工具
 import { allTools } from './tools'
-
-// 导入类型
 import type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult } from './types'
 
-/**
- * OrbitX Eko实例类
- * 封装Eko框架，支持智能Agent选择
- */
 export class OrbitXEko {
   private eko: Eko | null = null
   private terminalChatAgent: TerminalAgent
@@ -100,7 +83,7 @@ export class OrbitXEko {
         callback: this.callback,
       })
     } catch (error) {
-      console.error('❌ 更新LLM配置失败:', error)
+      console.error('❌ Failed to update LLM configuration:', error)
       // 不抛出错误，避免影响正常运行
     }
   }
@@ -132,8 +115,8 @@ export class OrbitXEko {
         this.codeAgent.updateConfig({ defaultWorkingDirectory: options.workingDirectory })
       }
 
-      // 构建用户请求prompt
-      const enhancedPrompt = `🎯 **用户请求**
+      // Build user request prompt
+      const enhancedPrompt = `🎯 **User Request**
 ${prompt}`
 
       // 生成唯一的taskId

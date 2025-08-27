@@ -34,7 +34,7 @@
     <div class="tool-header non-expandable">
       <div class="tool-info">
         <div class="tool-icon" v-html="getToolIcon('unknown')"></div>
-        <span class="tool-name">数据错误</span>
+        <span class="tool-name">{{ t('tool.data_error') }}</span>
       </div>
       <div class="status-dot error"></div>
     </div>
@@ -43,11 +43,14 @@
 
 <script setup lang="ts">
   import { ref, computed } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import type { AIOutputStep } from '@/types'
   import type { ToolExecution } from '@/types'
   import EditResult from './components/EditResult.vue'
   import type { SimpleEditResult } from '@/eko/tools/toolList/edit-file'
   import stripAnsi from 'strip-ansi'
+
+  const { t } = useI18n()
 
   const props = defineProps<{
     step: AIOutputStep & { toolExecution?: ToolExecution }

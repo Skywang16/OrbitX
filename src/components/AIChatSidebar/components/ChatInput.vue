@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, ref, nextTick } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import TerminalSelectionTag from './TerminalSelectionTag.vue'
 
@@ -26,7 +27,7 @@
   }
 
   const props = withDefaults(defineProps<Props>(), {
-    placeholder: '输入消息...',
+    placeholder: '',
     loading: false,
 
     canSend: false,
@@ -36,6 +37,7 @@
   })
 
   const emit = defineEmits<Emits>()
+  const { t } = useI18n()
 
   // 响应式引用
   const inputTextarea = ref<HTMLTextAreaElement>()
@@ -150,7 +152,7 @@
     const selectedText = terminalSelection.getSelectedText()
     if (selectedText.trim()) {
       const selectionInfo = terminalSelection.selectionInfo.value
-      const contextPrompt = `\n\n**终端选中内容**${selectionInfo ? ` (${selectionInfo})` : ''}:\n\`\`\`\n${selectedText}\n\`\`\``
+      const contextPrompt = `\n\n**Terminal Selected Content**${selectionInfo ? ` (${selectionInfo})` : ''}:\n\`\`\`\n${selectedText}\n\`\`\``
       message += contextPrompt
     }
 
@@ -183,7 +185,7 @@
           ref="inputTextarea"
           v-model="inputValue"
           class="message-input"
-          :placeholder="placeholder"
+          :placeholder="placeholder || t('chat.input_placeholder')"
           rows="1"
           @keydown="handleKeydown"
           @input="adjustTextareaHeight"
@@ -219,7 +221,7 @@
           class="mode-selector"
           :model-value="chatMode"
           :options="modeOptions"
-          placeholder="选择模式"
+          :placeholder="t('ai.select_mode')"
           size="small"
           borderless
           @update:model-value="handleModeChange"
@@ -228,7 +230,7 @@
           class="model-selector"
           :model-value="selectedModel"
           :options="modelOptions"
-          placeholder="选择AI模型"
+          :placeholder="t('ai.select_model')"
           size="small"
           borderless
           @update:model-value="handleModelChange"
