@@ -1,5 +1,5 @@
 .settings-container {
-  height: 100vh;
+  height: calc(100vh - 40px);
   background: var(--bg-200);
   display: flex;
 }
@@ -226,7 +226,6 @@
   cursor: pointer;
   transition: background-color 0.1s ease;
   min-height: 32px;
-  border-left: 2px solid transparent;
 }
 
 .settings-navigation-item:hover {

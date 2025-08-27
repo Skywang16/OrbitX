@@ -134,6 +134,57 @@ pub async fn subscribe_config_events(_state: State<'_, ConfigManagerState>) -> R
     Ok(())
 }
 
+/// 获取配置文件夹路径
+#[tauri::command]
+pub async fn get_config_folder_path(
+    state: State<'_, ConfigManagerState>,
+) -> Result<String, String> {
+    debug!("获取配置文件夹路径");
+
+    // 通过toml_manager获取配置路径
+    let config_path = state.toml_manager.get_config_path().await;
+
+    // 获取配置文件的父目录（即配置文件夹）
+    if let Some(config_dir) = config_path.parent() {
+        Ok(config_dir.to_string_lossy().to_string())
+    } else {
+        Err("无法获取配置文件夹路径".to_string())
+    }
+}
+
+/// 打开配置文件夹
+#[tauri::command]
+pub async fn open_config_folder<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, ConfigManagerState>,
+) -> Result<(), String> {
+    debug!("打开配置文件夹");
+
+    // 通过toml_manager获取配置路径
+    let config_path = state.toml_manager.get_config_path().await;
+
+    // 获取配置文件的父目录（即配置文件夹）
+    let config_dir = if let Some(dir) = config_path.parent() {
+        dir
+    } else {
+        return Err("无法获取配置文件夹路径".to_string());
+    };
+
+    // 确保配置目录存在
+    if !config_dir.exists() {
+        return Err("配置目录不存在".to_string());
+    }
+
+    // 使用 tauri-plugin-opener 打开文件夹
+    use tauri_plugin_opener::OpenerExt;
+
+    app.opener()
+        .open_path(config_dir.to_string_lossy().to_string(), None::<String>)
+        .map_err(|e| format!("无法打开配置文件夹: {}", e))?;
+
+    Ok(())
+}
+
 // 主题相关的存根函数
 #[tauri::command]
 pub async fn get_theme_list(_state: State<'_, ConfigManagerState>) -> Result<Vec<String>, String> {

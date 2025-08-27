@@ -34,26 +34,11 @@ pub mod utils;
 pub mod window;
 
 use ai::commands::{
-    add_ai_model,
-    build_prompt_with_context,
-    create_conversation,
-    delete_conversation,
-    get_ai_models,
-    get_compressed_context,
-    get_conversation,
-    get_conversations,
-    get_user_prefix_prompt,
-    remove_ai_model,
-    save_message,
-    set_user_prefix_prompt,
-
-    test_ai_connection_with_config,
-    truncate_conversation,
-    update_ai_model,
-    update_conversation_title,
-    update_message_content,
-    update_message_status,
-    update_message_steps,
+    add_ai_model, build_prompt_with_context, create_conversation, delete_conversation,
+    get_ai_models, get_compressed_context, get_conversation, get_conversations,
+    get_user_prefix_prompt, remove_ai_model, save_message, set_user_prefix_prompt,
+    test_ai_connection_with_config, truncate_conversation, update_ai_model,
+    update_conversation_title, update_message_content, update_message_status, update_message_steps,
     AIManagerState,
 };
 use ai::tool::ast::commands::analyze_code;
@@ -73,10 +58,12 @@ use config::commands::{
     get_config,
     get_config_file_info,
     get_config_file_path,
+    get_config_folder_path,
     get_theme_index,
     get_theme_list,
     load_theme,
     open_config_file,
+    open_config_folder,
     refresh_theme_index,
     reset_config_to_defaults,
     save_config,
@@ -313,6 +300,8 @@ pub fn run() {
             get_config_file_info,
             open_config_file,
             subscribe_config_events,
+            get_config_folder_path,
+            open_config_folder,
             // 主题系统命令
             get_theme_list,
             get_theme_index,

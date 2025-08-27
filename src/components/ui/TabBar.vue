@@ -75,11 +75,6 @@
 
     const containerWidth = tabBarWrapperRef.value?.clientWidth || 400
 
-    // 计算实际占用空间：
-    // - padding-left: 6px (--spacing-sm)
-    // - gap: 4px (--spacing-xs)
-    // - add按钮: 28px + margin(4px或6px) = 32px-34px
-    // - 每个tab的右边距: 6px * tabCount
     const paddingAndGaps = 6 + 4 + 34 + 6 * tabCount
     const availableWidth = containerWidth - paddingAndGaps
     const widthPerTab = availableWidth / tabCount
@@ -328,7 +323,6 @@
   }
 
   .tab.active {
-    background-color: var(--color-primary-alpha);
     color: var(--text-100);
     position: relative;
     border: 1px solid var(--color-primary);
@@ -357,7 +351,6 @@
 
   .tab:not(.agent-tab).active {
     background: var(--color-primary-alpha);
-    border-color: var(--color-primary);
   }
 
   .tab:not(.agent-tab).active::before {

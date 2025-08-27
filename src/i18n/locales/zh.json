@@ -32,6 +32,16 @@
   "settings": {
     "title": "设置",
     "search_placeholder": "搜索设置",
+    "general": {
+      "title": "通用设置",
+      "description": "应用程序通用配置",
+      "config_management": "配置管理",
+      "config_folder": "配置文件夹",
+      "config_folder_description": "打开应用程序配置文件所在的文件夹",
+      "open_config_folder": "打开配置文件夹",
+      "config_folder_opened": "配置文件夹已打开",
+      "config_folder_error": "无法打开配置文件夹"
+    },
     "theme": {
       "title": "主题设置",
       "description": "外观和主题配置"

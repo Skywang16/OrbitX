@@ -99,7 +99,6 @@ export class ConfigApi {
     }
   }
 
-
   async getConfigFileInfo(): Promise<ConfigFileInfo> {
     try {
       return await invoke<ConfigFileInfo>('get_config_file_info')
@@ -156,6 +155,21 @@ export class ConfigApi {
     }
   }
 
+  async getConfigFolderPath(): Promise<string> {
+    try {
+      return await invoke<string>('get_config_folder_path')
+    } catch (error) {
+      throw new Error(handleError(error, 'Failed to get config folder path'))
+    }
+  }
+
+  async openConfigFolder(): Promise<void> {
+    try {
+      await invoke('open_config_folder')
+    } catch (error) {
+      throw new Error(handleError(error, 'Failed to open config folder'))
+    }
+  }
 
   async getThemeConfigStatus(): Promise<ThemeConfigStatus> {
     return this.themeAPI.getThemeConfigStatus()
@@ -176,7 +190,6 @@ export class ConfigApi {
   async setFollowSystemTheme(followSystem: boolean, lightTheme?: string, darkTheme?: string): Promise<void> {
     return this.themeAPI.setFollowSystemTheme(followSystem, lightTheme, darkTheme)
   }
-
 
   get theme() {
     return this.themeAPI

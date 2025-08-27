@@ -61,7 +61,7 @@ impl ConfigPaths {
         let app_data_dir = app_data_dir.as_ref().to_path_buf();
 
         let config_dir = app_data_dir.join(crate::config::CONFIG_DIR_NAME);
-        let themes_dir = app_data_dir.join(crate::config::THEMES_DIR_NAME);
+        let themes_dir = config_dir.join(crate::config::THEMES_DIR_NAME);
         let backups_dir = app_data_dir.join(crate::config::BACKUPS_DIR_NAME);
         let cache_dir = app_data_dir.join(crate::config::CACHE_DIR_NAME);
         let logs_dir = app_data_dir.join(crate::config::LOGS_DIR_NAME);
@@ -86,11 +86,11 @@ impl ConfigPaths {
     /// 获取应用程序数据目录
     ///
     /// 根据不同平台返回合适的应用数据目录：
-    /// - Windows: `%APPDATA%\TerminalApp`
-    /// - macOS: `~/Library/Application Support/TerminalApp`
-    /// - Linux: `~/.config/terminal-app`
+    /// - Windows: `%APPDATA%\OrbitX`
+    /// - macOS: `~/Library/Application Support/OrbitX`
+    /// - Linux: `~/.config/orbitx`
     fn get_app_data_dir() -> AppResult<PathBuf> {
-        let app_name = "TerminalApp";
+        let app_name = "OrbitX";
 
         #[cfg(target_os = "windows")]
         {
@@ -111,21 +111,19 @@ impl ConfigPaths {
         #[cfg(target_os = "linux")]
         {
             let config_dir = dirs::config_dir().ok_or_else(|| anyhow!("无法获取配置目录"))?;
-            Ok(config_dir.join("terminal-app"))
+            Ok(config_dir.join("orbitx"))
         }
 
         #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
         {
             let home = dirs::home_dir().ok_or_else(|| anyhow!("无法获取用户主目录"))?;
-            Ok(home.join(".terminal-app"))
+            Ok(home.join(".orbitx"))
         }
     }
-
 
     /// 获取项目主题目录
     ///
     /// 返回项目根目录下的 config/themes 目录路径
-
 
     /// 确保所有必要的目录存在
     fn ensure_directories_exist(&self) -> AppResult<()> {

@@ -1,4 +1,3 @@
-
 import { aiApi } from '@/api'
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useSessionStore } from '@/stores/session'
@@ -13,7 +12,19 @@ import { createToolExecution } from '@/types'
 import { debounce } from 'lodash-es'
 
 interface StreamMessage {
-  type: 'tool_use' | 'tool_result' | 'workflow' | 'text' | 'thinking'
+  type:
+    | 'tool_use'
+    | 'tool_result'
+    | 'workflow'
+    | 'text'
+    | 'thinking'
+    | 'agent_start'
+    | 'agent_result'
+    | 'tool_streaming'
+    | 'tool_running'
+    | 'file'
+    | 'error'
+    | 'finish'
   toolName?: string
   params?: Record<string, any>
   toolResult?: any
@@ -23,6 +34,34 @@ interface StreamMessage {
   streamDone?: boolean
   workflow?: {
     thought?: string
+  }
+  // 新增字段支持更多回调类型
+  agentName?: string
+  agentResult?: any
+  toolStreaming?: {
+    paramName?: string
+    paramValue?: any
+    isComplete?: boolean
+  }
+  fileData?: {
+    fileName?: string
+    filePath?: string
+    content?: string
+    mimeType?: string
+  }
+  error?: {
+    message?: string
+    code?: string
+    details?: any
+  }
+  finish?: {
+    tokenUsage?: {
+      promptTokens?: number
+      completionTokens?: number
+      totalTokens?: number
+    }
+    duration?: number
+    status?: 'success' | 'error' | 'cancelled'
   }
 }
 
@@ -422,6 +461,58 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               if (message.streamDone) {
                 tempMessage.content = message.text || ''
               }
+              break
+
+            case 'agent_start':
+              console.log('🚀 [侧边栏] Agent开始执行:', {
+                agentName: message.agentName,
+                timestamp: new Date().toISOString(),
+              })
+              break
+
+            case 'agent_result':
+              console.log('✅ [侧边栏] Agent执行结果:', {
+                agentName: message.agentName,
+                result: message.agentResult,
+                timestamp: new Date().toISOString(),
+              })
+              break
+
+            case 'tool_streaming':
+              console.log('📡 [侧边栏] 工具参数流式输出:', {
+                toolName: message.toolName,
+                streaming: message.toolStreaming,
+                timestamp: new Date().toISOString(),
+              })
+              break
+
+            case 'tool_running':
+              console.log('⚙️ [侧边栏] 工具执行中:', {
+                toolName: message.toolName,
+                params: message.params,
+                timestamp: new Date().toISOString(),
+              })
+              break
+
+            case 'file':
+              console.log('📁 [侧边栏] 文件输出:', {
+                fileData: message.fileData,
+                timestamp: new Date().toISOString(),
+              })
+              break
+
+            case 'error':
+              console.log('❌ [侧边栏] 错误信息:', {
+                error: message.error,
+                timestamp: new Date().toISOString(),
+              })
+              break
+
+            case 'finish':
+              console.log('🏁 [侧边栏] 完成信息:', {
+                finish: message.finish,
+                timestamp: new Date().toISOString(),
+              })
               break
           }
 

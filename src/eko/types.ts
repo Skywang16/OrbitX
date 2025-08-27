@@ -11,7 +11,19 @@ export type { Tool, ToolResult } from '@eko-ai/eko/types'
  * 流式消息类型（与侧边栏使用一致）
  */
 export interface StreamMessage {
-  type: 'tool_use' | 'tool_result' | 'workflow' | 'text' | 'thinking'
+  type:
+    | 'tool_use'
+    | 'tool_result'
+    | 'workflow'
+    | 'text'
+    | 'thinking'
+    | 'agent_start'
+    | 'agent_result'
+    | 'tool_streaming'
+    | 'tool_running'
+    | 'file'
+    | 'error'
+    | 'finish'
   toolName?: string
   params?: Record<string, unknown>
   toolResult?: unknown
@@ -21,6 +33,34 @@ export interface StreamMessage {
   streamDone?: boolean
   workflow?: {
     thought?: string
+  }
+  // 新增字段支持更多回调类型
+  agentName?: string
+  agentResult?: unknown
+  toolStreaming?: {
+    paramName?: string
+    paramValue?: unknown
+    isComplete?: boolean
+  }
+  fileData?: {
+    fileName?: string
+    filePath?: string
+    content?: string
+    mimeType?: string
+  }
+  error?: {
+    message?: string
+    code?: string
+    details?: unknown
+  }
+  finish?: {
+    tokenUsage?: {
+      promptTokens?: number
+      completionTokens?: number
+      totalTokens?: number
+    }
+    duration?: number
+    status?: 'success' | 'error' | 'cancelled'
   }
 }
 

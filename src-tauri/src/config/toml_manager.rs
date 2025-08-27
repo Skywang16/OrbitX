@@ -211,6 +211,11 @@ impl TomlConfigManager {
         Ok(cache.clone())
     }
 
+    /// 获取配置文件路径
+    pub async fn get_config_path(&self) -> PathBuf {
+        self.config_path.clone()
+    }
+
     pub fn validate_config(&self, config: &AppConfig) -> AppResult<()> {
         debug!("开始验证配置");
 

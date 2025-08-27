@@ -32,6 +32,16 @@
   "settings": {
     "title": "Settings",
     "search_placeholder": "Search settings",
+    "general": {
+      "title": "General Settings",
+      "description": "General application configuration",
+      "config_management": "Configuration Management",
+      "config_folder": "Configuration Folder",
+      "config_folder_description": "Open the folder containing application configuration files",
+      "open_config_folder": "Open Config Folder",
+      "config_folder_opened": "Configuration folder opened",
+      "config_folder_error": "Unable to open configuration folder"
+    },
     "theme": {
       "title": "Theme Settings",
       "description": "Appearance and theme configuration"
