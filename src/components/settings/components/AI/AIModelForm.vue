@@ -236,6 +236,7 @@
 
 <style scoped>
   .form-section {
+    margin-top: 1rem;
     margin-bottom: 1.5rem;
     padding: 1.25rem;
     background: var(--bg-500);

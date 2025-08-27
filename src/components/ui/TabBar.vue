@@ -66,7 +66,7 @@
 
   // 简化的标签宽度配置
   const MIN_TAB_WIDTH = 60
-  const MAX_TAB_WIDTH = 200
+  const MAX_TAB_WIDTH = 150
 
   // 简化的标签宽度计算
   const tabWidth = computed(() => {
@@ -497,7 +497,7 @@
     border: none;
     background: none;
     color: var(--text-400);
-    border-radius: var(--border-radius-md);
+    border-radius: var(--border-radius-sm);
     cursor: pointer;
     transition: all 0.2s ease;
     opacity: 0.8;

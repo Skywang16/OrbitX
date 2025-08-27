@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
-  import { confirm, createMessage } from '@/ui'
+  import { createMessage } from '@/ui'
   import { handleError } from '@/utils/errorHandler'
   import { computed, onMounted, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
@@ -34,15 +34,11 @@
   }
 
   const handleDeleteModel = async (modelId: string) => {
-    const confirmed = await confirm(t('ai_model.delete_confirm'))
-
-    if (confirmed) {
-      try {
-        await aiSettingsStore.removeModel(modelId)
-        createMessage.success(t('ai_model.delete_success'))
-      } catch (error) {
-        createMessage.error(handleError(error, t('ai_model.delete_failed')))
-      }
+    try {
+      await aiSettingsStore.removeModel(modelId)
+      createMessage.success(t('ai_model.delete_success'))
+    } catch (error) {
+      createMessage.error(handleError(error, t('ai_model.delete_failed')))
     }
   }
 
@@ -109,9 +105,21 @@
           <x-button variant="secondary" size="small" @click="handleEditModel(model)">
             {{ t('ai_model.edit') }}
           </x-button>
-          <x-button variant="danger" size="small" @click="handleDeleteModel(model.id)">
-            {{ t('ai_model.delete') }}
-          </x-button>
+          <x-popconfirm
+            :title="t('ai_model.delete_confirm')"
+            :description="t('ai_model.delete_description', { name: model.name })"
+            type="danger"
+            :confirm-text="t('ai_model.delete_confirm_text')"
+            :cancel-text="t('ai_model.cancel')"
+            placement="top"
+            @confirm="handleDeleteModel(model.id)"
+          >
+            <template #trigger>
+              <x-button variant="danger" size="small">
+                {{ t('ai_model.delete') }}
+              </x-button>
+            </template>
+          </x-popconfirm>
         </div>
       </div>
     </div>

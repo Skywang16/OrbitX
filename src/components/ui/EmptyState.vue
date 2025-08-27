@@ -72,14 +72,14 @@
     </div>
     <h1 class="title">OrbitX</h1>
     <div class="shortcuts">
-      <div class="shortcut">
+      <div class="shortcut" @click="handleNewTabClick">
         <span class="shortcut-desc">{{ t('shortcuts.actions.new_tab') }}</span>
         <div class="keys">
           <kbd>⌘</kbd>
           <kbd>T</kbd>
         </div>
       </div>
-      <div class="shortcut">
+      <div class="shortcut" @click="handleToggleAISidebarClick">
         <span class="shortcut-desc">{{ t('shortcuts.actions.toggle_ai_sidebar') }}</span>
         <div class="keys">
           <kbd>⌘</kbd>
@@ -92,8 +92,19 @@
 
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n'
+  import { shortcutActionsService } from '@/shortcuts/actions'
 
   const { t } = useI18n()
+
+  // 处理新建标签页点击
+  const handleNewTabClick = async () => {
+    await shortcutActionsService.newTab()
+  }
+
+  // 处理切换AI侧边栏点击
+  const handleToggleAISidebarClick = () => {
+    shortcutActionsService.toggleAISidebar()
+  }
 </script>
 
 <style scoped>
@@ -221,6 +232,19 @@
     border-radius: 8px;
     transition: all 0.2s ease;
     min-width: 200px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .shortcut:hover {
+    background: var(--bg-400);
+    border-color: var(--border-300);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .shortcut:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 
   .keys {

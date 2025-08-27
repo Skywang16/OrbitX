@@ -95,6 +95,99 @@
     "close": "关闭",
     "clear": "清除"
   },
+  "onboarding": {
+    "navigation": {
+      "previous": "上一步",
+      "next": "下一步",
+      "finish": "开始使用",
+      "save_config": "保存配置",
+      "skip_temporarily": "暂时跳过"
+    },
+    "language": {
+      "title": "选择语言",
+      "description": "请选择您偏好的语言"
+    },
+    "welcome": {
+      "title": "欢迎使用 OrbitX",
+      "subtitle": "功能强大的终端模拟器，内置AI助手",
+      "get_started": "开始使用",
+      "features": {
+        "terminal": {
+          "title": "现代终端",
+          "description": "快速高效的终端体验"
+        },
+        "ai": {
+          "title": "AI助手",
+          "description": "智能编程伴侣和命令助手"
+        },
+        "customize": {
+          "title": "完全可定制",
+          "description": "主题、快捷键和个性化设置"
+        }
+      }
+    },
+    "theme": {
+      "title": "选择您的主题",
+      "description": "选择符合您风格的主题",
+      "options": {
+        "dark": {
+          "name": "深色主题",
+          "description": "适合低光环境"
+        },
+        "light": {
+          "name": "浅色主题",
+          "description": "清爽明亮的外观"
+        },
+        "auto": {
+          "name": "自动主题",
+          "description": "跟随系统设置"
+        }
+      }
+    },
+    "ai": {
+      "title": "AI助手设置",
+      "description": "配置您的AI编程伴侣",
+      "enable_title": "启用AI助手",
+      "enable_description": "获取命令、编程和终端任务的帮助",
+      "model_title": "选择AI模型",
+      "model_description": "选择您偏好的AI模型",
+      "voice_title": "语音功能",
+      "voice_description": "启用与AI的语音交互",
+      "recommended": "推荐",
+      "api_key_placeholder": "请输入您的API密钥",
+      "api_url_placeholder": "请输入API地址",
+      "model_name": "模型名称",
+      "model_name_placeholder": "请输入模型名称",
+      "config_name": "配置名称",
+      "config_name_placeholder": "例如：Claude生产环境",
+      "save_config": "保存配置",
+      "skip_temporarily": "暂时跳过",
+      "select_provider_first": "请先选择一个AI提供商，或点击\"暂时跳过\"",
+      "config_name_required": "配置名称不能为空",
+      "api_key_required": "API密钥不能为空",
+      "model_name_required": "模型名称不能为空",
+      "api_url_required": "API地址不能为空",
+      "save_config_success": "配置保存成功！",
+      "save_config_failed": "保存配置失败",
+      "skip_config_message": "已跳过AI配置，您可以后续在设置中配置",
+      "models": {
+        "claude": {
+          "description": "Anthropic AI 助手"
+        },
+        "openai": {
+          "description": "ChatGPT & GPT 模型"
+        },
+        "custom": {
+          "name": "自定义",
+          "description": "配置自定义 AI 服务"
+        }
+      },
+      "preview_title": "预览",
+      "preview_user_message": "如何列出目录中的文件？",
+      "preview_ai_message": "使用 `ls` 命令列出文件，或使用 `ls -la` 显示详细信息包括隐藏文件。",
+      "start_using": "开始使用 OrbitX"
+    }
+  },
   "ai": {
     "select_mode": "选择模式",
     "select_model": "选择AI模型",
@@ -181,7 +274,11 @@
     "empty_description": "点击\"添加模型\"按钮开始配置您的第一个AI模型",
     "edit": "编辑",
     "delete": "删除",
-    "delete_confirm": "确定要删除这个AI模型配置吗？",
+    "delete_title": "删除模型",
+    "delete_confirm": "确定删除模型？",
+    "delete_description": "删除后无法恢复",
+    "delete_confirm_text": "确认",
+    "cancel": "取消",
     "delete_success": "模型删除成功",
     "delete_failed": "删除失败",
     "update_success": "模型更新成功",
@@ -241,7 +338,10 @@
   },
   "message_list": {
     "start_conversation": "开始对话吧",
-    "send_message_hint": "发送消息开始与Orbit对话"
+    "send_message_hint": "发送消息开始与Orbit对话",
+    "no_model_configured": "尚未配置AI模型",
+    "configure_model_hint": "请先在设置中配置AI模型后再开始对话",
+    "go_to_settings": "前往设置"
   },
   "theme_settings": {
     "theme_mode": "主题模式",

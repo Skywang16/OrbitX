@@ -155,8 +155,7 @@
     }
   })
 
-  onUnmounted(() => {
-  })
+  onUnmounted(() => {})
 </script>
 
 <template>

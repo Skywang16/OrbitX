@@ -1,11 +1,13 @@
 <script setup lang="ts">
-  import { computed, nextTick, ref, watch } from 'vue'
+  import { computed, nextTick, ref, watch, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import type { Message } from '@/types'
   import UserMessage from './UserMessage.vue'
   import AIMessage from './AIMessage.vue'
+  import { useAISettingsStore } from '@/components/settings/components/AI/store'
 
   const { t } = useI18n()
+  const aiSettingsStore = useAISettingsStore()
 
   interface Props {
     messages: Message[]
@@ -41,20 +43,37 @@
     },
     { immediate: true }
   )
+
+  // 初始化AI设置
+  onMounted(async () => {
+    if (!aiSettingsStore.isInitialized) {
+      await aiSettingsStore.loadSettings()
+    }
+  })
+
 </script>
 
 <template>
   <div ref="messageListRef" class="message-list">
     <div v-if="msgList.length === 0" class="empty-state">
-      <div class="empty-icon">
-        <svg class="empty-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path
-            d="M21 15a2 2 0 0 1-2 2H10l-3 5c-.3.4-.8.1-.8-.4v-4.6H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z"
-          />
-        </svg>
+      <!-- 没有配置模型时的提醒 -->
+      <div v-if="!aiSettingsStore.hasModels && aiSettingsStore.isInitialized" class="no-model-state">
+        <div class="empty-text">{{ t('message_list.no_model_configured') }}</div>
+        <div class="empty-hint">{{ t('message_list.configure_model_hint') }}</div>
       </div>
-      <div class="empty-text">{{ t('message_list.start_conversation') }}</div>
-      <div class="empty-hint">{{ t('message_list.send_message_hint') }}</div>
+      
+      <!-- 正常的空状态 -->
+      <div v-else class="normal-empty-state">
+        <div class="empty-icon">
+          <svg class="empty-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path
+              d="M21 15a2 2 0 0 1-2 2H10l-3 5c-.3.4-.8.1-.8-.4v-4.6H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z"
+            />
+          </svg>
+        </div>
+        <div class="empty-text">{{ t('message_list.start_conversation') }}</div>
+        <div class="empty-hint">{{ t('message_list.send_message_hint') }}</div>
+      </div>
     </div>
 
     <div v-else class="message-container">
@@ -89,6 +108,14 @@
     gap: var(--spacing-lg);
   }
 
+  .no-model-state,
+  .normal-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-lg);
+  }
+
   .empty-icon {
     margin-bottom: var(--spacing-md);
   }
@@ -116,4 +143,5 @@
     flex-direction: column;
     gap: var(--spacing-md);
   }
+
 </style>

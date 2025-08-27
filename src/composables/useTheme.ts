@@ -71,9 +71,8 @@ export const useTheme = () => {
     error.value = null
 
     try {
+      // 只调用后端设置，让事件监听器处理状态更新
       await themeAPI.setTerminalTheme(themeName)
-      await loadThemeConfigStatus()
-      await loadCurrentTheme()
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)
       throw err
@@ -87,9 +86,8 @@ export const useTheme = () => {
     error.value = null
 
     try {
+      // 只调用后端设置，让事件监听器处理状态更新
       await themeAPI.setFollowSystemTheme(followSystem, lightTheme, darkTheme)
-      await loadThemeConfigStatus()
-      await loadCurrentTheme()
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)
       throw err

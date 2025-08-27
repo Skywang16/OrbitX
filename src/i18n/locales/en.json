@@ -95,6 +95,95 @@
     "close": "Close",
     "clear": "Clear"
   },
+  "onboarding": {
+    "navigation": {
+      "previous": "Previous",
+      "next": "Next",
+      "finish": "Get Started",
+      "save_config": "Save Configuration",
+      "skip_temporarily": "Skip for Now"
+    },
+    "language": {
+      "title": "Choose Your Language",
+      "description": "Select your preferred language"
+    },
+    "welcome": {
+      "title": "Welcome to OrbitX",
+      "subtitle": "A powerful terminal simulator with AI assistance",
+      "get_started": "Get Started",
+      "features": {
+        "terminal": {
+          "title": "Modern Terminal",
+          "description": "Fast and efficient terminal experience"
+        },
+        "ai": {
+          "title": "AI Assistant",
+          "description": "Smart coding companion and command helper"
+        },
+        "customize": {
+          "title": "Fully Customizable",
+          "description": "Themes, shortcuts, and personalization"
+        }
+      }
+    },
+    "theme": {
+      "title": "Choose Your Theme",
+      "description": "Select a theme that matches your style",
+      "options": {
+        "dark": {
+          "name": "Dark Theme",
+          "description": "Perfect for low-light environments"
+        },
+        "light": {
+          "name": "Light Theme",
+          "description": "Clean and bright appearance"
+        },
+        "auto": {
+          "name": "Auto Theme",
+          "description": "Follow system preferences"
+        }
+      }
+    },
+    "ai": {
+      "title": "AI Assistant Setup",
+      "description": "Configure your AI coding companion",
+      "enable_title": "Enable AI Assistant",
+      "enable_description": "Get help with commands, coding, and terminal tasks",
+      "model_title": "Choose AI Model",
+      "model_description": "Select your preferred AI model",
+      "voice_title": "Voice Features",
+      "voice_description": "Enable voice interaction with AI",
+      "recommended": "Recommended",
+      "config_name": "Configuration Name",
+      "config_name_placeholder": "e.g., Claude Production",
+      "save_config": "Save Configuration",
+      "skip_temporarily": "Skip for Now",
+      "select_provider_first": "Please select an AI provider first, or click \"Skip for Now\"",
+      "config_name_required": "Configuration name is required",
+      "api_key_required": "API key is required",
+      "model_name_required": "Model name is required",
+      "api_url_required": "API URL is required",
+      "save_config_success": "Configuration saved successfully!",
+      "save_config_failed": "Failed to save configuration",
+      "skip_config_message": "AI configuration skipped. You can configure it later in settings",
+      "models": {
+        "claude": {
+          "description": "Anthropic AI Assistant"
+        },
+        "openai": {
+          "description": "ChatGPT & GPT Models"
+        },
+        "custom": {
+          "name": "Custom",
+          "description": "Configure custom AI service"
+        }
+      },
+      "preview_title": "Preview",
+      "preview_user_message": "How do I list files in a directory?",
+      "preview_ai_message": "Use the `ls` command to list files, or `ls -la` for detailed view including hidden files.",
+      "start_using": "Start Using OrbitX"
+    }
+  },
   "ai": {
     "select_mode": "Select mode",
     "select_model": "Select AI model",
@@ -181,7 +270,10 @@
     "empty_description": "Click \"Add Model\" button to configure your first AI model",
     "edit": "Edit",
     "delete": "Delete",
-    "delete_confirm": "Are you sure you want to delete this AI model configuration?",
+    "delete_confirm": "Delete this model?",
+    "delete_description": "Cannot be undone",
+    "delete_confirm_text": "Confirm Delete",
+    "cancel": "Cancel",
     "delete_success": "Model deleted successfully",
     "delete_failed": "Failed to delete",
     "update_success": "Model updated successfully",
@@ -241,7 +333,10 @@
   },
   "message_list": {
     "start_conversation": "Start conversation",
-    "send_message_hint": "Send a message to start chatting with Orbit"
+    "send_message_hint": "Send a message to start chatting with Orbit",
+    "no_model_configured": "No AI model configured",
+    "configure_model_hint": "Please configure an AI model in settings before starting a conversation",
+    "go_to_settings": "Go to Settings"
   },
   "theme_settings": {
     "theme_mode": "Theme Mode",

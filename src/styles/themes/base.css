@@ -19,7 +19,7 @@
   --font-size-xl: 18px;
 
   --titlebar-height: 36px;
-  --titlebar-element-height: 24px; /* 降低tab高度从28px到24px */
+  --titlebar-element-height: 28px;
 
   /* Split pane dimensions */
   --split-divider-size: 4px;

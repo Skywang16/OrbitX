@@ -159,7 +159,7 @@ export interface Message {
   role: 'user' | 'assistant' | 'system'
   createdAt: Date
 
-    steps?: AIOutputStep[]
+  steps?: AIOutputStep[]
   status?: 'pending' | 'streaming' | 'complete' | 'error'
   duration?: number
 
