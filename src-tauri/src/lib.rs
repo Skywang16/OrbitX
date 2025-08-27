@@ -53,26 +53,9 @@ use completion::commands::{
     init_completion_engine, CompletionState,
 };
 use config::commands::{
-    // 主题系统命令
-    create_builtin_themes,
-    get_config,
-    get_config_file_info,
-    get_config_file_path,
-    get_config_folder_path,
-    get_theme_index,
-    get_theme_list,
-    load_theme,
-    open_config_file,
-    open_config_folder,
-    refresh_theme_index,
-    reset_config_to_defaults,
-    save_config,
-    subscribe_config_events,
-    switch_theme,
-    update_config,
-    validate_config,
-    validate_theme,
-    ConfigManagerState,
+    get_config, get_config_file_info, get_config_file_path, get_config_folder_path,
+    open_config_file, open_config_folder, reset_config_to_defaults, save_config,
+    subscribe_config_events, update_config, validate_config, ConfigManagerState,
 };
 use config::shortcuts::{
     // 全新快捷键系统命令
@@ -317,14 +300,6 @@ pub fn run() {
             get_config_folder_path,
             open_config_folder,
             // 主题系统命令
-            get_theme_list,
-            get_theme_index,
-            load_theme,
-            switch_theme,
-            validate_theme,
-            refresh_theme_index,
-            create_builtin_themes,
-            // 新的主题系统命令
             get_theme_config_status,
             get_current_theme,
             set_terminal_theme,

@@ -16,11 +16,10 @@ pub mod types;
 
 // 重新导出核心类型和函数
 pub use commands::{
-    create_builtin_themes, get_config, get_config_file_info, get_config_file_path,
-    get_config_folder_path, get_theme_index, get_theme_list, load_theme, open_config_file,
-    open_config_folder, refresh_theme_index, reset_config_to_defaults, save_config,
-    subscribe_config_events, switch_theme, update_config, validate_config, validate_theme,
-    ConfigManagerState,
+    get_config, get_config_file_info, get_config_file_path,
+    get_config_folder_path, open_config_file, open_config_folder, 
+    reset_config_to_defaults, save_config, subscribe_config_events, 
+    update_config, validate_config, ConfigManagerState,
 };
 pub use defaults::*;
 pub use paths::ConfigPaths;
