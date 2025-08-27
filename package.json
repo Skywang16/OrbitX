@@ -34,7 +34,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@eko-ai/eko": "^3.0.0-alpha.4",
+    "@eko-ai/eko": "file:npm-file/eko-ai-eko-3.0.1-alpha.2.tgz",
     "@tauri-apps/api": "^2.7.0",
     "@tauri-apps/plugin-fs": "^2.4.1",
     "@tauri-apps/plugin-http": "^2.5.1",
