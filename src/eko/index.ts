@@ -1,6 +1,6 @@
 import { Eko } from '@eko-ai/eko'
 import { getEkoConfig, getEkoLLMsConfig, type EkoConfigOptions } from './core/config'
-import { createCallback, createSidebarCallback } from './core/callbacks'
+import { createSidebarCallback } from './core/callbacks'
 import { TerminalAgent, createTerminalAgent, createTerminalChatAgent } from './agent/terminal-agent'
 import { CodeAgent, createCodeAgent, createCodeChatAgent } from './agent/code-agent'
 import { allTools } from './tools'
@@ -22,7 +22,7 @@ export class OrbitXEko {
     this.config = { ...config }
 
     // 创建回调
-    this.callback = config.callback || createCallback()
+    this.callback = config.callback || createSidebarCallback()
 
     // 创建Chat模式的Agent（只读）
     this.terminalChatAgent = createTerminalChatAgent(config.agentConfig)
@@ -120,7 +120,7 @@ export class OrbitXEko {
 ${prompt}`
 
       // 生成唯一的taskId
-      const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
       this.currentTaskId = taskId
 
       // 执行任务，使用eko的原生run方法（内部会生成taskId）
@@ -375,7 +375,6 @@ export {
   createCodeAgent,
 
   // 回调
-  createCallback,
   createSidebarCallback,
 
   // 工具
