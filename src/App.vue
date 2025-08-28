@@ -25,16 +25,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
   const { reloadConfig } = useShortcutListener()
 
   // 首次启动状态管理
-  const showOnboarding = ref(false)
   const onboardingStorage = createStorage<boolean>('orbitx-onboarding-completed')
+  const showOnboarding = ref(!onboardingStorage.exists())
 
   const handleOnboardingComplete = () => {
     onboardingStorage.save(true)
-
-    // 添加一个短暂的延迟，让动画能够播放
-    setTimeout(() => {
-      showOnboarding.value = false
-    }, 300)
+    showOnboarding.value = false
   }
 
   // 测试按钮：重新打开引导页面
@@ -50,20 +46,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
   onMounted(() => {
     ;(window as any).reloadShortcuts = reloadConfig
-
-    // 检查是否是首次启动
-    const hasCompletedOnboarding = onboardingStorage.exists()
-    showOnboarding.value = !hasCompletedOnboarding
   })
 </script>
 
 <template>
   <div class="app-layout">
     <!-- 引导页面 -->
-    <Transition name="onboarding-fade" mode="out-in">
-      <OnboardingView v-if="showOnboarding" @complete="handleOnboardingComplete" :key="'onboarding'" />
-      <TerminalView v-else :key="'terminal'" />
-    </Transition>
+    <OnboardingView v-if="showOnboarding" @complete="handleOnboardingComplete" />
+    <TerminalView v-else />
   </div>
 </template>
 
@@ -104,23 +94,5 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     height: 100vh;
     display: flex;
     flex-direction: column;
-  }
-
-  /* Onboarding到主界面的过渡动画 */
-  .onboarding-fade-enter-active,
-  .onboarding-fade-leave-active {
-    transition: all 0.3s ease;
-  }
-
-  .onboarding-fade-enter-from,
-  .onboarding-fade-leave-to {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  .onboarding-fade-enter-to,
-  .onboarding-fade-leave-from {
-    opacity: 1;
-    transform: translateY(0);
   }
 </style>

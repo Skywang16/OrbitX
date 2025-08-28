@@ -158,12 +158,12 @@
   }
 
   .theme-option:hover {
-    border-color: var(--primary-400);
+    border-color: var(--color-primary);
     background: var(--bg-300);
   }
 
   .theme-option.selected {
-    border-color: var(--primary-500);
+    border-color: var(--color-primary);
     background: var(--bg-300);
   }
 
@@ -328,7 +328,7 @@
   .theme-check {
     width: 24px;
     height: 24px;
-    color: var(--primary-500);
+    color: var(--text-100);
     flex-shrink: 0;
   }
 

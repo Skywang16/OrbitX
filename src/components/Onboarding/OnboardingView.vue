@@ -221,12 +221,12 @@
   }
 
   .progress-dot.active {
-    background: var(--primary-500, #007acc);
+    background: var(--color-primary, #007acc);
     transform: scale(1.3);
   }
 
   .progress-dot.completed {
-    background: var(--primary-500, #007acc);
+    background: var(--color-primary, #007acc);
     transform: scale(1.1);
   }
 
@@ -238,7 +238,7 @@
     left: -2px;
     right: -2px;
     bottom: -2px;
-    border: 1px solid var(--primary-400);
+    border: 1px solid var(--color-primary);
     border-radius: 50%;
     opacity: 0.4;
     animation: subtle-pulse 3s ease-in-out infinite;

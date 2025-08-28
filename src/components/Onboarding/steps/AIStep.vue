@@ -334,11 +334,11 @@
   }
 
   .ai-option:not(.selected):hover {
-    border-color: var(--primary-400);
+    border-color: var(--color-primary);
   }
 
   .ai-option.selected {
-    border-color: var(--primary-500);
+    border-color: var(--color-primary);
   }
 
   .ai-option.selected .ai-option-header {
@@ -367,8 +367,8 @@
   .ai-badge {
     font-size: 11px;
     font-weight: 600;
-    color: var(--primary-600);
-    background: var(--primary-100);
+    color: var(--color-primary);
+    background: var(--color-primary-alpha);
     padding: 4px 8px;
     border-radius: 6px;
     text-transform: uppercase;
@@ -431,7 +431,7 @@
 
   .form-input:focus {
     outline: none;
-    border-color: var(--primary-500);
+    border-color: var(--color-primary);
   }
 
   .form-input::placeholder {
@@ -506,7 +506,7 @@
 
   /* 选中状态的卡片样式调整 */
   .ai-option.expanded {
-    border-color: var(--primary-500);
+    border-color: var(--color-primary);
     background: var(--bg-250);
   }
 
