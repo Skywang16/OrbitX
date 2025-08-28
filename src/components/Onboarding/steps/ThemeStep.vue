@@ -43,11 +43,11 @@
 <script setup lang="ts">
   import { ref, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { useTheme } from '@/composables/useTheme'
+  import { useThemeStore } from '@/stores/theme'
   import CheckIcon from './icons/CheckIcon.vue'
 
   const { t } = useI18n()
-  const theme = useTheme()
+  const theme = useThemeStore()
 
   const selectedTheme = ref('dark')
 
@@ -89,11 +89,11 @@
       await theme.initialize()
 
       // 获取当前主题状态
-      if (theme.isFollowingSystem.value) {
+      if (theme.isFollowingSystem) {
         selectedTheme.value = 'system'
       } else {
         // 获取当前主题
-        const currentTheme = theme.currentThemeName.value
+        const currentTheme = theme.currentThemeName
         selectedTheme.value = currentTheme || 'dark'
       }
     } catch (error) {

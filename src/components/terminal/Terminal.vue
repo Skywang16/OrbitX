@@ -50,7 +50,7 @@
   // 项目内部模块
   import type { Theme } from '@/types'
   import { windowApi } from '@/api'
-  import { useTheme } from '@/composables/useTheme'
+  import { useThemeStore } from '@/stores/theme'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import { useTerminalState } from '@/composables/useTerminalState'
   import { useTerminalSearch } from '@/composables/useTerminalSearch'
@@ -83,7 +83,7 @@
 
   // === 状态管理 ===
   const terminalStore = useTerminalStore()
-  const themeStore = useTheme()
+  const themeStore = useThemeStore()
   const terminalSelection = useTerminalSelection()
 
   // 使用新的composables
@@ -142,7 +142,7 @@
       }
 
       // 获取当前主题
-      const currentTheme = themeStore.currentThemeData.value
+      const currentTheme = themeStore.currentTheme
       const xtermTheme = currentTheme ? convertThemeToXTerm(currentTheme) : createDefaultXTermTheme()
 
       // 创建终端实例，应用配置和主题
@@ -259,7 +259,7 @@
 
   // 监听主题变化 - 使用防抖优化，减少频繁更新
   watch(
-    () => themeStore.currentThemeData.value,
+    () => themeStore.currentTheme,
     newTheme => {
       // 清除之前的定时器
       if (timers.themeUpdate) {

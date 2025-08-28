@@ -50,7 +50,6 @@
       await aiSettingsStore.loadSettings()
     }
   })
-
 </script>
 
 <template>
@@ -61,7 +60,7 @@
         <div class="empty-text">{{ t('message_list.no_model_configured') }}</div>
         <div class="empty-hint">{{ t('message_list.configure_model_hint') }}</div>
       </div>
-      
+
       <!-- 正常的空状态 -->
       <div v-else class="normal-empty-state">
         <div class="empty-icon">
@@ -143,5 +142,4 @@
     flex-direction: column;
     gap: var(--spacing-md);
   }
-
 </style>

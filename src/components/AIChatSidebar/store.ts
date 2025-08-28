@@ -351,6 +351,107 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const clearError = (): void => {
     error.value = null
   }
+  // 工具步骤处理相关函数
+  const findOrCreateToolStep = (tempMessage: Message, toolName: string) => {
+    const existingStep = tempMessage.steps?.find(
+      step =>
+        step.type === 'tool_use' &&
+        (step as any).toolExecution?.name === toolName &&
+        (step as any).toolExecution?.status === 'running'
+    )
+
+    if (existingStep) {
+      return existingStep as any
+    }
+
+    // 创建新的工具步骤
+    const toolExecution = createToolExecution(toolName, {}, 'running')
+    const newStep = {
+      type: 'tool_use' as const,
+      content: '',
+      timestamp: Date.now(),
+      toolExecution,
+    }
+    tempMessage.steps?.push(newStep as any)
+    return newStep
+  }
+
+  const updateToolStepParams = (toolStep: any, params: Record<string, unknown>) => {
+    toolStep.toolExecution.params = {
+      ...toolStep.toolExecution.params,
+      ...params,
+    }
+  }
+
+  const handleToolUse = (tempMessage: Message, message: StreamMessage) => {
+    if (!message.toolName) return
+
+    const toolStep = findOrCreateToolStep(tempMessage, message.toolName)
+    if (message.params) {
+      updateToolStepParams(toolStep, message.params)
+    }
+  }
+
+  const handleToolStreaming = (tempMessage: Message, message: StreamMessage) => {
+    if (!message.toolName) return
+
+    // 立即创建或获取工具步骤以显示执行状态
+    const toolStep = findOrCreateToolStep(tempMessage, message.toolName)
+
+    // 如果有流式参数数据，更新参数
+    if (message.toolStreaming?.paramName && message.toolStreaming.paramValue !== undefined) {
+      updateToolStepParams(toolStep, {
+        [message.toolStreaming.paramName]: message.toolStreaming.paramValue,
+      })
+    }
+  }
+
+  const handleToolResult = (tempMessage: Message, message: StreamMessage) => {
+    const toolSteps = tempMessage.steps?.filter((step: any) => step.type === 'tool_use') || []
+    const toolStep = toolSteps[toolSteps.length - 1] as any
+
+    if (toolStep?.toolExecution) {
+      const hasError = isToolResultError(message.toolResult)
+      toolStep.toolExecution.status = hasError ? 'error' : 'completed'
+      toolStep.toolExecution.endTime = Date.now()
+      toolStep.toolExecution.result = message.toolResult
+
+      if (hasError) {
+        toolStep.toolExecution.error = '工具执行失败'
+      }
+    }
+  }
+
+  const updateOrCreateStep = (tempMessage: Message, stepData: { type: string; content: string; streamId?: string }) => {
+    let targetStep: any = null
+
+    if (stepData.type === 'thinking') {
+      if (stepData.streamId) {
+        targetStep = tempMessage.steps?.find(
+          step => step.type === 'thinking' && step.metadata?.streamId === stepData.streamId
+        )
+      } else {
+        const thinkingSteps = tempMessage.steps?.filter(step => step.type === 'thinking') || []
+        targetStep = thinkingSteps[thinkingSteps.length - 1] || null
+      }
+    } else {
+      targetStep = stepData.streamId
+        ? tempMessage.steps?.find(step => step.type === stepData.type && step.metadata?.streamId === stepData.streamId)
+        : null
+    }
+
+    if (targetStep) {
+      targetStep.content = stepData.content
+    } else {
+      tempMessage.steps?.push({
+        type: stepData.type as any,
+        content: stepData.content,
+        timestamp: Date.now(),
+        metadata: stepData.streamId ? { streamId: stepData.streamId } : undefined,
+      })
+    }
+  }
+
   const initializeEko = async (): Promise<void> => {
     try {
       if (!ekoInstance.value) {
@@ -360,66 +461,21 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
           tempMessage.steps = tempMessage.steps || []
 
-          const updateOrCreateStep = (stepData: { type: string; content: string; streamId?: string }) => {
-            let targetStep: any = null
-
-            if (stepData.type === 'thinking') {
-              if (stepData.streamId) {
-                targetStep = tempMessage.steps?.find(
-                  step => step.type === 'thinking' && step.metadata?.streamId === stepData.streamId
-                )
-              } else {
-                const thinkingSteps = tempMessage.steps?.filter(step => step.type === 'thinking') || []
-                targetStep = thinkingSteps[thinkingSteps.length - 1] || null
-              }
-            } else {
-              targetStep = stepData.streamId
-                ? tempMessage.steps?.find(
-                    step => step.type === stepData.type && step.metadata?.streamId === stepData.streamId
-                  )
-                : null
-            }
-
-            if (targetStep) {
-              targetStep.content = stepData.content
-            } else {
-              tempMessage.steps?.push({
-                type: stepData.type as any,
-                content: stepData.content,
-                timestamp: Date.now(),
-                metadata: stepData.streamId ? { streamId: stepData.streamId } : undefined,
-              })
-            }
-          }
-
           switch (message.type) {
             case 'tool_use':
-              tempMessage.steps.push({
-                type: 'tool_use',
-                content: '',
-                timestamp: Date.now(),
-                toolExecution: createToolExecution(message.toolName || '', message.params || {}, 'running'),
-              })
+              handleToolUse(tempMessage, message)
               break
 
-            case 'tool_result': {
-              const toolSteps = tempMessage.steps.filter((step: any) => step.type === 'tool_use')
-              const toolStep = toolSteps[toolSteps.length - 1] as any
-              if (toolStep?.toolExecution) {
-                const hasError = isToolResultError(message.toolResult)
-                toolStep.toolExecution.status = hasError ? 'error' : 'completed'
-                toolStep.toolExecution.endTime = Date.now()
-                toolStep.toolExecution.result = message.toolResult
-
-                if (hasError) {
-                  toolStep.toolExecution.error = '工具执行失败'
-                }
-              }
+            case 'tool_streaming':
+              handleToolStreaming(tempMessage, message)
               break
-            }
+
+            case 'tool_result':
+              handleToolResult(tempMessage, message)
+              break
 
             case 'thinking':
-              updateOrCreateStep({
+              updateOrCreateStep(tempMessage, {
                 type: 'thinking',
                 content: message.thought || message.text || '',
                 streamId: message.streamId,
@@ -452,7 +508,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               break
 
             case 'text':
-              updateOrCreateStep({
+              updateOrCreateStep(tempMessage, {
                 type: 'text',
                 content: message.text || '',
                 streamId: message.streamId,
@@ -464,55 +520,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               break
 
             case 'agent_start':
-              console.log('🚀 [侧边栏] Agent开始执行:', {
-                agentName: message.agentName,
-                timestamp: new Date().toISOString(),
-              })
-              break
-
             case 'agent_result':
-              console.log('✅ [侧边栏] Agent执行结果:', {
-                agentName: message.agentName,
-                result: message.agentResult,
-                timestamp: new Date().toISOString(),
-              })
-              break
-
-            case 'tool_streaming':
-              console.log('📡 [侧边栏] 工具参数流式输出:', {
-                toolName: message.toolName,
-                streaming: message.toolStreaming,
-                timestamp: new Date().toISOString(),
-              })
-              break
-
             case 'tool_running':
-              console.log('⚙️ [侧边栏] 工具执行中:', {
-                toolName: message.toolName,
-                params: message.params,
-                timestamp: new Date().toISOString(),
-              })
-              break
-
             case 'file':
-              console.log('📁 [侧边栏] 文件输出:', {
-                fileData: message.fileData,
-                timestamp: new Date().toISOString(),
-              })
-              break
-
             case 'error':
-              console.log('❌ [侧边栏] 错误信息:', {
-                error: message.error,
-                timestamp: new Date().toISOString(),
-              })
-              break
-
             case 'finish':
-              console.log('🏁 [侧边栏] 完成信息:', {
-                finish: message.finish,
-                timestamp: new Date().toISOString(),
-              })
+              // 这些事件暂时只记录日志，不影响UI渲染
               break
           }
 

@@ -114,7 +114,6 @@
     return null
   })
 
-
   const triggerProps = computed(() => {
     return {
       variant: props.triggerButtonVariant || (props.type === 'danger' ? 'danger' : 'secondary'),

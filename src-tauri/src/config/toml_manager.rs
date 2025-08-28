@@ -368,10 +368,38 @@ impl TomlConfigManager {
         // 序列化配置为TOML
         let toml_content = toml::to_string_pretty(config).context("配置序列化为TOML失败")?;
 
-        // 原子写入配置文件
-        self.atomic_write_config(&toml_content).await?;
+        // 带重试的配置文件写入
+        self.write_config_with_retry(&toml_content, 3).await?;
 
         Ok(())
+    }
+
+    /// 带重试机制的配置文件写入
+    async fn write_config_with_retry(&self, content: &str, max_retries: usize) -> AppResult<()> {
+        let mut last_error = None;
+
+        for attempt in 1..=max_retries {
+            match self.atomic_write_config(content).await {
+                Ok(()) => {
+                    if attempt > 1 {
+                        info!("配置文件在第{}次尝试后写入成功", attempt);
+                    }
+                    return Ok(());
+                }
+                Err(e) => {
+                    warn!("配置文件写入失败 (尝试 {}/{}): {}", attempt, max_retries, e);
+                    last_error = Some(e);
+
+                    if attempt < max_retries {
+                        // 短暂等待后重试
+                        tokio::time::sleep(std::time::Duration::from_millis(100 * attempt as u64))
+                            .await;
+                    }
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| anyhow!("配置文件写入失败，未知错误")))
     }
 
     async fn ensure_config_directory(&self) -> AppResult<()> {
@@ -379,31 +407,121 @@ impl TomlConfigManager {
             tokio::fs::create_dir_all(parent)
                 .await
                 .with_context(|| format!("无法创建配置目录: {}", parent.display()))?;
+
+            // 验证目录权限
+            self.verify_directory_permissions(parent).await?;
         }
         Ok(())
     }
 
+    /// 验证目录权限
+    async fn verify_directory_permissions(&self, dir: &std::path::Path) -> AppResult<()> {
+        // 尝试在目录中创建一个测试文件来验证写权限
+        let test_file = dir.join(&format!(".orbitx_test_{}", std::process::id()));
+
+        match tokio::fs::write(&test_file, "test").await {
+            Ok(()) => {
+                // 成功创建测试文件，立即删除
+                let _ = tokio::fs::remove_file(&test_file).await;
+                Ok(())
+            }
+            Err(e) => {
+                bail!("配置目录权限不足: {} - {}", dir.display(), e)
+            }
+        }
+    }
+
     async fn atomic_write_config(&self, content: &str) -> AppResult<()> {
-        // 创建临时文件
-        let temp_path = self.config_path.with_extension("tmp");
+        // 简化的配置文件写入策略
+        // 在 macOS 上，原子重命名有时会失败，我们使用更直接的方法
 
-        // 写入临时文件
-        tokio::fs::write(&temp_path, content)
-            .await
-            .with_context(|| format!("无法写入临时配置文件: {}", temp_path.display()))?;
+        // 首先尝试直接写入（最可靠的方法）
+        debug!("尝试直接写入配置文件");
 
-        // 原子性地重命名文件
-        tokio::fs::rename(&temp_path, &self.config_path)
-            .await
-            .with_context(|| {
-                format!(
-                    "无法重命名配置文件: {} -> {}",
-                    temp_path.display(),
-                    self.config_path.display()
-                )
-            })?;
+        // 创建备份（如果原文件存在）
+        let backup_path = if self.config_path.exists() {
+            let backup = self.config_path.with_extension("backup");
+            match tokio::fs::copy(&self.config_path, &backup).await {
+                Ok(_) => {
+                    debug!("已创建配置备份: {}", backup.display());
+                    Some(backup)
+                }
+                Err(e) => {
+                    warn!("创建配置备份失败: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
-        Ok(())
+        // 直接写入配置文件
+        match tokio::fs::write(&self.config_path, content).await {
+            Ok(()) => {
+                debug!("配置文件写入成功");
+
+                // 删除备份文件（如果存在）
+                if let Some(backup) = backup_path {
+                    let _ = tokio::fs::remove_file(&backup).await;
+                }
+
+                Ok(())
+            }
+            Err(write_err) => {
+                warn!("直接写入失败，尝试原子写入方法: {}", write_err);
+
+                // 如果直接写入失败，尝试原子写入方法
+                let temp_path = self
+                    .config_path
+                    .with_extension(&format!("tmp.{}", std::process::id()));
+
+                // 清理可能存在的临时文件
+                if temp_path.exists() {
+                    let _ = tokio::fs::remove_file(&temp_path).await;
+                }
+
+                // 写入临时文件
+                tokio::fs::write(&temp_path, content)
+                    .await
+                    .with_context(|| format!("无法写入临时配置文件: {}", temp_path.display()))?;
+
+                // 尝试重命名
+                match tokio::fs::rename(&temp_path, &self.config_path).await {
+                    Ok(()) => {
+                        debug!("原子写入成功");
+
+                        // 删除备份文件（如果存在）
+                        if let Some(backup) = backup_path {
+                            let _ = tokio::fs::remove_file(&backup).await;
+                        }
+
+                        Ok(())
+                    }
+                    Err(rename_err) => {
+                        // 清理临时文件
+                        let _ = tokio::fs::remove_file(&temp_path).await;
+
+                        // 如果有备份，尝试恢复
+                        if let Some(backup) = backup_path {
+                            if let Err(restore_err) =
+                                tokio::fs::copy(&backup, &self.config_path).await
+                            {
+                                warn!("恢复配置备份失败: {}", restore_err);
+                            } else {
+                                info!("已恢复配置备份");
+                            }
+                            let _ = tokio::fs::remove_file(&backup).await;
+                        }
+
+                        bail!(
+                            "配置文件写入失败 - 直接写入错误: {}, 原子写入错误: {}",
+                            write_err,
+                            rename_err
+                        );
+                    }
+                }
+            }
+        }
     }
 
     async fn create_backup_and_use_default(&self) -> AppResult<AppConfig> {

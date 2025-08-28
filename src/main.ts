@@ -19,7 +19,7 @@ import { completionApi } from '@/api'
 
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useAIChatStore } from '@/components/AIChatSidebar/store'
-import { useTheme } from '@/composables/useTheme'
+import { useThemeStore } from '@/stores/theme'
 import { useSessionStore } from '@/stores/session'
 
 import { useTerminalStore } from '@/stores/Terminal'
@@ -60,8 +60,8 @@ const initializeSettings = async () => {
     const aiSettingsStore = useAISettingsStore()
     await aiSettingsStore.loadSettings()
 
-    const themeManager = useTheme()
-    await themeManager.initialize()
+    const themeStore = useThemeStore()
+    await themeStore.initialize()
   } catch (error) {
     console.warn('应用设置初始化失败:', error)
   }
@@ -95,8 +95,8 @@ const initializeOpacity = async () => {
 
 const initializeApplication = async () => {
   try {
-    const themeManager = useTheme()
-    await Promise.allSettled([themeManager.initialize(), initLocale(), initializeOpacity()])
+    const themeStore = useThemeStore()
+    await Promise.allSettled([themeStore.initialize(), initLocale(), initializeOpacity()])
 
     app.mount('#app')
 

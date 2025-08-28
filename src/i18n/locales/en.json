@@ -27,7 +27,8 @@
     "no_data": "No data",
     "search_options": "Search options",
     "open_feedback_error": "Unable to open feedback page",
-    "visit_manually": "Please visit manually: https://github.com/Skywang16/OrbitX/issues"
+    "visit_manually": "Please visit manually: https://github.com/Skywang16/OrbitX/issues",
+    "dismiss": "Dismiss"
   },
   "settings": {
     "title": "Settings",
@@ -352,7 +353,13 @@
     "window_opacity": "Window Opacity",
     "opacity": "Opacity",
     "opacity_description": "Adjust window transparency",
-    "opacity_error": "Failed to set opacity: {error}"
+    "opacity_error": "Failed to set opacity: {error}",
+    "theme_changed": "Theme changed successfully",
+    "theme_change_failed": "Failed to change theme",
+    "mode_changed": "Theme mode changed successfully",
+    "mode_change_failed": "Failed to change theme mode",
+    "loading": "Loading themes...",
+    "init_failed": "Failed to initialize theme system"
   },
   "ui": {
     "clear": "Clear",

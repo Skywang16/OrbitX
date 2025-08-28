@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { useTheme } from '../../../../composables/useTheme'
+  import { useThemeStore } from '@/stores/theme'
   import { windowApi } from '@/api/window'
   import { configApi } from '@/api/config'
   import { createMessage } from '@/ui'
@@ -9,14 +9,14 @@
   import type { SelectOption } from '@/ui'
   import { useSessionStore } from '@/stores/session'
 
-  const theme = useTheme()
+  const themeStore = useThemeStore()
   const { t } = useI18n()
   const sessionStore = useSessionStore()
 
   onMounted(async () => {
     try {
-      await theme.initialize()
-      const config = theme.themeConfig.value
+      await themeStore.initialize()
+      const config = themeStore.themeConfig
       if (config) {
         if (config.lightTheme) {
           selectedLightTheme.value = config.lightTheme
@@ -37,12 +37,13 @@
   const opacity = ref(1.0)
 
   const currentMode = computed(() => {
-    const isFollowing = theme.isFollowingSystem.value
+    const isFollowing = themeStore.isFollowingSystem
     return isFollowing ? 'system' : 'manual'
   })
 
-  const manualThemeOptions = computed(() => {
-    return theme.themeOptions.value.map((option: any) => ({
+  // 缓存主题选项以避免重复计算
+  const themeOptionsCache = computed(() => {
+    return themeStore.themeOptions.map((option: any) => ({
       value: option.value,
       label: option.label,
       type: option.type,
@@ -51,26 +52,28 @@
     }))
   })
 
+  const manualThemeOptions = computed(() => themeOptionsCache.value)
+
   const lightThemeOptions = computed((): SelectOption[] => {
-    return theme.themeOptions.value
-      .filter((option: any) => option.type === 'light' || option.type === 'auto')
-      .map((option: any) => ({
+    return themeOptionsCache.value
+      .filter(option => option.type === 'light' || option.type === 'auto')
+      .map(option => ({
         label: option.label,
         value: option.value,
       }))
   })
 
   const darkThemeOptions = computed((): SelectOption[] => {
-    return theme.themeOptions.value
-      .filter((option: any) => option.type === 'dark' || option.type === 'auto')
-      .map((option: any) => ({
+    return themeOptionsCache.value
+      .filter(option => option.type === 'dark' || option.type === 'auto')
+      .map(option => ({
         label: option.label,
         value: option.value,
       }))
   })
 
   watch(
-    () => theme.themeConfig.value,
+    () => themeStore.themeConfig,
     config => {
       if (config) {
         if (config.lightTheme) {
@@ -107,27 +110,29 @@
         const lightTheme = selectedLightTheme.value || 'light'
         const darkTheme = selectedDarkTheme.value || 'dark'
 
-        await theme.enableFollowSystem(lightTheme, darkTheme)
+        await themeStore.enableFollowSystem(lightTheme, darkTheme)
       } else {
-        await theme.disableFollowSystem()
+        await themeStore.disableFollowSystem()
       }
     } catch (error) {
       console.error('Failed to switch theme mode:', error)
+      createMessage.error(t('theme_settings.mode_change_failed'))
     }
   }
 
   const handleThemeSelect = async (themeName: string) => {
     try {
-      await theme.switchToTheme(themeName)
+      await themeStore.switchToTheme(themeName)
     } catch (error) {
       console.error('Failed to switch theme:', error)
+      createMessage.error(t('theme_settings.theme_change_failed'))
     }
   }
 
   const handleSystemThemeChange = async () => {
     if (currentMode.value === 'system') {
       try {
-        await theme.setFollowSystem(true, selectedLightTheme.value, selectedDarkTheme.value)
+        await themeStore.setFollowSystem(true, selectedLightTheme.value, selectedDarkTheme.value)
       } catch (error) {
         console.error('Failed to set follow system theme:', error)
       }

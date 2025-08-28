@@ -27,7 +27,8 @@
     "no_data": "无数据",
     "search_options": "搜索选项",
     "open_feedback_error": "无法打开问题反馈页面",
-    "visit_manually": "请手动访问：https://github.com/Skywang16/OrbitX/issues"
+    "visit_manually": "请手动访问：https://github.com/Skywang16/OrbitX/issues",
+    "dismiss": "关闭"
   },
   "settings": {
     "title": "设置",
@@ -357,7 +358,13 @@
     "window_opacity": "窗口透明度",
     "opacity": "透明度",
     "opacity_description": "调整窗口的透明度",
-    "opacity_error": "设置透明度失败: {error}"
+    "opacity_error": "设置透明度失败: {error}",
+    "theme_changed": "主题切换成功",
+    "theme_change_failed": "主题切换失败",
+    "mode_changed": "主题模式切换成功",
+    "mode_change_failed": "主题模式切换失败",
+    "loading": "正在加载主题...",
+    "init_failed": "主题系统初始化失败"
   },
   "ui": {
     "clear": "清除",

@@ -4,7 +4,7 @@
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { useTheme } from '../../composables/useTheme'
+import { useThemeStore } from '@/stores/theme'
 import { useAISettingsStore } from './components/AI'
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -13,7 +13,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // 子stores和组合函数
   const aiSettings = useAISettingsStore()
-  const themeManager = useTheme()
+  const themeManager = useThemeStore()
 
   const setActiveSection = (section: string) => {
     activeSection.value = section

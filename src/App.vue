@@ -30,7 +30,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
   const handleOnboardingComplete = () => {
     onboardingStorage.save(true)
-    showOnboarding.value = false
+
+    // 添加一个短暂的延迟，让动画能够播放
+    setTimeout(() => {
+      showOnboarding.value = false
+    }, 300)
   }
 
   // 测试按钮：重新打开引导页面
@@ -56,10 +60,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 <template>
   <div class="app-layout">
     <!-- 引导页面 -->
-    <OnboardingView v-if="showOnboarding" @complete="handleOnboardingComplete" />
-
-    <!-- 主应用界面 -->
-    <TerminalView v-else />
+    <Transition name="onboarding-fade" mode="out-in">
+      <OnboardingView v-if="showOnboarding" @complete="handleOnboardingComplete" :key="'onboarding'" />
+      <TerminalView v-else :key="'terminal'" />
+    </Transition>
   </div>
 </template>
 
@@ -100,5 +104,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     height: 100vh;
     display: flex;
     flex-direction: column;
+  }
+
+  /* Onboarding到主界面的过渡动画 */
+  .onboarding-fade-enter-active,
+  .onboarding-fade-leave-active {
+    transition: all 0.3s ease;
+  }
+
+  .onboarding-fade-enter-from,
+  .onboarding-fade-leave-to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  .onboarding-fade-enter-to,
+  .onboarding-fade-leave-from {
+    opacity: 1;
+    transform: translateY(0);
   }
 </style>
