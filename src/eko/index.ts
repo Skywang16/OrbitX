@@ -17,6 +17,7 @@ export class OrbitXEko {
   private mode: 'chat' | 'agent' = 'chat'
   private currentTaskId: string | null = null
   private isRunning: boolean = false
+  private selectedModelId: string | null = null
 
   constructor(config: EkoInstanceConfig = {}) {
     this.config = { ...config }
@@ -38,9 +39,10 @@ export class OrbitXEko {
    */
   async initialize(options: EkoConfigOptions = {}): Promise<void> {
     try {
-      // 获取Eko配置
+      // 获取Eko配置，传递选中的模型ID
       const ekoConfig = await getEkoConfig({
         ...options,
+        selectedModelId: this.selectedModelId,
       })
 
       // 根据模式选择对应的Agent
@@ -69,8 +71,8 @@ export class OrbitXEko {
    */
   private async updateLLMConfig(): Promise<void> {
     try {
-      // 重新获取最新的LLM配置
-      const newLLMsConfig = await getEkoLLMsConfig()
+      // 重新获取最新的LLM配置，传递选中的模型ID
+      const newLLMsConfig = await getEkoLLMsConfig(this.selectedModelId)
 
       // 重新创建Eko实例（简单可靠）
       const agents =
@@ -257,6 +259,20 @@ ${prompt}`
     if (updates.codeAgentConfig) {
       this.codeAgent.updateConfig(updates.codeAgentConfig)
     }
+  }
+
+  /**
+   * 设置选中的模型ID
+   */
+  setSelectedModelId(modelId: string | null): void {
+    this.selectedModelId = modelId
+  }
+
+  /**
+   * 获取当前选中的模型ID
+   */
+  getSelectedModelId(): string | null {
+    return this.selectedModelId
   }
 
   /**

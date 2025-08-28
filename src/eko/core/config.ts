@@ -36,7 +36,7 @@ export const convertToEkoLLMConfig = (modelConfig: AIModelConfig) => {
 /**
  * 获取当前选中的模型配置并转换为Eko LLMs格式
  */
-export const getEkoLLMsConfig = async (): Promise<LLMs> => {
+export const getEkoLLMsConfig = async (selectedModelId?: string | null): Promise<LLMs> => {
   try {
     // 获取所有模型配置
     const models = await aiApi.getModels()
@@ -45,8 +45,15 @@ export const getEkoLLMsConfig = async (): Promise<LLMs> => {
       throw new Error('No AI models configured. Please add model configuration in settings first.')
     }
 
-    // 使用第一个模型作为默认模型
-    const defaultModel = models[0]
+    // 根据用户选择的模型ID确定默认模型
+    let defaultModel = models[0] // 默认使用第一个模型
+    if (selectedModelId) {
+      const selectedModel = models.find(m => m.id === selectedModelId)
+      if (selectedModel) {
+        defaultModel = selectedModel
+      }
+    }
+
     // 构建LLMs配置对象
     const llms: LLMs = {
       default: convertToEkoLLMConfig(defaultModel),
@@ -95,17 +102,19 @@ export interface EkoConfigOptions {
   maxRetries?: number
   /** 请求超时时间(毫秒) */
   timeout?: number
+  /** 选中的模型ID */
+  selectedModelId?: string | null
 }
 
 /**
  * 获取完整的Eko配置
  */
 export const getEkoConfig = async (options: EkoConfigOptions = {}) => {
-  const { debug = false, maxRetries = 3, timeout = 30000 } = options
+  const { debug = false, maxRetries = 3, timeout = 30000, selectedModelId } = options
 
   try {
-    // 获取LLM配置
-    const llms = await getEkoLLMsConfig()
+    // 获取LLM配置，传递选中的模型ID
+    const llms = await getEkoLLMsConfig(selectedModelId)
 
     return {
       llms,

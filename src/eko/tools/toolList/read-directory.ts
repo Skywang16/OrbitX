@@ -101,8 +101,8 @@ export class ReadDirectoryTool extends ModifiableTool {
       })
 
       for (const entry of dirEntries) {
-        // 过滤隐藏文件
-        if (entry.name.startsWith('.')) {
+        // 过滤隐藏文件、依赖、缓存等噪音文件
+        if (this.shouldSkipEntry(entry.name, entry.isDirectory)) {
           continue
         }
 
@@ -130,6 +130,104 @@ export class ReadDirectoryTool extends ModifiableTool {
     }
 
     return entries
+  }
+
+  private shouldSkipEntry(name: string, isDirectory: boolean): boolean {
+    // 隐藏文件和文件夹
+    if (name.startsWith('.')) {
+      return true
+    }
+
+    // 常见的依赖和缓存文件夹
+    const skipDirectories = new Set([
+      'node_modules',
+      '__pycache__',
+      '.pytest_cache',
+      '.coverage',
+      'coverage',
+      'dist',
+      'build',
+      'out',
+      'target', // Rust
+      'bin',
+      'obj', // C#/.NET
+      '.gradle', // Gradle
+      '.maven', // Maven
+      'vendor', // PHP/Go vendor
+      '.bundle', // Ruby
+      '.cache',
+      '.tmp',
+      '.temp',
+      'tmp',
+      'temp',
+      '.nuxt', // Nuxt.js
+      '.next', // Next.js
+      '.vscode',
+      '.idea', // IntelliJ
+      '.vs', // Visual Studio
+      'bower_components',
+      'jspm_packages',
+      'web_modules',
+      'logs',
+      '*.egg-info', // Python eggs
+      '.tox', // Python tox
+      '.venv', // Python virtual env
+      'venv',
+      'env',
+      '.env',
+    ])
+
+    if (isDirectory && skipDirectories.has(name)) {
+      return true
+    }
+
+    // 常见的缓存和临时文件
+    const skipFilePatterns = [
+      /\.log$/,
+      /\.cache$/,
+      /\.tmp$/,
+      /\.temp$/,
+      /\.bak$/,
+      /\.backup$/,
+      /\.swp$/,
+      /\.swo$/,
+      /~$/,
+      /\.pyc$/,
+      /\.pyo$/,
+      /\.pyd$/,
+      /\.so$/,
+      /\.dll$/,
+      /\.dylib$/,
+      /\.o$/,
+      /\.obj$/,
+      /\.class$/,
+      /\.jar$/,
+      /\.war$/,
+      /\.ear$/,
+      /\.dSYM$/,
+      /Thumbs\.db$/,
+      /\.DS_Store$/,
+      /desktop\.ini$/,
+      /\.lock$/,
+      /package-lock\.json$/,
+      /yarn\.lock$/,
+      /pnpm-lock\.yaml$/,
+      /Pipfile\.lock$/,
+      /poetry\.lock$/,
+      /Cargo\.lock$/,
+      /composer\.lock$/,
+      /Gemfile\.lock$/,
+    ]
+
+    if (!isDirectory) {
+      for (const pattern of skipFilePatterns) {
+        if (pattern.test(name)) {
+          return true
+        }
+      }
+    }
+
+    return false
   }
 
   private async formatTreeOutput(rootPath: string, entries: FileEntry[]): Promise<string> {

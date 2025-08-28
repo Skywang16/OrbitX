@@ -16,13 +16,13 @@
   const props = defineProps<Props>()
   const aiChatStore = useAIChatStore()
 
-  // 按时间戳排序步骤，确保瀑布式显示顺序
+  // 直接使用数组顺序，按插入顺序显示
   const sortedSteps = computed(() => {
     if (!props.message.steps) {
       return []
     }
 
-    return [...props.message.steps].sort((a, b) => a.timestamp - b.timestamp)
+    return props.message.steps
   })
 
   import { formatTime } from '@/utils/dateFormatter'

@@ -71,6 +71,11 @@ export class ReadFileTool extends ModifiableTool {
         throw new ValidationError(`路径 ${path} 是一个目录，请使用 read_directory 工具读取目录内容`)
       }
 
+      // 检查是否为二进制文件
+      if (this.isBinaryFile(path)) {
+        throw new ValidationError(`文件 ${path} 是二进制文件，无法以文本方式读取`)
+      }
+
       // 使用Tauri API读取文件
       const rawContent = await invoke<ArrayBuffer>('plugin:fs|read_text_file', {
         path: path,
@@ -145,6 +150,94 @@ export class ReadFileTool extends ModifiableTool {
     } catch {
       return false
     }
+  }
+
+  private isBinaryFile(path: string): boolean {
+    // 获取文件扩展名
+    const ext = path.toLowerCase().split('.').pop() || ''
+
+    // 常见的二进制文件扩展名
+    const binaryExtensions = new Set([
+      // 图片文件
+      'jpg',
+      'jpeg',
+      'png',
+      'gif',
+      'bmp',
+      'tiff',
+      'tif',
+      'webp',
+      'ico',
+      'svg',
+      // 音频文件
+      'mp3',
+      'wav',
+      'flac',
+      'aac',
+      'ogg',
+      'm4a',
+      'wma',
+      // 视频文件
+      'mp4',
+      'avi',
+      'mkv',
+      'mov',
+      'wmv',
+      'flv',
+      'webm',
+      '3gp',
+      // 压缩文件
+      'zip',
+      'rar',
+      '7z',
+      'tar',
+      'gz',
+      'bz2',
+      'xz',
+      // 可执行文件
+      'exe',
+      'dll',
+      'so',
+      'dylib',
+      'app',
+      'deb',
+      'rpm',
+      'dmg',
+      // 办公文档
+      'doc',
+      'docx',
+      'xls',
+      'xlsx',
+      'ppt',
+      'pptx',
+      'pdf',
+      // 字体文件
+      'ttf',
+      'otf',
+      'woff',
+      'woff2',
+      'eot',
+      // 数据库文件
+      'db',
+      'sqlite',
+      'sqlite3',
+      // 编译产物
+      'class',
+      'jar',
+      'war',
+      'ear',
+      'pyc',
+      'pyo',
+      'o',
+      'obj',
+      // 其他二进制
+      'bin',
+      'dat',
+      'iso',
+      'img',
+    ])
+
+    return binaryExtensions.has(ext)
   }
 }
 
