@@ -10,63 +10,31 @@ import { createTerminalEko, createSidebarCallback, type TerminalEko } from '@/ek
 import type { Conversation, Message } from '@/types'
 import { createToolExecution } from '@/types'
 import { debounce } from 'lodash-es'
-
-interface StreamMessage {
-  type:
-    | 'tool_use'
-    | 'tool_result'
-    | 'workflow'
-    | 'text'
-    | 'thinking'
-    | 'agent_start'
-    | 'agent_result'
-    | 'tool_streaming'
-    | 'tool_running'
-    | 'file'
-    | 'error'
-    | 'finish'
-  toolName?: string
-  params?: Record<string, any>
-  toolResult?: any
-  thought?: string
-  text?: string
-  streamId?: string
-  streamDone?: boolean
-  workflow?: {
-    thought?: string
-  }
-  // 新增字段支持更多回调类型
-  agentName?: string
-  agentResult?: any
-  toolStreaming?: {
-    paramName?: string
-    paramValue?: any
-    isComplete?: boolean
-  }
-  fileData?: {
-    fileName?: string
-    filePath?: string
-    content?: string
-    mimeType?: string
-  }
-  error?: {
-    message?: string
-    code?: string
-    details?: any
-  }
-  finish?: {
-    tokenUsage?: {
-      promptTokens?: number
-      completionTokens?: number
-      totalTokens?: number
-    }
-    duration?: number
-    status?: 'success' | 'error' | 'cancelled'
-  }
-}
+import type { StreamCallbackMessage } from '@/eko/types'
 
 const isToolResultError = (toolResult: any): boolean => {
   return toolResult?.isError === true
+}
+
+/**
+ * 性能优化：判断是否应该跳过某些消息
+ * 根据文档最佳实践，过滤不需要的消息
+ */
+const shouldSkipMessage = (message: StreamCallbackMessage): boolean => {
+  // 保留文本和思考的流式输出，用户需要看到实时效果
+  // 不跳过任何文本或思考消息
+
+  // 不跳过工具参数流式传输，用户需要看到工具正在准备
+  // if (message.type === 'tool_streaming') {
+  //   return true
+  // }
+
+  // 跳过工具执行中的消息（除非需要实时显示）
+  if (message.type === 'tool_running') {
+    return true
+  }
+
+  return false
 }
 
 export const useAIChatStore = defineStore('ai-chat', () => {
@@ -241,7 +209,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         currentWorkingDirectory
       )
 
-      const messageId = await aiApi.saveMessage(currentConversationId.value, 'assistant', '正在生成回复...')
+      const messageId = await aiApi.saveMessage(currentConversationId.value, 'assistant', 'Thinking...')
 
       tempAIMessage = {
         id: messageId,
@@ -351,14 +319,36 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const clearError = (): void => {
     error.value = null
   }
+
+  const updateSelectedModel = async (modelId: string | null): Promise<void> => {
+    try {
+      // 更新EKO实例的模型配置
+      if (ekoInstance.value) {
+        await ekoInstance.value.setSelectedModelId(modelId)
+      }
+    } catch (error) {
+      console.error('更新模型配置失败:', error)
+    }
+  }
   // 工具步骤处理相关函数
-  const findOrCreateToolStep = (tempMessage: Message, toolName: string) => {
-    const existingStep = tempMessage.steps?.find(
-      step =>
-        step.type === 'tool_use' &&
-        (step as any).toolExecution?.name === toolName &&
-        (step as any).toolExecution?.status === 'running'
-    )
+  const findOrCreateToolStep = (tempMessage: Message, toolName: string, toolId?: string) => {
+    // 优先根据 toolId 查找，如果没有则根据 toolName 查找最新的运行中工具
+    let existingStep = null
+
+    if (toolId) {
+      existingStep = tempMessage.steps?.find(
+        step => step.type === 'tool_use' && (step as any).toolExecution?.toolId === toolId
+      )
+    }
+
+    if (!existingStep) {
+      existingStep = tempMessage.steps?.find(
+        step =>
+          step.type === 'tool_use' &&
+          (step as any).toolExecution?.name === toolName &&
+          (step as any).toolExecution?.status === 'running'
+      )
+    }
 
     if (existingStep) {
       return existingStep as any
@@ -366,6 +356,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
     // 创建新的工具步骤
     const toolExecution = createToolExecution(toolName, {}, 'running')
+    // 保存 toolId 以便后续查找
+    if (toolId) {
+      ;(toolExecution as any).toolId = toolId
+    }
+
     const newStep = {
       type: 'tool_use' as const,
       content: '',
@@ -383,164 +378,282 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  const handleToolUse = (tempMessage: Message, message: StreamMessage) => {
-    if (!message.toolName) return
+  const handleToolUse = (tempMessage: Message, message: StreamCallbackMessage) => {
+    if (message.type !== 'tool_use' || !message.toolName) return
 
-    const toolStep = findOrCreateToolStep(tempMessage, message.toolName)
+    // 使用 toolId 查找已存在的工具步骤（可能由 tool_streaming 创建）
+    const toolStep = findOrCreateToolStep(tempMessage, message.toolName, message.toolId)
+
+    // 更新工具状态
+    if (toolStep.toolExecution) {
+      toolStep.toolExecution.status = 'running'
+    }
+
     if (message.params) {
       updateToolStepParams(toolStep, message.params)
     }
   }
 
-  const handleToolStreaming = (tempMessage: Message, message: StreamMessage) => {
-    if (!message.toolName) return
+  const handleToolStreaming = (tempMessage: Message, message: StreamCallbackMessage) => {
+    if (message.type !== 'tool_streaming' || !message.toolName) return
 
-    // 立即创建或获取工具步骤以显示执行状态
-    const toolStep = findOrCreateToolStep(tempMessage, message.toolName)
+    // 立即创建或获取工具步骤以显示执行状态，使用 toolId 进行精确匹配
+    const toolStep = findOrCreateToolStep(tempMessage, message.toolName, message.toolId)
 
-    // 如果有流式参数数据，更新参数
-    if (message.toolStreaming?.paramName && message.toolStreaming.paramValue !== undefined) {
-      updateToolStepParams(toolStep, {
-        [message.toolStreaming.paramName]: message.toolStreaming.paramValue,
-      })
+    // 更新工具状态为"准备参数中"
+    if (toolStep.toolExecution) {
+      toolStep.toolExecution.status = 'running'
+    }
+
+    // 对于 tool_streaming 类型，paramsText 包含参数信息
+    // 实时更新参数显示
+    if (message.paramsText) {
+      try {
+        // 尝试解析参数文本（如果是JSON格式）
+        const params = JSON.parse(message.paramsText)
+        updateToolStepParams(toolStep, params)
+      } catch {
+        // 如果不是完整JSON，显示当前的参数文本
+        updateToolStepParams(toolStep, {
+          _streamingParams: message.paramsText,
+          _isStreaming: true,
+        })
+      }
     }
   }
 
-  const handleToolResult = (tempMessage: Message, message: StreamMessage) => {
-    const toolSteps = tempMessage.steps?.filter((step: any) => step.type === 'tool_use') || []
-    const toolStep = toolSteps[toolSteps.length - 1] as any
+  const handleToolResult = (tempMessage: Message, message: StreamCallbackMessage) => {
+    if (message.type !== 'tool_result') return
 
-    if (toolStep?.toolExecution) {
+    // 优先根据 toolId 查找对应的工具步骤
+    let toolStep = null
+    if (message.toolId) {
+      toolStep = tempMessage.steps?.find(
+        step => step.type === 'tool_use' && (step as any).toolExecution?.toolId === message.toolId
+      )
+    }
+
+    if (toolStep && (toolStep as any).toolExecution) {
       const hasError = isToolResultError(message.toolResult)
-      toolStep.toolExecution.status = hasError ? 'error' : 'completed'
-      toolStep.toolExecution.endTime = Date.now()
-      toolStep.toolExecution.result = message.toolResult
+      ;(toolStep as any).toolExecution.status = hasError ? 'error' : 'completed'
+      ;(toolStep as any).toolExecution.endTime = Date.now()
+      ;(toolStep as any).toolExecution.result = message.toolResult
 
       if (hasError) {
-        toolStep.toolExecution.error = '工具执行失败'
+        ;(toolStep as any).toolExecution.error = 'Tool execution failed'
       }
+    } else if (!toolStep) {
+      console.warn('工具结果无法匹配到对应步骤，toolId:', message.toolId)
     }
   }
 
-  const updateOrCreateStep = (tempMessage: Message, stepData: { type: string; content: string; streamId?: string }) => {
+  const updateOrCreateStep = (
+    tempMessage: Message,
+    stepData: {
+      type: string
+      content: string
+      streamId?: string
+      streamDone?: boolean
+    }
+  ) => {
     let targetStep: any = null
 
-    if (stepData.type === 'thinking') {
-      if (stepData.streamId) {
-        targetStep = tempMessage.steps?.find(
-          step => step.type === 'thinking' && step.metadata?.streamId === stepData.streamId
-        )
-      } else {
-        const thinkingSteps = tempMessage.steps?.filter(step => step.type === 'thinking') || []
-        targetStep = thinkingSteps[thinkingSteps.length - 1] || null
-      }
-    } else {
-      targetStep = stepData.streamId
-        ? tempMessage.steps?.find(step => step.type === stepData.type && step.metadata?.streamId === stepData.streamId)
-        : null
+    // 优化查找逻辑：基于 streamId 和类型查找现有步骤
+    if (stepData.streamId) {
+      targetStep = tempMessage.steps?.find(
+        step => step.type === stepData.type && step.metadata?.streamId === stepData.streamId
+      )
+    } else if (stepData.type === 'thinking') {
+      // 对于 thinking 类型，如果没有 streamId，查找最后一个 thinking 步骤
+      const thinkingSteps = tempMessage.steps?.filter(step => step.type === 'thinking') || []
+      targetStep = thinkingSteps[thinkingSteps.length - 1] || null
     }
 
     if (targetStep) {
+      // 更新现有步骤
       targetStep.content = stepData.content
+
+      // 如果流式完成，添加完成标记
+      if (stepData.streamDone) {
+        targetStep.metadata = {
+          ...targetStep.metadata,
+          streamDone: true,
+          completedAt: Date.now(),
+        }
+
+        // 对于 thinking 类型，计算思考持续时间
+        if (stepData.type === 'thinking') {
+          targetStep.metadata.thinkingDuration = Date.now() - targetStep.timestamp
+        }
+      }
     } else {
-      tempMessage.steps?.push({
+      // 创建新步骤
+      const newStep = {
         type: stepData.type as any,
         content: stepData.content,
         timestamp: Date.now(),
-        metadata: stepData.streamId ? { streamId: stepData.streamId } : undefined,
-      })
+        metadata: {
+          ...(stepData.streamId ? { streamId: stepData.streamId } : {}),
+          ...(stepData.streamDone ? { streamDone: true, completedAt: Date.now() } : {}),
+        },
+      }
+
+      tempMessage.steps?.push(newStep)
     }
   }
 
   const initializeEko = async (): Promise<void> => {
     try {
       if (!ekoInstance.value) {
-        const handleStreamMessage = async (message: StreamMessage) => {
-          const tempMessage = messageList.value[messageList.value.length - 1]
-          if (!tempMessage || tempMessage.role !== 'assistant') return
+        const handleStreamMessage = async (message: StreamCallbackMessage) => {
+          try {
+            // 性能优化：过滤不需要的消息
+            if (shouldSkipMessage(message)) {
+              return
+            }
 
-          tempMessage.steps = tempMessage.steps || []
+            const tempMessage = messageList.value[messageList.value.length - 1]
+            if (!tempMessage || tempMessage.role !== 'assistant') return
 
-          switch (message.type) {
-            case 'tool_use':
-              handleToolUse(tempMessage, message)
-              break
+            tempMessage.steps = tempMessage.steps || []
 
-            case 'tool_streaming':
-              handleToolStreaming(tempMessage, message)
-              break
+            switch (message.type) {
+              case 'tool_use':
+                handleToolUse(tempMessage, message)
+                break
 
-            case 'tool_result':
-              handleToolResult(tempMessage, message)
-              break
+              case 'tool_streaming':
+                handleToolStreaming(tempMessage, message)
+                break
 
-            case 'thinking':
-              updateOrCreateStep(tempMessage, {
-                type: 'thinking',
-                content: message.thought || message.text || '',
-                streamId: message.streamId,
-              })
-              break
+              case 'tool_result':
+                handleToolResult(tempMessage, message)
+                break
 
-            case 'workflow':
-              if (message.workflow?.thought) {
-                let thinkingStep = tempMessage.steps?.find(step => step.type === 'thinking')
+              case 'thinking':
+                if (message.type === 'thinking') {
+                  updateOrCreateStep(tempMessage, {
+                    type: 'thinking',
+                    content: message.text || '',
+                    streamId: message.streamId,
+                    streamDone: message.streamDone,
+                  })
+                }
+                break
 
-                if (thinkingStep) {
-                  thinkingStep.content = message.workflow.thought
+              case 'workflow':
+                if (message.type === 'workflow') {
+                  // workflow 消息类型在官方定义中包含 workflow 对象
+                  // 这里可以根据需要处理工作流信息
+                  // 注意：新版本eko已将workflow替换为task，但保持兼容性
+                }
+                break
+
+              case 'text':
+                if (message.type === 'text') {
+                  updateOrCreateStep(tempMessage, {
+                    type: 'text',
+                    content: message.text || '',
+                    streamId: message.streamId,
+                    streamDone: message.streamDone,
+                  })
+
                   if (message.streamDone) {
-                    thinkingStep.metadata = {
-                      ...thinkingStep.metadata,
-                      thinkingDuration: Date.now() - thinkingStep.timestamp,
-                    }
+                    tempMessage.content = message.text || ''
                   }
-                } else {
+                }
+                break
+
+              case 'agent_start':
+                // 代理开始执行，可以添加状态指示
+                if (message.type === 'agent_start') {
+                  // Agent started
+                }
+                break
+
+              case 'agent_result':
+                // 代理执行完成
+                if (message.type === 'agent_result') {
+                  if (message.error) {
+                    console.error(`代理执行失败:`, message.error)
+                    tempMessage.status = 'error'
+                  } else {
+                    tempMessage.status = 'complete'
+                  }
+                }
+                break
+
+              case 'tool_running':
+                // 工具执行中的输出
+                if (message.type === 'tool_running') {
+                  // 可以实时显示工具执行的输出
+                }
+                break
+
+              case 'file':
+                // 文件输出处理
+                if (message.type === 'file') {
                   tempMessage.steps?.push({
-                    type: 'thinking' as any,
-                    content: message.workflow.thought,
+                    type: 'file' as any,
+                    content: '',
                     timestamp: Date.now(),
                     metadata: {
-                      thinkingDuration: message.streamDone ? 0 : undefined,
+                      streamId: `file-${Date.now()}`,
                     },
                   })
                 }
-              }
-              break
+                break
 
-            case 'text':
-              updateOrCreateStep(tempMessage, {
-                type: 'text',
-                content: message.text || '',
-                streamId: message.streamId,
-              })
+              case 'error':
+                // 错误处理
+                if (message.type === 'error') {
+                  tempMessage.steps?.push({
+                    type: 'error' as any,
+                    content: '',
+                    timestamp: Date.now(),
+                    metadata: {
+                      errorType: 'execution_error',
+                      errorDetails: String(message.error),
+                    },
+                  })
+                  tempMessage.status = 'error'
+                }
+                break
 
-              if (message.streamDone) {
-                tempMessage.content = message.text || ''
-              }
-              break
+              case 'finish':
+                // 执行完成
+                if (message.type === 'finish') {
+                  tempMessage.status = 'complete'
+                  tempMessage.duration = Date.now() - (tempMessage.createdAt?.getTime() || Date.now())
+                }
+                break
+            }
 
-            case 'agent_start':
-            case 'agent_result':
-            case 'tool_running':
-            case 'file':
-            case 'error':
-            case 'finish':
-              // 这些事件暂时只记录日志，不影响UI渲染
-              break
+            debouncedSaveSteps(tempMessage.id, tempMessage.steps)
+          } catch (error) {
+            console.error('处理流式消息时发生错误:', error)
+            // 不要抛出错误，避免中断执行流程
           }
-
-          debouncedSaveSteps(tempMessage.id, tempMessage.steps)
         }
 
         const callback = createSidebarCallback(handleStreamMessage)
 
+        // 获取当前选中的模型ID
+        const selectedModelId = sessionStore.aiState.selectedModelId
+
         ekoInstance.value = await createTerminalEko({
           callback,
           debug: true,
+          selectedModelId,
         })
       }
     } catch (err) {
-      ekoInstance.value = await createTerminalEko({ debug: true })
+      // 获取当前选中的模型ID
+      const selectedModelId = sessionStore.aiState.selectedModelId
+      ekoInstance.value = await createTerminalEko({
+        debug: true,
+        selectedModelId,
+      })
     }
   }
 
@@ -620,5 +733,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     initialize,
     restoreFromSessionState,
     saveToSessionState,
+    updateSelectedModel,
   }
 })

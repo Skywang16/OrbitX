@@ -5,7 +5,7 @@
  */
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
-import type { ToolResult } from '@eko-ai/eko/types'
+import type { ToolResult } from '@/eko-core/types'
 import { FileNotFoundError, ValidationError, ToolError } from '../tool-error'
 import { invoke } from '@tauri-apps/api/core'
 import { aiApi, type AnalyzeCodeParams, type AnalysisResult, type CodeSymbol } from '@/api'

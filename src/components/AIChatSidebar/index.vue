@@ -114,9 +114,12 @@
     }))
   })
 
-  const handleModelChange = (modelId: string | null) => {
+  const handleModelChange = async (modelId: string | null) => {
     selectedModelId.value = modelId
     sessionStore.updateAiState({ selectedModelId: modelId })
+
+    // 更新EKO实例的模型配置
+    await aiChatStore.updateSelectedModel(modelId)
   }
 
   const stopMessage = () => {

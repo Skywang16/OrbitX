@@ -2,8 +2,8 @@
  * 可修改工具基础类
  */
 
-import type { AgentContext } from '@eko-ai/eko'
-import type { Tool, ToolResult } from '@eko-ai/eko/types'
+import type { AgentContext } from '@/eko-core'
+import type { Tool, ToolResult } from '@/eko-core/types'
 
 import { ToolError, formatToolError } from './tool-error'
 // 与 Eko Tool 的参数类型保持一致，避免 JSON Schema 类型不兼容

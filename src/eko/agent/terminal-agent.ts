@@ -3,7 +3,7 @@
  * 为终端模拟器提供专门的AI代理功能
  */
 
-import { Agent } from '@eko-ai/eko'
+import { Agent } from '@/eko-core'
 import type { TerminalAgentConfig } from '../types'
 import { getToolsForMode } from '../tools'
 import { terminalApi } from '@/api'

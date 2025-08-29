@@ -2,67 +2,10 @@
  * 本地 Eko 类型定义与导出
  */
 
-import type { AgentContext } from '@eko-ai/eko'
+import type { AgentContext } from '@/eko-core'
 
 // 从 Eko 包导出工具相关类型，供本地代码统一引用
-export type { Tool, ToolResult } from '@eko-ai/eko/types'
-
-/**
- * 流式消息类型（与侧边栏使用一致）
- */
-export interface StreamMessage {
-  type:
-    | 'tool_use'
-    | 'tool_result'
-    | 'workflow'
-    | 'text'
-    | 'thinking'
-    | 'agent_start'
-    | 'agent_result'
-    | 'tool_streaming'
-    | 'tool_running'
-    | 'file'
-    | 'error'
-    | 'finish'
-  toolName?: string
-  params?: Record<string, unknown>
-  toolResult?: unknown
-  thought?: string
-  text?: string
-  streamId?: string
-  streamDone?: boolean
-  workflow?: {
-    thought?: string
-  }
-  // 新增字段支持更多回调类型
-  agentName?: string
-  agentResult?: unknown
-  toolStreaming?: {
-    paramName?: string
-    paramValue?: unknown
-    isComplete?: boolean
-  }
-  fileData?: {
-    fileName?: string
-    filePath?: string
-    content?: string
-    mimeType?: string
-  }
-  error?: {
-    message?: string
-    code?: string
-    details?: unknown
-  }
-  finish?: {
-    tokenUsage?: {
-      promptTokens?: number
-      completionTokens?: number
-      totalTokens?: number
-    }
-    duration?: number
-    status?: 'success' | 'error' | 'cancelled'
-  }
-}
+export type { Tool, ToolResult, Task } from '@/eko-core/types'
 
 /**
  * Eko 回调接口（与 Eko 的 StreamCallback & HumanCallback 对齐）
@@ -79,7 +22,7 @@ export interface TerminalCallback {
 }
 
 // Import StreamCallbackMessage from the Eko package to avoid type mismatches
-import type { StreamCallbackMessage } from '@eko-ai/eko/types'
+import type { StreamCallbackMessage } from '@/eko-core/types'
 export type { StreamCallbackMessage }
 
 /**
@@ -127,6 +70,7 @@ export interface EkoInstanceConfig {
   agentConfig?: Partial<TerminalAgentConfig>
   codeAgentConfig?: Partial<TerminalAgentConfig>
   debug?: boolean
+  selectedModelId?: string | null
 }
 
 /**

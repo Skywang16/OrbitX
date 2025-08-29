@@ -2,7 +2,7 @@
  * 工具集合
  */
 
-import type { Tool } from '../types'
+import type { Tool } from '@/eko-core/types'
 import { globalToolRegistry } from './tool-registry'
 
 // Import all tools

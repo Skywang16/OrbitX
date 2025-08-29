@@ -3,7 +3,7 @@
  */
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
-import type { ToolResult } from '@eko-ai/eko/types'
+import type { ToolResult } from '@/eko-core/types'
 import { invoke } from '@tauri-apps/api/core'
 
 export interface ReadManyFilesParams {

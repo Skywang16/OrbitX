@@ -148,7 +148,7 @@ export interface ToolStep extends BaseStep {
 }
 
 export interface NonToolStep extends BaseStep {
-  type: 'thinking' | 'workflow' | 'text' | 'error'
+  type: 'thinking' | 'task' | 'text' | 'error'
 }
 
 export type AIOutputStep = ToolStep | NonToolStep
@@ -300,16 +300,16 @@ export interface AgentTextMessage {
   timestamp: string
 }
 
-export interface AgentWorkflowMessage {
-  type: 'workflow'
+export interface AgentTaskMessage {
+  type: 'task'
   stage: string
   content: string
   timestamp: string
-  workflow?: Record<string, unknown>
+  task?: Record<string, unknown>
   step?: Record<string, unknown>
 }
 
-export type AgentMessageData = AgentTextMessage | AgentWorkflowMessage
+export type AgentMessageData = AgentTextMessage | AgentTaskMessage
 
 export function createToolExecution(
   name: string,

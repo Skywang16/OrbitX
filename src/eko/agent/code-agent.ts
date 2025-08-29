@@ -3,7 +3,7 @@
  * 为代码开发提供专门的AI代理功能
  */
 
-import { Agent } from '@eko-ai/eko'
+import { Agent } from '@/eko-core'
 import type { CodeAgentConfig } from '../types'
 import { getToolsForMode } from '../tools'
 

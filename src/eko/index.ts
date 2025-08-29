@@ -1,8 +1,8 @@
-import { Eko } from '@eko-ai/eko'
+import { Eko } from '@/eko-core'
 import { getEkoConfig, getEkoLLMsConfig, type EkoConfigOptions } from './core/config'
 import { createSidebarCallback } from './core/callbacks'
 import { TerminalAgent, createTerminalAgent, createTerminalChatAgent } from './agent/terminal-agent'
-import { CodeAgent, createCodeAgent, createCodeChatAgent } from './agent/code-agent'
+import { CodeAgent, createCodeAgent } from './agent/code-agent'
 import { allTools } from './tools'
 import type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult } from './types'
 
@@ -10,8 +10,6 @@ export class OrbitXEko {
   private eko: Eko | null = null
   private terminalChatAgent: TerminalAgent
   private terminalAgent: TerminalAgent
-  private codeChatAgent: CodeAgent
-  private codeAgent: CodeAgent
   private callback: TerminalCallback
   private config: EkoInstanceConfig
   private mode: 'chat' | 'agent' = 'chat'
@@ -22,16 +20,17 @@ export class OrbitXEko {
   constructor(config: EkoInstanceConfig = {}) {
     this.config = { ...config }
 
+    // 初始化选中的模型ID
+    this.selectedModelId = config.selectedModelId || null
+
     // 创建回调
     this.callback = config.callback || createSidebarCallback()
 
     // 创建Chat模式的Agent（只读）
     this.terminalChatAgent = createTerminalChatAgent(config.agentConfig)
-    this.codeChatAgent = createCodeChatAgent(config.codeAgentConfig)
 
     // 创建Agent模式的Agent（全权限）
     this.terminalAgent = createTerminalAgent('agent', config.agentConfig)
-    this.codeAgent = createCodeAgent('agent', config.codeAgentConfig)
   }
 
   /**
@@ -45,16 +44,16 @@ export class OrbitXEko {
         selectedModelId: this.selectedModelId,
       })
 
-      // 根据模式选择对应的Agent
-      const agents =
+      // 根据模式选择对应的Agent（单Agent模式）
+      const agent =
         this.mode === 'chat'
-          ? [this.terminalChatAgent, this.codeChatAgent] // Chat模式：只读Agent
-          : [this.terminalAgent, this.codeAgent] // Agent模式：全权限Agent
+          ? this.terminalChatAgent // Chat模式：只读Agent
+          : this.terminalAgent // Agent模式：全权限Agent
 
-      // 创建Eko实例
+      // 创建Eko实例（单Agent配置）
       this.eko = new Eko({
         llms: ekoConfig.llms,
-        agents: agents, // 根据模式选择不同的Agent
+        agent: agent, // 单Agent配置
         planLlms: ekoConfig.planLlms,
         callback: this.callback,
       })
@@ -67,6 +66,23 @@ export class OrbitXEko {
   }
 
   /**
+   * 设置选中的模型ID并更新LLM配置
+   */
+  async setSelectedModelId(modelId: string | null): Promise<void> {
+    if (this.selectedModelId !== modelId) {
+      this.selectedModelId = modelId
+      await this.updateLLMConfig()
+    }
+  }
+
+  /**
+   * 获取当前选中的模型ID
+   */
+  getSelectedModelId(): string | null {
+    return this.selectedModelId
+  }
+
+  /**
    * 更新LLM配置（重新创建Eko实例以使用最新的AI模型配置）
    */
   private async updateLLMConfig(): Promise<void> {
@@ -74,13 +90,13 @@ export class OrbitXEko {
       // 重新获取最新的LLM配置，传递选中的模型ID
       const newLLMsConfig = await getEkoLLMsConfig(this.selectedModelId)
 
-      // 重新创建Eko实例（简单可靠）
-      const agents =
-        this.mode === 'chat' ? [this.terminalChatAgent, this.codeChatAgent] : [this.terminalAgent, this.codeAgent]
+      // 重新创建Eko实例（简单可靠，单Agent配置）
+      const agent =
+        this.mode === 'chat' ? this.terminalChatAgent : this.terminalAgent
 
       this.eko = new Eko({
         llms: newLLMsConfig,
-        agents: agents,
+        agent: agent,
         planLlms: ['default'],
         callback: this.callback,
       })
@@ -114,7 +130,6 @@ export class OrbitXEko {
 
       if (options.workingDirectory) {
         this.terminalAgent.setDefaultWorkingDirectory(options.workingDirectory)
-        this.codeAgent.updateConfig({ defaultWorkingDirectory: options.workingDirectory })
       }
 
       // Build user request prompt
@@ -152,7 +167,7 @@ ${prompt}`
   }
 
   /**
-   * 生成工作流（不执行）
+   * 生成任务（不执行）
    */
   async generate(prompt: string): Promise<any> {
     try {
@@ -160,19 +175,19 @@ ${prompt}`
         await this.initialize()
       }
 
-      const workflow = await this.eko!.generate(prompt)
+      const task = await this.eko!.generate(prompt)
 
-      return workflow
+      return task
     } catch (error) {
-      console.error('❌ 工作流生成失败:', error)
+      console.error('❌ 任务生成失败:', error)
       throw error
     }
   }
 
   /**
-   * 执行已生成的工作流
+   * 执行已生成的任务
    */
-  async execute(workflow: any, options: EkoRunOptions = {}): Promise<EkoRunResult> {
+  async execute(task: any, options: EkoRunOptions = {}): Promise<EkoRunResult> {
     const startTime = Date.now()
 
     try {
@@ -187,11 +202,10 @@ ${prompt}`
 
       if (options.workingDirectory) {
         this.terminalAgent.setDefaultWorkingDirectory(options.workingDirectory)
-        this.codeAgent.updateConfig({ defaultWorkingDirectory: options.workingDirectory })
       }
 
-      // 执行工作流
-      const result = await this.eko!.execute(workflow)
+      // 执行任务
+      const result = await this.eko!.execute(task.taskId)
 
       const duration = Date.now() - startTime
 
@@ -203,7 +217,7 @@ ${prompt}`
     } catch (error) {
       const duration = Date.now() - startTime
       const errorMessage = error instanceof Error ? error.message : String(error)
-      console.error('❌ 工作流执行失败:', errorMessage)
+      console.error('❌ 任务执行失败:', errorMessage)
 
       return {
         result: '',
@@ -221,12 +235,7 @@ ${prompt}`
     return this.terminalAgent
   }
 
-  /**
-   * 获取代码Agent实例
-   */
-  getCodeAgent(): CodeAgent {
-    return this.codeAgent
-  }
+
 
   /**
    * 获取Eko实例
@@ -255,25 +264,9 @@ ${prompt}`
     if (updates.agentConfig) {
       this.terminalAgent.updateConfig(updates.agentConfig)
     }
-
-    if (updates.codeAgentConfig) {
-      this.codeAgent.updateConfig(updates.codeAgentConfig)
-    }
   }
 
-  /**
-   * 设置选中的模型ID
-   */
-  setSelectedModelId(modelId: string | null): void {
-    this.selectedModelId = modelId
-  }
 
-  /**
-   * 获取当前选中的模型ID
-   */
-  getSelectedModelId(): string | null {
-    return this.selectedModelId
-  }
 
   /**
    * 设置工作模式（chat/agent）并重新初始化Eko实例

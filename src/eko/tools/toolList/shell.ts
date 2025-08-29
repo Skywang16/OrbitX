@@ -3,7 +3,7 @@
  */
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
-import type { ToolResult } from '@eko-ai/eko/types'
+import type { ToolResult } from '@/eko-core/types'
 import { ValidationError, ToolError } from '../tool-error'
 import { terminalApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'

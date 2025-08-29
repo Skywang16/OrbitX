@@ -3,7 +3,7 @@
  * 负责管理LLM配置、Agent配置和Eko实例初始化
  */
 
-import type { LLMs } from '@eko-ai/eko'
+import type { LLMs } from '@/eko-core'
 import type { AIModelConfig } from '@/types'
 import { aiApi } from '@/api'
 

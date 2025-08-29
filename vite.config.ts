@@ -53,7 +53,7 @@ export default defineConfig(() => ({
             '@tauri-apps/plugin-process',
             '@tauri-apps/plugin-window-state',
           ],
-          ai: ['@eko-ai/eko'],
+
           utils: ['lodash-es', 'dayjs', 'uuid', 'marked', 'strip-ansi'],
           validation: ['ajv'],
         },

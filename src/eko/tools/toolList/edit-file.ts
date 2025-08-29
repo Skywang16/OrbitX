@@ -3,7 +3,7 @@
  */
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
-import type { ToolResult } from '@eko-ai/eko/types'
+import type { ToolResult } from '@/eko-core/types'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
 
 // 扩展的内容项类型，支持 data 字段

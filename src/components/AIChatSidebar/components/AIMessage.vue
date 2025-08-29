@@ -16,7 +16,7 @@
   const props = defineProps<Props>()
   const aiChatStore = useAIChatStore()
 
-  // 直接使用数组顺序，按插入顺序显示
+  // 按时间戳排序确保正确的显示顺序
   const sortedSteps = computed(() => {
     if (!props.message.steps) {
       return []
@@ -57,16 +57,40 @@
           <div v-html="renderMarkdown(step.content)"></div>
         </div>
 
-        <!-- 错误信息显示 -->
-        <div v-else-if="step.type === 'error'" class="error-message step-block">
+        <!-- 文件输出 -->
+        <div v-else-if="(step as any).type === 'file'" class="file-output step-block">
+          <div class="file-header">
+            <span class="file-icon">📁</span>
+            <span class="file-label">文件输出</span>
+          </div>
+          <div class="file-content">{{ (step as any).content }}</div>
+        </div>
+
+        <!-- 错误信息 -->
+        <div v-else-if="step.type === 'error'" class="error-output step-block">
           <div class="error-header">
-            <span class="error-icon">⚠️</span>
-            <span class="error-title">{{ t('message.execution_failed') }}</span>
+            <span class="error-icon">❌</span>
+            <span class="error-label">执行错误</span>
           </div>
           <div class="error-content">{{ step.content }}</div>
-          <div v-if="step.metadata?.errorDetails" class="error-details">
-            {{ t('message.error_details', { details: step.metadata.errorDetails }) }}
+        </div>
+
+        <!-- 工作流事件 -->
+        <div v-else-if="step.type === 'workflow'" class="workflow-output step-block">
+          <div class="workflow-header">
+            <span class="workflow-icon">🔄</span>
+            <span class="workflow-label">工作流事件</span>
           </div>
+          <div class="workflow-content">{{ step.content }}</div>
+        </div>
+
+        <!-- 未知类型的步骤 -->
+        <div v-else class="unknown-step step-block">
+          <div class="unknown-header">
+            <span class="unknown-icon">❓</span>
+            <span class="unknown-label">未知步骤类型: {{ (step as any).type }}</span>
+          </div>
+          <div class="unknown-content">{{ (step as any).content }}</div>
         </div>
       </template>
     </template>
@@ -255,5 +279,140 @@
     50% {
       opacity: 0.5;
     }
+  }
+
+  /* 文件输出样式 */
+  .file-output {
+    border: 1px solid var(--border-300);
+    border-radius: var(--border-radius);
+    background: var(--bg-300);
+  }
+
+  .file-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-400);
+    border-bottom: 1px solid var(--border-300);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+  }
+
+  .file-icon {
+    font-size: var(--font-size-sm);
+  }
+
+  .file-label {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-400);
+  }
+
+  .file-content {
+    padding: var(--spacing-md);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-300);
+  }
+
+  /* 错误输出样式 */
+  .error-output {
+    border: 1px solid var(--color-error);
+    border-radius: var(--border-radius);
+    background: var(--bg-300);
+  }
+
+  .error-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: rgba(var(--color-error-rgb), 0.1);
+    border-bottom: 1px solid var(--color-error);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+  }
+
+  .error-icon {
+    font-size: var(--font-size-sm);
+  }
+
+  .error-label {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-error);
+  }
+
+  .error-content {
+    padding: var(--spacing-md);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--color-error);
+  }
+
+  /* 工作流输出样式 */
+  .workflow-output {
+    border: 1px solid var(--color-primary);
+    border-radius: var(--border-radius);
+    background: var(--bg-300);
+  }
+
+  .workflow-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: rgba(var(--color-primary-rgb), 0.1);
+    border-bottom: 1px solid var(--color-primary);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+  }
+
+  .workflow-icon {
+    font-size: var(--font-size-sm);
+  }
+
+  .workflow-label {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-primary);
+  }
+
+  .workflow-content {
+    padding: var(--spacing-md);
+    font-size: var(--font-size-sm);
+    color: var(--text-300);
+  }
+
+  /* 未知步骤样式 */
+  .unknown-step {
+    border: 1px solid var(--border-300);
+    border-radius: var(--border-radius);
+    background: var(--bg-300);
+    opacity: 0.7;
+  }
+
+  .unknown-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-400);
+    border-bottom: 1px solid var(--border-300);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+  }
+
+  .unknown-icon {
+    font-size: var(--font-size-sm);
+  }
+
+  .unknown-label {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-400);
+  }
+
+  .unknown-content {
+    padding: var(--spacing-md);
+    font-size: var(--font-size-sm);
+    color: var(--text-400);
   }
 </style>
