@@ -69,7 +69,8 @@ class ConversationAPI {
     conversationId: number,
     currentMessage: string,
     upToMessageId?: number,
-    currentWorkingDirectory?: string
+    currentWorkingDirectory?: string,
+    tagContext?: any
   ): Promise<string> {
     try {
       const prompt = await invoke<string>('build_prompt_with_context', {
@@ -77,6 +78,7 @@ class ConversationAPI {
         currentMessage,
         upToMessageId,
         currentWorkingDirectory,
+        tagContext,
       })
       return prompt
     } catch (error) {

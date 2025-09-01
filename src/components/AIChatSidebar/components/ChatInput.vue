@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import TerminalSelectionTag from './TerminalSelectionTag.vue'
+  import TerminalTabTag from './TerminalTabTag.vue'
 
   // Props定义
   interface Props {
@@ -143,32 +144,32 @@
   }
 
   /**
-   * 获取包含终端选择内容的完整消息
+   * 获取标签上下文信息（用于传递给后端）
    */
-  const getMessageWithTerminalContext = () => {
-    let message = props.modelValue.trim()
-
-    // 如果有终端选择内容，自动添加到消息中
-    const selectedText = terminalSelection.getSelectedText()
-    if (selectedText.trim()) {
-      const selectionInfo = terminalSelection.selectionInfo.value
-      const contextPrompt = `\n\n**Terminal Selected Content**${selectionInfo ? ` (${selectionInfo})` : ''}:\n\`\`\`\n${selectedText}\n\`\`\``
-      message += contextPrompt
-    }
-
-    return message
+  const getTagContextInfo = () => {
+    return terminalSelection.getTagContextInfo()
   }
 
   // 暴露方法给父组件
   defineExpose({
     adjustTextareaHeight,
     focus: () => inputTextarea.value?.focus(),
-    getMessageWithTerminalContext,
+    getTagContextInfo,
   })
 </script>
 
 <template>
   <div class="chat-input">
+    <!-- 终端标签页标签 -->
+    <TerminalTabTag
+      :visible="terminalSelection.hasTerminalTab.value"
+      :terminal-id="terminalSelection.currentTerminalTab.value?.terminalId"
+      :shell="terminalSelection.currentTerminalTab.value?.shell"
+      :cwd="terminalSelection.currentTerminalTab.value?.cwd"
+      :display-path="terminalSelection.currentTerminalTab.value?.displayPath"
+      @clear="terminalSelection.clearTerminalTab"
+    />
+
     <!-- 终端选择标签 -->
     <TerminalSelectionTag
       :visible="terminalSelection.hasSelection.value"

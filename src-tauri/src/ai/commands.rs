@@ -186,6 +186,7 @@ pub async fn build_prompt_with_context(
     current_message: String,
     up_to_message_id: Option<i64>,
     current_working_directory: Option<String>,
+    tag_context: Option<serde_json::Value>,
     state: State<'_, AIManagerState>,
 ) -> Result<String, String> {
     // 参数验证
@@ -199,12 +200,13 @@ pub async fn build_prompt_with_context(
     let repositories = state.repositories();
 
     // 使用智能上下文管理器构建prompt
-    let intelligent_prompt = crate::ai::context::build_intelligent_prompt(
+    let intelligent_prompt = crate::ai::context::build_intelligent_prompt_with_tags(
         repositories,
         conversation_id,
         &current_message,
         up_to_message_id,
         current_working_directory.as_deref(),
+        tag_context,
     )
     .await
     .to_tauri()?;

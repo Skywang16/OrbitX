@@ -203,7 +203,9 @@
     "messages": "messages",
     "current_session": "Current session",
     "selected_content": "selected content",
-    "click_to_insert": "Click to insert to input"
+    "click_to_insert": "Click to insert to input",
+    "current_terminal": "Current Terminal",
+    "clear_terminal_tag": "Clear terminal tag"
   },
   "theme": {
     "select_light": "Select light theme",

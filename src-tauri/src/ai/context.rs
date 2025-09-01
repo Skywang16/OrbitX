@@ -60,6 +60,26 @@ pub async fn build_intelligent_prompt(
         .await
 }
 
+pub async fn build_intelligent_prompt_with_tags(
+    repositories: &RepositoryManager,
+    conversation_id: i64,
+    current_message: &str,
+    up_to_message_id: Option<i64>,
+    current_working_directory: Option<&str>,
+    tag_context: Option<serde_json::Value>,
+) -> AppResult<String> {
+    CONTEXT_MANAGER
+        .build_prompt_with_tags(
+            repositories,
+            conversation_id,
+            current_message,
+            up_to_message_id,
+            current_working_directory,
+            tag_context,
+        )
+        .await
+}
+
 pub fn messages_to_ai_context(messages: Vec<Message>, _conversation_id: i64) -> AIContext {
     debug!("转换消息为AI上下文: 消息数量={}", messages.len());
 

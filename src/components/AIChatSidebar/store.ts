@@ -166,7 +166,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  const sendMessage = async (content: string): Promise<void> => {
+  const sendMessage = async (content: string, tagContext?: any): Promise<void> => {
     if (!currentConversationId.value) {
       await createConversation()
     }
@@ -206,7 +206,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         currentConversationId.value,
         content,
         userMessageId,
-        currentWorkingDirectory
+        currentWorkingDirectory,
+        tagContext
       )
 
       const messageId = await aiApi.saveMessage(currentConversationId.value, 'assistant', 'Thinking...')

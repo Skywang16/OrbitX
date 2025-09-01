@@ -199,17 +199,37 @@ impl ContextManager {
         up_to_msg_id: Option<i64>,
         current_working_directory: Option<&str>,
     ) -> AppResult<String> {
-        debug!(
-            "构建prompt: conv_id={}, up_to_msg_id={:?}, current_msg_len={}",
+        self.build_prompt_with_tags(
+            repos,
             conv_id,
+            current_msg,
             up_to_msg_id,
-            current_msg.len()
+            current_working_directory,
+            None,
+        )
+        .await
+    }
+
+    /// 构建带标签的prompt
+    pub async fn build_prompt_with_tags(
+        &self,
+        repos: &RepositoryManager,
+        conv_id: i64,
+        current_msg: &str,
+        up_to_msg_id: Option<i64>,
+        current_working_directory: Option<&str>,
+        tag_context: Option<serde_json::Value>,
+    ) -> AppResult<String> {
+        debug!(
+            "构建带标签的prompt: conv_id={}, has_tags={}",
+            conv_id,
+            tag_context.is_some()
         );
 
         // 1. 获取上下文消息
         let ctx = self.build_context(repos, conv_id, up_to_msg_id).await?;
 
-        // 2. 构建简单的prompt
+        // 2. 构建prompt
         let mut parts = Vec::new();
 
         // 添加前置提示词
@@ -219,8 +239,12 @@ impl ContextManager {
             }
         }
 
-        // 添加环境信息
-        if let Some(cwd) = current_working_directory {
+        // 添加标签上下文信息
+        if let Some(tag_ctx) = tag_context {
+            debug!("🏷️ 处理标签上下文");
+            self.add_tag_context_to_prompt(&mut parts, &tag_ctx, current_working_directory);
+        } else if let Some(cwd) = current_working_directory {
+            // 兼容旧版本：只有工作目录信息
             if !cwd.trim().is_empty() {
                 parts.push(format!("【当前环境】\n工作目录: {}\n", cwd));
             }
@@ -250,7 +274,64 @@ impl ContextManager {
         // 添加当前问题
         parts.push(format!("【当前问题】\n{}", current_msg));
 
-        Ok(parts.join("\n"))
+        let final_prompt = parts.join("\n");
+        debug!("✅ 最终prompt构建完成，总长度: {} 字符", final_prompt.len());
+        debug!("📝 最终prompt内容:\n{}", final_prompt);
+
+        Ok(final_prompt)
+    }
+
+    /// 添加标签上下文信息到prompt
+    fn add_tag_context_to_prompt(
+        &self,
+        parts: &mut Vec<String>,
+        tag_context: &serde_json::Value,
+        fallback_cwd: Option<&str>,
+    ) {
+        let mut env_parts = Vec::new();
+
+        // 处理终端标签页信息
+        if let Some(terminal_tab_info) = tag_context.get("terminalTabInfo") {
+            if let (Some(shell), Some(cwd)) = (
+                terminal_tab_info.get("shell").and_then(|v| v.as_str()),
+                terminal_tab_info.get("cwd").and_then(|v| v.as_str()),
+            ) {
+                debug!("🐚 添加终端环境: Shell={}, CWD={}", shell, cwd);
+                env_parts.push(format!("Shell: {}", shell));
+                env_parts.push(format!("工作目录: {}", cwd));
+            }
+        } else if let Some(cwd) = fallback_cwd {
+            // 使用fallback工作目录
+            if !cwd.trim().is_empty() {
+                env_parts.push(format!("工作目录: {}", cwd));
+            }
+        }
+
+        if !env_parts.is_empty() {
+            parts.push(format!("【当前环境】\n{}\n", env_parts.join("\n")));
+        }
+
+        // 处理选中内容信息
+        if let Some(selection_info) = tag_context.get("terminalSelectionInfo") {
+            if let Some(selected_text) = selection_info.get("selectedText").and_then(|v| v.as_str())
+            {
+                if !selected_text.trim().is_empty() {
+                    let selection_desc = if let Some(info) =
+                        selection_info.get("selectionInfo").and_then(|v| v.as_str())
+                    {
+                        format!(" ({})", info)
+                    } else {
+                        String::new()
+                    };
+
+                    debug!("✂️ 添加选中内容: {} 字符", selected_text.len());
+                    parts.push(format!(
+                        "【当前选中】{}\n```\n{}\n```\n",
+                        selection_desc, selected_text
+                    ));
+                }
+            }
+        }
     }
 
     // ============= 私有方法 =============
@@ -508,7 +589,6 @@ impl ContextManager {
     fn format_message(&self, msg: &Message) -> String {
         if msg.role == "assistant" && msg.steps_json.is_some() {
             let steps_json = msg.steps_json.as_ref().unwrap();
-            debug!("🔍 原始steps_json: {}", steps_json);
 
             if let Ok(steps_value) = serde_json::from_str(steps_json) {
                 let tool_summary = self.extract_tool_summary(&steps_value);
@@ -547,7 +627,6 @@ impl ContextManager {
                         let mut input_text = String::new();
                         if let Some(params) = tool_exec.get("params") {
                             input_text = self.format_tool_params(tool_name, params);
-                            debug!("🔧 工具参数格式化: {} -> {}", tool_name, input_text);
                         }
 
                         // 提取工具输出文本

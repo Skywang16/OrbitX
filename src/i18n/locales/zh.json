@@ -207,7 +207,9 @@
     "messages": "条消息",
     "current_session": "当前会话",
     "selected_content": "已选择内容",
-    "click_to_insert": "点击插入到输入框"
+    "click_to_insert": "点击插入到输入框",
+    "current_terminal": "当前终端",
+    "clear_terminal_tag": "清除终端标签"
   },
   "theme": {
     "select_light": "选择浅色主题",

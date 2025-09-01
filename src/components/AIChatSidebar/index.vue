@@ -4,6 +4,8 @@
   import { useAIChatStore } from './store'
   import { useAISettingsStore } from '@/components/settings/components/AI'
   import { useSessionStore } from '@/stores/session'
+  import { useTerminalSelection } from '@/composables/useTerminalSelection'
+  import { useTabManagerStore } from '@/stores/TabManager'
 
   import ChatHeader from './components/ChatHeader.vue'
   import MessageList from './components/MessageList.vue'
@@ -13,6 +15,8 @@
   const aiChatStore = useAIChatStore()
   const aiSettingsStore = useAISettingsStore()
   const sessionStore = useSessionStore()
+  const terminalSelection = useTerminalSelection()
+  const tabManagerStore = useTabManagerStore()
   const { t } = useI18n()
 
   const messageInput = ref('')
@@ -28,11 +32,13 @@
   const sendMessage = async () => {
     if (!canSend.value) return
 
-    const fullMessage = chatInputRef.value?.getMessageWithTerminalContext() || messageInput.value.trim()
+    // 获取标签上下文信息
+    const tagContext = chatInputRef.value?.getTagContextInfo?.() || null
+    const message = messageInput.value.trim()
     messageInput.value = ''
 
     try {
-      await aiChatStore.sendMessage(fullMessage)
+      await aiChatStore.sendMessage(message, tagContext)
     } catch (error) {
       // Error handling is done by the store
     }
@@ -148,6 +154,21 @@
     { immediate: true }
   )
 
+  // 监听终端标签页切换，自动启用终端标签
+  watch(
+    () => tabManagerStore.activeTabId,
+    newTabId => {
+      if (newTabId && tabManagerStore.activeTab?.type === 'terminal') {
+        // 当切换到终端标签页时，自动启用终端标签
+        terminalSelection.enableTerminalTab()
+      } else {
+        // 当切换到非终端标签页时，禁用终端标签
+        terminalSelection.disableTerminalTab()
+      }
+    },
+    { immediate: true }
+  )
+
   onMounted(async () => {
     if (!aiSettingsStore.isInitialized) {
       await aiSettingsStore.loadSettings()
@@ -155,6 +176,11 @@
 
     if (!aiChatStore.isInitialized) {
       await aiChatStore.initialize()
+    }
+
+    // 初始化时检查当前是否在终端标签页
+    if (tabManagerStore.activeTab?.type === 'terminal') {
+      terminalSelection.enableTerminalTab()
     }
   })
 
