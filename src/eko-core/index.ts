@@ -25,14 +25,7 @@ export {
   RetryLanguageModel,
 }
 
-export {
-  Agent,
-  type AgentParams,
-  BaseFileAgent,
-  BaseShellAgent,
-  BaseComputerAgent,
-  ContextCompressorAgent,
-} from './agent'
+export { Agent, type AgentParams, ContextCompressorAgent } from './agent'
 
 export { HumanInteractTool, TaskNodeStatusTool, ForeachTaskTool, WatchTriggerTool } from './tools'
 
