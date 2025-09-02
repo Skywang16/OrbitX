@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { useTabManagerStore } from '@/stores/TabManager'
 import { useTerminalStore } from '@/stores/Terminal'
+import { TabType } from '@/types'
 import {
   TagType,
   type TerminalSelectionTag,
@@ -17,7 +18,6 @@ interface TerminalSelection {
 }
 
 const selectedTerminalData = ref<TerminalSelection | null>(null)
-const terminalTabEnabled = ref<boolean>(false)
 
 export const useTerminalSelection = () => {
   const tabManagerStore = useTabManagerStore()
@@ -44,13 +44,11 @@ export const useTerminalSelection = () => {
   })
 
   // 终端标签页相关计算属性
-  const hasTerminalTab = computed(() => terminalTabEnabled.value)
+  const hasTerminalTab = computed(() => tabManagerStore.tabs.some(tab => tab.type === TabType.TERMINAL))
 
   const currentTerminalTab = computed(() => {
-    if (!terminalTabEnabled.value || !tabManagerStore.activeTabId) return null
-
     const activeTab = tabManagerStore.activeTab
-    if (!activeTab || activeTab.type !== 'terminal') return null
+    if (!activeTab || activeTab.type !== TabType.TERMINAL) return null
 
     const terminal = terminalStore.terminals.find(t => t.id === activeTab.id)
     if (!terminal) return null
@@ -115,41 +113,34 @@ export const useTerminalSelection = () => {
   }
 
   const getTagContextInfo = (): TagContextInfo => {
-    const tagState = getTagState()
-
-    return {
-      hasTerminalTab: !!tagState.terminalTab,
-      hasTerminalSelection: !!tagState.terminalSelection,
-      terminalTabInfo: tagState.terminalTab
-        ? {
-            terminalId: tagState.terminalTab.terminalId,
-            shell: tagState.terminalTab.shell,
-            cwd: tagState.terminalTab.cwd,
-          }
-        : undefined,
-      terminalSelectionInfo: tagState.terminalSelection
-        ? {
-            selectedText: tagState.terminalSelection.selectedText,
-            selectionInfo: tagState.terminalSelection.selectionInfo,
-            startLine: tagState.terminalSelection.startLine,
-            endLine: tagState.terminalSelection.endLine,
-            path: tagState.terminalSelection.path,
-          }
-        : undefined,
+    const result: TagContextInfo = {
+      hasTerminalTab: hasTerminalTab.value,
+      hasTerminalSelection: hasSelection.value,
     }
-  }
 
-  // 启用/禁用终端标签页标签
-  const enableTerminalTab = () => {
-    terminalTabEnabled.value = true
-  }
+    if (currentTerminalTab.value) {
+      result.terminalTabInfo = {
+        terminalId: currentTerminalTab.value.terminalId,
+        shell: currentTerminalTab.value.shell,
+        cwd: currentTerminalTab.value.cwd,
+      }
+    }
 
-  const disableTerminalTab = () => {
-    terminalTabEnabled.value = false
+    if (selectedTerminalData.value) {
+      result.terminalSelectionInfo = {
+        selectedText: selectedTerminalData.value.text,
+        selectionInfo: selectionInfo.value,
+        startLine: selectedTerminalData.value.startLine,
+        endLine: selectedTerminalData.value.endLine,
+        path: selectedTerminalData.value.path,
+      }
+    }
+
+    return result
   }
 
   const clearTerminalTab = () => {
-    terminalTabEnabled.value = false
+    // 清除终端标签（保留方法以兼容现有调用）
   }
 
   return {
@@ -166,8 +157,6 @@ export const useTerminalSelection = () => {
     // 新的标签管理方法
     getTagState,
     getTagContextInfo,
-    enableTerminalTab,
-    disableTerminalTab,
     clearTerminalTab,
   }
 }

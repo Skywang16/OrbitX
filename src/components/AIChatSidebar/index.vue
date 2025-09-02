@@ -154,21 +154,6 @@
     { immediate: true }
   )
 
-  // 监听终端标签页切换，自动启用终端标签
-  watch(
-    () => tabManagerStore.activeTabId,
-    newTabId => {
-      if (newTabId && tabManagerStore.activeTab?.type === 'terminal') {
-        // 当切换到终端标签页时，自动启用终端标签
-        terminalSelection.enableTerminalTab()
-      } else {
-        // 当切换到非终端标签页时，禁用终端标签
-        terminalSelection.disableTerminalTab()
-      }
-    },
-    { immediate: true }
-  )
-
   onMounted(async () => {
     if (!aiSettingsStore.isInitialized) {
       await aiSettingsStore.loadSettings()
@@ -176,11 +161,6 @@
 
     if (!aiChatStore.isInitialized) {
       await aiChatStore.initialize()
-    }
-
-    // 初始化时检查当前是否在终端标签页
-    if (tabManagerStore.activeTab?.type === 'terminal') {
-      terminalSelection.enableTerminalTab()
     }
   })
 
