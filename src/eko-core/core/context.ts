@@ -72,10 +72,12 @@ export class AgentContext {
   context: Context
   consecutiveErrorNum: number
   messages?: LanguageModelV2Prompt
+  platform?: string
 
-  constructor(context: Context, agent: Agent) {
+  constructor(context: Context, agent: Agent, platform?: string) {
     this.context = context
     this.agent = agent
     this.consecutiveErrorNum = 0
+    this.platform = platform || 'web'
   }
 }

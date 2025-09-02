@@ -31,7 +31,6 @@ export class TerminalAgent extends Agent {
       name: 'Orbit',
       description: '', // 将通过组件系统动态生成
       defaultTerminalId: undefined,
-      defaultWorkingDirectory: undefined,
       safeMode: true,
       allowedCommands: [],
       blockedCommands: [
@@ -195,17 +194,38 @@ AGENT MODE (Full Authority): Execute commands and complete tasks autonomously
   }
 
   /**
-   * 设置默认工作目录
+   * 从指定终端继承工作目录
+   * 这是新的工作目录继承机制的核心方法
    */
-  setDefaultWorkingDirectory(directory: string): void {
-    this.config.defaultWorkingDirectory = directory
-  }
+  async getWorkingDirectoryFromTerminal(terminalId?: number): Promise<string | null> {
+    try {
+      // 优先使用传入的terminalId，否则使用默认的
+      const targetTerminalId = terminalId || this.config.defaultTerminalId
 
-  /**
-   * 获取默认工作目录
-   */
-  getDefaultWorkingDirectory(): string | undefined {
-    return this.config.defaultWorkingDirectory
+      if (!targetTerminalId) {
+        console.warn('Agent: 没有指定终端ID，无法获取工作目录')
+        return null
+      }
+
+      // 首先尝试从终端面板的Shell Integration获取CWD
+      const cwd = await terminalApi.getPaneCwd(targetTerminalId)
+      if (cwd) {
+        return cwd
+      }
+
+      // 如果Shell Integration没有CWD信息，尝试从终端状态获取
+      const terminalStore = useTerminalStore()
+      const terminal = terminalStore.terminals.find(t => t.backendId === targetTerminalId)
+      if (terminal?.cwd && terminal.cwd !== '~') {
+        return terminal.cwd
+      }
+
+      console.warn(`Agent: 无法从终端 ${targetTerminalId} 获取工作目录`)
+      return null
+    } catch (error) {
+      console.error('Agent: 获取终端工作目录失败:', error)
+      return null
+    }
   }
 
   /**
@@ -274,7 +294,6 @@ AGENT MODE (Full Authority): Execute commands and complete tasks autonomously
     toolsCount: number
     safeMode: boolean
     defaultTerminalId?: number
-    defaultWorkingDirectory?: string
     allowedCommandsCount: number
     blockedCommandsCount: number
     agentTerminalId?: number | null
@@ -286,10 +305,33 @@ AGENT MODE (Full Authority): Execute commands and complete tasks autonomously
       toolsCount: this.tools.length,
       safeMode: this.config.safeMode || false,
       defaultTerminalId: this.config.defaultTerminalId,
-      defaultWorkingDirectory: this.config.defaultWorkingDirectory,
       allowedCommandsCount: this.config.allowedCommands?.length || 0,
       blockedCommandsCount: this.config.blockedCommands?.length || 0,
       agentTerminalId: TerminalAgent.sharedAgentTerminalId,
+    }
+  }
+
+  /**
+   * 获取Agent的详细状态信息（包括当前工作目录）
+   */
+  async getDetailedStatus(): Promise<{
+    name: string
+    description: string
+    mode: string
+    toolsCount: number
+    safeMode: boolean
+    defaultTerminalId?: number
+    currentWorkingDirectory?: string | null
+    allowedCommandsCount: number
+    blockedCommandsCount: number
+    agentTerminalId?: number | null
+  }> {
+    const basicStatus = this.getStatus()
+    const currentWorkingDirectory = await this.getWorkingDirectoryFromTerminal()
+
+    return {
+      ...basicStatus,
+      currentWorkingDirectory,
     }
   }
 
@@ -338,16 +380,10 @@ AGENT MODE (Full Authority): Execute commands and complete tasks autonomously
   /**
    * 初始化Agent专属终端（仅在首次创建时调用）
    */
-  private async initializeAgentTerminal(terminalId: number): Promise<void> {
+  private async initializeAgentTerminal(_terminalId: number): Promise<void> {
     try {
       // 保持Agent终端干净，不输出欢迎信息
-      // 只设置工作目录（如果配置了）
-      if (this.config.defaultWorkingDirectory) {
-        await terminalApi.writeToTerminal({
-          paneId: terminalId,
-          data: `cd "${this.config.defaultWorkingDirectory}"\n`,
-        })
-      }
+      // Agent将自动继承调用时的工作目录，无需手动设置
     } catch (error) {
       console.warn('初始化Agent终端失败:', error)
     }

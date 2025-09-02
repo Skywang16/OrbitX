@@ -32,7 +32,6 @@ export interface TerminalAgentConfig {
   name: string
   description: string
   defaultTerminalId?: number
-  defaultWorkingDirectory?: string
   safeMode?: boolean
   allowedCommands?: string[]
   blockedCommands?: string[]
@@ -50,7 +49,6 @@ export interface EkoInstanceConfig {
  */
 export interface EkoRunOptions {
   terminalId?: number
-  workingDirectory?: string
 }
 
 /**

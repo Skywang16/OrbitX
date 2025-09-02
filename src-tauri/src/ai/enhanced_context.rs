@@ -259,11 +259,9 @@ impl ContextManager {
         if let Some(tag_ctx) = tag_context {
             debug!("🏷️ 处理标签上下文");
             self.add_tag_context_to_prompt(&mut parts, &tag_ctx, current_working_directory);
-        } else if let Some(cwd) = current_working_directory {
-            // 兼容旧版本：只有工作目录信息
-            if !cwd.trim().is_empty() {
-                parts.push(format!("【当前环境】\n工作目录: {}\n", cwd));
-            }
+        } else if let Some(_cwd) = current_working_directory {
+            // 工作目录信息已移除 - Agent工具会自动继承终端的工作目录
+            // 不再在prompt中显示技术细节，减少LLM噪音
         }
 
         // 添加对话历史
@@ -306,22 +304,15 @@ impl ContextManager {
     ) {
         let mut env_parts = Vec::new();
 
-        // 处理终端标签页信息
+        // 处理终端标签页信息（仅保留Shell信息，移除工作目录）
         if let Some(terminal_tab_info) = tag_context.get("terminalTabInfo") {
-            if let (Some(shell), Some(cwd)) = (
-                terminal_tab_info.get("shell").and_then(|v| v.as_str()),
-                terminal_tab_info.get("cwd").and_then(|v| v.as_str()),
-            ) {
-                debug!("🐚 添加终端环境: Shell={}, CWD={}", shell, cwd);
+            if let Some(shell) = terminal_tab_info.get("shell").and_then(|v| v.as_str()) {
+                debug!("🐚 添加终端环境: Shell={}", shell);
                 env_parts.push(format!("Shell: {}", shell));
-                env_parts.push(format!("工作目录: {}", cwd));
-            }
-        } else if let Some(cwd) = fallback_cwd {
-            // 使用fallback工作目录
-            if !cwd.trim().is_empty() {
-                env_parts.push(format!("工作目录: {}", cwd));
+                // 工作目录信息已移除 - Agent工具会自动继承
             }
         }
+        // 移除fallback工作目录处理 - 不再在prompt中显示技术细节
 
         if !env_parts.is_empty() {
             parts.push(format!("【当前环境】\n{}\n", env_parts.join("\n")));

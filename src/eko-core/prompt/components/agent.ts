@@ -127,7 +127,7 @@ export const agentRulesComponent: ComponentConfig = {
     const { context: ctx } = context
     const template = (context as any)._templateOverride || agentRulesComponent.template!
     return resolveTemplate(template, {
-      cwd: process.cwd(),
+      cwd: ctx?.workingDirectory || '/current/directory',
     })
   },
 }

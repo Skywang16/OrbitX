@@ -47,15 +47,6 @@ export {
   buildPlanUserPrompt as getPlanUserPrompt,
 } from './builders/plan-builder'
 
-// 导出工具描述生成器
-export {
-  ToolDescriptor,
-  filterToolsByContext,
-  generateToolsDescription,
-  type ToolContextRequirements,
-  type ToolDescriptorConfig,
-} from '../tools/descriptor'
-
 // 导出配置管理
 export {
   PromptConfigManager,

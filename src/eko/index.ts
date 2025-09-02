@@ -115,25 +115,20 @@ export class OrbitXEko {
       // 设置运行状态
       this.isRunning = true
 
-      // 设置终端上下文
+      // 设置终端上下文并自动继承工作目录
       if (options.terminalId) {
         this.agent.setDefaultTerminalId(options.terminalId)
-      }
 
-      if (options.workingDirectory) {
-        this.agent.setDefaultWorkingDirectory(options.workingDirectory)
+        // Agent自动继承终端工作目录
+        await this.agent.getWorkingDirectoryFromTerminal(options.terminalId)
       }
-
-      // Build user request prompt
-      const enhancedPrompt = `🎯 **User Request**
-${prompt}`
 
       // 生成唯一的taskId
       const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
       this.currentTaskId = taskId
 
-      // 执行任务，使用eko的原生run方法（内部会生成taskId）
-      const result = await this.eko!.run(enhancedPrompt, taskId)
+      // 执行任务，直接使用用户原始prompt
+      const result = await this.eko!.run(prompt, taskId)
 
       const duration = Date.now() - startTime
 
@@ -187,13 +182,12 @@ ${prompt}`
         await this.initialize()
       }
 
-      // 设置终端上下文
+      // 设置终端上下文并自动继承工作目录
       if (options.terminalId) {
-        this.terminalAgent.setDefaultTerminalId(options.terminalId)
-      }
+        this.agent.setDefaultTerminalId(options.terminalId)
 
-      if (options.workingDirectory) {
-        this.terminalAgent.setDefaultWorkingDirectory(options.workingDirectory)
+        // Agent自动继承终端工作目录
+        await this.agent.getWorkingDirectoryFromTerminal(options.terminalId)
       }
 
       // 执行任务
@@ -224,7 +218,7 @@ ${prompt}`
    * 获取终端Agent实例
    */
   getTerminalAgent(): TerminalAgent {
-    return this.terminalAgent
+    return this.agent
   }
 
   /**
