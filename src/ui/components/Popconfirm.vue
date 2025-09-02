@@ -7,7 +7,7 @@
     :close-on-click-outside="closeOnClickOutside"
     :close-on-click-inside="false"
     :offset="offset"
-    class="popconfirm"
+    :class="['popconfirm', attrs.class]"
   >
     <template #trigger>
       <slot name="trigger">
@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { computed, ref, useAttrs } from 'vue'
   import Popover from './Popover.vue'
   import type { PopconfirmProps } from '../types/index'
 
@@ -85,6 +85,14 @@
     offset: 8,
     triggerText: '',
   })
+
+  // 禁用自动属性继承
+  defineOptions({
+    inheritAttrs: false,
+  })
+
+  // 获取传入的属性
+  const attrs = useAttrs()
 
   const emit = defineEmits<{
     (e: 'confirm'): void

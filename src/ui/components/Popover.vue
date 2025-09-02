@@ -1,6 +1,6 @@
 <template>
   <!-- 触发器插槽 - 手动坐标模式也渲染触发器，只是不参与定位计算 -->
-  <div ref="triggerRef" class="popover-trigger" @click="handleTriggerClick">
+  <div ref="triggerRef" class="popover-trigger" :class="attrs.class" @click="handleTriggerClick">
     <slot name="trigger">
       <button class="default-trigger">{{ triggerText }}</button>
     </slot>
@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+  import { computed, nextTick, onMounted, onUnmounted, ref, watch, useAttrs } from 'vue'
 
   interface MenuItem {
     label: string
@@ -99,6 +99,11 @@
     menuItems: () => [],
   })
 
+  // 禁用自动属性继承
+  defineOptions({
+    inheritAttrs: false,
+  })
+
   const emit = defineEmits<{
     'update:modelValue': [value: boolean]
     'update:visible': [value: boolean]
@@ -108,6 +113,9 @@
     hide: []
     'menu-item-click': [item: MenuItem]
   }>()
+
+  // 获取传入的属性
+  const attrs = useAttrs()
 
   // 引用
   const triggerRef = ref<HTMLElement>()
