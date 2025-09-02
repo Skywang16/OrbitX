@@ -38,37 +38,9 @@ export interface TerminalAgentConfig {
   blockedCommands?: string[]
 }
 
-/**
- * Eko 实例配置
- */
-export interface CodeAgentConfig {
-  name: string
-  description: string
-  defaultWorkingDirectory?: string
-  safeMode: boolean
-  supportedLanguages: string[]
-  codeStyle: {
-    indentSize: number
-    indentType: 'spaces' | 'tabs'
-    maxLineLength: number
-    insertFinalNewline: boolean
-    trimTrailingWhitespace: boolean
-  }
-  enabledFeatures: {
-    codeGeneration: boolean
-    codeAnalysis: boolean
-    refactoring: boolean
-    formatting: boolean
-    linting: boolean
-    testing: boolean
-    documentation: boolean
-  }
-}
-
 export interface EkoInstanceConfig {
   callback?: TerminalCallback
   agentConfig?: Partial<TerminalAgentConfig>
-  codeAgentConfig?: Partial<TerminalAgentConfig>
   debug?: boolean
   selectedModelId?: string | null
 }

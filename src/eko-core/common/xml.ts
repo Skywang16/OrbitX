@@ -17,7 +17,7 @@ export function parseTask(taskId: string, xml: string, done: boolean, thinking?:
 
     const nameElement = root.querySelector('name')
     const thoughtElement = root.querySelector('thought')
-    const agentElement = root.querySelector('agents > agent') || root.querySelector('agent')
+    const agentElement = root.querySelector('agent')
 
     const name = nameElement?.textContent?.trim() || 'Untitled Task'
     const thought = thoughtElement?.textContent?.trim() || ''

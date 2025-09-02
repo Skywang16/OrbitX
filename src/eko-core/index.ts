@@ -25,7 +25,7 @@ export {
   RetryLanguageModel,
 }
 
-export { Agent, type AgentParams, ContextCompressorAgent } from './agent'
+export { Agent, type AgentParams, ContextCompressorService } from './agent'
 
 export { HumanInteractTool, TaskNodeStatusTool, ForeachTaskTool, WatchTriggerTool } from './tools'
 

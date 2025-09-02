@@ -1,4 +1,3 @@
-// config import removed - not used in single agent mode
 import Context from './context'
 import { Agent } from '../agent'
 import { Planner } from './plan'
@@ -16,9 +15,8 @@ export class Eko {
     this.config = config
     this.taskMap = new Map()
 
-    // Single agent mode - use the first agent or throw error if none
     if (!config.agent) {
-      throw new Error('Single agent mode requires exactly one agent in config.agent')
+      throw new Error('Agent is required in config')
     }
     this.agent = config.agent
   }

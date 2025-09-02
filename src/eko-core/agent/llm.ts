@@ -198,7 +198,7 @@ export async function callAgentLLM(
     abortSignal: signal,
   }
   requestHandler && requestHandler(request)
-  // Store request in chain for single agent mode
+  // Store request in chain
   agentContext.context.chain.planRequest = request
   let result: StreamResult
   try {

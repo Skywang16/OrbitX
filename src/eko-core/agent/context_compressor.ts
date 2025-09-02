@@ -1,16 +1,11 @@
-import { Agent } from './base'
 import { AgentContext } from '../core/context'
 import { RetryLanguageModel } from '../llm'
 import { LanguageModelV2Prompt } from '../types'
 import config from '../config'
 
-export class ContextCompressorAgent extends Agent {
+export class ContextCompressorService {
   constructor() {
-    super({
-      name: 'ContextCompressor',
-      description: 'Intelligent context compression agent for task execution',
-      tools: [],
-    })
+    // Context compression service - no longer an agent
   }
 
   /**
@@ -93,7 +88,7 @@ Output requirements:
 - Maintain the logical structure of the original text
 - Use clear paragraph separation
 - Express important information in concise and clear language
-- Ensure subsequent agents can make correct decisions based on compressed content
+- Ensure subsequent tasks can make correct decisions based on compressed content
 
 Please output the compressed content directly without adding any explanations or meta-information.`
   }
@@ -116,26 +111,26 @@ Please output the compressed content directly without adding any explanations or
   }
 
   /**
-   * Batch compress results from multiple agents
+   * Batch compress multiple results
    */
   public async compressMultipleResults(
     agentContext: AgentContext,
-    agentResults: Array<{ name: string; task: string; result: string }>,
+    results: Array<{ name: string; task: string; result: string }>,
     targetLength: number = config.maxAgentContextLength
   ): Promise<string> {
-    const fullContext = agentResults.map(({ name, task, result }) => `## ${task || name}\n${result}`).join('\n\n')
+    const fullContext = results.map(({ name, task, result }) => `## ${task || name}\n${result}`).join('\n\n')
 
     if (fullContext.length <= targetLength) {
       return fullContext
     }
 
     // If total length exceeds limit, use specialized multi-result compression strategy
-    return await this.compressMultipleResultsWithStrategy(agentContext, agentResults, targetLength)
+    return await this.compressMultipleResultsWithStrategy(agentContext, results, targetLength)
   }
 
   private async compressMultipleResultsWithStrategy(
     agentContext: AgentContext,
-    agentResults: Array<{ name: string; task: string; result: string }>,
+    results: Array<{ name: string; task: string; result: string }>,
     targetLength: number
   ): Promise<string> {
     const rlm = new RetryLanguageModel(agentContext.context.config.llms, agentContext.context.config.planLlms)
@@ -143,16 +138,16 @@ Please output the compressed content directly without adding any explanations or
     const systemPrompt = `You are a professional task result integration expert. You need to integrate and compress multiple task execution results into a coherent context.
 
 Integration principles:
-1. Preserve core contributions and key findings from each agent
+1. Preserve core contributions and key findings from each task
 2. Merge related information and avoid duplication
 3. Maintain logical coherence and chronological order
 4. Highlight important data, configurations, and code snippets
-5. Provide sufficient decision-making basis for subsequent agents
+5. Provide sufficient decision-making basis for subsequent tasks
 
 Output format:
 Use clear paragraph structure, describing each important finding in concise language.`
 
-    const userContent = agentResults
+    const userContent = results
       .map(({ name, task, result }, index) => `### Task ${index + 1}: ${task || name}\n${result}`)
       .join('\n\n')
 

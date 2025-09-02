@@ -1,15 +1,13 @@
 import { Eko } from '@/eko-core'
 import { getEkoConfig, getEkoLLMsConfig, type EkoConfigOptions } from './core/config'
 import { createSidebarCallback } from './core/callbacks'
-import { TerminalAgent, createTerminalAgent, createTerminalChatAgent } from './agent/terminal-agent'
-import { CodeAgent, createCodeAgent } from './agent/code-agent'
+import { TerminalAgent, createTerminalAgent } from './agent/terminal-agent'
 import { allTools } from './tools'
 import type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult } from './types'
 
 export class OrbitXEko {
   private eko: Eko | null = null
-  private terminalChatAgent: TerminalAgent
-  private terminalAgent: TerminalAgent
+  private agent: TerminalAgent
   private callback: TerminalCallback
   private config: EkoInstanceConfig
   private mode: 'chat' | 'agent' = 'chat'
@@ -26,11 +24,8 @@ export class OrbitXEko {
     // 创建回调
     this.callback = config.callback || createSidebarCallback()
 
-    // 创建Chat模式的Agent（只读）
-    this.terminalChatAgent = createTerminalChatAgent(config.agentConfig)
-
-    // 创建Agent模式的Agent（全权限）
-    this.terminalAgent = createTerminalAgent('agent', config.agentConfig)
+    // 创建单一Agent实例，通过模式控制行为
+    this.agent = createTerminalAgent('chat', config.agentConfig)
   }
 
   /**
@@ -44,16 +39,13 @@ export class OrbitXEko {
         selectedModelId: this.selectedModelId,
       })
 
-      // 根据模式选择对应的Agent（单Agent模式）
-      const agent =
-        this.mode === 'chat'
-          ? this.terminalChatAgent // Chat模式：只读Agent
-          : this.terminalAgent // Agent模式：全权限Agent
+      // 更新Agent模式
+      this.agent.setMode(this.mode)
 
-      // 创建Eko实例（单Agent配置）
+      // 创建Eko实例
       this.eko = new Eko({
         llms: ekoConfig.llms,
-        agent: agent, // 单Agent配置
+        agent: this.agent,
         planLlms: ekoConfig.planLlms,
         callback: this.callback,
       })
@@ -90,13 +82,13 @@ export class OrbitXEko {
       // 重新获取最新的LLM配置，传递选中的模型ID
       const newLLMsConfig = await getEkoLLMsConfig(this.selectedModelId)
 
-      // 重新创建Eko实例（简单可靠，单Agent配置）
-      const agent =
-        this.mode === 'chat' ? this.terminalChatAgent : this.terminalAgent
+      // 更新Agent模式
+      this.agent.setMode(this.mode)
 
+      // 重新创建Eko实例
       this.eko = new Eko({
         llms: newLLMsConfig,
-        agent: agent,
+        agent: this.agent,
         planLlms: ['default'],
         callback: this.callback,
       })
@@ -125,11 +117,11 @@ export class OrbitXEko {
 
       // 设置终端上下文
       if (options.terminalId) {
-        this.terminalAgent.setDefaultTerminalId(options.terminalId)
+        this.agent.setDefaultTerminalId(options.terminalId)
       }
 
       if (options.workingDirectory) {
-        this.terminalAgent.setDefaultWorkingDirectory(options.workingDirectory)
+        this.agent.setDefaultWorkingDirectory(options.workingDirectory)
       }
 
       // Build user request prompt
@@ -235,8 +227,6 @@ ${prompt}`
     return this.terminalAgent
   }
 
-
-
   /**
    * 获取Eko实例
    */
@@ -262,11 +252,9 @@ ${prompt}`
     }
 
     if (updates.agentConfig) {
-      this.terminalAgent.updateConfig(updates.agentConfig)
+      this.agent.updateConfig(updates.agentConfig)
     }
   }
-
-
 
   /**
    * 设置工作模式（chat/agent）并重新初始化Eko实例
@@ -278,7 +266,7 @@ ${prompt}`
 
     this.mode = mode
 
-    // 重新初始化Eko实例以使用对应模式的Agent
+    // 重新初始化Eko实例
     if (this.eko) {
       await this.initialize()
     }
@@ -288,12 +276,7 @@ ${prompt}`
    * 获取Agent专属终端ID
    */
   getAgentTerminalId(): number | null {
-    // 根据当前模式返回对应Agent的终端ID
-    if (this.mode === 'agent') {
-      return this.terminalAgent.getAgentTerminalId()
-    } else {
-      return this.terminalChatAgent.getAgentTerminalId()
-    }
+    return this.agent.getAgentTerminalId()
   }
 
   /**
@@ -301,12 +284,7 @@ ${prompt}`
    */
   async cleanup(): Promise<void> {
     try {
-      // 根据当前模式清理对应Agent的终端资源
-      if (this.mode === 'agent') {
-        await this.terminalAgent.cleanupAgentTerminal()
-      } else {
-        await this.terminalChatAgent.cleanupAgentTerminal()
-      }
+      await this.agent.cleanupAgentTerminal()
     } catch (error) {
       // 清理失败不影响程序运行
     }
@@ -375,13 +353,11 @@ export type TerminalEko = OrbitXEko
 export {
   // 核心类
   TerminalAgent,
-  CodeAgent,
 
   // 工厂函数
   createOrbitXEko,
   createTerminalEko,
   createTerminalAgent,
-  createCodeAgent,
 
   // 回调
   createSidebarCallback,

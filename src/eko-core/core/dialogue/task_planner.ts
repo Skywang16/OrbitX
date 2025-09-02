@@ -15,7 +15,7 @@ export default class TaskPlannerTool implements DialogueTool {
   constructor(ekoDialogue: EkoDialogue, params: DialogueParams) {
     const agent = ekoDialogue.getConfig().agent
     const agentNames = agent ? agent.Name : 'Unknown'
-    this.description = `Used for task planning, this tool is only responsible for generating task plans, not executing them, the following agents are available: ${agentNames}...`
+    this.description = `Used for task planning, this tool is only responsible for generating task plans, not executing them, the agent available: ${agentNames}...`
     this.parameters = {
       type: 'object',
       properties: {

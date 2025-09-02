@@ -16,6 +16,10 @@ pub struct ContextConfig {
     pub max_tokens: usize,
     /// 压缩触发阈值(0.0-1.0)
     pub compress_threshold: f32,
+    /// 最大消息数量（类似eko-core的maxMessages）
+    pub max_messages: usize,
+    /// 保护最近消息数量（类似eko-core的保护策略）
+    pub protect_recent_count: usize,
 }
 
 impl Default for ContextConfig {
@@ -23,6 +27,8 @@ impl Default for ContextConfig {
         Self {
             max_tokens: 120000,       // 适当的token上限
             compress_threshold: 0.70, // 70%触发压缩
+            max_messages: 20,         // 最大消息数量（参考eko-core的15条）
+            protect_recent_count: 5,  // 保护最近5条消息不被删除
         }
     }
 }
@@ -130,45 +136,55 @@ impl ContextManager {
         let token_count = self.estimate_tokens(&raw_msgs);
         let original_count = raw_msgs.len();
 
-        // 2. 统一的压缩逻辑
-        let processed_msgs = if token_count as f32
+        // 2. 先进行消息数量管理（类似eko-core的策略）
+        let mut processed_msgs = if raw_msgs.len() > self.config.max_messages {
+            debug!(
+                "消息数量超限: {}/{}, 进行数量压缩",
+                raw_msgs.len(),
+                self.config.max_messages
+            );
+            self.manage_message_count(raw_msgs).await?
+        } else {
+            raw_msgs
+        };
+
+        // 3. 再进行token压缩
+        let current_tokens = self.estimate_tokens(&processed_msgs);
+        processed_msgs = if current_tokens as f32
             > self.config.max_tokens as f32 * self.config.compress_threshold
         {
             debug!(
-                "触发压缩: tokens={}/{} ({}%), 消息数={}",
-                token_count,
+                "触发token压缩: tokens={}/{} ({}%), 消息数={}",
+                current_tokens,
                 self.config.max_tokens,
-                (token_count as f32 / self.config.max_tokens as f32 * 100.0) as u32,
-                original_count
+                (current_tokens as f32 / self.config.max_tokens as f32 * 100.0) as u32,
+                processed_msgs.len()
             );
 
-            // 使用30%保留策略，但确保最少保留8条消息
-            let keep_ratio = 0.3; // 保留30%
-            let min_keep = 8; // 最少保留8条消息
-            let keep_count = (raw_msgs.len() as f32 * keep_ratio)
-                .max(min_keep as f32)
-                .min(raw_msgs.len() as f32) as usize;
+            // 使用更保守的压缩策略
+            let keep_count = (processed_msgs.len() as f32 * 0.6) // 保留60%
+                .max(self.config.protect_recent_count as f32) // 至少保护最近几条
+                .min(processed_msgs.len() as f32) as usize;
 
-            let compress_from = raw_msgs.len().saturating_sub(keep_count);
+            let compress_from = processed_msgs.len().saturating_sub(keep_count);
 
             debug!("保留最后{}条消息，压缩前{}条", keep_count, compress_from);
 
             if compress_from > 0 {
-                // 生成摘要并替换早期消息
-                self.compress_with_summary(repos, conv_id, &raw_msgs, compress_from)
+                self.compress_with_summary(repos, conv_id, &processed_msgs, compress_from)
                     .await?
             } else {
                 debug!("无需压缩：消息数量太少");
-                raw_msgs
+                processed_msgs
             }
         } else {
             debug!(
-                "无需压缩: tokens={}/{} ({}%)",
-                token_count,
+                "无需token压缩: tokens={}/{} ({}%)",
+                current_tokens,
                 self.config.max_tokens,
-                (token_count as f32 / self.config.max_tokens as f32 * 100.0) as u32
+                (current_tokens as f32 / self.config.max_tokens as f32 * 100.0) as u32
             );
-            raw_msgs
+            processed_msgs
         };
 
         let final_token_count = self.estimate_tokens(&processed_msgs);
@@ -334,6 +350,29 @@ impl ContextManager {
         }
     }
 
+
+
+    /// 管理消息数量（类似eko-core的消息数量限制）
+    async fn manage_message_count(&self, messages: Vec<Message>) -> AppResult<Vec<Message>> {
+        if messages.len() <= self.config.max_messages {
+            return Ok(messages);
+        }
+
+        // 计算需要删除的消息数量
+        let excess = messages.len() - self.config.max_messages;
+
+        // 保护最近的消息，删除最早的消息（类似eko-core的滑动窗口）
+        let keep_from = excess;
+
+        debug!(
+            "消息数量管理: 删除前{}条消息，保留后{}条",
+            excess,
+            self.config.max_messages
+        );
+
+        Ok(messages[keep_from..].to_vec())
+    }
+
     // ============= 私有方法 =============
 
     /// 简化的压缩函数
@@ -350,7 +389,19 @@ impl ContextManager {
             compress_from
         );
 
-        let (to_compress, to_keep) = messages.split_at(compress_from);
+        // 保护最近的重要消息（类似eko-core的保护策略）
+        let actual_compress_to = if messages.len() > self.config.protect_recent_count {
+            (messages.len() - self.config.protect_recent_count).min(compress_from)
+        } else {
+            0
+        };
+
+        if actual_compress_to == 0 {
+            debug!("所有消息都在保护范围内，跳过压缩");
+            return Ok(messages.to_vec());
+        }
+
+        let (to_compress, to_keep) = messages.split_at(actual_compress_to);
 
         if to_compress.is_empty() {
             return Ok(messages.to_vec());
@@ -379,10 +430,11 @@ impl ContextManager {
         result.extend_from_slice(to_keep);
 
         debug!(
-            "压缩完成: {}条 -> {}条 (摘要+{}条保留)",
+            "压缩完成: {}条 -> {}条 (摘要+{}条保留)，保护了最近{}条消息",
             messages.len(),
             result.len(),
-            to_keep.len()
+            to_keep.len(),
+            self.config.protect_recent_count
         );
         Ok(result)
     }

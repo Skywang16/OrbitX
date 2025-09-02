@@ -5,22 +5,22 @@ const PLAN_SYSTEM_TEMPLATE = `
 You are {name}, an autonomous AI Task Planner.
 
 ## Task Description
-Your task is to understand the user's requirements and plan the execution steps for the single agent. Please follow the steps below:
+Your task is to understand the user's requirements and plan the execution steps. Please follow the steps below:
 1. Understand the user's requirements.
 2. Analyze what tools and capabilities are needed based on the user's requirements.
-3. Generate a step-by-step execution plan for the agent.
+3. Generate a step-by-step execution plan.
 4. You only need to provide the steps to complete the user's task, key steps only, no need to be too detailed.
 5. Please strictly follow the output format and example output.
 6. The output language should follow the language corresponding to the user's task.
 
-## Single Agent Design Guidelines
+## Planning Guidelines
 - **Sequential execution**: Break down the task into logical sequential steps.
-- **Tool utilization**: Make use of the agent's available tools and capabilities.
+- **Tool utilization**: Make use of available tools and capabilities.
 - **Context preservation**: Each step can reference results from previous steps.
 - **Efficient planning**: Focus on the most direct path to complete the user's task.
 
 ## Agent Information
-{agents}
+{agent}
 
 ## Output Rules and Format
 <root>
@@ -28,7 +28,7 @@ Your task is to understand the user's requirements and plan the execution steps 
   <name>Task Name</name>
   <!-- Think step by step and output a detailed thought process for task planning. -->
   <thought>Your thought process on user demand planning</thought>
-  <!-- Single Agent execution plan -->
+  <!-- Execution plan -->
   <agent name="{agent_name}">
     <!-- Task description for the agent -->
     <task>Describe what the agent needs to accomplish</task>
@@ -182,14 +182,13 @@ Task Description: {task_prompt}
 `
 
 export async function getPlanSystemPrompt(context: Context): Promise<string> {
-  let agents_prompt = ''
+  let agent_prompt = ''
   let agent = context.agent
-  // Single agent mode - process the single agent
   let tools = await agent.loadTools(context)
 
-  // Only generate prompt if agent should be included in planning
+  // Generate agent prompt if agent should be included in planning
   if (!(agent as any).ignorePlan) {
-    agents_prompt +=
+    agent_prompt +=
       `<agent name="${agent.Name}">\n` +
       `Description: ${agent.PlanDescription || agent.Description}\n` +
       'Tools:\n' +
@@ -207,7 +206,7 @@ export async function getPlanSystemPrompt(context: Context): Promise<string> {
     example_prompt += `## Example ${i + 1}\n${example_list[i]}\n\n`
   }
   return PLAN_SYSTEM_TEMPLATE.replace('{name}', config.name)
-    .replace('{agents}', agents_prompt.trim())
+    .replace('{agent}', agent_prompt.trim())
     .replace('{agent_name}', agent.Name)
     .replace('{example_prompt}', example_prompt)
     .trim()

@@ -99,7 +99,7 @@ export async function getAgentSystemPrompt(
     prompt += '\n' + extSysPrompt.trim() + '\n'
   }
   prompt += '\nCurrent datetime: {datetime}'
-  // Single agent mode - no multi-agent context needed
+
   return AGENT_SYSTEM_TEMPLATE.replace('{name}', config.name)
     .replace('{agent}', agent.Name)
     .replace('{description}', agent.Description)

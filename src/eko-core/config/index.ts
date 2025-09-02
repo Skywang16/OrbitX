@@ -12,7 +12,7 @@ type GlobalConfig = {
   toolResultMultimodal: boolean
   expertMode: boolean
   expertModeTodoLoopNum: number
-  maxAgentContextLength: number // Maximum context length for single agent
+  maxAgentContextLength: number // Maximum context length for agent
   enableIntelligentCompression: boolean // Enable intelligent context compression
 }
 
@@ -22,7 +22,7 @@ const config: GlobalConfig = {
   maxReactNum: 500,
   maxTokens: 16000,
   maxRetryNum: 3,
-  // agentParallel removed - single agent mode only
+
   compressThreshold: 80,
   largeTextLength: 5000,
   fileTextMaxLength: 20000,
@@ -30,7 +30,7 @@ const config: GlobalConfig = {
   toolResultMultimodal: true,
   expertMode: false,
   expertModeTodoLoopNum: 10,
-  maxAgentContextLength: 50000, // Maximum context length for single agent (50k characters)
+  maxAgentContextLength: 50000, // Maximum context length for agent (50k characters)
   enableIntelligentCompression: true, // Enable intelligent compression
 }
 

@@ -1,4 +1,4 @@
 import { Agent, AgentParams } from './base'
-import { ContextCompressorAgent } from './context_compressor'
+import { ContextCompressorService } from './context_compressor'
 
-export { Agent, ContextCompressorAgent, type AgentParams }
+export { Agent, ContextCompressorService, type AgentParams }

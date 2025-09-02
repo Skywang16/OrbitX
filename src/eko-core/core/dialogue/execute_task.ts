@@ -60,7 +60,7 @@ export default class ExecuteTaskTool implements DialogueTool {
 
   private getTaskResult(context: Context, ekoResult: EkoResult): ToolResult {
     let result = '# Task execution result\n' + JSON.stringify(ekoResult, null, 2)
-    // Single agent mode - no multi-agent chain results
+
     return {
       content: [
         {
