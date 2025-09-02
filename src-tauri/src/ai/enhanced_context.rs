@@ -266,30 +266,35 @@ impl ContextManager {
 
         // 添加对话历史
         if !ctx.messages.is_empty() {
-            let history = ctx
+            let formatted_messages: Vec<String> = ctx
                 .messages
                 .iter()
                 .map(|m| self.format_message(m))
-                .collect::<Vec<_>>()
-                .join("\n");
+                .filter(|s| !s.is_empty()) // 过滤掉空字符串
+                .collect();
 
-            let compression_info = if ctx.compressed {
-                format!("，已压缩至{}条", ctx.messages.len())
-            } else {
-                String::new()
-            };
+            if !formatted_messages.is_empty() {
+                let history = formatted_messages.join("\n");
+                let actual_count = formatted_messages.len();
 
-            parts.push(format!(
-                "【对话历史】(共{}条消息{})\n{}\n",
-                ctx.original_count, compression_info, history
-            ));
+                let compression_info = if ctx.compressed {
+                    format!("，已压缩至{}条", actual_count)
+                } else {
+                    String::new()
+                };
+
+                parts.push(format!(
+                    "【对话历史】(共{}条消息{})\n{}\n",
+                    actual_count, compression_info, history
+                ));
+            }
         }
 
         // 添加当前问题
         parts.push(format!("【当前问题】\n{}", current_msg));
 
         let final_prompt = parts.join("\n");
-        debug!("✅ 最终prompt构建完成，总长度: {} 字符", final_prompt.len());
+
         debug!("📝 最终prompt内容:\n{}", final_prompt);
 
         Ok(final_prompt)
@@ -341,8 +346,6 @@ impl ContextManager {
         }
     }
 
-
-
     /// 管理消息数量（类似eko-core的消息数量限制）
     async fn manage_message_count(&self, messages: Vec<Message>) -> AppResult<Vec<Message>> {
         if messages.len() <= self.config.max_messages {
@@ -357,8 +360,7 @@ impl ContextManager {
 
         debug!(
             "消息数量管理: 删除前{}条消息，保留后{}条",
-            excess,
-            self.config.max_messages
+            excess, self.config.max_messages
         );
 
         Ok(messages[keep_from..].to_vec())
@@ -568,12 +570,12 @@ impl ContextManager {
             .get_messages(conv_id, None, None)
             .await?;
 
-        // 如果指定了up_to_message_id，只获取到该消息为止的历史
+        // 如果指定了up_to_message_id，只获取该消息之前的历史（不包含该消息本身）
         let filtered_msgs = if let Some(up_to_id) = up_to_msg_id {
             all.into_iter()
                 .filter(|m| {
                     if let Some(msg_id) = m.id {
-                        msg_id <= up_to_id
+                        msg_id < up_to_id // 修改：使用 < 而不是 <=，排除当前消息
                     } else {
                         true // 保留没有ID的消息（不应该发生，但为了安全）
                     }
@@ -630,6 +632,15 @@ impl ContextManager {
     }
 
     fn format_message(&self, msg: &Message) -> String {
+        // 过滤无用的assistant消息
+        if msg.role == "assistant" {
+            let content = msg.content.trim();
+            // 过滤掉无意义的状态消息
+            if content == "Completed" || content == "Thinking..." || content.is_empty() {
+                return String::new(); // 返回空字符串，后续会被过滤掉
+            }
+        }
+
         if msg.role == "assistant" && msg.steps_json.is_some() {
             let steps_json = msg.steps_json.as_ref().unwrap();
 
