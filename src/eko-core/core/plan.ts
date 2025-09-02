@@ -4,7 +4,7 @@ import { RetryLanguageModel } from '../llm'
 import { parseTask } from '../common/xml'
 import { LLMRequest } from '../types/llm.types'
 import { StreamCallback, Task } from '../types/core.types'
-import { getPlanSystemPrompt, getPlanUserPrompt } from '../prompt/plan'
+import { getPlanSystemPrompt, getPlanUserPrompt } from '../prompt'
 import { LanguageModelV2Prompt, LanguageModelV2StreamPart, LanguageModelV2TextPart } from '@ai-sdk/provider'
 
 export class Planner {

@@ -18,7 +18,7 @@ import TaskPlannerTool, { TOOL_NAME as task_planner } from './dialogue/task_plan
 import { RetryLanguageModel } from '../llm'
 import { EkoMemory } from '../memory/memory'
 import ExecuteTaskTool from './dialogue/execute_task'
-import { getDialogueSystemPrompt } from '../prompt/dialogue'
+import { getDialogueSystemPrompt } from '../prompt'
 
 import { convertTools, getTool, convertToolResult } from '../agent/llm'
 

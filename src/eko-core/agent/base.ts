@@ -27,7 +27,7 @@ import {
 } from '@ai-sdk/provider'
 import { callAgentLLM, convertTools, getTool, convertToolResult, defaultMessageProviderOptions } from './llm'
 import { doTaskResultCheck } from '../tools/task_result_check'
-import { getAgentSystemPrompt, getAgentUserPrompt } from '../prompt/agent'
+import { getAgentSystemPrompt, getAgentUserPrompt } from '../prompt'
 import { doTodoListManager } from '../tools/todo_list_manager'
 
 export type AgentParams = {
