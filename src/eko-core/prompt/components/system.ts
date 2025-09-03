@@ -22,9 +22,9 @@ Agent: {agent}`,
     const template = systemInfoComponent.template!
     return resolveTemplate(template, {
       platform: config.platform,
-      agent: agent.Name
+      agent: agent.Name,
     })
-  }
+  },
 }
 
 /**
@@ -36,12 +36,12 @@ export const datetimeComponent: ComponentConfig = {
   description: '当前日期时间',
   required: true,
   template: `Current datetime: {datetime}`,
-  fn: async (context: ComponentContext) => {
+  fn: async () => {
     const template = datetimeComponent.template!
     return resolveTemplate(template, {
-      datetime: new Date().toLocaleString()
+      datetime: new Date().toLocaleString(),
     })
-  }
+  },
 }
 
 /**
@@ -53,10 +53,10 @@ export const platformComponent: ComponentConfig = {
   description: '平台信息',
   required: false,
   template: `Platform: {platform}`,
-  fn: async (context: ComponentContext) => {
+  fn: async () => {
     const template = platformComponent.template!
     return resolveTemplate(template, {
-      platform: config.platform
+      platform: config.platform,
     })
-  }
+  },
 }

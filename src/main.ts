@@ -16,6 +16,8 @@
  */
 
 import { completionApi } from '@/api'
+import { configApi } from '@/api/config'
+import { windowApi } from '@/api/window'
 
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useAIChatStore } from '@/components/AIChatSidebar/store'
@@ -80,9 +82,6 @@ const initializeServices = async () => {
 
 const initializeOpacity = async () => {
   try {
-    const { configApi } = await import('@/api/config')
-    const { windowApi } = await import('@/api/window')
-
     const config = await configApi.getConfig()
 
     if (config.appearance.opacity !== undefined) {

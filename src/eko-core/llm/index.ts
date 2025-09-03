@@ -135,7 +135,7 @@ export class RetryLanguageModel {
         const result = (await call_timeout(
           async () => await llm.doStream({ ..._options, abortSignal: signal }),
           this.stream_first_timeout,
-          e => {
+          () => {
             controller.abort()
           }
         )) as StreamResult
@@ -144,7 +144,7 @@ export class RetryLanguageModel {
         const { done, value } = await call_timeout(
           async () => await reader.read(),
           this.stream_first_timeout,
-          e => {
+          () => {
             reader.cancel()
             reader.releaseLock()
             controller.abort()

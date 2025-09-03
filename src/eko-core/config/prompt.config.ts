@@ -260,7 +260,7 @@ export class PromptConfigManager {
   /**
    * 获取组件顺序
    */
-  getComponentOrder(type: PromptType, scenario?: string): PromptComponent[] {
+  getComponentOrder(type: PromptType): PromptComponent[] {
     const baseOrder = this.config.defaultComponentOrder[type] || []
 
     // 根据组件配置过滤和排序

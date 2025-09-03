@@ -1,10 +1,9 @@
 // Use browser DOM APIs directly
-import { fixXmlTag } from './utils'
-import { Task, TaskNode, TaskTextNode, TaskForEachNode, TaskWatchNode } from '../types/core.types'
+import { Task, TaskNode, TaskTextNode } from '../types/core.types'
 
 // All Workflow-related functions removed - Task-only architecture
 
-export function parseTask(taskId: string, xml: string, done: boolean, thinking?: string): Task | null {
+export function parseTask(taskId: string, xml: string, done: boolean): Task | null {
   // Parse XML directly for single-agent task mode
   try {
     const parser = new DOMParser()

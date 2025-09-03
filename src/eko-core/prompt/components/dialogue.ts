@@ -2,7 +2,7 @@
  * 对话相关的提示词组件
  */
 
-import { ComponentConfig, ComponentContext, PromptComponent } from './types'
+import { ComponentConfig, PromptComponent } from './types'
 
 /**
  * 对话能力组件
@@ -19,9 +19,9 @@ You excel at helping users with:
 - Code development and project management
 - System administration and automation
 - Terminal-based workflows and productivity`,
-  fn: async (context: ComponentContext) => {
+  fn: async () => {
     return dialogueCapabilitiesComponent.template!
-  }
+  },
 }
 
 /**
@@ -37,7 +37,7 @@ export const dialogueGuidelinesComponent: ComponentConfig = {
 - Ask clarifying questions when needed
 - Offer practical solutions and examples
 - Maintain context throughout the conversation`,
-  fn: async (context: ComponentContext) => {
+  fn: async () => {
     return dialogueGuidelinesComponent.template!
-  }
+  },
 }

@@ -94,7 +94,7 @@
   import { useI18n } from 'vue-i18n'
   import { createMessage } from '@/ui'
   import { handleError } from '@/utils/errorHandler'
-  import { aiApi } from '@/api'
+
   import type { AIModelConfig } from '@/types'
   import { useAISettingsStore } from '@/components/settings/components/AI/store'
 
@@ -139,7 +139,6 @@
 
   const errors = ref<Record<string, string>>({})
   const isSubmitting = ref(false)
-  const isTesting = ref(false)
 
   // 计算可见的提供商列表
   const visibleProviders = computed(() => {

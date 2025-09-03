@@ -159,7 +159,7 @@ export default class WatchTriggerTool implements Tool {
           let _window = window as any
           _window.has_eko_changed = false
           _window.eko_observer && _window.eko_observer.disconnect()
-          let eko_observer = new MutationObserver(function (mutations) {
+          let eko_observer = new MutationObserver(function () {
             _window.has_eko_changed = true
           })
           eko_observer.observe(document.body, {

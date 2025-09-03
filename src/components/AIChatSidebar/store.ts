@@ -12,8 +12,8 @@ import { createToolExecution } from '@/types'
 import { debounce } from 'lodash-es'
 import type { StreamCallbackMessage } from '@/eko/types'
 
-const isToolResultError = (toolResult: any): boolean => {
-  return toolResult?.isError === true
+const isToolResultError = (toolResult: unknown): boolean => {
+  return (toolResult as { isError?: boolean })?.isError === true
 }
 
 /**
@@ -56,7 +56,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   const isInitialized = ref(false)
 
-  const debouncedSaveSteps = debounce(async (messageId: number, steps: any[]) => {
+  const debouncedSaveSteps = debounce(async (messageId: number, steps: unknown[]) => {
     try {
       await aiApi.updateMessageSteps(messageId, steps)
     } catch {
@@ -166,7 +166,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  const sendMessage = async (content: string, tagContext?: any): Promise<void> => {
+  const sendMessage = async (content: string): Promise<void> => {
     if (!currentConversationId.value) {
       await createConversation()
     }
@@ -206,8 +206,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         currentConversationId.value,
         content,
         userMessageId,
-        currentWorkingDirectory,
-        tagContext
+        currentWorkingDirectory
       )
 
       const messageId = await aiApi.saveMessage(currentConversationId.value, 'assistant', 'Thinking...')
@@ -542,11 +541,13 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                 }
                 break
 
-              case 'workflow':
-                if (message.type === 'workflow') {
-                  // workflow 消息类型在官方定义中包含 workflow 对象
-                  // 这里可以根据需要处理工作流信息
-                  // eko已将workflow替换为task
+              case 'task':
+                if (message.type === 'task') {
+                  updateOrCreateStep(tempMessage, {
+                    type: 'task',
+                    content: message.task?.name || '',
+                    streamDone: message.streamDone,
+                  })
                 }
                 break
 

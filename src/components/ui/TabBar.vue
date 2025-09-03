@@ -88,7 +88,7 @@
   // 判断标签页是否可以显示关闭按钮
   const canShowCloseButton = (tab: TabItem): boolean => {
     // 只要标签页是可关闭的，就显示关闭按钮
-    return tab.closable
+    return tab.closable ?? false
   }
 
   // 处理标签点击

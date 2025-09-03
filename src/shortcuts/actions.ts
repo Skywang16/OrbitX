@@ -1,8 +1,6 @@
 import { useTabManagerStore } from '@/stores/TabManager'
 import { useTerminalStore } from '@/stores/Terminal'
-import { createMessage } from '@/ui/composables/message-api'
-import { TabType } from '@/types'
-import { useI18n } from 'vue-i18n'
+
 import { windowApi } from '@/api/window'
 import { useAIChatStore } from '@/components/AIChatSidebar'
 
@@ -13,10 +11,6 @@ export class ShortcutActionsService {
 
   private get terminalStore() {
     return useTerminalStore()
-  }
-
-  private get t() {
-    return useI18n().t
   }
 
   switchToTab(index: number): boolean {

@@ -673,7 +673,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     try {
       await initializeShellManager()
 
-      const restored = await restoreFromSessionState()
+      await restoreFromSessionState()
 
       await setupGlobalListeners()
     } catch (error) {

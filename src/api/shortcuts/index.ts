@@ -11,7 +11,6 @@ import { invoke } from '@tauri-apps/api/core'
 import type {
   ShortcutsConfig,
   ShortcutBinding,
-  ShortcutCategory,
   Platform,
   ShortcutValidationResult,
   ConflictDetectionResult,

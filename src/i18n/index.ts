@@ -1,5 +1,6 @@
 import { createI18n } from 'vue-i18n'
 import { storageApi } from '@/api/storage'
+import { useSessionStore } from '@/stores/session'
 import zh from './locales/zh.json'
 import en from './locales/en.json'
 
@@ -72,7 +73,6 @@ export async function setLocale(locale: string) {
     })
 
     // 立即保存会话状态
-    const { useSessionStore } = await import('@/stores/session')
     const sessionStore = useSessionStore()
     sessionStore.updateUiState({ language: locale })
   } catch (error) {

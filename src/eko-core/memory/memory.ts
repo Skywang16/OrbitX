@@ -115,13 +115,13 @@ export class EkoMemory {
     await this.manageCapacity()
   }
 
-  protected async dynamicSystemPrompt(messages: EkoMessage[]): Promise<void> {
+  protected async dynamicSystemPrompt(): Promise<void> {
     // RAG dynamic system prompt
   }
 
   protected async manageCapacity(): Promise<void> {
     if (this.messages[this.messages.length - 1].role == 'user') {
-      await this.dynamicSystemPrompt(this.messages)
+      await this.dynamicSystemPrompt()
     }
     if (this.messages.length > this.maxMessages) {
       const excess = this.messages.length - this.maxMessages

@@ -1,7 +1,6 @@
 import { JSONSchema7 } from 'json-schema'
 import { EkoDialogue } from '../dialogue'
-import Context from '../context'
-import { sub } from '../../common/utils'
+
 import { TOOL_NAME as task_planner } from './task_planner'
 import { DialogueTool, EkoResult, ToolResult } from '../../types'
 
@@ -45,7 +44,7 @@ export default class ExecuteTaskTool implements DialogueTool {
     const context = eko.getTask(taskId)
     // Variables no longer supported - context preserved through conversation history
     if (context) {
-      return this.getTaskResult(context, result)
+      return this.getTaskResult(result)
     } else {
       return {
         content: [
@@ -58,7 +57,7 @@ export default class ExecuteTaskTool implements DialogueTool {
     }
   }
 
-  private getTaskResult(context: Context, ekoResult: EkoResult): ToolResult {
+  private getTaskResult(ekoResult: EkoResult): ToolResult {
     let result = '# Task execution result\n' + JSON.stringify(ekoResult, null, 2)
 
     return {

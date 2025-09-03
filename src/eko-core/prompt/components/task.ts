@@ -4,8 +4,6 @@
 
 import { ComponentConfig, ComponentContext, PromptComponent } from './types'
 import { resolveTemplate } from '../template-engine'
-import { buildAgentRootXml } from '../../common/xml'
-import { TOOL_NAME as task_node_status } from '../../tools/task_node_status'
 
 // 原有的节点提示词常量
 const FOR_EACH_NODE = `
@@ -38,15 +36,15 @@ export const taskContextComponent: ComponentConfig = {
 {taskContext}`,
   fn: async (context: ComponentContext) => {
     const { task, context: agentContext } = context
-    
+
     if (!task && !agentContext?.chain.taskPrompt) return undefined
-    
+
     const taskContext = task?.xml || agentContext?.chain.taskPrompt || ''
     if (!taskContext.trim()) return undefined
-    
+
     const template = taskContextComponent.template!
     return resolveTemplate(template, { taskContext })
-  }
+  },
 }
 
 /**
@@ -61,27 +59,27 @@ export const taskNodesComponent: ComponentConfig = {
 {nodePrompt}`,
   fn: async (context: ComponentContext) => {
     const { task, tools = [] } = context
-    
+
     if (!task?.xml) return undefined
-    
+
     let nodePrompt = ''
     const taskXml = task.xml
     const hasForEachNode = taskXml.indexOf('</forEach>') > -1
     const hasWatchNode = taskXml.indexOf('</watch>') > -1
-    
+
     if (hasForEachNode && tools.some(tool => tool.name === 'foreach_task')) {
       nodePrompt += FOR_EACH_NODE
     }
-    
+
     if (hasWatchNode && tools.some(tool => tool.name === 'watch_trigger')) {
       nodePrompt += WATCH_NODE
     }
-    
+
     if (!nodePrompt.trim()) return undefined
-    
+
     const template = taskNodesComponent.template!
     return resolveTemplate(template, { nodePrompt })
-  }
+  },
 }
 
 /**
@@ -94,9 +92,9 @@ export const taskExamplesComponent: ComponentConfig = {
   required: false,
   template: `# Task Processing Examples
 {examples}`,
-  fn: async (context: ComponentContext) => {
+  fn: async () => {
     // 这里可以根据任务类型提供相应的示例
     // 暂时返回undefined，后续可以扩展
     return undefined
-  }
+  },
 }

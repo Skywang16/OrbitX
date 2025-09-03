@@ -3,9 +3,9 @@
  * 负责组装各个组件生成完整的提示词
  */
 
-import { ComponentContext, PromptComponent, PromptBuildOptions, PromptType, PromptVariant } from '../components/types'
+import { ComponentContext, PromptComponent, PromptBuildOptions, PromptVariant } from '../components/types'
 import { getComponentRegistry } from '../components/registry'
-import { EkoTemplateEngine, resolveTemplate } from '../template-engine'
+import { EkoTemplateEngine } from '../template-engine'
 
 /**
  * 提示词构建器类
@@ -29,7 +29,6 @@ export class PromptBuilder {
     const {
       components = [],
       templateOverrides = {} as Partial<Record<PromptComponent, string>>,
-      additionalContext = {},
       skipMissing = true,
     } = options
 
@@ -81,7 +80,7 @@ export class PromptBuilder {
     }
 
     // 组装最终提示词
-    return this.assemblePrompt(componentResults, additionalContext)
+    return this.assemblePrompt(componentResults)
   }
 
   /**
@@ -93,7 +92,7 @@ export class PromptBuilder {
   async buildFromVariant(
     variant: PromptVariant,
     context: ComponentContext,
-    additionalContext: Record<string, any> = {}
+    additionalContext: Record<string, unknown> = {}
   ): Promise<string> {
     // 构建组件
     const options: PromptBuildOptions = {
@@ -166,10 +165,7 @@ export class PromptBuilder {
   /**
    * 组装提示词
    */
-  private assemblePrompt(
-    componentResults: Record<string, string>,
-    additionalContext: Record<string, any> = {}
-  ): string {
+  private assemblePrompt(componentResults: Record<string, string>): string {
     // 简单的组装方式：按顺序连接所有组件
     const sections = Object.values(componentResults).filter(Boolean)
 

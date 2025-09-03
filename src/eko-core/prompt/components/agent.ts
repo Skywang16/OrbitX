@@ -2,7 +2,6 @@
  * Agent相关的提示词组件
  */
 
-import config from '../../config'
 import { ComponentConfig, ComponentContext, PromptComponent } from './types'
 import { resolveTemplate } from '../template-engine'
 
@@ -88,7 +87,7 @@ You excel at terminal-based development workflows and have access to powerful to
 
 Each tool execution provides detailed output that informs subsequent actions. You work methodically through complex tasks by breaking them into logical steps.`,
   fn: async (context: ComponentContext) => {
-    const { agent, tools = [] } = context
+    const { tools = [] } = context
 
     // 基于工具生成能力描述
     const capabilities = tools
@@ -124,10 +123,9 @@ export const agentRulesComponent: ComponentConfig = {
 - Consider cross-platform compatibility when suggesting commands
 - Always validate command syntax before execution`,
   fn: async (context: ComponentContext) => {
-    const { context: ctx } = context
     const template = (context as any)._templateOverride || agentRulesComponent.template!
     return resolveTemplate(template, {
-      cwd: ctx?.workingDirectory || '/current/directory',
+      cwd: '/current/directory',
     })
   },
 }

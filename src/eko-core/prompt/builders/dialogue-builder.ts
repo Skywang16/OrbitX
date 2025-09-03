@@ -6,7 +6,6 @@
 import config from '../../config'
 import { PromptComponent, ComponentContext } from '../components/types'
 import { PromptBuilder } from './prompt-builder'
-import { resolveTemplate } from '../template-engine'
 
 /**
  * Dialogue提示词构建器

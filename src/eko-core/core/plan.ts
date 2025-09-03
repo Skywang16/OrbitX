@@ -96,7 +96,7 @@ export class Planner {
           streamText += chunk.delta || ''
         }
         if (this.callback) {
-          let task = parseTask(this.taskId, streamText, false, thinkingText)
+          let task = parseTask(this.taskId, streamText, false)
           if (task) {
             await this.callback.onMessage({
               taskId: this.taskId,
@@ -119,7 +119,7 @@ export class Planner {
       chain.planRequest = request
       chain.planResult = streamText
     }
-    let task = parseTask(this.taskId, streamText, true, thinkingText) as Task
+    let task = parseTask(this.taskId, streamText, true) as Task
     if (this.callback) {
       await this.callback.onMessage({
         taskId: this.taskId,

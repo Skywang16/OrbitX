@@ -184,7 +184,7 @@ export async function callAgentLLM(
   let context = agentContext.context
   // agentChain removed - single agent mode
   // Single agent mode - use task info
-  let taskInfo = agentContext.context.task
+
   let streamCallback = callback ||
     context.config.callback || {
       onMessage: async () => {},

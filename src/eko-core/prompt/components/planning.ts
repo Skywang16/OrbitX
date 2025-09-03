@@ -2,7 +2,7 @@
  * 规划相关的提示词组件
  */
 
-import { ComponentConfig, ComponentContext, PromptComponent } from './types'
+import { ComponentConfig, PromptComponent } from './types'
 
 /**
  * 规划指导原则组件
@@ -17,9 +17,9 @@ export const planningGuidelinesComponent: ComponentConfig = {
 - Tool utilization: Make use of available tools and capabilities
 - Context preservation: Each step can reference results from previous steps
 - Efficient planning: Focus on the most direct path to complete the user's task`,
-  fn: async (context: ComponentContext) => {
+  fn: async () => {
     return planningGuidelinesComponent.template!
-  }
+  },
 }
 
 /**
@@ -32,10 +32,10 @@ export const planningExamplesComponent: ComponentConfig = {
   required: false,
   template: `# Planning Examples
 {examples}`,
-  fn: async (context: ComponentContext) => {
+  fn: async () => {
     // 规划示例将在后续实现
     return undefined
-  }
+  },
 }
 
 /**
@@ -48,8 +48,8 @@ export const outputFormatComponent: ComponentConfig = {
   required: false,
   template: `# Output Format
 {format}`,
-  fn: async (context: ComponentContext) => {
+  fn: async () => {
     // 输出格式将在后续实现
     return undefined
-  }
+  },
 }

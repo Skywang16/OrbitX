@@ -1,4 +1,3 @@
-import { Agent } from '../agent'
 import { Tool, ToolSchema } from '../types/tools.types'
 import { LanguageModelV2FunctionTool } from '@ai-sdk/provider'
 

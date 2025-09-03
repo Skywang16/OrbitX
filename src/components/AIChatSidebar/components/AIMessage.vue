@@ -75,13 +75,13 @@
           <div class="error-content">{{ step.content }}</div>
         </div>
 
-        <!-- 工作流事件 -->
-        <div v-else-if="step.type === 'workflow'" class="workflow-output step-block">
-          <div class="workflow-header">
-            <span class="workflow-icon">🔄</span>
-            <span class="workflow-label">工作流事件</span>
+        <!-- 任务事件 -->
+        <div v-else-if="step.type === 'task'" class="task-output step-block">
+          <div class="task-header">
+            <span class="task-icon">📋</span>
+            <span class="task-label">任务事件</span>
           </div>
-          <div class="workflow-content">{{ step.content }}</div>
+          <div class="task-content">{{ step.content }}</div>
         </div>
 
         <!-- 未知类型的步骤 -->

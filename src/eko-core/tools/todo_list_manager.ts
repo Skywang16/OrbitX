@@ -47,7 +47,7 @@ export default class TodoListManagerTool implements Tool {
     }
   }
 
-  async execute(args: Record<string, unknown>, agentContext: AgentContext): Promise<ToolResult> {
+  async execute(): Promise<ToolResult> {
     return {
       content: [
         {
@@ -94,7 +94,7 @@ async function doTodoListManager(
     })
     const toolCall = result.filter(s => s.type == 'tool-call')[0]
     const args = typeof toolCall.input == 'string' ? JSON.parse(toolCall.input || '{}') : toolCall.input || {}
-    const toolResult = await todoListManager.execute(args, agentContext)
+    const toolResult = await todoListManager.execute()
     const callback = agentContext.context.config.callback
     if (callback) {
       await callback.onMessage(

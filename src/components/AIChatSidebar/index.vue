@@ -4,8 +4,6 @@
   import { useAIChatStore } from './store'
   import { useAISettingsStore } from '@/components/settings/components/AI'
   import { useSessionStore } from '@/stores/session'
-  import { useTerminalSelection } from '@/composables/useTerminalSelection'
-  import { useTabManagerStore } from '@/stores/TabManager'
 
   import ChatHeader from './components/ChatHeader.vue'
   import MessageList from './components/MessageList.vue'
@@ -15,8 +13,7 @@
   const aiChatStore = useAIChatStore()
   const aiSettingsStore = useAISettingsStore()
   const sessionStore = useSessionStore()
-  const terminalSelection = useTerminalSelection()
-  const tabManagerStore = useTabManagerStore()
+
   const { t } = useI18n()
 
   const messageInput = ref('')
@@ -32,13 +29,11 @@
   const sendMessage = async () => {
     if (!canSend.value) return
 
-    // 获取标签上下文信息
-    const tagContext = chatInputRef.value?.getTagContextInfo?.() || null
     const message = messageInput.value.trim()
     messageInput.value = ''
 
     try {
-      await aiChatStore.sendMessage(message, tagContext)
+      await aiChatStore.sendMessage(message)
     } catch (error) {
       // Error handling is done by the store
     }

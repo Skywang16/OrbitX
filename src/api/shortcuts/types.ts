@@ -5,6 +5,17 @@
  */
 
 /**
+ * 快捷键分类
+ */
+export enum ShortcutCategory {
+  Global = 'global',
+  Terminal = 'terminal',
+  Tab = 'tab',
+  AI = 'ai',
+  Custom = 'custom',
+}
+
+/**
  * 快捷键动作类型
  */
 export type ShortcutAction = string
