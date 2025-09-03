@@ -7,34 +7,13 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import type { ChatMode } from '@/types'
 import { createTerminalEko, createSidebarCallback, type TerminalEko } from '@/eko'
-import type { Conversation, Message } from '@/types'
+import type { Conversation, Message, ToolStep, NonToolStep } from '@/types'
 import { createToolExecution } from '@/types'
 import { debounce } from 'lodash-es'
 import type { StreamCallbackMessage } from '@/eko/types'
 
 const isToolResultError = (toolResult: unknown): boolean => {
   return (toolResult as { isError?: boolean })?.isError === true
-}
-
-/**
- * 性能优化：判断是否应该跳过某些消息
- * 根据文档最佳实践，过滤不需要的消息
- */
-const shouldSkipMessage = (message: StreamCallbackMessage): boolean => {
-  // 保留文本和思考的流式输出，用户需要看到实时效果
-  // 不跳过任何文本或思考消息
-
-  // 不跳过工具参数流式传输，用户需要看到工具正在准备
-  // if (message.type === 'tool_streaming') {
-  //   return true
-  // }
-
-  // 跳过工具执行中的消息（除非需要实时显示）
-  if (message.type === 'tool_running') {
-    return true
-  }
-
-  return false
 }
 
 export const useAIChatStore = defineStore('ai-chat', () => {
@@ -331,47 +310,48 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
   // 工具步骤处理相关函数
-  const findOrCreateToolStep = (tempMessage: Message, toolName: string, toolId?: string) => {
+  const findOrCreateToolStep = (tempMessage: Message, toolName: string, toolId?: string): ToolStep => {
     // 优先根据 toolId 查找，如果没有则根据 toolName 查找最新的运行中工具
     let existingStep = null
 
     if (toolId) {
       existingStep = tempMessage.steps?.find(
-        step => step.type === 'tool_use' && (step as any).toolExecution?.toolId === toolId
-      )
+        step => step.type === 'tool_use' && 'toolExecution' in step && (step.toolExecution as any).toolId === toolId
+      ) as ToolStep | undefined
     }
 
     if (!existingStep) {
       existingStep = tempMessage.steps?.find(
         step =>
           step.type === 'tool_use' &&
-          (step as any).toolExecution?.name === toolName &&
-          (step as any).toolExecution?.status === 'running'
-      )
+          'toolExecution' in step &&
+          step.toolExecution.name === toolName &&
+          step.toolExecution.status === 'running'
+      ) as ToolStep | undefined
     }
 
     if (existingStep) {
-      return existingStep as any
+      return existingStep
     }
 
     // 创建新的工具步骤
     const toolExecution = createToolExecution(toolName, {}, 'running')
     // 保存 toolId 以便后续查找
     if (toolId) {
-      ;(toolExecution as any).toolId = toolId
+      toolExecution.toolId = toolId
     }
 
-    const newStep = {
-      type: 'tool_use' as const,
+    const newStep: ToolStep = {
+      type: 'tool_use',
       content: '',
       timestamp: Date.now(),
       toolExecution,
     }
-    tempMessage.steps?.push(newStep as any)
+    tempMessage.steps?.push(newStep)
     return newStep
   }
 
-  const updateToolStepParams = (toolStep: any, params: Record<string, unknown>) => {
+  const updateToolStepParams = (toolStep: ToolStep, params: Record<string, unknown>) => {
     toolStep.toolExecution.params = {
       ...toolStep.toolExecution.params,
       ...params,
@@ -426,21 +406,21 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     if (message.type !== 'tool_result') return
 
     // 优先根据 toolId 查找对应的工具步骤
-    let toolStep = null
+    let toolStep: ToolStep | undefined = undefined
     if (message.toolId) {
       toolStep = tempMessage.steps?.find(
-        step => step.type === 'tool_use' && (step as any).toolExecution?.toolId === message.toolId
-      )
+        step => step.type === 'tool_use' && 'toolExecution' in step && step.toolExecution.toolId === message.toolId
+      ) as ToolStep | undefined
     }
 
-    if (toolStep && (toolStep as any).toolExecution) {
+    if (toolStep && toolStep.toolExecution) {
       const hasError = isToolResultError(message.toolResult)
-      ;(toolStep as any).toolExecution.status = hasError ? 'error' : 'completed'
-      ;(toolStep as any).toolExecution.endTime = Date.now()
-      ;(toolStep as any).toolExecution.result = message.toolResult
+      toolStep.toolExecution.status = hasError ? 'error' : 'completed'
+      toolStep.toolExecution.endTime = Date.now()
+      toolStep.toolExecution.result = message.toolResult
 
       if (hasError) {
-        ;(toolStep as any).toolExecution.error = 'Tool execution failed'
+        toolStep.toolExecution.error = 'Tool execution failed'
       }
     } else if (!toolStep) {
       console.warn('工具结果无法匹配到对应步骤，toolId:', message.toolId)
@@ -450,23 +430,23 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const updateOrCreateStep = (
     tempMessage: Message,
     stepData: {
-      type: string
+      type: 'thinking' | 'text' | 'task_thought' | 'error'
       content: string
       streamId?: string
       streamDone?: boolean
     }
   ) => {
-    let targetStep: any = null
+    let targetStep: NonToolStep | undefined = undefined
 
     // 优化查找逻辑：基于 streamId 和类型查找现有步骤
     if (stepData.streamId) {
       targetStep = tempMessage.steps?.find(
         step => step.type === stepData.type && step.metadata?.streamId === stepData.streamId
-      )
+      ) as NonToolStep | undefined
     } else if (stepData.type === 'thinking') {
       // 对于 thinking 类型，如果没有 streamId，查找最后一个 thinking 步骤
       const thinkingSteps = tempMessage.steps?.filter(step => step.type === 'thinking') || []
-      targetStep = thinkingSteps[thinkingSteps.length - 1] || null
+      targetStep = thinkingSteps[thinkingSteps.length - 1] as NonToolStep | undefined
     }
 
     if (targetStep) {
@@ -477,24 +457,25 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       if (stepData.streamDone) {
         targetStep.metadata = {
           ...targetStep.metadata,
-          streamDone: true,
-          completedAt: Date.now(),
+          streamId: stepData.streamId,
         }
 
         // 对于 thinking 类型，计算思考持续时间
         if (stepData.type === 'thinking') {
-          targetStep.metadata.thinkingDuration = Date.now() - targetStep.timestamp
+          targetStep.metadata = {
+            ...targetStep.metadata,
+            thinkingDuration: Date.now() - targetStep.timestamp,
+          }
         }
       }
     } else {
       // 创建新步骤
-      const newStep = {
-        type: stepData.type as any,
+      const newStep: NonToolStep = {
+        type: stepData.type,
         content: stepData.content,
         timestamp: Date.now(),
         metadata: {
           ...(stepData.streamId ? { streamId: stepData.streamId } : {}),
-          ...(stepData.streamDone ? { streamDone: true, completedAt: Date.now() } : {}),
         },
       }
 
@@ -507,16 +488,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       if (!ekoInstance.value) {
         const handleStreamMessage = async (message: StreamCallbackMessage) => {
           try {
-            // 性能优化：过滤不需要的消息
-            if (shouldSkipMessage(message)) {
-              return
-            }
-
             const tempMessage = messageList.value[messageList.value.length - 1]
             if (!tempMessage || tempMessage.role !== 'assistant') return
 
             tempMessage.steps = tempMessage.steps || []
-
+            console.log('message', message)
             switch (message.type) {
               case 'tool_use':
                 handleToolUse(tempMessage, message)
@@ -541,16 +517,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                 }
                 break
 
-              case 'task':
-                if (message.type === 'task') {
-                  updateOrCreateStep(tempMessage, {
-                    type: 'task',
-                    content: message.task?.name || '',
-                    streamDone: message.streamDone,
-                  })
-                }
-                break
-
               case 'text':
                 if (message.type === 'text') {
                   updateOrCreateStep(tempMessage, {
@@ -562,6 +528,21 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
                   if (message.streamDone) {
                     tempMessage.content = message.text || ''
+                  }
+                }
+                break
+
+              case 'task':
+                if (message.type === 'task') {
+                  updateOrCreateStep(tempMessage, {
+                    type: 'task_thought',
+                    content: message.task?.thought || '',
+                    streamId: `task_${message.taskId}`,
+                    streamDone: message.streamDone,
+                  })
+
+                  if (message.streamDone) {
+                    tempMessage.content = message.task?.thought || ''
                   }
                 }
                 break
@@ -585,39 +566,19 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                 }
                 break
 
-              case 'tool_running':
-                // 工具执行中的输出
-                if (message.type === 'tool_running') {
-                  // 可以实时显示工具执行的输出
-                }
-                break
-
-              case 'file':
-                // 文件输出处理
-                if (message.type === 'file') {
-                  tempMessage.steps?.push({
-                    type: 'file' as any,
-                    content: '',
-                    timestamp: Date.now(),
-                    metadata: {
-                      streamId: `file-${Date.now()}`,
-                    },
-                  })
-                }
-                break
-
               case 'error':
                 // 错误处理
                 if (message.type === 'error') {
-                  tempMessage.steps?.push({
-                    type: 'error' as any,
+                  const errorStep: NonToolStep = {
+                    type: 'error',
                     content: '',
                     timestamp: Date.now(),
                     metadata: {
                       errorType: 'execution_error',
                       errorDetails: String(message.error),
                     },
-                  })
+                  }
+                  tempMessage.steps?.push(errorStep)
                   tempMessage.status = 'error'
                 }
                 break

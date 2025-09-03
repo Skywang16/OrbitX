@@ -99,7 +99,7 @@ export type ChatStreamCallbackMessage =
       type: 'tool_use'
       toolName: string
       toolId: string
-      params: Record<string, any>
+      params: Record<string, unknown>
     }
   | {
       type: 'tool_running'
@@ -113,7 +113,7 @@ export type ChatStreamCallbackMessage =
       type: 'tool_result'
       toolName: string
       toolId: string
-      params: Record<string, any>
+      params: Record<string, unknown>
       toolResult: ToolResult
     }
   | {

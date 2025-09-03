@@ -8,6 +8,7 @@ export interface ToolExecution {
   endTime?: number
   result?: unknown
   error?: string
+  toolId?: string
 }
 
 export type AIProvider = 'openAI' | 'claude' | 'custom'
@@ -108,7 +109,7 @@ export interface AIHealthStatus {
 export interface StreamChunk {
   content: string
   isComplete: boolean
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export type StreamCallback = (chunk: StreamChunk) => void
@@ -148,7 +149,7 @@ export interface ToolStep extends BaseStep {
 }
 
 export interface NonToolStep extends BaseStep {
-  type: 'thinking' | 'task' | 'text' | 'error'
+  type: 'thinking' | 'task' | 'task_thought' | 'text' | 'error'
 }
 
 export type AIOutputStep = ToolStep | NonToolStep

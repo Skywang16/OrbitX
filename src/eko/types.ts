@@ -16,9 +16,6 @@ export interface TerminalCallback {
   onHumanInput: (agentContext: AgentContext, prompt: string) => Promise<string>
   onHumanSelect: (agentContext: AgentContext, prompt: string, options: readonly string[]) => Promise<string[]>
   onHumanHelp: (agentContext: AgentContext, helpType: string, prompt: string) => Promise<boolean>
-  onCommandConfirm: (agentContext: AgentContext, command: string) => Promise<boolean>
-  onFileSelect: (agentContext: AgentContext, prompt: string, directory?: string) => Promise<string>
-  onPathInput: (agentContext: AgentContext, prompt: string, defaultPath?: string) => Promise<string>
 }
 
 // Import StreamCallbackMessage from the Eko package to avoid type mismatches

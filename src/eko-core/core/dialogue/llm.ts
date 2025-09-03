@@ -74,7 +74,7 @@ export async function callChatLLM(
               type: 'tool_use',
               toolId: toolPart.toolCallId,
               toolName: toolPart.toolName,
-              params: toolPart.input || {},
+              params: (toolPart.input as Record<string, unknown>) || {},
             })
             toolPart = null
           }
@@ -196,7 +196,7 @@ export async function callChatLLM(
               type: 'tool_use',
               toolId: toolPart.toolCallId,
               toolName: toolPart.toolName,
-              params: toolPart.input || {},
+              params: (toolPart.input as Record<string, unknown>) || {},
             })
             toolPart = null
           }

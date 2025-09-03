@@ -264,7 +264,7 @@ export async function callAgentLLM(
                 type: 'tool_use',
                 toolId: toolPart.toolCallId,
                 toolName: toolPart.toolName,
-                params: toolPart.input || {},
+                params: (toolPart.input as Record<string, unknown>) || {},
               },
               agentContext
             )
@@ -451,7 +451,7 @@ export async function callAgentLLM(
                 type: 'tool_use',
                 toolId: toolPart.toolCallId,
                 toolName: toolPart.toolName,
-                params: toolPart.input || {},
+                params: (toolPart.input as Record<string, unknown>) || {},
               },
               agentContext
             )

@@ -168,7 +168,7 @@ export class EkoDialogue {
           type: 'tool_result',
           toolId: result.toolCallId,
           toolName: result.toolName,
-          params: result.input || {},
+          params: (result.input as Record<string, unknown>) || {},
           toolResult: toolResult,
         })
       }

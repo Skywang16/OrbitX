@@ -48,27 +48,19 @@ export type StreamCallbackMessage = {
       type: 'tool_use'
       toolName: string
       toolId: string
-      params: Record<string, any>
-    }
-  | {
-      type: 'tool_running'
-      toolName: string
-      toolId: string
-      text: string
-      streamId: string
-      streamDone: boolean
+      params: Record<string, unknown>
     }
   | {
       type: 'tool_result'
       toolName: string
       toolId: string
-      params: Record<string, any>
+      params: Record<string, unknown>
       toolResult: ToolResult
     }
   | {
       type: 'agent_result'
       task: Task
-      error?: any
+      error?: unknown
       result?: string
     }
   | {

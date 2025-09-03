@@ -6,7 +6,7 @@
   import ThinkingBlock from './msgBlock/ThinkingBlock.vue'
   import ToolBlock from './msgBlock/ToolBlock.vue'
   import { useAIChatStore } from '../store'
-
+  import { formatTime } from '@/utils/dateFormatter'
   const { t } = useI18n()
 
   interface Props {
@@ -24,8 +24,6 @@
 
     return props.message.steps
   })
-
-  import { formatTime } from '@/utils/dateFormatter'
 
   // 格式化持续时间
   const formatDuration = (ms: number) => {
@@ -57,13 +55,9 @@
           <div v-html="renderMarkdown(step.content)"></div>
         </div>
 
-        <!-- 文件输出 -->
-        <div v-else-if="(step as any).type === 'file'" class="file-output step-block">
-          <div class="file-header">
-            <span class="file-icon">📁</span>
-            <span class="file-label">文件输出</span>
-          </div>
-          <div class="file-content">{{ (step as any).content }}</div>
+        <!-- 任务思考内容 -->
+        <div v-else-if="step.type === 'task_thought'" class="ai-message-text step-block">
+          <div v-html="renderMarkdown(step.content)"></div>
         </div>
 
         <!-- 错误信息 -->
@@ -73,15 +67,6 @@
             <span class="error-label">执行错误</span>
           </div>
           <div class="error-content">{{ step.content }}</div>
-        </div>
-
-        <!-- 任务事件 -->
-        <div v-else-if="step.type === 'task'" class="task-output step-block">
-          <div class="task-header">
-            <span class="task-icon">📋</span>
-            <span class="task-label">任务事件</span>
-          </div>
-          <div class="task-content">{{ step.content }}</div>
         </div>
 
         <!-- 未知类型的步骤 -->
@@ -279,40 +264,6 @@
     50% {
       opacity: 0.5;
     }
-  }
-
-  /* 文件输出样式 */
-  .file-output {
-    border: 1px solid var(--border-300);
-    border-radius: var(--border-radius);
-    background: var(--bg-300);
-  }
-
-  .file-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-    padding: var(--spacing-sm) var(--spacing-md);
-    background: var(--bg-400);
-    border-bottom: 1px solid var(--border-300);
-    border-radius: var(--border-radius) var(--border-radius) 0 0;
-  }
-
-  .file-icon {
-    font-size: var(--font-size-sm);
-  }
-
-  .file-label {
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    color: var(--text-400);
-  }
-
-  .file-content {
-    padding: var(--spacing-md);
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--text-300);
   }
 
   /* 错误输出样式 */
