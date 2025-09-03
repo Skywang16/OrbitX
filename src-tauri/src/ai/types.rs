@@ -1,5 +1,5 @@
 /*!
- * AI相关的数据类型定义 - 简化版
+ * AI相关的数据类型定义
  */
 
 use chrono::{DateTime, Utc};

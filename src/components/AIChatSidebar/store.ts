@@ -546,7 +546,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                 if (message.type === 'workflow') {
                   // workflow 消息类型在官方定义中包含 workflow 对象
                   // 这里可以根据需要处理工作流信息
-                  // 注意：新版本eko已将workflow替换为task，但保持兼容性
+                  // eko已将workflow替换为task
                 }
                 break
 

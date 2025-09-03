@@ -1,5 +1,5 @@
 /*!
- * AI功能的Tauri命令接口 - 全新重构版本
+ * AI功能的Tauri命令接口
  *
  * 实现基于会话上下文管理的AI命令接口
  */
@@ -15,7 +15,7 @@ use std::sync::Arc;
 use tauri::State;
 use tracing::debug;
 
-/// AI管理器状态 - 重构版本
+/// AI管理器状态
 pub struct AIManagerState {
     pub ai_service: Arc<AIService>,
     pub repositories: Arc<RepositoryManager>,

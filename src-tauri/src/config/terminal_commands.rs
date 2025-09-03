@@ -308,11 +308,7 @@ pub async fn update_terminal_behavior_config(
     info!("终端行为配置更新成功");
     Ok(())
 }
-// ============================================================================
-// 兼容性存根函数
-// ============================================================================
-
-/// 获取Shell信息（存根实现）
+/// 获取Shell信息
 #[tauri::command]
 pub async fn get_shell_info(_state: State<'_, ConfigManagerState>) -> Result<String, String> {
     debug!("开始获取Shell信息");

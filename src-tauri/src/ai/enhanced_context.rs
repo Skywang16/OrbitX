@@ -258,7 +258,7 @@ impl ContextManager {
         // 添加标签上下文信息
         if let Some(tag_ctx) = tag_context {
             debug!("🏷️ 处理标签上下文");
-            self.add_tag_context_to_prompt(&mut parts, &tag_ctx, current_working_directory);
+            self.add_tag_context_to_prompt(&mut parts, &tag_ctx);
         } else if let Some(_cwd) = current_working_directory {
             // 工作目录信息已移除 - Agent工具会自动继承终端的工作目录
             // 不再在prompt中显示技术细节，减少LLM噪音
@@ -301,12 +301,7 @@ impl ContextManager {
     }
 
     /// 添加标签上下文信息到prompt
-    fn add_tag_context_to_prompt(
-        &self,
-        parts: &mut Vec<String>,
-        tag_context: &serde_json::Value,
-        fallback_cwd: Option<&str>,
-    ) {
+    fn add_tag_context_to_prompt(&self, parts: &mut Vec<String>, tag_context: &serde_json::Value) {
         let mut env_parts = Vec::new();
 
         // 处理终端标签页信息（仅保留Shell信息，移除工作目录）
@@ -920,7 +915,7 @@ impl ContextManager {
     /// 获取缓存统计
     pub fn cache_stats(&self) -> CacheStats {
         CacheStats {
-            total_entries: 0, // 简化版本，不统计具体数量
+            total_entries: 0, // 不统计具体数量
         }
     }
 
@@ -929,10 +924,9 @@ impl ContextManager {
         self.cache.cleanup_expired()
     }
 
-    /// 失效缓存（兼容性方法）
+    /// 失效缓存
     pub fn invalidate_cache(&self, _conv_id: i64) {
-        // 简化版本，不做具体操作
-        debug!("缓存失效请求已忽略（简化版本）");
+        debug!("缓存失效请求已忽略");
     }
 }
 

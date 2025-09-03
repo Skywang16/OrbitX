@@ -352,7 +352,7 @@ impl OutputAnalyzer {
         let extractor = SmartExtractor::global();
         let extraction_results = extractor.extract_entities(command, output)?;
 
-        // 转换为旧格式以兼容现有代码
+        // 转换为标准格式
         let mut entities = HashMap::new();
         for result in extraction_results {
             entities

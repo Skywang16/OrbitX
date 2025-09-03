@@ -240,7 +240,7 @@ impl NpmCompletionProvider {
         Ok(completions)
     }
 
-    /// 获取包搜索补全（简化版，避免过多网络请求）
+    /// 获取包搜索补全
     async fn get_package_search_completions(&self, query: &str) -> AppResult<Vec<CompletionItem>> {
         if query.len() < 3 {
             return Ok(vec![]);

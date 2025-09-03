@@ -58,7 +58,6 @@ export async function buildDialogueSystemPrompt(extSysPrompt?: string): Promise<
  * 同步版本：用于构造函数等需要同步调用的场景
  */
 export function getDialogueSystemPrompt(extSysPrompt?: string): string {
-  // 简化版本，用于保持向后兼容
   let prompt = ''
   if (extSysPrompt && extSysPrompt.trim()) {
     prompt += '\n' + extSysPrompt.trim() + '\n'

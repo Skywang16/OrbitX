@@ -74,7 +74,7 @@ export const useTerminalSelection = () => {
     selectedTerminalData.value = { text, startLine, endLine: actualEndLine, path }
   }
 
-  // 清除选择 - 简化
+  // 清除选择
   const clearSelection = () => {
     selectedTerminalData.value = null
   }
@@ -139,10 +139,6 @@ export const useTerminalSelection = () => {
     return result
   }
 
-  const clearTerminalTab = () => {
-    // 清除终端标签（保留方法以兼容现有调用）
-  }
-
   return {
     // 状态
     selectedText,
@@ -157,6 +153,5 @@ export const useTerminalSelection = () => {
     // 新的标签管理方法
     getTagState,
     getTagContextInfo,
-    clearTerminalTab,
   }
 }

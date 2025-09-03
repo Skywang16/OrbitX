@@ -18,9 +18,6 @@
     visible: false,
   })
 
-  const emit = defineEmits<{
-    clear: []
-  }>()
 
   const { t } = useI18n()
 
@@ -64,12 +61,6 @@
       <span class="tag-text" :title="tooltipText">
         {{ displayText }}
       </span>
-      <button class="tag-close" @click="emit('clear')" :title="t('session.clear_terminal_tag')">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-      </button>
     </div>
   </div>
 </template>
@@ -92,8 +83,7 @@
     max-width: 100%;
   }
 
-  .tag-icon,
-  .tag-close {
+  .tag-icon {
     display: flex;
     align-items: center;
     flex-shrink: 0;
@@ -114,23 +104,4 @@
     transition: color 0.1s ease;
   }
 
-  .tag-close {
-    justify-content: center;
-    background: none;
-    border: none;
-    color: var(--text-400);
-    cursor: pointer;
-    padding: 2px;
-    border-radius: 50%;
-    transition: all 0.1s ease;
-  }
-
-  .tag-close:hover {
-    background-color: var(--bg-600);
-    color: var(--text-200);
-  }
-
-  .tag-close:active {
-    transform: scale(0.95);
-  }
 </style>

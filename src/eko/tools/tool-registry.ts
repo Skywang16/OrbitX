@@ -11,7 +11,6 @@ export interface ToolMetadata {
   category: string
   author?: string
   tags?: string[]
-  deprecated?: boolean
 }
 
 export interface RegisteredTool {
@@ -170,14 +169,6 @@ export class ToolRegistry {
       .map(registered => registered.tool)
   }
 
-  /**
-   * 获取非废弃的工具
-   */
-  getActive(): Tool[] {
-    return Array.from(this.tools.values())
-      .filter(registered => !registered.metadata.deprecated)
-      .map(registered => registered.tool)
-  }
 
   /**
    * 清空注册表
@@ -194,13 +185,11 @@ export class ToolRegistry {
     totalTools: number
     totalCategories: number
     activeTools: number
-    deprecatedTools: number
     toolsByCategory: Record<string, number>
   } {
     const totalTools = this.tools.size
     const totalCategories = this.categories.size
-    const activeTools = this.getActive().length
-    const deprecatedTools = totalTools - activeTools
+    const activeTools = totalTools
 
     const toolsByCategory: Record<string, number> = {}
     for (const [category, toolNames] of this.categories) {
@@ -211,7 +200,6 @@ export class ToolRegistry {
       totalTools,
       totalCategories,
       activeTools,
-      deprecatedTools,
       toolsByCategory,
     }
   }

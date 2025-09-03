@@ -167,7 +167,6 @@
       :shell="terminalSelection.currentTerminalTab.value?.shell"
       :cwd="terminalSelection.currentTerminalTab.value?.cwd"
       :display-path="terminalSelection.currentTerminalTab.value?.displayPath"
-      @clear="terminalSelection.clearTerminalTab"
     />
 
     <!-- 终端选择标签 -->

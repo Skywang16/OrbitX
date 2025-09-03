@@ -392,7 +392,7 @@ export class OrbitSearchTool extends ModifiableTool {
   }
 
   /**
-   * 读取文件内容（简化版本，直接读取文件）
+   * 读取文件内容
    */
   private async readFileContent(filePath: string): Promise<string> {
     try {

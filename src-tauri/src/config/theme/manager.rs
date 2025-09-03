@@ -828,7 +828,6 @@ selection = "rgba(3, 102, 214, 0.3)"
     /// 从打包的资源目录复制主题文件
     async fn copy_themes_from_resources(&self, _themes_dir: &Path) -> AppResult<()> {
         // 实际的资源复制在应用初始化时通过 AppHandle 完成
-        // 这里只是保持接口兼容性
         Ok(())
     }
 

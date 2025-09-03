@@ -23,7 +23,7 @@ pub struct WebFetchRequest {
     pub response_format: Option<String>,
     pub extract_content: Option<bool>,
     pub max_content_length: Option<usize>,
-    // 智能内容提取参数（简化版）
+    // 智能内容提取参数
     pub use_jina_reader: Option<bool>,
 }
 
@@ -293,7 +293,7 @@ pub async fn simple_web_fetch(url: String) -> Result<WebFetchResponse, String> {
         response_format: Some("text".to_string()),
         extract_content: Some(true),
         max_content_length: Some(2000),
-        use_jina_reader: Some(false), // 简化版本不使用
+        use_jina_reader: Some(false), // 不使用jina_reader
     };
 
     web_fetch_headless(request).await
