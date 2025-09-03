@@ -39,6 +39,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   >([])
   const currentTaskId = ref<string | null>(null)
   const currentNodeIndex = ref<number>(0) // 当前执行的节点索引
+  const taskStreamDone = ref(false) // 任务流是否完成
 
   // 节点状态更新函数
   const updateNodeStatus = (nodeIndex: number, status: 'pending' | 'running' | 'completed') => {
@@ -655,10 +656,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                       }))
                     currentTaskId.value = message.taskId
                     currentNodeIndex.value = 0
+                    taskStreamDone.value = false // 重置状态
                   }
 
                   if (message.streamDone) {
                     tempMessage.content = message.task?.thought || ''
+                    taskStreamDone.value = true // 标记任务流完成
                   }
                 }
                 break
@@ -805,6 +808,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     currentTaskNodes,
     currentTaskId,
     currentNodeIndex,
+    taskStreamDone,
     updateNodeStatus,
     advanceNodeProgress,
     isInitialized,

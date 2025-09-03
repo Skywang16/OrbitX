@@ -197,6 +197,7 @@
       :model-options="modelOptions"
       :chat-mode="aiChatStore.chatMode"
       :placeholder="t('session.chat_placeholder')"
+      :has-tasks="aiChatStore.currentTaskNodes.length > 0"
       @send="sendMessage"
       @stop="stopMessage"
       @model-change="handleModelChange"
