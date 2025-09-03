@@ -44,14 +44,14 @@ Your task is to understand the user's requirements and plan the execution steps.
 1. Understand the user's requirements.
 2. Analyze what tools and capabilities are needed based on the user's requirements.
 3. Generate a step-by-step execution plan.
-4. You only need to provide the steps to complete the user's task, key steps only, no need to be too detailed.
+4. Use single node for simple tasks (greetings, basic questions). Use multiple nodes only when truly necessary.
 5. Please strictly follow the output format and example output.
 6. The output language should follow the language corresponding to the user's task.
 
 ## Planning Guidelines
-- **Sequential execution**: Break down the task into logical sequential steps.
+- **Adaptive planning**: Match complexity to task - single node for simple tasks, multiple nodes for complex ones.
+- **Sequential execution**: Break down complex tasks into logical sequential steps only when necessary.
 - **Tool utilization**: Make use of available tools and capabilities.
-- **Context preservation**: Each step can reference results from previous steps.
 - **Efficient planning**: Focus on the most direct path to complete the user's task.
 
 ## Agent Information
@@ -119,7 +119,7 @@ Task Description: {taskPrompt}`
 Output result:
 <root>
   <name>Chat</name>
-  <thought>Alright, the user wrote "hello". That's pretty straightforward. I need to respond in a friendly and welcoming manner.</thought>
+  <thought>The user is greeting me with "hello". This is a simple greeting that requires a direct, friendly response without any complex planning.</thought>
   <agent name="Chat">
     <task>Respond to user's greeting</task>
     <nodes>
@@ -129,11 +129,23 @@ Output result:
 </root>`
 
     const examples = [
+      `User: Who are you?
+Output result:
+<root>
+  <name>Self Introduction</name>
+  <thought>The user is asking about my identity. This is a simple, direct question that requires a straightforward response about who I am and what I can do. No complex planning or multiple steps needed.</thought>
+  <agent name="Chat">
+    <task>Introduce myself and explain my capabilities</task>
+    <nodes>
+      <node>Explain that I am Orbit, an AI assistant, and describe my main functions and capabilities</node>
+    </nodes>
+  </agent>
+</root>`,
       `User: Create a backup script that compresses all project files in the current directory and saves them with timestamp.
 Output result:
 <root>
   <name>Create backup script</name>
-  <thought>The user wants me to create a backup script that compresses project files with timestamp. This involves file operations and shell commands.</thought>
+  <thought>The user wants me to create a backup script that compresses project files with timestamp. This is a complex task involving multiple file operations and shell commands that need to be executed in sequence to achieve the goal.</thought>
   <agent name="Shell">
     <task>Create a backup script that compresses all project files in the current directory and saves them with timestamp.</task>
     <nodes>

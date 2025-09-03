@@ -13,9 +13,9 @@ export const planningGuidelinesComponent: ComponentConfig = {
   description: '规划指导原则',
   required: false,
   template: `# Planning Guidelines
-- Sequential execution: Break down the task into logical sequential steps
+- Adaptive planning: Single node for simple tasks, multiple nodes for complex tasks only when necessary
+- Sequential execution: Break down tasks into logical sequential steps
 - Tool utilization: Make use of available tools and capabilities
-- Context preservation: Each step can reference results from previous steps
 - Efficient planning: Focus on the most direct path to complete the user's task`,
   fn: async () => {
     return planningGuidelinesComponent.template!
