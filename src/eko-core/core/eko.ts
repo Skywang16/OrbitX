@@ -82,8 +82,30 @@ export class Eko {
     taskId: string = uuidv4(),
     contextParams?: Record<string, any>
   ): Promise<EkoResult> {
-    await this.generate(taskPrompt, taskId, contextParams)
-    return await this.execute(taskId)
+    // 参考gemini-cli: 直接让Agent处理用户输入，不预生成task
+    const chain: Chain = new Chain(taskPrompt)
+    const context = new Context(taskId, this.config, this.agent, chain)
+
+    // 创建一个简单的task对象，但不通过Planner生成
+    context.task = {
+      taskId,
+      name: 'Direct Agent Task',
+      thought: 'Processing user request directly without pre-planning',
+      taskPrompt,
+      description: `Process user request: ${taskPrompt}`,
+      nodes: [], // Agent会根据需要动态创建节点
+      status: 'init',
+      xml: `<task>${taskPrompt}</task>`, // 简单的XML包装
+    }
+
+    this.taskMap.set(taskId, context)
+
+    try {
+      return await this.doRunTask(context)
+    } catch (e: any) {
+      this.deleteTask(taskId)
+      throw e
+    }
   }
 
   public async initContext(task: Task, _contextParams?: Record<string, any>): Promise<Context> {

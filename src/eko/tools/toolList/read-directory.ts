@@ -24,7 +24,7 @@ export class ReadDirectoryTool extends ModifiableTool {
   constructor() {
     super(
       'read_directory',
-      `Recursively list all files and subdirectories in a directory, up to 5 levels deep. Displays in tree structure format, directories end with "/", automatically filters hidden files. Output is in LLM-friendly tree format. Must use absolute paths.`,
+      `List directory contents in tree format. Use this for basic directory structure overview when orbit_search results need additional context. Recursively lists files and subdirectories up to 5 levels deep. For code understanding and finding specific functionality, prefer orbit_search instead. Must use absolute paths.`,
       {
         type: 'object',
         properties: {

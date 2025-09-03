@@ -60,7 +60,7 @@ export class OrbitSearchTool extends ModifiableTool {
   constructor() {
     super(
       'orbit_search',
-      `Professional code search tool - prioritize using this tool for all code-related searches! Intelligent search engine combining text search, AST analysis, and semantic understanding. Supports single keyword or multi-keyword OR search (e.g., "gemini-cli OR xxxgemini OR gemini"). Suitable for searching function definitions, classes, interfaces, variables, code references and usage locations, code review and refactoring analysis, etc. Do not use shell commands for code search; this tool is smarter and more accurate than shell commands. Supports syntax analysis for multiple programming languages and can understand code structure and context. Must use absolute paths.`,
+      `Code search tool for finding specific code elements like functions, classes, variables, and patterns. Use specific code keywords, not natural language descriptions. Examples: search "Agent" to find Agent classes, "execute" to find execution methods, "workflow" to find workflow-related code. Supports single keyword or multi-keyword OR search (e.g., "Agent OR workflow"). Must use absolute paths.`,
       {
         type: 'object',
         properties: {
@@ -109,6 +109,10 @@ export class OrbitSearchTool extends ModifiableTool {
       const searchTime = Date.now() - startTime
       searchResult.searchTime = searchTime
       const resultText = this.formatSearchResults(searchResult)
+
+      console.log('🔍 orbit_search:', query, '→', searchResult.totalMatches, 'matches')
+      console.log('📄 LLM输出内容:')
+      console.log(resultText)
 
       return {
         content: [
@@ -655,47 +659,63 @@ export class OrbitSearchTool extends ModifiableTool {
    * 计算文本相关性评分
    */
   private calculateTextRelevanceScore(line: string, keywords: string[], filePath: string): number {
-    let score = 50 // 基础分数
+    const lineLower = line.toLowerCase()
+    let totalScore = 0
     let matchedKeywords = 0
 
-    const lineLower = line.toLowerCase()
-
-    // 检查每个关键词的匹配情况
+    // BM25-inspired scoring for each keyword
     for (const keyword of keywords) {
       const keywordLower = keyword.toLowerCase()
+      const escapedKeyword = keywordLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const wordRegex = new RegExp(`\\b${escapedKeyword}\\b`, 'i')
 
-      // 精确匹配
-      if (lineLower.includes(keywordLower)) {
-        score += 30
-        matchedKeywords++
+      let keywordScore = 0
 
-        // 单词边界匹配额外加分
-        const escapedKeyword = keywordLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const wordRegex = new RegExp(`\\b${escapedKeyword}\\b`, 'i')
-        if (wordRegex.test(line)) {
-          score += 20
-        }
+      // Term frequency (tf) - count occurrences
+      const tf = (lineLower.match(new RegExp(keywordLower, 'g')) || []).length
+      if (tf === 0) continue
+
+      matchedKeywords++
+
+      // BM25-like term frequency normalization
+      // tf * (k1 + 1) / (tf + k1)
+      const k1 = 1.5
+      const normalizedTf = (tf * (k1 + 1)) / (tf + k1)
+
+      // Word boundary bonus (like IDF boost)
+      if (wordRegex.test(line)) {
+        keywordScore = normalizedTf * 60 // Complete word match
+      } else {
+        keywordScore = normalizedTf * 20 // Partial match
       }
+
+      // Code structure bonus
+      if (
+        line.includes('function') ||
+        line.includes('class') ||
+        line.includes('interface') ||
+        line.includes('export') ||
+        line.includes('import')
+      ) {
+        keywordScore *= 1.3
+      }
+
+      totalScore += keywordScore
     }
 
-    // 匹配多个关键词的额外加分
+    // Multi-keyword bonus (like query coordination)
     if (matchedKeywords > 1) {
-      score += (matchedKeywords - 1) * 15
+      totalScore *= 1 + (matchedKeywords - 1) * 0.2
     }
 
-    // 文件类型权重
+    // File type boost
     const fileExt = filePath.split('.').pop()?.toLowerCase()
     const importantExtensions = ['ts', 'js', 'tsx', 'jsx', 'py', 'java', 'cpp', 'c', 'h']
     if (fileExt && importantExtensions.includes(fileExt)) {
-      score += 10
+      totalScore *= 1.1
     }
 
-    // 代码结构权重
-    if (line.includes('function') || line.includes('class') || line.includes('interface')) {
-      score += 15
-    }
-
-    return Math.min(score, 100)
+    return Math.min(Math.round(totalScore), 100)
   }
 
   /**

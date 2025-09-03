@@ -259,9 +259,11 @@ impl ContextManager {
         if let Some(tag_ctx) = tag_context {
             debug!("🏷️ 处理标签上下文");
             self.add_tag_context_to_prompt(&mut parts, &tag_ctx);
-        } else if let Some(_cwd) = current_working_directory {
-            // 工作目录信息已移除 - Agent工具会自动继承终端的工作目录
-            // 不再在prompt中显示技术细节，减少LLM噪音
+        }
+
+        // 添加当前工作目录信息
+        if let Some(cwd) = current_working_directory {
+            parts.push(format!("【当前工作目录】\n{}\n", cwd));
         }
 
         // 添加对话历史

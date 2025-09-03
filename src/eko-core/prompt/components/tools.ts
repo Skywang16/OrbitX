@@ -47,20 +47,17 @@ export const toolsDescriptionComponent: ComponentConfig = {
   description: '工具的基本描述',
   required: false,
   template: `# Available Tools
-You have access to the following tools:
 {toolsList}`,
   fn: async (context: ComponentContext) => {
     const { tools = [] } = context
-    
+
     if (tools.length === 0) return undefined
-    
-    const toolsList = tools
-      .map(tool => `- ${tool.name}: ${tool.description || ''}`)
-      .join('\n')
-    
+
+    const toolsList = tools.map(tool => `- ${tool.name}: ${tool.description || ''}`).join('\n')
+
     const template = toolsDescriptionComponent.template!
     return resolveTemplate(template, { toolsList })
-  }
+  },
 }
 
 /**
@@ -75,9 +72,9 @@ export const humanInteractionComponent: ComponentConfig = {
   fn: async (context: ComponentContext) => {
     const { tools = [] } = context
     const hasHumanTool = tools.some(tool => tool.name === human_interact)
-    
+
     return hasHumanTool ? humanInteractionComponent.template! : undefined
-  }
+  },
 }
 
 /**
@@ -93,9 +90,9 @@ export const foreachToolsComponent: ComponentConfig = {
   fn: async (context: ComponentContext) => {
     const { tools = [] } = context
     const hasForEachTool = tools.some(tool => tool.name === foreach_task)
-    
+
     return hasForEachTool ? foreachToolsComponent.template! : undefined
-  }
+  },
 }
 
 /**
@@ -111,7 +108,7 @@ export const watchToolsComponent: ComponentConfig = {
   fn: async (context: ComponentContext) => {
     const { tools = [] } = context
     const hasWatchTool = tools.some(tool => tool.name === watch_trigger)
-    
+
     return hasWatchTool ? watchToolsComponent.template! : undefined
-  }
+  },
 }
