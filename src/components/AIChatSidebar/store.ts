@@ -29,6 +29,63 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const conversations = ref<Conversation[]>([])
   const cancelFunction = ref<(() => void) | null>(null)
 
+  // 任务节点管理
+  const currentTaskNodes = ref<
+    Array<{
+      type: string
+      text: string
+      status?: 'pending' | 'running' | 'completed'
+    }>
+  >([])
+  const currentTaskId = ref<string | null>(null)
+  const currentNodeIndex = ref<number>(0) // 当前执行的节点索引
+
+  // 节点状态更新函数
+  const updateNodeStatus = (nodeIndex: number, status: 'pending' | 'running' | 'completed') => {
+    if (currentTaskNodes.value[nodeIndex]) {
+      currentTaskNodes.value[nodeIndex].status = status
+    }
+  }
+
+  // 根据nodeId解析节点信息
+  const parseNodeId = (nodeId: string, taskId: string) => {
+    if (!nodeId || !taskId) return null
+
+    // 移除taskId前缀
+    const suffix = nodeId.replace(`${taskId}_`, '')
+
+    if (suffix.startsWith('node_')) {
+      // 具体节点: taskId_node_0, taskId_node_1
+      const nodeIndex = parseInt(suffix.replace('node_', ''))
+      return { type: 'node', index: nodeIndex }
+    } else if (suffix === 'start') {
+      return { type: 'start', index: 0 }
+    } else if (suffix === 'execution') {
+      return { type: 'execution', index: currentNodeIndex.value }
+    } else if (suffix === 'thinking') {
+      return { type: 'thinking', index: currentNodeIndex.value }
+    }
+
+    return null
+  }
+
+  // 智能推进节点状态
+  const advanceNodeProgress = () => {
+    const currentIndex = currentNodeIndex.value
+    const totalNodes = currentTaskNodes.value.length
+
+    if (currentIndex < totalNodes) {
+      // 标记当前节点为已完成
+      updateNodeStatus(currentIndex, 'completed')
+
+      // 如果还有下一个节点，推进到下一个
+      if (currentIndex + 1 < totalNodes) {
+        currentNodeIndex.value = currentIndex + 1
+        updateNodeStatus(currentNodeIndex.value, 'running')
+      }
+    }
+  }
+
   const chatMode = ref<ChatMode>('chat')
   const ekoInstance = ref<TerminalEko | null>(null)
   const currentAgentId = ref<string | null>(null)
@@ -77,6 +134,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       if (existingEmptyConversation) {
         currentConversationId.value = existingEmptyConversation.id
         messageList.value = []
+        // 清空任务列表
+        currentTaskNodes.value = []
+        currentTaskId.value = null
         return
       }
 
@@ -86,6 +146,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       conversations.value.unshift(newConversation)
       currentConversationId.value = newConversation.id
       messageList.value = []
+      // 清空任务列表
+      currentTaskNodes.value = []
+      currentTaskId.value = null
     } catch (err) {
       error.value = handleErrorWithMessage(err, '创建会话失败')
     } finally {
@@ -120,6 +183,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const switchToConversation = async (conversationId: number): Promise<void> => {
     stopCurrentConversation()
     messageList.value = []
+    // 清空任务列表
+    currentTaskNodes.value = []
+    currentTaskId.value = null
     await loadConversation(conversationId, true)
   }
 
@@ -131,6 +197,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       if (currentConversationId.value === conversationId) {
         currentConversationId.value = null
         messageList.value = []
+        // 清空任务列表
+        currentTaskNodes.value = []
+        currentTaskId.value = null
       }
     } catch (err) {
       error.value = handleErrorWithMessage(err, '删除会话失败')
@@ -316,7 +385,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
     if (toolId) {
       existingStep = tempMessage.steps?.find(
-        step => step.type === 'tool_use' && 'toolExecution' in step && (step.toolExecution as any).toolId === toolId
+        step => step.type === 'tool_use' && 'toolExecution' in step && step.toolExecution.toolId === toolId
       ) as ToolStep | undefined
     }
 
@@ -422,6 +491,15 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       if (hasError) {
         toolStep.toolExecution.error = 'Tool execution failed'
       }
+
+      // 工具执行完成后，推进节点状态
+      if (!hasError && currentTaskId.value && message.nodeId) {
+        const nodeInfo = parseNodeId(message.nodeId, currentTaskId.value)
+        if (nodeInfo && nodeInfo.type === 'execution') {
+          // 工具执行成功，可能需要推进到下一个节点
+          advanceNodeProgress()
+        }
+      }
     } else if (!toolStep) {
       console.warn('工具结果无法匹配到对应步骤，toolId:', message.toolId)
     }
@@ -492,7 +570,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
             if (!tempMessage || tempMessage.role !== 'assistant') return
 
             tempMessage.steps = tempMessage.steps || []
-            console.log('message', message)
+            // 处理消息
             switch (message.type) {
               case 'tool_use':
                 handleToolUse(tempMessage, message)
@@ -514,6 +592,15 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                     streamId: message.streamId,
                     streamDone: message.streamDone,
                   })
+
+                  // 根据nodeId更新节点状态
+                  if (message.nodeId && currentTaskId.value) {
+                    const nodeInfo = parseNodeId(message.nodeId, currentTaskId.value)
+                    if (nodeInfo && nodeInfo.type === 'thinking') {
+                      // 思考阶段，保持当前节点为运行中
+                      updateNodeStatus(currentNodeIndex.value, 'running')
+                    }
+                  }
                 }
                 break
 
@@ -525,6 +612,22 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                     streamId: message.streamId,
                     streamDone: message.streamDone,
                   })
+
+                  // 根据nodeId更新节点状态
+                  if (message.nodeId && currentTaskId.value) {
+                    const nodeInfo = parseNodeId(message.nodeId, currentTaskId.value)
+                    if (nodeInfo && nodeInfo.type === 'execution') {
+                      // 执行阶段，当前节点运行中
+                      updateNodeStatus(currentNodeIndex.value, 'running')
+
+                      // 如果是流式完成，可能需要推进到下一个节点
+                      if (message.streamDone && currentNodeIndex.value < currentTaskNodes.value.length - 1) {
+                        updateNodeStatus(currentNodeIndex.value, 'completed')
+                        currentNodeIndex.value++
+                        updateNodeStatus(currentNodeIndex.value, 'running')
+                      }
+                    }
+                  }
 
                   if (message.streamDone) {
                     tempMessage.content = message.text || ''
@@ -541,6 +644,19 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                     streamDone: message.streamDone,
                   })
 
+                  // 更新任务节点 - 只处理 TaskTextNode 类型
+                  if (message.task?.nodes && message.task.nodes.length > 0) {
+                    currentTaskNodes.value = message.task.nodes
+                      .filter(node => node.type === 'normal' && 'text' in node)
+                      .map((node, index) => ({
+                        type: node.type,
+                        text: 'text' in node ? node.text : '',
+                        status: (index === 0 ? 'pending' : 'pending') as 'pending' | 'running' | 'completed',
+                      }))
+                    currentTaskId.value = message.taskId
+                    currentNodeIndex.value = 0
+                  }
+
                   if (message.streamDone) {
                     tempMessage.content = message.task?.thought || ''
                   }
@@ -550,7 +666,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               case 'agent_start':
                 // 代理开始执行，可以添加状态指示
                 if (message.type === 'agent_start') {
-                  // Agent started
+                  // 任务开始，将第一个节点设为运行中
+                  if (currentTaskNodes.value.length > 0) {
+                    updateNodeStatus(0, 'running')
+                    currentNodeIndex.value = 0
+                  }
                 }
                 break
 
@@ -562,6 +682,10 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                     tempMessage.status = 'error'
                   } else {
                     tempMessage.status = 'complete'
+                    // 标记所有节点为已完成
+                    currentTaskNodes.value.forEach((_, index) => {
+                      updateNodeStatus(index, 'completed')
+                    })
                   }
                 }
                 break
@@ -678,6 +802,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     chatMode,
     ekoInstance,
     currentAgentId,
+    currentTaskNodes,
+    currentTaskId,
+    currentNodeIndex,
+    updateNodeStatus,
+    advanceNodeProgress,
     isInitialized,
     hasMessages,
     canSendMessage,

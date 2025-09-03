@@ -94,6 +94,7 @@
     padding: var(--spacing-md);
     display: flex;
     flex-direction: column;
+    padding-bottom: 80px; /* 为TaskList预留空间 */
   }
 
   .empty-state {

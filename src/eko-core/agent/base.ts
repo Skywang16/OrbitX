@@ -4,7 +4,7 @@ import { extractUsedTool, removeDuplicateToolUse, handleLargeContextMessages } f
 import { RetryLanguageModel } from '../llm'
 import { ToolWrapper } from '../tools/wrapper'
 import { ToolChain } from '../core/chain'
-import Context, { AgentContext } from '../core/context'
+import Context, { AgentContext, generateNodeId } from '../core/context'
 import { ForeachTaskTool, McpTool, WatchTriggerTool } from '../tools'
 import { mergeTools } from '../common/utils'
 import {
@@ -85,6 +85,9 @@ export class Agent {
     this.agentContext = agentContext
     const context = agentContext.context
     const task = context.task
+
+    // 设置执行阶段的nodeId
+    context.currentNodeId = generateNodeId(context.taskId, 'execution')
     const tools = [...this.tools, ...this.system_auto_tools(task)]
     const systemPrompt = await this.buildSystemPrompt(agentContext, tools)
     const userPrompt = await this.buildUserPrompt(agentContext, tools)

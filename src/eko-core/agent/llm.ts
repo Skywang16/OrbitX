@@ -2,7 +2,7 @@ import config from '../config'
 import Log from '../common/log'
 import * as memory from '../memory'
 import { RetryLanguageModel } from '../llm'
-import { AgentContext } from '../core/context'
+import { AgentContext, generateNodeId } from '../core/context'
 import { uuidv4, sleep, toFile, getMimeType } from '../common/utils'
 import {
   LLMRequest,
@@ -275,11 +275,12 @@ export async function callAgentLLM(
         case 'text-end': {
           textStreamDone = true
           if (streamText) {
+            const textNodeId = agentContext.context.currentNodeId || generateNodeId(context.taskId, 'execution')
             await streamCallback.onMessage(
               {
                 taskId: context.taskId,
                 agentName: agentContext.agent.Name,
-                nodeId: agentContext.context.taskId,
+                nodeId: textNodeId,
                 type: 'text',
                 streamId: textStreamId,
                 streamDone: true,
@@ -296,11 +297,12 @@ export async function callAgentLLM(
         }
         case 'reasoning-delta': {
           thinkText += chunk.delta || ''
+          const thinkingNodeId = generateNodeId(context.taskId, 'thinking')
           await streamCallback.onMessage(
             {
               taskId: context.taskId,
               agentName: agentContext.agent.Name,
-              nodeId: agentContext.context.taskId,
+              nodeId: thinkingNodeId,
               type: 'thinking',
               streamId: thinkStreamId,
               streamDone: false,
@@ -312,11 +314,12 @@ export async function callAgentLLM(
         }
         case 'reasoning-end': {
           if (thinkText) {
+            const thinkingNodeId = generateNodeId(context.taskId, 'thinking')
             await streamCallback.onMessage(
               {
                 taskId: context.taskId,
                 agentName: agentContext.agent.Name,
-                nodeId: agentContext.context.taskId,
+                nodeId: thinkingNodeId,
                 type: 'thinking',
                 streamId: thinkStreamId,
                 streamDone: true,
@@ -429,11 +432,12 @@ export async function callAgentLLM(
         case 'finish': {
           if (!textStreamDone) {
             textStreamDone = true
+            const textNodeId = agentContext.context.currentNodeId || generateNodeId(context.taskId, 'execution')
             await streamCallback.onMessage(
               {
                 taskId: context.taskId,
                 agentName: agentContext.agent.Name,
-                nodeId: agentContext.context.taskId,
+                nodeId: textNodeId,
                 type: 'text',
                 streamId: textStreamId,
                 streamDone: true,
@@ -443,11 +447,12 @@ export async function callAgentLLM(
             )
           }
           if (toolPart) {
+            const toolNodeId = agentContext.context.currentNodeId || generateNodeId(context.taskId, 'execution')
             await streamCallback.onMessage(
               {
                 taskId: context.taskId,
                 agentName: agentContext.agent.Name,
-                nodeId: agentContext.context.taskId,
+                nodeId: toolNodeId,
                 type: 'tool_use',
                 toolId: toolPart.toolCallId,
                 toolName: toolPart.toolName,

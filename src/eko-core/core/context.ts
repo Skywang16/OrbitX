@@ -3,6 +3,24 @@ import { sleep } from '../common/utils'
 import Chain from './chain'
 import { EkoConfig, LanguageModelV2Prompt, Task } from '../types'
 
+/**
+ * 生成节点ID
+ * @param taskId 任务ID
+ * @param phase 执行阶段
+ * @param nodeIndex 节点索引（可选）
+ * @returns 生成的节点ID
+ */
+export function generateNodeId(
+  taskId: string,
+  phase: 'planning' | 'execution' | 'thinking' | 'start',
+  nodeIndex?: number
+): string {
+  if (nodeIndex !== undefined) {
+    return `${taskId}_node_${nodeIndex}`
+  }
+  return `${taskId}_${phase}`
+}
+
 export default class Context {
   taskId: string
   config: EkoConfig
@@ -11,6 +29,7 @@ export default class Context {
   controller: AbortController
   task?: Task
   conversation: string[] = []
+  currentNodeId?: string // 当前执行的节点ID
   private pauseStatus: 0 | 1 | 2 = 0
   readonly currentStepControllers: Set<AbortController> = new Set()
 

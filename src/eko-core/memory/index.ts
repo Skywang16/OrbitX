@@ -9,7 +9,7 @@ import { Tool } from '../types'
 import TaskSnapshotTool from './snapshot'
 import { RetryLanguageModel } from '../llm'
 import { mergeTools } from '../common/utils'
-import { AgentContext } from '../core/context'
+import { AgentContext, generateNodeId } from '../core/context'
 import Log from '../common/log'
 
 export function extractUsedTool<T extends Tool | LanguageModelV2FunctionTool>(
@@ -124,11 +124,13 @@ async function doCompressAgentMessages(
   const toolResult = await snapshotTool.execute(args, agentContext)
   const callback = agentContext.context.config.callback
   if (callback) {
+    const toolResultNodeId =
+      agentContext.context.currentNodeId || generateNodeId(agentContext.context.taskId, 'execution')
     await callback.onMessage(
       {
         taskId: agentContext.context.taskId,
         agentName: agentContext.agent.Name,
-        nodeId: agentContext.context.taskId,
+        nodeId: toolResultNodeId,
         type: 'tool_result',
         toolId: toolCall.toolCallId,
         toolName: toolCall.toolName,

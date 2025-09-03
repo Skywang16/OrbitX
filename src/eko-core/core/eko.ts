@@ -1,4 +1,4 @@
-import Context from './context'
+import Context, { generateNodeId } from './context'
 import { Agent } from '../agent'
 import { Planner } from './plan'
 import Log from '../common/log'
@@ -105,10 +105,13 @@ export class Eko {
 
     try {
       // Notify task start
+      const startNodeId = generateNodeId(context.taskId, 'start')
+      context.currentNodeId = startNodeId
       this.config.callback &&
         (await this.config.callback.onMessage({
           taskId: context.taskId,
           agentName: this.agent.Name,
+          nodeId: startNodeId,
           type: 'agent_start',
           task: task,
         }))
