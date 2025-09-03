@@ -87,12 +87,13 @@
 
 <style scoped>
   .task-list {
-    margin: 0 10px 0 10px; /* 减小边距 */
+    margin: 0 10px 0 10px;
     border-radius: 6px 6px 0 0;
-    background-color: transparent;
+    background-color: rgba(37, 37, 38, 0.8); /* 半透明背景 */
     border: 1px solid var(--border-200);
     border-bottom: none;
     overflow: hidden;
+    backdrop-filter: blur(2px); /* 轻微模糊效果 */
   }
 
   .task-list-header {
@@ -100,14 +101,14 @@
     align-items: center;
     justify-content: space-between;
     padding: 4px 8px;
-    background-color: rgba(37, 37, 38, 0.7); /* 更透明的背景 */
+    background-color: rgba(37, 37, 38, 0.9); /* 与task-list背景一致但稍微不透明 */
     border-bottom: 1px solid var(--border-200);
     cursor: pointer;
     user-select: none;
   }
 
   .task-list-header:hover {
-    background-color: rgba(255, 255, 255, 0.05); /* 更轻的悬停效果 */
+    background-color: rgba(255, 255, 255, 0.08); /* 更明显的悬停效果 */
   }
 
   .task-list-title {
@@ -158,7 +159,7 @@
   }
 
   .task-item:hover {
-    background-color: rgba(255, 255, 255, 0.03); /* 更轻的悬停效果 */
+    background-color: rgba(255, 255, 255, 0.08); /* 更明显的悬停效果 */
   }
 
   .task-item-content {

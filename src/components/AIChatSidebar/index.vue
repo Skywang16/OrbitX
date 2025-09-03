@@ -9,6 +9,7 @@
   import MessageList from './components/MessageList.vue'
   import ChatInput from './components/ChatInput.vue'
   import ResizeHandle from './components/ResizeHandle.vue'
+  import TaskList from './components/TaskList.vue'
 
   const aiChatStore = useAIChatStore()
   const aiSettingsStore = useAISettingsStore()
@@ -184,6 +185,8 @@
     />
 
     <MessageList :messages="aiChatStore.messageList" />
+
+    <TaskList :task-nodes="aiChatStore.currentTaskNodes" :task-id="aiChatStore.currentTaskId || ''" />
 
     <ChatInput
       ref="chatInputRef"
