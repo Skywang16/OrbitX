@@ -31,13 +31,13 @@ pub enum CommandStatus {
     Finished { exit_code: Option<i32> },
 }
 
-/// OSC序列类型 - 支持Shell Integration（OSC 633）、CWD（OSC 7）等
+/// OSC序列类型 - 支持Shell Integration（OSC 133）、CWD（OSC 7）等
 #[derive(Debug, Clone)]
 pub enum OscSequence {
     /// OSC 7 - 当前工作目录
     CurrentWorkingDirectory { path: String },
 
-    /// OSC 633 序列 - Shell Integration（命令生命周期）
+    /// OSC 133 序列 - Shell Integration（命令生命周期）
     ShellIntegration {
         marker: IntegrationMarker,
         data: Option<String>,
@@ -56,7 +56,7 @@ pub enum OscSequence {
     Unknown { number: String, data: String },
 }
 
-/// Shell Integration（OSC 633）标记
+/// Shell Integration（OSC 133）标记
 #[derive(Debug, Clone, PartialEq)]
 pub enum IntegrationMarker {
     /// A - 命令开始前（提示符开始）
@@ -108,8 +108,8 @@ impl OscParser {
         // 基本OSC序列正则表达式
         let osc_regex = Regex::new(r"\x1b]([0-9]+);([^\x07\x1b]*?)(?:\x07|\x1b\\)")?;
 
-        // Shell Integration (OSC 633) - 大小写不敏感
-        let si_regex = Regex::new(r"(?i)\x1b]633;([A-Z]);?([^\x07\x1b]*?)(?:\x07|\x1b\\)")?;
+        // 修复：Shell Integration (OSC 133) - 符合标准，大小写不敏感
+        let si_regex = Regex::new(r"(?i)\x1b]133;([A-Z]);?([^\x07\x1b]*?)(?:\x07|\x1b\\)")?;
 
         // 窗口标题 (OSC 0/1/2)
         let title_regex = Regex::new(r"\x1b]([012]);([^\x07\x1b]*?)(?:\x07|\x1b\\)")?;
@@ -129,7 +129,7 @@ impl OscParser {
     pub fn parse(&self, data: &str) -> Vec<OscSequence> {
         let mut sequences = Vec::new();
 
-        // 解析 Shell Integration 序列 (OSC 633)
+        // 解析 Shell Integration 序列 (OSC 133)
         for captures in self.si_regex.captures_iter(data) {
             if let Some(marker_match) = captures.get(1) {
                 let marker_str = marker_match.as_str();
@@ -333,7 +333,7 @@ impl Default for OscParser {
 pub struct OscGenerator;
 
 impl OscGenerator {
-    /// 生成 Shell Integration（OSC 633） 序列
+    /// 生成 Shell Integration（OSC 133） 序列
     pub fn shell_integration_sequence(marker: &IntegrationMarker, data: Option<&str>) -> String {
         let marker_char = match marker {
             IntegrationMarker::PromptStart => "A",
@@ -341,9 +341,9 @@ impl OscGenerator {
             IntegrationMarker::CommandExecuted => "C",
             IntegrationMarker::CommandFinished { exit_code } => {
                 return if let Some(code) = exit_code {
-                    format!("\x1b]633;D;{}\x07", code)
+                    format!("\x1b]133;D;{}\x07", code)
                 } else {
-                    "\x1b]633;D\x07".to_string()
+                    "\x1b]133;D\x07".to_string()
                 };
             }
             IntegrationMarker::CommandContinuation => "E",
@@ -351,14 +351,14 @@ impl OscGenerator {
             IntegrationMarker::CommandInvalid => "G",
             IntegrationMarker::CommandCancelled => "H",
             IntegrationMarker::Property { key, value } => {
-                return format!("\x1b]633;P;{}={}\x07", key, value);
+                return format!("\x1b]133;P;{}={}\x07", key, value);
             }
         };
 
         if let Some(data) = data {
-            format!("\x1b]633;{};{}\x07", marker_char, data)
+            format!("\x1b]133;{};{}\x07", marker_char, data)
         } else {
-            format!("\x1b]633;{}\x07", marker_char)
+            format!("\x1b]133;{}\x07", marker_char)
         }
     }
 

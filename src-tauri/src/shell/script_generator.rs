@@ -142,16 +142,27 @@ __orbitx_update_cwd() {
         if self.config.enable_command_tracking {
             script.push_str(
                 r#"
-# 命令跟踪
+# 完整的Shell Integration支持 - 修复：正确的OSC 133序列顺序
 __orbitx_preexec() {
-    printf '\e]633;C\e\\'
+    # C: 命令执行开始（命令实际开始运行）
+    printf '\e]133;C\e\\'
 }
 
 __orbitx_precmd() {
     local exit_code=$?
-    printf '\e]633;D;%d\e\\' "$exit_code"
+    # D: 命令完成，包含退出码
+    printf '\e]133;D;%d\e\\' "$exit_code"
     __orbitx_update_cwd
+    # A: 提示符开始（准备显示新提示符）
+    printf '\e]133;A\e\\'
 }
+
+# 修改PS1以包含B标记（命令开始）
+if [[ -z "$ORBITX_ORIGINAL_PS1" ]]; then
+    export ORBITX_ORIGINAL_PS1="$PS1"
+fi
+# 正确的序列：A在precmd中发送，B在用户按回车时发送
+PS1="${ORBITX_ORIGINAL_PS1}\[\e]133;B\e\\\]"
 
 # 集成到Bash提示符系统
 if [[ -z "$PROMPT_COMMAND" ]]; then
@@ -244,20 +255,29 @@ __orbitx_update_cwd() {
             );
         }
 
-        // 命令跟踪功能 (OSC 633协议)
+        // 命令跟踪功能 (OSC 133协议) - 修复序列号
         if self.config.enable_command_tracking {
             script.push_str(
                 r#"
-# 协议命令跟踪 (OSC 633)
+# 完整的Shell Integration支持 (OSC 133)
 __orbitx_preexec() {
-    printf '\e]633;B\e\\'
+    printf '\e]133;C\e\\'
 }
 
 __orbitx_precmd() {
     local exit_code=$?
-    printf '\e]633;D;%d\e\\' "$exit_code"
+    printf '\e]133;D;%d\e\\' "$exit_code"
     __orbitx_update_cwd
+    # 发送提示符开始标记
+    printf '\e]133;A\e\\'
 }
+
+# 修改提示符以包含命令开始标记
+if [[ -z "$ORBITX_ORIGINAL_PS1" ]]; then
+    export ORBITX_ORIGINAL_PS1="$PS1"
+fi
+# 正确的Zsh序列：A在precmd中发送，B在用户按回车时发送
+PS1=$ORBITX_ORIGINAL_PS1$'%{\e]133;B\e\\%}'
 
 # 集成到zsh钩子系统
 autoload -U add-zsh-hook 2>/dev/null || return
@@ -333,14 +353,20 @@ end
         if self.config.enable_command_tracking {
             script.push_str(
                 r#"
-# 协议命令跟踪
+# 协议命令跟踪 - 修复：使用OSC 133序列
 function __orbitx_preexec --on-event fish_preexec
-    printf '\e]633;C\e\\'
+    # B: 命令开始（用户按下回车）
+    printf '\e]133;B\e\\'
+    # C: 命令执行开始
+    printf '\e]133;C\e\\'
 end
 
 function __orbitx_postexec --on-event fish_postexec
-    printf '\e]633;D;%d\e\\' $status
+    # D: 命令完成
+    printf '\e]133;D;%d\e\\' $status
     __orbitx_update_cwd
+    # A: 提示符开始
+    printf '\e]133;A\e\\'
 end
 "#,
             );
@@ -408,15 +434,21 @@ function Update-OrbitXCwd {
         if self.config.enable_command_tracking {
             script.push_str(
                 r#"
-# 协议命令跟踪
+# 协议命令跟踪 - 修复：使用OSC 133序列
 function Invoke-OrbitXPreCommand {
-    Write-Host -NoNewline "`e]633;C`e\"
+    # B: 命令开始
+    Write-Host -NoNewline "`e]133;B`e\"
+    # C: 命令执行开始
+    Write-Host -NoNewline "`e]133;C`e\"
 }
 
 function Invoke-OrbitXPostCommand {
     param($exitCode)
-    Write-Host -NoNewline "`e]633;D;$exitCode`e\"
+    # D: 命令完成
+    Write-Host -NoNewline "`e]133;D;$exitCode`e\"
     Update-OrbitXCwd
+    # A: 提示符开始
+    Write-Host -NoNewline "`e]133;A`e\"
 }
 "#,
             );

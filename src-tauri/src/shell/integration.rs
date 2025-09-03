@@ -237,12 +237,12 @@ impl ShellIntegrationManager {
         }
     }
 
-    /// 处理 Shell Integration（OSC 633） 序列
+    /// 处理 Shell Integration（OSC 133） 序列 - 修复并完善命令状态跟踪
     fn handle_shell_integration(
         &self,
         pane_id: PaneId,
         marker: IntegrationMarker,
-        _data: Option<String>,
+        data: Option<String>,
     ) {
         if let Ok(mut states) = self.pane_states.lock() {
             let state = states.entry(pane_id).or_default();
@@ -250,22 +250,33 @@ impl ShellIntegrationManager {
 
             match marker {
                 IntegrationMarker::PromptStart => {
-                    // 准备接收新命令
-                    state.current_command = Some(CommandInfo::new(state.next_command_id));
+                    // A: 提示符开始 - 准备接收新命令
+                    // 如果有未完成的命令，先结束它
+                    if state.current_command.is_some() {
+                        state.finish_command(None);
+                    }
+                    // 不在这里创建新命令，等到CommandStart时再创建
                 }
                 IntegrationMarker::CommandStart => {
-                    // 用户开始输入命令
+                    // B: 命令开始 - 用户开始输入命令
+                    let command_id = state.start_command();
+                    tracing::debug!("Command started: {} for pane {}", command_id, pane_id);
                 }
                 IntegrationMarker::CommandExecuted => {
-                    // 命令开始执行
-                    let _command_id = state.start_command();
-
-                    if let Some(command) = &state.current_command {
+                    // C: 命令执行开始 - 命令已提交执行
+                    if let Some(command) = &mut state.current_command {
+                        command.status = CommandStatus::Running;
+                        tracing::debug!("Command executing: {} for pane {}", command.id, pane_id);
                         self.trigger_command_callbacks(pane_id, command);
                     }
                 }
                 IntegrationMarker::CommandFinished { exit_code } => {
-                    // 命令执行完成
+                    // D: 命令执行完成
+                    tracing::debug!(
+                        "Command finished with exit code: {:?} for pane {}",
+                        exit_code,
+                        pane_id
+                    );
                     state.finish_command(exit_code);
 
                     if let Some(last_command) = state.command_history.last() {
@@ -274,10 +285,25 @@ impl ShellIntegrationManager {
                 }
                 IntegrationMarker::CommandCancelled => {
                     // 命令被取消
+                    tracing::debug!("Command cancelled for pane {}", pane_id);
                     state.finish_command(Some(130)); // SIGINT退出码
+                }
+                IntegrationMarker::Property { key, value } => {
+                    // P: 属性更新
+                    tracing::debug!("Property update: {}={} for pane {}", key, value, pane_id);
+                    // 可以在这里处理特定属性，如CWD等
+                    if key == "Cwd" {
+                        state.update_cwd(value.clone());
+                        self.trigger_cwd_callbacks(pane_id, &value);
+                    }
                 }
                 _ => {
                     // 其他标记
+                    tracing::debug!(
+                        "Unhandled shell integration marker: {:?} with data: {:?}",
+                        marker,
+                        data
+                    );
                 }
             }
         }
@@ -431,6 +457,37 @@ impl ShellIntegrationManager {
         Vec::new()
     }
 
+    /// 获取面板的Shell Integration状态
+    pub fn get_integration_state(&self, pane_id: PaneId) -> ShellIntegrationState {
+        if let Ok(states) = self.pane_states.lock() {
+            if let Some(state) = states.get(&pane_id) {
+                return state.integration_state.clone();
+            }
+        }
+        ShellIntegrationState::Disabled
+    }
+
+    /// 获取面板的命令统计信息
+    pub fn get_command_stats(&self, pane_id: PaneId) -> Option<(usize, usize, usize)> {
+        if let Ok(states) = self.pane_states.lock() {
+            if let Some(state) = states.get(&pane_id) {
+                let total = state.command_history.len();
+                let successful = state
+                    .command_history
+                    .iter()
+                    .filter(|cmd| {
+                        matches!(cmd.status, CommandStatus::Finished { exit_code: Some(0) })
+                    })
+                    .count();
+                let failed = state.command_history.iter()
+                    .filter(|cmd| matches!(cmd.status, CommandStatus::Finished { exit_code: Some(code) } if code != 0))
+                    .count();
+                return Some((total, successful, failed));
+            }
+        }
+        None
+    }
+
     /// 清理面板状态
     pub fn cleanup_pane(&self, pane_id: PaneId) {
         if let Ok(mut states) = self.pane_states.lock() {
@@ -468,15 +525,36 @@ mod tests {
     }
 
     #[test]
+    fn test_osc_133_sequences() {
+        let manager = ShellIntegrationManager::new().unwrap();
+        let pane_id = PaneId::new(1);
+
+        // 测试OSC 133序列解析
+        let test_data = "\x1b]133;A\x07\x1b]133;B\x07\x1b]133;C\x07\x1b]133;D;0\x07";
+        manager.process_output(pane_id, test_data);
+
+        // 验证命令历史
+        let history = manager.get_command_history(pane_id);
+        assert!(
+            !history.is_empty(),
+            "Should have command history after processing OSC 133 sequences"
+        );
+
+        // 验证Integration状态
+        let state = manager.get_integration_state(pane_id);
+        assert_eq!(state, ShellIntegrationState::Enabled);
+    }
+
+    #[test]
     fn test_command_lifecycle() {
         let manager = ShellIntegrationManager::new().unwrap();
         let pane_id = PaneId::new(1);
 
-        // 模拟 Shell Integration 命令序列
-        manager.process_output(pane_id, "\x1b]633;A\x07"); // 提示符开始
-        manager.process_output(pane_id, "\x1b]633;B\x07"); // 命令开始
-        manager.process_output(pane_id, "\x1b]633;C\x07"); // 命令执行
-        manager.process_output(pane_id, "\x1b]633;D;0\x07"); // 命令完成
+        // 模拟 Shell Integration 命令序列 - 修复：使用OSC 133
+        manager.process_output(pane_id, "\x1b]133;A\x07"); // 提示符开始
+        manager.process_output(pane_id, "\x1b]133;B\x07"); // 命令开始
+        manager.process_output(pane_id, "\x1b]133;C\x07"); // 命令执行
+        manager.process_output(pane_id, "\x1b]133;D;0\x07"); // 命令完成
 
         let state = manager.get_pane_shell_state(pane_id).unwrap();
         assert!(state.integration_state == ShellIntegrationState::Enabled);
@@ -490,6 +568,25 @@ mod tests {
 
         let bash_script = manager.generate_shell_script(&ShellType::Bash).unwrap();
         assert!(bash_script.contains("ORBITX_SHELL_INTEGRATION"));
+        // 验证使用了正确的OSC 133序列
+        assert!(
+            bash_script.contains("133;C"),
+            "Bash script should use OSC 133 sequences"
+        );
+        assert!(
+            bash_script.contains("133;D"),
+            "Bash script should use OSC 133 sequences"
+        );
+
+        let zsh_script = manager.generate_shell_script(&ShellType::Zsh).unwrap();
+        assert!(
+            zsh_script.contains("133;C"),
+            "Zsh script should use OSC 133 sequences"
+        );
+        assert!(
+            zsh_script.contains("133;D"),
+            "Zsh script should use OSC 133 sequences"
+        );
 
         let env_vars = manager.generate_shell_env_vars(&ShellType::Bash);
         assert!(env_vars.contains_key("ORBITX_SHELL_INTEGRATION"));

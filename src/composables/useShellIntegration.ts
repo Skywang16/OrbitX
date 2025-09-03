@@ -1,5 +1,6 @@
 import type { Terminal } from '@xterm/xterm'
-import { terminalApi } from '@/api'
+import { shellIntegrationApi } from '@/api'
+import { useTerminalStore } from '@/stores/Terminal'
 
 export interface ShellIntegrationOptions {
   terminalId: string
@@ -7,34 +8,103 @@ export interface ShellIntegrationOptions {
   workingDirectory: string
   onCwdUpdate: (cwd: string) => void
   onTerminalCwdUpdate: (terminalId: string, cwd: string) => void
+  onCommandFinished?: (exitCode: number, isSuccess: boolean) => void
+  onCommandStarted?: (commandId: string) => void
 }
 
 export const useShellIntegration = (options: ShellIntegrationOptions) => {
+  const terminalStore = useTerminalStore()
+
+  // Shell Integration状态跟踪
+  let currentCommandId: string | null = null
+  let isCommandActive: boolean = false
+
+  // 处理命令开始
+  const handleCommandStart = () => {
+    // 总是创建新的命令ID，因为每个B序列都表示新命令开始
+    currentCommandId = `cmd_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+    isCommandActive = true
+
+    // 调用命令开始回调
+    if (options.onCommandStarted && currentCommandId) {
+      options.onCommandStarted(currentCommandId)
+    }
+
+    // 发布命令开始事件
+    terminalStore.emitCommandEvent(options.terminalId, 'started', { commandId: currentCommandId })
+  }
+
+  // 处理命令结束
+  const handleCommandFinished = (payload: string) => {
+    if (currentCommandId && isCommandActive) {
+      // 解析退出码，支持多种格式
+      let exitCode = 0
+      if (payload && payload.trim()) {
+        const parsed = parseInt(payload.trim(), 10)
+        if (!isNaN(parsed)) {
+          exitCode = parsed
+        }
+      }
+      const isSuccess = exitCode === 0
+
+      // 调用命令完成回调
+      if (options.onCommandFinished) {
+        try {
+          options.onCommandFinished(exitCode, isSuccess)
+        } catch (error) {
+          console.error('Error in onCommandFinished callback:', error)
+        }
+      }
+
+      // 发布命令完成事件
+      terminalStore.emitCommandEvent(options.terminalId, 'finished', {
+        commandId: currentCommandId,
+        exitCode,
+        isSuccess,
+      })
+
+      // 重置状态
+      currentCommandId = null
+      isCommandActive = false
+    }
+  }
+
   const parseOSCSequences = (data: string) => {
-    // eslint-disable-next-line
-    const oscPattern = /\x1b]633;([A-Za-z]);?([^\x07\x1b]*?)(?:\x07|\x1b\\)/g
+    // 修复：使用标准的OSC 133序列，修复正则表达式
+    // 支持两种格式：\e]133;D\e\\ 和 \e]133;D;0\e\\
+    // eslint-disable-next-line no-control-regex
+    const oscPattern = /\u001b]133;([A-Za-z])(?:;([^\u0007\u001b]*?))?(?:\u0007|\u001b\\)/g
     let match
 
     while ((match = oscPattern.exec(data)) !== null) {
       const command = match[1].toUpperCase()
-      const payload = match[2]
+      const payload = match[2] || '' // 如果没有payload，使用空字符串
 
       switch (command) {
         case 'A':
+          // 提示符开始 - 无需处理
           break
         case 'B':
+          // 命令开始（提示符结束）
+          handleCommandStart()
           break
         case 'C':
+          // 命令执行开始 - 无需处理，只是标记
           break
         case 'D':
+          // 命令结束，可能包含退出码
+          handleCommandFinished(payload)
           break
         case 'P':
+          // 属性更新
           handlePropertyUpdate(payload)
           break
       }
     }
-    // eslint-disable-next-line
-    const cwdPattern = /\x1b]7;([^\x07\x1b]*?)(?:\x07|\x1b\\)/g
+
+    // OSC 7序列用于CWD更新
+    // eslint-disable-next-line no-control-regex
+    const cwdPattern = /\u001b]7;([^\u0007\u001b]*?)(?:\u0007|\u001b\\)/g
     let cwdMatch
 
     while ((cwdMatch = cwdPattern.exec(data)) !== null) {
@@ -64,7 +134,7 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
             options.onTerminalCwdUpdate(options.terminalId, newCwd)
 
             if (options.backendId != null) {
-              terminalApi.updatePaneCwd(options.backendId, newCwd).catch(err => {
+              shellIntegrationApi.updatePaneCwd(options.backendId, newCwd).catch((err: Error) => {
                 console.warn('同步CWD到后端失败:', err)
               })
             }
@@ -89,7 +159,7 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
             options.onCwdUpdate(decodedCwd)
             options.onTerminalCwdUpdate(options.terminalId, decodedCwd)
             if (options.backendId != null) {
-              terminalApi.updatePaneCwd(options.backendId, decodedCwd).catch(() => {})
+              shellIntegrationApi.updatePaneCwd(options.backendId, decodedCwd).catch(() => {})
             }
           }
           break
@@ -122,15 +192,21 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
   const silentShellIntegration = async () => {
     try {
       if (options.backendId != null) {
-        await terminalApi.setupShellIntegration(options.backendId, true)
+        await shellIntegrationApi.setupShellIntegration(options.backendId, true)
       }
     } catch {
       // 静默失败
     }
   }
 
+  const resetState = () => {
+    currentCommandId = null
+    isCommandActive = false
+  }
+
   return {
     processTerminalOutput,
     initShellIntegration,
+    resetState,
   }
 }

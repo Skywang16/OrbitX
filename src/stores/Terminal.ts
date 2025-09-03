@@ -48,6 +48,31 @@ export const useTerminalStore = defineStore('Terminal', () => {
   const _resizeCallbacks = ref<Map<string, ResizeCallback>>(new Map())
   let _globalResizeListener: (() => void) | null = null
 
+  // 命令事件系统 - 简单的发布订阅模式
+  const _commandEventListeners = ref<Array<(terminalId: string, event: 'started' | 'finished', data?: any) => void>>([])
+
+  const subscribeToCommandEvents = (
+    callback: (terminalId: string, event: 'started' | 'finished', data?: any) => void
+  ) => {
+    _commandEventListeners.value.push(callback)
+    return () => {
+      const index = _commandEventListeners.value.indexOf(callback)
+      if (index > -1) {
+        _commandEventListeners.value.splice(index, 1)
+      }
+    }
+  }
+
+  const emitCommandEvent = (terminalId: string, event: 'started' | 'finished', data?: any) => {
+    _commandEventListeners.value.forEach(callback => {
+      try {
+        callback(terminalId, event, data)
+      } catch (error) {
+        console.error('Command event callback error:', error)
+      }
+    })
+  }
+
   let _globalListenersUnlisten: UnlistenFn[] = []
   let _isListenerSetup = false
 
@@ -680,5 +705,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     restoreFromSessionState,
     saveSessionState,
     initializeTerminalStore,
+    subscribeToCommandEvents,
+    emitCommandEvent,
   }
 })

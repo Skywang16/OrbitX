@@ -6,7 +6,7 @@
 import { Agent } from '@/eko-core'
 import type { TerminalAgentConfig } from '../types'
 import { getToolsForMode } from '../tools'
-import { terminalApi } from '@/api'
+import { terminalApi, shellIntegrationApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'
 
 // Define mode types
@@ -208,7 +208,7 @@ AGENT MODE (Full Authority): Execute commands and complete tasks autonomously
       }
 
       // 首先尝试从终端面板的Shell Integration获取CWD
-      const cwd = await terminalApi.getPaneCwd(targetTerminalId)
+      const cwd = await shellIntegrationApi.getPaneCwd(targetTerminalId)
       if (cwd) {
         return cwd
       }

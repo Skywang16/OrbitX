@@ -7,6 +7,7 @@ import type { ToolResult } from '@/eko-core/types'
 import { ValidationError, ToolError } from '../tool-error'
 import { terminalApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'
+
 import stripAnsi from 'strip-ansi'
 export interface ShellParams {
   command: string
@@ -32,7 +33,7 @@ export class ShellTool extends ModifiableTool {
   constructor() {
     super(
       'shell',
-      `Execute Shell commands in the current terminal. Suitable for system operations, build deployment, version control, and other scenarios. Includes security checks that will block dangerous commands. Note: For code search, use the orbit_search tool; for file content lookup, use orbit_search or read_file tools.`,
+      `Execute Shell commands in the current terminal with advanced Shell Integration support. Uses OSC 133 sequences for precise command lifecycle tracking when available, with fallback to traditional prompt detection. Suitable for system operations, build deployment, version control, and other scenarios. Includes security checks that will block dangerous commands. Note: For code search, use the orbit_search tool; for file content lookup, use orbit_search or read_file tools.`,
       {
         type: 'object',
         properties: {
@@ -129,7 +130,7 @@ export class ShellTool extends ModifiableTool {
   }
 
   /**
-   * 基于事件驱动的命令执行
+   * 基于Shell Integration的命令执行 - 使用OSC 133序列检测命令完成
    */
   private async executeCommandWithCallback(terminalId: number, command: string, timeout: number): Promise<string> {
     const terminalStore = useTerminalStore()
@@ -148,17 +149,17 @@ export class ShellTool extends ModifiableTool {
       // 绑定 cleanOutput 方法
       const cleanOutputFn = this.cleanOutput.bind(this)
 
-      // 设置超时
-      timeoutId = setTimeout(() => {
-        if (!isCompleted) {
-          isCompleted = true
-          cleanup()
-          reject(new ToolError(`命令执行超时 (${timeout}ms): ${command}`))
-        }
-      }, timeout)
+      // Shell Integration状态跟踪
+      let shellIntegrationActive = false
 
-      // 命令完成检测逻辑
+      // 增强的命令完成检测 - 优先使用Shell Integration，回退到正则检测
       const detectCommandCompletion = (output: string): boolean => {
+        // 如果Shell Integration激活，依赖其状态
+        if (shellIntegrationActive) {
+          return false // Shell Integration会通过回调通知完成
+        }
+
+        // 回退到传统的正则检测（兼容性）
         if (!output || output.trim() === '') return false
 
         // 去除 ANSI 转义序列与回车符
@@ -183,12 +184,64 @@ export class ShellTool extends ModifiableTool {
         return promptPatterns.some(pattern => pattern.test(lastLine))
       }
 
+      // 设置超时 - 智能回退机制
+      timeoutId = setTimeout(() => {
+        if (!isCompleted) {
+          // 如果Shell Integration激活但没有完成，尝试传统检测作为回退
+          if (shellIntegrationActive && outputBuffer) {
+            const isComplete = detectCommandCompletion(outputBuffer)
+            if (isComplete) {
+              isCompleted = true
+              cleanup()
+              const cleanOutput = cleanOutputFn(outputBuffer, command)
+              resolve(cleanOutput)
+              return
+            }
+          }
+
+          isCompleted = true
+          cleanup()
+          reject(new ToolError(`命令执行超时 (${timeout}ms): ${command}`))
+        }
+      }, timeout)
+
+      // 订阅命令事件
+      const unsubscribe = terminalStore.subscribeToCommandEvents((terminalId, event, data) => {
+        // 只处理当前终端的事件
+        if (terminalId !== terminalSession.id) return
+
+        if (event === 'started') {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(`Shell Tool: Command started via event - ${data?.commandId}`)
+          }
+        } else if (event === 'finished') {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(
+              `Shell Tool: Command finished via event - exitCode=${data?.exitCode}, isSuccess=${data?.isSuccess}`
+            )
+          }
+
+          if (!isCompleted) {
+            isCompleted = true
+            cleanup()
+
+            if (data?.isSuccess) {
+              const cleanOutput = cleanOutputFn(outputBuffer, command)
+              resolve(cleanOutput)
+            } else {
+              reject(new ToolError(`Command execution failed with exit code: ${data?.exitCode}`))
+            }
+          }
+        }
+      })
+
       // 清理函数
       const cleanup = () => {
         if (timeoutId) {
           clearTimeout(timeoutId)
         }
         terminalStore.unregisterTerminalCallbacks(terminalSession.id, callbacks)
+        unsubscribe() // 取消事件订阅
       }
 
       // 终端输出监听回调
@@ -196,25 +249,43 @@ export class ShellTool extends ModifiableTool {
         onOutput: (data: string) => {
           outputBuffer += data
 
-          // 检测命令是否完成（出现新的提示符）
-          // 同时检测当前数据块和整个缓冲区
-          const isCompleteInData = detectCommandCompletion(data)
-          const isCompleteInBuffer = detectCommandCompletion(outputBuffer)
-          const isComplete = isCompleteInData || isCompleteInBuffer
+          // Shell Integration通过事件系统处理，这里不需要处理OSC序列
 
-          if (isComplete && !isCompleted) {
-            isCompleted = true
-            cleanup()
+          // 检测OSC 133序列以激活Shell Integration
+          if (data.includes('\x1b]133;')) {
+            shellIntegrationActive = true
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('Shell Tool: Shell Integration mode activated')
+            }
+          }
 
-            // 清理输出并返回
-            const cleanOutput = cleanOutputFn(outputBuffer, command)
-            resolve(cleanOutput)
+          // 只有在Shell Integration未激活时才使用传统检测
+          if (!shellIntegrationActive) {
+            const isComplete = detectCommandCompletion(data) || detectCommandCompletion(outputBuffer)
+
+            if (isComplete && !isCompleted) {
+              isCompleted = true
+              cleanup()
+
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('Shell Tool: Command completed via traditional detection')
+              }
+
+              // 清理输出并返回
+              const cleanOutput = cleanOutputFn(outputBuffer, command)
+              resolve(cleanOutput)
+            }
           }
         },
         onExit: (exitCode: number | null) => {
-          if (!isCompleted) {
+          // 如果Shell Integration已经处理了命令完成，不要重复处理
+          if (!isCompleted && !shellIntegrationActive) {
             isCompleted = true
             cleanup()
+
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`Shell Tool: Command completed via onExit with code: ${exitCode}`)
+            }
 
             if (exitCode === 0) {
               const cleanOutput = cleanOutputFn(outputBuffer, command)
@@ -229,19 +300,22 @@ export class ShellTool extends ModifiableTool {
       // 注册监听器
       terminalStore.registerTerminalCallbacks(terminalSession.id, callbacks)
 
-      // 执行命令
-      terminalApi
-        .writeToTerminal({
-          paneId: terminalId,
-          data: `${command}\n`,
-        })
-        .catch(error => {
-          if (!isCompleted) {
-            isCompleted = true
-            cleanup()
-            reject(new ToolError(`Failed to write command: ${error.message}`))
-          }
-        })
+      // 确保Shell Integration准备就绪，然后执行命令
+      setTimeout(() => {
+        // 执行命令
+        terminalApi
+          .writeToTerminal({
+            paneId: terminalId,
+            data: `${command}\n`,
+          })
+          .catch(error => {
+            if (!isCompleted) {
+              isCompleted = true
+              cleanup()
+              reject(new ToolError(`Failed to write command: ${error.message}`))
+            }
+          })
+      }, 100)
     })
   }
 
