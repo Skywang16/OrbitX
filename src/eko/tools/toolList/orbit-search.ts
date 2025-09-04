@@ -110,8 +110,6 @@ export class OrbitSearchTool extends ModifiableTool {
       searchResult.searchTime = searchTime
       const resultText = this.formatSearchResults(searchResult)
 
-      console.log('🔍 orbit_search:', query, '→', searchResult.totalMatches, 'matches')
-      console.log('📄 LLM输出内容:')
       console.log(resultText)
 
       return {

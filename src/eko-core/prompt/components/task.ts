@@ -30,7 +30,7 @@ When processing watch nodes:
 export const taskContextComponent: ComponentConfig = {
   id: PromptComponent.TASK_CONTEXT,
   name: 'Task Context',
-  description: '任务上下文信息',
+  description: 'Task context information',
   required: false,
   template: `# Task Context
 {taskContext}`,
@@ -53,7 +53,7 @@ export const taskContextComponent: ComponentConfig = {
 export const taskNodesComponent: ComponentConfig = {
   id: PromptComponent.TASK_NODES,
   name: 'Task Nodes',
-  description: '任务节点处理说明',
+  description: 'Task node processing description',
   required: false,
   template: `# Task Node Processing
 {nodePrompt}`,
@@ -88,7 +88,7 @@ export const taskNodesComponent: ComponentConfig = {
 export const taskExamplesComponent: ComponentConfig = {
   id: PromptComponent.TASK_EXAMPLES,
   name: 'Task Examples',
-  description: '任务处理示例',
+  description: 'Task processing examples',
   required: false,
   template: `# Task Processing Examples
 {examples}`,

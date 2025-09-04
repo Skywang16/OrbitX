@@ -16,11 +16,19 @@ import { shellTool } from './toolList/shell'
 import { webFetchTool } from './toolList/web-fetch'
 
 import { orbitSearchTool } from './toolList/orbit-search'
+import { grepSearchTool } from './toolList/grep-search'
 
 /**
  * Read-only tools - available in Chat mode
  */
-export const readOnlyTools: Tool[] = [readFileTool, readManyFilesTool, readDirectoryTool, webFetchTool, orbitSearchTool]
+export const readOnlyTools: Tool[] = [
+  readFileTool,
+  readManyFilesTool,
+  readDirectoryTool,
+  webFetchTool,
+  orbitSearchTool,
+  grepSearchTool,
+]
 
 /**
  * All tools - available in Agent mode
@@ -34,6 +42,7 @@ export const allTools: Tool[] = [
   shellTool,
   webFetchTool,
   orbitSearchTool,
+  grepSearchTool,
 ]
 
 /**
@@ -104,6 +113,14 @@ export function registerAllTools(): void {
         description: orbitSearchTool.description,
         category: 'search',
         tags: ['search', 'semantic', 'code', 'context', 'intelligent', 'analysis'],
+      },
+    },
+    {
+      tool: grepSearchTool,
+      metadata: {
+        description: grepSearchTool.description,
+        category: 'search',
+        tags: ['search', 'grep', 'text', 'simple', 'direct', 'command'],
       },
     },
   ]

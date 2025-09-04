@@ -11,7 +11,7 @@ import { resolveTemplate } from '../template-engine'
 export const agentRoleComponent: ComponentConfig = {
   id: PromptComponent.AGENT_ROLE,
   name: 'Agent Role',
-  description: 'Agent的基本角色定义',
+  description: 'Basic role definition for the agent',
   required: true,
   template: `You are {name}, an interactive CLI agent specializing in software engineering tasks.
 Your primary goal is to help users safely and efficiently.
@@ -45,7 +45,7 @@ CORE PRINCIPLES:
 export const agentDescriptionComponent: ComponentConfig = {
   id: PromptComponent.AGENT_DESCRIPTION,
   name: 'Agent Description',
-  description: 'Agent的详细描述',
+  description: 'Detailed description of the agent',
   required: true,
   template: `# Agent Description
 {description}`,
@@ -64,7 +64,7 @@ export const agentDescriptionComponent: ComponentConfig = {
 export const agentCapabilitiesComponent: ComponentConfig = {
   id: PromptComponent.AGENT_CAPABILITIES,
   name: 'Agent Capabilities',
-  description: 'Agent的能力描述',
+  description: 'Agent capabilities description',
   required: false,
   dependencies: [PromptComponent.TOOLS_DESCRIPTION],
   template: `CAPABILITIES
@@ -117,14 +117,14 @@ Each tool execution provides detailed output that informs subsequent actions. Yo
 export const agentRulesComponent: ComponentConfig = {
   id: PromptComponent.AGENT_RULES,
   name: 'Agent Rules',
-  description: 'Agent行为规则和约束',
+  description: 'Agent behavior rules and constraints',
   required: true,
   template: `RULES
 
 ## Tool Usage Priority
-- ALWAYS use 'orbit_search' FIRST when working with codebases - this is mandatory
-- NEVER start with 'read_directory' - use 'orbit_search' to understand structure first
-- Only use 'read_file' after orbit_search has identified relevant files
+- ALWAYS use 'orbit_search' or 'grep_search' FIRST when working with codebases - this is mandatory
+- NEVER start with 'read_directory' - use search tools to understand structure first
+- Only use 'read_file' after search tools have identified relevant files
 
 ## Command Execution
 - You cannot change directories with 'cd' - use absolute paths when needed
@@ -148,7 +148,7 @@ export const agentRulesComponent: ComponentConfig = {
 export const workMethodologyComponent: ComponentConfig = {
   id: PromptComponent.WORK_METHODOLOGY,
   name: 'Work Methodology',
-  description: '工作方法和流程指导',
+  description: 'Work methodology and process guidance',
   required: true,
   template: `WORK METHODOLOGY
 
@@ -165,13 +165,10 @@ user: How do I update the user profile in this system?
 assistant: I'll search the codebase for user profile related code to understand how updates are handled.
 [tool_call: orbit_search for pattern 'user profile|updateProfile|UserProfile']
 
-user: Fix the authentication bug in the login system
-assistant: I'll first search for authentication and login related files to understand the current implementation.
-[tool_call: orbit_search for pattern 'auth|login|authenticate']
+user: Find all TODO comments in the codebase
+assistant: I'll use grep to search for TODO comments across all files.
+[tool_call: grep_search with pattern 'TODO|FIXME|XXX']
 
-user: Add a new feature to the dashboard
-assistant: Let me search for existing dashboard code to understand the current structure and patterns.
-[tool_call: orbit_search for pattern 'dashboard|Dashboard']
 
 Always be direct and technical in your communication, avoiding conversational phrases like "Great!" or "Sure!". Focus on providing actionable information and clear explanations of your actions.`,
   fn: async (context: ComponentContext) => {
@@ -186,7 +183,7 @@ Always be direct and technical in your communication, avoiding conversational ph
 export const customInstructionsComponent: ComponentConfig = {
   id: PromptComponent.CUSTOM_INSTRUCTIONS,
   name: 'Custom Instructions',
-  description: '自定义指令',
+  description: 'Custom instructions',
   required: false,
   template: `# Additional Instructions
 {instructions}`,

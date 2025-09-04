@@ -10,7 +10,7 @@ import { ComponentConfig, PromptComponent } from './types'
 export const planningGuidelinesComponent: ComponentConfig = {
   id: PromptComponent.PLANNING_GUIDELINES,
   name: 'Planning Guidelines',
-  description: '规划指导原则',
+  description: 'Planning guidance principles',
   required: false,
   template: `# Planning Guidelines
 - Adaptive planning: Single node for simple tasks, multiple nodes for complex tasks only when necessary
@@ -28,7 +28,7 @@ export const planningGuidelinesComponent: ComponentConfig = {
 export const planningExamplesComponent: ComponentConfig = {
   id: PromptComponent.PLANNING_EXAMPLES,
   name: 'Planning Examples',
-  description: '规划示例',
+  description: 'Planning examples',
   required: false,
   template: `# Planning Examples
 {examples}`,
@@ -44,7 +44,7 @@ export const planningExamplesComponent: ComponentConfig = {
 export const outputFormatComponent: ComponentConfig = {
   id: PromptComponent.OUTPUT_FORMAT,
   name: 'Output Format',
-  description: '输出格式说明',
+  description: 'Output format description',
   required: false,
   template: `# Output Format
 {format}`,

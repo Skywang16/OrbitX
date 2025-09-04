@@ -33,7 +33,7 @@ export class ShellTool extends ModifiableTool {
   constructor() {
     super(
       'shell',
-      `Execute Shell commands in the current terminal with advanced Shell Integration support. Uses OSC 133 sequences for precise command lifecycle tracking when available, with fallback to traditional prompt detection. Suitable for system operations, build deployment, version control, and other scenarios. Includes security checks that will block dangerous commands. Note: For code search, use the orbit_search tool; for file content lookup, use orbit_search or read_file tools.`,
+      `Execute Shell commands in the current terminal with advanced Shell Integration support. Uses OSC 133 sequences for precise command lifecycle tracking when available, with fallback to traditional prompt detection. Suitable for system operations, build deployment, version control, and other scenarios. Includes security checks that will block dangerous commands. Note: For code search, use orbit_search or grep_search tools; for file content lookup, use orbit_search, grep_search, or read_file tools.`,
       {
         type: 'object',
         properties: {
@@ -115,11 +115,6 @@ export class ShellTool extends ModifiableTool {
       // 跳过包含命令的行
       if (trimmed.includes(command) && !foundCommand) {
         foundCommand = true
-        continue
-      }
-
-      // 跳过Agent欢迎信息
-      if (trimmed.includes('🤖') || trimmed.includes('专属终端')) {
         continue
       }
 

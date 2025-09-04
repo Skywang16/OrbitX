@@ -47,6 +47,7 @@ export { shellTool } from './toolList/shell'
 export { webFetchTool } from './toolList/web-fetch'
 
 export { orbitSearchTool } from './toolList/orbit-search'
+export { grepSearchTool } from './toolList/grep-search'
 
 // 导出主要的工具集合
 export { allTools, readOnlyTools, registerAllTools, getToolsForMode } from './tools'

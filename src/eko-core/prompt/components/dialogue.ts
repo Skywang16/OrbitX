@@ -10,7 +10,7 @@ import { ComponentConfig, PromptComponent } from './types'
 export const dialogueCapabilitiesComponent: ComponentConfig = {
   id: PromptComponent.DIALOGUE_CAPABILITIES,
   name: 'Dialogue Capabilities',
-  description: '对话能力描述',
+  description: 'Dialogue capabilities description',
   required: false,
   template: `# Terminal Environment Capabilities
 You excel at helping users with:
@@ -30,7 +30,7 @@ You excel at helping users with:
 export const dialogueGuidelinesComponent: ComponentConfig = {
   id: PromptComponent.DIALOGUE_GUIDELINES,
   name: 'Dialogue Guidelines',
-  description: '对话指导原则',
+  description: 'Dialogue guidance principles',
   required: false,
   template: `# Dialogue Guidelines
 - Provide clear and helpful responses

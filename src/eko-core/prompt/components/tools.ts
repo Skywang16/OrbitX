@@ -44,7 +44,7 @@ You can set up monitoring and watch triggers:
 export const toolsDescriptionComponent: ComponentConfig = {
   id: PromptComponent.TOOLS_DESCRIPTION,
   name: 'Tools Description',
-  description: '工具的基本描述',
+  description: 'Basic description of tools',
   required: false,
   template: `# Available Tools
 {toolsList}`,
@@ -66,7 +66,7 @@ export const toolsDescriptionComponent: ComponentConfig = {
 export const humanInteractionComponent: ComponentConfig = {
   id: PromptComponent.HUMAN_INTERACTION,
   name: 'Human Interaction',
-  description: '人机交互工具说明',
+  description: 'Human interaction tools description',
   required: false,
   template: HUMAN_PROMPT,
   fn: async (context: ComponentContext) => {
@@ -83,7 +83,7 @@ export const humanInteractionComponent: ComponentConfig = {
 export const foreachToolsComponent: ComponentConfig = {
   id: PromptComponent.FOREACH_TOOLS,
   name: 'ForEach Tools',
-  description: 'ForEach任务处理工具说明',
+  description: 'ForEach task processing tools description',
   required: false,
   dependencies: [PromptComponent.TOOLS_DESCRIPTION],
   template: FOR_EACH_PROMPT,
@@ -101,7 +101,7 @@ export const foreachToolsComponent: ComponentConfig = {
 export const watchToolsComponent: ComponentConfig = {
   id: PromptComponent.WATCH_TOOLS,
   name: 'Watch Tools',
-  description: '监控和触发工具说明',
+  description: 'Watch and trigger tools description',
   required: false,
   dependencies: [PromptComponent.TOOLS_DESCRIPTION],
   template: WATCH_PROMPT,

@@ -137,7 +137,7 @@
       .map(cmd => ({
         text: cmd,
         displayText: cmd,
-        description: `命令: ${cmd}`,
+        description: `Command: ${cmd}`,
         kind: 'command',
         score: 1.0,
         source: 'local',

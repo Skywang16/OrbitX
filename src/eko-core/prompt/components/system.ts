@@ -12,7 +12,7 @@ import { resolveTemplate } from '../template-engine'
 export const systemInfoComponent: ComponentConfig = {
   id: PromptComponent.SYSTEM_INFO,
   name: 'System Info',
-  description: '系统基本信息',
+  description: 'Basic system information',
   required: false,
   template: `# System Information
 Platform: {platform}
@@ -33,7 +33,7 @@ Agent: {agent}`,
 export const datetimeComponent: ComponentConfig = {
   id: PromptComponent.DATETIME,
   name: 'DateTime',
-  description: '当前日期时间',
+  description: 'Current date and time',
   required: true,
   template: `Current datetime: {datetime}`,
   fn: async () => {
@@ -50,7 +50,7 @@ export const datetimeComponent: ComponentConfig = {
 export const platformComponent: ComponentConfig = {
   id: PromptComponent.PLATFORM,
   name: 'Platform',
-  description: '平台信息',
+  description: 'Platform information',
   required: false,
   template: `Platform: {platform}`,
   fn: async () => {
