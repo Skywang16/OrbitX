@@ -1,6 +1,6 @@
 import { AgentContext } from '../core/context'
 import { RetryLanguageModel } from '../llm'
-import { LanguageModelV2Prompt } from '../types'
+import { NativeLLMMessage } from '../types'
 import config from '../config'
 
 export class ContextCompressorService {
@@ -30,7 +30,7 @@ export class ContextCompressorService {
     const compressionRatio = targetLength / fullContext.length
     const systemPrompt = this.buildCompressionSystemPrompt(compressionRatio)
 
-    const messages: LanguageModelV2Prompt = [
+    const messages: NativeLLMMessage[] = [
       {
         role: 'system',
         content: systemPrompt,
@@ -54,7 +54,7 @@ export class ContextCompressorService {
         abortSignal: agentContext.context.controller.signal,
       })
 
-      const compressedText = result.text || fullContext
+      const compressedText = result.content || fullContext
 
       // If still too long after compression, perform recursive compression
       if (compressedText.length > targetLength) {
@@ -151,7 +151,7 @@ Use clear paragraph structure, describing each important finding in concise lang
       .map(({ name, task, result }, index) => `### Task ${index + 1}: ${task || name}\n${result}`)
       .join('\n\n')
 
-    const messages: LanguageModelV2Prompt = [
+    const messages: NativeLLMMessage[] = [
       {
         role: 'system',
         content: systemPrompt,
@@ -175,7 +175,7 @@ Use clear paragraph structure, describing each important finding in concise lang
         abortSignal: agentContext.context.controller.signal,
       })
 
-      return result.text || this.intelligentTruncate(userContent, targetLength)
+      return result.content || this.intelligentTruncate(userContent, targetLength)
     } catch (error) {
       console.warn('Multi-result compression failed, using fallback:', error)
       return this.intelligentTruncate(userContent, targetLength)

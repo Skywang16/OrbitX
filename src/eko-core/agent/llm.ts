@@ -3,176 +3,64 @@ import Log from '../common/log'
 import * as memory from '../memory'
 import { RetryLanguageModel } from '../llm'
 import { AgentContext, generateNodeId } from '../core/context'
-import { uuidv4, sleep, toFile, getMimeType } from '../common/utils'
+import { uuidv4, sleep } from '../common/utils'
 import {
   LLMRequest,
-  StreamCallbackMessage,
   StreamCallback,
   HumanCallback,
   StreamResult,
-  Tool,
-  ToolResult,
-  DialogueTool,
+  NativeLLMMessage,
+  NativeLLMTool,
+  NativeLLMToolCall,
+  NativeLLMStreamChunk,
 } from '../types'
-import {
-  LanguageModelV2FunctionTool,
-  LanguageModelV2Prompt,
-  LanguageModelV2StreamPart,
-  LanguageModelV2TextPart,
-  LanguageModelV2ToolCallPart,
-  LanguageModelV2ToolChoice,
-  LanguageModelV2ToolResultOutput,
-  LanguageModelV2ToolResultPart,
-  SharedV2ProviderOptions,
-} from '@ai-sdk/provider'
+import { convertTools, getTool, convertToolResult } from '../llm/conversion-utils'
 
-export function defaultLLMProviderOptions(): SharedV2ProviderOptions {
-  return {
-    openai: {
-      stream_options: {
-        include_usage: true,
-      },
-    },
-    openrouter: {
-      reasoning: {
-        max_tokens: 10,
-      },
-    },
+// Export conversion utilities from llm module
+export { convertTools, getTool, convertToolResult }
+
+// Temporary compatibility functions for memory module (will be refactored in task 5)
+export function removeDuplicateToolUse(
+  results: Array<{ type: 'text'; text: string } | NativeLLMToolCall>
+): Array<{ type: 'text'; text: string } | NativeLLMToolCall> {
+  if (results.length <= 1) {
+    return results
   }
-}
 
-export function defaultMessageProviderOptions(): SharedV2ProviderOptions {
-  return {
-    anthropic: {
-      cacheControl: { type: 'ephemeral' },
-    },
-    bedrock: {
-      cachePoint: { type: 'default' },
-    },
-    openrouter: {
-      cacheControl: { type: 'ephemeral' },
-    },
+  const toolCalls = results.filter(r => 'id' in r) as NativeLLMToolCall[]
+  if (toolCalls.length <= 1) {
+    return results
   }
-}
 
-export function convertTools(tools: Tool[] | DialogueTool[]): LanguageModelV2FunctionTool[] {
-  return tools.map(tool => ({
-    type: 'function',
-    name: tool.name,
-    description: tool.description,
-    inputSchema: tool.parameters,
-    // providerOptions: defaultMessageProviderOptions()
-  }))
-}
+  const _results: Array<{ type: 'text'; text: string } | NativeLLMToolCall> = []
+  const tool_uniques: string[] = []
 
-export function getTool<T extends Tool | DialogueTool>(tools: T[], name: string): T | null {
-  for (let i = 0; i < tools.length; i++) {
-    if (tools[i].name == name) {
-      return tools[i]
-    }
-  }
-  return null
-}
-
-export function convertToolResult(
-  toolUse: LanguageModelV2ToolCallPart,
-  toolResult: ToolResult,
-  user_messages: LanguageModelV2Prompt
-): LanguageModelV2ToolResultPart {
-  let result: LanguageModelV2ToolResultOutput
-  if (toolResult.content.length == 1 && toolResult.content[0].type == 'text') {
-    let text = toolResult.content[0].text
-    result = {
-      type: 'text',
-      value: text,
-    }
-    let isError = toolResult.isError == true
-    if (isError && !text.startsWith('Error')) {
-      text = 'Error: ' + text
-      result = {
-        type: 'error-text',
-        value: text,
+  for (const result of results) {
+    if ('id' in result) {
+      const key = result.name + JSON.stringify(result.arguments)
+      if (tool_uniques.indexOf(key) === -1) {
+        _results.push(result)
+        tool_uniques.push(key)
       }
-    } else if (!isError && text.length == 0) {
-      text = 'Successful'
-      result = {
-        type: 'text',
-        value: text,
-      }
-    }
-    if (text && ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']')))) {
-      try {
-        result = JSON.parse(text)
-        result = {
-          type: 'json',
-          value: result,
-        }
-      } catch (e) {}
-    }
-  } else {
-    result = {
-      type: 'content',
-      value: [],
-    }
-    for (let i = 0; i < toolResult.content.length; i++) {
-      let content = toolResult.content[i]
-      if (content.type == 'text') {
-        result.value.push({
-          type: 'text',
-          text: content.text,
-        })
-      } else {
-        if (config.toolResultMultimodal) {
-          // Support returning images from tool results
-          let mediaData = content.data
-          if (mediaData.startsWith('data:')) {
-            mediaData = mediaData.substring(mediaData.indexOf(',') + 1)
-          }
-          result.value.push({
-            type: 'media',
-            data: mediaData,
-            mediaType: content.mimeType || 'image/png',
-          })
-        } else {
-          // Only the claude model supports returning images from tool results, while openai only supports text,
-          // Compatible with other AI models that do not support tool results as images.
-          user_messages.push({
-            role: 'user',
-            content: [
-              {
-                type: 'file',
-                data: toFile(content.data),
-                mediaType: content.mimeType || getMimeType(content.data),
-              },
-              {
-                type: 'text',
-                text: `call \`${toolUse.toolName}\` tool result`,
-              },
-            ],
-          })
-        }
-      }
+    } else {
+      _results.push(result)
     }
   }
-  return {
-    type: 'tool-result',
-    toolCallId: toolUse.toolCallId,
-    toolName: toolUse.toolName,
-    output: result,
-  }
+
+  return _results
 }
 
 export async function callAgentLLM(
   agentContext: AgentContext,
   rlm: RetryLanguageModel,
-  messages: LanguageModelV2Prompt,
-  tools: LanguageModelV2FunctionTool[],
+  messages: NativeLLMMessage[],
+  tools: NativeLLMTool[],
   noCompress?: boolean,
-  toolChoice?: LanguageModelV2ToolChoice,
+  toolChoice?: string,
   retryNum: number = 0,
   callback?: StreamCallback & HumanCallback,
   requestHandler?: (request: LLMRequest) => void
-): Promise<Array<LanguageModelV2TextPart | LanguageModelV2ToolCallPart>> {
+): Promise<Array<{ type: 'text'; text: string } | NativeLLMToolCall>> {
   await agentContext.context.checkAborted()
   if (messages.length >= config.compressThreshold && !noCompress) {
     await memory.compressAgentMessages(agentContext, rlm, messages, tools, callAgentLLM)
@@ -182,13 +70,16 @@ export async function callAgentLLM(
     appendUserConversation(agentContext, messages)
   }
   let context = agentContext.context
-  // agentChain removed - single agent mode
-  // Single agent mode - use task info
 
   let streamCallback = callback ||
     context.config.callback || {
       onMessage: async () => {},
     }
+
+  // Debug: 检查回调函数是否正确传递
+  console.warn('🔍 Debug: streamCallback available:', !!streamCallback)
+  console.warn('🔍 Debug: callback parameter:', !!callback)
+  console.warn('🔍 Debug: context.config.callback:', !!context.config.callback)
   const stepController = new AbortController()
   const signal = AbortSignal.any([context.controller.signal, stepController.signal])
   let request: LLMRequest = {
@@ -207,74 +98,86 @@ export async function callAgentLLM(
   } catch (e: any) {
     context.currentStepControllers.delete(stepController)
     await context.checkAborted()
+
+    // Handle context length errors with compression
     if (!noCompress && messages.length >= 5 && ((e + '').indexOf('tokens') > -1 || (e + '').indexOf('too long') > -1)) {
       await memory.compressAgentMessages(agentContext, rlm, messages, tools, callAgentLLM)
     }
-    if (retryNum < config.maxRetryNum) {
-      await sleep(200 * (retryNum + 1) * (retryNum + 1))
+
+    // Use enhanced error handling for retry decisions
+    const shouldRetry = retryNum < config.maxRetryNum
+
+    if (shouldRetry) {
+      // Use exponential backoff with jitter
+      const baseDelay = 200
+      const delay = Math.min(baseDelay * Math.pow(2, retryNum), 5000) + Math.random() * 1000
+      await sleep(delay)
       return callAgentLLM(agentContext, rlm, messages, tools, noCompress, toolChoice, ++retryNum, streamCallback)
     }
     throw e
   }
+
   let streamText = ''
-  let thinkText = ''
-  let toolArgsText = ''
   let textStreamId = uuidv4()
-  let thinkStreamId = uuidv4()
   let textStreamDone = false
-  const toolParts: LanguageModelV2ToolCallPart[] = []
+  const toolCalls: NativeLLMToolCall[] = []
   const reader = result.stream.getReader()
+
   try {
-    let toolPart: LanguageModelV2ToolCallPart | null = null
     while (true) {
       await context.checkAborted()
       const { done, value } = await reader.read()
       if (done) {
         break
       }
-      const chunk = value as LanguageModelV2StreamPart
+
+      const chunk = value as NativeLLMStreamChunk
       switch (chunk.type) {
-        case 'text-start': {
-          textStreamId = uuidv4()
-          break
-        }
-        case 'text-delta': {
-          if (toolPart && !chunk.delta) {
-            continue
-          }
-          streamText += chunk.delta || ''
-          await streamCallback.onMessage(
-            {
-              taskId: context.taskId,
-              agentName: agentContext.agent.Name,
-              nodeId: agentContext.context.taskId,
-              type: 'text',
-              streamId: textStreamId,
-              streamDone: false,
-              text: streamText,
-            },
-            agentContext
-          )
-          if (toolPart) {
+        case 'delta': {
+          // Handle text content
+          if (chunk.content) {
+            streamText += chunk.content
+            console.log('🔍 Debug: Processing delta chunk with content:', chunk.content)
+            console.log('🔍 Debug: About to call streamCallback.onMessage')
             await streamCallback.onMessage(
               {
                 taskId: context.taskId,
                 agentName: agentContext.agent.Name,
                 nodeId: agentContext.context.taskId,
-                type: 'tool_use',
-                toolId: toolPart.toolCallId,
-                toolName: toolPart.toolName,
-                params: (toolPart.input as Record<string, unknown>) || {},
+                type: 'text',
+                streamId: textStreamId,
+                streamDone: false,
+                text: streamText,
               },
               agentContext
             )
-            toolPart = null
+            console.log('🔍 Debug: streamCallback.onMessage called successfully')
+          }
+
+          // Handle tool calls
+          if (chunk.toolCalls) {
+            for (const toolCall of chunk.toolCalls) {
+              // Complete tool call received
+              toolCalls.push(toolCall)
+              await streamCallback.onMessage(
+                {
+                  taskId: context.taskId,
+                  agentName: agentContext.agent.Name,
+                  nodeId: agentContext.context.taskId,
+                  type: 'tool_use',
+                  toolId: toolCall.id,
+                  toolName: toolCall.name,
+                  params: toolCall.arguments,
+                },
+                agentContext
+              )
+            }
           }
           break
         }
-        case 'text-end': {
-          textStreamDone = true
-          if (streamText) {
+        case 'finish': {
+          if (!textStreamDone && streamText) {
+            textStreamDone = true
             const textNodeId = agentContext.context.currentNodeId || generateNodeId(context.taskId, 'execution')
             await streamCallback.onMessage(
               {
@@ -289,134 +192,31 @@ export async function callAgentLLM(
               agentContext
             )
           }
-          break
-        }
-        case 'reasoning-start': {
-          thinkStreamId = uuidv4()
-          break
-        }
-        case 'reasoning-delta': {
-          thinkText += chunk.delta || ''
-          const thinkingNodeId = generateNodeId(context.taskId, 'thinking')
-          await streamCallback.onMessage(
-            {
-              taskId: context.taskId,
-              agentName: agentContext.agent.Name,
-              nodeId: thinkingNodeId,
-              type: 'thinking',
-              streamId: thinkStreamId,
-              streamDone: false,
-              text: thinkText,
-            },
-            agentContext
-          )
-          break
-        }
-        case 'reasoning-end': {
-          if (thinkText) {
-            const thinkingNodeId = generateNodeId(context.taskId, 'thinking')
-            await streamCallback.onMessage(
-              {
-                taskId: context.taskId,
-                agentName: agentContext.agent.Name,
-                nodeId: thinkingNodeId,
-                type: 'thinking',
-                streamId: thinkStreamId,
-                streamDone: true,
-                text: thinkText,
-              },
-              agentContext
-            )
-          }
-          break
-        }
-        case 'tool-input-start': {
-          if (toolPart && toolPart.toolCallId == chunk.id) {
-            toolPart.toolName = chunk.toolName
-          } else {
-            toolPart = {
-              type: 'tool-call',
-              toolCallId: chunk.id,
-              toolName: chunk.toolName,
-              input: {},
-            }
-            toolParts.push(toolPart)
-          }
-          break
-        }
-        case 'tool-input-delta': {
-          if (!textStreamDone) {
-            textStreamDone = true
-            await streamCallback.onMessage(
-              {
-                taskId: context.taskId,
-                agentName: agentContext.agent.Name,
-                nodeId: agentContext.context.taskId,
-                type: 'text',
-                streamId: textStreamId,
-                streamDone: true,
-                text: streamText,
-              },
-              agentContext
-            )
-          }
-          toolArgsText += chunk.delta || ''
+
           await streamCallback.onMessage(
             {
               taskId: context.taskId,
               agentName: agentContext.agent.Name,
               nodeId: agentContext.context.taskId,
-              type: 'tool_streaming',
-              toolId: chunk.id,
-              toolName: toolPart?.toolName || '',
-              paramsText: toolArgsText,
+              type: 'finish',
+              finishReason: chunk.finishReason as any,
+              usage: chunk.usage || {
+                promptTokens: 0,
+                completionTokens: 0,
+                totalTokens: 0,
+              },
             },
             agentContext
           )
-          break
-        }
-        case 'tool-call': {
-          toolArgsText = ''
-          const args = chunk.input ? JSON.parse(chunk.input) : {}
-          const message: StreamCallbackMessage = {
-            taskId: context.taskId,
-            agentName: agentContext.agent.Name,
-            nodeId: agentContext.context.taskId,
-            type: 'tool_use',
-            toolId: chunk.toolCallId,
-            toolName: chunk.toolName,
-            params: args,
+
+          if (chunk.finishReason === 'length' && messages.length >= 5 && !noCompress && retryNum < config.maxRetryNum) {
+            await memory.compressAgentMessages(agentContext, rlm, messages, tools, callAgentLLM)
+            return callAgentLLM(agentContext, rlm, messages, tools, noCompress, toolChoice, ++retryNum, streamCallback)
           }
-          await streamCallback.onMessage(message, agentContext)
-          if (toolPart == null) {
-            toolParts.push({
-              type: 'tool-call',
-              toolCallId: chunk.toolCallId,
-              toolName: chunk.toolName,
-              input: message.params || args,
-            })
-          } else {
-            toolPart.input = message.params || args
-            toolPart = null
-          }
-          break
-        }
-        case 'file': {
-          await streamCallback.onMessage(
-            {
-              taskId: context.taskId,
-              agentName: agentContext.agent.Name,
-              nodeId: agentContext.context.taskId,
-              type: 'file',
-              mimeType: chunk.mediaType,
-              data: chunk.data as string,
-            },
-            agentContext
-          )
           break
         }
         case 'error': {
-          Log.error(`${agentContext.agent.Name} agent error: `, chunk)
+          Log.error(`${agentContext.agent.Name} agent error: `, chunk.error)
           await streamCallback.onMessage(
             {
               taskId: context.taskId,
@@ -429,67 +229,17 @@ export async function callAgentLLM(
           )
           throw new Error('LLM Error: ' + chunk.error)
         }
-        case 'finish': {
-          if (!textStreamDone) {
-            textStreamDone = true
-            const textNodeId = agentContext.context.currentNodeId || generateNodeId(context.taskId, 'execution')
-            await streamCallback.onMessage(
-              {
-                taskId: context.taskId,
-                agentName: agentContext.agent.Name,
-                nodeId: textNodeId,
-                type: 'text',
-                streamId: textStreamId,
-                streamDone: true,
-                text: streamText,
-              },
-              agentContext
-            )
-          }
-          if (toolPart) {
-            const toolNodeId = agentContext.context.currentNodeId || generateNodeId(context.taskId, 'execution')
-            await streamCallback.onMessage(
-              {
-                taskId: context.taskId,
-                agentName: agentContext.agent.Name,
-                nodeId: toolNodeId,
-                type: 'tool_use',
-                toolId: toolPart.toolCallId,
-                toolName: toolPart.toolName,
-                params: (toolPart.input as Record<string, unknown>) || {},
-              },
-              agentContext
-            )
-            toolPart = null
-          }
-          await streamCallback.onMessage(
-            {
-              taskId: context.taskId,
-              agentName: agentContext.agent.Name,
-              nodeId: agentContext.context.taskId,
-              type: 'finish',
-              finishReason: chunk.finishReason,
-              usage: {
-                promptTokens: chunk.usage.inputTokens || 0,
-                completionTokens: chunk.usage.outputTokens || 0,
-                totalTokens:
-                  chunk.usage.totalTokens || (chunk.usage.inputTokens || 0) + (chunk.usage.outputTokens || 0),
-              },
-            },
-            agentContext
-          )
-          if (chunk.finishReason === 'length' && messages.length >= 5 && !noCompress && retryNum < config.maxRetryNum) {
-            await memory.compressAgentMessages(agentContext, rlm, messages, tools, callAgentLLM)
-            return callAgentLLM(agentContext, rlm, messages, tools, noCompress, toolChoice, ++retryNum, streamCallback)
-          }
-          break
-        }
       }
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     await context.checkAborted()
+
+    // Use enhanced error handling for retry decisions
     if (retryNum < config.maxRetryNum) {
-      await sleep(200 * (retryNum + 1) * (retryNum + 1))
+      // Use exponential backoff with jitter for stream errors
+      const baseDelay = 200
+      const delay = Math.min(baseDelay * Math.pow(2, retryNum), 5000) + Math.random() * 1000
+      await sleep(delay)
       return callAgentLLM(agentContext, rlm, messages, tools, noCompress, toolChoice, ++retryNum, streamCallback)
     }
     throw e
@@ -497,12 +247,21 @@ export async function callAgentLLM(
     reader.releaseLock()
     context.currentStepControllers.delete(stepController)
   }
+
   // Store result in chain for single agent mode
   agentContext.context.chain.planResult = streamText
-  return streamText ? [{ type: 'text', text: streamText } as LanguageModelV2TextPart, ...toolParts] : toolParts
+
+  // Return results in native format
+  const results: Array<{ type: 'text'; text: string } | NativeLLMToolCall> = []
+  if (streamText) {
+    results.push({ type: 'text', text: streamText })
+  }
+  results.push(...toolCalls)
+
+  return results
 }
 
-function appendUserConversation(agentContext: AgentContext, messages: LanguageModelV2Prompt) {
+function appendUserConversation(agentContext: AgentContext, messages: NativeLLMMessage[]) {
   const userPrompts = agentContext.context.conversation
     .splice(0, agentContext.context.conversation.length)
     .filter(s => !!s)
@@ -512,7 +271,7 @@ function appendUserConversation(agentContext: AgentContext, messages: LanguageMo
       userPrompts.map(s => `- ${s.trim()}`).join('\n')
     messages.push({
       role: 'user',
-      content: [{ type: 'text', text: prompt }],
+      content: prompt,
     })
   }
 }

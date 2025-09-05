@@ -1,306 +1,231 @@
-import { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider'
 import Log from '../common/log'
-import config from '../config'
-import { createOpenAI } from '@ai-sdk/openai'
-import { call_timeout } from '../common/utils'
-import { createAnthropic } from '@ai-sdk/anthropic'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock'
-import { createOpenRouter } from '@openrouter/ai-sdk-provider'
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { GenerateResult, LLMRequest, LLMs, StreamResult } from '../types/llm.types'
-import { defaultLLMProviderOptions } from '../agent/llm'
+import {
+  GenerateResult,
+  LLMRequest,
+  LLMs,
+  StreamResult,
+  NativeLLMRequest,
+  FinishReason,
+  LLMConfig,
+} from '../types/llm.types'
+import { NativeLLMService } from './native-service'
+import { LLMError, ErrorHandler, RetryConfig, DEFAULT_RETRY_CONFIG } from '../common/error'
 
+// Export conversion utilities and native service
+export * from './conversion-utils'
+export * from './stream-processor'
+export * from './stream-buffer'
+export * from './performance-monitor'
+export { NativeLLMService }
+export { LLMError, ErrorHandler, DEFAULT_RETRY_CONFIG } from '../common/error'
+export type { RetryConfig } from '../common/error'
+
+/**
+ * Completely refactored RetryLanguageModel using native backend
+ * Removes all ai-sdk dependencies and implements intelligent retry with model failover
+ */
 export class RetryLanguageModel {
+  private nativeService: NativeLLMService
   private llms: LLMs
   private names: string[]
-  private stream_first_timeout: number
-  private stream_token_timeout: number
+  private retryConfig: RetryConfig
+  private modelFailureCount: Map<string, number> = new Map()
+  private lastFailureTime: Map<string, number> = new Map()
 
-  constructor(llms: LLMs, names?: string[], stream_first_timeout?: number, stream_token_timeout?: number) {
+  constructor(llms: LLMs, names?: string[], retryConfig?: Partial<RetryConfig>) {
+    this.nativeService = new NativeLLMService()
     this.llms = llms
     this.names = names || []
-    this.stream_first_timeout = stream_first_timeout || 30_000
-    this.stream_token_timeout = stream_token_timeout || 180_000
-    if (this.names.indexOf('default') == -1) {
+    if (this.names.indexOf('default') === -1) {
       this.names.push('default')
     }
+    this.retryConfig = { ...DEFAULT_RETRY_CONFIG, ...retryConfig }
   }
 
   async call(request: LLMRequest): Promise<GenerateResult> {
-    return await this.doGenerate({
-      prompt: request.messages,
-      tools: request.tools,
-      toolChoice: request.toolChoice,
-      maxOutputTokens: request.maxTokens,
-      temperature: request.temperature,
-      topP: request.topP,
-      topK: request.topK,
-      stopSequences: request.stopSequences,
-      abortSignal: request.abortSignal,
-    })
-  }
+    const errors: Array<{ modelName: string; error: LLMError; retryCount: number }> = []
+    const availableModels = this.getAvailableModels()
 
-  async doGenerate(options: LanguageModelV2CallOptions): Promise<GenerateResult> {
-    const maxTokens = options.maxOutputTokens
-    const providerOptions = options.providerOptions
-    const names = [...this.names, ...this.names]
-    let lastError
-    for (let i = 0; i < names.length; i++) {
-      const name = names[i]
-      const llmConfig = this.llms[name]
-      const llm = await this.getLLM(name)
-      if (!llm) {
+    for (const name of availableModels) {
+      const config = this.llms[name]
+      if (!config) continue
+
+      // Skip models that have failed recently (circuit breaker pattern)
+      if (this.isModelTemporarilyDisabled(name)) {
+        Log.info(`Skipping temporarily disabled model: ${name}`)
         continue
       }
-      if (!maxTokens) {
-        options.maxOutputTokens = llmConfig.config?.maxTokens || config.maxTokens
-      }
-      if (!providerOptions) {
-        options.providerOptions = defaultLLMProviderOptions()
-        options.providerOptions[llm.provider] = llmConfig.options || {}
-      }
-      let _options = options
-      if (llmConfig.handler) {
-        _options = await llmConfig.handler(_options)
-      }
-      try {
-        let result = (await llm.doGenerate(_options)) as GenerateResult
-        if (Log.isEnableDebug()) {
-          Log.debug(`LLM nonstream body, name: ${name} => `, result.request?.body)
-        }
-        result.llm = name
-        result.llmConfig = llmConfig
-        result.text = result.content.find(c => c.type === 'text')?.text
-        return result
-      } catch (e: any) {
-        if (e?.name === 'AbortError') {
-          throw e
-        }
-        lastError = e
-        if (Log.isEnableInfo()) {
-          Log.info(`LLM nonstream request, name: ${name} => `, {
-            tools: _options.tools,
-            messages: _options.prompt,
+
+      let retryCount = 0
+      let lastError: LLMError | null = null
+
+      while (retryCount <= this.retryConfig.maxRetries) {
+        try {
+          const nativeRequest = this.buildNativeRequest(request, config)
+          const response = await this.nativeService.call(nativeRequest)
+
+          // Reset failure count on success
+          this.modelFailureCount.delete(name)
+          this.lastFailureTime.delete(name)
+
+          return {
+            modelId: config.modelId,
+            content: response.content,
+            finishReason: response.finishReason as FinishReason,
+            usage: response.usage || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            toolCalls: response.toolCalls,
+          }
+        } catch (error) {
+          const llmError = error instanceof LLMError ? error : ErrorHandler.handleError(error)
+          lastError = llmError
+
+          Log.error(`LLM call failed for ${name} (attempt ${retryCount + 1}):`, {
+            error: llmError.message,
+            category: llmError.category,
+            retryable: llmError.retryable,
           })
+
+          // Track model failures
+          this.recordModelFailure(name, llmError)
+
+          // Check if we should retry this model
+          if (!ErrorHandler.shouldRetry(llmError, retryCount, this.retryConfig)) {
+            Log.info(`Not retrying ${name} due to error type: ${llmError.category}`)
+            break
+          }
+
+          // Check if we should switch models instead of retrying
+          if (ErrorHandler.shouldSwitchModel(llmError)) {
+            Log.info(`Switching models due to ${llmError.category} error`)
+            break
+          }
+
+          if (retryCount < this.retryConfig.maxRetries) {
+            const delay = ErrorHandler.getRetryDelay(retryCount, this.retryConfig, llmError.category)
+            Log.info(`Retrying ${name} after ${delay}ms... (${retryCount + 1}/${this.retryConfig.maxRetries})`)
+            await this.sleep(delay)
+            retryCount++
+            continue
+          }
+
+          break // Exit retry loop for this provider
         }
-        Log.error(`LLM error, name: ${name} => `, e)
+      }
+
+      if (lastError) {
+        errors.push({ modelName: name, error: lastError, retryCount })
       }
     }
-    return Promise.reject(lastError ? lastError : new Error('No LLM available'))
+
+    // All models failed, throw comprehensive error
+    const errorSummary = this.createFailureSummary(errors)
+    throw new LLMError(`All LLM providers failed. ${errorSummary}`, 'unknown', false, errors)
   }
 
-  async callStream(request: LLMRequest): Promise<StreamResult> {
-    return await this.doStream({
-      prompt: request.messages,
-      tools: request.tools,
-      toolChoice: request.toolChoice,
-      maxOutputTokens: request.maxTokens,
-      temperature: request.temperature,
-      topP: request.topP,
-      topK: request.topK,
-      stopSequences: request.stopSequences,
-      abortSignal: request.abortSignal,
-    })
-  }
+  async callStream(request: LLMRequest, optimized: boolean = false): Promise<StreamResult> {
+    const errors: Array<{ modelName: string; error: LLMError; retryCount: number }> = []
+    const availableModels = this.getAvailableModels()
 
-  async doStream(options: LanguageModelV2CallOptions): Promise<StreamResult> {
-    const maxTokens = options.maxOutputTokens
-    const providerOptions = options.providerOptions
-    const names = [...this.names, ...this.names]
-    let lastError
-    for (let i = 0; i < names.length; i++) {
-      const name = names[i]
-      const llmConfig = this.llms[name]
-      const llm = await this.getLLM(name)
-      if (!llm) {
+    for (const name of availableModels) {
+      const config = this.llms[name]
+      if (!config) continue
+
+      // Skip models that have failed recently
+      if (this.isModelTemporarilyDisabled(name)) {
+        Log.info(`Skipping temporarily disabled model for streaming: ${name}`)
         continue
       }
-      if (!maxTokens) {
-        options.maxOutputTokens = llmConfig.config?.maxTokens || config.maxTokens
-      }
-      if (!providerOptions) {
-        options.providerOptions = defaultLLMProviderOptions()
-        options.providerOptions[llm.provider] = llmConfig.options || {}
-      }
-      let _options = options
-      if (llmConfig.handler) {
-        _options = await llmConfig.handler(_options)
-      }
-      try {
-        const controller = new AbortController()
-        const signal = _options.abortSignal
-          ? AbortSignal.any([_options.abortSignal, controller.signal])
-          : controller.signal
-        const result = (await call_timeout(
-          async () => await llm.doStream({ ..._options, abortSignal: signal }),
-          this.stream_first_timeout,
-          () => {
-            controller.abort()
+
+      let retryCount = 0
+      let lastError: LLMError | null = null
+
+      while (retryCount <= this.retryConfig.maxRetries) {
+        try {
+          const nativeRequest = this.buildNativeRequest(request, config)
+          nativeRequest.stream = true // Ensure stream is enabled
+
+          // Use optimized stream processing if requested
+          const streamConfig = optimized
+            ? {
+                maxBufferSize: 1000,
+                backpressureThreshold: 800,
+                batchSize: 10,
+                flushInterval: 0, // Immediate processing for real-time streaming
+                enableMetrics: true,
+              }
+            : undefined
+
+          const stream = await this.nativeService.callStream(nativeRequest, streamConfig)
+
+          // Reset failure count on success
+          this.modelFailureCount.delete(name)
+          this.lastFailureTime.delete(name)
+
+          return {
+            modelId: config.modelId,
+            stream,
           }
-        )) as StreamResult
-        const stream = result.stream
-        const reader = stream.getReader()
-        const { done, value } = await call_timeout(
-          async () => await reader.read(),
-          this.stream_first_timeout,
-          () => {
-            reader.cancel()
-            reader.releaseLock()
-            controller.abort()
-          }
-        )
-        if (done) {
-          Log.warn(`LLM stream done, name: ${name} => `, { done, value })
-          reader.releaseLock()
-          continue
-        }
-        if (Log.isEnableDebug()) {
-          Log.debug(`LLM stream body, name: ${name} => `, result.request?.body)
-        }
-        let chunk = value as LanguageModelV2StreamPart
-        if (chunk.type == 'error') {
-          Log.error(`LLM stream error, name: ${name}`, chunk)
-          reader.releaseLock()
-          continue
-        }
-        result.llm = name
-        result.llmConfig = llmConfig
-        result.stream = this.streamWrapper([chunk], reader, controller)
-        return result
-      } catch (e: any) {
-        if (e?.name === 'AbortError') {
-          throw e
-        }
-        lastError = e
-        if (Log.isEnableInfo()) {
-          Log.info(`LLM stream request, name: ${name} => `, {
-            tools: _options.tools,
-            messages: _options.prompt,
+        } catch (error) {
+          const llmError = error instanceof LLMError ? error : ErrorHandler.handleError(error)
+          lastError = llmError
+
+          Log.error(`LLM stream call failed for ${name} (attempt ${retryCount + 1}):`, {
+            error: llmError.message,
+            category: llmError.category,
+            retryable: llmError.retryable,
           })
-        }
-        Log.error(`LLM error, name: ${name} => `, e)
-      }
-    }
-    return Promise.reject(lastError ? lastError : new Error('No LLM available'))
-  }
 
-  private async getLLM(name: string): Promise<LanguageModelV2 | null> {
-    const llm = this.llms[name]
-    if (!llm) {
-      return null
-    }
-    let apiKey
-    if (typeof llm.apiKey === 'string') {
-      apiKey = llm.apiKey
-    } else {
-      apiKey = await llm.apiKey()
-    }
-    let baseURL = undefined
-    if (llm.config?.baseURL) {
-      if (typeof llm.config.baseURL === 'string') {
-        baseURL = llm.config.baseURL
-      } else {
-        baseURL = await llm.config.baseURL()
-      }
-    }
-    if (llm.provider == 'openai') {
-      if (!baseURL || baseURL.indexOf('openai.com') > -1 || llm.config?.organization || llm.config?.openai) {
-        return createOpenAI({
-          apiKey: apiKey,
-          baseURL: baseURL,
-          fetch: llm.fetch,
-          organization: llm.config?.organization,
-          project: llm.config?.project,
-          headers: llm.config?.headers,
-        }).languageModel(llm.model)
-      } else {
-        return createOpenAICompatible({
-          name: llm.model,
-          apiKey: apiKey,
-          baseURL: baseURL,
-          fetch: llm.fetch,
-          headers: llm.config?.headers,
-        }).languageModel(llm.model)
-      }
-    } else if (llm.provider == 'anthropic') {
-      return createAnthropic({
-        apiKey: apiKey,
-        baseURL: baseURL,
-        fetch: llm.fetch,
-        headers: llm.config?.headers,
-      }).languageModel(llm.model)
-    } else if (llm.provider == 'google') {
-      return createGoogleGenerativeAI({
-        apiKey: apiKey,
-        baseURL: baseURL,
-        fetch: llm.fetch,
-        headers: llm.config?.headers,
-      }).languageModel(llm.model)
-    } else if (llm.provider == 'aws') {
-      let keys = apiKey.split('=')
-      return createAmazonBedrock({
-        accessKeyId: keys[0],
-        secretAccessKey: keys[1],
-        baseURL: baseURL,
-        region: llm.config?.region || 'us-west-1',
-        fetch: llm.fetch,
-        headers: llm.config?.headers,
-        sessionToken: llm.config?.sessionToken,
-      }).languageModel(llm.model)
-    } else if (llm.provider == 'openai-compatible') {
-      return createOpenAICompatible({
-        name: llm.config?.name || llm.model.split('/')[0],
-        apiKey: apiKey,
-        baseURL: baseURL || 'https://openrouter.ai/api/v1',
-        fetch: llm.fetch,
-        headers: llm.config?.headers,
-      }).languageModel(llm.model)
-    } else if (llm.provider == 'openrouter') {
-      return createOpenRouter({
-        apiKey: apiKey,
-        baseURL: baseURL || 'https://openrouter.ai/api/v1',
-        fetch: llm.fetch,
-        headers: llm.config?.headers,
-        compatibility: llm.config?.compatibility,
-      }).languageModel(llm.model)
-    } else {
-      return llm.provider.languageModel(llm.model)
-    }
-  }
+          // Track model failures
+          this.recordModelFailure(name, llmError)
 
-  private streamWrapper(
-    parts: LanguageModelV2StreamPart[],
-    reader: ReadableStreamDefaultReader<LanguageModelV2StreamPart>,
-    abortController: AbortController
-  ): ReadableStream<LanguageModelV2StreamPart> {
-    let timer: any = null
-    return new ReadableStream<LanguageModelV2StreamPart>({
-      start: controller => {
-        if (parts != null && parts.length > 0) {
-          for (let i = 0; i < parts.length; i++) {
-            controller.enqueue(parts[i])
+          // Check if we should retry this model
+          if (!ErrorHandler.shouldRetry(llmError, retryCount, this.retryConfig)) {
+            Log.info(`Not retrying stream ${name} due to error type: ${llmError.category}`)
+            break
           }
+
+          // Check if we should switch models instead of retrying
+          if (ErrorHandler.shouldSwitchModel(llmError)) {
+            Log.info(`Switching models for streaming due to ${llmError.category} error`)
+            break
+          }
+
+          if (retryCount < this.retryConfig.maxRetries) {
+            const delay = ErrorHandler.getRetryDelay(retryCount, this.retryConfig, llmError.category)
+            Log.info(`Retrying stream ${name} after ${delay}ms... (${retryCount + 1}/${this.retryConfig.maxRetries})`)
+            await this.sleep(delay)
+            retryCount++
+            continue
+          }
+
+          break // Exit retry loop for this provider
         }
-      },
-      pull: async controller => {
-        timer = setTimeout(() => {
-          abortController.abort('Streaming request timeout')
-        }, this.stream_token_timeout)
-        const { done, value } = await reader.read()
-        clearTimeout(timer)
-        if (done) {
-          controller.close()
-          reader.releaseLock()
-          return
-        }
-        controller.enqueue(value)
-      },
-      cancel: reason => {
-        timer && clearTimeout(timer)
-        reader.cancel(reason)
-      },
-    })
+      }
+
+      if (lastError) {
+        errors.push({ modelName: name, error: lastError, retryCount })
+      }
+    }
+
+    // All models failed, throw comprehensive error
+    const errorSummary = this.createFailureSummary(errors)
+    throw new LLMError(`All LLM stream providers failed. ${errorSummary}`, 'unknown', false, errors)
+  }
+
+  /**
+   * Build native request from LLMRequest
+   */
+  private buildNativeRequest(request: LLMRequest, config: LLMConfig): NativeLLMRequest {
+    return {
+      model: config.modelId,
+      messages: request.messages,
+      temperature: request.temperature ?? config.temperature,
+      maxTokens: request.maxTokens ?? config.maxTokens,
+      tools: request.tools,
+      toolChoice: request.toolChoice,
+      stream: false, // Will be overridden for stream calls
+      abortSignal: request.abortSignal,
+    }
   }
 
   public get Llms(): LLMs {
@@ -309,5 +234,111 @@ export class RetryLanguageModel {
 
   public get Names(): string[] {
     return this.names
+  }
+
+  /**
+   * Get available models sorted by priority (least failed first)
+   */
+  private getAvailableModels(): string[] {
+    return [...this.names].sort((a, b) => {
+      const aFailures = this.modelFailureCount.get(a) || 0
+      const bFailures = this.modelFailureCount.get(b) || 0
+      return aFailures - bFailures
+    })
+  }
+
+  /**
+   * Record model failure for circuit breaker pattern
+   */
+  private recordModelFailure(modelName: string, error: LLMError): void {
+    const currentCount = this.modelFailureCount.get(modelName) || 0
+    this.modelFailureCount.set(modelName, currentCount + 1)
+    this.lastFailureTime.set(modelName, Date.now())
+
+    // Log failure tracking
+    Log.info(`Model ${modelName} failure count: ${currentCount + 1}, category: ${error.category}`)
+  }
+
+  /**
+   * Check if model should be temporarily disabled (circuit breaker)
+   */
+  private isModelTemporarilyDisabled(modelName: string): boolean {
+    const failureCount = this.modelFailureCount.get(modelName) || 0
+    const lastFailure = this.lastFailureTime.get(modelName) || 0
+
+    // Disable model if it has failed too many times recently
+    if (failureCount >= 5) {
+      const timeSinceLastFailure = Date.now() - lastFailure
+      const cooldownPeriod = Math.min(60000 * Math.pow(2, failureCount - 5), 300000) // Max 5 minutes
+
+      if (timeSinceLastFailure < cooldownPeriod) {
+        return true
+      } else {
+        // Reset failure count after cooldown
+        this.modelFailureCount.delete(modelName)
+        this.lastFailureTime.delete(modelName)
+      }
+    }
+
+    return false
+  }
+
+  /**
+   * Create comprehensive failure summary for error reporting
+   */
+  private createFailureSummary(errors: Array<{ modelName: string; error: LLMError; retryCount: number }>): string {
+    if (errors.length === 0) {
+      return 'No models available.'
+    }
+
+    const summary = errors
+      .map(({ modelName, error, retryCount }) => {
+        const userFriendlyError = ErrorHandler.formatErrorForUser(error)
+        return `${modelName}: ${userFriendlyError} (${retryCount + 1} attempts)`
+      })
+      .join('; ')
+
+    return summary
+  }
+
+  /**
+   * Get retry statistics for monitoring
+   */
+  public getRetryStats(): { modelName: string; failureCount: number; lastFailure?: Date }[] {
+    return Array.from(this.modelFailureCount.entries()).map(([modelName, failureCount]) => ({
+      modelName,
+      failureCount,
+      lastFailure: this.lastFailureTime.has(modelName) ? new Date(this.lastFailureTime.get(modelName)!) : undefined,
+    }))
+  }
+
+  /**
+   * Reset failure tracking for a specific model or all models
+   */
+  public resetFailureTracking(modelName?: string): void {
+    if (modelName) {
+      this.modelFailureCount.delete(modelName)
+      this.lastFailureTime.delete(modelName)
+      Log.info(`Reset failure tracking for model: ${modelName}`)
+    } else {
+      this.modelFailureCount.clear()
+      this.lastFailureTime.clear()
+      Log.info('Reset failure tracking for all models')
+    }
+  }
+
+  /**
+   * Update retry configuration
+   */
+  public updateRetryConfig(config: Partial<RetryConfig>): void {
+    this.retryConfig = { ...this.retryConfig, ...config }
+    Log.info('Updated retry configuration:', this.retryConfig)
+  }
+
+  /**
+   * Sleep utility for retry delays
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
   }
 }

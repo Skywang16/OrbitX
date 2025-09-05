@@ -1,36 +1,74 @@
-import {
-  ProviderV2,
-  LanguageModelV2CallWarning,
-  LanguageModelV2FinishReason,
-  LanguageModelV2StreamPart,
-  LanguageModelV2FunctionTool,
-  LanguageModelV2ToolChoice,
-  LanguageModelV2Prompt,
-  LanguageModelV2CallOptions,
-  LanguageModelV2Content,
-  SharedV2Headers,
-  SharedV2ProviderMetadata,
-  LanguageModelV2Usage,
-  LanguageModelV2ResponseMetadata,
-} from '@ai-sdk/provider'
+// Native LLM Types - Complete refactor without ai-sdk dependencies
 
-export type LLMprovider = 'openai' | 'anthropic' | 'google' | 'aws' | 'openrouter' | 'openai-compatible' | ProviderV2
+// Simplified JSONSchema type
+export type JSONSchema7 = any
 
-export type LLMConfig = {
-  provider: LLMprovider
+// Core message types
+export interface NativeLLMMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool'
+  content: string | NativeLLMMessagePart[]
+}
+
+export interface NativeLLMMessagePart {
+  type: 'text' | 'file' | 'tool-call' | 'tool-result'
+  text?: string
+  mimeType?: string
+  data?: string
+  toolCallId?: string
+  toolName?: string
+  args?: Record<string, unknown>
+  result?: string | Record<string, unknown>
+}
+
+// Tool types
+export interface NativeLLMTool {
+  name: string
+  description: string
+  parameters: any // JSONSchema
+}
+
+export interface NativeLLMToolCall {
+  id: string
+  name: string
+  arguments: Record<string, unknown>
+}
+
+// Request and response types
+export interface NativeLLMRequest {
   model: string
-  apiKey: string | (() => Promise<string>)
-  config?: {
-    baseURL?: string | (() => Promise<string>)
-    temperature?: number
-    topP?: number
-    topK?: number
-    maxTokens?: number
-    [key: string]: any
-  }
-  options?: Record<string, any>
-  fetch?: typeof globalThis.fetch
-  handler?: (options: LanguageModelV2CallOptions) => Promise<LanguageModelV2CallOptions>
+  messages: NativeLLMMessage[]
+  temperature?: number
+  maxTokens?: number
+  tools?: NativeLLMTool[]
+  toolChoice?: string
+  stream: boolean
+  abortSignal?: AbortSignal
+}
+
+export interface NativeLLMResponse {
+  content: string
+  finishReason: string
+  toolCalls?: NativeLLMToolCall[]
+  usage?: NativeLLMUsage
+}
+
+export interface NativeLLMUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+// Stream types
+export type NativeLLMStreamChunk =
+  | { type: 'delta'; content?: string; toolCalls?: NativeLLMToolCall[] }
+  | { type: 'finish'; finishReason: string; usage?: NativeLLMUsage }
+  | { type: 'error'; error: string }
+
+// Simplified configuration types
+export type LLMConfig = {
+  modelId: string
+  temperature?: number
+  maxTokens?: number
 }
 
 export type LLMs = {
@@ -38,44 +76,30 @@ export type LLMs = {
   [key: string]: LLMConfig
 }
 
+export type FinishReason = 'stop' | 'length' | 'tool_calls' | 'content_filter'
+
+// Generate result types
 export type GenerateResult = {
-  llm: string
-  llmConfig: LLMConfig
-  text?: string
-  content: Array<LanguageModelV2Content>
-  finishReason: LanguageModelV2FinishReason
-  usage: LanguageModelV2Usage
-  providerMetadata?: SharedV2ProviderMetadata
-  request?: {
-    body?: unknown
-  }
-  response?: LanguageModelV2ResponseMetadata & {
-    headers?: SharedV2Headers
-    body?: unknown
-  }
-  warnings: Array<LanguageModelV2CallWarning>
+  modelId: string
+  content: string
+  finishReason: FinishReason
+  usage: NativeLLMUsage
+  toolCalls?: NativeLLMToolCall[]
 }
 
+// Stream result types
 export type StreamResult = {
-  llm: string
-  llmConfig: LLMConfig
-  stream: ReadableStream<LanguageModelV2StreamPart>
-  request?: {
-    body?: unknown
-  }
-  response?: {
-    headers?: SharedV2Headers
-  }
+  modelId: string
+  stream: ReadableStream<NativeLLMStreamChunk>
 }
 
+// Request type for compatibility
 export type LLMRequest = {
   maxTokens?: number
-  messages: LanguageModelV2Prompt
-  toolChoice?: LanguageModelV2ToolChoice
-  tools?: Array<LanguageModelV2FunctionTool>
+  messages: NativeLLMMessage[]
+  toolChoice?: string
+  tools?: NativeLLMTool[]
   temperature?: number
-  topP?: number
-  topK?: number
   stopSequences?: string[]
   abortSignal?: AbortSignal
 }

@@ -1,6 +1,5 @@
-import { JSONSchema7 } from 'json-schema'
 import { AgentContext } from '../core/context'
-import { LanguageModelV2ToolCallPart } from '@ai-sdk/provider'
+import { NativeLLMToolCall, JSONSchema7 } from './llm.types'
 
 export type ToolSchema =
   | {
@@ -61,7 +60,7 @@ export interface ToolExecuter {
   execute: (
     args: Record<string, unknown>,
     agentContext: AgentContext,
-    toolCall: LanguageModelV2ToolCallPart
+    toolCall: NativeLLMToolCall
   ) => Promise<ToolResult>
 }
 

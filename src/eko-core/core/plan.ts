@@ -2,10 +2,9 @@ import Log from '../common/log'
 import Context from './context'
 import { RetryLanguageModel } from '../llm'
 import { parseTask } from '../common/xml'
-import { LLMRequest } from '../types/llm.types'
+import { LLMRequest, NativeLLMMessage, NativeLLMStreamChunk, NativeLLMMessagePart } from '../types/llm.types'
 import { StreamCallback, Task } from '../types/core.types'
 import { getPlanSystemPrompt, getPlanUserPrompt } from '../prompt'
-import { LanguageModelV2Prompt, LanguageModelV2StreamPart, LanguageModelV2TextPart } from '@ai-sdk/provider'
 
 export class Planner {
   private taskId: string
@@ -18,9 +17,9 @@ export class Planner {
     this.callback = callback || context.config.callback
   }
 
-  async plan(taskPrompt: string | LanguageModelV2TextPart, saveHistory: boolean = true): Promise<Task> {
+  async plan(taskPrompt: string | NativeLLMMessagePart, saveHistory: boolean = true): Promise<Task> {
     let taskPromptStr
-    let userPrompt: LanguageModelV2TextPart
+    let userPrompt: NativeLLMMessagePart
     if (typeof taskPrompt === 'string') {
       taskPromptStr = taskPrompt
       userPrompt = {
@@ -31,7 +30,7 @@ export class Planner {
       userPrompt = taskPrompt
       taskPromptStr = taskPrompt.text || ''
     }
-    const messages: LanguageModelV2Prompt = [
+    const messages: NativeLLMMessage[] = [
       {
         role: 'system',
         content: await getPlanSystemPrompt(this.context),
@@ -47,15 +46,15 @@ export class Planner {
   async replan(taskPrompt: string, saveHistory: boolean = true): Promise<Task> {
     const chain = this.context.chain
     if (chain.planRequest && chain.planResult) {
-      const messages: LanguageModelV2Prompt = [
+      const messages: NativeLLMMessage[] = [
         ...chain.planRequest.messages,
         {
           role: 'assistant',
-          content: [{ type: 'text', text: chain.planResult }],
+          content: chain.planResult,
         },
         {
           role: 'user',
-          content: [{ type: 'text', text: taskPrompt }],
+          content: taskPrompt,
         },
       ]
       return await this.doPlan(taskPrompt, messages, saveHistory)
@@ -64,7 +63,7 @@ export class Planner {
     }
   }
 
-  async doPlan(taskPrompt: string, messages: LanguageModelV2Prompt, saveHistory: boolean): Promise<Task> {
+  async doPlan(taskPrompt: string, messages: NativeLLMMessage[], saveHistory: boolean): Promise<Task> {
     const config = this.context.config
     const rlm = new RetryLanguageModel(config.llms, config.planLlms)
     const request: LLMRequest = {
@@ -76,7 +75,6 @@ export class Planner {
     const result = await rlm.callStream(request)
     const reader = result.stream.getReader()
     let streamText = ''
-    let thinkingText = ''
     try {
       while (true) {
         await this.context.checkAborted(true)
@@ -84,16 +82,15 @@ export class Planner {
         if (done) {
           break
         }
-        let chunk = value as LanguageModelV2StreamPart
+        let chunk = value as NativeLLMStreamChunk
         if (chunk.type == 'error') {
           Log.error('Plan, LLM Error: ', chunk)
           throw new Error('LLM Error: ' + chunk.error)
         }
-        if (chunk.type == 'reasoning-delta') {
-          thinkingText += chunk.delta || ''
-        }
-        if (chunk.type == 'text-delta') {
-          streamText += chunk.delta || ''
+        if (chunk.type == 'delta') {
+          if (chunk.content) {
+            streamText += chunk.content
+          }
         }
         if (this.callback) {
           let task = parseTask(this.taskId, streamText, false)

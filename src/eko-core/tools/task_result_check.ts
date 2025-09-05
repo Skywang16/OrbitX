@@ -1,11 +1,10 @@
-import { JSONSchema7 } from 'json-schema'
+import { JSONSchema7, NativeLLMToolCall, NativeLLMMessage, NativeLLMTool } from '../types'
 import { RetryLanguageModel } from '../llm'
 import { extractUsedTool } from '../memory'
 import { mergeTools } from '../common/utils'
 import { callAgentLLM } from '../agent/llm'
 import { AgentContext } from '../core/context'
 import { Tool, ToolResult } from '../types/tools.types'
-import { LanguageModelV2FunctionTool, LanguageModelV2Prompt } from '@ai-sdk/provider'
 import Log from '../common/log'
 
 export const TOOL_NAME = 'task_result_check'
@@ -41,7 +40,11 @@ export default class TaskResultCheckTool implements Tool {
     }
   }
 
-  async execute(): Promise<ToolResult> {
+  async execute(
+    _args: Record<string, unknown>,
+    _agentContext: AgentContext,
+    _toolCall?: NativeLLMToolCall
+  ): Promise<ToolResult> {
     return {
       content: [
         {
@@ -56,8 +59,8 @@ export default class TaskResultCheckTool implements Tool {
 async function doTaskResultCheck(
   agentContext: AgentContext,
   rlm: RetryLanguageModel,
-  messages: LanguageModelV2Prompt,
-  tools: LanguageModelV2FunctionTool[]
+  messages: NativeLLMMessage[],
+  tools: NativeLLMTool[]
 ): Promise<{ completionStatus: 'completed' | 'incomplete' }> {
   try {
     // extract used tool
@@ -65,14 +68,13 @@ async function doTaskResultCheck(
     const taskResultCheck = new TaskResultCheckTool()
     const newTools = mergeTools(usedTools, [
       {
-        type: 'function',
         name: taskResultCheck.name,
         description: taskResultCheck.description,
-        inputSchema: taskResultCheck.parameters,
+        parameters: taskResultCheck.parameters,
       },
     ])
     // handle messages
-    const newMessages: LanguageModelV2Prompt = [...messages]
+    const newMessages: NativeLLMMessage[] = [...messages]
     newMessages.push({
       role: 'user',
       content: [
@@ -82,13 +84,14 @@ async function doTaskResultCheck(
         },
       ],
     })
-    const result = await callAgentLLM(agentContext, rlm, newMessages, newTools, true, {
-      type: 'tool',
-      toolName: taskResultCheck.name,
-    })
-    const toolCall = result.filter(s => s.type == 'tool-call')[0]
-    const args = typeof toolCall.input == 'string' ? JSON.parse(toolCall.input || '{}') : toolCall.input || {}
-    const toolResult = await taskResultCheck.execute()
+    const result = await callAgentLLM(agentContext, rlm, newMessages, newTools, true, taskResultCheck.name)
+    const toolCall = result.find(s => 'id' in s && 'name' in s) as NativeLLMToolCall
+    if (!toolCall) {
+      throw new Error('No tool call found in result')
+    }
+    const args = toolCall.arguments || {}
+    const nativeToolCall: NativeLLMToolCall = toolCall
+    const toolResult = await taskResultCheck.execute(args, agentContext, nativeToolCall)
     const callback = agentContext.context.config.callback
     if (callback) {
       await callback.onMessage(
@@ -97,8 +100,8 @@ async function doTaskResultCheck(
           agentName: agentContext.agent.Name,
           nodeId: agentContext.context.taskId,
           type: 'tool_result',
-          toolId: toolCall.toolCallId,
-          toolName: toolCall.toolName,
+          toolId: toolCall.id,
+          toolName: toolCall.name,
           params: args,
           toolResult: toolResult,
         },
@@ -119,7 +122,7 @@ async function doTaskResultCheck(
       })
     }
     return {
-      completionStatus: args.completionStatus,
+      completionStatus: args.completionStatus as 'completed' | 'incomplete',
     }
   } catch (e) {
     Log.error('TaskResultCheckTool error', e)

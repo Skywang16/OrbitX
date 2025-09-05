@@ -1,6 +1,5 @@
 import { ToolResult } from '../types/tools.types'
-import { LLMRequest } from '../types/llm.types'
-import { LanguageModelV2ToolCallPart } from '@ai-sdk/provider'
+import { LLMRequest, NativeLLMToolCall } from '../types/llm.types'
 
 type ChainEvent = {
   type: 'update'
@@ -19,9 +18,9 @@ export class ToolChain {
   toolResult?: ToolResult
   onUpdate?: () => void
 
-  constructor(toolUse: LanguageModelV2ToolCallPart, request: LLMRequest) {
-    this.toolName = toolUse.toolName
-    this.toolCallId = toolUse.toolCallId
+  constructor(toolCall: NativeLLMToolCall, request: LLMRequest) {
+    this.toolName = toolCall.name
+    this.toolCallId = toolCall.id
     this.request = JSON.parse(JSON.stringify(request))
   }
 

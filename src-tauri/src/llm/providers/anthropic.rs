@@ -227,6 +227,44 @@ impl AnthropicProvider {
         LLMError::Provider(format!("Anthropic API error {}: {}", status, body))
     }
 
+    /// 解析content_block_start事件，处理工具调用
+    fn parse_content_block_start(event_json: &Value) -> Option<LLMResult<LLMStreamChunk>> {
+        let content_block = &event_json["content_block"];
+
+        if content_block["type"] == "tool_use" {
+            println!("🔧 Debug: Found tool_use in content_block_start");
+
+            // 提取工具调用信息
+            let id = content_block["id"].as_str().unwrap_or("").to_string();
+            let name = content_block["name"].as_str().unwrap_or("").to_string();
+
+            // Anthropic在content_block_start中可能只有部分信息
+            // 完整的input会在后续的content_block_delta事件中提供
+            if !name.is_empty() {
+                let tool_call = LLMToolCall {
+                    id,
+                    name,
+                    // 初始化为空对象，后续会通过delta更新
+                    arguments: serde_json::json!({}),
+                };
+
+                println!(
+                    "🔧 Debug: Creating Anthropic tool call - id: {}, name: {}",
+                    tool_call.id, tool_call.name
+                );
+
+                Some(Ok(LLMStreamChunk::Delta {
+                    content: None,
+                    tool_calls: Some(vec![tool_call]),
+                }))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
     fn parse_stream_chunk(data: &str) -> Option<LLMResult<LLMStreamChunk>> {
         // eventsource_stream::Eventsource 已经为我们解析出每个 SSE 事件，传入的就是纯 data 字段
         let event_json: Value = match serde_json::from_str(data) {
@@ -245,16 +283,33 @@ impl AnthropicProvider {
                         content,
                         tool_calls: None,
                     }))
+                } else if event_json["delta"]["type"] == "input_json_delta" {
+                    // 处理工具调用参数的增量更新
+                    // 这里我们暂时不处理增量参数，等待完整的工具调用
+                    None
                 } else {
-                    None // 目前忽略非文本的增量（如 tool_use 增量）
+                    None
                 }
+            }
+            // 内容块开始 - 处理工具调用
+            "content_block_start" => Self::parse_content_block_start(&event_json),
+            // 内容块结束 - 工具调用完成
+            "content_block_stop" => {
+                // 工具调用块结束，这里可以做一些清理工作
+                // 但通常不需要发送额外的消息，因为工具调用信息已经在start事件中发送了
+                None
             }
             // 流结束
             "message_stop" => {
-                let finish_reason = event_json["stop_reason"]
-                    .as_str()
-                    .unwrap_or("stop")
-                    .to_string();
+                let stop_reason = event_json["stop_reason"].as_str().unwrap_or("stop");
+                let finish_reason = match stop_reason {
+                    "tool_use" => "tool_calls".to_string(),
+                    other => other.to_string(),
+                };
+                println!(
+                    "🔧 Debug: Anthropic message_stop with reason: {} -> {}",
+                    stop_reason, finish_reason
+                );
                 Some(Ok(LLMStreamChunk::Finish {
                     finish_reason,
                     // Anthropic 的 usage 常出现在 message_delta 事件，这里简化为 None

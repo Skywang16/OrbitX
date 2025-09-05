@@ -1,5 +1,5 @@
-import { Tool, ToolSchema } from '../types/tools.types'
-import { LanguageModelV2FunctionTool } from '@ai-sdk/provider'
+import { Tool, ToolSchema, NativeLLMTool, NativeLLMToolCall, NativeLLMMessagePart, NativeLLMMessage } from '../types'
+import { ToolResult } from '../types/tools.types'
 
 export function sleep(time: number): Promise<void> {
   return new Promise(resolve => setTimeout(() => resolve(), time))
@@ -13,7 +13,7 @@ export function uuidv4(): string {
   })
 }
 
-export function call_timeout<R extends Promise<any>>(
+export function call_timeout<R extends Promise<unknown>>(
   fun: () => R,
   timeout: number,
   error_callback?: (e: string) => void
@@ -35,35 +35,63 @@ export function call_timeout<R extends Promise<any>>(
   })
 }
 
-export function convertToolSchema(tool: ToolSchema): LanguageModelV2FunctionTool {
+// Native tool conversion functions
+export function convertToolSchema(tool: ToolSchema): NativeLLMTool {
   if ('function' in tool) {
     return {
-      type: 'function',
       name: tool.function.name,
-      description: tool.function.description,
-      inputSchema: tool.function.parameters,
+      description: tool.function.description || '',
+      parameters: tool.function.parameters,
     }
   } else if ('input_schema' in tool) {
     return {
-      type: 'function',
       name: tool.name,
-      description: tool.description,
-      inputSchema: tool.input_schema,
+      description: tool.description || '',
+      parameters: tool.input_schema,
     }
   } else if ('inputSchema' in tool) {
     return {
-      type: 'function',
       name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
+      description: tool.description || '',
+      parameters: tool.inputSchema,
     }
   } else {
     return {
-      type: 'function',
       name: tool.name,
-      description: tool.description,
-      inputSchema: tool.parameters,
+      description: tool.description || '',
+      parameters: tool.parameters,
     }
+  }
+}
+
+export function convertTools(tools: Tool[]): NativeLLMTool[] {
+  return tools.map(tool => ({
+    name: tool.name,
+    description: tool.description || '',
+    parameters: tool.parameters,
+  }))
+}
+
+export function convertToolResult(toolCall: NativeLLMToolCall, toolResult: ToolResult): NativeLLMMessagePart {
+  // Convert ToolResult content to a simple string or object format
+  let result: string | Record<string, unknown>
+
+  if (toolResult.content.length === 1 && toolResult.content[0].type === 'text') {
+    result = toolResult.content[0].text
+  } else {
+    // Convert complex content to a structured object
+    result = {
+      content: toolResult.content,
+      isError: toolResult.isError,
+      extInfo: toolResult.extInfo,
+    }
+  }
+
+  return {
+    type: 'tool-result',
+    toolCallId: toolCall.id,
+    toolName: toolCall.name,
+    result,
   }
 }
 
@@ -131,7 +159,7 @@ export function getMimeType(data: string): string {
   return mediaType
 }
 
-export function mergeTools<T extends Tool | LanguageModelV2FunctionTool>(tools1: T[], tools2: T[]): T[] {
+export function mergeTools<T extends Tool | NativeLLMTool>(tools1: T[], tools2: T[]): T[] {
   let tools: T[] = []
   let toolMap2 = tools2.reduce(
     (map, tool) => {
@@ -159,6 +187,63 @@ export function mergeTools<T extends Tool | LanguageModelV2FunctionTool>(tools1:
     }
   }
   return tools
+}
+
+// Additional utility functions for native backend
+export function createTextMessage(role: 'system' | 'user' | 'assistant', content: string): NativeLLMMessage {
+  return { role, content }
+}
+
+export function createToolCallMessage(toolCalls: NativeLLMToolCall[]): NativeLLMMessage {
+  return {
+    role: 'assistant',
+    content: toolCalls.map(call => ({
+      type: 'tool-call' as const,
+      toolCallId: call.id,
+      toolName: call.name,
+      args: call.arguments,
+    })),
+  }
+}
+
+export function createToolResultMessage(toolCall: NativeLLMToolCall, result: ToolResult): NativeLLMMessage {
+  return {
+    role: 'tool',
+    content: [convertToolResult(toolCall, result)],
+  }
+}
+
+export function isTextMessage(message: NativeLLMMessage): boolean {
+  return typeof message.content === 'string'
+}
+
+export function isMultiPartMessage(message: NativeLLMMessage): boolean {
+  return Array.isArray(message.content)
+}
+
+export function extractTextFromMessage(message: NativeLLMMessage): string {
+  if (typeof message.content === 'string') {
+    return message.content
+  }
+
+  return message.content
+    .filter(part => part.type === 'text')
+    .map(part => part.text || '')
+    .join('')
+}
+
+export function extractToolCallsFromMessage(message: NativeLLMMessage): NativeLLMToolCall[] {
+  if (typeof message.content === 'string') {
+    return []
+  }
+
+  return message.content
+    .filter(part => part.type === 'tool-call')
+    .map(part => ({
+      id: part.toolCallId || '',
+      name: part.toolName || '',
+      arguments: part.args || {},
+    }))
 }
 
 // mergeAgents removed - single agent mode only

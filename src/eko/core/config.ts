@@ -11,25 +11,19 @@ import { aiApi } from '@/api'
  * 将项目的AIModelConfig转换为Eko的LLM配置
  */
 export const convertToEkoLLMConfig = (modelConfig: AIModelConfig) => {
-  // 根据provider映射到eko支持的provider
-  const providerMap: Record<string, 'openai' | 'anthropic'> = {
-    openAI: 'openai',
-    claude: 'anthropic',
-    custom: 'openai', // 自定义provider默认使用openai格式
-  }
+  // 根据provider映射到eko支持的provider (removed for native backend migration)
+  // const providerMap: Record<string, 'openai' | 'anthropic'> = {
+  //   openAI: 'openai',
+  //   claude: 'anthropic',
+  //   custom: 'openai', // 自定义provider默认使用openai格式
+  // }
 
-  const ekoProvider = providerMap[modelConfig.provider] || 'openai'
+  // const ekoProvider = providerMap[modelConfig.provider] || 'openai'
 
   return {
-    provider: ekoProvider,
-    model: modelConfig.model,
-    apiKey: modelConfig.apiKey,
-    config: {
-      baseURL: modelConfig.apiUrl,
-      maxTokens: modelConfig.options?.maxTokens,
-      temperature: modelConfig.options?.temperature,
-      timeout: modelConfig.options?.timeout,
-    },
+    modelId: modelConfig.id, // 使用数据库ID而不是model名称
+    temperature: modelConfig.options?.temperature,
+    maxTokens: modelConfig.options?.maxTokens,
   }
 }
 

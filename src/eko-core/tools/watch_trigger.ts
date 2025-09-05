@@ -1,6 +1,5 @@
 import Log from '../common/log'
-import { LLMRequest } from '../types'
-import { JSONSchema7 } from 'json-schema'
+import { LLMRequest, JSONSchema7, NativeLLMToolCall } from '../types'
 import { toImage } from '../common/utils'
 import { RetryLanguageModel } from '../llm'
 import { AgentContext } from '../core/context'
@@ -78,7 +77,11 @@ export default class WatchTriggerTool implements Tool {
     }
   }
 
-  async execute(args: Record<string, unknown>, agentContext: AgentContext): Promise<ToolResult> {
+  async execute(
+    args: Record<string, unknown>,
+    agentContext: AgentContext,
+    _toolCall?: NativeLLMToolCall
+  ): Promise<ToolResult> {
     let nodeId = args.nodeId as number
     let agentXml = agentContext.context.task?.xml || ''
     let node = extractAgentXmlNode(agentXml, `[id="${nodeId}"]`)
@@ -219,13 +222,13 @@ export default class WatchTriggerTool implements Tool {
             content: [
               {
                 type: 'file',
-                data: image1.image,
-                mediaType: image1.imageType,
+                data: typeof image1.image === 'string' ? image1.image : '',
+                mimeType: image1.imageType,
               },
               {
                 type: 'file',
-                data: image2.image,
-                mediaType: image2.imageType,
+                data: typeof image2.image === 'string' ? image2.image : '',
+                mimeType: image2.imageType,
               },
               {
                 type: 'text',
@@ -237,7 +240,7 @@ export default class WatchTriggerTool implements Tool {
         abortSignal: agentContext.context.controller.signal,
       }
       const result = await rlm.call(request)
-      let resultText = result.text || '{}'
+      let resultText = result.content || '{}'
       resultText = resultText.substring(resultText.indexOf('{'), resultText.lastIndexOf('}') + 1)
       return JSON.parse(resultText)
     } catch (error) {

@@ -1,7 +1,5 @@
-import { LanguageModelV2Message } from '@ai-sdk/provider'
-import { toFile, uuidv4, getMimeType } from '../common/utils'
-import { EkoMessage, LanguageModelV2Prompt } from '../types'
-import { defaultMessageProviderOptions } from '../agent/llm'
+import { uuidv4, getMimeType } from '../common/utils'
+import { EkoMessage, NativeLLMMessage } from '../types'
 
 export interface MemoryConfig {
   maxMessages?: number
@@ -235,8 +233,8 @@ export class EkoMemory {
     this.messages = []
   }
 
-  public buildMessages(): LanguageModelV2Prompt {
-    const llmMessages: LanguageModelV2Message[] = []
+  public buildMessages(): NativeLLMMessage[] {
+    const llmMessages: NativeLLMMessage[] = []
     for (let i = 0; i < this.messages.length; i++) {
       const message = this.messages[i]
       if (message.role == 'user') {
@@ -244,12 +242,7 @@ export class EkoMemory {
           role: message.role,
           content:
             typeof message.content === 'string'
-              ? [
-                  {
-                    type: 'text',
-                    text: message.content,
-                  },
-                ]
+              ? message.content
               : message.content.map(part => {
                   if (part.type == 'text') {
                     return {
@@ -259,12 +252,11 @@ export class EkoMemory {
                   } else {
                     return {
                       type: 'file',
-                      data: toFile(part.data),
-                      mediaType: part.mimeType || getMimeType(part.data),
+                      data: part.data,
+                      mimeType: part.mimeType || getMimeType(part.data),
                     }
                   }
                 }),
-          providerOptions: defaultMessageProviderOptions(),
         })
       } else if (message.role == 'assistant') {
         llmMessages.push({
@@ -275,20 +267,19 @@ export class EkoMemory {
                 type: 'text',
                 text: part.text,
               }
-            } else if (part.type == 'reasoning') {
-              return {
-                type: 'reasoning',
-                text: part.text,
-              }
             } else if (part.type == 'tool-call') {
               return {
                 type: 'tool-call',
                 toolCallId: part.toolCallId,
                 toolName: part.toolName,
-                input: part.args as unknown,
+                args: part.args,
               }
             } else {
-              return part
+              // Handle other types like reasoning by converting to text
+              return {
+                type: 'text',
+                text: (part as any).text || '',
+              }
             }
           }),
         })
@@ -300,16 +291,7 @@ export class EkoMemory {
               type: 'tool-result',
               toolCallId: part.toolCallId,
               toolName: part.toolName,
-              output:
-                typeof part.result == 'string'
-                  ? {
-                      type: 'text',
-                      value: part.result,
-                    }
-                  : {
-                      type: 'json',
-                      value: part.result as any,
-                    },
+              result: part.result,
             }
           }),
         })
@@ -319,7 +301,6 @@ export class EkoMemory {
       {
         role: 'system',
         content: this.getSystemPrompt(),
-        providerOptions: defaultMessageProviderOptions(),
       },
       ...llmMessages,
     ]

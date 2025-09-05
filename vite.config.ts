@@ -53,15 +53,7 @@ export default defineConfig(() => ({
             '@tauri-apps/plugin-process',
             '@tauri-apps/plugin-window-state',
           ],
-          'ai-sdk': [
-            '@ai-sdk/anthropic',
-            '@ai-sdk/openai',
-            '@ai-sdk/provider',
-            '@ai-sdk/amazon-bedrock',
-            '@ai-sdk/google',
-            '@ai-sdk/openai-compatible',
-            '@openrouter/ai-sdk-provider',
-          ],
+
           utils: ['lodash-es', 'dayjs', 'uuid', 'marked', 'strip-ansi'],
         },
         chunkFileNames: () => {

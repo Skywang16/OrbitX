@@ -1,6 +1,5 @@
-import { LanguageModelV2FinishReason } from '@ai-sdk/provider'
 import { Agent } from '../agent'
-import { LLMs } from './llm.types'
+import { LLMs, FinishReason } from './llm.types'
 import { IMcpClient } from './mcp.types'
 import { ToolResult } from './tools.types'
 import { AgentContext } from '../core/context'
@@ -69,7 +68,7 @@ export type StreamCallbackMessage = {
     }
   | {
       type: 'finish'
-      finishReason: LanguageModelV2FinishReason
+      finishReason: FinishReason
       usage: {
         promptTokens: number
         completionTokens: number

@@ -1,4 +1,4 @@
-import { JSONSchema7 } from 'json-schema'
+import { JSONSchema7, NativeLLMToolCall } from '../types'
 import { AgentContext } from '../core/context'
 import { buildAgentRootXml } from '../common/xml'
 import { Tool, ToolResult } from '../types/tools.types'
@@ -39,7 +39,11 @@ export default class TaskNodeStatusTool implements Tool {
     }
   }
 
-  async execute(args: Record<string, unknown>, agentContext: AgentContext): Promise<ToolResult> {
+  async execute(
+    args: Record<string, unknown>,
+    agentContext: AgentContext,
+    _toolCall?: NativeLLMToolCall
+  ): Promise<ToolResult> {
     let doneIds = args.doneIds as string[]
     let todoIds = args.todoIds as string[]
     let taskInfo = agentContext.context.task

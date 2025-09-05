@@ -1,11 +1,10 @@
-import { JSONSchema7 } from 'json-schema'
+import { JSONSchema7, NativeLLMToolCall, NativeLLMMessage, NativeLLMTool } from '../types'
 import { RetryLanguageModel } from '../llm'
 import { extractUsedTool } from '../memory'
 import { mergeTools } from '../common/utils'
 import { callAgentLLM } from '../agent/llm'
 import { AgentContext } from '../core/context'
 import { Tool, ToolResult } from '../types/tools.types'
-import { LanguageModelV2FunctionTool, LanguageModelV2Prompt } from '@ai-sdk/provider'
 import Log from '../common/log'
 
 export const TOOL_NAME = 'todo_list_manager'
@@ -47,7 +46,11 @@ export default class TodoListManagerTool implements Tool {
     }
   }
 
-  async execute(): Promise<ToolResult> {
+  async execute(
+    _args: Record<string, unknown>,
+    _agentContext: AgentContext,
+    _toolCall?: NativeLLMToolCall
+  ): Promise<ToolResult> {
     return {
       content: [
         {
@@ -62,8 +65,8 @@ export default class TodoListManagerTool implements Tool {
 async function doTodoListManager(
   agentContext: AgentContext,
   rlm: RetryLanguageModel,
-  messages: LanguageModelV2Prompt,
-  tools: LanguageModelV2FunctionTool[]
+  messages: NativeLLMMessage[],
+  tools: NativeLLMTool[]
 ) {
   try {
     // extract used tool
@@ -71,14 +74,13 @@ async function doTodoListManager(
     const todoListManager = new TodoListManagerTool()
     const newTools = mergeTools(usedTools, [
       {
-        type: 'function',
         name: todoListManager.name,
         description: todoListManager.description,
-        inputSchema: todoListManager.parameters,
+        parameters: todoListManager.parameters,
       },
     ])
     // handle messages
-    const newMessages: LanguageModelV2Prompt = [...messages]
+    const newMessages: NativeLLMMessage[] = [...messages]
     newMessages.push({
       role: 'user',
       content: [
@@ -88,13 +90,14 @@ async function doTodoListManager(
         },
       ],
     })
-    const result = await callAgentLLM(agentContext, rlm, newMessages, newTools, true, {
-      type: 'tool',
-      toolName: todoListManager.name,
-    })
-    const toolCall = result.filter(s => s.type == 'tool-call')[0]
-    const args = typeof toolCall.input == 'string' ? JSON.parse(toolCall.input || '{}') : toolCall.input || {}
-    const toolResult = await todoListManager.execute()
+    const result = await callAgentLLM(agentContext, rlm, newMessages, newTools, true, todoListManager.name)
+    const toolCall = result.find(s => 'id' in s && 'name' in s) as NativeLLMToolCall
+    if (!toolCall) {
+      throw new Error('No tool call found in result')
+    }
+    const args = toolCall.arguments || {}
+    const nativeToolCall: NativeLLMToolCall = toolCall
+    const toolResult = await todoListManager.execute(args, agentContext, nativeToolCall)
     const callback = agentContext.context.config.callback
     if (callback) {
       await callback.onMessage(
@@ -103,8 +106,8 @@ async function doTodoListManager(
           agentName: agentContext.agent.Name,
           nodeId: agentContext.context.taskId,
           type: 'tool_result',
-          toolId: toolCall.toolCallId,
-          toolName: toolCall.toolName,
+          toolId: toolCall.id,
+          toolName: toolCall.name,
           params: args,
           toolResult: toolResult,
         },
@@ -112,17 +115,19 @@ async function doTodoListManager(
       )
     }
     let userPrompt = '# Task Execution Status\n'
-    if (args.completedList && args.completedList.length > 0) {
+    const completedList = args.completedList as string[]
+    const todoList = args.todoList as string[]
+    if (completedList && completedList.length > 0) {
       userPrompt += '## Completed task list\n'
-      for (let i = 0; i < args.completedList.length; i++) {
-        userPrompt += `- ${args.completedList[i]}\n`
+      for (let i = 0; i < completedList.length; i++) {
+        userPrompt += `- ${completedList[i]}\n`
       }
       userPrompt += '\n'
     }
-    if (args.todoList && args.todoList.length > 0) {
+    if (todoList && todoList.length > 0) {
       userPrompt += '## Pending task list\n'
-      for (let i = 0; i < args.todoList.length; i++) {
-        userPrompt += `- ${args.todoList[i]}\n`
+      for (let i = 0; i < todoList.length; i++) {
+        userPrompt += `- ${todoList[i]}\n`
       }
       userPrompt += '\n'
     }

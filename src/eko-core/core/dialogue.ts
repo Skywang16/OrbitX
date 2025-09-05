@@ -7,12 +7,9 @@ import {
   DialogueCallback,
   EkoDialogueConfig,
   EkoMessageUserPart,
-  LanguageModelV2Prompt,
-  LanguageModelV2TextPart,
-  LanguageModelV2ToolCallPart,
-  LanguageModelV2ToolResultPart,
 } from '../types'
-import { callChatLLM, convertToolResults, convertUserContent, convertAssistantToolResults } from './dialogue/llm'
+import { NativeLLMMessagePart, NativeLLMToolCall } from '../types/llm.types'
+import { callChatLLM, convertToolResults, convertAssistantToolResults } from './dialogue/llm'
 import { Eko } from './eko'
 import TaskPlannerTool, { TOOL_NAME as task_planner } from './dialogue/task_planner'
 import { RetryLanguageModel } from '../llm'
@@ -20,7 +17,7 @@ import { EkoMemory } from '../memory/memory'
 import ExecuteTaskTool from './dialogue/execute_task'
 import { getDialogueSystemPrompt } from '../prompt'
 
-import { convertTools, getTool, convertToolResult } from '../agent/llm'
+import { convertTools, getTool, convertToolResult } from '../llm/conversion-utils'
 
 export class EkoDialogue {
   protected memory: EkoMemory
@@ -117,7 +114,7 @@ export class EkoDialogue {
     return this.ekoMap.get(taskId)
   }
 
-  public getGlobalContext(): Map<string, any> {
+  public getGlobalContext(): Map<string, unknown> {
     return this.globalContext
   }
 
@@ -127,53 +124,70 @@ export class EkoDialogue {
 
   protected async handleCallResult(
     chatTools: DialogueTool[],
-    results: Array<LanguageModelV2TextPart | LanguageModelV2ToolCallPart>,
+    results: NativeLLMMessagePart[],
     dialogueCallback?: DialogueCallback
   ): Promise<string | null> {
     let text: string | null = null
-    const user_messages: LanguageModelV2Prompt = []
-    const toolResults: LanguageModelV2ToolResultPart[] = []
+    const toolResults: NativeLLMMessagePart[] = []
     if (results.length == 0) {
       return null
     }
     for (let i = 0; i < results.length; i++) {
       const result = results[i]
       if (result.type == 'text') {
-        text = result.text
+        text = result.text || null
         continue
       }
-      let toolResult: ToolResult
-      try {
-        const args = typeof result.input == 'string' ? JSON.parse(result.input || '{}') : result.input || {}
-        const tool = getTool(chatTools, result.toolName)
-        if (!tool) {
-          throw new Error(result.toolName + ' tool does not exist')
+      if (result.type == 'tool-call') {
+        let toolResult: ToolResult
+        try {
+          const args = result.args || {}
+          const tool = getTool(chatTools, result.toolName || '')
+          if (!tool) {
+            throw new Error((result.toolName || 'unknown') + ' tool does not exist')
+          }
+
+          // Create NativeLLMToolCall for compatibility
+          const toolCall: NativeLLMToolCall = {
+            id: result.toolCallId || '',
+            name: result.toolName || '',
+            arguments: args,
+          }
+
+          toolResult = await tool.execute(args, toolCall)
+        } catch (e) {
+          Log.error('tool call error: ', result.toolName, result.args, e)
+          toolResult = {
+            content: [
+              {
+                type: 'text',
+                text: e + '',
+              },
+            ],
+            isError: true,
+          }
         }
-        toolResult = await tool.execute(args, result)
-      } catch (e) {
-        Log.error('tool call error: ', result.toolName, result.input, e)
-        toolResult = {
-          content: [
-            {
-              type: 'text',
-              text: e + '',
-            },
-          ],
-          isError: true,
+        const callback = dialogueCallback?.chatCallback
+        if (callback) {
+          await callback.onMessage({
+            type: 'tool_result',
+            toolId: result.toolCallId || '',
+            toolName: result.toolName || '',
+            params: (result.args as Record<string, unknown>) || {},
+            toolResult: toolResult,
+          })
         }
+
+        // Create tool call for conversion
+        const toolCall: NativeLLMToolCall = {
+          id: result.toolCallId || '',
+          name: result.toolName || '',
+          arguments: result.args || {},
+        }
+
+        const llmToolResult = convertToolResult(toolCall, toolResult)
+        toolResults.push(llmToolResult)
       }
-      const callback = dialogueCallback?.chatCallback
-      if (callback) {
-        await callback.onMessage({
-          type: 'tool_result',
-          toolId: result.toolCallId,
-          toolName: result.toolName,
-          params: (result.input as Record<string, unknown>) || {},
-          toolResult: toolResult,
-        })
-      }
-      const llmToolResult = convertToolResult(result, toolResult, user_messages)
-      toolResults.push(llmToolResult)
     }
     await this.memory.addMessages([
       {
@@ -192,19 +206,6 @@ export class EkoDialogue {
           content: convertToolResults(toolResults),
         },
       ])
-      for (let i = 0; i < user_messages.length; i++) {
-        const message = user_messages[i]
-        if (message.role == 'user') {
-          await this.memory.addMessages([
-            {
-              id: this.memory.genMessageId(),
-              role: 'user',
-              timestamp: Date.now(),
-              content: convertUserContent(message.content),
-            },
-          ])
-        }
-      }
       return null
     } else {
       return text

@@ -292,6 +292,63 @@ impl OpenAIProvider {
         LLMError::Provider(format!("OpenAI API error {}: {}", status, body))
     }
 
+    /// 解析流式响应中的工具调用增量
+    fn parse_delta_tool_calls(delta: &Value) -> LLMResult<Option<Vec<LLMToolCall>>> {
+        if let Some(tool_calls_array) = delta["tool_calls"].as_array() {
+            let mut parsed_calls = Vec::new();
+
+            for tool_call_delta in tool_calls_array {
+                // 获取工具调用的基本信息
+                let index = tool_call_delta["index"].as_u64().unwrap_or(0) as usize;
+
+                // 工具调用ID（可能在第一个delta中出现）
+                let id = tool_call_delta["id"]
+                    .as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("tool_call_{}", index));
+
+                // 解析function信息
+                if let Some(function_delta) = tool_call_delta.get("function") {
+                    let name = function_delta["name"]
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .unwrap_or_default();
+
+                    // 参数可能是增量式的，这里我们收集所有可用的参数
+                    let arguments_str = function_delta["arguments"].as_str().unwrap_or("{}");
+
+                    // 尝试解析参数，如果解析失败则使用空对象
+                    let arguments = if arguments_str.is_empty() {
+                        serde_json::Value::Object(serde_json::Map::new())
+                    } else {
+                        serde_json::from_str(arguments_str).unwrap_or_else(|_| {
+                            // 如果不是完整的JSON，创建一个包含原始文本的对象
+                            serde_json::json!({
+                                "_streaming_args": arguments_str,
+                                "_is_streaming": true
+                            })
+                        })
+                    };
+
+                    // 只有当我们有名称时才创建工具调用
+                    if !name.is_empty() {
+                        parsed_calls.push(LLMToolCall {
+                            id,
+                            name,
+                            arguments,
+                        });
+                    }
+                }
+            }
+
+            if !parsed_calls.is_empty() {
+                return Ok(Some(parsed_calls));
+            }
+        }
+
+        Ok(None)
+    }
+
     /// 解析 SSE 流中的单个数据块 (关联函数，不依赖 self)
     fn parse_stream_chunk(data: &str) -> LLMResult<LLMStreamChunk> {
         if data == "[DONE]" {
@@ -299,6 +356,11 @@ impl OpenAIProvider {
                 finish_reason: "stop".to_string(),
                 usage: None, // Usage is often sent in a separate event or not at all in streams
             });
+        }
+
+        // 跳过空数据或无效数据
+        if data.trim().is_empty() {
+            return Err(LLMError::InvalidResponse("Empty stream data".to_string()));
         }
 
         let json_data: Value = serde_json::from_str(data).map_err(|e| {
@@ -313,6 +375,21 @@ impl OpenAIProvider {
             })?;
 
         if let Some(finish_reason) = choice["finish_reason"].as_str() {
+            // 当finish_reason是"tool_calls"时，检查是否有工具调用需要处理
+            if finish_reason == "tool_calls" {
+                // 检查delta中是否有工具调用信息
+                if let Some(delta) = choice.get("delta") {
+                    let tool_calls = Self::parse_delta_tool_calls(delta)?;
+                    if tool_calls.is_some() {
+                        // 如果有工具调用，先发送delta消息
+                        return Ok(LLMStreamChunk::Delta {
+                            content: None,
+                            tool_calls,
+                        });
+                    }
+                }
+            }
+
             return Ok(LLMStreamChunk::Finish {
                 finish_reason: finish_reason.to_string(),
                 // 在流的末尾，OpenAI 可能会附带 usage 统计
@@ -322,12 +399,21 @@ impl OpenAIProvider {
 
         if let Some(delta) = choice.get("delta") {
             let content = delta["content"].as_str().map(|s| s.to_string());
-            // TODO: 流式工具调用解析
-            let tool_calls = None;
-            return Ok(LLMStreamChunk::Delta {
-                content,
-                tool_calls,
-            });
+
+            // 解析流式工具调用
+            let tool_calls = Self::parse_delta_tool_calls(delta)?;
+
+            // 只有当有实际内容或工具调用时才返回delta
+            if (content.is_some() && !content.as_ref().unwrap().is_empty()) || tool_calls.is_some()
+            {
+                return Ok(LLMStreamChunk::Delta {
+                    content,
+                    tool_calls,
+                });
+            } else {
+                // 跳过空的delta
+                return Err(LLMError::InvalidResponse("Empty delta content".to_string()));
+            }
         }
 
         Err(LLMError::InvalidResponse(
@@ -404,23 +490,16 @@ impl LLMProvider for OpenAIProvider {
         let stream = response
             .bytes_stream()
             .eventsource()
-            .map(|event_result| {
-                match event_result {
+            .filter_map(|event_result| {
+                futures::future::ready(match event_result {
                     Ok(event) => {
                         // 解析SSE事件数据
-                        Self::parse_stream_chunk(&event.data)
+                        match Self::parse_stream_chunk(&event.data) {
+                            Ok(chunk) => Some(Ok(chunk)),
+                            Err(_) => None, // 静默跳过解析错误（通常是空内容）
+                        }
                     }
-                    Err(e) => Err(LLMError::Network(e.to_string())),
-                }
-            })
-            .filter(|result| {
-                // 过滤掉空的delta消息
-                futures::future::ready(match result {
-                    Ok(LLMStreamChunk::Delta {
-                        content: None,
-                        tool_calls: None,
-                    }) => false,
-                    _ => true,
+                    Err(e) => Some(Err(LLMError::Network(e.to_string()))),
                 })
             });
 

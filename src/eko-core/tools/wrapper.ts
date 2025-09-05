@@ -1,10 +1,9 @@
-import { LanguageModelV2FunctionTool, LanguageModelV2ToolCallPart } from '@ai-sdk/provider'
-import { ToolResult, ToolExecuter, ToolSchema } from '../types/tools.types'
+import { ToolResult, ToolExecuter, ToolSchema, NativeLLMTool, NativeLLMToolCall } from '../types'
 import { convertToolSchema } from '../common/utils'
 import { AgentContext } from '../core/context'
 
 export class ToolWrapper {
-  private tool: LanguageModelV2FunctionTool
+  private tool: NativeLLMTool
   private execute: ToolExecuter
 
   constructor(toolSchema: ToolSchema, execute: ToolExecuter) {
@@ -16,14 +15,14 @@ export class ToolWrapper {
     return this.tool.name
   }
 
-  getTool(): LanguageModelV2FunctionTool {
+  getTool(): NativeLLMTool {
     return this.tool
   }
 
   async callTool(
     args: Record<string, unknown>,
     agentContext: AgentContext,
-    toolCall: LanguageModelV2ToolCallPart
+    toolCall: NativeLLMToolCall
   ): Promise<ToolResult> {
     return await this.execute.execute(args, agentContext, toolCall)
   }

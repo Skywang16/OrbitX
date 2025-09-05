@@ -1,7 +1,7 @@
 import type { Agent } from '../agent'
 import { sleep } from '../common/utils'
 import Chain from './chain'
-import { EkoConfig, LanguageModelV2Prompt, Task } from '../types'
+import { EkoConfig, NativeLLMMessage, Task } from '../types'
 
 /**
  * 生成节点ID
@@ -90,7 +90,7 @@ export class AgentContext {
   agent: Agent
   context: Context
   consecutiveErrorNum: number
-  messages?: LanguageModelV2Prompt
+  messages?: NativeLLMMessage[]
   platform?: string
 
   constructor(context: Context, agent: Agent, platform?: string) {

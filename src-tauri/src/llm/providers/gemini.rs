@@ -171,22 +171,35 @@ impl GeminiProvider {
                     content_text.push_str(text);
                 }
                 if let Some(fc) = part["functionCall"].as_object() {
+                    println!("🔧 Debug: Found functionCall in Gemini response");
                     if let (Some(name), Some(args)) = (fc["name"].as_str(), fc["args"].as_object())
                     {
-                        tool_calls.push(LLMToolCall {
+                        let tool_call = LLMToolCall {
                             // Gemini doesn't provide a unique ID, so we generate one.
                             id: format!("tool-call-{}", uuid::Uuid::new_v4()),
                             name: name.to_string(),
                             arguments: json!(args),
-                        });
+                        };
+                        println!(
+                            "🔧 Debug: Creating Gemini tool call - id: {}, name: {}",
+                            tool_call.id, tool_call.name
+                        );
+                        tool_calls.push(tool_call);
                     }
                 }
             }
         }
 
         let finish_reason = match candidate["finishReason"].as_str() {
-            Some("TOOL_CODE") => "tool_calls".to_string(),
-            Some(reason) => reason.to_string(),
+            Some("STOP") => {
+                // 如果有工具调用，则finish_reason应该是tool_calls
+                if !tool_calls.is_empty() {
+                    "tool_calls".to_string()
+                } else {
+                    "stop".to_string()
+                }
+            }
+            Some(reason) => reason.to_lowercase(),
             None => "unknown".to_string(),
         };
 

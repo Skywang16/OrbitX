@@ -1,6 +1,6 @@
 import config from '../config'
 import Log from '../common/log'
-import { extractUsedTool, removeDuplicateToolUse, handleLargeContextMessages } from '../memory'
+import { extractUsedTool, handleLargeContextMessages } from '../memory'
 import { RetryLanguageModel } from '../llm'
 import { ToolWrapper } from '../tools/wrapper'
 import { ToolChain } from '../core/chain'
@@ -17,15 +17,11 @@ import {
   ToolSchema,
   StreamCallback,
   HumanCallback,
+  NativeLLMMessage,
+  NativeLLMMessagePart,
+  NativeLLMToolCall,
 } from '../types'
-import {
-  LanguageModelV2FilePart,
-  LanguageModelV2Prompt,
-  LanguageModelV2TextPart,
-  LanguageModelV2ToolCallPart,
-  LanguageModelV2ToolResultPart,
-} from '@ai-sdk/provider'
-import { callAgentLLM, convertTools, getTool, convertToolResult, defaultMessageProviderOptions } from './llm'
+import { callAgentLLM, convertTools, getTool, convertToolResult, removeDuplicateToolUse } from './llm'
 import { doTaskResultCheck } from '../tools/task_result_check'
 import { getAgentSystemPrompt, getAgentUserPrompt } from '../prompt'
 import { doTodoListManager } from '../tools/todo_list_manager'
@@ -78,7 +74,7 @@ export class Agent {
     agentContext: AgentContext,
     mcpClient?: IMcpClient,
     maxReactNum: number = 100,
-    historyMessages: LanguageModelV2Prompt = []
+    historyMessages: NativeLLMMessage[] = []
   ): Promise<string> {
     let loopNum = 0
     let checkNum = 0
@@ -91,17 +87,15 @@ export class Agent {
     const tools = [...this.tools, ...this.system_auto_tools(task)]
     const systemPrompt = await this.buildSystemPrompt(agentContext, tools)
     const userPrompt = await this.buildUserPrompt(agentContext, tools)
-    const messages: LanguageModelV2Prompt = [
+    const messages: NativeLLMMessage[] = [
       {
         role: 'system',
         content: systemPrompt,
-        providerOptions: defaultMessageProviderOptions(),
       },
       ...historyMessages,
       {
         role: 'user',
         content: userPrompt,
-        providerOptions: defaultMessageProviderOptions(),
       },
     ]
     agentContext.messages = messages
@@ -113,7 +107,7 @@ export class Agent {
         const controlMcp = await this.controlMcpTools(agentContext, messages, loopNum)
         if (controlMcp.mcpTools) {
           const mcpTools = await this.listTools(context, mcpClient, task, controlMcp.mcpParams)
-          const usedTools = extractUsedTool(messages, agentTools)
+          const usedTools: Tool[] = extractUsedTool(messages, agentTools)
           const _agentTools = mergeTools(tools, usedTools)
           agentTools = mergeTools(_agentTools, mcpTools)
         }
@@ -143,7 +137,7 @@ export class Agent {
       if (config.expertMode && checkNum == 0) {
         checkNum++
         const { completionStatus } = await doTaskResultCheck(agentContext, rlm, messages, llm_tools)
-        if (completionStatus == 'incomplete') {
+        if (completionStatus === 'incomplete') {
           continue
         }
       }
@@ -154,39 +148,52 @@ export class Agent {
 
   protected async handleCallResult(
     agentContext: AgentContext,
-    messages: LanguageModelV2Prompt,
+    messages: NativeLLMMessage[],
     agentTools: Tool[],
-    results: Array<LanguageModelV2TextPart | LanguageModelV2ToolCallPart>
+    results: Array<{ type: 'text'; text: string } | NativeLLMToolCall>
   ): Promise<string | null> {
     let text: string | null = null
     let context = agentContext.context
-    let user_messages: LanguageModelV2Prompt = []
-    let toolResults: LanguageModelV2ToolResultPart[] = []
+    let toolResults: NativeLLMMessagePart[] = []
     results = removeDuplicateToolUse(results)
     if (results.length == 0) {
       return null
     }
-    for (let i = 0; i < results.length; i++) {
-      let result = results[i]
-      if (result.type == 'text') {
-        text = result.text
-        continue
-      }
+
+    // Separate text and tool calls
+    const textResults = results.filter(r => 'type' in r && r.type === 'text') as Array<{ type: 'text'; text: string }>
+    const toolCallResults = results.filter(r => 'id' in r) as NativeLLMToolCall[]
+
+    // Handle text results
+    if (textResults.length > 0) {
+      text = textResults.map(r => r.text).join('')
+    }
+
+    // Handle tool calls
+    for (let i = 0; i < toolCallResults.length; i++) {
+      let result = toolCallResults[i]
       let toolResult: ToolResult
-      let toolChain = new ToolChain(result, agentContext.context.chain.planRequest as LLMRequest)
+      // Create compatibility adapter for ToolChain
+      const toolCallAdapter = {
+        type: 'tool-call' as const,
+        toolCallId: result.id,
+        toolName: result.name,
+        input: result.arguments,
+      }
+      let toolChain = new ToolChain(toolCallAdapter as any, agentContext.context.chain.planRequest as LLMRequest)
       agentContext.context.chain.push(toolChain)
       try {
-        let args = typeof result.input == 'string' ? JSON.parse(result.input || '{}') : result.input || {}
+        let args = result.arguments || {}
         toolChain.params = args
-        let tool = getTool(agentTools, result.toolName)
+        let tool = getTool(agentTools, result.name)
         if (!tool) {
-          throw new Error(result.toolName + ' tool does not exist')
+          throw new Error(result.name + ' tool does not exist')
         }
         toolResult = await tool.execute(args, agentContext, result)
         toolChain.updateToolResult(toolResult)
         agentContext.consecutiveErrorNum = 0
       } catch (e) {
-        Log.error('tool call error: ', result.toolName, result.input, e)
+        Log.error('tool call error: ', result.name, result.arguments, e)
         toolResult = {
           content: [
             {
@@ -209,27 +216,46 @@ export class Agent {
             agentName: agentContext.agent.Name,
             nodeId: agentContext.context.taskId,
             type: 'tool_result',
-            toolId: result.toolCallId,
-            toolName: result.toolName,
-            params: (result.input as Record<string, unknown>) || {},
+            toolId: result.id,
+            toolName: result.name,
+            params: result.arguments,
             toolResult: toolResult,
           },
           agentContext
         )
       }
-      const llmToolResult = convertToolResult(result, toolResult, user_messages)
+      const llmToolResult = convertToolResult(result, toolResult)
       toolResults.push(llmToolResult)
     }
-    messages.push({
-      role: 'assistant',
-      content: results,
-    })
+
+    // Add assistant message with results
+    if (textResults.length > 0 || toolCallResults.length > 0) {
+      const assistantContent: NativeLLMMessagePart[] = []
+
+      if (text) {
+        assistantContent.push({ type: 'text', text })
+      }
+
+      toolCallResults.forEach(toolCall => {
+        assistantContent.push({
+          type: 'tool-call',
+          toolCallId: toolCall.id,
+          toolName: toolCall.name,
+          args: toolCall.arguments,
+        })
+      })
+
+      messages.push({
+        role: 'assistant',
+        content: assistantContent,
+      })
+    }
+
     if (toolResults.length > 0) {
       messages.push({
         role: 'tool',
         content: toolResults,
       })
-      user_messages.forEach(message => messages.push(message))
       return null
     } else {
       return text
@@ -264,16 +290,8 @@ export class Agent {
     )
   }
 
-  protected async buildUserPrompt(
-    agentContext: AgentContext,
-    tools: Tool[]
-  ): Promise<Array<LanguageModelV2TextPart | LanguageModelV2FilePart>> {
-    return [
-      {
-        type: 'text',
-        text: getAgentUserPrompt(this, agentContext.context.task, agentContext.context, tools),
-      },
-    ]
+  protected async buildUserPrompt(agentContext: AgentContext, tools: Tool[]): Promise<string> {
+    return getAgentUserPrompt(this, agentContext.context.task, agentContext.context, tools)
   }
 
   protected async extSysPrompt(_agentContext: AgentContext, _tools: Tool[]): Promise<string> {
@@ -318,7 +336,7 @@ export class Agent {
 
   protected async controlMcpTools(
     _agentContext: AgentContext,
-    _messages: LanguageModelV2Prompt,
+    _messages: NativeLLMMessage[],
     _loopNum: number
   ): Promise<{
     mcpTools: boolean
@@ -351,11 +369,11 @@ export class Agent {
 
   protected async handleMessages(
     _agentContext: AgentContext,
-    messages: LanguageModelV2Prompt,
+    _messages: NativeLLMMessage[],
     _tools: Tool[]
   ): Promise<void> {
     // Only keep the last image / file, large tool-text-result
-    handleLargeContextMessages(messages)
+    handleLargeContextMessages(_messages)
   }
 
   protected async callInnerTool(fun: () => Promise<any>): Promise<ToolResult> {

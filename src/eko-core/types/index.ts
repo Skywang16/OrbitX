@@ -4,15 +4,8 @@ export * from './llm.types'
 export * from './tools.types'
 export * from './mcp.types'
 
-export type {
-  JSONSchema7,
-  LanguageModelV2Prompt,
-  LanguageModelV2TextPart,
-  LanguageModelV2FilePart,
-  LanguageModelV2StreamPart,
-  LanguageModelV2ToolCallPart,
-  LanguageModelV2ToolChoice,
-  LanguageModelV2FunctionTool,
-  LanguageModelV2ToolResultPart,
-  LanguageModelV2ToolResultOutput,
-} from '@ai-sdk/provider'
+// Native types replace ai-sdk types
+export type JSONSchema7 = any // Simplified JSONSchema type
+
+// Error types
+export { LLMError, ToolError, StreamError, ValidationError, ErrorHandler } from '../common/error'

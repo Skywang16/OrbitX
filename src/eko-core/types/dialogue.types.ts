@@ -1,6 +1,6 @@
-import { JSONSchema7, LanguageModelV2FinishReason, LanguageModelV2ToolCallPart } from '@ai-sdk/provider'
 import { ToolResult } from './tools.types'
 import { EkoConfig, HumanCallback, StreamCallback } from './core.types'
+import { NativeLLMToolCall, FinishReason, JSONSchema7 } from './llm.types'
 
 export type EkoMessage =
   | {
@@ -60,7 +60,7 @@ export interface DialogueTool {
   readonly name: string
   readonly description?: string
   readonly parameters: JSONSchema7
-  execute: (args: Record<string, unknown>, toolCall: LanguageModelV2ToolCallPart) => Promise<ToolResult>
+  execute: (args: Record<string, unknown>, toolCall: NativeLLMToolCall) => Promise<ToolResult>
 }
 
 export type EkoDialogueConfig = Omit<EkoConfig, 'callback'> & {
@@ -122,7 +122,7 @@ export type ChatStreamCallbackMessage =
     }
   | {
       type: 'finish'
-      finishReason: LanguageModelV2FinishReason
+      finishReason: FinishReason
       usage: {
         promptTokens: number
         completionTokens: number

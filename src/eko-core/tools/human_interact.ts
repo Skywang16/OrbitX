@@ -1,8 +1,7 @@
-import { JSONSchema7 } from 'json-schema'
+import { JSONSchema7 } from '../types'
 import { AgentContext } from '../core/context'
-import { Tool, ToolResult } from '../types/tools.types'
+import { Tool, ToolResult, NativeLLMToolCall, LLMRequest } from '../types'
 import { RetryLanguageModel } from '../llm'
-import { LLMRequest } from '../types'
 import { toImage } from '../common/utils'
 
 export const TOOL_NAME = 'human_interact'
@@ -52,7 +51,11 @@ request_help: Request assistance from the user; for instance, when an operation 
     }
   }
 
-  async execute(args: Record<string, unknown>, agentContext: AgentContext): Promise<ToolResult> {
+  async execute(
+    args: Record<string, unknown>,
+    agentContext: AgentContext,
+    _toolCall?: NativeLLMToolCall
+  ): Promise<ToolResult> {
     let interactType = args.interactType as string
     let callback = agentContext.context.config.callback
     let resultText = ''
@@ -138,8 +141,8 @@ request_help: Request assistance from the user; for instance, when an operation 
             content: [
               {
                 type: 'file',
-                data: image,
-                mediaType: imageResult.imageType,
+                data: typeof image === 'string' ? image : '',
+                mimeType: imageResult.imageType,
               },
               {
                 type: 'text',
@@ -151,7 +154,7 @@ request_help: Request assistance from the user; for instance, when an operation 
         abortSignal: agentContext.context.controller.signal,
       }
       let result = await rlm.call(request)
-      return result.text && result.text.indexOf('LOGGED_IN') > -1
+      return result.content && result.content.indexOf('LOGGED_IN') > -1
     } catch (error) {
       console.error('Error auto checking login status:', error)
       return false

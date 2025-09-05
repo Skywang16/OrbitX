@@ -40,6 +40,36 @@ export {
   type StreamCallbackMessage,
 } from './types'
 
-export { mergeTools, toImage, toFile, convertToolSchema, uuidv4, call_timeout } from './common/utils'
+export {
+  mergeTools,
+  toImage,
+  toFile,
+  convertToolSchema,
+  convertTools,
+  convertToolResult,
+  createTextMessage,
+  createToolCallMessage,
+  createToolResultMessage,
+  isTextMessage,
+  isMultiPartMessage,
+  extractTextFromMessage,
+  extractToolCallsFromMessage,
+  uuidv4,
+  call_timeout,
+} from './common/utils'
+
+export {
+  LLMError,
+  ToolError,
+  StreamError,
+  ValidationError,
+  ErrorHandler,
+  DEFAULT_RETRY_CONFIG,
+  validateLLMRequest,
+  validateToolCall,
+} from './common/error'
+export type { RetryConfig } from './common/error'
+
+export { RetryManager, globalRetryManager, type RetryAttempt, type RetryStats } from './common/retry-manager'
 
 export { parseTask, resetTaskXml, buildSimpleTaskWorkflow, buildAgentRootXml, extractAgentXmlNode } from './common/xml'

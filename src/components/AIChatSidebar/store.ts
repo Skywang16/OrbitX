@@ -381,6 +381,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
   // 工具步骤处理相关函数
   const findOrCreateToolStep = (tempMessage: Message, toolName: string, toolId?: string): ToolStep => {
+    console.warn('🔍 Debug: findOrCreateToolStep called with:', { toolName, toolId })
     // 优先根据 toolId 查找，如果没有则根据 toolName 查找最新的运行中工具
     let existingStep = null
 
@@ -388,6 +389,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       existingStep = tempMessage.steps?.find(
         step => step.type === 'tool_use' && 'toolExecution' in step && step.toolExecution.toolId === toolId
       ) as ToolStep | undefined
+      console.warn('🔍 Debug: Found existing step by toolId:', !!existingStep)
     }
 
     if (!existingStep) {
@@ -398,12 +400,14 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           step.toolExecution.name === toolName &&
           step.toolExecution.status === 'running'
       ) as ToolStep | undefined
+      console.warn('🔍 Debug: Found existing step by toolName:', !!existingStep)
     }
 
     if (existingStep) {
       return existingStep
     }
 
+    console.warn('🔍 Debug: Creating new tool step for:', toolName)
     // 创建新的工具步骤
     const toolExecution = createToolExecution(toolName, {}, 'running')
     // 保存 toolId 以便后续查找
@@ -413,11 +417,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
     const newStep: ToolStep = {
       type: 'tool_use',
-      content: '',
+      content: `Executing ${toolName}...`,
       timestamp: Date.now(),
       toolExecution,
     }
     tempMessage.steps?.push(newStep)
+    console.warn('🔍 Debug: New tool step created and added to message steps. Total steps:', tempMessage.steps?.length)
     return newStep
   }
 
@@ -429,18 +434,25 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
 
   const handleToolUse = (tempMessage: Message, message: StreamCallbackMessage) => {
-    if (message.type !== 'tool_use' || !message.toolName) return
+    if (message.type !== 'tool_use' || !message.toolName) {
+      console.warn('🔍 Debug: Invalid tool_use message:', message)
+      return
+    }
 
+    console.warn('🔍 Debug: Creating/finding tool step for:', message.toolName, message.toolId)
     // 使用 toolId 查找已存在的工具步骤（可能由 tool_streaming 创建）
     const toolStep = findOrCreateToolStep(tempMessage, message.toolName, message.toolId)
+    console.warn('🔍 Debug: Tool step created/found:', toolStep)
 
     // 更新工具状态
     if (toolStep.toolExecution) {
       toolStep.toolExecution.status = 'running'
+      console.warn('🔍 Debug: Updated tool status to running')
     }
 
     if (message.params) {
       updateToolStepParams(toolStep, message.params)
+      console.warn('🔍 Debug: Updated tool params:', message.params)
     }
   }
 
@@ -473,8 +485,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
 
   const handleToolResult = (tempMessage: Message, message: StreamCallbackMessage) => {
-    if (message.type !== 'tool_result') return
+    if (message.type !== 'tool_result') {
+      console.warn('🔍 Debug: Invalid tool_result message:', message)
+      return
+    }
 
+    console.warn('🔍 Debug: Processing tool result for toolId:', message.toolId)
     // 优先根据 toolId 查找对应的工具步骤
     let toolStep: ToolStep | undefined = undefined
     if (message.toolId) {
@@ -483,11 +499,19 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       ) as ToolStep | undefined
     }
 
+    console.warn('🔍 Debug: Found tool step for result:', !!toolStep)
+
     if (toolStep && toolStep.toolExecution) {
       const hasError = isToolResultError(message.toolResult)
       toolStep.toolExecution.status = hasError ? 'error' : 'completed'
       toolStep.toolExecution.endTime = Date.now()
       toolStep.toolExecution.result = message.toolResult
+
+      console.warn('🔍 Debug: Updated tool result:', {
+        status: toolStep.toolExecution.status,
+        hasError,
+        result: message.toolResult,
+      })
 
       if (hasError) {
         toolStep.toolExecution.error = 'Tool execution failed'
@@ -502,7 +526,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         }
       }
     } else if (!toolStep) {
-      console.warn('工具结果无法匹配到对应步骤，toolId:', message.toolId)
+      console.warn(
+        '🔍 Debug: 工具结果无法匹配到对应步骤，toolId:',
+        message.toolId,
+        'Available steps:',
+        tempMessage.steps?.map(s => ({ type: s.type, toolId: 'toolExecution' in s ? s.toolExecution?.toolId : 'N/A' }))
+      )
     }
   }
 
@@ -567,21 +596,36 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       if (!ekoInstance.value) {
         const handleStreamMessage = async (message: StreamCallbackMessage) => {
           try {
+            console.warn('🔍 Debug: Received stream message:', message.type, message)
             const tempMessage = messageList.value[messageList.value.length - 1]
-            if (!tempMessage || tempMessage.role !== 'assistant') return
+            if (!tempMessage || tempMessage.role !== 'assistant') {
+              console.warn('🔍 Debug: No valid temp message found')
+              return
+            }
 
             tempMessage.steps = tempMessage.steps || []
+            console.warn(
+              '🔍 Debug: Current message steps before processing:',
+              tempMessage.steps?.length,
+              tempMessage.steps?.map(s => ({
+                type: s.type,
+                toolName: 'toolExecution' in s ? s.toolExecution?.name : 'N/A',
+              }))
+            )
             // 处理消息
             switch (message.type) {
               case 'tool_use':
+                console.warn('🔍 Debug: Processing tool_use message:', message)
                 handleToolUse(tempMessage, message)
                 break
 
               case 'tool_streaming':
+                console.warn('🔍 Debug: Processing tool_streaming message:', message)
                 handleToolStreaming(tempMessage, message)
                 break
 
               case 'tool_result':
+                console.warn('🔍 Debug: Processing tool_result message:', message)
                 handleToolResult(tempMessage, message)
                 break
 
@@ -719,7 +763,22 @@ export const useAIChatStore = defineStore('ai-chat', () => {
                 break
             }
 
+            // 强制触发响应式更新
+            const messageIndex = messageList.value.findIndex(m => m.id === tempMessage.id)
+            if (messageIndex !== -1) {
+              messageList.value[messageIndex] = { ...tempMessage }
+            }
+
             debouncedSaveSteps(tempMessage.id, tempMessage.steps)
+            console.warn(
+              '🔍 Debug: Message steps updated. Total steps:',
+              tempMessage.steps?.length,
+              'Steps:',
+              tempMessage.steps?.map(s => ({
+                type: s.type,
+                toolName: 'toolExecution' in s ? s.toolExecution?.name : 'N/A',
+              }))
+            )
           } catch (error) {
             console.error('处理流式消息时发生错误:', error)
             // 不要抛出错误，避免中断执行流程

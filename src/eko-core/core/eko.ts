@@ -184,7 +184,7 @@ export class Eko {
   }
 
   public getAllTaskId(): string[] {
-    return [...this.taskMap.keys()]
+    return Array.from(this.taskMap.keys())
   }
 
   public deleteTask(taskId: string): boolean {

@@ -1,4 +1,4 @@
-import { JSONSchema7 } from 'json-schema'
+import { JSONSchema7, NativeLLMToolCall } from '../types'
 import { AgentContext } from '../core/context'
 import { Tool, ToolResult } from '../types/tools.types'
 import { extractAgentXmlNode } from '../common/xml'
@@ -32,7 +32,11 @@ export default class ForeachTaskTool implements Tool {
     }
   }
 
-  async execute(args: Record<string, unknown>, agentContext: AgentContext): Promise<ToolResult> {
+  async execute(
+    args: Record<string, unknown>,
+    agentContext: AgentContext,
+    _toolCall?: NativeLLMToolCall
+  ): Promise<ToolResult> {
     let nodeId = args.nodeId as string
     let agentXml = agentContext.context.task?.xml || ''
     let node = extractAgentXmlNode(agentXml, `[id="${nodeId}"]`)

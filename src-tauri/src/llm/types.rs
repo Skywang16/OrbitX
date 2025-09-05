@@ -76,6 +76,7 @@ pub struct LLMRequest {
 
 /// LLM 使用统计
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LLMUsage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
@@ -93,23 +94,28 @@ pub struct LLMResponse {
 
 /// LLM 流式数据块类型 - 简化设计，符合 OpenAI 标准
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum LLMStreamChunk {
     /// 内容增量 - 对应 OpenAI 的 choices[0].delta
+    #[serde(rename = "delta")]
     Delta {
         /// 文本内容增量
         content: Option<String>,
         /// 工具调用增量
+        #[serde(rename = "toolCalls")]
         tool_calls: Option<Vec<LLMToolCall>>,
     },
     /// 流式完成 - 对应 OpenAI 的完成信号
+    #[serde(rename = "finish")]
     Finish {
         /// 完成原因
+        #[serde(rename = "finishReason")]
         finish_reason: String,
         /// 使用统计
         usage: Option<LLMUsage>,
     },
     /// 错误
+    #[serde(rename = "error")]
     Error {
         /// 错误信息
         error: String,
