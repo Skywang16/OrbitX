@@ -80,7 +80,7 @@ export class Eko {
   public async run(
     taskPrompt: string,
     taskId: string = uuidv4(),
-    contextParams?: Record<string, any>
+    _contextParams?: Record<string, any>
   ): Promise<EkoResult> {
     // 参考gemini-cli: 直接让Agent处理用户输入，不预生成task
     const chain: Chain = new Chain(taskPrompt)

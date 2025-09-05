@@ -109,7 +109,7 @@
     --x-button-border-width: 1px;
     --x-button-border-style: solid;
     --x-button-border-radius: var(--border-radius);
-    --x-button-transition: all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
+    --x-button-transition: all var(--x-duration-normal) var(--x-ease-in-out);
 
     --x-button-height-small: 24px;
     --x-button-padding-small: 0 var(--spacing-sm);

@@ -356,21 +356,22 @@
     display: flex;
     align-items: center;
     width: 100%;
-    min-height: 32px;
-    padding: 6px 32px 6px 12px;
+    height: 32px;
+    padding: 0 32px 0 var(--spacing-md);
     border: 1px solid var(--border-300);
-    border-radius: 6px;
+    border-radius: var(--border-radius);
     background-color: var(--bg-400);
     color: var(--text-200);
-    font-size: 14px;
+    font-size: var(--font-size-md);
+    font-family: var(--font-family);
     line-height: 1.5;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all var(--x-duration-normal) var(--x-ease-out);
     box-sizing: border-box;
   }
 
   .x-select__input:hover {
-    border-color: var(--color-primary);
+    border-color: var(--border-400);
   }
 
   .x-select--open .x-select__input {
@@ -389,15 +390,15 @@
   }
 
   .x-select--small .x-select__input {
-    min-height: 20px;
-    padding: 2px 24px 2px 6px;
-    font-size: 11px;
+    height: 24px;
+    padding: 0 24px 0 var(--spacing-sm);
+    font-size: var(--font-size-xs);
   }
 
   .x-select--large .x-select__input {
-    min-height: 40px;
-    padding: 10px 36px 10px 16px;
-    font-size: 16px;
+    height: 40px;
+    padding: 0 36px 0 var(--spacing-lg);
+    font-size: var(--font-size-lg);
   }
 
   .x-select--borderless .x-select__input {
@@ -488,10 +489,10 @@
   .x-select__dropdown {
     background-color: var(--bg-400);
     border: 1px solid var(--border-300);
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-radius: var(--border-radius);
+    box-shadow: var(--x-shadow-lg);
     overflow: hidden;
-    animation: x-select-dropdown-enter 0.2s ease;
+    animation: x-select-dropdown-enter var(--x-duration-normal) var(--x-ease-out);
   }
 
   .x-select__dropdown--top {
@@ -520,14 +521,17 @@
 
   .x-select__filter-input {
     width: 100%;
-    padding: 6px 8px;
+    height: 28px;
+    padding: 0 var(--spacing-sm);
     border: 1px solid var(--border-300);
-    border-radius: 6px;
+    border-radius: var(--border-radius-sm);
     background-color: var(--bg-400);
     color: var(--text-200);
-    font-size: 12px;
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family);
     outline: none;
-    transition: border-color 0.2s ease;
+    transition: border-color var(--x-duration-normal) var(--x-ease-out);
+    box-sizing: border-box;
   }
 
   .x-select__filter-input:focus {
@@ -560,12 +564,13 @@
   .x-select__option {
     display: flex;
     align-items: center;
-    padding: 6px 8px;
+    padding: var(--spacing-sm) var(--spacing-md);
     cursor: pointer;
-    transition: background-color 0.2s ease;
-    min-height: 28px;
+    transition: background-color var(--x-duration-normal) var(--x-ease-out);
+    min-height: 32px;
     box-sizing: border-box;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
   }
 
   .x-select__option:hover,
@@ -643,9 +648,10 @@
   }
 
   .x-select__no-data {
-    padding: 16px 12px;
+    padding: var(--spacing-lg) var(--spacing-md);
     text-align: center;
     color: var(--text-400);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
   }
 </style>

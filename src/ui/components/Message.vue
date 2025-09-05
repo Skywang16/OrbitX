@@ -255,7 +255,7 @@
 
   .x-message-enter-active,
   .x-message-leave-active {
-    transition: all 0.3s ease;
+    transition: all var(--x-duration-slow) var(--x-ease-out);
   }
 
   .x-message-enter-from,

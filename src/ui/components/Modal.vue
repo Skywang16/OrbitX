@@ -200,14 +200,14 @@
 
   .modal-container {
     background-color: var(--bg-100);
-    border: 1px solid var(--border-100);
-    border-radius: 6px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.32);
+    border: 1px solid var(--border-300);
+    border-radius: var(--border-radius);
+    box-shadow: var(--x-shadow-xl);
     max-height: 90vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    animation: modalSlideIn 0.2s ease-out;
+    animation: modalSlideIn var(--x-duration-normal) var(--x-ease-out);
     font-family: var(--font-family);
   }
 
@@ -248,8 +248,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 24px 16px 24px;
-    border-bottom: 1px solid var(--border-200);
+    padding: var(--spacing-xl) var(--spacing-xl) var(--spacing-lg) var(--spacing-xl);
+    border-bottom: 1px solid var(--border-300);
     flex-shrink: 0;
   }
 
@@ -289,7 +289,7 @@
   .modal-body {
     flex: 1;
     overflow-y: auto;
-    padding: 0 20px 20px 20px;
+    padding: 0 var(--spacing-xl) var(--spacing-xl) var(--spacing-xl);
   }
 
   .modal-body.no-padding {
@@ -298,14 +298,14 @@
 
   .modal-footer {
     flex-shrink: 0;
-    padding: 12px 24px 24px 24px;
+    padding: var(--spacing-md) var(--spacing-xl) var(--spacing-xl) var(--spacing-xl);
     background-color: var(--bg-100);
   }
 
   .modal-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--spacing-md);
   }
 
   .spinning {

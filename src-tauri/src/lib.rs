@@ -26,6 +26,7 @@
 pub mod ai;
 pub mod completion;
 pub mod config;
+pub mod llm;
 // pub mod lock_optimization_demo;
 pub mod mux;
 pub mod shell;
@@ -97,6 +98,9 @@ use config::{
     get_theme_config_status,
     set_follow_system_theme,
     set_terminal_theme,
+};
+use llm::commands::{
+    llm_call, llm_call_stream, llm_get_available_models, llm_test_model_connection, LLMManagerState,
 };
 use shell::commands::{
     check_shell_integration_status, get_pane_cwd, setup_shell_integration, update_pane_cwd,
@@ -326,6 +330,11 @@ pub fn run() {
             update_ai_model,
             remove_ai_model,
             test_ai_connection_with_config,
+            // LLM调用命令
+            llm_call,
+            llm_call_stream,
+            llm_get_available_models,
+            llm_test_model_connection,
             // AI会话上下文管理命令
             create_conversation,
             get_conversations,
@@ -375,7 +384,12 @@ pub fn run() {
             setup_shell_integration,
             check_shell_integration_status,
             get_pane_cwd,
-            update_pane_cwd
+            update_pane_cwd,
+            // LLM调用命令
+            llm_call,
+            llm_call_stream,
+            llm_get_available_models,
+            llm_test_model_connection
         ])
         .setup(|app| {
             // 使用统一的错误处理初始化各个状态管理器
@@ -470,6 +484,22 @@ pub fn run() {
                     ai_state
                 };
                 app.manage(ai_state);
+
+                // 初始化LLM管理器状态
+                let llm_state = {
+                    let storage_state = app.state::<StorageCoordinatorState>();
+                    let repositories = storage_state.coordinator.repositories();
+                    LLMManagerState::new(repositories)
+                };
+                app.manage(llm_state);
+
+                // 初始化LLM管理器状态
+                let llm_state = {
+                    let storage_state = app.state::<StorageCoordinatorState>();
+                    let repositories = storage_state.coordinator.repositories();
+                    LLMManagerState::new(repositories)
+                };
+                app.manage(llm_state);
 
                 // 初始化窗口状态
                 let window_state =

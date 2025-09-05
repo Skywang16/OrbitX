@@ -151,7 +151,7 @@
   }
 
   .popconfirm-content {
-    padding: 4px;
+    padding: var(--spacing-xs);
   }
 
   .popconfirm-header {
@@ -179,18 +179,20 @@
 
   .popconfirm-message {
     flex: 1;
-    font-size: 14px;
+    font-size: var(--font-size-md);
+    font-family: var(--font-family);
     font-weight: 500;
     line-height: 1.4;
     color: var(--text-100);
   }
 
   .popconfirm-description {
-    font-size: 13px;
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
     line-height: 1.4;
     color: var(--text-300);
     margin-bottom: var(--spacing-md);
-    margin-left: 24px;
+    margin-left: var(--spacing-xl);
   }
 
   .popconfirm-actions {

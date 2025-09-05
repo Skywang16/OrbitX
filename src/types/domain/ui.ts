@@ -9,6 +9,7 @@ import type { Size } from '../core'
 export enum TabType {
   TERMINAL = 'terminal',
   SETTINGS = 'settings',
+  LLM_TEST = 'llm_test',
 }
 
 export interface TabItem {

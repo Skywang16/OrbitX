@@ -27,6 +27,7 @@
   // 设置菜单项 - 使用计算属性确保响应式更新
   const settingsMenuItems = computed(() => [
     { label: t('ui.open_settings'), value: 'settings' },
+    { label: 'LLM 测试', value: 'llm_test' },
     { label: t('ui.feedback'), value: 'feedback' },
   ])
 
@@ -48,6 +49,8 @@
   const handleSettingsAction = async (item: { label: string; value: string }) => {
     if (item.value === 'settings') {
       tabManagerStore.createSettingsTab()
+    } else if (item.value === 'llm_test') {
+      tabManagerStore.createLLMTestTab()
     } else if (item.value === 'shortcuts') {
       tabManagerStore.createSettingsTab()
     } else if (item.value === 'feedback') {

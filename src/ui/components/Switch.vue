@@ -67,7 +67,7 @@
     bottom: 0;
     background-color: var(--bg-500);
     border: 1px solid var(--border-300);
-    transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
+    transition: all var(--x-duration-slow) var(--x-ease-in-out);
     border-radius: 22px;
     display: flex;
     align-items: center;
@@ -80,9 +80,9 @@
     left: 1px;
     background-color: var(--bg-200);
     border: 1px solid var(--border-300);
-    transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
+    transition: all var(--x-duration-slow) var(--x-ease-in-out);
     border-radius: 50%;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--x-shadow-sm);
   }
 
   input:checked + .slider {

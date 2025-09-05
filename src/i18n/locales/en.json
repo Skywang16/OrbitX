@@ -15,6 +15,7 @@
     "close": "Close",
     "processing": "Processing...",
     "new": "New",
+    "add": "Add",
     "copy": "Copy",
     "paste": "Paste",
     "cut": "Cut",
@@ -194,6 +195,74 @@
     "add_model": "Add Model",
     "empty_description": "Click \\\"Add Model\\\" button to start configuring your first AI model"
   },
+  "ai_model": {
+    "add_title": "Add AI Model",
+    "edit_title": "Edit AI Model",
+    "config_type": "Configuration Type",
+    "preset_provider": "Preset Provider",
+    "custom_config": "Custom Configuration",
+    "provider": "Provider",
+    "select_provider": "Select Provider",
+    "model": "Model",
+    "select_model": "Select Model",
+    "select_provider_first": "Please select a provider first",
+    "config_name": "Configuration Name",
+    "config_name_placeholder": "My Custom GPT",
+    "model_name": "Model Name",
+    "model_name_placeholder": "gpt-4",
+    "api_url": "API URL",
+    "api_url_placeholder": "https://api.openai.com/v1",
+    "api_key": "API Key",
+    "api_key_placeholder": "Enter your API Key",
+    "test_connection": "Test Connection",
+    "testing": "Testing...",
+    "add_model": "Add Model",
+    "loading": "Loading...",
+    "empty_title": "No AI Models",
+    "empty_description": "Click \"Add Model\" button to configure your first AI model",
+    "edit": "Edit",
+    "delete": "Delete",
+    "delete_confirm": "Delete this model?",
+    "delete_description": "Cannot be undone",
+    "delete_confirm_text": "Confirm Delete",
+    "cancel": "Cancel",
+    "delete_success": "Model deleted successfully",
+    "delete_failed": "Failed to delete",
+    "update_success": "Model updated successfully",
+    "add_success": "Model added successfully",
+    "operation_failed": "Operation failed",
+    "save": "Save",
+    "add": "Add",
+    "add_new_model": "Add New Model",
+    "add_model_description": "Configure AI model connection information",
+    "no_models": "No Model Configuration",
+    "default_provider": "AI Model",
+    "providers": {
+      "openai_description": "OpenAI GPT Models",
+      "claude_description": "Anthropic Claude Models",
+      "custom_description": "Custom API Endpoint"
+    },
+    "validation": {
+      "api_key_required": "API Key is required",
+      "preset_required": "Please select a preset provider",
+      "model_required": "Please select a model",
+      "config_name_required": "Configuration name is required",
+      "api_url_required": "API URL is required",
+      "model_name_required": "Model name is required",
+      "required_fields": "Please fill in API URL, API Key and Model Name first"
+    },
+    "test": {
+      "fill_config_first": "Please fill in the complete configuration information first",
+      "success": "Connection test successful",
+      "failed": "Connection test failed",
+      "error": "Connection test error"
+    },
+    "connection_test": {
+      "success": "Connection test successful!",
+      "failed": "Connection test failed, please check configuration",
+      "error": "Connection test failed"
+    }
+  },
   "session": {
     "search_placeholder": "Search sessions...",
     "no_data": "No session history",
@@ -266,44 +335,7 @@
     "confirm": "Confirm",
     "close": "Close"
   },
-  "ai_model": {
-    "add_model": "Add Model",
-    "loading": "Loading...",
-    "empty_title": "No AI Models",
-    "empty_description": "Click \"Add Model\" button to configure your first AI model",
-    "edit": "Edit",
-    "delete": "Delete",
-    "delete_confirm": "Delete this model?",
-    "delete_description": "Cannot be undone",
-    "delete_confirm_text": "Confirm Delete",
-    "cancel": "Cancel",
-    "delete_success": "Model deleted successfully",
-    "delete_failed": "Failed to delete",
-    "update_success": "Model updated successfully",
-    "add_success": "Model added successfully",
-    "operation_failed": "Operation failed",
-    "test_connection": "Test Connection",
-    "testing": "Testing...",
-    "save": "Save",
-    "add": "Add",
-    "add_new_model": "Add New Model",
-    "add_model_description": "Configure AI model connection information",
-    "no_models": "No Model Configuration",
-    "default_provider": "AI Model",
-    "providers": {
-      "openai_description": "OpenAI GPT Models",
-      "claude_description": "Anthropic Claude Models",
-      "custom_description": "Custom API Endpoint"
-    },
-    "validation": {
-      "required_fields": "Please fill in API URL, API Key and Model Name first"
-    },
-    "connection_test": {
-      "success": "Connection test successful!",
-      "failed": "Connection test failed, please check configuration",
-      "error": "Connection test failed"
-    }
-  },
+
   "message": {
     "execution_failed": "Execution Failed",
     "generating": "Generating...",

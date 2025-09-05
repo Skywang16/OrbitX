@@ -72,7 +72,7 @@ rmp = "0.8"
 rmp-serde = "1.1"
 sha2 = "0.10"
 
-# AI统一接口库
+# LLM 提供商 SDK
 async-openai = "0.29"
 
 # HTML 解析和内容提取
@@ -103,6 +103,7 @@ syn = { version = "2.0", features = ["full", "visit"] }
 quote = "1.0"
 tauri-plugin-window-state = "2.4.0"
 tauri-plugin-autostart = "2.5.0"
+eventsource-stream = "0.2.3"
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -165,6 +166,14 @@ path = "tests/storage/messagepack_tests.rs"
 [[test]]
 name = "storage_repository_tests"
 path = "tests/storage_repository_tests.rs"
+
+[[test]]
+name = "llm_unit_tests"
+path = "src/llm/tests.rs"
+
+[[test]]
+name = "llm_integration_tests"
+path = "src/llm/integration_tests.rs"
 
 
 

@@ -134,7 +134,7 @@
     background-color: var(--bg-400);
     border: 1px solid var(--border-300);
     border-radius: var(--border-radius);
-    transition: all 0.2s ease;
+    transition: all var(--x-duration-normal) var(--x-ease-out);
     height: 32px;
     font-family: var(--font-family);
   }
@@ -191,7 +191,7 @@
     border-radius: var(--border-radius-sm);
     color: var(--text-400);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all var(--x-duration-normal) var(--x-ease-out);
     flex-shrink: 0;
   }
 

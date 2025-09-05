@@ -15,6 +15,7 @@
     "close": "关闭",
     "processing": "处理中...",
     "new": "新建",
+    "add": "添加",
     "copy": "复制",
     "paste": "粘贴",
     "cut": "剪切",
@@ -198,6 +199,75 @@
     "add_model": "添加模型",
     "empty_description": "点击 \\\"添加模型\\\" 按钮开始配置您的第一个AI模型"
   },
+  "ai_model": {
+    "add_title": "添加 AI 模型",
+    "edit_title": "编辑 AI 模型",
+    "config_type": "配置类型",
+    "preset_provider": "预设提供商",
+    "custom_config": "自定义配置",
+    "provider": "提供商",
+    "select_provider": "选择提供商",
+    "model": "模型",
+    "select_model": "选择模型",
+    "select_provider_first": "请先选择提供商",
+    "config_name": "配置名称",
+    "config_name_placeholder": "我的自定义 GPT",
+    "model_name": "模型名称",
+    "model_name_placeholder": "gpt-4",
+    "api_url": "API URL",
+    "api_url_placeholder": "https://api.openai.com/v1",
+    "api_key": "API Key",
+    "api_key_placeholder": "输入您的 API Key",
+    "test_connection": "测试连接",
+    "testing": "测试中...",
+    "add_model": "添加模型",
+    "loading": "加载中...",
+    "empty_title": "暂无AI模型",
+    "empty_description": "点击\"添加模型\"按钮开始配置您的第一个AI模型",
+    "edit": "编辑",
+    "delete": "删除",
+    "delete_title": "删除模型",
+    "delete_confirm": "确定删除模型？",
+    "delete_description": "删除后无法恢复",
+    "delete_confirm_text": "确认",
+    "cancel": "取消",
+    "delete_success": "模型删除成功",
+    "delete_failed": "删除失败",
+    "update_success": "模型更新成功",
+    "add_success": "模型添加成功",
+    "operation_failed": "操作失败",
+    "save": "保存",
+    "add": "添加",
+    "add_new_model": "添加新模型",
+    "add_model_description": "配置AI模型连接信息",
+    "no_models": "暂无模型配置",
+    "default_provider": "AI模型",
+    "providers": {
+      "openai_description": "OpenAI GPT 模型",
+      "claude_description": "Anthropic Claude 模型",
+      "custom_description": "自定义 API 端点"
+    },
+    "validation": {
+      "api_key_required": "API Key 是必填项",
+      "preset_required": "请选择一个预设提供商",
+      "model_required": "请选择一个模型",
+      "config_name_required": "配置名称是必填项",
+      "api_url_required": "API URL 是必填项",
+      "model_name_required": "模型名称是必填项",
+      "required_fields": "请先填写API地址、API密钥和模型名称"
+    },
+    "test": {
+      "fill_config_first": "请先填写完整的配置信息",
+      "success": "连接测试成功",
+      "failed": "连接测试失败",
+      "error": "连接测试出错"
+    },
+    "connection_test": {
+      "success": "连接测试成功！",
+      "failed": "连接测试失败，请检查配置",
+      "error": "连接测试失败"
+    }
+  },
   "session": {
     "search_placeholder": "搜索会话...",
     "no_data": "暂无会话历史",
@@ -270,45 +340,7 @@
     "confirm": "确认",
     "close": "关闭"
   },
-  "ai_model": {
-    "add_model": "添加模型",
-    "loading": "加载中...",
-    "empty_title": "暂无AI模型",
-    "empty_description": "点击\"添加模型\"按钮开始配置您的第一个AI模型",
-    "edit": "编辑",
-    "delete": "删除",
-    "delete_title": "删除模型",
-    "delete_confirm": "确定删除模型？",
-    "delete_description": "删除后无法恢复",
-    "delete_confirm_text": "确认",
-    "cancel": "取消",
-    "delete_success": "模型删除成功",
-    "delete_failed": "删除失败",
-    "update_success": "模型更新成功",
-    "add_success": "模型添加成功",
-    "operation_failed": "操作失败",
-    "test_connection": "测试连接",
-    "testing": "测试中...",
-    "save": "保存",
-    "add": "添加",
-    "add_new_model": "添加新模型",
-    "add_model_description": "配置AI模型连接信息",
-    "no_models": "暂无模型配置",
-    "default_provider": "AI模型",
-    "providers": {
-      "openai_description": "OpenAI GPT 模型",
-      "claude_description": "Anthropic Claude 模型",
-      "custom_description": "自定义 API 端点"
-    },
-    "validation": {
-      "required_fields": "请先填写API地址、API密钥和模型名称"
-    },
-    "connection_test": {
-      "success": "连接测试成功！",
-      "failed": "连接测试失败，请检查配置",
-      "error": "连接测试失败"
-    }
-  },
+
   "message": {
     "execution_failed": "执行失败",
     "generating": "正在生成...",

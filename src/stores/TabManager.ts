@@ -124,6 +124,25 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     return id
   }
 
+  const createLLMTestTab = (): string => {
+    const existing = tabs.value.find(tab => tab.type === TabType.LLM_TEST)
+    if (existing) {
+      setActiveTab(existing.id)
+      return existing.id
+    }
+
+    const id = `llm-test-${Date.now()}`
+    tabs.value.push({
+      id,
+      title: 'llm_test',
+      type: TabType.LLM_TEST,
+      closable: true,
+      data: {},
+    })
+    setActiveTab(id)
+    return id
+  }
+
   const setActiveTab = (tabId: string) => {
     const tab = tabs.value.find(t => t.id === tabId)
     if (!tab) return
@@ -161,6 +180,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     activeTabId,
     activeTab,
     createSettingsTab,
+    createLLMTestTab,
     setActiveTab,
     closeTab,
     syncTerminalTabs,

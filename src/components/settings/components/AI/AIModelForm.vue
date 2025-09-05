@@ -1,10 +1,11 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
-  import { reactive, ref } from 'vue'
   import { createMessage } from '@/ui'
   import { handleError } from '@/utils/errorHandler'
   import { aiApi } from '@/api'
+  import { reactive, ref, computed } from 'vue'
   import { useI18n } from 'vue-i18n'
+
   interface Props {
     model?: AIModelConfig | null
   }
@@ -18,10 +19,42 @@
   const emit = defineEmits<Emits>()
   const { t } = useI18n()
 
+  // 预设提供商配置
+  const presetProviders = [
+    {
+      value: 'openai',
+      label: 'OpenAI',
+      apiUrl: 'https://api.openai.com/v1',
+      models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+    },
+    {
+      value: 'anthropic',
+      label: 'Anthropic Claude',
+      apiUrl: 'https://api.anthropic.com/v1',
+      models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
+    },
+    {
+      value: 'gemini',
+      label: 'Google Gemini',
+      apiUrl: 'https://generativelanguage.googleapis.com/v1beta',
+      models: ['gemini-pro', 'gemini-pro-vision', 'gemini-ultra'],
+    },
+    {
+      value: 'qwen',
+      label: '通义千问',
+      apiUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      models: ['qwen-max', 'qwen-plus', 'qwen-turbo'],
+    },
+  ]
+
+  // 配置模式：preset（预设）或 custom（自定义）
+  const configMode = ref<'preset' | 'custom'>('preset')
+  const selectedPreset = ref<string>('')
+
   // 表单数据
   const formData = reactive({
     name: '',
-    provider: 'openAI' as AIModelConfig['provider'],
+    provider: 'openai' as AIModelConfig['provider'],
     apiUrl: '',
     apiKey: '',
     model: '',
@@ -37,24 +70,17 @@
   const isSubmitting = ref(false)
   const isTesting = ref(false)
 
-  // 提供商选项
-  const providerOptions = [
-    {
-      value: 'openAI',
-      label: 'OpenAI',
-      description: t('ai_model.providers.openai_description'),
-    },
-    {
-      value: 'claude',
-      label: 'Claude',
-      description: t('ai_model.providers.claude_description'),
-    },
-    {
-      value: 'custom',
-      label: 'Custom',
-      description: t('ai_model.providers.custom_description'),
-    },
-  ]
+  // 计算属性：是否为预设模式
+  const isPresetMode = computed(() => configMode.value === 'preset')
+
+  // 计算属性：当前预设的可用模型
+  const availableModels = computed(() => {
+    if (isPresetMode.value && selectedPreset.value) {
+      const preset = presetProviders.find(p => p.value === selectedPreset.value)
+      return preset?.models.map(m => ({ value: m, label: m })) || []
+    }
+    return []
+  })
 
   // 初始化表单数据
   if (props.model) {
@@ -70,16 +96,69 @@
         timeout: props.model.options?.timeout || 300000,
       },
     })
+
+    // 判断是预设还是自定义
+    const preset = presetProviders.find(p => p.apiUrl === props.model?.apiUrl)
+    if (preset) {
+      configMode.value = 'preset'
+      selectedPreset.value = preset.value
+    } else {
+      configMode.value = 'custom'
+    }
   }
 
-  // 简化的表单验证
+  // 监听配置模式变化
+  const handleConfigModeChange = (mode: 'preset' | 'custom') => {
+    configMode.value = mode
+    if (mode === 'preset') {
+      selectedPreset.value = ''
+      formData.apiUrl = ''
+      formData.model = ''
+      formData.name = ''
+    } else {
+      selectedPreset.value = ''
+      formData.name = ''
+    }
+  }
+
+  // 监听预设选择变化
+  const handlePresetChange = (presetValue: string) => {
+    selectedPreset.value = presetValue
+    const preset = presetProviders.find(p => p.value === presetValue)
+    if (preset) {
+      formData.provider = presetValue as AIModelConfig['provider']
+      formData.apiUrl = preset.apiUrl
+      formData.model = preset.models[0] // 默认选择第一个模型
+      formData.name = `${preset.label} - ${preset.models[0]}`
+    }
+  }
+
+  // 表单验证
   const validateForm = () => {
     errors.value = {}
 
-    if (!formData.name.trim()) errors.value.name = t('ai_model_form.model_name_required')
-    if (!formData.apiUrl.trim()) errors.value.apiUrl = t('ai_model_form.api_url_required')
-    if (!formData.apiKey.trim()) errors.value.apiKey = t('ai_model_form.api_key_required')
-    if (!formData.model.trim()) errors.value.model = t('ai_model_form.model_name_required')
+    if (!formData.apiKey.trim()) {
+      errors.value.apiKey = t('ai_model.validation.api_key_required')
+    }
+
+    if (isPresetMode.value) {
+      if (!selectedPreset.value) {
+        errors.value.preset = t('ai_model.validation.preset_required')
+      }
+      if (!formData.model.trim()) {
+        errors.value.model = t('ai_model.validation.model_required')
+      }
+    } else {
+      if (!formData.name.trim()) {
+        errors.value.name = t('ai_model.validation.config_name_required')
+      }
+      if (!formData.apiUrl.trim()) {
+        errors.value.apiUrl = t('ai_model.validation.api_url_required')
+      }
+      if (!formData.model.trim()) {
+        errors.value.model = t('ai_model.validation.model_name_required')
+      }
+    }
 
     return Object.keys(errors.value).length === 0
   }
@@ -103,17 +182,15 @@
 
   // 测试连接
   const handleTestConnection = async () => {
-    // 验证必填字段
-    if (!formData.apiUrl || !formData.apiKey || !formData.model) {
-      createMessage.warning(t('ai_model.validation.required_fields'))
+    if (!validateForm()) {
+      createMessage.warning(t('ai_model.test.fill_config_first'))
       return
     }
 
     isTesting.value = true
     try {
-      // 构造临时的模型配置用于测试
       const testConfig: AIModelConfig = {
-        id: 'test-' + Date.now(), // 临时ID
+        id: 'test-' + Date.now(),
         name: formData.name || 'Test Model',
         provider: formData.provider,
         apiUrl: formData.apiUrl,
@@ -122,16 +199,15 @@
         options: formData.options,
       }
 
-      // 调用连接测试 API
       const isConnected = await aiApi.testConnectionWithConfig(testConfig)
 
       if (isConnected) {
-        createMessage.success(t('ai_model.connection_test.success'))
+        createMessage.success(t('ai_model.test.success'))
       } else {
-        createMessage.error(t('ai_model.connection_test.failed'))
+        createMessage.error(t('ai_model.test.failed'))
       }
     } catch (error) {
-      createMessage.error(handleError(error, t('ai_model.connection_test.error')))
+      createMessage.error(handleError(error, t('ai_model.test.error')))
     } finally {
       isTesting.value = false
     }
@@ -141,8 +217,8 @@
 <template>
   <x-modal
     :visible="true"
-    :title="props.model ? t('ai_model_form.edit_title') : t('ai_model_form.add_title')"
-    size="large"
+    :title="props.model ? t('ai_model.edit_title') : t('ai_model.add_title')"
+    size="medium"
     show-footer
     :show-cancel-button="false"
     :show-confirm-button="false"
@@ -151,81 +227,126 @@
     <template #footer>
       <div class="modal-footer">
         <x-button variant="secondary" :loading="isTesting" @click="handleTestConnection">
-          {{ isTesting ? $t('ai_model.testing') : $t('ai_model.test_connection') }}
+          {{ isTesting ? t('ai_model.testing') : t('ai_model.test_connection') }}
         </x-button>
         <div class="footer-right">
-          <x-button variant="secondary" @click="handleCancel">{{ $t('dialog.cancel') }}</x-button>
+          <x-button variant="secondary" @click="handleCancel">{{ t('common.cancel') }}</x-button>
           <x-button variant="primary" :loading="isSubmitting" @click="handleSubmit">
-            {{ props.model ? $t('ai_model.save') : $t('ai_model.add') }}
+            {{ props.model ? t('common.save') : t('common.add') }}
           </x-button>
         </div>
       </div>
     </template>
-    <form @submit.prevent="handleSubmit">
-      <!-- 基本信息 -->
-      <div class="form-section">
-        <h4 class="section-title">{{ t('ai_model_form.basic_info') }}</h4>
 
-        <div class="form-group">
-          <label class="form-label">{{ t('ai_model_form.config_name') }}</label>
-          <input
-            v-model="formData.name"
-            type="text"
-            class="form-input"
-            :class="{ error: errors.name }"
-            :placeholder="t('ai_model_form.config_name_placeholder')"
-          />
-          <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">{{ t('ai_model_form.provider') }}</label>
-          <x-select
-            v-model="formData.provider"
-            :options="providerOptions"
-            :placeholder="t('ai_model_form.provider_placeholder')"
-          />
+    <form @submit.prevent="handleSubmit" class="ai-form">
+      <!-- 配置类型选择 -->
+      <div class="form-row">
+        <div class="form-group full-width">
+          <label class="form-label">{{ t('ai_model.config_type') }}</label>
+          <div class="tab-switcher">
+            <button
+              type="button"
+              class="tab-button"
+              :class="{ active: configMode === 'preset' }"
+              @click="handleConfigModeChange('preset')"
+            >
+              {{ t('ai_model.preset_provider') }}
+            </button>
+            <button
+              type="button"
+              class="tab-button"
+              :class="{ active: configMode === 'custom' }"
+              @click="handleConfigModeChange('custom')"
+            >
+              {{ t('ai_model.custom_config') }}
+            </button>
+            <div class="tab-indicator" :class="{ 'move-right': configMode === 'custom' }"></div>
+          </div>
         </div>
       </div>
 
-      <!-- 连接配置 -->
-      <div class="form-section">
-        <h4 class="section-title">{{ t('ai_model_form.connection_config') }}</h4>
+      <!-- 预设模式 -->
+      <div v-if="isPresetMode" class="form-row">
+        <div class="form-group">
+          <label class="form-label">{{ t('ai_model.provider') }}</label>
+          <x-select
+            v-model="selectedPreset"
+            :options="presetProviders.map(p => ({ value: p.value, label: p.label }))"
+            :placeholder="t('ai_model.select_provider')"
+            @update:value="handlePresetChange"
+          />
+          <div v-if="errors.preset" class="error-message">{{ errors.preset }}</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('ai_model.model') }}</label>
+          <x-select
+            v-if="availableModels.length > 0"
+            v-model="formData.model"
+            :options="availableModels"
+            :placeholder="t('ai_model.select_model')"
+          />
+          <input
+            v-else
+            type="text"
+            class="form-input disabled"
+            :placeholder="t('ai_model.select_provider_first')"
+            disabled
+          />
+          <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
+        </div>
+      </div>
 
+      <!-- 自定义模式 -->
+      <template v-if="!isPresetMode">
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">{{ t('ai_model_form.api_url') }}</label>
+            <label class="form-label">{{ t('ai_model.config_name') }}</label>
             <input
-              v-model="formData.apiUrl"
-              type="url"
+              v-model="formData.name"
+              type="text"
               class="form-input"
-              :class="{ error: errors.apiUrl }"
-              placeholder="https://api.openai.com/v1"
+              :class="{ error: errors.name }"
+              :placeholder="t('ai_model.config_name_placeholder')"
             />
-            <div v-if="errors.apiUrl" class="error-message">{{ errors.apiUrl }}</div>
+            <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
           </div>
-
           <div class="form-group">
-            <label class="form-label">{{ t('ai_model_form.model_name') }}</label>
+            <label class="form-label">{{ t('ai_model.model_name') }}</label>
             <input
               v-model="formData.model"
               type="text"
               class="form-input"
               :class="{ error: errors.model }"
-              placeholder="gpt-4"
+              :placeholder="t('ai_model.model_name_placeholder')"
             />
             <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-group full-width">
+            <label class="form-label">{{ t('ai_model.api_url') }}</label>
+            <input
+              v-model="formData.apiUrl"
+              type="url"
+              class="form-input"
+              :class="{ error: errors.apiUrl }"
+              :placeholder="t('ai_model.api_url_placeholder')"
+            />
+            <div v-if="errors.apiUrl" class="error-message">{{ errors.apiUrl }}</div>
+          </div>
+        </div>
+      </template>
 
-        <div class="form-group">
-          <label class="form-label">{{ t('ai_model_form.api_key') }}</label>
+      <!-- API Key -->
+      <div class="form-row">
+        <div class="form-group full-width">
+          <label class="form-label">{{ t('ai_model.api_key') }}</label>
           <input
             v-model="formData.apiKey"
             type="password"
             class="form-input"
             :class="{ error: errors.apiKey }"
-            placeholder="sk-..."
+            :placeholder="t('ai_model.api_key_placeholder')"
           />
           <div v-if="errors.apiKey" class="error-message">{{ errors.apiKey }}</div>
         </div>
@@ -235,110 +356,249 @@
 </template>
 
 <style scoped>
-  .form-section {
-    margin-top: 1rem;
-    margin-bottom: 1.5rem;
-    padding: 1.25rem;
-    background: var(--bg-500);
-    border: 1px solid var(--border-300);
-    border-radius: 8px;
-  }
-
-  .form-section:last-of-type {
-    margin-bottom: 0;
-  }
-
-  .section-title {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-200);
-    margin: 0 0 1rem 0;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--border-300);
+  .ai-form {
+    max-width: 500px;
+    margin: 0 auto;
   }
 
   .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-    margin-bottom: 1rem;
+    margin-top: 16px;
+    display: flex;
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
   }
 
   .form-group {
-    margin-bottom: 1rem;
+    flex: 1;
+    min-width: 0;
   }
 
-  .form-group:last-child {
-    margin-bottom: 0;
+  .form-group.full-width {
+    flex: 1 1 100%;
   }
 
   .form-label {
     display: block;
-    font-size: 0.875rem;
+    font-size: var(--font-size-sm);
     font-weight: 500;
     color: var(--text-200);
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--spacing-sm);
   }
 
   .form-input {
     width: 100%;
-    padding: 0.75rem;
+    height: 32px;
+    padding: 0 var(--spacing-md);
     border: 1px solid var(--border-300);
-    border-radius: 6px;
+    border-radius: var(--border-radius);
     background-color: var(--bg-400);
     color: var(--text-200);
-    font-size: 0.875rem;
-    transition: border-color 0.2s ease;
+    font-size: var(--font-size-md);
+    font-family: var(--font-family);
+    line-height: 1.5;
+    transition: all var(--x-duration-normal) var(--x-ease-out);
+    box-sizing: border-box;
+  }
+
+  .form-input:hover {
+    border-color: var(--border-400);
   }
 
   .form-input:focus {
     outline: none;
     border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary-alpha);
   }
 
   .form-input.error {
-    border-color: var(--color-danger);
+    border-color: var(--color-error);
   }
 
-  .form-hint {
-    font-size: 0.75rem;
+  .form-input.error:focus {
+    box-shadow: 0 0 0 2px rgba(244, 71, 71, 0.1);
+  }
+
+  .form-input.disabled {
+    background-color: var(--bg-500);
     color: var(--text-400);
-    margin-top: 0.25rem;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .form-input::placeholder {
+    color: var(--text-400);
+  }
+
+  .tab-switcher {
+    position: relative;
+    display: flex;
+    background-color: var(--bg-500);
+    border-radius: var(--border-radius);
+    padding: 4px;
+    border: 1px solid var(--border-300);
+  }
+
+  .tab-button {
+    flex: 1;
+    position: relative;
+    z-index: 2;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border: none;
+    background: transparent;
+    color: var(--text-400);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
+    font-weight: 500;
+    cursor: pointer;
+    transition: color var(--x-duration-normal) var(--x-ease-out);
+    user-select: none;
+    border-radius: var(--border-radius-sm);
+    text-align: center;
+  }
+
+  .tab-button:hover {
+    color: var(--text-300);
+  }
+
+  .tab-button.active {
+    color: var(--text-100);
+  }
+
+  .tab-button:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .tab-indicator {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: calc(50% - 4px);
+    height: calc(100% - 8px);
+    background-color: var(--bg-300);
+    border-radius: var(--border-radius-sm);
+    transition: transform var(--x-duration-normal) var(--x-ease-out);
+    z-index: 1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .tab-indicator.move-right {
+    transform: translateX(100%);
   }
 
   .error-message {
-    font-size: 0.75rem;
-    color: var(--color-danger);
-    margin-top: 0.25rem;
+    font-size: var(--font-size-xs);
+    color: var(--color-error);
+    margin-top: var(--spacing-xs);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    line-height: 1.4;
+  }
+
+  .error-message::before {
+    content: '⚠';
+    font-size: 12px;
+    flex-shrink: 0;
   }
 
   .modal-footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 1rem;
+    gap: var(--spacing-lg);
   }
 
   .footer-right {
     display: flex;
-    gap: 0.75rem;
+    gap: var(--spacing-md);
   }
 
   /* 响应式设计 */
   @media (max-width: 768px) {
+    .ai-form {
+      max-width: 100%;
+      padding: 0 var(--spacing-md);
+    }
+
     .form-row {
-      grid-template-columns: 1fr;
-      gap: 1rem;
+      flex-direction: column;
+      gap: var(--spacing-md);
     }
 
     .modal-footer {
       flex-direction: column;
-      gap: 0.75rem;
+      gap: var(--spacing-md);
+      padding: var(--spacing-md);
     }
 
     .footer-right {
       width: 100%;
       justify-content: flex-end;
+    }
+
+    .tab-switcher {
+      flex-direction: column;
+      border-radius: var(--border-radius);
+      padding: var(--spacing-xs);
+    }
+
+    .tab-button {
+      border-radius: var(--border-radius-sm);
+      padding: var(--spacing-lg);
+    }
+
+    .tab-indicator {
+      width: calc(100% - 8px);
+      height: calc(50% - 4px);
+      border-radius: var(--border-radius-sm);
+      transform: translateY(0);
+    }
+
+    .tab-indicator.move-right {
+      transform: translateY(100%);
+    }
+
+    .form-input {
+      height: 40px;
+      font-size: var(--font-size-lg);
+    }
+  }
+
+  /* 触摸设备优化 */
+  @media (hover: none) and (pointer: coarse) {
+    .form-input {
+      min-height: 44px;
+    }
+
+    .tab-button {
+      min-height: 48px;
+      padding: var(--spacing-lg) var(--spacing-xl);
+    }
+  }
+
+  /* 高对比度模式支持 */
+  @media (prefers-contrast: high) {
+    .form-input {
+      border-width: 2px;
+    }
+
+    .tab-button {
+      border: 1px solid var(--border-400);
+    }
+
+    .tab-button.active {
+      border-color: var(--color-primary);
+      border-width: 2px;
+    }
+  }
+
+  /* 减少动画模式支持 */
+  @media (prefers-reduced-motion: reduce) {
+    .form-input,
+    .tab-button,
+    .tab-indicator {
+      transition: none !important;
     }
   }
 </style>

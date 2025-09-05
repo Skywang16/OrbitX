@@ -11,7 +11,7 @@ export interface ToolExecution {
   toolId?: string
 }
 
-export type AIProvider = 'openAI' | 'claude' | 'custom'
+export type AIProvider = 'openai' | 'anthropic' | 'gemini' | 'qwen' | 'custom'
 
 export interface AIModelConfig {
   id: string
