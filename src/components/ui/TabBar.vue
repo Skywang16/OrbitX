@@ -109,9 +109,6 @@
     if (tab.type === TabType.SETTINGS && tab.title === 'settings') {
       return t('settings.title')
     }
-    if (tab.type === TabType.LLM_TEST && tab.title === 'llm_test') {
-      return 'LLM 测试'
-    }
     return tab.title || 'Tab'
   }
 

@@ -1,7 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { Channel } from '@tauri-apps/api/core'
 import { NativeLLMRequest, NativeLLMResponse, NativeLLMStreamChunk } from '../types/llm.types'
-import { StreamProcessor, StreamProcessorConfig } from './stream-processor'
 import { LLMError, ErrorHandler } from '../common/error'
 
 /**
@@ -25,10 +24,7 @@ export class NativeLLMService {
   /**
    * Make a streaming LLM call with optimized processing
    */
-  async callStream(
-    request: NativeLLMRequest,
-    streamConfig?: Partial<StreamProcessorConfig>
-  ): Promise<ReadableStream<NativeLLMStreamChunk>> {
+  async callStream(request: NativeLLMRequest): Promise<ReadableStream<NativeLLMStreamChunk>> {
     try {
       this.validateRequest(request)
       const channel = new Channel<NativeLLMStreamChunk>()
@@ -144,7 +140,7 @@ export class NativeLLMService {
 
         // Handle channel errors if the API supports it
         if ('onerror' in channel) {
-          ;(channel as any).onerror = (error: any) => {
+          ;(channel as { onerror?: (error: unknown) => void }).onerror = (error: unknown) => {
             if (!isStreamClosed) {
               isStreamClosed = true
               controller.error(new Error(`Channel error: ${error}`))

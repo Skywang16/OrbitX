@@ -1,6 +1,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { llmRegistryApi } from '@/api'
-import type { ProviderInfo, ModelInfo, LLMProviderType, ProviderOption, ModelOption } from '@/types'
+import type { ProviderInfo, ProviderOption, ModelOption } from '@/types'
 
 export function useLLMRegistry() {
   const providers = ref<ProviderInfo[]>([])

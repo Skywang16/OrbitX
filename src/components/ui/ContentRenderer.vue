@@ -21,13 +21,6 @@
       v-show="tab.id === tabManagerStore.activeTabId"
       :key="tab.id"
     />
-
-    <!-- LLM 测试页面 -->
-    <LLMTestView
-      v-for="tab in tabManagerStore.tabs.filter(t => t.type === TabType.LLM_TEST)"
-      v-show="tab.id === tabManagerStore.activeTabId"
-      :key="tab.id"
-    />
   </div>
 </template>
 
@@ -37,7 +30,6 @@
   import { useTerminalStore } from '@/stores/Terminal'
   import Terminal from '@/components/terminal/Terminal.vue'
   import SettingsView from '@/views/Settings/SettingsView.vue'
-  import LLMTestView from '@/views/LLMTest.vue'
   import EmptyState from '@/components/ui/EmptyState.vue'
 
   const tabManagerStore = useTabManagerStore()

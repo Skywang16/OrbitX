@@ -49,4 +49,3 @@ class LLMRegistryApiImpl implements LLMRegistryApi {
 }
 
 export const llmRegistryApi = new LLMRegistryApiImpl()
-export type { LLMRegistryApi }
