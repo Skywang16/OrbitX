@@ -22,7 +22,6 @@
           <div class="ai-option-header" @click="selectProvider(provider.id)">
             <div class="ai-info">
               <div class="ai-name">{{ provider.name }}</div>
-              <div class="ai-desc">{{ provider.description }}</div>
             </div>
             <div class="ai-badge" v-if="provider.recommended">
               {{ t('onboarding.ai.recommended') }}
@@ -72,7 +71,17 @@
 
               <div class="form-group">
                 <label class="form-label">{{ t('onboarding.ai.model_name') }}</label>
+                <!-- 预设provider使用下拉选择 -->
+                <x-select
+                  v-if="selectedProvider !== 'custom' && availableModels.length > 0"
+                  v-model="formData.model"
+                  :options="availableModels"
+                  :placeholder="t('ai_model.select_model')"
+                  :class="{ error: errors.model }"
+                />
+                <!-- 自定义provider使用文本输入 -->
                 <input
+                  v-else
                   v-model="formData.model"
                   type="text"
                   class="form-input"
@@ -90,43 +99,51 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, computed } from 'vue'
+  import { ref, reactive, computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { createMessage } from '@/ui'
+  import { createMessage, XSelect } from '@/ui'
   import { handleError } from '@/utils/errorHandler'
 
   import type { AIModelConfig } from '@/types'
   import { useAISettingsStore } from '@/components/settings/components/AI/store'
+  import { useLLMRegistry } from '@/composables/useLLMRegistry'
 
   const { t } = useI18n()
   const aiSettingsStore = useAISettingsStore()
 
+  // 使用后端LLM注册表
+  const { providerOptions, getModelOptions, loadProviders } = useLLMRegistry()
+
   const selectedProvider = ref('')
 
-  const availableProviders = [
-    {
-      id: 'claude',
-      name: 'Claude',
-      description: t('onboarding.ai.models.claude.description'),
-      recommended: true,
-    },
-    {
-      id: 'openai',
-      name: 'OpenAI',
-      description: t('onboarding.ai.models.openai.description'),
-      recommended: false,
-    },
-    {
+  // 从后端注册表生成可用供应商列表
+  const availableProviders = computed(() => {
+    const providers = providerOptions.value.map((provider, index) => ({
+      id: provider.value,
+      name: provider.label,
+      recommended: index === 0, // 第一个供应商设为推荐
+    }))
+
+    // 添加自定义选项
+    providers.push({
       id: 'custom',
       name: t('onboarding.ai.models.custom.name'),
-      description: t('onboarding.ai.models.custom.description'),
       recommended: false,
-    },
-  ]
+    })
+
+    return providers
+  })
+
+  // 组件挂载时确保数据已加载
+  onMounted(async () => {
+    if (providerOptions.value.length === 0) {
+      await loadProviders()
+    }
+  })
 
   const formData = reactive({
     name: '',
-    provider: 'claude' as AIModelConfig['provider'],
+    provider: 'anthropic' as AIModelConfig['provider'],
     apiKey: '',
     apiUrl: '',
     model: '',
@@ -143,10 +160,18 @@
   // 计算可见的提供商列表
   const visibleProviders = computed(() => {
     if (!selectedProvider.value) {
-      return availableProviders
+      return availableProviders.value
     }
     // 只显示选中的提供商
-    return availableProviders.filter(provider => provider.id === selectedProvider.value)
+    return availableProviders.value.filter(provider => provider.id === selectedProvider.value)
+  })
+
+  // 计算当前选中provider的可用模型
+  const availableModels = computed(() => {
+    if (!selectedProvider.value || selectedProvider.value === 'custom') {
+      return []
+    }
+    return getModelOptions(selectedProvider.value)
   })
 
   const selectProvider = (providerId: string) => {
@@ -156,26 +181,37 @@
     } else {
       selectedProvider.value = providerId
       formData.provider = providerId as AIModelConfig['provider']
+
+      // 如果不是自定义provider，自动设置API URL和默认模型
+      if (providerId !== 'custom') {
+        const provider = providerOptions.value.find(p => p.value === providerId)
+        if (provider) {
+          formData.apiUrl = provider.apiUrl
+          const models = getModelOptions(providerId)
+          if (models.length > 0) {
+            formData.model = models[0].value // 默认选择第一个模型
+          }
+        }
+      }
     }
     // 重置表单数据
     formData.name = ''
     formData.apiKey = ''
-    formData.apiUrl = ''
-    formData.model = ''
+    if (providerId === 'custom') {
+      formData.apiUrl = ''
+      formData.model = ''
+    }
     errors.value = {}
   }
 
   const getModelPlaceholder = () => {
-    switch (selectedProvider.value) {
-      case 'claude':
-        return 'claude-3-5-sonnet-20241022'
-      case 'openai':
-        return 'gpt-4'
-      case 'custom':
-        return t('onboarding.ai.model_name_placeholder')
-      default:
-        return ''
+    if (selectedProvider.value === 'custom') {
+      return t('onboarding.ai.model_name_placeholder')
     }
+
+    // 从后端注册表获取第一个可用模型作为占位符
+    const models = getModelOptions(selectedProvider.value)
+    return models.length > 0 ? models[0].value : ''
   }
 
   // 简化的表单验证
@@ -196,14 +232,13 @@
 
   // 获取默认API URL
   const getDefaultApiUrl = () => {
-    switch (selectedProvider.value) {
-      case 'claude':
-        return 'https://api.anthropic.com/v1'
-      case 'openai':
-        return 'https://api.openai.com/v1'
-      default:
-        return formData.apiUrl
+    if (selectedProvider.value === 'custom') {
+      return formData.apiUrl
     }
+
+    // 从后端注册表获取默认API URL
+    const provider = providerOptions.value.find(p => p.value === selectedProvider.value)
+    return provider?.apiUrl || formData.apiUrl
   }
 
   // 保存配置
@@ -222,7 +257,7 @@
         id: Date.now().toString(),
         name: formData.name,
         provider: formData.provider,
-        apiUrl: formData.apiUrl || getDefaultApiUrl(),
+        apiUrl: getDefaultApiUrl(),
         apiKey: formData.apiKey,
         model: formData.model,
         options: formData.options,
@@ -236,7 +271,7 @@
       selectedProvider.value = ''
       Object.assign(formData, {
         name: '',
-        provider: 'claude' as AIModelConfig['provider'],
+        provider: 'anthropic' as AIModelConfig['provider'],
         apiKey: '',
         apiUrl: '',
         model: '',
@@ -356,13 +391,6 @@
     margin: 0 0 4px 0;
   }
 
-  .ai-desc {
-    font-size: 14px;
-    color: var(--text-400);
-    margin: 0;
-    line-height: 1.4;
-  }
-
   .ai-badge {
     font-size: 11px;
     font-weight: 600;
@@ -445,6 +473,43 @@
     font-size: 12px;
     color: var(--color-danger, #ef4444);
     margin-top: 4px;
+  }
+
+  /* XSelect样式调整，使其与表单输入框保持一致 */
+  .form-group :deep(.x-select) {
+    width: 100%;
+  }
+
+  .form-group :deep(.x-select__input-wrapper) {
+    width: 100%;
+  }
+
+  .form-group :deep(.x-select__input) {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 14px;
+    color: var(--text-100);
+    background: var(--bg-200);
+    border: 2px solid var(--border-100);
+    border-radius: 8px;
+    transition: border-color 0.2s ease;
+    min-height: auto;
+  }
+
+  .form-group :deep(.x-select__input:focus-within) {
+    border-color: var(--color-primary);
+  }
+
+  .form-group :deep(.x-select.error .x-select__input) {
+    border-color: var(--color-danger, #ef4444);
+  }
+
+  .form-group :deep(.x-select__placeholder) {
+    color: var(--text-400);
+  }
+
+  .form-group :deep(.x-select__value) {
+    color: var(--text-100);
   }
 
   /* 动画效果优化 */

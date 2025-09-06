@@ -47,6 +47,17 @@ export interface ShellStats {
   lastRefresh: string
 }
 
+// ===== 后台命令执行相关类型 =====
+
+export interface BackgroundCommandResult {
+  command: string
+  exitCode: number
+  stdout: string
+  stderr: string
+  executionTimeMs: number
+  success: boolean
+}
+
 // ===== Shell管理器统计类型 =====
 
 export interface ShellManagerStats {

@@ -263,7 +263,7 @@ impl ContextManager {
 
         // 添加当前工作目录信息
         if let Some(cwd) = current_working_directory {
-            parts.push(format!("【当前工作目录】\n{}\n", cwd));
+            parts.push(format!("【当前工作区】\n{}\n", cwd));
         }
 
         // 添加对话历史
@@ -629,28 +629,37 @@ impl ContextManager {
     }
 
     fn format_message(&self, msg: &Message) -> String {
-        // 过滤无用的assistant消息
-        if msg.role == "assistant" {
-            let content = msg.content.trim();
-            // 过滤掉无意义的状态消息
-            if content == "Completed" || content == "Thinking..." || content.is_empty() {
-                return String::new(); // 返回空字符串，后续会被过滤掉
-            }
-        }
-
+        // 首先检查是否有工具调用信息
         if msg.role == "assistant" && msg.steps_json.is_some() {
             let steps_json = msg.steps_json.as_ref().unwrap();
 
             if let Ok(steps_value) = serde_json::from_str(steps_json) {
                 let tool_summary = self.extract_tool_summary(&steps_value);
 
-                // AbortError特殊处理: 只保留工具信息，不显示中断文本
-                if msg.content.contains("AbortError") {
-                    return format!("assistant: {}", tool_summary);
-                }
+                // 如果有工具调用信息，即使内容是 "Thinking..." 也要保留
+                if tool_summary != "Completed" && !tool_summary.is_empty() {
+                    // AbortError特殊处理: 只保留工具信息，不显示中断文本
+                    if msg.content.contains("AbortError") {
+                        return format!("assistant: {}", tool_summary);
+                    }
 
-                // 正常工具消息: 结合工具摘要和最终内容
-                return format!("assistant: {}\n{}", tool_summary, msg.content.trim());
+                    // 对于 "Thinking..." 内容，只显示工具摘要
+                    if msg.content.trim() == "Thinking..." {
+                        return format!("assistant: {}", tool_summary);
+                    }
+
+                    // 正常工具消息: 结合工具摘要和最终内容
+                    return format!("assistant: {}\n{}", tool_summary, msg.content.trim());
+                }
+            }
+        }
+
+        // 过滤无用的assistant消息（只有在没有工具调用信息时才过滤）
+        if msg.role == "assistant" {
+            let content = msg.content.trim();
+            // 过滤掉无意义的状态消息
+            if content == "Completed" || content == "Thinking..." || content.is_empty() {
+                return String::new(); // 返回空字符串，后续会被过滤掉
             }
         }
 
@@ -874,7 +883,7 @@ impl ContextManager {
             }
 
             if parts.is_empty() {
-                "[no params]".to_string()
+                String::new()
             } else {
                 parts.join(", ")
             }
@@ -904,10 +913,41 @@ impl ContextManager {
                             .join(", ")
                     )
                 } else {
-                    format!("[{} items]", arr.len())
+                    // 对于大数组，显示前几个元素然后省略
+                    let preview: Vec<String> = arr
+                        .iter()
+                        .take(2)
+                        .map(|v| self.format_param_value(v))
+                        .collect();
+                    format!("[{}, ...]", preview.join(", "))
                 }
             }
-            serde_json::Value::Object(_) => "[object]".to_string(),
+            serde_json::Value::Object(obj) => {
+                // 对于对象，显示关键字段
+                if obj.is_empty() {
+                    "{}".to_string()
+                } else {
+                    let mut key_previews = Vec::new();
+                    for (key, value) in obj.iter().take(2) {
+                        let value_str = match value {
+                            serde_json::Value::String(s) => {
+                                if s.len() > 20 {
+                                    format!("\"{}...\"", &s[..17])
+                                } else {
+                                    format!("\"{}\"", s)
+                                }
+                            }
+                            _ => self.format_param_value(value),
+                        };
+                        key_previews.push(format!("{}: {}", key, value_str));
+                    }
+                    if obj.len() > 2 {
+                        format!("{{{}, ...}}", key_previews.join(", "))
+                    } else {
+                        format!("{{{}}}", key_previews.join(", "))
+                    }
+                }
+            }
             serde_json::Value::Bool(b) => b.to_string(),
             serde_json::Value::Number(n) => n.to_string(),
             serde_json::Value::Null => "null".to_string(),

@@ -111,6 +111,12 @@ impl AIService {
             crate::storage::repositories::ai_models::AIProvider::Claude => {
                 self.test_claude_connection(model).await
             }
+            crate::storage::repositories::ai_models::AIProvider::Gemini => {
+                self.test_gemini_connection(model).await
+            }
+            crate::storage::repositories::ai_models::AIProvider::Qwen => {
+                self.test_qwen_connection(model).await
+            }
             crate::storage::repositories::ai_models::AIProvider::Custom => {
                 self.test_custom_connection(model).await
             }
@@ -144,21 +150,25 @@ impl AIService {
             .await?;
 
         let status = response.status();
-        
+
         // 对于OpenAI API，我们认为以下情况为成功：
         // - 200: 正常响应
         // - 400: Bad Request (通常表示API可用但请求参数有问题)
         // - 401: Unauthorized (API Key问题，但API端点可用)
         // - 429: Rate limit (API可用但达到限制)
-        let is_success = status.is_success() 
-            || status == reqwest::StatusCode::BAD_REQUEST 
+        let is_success = status.is_success()
+            || status == reqwest::StatusCode::BAD_REQUEST
             || status == reqwest::StatusCode::UNAUTHORIZED
             || status == reqwest::StatusCode::TOO_MANY_REQUESTS;
 
         if !is_success {
             // 记录详细的错误信息用于调试
             if let Ok(error_text) = response.text().await {
-                tracing::warn!("OpenAI连接测试失败: status={}, response={}", status, error_text);
+                tracing::warn!(
+                    "OpenAI连接测试失败: status={}, response={}",
+                    status,
+                    error_text
+                );
             }
         }
 
@@ -186,21 +196,25 @@ impl AIService {
             .await?;
 
         let status = response.status();
-        
+
         // 对于Claude API，我们认为以下情况为成功：
         // - 200: 正常响应
         // - 400: Bad Request (通常表示API可用但请求参数有问题)
         // - 401: Unauthorized (API Key问题，但API端点可用)
         // - 429: Rate limit (API可用但达到限制)
-        let is_success = status.is_success() 
-            || status == reqwest::StatusCode::BAD_REQUEST 
+        let is_success = status.is_success()
+            || status == reqwest::StatusCode::BAD_REQUEST
             || status == reqwest::StatusCode::UNAUTHORIZED
             || status == reqwest::StatusCode::TOO_MANY_REQUESTS;
 
         if !is_success {
             // 记录详细的错误信息用于调试
             if let Ok(error_text) = response.text().await {
-                tracing::warn!("Claude连接测试失败: status={}, response={}", status, error_text);
+                tracing::warn!(
+                    "Claude连接测试失败: status={}, response={}",
+                    status,
+                    error_text
+                );
             }
         }
 
@@ -223,7 +237,7 @@ impl AIService {
             "model": model.model,
             "messages": [
                 {
-                    "role": "user", 
+                    "role": "user",
                     "content": "Hello"
                 }
             ],
@@ -241,21 +255,135 @@ impl AIService {
             .await?;
 
         let status = response.status();
-        
+
         // 对于LLM测试，我们认为以下情况为成功：
         // - 200: 正常响应
         // - 400: Bad Request (通常表示API可用但请求参数有问题)
         // - 401: Unauthorized (API Key问题，但API端点可用)
         // - 422: Unprocessable Entity (模型参数问题，但API可用)
-        let is_success = status.is_success() 
-            || status == reqwest::StatusCode::BAD_REQUEST 
+        let is_success = status.is_success()
+            || status == reqwest::StatusCode::BAD_REQUEST
             || status == reqwest::StatusCode::UNAUTHORIZED
             || status == reqwest::StatusCode::UNPROCESSABLE_ENTITY;
 
         if !is_success {
             // 记录详细的错误信息用于调试
             if let Ok(error_text) = response.text().await {
-                tracing::warn!("LLM连接测试失败: status={}, response={}", status, error_text);
+                tracing::warn!(
+                    "LLM连接测试失败: status={}, response={}",
+                    status,
+                    error_text
+                );
+            }
+        }
+
+        Ok(is_success)
+    }
+
+    async fn test_gemini_connection(&self, model: &AIModelConfig) -> AppResult<bool> {
+        let url = format!(
+            "{}/v1/models/{}:generateContent",
+            model.api_url.trim_end_matches('/'),
+            model.model
+        );
+        let client = reqwest::Client::new();
+
+        let test_payload = json!({
+            "contents": [{
+                "parts": [{
+                    "text": "Hello"
+                }]
+            }],
+            "generationConfig": {
+                "maxOutputTokens": 1,
+                "temperature": 0
+            }
+        });
+
+        let response = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .query(&[("key", &model.api_key)])
+            .json(&test_payload)
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await?;
+
+        let status = response.status();
+
+        // 对于Gemini API，我们认为以下情况为成功：
+        // - 200: 正常响应
+        // - 400: Bad Request (通常表示API可用但请求参数有问题)
+        // - 401: Unauthorized (API Key问题，但API端点可用)
+        // - 429: Rate limit (API可用但达到限制)
+        let is_success = status.is_success()
+            || status == reqwest::StatusCode::BAD_REQUEST
+            || status == reqwest::StatusCode::UNAUTHORIZED
+            || status == reqwest::StatusCode::TOO_MANY_REQUESTS;
+
+        if !is_success {
+            // 记录详细的错误信息用于调试
+            if let Ok(error_text) = response.text().await {
+                tracing::warn!(
+                    "Gemini连接测试失败: status={}, response={}",
+                    status,
+                    error_text
+                );
+            }
+        }
+
+        Ok(is_success)
+    }
+
+    async fn test_qwen_connection(&self, model: &AIModelConfig) -> AppResult<bool> {
+        let chat_url = format!(
+            "{}/v1/chat/completions",
+            model.api_url.trim_end_matches('/')
+        );
+        let client = reqwest::Client::new();
+
+        // 发送一个实际的LLM请求来测试连接和模型可用性
+        let test_payload = json!({
+            "model": model.model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello"
+                }
+            ],
+            "max_tokens": 1,
+            "temperature": 0
+        });
+
+        let response = client
+            .post(&chat_url)
+            .header("Authorization", format!("Bearer {}", model.api_key))
+            .header("Content-Type", "application/json")
+            .json(&test_payload)
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await?;
+
+        let status = response.status();
+
+        // 对于Qwen API，我们认为以下情况为成功：
+        // - 200: 正常响应
+        // - 400: Bad Request (通常表示API可用但请求参数有问题)
+        // - 401: Unauthorized (API Key问题，但API端点可用)
+        // - 429: Rate limit (API可用但达到限制)
+        let is_success = status.is_success()
+            || status == reqwest::StatusCode::BAD_REQUEST
+            || status == reqwest::StatusCode::UNAUTHORIZED
+            || status == reqwest::StatusCode::TOO_MANY_REQUESTS;
+
+        if !is_success {
+            // 记录详细的错误信息用于调试
+            if let Ok(error_text) = response.text().await {
+                tracing::warn!(
+                    "Qwen连接测试失败: status={}, response={}",
+                    status,
+                    error_text
+                );
             }
         }
 

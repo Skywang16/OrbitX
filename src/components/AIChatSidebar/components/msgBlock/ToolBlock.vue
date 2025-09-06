@@ -111,12 +111,7 @@
       <path d="M8 11H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       <path d="M11 8V14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>`,
-    grep_search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
-      <path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M11 9H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      <path d="M11 13H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>`,
+
     unknown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
       <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -126,6 +121,10 @@
 
   // 获取工具图标
   const getToolIcon = (toolName: string) => {
+    // grep_search 使用和 orbit_search 相同的图标
+    if (toolName === 'grep_search') {
+      return toolIcons.orbit_search
+    }
     return toolIcons[toolName as keyof typeof toolIcons] || toolIcons.unknown
   }
 

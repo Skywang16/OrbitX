@@ -28,10 +28,16 @@ fn default_timestamp() -> DateTime<Utc> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub enum AIProvider {
+    #[serde(rename = "openai")]
     OpenAI,
+    #[serde(rename = "anthropic")]
     Claude,
+    #[serde(rename = "gemini")]
+    Gemini,
+    #[serde(rename = "qwen")]
+    Qwen,
+    #[serde(rename = "custom")]
     Custom,
 }
 
@@ -40,6 +46,8 @@ impl std::fmt::Display for AIProvider {
         match self {
             AIProvider::OpenAI => write!(f, "OpenAI"),
             AIProvider::Claude => write!(f, "Claude"),
+            AIProvider::Gemini => write!(f, "Gemini"),
+            AIProvider::Qwen => write!(f, "Qwen"),
             AIProvider::Custom => write!(f, "Custom"),
         }
     }
@@ -52,6 +60,8 @@ impl std::str::FromStr for AIProvider {
         match s {
             "OpenAI" => Ok(AIProvider::OpenAI),
             "Claude" => Ok(AIProvider::Claude),
+            "Gemini" => Ok(AIProvider::Gemini),
+            "Qwen" => Ok(AIProvider::Qwen),
             "Custom" => Ok(AIProvider::Custom),
             _ => Err(anyhow!("Unknown AI provider: {}", s)),
         }

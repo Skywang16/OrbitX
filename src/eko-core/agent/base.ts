@@ -114,6 +114,7 @@ export class Agent {
       }
       await this.handleMessages(agentContext, messages, tools)
       const llm_tools = convertTools(agentTools)
+
       const results = await callAgentLLM(
         agentContext,
         rlm,
@@ -125,9 +126,11 @@ export class Agent {
         this.callback,
         this.requestHandler
       )
+
       // Force stop functionality removed with variable storage
       const finalResult = await this.handleCallResult(agentContext, messages, agentTools, results)
       loopNum++
+
       if (!finalResult) {
         if (config.expertMode && loopNum % config.expertModeTodoLoopNum == 0) {
           await doTodoListManager(agentContext, rlm, messages, llm_tools)
@@ -191,9 +194,20 @@ export class Agent {
         }
         toolResult = await tool.execute(args, agentContext, result)
         toolChain.updateToolResult(toolResult)
-        agentContext.consecutiveErrorNum = 0
+
+        // 统一到Result-based模式：检查 toolResult.isError
+        if (toolResult.isError) {
+          const errorText = toolResult.content[0]?.type === 'text' ? toolResult.content[0].text : 'Unknown error'
+          agentContext.consecutiveErrorNum++
+          if (agentContext.consecutiveErrorNum >= 5) {
+            throw new Error(`Tool ${result.name} failed: ${errorText}`)
+          }
+        } else {
+          agentContext.consecutiveErrorNum = 0
+        }
       } catch (e) {
-        Log.error('tool call error: ', result.name, result.arguments, e)
+        // 处理工具不存在或其他系统级异常（非业务逻辑错误）
+        Log.error('tool call system error: ', result.name, result.arguments, e)
         toolResult = {
           content: [
             {
@@ -204,7 +218,8 @@ export class Agent {
           isError: true,
         }
         toolChain.updateToolResult(toolResult)
-        if (++agentContext.consecutiveErrorNum >= 10) {
+        agentContext.consecutiveErrorNum++
+        if (agentContext.consecutiveErrorNum >= 5) {
           throw e
         }
       }

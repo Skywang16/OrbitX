@@ -3,8 +3,9 @@
   import { createMessage } from '@/ui'
   import { handleError } from '@/utils/errorHandler'
   import { aiApi } from '@/api'
-  import { reactive, ref, computed } from 'vue'
+  import { reactive, ref, computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import { useLLMRegistry } from '@/composables/useLLMRegistry'
 
   interface Props {
     model?: AIModelConfig | null
@@ -19,37 +20,19 @@
   const emit = defineEmits<Emits>()
   const { t } = useI18n()
 
-  // 预设提供商配置
-  const presetProviders = [
-    {
-      value: 'openai',
-      label: 'OpenAI',
-      apiUrl: 'https://api.openai.com/v1',
-      models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-    },
-    {
-      value: 'anthropic',
-      label: 'Anthropic Claude',
-      apiUrl: 'https://api.anthropic.com/v1',
-      models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
-    },
-    {
-      value: 'gemini',
-      label: 'Google Gemini',
-      apiUrl: 'https://generativelanguage.googleapis.com/v1beta',
-      models: ['gemini-pro', 'gemini-pro-vision', 'gemini-ultra'],
-    },
-    {
-      value: 'qwen',
-      label: '通义千问',
-      apiUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      models: ['qwen-max', 'qwen-plus', 'qwen-turbo'],
-    },
-  ]
+  // 使用后端LLM注册表
+  const { providerOptions, getModelOptions, loadProviders } = useLLMRegistry()
 
   // 配置模式：preset（预设）或 custom（自定义）
   const configMode = ref<'preset' | 'custom'>('preset')
   const selectedPreset = ref<string>('')
+
+  // 组件挂载时确保数据已加载
+  onMounted(async () => {
+    if (providerOptions.value.length === 0) {
+      await loadProviders()
+    }
+  })
 
   // 表单数据
   const formData = reactive({
@@ -76,8 +59,7 @@
   // 计算属性：当前预设的可用模型
   const availableModels = computed(() => {
     if (isPresetMode.value && selectedPreset.value) {
-      const preset = presetProviders.find(p => p.value === selectedPreset.value)
-      return preset?.models.map(m => ({ value: m, label: m })) || []
+      return getModelOptions(selectedPreset.value)
     }
     return []
   })
@@ -98,7 +80,7 @@
     })
 
     // 判断是预设还是自定义
-    const preset = presetProviders.find(p => p.apiUrl === props.model?.apiUrl)
+    const preset = providerOptions.value.find(p => p.apiUrl === props.model?.apiUrl)
     if (preset) {
       configMode.value = 'preset'
       selectedPreset.value = preset.value
@@ -124,12 +106,15 @@
   // 监听预设选择变化
   const handlePresetChange = (presetValue: string) => {
     selectedPreset.value = presetValue
-    const preset = presetProviders.find(p => p.value === presetValue)
+    const preset = providerOptions.value.find(p => p.value === presetValue)
     if (preset) {
       formData.provider = presetValue as AIModelConfig['provider']
       formData.apiUrl = preset.apiUrl
-      formData.model = preset.models[0] // 默认选择第一个模型
-      formData.name = `${preset.label} - ${preset.models[0]}`
+      const models = getModelOptions(presetValue)
+      if (models.length > 0) {
+        formData.model = models[0].value // 默认选择第一个模型
+        formData.name = `${preset.label} - ${models[0].label}`
+      }
     }
   }
 
@@ -271,7 +256,7 @@
           <label class="form-label">{{ t('ai_model.provider') }}</label>
           <x-select
             v-model="selectedPreset"
-            :options="presetProviders.map(p => ({ value: p.value, label: p.label }))"
+            :options="providerOptions.map(p => ({ value: p.value, label: p.label }))"
             :placeholder="t('ai_model.select_provider')"
             @update:value="handlePresetChange"
           />

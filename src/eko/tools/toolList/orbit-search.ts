@@ -110,8 +110,6 @@ export class OrbitSearchTool extends ModifiableTool {
       searchResult.searchTime = searchTime
       const resultText = this.formatSearchResults(searchResult)
 
-      console.log(resultText)
-
       return {
         content: [
           {

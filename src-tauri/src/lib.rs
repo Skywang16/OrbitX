@@ -100,10 +100,13 @@ use config::{
     set_terminal_theme,
 };
 use llm::commands::{
-    llm_call, llm_call_stream, llm_get_available_models, llm_test_model_connection, LLMManagerState,
+    llm_call, llm_call_stream, llm_check_model_feature, llm_get_available_models,
+    llm_get_model_info, llm_get_provider_models, llm_get_providers, llm_test_model_connection,
+    LLMManagerState,
 };
 use shell::commands::{
-    check_shell_integration_status, get_pane_cwd, setup_shell_integration, update_pane_cwd,
+    check_shell_integration_status, execute_background_command, get_pane_cwd,
+    setup_shell_integration, update_pane_cwd,
 };
 use window::commands::{
     clear_directory_cache, get_current_directory, get_home_directory, get_platform_info,
@@ -293,6 +296,8 @@ pub fn run() {
             get_completion_stats,
             // 配置管理命令
             get_config,
+            // 后台命令执行
+            execute_background_command,
             update_config,
             save_config,
             validate_config,
@@ -335,6 +340,11 @@ pub fn run() {
             llm_call_stream,
             llm_get_available_models,
             llm_test_model_connection,
+            // LLM供应商和模型信息命令
+            llm_get_providers,
+            llm_get_provider_models,
+            llm_get_model_info,
+            llm_check_model_feature,
             // AI会话上下文管理命令
             create_conversation,
             get_conversations,
@@ -384,12 +394,7 @@ pub fn run() {
             setup_shell_integration,
             check_shell_integration_status,
             get_pane_cwd,
-            update_pane_cwd,
-            // LLM调用命令
-            llm_call,
-            llm_call_stream,
-            llm_get_available_models,
-            llm_test_model_connection
+            update_pane_cwd
         ])
         .setup(|app| {
             // 使用统一的错误处理初始化各个状态管理器
@@ -484,14 +489,6 @@ pub fn run() {
                     ai_state
                 };
                 app.manage(ai_state);
-
-                // 初始化LLM管理器状态
-                let llm_state = {
-                    let storage_state = app.state::<StorageCoordinatorState>();
-                    let repositories = storage_state.coordinator.repositories();
-                    LLMManagerState::new(repositories)
-                };
-                app.manage(llm_state);
 
                 // 初始化LLM管理器状态
                 let llm_state = {

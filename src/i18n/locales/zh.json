@@ -173,15 +173,8 @@
       "save_config_failed": "保存配置失败",
       "skip_config_message": "已跳过AI配置，您可以后续在设置中配置",
       "models": {
-        "claude": {
-          "description": "Anthropic AI 助手"
-        },
-        "openai": {
-          "description": "ChatGPT & GPT 模型"
-        },
         "custom": {
-          "name": "自定义",
-          "description": "配置自定义 AI 服务"
+          "name": "自定义"
         }
       },
       "preview_title": "预览",
@@ -242,11 +235,7 @@
     "add_model_description": "配置AI模型连接信息",
     "no_models": "暂无模型配置",
     "default_provider": "AI模型",
-    "providers": {
-      "openai_description": "OpenAI GPT 模型",
-      "claude_description": "Anthropic Claude 模型",
-      "custom_description": "自定义 API 端点"
-    },
+
     "validation": {
       "api_key_required": "API Key 是必填项",
       "preset_required": "请选择一个预设提供商",

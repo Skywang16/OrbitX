@@ -4,12 +4,55 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::process::Command;
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::State;
-use tracing::error;
+use tracing::{debug, error};
 
 use super::{CommandInfo, PaneShellState, ShellType};
 use crate::mux::{PaneId, TerminalMux};
+
+/// 解析命令行，正确处理引号
+fn parse_command_line(command: &str) -> Result<Vec<String>, String> {
+    let mut parts = Vec::new();
+    let mut current_part = String::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut chars = command.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+            }
+            '"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+            }
+            ' ' | '\t' if !in_single_quote && !in_double_quote => {
+                if !current_part.is_empty() {
+                    parts.push(current_part.clone());
+                    current_part.clear();
+                }
+            }
+            _ => {
+                current_part.push(ch);
+            }
+        }
+    }
+
+    // 添加最后一个部分
+    if !current_part.is_empty() {
+        parts.push(current_part);
+    }
+
+    // 检查引号是否匹配
+    if in_single_quote || in_double_quote {
+        return Err("引号不匹配".to_string());
+    }
+
+    Ok(parts)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrontendCommandInfo {
@@ -326,3 +369,72 @@ pub async fn check_shell_integration_support(shell_program: String) -> Result<bo
     Ok(shell_type.supports_integration())
 }
 
+/// 后台命令执行结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackgroundCommandResult {
+    pub command: String,
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
+    pub execution_time_ms: u64,
+    pub success: bool,
+}
+
+/// 在后台执行命令，不显示在终端UI中
+#[tauri::command]
+pub async fn execute_background_command(
+    command: String,
+    working_directory: Option<String>,
+) -> Result<BackgroundCommandResult, String> {
+    debug!("执行后台命令: {}", command);
+
+    let start_time = Instant::now();
+
+    // 解析命令和参数 - 正确处理引号
+    let parts = parse_command_line(&command)?;
+    if parts.is_empty() {
+        return Err("命令不能为空".to_string());
+    }
+
+    let program = &parts[0];
+    let args = &parts[1..];
+
+    // 创建命令
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+
+    // 设置工作目录
+    if let Some(cwd) = working_directory {
+        cmd.current_dir(cwd);
+    }
+
+    // 执行命令
+    match cmd.output() {
+        Ok(output) => {
+            let execution_time = start_time.elapsed().as_millis() as u64;
+            let exit_code = output.status.code().unwrap_or(-1);
+            let success = output.status.success();
+
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+            debug!(
+                "后台命令执行完成: {} (退出码: {}, 耗时: {}ms)",
+                command, exit_code, execution_time
+            );
+
+            Ok(BackgroundCommandResult {
+                command,
+                exit_code,
+                stdout,
+                stderr,
+                execution_time_ms: execution_time,
+                success,
+            })
+        }
+        Err(e) => {
+            error!("后台命令执行失败: {} - {}", command, e);
+            Err(format!("命令执行失败: {}", e))
+        }
+    }
+}

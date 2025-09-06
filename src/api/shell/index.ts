@@ -9,7 +9,7 @@
 
 import { invoke } from '@/utils/request'
 import { handleError } from '@/utils/errorHandler'
-import type { ShellInfo } from './types'
+import type { ShellInfo, BackgroundCommandResult } from './types'
 
 /**
  * Shell API 接口类
@@ -61,6 +61,19 @@ export class ShellApi {
     } catch (error) {
       console.warn('根据路径查找Shell失败:', handleError(error))
       return null
+    }
+  }
+
+  // ===== 后台命令执行功能 =====
+
+  async executeBackgroundCommand(command: string, workingDirectory?: string): Promise<BackgroundCommandResult> {
+    try {
+      return await invoke<BackgroundCommandResult>('execute_background_command', {
+        command,
+        working_directory: workingDirectory,
+      })
+    } catch (error) {
+      throw new Error(handleError(error, '后台命令执行失败'))
     }
   }
 }

@@ -169,15 +169,8 @@
       "save_config_failed": "Failed to save configuration",
       "skip_config_message": "AI configuration skipped. You can configure it later in settings",
       "models": {
-        "claude": {
-          "description": "Anthropic AI Assistant"
-        },
-        "openai": {
-          "description": "ChatGPT & GPT Models"
-        },
         "custom": {
-          "name": "Custom",
-          "description": "Configure custom AI service"
+          "name": "Custom"
         }
       },
       "preview_title": "Preview",
@@ -237,11 +230,7 @@
     "add_model_description": "Configure AI model connection information",
     "no_models": "No Model Configuration",
     "default_provider": "AI Model",
-    "providers": {
-      "openai_description": "OpenAI GPT Models",
-      "claude_description": "Anthropic Claude Models",
-      "custom_description": "Custom API Endpoint"
-    },
+
     "validation": {
       "api_key_required": "API Key is required",
       "preset_required": "Please select a preset provider",

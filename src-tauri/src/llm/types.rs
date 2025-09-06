@@ -123,7 +123,7 @@ pub enum LLMStreamChunk {
 }
 
 /// LLM 提供商类型
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum LLMProviderType {
     OpenAI,
     Anthropic,

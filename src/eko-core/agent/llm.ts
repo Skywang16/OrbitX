@@ -137,8 +137,6 @@ export async function callAgentLLM(
           // Handle text content
           if (chunk.content) {
             streamText += chunk.content
-            console.log('🔍 Debug: Processing delta chunk with content:', chunk.content)
-            console.log('🔍 Debug: About to call streamCallback.onMessage')
             await streamCallback.onMessage(
               {
                 taskId: context.taskId,
@@ -151,7 +149,6 @@ export async function callAgentLLM(
               },
               agentContext
             )
-            console.log('🔍 Debug: streamCallback.onMessage called successfully')
           }
 
           // Handle tool calls

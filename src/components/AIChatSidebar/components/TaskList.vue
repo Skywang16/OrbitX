@@ -1,5 +1,5 @@
 <template>
-  <div v-if="taskNodes.length > 0" class="vscode-task-list">
+  <div v-if="taskNodes.length > 0" class="task-list">
     <div class="task-header" @click="toggleCollapsed">
       <div class="header-left">
         <svg class="chevron-icon" :class="{ expanded: !isCollapsed }" width="14" height="14" viewBox="0 0 24 24">
@@ -37,7 +37,7 @@
       </div>
     </div>
 
-    <transition name="vscode-collapse">
+    <transition name="collapse">
       <div v-show="!isCollapsed" class="task-content">
         <div
           v-for="(node, index) in taskNodes"
@@ -165,7 +165,7 @@
 </script>
 
 <style scoped>
-  .vscode-task-list {
+  .task-list {
     margin: 6px 10px 0 10px;
     background-color: var(--bg-400);
     border: 1px solid var(--border-300);
@@ -293,7 +293,7 @@
 
   .status-icon.running {
     color: #007acc;
-    animation: vscode-pulse 1.5s ease-in-out infinite;
+    animation: pulse 1.5s ease-in-out infinite;
   }
 
   .status-icon.completed {
@@ -329,7 +329,7 @@
     opacity: 0.8;
   }
 
-  @keyframes vscode-pulse {
+  @keyframes pulse {
     0% {
       opacity: 1;
     }
@@ -341,20 +341,20 @@
     }
   }
 
-  .vscode-collapse-enter-active,
-  .vscode-collapse-leave-active {
+  .collapse-enter-active,
+  .collapse-leave-active {
     transition: all 0.3s ease;
     overflow: hidden;
   }
 
-  .vscode-collapse-enter-from,
-  .vscode-collapse-leave-to {
+  .collapse-enter-from,
+  .collapse-leave-to {
     max-height: 0;
     opacity: 0;
   }
 
-  .vscode-collapse-enter-to,
-  .vscode-collapse-leave-from {
+  .collapse-enter-to,
+  .collapse-leave-from {
     max-height: 240px;
     opacity: 1;
   }

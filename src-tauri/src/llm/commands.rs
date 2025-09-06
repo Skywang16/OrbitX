@@ -3,20 +3,23 @@ use tauri::{ipc::Channel, State};
 use tokio_stream::StreamExt;
 
 use super::{
+    registry::{LLMRegistry, ModelInfo, ProviderInfo},
     service::LLMService,
-    types::{LLMRequest, LLMResponse, LLMStreamChunk},
+    types::{LLMProviderType, LLMRequest, LLMResponse, LLMStreamChunk},
 };
 use crate::storage::repositories::RepositoryManager;
 
 /// LLM 管理器状态
 pub struct LLMManagerState {
     pub service: Arc<LLMService>,
+    pub registry: Arc<LLMRegistry>,
 }
 
 impl LLMManagerState {
     pub fn new(repositories: Arc<RepositoryManager>) -> Self {
         let service = Arc::new(LLMService::new(repositories.clone()));
-        Self { service }
+        let registry = Arc::new(LLMRegistry::new());
+        Self { service, registry }
     }
 }
 
@@ -99,4 +102,53 @@ pub async fn llm_test_model_connection(
         .test_model_connection(&model_id)
         .await
         .map_err(|e| e.to_string())
+}
+
+/// 获取所有供应商信息
+#[tauri::command]
+pub async fn llm_get_providers(
+    state: State<'_, LLMManagerState>,
+) -> Result<Vec<ProviderInfo>, String> {
+    Ok(state
+        .registry
+        .get_all_providers()
+        .into_iter()
+        .cloned()
+        .collect())
+}
+
+/// 获取指定供应商的模型列表
+#[tauri::command]
+pub async fn llm_get_provider_models(
+    state: State<'_, LLMManagerState>,
+    provider_type: LLMProviderType,
+) -> Result<Vec<ModelInfo>, String> {
+    Ok(state
+        .registry
+        .get_models_for_provider(&provider_type)
+        .into_iter()
+        .cloned()
+        .collect())
+}
+
+/// 根据模型ID获取模型信息
+#[tauri::command]
+pub async fn llm_get_model_info(
+    state: State<'_, LLMManagerState>,
+    model_id: String,
+) -> Result<Option<(ProviderInfo, ModelInfo)>, String> {
+    Ok(state
+        .registry
+        .find_model(&model_id)
+        .map(|(provider, model)| (provider.clone(), model.clone())))
+}
+
+/// 检查模型是否支持指定功能
+#[tauri::command]
+pub async fn llm_check_model_feature(
+    state: State<'_, LLMManagerState>,
+    model_id: String,
+    feature: String,
+) -> Result<bool, String> {
+    Ok(state.registry.model_supports_feature(&model_id, &feature))
 }

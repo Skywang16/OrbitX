@@ -96,8 +96,7 @@ Suggestion: Use read_file tool to check current file content, ensure oldString e
         {
           type: 'text',
           text: `File edited successfully: ${path}
-Status: Content has been successfully replaced.
-Suggestion: Use read_file tool to verify the changes.`,
+Status: Content has been successfully replaced.`,
           data: editResult,
         } as ExtendedContentItem,
       ],
