@@ -6,7 +6,8 @@
  */
 
 use serde_json::json;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use tauri::{AppHandle, Emitter, Runtime};
 use tokio::sync::broadcast;
 use tracing::{debug, error, warn};
@@ -22,10 +23,10 @@ pub struct TerminalEventHandler<R: Runtime> {
     app_handle: AppHandle<R>,
     mux_subscriber_id: Option<usize>,
     context_event_receiver: Option<broadcast::Receiver<TerminalContextEvent>>,
+    // 将高频终端输出做轻量缓冲，按固定帧率批量推送，缓解前端背压
+    output_buffers: Arc<RwLock<HashMap<u32, String>>>,
+    output_flush_interval_ms: u64,
 }
-
-/// Type alias for the concrete event handler used in this application
-pub type ConcreteTerminalEventHandler = TerminalEventHandler<tauri::Wry>;
 
 // Implement Send and Sync to allow the handler to be managed by Tauri
 unsafe impl<R: Runtime> Send for TerminalEventHandler<R> {}
@@ -38,6 +39,8 @@ impl<R: Runtime> TerminalEventHandler<R> {
             app_handle,
             mux_subscriber_id: None,
             context_event_receiver: None,
+            output_buffers: Arc::new(RwLock::new(HashMap::new())),
+            output_flush_interval_ms: 16, // ~60 FPS 默认节流
         }
     }
 
@@ -53,9 +56,42 @@ impl<R: Runtime> TerminalEventHandler<R> {
             anyhow::bail!("事件处理器已经启动");
         }
 
-        // 订阅 TerminalMux 事件
+        // 订阅 TerminalMux 事件（对 PaneOutput 采用缓冲节流，其它事件即时发送）
         let app_handle = self.app_handle.clone();
-        let mux_subscriber = Self::create_mux_subscriber(app_handle.clone());
+        let buffers = Arc::clone(&self.output_buffers);
+        let mux_subscriber: SubscriberCallback = Box::new(move |notification| match notification {
+            MuxNotification::PaneOutput { pane_id, data } => {
+                let text = String::from_utf8_lossy(data).to_string();
+                if let Ok(mut map) = buffers.write() {
+                    let entry = map.entry(pane_id.as_u32()).or_insert_with(String::new);
+                    entry.push_str(&text);
+                }
+                true
+            }
+            MuxNotification::PaneRemoved(pane_id) => {
+                if let Ok(mut map) = buffers.write() {
+                    map.remove(&pane_id.as_u32());
+                }
+                let (event_name, payload) = Self::mux_notification_to_tauri_event(notification);
+                if let Err(e) = app_handle.emit(event_name, payload.clone()) {
+                    error!(
+                        "发送Mux事件失败: {}, 错误: {}, payload: {}",
+                        event_name, e, payload
+                    );
+                }
+                true
+            }
+            _ => {
+                let (event_name, payload) = Self::mux_notification_to_tauri_event(notification);
+                if let Err(e) = app_handle.emit(event_name, payload.clone()) {
+                    error!(
+                        "发送Mux事件失败: {}, 错误: {}, payload: {}",
+                        event_name, e, payload
+                    );
+                }
+                true
+            }
+        });
         let subscriber_id = mux.subscribe(mux_subscriber);
         self.mux_subscriber_id = Some(subscriber_id);
 
@@ -64,6 +100,9 @@ impl<R: Runtime> TerminalEventHandler<R> {
 
         // 启动上下文事件处理任务
         self.start_context_event_task();
+
+        // 启动输出缓冲的定时刷新任务
+        self.start_output_flush_task();
 
         debug!("终端事件处理器已启动，Mux订阅者ID: {}", subscriber_id);
         Ok(())
@@ -85,18 +124,37 @@ impl<R: Runtime> TerminalEventHandler<R> {
         Ok(())
     }
 
-    /// 创建 TerminalMux 事件订阅者
-    fn create_mux_subscriber(app_handle: AppHandle<R>) -> SubscriberCallback {
-        Box::new(move |notification| {
-            let (event_name, payload) = Self::mux_notification_to_tauri_event(notification);
+    /// 启动输出缓冲的定时刷新任务
+    fn start_output_flush_task(&self) {
+        let app_handle = self.app_handle.clone();
+        let buffers = Arc::clone(&self.output_buffers);
+        let interval_ms = self.output_flush_interval_ms;
 
-            // 添加详细的调试日志
-            if let Err(e) = app_handle.emit(event_name, payload.clone()) {
-                error!("发送Mux事件失败: {}, 错误: {}, payload: {}", event_name, e, payload);
+        tauri::async_runtime::spawn(async move {
+            let mut ticker = tokio::time::interval(std::time::Duration::from_millis(interval_ms));
+            loop {
+                ticker.tick().await;
+
+                // 提取并清空当前缓冲
+                let mut drained: Vec<(u32, String)> = Vec::new();
+                if let Ok(mut map) = buffers.write() {
+                    for (pane_id, buf) in map.iter_mut() {
+                        if !buf.is_empty() {
+                            drained.push((*pane_id, std::mem::take(buf)));
+                        }
+                    }
+                }
+
+                // 批量向前端发送
+                for (pane_id, chunk) in drained.into_iter() {
+                    let payload = json!({
+                        "paneId": pane_id,
+                        "data": chunk
+                    });
+                    let _ = app_handle.emit("terminal_output", payload);
+                }
             }
-
-            true // 继续保持订阅
-        })
+        });
     }
 
     /// 启动上下文事件处理任务
@@ -117,6 +175,11 @@ impl<R: Runtime> TerminalEventHandler<R> {
 
     /// 处理终端上下文事件
     fn handle_context_event(app_handle: &AppHandle<R>, event: TerminalContextEvent) {
+        // 避免与 Mux 事件造成的重复：不再转发上下文层面的 pane_cwd_changed 到前端
+        if let TerminalContextEvent::PaneCwdChanged { .. } = &event {
+            debug!("忽略上下文层面的 pane_cwd_changed（以 Mux 事件为唯一来源）");
+            return;
+        }
         let (event_name, payload) = Self::context_event_to_tauri_event(&event);
 
         match app_handle.emit(event_name, payload) {
@@ -200,18 +263,6 @@ impl<R: Runtime> TerminalEventHandler<R> {
                     "context": context
                 }),
             ),
-            TerminalContextEvent::PaneCwdChanged {
-                pane_id,
-                old_cwd,
-                new_cwd,
-            } => (
-                "pane_cwd_changed",
-                json!({
-                    "paneId": pane_id.as_u32(),
-                    "oldCwd": old_cwd,
-                    "newCwd": new_cwd
-                }),
-            ),
             TerminalContextEvent::PaneShellIntegrationChanged { pane_id, enabled } => (
                 "pane_shell_integration_changed",
                 json!({
@@ -219,23 +270,10 @@ impl<R: Runtime> TerminalEventHandler<R> {
                     "enabled": enabled
                 }),
             ),
-        }
-    }
-
-    /// 手动发送事件（用于测试或特殊情况）
-    pub fn emit_event(&self, event_name: &str, payload: serde_json::Value) -> AppResult<()> {
-        self.app_handle
-            .emit(event_name, payload)
-            .map_err(|e| anyhow::anyhow!("发送事件失败: {}", e))?;
-        Ok(())
-    }
-
-    /// 获取当前状态信息
-    pub fn get_status(&self) -> EventHandlerStatus {
-        EventHandlerStatus {
-            mux_subscribed: self.mux_subscriber_id.is_some(),
-            context_subscribed: self.context_event_receiver.is_some(),
-            mux_subscriber_id: self.mux_subscriber_id,
+            // Note: PaneCwdChanged 事件不应从 Context 层发送给前端，Mux 是唯一来源
+            TerminalContextEvent::PaneCwdChanged { .. } => unreachable!(
+                "PaneCwdChanged should never be serialized from context_event_to_tauri_event; Mux is the single source"
+            ),
         }
     }
 }
@@ -246,14 +284,6 @@ impl<R: Runtime> Drop for TerminalEventHandler<R> {
             warn!("TerminalEventHandler 被丢弃时仍有活跃的Mux订阅");
         }
     }
-}
-
-/// 事件处理器状态信息
-#[derive(Debug, Clone)]
-pub struct EventHandlerStatus {
-    pub mux_subscribed: bool,
-    pub context_subscribed: bool,
-    pub mux_subscriber_id: Option<usize>,
 }
 
 /// 便利函数：创建并启动终端事件处理器
@@ -308,14 +338,11 @@ mod tests {
             old_cwd: Some("/old/path".to_string()),
             new_cwd: "/new/path".to_string(),
         };
-
-        let (event_name, payload) =
-            TerminalEventHandler::<tauri::Wry>::context_event_to_tauri_event(&event);
-
-        assert_eq!(event_name, "pane_cwd_changed");
-        assert_eq!(payload["paneId"], 1);
-        assert_eq!(payload["oldCwd"], "/old/path");
-        assert_eq!(payload["newCwd"], "/new/path");
+        // 不再允许从 Context 层序列化 PaneCwdChanged 事件，应该为不可达
+        let result = std::panic::catch_unwind(|| {
+            let _ = TerminalEventHandler::<tauri::Wry>::context_event_to_tauri_event(&event);
+        });
+        assert!(result.is_err());
     }
 
     #[test]

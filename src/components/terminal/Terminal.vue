@@ -56,6 +56,7 @@
   import { useTerminalSearch } from '@/composables/useTerminalSearch'
   import { useShellIntegration } from '@/composables/useShellIntegration'
   import { useTerminalOutput } from '@/composables/useTerminalOutput'
+  import { useTerminalEvents } from '@/composables/useTerminalEvents'
   import { TERMINAL_CONFIG } from '@/constants/terminal'
   import { useTerminalStore } from '@/stores/Terminal'
   import { XMessage } from '@/ui/components'
@@ -539,6 +540,12 @@
     handleTerminalOutput(terminal.value, data, shellIntegration.processTerminalOutput)
   }
 
+  // 使用 Composable 自动管理事件监听器的生命周期
+  useTerminalEvents(props.terminalId, {
+    onOutput: handleOutput,
+    onExit: (exitCode: number | null) => handleExit(terminal.value, exitCode),
+  })
+
   // === Lifecycle ===
   onMounted(() => {
     nextTick(async () => {
@@ -563,12 +570,6 @@
             terminalEnv.workingDirectory = '/tmp'
           })
       }
-
-      // 注册回调
-      terminalStore.registerTerminalCallbacks(props.terminalId, {
-        onOutput: handleOutput,
-        onExit: (exitCode: number | null) => handleExit(terminal.value, exitCode),
-      })
 
       // 注册到终端store的resize回调，避免每个终端都监听window resize
       terminalStore.registerResizeCallback(props.terminalId, resizeTerminal)
@@ -609,8 +610,6 @@
     document.removeEventListener('open-terminal-search', () =>
       handleOpenTerminalSearch(props.isActive, searchAddon.value)
     )
-
-    terminalStore.unregisterTerminalCallbacks(props.terminalId)
 
     // 清理主题监听器
     // 主题监听器为全局单例，不在组件层面清理，避免影响其他实例

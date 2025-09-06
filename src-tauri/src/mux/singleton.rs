@@ -2,13 +2,17 @@
 //!
 //! 确保整个应用只有一个 Mux 实例
 
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, Mutex};
+use std::thread;
 
 use crate::mux::TerminalMux;
 use crate::utils::error::AppResult;
 
 /// 全局TerminalMux单例实例
 static GLOBAL_MUX: OnceLock<Arc<TerminalMux>> = OnceLock::new();
+
+/// 通知处理线程句柄（用于优雅关停时 join）
+static NOTIFICATION_THREAD: OnceLock<Mutex<Option<thread::JoinHandle<()>>>> = OnceLock::new();
 
 /// 获取全局TerminalMux实例
 ///
@@ -22,7 +26,14 @@ pub fn get_mux() -> Arc<TerminalMux> {
             
             // 启动通知处理线程
             let mux_clone = Arc::clone(&mux);
-            let _notification_thread = mux_clone.start_notification_processor();
+            let notification_thread = mux_clone.start_notification_processor();
+            // 保存线程句柄，方便关停时 join
+            let slot = NOTIFICATION_THREAD.get_or_init(|| Mutex::new(None));
+            if let Ok(mut guard) = slot.lock() {
+                *guard = Some(notification_thread);
+            } else {
+                tracing::warn!("无法保存通知处理线程句柄（锁不可用）");
+            }
             tracing::debug!("TerminalMux通知处理线程已启动");
             
             mux
@@ -45,7 +56,17 @@ pub fn init_mux() -> Arc<TerminalMux> {
 pub fn shutdown_mux() -> AppResult<()> {
     if let Some(mux) = GLOBAL_MUX.get() {
         tracing::debug!("关闭全局TerminalMux实例");
-        mux.shutdown()
+        let result = mux.shutdown();
+        // 尝试回收通知处理线程
+        if let Some(slot) = NOTIFICATION_THREAD.get() {
+            if let Ok(mut guard) = slot.lock() {
+                if let Some(handle) = guard.take() {
+                    let _ = handle.join();
+                    tracing::debug!("通知处理线程已回收");
+                }
+            }
+        }
+        result
     } else {
         tracing::warn!("尝试关闭未初始化的TerminalMux");
         Ok(())

@@ -299,6 +299,8 @@ impl BatchProcessor {
         }
 
         let data_str = String::from_utf8_lossy(&data);
+        // 将输出交给 Shell Integration 进行处理（用于解析 CWD/命令等上下文）
+        shell_integration.process_output(pane_id, &data_str);
         let notification = MuxNotification::PaneOutput {
             pane_id,
             data: Bytes::from(data),

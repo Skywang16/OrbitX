@@ -18,5 +18,5 @@ pub mod types;
 pub use commands::TerminalContextState;
 pub use context_registry::ActiveTerminalContextRegistry;
 pub use context_service::{CacheStats, CachedContext, TerminalContextService};
-pub use event_handler::{create_terminal_event_handler, EventHandlerStatus, TerminalEventHandler};
+pub use event_handler::{create_terminal_event_handler, TerminalEventHandler};
 pub use types::*;

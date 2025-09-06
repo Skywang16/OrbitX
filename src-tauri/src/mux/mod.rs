@@ -5,7 +5,7 @@
 pub mod batch_processor;
 pub mod config;
 pub mod error;
-pub mod event_bus;
+
 pub mod io_handler;
 pub mod io_thread_pool;
 pub mod pane;
@@ -18,7 +18,7 @@ pub mod types;
 pub use batch_processor::*;
 pub use config::*;
 pub use error::*;
-pub use event_bus::*;
+
 pub use io_handler::*;
 pub use io_thread_pool::*;
 pub use pane::*;

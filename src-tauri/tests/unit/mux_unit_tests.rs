@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod terminal_mux_tests {
     use terminal_lib::mux::{PaneId, PtySize, TerminalMux};
+    use terminal_lib::terminal::event_handler::TerminalEventHandler;
 
     #[tokio::test]
     async fn test_create_single_pane() {
@@ -352,53 +353,53 @@ mod notification_system_tests {
             data: b"hello world".to_vec().into(),
         };
 
-        let (event_name, payload) = TerminalMux::notification_to_tauri_event(&notification);
+        let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
         assert_eq!(event_name, "terminal_output");
-        assert!(payload.contains("\"paneId\":1")); // camelCase
-        assert!(payload.contains("\"data\":\"hello world\""));
+        assert_eq!(payload["paneId"], 1);
+        assert_eq!(payload["data"], "hello world");
 
         // 测试PaneAdded通知转换
         let notification = MuxNotification::PaneAdded(PaneId::new(2));
-        let (event_name, payload) = TerminalMux::notification_to_tauri_event(&notification);
+        let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
         assert_eq!(event_name, "terminal_created");
-        assert!(payload.contains("\"paneId\":2")); // camelCase
+        assert_eq!(payload["paneId"], 2);
 
         // 测试PaneRemoved通知转换
         let notification = MuxNotification::PaneRemoved(PaneId::new(3));
-        let (event_name, payload) = TerminalMux::notification_to_tauri_event(&notification);
+        let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
         assert_eq!(event_name, "terminal_closed");
-        assert!(payload.contains("\"paneId\":3")); // camelCase
+        assert_eq!(payload["paneId"], 3);
 
         // 测试PaneResized通知转换
         let notification = MuxNotification::PaneResized {
             pane_id: PaneId::new(4),
             size: terminal_lib::mux::PtySize::new(30, 100),
         };
-        let (event_name, payload) = TerminalMux::notification_to_tauri_event(&notification);
+        let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
         assert_eq!(event_name, "terminal_resized");
-        assert!(payload.contains("\"paneId\":4")); // camelCase
-        assert!(payload.contains("\"rows\":30"));
-        assert!(payload.contains("\"cols\":100"));
+        assert_eq!(payload["paneId"], 4);
+        assert_eq!(payload["rows"], 30);
+        assert_eq!(payload["cols"], 100);
 
         // 测试PaneExited通知转换
         let notification = MuxNotification::PaneExited {
             pane_id: PaneId::new(5),
             exit_code: Some(0),
         };
-        let (event_name, payload) = TerminalMux::notification_to_tauri_event(&notification);
+        let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
         assert_eq!(event_name, "terminal_exit");
-        assert!(payload.contains("\"paneId\":5")); // camelCase
-        assert!(payload.contains("\"exitCode\":0")); // camelCase
+        assert_eq!(payload["paneId"], 5);
+        assert_eq!(payload["exitCode"], 0);
 
         // 测试没有退出码的情况
         let notification = MuxNotification::PaneExited {
             pane_id: PaneId::new(6),
             exit_code: None,
         };
-        let (event_name, payload) = TerminalMux::notification_to_tauri_event(&notification);
+        let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
         assert_eq!(event_name, "terminal_exit");
-        assert!(payload.contains("\"paneId\":6")); // camelCase
-        assert!(payload.contains("\"exitCode\":null")); // camelCase
+        assert_eq!(payload["paneId"], 6);
+        assert_eq!(payload["exitCode"], serde_json::Value::Null);
     }
 
     #[test]

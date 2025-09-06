@@ -482,9 +482,8 @@ pub fn run() {
                 let completion_state = CompletionState::new();
                 app.manage(completion_state);
 
-                // 初始化终端上下文服务
+                // 初始化终端上下文服务（使用全局单例TerminalMux并启用集成回调）
                 let terminal_context_state = {
-                    use crate::mux::TerminalMux;
                     use crate::shell::ShellIntegrationManager;
 
                     let registry = Arc::new(ActiveTerminalContextRegistry::new());
@@ -492,12 +491,14 @@ pub fn run() {
                         ShellIntegrationManager::new()
                             .map_err(|e| anyhow::anyhow!("Shell集成管理器初始化失败: {}", e))?,
                     );
-                    let terminal_mux = Arc::new(TerminalMux::new());
-                    let context_service = Arc::new(TerminalContextService::new(
+                    // 使用全局单例，避免与事件系统订阅的Mux不一致
+                    let global_mux = crate::mux::singleton::get_mux();
+                    // 启用与 ShellIntegration 的上下文服务集成（回调、缓存失效、事件转发）
+                    let context_service = TerminalContextService::new_with_integration(
                         registry.clone(),
                         shell_integration,
-                        terminal_mux,
-                    ));
+                        global_mux,
+                    );
 
                     TerminalContextState::new(registry, context_service.clone())
                 };

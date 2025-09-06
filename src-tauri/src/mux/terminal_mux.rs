@@ -106,64 +106,6 @@ impl TerminalMux {
         }
     }
 
-    /// 统一的初始化方法
-    ///
-    /// 提供更高级的初始化，包括验证和错误处理
-    pub fn new_with_validation() -> AppResult<Self> {
-        let mux = Self::new();
-
-        // 验证状态完整性
-        mux.validate()?;
-
-        debug!("带验证的TerminalMux初始化完成");
-        Ok(mux)
-    }
-
-    /// 验证状态完整性
-    ///
-    /// 统一验证规范：
-    /// - 验证各组件是否可访问
-    /// - 检查内部状态一致性
-    /// - 提供详细的错误信息
-    pub fn validate(&self) -> AppResult<()> {
-        // 验证面板映射是否可访问
-        let _unused = self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
-        debug!("面板映射验证通过");
-
-        // 验证订阅者映射是否可访问
-        let _unused = self
-            .subscribers
-            .read()
-            .map_err(|_| anyhow!("无法获取订阅者读锁"))?;
-        debug!("订阅者映射验证通过");
-
-        // 验证通知接收器是否可访问
-        let _unused = self
-            .notification_receiver
-            .read()
-            .map_err(|_| anyhow!("无法获取通知接收器读锁"))?;
-        debug!("通知接收器验证通过");
-
-        // 验证原子计数器状态
-        let pane_id_counter = self.next_pane_id.load(Ordering::Relaxed);
-        let subscriber_id_counter = self.next_subscriber_id.load(Ordering::Relaxed);
-
-        if pane_id_counter == 0 {
-            bail!("面板ID计数器状态异常");
-        }
-
-        if subscriber_id_counter == 0 {
-            bail!("订阅者ID计数器状态异常");
-        }
-
-        debug!(
-            "计数器状态验证通过: pane_id_counter={}, subscriber_id_counter={}",
-            pane_id_counter, subscriber_id_counter
-        );
-
-        debug!("TerminalMux状态验证完成");
-        Ok(())
-    }
 
     /// 获取状态统计信息
     ///
@@ -548,88 +490,12 @@ impl TerminalMux {
         })
     }
 
-    /// 全局通知发送器（用于从任意线程发送通知）
-    /// 这需要配合单例模式使用
-    pub fn notify_from_any_thread_static(notification: MuxNotification) {
-        crate::mux::singleton::notify_global(notification);
-    }
 
-    // === Tauri 事件集成 ===
-
-    /// 将MuxNotification转换为Tauri事件名称和数据
-    ///
-    /// 统一事件命名规范：
-    /// - 使用下划线格式 (terminal_output) 而不是连字符格式 (terminal-output)
-    /// - 确保事件命名的一致性
-    /// - 使用结构体自动序列化确保字段名一致性
-    pub fn notification_to_tauri_event(notification: &MuxNotification) -> (&'static str, String) {
-        use crate::mux::{
-            TerminalClosedEvent, TerminalCreatedEvent, TerminalExitEvent, TerminalOutputEvent,
-            TerminalResizedEvent,
-        };
-
-        fn safe_serialize<T: serde::Serialize>(event: &T, fallback: &str) -> String {
-            serde_json::to_string(event).unwrap_or_else(|e| {
-                tracing::error!("JSON序列化失败: {}, 使用默认值", e);
-                fallback.to_string()
-            })
-        }
-
-        match notification {
-            MuxNotification::PaneOutput { pane_id, data } => {
-                let event = TerminalOutputEvent {
-                    pane_id: *pane_id,
-                    data: String::from_utf8_lossy(data).to_string(),
-                };
-                (
-                    "terminal_output",
-                    safe_serialize(&event, "{\"pane_id\":0,\"data\":\"\"}"),
-                )
-            }
-            MuxNotification::PaneAdded(pane_id) => {
-                let event = TerminalCreatedEvent { pane_id: *pane_id };
-                (
-                    "terminal_created",
-                    safe_serialize(&event, "{\"pane_id\":0}"),
-                )
-            }
-            MuxNotification::PaneRemoved(pane_id) => {
-                let event = TerminalClosedEvent { pane_id: *pane_id };
-                ("terminal_closed", safe_serialize(&event, "{\"pane_id\":0}"))
-            }
-            MuxNotification::PaneResized { pane_id, size } => {
-                let event = TerminalResizedEvent {
-                    pane_id: *pane_id,
-                    rows: size.rows,
-                    cols: size.cols,
-                };
-                (
-                    "terminal_resized",
-                    safe_serialize(&event, "{\"pane_id\":0,\"rows\":24,\"cols\":80}"),
-                )
-            }
-            MuxNotification::PaneExited { pane_id, exit_code } => {
-                let event = TerminalExitEvent {
-                    pane_id: *pane_id,
-                    exit_code: *exit_code,
-                };
-                (
-                    "terminal_exit",
-                    safe_serialize(&event, "{\"pane_id\":0,\"exit_code\":0}"),
-                )
-            }
-            MuxNotification::PaneCwdChanged { pane_id, cwd } => (
-                "pane_cwd_changed",
-                format!("{{\"pane_id\":{},\"cwd\":\"{}\"}}", pane_id.as_u32(), cwd),
-            ),
-        }
-    }
-
+    // === 调试辅助 ===
     /// 创建一个简单的日志订阅者（用于调试）
     pub fn create_debug_subscriber() -> SubscriberCallback {
         Box::new(|notification| {
-            let (event_name, payload) = Self::notification_to_tauri_event(&notification);
-            tracing::debug!("事件: {} -> {}", event_name, payload);
+            tracing::debug!("Mux通知: {:?}", notification);
             true
         })
     }
