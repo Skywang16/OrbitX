@@ -58,18 +58,8 @@ export class ShellIntegrationApi {
 
   // ===== 工作目录管理 =====
 
-  /**
-   * 更新面板工作目录
-   * @param paneId 终端面板ID
-   * @param cwd 新的工作目录路径
-   */
-  async updatePaneCwd(paneId: number, cwd: string): Promise<void> {
-    try {
-      await invoke('update_pane_cwd', { paneId, cwd })
-    } catch (error) {
-      throw new Error(handleError(error, '更新面板工作目录失败'))
-    }
-  }
+  // Note: updatePaneCwd method removed - backend is now the single source of truth for CWD
+  // Frontend should only subscribe to CWD change events, not write back to backend
 
   /**
    * 获取面板工作目录

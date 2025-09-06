@@ -130,14 +130,10 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
           }
 
           if (newCwd && newCwd !== options.workingDirectory) {
+            // Only update UI-level state, do not write back to backend
+            // Backend is the single source of truth for CWD
             options.onCwdUpdate(newCwd)
             options.onTerminalCwdUpdate(options.terminalId, newCwd)
-
-            if (options.backendId != null) {
-              shellIntegrationApi.updatePaneCwd(options.backendId, newCwd).catch((err: Error) => {
-                console.warn('同步CWD到后端失败:', err)
-              })
-            }
           }
         } catch (error) {
           console.warn('CWD解析失败:', error, '原始数据:', fullData)
@@ -156,11 +152,10 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
         case 'Cwd': {
           const decodedCwd = decodeURIComponent(value)
           if (decodedCwd && decodedCwd !== options.workingDirectory) {
+            // Only update UI-level state, do not write back to backend
+            // Backend is the single source of truth for CWD
             options.onCwdUpdate(decodedCwd)
             options.onTerminalCwdUpdate(options.terminalId, decodedCwd)
-            if (options.backendId != null) {
-              shellIntegrationApi.updatePaneCwd(options.backendId, decodedCwd).catch(() => {})
-            }
           }
           break
         }

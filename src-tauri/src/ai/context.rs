@@ -7,6 +7,7 @@
 use crate::ai::enhanced_context::{create_context_manager, ContextManager};
 use crate::ai::types::{AIConfig, AIContext, Message};
 use crate::storage::repositories::RepositoryManager;
+use crate::terminal::TerminalContext;
 use crate::utils::error::AppResult;
 use std::sync::LazyLock;
 use tracing::debug;
@@ -68,6 +69,35 @@ pub async fn build_intelligent_prompt_with_tags(
     current_working_directory: Option<&str>,
     tag_context: Option<serde_json::Value>,
 ) -> AppResult<String> {
+    CONTEXT_MANAGER
+        .build_prompt_with_tags(
+            repositories,
+            conversation_id,
+            current_message,
+            up_to_message_id,
+            current_working_directory,
+            tag_context,
+        )
+        .await
+}
+
+/// 构建带智能上下文的prompt（使用TerminalContext）
+pub async fn build_intelligent_prompt_with_context(
+    repositories: &RepositoryManager,
+    conversation_id: i64,
+    current_message: &str,
+    up_to_message_id: Option<i64>,
+    terminal_context: &TerminalContext,
+    tag_context: Option<serde_json::Value>,
+) -> AppResult<String> {
+    // 从终端上下文中提取当前工作目录
+    let current_working_directory = terminal_context.current_working_directory.as_deref();
+
+    debug!(
+        "构建智能上下文: conv_id={}, pane_id={:?}, cwd={:?}",
+        conversation_id, terminal_context.pane_id, current_working_directory
+    );
+
     CONTEXT_MANAGER
         .build_prompt_with_tags(
             repositories,

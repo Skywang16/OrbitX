@@ -7,6 +7,9 @@ pub mod integration;
 pub mod osc_parser;
 pub mod script_generator;
 
+#[cfg(test)]
+mod integration_test;
+
 pub use commands::*;
 pub use integration::*;
 pub use osc_parser::*;

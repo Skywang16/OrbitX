@@ -6,9 +6,11 @@
 
 use crate::ai::types::{AIModelConfig, Conversation, Message};
 use crate::ai::{context::handle_truncate_conversation, AIService};
+use crate::mux::PaneId;
 use crate::storage::cache::UnifiedCache;
 use crate::storage::repositories::Repository;
 use crate::storage::repositories::RepositoryManager;
+use crate::terminal::TerminalContextService;
 use crate::utils::error::{ToTauriResult, Validator};
 
 use std::sync::Arc;
@@ -20,12 +22,14 @@ pub struct AIManagerState {
     pub ai_service: Arc<AIService>,
     pub repositories: Arc<RepositoryManager>,
     pub cache: Arc<UnifiedCache>,
+    pub terminal_context_service: Arc<TerminalContextService>,
 }
 
 impl AIManagerState {
     pub fn new(
         repositories: Arc<RepositoryManager>,
         cache: Arc<UnifiedCache>,
+        terminal_context_service: Arc<TerminalContextService>,
     ) -> Result<Self, String> {
         let ai_service = Arc::new(AIService::new(repositories.clone(), cache.clone()));
 
@@ -33,6 +37,7 @@ impl AIManagerState {
             ai_service,
             repositories,
             cache,
+            terminal_context_service,
         })
     }
 
@@ -42,6 +47,10 @@ impl AIManagerState {
 
     pub fn repositories(&self) -> &Arc<RepositoryManager> {
         &self.repositories
+    }
+
+    pub fn get_terminal_context_service(&self) -> &Arc<TerminalContextService> {
+        &self.terminal_context_service
     }
 }
 
@@ -185,7 +194,7 @@ pub async fn build_prompt_with_context(
     conversation_id: i64,
     current_message: String,
     up_to_message_id: Option<i64>,
-    current_working_directory: Option<String>,
+    pane_id: Option<u32>,
     tag_context: Option<serde_json::Value>,
     state: State<'_, AIManagerState>,
 ) -> Result<String, String> {
@@ -198,14 +207,28 @@ pub async fn build_prompt_with_context(
     }
 
     let repositories = state.repositories();
+    let context_service = state.get_terminal_context_service();
 
-    // 使用智能上下文管理器构建prompt
-    let intelligent_prompt = crate::ai::context::build_intelligent_prompt_with_tags(
+    // 使用 TerminalContextService 解析上下文
+    let terminal_context = if let Some(pane_id) = pane_id {
+        context_service
+            .get_context_by_pane(PaneId::new(pane_id))
+            .await
+            .map_err(|e| format!("获取终端上下文失败: {}", e))?
+    } else {
+        context_service
+            .get_context_with_fallback(None)
+            .await
+            .map_err(|e| format!("获取活跃终端上下文失败: {}", e))?
+    };
+
+    // 使用智能上下文管理器构建prompt，传递终端上下文
+    let intelligent_prompt = crate::ai::context::build_intelligent_prompt_with_context(
         repositories,
         conversation_id,
         &current_message,
         up_to_message_id,
-        current_working_directory.as_deref(),
+        &terminal_context,
         tag_context,
     )
     .await
@@ -477,4 +500,163 @@ pub async fn invalidate_conversation_cache(conversation_id: i64) -> Result<(), S
     let manager = &*crate::ai::context::CONTEXT_MANAGER;
     manager.invalidate_cache(conversation_id);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mux::TerminalMux;
+    use crate::shell::ShellIntegrationManager;
+    use crate::storage::cache::UnifiedCache;
+    use crate::storage::repositories::RepositoryManager;
+    use crate::terminal::{ActiveTerminalContextRegistry, TerminalContextService};
+    use std::sync::Arc;
+
+    async fn create_test_repositories() -> Arc<RepositoryManager> {
+        use crate::storage::database::{DatabaseManager, DatabaseOptions};
+        use crate::storage::paths::StoragePaths;
+        use chrono::Utc;
+        use std::path::PathBuf;
+
+        // 使用系统临时目录下的独立子目录
+        let mut app_dir: PathBuf = std::env::temp_dir();
+        let unique = format!(
+            "orbitx_test_{}_{}",
+            std::process::id(),
+            Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        );
+        app_dir.push(unique);
+
+        let paths = StoragePaths::new(app_dir).expect("failed to build storage paths");
+
+        let db = Arc::new(
+            DatabaseManager::new(paths, DatabaseOptions::default())
+                .await
+                .expect("failed to create DatabaseManager"),
+        );
+
+        db.initialize().await.expect("failed to initialize db");
+
+        Arc::new(RepositoryManager::new(Arc::clone(&db)))
+    }
+
+    async fn create_test_ai_manager_state() -> AIManagerState {
+        // 创建测试用的存储管理器
+        let repositories = create_test_repositories().await;
+        let cache = Arc::new(UnifiedCache::new());
+
+        // 创建测试用的终端上下文服务
+        let registry = Arc::new(ActiveTerminalContextRegistry::new());
+        let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
+        let terminal_mux = Arc::new(TerminalMux::new());
+        let terminal_context_service = Arc::new(TerminalContextService::new(
+            registry,
+            shell_integration,
+            terminal_mux,
+        ));
+
+        AIManagerState::new(repositories, cache, terminal_context_service).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_build_intelligent_prompt_with_context_integration() {
+        let state = create_test_ai_manager_state().await;
+
+        // 创建测试会话
+        let conversation_id = state
+            .repositories()
+            .conversations()
+            .save(&crate::ai::types::Conversation::new("测试会话".to_string()))
+            .await
+            .unwrap();
+
+        // 获取终端上下文
+        let context_service = state.get_terminal_context_service();
+        let terminal_context = context_service
+            .get_context_with_fallback(None)
+            .await
+            .unwrap();
+
+        // 测试新的build_intelligent_prompt_with_context函数
+        let result = crate::ai::context::build_intelligent_prompt_with_context(
+            state.repositories(),
+            conversation_id,
+            "测试消息",
+            None,
+            &terminal_context,
+            None,
+        )
+        .await;
+
+        assert!(result.is_ok(), "构建智能prompt应该成功: {:?}", result);
+        let prompt = result.unwrap();
+        assert!(!prompt.is_empty(), "生成的prompt不应该为空");
+
+        // 验证prompt包含工作目录信息
+        assert!(prompt.contains("~"), "prompt应该包含工作目录信息");
+    }
+
+    #[tokio::test]
+    async fn test_ai_manager_state_terminal_context_service_access() {
+        let state = create_test_ai_manager_state().await;
+
+        // 测试获取终端上下文服务
+        let context_service = state.get_terminal_context_service();
+
+        // 测试服务的基本功能（应该返回默认上下文）
+        let result = context_service.get_context_with_fallback(None).await;
+        assert!(result.is_ok(), "获取默认上下文应该成功: {:?}", result);
+
+        let context = result.unwrap();
+        assert_eq!(context.current_working_directory, Some("~".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_ai_manager_state_creation_with_terminal_context_service() {
+        let repositories = create_test_repositories().await;
+        let cache = Arc::new(UnifiedCache::new());
+
+        // 创建终端上下文服务
+        let registry = Arc::new(ActiveTerminalContextRegistry::new());
+        let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
+        let terminal_mux = Arc::new(TerminalMux::new());
+        let terminal_context_service = Arc::new(TerminalContextService::new(
+            registry,
+            shell_integration,
+            terminal_mux,
+        ));
+
+        // 测试创建AIManagerState
+        let result = AIManagerState::new(repositories, cache, terminal_context_service);
+        assert!(result.is_ok(), "创建AIManagerState应该成功");
+
+        let state = result.unwrap();
+        let _context_service = state.get_terminal_context_service();
+        // 验证服务存在且可访问
+        assert!(true, "终端上下文服务应该可以访问");
+    }
+
+    #[tokio::test]
+    async fn test_terminal_context_service_integration() {
+        let state = create_test_ai_manager_state().await;
+        let context_service = state.get_terminal_context_service();
+
+        // 测试获取上下文（无活跃终端，应该返回默认上下文）
+        let result = context_service.get_context_with_fallback(None).await;
+        assert!(result.is_ok());
+
+        let context = result.unwrap();
+        assert_eq!(context.current_working_directory, Some("~".to_string()));
+        assert_eq!(context.shell_type, Some(crate::terminal::ShellType::Bash));
+        assert!(!context.shell_integration_enabled);
+
+        // 测试指定不存在的面板ID（应该回退到默认上下文）
+        let result = context_service
+            .get_context_with_fallback(Some(crate::mux::PaneId::new(999)))
+            .await;
+        assert!(result.is_ok());
+
+        let context = result.unwrap();
+        assert_eq!(context.current_working_directory, Some("~".to_string()));
+    }
 }

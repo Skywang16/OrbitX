@@ -5,18 +5,20 @@
 pub mod batch_processor;
 pub mod config;
 pub mod error;
+pub mod event_bus;
 pub mod io_handler;
 pub mod io_thread_pool;
 pub mod pane;
 pub mod performance_monitor;
 pub mod singleton;
-pub mod tauri_integration;
+// Note: tauri_integration module removed - event handling now unified in terminal::event_handler
 pub mod terminal_mux;
 pub mod types;
 
 pub use batch_processor::*;
 pub use config::*;
 pub use error::*;
+pub use event_bus::*;
 pub use io_handler::*;
 pub use io_thread_pool::*;
 pub use pane::*;

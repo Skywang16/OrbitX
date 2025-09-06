@@ -69,7 +69,7 @@ class ConversationAPI {
     conversationId: number,
     currentMessage: string,
     upToMessageId?: number,
-    currentWorkingDirectory?: string,
+    paneId?: number,
     tagContext?: any
   ): Promise<string> {
     try {
@@ -77,7 +77,7 @@ class ConversationAPI {
         conversationId,
         currentMessage,
         upToMessageId,
-        currentWorkingDirectory,
+        paneId,
         tagContext,
       })
       return prompt
@@ -339,13 +339,15 @@ export class AiApi {
     conversationId: number,
     currentMessage: string,
     upToMessageId?: number,
-    currentWorkingDirectory?: string
+    paneId?: number,
+    tagContext?: any
   ) {
     return this.conversationAPI.buildPromptWithContext(
       conversationId,
       currentMessage,
       upToMessageId,
-      currentWorkingDirectory
+      paneId,
+      tagContext
     )
   }
 

@@ -7,15 +7,18 @@
  * 3. 日志记录：每个命令都记录调用和结果日志
  * 4. 状态管理：统一使用TerminalState访问各组件
  * 5. 错误处理：使用TerminalError统一错误类型
+ *
+ * Note: Event handling has been moved to terminal::event_handler for unified event management.
+ * This module now focuses solely on terminal command implementations.
  */
 
 // 注意：移除未使用的 anyhow 导入，因为所有 Tauri 命令都直接返回 Result<T, String>
 
-use tauri::{AppHandle, Emitter, Runtime, State};
+use tauri::{AppHandle, Runtime, State};
 use tracing::{debug, error, warn};
 
 use crate::mux::{
-    get_mux, ErrorHandler, MuxNotification, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager,
+    get_mux, ErrorHandler, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager,
     ShellManagerStats, TerminalConfig, TerminalError, TerminalResult,
 };
 
@@ -281,134 +284,14 @@ pub async fn list_terminals(_state: State<'_, TerminalState>) -> Result<Vec<u32>
     Ok(pane_ids)
 }
 
-/// 将 MuxNotification 转换为 Tauri 事件负载
-/// 将 MuxNotification 转换为 Tauri 事件负载
-///
-/// 统一事件命名规范：
-/// - 使用下划线格式 (terminal_output)
-/// - 确保事件命名的一致性
-fn notification_to_tauri_payload(
-    notification: &MuxNotification,
-) -> (&'static str, serde_json::Value) {
-    use crate::mux::{
-        TerminalClosedEvent, TerminalCreatedEvent, TerminalExitEvent, TerminalOutputEvent,
-        TerminalResizedEvent,
-    };
+// Note: Event conversion logic has been moved to TerminalEventHandler
+// This eliminates duplicate event handling code and provides a single source of truth
 
-    match notification {
-        MuxNotification::PaneOutput { pane_id, data } => {
-            let event = TerminalOutputEvent {
-                pane_id: *pane_id,
-                data: String::from_utf8_lossy(data).to_string(),
-            };
-            ("terminal_output", serde_json::to_value(event).unwrap())
-        }
-        MuxNotification::PaneAdded(pane_id) => {
-            let event = TerminalCreatedEvent { pane_id: *pane_id };
-            ("terminal_created", serde_json::to_value(event).unwrap())
-        }
-        MuxNotification::PaneRemoved(pane_id) => {
-            let event = TerminalClosedEvent { pane_id: *pane_id };
-            ("terminal_closed", serde_json::to_value(event).unwrap())
-        }
-        MuxNotification::PaneResized { pane_id, size } => {
-            let event = TerminalResizedEvent {
-                pane_id: *pane_id,
-                rows: size.rows,
-                cols: size.cols,
-            };
-            ("terminal_resized", serde_json::to_value(event).unwrap())
-        }
-        MuxNotification::PaneExited { pane_id, exit_code } => {
-            let event = TerminalExitEvent {
-                pane_id: *pane_id,
-                exit_code: *exit_code,
-            };
-            ("terminal_exit", serde_json::to_value(event).unwrap())
-        }
-        MuxNotification::PaneCwdChanged { pane_id, cwd } => {
-            // 暂时忽略CWD变化事件，或者可以创建相应的事件结构
-            (
-                "pane_cwd_changed",
-                serde_json::json!({
-                    "pane_id": pane_id,
-                    "cwd": cwd
-                }),
-            )
-        }
-    }
-}
+// Note: OutputProcessor trait and related code removed - output processing is now handled
+// by the unified TerminalEventHandler in the terminal::event_handler module
 
-/// 输出处理器trait，用于解耦模块依赖
-pub trait OutputProcessor: Send + Sync {
-    fn process_output(&self, pane_id: u32, data: &str) -> Result<(), Box<dyn std::error::Error>>;
-    fn cleanup_pane(&self, pane_id: u32) -> Result<(), Box<dyn std::error::Error>>;
-}
-
-/// 默认输出处理器实现
-struct DefaultOutputProcessor;
-
-impl OutputProcessor for DefaultOutputProcessor {
-    fn process_output(&self, pane_id: u32, data: &str) -> Result<(), Box<dyn std::error::Error>> {
-        use crate::completion::output_analyzer::OutputAnalyzer;
-        OutputAnalyzer::global().analyze_output(pane_id, data)?;
-        Ok(())
-    }
-
-    fn cleanup_pane(&self, pane_id: u32) -> Result<(), Box<dyn std::error::Error>> {
-        use crate::completion::output_analyzer::OutputAnalyzer;
-        OutputAnalyzer::global().cleanup_pane_buffer(pane_id)?;
-        Ok(())
-    }
-}
-
-/// 设置 Tauri 事件集成（解耦版本）
-pub fn setup_tauri_integration<R: Runtime>(app_handle: AppHandle<R>) {
-    setup_tauri_integration_with_processor(app_handle, Box::new(DefaultOutputProcessor));
-}
-
-/// 设置 Tauri 事件集成，支持自定义输出处理器
-pub fn setup_tauri_integration_with_processor<R: Runtime>(
-    app_handle: AppHandle<R>,
-    output_processor: Box<dyn OutputProcessor>,
-) {
-    let mux = get_mux();
-
-    let subscriber_id = mux.subscribe(move |notification| {
-        let (event_name, payload) = notification_to_tauri_payload(&notification);
-
-        // 处理输出分析（解耦）
-        match &notification {
-            crate::mux::MuxNotification::PaneOutput { pane_id, data } => {
-                let output_text = String::from_utf8_lossy(data);
-                if let Err(e) = output_processor.process_output(pane_id.as_u32(), &output_text) {
-                    debug!("输出处理失败: {}", e);
-                }
-            }
-            crate::mux::MuxNotification::PaneRemoved(pane_id) => {
-                // 清理面板缓冲区
-                if let Err(e) = output_processor.cleanup_pane(pane_id.as_u32()) {
-                    debug!("清理面板失败: {}", e);
-                }
-            }
-            _ => {}
-        }
-
-        // 发送Tauri事件
-        match app_handle.emit(event_name, payload.clone()) {
-            Ok(_) => debug!("Tauri 事件发送成功: {}", event_name),
-            Err(e) => error!("Tauri 事件发送失败: {}, 错误: {}", event_name, e),
-        }
-
-        true
-    });
-
-    debug!("Tauri 事件集成完成，订阅者ID: {}", subscriber_id);
-
-    let mux_arc = get_mux();
-    mux_arc.start_notification_processor();
-    debug!("通知处理器已启动");
-}
+// Note: Tauri event integration has been moved to TerminalEventHandler
+// This eliminates duplicate event handling setup and provides unified event management
 
 // === Shell 管理命令 ===
 

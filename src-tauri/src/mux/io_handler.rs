@@ -243,11 +243,11 @@ impl IoHandler {
 
                     let notification = MuxNotification::PaneOutput {
                         pane_id,
-                        data: Bytes::from(data_to_send),
+                        data: Bytes::from(data_to_send.clone()),
                     };
-                    if notification_sender.send(notification).is_err() {
-                        debug!("面板 {:?} 发送通知失败（可能是正在关闭）", pane_id);
-                        break;
+                    
+                    if let Err(e) = notification_sender.send(notification) {
+                        error!("面板 {:?} 发送通知失败: {}", pane_id, e);
                     }
                     last_flush = Instant::now();
                 } else if batch_data.is_empty() {
@@ -264,7 +264,7 @@ impl IoHandler {
                     data: Bytes::from(batch_data),
                 };
                 if let Err(e) = notification_sender.send(notification) {
-                    debug!("面板 {:?} 发送最终数据失败: {}", pane_id, e);
+                    error!("面板 {:?} 发送最终通知失败: {}", pane_id, e);
                 }
             }
             // 发送退出通知，保持与线程池模式一致

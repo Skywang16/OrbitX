@@ -18,7 +18,14 @@ pub fn get_mux() -> Arc<TerminalMux> {
     GLOBAL_MUX
         .get_or_init(|| {
             tracing::debug!("初始化全局TerminalMux实例");
-            Arc::new(TerminalMux::new())
+            let mux = Arc::new(TerminalMux::new());
+            
+            // 启动通知处理线程
+            let mux_clone = Arc::clone(&mux);
+            let _notification_thread = mux_clone.start_notification_processor();
+            tracing::debug!("TerminalMux通知处理线程已启动");
+            
+            mux
         })
         .clone()
 }

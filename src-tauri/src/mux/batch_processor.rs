@@ -299,14 +299,17 @@ impl BatchProcessor {
         }
 
         let data_str = String::from_utf8_lossy(&data);
-        shell_integration.process_output(pane_id, &data_str);
-
         let notification = MuxNotification::PaneOutput {
             pane_id,
             data: Bytes::from(data),
         };
-
-        let _ = notification_sender.send(notification);
+        if let Err(e) = notification_sender.send(notification) {
+            tracing::error!(
+                "BatchProcessor发送PaneOutput通知失败: pane_id={:?}, error={}",
+                pane_id,
+                e
+            );
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-import { shellApi, terminalApi } from '@/api'
+import { shellApi, terminalApi, terminalContextApi } from '@/api'
 import type { ShellInfo } from '@/api'
 import { useSessionStore } from '@/stores/session'
 import type { TerminalState } from '@/types/domain/storage'
@@ -220,6 +220,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       try {
         const terminal = findTerminalByBackendId(event.payload.paneId)
         if (terminal) {
+          // 只订阅后端CWD变化事件，不进行回写
           terminal.cwd = event.payload.cwd
           updateTerminalTitle(terminal, event.payload.cwd)
         }
@@ -314,7 +315,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
         }
 
         terminals.value.push(terminal)
-        setActiveTerminal(id)
+        await setActiveTerminal(id)
         immediateSync()
 
         const duration = Date.now() - startTime
@@ -352,13 +353,13 @@ export const useTerminalStore = defineStore('Terminal', () => {
         console.error(`关闭终端失败:`, error)
       }
 
-      cleanupTerminalState(id)
+      await cleanupTerminalState(id)
       immediateSync()
       recordPerformanceMetric('close')
     })
   }
 
-  const cleanupTerminalState = (id: string) => {
+  const cleanupTerminalState = async (id: string) => {
     const index = terminals.value.findIndex(t => t.id === id)
     if (index !== -1) {
       terminals.value.splice(index, 1)
@@ -367,14 +368,14 @@ export const useTerminalStore = defineStore('Terminal', () => {
     // 如果关闭的是当前活动终端，需要切换到其他终端
     if (activeTerminalId.value === id) {
       if (terminals.value.length > 0) {
-        setActiveTerminal(terminals.value[0].id)
+        await setActiveTerminal(terminals.value[0].id)
       } else {
         activeTerminalId.value = null
       }
     }
   }
 
-  const setActiveTerminal = (id: string) => {
+  const setActiveTerminal = async (id: string) => {
     // 确保终端存在
     const targetTerminal = terminals.value.find(t => t.id === id)
     if (!targetTerminal) {
@@ -382,7 +383,18 @@ export const useTerminalStore = defineStore('Terminal', () => {
       return
     }
 
+    // 更新前端状态
     activeTerminalId.value = id
+
+    // 同步活跃终端状态到后端
+    if (targetTerminal.backendId !== null) {
+      try {
+        await terminalContextApi.setActivePaneId(targetTerminal.backendId)
+      } catch (error) {
+        console.warn(`同步活跃终端到后端失败: ${error}`)
+        // 继续执行，不阻塞前端状态更新
+      }
+    }
 
     // 同步活跃标签页ID到会话状态
     sessionStore.setActiveTabId(id)
@@ -432,6 +444,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
       return
     }
 
+    // 仅更新前端UI状态，不回写到后端
+    // 后端是CWD的单一数据源，前端只订阅变化事件
     terminal.cwd = cwd
 
     // 智能更新终端标题
@@ -512,7 +526,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       const existingAgentTerminal = terminals.value.find(terminal => terminal.title === agentName)
 
       if (existingAgentTerminal) {
-        setActiveTerminal(existingAgentTerminal.id)
+        await setActiveTerminal(existingAgentTerminal.id)
         existingAgentTerminal.title = agentTerminalTitle
         return existingAgentTerminal.id
       }
@@ -535,7 +549,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
         terminals.value.push(terminal)
         await new Promise(resolve => setTimeout(resolve, 100))
-        setActiveTerminal(id)
+        await setActiveTerminal(id)
         immediateSync()
         return id
       } catch (error) {
@@ -573,7 +587,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
         }
 
         terminals.value.push(terminal)
-        setActiveTerminal(id)
+        await setActiveTerminal(id)
         immediateSync()
 
         return id
@@ -647,7 +661,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       }
 
       if (terminalToActivate) {
-        setActiveTerminal(terminalToActivate)
+        await setActiveTerminal(terminalToActivate)
       }
 
       if (terminals.value.length === 0) {

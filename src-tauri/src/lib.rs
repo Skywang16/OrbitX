@@ -31,6 +31,7 @@ pub mod llm;
 pub mod mux;
 pub mod shell;
 pub mod storage;
+pub mod terminal;
 pub mod utils;
 pub mod window;
 
@@ -108,6 +109,12 @@ use shell::commands::{
     check_shell_integration_status, execute_background_command, get_pane_cwd,
     setup_shell_integration, update_pane_cwd,
 };
+use std::sync::Arc;
+use terminal::commands::{
+    get_active_pane, get_active_terminal_context, get_terminal_context, set_active_pane,
+    TerminalContextState,
+};
+use terminal::{ActiveTerminalContextRegistry, TerminalContextService};
 use window::commands::{
     clear_directory_cache, get_current_directory, get_home_directory, get_platform_info,
     get_window_opacity, join_paths, manage_window_state, normalize_path, path_exists,
@@ -360,6 +367,11 @@ pub fn run() {
             update_message_steps,
             update_message_status,
             truncate_conversation,
+            // 终端上下文管理命令
+            set_active_pane,
+            get_active_pane,
+            get_terminal_context,
+            get_active_terminal_context,
             // 全新快捷键系统命令
             get_shortcuts_config,
             update_shortcuts_config,
@@ -470,13 +482,38 @@ pub fn run() {
                 let completion_state = CompletionState::new();
                 app.manage(completion_state);
 
+                // 初始化终端上下文服务
+                let terminal_context_state = {
+                    use crate::mux::TerminalMux;
+                    use crate::shell::ShellIntegrationManager;
+
+                    let registry = Arc::new(ActiveTerminalContextRegistry::new());
+                    let shell_integration = Arc::new(
+                        ShellIntegrationManager::new()
+                            .map_err(|e| anyhow::anyhow!("Shell集成管理器初始化失败: {}", e))?,
+                    );
+                    let terminal_mux = Arc::new(TerminalMux::new());
+                    let context_service = Arc::new(TerminalContextService::new(
+                        registry.clone(),
+                        shell_integration,
+                        terminal_mux,
+                    ));
+
+                    TerminalContextState::new(registry, context_service.clone())
+                };
+                app.manage(terminal_context_state);
+
                 // 初始化AI管理器状态（使用存储协调器中的SQLite管理器和缓存）
                 let ai_state = {
                     let storage_state = app.state::<StorageCoordinatorState>();
                     let repositories = storage_state.coordinator.repositories();
                     let cache = storage_state.coordinator.cache();
-                    let ai_state = AIManagerState::new(repositories, cache)
-                        .map_err(|e| anyhow::anyhow!("AI管理器状态初始化失败: {}", e))?;
+                    let terminal_context_state = app.state::<TerminalContextState>();
+                    let terminal_context_service = terminal_context_state.context_service().clone();
+
+                    let ai_state =
+                        AIManagerState::new(repositories, cache, terminal_context_service)
+                            .map_err(|e| anyhow::anyhow!("AI管理器状态初始化失败: {}", e))?;
 
                     // 初始化AI服务
                     tauri::async_runtime::block_on(async {
@@ -509,8 +546,8 @@ pub fn run() {
 
                 // Shell Integration现在通过环境变量自动启用，无需复杂初始化
 
-                // 设置Tauri集成
-                setup_tauri_integration(app.handle().clone());
+                // 设置统一的终端事件处理器
+                setup_unified_terminal_events(app.handle().clone());
 
                 // 启动系统主题监听器
                 start_system_theme_listener(app.handle().clone());
@@ -823,4 +860,36 @@ fn start_system_theme_listener<R: tauri::Runtime>(app_handle: tauri::AppHandle<R
 
     // 存储监听器句柄，防止被drop
     // 注意：在实际应用中，你可能需要在应用关闭时停止监听器
+}
+
+/// 设置统一的终端事件处理器
+///
+/// 替代原有的重复事件处理逻辑，提供单一的事件集成路径
+fn setup_unified_terminal_events<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>) {
+    use crate::mux::singleton::get_mux;
+    use crate::terminal::create_terminal_event_handler;
+
+    // 获取终端多路复用器
+    let mux = get_mux();
+
+    // 获取终端上下文状态
+    let terminal_context_state = app_handle.state::<TerminalContextState>();
+    let registry = terminal_context_state.registry();
+
+    // 订阅上下文事件
+    let context_event_receiver = registry.subscribe_events();
+
+    // 创建并启动统一的事件处理器
+    match create_terminal_event_handler(app_handle.clone(), &mux, context_event_receiver) {
+        Ok(handler) => {
+            tracing::debug!("统一终端事件处理器已启动");
+            // Use Box::leak to prevent the handler from being dropped
+            // This ensures the event subscriptions remain active for the app lifetime
+            // The memory will be cleaned up when the process exits
+            Box::leak(Box::new(handler));
+        }
+        Err(e) => {
+            tracing::error!("启动统一终端事件处理器失败: {}", e);
+        }
+    }
 }

@@ -5,12 +5,13 @@
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '@/eko-core/types'
 import { ValidationError, ToolError } from '../tool-error'
-import { terminalApi } from '@/api'
+import { terminalApi, terminalContextApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'
 
 import stripAnsi from 'strip-ansi'
 export interface ShellParams {
   command: string
+  paneId?: number // 新增：可选的面板ID参数
 }
 
 /**
@@ -41,6 +42,10 @@ export class ShellTool extends ModifiableTool {
             type: 'string',
             description: 'Command to execute. Examples: "ls -la", "npm install", "git status"',
           },
+          paneId: {
+            type: 'number',
+            description: 'Optional terminal pane ID. If not provided, uses the active terminal.',
+          },
         },
         required: ['command'],
       }
@@ -48,13 +53,13 @@ export class ShellTool extends ModifiableTool {
   }
 
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
-    const { command } = context.parameters as unknown as ShellParams
+    const { command, paneId } = context.parameters as unknown as ShellParams
 
     // 验证命令
     this.validateCommand(command)
 
-    // 获取当前活跃的终端ID
-    const targetTerminalId = await this.getActiveTerminal()
+    // 获取目标终端ID（使用新的上下文服务）
+    const targetTerminalId = await this.getActiveTerminal(paneId)
 
     try {
       // 使用事件驱动的方式等待命令完成
@@ -315,19 +320,42 @@ export class ShellTool extends ModifiableTool {
   }
 
   /**
-   * 获取当前活跃的终端
+   * 获取目标终端ID
+   * 使用后端 TerminalContextService 替代前端 Store 查询
+   * @param paneId 可选的面板ID，如果提供则使用指定终端，否则使用活跃终端
    */
-  private async getActiveTerminal(): Promise<number> {
-    const terminalStore = useTerminalStore()
+  private async getActiveTerminal(paneId?: number): Promise<number> {
+    try {
+      // 如果提供了 paneId，直接使用它
+      if (paneId !== undefined) {
+        // 验证终端是否存在
+        const exists = await terminalContextApi.terminalExists(paneId)
+        if (!exists) {
+          throw new ToolError(`指定的终端不存在: ${paneId}`)
+        }
+        return paneId
+      }
 
-    // 获取当前活跃的终端
-    const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
+      // 否则从后端获取活跃终端ID
+      const activePaneId = await terminalContextApi.getActivePaneId()
+      if (activePaneId === null) {
+        throw new ToolError('没有可用的活跃终端')
+      }
 
-    if (!activeTerminal || !activeTerminal.backendId) {
-      throw new ToolError('没有可用的活跃终端')
+      return activePaneId
+    } catch (error) {
+      // 如果后端查询失败，回退到前端 Store 查询（向后兼容）
+      console.warn('后端终端上下文查询失败，回退到前端查询:', error)
+
+      const terminalStore = useTerminalStore()
+      const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
+
+      if (!activeTerminal || !activeTerminal.backendId) {
+        throw new ToolError('没有可用的活跃终端（后端和前端查询都失败）')
+      }
+
+      return activeTerminal.backendId
     }
-
-    return activeTerminal.backendId
   }
 }
 

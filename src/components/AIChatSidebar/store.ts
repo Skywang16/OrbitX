@@ -249,14 +249,23 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
       const terminalStore = useTerminalStore()
       const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
-      const currentWorkingDirectory = activeTerminal?.cwd
 
-      const fullPrompt = await aiApi.buildPromptWithContext(
-        currentConversationId.value,
-        content,
-        userMessageId,
-        currentWorkingDirectory
-      )
+      // 使用 activeTerminal.backendId 作为 paneId 参数，移除 currentWorkingDirectory 逻辑
+      const paneId = activeTerminal?.backendId || undefined
+
+      let fullPrompt: string
+      try {
+        fullPrompt = await aiApi.buildPromptWithContext(currentConversationId.value, content, userMessageId, paneId)
+      } catch (contextError) {
+        console.warn('获取终端上下文失败，使用回退逻辑:', contextError)
+        // 回退逻辑：不传递 paneId，让后端使用默认上下文
+        try {
+          fullPrompt = await aiApi.buildPromptWithContext(currentConversationId.value, content, userMessageId)
+        } catch (fallbackError) {
+          console.error('构建AI提示失败:', fallbackError)
+          throw new Error('无法构建AI提示，请检查终端状态')
+        }
+      }
 
       const messageId = await aiApi.saveMessage(currentConversationId.value, 'assistant', 'Thinking...')
 
