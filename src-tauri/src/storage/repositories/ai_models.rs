@@ -14,10 +14,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::{debug, error};
-
-static USER_PREFIX_PROMPT: Mutex<Option<String>> = Mutex::new(None);
 
 fn default_enabled() -> bool {
     true
@@ -139,11 +138,15 @@ impl RowMapper<AIModelConfig> for AIModelConfig {
 
 pub struct AIModelRepository {
     database: Arc<DatabaseManager>,
+    user_prefix_prompt: Arc<RwLock<Option<String>>>,
 }
 
 impl AIModelRepository {
     pub fn new(database: Arc<DatabaseManager>) -> Self {
-        Self { database }
+        Self {
+            database,
+            user_prefix_prompt: Arc::new(RwLock::new(None)),
+        }
     }
 
     pub async fn find_all_with_decrypted_keys(&self) -> AppResult<Vec<AIModelConfig>> {
@@ -330,7 +333,7 @@ impl AIModelRepository {
     pub async fn get_user_prefix_prompt(&self) -> AppResult<Option<String>> {
         debug!("从内存缓存获取用户前置提示词");
 
-        let prompt = USER_PREFIX_PROMPT.lock().unwrap().clone();
+        let prompt = self.user_prefix_prompt.read().await.clone();
         debug!(
             "用户前置提示词获取成功: {:?}",
             prompt.as_ref().map(|p| p.len())
@@ -341,7 +344,7 @@ impl AIModelRepository {
     pub async fn set_user_prefix_prompt(&self, prompt: Option<String>) -> AppResult<()> {
         debug!("设置用户前置提示词: {:?}", prompt.as_ref().map(|p| p.len()));
 
-        *USER_PREFIX_PROMPT.lock().unwrap() = prompt;
+        *self.user_prefix_prompt.write().await = prompt;
 
         debug!("用户前置提示词设置成功");
         Ok(())

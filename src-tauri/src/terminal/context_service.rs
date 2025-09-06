@@ -32,7 +32,8 @@ impl CachedContext {
 }
 
 /// 缓存统计信息
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheStats {
     pub total_entries: usize,
     pub hit_count: u64,

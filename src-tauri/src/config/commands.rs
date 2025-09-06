@@ -6,7 +6,7 @@
 
 use crate::config::{defaults::create_default_config, types::AppConfig, TomlConfigManager};
 
-use crate::utils::error::{AppResult, ToTauriResult};
+use crate::utils::error::{AppResult, TauriResult, ToTauriResult};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
@@ -35,7 +35,7 @@ impl ConfigManagerState {
 
 /// 获取当前配置
 #[tauri::command]
-pub async fn get_config(state: State<'_, ConfigManagerState>) -> Result<AppConfig, String> {
+pub async fn get_config(state: State<'_, ConfigManagerState>) -> TauriResult<AppConfig> {
     state.toml_manager.get_config().await.to_tauri()
 }
 
@@ -44,7 +44,7 @@ pub async fn get_config(state: State<'_, ConfigManagerState>) -> Result<AppConfi
 pub async fn update_config(
     new_config: AppConfig,
     state: State<'_, ConfigManagerState>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     state
         .toml_manager
         .update_config(|config| {
@@ -57,7 +57,7 @@ pub async fn update_config(
 
 /// 保存配置（强制保存当前缓存的配置到文件）
 #[tauri::command]
-pub async fn save_config(state: State<'_, ConfigManagerState>) -> Result<(), String> {
+pub async fn save_config(state: State<'_, ConfigManagerState>) -> TauriResult<()> {
     // 这个命令主要用于强制保存当前缓存的配置到文件
     // 使用 update_config 确保原子性操作
     state
@@ -72,7 +72,7 @@ pub async fn save_config(state: State<'_, ConfigManagerState>) -> Result<(), Str
 
 /// 验证配置
 #[tauri::command]
-pub async fn validate_config(state: State<'_, ConfigManagerState>) -> Result<(), String> {
+pub async fn validate_config(state: State<'_, ConfigManagerState>) -> TauriResult<()> {
     debug!("开始验证配置");
     let config = state.toml_manager.get_config().await.to_tauri()?;
     state.toml_manager.validate_config(&config).to_tauri()
@@ -80,7 +80,7 @@ pub async fn validate_config(state: State<'_, ConfigManagerState>) -> Result<(),
 
 /// 重置配置为默认值
 #[tauri::command]
-pub async fn reset_config_to_defaults(state: State<'_, ConfigManagerState>) -> Result<(), String> {
+pub async fn reset_config_to_defaults(state: State<'_, ConfigManagerState>) -> TauriResult<()> {
     debug!("开始重置配置为默认值");
     let default_config = create_default_config();
     state
@@ -95,7 +95,7 @@ pub async fn reset_config_to_defaults(state: State<'_, ConfigManagerState>) -> R
 
 /// 获取配置文件路径
 #[tauri::command]
-pub async fn get_config_file_path(_state: State<'_, ConfigManagerState>) -> Result<String, String> {
+pub async fn get_config_file_path(_state: State<'_, ConfigManagerState>) -> TauriResult<String> {
     Ok("config/config.toml".to_string())
 }
 
@@ -110,7 +110,7 @@ pub struct ConfigFileInfo {
 #[tauri::command]
 pub async fn get_config_file_info(
     _state: State<'_, ConfigManagerState>,
-) -> Result<ConfigFileInfo, String> {
+) -> TauriResult<ConfigFileInfo> {
     Ok(ConfigFileInfo {
         path: "config/config.toml".to_string(),
         exists: true,
@@ -122,14 +122,14 @@ pub async fn get_config_file_info(
 pub async fn open_config_file<R: tauri::Runtime>(
     _app: tauri::AppHandle<R>,
     _state: State<'_, ConfigManagerState>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     debug!("打开配置文件功能需要重新实现");
     Ok(())
 }
 
 /// 订阅配置事件
 #[tauri::command]
-pub async fn subscribe_config_events(_state: State<'_, ConfigManagerState>) -> Result<(), String> {
+pub async fn subscribe_config_events(_state: State<'_, ConfigManagerState>) -> TauriResult<()> {
     debug!("订阅配置事件");
     Ok(())
 }
@@ -138,7 +138,7 @@ pub async fn subscribe_config_events(_state: State<'_, ConfigManagerState>) -> R
 #[tauri::command]
 pub async fn get_config_folder_path(
     state: State<'_, ConfigManagerState>,
-) -> Result<String, String> {
+) -> TauriResult<String> {
     debug!("获取配置文件夹路径");
 
     // 通过toml_manager获取配置路径
@@ -157,7 +157,7 @@ pub async fn get_config_folder_path(
 pub async fn open_config_folder<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, ConfigManagerState>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     debug!("打开配置文件夹");
 
     // 通过toml_manager获取配置路径

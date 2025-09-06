@@ -11,15 +11,14 @@ pub mod paths;
 pub mod shortcuts;
 pub mod terminal_commands;
 pub mod theme;
-pub mod toml_manager;
+pub mod toml;
 pub mod types;
 
 // 重新导出核心类型和函数
 pub use commands::{
-    get_config, get_config_file_info, get_config_file_path,
-    get_config_folder_path, open_config_file, open_config_folder, 
-    reset_config_to_defaults, save_config, subscribe_config_events, 
-    update_config, validate_config, ConfigManagerState,
+    get_config, get_config_file_info, get_config_file_path, get_config_folder_path,
+    open_config_file, open_config_folder, reset_config_to_defaults, save_config,
+    subscribe_config_events, update_config, validate_config, ConfigManagerState,
 };
 pub use defaults::*;
 pub use paths::ConfigPaths;
@@ -41,7 +40,7 @@ pub use theme::{
     ThemeIndex, ThemeIndexEntry, ThemeInfo, ThemeManager, ThemeManagerOptions, ThemeService,
     ThemeValidationResult, ThemeValidator,
 };
-pub use toml_manager::{ConfigEvent, TomlConfigManager};
+pub use toml::{ConfigEvent, TomlConfigManager};
 pub use types::*;
 
 /// 配置系统版本

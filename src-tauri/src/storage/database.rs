@@ -9,7 +9,13 @@ use crate::storage::sql_scripts::SqlScriptLoader;
 use crate::storage::DATABASE_FILE_NAME;
 use crate::utils::error::AppResult;
 use anyhow::{anyhow, Context};
-use argon2::{password_hash::Salt, Argon2, PasswordHasher};
+use argon2::{
+    password_hash::{
+        rand_core::{OsRng, RngCore},
+        SaltString,
+    },
+    Argon2, PasswordHasher,
+};
 use base64::Engine;
 use chacha20poly1305::{
     aead::{Aead, AeadCore, KeyInit, OsRng as ChaChaOsRng},
@@ -75,12 +81,12 @@ impl EncryptionManager {
 
     /// 设置主密钥（从用户密码派生）
     pub fn set_master_password(&mut self, password: &str) -> AppResult<()> {
-        let salt = Salt::from_b64("T3JiaXRYVGVybWluYWxTYWx0")
-            .map_err(|e| anyhow!("创建固定盐值失败: {}", e))?;
+        // 生成随机盐值而不是使用固定盐值
+        let salt = SaltString::generate(&mut OsRng);
 
         let password_hash = self
             .argon2
-            .hash_password(password.as_bytes(), salt)
+            .hash_password(password.as_bytes(), &salt)
             .map_err(|e| anyhow!("密钥派生失败: {}", e))?;
 
         let hash = password_hash.hash.unwrap();
@@ -306,7 +312,7 @@ impl DatabaseManager {
         }
     }
 
-    /// 生成基于机器标识的确定性主密钥
+    /// 生成基于机器标识的安全主密钥
     async fn generate_deterministic_master_key(&self) -> AppResult<String> {
         use sha2::{Digest, Sha256};
 
@@ -329,12 +335,18 @@ impl DatabaseManager {
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| "unknown_home".to_string());
 
+        // 添加随机数据增强安全性
+        let mut random_bytes = [0u8; 32];
+        OsRng.fill_bytes(&mut random_bytes);
+
         let mut hasher = Sha256::default();
         hasher.update(b"OrbitX-Terminal-App-v1.0");
         hasher.update(username.as_bytes());
         hasher.update(hostname.as_bytes());
         hasher.update(home_dir.as_bytes());
         hasher.update(b"encryption-key-salt");
+        // 添加随机因子增强安全性
+        hasher.update(&random_bytes);
 
         let hash = hasher.finalize();
         let key = base64::engine::general_purpose::STANDARD.encode(hash);
@@ -433,5 +445,113 @@ impl DatabaseManager {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_encryption_manager_creation() {
+        let manager = EncryptionManager::new();
+        assert!(manager.master_key.is_none());
+    }
+
+    #[test]
+    fn test_set_master_password_random_salt() {
+        let mut manager1 = EncryptionManager::new();
+        let mut manager2 = EncryptionManager::new();
+
+        // 使用相同密码设置主密钥
+        let password = "test_password_123";
+        let result1 = manager1.set_master_password(password);
+        let result2 = manager2.set_master_password(password);
+
+        // 两次操作都应该成功
+        assert!(result1.is_ok());
+        assert!(result2.is_ok());
+
+        // 两个管理器都应该有主密钥
+        assert!(manager1.master_key.is_some());
+        assert!(manager2.master_key.is_some());
+
+        // 由于使用随机盐值，每次生成的密钥应该不同（尽管密码相同）
+        // 注意：理论上有极小概率相同，但实际上几乎不可能
+        let key1 = manager1.master_key.unwrap();
+        let key2 = manager2.master_key.unwrap();
+        assert_ne!(key1, key2, "随机盐值应该产生不同的密钥");
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_roundtrip() {
+        let mut manager = EncryptionManager::new();
+        let password = "test_password_123";
+        manager
+            .set_master_password(password)
+            .expect("设置主密钥失败");
+
+        let test_data = "这是需要加密的敏感数据";
+
+        // 加密数据
+        let encrypted = manager.encrypt_data(test_data).expect("加密失败");
+        assert!(!encrypted.is_empty());
+
+        // 解密数据
+        let decrypted = manager.decrypt_data(&encrypted).expect("解密失败");
+        assert_eq!(decrypted, test_data);
+    }
+
+    #[test]
+    fn test_encrypt_without_master_key_fails() {
+        let manager = EncryptionManager::new();
+        let test_data = "测试数据";
+
+        let result = manager.encrypt_data(test_data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("未设置主密钥"));
+    }
+
+    #[test]
+    fn test_decrypt_without_master_key_fails() {
+        let manager = EncryptionManager::new();
+        let test_data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+
+        let result = manager.decrypt_data(&test_data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("未设置主密钥"));
+    }
+
+    #[test]
+    fn test_decrypt_invalid_data_fails() {
+        let mut manager = EncryptionManager::new();
+        manager.set_master_password("test").expect("设置主密钥失败");
+
+        // 测试数据太短
+        let invalid_data = vec![1, 2, 3];
+        let result = manager.decrypt_data(&invalid_data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("加密数据格式错误"));
+    }
+
+    #[test]
+    fn test_multiple_encryptions_produce_different_ciphertexts() {
+        let mut manager = EncryptionManager::new();
+        manager.set_master_password("test").expect("设置主密钥失败");
+
+        let test_data = "相同的明文数据";
+
+        // 多次加密相同数据
+        let encrypted1 = manager.encrypt_data(test_data).expect("第一次加密失败");
+        let encrypted2 = manager.encrypt_data(test_data).expect("第二次加密失败");
+
+        // 由于使用不同的随机 nonce，密文应该不同
+        assert_ne!(encrypted1, encrypted2, "相同明文的多次加密应该产生不同密文");
+
+        // 但解密结果应该相同
+        let decrypted1 = manager.decrypt_data(&encrypted1).expect("第一次解密失败");
+        let decrypted2 = manager.decrypt_data(&encrypted2).expect("第二次解密失败");
+        assert_eq!(decrypted1, test_data);
+        assert_eq!(decrypted2, test_data);
     }
 }

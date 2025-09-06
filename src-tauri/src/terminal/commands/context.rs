@@ -1,0 +1,195 @@
+/*!
+ * 终端上下文管理命令
+ *
+ * 提供终端上下文信息的获取功能，包括：
+ * - 获取指定终端的上下文
+ * - 获取活跃终端的上下文
+ * - 支持回退逻辑处理
+ */
+
+use super::TerminalContextState;
+use crate::mux::PaneId;
+use crate::terminal::{ContextError, TerminalContext};
+use tauri::State;
+use tracing::{debug, error, warn};
+
+/// 获取指定终端的上下文信息
+///
+/// 根据提供的面板ID获取终端的完整上下文信息，包括当前工作目录、
+/// Shell类型、命令历史等。如果不提供面板ID，则获取当前活跃终端的上下文。
+///
+/// # Arguments
+/// * `pane_id` - 可选的面板ID，如果为None则使用活跃终端
+/// * `state` - 终端上下文状态
+///
+/// # Returns
+/// * `Ok(TerminalContext)` - 终端上下文信息
+/// * `Err(String)` - 获取失败的错误信息
+///
+/// # Examples
+/// ```javascript
+/// // 获取指定终端的上下文
+/// const context = await invoke('get_terminal_context', { paneId: 123 });
+/// console.log('工作目录:', context.currentWorkingDirectory);
+///
+/// // 获取活跃终端的上下文
+/// const activeContext = await invoke('get_terminal_context');
+/// ```
+#[tauri::command]
+pub async fn get_terminal_context(
+    pane_id: Option<u32>,
+    state: State<'_, TerminalContextState>,
+) -> Result<TerminalContext, String> {
+    debug!("获取终端上下文: pane_id={:?}", pane_id);
+
+    // 参数验证
+    if let Some(id) = pane_id {
+        if id == 0 {
+            let error_msg = "面板ID不能为0".to_string();
+            warn!("{}", error_msg);
+            return Err(error_msg);
+        }
+    }
+
+    let pane_id = pane_id.map(PaneId::new);
+
+    // 使用上下文服务获取终端上下文，支持回退逻辑
+    match state
+        .context_service
+        .get_context_with_fallback(pane_id)
+        .await
+    {
+        Ok(context) => {
+            debug!(
+                "成功获取终端上下文: pane_id={:?}, cwd={:?}",
+                context.pane_id, context.current_working_directory
+            );
+            Ok(context)
+        }
+        Err(e) => {
+            let error_msg = format!("获取终端上下文失败: {}", e);
+            error!("{}", error_msg);
+            Err(error_msg)
+        }
+    }
+}
+
+/// 获取当前活跃终端的上下文信息
+///
+/// 专门用于获取当前活跃终端的上下文信息的便捷方法。
+/// 这是 `get_terminal_context(None)` 的简化版本。
+///
+/// # Arguments
+/// * `state` - 终端上下文状态
+///
+/// # Returns
+/// * `Ok(TerminalContext)` - 活跃终端的上下文信息
+/// * `Err(String)` - 获取失败的错误信息
+///
+/// # Examples
+/// ```javascript
+/// // 前端调用示例
+/// const activeContext = await invoke('get_active_terminal_context');
+/// console.log('活跃终端工作目录:', activeContext.currentWorkingDirectory);
+/// console.log('Shell类型:', activeContext.shellType);
+/// ```
+#[tauri::command]
+pub async fn get_active_terminal_context(
+    state: State<'_, TerminalContextState>,
+) -> Result<TerminalContext, String> {
+    debug!("获取活跃终端上下文");
+
+    match state.context_service.get_active_context().await {
+        Ok(context) => {
+            debug!(
+                "成功获取活跃终端上下文: pane_id={:?}, cwd={:?}",
+                context.pane_id, context.current_working_directory
+            );
+            Ok(context)
+        }
+        Err(ContextError::NoActivePane) => {
+            // 没有活跃终端时，使用回退逻辑
+            debug!("没有活跃终端，使用回退逻辑");
+            match state.context_service.get_context_with_fallback(None).await {
+                Ok(context) => {
+                    debug!("使用回退逻辑成功获取终端上下文");
+                    Ok(context)
+                }
+                Err(e) => {
+                    let error_msg = format!("获取活跃终端上下文失败（回退也失败）: {}", e);
+                    error!("{}", error_msg);
+                    Err(error_msg)
+                }
+            }
+        }
+        Err(e) => {
+            let error_msg = format!("获取活跃终端上下文失败: {}", e);
+            error!("{}", error_msg);
+            Err(error_msg)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mux::PaneId;
+    use crate::terminal::commands::tests::create_test_state;
+
+    #[tokio::test]
+    async fn test_get_terminal_context_fallback() {
+        let state = create_test_state();
+
+        // 没有活跃终端时，应该返回默认上下文
+        let result = state.context_service.get_context_with_fallback(None).await;
+        assert!(result.is_ok());
+
+        let context = result.unwrap();
+        assert_eq!(context.current_working_directory, Some("~".to_string()));
+        assert!(matches!(
+            context.shell_type,
+            Some(crate::terminal::ShellType::Bash)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_get_active_terminal_context_fallback() {
+        let state = create_test_state();
+
+        // 没有活跃终端时，get_active_context应该返回错误
+        let result = state.context_service.get_active_context().await;
+        assert!(matches!(result, Err(ContextError::NoActivePane)));
+
+        // 但是get_context_with_fallback应该返回默认上下文
+        let result = state.context_service.get_context_with_fallback(None).await;
+        assert!(result.is_ok());
+
+        let context = result.unwrap();
+        assert_eq!(context.current_working_directory, Some("~".to_string()));
+        assert!(!context.shell_integration_enabled);
+    }
+
+    #[tokio::test]
+    async fn test_context_service_integration() {
+        let state = create_test_state();
+        let pane_id = PaneId::new(123);
+
+        // 设置活跃终端
+        state.registry.set_active_pane(pane_id).unwrap();
+
+        // 测试获取活跃终端上下文（应该失败，因为面板不存在于mux中）
+        let result = state.context_service.get_active_context().await;
+        assert!(matches!(result, Err(ContextError::PaneNotFound { .. })));
+
+        // 测试使用回退逻辑
+        let result = state
+            .context_service
+            .get_context_with_fallback(Some(pane_id))
+            .await;
+        assert!(result.is_ok());
+
+        let context = result.unwrap();
+        // 由于面板不存在，应该回退到默认上下文
+        assert_eq!(context.current_working_directory, Some("~".to_string()));
+    }
+}

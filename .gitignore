@@ -20,6 +20,9 @@ pnpm-debug.log*
 # Tauri
 src-tauri/target/
 
+# Documentation
+docs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

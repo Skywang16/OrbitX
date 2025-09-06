@@ -8,7 +8,7 @@
 use super::service::{SystemThemeDetector, ThemeService};
 use super::types::{Theme, ThemeConfig};
 use crate::config::TomlConfigManager;
-use crate::utils::error::{AppResult, ToTauriResult};
+use crate::utils::error::{AppResult, TauriResult, ToTauriResult};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -51,7 +51,7 @@ pub struct ThemeConfigStatus {
 pub async fn get_theme_config_status(
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
-) -> Result<ThemeConfigStatus, String> {
+) -> TauriResult<ThemeConfigStatus> {
     let config = config_manager.get_config().await.to_tauri()?;
 
     let theme_config = &config.appearance.theme_config;
@@ -89,7 +89,7 @@ pub async fn get_theme_config_status(
 pub async fn get_current_theme(
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
-) -> Result<Theme, String> {
+) -> TauriResult<Theme> {
     let config = config_manager.get_config().await.to_tauri()?;
 
     let theme_config = &config.appearance.theme_config;
@@ -108,7 +108,7 @@ pub async fn set_terminal_theme(
     app_handle: AppHandle,
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     // 验证主题是否存在
     if !theme_service.theme_exists(&theme_name).await {
         return Err(format!("主题不存在: {}", theme_name));
@@ -141,7 +141,7 @@ pub async fn set_follow_system_theme(
     app_handle: AppHandle,
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     // 验证主题是否存在
     if let Some(ref light) = light_theme {
         if !theme_service.theme_exists(light).await {
@@ -171,7 +171,7 @@ pub async fn set_follow_system_theme(
             Ok(())
         })
         .await
-        .map_err(|e| format!("更新配置失败: {}", e))?;
+        .to_tauri()?;
 
     // 如果启用跟随系统主题，需要获取当前应该使用的主题并发送事件
     if follow_system {
@@ -179,7 +179,7 @@ pub async fn set_follow_system_theme(
         let config = config_manager
             .get_config()
             .await
-            .map_err(|e| format!("获取配置失败: {}", e))?;
+            .to_tauri()?;
         let is_system_dark = SystemThemeDetector::is_dark_mode();
         let current_theme_name =
             theme_service.get_current_theme_name(&config.appearance.theme_config, is_system_dark);
@@ -197,7 +197,7 @@ pub async fn set_follow_system_theme(
 #[tauri::command]
 pub async fn get_available_themes(
     theme_service: State<'_, Arc<ThemeService>>,
-) -> Result<Vec<ThemeInfo>, String> {
+) -> TauriResult<Vec<ThemeInfo>> {
     let theme_list = theme_service
         .theme_manager()
         .list_themes()

@@ -8,7 +8,7 @@ use super::core::ShortcutManager;
 use super::types::*;
 use crate::config::commands::ConfigManagerState;
 use crate::config::types::{ShortcutBinding, ShortcutsConfig};
-use crate::utils::error::ToTauriResult;
+use crate::utils::error::{TauriResult, ToTauriResult};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -33,7 +33,7 @@ impl ShortcutManagerState {
 #[tauri::command]
 pub async fn get_shortcuts_config(
     state: State<'_, ShortcutManagerState>,
-) -> Result<ShortcutsConfig, String> {
+) -> TauriResult<ShortcutsConfig> {
     debug!("获取快捷键配置");
 
     let manager = state.manager.lock().await;
@@ -47,7 +47,7 @@ pub async fn get_shortcuts_config(
 pub async fn update_shortcuts_config(
     config: ShortcutsConfig,
     state: State<'_, ShortcutManagerState>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     debug!("更新快捷键配置");
 
     let manager = state.manager.lock().await;
@@ -61,7 +61,7 @@ pub async fn update_shortcuts_config(
 pub async fn validate_shortcuts_config(
     config: ShortcutsConfig,
     state: State<'_, ShortcutManagerState>,
-) -> Result<ValidationResult, String> {
+) -> TauriResult<ValidationResult> {
     debug!("验证快捷键配置");
 
     let manager = state.manager.lock().await;
@@ -75,7 +75,7 @@ pub async fn validate_shortcuts_config(
 pub async fn detect_shortcuts_conflicts(
     config: ShortcutsConfig,
     state: State<'_, ShortcutManagerState>,
-) -> Result<ConflictResult, String> {
+) -> TauriResult<ConflictResult> {
     debug!("检测快捷键冲突");
 
     let manager = state.manager.lock().await;
@@ -89,7 +89,7 @@ pub async fn detect_shortcuts_conflicts(
 pub async fn add_shortcut(
     binding: ShortcutBinding,
     state: State<'_, ShortcutManagerState>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     debug!("添加快捷键: {:?}", binding);
 
     let manager = state.manager.lock().await;
@@ -103,7 +103,7 @@ pub async fn add_shortcut(
 pub async fn remove_shortcut(
     index: usize,
     state: State<'_, ShortcutManagerState>,
-) -> Result<ShortcutBinding, String> {
+) -> TauriResult<ShortcutBinding> {
     debug!("删除快捷键: 索引 {}", index);
 
     let manager = state.manager.lock().await;
@@ -118,7 +118,7 @@ pub async fn update_shortcut(
     index: usize,
     binding: ShortcutBinding,
     state: State<'_, ShortcutManagerState>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     debug!("更新快捷键: 索引 {}, 新绑定 {:?}", index, binding);
 
     let manager = state.manager.lock().await;
@@ -131,7 +131,7 @@ pub async fn update_shortcut(
 #[tauri::command]
 pub async fn reset_shortcuts_to_defaults(
     state: State<'_, ShortcutManagerState>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     debug!("重置快捷键到默认配置");
 
     let manager = state.manager.lock().await;
@@ -144,7 +144,7 @@ pub async fn reset_shortcuts_to_defaults(
 #[tauri::command]
 pub async fn get_shortcuts_statistics(
     state: State<'_, ShortcutManagerState>,
-) -> Result<ShortcutStatistics, String> {
+) -> TauriResult<ShortcutStatistics> {
     debug!("获取快捷键统计信息");
 
     let manager = state.manager.lock().await;
@@ -158,7 +158,7 @@ pub async fn get_shortcuts_statistics(
 pub async fn search_shortcuts(
     options: SearchOptions,
     state: State<'_, ShortcutManagerState>,
-) -> Result<SearchResult, String> {
+) -> TauriResult<SearchResult> {
     debug!("搜索快捷键: {:?}", options);
 
     let manager = state.manager.lock().await;
@@ -175,7 +175,7 @@ pub async fn execute_shortcut_action(
     active_terminal_id: Option<String>,
     metadata: Option<HashMap<String, serde_json::Value>>,
     state: State<'_, ShortcutManagerState>,
-) -> Result<OperationResult<serde_json::Value>, String> {
+) -> TauriResult<OperationResult<serde_json::Value>> {
     debug!("执行快捷键动作: {:?}", action);
     let parts: Vec<&str> = key_combination.split('+').collect();
     let key = parts.last().map(|s| s.to_string()).unwrap_or_default();
@@ -199,7 +199,7 @@ pub async fn execute_shortcut_action(
 }
 
 #[tauri::command]
-pub async fn get_current_platform() -> Result<Platform, String> {
+pub async fn get_current_platform() -> TauriResult<Platform> {
     debug!("获取当前平台信息");
 
     let platform = if cfg!(target_os = "macos") {
@@ -216,7 +216,7 @@ pub async fn get_current_platform() -> Result<Platform, String> {
 #[tauri::command]
 pub async fn export_shortcuts_config(
     state: State<'_, ShortcutManagerState>,
-) -> Result<String, String> {
+) -> TauriResult<String> {
     debug!("导出快捷键配置");
 
     let manager = state.manager.lock().await;
@@ -233,7 +233,7 @@ pub async fn export_shortcuts_config(
 pub async fn import_shortcuts_config(
     config_json: String,
     state: State<'_, ShortcutManagerState>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     debug!("导入快捷键配置");
 
     let config: ShortcutsConfig =
@@ -249,7 +249,7 @@ pub async fn import_shortcuts_config(
 #[tauri::command]
 pub async fn get_registered_actions(
     state: State<'_, ShortcutManagerState>,
-) -> Result<Vec<String>, String> {
+) -> TauriResult<Vec<String>> {
     debug!("获取已注册的动作列表");
 
     let manager = state.manager.lock().await;
@@ -265,7 +265,7 @@ pub async fn get_registered_actions(
 pub async fn get_action_metadata(
     action_name: String,
     state: State<'_, ShortcutManagerState>,
-) -> Result<Option<super::actions::ActionMetadata>, String> {
+) -> TauriResult<Option<super::actions::ActionMetadata>> {
     debug!("获取动作元数据: {}", action_name);
 
     let manager = state.manager.lock().await;
@@ -280,7 +280,7 @@ pub async fn get_action_metadata(
 pub async fn validate_key_combination(
     key: String,
     modifiers: Vec<String>,
-) -> Result<ValidationResult, String> {
+) -> TauriResult<ValidationResult> {
     debug!("验证快捷键组合: {} + {:?}", key, modifiers);
 
     let mut errors = Vec::new();
