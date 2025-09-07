@@ -10,7 +10,7 @@
  * `mod_simplified.rs` 已被移除/隔离，不再与本实现并存。
  */
 
-use crate::vector_index::types::{CodeVector, SearchOptions, SearchResult, VectorIndexConfig};
+use crate::vector_index::types::{CodeVector, SearchOptions, SearchResult, VectorIndexFullConfig};
 use anyhow::{bail, ensure, Context, Result};
 use qdrant_client::{
     qdrant::{
@@ -21,6 +21,7 @@ use qdrant_client::{
 };
 use std::collections::HashMap;
 use std::time::Duration;
+use url::Url;
 
 /// Qdrant服务接口
 pub trait QdrantService {
@@ -67,19 +68,22 @@ pub trait QdrantService {
 /// Qdrant客户端实现
 pub struct QdrantClientImpl {
     client: Qdrant,
-    config: VectorIndexConfig,
+    config: VectorIndexFullConfig,
 }
 
 impl QdrantClientImpl {
     /// 创建新的Qdrant客户端
-    pub async fn new(config: VectorIndexConfig) -> Result<Self> {
-        tracing::info!("正在连接Qdrant数据库: {}", config.qdrant_url);
+    pub async fn new(config: VectorIndexFullConfig) -> Result<Self> {
+        tracing::info!("正在连接Qdrant数据库: {}", config.user_config.qdrant_url);
+
+        // 在创建客户端之前，校验端点是否与 gRPC 客户端匹配
+        Self::validate_endpoint(&config)?;
 
         // 创建Qdrant客户端
-        let mut client_builder = Qdrant::from_url(&config.qdrant_url);
+        let mut client_builder = Qdrant::from_url(&config.user_config.qdrant_url);
 
         // 设置API密钥（如果有）
-        if let Some(api_key) = &config.qdrant_api_key {
+        if let Some(api_key) = &config.user_config.qdrant_api_key {
             client_builder = client_builder.api_key(api_key.clone());
         }
 
@@ -113,13 +117,56 @@ impl QdrantClientImpl {
     }
 }
 
+impl QdrantClientImpl {
+    /// 校验配置的 Qdrant 端点，确保与 gRPC 客户端匹配
+    fn validate_endpoint(config: &VectorIndexFullConfig) -> Result<()> {
+        let url = Url::parse(&config.user_config.qdrant_url)
+            .with_context(|| format!("无法解析Qdrant地址: {}", config.user_config.qdrant_url))?;
+
+        let host = url.host_str().unwrap_or("");
+        let scheme = url.scheme();
+        let port = url.port_or_known_default();
+
+        // 1) 明确禁止将 gRPC 客户端指向 6333（REST 端口）
+        if let Some(p) = port {
+            if p == 6333 {
+                bail!(
+                    "检测到将gRPC客户端连接到REST端口 6333。请将端口改为 6334。示例：\n- 本地: http://localhost:6334\n- 云端: https://<cluster>.<region>.<zone>.aws.cloud.qdrant.io:6334"
+                );
+            }
+        }
+
+        // 2) 云端域名的特殊提示：必须使用 6334 且建议 https
+        let is_cloud = host.ends_with(".cloud.qdrant.io") || host.ends_with(".qdrant.io");
+        if is_cloud {
+            // 云端强烈建议使用 https
+            if scheme != "https" {
+                tracing::warn!(
+                    "Qdrant Cloud 建议使用 HTTPS。当前为 '{}', 建议切换为 'https'。",
+                    scheme
+                );
+            }
+
+            // 云端 gRPC 端口必须为 6334
+            if port != Some(6334) {
+                bail!(
+                    "Qdrant Cloud gRPC 端点应使用端口 6334。请将地址改为形如：https://{}:6334",
+                    host
+                );
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl QdrantService for QdrantClientImpl {
     async fn test_connection(&self) -> Result<String> {
         tracing::debug!("测试Qdrant数据库连接");
 
         match self.test_connection_internal().await {
             Ok(_) => {
-                let message = format!("✅ Qdrant连接成功: {}", self.config.qdrant_url);
+                let message = format!("✅ Qdrant连接成功: {}", self.config.user_config.qdrant_url);
                 tracing::info!("{}", message);
                 Ok(message)
             }
@@ -132,7 +179,7 @@ impl QdrantService for QdrantClientImpl {
     }
 
     async fn initialize_collection(&self) -> Result<()> {
-        let collection_name = &self.config.collection_name;
+        let collection_name = &self.config.user_config.collection_name;
 
         tracing::info!("初始化Qdrant集合: {}", collection_name);
 
@@ -170,7 +217,7 @@ impl QdrantService for QdrantClientImpl {
             return Ok(());
         }
 
-        let collection_name = &self.config.collection_name;
+        let collection_name = &self.config.user_config.collection_name;
         let total_vectors = vectors.len();
 
         tracing::info!(
@@ -213,7 +260,7 @@ impl QdrantService for QdrantClientImpl {
         );
 
         // 使用占位符向量进行搜索（仅用于测试）
-        let placeholder_vector = vec![0.0f32; self.config.vector_size];
+        let placeholder_vector = vec![0.0f32; self.config.vector_size()];
         self.search_with_vector(placeholder_vector, options).await
     }
 
@@ -224,7 +271,7 @@ impl QdrantService for QdrantClientImpl {
     ) -> Result<Vec<SearchResult>> {
         use qdrant_client::qdrant::SearchPointsBuilder;
 
-        let collection_name = &self.config.collection_name;
+        let collection_name = &self.config.user_config.collection_name;
 
         tracing::info!(
             "开始向量搜索: '{}' (collection: {})",
@@ -240,9 +287,9 @@ impl QdrantService for QdrantClientImpl {
         );
 
         ensure!(
-            query_vector.len() == self.config.vector_size,
+            query_vector.len() == self.config.vector_size(),
             "查询向量维度不匹配：期望 {}, 实际 {}",
-            self.config.vector_size,
+            self.config.vector_size(),
             query_vector.len()
         );
 
@@ -295,7 +342,7 @@ impl QdrantService for QdrantClientImpl {
     async fn delete_file_vectors(&self, _file_path: &str) -> Result<()> {
         use qdrant_client::qdrant::{Condition, DeletePointsBuilder, Filter};
 
-        let collection_name = &self.config.collection_name;
+        let collection_name = &self.config.user_config.collection_name;
 
         // 构建按 file_path 精确匹配的过滤器
         let filter = Filter::must([Condition::matches("file_path", _file_path.to_string())]);
@@ -320,7 +367,7 @@ impl QdrantService for QdrantClientImpl {
     }
 
     async fn get_collection_info(&self) -> Result<(usize, usize)> {
-        let collection_name = &self.config.collection_name;
+        let collection_name = &self.config.user_config.collection_name;
 
         tracing::debug!("获取集合信息: {}", collection_name);
 
@@ -351,7 +398,7 @@ impl QdrantService for QdrantClientImpl {
     }
 
     async fn clear_all_vectors(&self) -> Result<()> {
-        let collection_name = &self.config.collection_name;
+        let collection_name = &self.config.user_config.collection_name;
 
         tracing::info!("开始清空集合中的所有向量: {}", collection_name);
 
@@ -379,7 +426,7 @@ impl QdrantService for QdrantClientImpl {
 impl QdrantClientImpl {
     /// 验证现有集合的配置
     async fn validate_existing_collection(&self) -> Result<()> {
-        let collection_name = &self.config.collection_name;
+        let collection_name = &self.config.user_config.collection_name;
 
         let collection_info = self
             .client
@@ -397,7 +444,7 @@ impl QdrantClientImpl {
                                 qdrant_client::qdrant::vectors_config::Config::Params(
                                     vector_params,
                                 ) => {
-                                    let expected_size = self.config.vector_size as u64;
+                                    let expected_size = self.config.vector_size() as u64;
                                     let actual_size = vector_params.size;
 
                                     ensure!(
@@ -423,11 +470,11 @@ impl QdrantClientImpl {
 
     /// 创建新集合
     async fn create_new_collection(&self) -> Result<()> {
-        let collection_name = &self.config.collection_name;
+        let collection_name = &self.config.user_config.collection_name;
 
         // 构建向量参数
         let vector_params = VectorParamsBuilder::new(
-            self.config.vector_size as u64,
+            self.config.vector_size() as u64,
             Distance::Cosine, // 使用余弦相似度
         )
         .on_disk(true) // 启用磁盘存储以支持大规模数据
@@ -457,7 +504,7 @@ impl QdrantClientImpl {
 
     /// 批量上传单个批次的向量
     async fn upload_batch(&self, vectors: &[CodeVector]) -> Result<()> {
-        let collection_name = &self.config.collection_name;
+        let collection_name = &self.config.user_config.collection_name;
 
         // 将CodeVector转换为Qdrant的PointStruct
         let points: Vec<PointStruct> = vectors
@@ -542,7 +589,7 @@ impl QdrantClientImpl {
         );
 
         // 验证向量维度
-        let expected_size = self.config.vector_size;
+        let expected_size = self.config.vector_size();
         ensure!(
             vector.vector.len() == expected_size,
             "向量维度不匹配: 期望 {}, 实际 {}",

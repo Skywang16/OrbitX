@@ -22,6 +22,7 @@
 
 // 子模块声明
 pub mod commands;
+pub mod config_service;
 pub mod monitor;
 pub mod parser;
 pub mod qdrant;
@@ -33,6 +34,7 @@ pub mod vectorizer;
 pub use types::{CodeVector, IndexStats, SearchOptions, SearchResult, VectorIndexConfig};
 
 // 导出主要服务接口
+pub use config_service::VectorIndexConfigService;
 pub use monitor::FileMonitorService;
 pub use parser::CodeParser;
 pub use qdrant::QdrantService;

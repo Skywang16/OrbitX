@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 use walkdir::{DirEntry, WalkDir};
 
-use crate::vector_index::types::{Language, VectorIndexConfig};
+use crate::vector_index::types::{Language, VectorIndexFullConfig};
 
 /// 文件扫描统计信息
 #[derive(Debug, Clone)]
@@ -44,17 +44,17 @@ pub struct CodeFileScanner {
 
 impl CodeFileScanner {
     /// 创建新的文件扫描器
-    pub fn new(config: VectorIndexConfig) -> Result<Self> {
+    pub fn new(config: VectorIndexFullConfig) -> Result<Self> {
         // 处理支持的扩展名（去掉前导点并转换为小写）
         let supported_extensions: HashSet<String> = config
-            .supported_extensions
+            .supported_extensions()
             .iter()
             .map(|ext| ext.trim_start_matches('.').to_lowercase())
             .collect();
 
         // 编译ignore patterns为glob模式
         let mut ignore_patterns = Vec::new();
-        for pattern in &config.ignore_patterns {
+        for pattern in config.ignore_patterns() {
             match glob::Pattern::new(pattern) {
                 Ok(compiled_pattern) => ignore_patterns.push(compiled_pattern),
                 Err(e) => {

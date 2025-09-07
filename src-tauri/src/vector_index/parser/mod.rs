@@ -14,7 +14,9 @@ use tokio::fs;
 use tracing::{debug, error, warn};
 use tree_sitter::{Language as TSLanguage, Node, Parser};
 
-use crate::vector_index::types::{ChunkType, CodeChunk, Language, ParsedCode, VectorIndexConfig};
+use crate::vector_index::types::{
+    ChunkType, CodeChunk, Language, ParsedCode, VectorIndexFullConfig,
+};
 
 // 子模块
 pub mod scanner;
@@ -45,14 +47,14 @@ pub trait CodeParser {
 
 /// Tree-sitter代码解析器实现
 pub struct TreeSitterParser {
-    config: VectorIndexConfig,
+    config: VectorIndexFullConfig,
     /// 语言配置缓存
     languages: HashMap<Language, TSLanguage>,
 }
 
 impl TreeSitterParser {
     /// 创建新的解析器实例
-    pub fn new(config: VectorIndexConfig) -> Result<Self> {
+    pub fn new(config: VectorIndexFullConfig) -> Result<Self> {
         let mut parser = Self {
             config,
             languages: HashMap::new(),
@@ -149,8 +151,8 @@ impl TreeSitterParser {
                 let content = source_code[start_byte..end_byte].to_string();
 
                 // 过滤太短或太长的代码块
-                if content.len() >= self.config.chunk_size_range[0]
-                    && content.len() <= self.config.chunk_size_range[1]
+                if content.len() >= self.config.chunk_size_range()[0]
+                    && content.len() <= self.config.chunk_size_range()[1]
                 {
                     let mut metadata = HashMap::new();
                     metadata.insert("node_kind".to_string(), node.kind().to_string());
@@ -307,7 +309,11 @@ impl CodeParser for TreeSitterParser {
         let mut results = Vec::new();
 
         // 分批处理文件以控制内存使用和并发度
-        let batch_size = self.config.max_concurrent_files.min(file_paths.len());
+        let batch_size = self
+            .config
+            .user_config
+            .max_concurrent_files
+            .min(file_paths.len());
 
         for chunk in file_paths.chunks(batch_size) {
             let mut batch_results = Vec::new();

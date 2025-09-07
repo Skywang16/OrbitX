@@ -51,13 +51,8 @@ export const useVectorIndexSettingsStore = defineStore('vectorIndexSettings', ()
         qdrantUrl: newConfig.qdrantUrl || 'http://localhost:6333',
         qdrantApiKey: newConfig.qdrantApiKey || null,
         collectionName: newConfig.collectionName || 'orbitx-code-vectors',
-        vectorSize: newConfig.vectorSize || 1536,
-        batchSize: newConfig.batchSize || 50,
+        embeddingModelId: newConfig.embeddingModelId || 'text-embedding-3-small',
         maxConcurrentFiles: newConfig.maxConcurrentFiles || 4,
-        chunkSizeRange: newConfig.chunkSizeRange || [10, 2000],
-        supportedExtensions: ['.ts', '.tsx', '.js', '.jsx', '.rs', '.py', '.go', '.java', '.c', '.cpp', '.h', '.hpp'],
-        ignorePatterns: ['**/node_modules/**', '**/target/**', '**/dist/**', '**/.git/**', '**/build/**'],
-        embeddingModelId: newConfig.embeddingModelId || undefined,
       }
       await vectorIndexApi.saveConfig(configToSave)
       config.value = configToSave

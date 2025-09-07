@@ -33,13 +33,15 @@ use crate::llm::service::LLMService;
 use crate::vector_index::{
     parser::{CodeParser, TreeSitterParser},
     qdrant::{QdrantClientImpl, QdrantService},
-    types::{CodeVector, IndexStats, SearchOptions, SearchResult, TaskProgress, VectorIndexConfig},
+    types::{
+        CodeVector, IndexStats, SearchOptions, SearchResult, TaskProgress, VectorIndexFullConfig,
+    },
     vectorizer::{LLMVectorizationService, VectorizationService},
 };
 
 /// 向量索引服务 - 主要业务逻辑
 pub struct VectorIndexService {
-    config: VectorIndexConfig,
+    config: VectorIndexFullConfig,
     parser: TreeSitterParser,
     vectorizer: LLMVectorizationService,
     storage: QdrantClientImpl,
@@ -48,17 +50,21 @@ pub struct VectorIndexService {
 impl VectorIndexService {
     /// 创建新的向量索引服务
     pub async fn new(
-        config: VectorIndexConfig,
+        user_config: crate::vector_index::types::VectorIndexConfig,
         llm_service: Arc<LLMService>,
         embedding_model: String,
     ) -> Result<Self> {
+        // 构建完整配置（用户配置 + 内部技术配置）
+        let full_config =
+            VectorIndexFullConfig::from_user_config_with_model_info(user_config, &embedding_model);
+
         // 初始化各个组件
-        let parser = TreeSitterParser::new(config.clone()).context("初始化代码解析器失败")?;
+        let parser = TreeSitterParser::new(full_config.clone()).context("初始化代码解析器失败")?;
 
         let vectorizer =
             LLMVectorizationService::new(llm_service, embedding_model).with_max_retries(3);
 
-        let storage = QdrantClientImpl::new(config.clone())
+        let storage = QdrantClientImpl::new(full_config.clone())
             .await
             .context("初始化Qdrant客户端失败")?;
 
@@ -69,7 +75,7 @@ impl VectorIndexService {
             .context("初始化Qdrant集合失败")?;
 
         Ok(Self {
-            config,
+            config: full_config,
             parser,
             vectorizer,
             storage,
@@ -111,7 +117,7 @@ impl VectorIndexService {
 
         // 3. 并发处理文件（管线式：每批处理完成即上传，避免累计内存）
         let mut processed_files = 0;
-        let batch_size = self.config.max_concurrent_files;
+        let batch_size = self.config.user_config.max_concurrent_files;
 
         for file_batch in files.chunks(batch_size) {
             let mut batch_tasks = Vec::new();
@@ -328,7 +334,7 @@ impl VectorIndexService {
 
     /// 获取集合名称
     pub fn collection_name(&self) -> &str {
-        &self.config.collection_name
+        &self.config.user_config.collection_name
     }
 
     /// 获取向量化服务引用（供增量更新器使用）

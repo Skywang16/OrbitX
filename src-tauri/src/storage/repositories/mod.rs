@@ -4,12 +4,14 @@
  * 提供数据访问层的抽象，将业务逻辑与数据库操作分离
  */
 
+pub mod ai_features;
 pub mod ai_models;
 pub mod audit_logs;
 pub mod command_history;
 pub mod conversations;
 
 // 重新导出所有Repository
+pub use ai_features::AIFeaturesRepository;
 pub use ai_models::AIModelRepository;
 pub use audit_logs::AuditLogRepository;
 pub use command_history::CommandHistoryRepository;
@@ -44,6 +46,7 @@ pub trait Repository<T> {
 /// Repository管理器
 pub struct RepositoryManager {
     database: Arc<DatabaseManager>,
+    ai_features: AIFeaturesRepository,
     ai_models: AIModelRepository,
     audit_logs: AuditLogRepository,
     command_history: CommandHistoryRepository,
@@ -54,12 +57,18 @@ impl RepositoryManager {
     /// 创建新的Repository管理器
     pub fn new(database: Arc<DatabaseManager>) -> Self {
         Self {
+            ai_features: AIFeaturesRepository::new(Arc::clone(&database)),
             ai_models: AIModelRepository::new(Arc::clone(&database)),
             audit_logs: AuditLogRepository::new(Arc::clone(&database)),
             command_history: CommandHistoryRepository::new(Arc::clone(&database)),
             conversations: ConversationRepository::new(Arc::clone(&database)),
             database,
         }
+    }
+
+    /// 获取AI功能配置Repository
+    pub fn ai_features(&self) -> &AIFeaturesRepository {
+        &self.ai_features
     }
 
     /// 获取AI模型Repository

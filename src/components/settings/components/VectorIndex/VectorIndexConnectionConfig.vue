@@ -17,10 +17,8 @@
     qdrantUrl: '',
     qdrantApiKey: '',
     collectionName: '',
-    vectorSize: 1536,
-    batchSize: 50,
+    embeddingModelId: '', // 必需：选择的embedding模型ID
     maxConcurrentFiles: 4,
-    embeddingModelId: '', // 新增：选择的embedding模型ID
   })
 
   // 计算属性：可用的embedding模型
@@ -28,21 +26,10 @@
     return aiSettingsStore.models.filter(model => model.modelType === 'embedding')
   })
 
-  // 监听embedding模型选择变化，自动设置向量维度
+  // 监听embedding模型选择变化
   const handleEmbeddingModelChange = (modelId: string) => {
-    const selectedModel = availableEmbeddingModels.value.find(m => m.id === modelId)
-    if (selectedModel) {
-      // 根据模型名称推断向量维度
-      const modelName = selectedModel.model.toLowerCase()
-      if (modelName.includes('text-embedding-3-small') || modelName.includes('text-embedding-ada-002')) {
-        configForm.vectorSize = 1536
-      } else if (modelName.includes('text-embedding-3-large')) {
-        configForm.vectorSize = 3072
-      } else {
-        // 默认维度，用户可以手动调整
-        configForm.vectorSize = 1536
-      }
-    }
+    // 向量维度将由后端根据模型自动推断，前端不再需要处理
+    console.log('选择的embedding模型ID:', modelId)
   }
 
   // 加载当前配置
@@ -52,10 +39,8 @@
         qdrantUrl: settingsStore.config.qdrantUrl || '',
         qdrantApiKey: settingsStore.config.qdrantApiKey || '',
         collectionName: settingsStore.config.collectionName || '',
-        vectorSize: settingsStore.config.vectorSize || 1536,
-        batchSize: settingsStore.config.batchSize || 50,
-        maxConcurrentFiles: settingsStore.config.maxConcurrentFiles || 4,
         embeddingModelId: settingsStore.config.embeddingModelId || '',
+        maxConcurrentFiles: settingsStore.config.maxConcurrentFiles || 4,
       })
     }
   }
@@ -84,13 +69,8 @@
         qdrantUrl: configForm.qdrantUrl,
         qdrantApiKey: configForm.qdrantApiKey || null,
         collectionName: configForm.collectionName,
-        vectorSize: configForm.vectorSize,
-        batchSize: configForm.batchSize,
+        embeddingModelId: configForm.embeddingModelId,
         maxConcurrentFiles: configForm.maxConcurrentFiles,
-        chunkSizeRange: [10, 2000] as [number, number],
-        supportedExtensions: ['.ts', '.tsx', '.js', '.jsx', '.rs', '.py', '.go', '.java', '.c', '.cpp', '.h', '.hpp'],
-        ignorePatterns: ['**/node_modules/**', '**/target/**', '**/dist/**', '**/.git/**', '**/build/**'],
-        embeddingModelId: configForm.embeddingModelId || undefined,
       }
 
       await settingsStore.testConnection(testConfig)
@@ -107,8 +87,7 @@
     return (
       configForm.qdrantUrl.trim() &&
       configForm.collectionName.trim() &&
-      configForm.vectorSize > 0 &&
-      configForm.batchSize > 0 &&
+      configForm.embeddingModelId.trim() &&
       configForm.maxConcurrentFiles > 0
     )
   })
@@ -208,51 +187,6 @@
         >
           {{ t('settings.vectorIndex.add_embedding_model') }}
         </x-button>
-      </div>
-    </div>
-
-    <!-- 向量维度 -->
-    <div class="settings-item">
-      <div class="settings-item-header">
-        <div class="settings-label">{{ t('settings.vectorIndex.vector_size') }}</div>
-        <div class="settings-description">{{ t('settings.vectorIndex.vector_size_description') }}</div>
-      </div>
-      <div class="settings-item-control">
-        <input
-          v-model.number="configForm.vectorSize"
-          type="number"
-          class="settings-input"
-          min="128"
-          max="4096"
-          step="1"
-          :placeholder="t('settings.vectorIndex.vector_size_placeholder')"
-        />
-        <div class="vector-size-hint">
-          <span v-if="configForm.vectorSize === 1536" class="hint-text">
-            {{ t('settings.vectorIndex.common_for_openai_small') }}
-          </span>
-          <span v-else-if="configForm.vectorSize === 3072" class="hint-text">
-            {{ t('settings.vectorIndex.common_for_openai_large') }}
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 批处理大小 -->
-    <div class="settings-item">
-      <div class="settings-item-header">
-        <div class="settings-label">{{ t('settings.vectorIndex.batch_size') }}</div>
-        <div class="settings-description">{{ t('settings.vectorIndex.batch_size_description') }}</div>
-      </div>
-      <div class="settings-item-control">
-        <input
-          v-model.number="configForm.batchSize"
-          type="number"
-          class="settings-input"
-          min="10"
-          max="200"
-          step="10"
-        />
       </div>
     </div>
 

@@ -10,10 +10,7 @@ use crate::storage::DATABASE_FILE_NAME;
 use crate::utils::error::AppResult;
 use anyhow::{anyhow, Context};
 use argon2::{
-    password_hash::{
-        rand_core::{OsRng, RngCore},
-        SaltString,
-    },
+    password_hash::{rand_core::OsRng, SaltString},
     Argon2, PasswordHasher,
 };
 use base64::Engine;

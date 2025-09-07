@@ -79,7 +79,7 @@ mod setup {
                     println!("✅ Qdrant服务可用");
                 }
                 _ => {
-                    println!("⚠️  Qdrant服务不可用，集成测试将被跳过");
+                    println!("Qdrant服务不可用，集成测试将被跳过");
                     std::env::set_var("SKIP_QDRANT_INTEGRATION", "1");
                 }
             }

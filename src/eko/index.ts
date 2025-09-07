@@ -41,7 +41,7 @@ export class OrbitXEko {
 
       // 如果没有AI模型配置，跳过Eko实例创建
       if (!ekoConfig.llms) {
-        console.warn('⚠️ 没有AI模型配置，跳过Eko实例创建。AI功能将不可用，请在设置中添加AI模型配置。')
+        console.warn('没有AI模型配置，跳过Eko实例创建。AI功能将不可用，请在设置中添加AI模型配置。')
         this.eko = null
         return
       }

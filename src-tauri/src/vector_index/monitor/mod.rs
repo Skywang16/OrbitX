@@ -90,7 +90,8 @@ impl FileMonitorService {
     /// 创建新的文件监控服务
     pub fn new(config: VectorIndexConfig, vector_service: Arc<VectorIndexService>) -> Result<Self> {
         // 创建文件过滤器
-        let file_filter = FileFilter::new(&config);
+        let full_config = crate::vector_index::types::VectorIndexFullConfig::new(config.clone());
+        let file_filter = FileFilter::new(&full_config);
 
         Ok(Self {
             config,

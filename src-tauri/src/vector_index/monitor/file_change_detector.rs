@@ -110,7 +110,8 @@ pub struct FileChangeDetector {
 impl FileChangeDetector {
     /// 创建新的文件变化检测器
     pub fn new(config: VectorIndexConfig, debounce_config: Option<DebounceConfig>) -> Self {
-        let file_filter = FileFilter::new(&config);
+        let full_config = crate::vector_index::types::VectorIndexFullConfig::new(config);
+        let file_filter = FileFilter::new(&full_config);
 
         Self {
             debounce_config: debounce_config.unwrap_or_default(),

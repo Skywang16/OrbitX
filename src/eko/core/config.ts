@@ -36,7 +36,7 @@ export const getEkoLLMsConfig = async (selectedModelId?: string | null): Promise
     const models = await aiApi.getModels()
 
     if (models.length === 0) {
-      console.warn('⚠️ 没有配置AI模型，Eko功能将不可用。请在设置中添加AI模型配置。')
+      console.warn('没有配置AI模型，Eko功能将不可用。请在设置中添加AI模型配置。')
       return null
     }
 

@@ -21,7 +21,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::vector_index::types::VectorIndexConfig;
+use crate::vector_index::types::VectorIndexFullConfig;
 
 /// 文件过滤器
 pub struct FileFilter {
@@ -35,16 +35,16 @@ pub struct FileFilter {
 
 impl FileFilter {
     /// 创建新的文件过滤器
-    pub fn new(config: &VectorIndexConfig) -> Self {
+    pub fn new(config: &VectorIndexFullConfig) -> Self {
         let supported_extensions: HashSet<String> = config
-            .supported_extensions
+            .supported_extensions()
             .iter()
             .map(|ext| ext.trim_start_matches('.').to_lowercase())
             .collect();
 
         Self {
             supported_extensions,
-            ignore_patterns: config.ignore_patterns.clone(),
+            ignore_patterns: config.ignore_patterns().to_vec(),
             max_file_size: 5 * 1024 * 1024, // 5MB
         }
     }
@@ -228,7 +228,7 @@ mod tests {
 
         // 创建小文件
         fs::write(&small_file, "small").await.unwrap();
-        
+
         // 创建大文件
         let large_content = "a".repeat(200);
         fs::write(&large_file, large_content).await.unwrap();

@@ -10,6 +10,9 @@ use std::collections::HashMap;
 // use std::time::Duration; // removed: using milliseconds (u64) instead
 
 /// 向量索引服务配置
+///
+/// 简化的配置结构，只包含用户需要配置的核心参数。
+/// 技术细节参数（如批处理大小、块大小等）由程序内部自动优化。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
@@ -23,26 +26,48 @@ pub struct VectorIndexConfig {
     /// 向量集合名称
     pub collection_name: String,
 
-    /// 向量维度大小
+    /// 关联的embedding模型ID
+    pub embedding_model_id: String,
+
+    /// 最大并发文件处理数量（性能调优参数）
+    #[serde(default = "default_max_concurrent_files")]
+    pub max_concurrent_files: usize,
+}
+
+/// 内部配置参数
+///
+/// 这些参数由程序内部控制，不暴露给用户配置界面。
+/// 根据模型类型、项目特征等自动优化。
+#[derive(Debug, Clone)]
+pub struct VectorIndexInternalConfig {
+    /// 向量维度大小（根据模型自动推断）
     pub vector_size: usize,
 
-    /// 批处理大小
+    /// 批处理大小（根据性能自动调整）
     pub batch_size: usize,
 
-    /// 支持的文件扩展名
+    /// 支持的文件扩展名（根据项目类型自动检测）
     pub supported_extensions: Vec<String>,
 
-    /// 忽略的文件模式（glob patterns）
+    /// 忽略的文件模式（遵循.gitignore规则）
     pub ignore_patterns: Vec<String>,
 
-    /// 最大并发文件处理数量
-    pub max_concurrent_files: usize,
-
-    /// 代码块大小范围 [最小字符数, 最大字符数]
+    /// 代码块大小范围（根据语言特征优化）
     pub chunk_size_range: [usize; 2],
+}
 
-    /// 关联的embedding模型ID（可选）
-    pub embedding_model_id: Option<String>,
+/// 完整的向量索引配置（用户配置 + 内部配置）
+#[derive(Debug, Clone)]
+pub struct VectorIndexFullConfig {
+    /// 用户配置部分
+    pub user_config: VectorIndexConfig,
+    /// 内部配置部分
+    pub internal_config: VectorIndexInternalConfig,
+}
+
+// 默认值函数
+fn default_max_concurrent_files() -> usize {
+    4
 }
 
 impl Default for VectorIndexConfig {
@@ -51,6 +76,15 @@ impl Default for VectorIndexConfig {
             qdrant_url: "http://localhost:6333".to_string(),
             qdrant_api_key: None,
             collection_name: "orbitx-code-vectors".to_string(),
+            embedding_model_id: "text-embedding-3-small".to_string(),
+            max_concurrent_files: default_max_concurrent_files(),
+        }
+    }
+}
+
+impl Default for VectorIndexInternalConfig {
+    fn default() -> Self {
+        Self {
             vector_size: crate::vector_index::constants::DEFAULT_VECTOR_SIZE,
             batch_size: crate::vector_index::constants::DEFAULT_BATCH_SIZE,
             supported_extensions: vec![
@@ -76,10 +110,75 @@ impl Default for VectorIndexConfig {
                 "**/.vscode/**".to_string(),
                 "**/.idea/**".to_string(),
             ],
-            max_concurrent_files: 4,
             chunk_size_range: [10, 2000],
-            embedding_model_id: None,
         }
+    }
+}
+
+impl VectorIndexFullConfig {
+    /// 创建新的完整配置
+    pub fn new(user_config: VectorIndexConfig) -> Self {
+        Self {
+            user_config,
+            internal_config: VectorIndexInternalConfig::default(),
+        }
+    }
+
+    /// 根据用户配置和模型信息创建优化的完整配置
+    pub fn from_user_config_with_model_info(
+        user_config: VectorIndexConfig,
+        model_name: &str,
+    ) -> Self {
+        let mut internal_config = VectorIndexInternalConfig::default();
+
+        // 根据模型名称推断向量维度
+        internal_config.vector_size = infer_vector_size_from_model(model_name);
+
+        Self {
+            user_config,
+            internal_config,
+        }
+    }
+
+    /// 获取向量维度大小
+    pub fn vector_size(&self) -> usize {
+        self.internal_config.vector_size
+    }
+
+    /// 获取批处理大小
+    pub fn batch_size(&self) -> usize {
+        self.internal_config.batch_size
+    }
+
+    /// 获取支持的文件扩展名
+    pub fn supported_extensions(&self) -> &[String] {
+        &self.internal_config.supported_extensions
+    }
+
+    /// 获取忽略模式
+    pub fn ignore_patterns(&self) -> &[String] {
+        &self.internal_config.ignore_patterns
+    }
+
+    /// 获取代码块大小范围
+    pub fn chunk_size_range(&self) -> [usize; 2] {
+        self.internal_config.chunk_size_range
+    }
+}
+
+/// 根据模型名称推断向量维度
+fn infer_vector_size_from_model(model_name: &str) -> usize {
+    let model_lower = model_name.to_lowercase();
+
+    if model_lower.contains("text-embedding-3-large") {
+        3072
+    } else if model_lower.contains("text-embedding-3-small")
+        || model_lower.contains("text-embedding-ada-002")
+    {
+        1536
+    } else {
+        // 默认维度
+        1536
     }
 }
 

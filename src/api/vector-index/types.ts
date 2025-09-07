@@ -8,13 +8,8 @@ export interface VectorIndexConfig {
   qdrantUrl: string
   qdrantApiKey: string | null
   collectionName: string
-  vectorSize: number
-  batchSize: number
-  maxConcurrentFiles: number
-  chunkSizeRange: [number, number]
-  supportedExtensions: string[]
-  ignorePatterns: string[]
-  embeddingModelId?: string // 新增：关联的embedding模型ID
+  embeddingModelId: string // 必需：关联的embedding模型ID
+  maxConcurrentFiles: number // 性能调优参数
 }
 
 export interface VectorIndexStatus {

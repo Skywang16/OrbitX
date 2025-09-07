@@ -162,26 +162,27 @@ pub async fn init_vector_index<R: Runtime>(
             !config.collection_name.trim().is_empty(),
             "集合名称不能为空"
         );
-        ensure!(config.vector_size > 0, "向量维度必须大于0");
-        ensure!(config.batch_size > 0, "批处理大小必须大于0");
+        ensure!(
+            !config.embedding_model_id.trim().is_empty(),
+            "Embedding模型ID不能为空"
+        );
+        ensure!(
+            config.max_concurrent_files > 0,
+            "最大并发文件数必须大于0"
+        );
+        
         // 获取embedding模型配置
-        let embedding_model = if let Some(model_id) = &config.embedding_model_id {
-            // 从AI模型管理器获取模型配置
-            let models = ai_state.ai_service.get_models().await;
-            let embedding_model_config = models
-                .iter()
-                .find(|m| m.id == *model_id && m.model_type == crate::ai::types::ModelType::Embedding)
-                .ok_or_else(|| anyhow::anyhow!("找不到指定的embedding模型: {}", model_id))?;
-            
-            embedding_model_config.model.clone()
-        } else {
-            // 使用默认模型
-            "text-embedding-3-small".to_string()
-        };
+        let models = ai_state.ai_service.get_models().await;
+        let embedding_model_config = models
+            .iter()
+            .find(|m| m.id == config.embedding_model_id && m.model_type == crate::ai::types::ModelType::Embedding)
+            .ok_or_else(|| anyhow::anyhow!("找不到指定的embedding模型: {}", config.embedding_model_id))?;
+        
+        let embedding_model = embedding_model_config.model.clone();
 
         debug!(
-            "配置验证通过: qdrant_url={}, collection_name={}, vector_size={}, embedding_model={}",
-            config.qdrant_url, config.collection_name, config.vector_size, embedding_model
+            "配置验证通过: qdrant_url={}, collection_name={}, embedding_model={}, max_concurrent_files={}",
+            config.qdrant_url, config.collection_name, embedding_model, config.max_concurrent_files
         );
 
         // 2. 获取LLM服务
@@ -501,7 +502,8 @@ pub async fn test_qdrant_connection(config: VectorIndexConfig) -> TauriResult<St
         );
 
         // 2. 创建临时的Qdrant客户端进行测试
-        let qdrant_client = crate::vector_index::qdrant::QdrantClientImpl::new(config.clone())
+        let full_config = crate::vector_index::types::VectorIndexFullConfig::new(config.clone());
+        let qdrant_client = crate::vector_index::qdrant::QdrantClientImpl::new(full_config)
             .await
             .context("创建Qdrant客户端失败")?;
 
@@ -740,18 +742,35 @@ pub async fn get_file_monitoring_status(
 
 /// 获取向量索引配置
 ///
-/// 返回当前的向量索引配置信息，用于前端配置页面显示。
+/// 从数据库加载向量索引配置信息，用于前端配置页面显示。
+/// 如果配置不存在，返回默认配置。
+///
+/// # 参数
+///
+/// - `storage_state`: 存储系统状态，用于访问数据库
 ///
 /// # 返回
 ///
 /// 返回VectorIndexConfig结构，包含所有配置参数
 #[tauri::command]
-pub async fn get_vector_index_config() -> TauriResult<VectorIndexConfig> {
+pub async fn get_vector_index_config(
+    storage_state: State<'_, crate::storage::coordinator::StorageCoordinator>,
+) -> TauriResult<VectorIndexConfig> {
     let result: Result<VectorIndexConfig> = async {
-        // 返回默认配置，实际应该从配置文件读取
-        // TODO: 集成到现有配置系统中
-        let config = VectorIndexConfig::default();
-        debug!("获取向量索引配置: {:?}", config);
+        debug!("获取向量索引配置");
+
+        // 1. 创建配置服务
+        let config_service = crate::vector_index::VectorIndexConfigService::new(
+            storage_state.repositories()
+        );
+
+        // 2. 加载配置或使用默认配置
+        let config = config_service
+            .get_config_or_default()
+            .await
+            .context("获取向量索引配置失败")?;
+
+        debug!("向量索引配置获取成功");
         Ok(config)
     }
     .await;
@@ -761,11 +780,13 @@ pub async fn get_vector_index_config() -> TauriResult<VectorIndexConfig> {
 
 /// 保存向量索引配置
 ///
-/// 将向量索引配置保存到配置文件中，供后续使用。
+/// 验证并保存向量索引配置到数据库中。
+/// 配置包括Qdrant连接信息、embedding模型选择和性能参数。
 ///
 /// # 参数
 ///
 /// - `config`: 要保存的向量索引配置
+/// - `storage_state`: 存储系统状态，用于访问数据库
 ///
 /// # 返回
 ///
@@ -774,28 +795,27 @@ pub async fn get_vector_index_config() -> TauriResult<VectorIndexConfig> {
 /// # 错误
 ///
 /// - 配置参数验证失败
-/// - 配置文件写入失败
+/// - 数据库保存失败
 #[tauri::command]
-pub async fn save_vector_index_config(config: VectorIndexConfig) -> TauriResult<String> {
+pub async fn save_vector_index_config(
+    config: VectorIndexConfig,
+    storage_state: State<'_, crate::storage::coordinator::StorageCoordinator>,
+) -> TauriResult<String> {
     let result: Result<String> = async {
         info!("保存向量索引配置");
 
-        // 1. 配置验证
-        ensure!(
-            !config.qdrant_url.trim().is_empty(),
-            "Qdrant数据库URL不能为空"
+        // 1. 创建配置服务
+        let config_service = crate::vector_index::VectorIndexConfigService::new(
+            storage_state.repositories()
         );
-        ensure!(
-            !config.collection_name.trim().is_empty(),
-            "集合名称不能为空"
-        );
-        ensure!(config.vector_size > 0, "向量维度必须大于0");
-        ensure!(config.batch_size > 0, "批处理大小必须大于0");
 
-        // TODO: 实际保存到配置文件中
-        // 这里应该集成到现有的配置管理系统中
-        debug!("向量索引配置验证通过，准备保存: {:?}", config);
+        // 2. 保存配置（包含验证逻辑）
+        config_service
+            .save_config(&config)
+            .await
+            .context("保存向量索引配置失败")?;
 
+        info!("向量索引配置保存成功");
         Ok("向量索引配置保存成功".to_string())
     }
     .await;
