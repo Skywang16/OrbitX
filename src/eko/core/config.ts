@@ -30,13 +30,14 @@ export const convertToEkoLLMConfig = (modelConfig: AIModelConfig) => {
 /**
  * 获取当前选中的模型配置并转换为Eko LLMs格式
  */
-export const getEkoLLMsConfig = async (selectedModelId?: string | null): Promise<LLMs> => {
+export const getEkoLLMsConfig = async (selectedModelId?: string | null): Promise<LLMs | null> => {
   try {
     // 获取所有模型配置
     const models = await aiApi.getModels()
 
     if (models.length === 0) {
-      throw new Error('No AI models configured. Please add model configuration in settings first.')
+      console.warn('⚠️ 没有配置AI模型，Eko功能将不可用。请在设置中添加AI模型配置。')
+      return null
     }
 
     // 根据用户选择的模型ID确定默认模型
@@ -63,7 +64,7 @@ export const getEkoLLMsConfig = async (selectedModelId?: string | null): Promise
     return llms
   } catch (error) {
     console.error('获取Eko LLMs配置失败:', error)
-    throw error
+    return null
   }
 }
 
@@ -110,6 +111,17 @@ export const getEkoConfig = async (options: EkoConfigOptions = {}) => {
     // 获取LLM配置，传递选中的模型ID
     const llms = await getEkoLLMsConfig(selectedModelId)
 
+    if (!llms) {
+      // 如果没有AI模型配置，返回一个最小的配置，让应用能够启动
+      return {
+        llms: null,
+        debug,
+        maxRetries,
+        timeout,
+        planLlms: [],
+      }
+    }
+
     return {
       llms,
       debug,
@@ -119,6 +131,13 @@ export const getEkoConfig = async (options: EkoConfigOptions = {}) => {
     }
   } catch (error) {
     console.error('获取Eko配置失败:', error)
-    throw error
+    // 即使出错也返回一个最小配置，而不是抛出异常
+    return {
+      llms: null,
+      debug,
+      maxRetries,
+      timeout,
+      planLlms: [],
+    }
   }
 }

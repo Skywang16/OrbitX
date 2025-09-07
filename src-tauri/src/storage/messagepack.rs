@@ -300,7 +300,6 @@ impl MessagePackManager {
 
         // 尝试从最新的备份开始恢复
         for (backup_path, _) in backups {
-
             match async_fs::read(&backup_path).await {
                 Ok(data) => match self.deserialize_state(&data) {
                     Ok(state) => return Ok(Some(state)),

@@ -1,6 +1,6 @@
 /*!
  * 测试数据构建器
- * 
+ *
  * 提供流式API来构建测试数据，减少重复的测试数据创建代码
  */
 
@@ -310,11 +310,11 @@ impl TestDataBuilder {
         let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 \t"
             .chars()
             .collect();
-        
+
         let content: String = (0..size)
             .map(|_| chars[rng.gen_range(0..chars.len())])
             .collect();
-        
+
         self.content = content;
         self.size = size;
         self
@@ -385,15 +385,24 @@ impl PerformanceTestBuilder {
     }
 
     pub fn quick() -> Self {
-        Self::new().iterations(10).warmup(2).timeout(Duration::from_secs(5))
+        Self::new()
+            .iterations(10)
+            .warmup(2)
+            .timeout(Duration::from_secs(5))
     }
 
     pub fn standard() -> Self {
-        Self::new().iterations(100).warmup(10).timeout(Duration::from_secs(30))
+        Self::new()
+            .iterations(100)
+            .warmup(10)
+            .timeout(Duration::from_secs(30))
     }
 
     pub fn intensive() -> Self {
-        Self::new().iterations(1000).warmup(50).timeout(Duration::from_secs(300))
+        Self::new()
+            .iterations(1000)
+            .warmup(50)
+            .timeout(Duration::from_secs(300))
     }
 }
 

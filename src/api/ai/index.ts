@@ -232,7 +232,16 @@ export class AiApi {
 
   async addModel(model: Omit<AIModelConfig, 'id'>): Promise<AIModelConfig> {
     try {
-      return await invoke<AIModelConfig>('add_ai_model', { config: model })
+      // 创建完整的模型配置，包含ID和时间戳
+      const fullModel: AIModelConfig = {
+        id: crypto.randomUUID(),
+        ...model,
+        enabled: model.enabled ?? true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+      const result = await invoke<AIModelConfig>('add_ai_model', { config: fullModel })
+      return result
     } catch (error) {
       throw new Error(handleError(error, 'Failed to add AI model'))
     }
@@ -278,6 +287,8 @@ export class AiApi {
       throw new Error(handleError(error, 'Failed to set user prefix prompt'))
     }
   }
+
+  // embedding模型相关方法已移除，统一使用AI模型接口通过modelType区分
 
   async getSettings(): Promise<AISettings> {
     try {
@@ -364,7 +375,7 @@ export class AiApi {
   }
 
   async updateMessageStatus(messageId: number, status?: string, duration?: number) {
-    return this.conversationAPI.updateMessageStatus(messageId, status as any, duration)
+    return this.conversationAPI.updateMessageStatus(messageId, status as unknown, duration)
   }
 
   async truncateConversation(conversationId: number, truncateAfterMessageId: number) {

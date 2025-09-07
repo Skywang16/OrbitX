@@ -9,12 +9,12 @@ export interface TemplateContext {
 
 export interface TemplateOptions {
   preserveUnresolved?: boolean // 是否保留未解析的占位符
-  throwOnMissing?: boolean     // 遇到缺失值时是否抛出错误
+  throwOnMissing?: boolean // 遇到缺失值时是否抛出错误
 }
 
 export class EkoTemplateEngine {
   private static instance: EkoTemplateEngine
-  
+
   /**
    * 获取单例实例
    */
@@ -36,20 +36,20 @@ export class EkoTemplateEngine {
 
     return template.replace(/\{([^}]+)\}/g, (match, key) => {
       const trimmedKey = key.trim()
-      
+
       try {
         // 支持点号嵌套访问
         const value = this.getNestedValue(context, trimmedKey)
-        
+
         if (value !== undefined && value !== null) {
           return typeof value === 'string' ? value : JSON.stringify(value)
         }
-        
+
         // 处理缺失值
         if (throwOnMissing) {
           throw new Error(`Template placeholder '${trimmedKey}' not found in context`)
         }
-        
+
         // 如果未找到且允许保留，则保留占位符
         return preserveUnresolved ? match : ''
       } catch (error) {
@@ -68,12 +68,12 @@ export class EkoTemplateEngine {
    */
   private getNestedValue(obj: any, path: string): any {
     if (!path) return undefined
-    
+
     return path.split('.').reduce((current, key) => {
       if (current === null || current === undefined) {
         return undefined
       }
-      
+
       // 处理数组索引访问，如 items[0]
       const arrayMatch = key.match(/^(\w+)\[(\d+)\]$/)
       if (arrayMatch) {
@@ -81,7 +81,7 @@ export class EkoTemplateEngine {
         const array = current[arrayKey]
         return Array.isArray(array) ? array[parseInt(index, 10)] : undefined
       }
-      
+
       return current[key]
     }, obj)
   }
@@ -93,14 +93,14 @@ export class EkoTemplateEngine {
    */
   validate(template: string, requiredPlaceholders: string[]): string[] {
     const missingPlaceholders: string[] = []
-    
+
     for (const placeholder of requiredPlaceholders) {
       const regex = new RegExp(`\\{\\s*${this.escapeRegex(placeholder)}\\s*\\}`, 'g')
       if (!regex.test(template)) {
         missingPlaceholders.push(placeholder)
       }
     }
-    
+
     return missingPlaceholders
   }
 
@@ -112,14 +112,14 @@ export class EkoTemplateEngine {
     const placeholders: string[] = []
     const regex = /\{([^}]+)\}/g
     let match: RegExpExecArray | null
-    
+
     while ((match = regex.exec(template)) !== null) {
       const placeholder = match[1].trim()
       if (!placeholders.includes(placeholder)) {
         placeholders.push(placeholder)
       }
     }
-    
+
     return placeholders
   }
 
@@ -137,16 +137,16 @@ export class EkoTemplateEngine {
    * @param options 解析选项
    */
   resolveMultiple(
-    templates: Record<string, string>, 
-    context: TemplateContext, 
+    templates: Record<string, string>,
+    context: TemplateContext,
     options: TemplateOptions = {}
   ): Record<string, string> {
     const result: Record<string, string> = {}
-    
+
     for (const [key, template] of Object.entries(templates)) {
       result[key] = this.resolve(template, context, options)
     }
-    
+
     return result
   }
 
@@ -173,11 +173,7 @@ export class EkoTemplateEngine {
 /**
  * 便捷函数：快速解析模板
  */
-export function resolveTemplate(
-  template: string, 
-  context: TemplateContext, 
-  options?: TemplateOptions
-): string {
+export function resolveTemplate(template: string, context: TemplateContext, options?: TemplateOptions): string {
   return EkoTemplateEngine.getInstance().resolve(template, context, options)
 }
 

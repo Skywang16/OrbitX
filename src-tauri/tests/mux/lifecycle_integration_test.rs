@@ -274,7 +274,8 @@ mod integration_tests {
 
         // 订阅所有事件并记录
         let _subscriber_id = mux.subscribe(move |notification| {
-            let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
+            let (event_name, payload) =
+                TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
             let payload_str = serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string());
             events_clone
                 .lock()

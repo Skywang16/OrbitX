@@ -67,9 +67,7 @@ impl OutputAnalyzer {
     }
 
     /// 安全获取缓冲区锁，处理中毒情况
-    fn get_buffer_lock(
-        &self,
-    ) -> Result<std::sync::MutexGuard<'_, HashMap<u32, PaneBufferEntry>>> {
+    fn get_buffer_lock(&self) -> Result<std::sync::MutexGuard<'_, HashMap<u32, PaneBufferEntry>>> {
         match self.output_buffer.lock() {
             Ok(guard) => Ok(guard),
             Err(poisoned) => {
@@ -80,9 +78,7 @@ impl OutputAnalyzer {
     }
 
     /// 安全获取上下文提供者锁，处理中毒情况
-    fn get_context_provider_lock(
-        &self,
-    ) -> Result<std::sync::MutexGuard<'_, ContextAwareProvider>> {
+    fn get_context_provider_lock(&self) -> Result<std::sync::MutexGuard<'_, ContextAwareProvider>> {
         match self.context_provider.lock() {
             Ok(guard) => Ok(guard),
             Err(poisoned) => {

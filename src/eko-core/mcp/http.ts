@@ -116,14 +116,17 @@ export class SimpleHttpMcpClient implements IMcpClient {
       }
       const contentType =
         response.headers.get('Content-Type') || response.headers.get('content-type') || 'application/json'
-      if (contentType?.includes('text/event-stream')) {
+      if (typeof contentType === 'string' && contentType.includes('text/event-stream')) {
         // SSE
-        const reader = response.body?.getReader() as ReadableStreamDefaultReader
+        if (!response.body) {
+          throw new Error('Readable stream is not supported by the environment')
+        }
+        const reader = response.body.getReader() as ReadableStreamDefaultReader
         let str = ''
         let message: any
         const decoder = new TextDecoder()
         while (true) {
-          const { value, done } = await reader?.read()
+          const { value, done } = await reader.read()
           if (done) {
             break
           }

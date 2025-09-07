@@ -13,6 +13,8 @@ export interface ToolExecution {
 
 export type AIProvider = 'openai' | 'anthropic' | 'gemini' | 'qwen' | 'custom'
 
+export type ModelType = 'chat' | 'embedding'
+
 export interface AIModelConfig {
   id: string
   name: string
@@ -20,12 +22,16 @@ export interface AIModelConfig {
   apiUrl: string
   apiKey: string
   model: string
+  modelType: ModelType
+  enabled?: boolean
   options?: {
     maxTokens?: number
     temperature?: number
     timeout?: number
     customConfig?: string
   }
+  createdAt?: Date
+  updatedAt?: Date
 }
 
 export interface AIResponse {

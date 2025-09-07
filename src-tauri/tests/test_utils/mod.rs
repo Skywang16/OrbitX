@@ -1,6 +1,6 @@
 /*!
  * 统一测试工具库
- * 
+ *
  * 提供跨所有测试模块的通用工具、宏和辅助函数
  * 减少重复代码，提高测试的维护性
  */
@@ -132,7 +132,8 @@ macro_rules! retry_async_test {
 #[macro_export]
 macro_rules! with_timeout {
     ($duration:expr, $test_fn:expr) => {{
-        tokio::time::timeout($duration, $test_fn).await
+        tokio::time::timeout($duration, $test_fn)
+            .await
             .map_err(|_| format!("测试超时: {:?}", $duration))
     }};
 }
@@ -143,12 +144,10 @@ macro_rules! concurrent_test {
     ($test_fn:expr, $count:expr) => {{
         let mut handles = Vec::new();
         for i in 0..$count {
-            let handle = tokio::spawn(async move {
-                $test_fn(i).await
-            });
+            let handle = tokio::spawn(async move { $test_fn(i).await });
             handles.push(handle);
         }
-        
+
         let mut results = Vec::new();
         for handle in handles {
             results.push(handle.await.unwrap());
@@ -167,12 +166,12 @@ macro_rules! benchmark_test {
         }
         let duration = start.elapsed();
         let avg_duration = duration / $iterations;
-        
+
         println!("基准测试结果:");
         println!("  总时间: {:?}", duration);
         println!("  迭代次数: {}", $iterations);
         println!("  平均时间: {:?}", avg_duration);
-        
+
         (duration, avg_duration)
     }};
 }
@@ -187,12 +186,12 @@ macro_rules! benchmark_async_test {
         }
         let duration = start.elapsed();
         let avg_duration = duration / $iterations;
-        
+
         println!("异步基准测试结果:");
         println!("  总时间: {:?}", duration);
         println!("  迭代次数: {}", $iterations);
         println!("  平均时间: {:?}", avg_duration);
-        
+
         (duration, avg_duration)
     }};
 }
@@ -204,7 +203,7 @@ macro_rules! memory_test {
         #[cfg(target_os = "linux")]
         {
             use std::fs;
-            
+
             let get_memory_usage = || -> Result<usize, Box<dyn std::error::Error>> {
                 let status = fs::read_to_string("/proc/self/status")?;
                 for line in status.lines() {
@@ -217,20 +216,20 @@ macro_rules! memory_test {
                 }
                 Err("无法找到内存使用信息".into())
             };
-            
+
             let memory_before = get_memory_usage().unwrap_or(0);
             let result = $test_fn();
             let memory_after = get_memory_usage().unwrap_or(0);
-            
+
             let memory_diff = memory_after.saturating_sub(memory_before);
             println!("内存使用测试结果:");
             println!("  测试前: {} bytes", memory_before);
             println!("  测试后: {} bytes", memory_after);
             println!("  内存增长: {} bytes", memory_diff);
-            
+
             (result, memory_diff)
         }
-        
+
         #[cfg(not(target_os = "linux"))]
         {
             println!("内存测试仅在Linux上支持");
@@ -245,7 +244,7 @@ macro_rules! test_group {
     ($group_name:expr, { $($test_name:ident: $test_fn:expr),* $(,)? }) => {
         mod $group_name {
             use super::*;
-            
+
             $(
                 #[tokio::test]
                 async fn $test_name() {
@@ -275,23 +274,23 @@ macro_rules! platform_test {
     (unix: $test_fn:expr) => {
         #[cfg(unix)]
         $test_fn();
-        
+
         #[cfg(not(unix))]
         println!("跳过Unix特定测试");
     };
-    
+
     (windows: $test_fn:expr) => {
         #[cfg(windows)]
         $test_fn();
-        
+
         #[cfg(not(windows))]
         println!("跳过Windows特定测试");
     };
-    
+
     (macos: $test_fn:expr) => {
         #[cfg(target_os = "macos")]
         $test_fn();
-        
+
         #[cfg(not(target_os = "macos"))]
         println!("跳过macOS特定测试");
     };

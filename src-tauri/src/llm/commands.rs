@@ -42,11 +42,7 @@ pub async fn llm_call_stream(
 ) -> Result<(), String> {
     tracing::debug!("Starting stream call for model: {}", request.model);
 
-    let mut stream = state
-        .service
-        .call_stream(request)
-        .await
-        .to_tauri()?;
+    let mut stream = state.service.call_stream(request).await.to_tauri()?;
 
     tracing::debug!("Stream created successfully, starting to read chunks");
     let mut chunk_count = 0;
@@ -85,11 +81,7 @@ pub async fn llm_call_stream(
 pub async fn llm_get_available_models(
     state: State<'_, LLMManagerState>,
 ) -> Result<Vec<String>, String> {
-    state
-        .service
-        .get_available_models()
-        .await
-        .to_tauri()
+    state.service.get_available_models().await.to_tauri()
 }
 
 /// 测试模型连接

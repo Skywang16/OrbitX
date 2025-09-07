@@ -124,7 +124,7 @@ impl Default for BufferConfig {
 impl Default for ShellSystemConfig {
     fn default() -> Self {
         Self {
-            cache_ttl_seconds: 300, // 5分钟
+            cache_ttl_seconds: 300,      // 5分钟
             max_cache_age_seconds: 3600, // 1小时
             default_paths: DefaultShellPaths::default(),
         }
@@ -166,9 +166,9 @@ impl Default for TimeoutConfig {
     fn default() -> Self {
         Self {
             command_execution_ms: 30_000, // 30秒
-            connection_ms: 5_000, // 5秒
-            read_ms: 10_000, // 10秒
-            write_ms: 5_000, // 5秒
+            connection_ms: 5_000,         // 5秒
+            read_ms: 10_000,              // 10秒
+            write_ms: 5_000,              // 5秒
         }
     }
 }
@@ -176,7 +176,7 @@ impl Default for TimeoutConfig {
 impl Default for CleanupConfig {
     fn default() -> Self {
         Self {
-            interval_seconds: 300, // 5分钟
+            interval_seconds: 300,         // 5分钟
             stale_threshold_seconds: 1800, // 30分钟
             auto_cleanup_enabled: true,
         }
@@ -188,10 +188,10 @@ impl TerminalSystemConfig {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
         let path = path.as_ref();
         debug!("从文件加载配置: {:?}", path);
-        
+
         let content = std::fs::read_to_string(path)?;
         let config: Self = toml::from_str(&content)?;
-        
+
         info!("配置加载成功: {:?}", path);
         Ok(config)
     }
@@ -200,14 +200,14 @@ impl TerminalSystemConfig {
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<dyn std::error::Error>> {
         let path = path.as_ref();
         debug!("保存配置到文件: {:?}", path);
-        
+
         let content = toml::to_string_pretty(self)?;
-        
+
         // 确保目录存在
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         std::fs::write(path, content)?;
         info!("配置保存成功: {:?}", path);
         Ok(())
@@ -216,7 +216,7 @@ impl TerminalSystemConfig {
     /// 从环境变量覆盖配置
     pub fn override_from_env(&mut self) {
         debug!("从环境变量覆盖配置");
-        
+
         // 缓冲区配置
         if let Ok(val) = std::env::var("TERMINAL_BUFFER_MAX_SIZE") {
             if let Ok(size) = val.parse::<usize>() {
@@ -224,14 +224,14 @@ impl TerminalSystemConfig {
                 debug!("从环境变量设置 buffer.max_size = {}", size);
             }
         }
-        
+
         if let Ok(val) = std::env::var("TERMINAL_BUFFER_KEEP_SIZE") {
             if let Ok(size) = val.parse::<usize>() {
                 self.buffer.keep_size = size;
                 debug!("从环境变量设置 buffer.keep_size = {}", size);
             }
         }
-        
+
         // Shell配置
         if let Ok(val) = std::env::var("TERMINAL_SHELL_CACHE_TTL") {
             if let Ok(ttl) = val.parse::<u64>() {
@@ -239,7 +239,7 @@ impl TerminalSystemConfig {
                 debug!("从环境变量设置 shell.cache_ttl_seconds = {}", ttl);
             }
         }
-        
+
         // 清理配置
         if let Ok(val) = std::env::var("TERMINAL_CLEANUP_INTERVAL") {
             if let Ok(interval) = val.parse::<u64>() {
@@ -247,7 +247,7 @@ impl TerminalSystemConfig {
                 debug!("从环境变量设置 cleanup.interval_seconds = {}", interval);
             }
         }
-        
+
         if let Ok(val) = std::env::var("TERMINAL_AUTO_CLEANUP") {
             if let Ok(enabled) = val.parse::<bool>() {
                 self.cleanup.auto_cleanup_enabled = enabled;
@@ -262,34 +262,34 @@ impl TerminalSystemConfig {
         if self.buffer.max_size == 0 {
             return Err("buffer.max_size 不能为0".to_string());
         }
-        
+
         if self.buffer.keep_size >= self.buffer.max_size {
             return Err("buffer.keep_size 必须小于 buffer.max_size".to_string());
         }
-        
+
         if self.buffer.max_truncation_attempts == 0 {
             return Err("buffer.max_truncation_attempts 不能为0".to_string());
         }
-        
+
         // 验证Shell配置
         if self.shell.cache_ttl_seconds == 0 {
             return Err("shell.cache_ttl_seconds 不能为0".to_string());
         }
-        
+
         // 验证性能配置
         if self.performance.max_concurrent_connections == 0 {
             return Err("performance.max_concurrent_connections 不能为0".to_string());
         }
-        
+
         // 验证清理配置
         if self.cleanup.interval_seconds == 0 {
             return Err("cleanup.interval_seconds 不能为0".to_string());
         }
-        
+
         if self.cleanup.stale_threshold_seconds == 0 {
             return Err("cleanup.stale_threshold_seconds 不能为0".to_string());
         }
-        
+
         debug!("配置验证通过");
         Ok(())
     }
@@ -325,7 +325,8 @@ impl ConfigManager {
     /// 初始化全局配置
     pub fn init() -> Result<(), Box<dyn std::error::Error>> {
         let config = Self::load_config()?;
-        GLOBAL_CONFIG.set(Arc::new(Mutex::new(config)))
+        GLOBAL_CONFIG
+            .set(Arc::new(Mutex::new(config)))
             .map_err(|_| "配置管理器已经初始化")?;
         info!("配置管理器初始化成功");
         Ok(())
@@ -333,10 +334,12 @@ impl ConfigManager {
 
     /// 获取全局配置
     pub fn get() -> Arc<Mutex<TerminalSystemConfig>> {
-        GLOBAL_CONFIG.get_or_init(|| {
-            warn!("配置管理器未初始化，使用默认配置");
-            Arc::new(Mutex::new(TerminalSystemConfig::default()))
-        }).clone()
+        GLOBAL_CONFIG
+            .get_or_init(|| {
+                warn!("配置管理器未初始化，使用默认配置");
+                Arc::new(Mutex::new(TerminalSystemConfig::default()))
+            })
+            .clone()
     }
 
     /// 加载配置（按优先级：文件 -> 环境变量 -> 默认值）
@@ -379,8 +382,7 @@ impl ConfigManager {
     pub fn reload() -> Result<(), Box<dyn std::error::Error>> {
         let new_config = Self::load_config()?;
         let config_guard = Self::get();
-        let mut config = config_guard.lock()
-            .map_err(|_| "获取配置锁失败")?;
+        let mut config = config_guard.lock().map_err(|_| "获取配置锁失败")?;
         *config = new_config;
         info!("配置重新加载成功");
         Ok(())
@@ -389,8 +391,7 @@ impl ConfigManager {
     /// 保存当前配置到文件
     pub fn save_to_file<P: AsRef<Path>>(path: P) -> Result<(), Box<dyn std::error::Error>> {
         let config_guard = Self::get();
-        let config = config_guard.lock()
-            .map_err(|_| "获取配置锁失败")?;
+        let config = config_guard.lock().map_err(|_| "获取配置锁失败")?;
         config.save_to_file(path)?;
         Ok(())
     }
@@ -398,7 +399,8 @@ impl ConfigManager {
     /// 获取配置的只读副本
     pub fn get_config() -> TerminalSystemConfig {
         let config_guard = Self::get();
-        let config = config_guard.lock()
+        let config = config_guard
+            .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         config.clone()
     }
@@ -409,8 +411,7 @@ impl ConfigManager {
         F: FnOnce(&mut TerminalSystemConfig),
     {
         let config_guard = Self::get();
-        let mut config = config_guard.lock()
-            .map_err(|_| "获取配置锁失败")?;
+        let mut config = config_guard.lock().map_err(|_| "获取配置锁失败")?;
 
         updater(&mut config);
         config.validate()?;

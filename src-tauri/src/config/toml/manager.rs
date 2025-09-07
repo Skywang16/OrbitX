@@ -55,6 +55,25 @@ impl TomlConfigManager {
         Ok(manager)
     }
 
+    /// 创建用于测试的配置管理器
+    #[cfg(test)]
+    pub async fn new_for_test(config_path: std::path::PathBuf) -> AppResult<Self> {
+        let reader = TomlConfigReader::new_with_config_path(config_path.clone())?;
+        let writer = TomlConfigWriter::new(config_path);
+        let validator = TomlConfigValidator::new();
+        let event_sender = ConfigEventSender::new().0;
+
+        let manager = Self {
+            config_cache: Arc::new(RwLock::new(crate::config::defaults::create_default_config())),
+            reader,
+            writer,
+            validator,
+            event_sender,
+        };
+
+        Ok(manager)
+    }
+
     /// 从文件系统加载TOML配置
     pub async fn load_config(&self) -> AppResult<AppConfig> {
         let config = match self.reader.load_config().await {

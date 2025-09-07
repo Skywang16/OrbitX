@@ -84,7 +84,8 @@ impl AstParser {
         if !parser_return.errors.is_empty() {
             return Err(anyhow!(
                 "{}解析错误: {:?}",
-                error_prefix, parser_return.errors
+                error_prefix,
+                parser_return.errors
             ));
         }
 
@@ -101,8 +102,7 @@ impl AstParser {
     }
 
     fn analyze_rust_code(&self, content: &str, file_path: &str) -> Result<CodeAnalysis> {
-        let syntax_tree = syn::parse_file(content)
-            .with_context(|| "Rust代码解析失败")?;
+        let syntax_tree = syn::parse_file(content).with_context(|| "Rust代码解析失败")?;
 
         let mut visitor = RustSymbolVisitor::new(file_path);
         visitor.visit_file(&syntax_tree);

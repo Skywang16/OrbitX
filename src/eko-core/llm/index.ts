@@ -122,7 +122,7 @@ export class RetryLanguageModel {
     throw new LLMError(`All LLM providers failed. ${errorSummary}`, 'unknown', false, errors)
   }
 
-  async callStream(request: LLMRequest, optimized: boolean = false): Promise<StreamResult> {
+  async callStream(request: LLMRequest): Promise<StreamResult> {
     const errors: Array<{ modelName: string; error: LLMError; retryCount: number }> = []
     const availableModels = this.getAvailableModels()
 
@@ -144,18 +144,9 @@ export class RetryLanguageModel {
           const nativeRequest = this.buildNativeRequest(request, config)
           nativeRequest.stream = true // Ensure stream is enabled
 
-          // Use optimized stream processing if requested
-          const streamConfig = optimized
-            ? {
-                maxBufferSize: 1000,
-                backpressureThreshold: 800,
-                batchSize: 10,
-                flushInterval: 0, // Immediate processing for real-time streaming
-                enableMetrics: true,
-              }
-            : undefined
-
-          const stream = await this.nativeService.callStream(nativeRequest, streamConfig)
+          // callStream 目前仅接受 request 一个参数
+          // 如需未来支持优化参数，应在 NativeLLMRequest 或 NativeLLMService 内扩展
+          const stream = await this.nativeService.callStream(nativeRequest)
 
           // Reset failure count on success
           this.modelFailureCount.delete(name)

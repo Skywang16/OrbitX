@@ -142,3 +142,37 @@ pub struct LLMProviderConfig {
     pub options: Option<HashMap<String, serde_json::Value>>,
 }
 
+/// Embedding 请求参数
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingRequest {
+    /// 模型名称
+    pub model: String,
+    /// 输入文本列表
+    pub input: Vec<String>,
+    /// 编码格式（可选）
+    pub encoding_format: Option<String>,
+    /// 维度数量（可选，某些模型支持）
+    pub dimensions: Option<usize>,
+}
+
+/// Embedding 响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingResponse {
+    /// 向量数据
+    pub data: Vec<EmbeddingData>,
+    /// 模型名称
+    pub model: String,
+    /// 使用统计
+    pub usage: Option<LLMUsage>,
+}
+
+/// 单个embedding数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingData {
+    /// 向量表示
+    pub embedding: Vec<f32>,
+    /// 索引位置
+    pub index: usize,
+    /// 对象类型
+    pub object: String,
+}

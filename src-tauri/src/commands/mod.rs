@@ -202,6 +202,22 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::ai::tool::network::web_fetch_headless,
         crate::ai::tool::network::simple_web_fetch,
         // AST代码分析命令
-        crate::ai::tool::ast::commands::analyze_code
+        crate::ai::tool::ast::commands::analyze_code,
+        // 向量索引系统命令
+        crate::vector_index::commands::init_vector_index,
+        crate::vector_index::commands::build_code_index,
+        crate::vector_index::commands::search_code_vectors,
+        crate::vector_index::commands::test_qdrant_connection,
+        crate::vector_index::commands::get_vector_index_status,
+        // 向量索引配置命令
+        crate::vector_index::commands::get_vector_index_config,
+        crate::vector_index::commands::save_vector_index_config,
+        crate::vector_index::commands::get_current_workspace_path,
+        crate::vector_index::commands::cancel_build_index,
+        crate::vector_index::commands::clear_vector_index,
+        // 文件监控相关命令
+        crate::vector_index::commands::start_file_monitoring,
+        crate::vector_index::commands::stop_file_monitoring,
+        crate::vector_index::commands::get_file_monitoring_status
     ])
 }

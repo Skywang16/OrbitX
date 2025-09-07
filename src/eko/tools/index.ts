@@ -19,6 +19,7 @@
  *
  * 🔍 搜索工具：
  * - orbit-search: 🧠 智能语义搜索（融合文本搜索、AST分析、语义理解）
+ * - code-search: 🔍 代码向量搜索（基于语义相似度的代码片段搜索）
  *
  * 🔧 基础设施：
  * - tool-error: 错误处理和类型定义
@@ -48,6 +49,7 @@ export { webFetchTool } from './toolList/web-fetch'
 
 export { orbitSearchTool } from './toolList/orbit-search'
 export { grepSearchTool } from './toolList/grep-search'
+export { codeSearchTool } from './toolList/code-search'
 
 // 导出主要的工具集合
 export { allTools, readOnlyTools, registerAllTools, getToolsForMode } from './tools'

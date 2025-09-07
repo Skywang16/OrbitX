@@ -1,6 +1,6 @@
 /*!
  * TOML配置读取器
- * 
+ *
  * 负责从文件系统读取和解析TOML配置文件
  */
 
@@ -25,11 +25,19 @@ impl TomlConfigReader {
     pub fn new() -> AppResult<Self> {
         let paths = ConfigPaths::new()?;
         let config_path = paths.config_file();
-        
-        Ok(Self {
-            config_path,
-            paths,
-        })
+
+        Ok(Self { config_path, paths })
+    }
+
+    /// 创建指定配置路径的配置读取器（主要用于测试）
+    #[cfg(test)]
+    pub fn new_with_config_path(config_path: PathBuf) -> AppResult<Self> {
+        // 为测试创建一个虚拟的 ConfigPaths
+        let temp_dir = config_path.parent()
+            .ok_or_else(|| anyhow::anyhow!("配置文件路径无效"))?;
+        let paths = ConfigPaths::with_app_data_dir(temp_dir)?;
+
+        Ok(Self { config_path, paths })
     }
 
     /// 从文件系统加载TOML配置
@@ -57,7 +65,7 @@ impl TomlConfigReader {
             }
         } else {
             info!("配置文件不存在，尝试复制打包的配置文件");
-            
+
             // 尝试从资源文件复制配置
             match self.copy_bundled_config().await {
                 Ok(config) => {

@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
 use crate::llm::{
     providers::ProviderFactory,
     types::{
-        LLMProviderConfig, LLMProviderType, LLMRequest, LLMResponse, LLMStreamChunk,
+        EmbeddingRequest, EmbeddingResponse, LLMProviderConfig, LLMProviderType, LLMRequest,
+        LLMResponse, LLMStreamChunk,
     },
 };
 use crate::storage::repositories::RepositoryManager;
+use anyhow::{Context, Result};
 
 /// LLM 服务
 pub struct LLMService {
@@ -114,6 +115,39 @@ impl LLMService {
         );
         let stream = provider.call_stream(actual_request).await?;
         Ok(stream)
+    }
+
+    /// Embedding调用
+    pub async fn create_embeddings(&self, request: EmbeddingRequest) -> Result<EmbeddingResponse> {
+        let original_model_id = request.model.clone();
+        let config = self.get_provider_config(&request.model).await?;
+        let provider = ProviderFactory::create_provider(config.clone())?;
+
+        // 创建新的请求，使用真实的模型名称而不是数据库ID
+        let mut actual_request = request.clone();
+        actual_request.model = config.model.clone();
+
+        tracing::debug!(
+            "Making embedding call with model: {} (config: {})",
+            actual_request.model,
+            original_model_id
+        );
+
+        let result = provider.create_embeddings(actual_request).await;
+
+        match &result {
+            Ok(response) => {
+                tracing::debug!(
+                    "Embedding call successful, {} vectors generated",
+                    response.data.len()
+                );
+            }
+            Err(e) => {
+                tracing::error!("Embedding call failed: {}", e);
+            }
+        }
+
+        result
     }
 
     /// 获取可用的模型列表

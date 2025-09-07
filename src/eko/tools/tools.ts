@@ -17,6 +17,7 @@ import { webFetchTool } from './toolList/web-fetch'
 
 import { orbitSearchTool } from './toolList/orbit-search'
 import { grepSearchTool } from './toolList/grep-search'
+import { codeSearchTool } from './toolList/code-search'
 
 /**
  * Read-only tools - available in Chat mode
@@ -28,6 +29,7 @@ export const readOnlyTools: Tool[] = [
   webFetchTool,
   orbitSearchTool,
   grepSearchTool,
+  codeSearchTool,
 ]
 
 /**
@@ -43,6 +45,7 @@ export const allTools: Tool[] = [
   webFetchTool,
   orbitSearchTool,
   grepSearchTool,
+  codeSearchTool,
 ]
 
 /**
@@ -121,6 +124,14 @@ export function registerAllTools(): void {
         description: grepSearchTool.description,
         category: 'search',
         tags: ['search', 'grep', 'text', 'simple', 'direct', 'command'],
+      },
+    },
+    {
+      tool: codeSearchTool,
+      metadata: {
+        description: codeSearchTool.description,
+        category: 'search',
+        tags: ['search', 'vector', 'semantic', 'code', 'embedding', 'similarity'],
       },
     },
   ]

@@ -56,14 +56,49 @@ impl std::str::FromStr for AIProvider {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "OpenAI" => Ok(AIProvider::OpenAI),
-            "Claude" => Ok(AIProvider::Claude),
-            "Gemini" => Ok(AIProvider::Gemini),
-            "Qwen" => Ok(AIProvider::Qwen),
-            "Custom" => Ok(AIProvider::Custom),
+        match s.to_lowercase().as_str() {
+            "openai" => Ok(AIProvider::OpenAI),
+            "anthropic" | "claude" => Ok(AIProvider::Claude),
+            "gemini" => Ok(AIProvider::Gemini),
+            "qwen" => Ok(AIProvider::Qwen),
+            "custom" => Ok(AIProvider::Custom),
             _ => Err(anyhow!("Unknown AI provider: {}", s)),
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ModelType {
+    #[serde(rename = "chat")]
+    Chat,
+    #[serde(rename = "embedding")]
+    Embedding,
+}
+
+impl std::fmt::Display for ModelType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ModelType::Chat => write!(f, "chat"),
+            ModelType::Embedding => write!(f, "embedding"),
+        }
+    }
+}
+
+impl std::str::FromStr for ModelType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "chat" => Ok(ModelType::Chat),
+            "embedding" => Ok(ModelType::Embedding),
+            _ => Err(anyhow!("Unknown model type: {}", s)),
+        }
+    }
+}
+
+impl Default for ModelType {
+    fn default() -> Self {
+        ModelType::Chat
     }
 }
 
@@ -76,6 +111,8 @@ pub struct AIModelConfig {
     pub api_url: String,
     pub api_key: String,
     pub model: String,
+    #[serde(default)]
+    pub model_type: ModelType,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
     #[serde(default)]
@@ -102,6 +139,31 @@ impl AIModelConfig {
             api_url,
             api_key,
             model,
+            model_type: ModelType::Chat, // 默认为聊天模型
+            enabled: true,
+            options: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    pub fn with_model_type(
+        name: String,
+        provider: AIProvider,
+        api_url: String,
+        api_key: String,
+        model: String,
+        model_type: ModelType,
+    ) -> Self {
+        let now = Utc::now();
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            name,
+            provider,
+            api_url,
+            api_key,
+            model,
+            model_type,
             enabled: true,
             options: None,
             created_at: now,
@@ -114,6 +176,9 @@ impl RowMapper<AIModelConfig> for AIModelConfig {
     fn from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<Self> {
         let provider_str: String = row.try_get("provider")?;
         let provider = provider_str.parse()?;
+
+        let model_type_str: String = row.try_get("model_type")?;
+        let model_type = model_type_str.parse()?;
 
         let options = if let Some(config_json) = row.try_get::<Option<String>, _>("config_json")? {
             serde_json::from_str(&config_json).ok()
@@ -128,6 +193,7 @@ impl RowMapper<AIModelConfig> for AIModelConfig {
             api_url: row.try_get("api_url")?,
             api_key: String::new(), // 加密的API密钥需要单独解密
             model: row.try_get("model_name")?,
+            model_type,
             enabled: row.try_get("enabled")?,
             options,
             created_at: row.try_get("created_at")?,
@@ -158,6 +224,7 @@ impl AIModelRepository {
                 "api_url",
                 "api_key_encrypted",
                 "model_name",
+                "model_type", // 添加缺失的model_type字段
                 "enabled",
                 "config_json",
                 "created_at",
@@ -167,6 +234,7 @@ impl AIModelRepository {
                 "created_at".to_string(),
             ))
             .build()?;
+
 
         let mut query_builder = sqlx::query(&query);
         for param in params {
@@ -194,7 +262,13 @@ impl AIModelRepository {
         let mut models = Vec::new();
 
         for row in rows {
-            let mut model = AIModelConfig::from_row(&row)?;
+            let mut model = match AIModelConfig::from_row(&row) {
+                Ok(m) => m,
+                Err(e) => {
+                    error!("解析数据失败: {}", e);
+                    continue;
+                }
+            };
 
             // 解密API密钥
             if let Some(encrypted_base64) = row.try_get::<Option<String>, _>("api_key_encrypted")? {
@@ -216,12 +290,15 @@ impl AIModelRepository {
                             model.api_key = String::new();
                         }
                     }
+                } else {
+                    model.api_key = String::new();
                 }
+            } else {
+                model.api_key = String::new();
             }
 
             models.push(model);
         }
-
         Ok(models)
     }
 
@@ -259,6 +336,7 @@ impl AIModelRepository {
                     .unwrap_or(Value::Null),
             )
             .set("model_name", Value::String(model.model.clone()))
+            .set("model_type", Value::String(model.model_type.to_string()))
             .set("enabled", Value::Bool(model.enabled))
             .set(
                 "config_json",

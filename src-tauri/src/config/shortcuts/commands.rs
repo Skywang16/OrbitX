@@ -222,8 +222,7 @@ pub async fn export_shortcuts_config(
     let manager = state.manager.lock().await;
     let config = manager.get_config().await.to_tauri()?;
 
-    let json_config =
-        serde_json::to_string_pretty(&config)
+    let json_config = serde_json::to_string_pretty(&config)
         .context("序列化配置失败")
         .to_tauri()?;
 
@@ -238,8 +237,7 @@ pub async fn import_shortcuts_config(
 ) -> TauriResult<()> {
     debug!("导入快捷键配置");
 
-    let config: ShortcutsConfig =
-        serde_json::from_str(&config_json)
+    let config: ShortcutsConfig = serde_json::from_str(&config_json)
         .context("解析配置失败")
         .to_tauri()?;
 

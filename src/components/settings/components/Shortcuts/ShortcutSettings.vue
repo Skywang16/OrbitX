@@ -2,11 +2,6 @@
   <div class="settings-group">
     <h2 class="settings-section-title">{{ t('settings.shortcuts.title') }}</h2>
 
-    <div v-if="hasConflicts" class="settings-warning">
-      <span class="settings-warning-icon">⚠️</span>
-      <span>{{ t('shortcuts.conflicts', { count: conflictCount }) }}</span>
-    </div>
-
     <div v-if="loading" class="settings-loading">
       <div class="settings-loading-spinner"></div>
       <span>{{ t('shortcuts.loading') }}</span>
@@ -230,6 +225,10 @@
     if (!store.initialized && !loading.value) {
       try {
         await initialize()
+        // 初始化后检查冲突并显示警告
+        if (hasConflicts.value) {
+          createMessage.warning(t('shortcuts.conflicts', { count: conflictCount.value }))
+        }
       } catch (err) {
         handleErrorWithMessage(err, t('shortcuts.init_failed'))
       }
@@ -322,23 +321,6 @@
     min-height: 28px; /* 与按键相同高度 */
     display: flex;
     align-items: center;
-  }
-
-  .settings-warning {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 16px;
-    background: var(--color-warning-alpha);
-    border: 1px solid var(--color-warning);
-    border-radius: var(--border-radius);
-    color: var(--color-warning-text);
-    margin-bottom: 16px;
-    font-size: 13px;
-  }
-
-  .settings-warning-icon {
-    font-size: 16px;
   }
 
   .settings-loading {

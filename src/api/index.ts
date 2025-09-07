@@ -11,6 +11,7 @@ export { shortcutsApi } from './shortcuts'
 export { completionApi } from './completion'
 export { windowApi } from './window'
 export { llmRegistryApi } from './llm-registry'
+export { vectorIndexApi } from './vector-index'
 
 export type { AiApi } from './ai'
 export type { ConfigApi } from './config'
@@ -23,6 +24,7 @@ export type { ShortcutsApi } from './shortcuts'
 export type { CompletionApi } from './completion'
 export type { WindowApi } from './window'
 export type { LLMRegistryApi } from './llm-registry'
+export type { VectorIndexApiType } from './vector-index'
 
 export type {
   AIModelConfig,

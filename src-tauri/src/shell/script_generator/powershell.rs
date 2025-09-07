@@ -143,7 +143,7 @@ mod tests {
     fn test_basic_powershell_script_generation() {
         let config = ShellIntegrationConfig::default();
         let script = generate_script(&config);
-        
+
         assert!(script.contains("# OrbitX Shell Integration for PowerShell"));
         assert!(script.contains("ORBITX_SHELL_INTEGRATION_LOADED"));
         assert!(script.contains("$env:"));
@@ -156,7 +156,7 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("__orbitx_preexec"));
         assert!(script.contains("__orbitx_postcmd"));
         assert!(script.contains("Register-EngineEvent"));
@@ -169,7 +169,7 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("__orbitx_update_cwd"));
         assert!(script.contains("Get-Location"));
     }
@@ -181,7 +181,7 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("__orbitx_update_title"));
         assert!(script.contains("WindowTitle"));
     }
@@ -190,13 +190,13 @@ mod tests {
     fn test_custom_env_vars() {
         let mut custom_vars = HashMap::new();
         custom_vars.insert("ORBITX_CUSTOM".to_string(), "test_value".to_string());
-        
+
         let config = ShellIntegrationConfig {
             custom_env_vars: custom_vars,
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("$env:ORBITX_CUSTOM = \"test_value\""));
     }
 }

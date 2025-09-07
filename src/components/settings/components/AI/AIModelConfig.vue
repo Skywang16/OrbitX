@@ -13,18 +13,19 @@
 
   const showAddForm = ref(false)
   const editingModel = ref<AIModelConfig | null>(null)
+  const defaultModelType = ref<'chat' | 'embedding'>('chat')
 
   const models = computed(() => aiSettingsStore.models)
   const loading = computed(() => aiSettingsStore.isLoading)
 
   onMounted(async () => {
-    if (!aiSettingsStore.isInitialized) {
-      await aiSettingsStore.loadSettings()
-    }
+    // 强制刷新模型列表
+    await aiSettingsStore.loadModels()
   })
 
-  const handleAddModel = () => {
+  const handleAddModel = (modelType: 'chat' | 'embedding' = 'chat') => {
     editingModel.value = null
+    defaultModelType.value = modelType
     showAddForm.value = true
   }
 
@@ -48,18 +49,24 @@
         await aiSettingsStore.updateModel(editingModel.value.id, modelData)
         createMessage.success(t('ai_model.update_success'))
       } else {
-        const newModel: AIModelConfig = {
+        // 添加新模型时，不需要手动生成ID，后端会处理
+        const newModelData = {
           ...modelData,
-          id: Date.now().toString(),
+          // 确保modelType正确设置
+          modelType: modelData.modelType || defaultModelType.value,
+          enabled: true,
         }
 
-        await aiSettingsStore.addModel(newModel)
+        await aiSettingsStore.addModel(newModelData as AIModelConfig)
+
         createMessage.success(t('ai_model.add_success'))
       }
       showAddForm.value = false
       editingModel.value = null
     } catch (error) {
-      createMessage.error(handleError(error, t('ai_model.operation_failed')))
+      console.error('模型操作失败:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      createMessage.error(handleError(error, `${t('ai_model.operation_failed')}: ${errorMessage}`))
     }
   }
 
@@ -77,9 +84,12 @@
         <div class="settings-label">{{ t('ai_model.add_new_model') }}</div>
         <div class="settings-description">{{ t('ai_model.add_model_description') }}</div>
       </div>
-      <div class="settings-item-control">
-        <x-button variant="primary" @click="handleAddModel">
-          {{ t('ai_model.add_model') }}
+      <div class="settings-item-control model-add-buttons">
+        <x-button variant="primary" @click="handleAddModel('chat')">
+          {{ t('ai_model.add_chat_model') }}
+        </x-button>
+        <x-button variant="primary" @click="handleAddModel('embedding')">
+          {{ t('ai_model.add_embedding_model') }}
         </x-button>
       </div>
     </div>
@@ -96,41 +106,117 @@
       </div>
     </div>
     <div v-else>
-      <div v-for="model in models" :key="model.id" class="settings-item">
-        <div class="settings-item-header">
-          <div class="settings-label">{{ model.name }}</div>
-          <div class="settings-description">{{ model.provider || t('ai_model.default_provider') }}</div>
-        </div>
-        <div class="settings-item-control">
-          <x-button variant="secondary" size="small" @click="handleEditModel(model)">
-            {{ t('ai_model.edit') }}
-          </x-button>
-          <x-popconfirm
-            :title="t('ai_model.delete_confirm')"
-            :description="t('ai_model.delete_description', { name: model.name })"
-            type="danger"
-            :confirm-text="t('ai_model.delete_confirm_text')"
-            :cancel-text="t('ai_model.cancel')"
-            placement="top"
-            @confirm="handleDeleteModel(model.id)"
-          >
-            <template #trigger>
-              <x-button variant="danger" size="small">
-                {{ t('ai_model.delete') }}
-              </x-button>
-            </template>
-          </x-popconfirm>
+      <!-- 统一的模型列表 -->
+      <div class="model-section">
+        <h4 class="model-section-title">{{ t('ai_model.all_models') }}</h4>
+        <div v-for="model in models" :key="model.id" class="settings-item">
+          <div class="settings-item-header">
+            <div class="model-info">
+              <div class="settings-label">
+                {{ model.name }}
+                <span class="model-type-tag" :class="model.modelType">
+                  {{ model.modelType === 'chat' ? t('ai_model.chat') : t('ai_model.embedding') }}
+                </span>
+              </div>
+              <div class="settings-description">{{ model.provider }}</div>
+            </div>
+          </div>
+          <div class="settings-item-control">
+            <x-button variant="secondary" size="small" @click="handleEditModel(model)">
+              {{ t('ai_model.edit') }}
+            </x-button>
+            <x-popconfirm
+              :title="t('ai_model.delete_confirm')"
+              :description="t('ai_model.delete_description', { name: model.name })"
+              type="danger"
+              :confirm-text="t('ai_model.delete_confirm_text')"
+              :cancel-text="t('ai_model.cancel')"
+              placement="top"
+              @confirm="handleDeleteModel(model.id)"
+            >
+              <template #trigger>
+                <x-button variant="danger" size="small">
+                  {{ t('ai_model.delete') }}
+                </x-button>
+              </template>
+            </x-popconfirm>
+          </div>
         </div>
       </div>
     </div>
 
-    <AIModelForm v-if="showAddForm" :model="editingModel" @submit="handleFormSubmit" @cancel="handleFormCancel" />
+    <AIModelForm
+      v-if="showAddForm"
+      :model="editingModel"
+      :defaultModelType="defaultModelType"
+      @submit="handleFormSubmit"
+      @cancel="handleFormCancel"
+    />
   </div>
 </template>
 
 <style scoped>
   .ai-model-config {
     width: 100%;
+  }
+
+  .model-section {
+    margin-bottom: 24px;
+  }
+
+  .model-section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-200);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-300);
+  }
+
+  .settings-item-control {
+    display: flex;
+    gap: 8px;
+  }
+
+  .model-add-buttons {
+    display: flex;
+    gap: 12px;
+  }
+
+  .model-add-buttons .x-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 100px;
+    justify-content: center;
+  }
+
+  .model-info {
+    flex: 1;
+  }
+
+  .model-type-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  .model-type-tag.chat {
+    background: rgba(34, 197, 94, 0.1);
+    color: rgb(34, 197, 94);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .model-type-tag.embedding {
+    background: rgba(59, 130, 246, 0.1);
+    color: rgb(59, 130, 246);
+    border: 1px solid rgba(59, 130, 246, 0.2);
   }
 
   .action-header {

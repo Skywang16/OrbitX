@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import { createMessage } from '@/ui'
   import { useAISettingsStore } from './store'
   import AIFeatureSettings from './AIFeatureSettings.vue'
   import AIModelConfig from './AIModelConfig.vue'
@@ -10,7 +11,13 @@
 
   onMounted(async () => {
     if (!aiSettingsStore.isInitialized && !aiSettingsStore.isLoading) {
-      await aiSettingsStore.loadSettings()
+      try {
+        await aiSettingsStore.loadSettings()
+      } catch (error) {
+        createMessage.error(
+          t('settings.ai.load_error', { error: error instanceof Error ? error.message : String(error) })
+        )
+      }
     }
   })
 </script>
@@ -18,20 +25,13 @@
 <template>
   <div class="settings-group">
     <h2 class="settings-section-title">{{ t('settings.ai.title') }}</h2>
-    <div v-if="aiSettingsStore.error" class="settings-error">
-      <div class="settings-error-icon">⚠️</div>
-      <div class="settings-error-message">{{ t('settings.ai.load_error', { error: aiSettingsStore.error }) }}</div>
-      <x-button variant="primary" @click="aiSettingsStore.loadSettings()">{{ t('common.retry') }}</x-button>
-    </div>
 
-    <template v-else>
-      <div class="settings-group">
-        <AIModelConfig />
-      </div>
-      <div class="settings-group">
-        <AIFeatureSettings />
-      </div>
-    </template>
+    <div class="settings-group">
+      <AIModelConfig />
+    </div>
+    <div class="settings-group">
+      <AIFeatureSettings />
+    </div>
   </div>
 </template>
 

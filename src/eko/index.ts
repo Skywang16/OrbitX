@@ -39,6 +39,13 @@ export class OrbitXEko {
         selectedModelId: this.selectedModelId,
       })
 
+      // 如果没有AI模型配置，跳过Eko实例创建
+      if (!ekoConfig.llms) {
+        console.warn('⚠️ 没有AI模型配置，跳过Eko实例创建。AI功能将不可用，请在设置中添加AI模型配置。')
+        this.eko = null
+        return
+      }
+
       // 更新Agent模式
       this.agent.setMode(this.mode)
 
@@ -53,7 +60,8 @@ export class OrbitXEko {
       // 初始化完成，无需输出额外日志
     } catch (error) {
       console.error('❌ Eko实例初始化失败:', error)
-      throw error
+      // 不抛出错误，允许应用继续启动
+      this.eko = null
     }
   }
 
@@ -82,6 +90,12 @@ export class OrbitXEko {
       // 重新获取最新的LLM配置，传递选中的模型ID
       const newLLMsConfig = await getEkoLLMsConfig(this.selectedModelId)
 
+      // 如果没有AI模型配置，清除Eko实例
+      if (!newLLMsConfig) {
+        this.eko = null
+        return
+      }
+
       // 更新Agent模式
       this.agent.setMode(this.mode)
 
@@ -95,6 +109,7 @@ export class OrbitXEko {
     } catch (error) {
       console.error('❌ Failed to update LLM configuration:', error)
       // 不抛出错误，避免影响正常运行
+      this.eko = null
     }
   }
 
@@ -110,6 +125,17 @@ export class OrbitXEko {
       } else {
         // 每次运行时都更新LLM配置，确保使用最新的AI模型配置
         await this.updateLLMConfig()
+      }
+
+      // 如果初始化后仍然没有Eko实例，说明没有AI模型配置
+      if (!this.eko) {
+        const duration = Date.now() - startTime
+        return {
+          result: '',
+          duration,
+          success: false,
+          error: '❌ 没有可用的AI模型配置。请在设置中添加AI模型配置后再试。',
+        }
       }
 
       // 设置运行状态
@@ -128,7 +154,7 @@ export class OrbitXEko {
       this.currentTaskId = taskId
 
       // 执行任务，直接使用用户原始prompt
-      const result = await this.eko!.run(prompt, taskId)
+      const result = await this.eko.run(prompt, taskId)
 
       const duration = Date.now() - startTime
 

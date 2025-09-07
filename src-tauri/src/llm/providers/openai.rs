@@ -7,14 +7,15 @@ use std::collections::HashMap;
 use std::pin::Pin;
 use tokio_stream::Stream;
 
-use anyhow::{anyhow, Context, Result};
 use crate::llm::{
     providers::base::LLMProvider,
     types::{
-        LLMMessage, LLMMessageContent, LLMMessagePart, LLMProviderConfig, LLMRequest,
-        LLMResponse, LLMStreamChunk, LLMTool, LLMToolCall, LLMUsage,
+        EmbeddingData, EmbeddingRequest, EmbeddingResponse, LLMMessage, LLMMessageContent,
+        LLMMessagePart, LLMProviderConfig, LLMRequest, LLMResponse, LLMStreamChunk, LLMTool,
+        LLMToolCall, LLMUsage,
     },
 };
+use anyhow::{anyhow, Context, Result};
 
 /// OpenAI Provider
 ///
@@ -68,6 +69,16 @@ impl OpenAIProvider {
             .as_deref()
             .unwrap_or("https://api.openai.com/v1");
         format!("{}/chat/completions", base)
+    }
+
+    /// 获取 Embedding API 端点
+    fn get_embedding_endpoint(&self) -> String {
+        let base = self
+            .config
+            .api_url
+            .as_deref()
+            .unwrap_or("https://api.openai.com/v1");
+        format!("{}/embeddings", base)
     }
 
     /// 获取请求头
@@ -223,25 +234,17 @@ impl OpenAIProvider {
                 .map(|tc| {
                     let id = tc["id"]
                         .as_str()
-                        .ok_or_else(|| {
-                            anyhow!("工具调用中缺少ID字段")
-                        })?
+                        .ok_or_else(|| anyhow!("工具调用中缺少ID字段"))?
                         .to_string();
                     let function = &tc["function"];
                     let name = function["name"]
                         .as_str()
-                        .ok_or_else(|| {
-                            anyhow!("工具调用函数中缺少name字段")
-                        })?
+                        .ok_or_else(|| anyhow!("工具调用函数中缺少name字段"))?
                         .to_string();
 
                     let arguments_str = function["arguments"].as_str().unwrap_or("{}");
-                    let arguments: Value = serde_json::from_str(arguments_str).map_err(|e| {
-                        anyhow!(
-                            "Failed to parse tool_call arguments: {}",
-                            e
-                        )
-                    })?;
+                    let arguments: Value = serde_json::from_str(arguments_str)
+                        .map_err(|e| anyhow!("Failed to parse tool_call arguments: {}", e))?;
 
                     Ok(LLMToolCall {
                         id,
@@ -362,16 +365,13 @@ impl OpenAIProvider {
             anyhow::bail!("流式数据为空");
         }
 
-        let json_data: Value = serde_json::from_str(data).map_err(|e| {
-            anyhow!("解析流式数据失败: {}", e)
-        })?;
+        let json_data: Value =
+            serde_json::from_str(data).map_err(|e| anyhow!("解析流式数据失败: {}", e))?;
 
         let choice = json_data["choices"]
             .as_array()
             .and_then(|arr| arr.first())
-            .ok_or_else(|| {
-                anyhow!("流式数据块中缺少choices字段")
-            })?;
+            .ok_or_else(|| anyhow!("流式数据块中缺少choices字段"))?;
 
         if let Some(finish_reason) = choice["finish_reason"].as_str() {
             // 当finish_reason是"tool_calls"时，检查是否有工具调用需要处理
@@ -427,6 +427,42 @@ impl OpenAIProvider {
                 completion_tokens: usage_obj["completion_tokens"].as_u64().unwrap_or(0) as u32,
                 total_tokens: usage_obj["total_tokens"].as_u64().unwrap_or(0) as u32,
             })
+    }
+
+    /// 解析embedding响应
+    fn parse_embedding_response(&self, response_json: &Value) -> Result<EmbeddingResponse> {
+        let data_array = response_json["data"]
+            .as_array()
+            .ok_or_else(|| anyhow!("embedding响应缺少data字段"))?;
+
+        let mut embedding_data = Vec::new();
+        for (i, item) in data_array.iter().enumerate() {
+            let embedding_vec = item["embedding"]
+                .as_array()
+                .ok_or_else(|| anyhow!("embedding数据缺少embedding字段"))?
+                .iter()
+                .map(|v| v.as_f64().unwrap_or(0.0) as f32)
+                .collect::<Vec<f32>>();
+
+            embedding_data.push(EmbeddingData {
+                embedding: embedding_vec,
+                index: item["index"].as_u64().unwrap_or(i as u64) as usize,
+                object: item["object"].as_str().unwrap_or("embedding").to_string(),
+            });
+        }
+
+        let model = response_json["model"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string();
+
+        let usage = Self::extract_usage_static(response_json);
+
+        Ok(EmbeddingResponse {
+            data: embedding_data,
+            model,
+            usage,
+        })
     }
 }
 
@@ -501,5 +537,46 @@ impl LLMProvider for OpenAIProvider {
             });
 
         Ok(Box::pin(stream))
+    }
+
+    /// Embedding调用实现
+    async fn create_embeddings(&self, request: EmbeddingRequest) -> Result<EmbeddingResponse> {
+        let url = self.get_embedding_endpoint();
+        let headers = self.get_headers();
+
+        // 构建embedding请求体
+        let mut body = json!({
+            "model": request.model,
+            "input": request.input
+        });
+
+        if let Some(encoding_format) = &request.encoding_format {
+            body["encoding_format"] = json!(encoding_format);
+        }
+
+        if let Some(dimensions) = request.dimensions {
+            body["dimensions"] = json!(dimensions);
+        }
+
+        let mut req_builder = self.client.post(&url).json(&body);
+        for (key, value) in headers {
+            req_builder = req_builder.header(&key, &value);
+        }
+
+        tracing::debug!("Making embedding API call to: {}", url);
+
+        let response = req_builder.send().await.context("发送embedding请求失败")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(self.handle_error_response(status.as_u16(), &error_text));
+        }
+
+        let response_json: Value = response.json().await.context("解析embedding响应失败")?;
+        self.parse_embedding_response(&response_json)
     }
 }

@@ -81,12 +81,7 @@ fn test_io_configuration() {
         let shell_mgr = std::sync::Arc::new(
             terminal_lib::shell::integration::ShellIntegrationManager::new().unwrap(),
         );
-        IoHandler::with_config_and_mode(
-            sender,
-            config.clone(),
-            IoMode::ThreadPool,
-            shell_mgr,
-        )
+        IoHandler::with_config_and_mode(sender, config.clone(), IoMode::ThreadPool, shell_mgr)
     };
 
     // 验证配置被正确应用

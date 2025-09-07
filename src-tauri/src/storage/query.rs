@@ -99,8 +99,9 @@ impl SafeQueryBuilder {
 
     /// 构建查询
     pub fn build(self) -> AppResult<(String, Vec<Value>)> {
-        let mut query = format!("SELECT {} FROM {}", 
-            self.select_fields.join(", "), 
+        let mut query = format!(
+            "SELECT {} FROM {}",
+            self.select_fields.join(", "),
             self.table
         );
 
@@ -123,12 +124,14 @@ impl SafeQueryBuilder {
         // 添加ORDER BY
         if !self.orders.is_empty() {
             query.push_str(" ORDER BY ");
-            let order_clauses: Vec<String> = self.orders.iter().map(|order| {
-                match order {
+            let order_clauses: Vec<String> = self
+                .orders
+                .iter()
+                .map(|order| match order {
                     QueryOrder::Asc(field) => format!("{} ASC", field),
                     QueryOrder::Desc(field) => format!("{} DESC", field),
-                }
-            }).collect();
+                })
+                .collect();
             query.push_str(&order_clauses.join(", "));
         }
 
@@ -166,42 +169,37 @@ impl SafeQueryBuilder {
     }
 
     /// 构建单个条件
-    fn build_single_condition(&self, condition: &QueryCondition) -> AppResult<(String, Vec<Value>)> {
+    fn build_single_condition(
+        &self,
+        condition: &QueryCondition,
+    ) -> AppResult<(String, Vec<Value>)> {
         match condition {
-            QueryCondition::Eq(field, value) => {
-                Ok((format!("{} = ?", field), vec![value.clone()]))
-            }
+            QueryCondition::Eq(field, value) => Ok((format!("{} = ?", field), vec![value.clone()])),
             QueryCondition::Ne(field, value) => {
                 Ok((format!("{} != ?", field), vec![value.clone()]))
             }
-            QueryCondition::Lt(field, value) => {
-                Ok((format!("{} < ?", field), vec![value.clone()]))
-            }
+            QueryCondition::Lt(field, value) => Ok((format!("{} < ?", field), vec![value.clone()])),
             QueryCondition::Le(field, value) => {
                 Ok((format!("{} <= ?", field), vec![value.clone()]))
             }
-            QueryCondition::Gt(field, value) => {
-                Ok((format!("{} > ?", field), vec![value.clone()]))
-            }
+            QueryCondition::Gt(field, value) => Ok((format!("{} > ?", field), vec![value.clone()])),
             QueryCondition::Ge(field, value) => {
                 Ok((format!("{} >= ?", field), vec![value.clone()]))
             }
-            QueryCondition::Like(field, pattern) => {
-                Ok((format!("{} LIKE ?", field), vec![Value::String(pattern.clone())]))
-            }
+            QueryCondition::Like(field, pattern) => Ok((
+                format!("{} LIKE ?", field),
+                vec![Value::String(pattern.clone())],
+            )),
             QueryCondition::In(field, values) => {
                 let placeholders = vec!["?"; values.len()].join(", ");
                 Ok((format!("{} IN ({})", field, placeholders), values.clone()))
             }
-            QueryCondition::IsNull(field) => {
-                Ok((format!("{} IS NULL", field), Vec::new()))
-            }
-            QueryCondition::IsNotNull(field) => {
-                Ok((format!("{} IS NOT NULL", field), Vec::new()))
-            }
-            QueryCondition::Between(field, start, end) => {
-                Ok((format!("{} BETWEEN ? AND ?", field), vec![start.clone(), end.clone()]))
-            }
+            QueryCondition::IsNull(field) => Ok((format!("{} IS NULL", field), Vec::new())),
+            QueryCondition::IsNotNull(field) => Ok((format!("{} IS NOT NULL", field), Vec::new())),
+            QueryCondition::Between(field, start, end) => Ok((
+                format!("{} BETWEEN ? AND ?", field),
+                vec![start.clone(), end.clone()],
+            )),
             QueryCondition::And(conditions) => {
                 let (sql, params) = self.build_conditions(conditions)?;
                 Ok((format!("({})", sql), params))
@@ -209,13 +207,14 @@ impl SafeQueryBuilder {
             QueryCondition::Or(conditions) => {
                 let mut sql_parts = Vec::new();
                 let mut params = Vec::new();
-                
+
                 for condition in conditions {
-                    let (condition_sql, condition_params) = self.build_single_condition(condition)?;
+                    let (condition_sql, condition_params) =
+                        self.build_single_condition(condition)?;
                     sql_parts.push(condition_sql);
                     params.extend(condition_params);
                 }
-                
+
                 Ok((format!("({})", sql_parts.join(" OR ")), params))
             }
         }
@@ -264,10 +263,19 @@ impl InsertBuilder {
         let values: Vec<Value> = fields.iter().map(|f| self.fields[f].clone()).collect();
 
         let query = match &self.on_conflict {
-            Some(action) => format!("INSERT OR {} INTO {} ({}) VALUES ({})", 
-                action, self.table, fields.join(", "), placeholders),
-            None => format!("INSERT INTO {} ({}) VALUES ({})", 
-                self.table, fields.join(", "), placeholders),
+            Some(action) => format!(
+                "INSERT OR {} INTO {} ({}) VALUES ({})",
+                action,
+                self.table,
+                fields.join(", "),
+                placeholders
+            ),
+            None => format!(
+                "INSERT INTO {} ({}) VALUES ({})",
+                self.table,
+                fields.join(", "),
+                placeholders
+            ),
         };
 
         Ok((query, values))

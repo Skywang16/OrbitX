@@ -12,7 +12,7 @@ use std::pin::Pin;
 
 // ===== AI模型配置 =====
 // 重新导出Repository中的类型
-pub use crate::storage::repositories::ai_models::{AIModelConfig, AIProvider};
+pub use crate::storage::repositories::ai_models::{AIModelConfig, AIProvider, ModelType};
 
 // ===== AI请求和响应类型 =====
 

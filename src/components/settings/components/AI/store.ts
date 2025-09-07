@@ -24,55 +24,50 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
     return settings.value?.models || []
   })
 
-  const refreshModels = async () => {
+  const chatModels = computed(() => {
+    return models.value.filter(model => model.modelType === 'chat')
+  })
+
+  const embeddingModels = computed(() => {
+    return models.value.filter(model => model.modelType === 'embedding')
+  })
+
+  const loadModels = async () => {
     try {
+      isLoading.value = true
       const models = await aiApi.getModels()
 
-      if (settings.value) {
+      if (!settings.value) {
         settings.value = {
-          ...settings.value,
           models,
-        }
+          features: {
+            chat: { enabled: true, maxHistoryLength: 1000, autoSaveHistory: true, contextWindowSize: 4000 },
+          },
+          performance: {
+            requestTimeout: 30,
+            maxConcurrentRequests: 5,
+            cacheEnabled: true,
+            cacheTtl: 3600,
+          },
+        } as AISettings
+      } else {
+        settings.value.models = models
       }
 
       dataVersion.value++
     } catch (err) {
-      error.value = handleErrorWithMessage(err, 'Failed to refresh models')
+      error.value = handleErrorWithMessage(err, 'Failed to load models')
       throw err
+    } finally {
+      isLoading.value = false
     }
   }
 
   const loadSettings = async (forceRefresh = false) => {
     if (isInitialized.value && !forceRefresh) return
 
-    if (isLoading.value) return
-
-    isLoading.value = true
-    error.value = null
-
-    try {
-      const models = await aiApi.getModels()
-      settings.value = {
-        models,
-        features: {
-          chat: { enabled: true, maxHistoryLength: 1000, autoSaveHistory: true, contextWindowSize: 4000 },
-        },
-        performance: {
-          requestTimeout: 30,
-          maxConcurrentRequests: 5,
-          cacheEnabled: true,
-          cacheTtl: 3600,
-        },
-      } as AISettings
-
-      dataVersion.value++
-      isInitialized.value = true
-    } catch (err) {
-      error.value = handleErrorWithMessage(err, 'Failed to load AI settings')
-      settings.value = null
-    } finally {
-      isLoading.value = false
-    }
+    await loadModels()
+    isInitialized.value = true
   }
 
   const updateSettings = async (newSettings: Partial<AISettings>) => {
@@ -95,8 +90,14 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
   }
 
   const addModel = async (model: AIModelConfig) => {
-    await aiApi.addModel(model)
-    await refreshModels()
+    try {
+      const savedModel = await aiApi.addModel(model)
+      console.log('模型添加成功:', savedModel)
+      await loadModels()
+    } catch (error) {
+      console.error('模型添加失败:', error)
+      throw error
+    }
   }
 
   const updateModel = async (modelId: string, updates: Partial<AIModelConfig>) => {
@@ -107,12 +108,12 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
 
     const updatedModel = { ...existingModel, ...updates }
     await aiApi.updateModel(updatedModel)
-    await refreshModels()
+    await loadModels()
   }
 
   const removeModel = async (modelId: string) => {
     await aiApi.deleteModel(modelId)
-    await refreshModels()
+    await loadModels()
   }
 
   const resetToDefaults = async () => {
@@ -132,8 +133,10 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
     hasModels,
     enabledModels,
     models,
+    chatModels,
+    embeddingModels,
     loadSettings,
-    refreshModels,
+    loadModels,
     updateSettings,
     addModel,
     updateModel,

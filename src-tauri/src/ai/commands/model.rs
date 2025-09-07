@@ -24,8 +24,17 @@ pub async fn get_ai_models(state: State<'_, AIManagerState>) -> Result<Vec<AIMod
 pub async fn add_ai_model(
     config: AIModelConfig,
     state: State<'_, AIManagerState>,
-) -> Result<(), String> {
-    state.ai_service.add_model(config).await.to_tauri()
+) -> Result<AIModelConfig, String> {
+    // 保存模型配置，如果保存失败会抛出异常
+    state
+        .ai_service
+        .add_model(config.clone())
+        .await
+        .to_tauri()?;
+
+    // 保存成功，直接返回配置
+    // 注意：这里返回传入的配置，因为save操作成功意味着数据已正确保存
+    Ok(config)
 }
 
 /// 删除AI模型配置

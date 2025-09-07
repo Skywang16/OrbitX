@@ -51,15 +51,15 @@ impl TerminalContextState {
 }
 
 // 导出各功能域模块
-pub mod pane;
-pub mod context;
 pub mod cache;
+pub mod context;
+pub mod pane;
 pub mod stats;
 
 // 重新导出所有命令函数，保持向后兼容
-pub use pane::{set_active_pane, get_active_pane, clear_active_pane, is_pane_active};
-pub use context::{get_terminal_context, get_active_terminal_context};
-pub use cache::{invalidate_context_cache, clear_all_context_cache};
+pub use cache::{clear_all_context_cache, invalidate_context_cache};
+pub use context::{get_active_terminal_context, get_terminal_context};
+pub use pane::{clear_active_pane, get_active_pane, is_pane_active, set_active_pane};
 pub use stats::{get_context_cache_stats, get_registry_stats};
 
 #[cfg(test)]

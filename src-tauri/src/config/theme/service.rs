@@ -188,12 +188,12 @@ impl SystemThemeDetector {
             // macOS 系统主题检测
             // 使用 osascript 命令检测系统主题
             use std::process::Command;
-            
+
             let output = Command::new("osascript")
                 .args(["-e", "tell application \"System Events\" to tell appearance preferences to get dark mode"])
                 .output()
                 .ok()?;
-            
+
             if output.status.success() {
                 let result = String::from_utf8_lossy(&output.stdout);
                 let is_dark = result.trim().eq_ignore_ascii_case("true");
@@ -204,7 +204,7 @@ impl SystemThemeDetector {
                     .args(["read", "-g", "AppleInterfaceStyle"])
                     .output()
                     .ok()?;
-                
+
                 if output.status.success() {
                     let result = String::from_utf8_lossy(&output.stdout);
                     Some(result.trim().eq_ignore_ascii_case("dark"))
@@ -248,20 +248,20 @@ impl SystemThemeDetector {
     {
         use std::thread;
         use std::time::Duration;
-        
+
         Some(thread::spawn(move || {
             let mut last_dark_mode: Option<bool> = None;
-            
+
             loop {
                 let current_dark_mode = Self::is_dark_mode();
-                
+
                 if current_dark_mode != last_dark_mode {
                     if let Some(is_dark) = current_dark_mode {
                         callback(is_dark);
                     }
                     last_dark_mode = current_dark_mode;
                 }
-                
+
                 // 每秒检查一次主题变化
                 thread::sleep(Duration::from_secs(1));
             }

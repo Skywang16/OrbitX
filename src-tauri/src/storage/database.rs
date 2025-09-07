@@ -335,18 +335,14 @@ impl DatabaseManager {
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| "unknown_home".to_string());
 
-        // 添加随机数据增强安全性
-        let mut random_bytes = [0u8; 32];
-        OsRng.fill_bytes(&mut random_bytes);
-
+        // 移除随机数据，确保密钥生成是确定性的
+        // 这样同一台机器每次生成的密钥都相同
         let mut hasher = Sha256::default();
         hasher.update(b"OrbitX-Terminal-App-v1.0");
         hasher.update(username.as_bytes());
         hasher.update(hostname.as_bytes());
         hasher.update(home_dir.as_bytes());
-        hasher.update(b"encryption-key-salt");
-        // 添加随机因子增强安全性
-        hasher.update(&random_bytes);
+        hasher.update(b"encryption-key-salt-deterministic");
 
         let hash = hasher.finalize();
         let key = base64::engine::general_purpose::STANDARD.encode(hash);

@@ -147,7 +147,7 @@ mod tests {
     fn test_basic_bash_script_generation() {
         let config = ShellIntegrationConfig::default();
         let script = generate_script(&config);
-        
+
         assert!(script.contains("# OrbitX Integration Start"));
         assert!(script.contains("# OrbitX Integration End"));
         assert!(script.contains("ORBITX_INTEGRATION_LOADED"));
@@ -161,7 +161,7 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("orbitx_preexec"));
         assert!(script.contains("PROMPT_COMMAND"));
         assert!(script.contains("DEBUG trap"));
@@ -174,7 +174,7 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("orbitx_cd"));
         assert!(script.contains("alias cd="));
         assert!(script.contains("DirectoryChanged"));
@@ -187,7 +187,7 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("orbitx_update_title"));
         assert!(script.contains("orbitx_precmd_with_title"));
     }
@@ -197,13 +197,13 @@ mod tests {
         let mut custom_vars = HashMap::new();
         custom_vars.insert("ORBITX_CUSTOM".to_string(), "test_value".to_string());
         custom_vars.insert("ANOTHER_VAR".to_string(), "another_value".to_string());
-        
+
         let config = ShellIntegrationConfig {
             custom_env_vars: custom_vars,
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("export ORBITX_CUSTOM=\"test_value\""));
         assert!(script.contains("export ANOTHER_VAR=\"another_value\""));
     }
@@ -217,12 +217,12 @@ mod tests {
             custom_env_vars: HashMap::new(),
         };
         let script = generate_script(&config);
-        
+
         // 仍应包含基本结构
         assert!(script.contains("# OrbitX Integration Start"));
         assert!(script.contains("# OrbitX Integration End"));
         assert!(script.contains("ORBITX_INTEGRATION_LOADED"));
-        
+
         // 不应包含禁用的功能
         assert!(!script.contains("orbitx_preexec"));
         assert!(!script.contains("orbitx_cd"));

@@ -18,7 +18,6 @@
     visible: false,
   })
 
-
   const { t } = useI18n()
 
   // 计算显示文本
@@ -103,5 +102,4 @@
     cursor: default;
     transition: color 0.1s ease;
   }
-
 </style>

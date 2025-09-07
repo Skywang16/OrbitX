@@ -72,4 +72,3 @@ pub struct AnalysisResult {
     pub success_count: usize,
     pub error_count: usize,
 }
-

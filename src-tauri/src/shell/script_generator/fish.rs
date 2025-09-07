@@ -106,7 +106,7 @@ mod tests {
     fn test_basic_fish_script_generation() {
         let config = ShellIntegrationConfig::default();
         let script = generate_script(&config);
-        
+
         assert!(script.contains("# OrbitX Shell Integration for Fish"));
         assert!(script.contains("ORBITX_SHELL_INTEGRATION_LOADED"));
         assert!(script.contains("set -g"));
@@ -119,7 +119,7 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("__orbitx_preexec"));
         assert!(script.contains("__orbitx_postcmd"));
         assert!(script.contains("fish_preexec"));
@@ -133,7 +133,7 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("__orbitx_update_cwd"));
         assert!(script.contains("--on-variable PWD"));
     }
@@ -145,7 +145,7 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("__orbitx_update_title"));
         assert!(script.contains("--on-variable PWD"));
     }
@@ -154,13 +154,13 @@ mod tests {
     fn test_custom_env_vars() {
         let mut custom_vars = HashMap::new();
         custom_vars.insert("ORBITX_CUSTOM".to_string(), "test_value".to_string());
-        
+
         let config = ShellIntegrationConfig {
             custom_env_vars: custom_vars,
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("set -gx ORBITX_CUSTOM \"test_value\""));
     }
 }

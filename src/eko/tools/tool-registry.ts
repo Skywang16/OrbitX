@@ -169,7 +169,6 @@ export class ToolRegistry {
       .map(registered => registered.tool)
   }
 
-
   /**
    * 清空注册表
    */

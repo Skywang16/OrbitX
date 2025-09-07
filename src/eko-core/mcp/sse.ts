@@ -228,7 +228,10 @@ async function connectSse(
       keepalive: true,
       signal: signal,
     })
-    const reader = response.body?.getReader() as ReadableStreamDefaultReader
+    if (!response.body) {
+      throw new Error('Readable stream is not supported by the environment')
+    }
+    const reader = response.body.getReader() as ReadableStreamDefaultReader
     hander.close = () => {
       controller.abort()
       hander.readyState = 2
@@ -239,7 +242,7 @@ async function connectSse(
     hander.readyState = 1
     hander.onopen()
     while (hander.readyState == 1) {
-      const { value, done } = await reader?.read()
+      const { value, done } = await reader.read()
       if (done) {
         break
       }

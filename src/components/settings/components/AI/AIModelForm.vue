@@ -3,12 +3,13 @@
   import { createMessage } from '@/ui'
   import { handleError } from '@/utils/errorHandler'
   import { aiApi } from '@/api'
-  import { reactive, ref, computed, onMounted } from 'vue'
+  import { reactive, ref, computed, onMounted, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useLLMRegistry } from '@/composables/useLLMRegistry'
 
   interface Props {
     model?: AIModelConfig | null
+    defaultModelType?: 'chat' | 'embedding'
   }
 
   interface Emits {
@@ -23,8 +24,8 @@
   // 使用后端LLM注册表
   const { providerOptions, getModelOptions, loadProviders } = useLLMRegistry()
 
-  // 配置模式：preset（预设）或 custom（自定义）
-  const configMode = ref<'preset' | 'custom'>('preset')
+  // 配置模式：preset（预设）或 custom（自定义）——默认自定义，避免误判
+  const configMode = ref<'preset' | 'custom'>('custom')
   const selectedPreset = ref<string>('')
 
   // 组件挂载时确保数据已加载
@@ -37,10 +38,11 @@
   // 表单数据
   const formData = reactive({
     name: '',
-    provider: 'openai' as AIModelConfig['provider'],
+    provider: 'custom' as AIModelConfig['provider'],
     apiUrl: '',
     apiKey: '',
     model: '',
+    modelType: (props.defaultModelType || 'chat') as AIModelConfig['modelType'],
     options: {
       maxTokens: 4096,
       temperature: 0.7,
@@ -72,6 +74,7 @@
       apiUrl: props.model.apiUrl,
       apiKey: props.model.apiKey,
       model: props.model.model,
+      modelType: props.model.modelType || 'chat',
       options: {
         maxTokens: props.model.options?.maxTokens || 4096,
         temperature: props.model.options?.temperature || 0.7,
@@ -79,13 +82,13 @@
       },
     })
 
-    // 判断是预设还是自定义
-    const preset = providerOptions.value.find(p => p.apiUrl === props.model?.apiUrl)
-    if (preset) {
-      configMode.value = 'preset'
-      selectedPreset.value = preset.value
-    } else {
+    // 简化：仅依据 provider 判断模式
+    if (props.model.provider === 'custom') {
       configMode.value = 'custom'
+      selectedPreset.value = ''
+    } else {
+      configMode.value = 'preset'
+      selectedPreset.value = String(props.model.provider)
     }
   }
 
@@ -96,10 +99,12 @@
       selectedPreset.value = ''
       formData.apiUrl = ''
       formData.model = ''
-      formData.name = ''
+      // provider 将在选择预设时由 handlePresetChange 设置
     } else {
       selectedPreset.value = ''
       formData.name = ''
+      // 自定义模式下，provider 固定为 custom
+      formData.provider = 'custom'
     }
   }
 
@@ -108,13 +113,25 @@
     selectedPreset.value = presetValue
     const preset = providerOptions.value.find(p => p.value === presetValue)
     if (preset) {
+      // 预设模式下，provider = 选中的预设值
       formData.provider = presetValue as AIModelConfig['provider']
       formData.apiUrl = preset.apiUrl
       const models = getModelOptions(presetValue)
       if (models.length > 0) {
         formData.model = models[0].value // 默认选择第一个模型
-        formData.name = `${preset.label} - ${models[0].label}`
+        // 名称直接等于选中模型的名字
+        formData.name = models[0].label
       }
+    }
+  }
+
+  // 更换模型时，若处于预设模式，名称=模型名称
+  const handleModelChange = (modelValue: string) => {
+    if (configMode.value !== 'preset') return
+    const models = getModelOptions(selectedPreset.value)
+    const modelInfo = models.find(m => m.value === modelValue)
+    if (modelInfo) {
+      formData.name = modelInfo.label
     }
   }
 
@@ -154,7 +171,24 @@
 
     isSubmitting.value = true
     try {
-      emit('submit', { ...formData })
+      // 最终提交前的兜底修正
+      const submitData = { ...formData }
+      if (isPresetMode.value) {
+        // 预设模式下，确保 provider = 选中的预设
+        if (selectedPreset.value) {
+          submitData.provider = selectedPreset.value as AIModelConfig['provider']
+        }
+        // 若名称为空，使用当前模型的label
+        if (!submitData.name.trim()) {
+          const models = getModelOptions(selectedPreset.value)
+          const modelInfo = models.find(m => m.value === submitData.model)
+          if (modelInfo) submitData.name = modelInfo.label
+        }
+      } else {
+        // 自定义模式
+        submitData.provider = 'custom'
+      }
+      emit('submit', submitData)
     } finally {
       isSubmitting.value = false
     }
@@ -181,6 +215,7 @@
         apiUrl: formData.apiUrl,
         apiKey: formData.apiKey,
         model: formData.model,
+        modelType: formData.modelType,
         options: formData.options,
       }
 
@@ -224,6 +259,28 @@
     </template>
 
     <form @submit.prevent="handleSubmit" class="ai-form">
+      <!-- 模型类型选择 -->
+      <div class="form-row">
+        <div class="form-group full-width">
+          <label class="form-label">{{ t('ai_model.model_type') }}</label>
+          <x-select
+            v-model="formData.modelType"
+            :options="[
+              { value: 'chat', label: t('ai_model.model_type_chat') },
+              { value: 'embedding', label: t('ai_model.model_type_embedding') },
+            ]"
+            :placeholder="t('ai_model.select_model_type')"
+          />
+          <div class="form-description">
+            {{
+              formData.modelType === 'chat'
+                ? t('ai_model.model_type_chat_description')
+                : t('ai_model.model_type_embedding_description')
+            }}
+          </div>
+        </div>
+      </div>
+
       <!-- 配置类型选择 -->
       <div class="form-row">
         <div class="form-group full-width">
@@ -258,7 +315,7 @@
             v-model="selectedPreset"
             :options="providerOptions.map(p => ({ value: p.value, label: p.label }))"
             :placeholder="t('ai_model.select_provider')"
-            @update:value="handlePresetChange"
+            @update:modelValue="handlePresetChange"
           />
           <div v-if="errors.preset" class="error-message">{{ errors.preset }}</div>
         </div>
@@ -269,6 +326,7 @@
             v-model="formData.model"
             :options="availableModels"
             :placeholder="t('ai_model.select_model')"
+            @update:modelValue="handleModelChange"
           />
           <input
             v-else
@@ -499,91 +557,10 @@
     gap: var(--spacing-md);
   }
 
-  /* 响应式设计 */
-  @media (max-width: 768px) {
-    .ai-form {
-      max-width: 100%;
-      padding: 0 var(--spacing-md);
-    }
-
-    .form-row {
-      flex-direction: column;
-      gap: var(--spacing-md);
-    }
-
-    .modal-footer {
-      flex-direction: column;
-      gap: var(--spacing-md);
-      padding: var(--spacing-md);
-    }
-
-    .footer-right {
-      width: 100%;
-      justify-content: flex-end;
-    }
-
-    .tab-switcher {
-      flex-direction: column;
-      border-radius: var(--border-radius);
-      padding: var(--spacing-xs);
-    }
-
-    .tab-button {
-      border-radius: var(--border-radius-sm);
-      padding: var(--spacing-lg);
-    }
-
-    .tab-indicator {
-      width: calc(100% - 8px);
-      height: calc(50% - 4px);
-      border-radius: var(--border-radius-sm);
-      transform: translateY(0);
-    }
-
-    .tab-indicator.move-right {
-      transform: translateY(100%);
-    }
-
-    .form-input {
-      height: 40px;
-      font-size: var(--font-size-lg);
-    }
-  }
-
-  /* 触摸设备优化 */
-  @media (hover: none) and (pointer: coarse) {
-    .form-input {
-      min-height: 44px;
-    }
-
-    .tab-button {
-      min-height: 48px;
-      padding: var(--spacing-lg) var(--spacing-xl);
-    }
-  }
-
-  /* 高对比度模式支持 */
-  @media (prefers-contrast: high) {
-    .form-input {
-      border-width: 2px;
-    }
-
-    .tab-button {
-      border: 1px solid var(--border-400);
-    }
-
-    .tab-button.active {
-      border-color: var(--color-primary);
-      border-width: 2px;
-    }
-  }
-
-  /* 减少动画模式支持 */
-  @media (prefers-reduced-motion: reduce) {
-    .form-input,
-    .tab-button,
-    .tab-indicator {
-      transition: none !important;
-    }
+  .form-description {
+    font-size: var(--font-size-xs);
+    color: var(--text-400);
+    margin-top: var(--spacing-xs);
+    line-height: 1.4;
   }
 </style>

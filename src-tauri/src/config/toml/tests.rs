@@ -6,13 +6,9 @@
 mod tests {
     use crate::config::{defaults::create_default_config, paths::ConfigPaths};
     use crate::config::{
-        toml::{
-            ConfigEventSender, TomlConfigManager, TomlConfigReader, TomlConfigValidator,
-            TomlConfigWriter,
-        },
+        toml::TomlConfigManager,
         ConfigEvent,
     };
-    use std::sync::{Arc, RwLock};
     use tempfile::TempDir;
     use tokio::time::Duration;
 
@@ -21,19 +17,10 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let paths = ConfigPaths::with_app_data_dir(temp_dir.path()).unwrap();
 
-        // 使用测试路径创建管理器的各个组件
-        let reader = TomlConfigReader::new().unwrap();
-        let writer = TomlConfigWriter::new(paths.config_file());
-        let validator = TomlConfigValidator::new();
-        let event_sender = ConfigEventSender::new().0;
-
-        let manager = TomlConfigManager {
-            config_cache: Arc::new(RwLock::new(create_default_config())),
-            reader,
-            writer,
-            validator,
-            event_sender,
-        };
+        // 使用测试专用的构造器创建管理器
+        let manager = TomlConfigManager::new_for_test(paths.config_file())
+            .await
+            .unwrap();
 
         (manager, temp_dir)
     }

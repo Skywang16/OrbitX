@@ -13,25 +13,27 @@ export function uuidv4(): string {
   })
 }
 
-export function call_timeout<R extends Promise<unknown>>(
-  fun: () => R,
+export function call_timeout<T>(
+  fun: () => Promise<T>,
   timeout: number,
   error_callback?: (e: string) => void
-): Promise<R> {
-  return new Promise(async (resolve, reject) => {
-    let timer = setTimeout(() => {
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
       reject(new Error('Timeout'))
-      error_callback && error_callback('Timeout')
+      if (error_callback) error_callback('Timeout')
     }, timeout)
-    try {
-      const result = await fun()
-      clearTimeout(timer)
-      resolve(result)
-    } catch (e) {
-      clearTimeout(timer)
-      reject(e)
-      error_callback && error_callback(e + '')
-    }
+
+    fun()
+      .then((result: T) => {
+        clearTimeout(timer)
+        resolve(result)
+      })
+      .catch(e => {
+        clearTimeout(timer)
+        reject(e)
+        if (error_callback) error_callback(String(e))
+      })
   })
 }
 
@@ -320,6 +322,7 @@ export function fixXmlTag(code: string) {
       let endIndex = code.indexOf('>', i)
       let tagContent = code.slice(i, endIndex + 1)
       if (isSelfClosing(tagContent)) {
+        // no-op for self-closing tags
       } else if (isEndTag) {
         stack.pop()
       } else {

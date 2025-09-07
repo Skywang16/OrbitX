@@ -1,14 +1,16 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use std::pin::Pin;
 use tokio_stream::Stream;
-use anyhow::Result;
 
-use crate::llm::types::{LLMRequest, LLMResponse, LLMStreamChunk};
+use crate::llm::types::{
+    EmbeddingRequest, EmbeddingResponse, LLMRequest, LLMResponse, LLMStreamChunk,
+};
 
 /// LLM Provider 统一接口
 ///
 /// 这个 Trait 定义了所有 LLM 提供商必须实现的统一接口，
-/// 包括非流式和流式调用。
+/// 包括非流式和流式调用，以及embedding功能。
 #[async_trait]
 pub trait LLMProvider: Send + Sync {
     /// 非流式调用
@@ -24,4 +26,12 @@ pub trait LLMProvider: Send + Sync {
         &self,
         request: LLMRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<LLMStreamChunk>> + Send>>>;
+
+    /// Embedding调用
+    ///
+    /// 生成文本的向量表示，用于语义搜索和相似度计算。
+    /// 如果provider不支持embedding，应返回NotImplemented错误。
+    async fn create_embeddings(&self, _request: EmbeddingRequest) -> Result<EmbeddingResponse> {
+        Err(anyhow::anyhow!("Embedding功能未实现"))
+    }
 }

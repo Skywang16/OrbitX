@@ -52,7 +52,6 @@ pub struct RecoveryManager {
     paths: StoragePaths,
     /// 恢复策略配置
     strategies: HashMap<StorageLayer, Vec<RecoveryStrategy>>,
-
 }
 
 impl RecoveryManager {
@@ -104,11 +103,7 @@ impl RecoveryManager {
             ],
         );
 
-        Self {
-            paths,
-            strategies,
-
-        }
+        Self { paths, strategies }
     }
 
     /// 尝试恢复存储层

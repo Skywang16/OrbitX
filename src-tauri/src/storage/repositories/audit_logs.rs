@@ -112,10 +112,19 @@ impl AuditLogRepository {
     ) -> AppResult<Vec<AuditLogEntry>> {
         let mut builder = SafeQueryBuilder::new("audit_logs")
             .select(&[
-                "id", "operation", "table_name", "record_id", "user_context",
-                "details", "timestamp", "success", "error_message"
+                "id",
+                "operation",
+                "table_name",
+                "record_id",
+                "user_context",
+                "details",
+                "timestamp",
+                "success",
+                "error_message",
             ])
-            .order_by(crate::storage::query::QueryOrder::Desc("timestamp".to_string()));
+            .order_by(crate::storage::query::QueryOrder::Desc(
+                "timestamp".to_string(),
+            ));
 
         if let Some(table) = table_name {
             builder = builder.where_condition(QueryCondition::Eq(
@@ -166,7 +175,10 @@ impl AuditLogRepository {
 impl Repository<AuditLogEntry> for AuditLogRepository {
     async fn find_by_id(&self, id: i64) -> AppResult<Option<AuditLogEntry>> {
         let (sql, _params) = SafeQueryBuilder::new("audit_logs")
-            .where_condition(QueryCondition::Eq("id".to_string(), Value::Number(id.into())))
+            .where_condition(QueryCondition::Eq(
+                "id".to_string(),
+                Value::Number(id.into()),
+            ))
             .build()?;
 
         let row = sqlx::query(&sql)
@@ -188,11 +200,32 @@ impl Repository<AuditLogEntry> for AuditLogRepository {
         let (sql, params) = InsertBuilder::new("audit_logs")
             .set("operation", Value::String(entity.operation.clone()))
             .set("table_name", Value::String(entity.table_name.clone()))
-            .set("record_id", entity.record_id.as_ref().map(|r| Value::String(r.clone())).unwrap_or(Value::Null))
-            .set("user_context", entity.user_context.as_ref().map(|u| Value::String(u.clone())).unwrap_or(Value::Null))
+            .set(
+                "record_id",
+                entity
+                    .record_id
+                    .as_ref()
+                    .map(|r| Value::String(r.clone()))
+                    .unwrap_or(Value::Null),
+            )
+            .set(
+                "user_context",
+                entity
+                    .user_context
+                    .as_ref()
+                    .map(|u| Value::String(u.clone()))
+                    .unwrap_or(Value::Null),
+            )
             .set("details", Value::String(entity.details.clone()))
             .set("success", Value::Bool(entity.success))
-            .set("error_message", entity.error_message.as_ref().map(|e| Value::String(e.clone())).unwrap_or(Value::Null))
+            .set(
+                "error_message",
+                entity
+                    .error_message
+                    .as_ref()
+                    .map(|e| Value::String(e.clone()))
+                    .unwrap_or(Value::Null),
+            )
             .build()?;
 
         let mut query_builder = sqlx::query(&sql);

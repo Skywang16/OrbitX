@@ -185,6 +185,10 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
     let terminal_mux = crate::mux::singleton::get_mux();
     app.manage(terminal_mux);
 
+    // 初始化向量索引状态
+    let vector_index_state = crate::vector_index::commands::VectorIndexState::new();
+    app.manage(vector_index_state);
+
     Ok(())
 }
 

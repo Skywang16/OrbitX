@@ -33,7 +33,6 @@ fn validate_non_empty_string(value: &str, field_name: &str) -> AppResult<()> {
 /// 终端状态管理
 ///
 pub struct TerminalState {
-    // 注意：我们使用全局单例，所以这里不需要存储 Arc<TerminalMux>
     // 但保留这个结构体以便将来扩展其他状态
     _placeholder: (),
 }
@@ -175,7 +174,6 @@ pub async fn resize_terminal(
 
 /// 关闭终端会话
 ///
-/// - 防御性编程：优雅处理面板不存在的情况
 #[tauri::command]
 pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> TauriResult<()> {
     let mux = get_mux();
@@ -257,7 +255,7 @@ pub async fn get_terminal_buffer(pane_id: u32) -> TauriResult<String> {
         Err(e) => {
             let error_msg = format!("获取终端缓冲区失败: ID={}, 错误: {}", pane_id, e);
             error!("{}", error_msg);
-            Err(error_msg)
+            Err(anyhow!("{}", error_msg)).to_tauri()
         }
     }
 }
@@ -289,8 +287,6 @@ pub async fn set_terminal_buffer(pane_id: u32, content: String) -> TauriResult<(
 
 /// 获取系统可用的shell列表
 ///
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn get_available_shells() -> TauriResult<Vec<ShellInfo>> {
     debug!("获取可用shell列表");
@@ -311,8 +307,6 @@ pub async fn get_available_shells() -> TauriResult<Vec<ShellInfo>> {
 
 /// 获取系统默认shell信息
 ///
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn get_default_shell() -> TauriResult<ShellInfo> {
     debug!("获取系统默认shell");
@@ -334,9 +328,6 @@ pub async fn get_default_shell() -> TauriResult<ShellInfo> {
 
 /// 验证shell路径是否有效
 ///
-/// - 参数顺序：业务参数在前，state参数在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn validate_shell_path(path: String) -> TauriResult<bool> {
     // 参数验证
@@ -413,9 +404,6 @@ pub async fn create_terminal_with_shell<R: Runtime>(
 
 /// 根据名称查找shell
 ///
-/// - 参数顺序：业务参数在前，state参数在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn find_shell_by_name(shell_name: String) -> TauriResult<Option<ShellInfo>> {
     debug!("查找shell: {}", shell_name);
@@ -451,9 +439,6 @@ pub async fn find_shell_by_name(shell_name: String) -> TauriResult<Option<ShellI
 
 /// 根据路径查找shell
 ///
-/// - 参数顺序：业务参数在前，state参数在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn find_shell_by_path(shell_path: String) -> TauriResult<Option<ShellInfo>> {
     debug!("根据路径查找shell: {}", shell_path);
@@ -492,10 +477,8 @@ pub async fn find_shell_by_path(shell_path: String) -> TauriResult<Option<ShellI
 
 /// 获取Shell管理器统计信息
 ///
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
-pub async fn get_shell_stats() -> Result<ShellManagerStats, String> {
+pub async fn get_shell_stats() -> TauriResult<ShellManagerStats> {
     debug!("获取Shell管理器统计信息");
 
     match std::panic::catch_unwind(|| {
@@ -521,10 +504,8 @@ pub async fn get_shell_stats() -> Result<ShellManagerStats, String> {
 
 /// 初始化Shell管理器
 ///
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
-pub async fn initialize_shell_manager() -> Result<(), String> {
+pub async fn initialize_shell_manager() -> TauriResult<()> {
     debug!("初始化Shell管理器");
 
     // ShellManager 不需要单独的初始化方法，创建实例时自动初始化
@@ -545,10 +526,8 @@ pub async fn initialize_shell_manager() -> Result<(), String> {
 
 /// 验证Shell管理器状态
 ///
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
-pub async fn validate_shell_manager() -> Result<(), String> {
+pub async fn validate_shell_manager() -> TauriResult<()> {
     debug!("验证Shell管理器状态");
 
     // ShellManager 不需要单独的验证方法，创建实例时自动验证

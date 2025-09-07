@@ -6,9 +6,9 @@ use chrono::Utc;
 use terminal_lib::ai::{create_context_manager, create_context_manager_with_config, ContextConfig};
 use terminal_lib::storage::database::{DatabaseManager, DatabaseOptions};
 use terminal_lib::storage::paths::StoragePaths;
-use terminal_lib::storage::repositories::RepositoryManager;
-use terminal_lib::storage::repositories::Repository;
 use terminal_lib::storage::repositories::conversations::{Conversation, Message};
+use terminal_lib::storage::repositories::Repository;
+use terminal_lib::storage::repositories::RepositoryManager;
 
 // 测试使用真实的 SQLite + SQL 脚本初始化，但将数据写入临时目录下，避免污染用户环境
 async fn setup_repos() -> (Arc<DatabaseManager>, RepositoryManager) {

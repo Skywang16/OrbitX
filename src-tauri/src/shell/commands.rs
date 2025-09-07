@@ -2,6 +2,8 @@
 //!
 //! 提供前端调用的Shell Integration相关命令
 
+use crate::utils::error::{TauriResult, ToTauriResult};
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Command;
@@ -9,8 +11,6 @@ use std::sync::Arc;
 use std::time::Instant;
 use tauri::State;
 use tracing::{debug, error};
-use anyhow::Context;
-use crate::utils::error::{TauriResult, ToTauriResult};
 
 use super::{CommandInfo, PaneShellState, ShellType};
 use crate::mux::{PaneId, TerminalMux};

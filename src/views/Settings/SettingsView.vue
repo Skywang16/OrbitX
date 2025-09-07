@@ -5,6 +5,7 @@
   import ShortcutSettings from '@/components/settings/components/Shortcuts/ShortcutSettings.vue'
   import { LanguageSettings } from '@/components/settings/components/Language'
   import { GeneralSettings } from '@/components/settings/components/General'
+  import { VectorIndexSettings } from '@/components/settings/components/VectorIndex'
   import SettingsNav from '@/components/settings/SettingsNav.vue'
   import { useSettingsStore } from '@/components/settings/store'
   import { createMessage, XButton } from '@/ui'
@@ -58,6 +59,7 @@
         <div class="settings-panel">
           <GeneralSettings v-if="settingsStore.activeSection === 'general'" />
           <AISettings v-else-if="settingsStore.activeSection === 'ai'" />
+          <VectorIndexSettings v-else-if="settingsStore.activeSection === 'vectorIndex'" />
           <ThemeSettings v-else-if="settingsStore.activeSection === 'theme'" />
           <ShortcutSettings v-else-if="settingsStore.activeSection === 'shortcuts'" />
           <LanguageSettings v-else-if="settingsStore.activeSection === 'language'" />

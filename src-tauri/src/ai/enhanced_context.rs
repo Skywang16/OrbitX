@@ -1003,4 +1003,3 @@ pub fn create_context_manager() -> ContextManager {
 pub fn create_context_manager_with_config(config: ContextConfig) -> ContextManager {
     ContextManager::new(config)
 }
-

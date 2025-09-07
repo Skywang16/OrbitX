@@ -1,6 +1,6 @@
 /*!
  * TOML配置写入器
- * 
+ *
  * 负责将配置写入文件系统，支持原子写入和备份恢复
  */
 
@@ -87,9 +87,7 @@ impl TomlConfigWriter {
                 let _ = fs::remove_file(&test_file).await;
                 Ok(())
             }
-            Err(e) => {
-                Err(anyhow!("配置目录权限不足: {} - {}", dir.display(), e))
-            }
+            Err(e) => Err(anyhow!("配置目录权限不足: {} - {}", dir.display(), e)),
         }
     }
 
@@ -166,9 +164,7 @@ impl TomlConfigWriter {
 
                         // 如果有备份，尝试恢复
                         if let Some(backup) = backup_path {
-                            if let Err(restore_err) =
-                                fs::copy(&backup, &self.config_path).await
-                            {
+                            if let Err(restore_err) = fs::copy(&backup, &self.config_path).await {
                                 warn!("恢复配置备份失败: {}", restore_err);
                             } else {
                                 info!("已恢复配置备份");
@@ -190,7 +186,7 @@ impl TomlConfigWriter {
     /// 创建备份并恢复默认配置
     pub async fn create_backup_and_use_default(&self) -> AppResult<AppConfig> {
         use crate::config::defaults::create_default_config;
-        
+
         // 创建备份
         if self.config_path.exists() {
             let backup_path = self.config_path.with_extension("backup");

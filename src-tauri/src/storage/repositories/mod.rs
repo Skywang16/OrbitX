@@ -27,16 +27,16 @@ use std::sync::Arc;
 pub trait Repository<T> {
     /// 根据ID查找实体
     async fn find_by_id(&self, id: i64) -> AppResult<Option<T>>;
-    
+
     /// 查找所有实体
     async fn find_all(&self) -> AppResult<Vec<T>>;
-    
+
     /// 保存实体
     async fn save(&self, entity: &T) -> AppResult<i64>;
-    
+
     /// 更新实体
     async fn update(&self, entity: &T) -> AppResult<()>;
-    
+
     /// 删除实体
     async fn delete(&self, id: i64) -> AppResult<()>;
 }
@@ -94,9 +94,12 @@ pub trait RowMapper<T> {
 }
 
 /// 通用的值提取工具
-pub fn extract_value_from_row(row: &sqlx::sqlite::SqliteRow, column_index: usize) -> AppResult<Value> {
+pub fn extract_value_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+    column_index: usize,
+) -> AppResult<Value> {
     use sqlx::{Column, TypeInfo};
-    
+
     let column = &row.columns()[column_index];
     let column_type = column.type_info();
 

@@ -33,6 +33,12 @@
       description: t('settings.ai.description'),
     },
     {
+      id: 'vectorIndex',
+      label: t('settings.vectorIndex.title'),
+      icon: 'database',
+      description: t('settings.vectorIndex.description'),
+    },
+    {
       id: 'theme',
       label: t('settings.theme.title'),
       icon: 'palette',

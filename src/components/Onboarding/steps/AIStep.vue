@@ -260,6 +260,7 @@
         apiUrl: getDefaultApiUrl(),
         apiKey: formData.apiKey,
         model: formData.model,
+        modelType: 'chat', // 默认为聊天模型
         options: formData.options,
       }
 

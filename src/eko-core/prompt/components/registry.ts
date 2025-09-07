@@ -107,7 +107,7 @@ class PromptComponentRegistry {
 
       visiting.add(componentId)
       const component = this.registry[componentId]
-      
+
       if (component?.dependencies) {
         for (const dep of component.dependencies) {
           if (components.includes(dep)) {
@@ -135,7 +135,7 @@ class PromptComponentRegistry {
    */
   validateDependencies(components: PromptComponent[]): string[] {
     const errors: string[] = []
-    
+
     for (const componentId of components) {
       const component = this.registry[componentId]
       if (!component) {

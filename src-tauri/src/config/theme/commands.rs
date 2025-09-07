@@ -186,7 +186,7 @@ pub async fn set_follow_system_theme(
         app_handle
             .emit("theme-changed", &current_theme_name)
             .context("发送事件失败")
-        .to_tauri()?;
+            .to_tauri()?;
     }
 
     Ok(())

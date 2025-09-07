@@ -99,11 +99,23 @@ oxc_syntax = "0.41"
 tree-sitter = "0.24"
 tree-sitter-python = "0.23"
 tree-sitter-rust = "0.23"
+
+# 向量索引系统依赖
+qdrant-client = "1.11"
+tree-sitter-typescript = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-go = "0.23"
+tree-sitter-java = "0.23"
 syn = { version = "2.0", features = ["full", "visit"] }
 quote = "1.0"
+glob = "0.3"
 tauri-plugin-window-state = "2.4.0"
 tauri-plugin-autostart = "2.5.0"
 eventsource-stream = "0.2.3"
+
+# 文件监控系统依赖
+notify = "6.1"
+debounce = "0.2"
 
 [dev-dependencies]
 tempfile = "3.8"

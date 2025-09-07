@@ -2,7 +2,7 @@
 //!
 //! 确保整个应用只有一个 Mux 实例
 
-use std::sync::{Arc, OnceLock, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
 use crate::mux::TerminalMux;
@@ -23,7 +23,7 @@ pub fn get_mux() -> Arc<TerminalMux> {
         .get_or_init(|| {
             tracing::debug!("初始化全局TerminalMux实例");
             let mux = Arc::new(TerminalMux::new());
-            
+
             // 启动通知处理线程
             let mux_clone = Arc::clone(&mux);
             let notification_thread = mux_clone.start_notification_processor();
@@ -35,7 +35,7 @@ pub fn get_mux() -> Arc<TerminalMux> {
                 tracing::warn!("无法保存通知处理线程句柄（锁不可用）");
             }
             tracing::debug!("TerminalMux通知处理线程已启动");
-            
+
             mux
         })
         .clone()

@@ -130,11 +130,17 @@ impl CommandHistoryRepository {
 
     /// 根据查询条件查找命令历史
     pub async fn find_by_query(&self, query: &HistoryQuery) -> AppResult<Vec<CommandHistoryEntry>> {
-        let mut builder = SafeQueryBuilder::new("command_history")
-            .select(&[
-                "id", "command", "working_directory", "exit_code", 
-                "output", "duration_ms", "executed_at", "session_id", "tags"
-            ]);
+        let mut builder = SafeQueryBuilder::new("command_history").select(&[
+            "id",
+            "command",
+            "working_directory",
+            "exit_code",
+            "output",
+            "duration_ms",
+            "executed_at",
+            "session_id",
+            "tags",
+        ]);
 
         // 添加查询条件
         if let Some(pattern) = &query.command_pattern {
@@ -217,7 +223,10 @@ impl CommandHistoryRepository {
     }
 
     /// 全文搜索命令历史
-    pub async fn full_text_search(&self, search_query: &str) -> AppResult<Vec<CommandSearchResult>> {
+    pub async fn full_text_search(
+        &self,
+        search_query: &str,
+    ) -> AppResult<Vec<CommandSearchResult>> {
         let sql = r#"
             SELECT ch.id, ch.command, ch.working_directory, ch.output, ch.executed_at,
                    snippet(command_search, 0, '<mark>', '</mark>', '...', 32) as command_snippet,
@@ -369,7 +378,10 @@ impl CommandHistoryRepository {
 impl Repository<CommandHistoryEntry> for CommandHistoryRepository {
     async fn find_by_id(&self, id: i64) -> AppResult<Option<CommandHistoryEntry>> {
         let (sql, _params) = SafeQueryBuilder::new("command_history")
-            .where_condition(QueryCondition::Eq("id".to_string(), Value::Number(id.into())))
+            .where_condition(QueryCondition::Eq(
+                "id".to_string(),
+                Value::Number(id.into()),
+            ))
             .build()?;
 
         let row = sqlx::query(&sql)
@@ -391,13 +403,52 @@ impl Repository<CommandHistoryEntry> for CommandHistoryRepository {
     async fn save(&self, entity: &CommandHistoryEntry) -> AppResult<i64> {
         let (sql, params) = InsertBuilder::new("command_history")
             .set("command", Value::String(entity.command.clone()))
-            .set("working_directory", Value::String(entity.working_directory.clone()))
-            .set("exit_code", entity.exit_code.map(|c| Value::Number(c.into())).unwrap_or(Value::Null))
-            .set("output", entity.output.as_ref().map(|o| Value::String(o.clone())).unwrap_or(Value::Null))
-            .set("duration_ms", entity.duration_ms.map(|d| Value::Number(d.into())).unwrap_or(Value::Null))
-            .set("executed_at", Value::String(entity.executed_at.to_rfc3339()))
-            .set("session_id", entity.session_id.as_ref().map(|s| Value::String(s.clone())).unwrap_or(Value::Null))
-            .set("tags", entity.tags.as_ref().map(|t| Value::String(t.clone())).unwrap_or(Value::Null))
+            .set(
+                "working_directory",
+                Value::String(entity.working_directory.clone()),
+            )
+            .set(
+                "exit_code",
+                entity
+                    .exit_code
+                    .map(|c| Value::Number(c.into()))
+                    .unwrap_or(Value::Null),
+            )
+            .set(
+                "output",
+                entity
+                    .output
+                    .as_ref()
+                    .map(|o| Value::String(o.clone()))
+                    .unwrap_or(Value::Null),
+            )
+            .set(
+                "duration_ms",
+                entity
+                    .duration_ms
+                    .map(|d| Value::Number(d.into()))
+                    .unwrap_or(Value::Null),
+            )
+            .set(
+                "executed_at",
+                Value::String(entity.executed_at.to_rfc3339()),
+            )
+            .set(
+                "session_id",
+                entity
+                    .session_id
+                    .as_ref()
+                    .map(|s| Value::String(s.clone()))
+                    .unwrap_or(Value::Null),
+            )
+            .set(
+                "tags",
+                entity
+                    .tags
+                    .as_ref()
+                    .map(|t| Value::String(t.clone()))
+                    .unwrap_or(Value::Null),
+            )
             .build()?;
 
         let mut query_builder = sqlx::query(&sql);
@@ -419,10 +470,10 @@ impl Repository<CommandHistoryEntry> for CommandHistoryRepository {
         }
 
         let result = query_builder.execute(self.database.pool()).await?;
-        
+
         // 更新使用统计
         self.update_usage_stats(entity).await?;
-        
+
         Ok(result.last_insert_rowid())
     }
 

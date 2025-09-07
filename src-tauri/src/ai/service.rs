@@ -29,42 +29,26 @@ impl AIService {
     }
 
     pub async fn get_models(&self) -> Vec<AIModelConfig> {
-        if let Some(cached) = self.cache.get("ai_models_list").await {
-            if let Ok(models) = serde_json::from_value(cached) {
-                return models;
-            }
-        }
-
-        let models = self
-            .repositories
+        self.repositories
             .ai_models()
             .find_all()
             .await
-            .unwrap_or_default();
-        if let Ok(value) = serde_json::to_value(&models) {
-            let _ = self.cache.set("ai_models_list", value).await;
-        }
-        models
+            .unwrap_or_default()
     }
 
     pub async fn add_model(&self, config: AIModelConfig) -> AppResult<()> {
-        let result = self.repositories.ai_models().save(&config).await;
-        if result.is_ok() {
-            self.cache.remove("ai_models_list").await;
-        }
-        result.map(|_| ())
+        self.repositories
+            .ai_models()
+            .save(&config)
+            .await
+            .map(|_| ())
     }
 
     pub async fn remove_model(&self, model_id: &str) -> AppResult<()> {
-        let result = self
-            .repositories
+        self.repositories
             .ai_models()
             .delete_by_string_id(model_id)
-            .await;
-        if result.is_ok() {
-            self.cache.remove("ai_models_list").await;
-        }
-        result
+            .await
     }
 
     pub async fn update_model(&self, model_id: &str, updates: serde_json::Value) -> AppResult<()> {
@@ -85,11 +69,7 @@ impl AIService {
         }
 
         let final_config: AIModelConfig = serde_json::from_value(config_value)?;
-        let result = self.repositories.ai_models().update(&final_config).await;
-        if result.is_ok() {
-            self.cache.remove("ai_models_list").await;
-        }
-        result
+        self.repositories.ai_models().update(&final_config).await
     }
 
     pub async fn test_connection(&self, model_id: &str) -> AppResult<bool> {

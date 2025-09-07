@@ -1,6 +1,6 @@
 /*!
  * 统一断言工具
- * 
+ *
  * 提供增强的断言宏和函数，用于更清晰的测试验证
  */
 
@@ -28,10 +28,7 @@ macro_rules! assert_ne_detailed {
         match (&$left, &$right) {
             (left_val, right_val) => {
                 if *left_val == *right_val {
-                    panic!(
-                        "断言失败: {} \n值不应该相等: {:?}",
-                        $context, left_val
-                    );
+                    panic!("断言失败: {} \n值不应该相等: {:?}", $context, left_val);
                 }
             }
         }
@@ -83,7 +80,8 @@ macro_rules! assert_error_contains {
                 assert!(
                     error_msg.contains($expected_msg),
                     "错误消息应该包含 '{}', 实际错误: {}",
-                    $expected_msg, error_msg
+                    $expected_msg,
+                    error_msg
                 );
             }
         }
@@ -100,7 +98,8 @@ macro_rules! assert_error_type {
                 assert!(
                     matches!(e, $error_type),
                     "错误类型不匹配，期望: {}, 实际: {:?}",
-                    stringify!($error_type), e
+                    stringify!($error_type),
+                    e
                 );
             }
         }
@@ -155,7 +154,8 @@ macro_rules! assert_contains {
         assert!(
             $collection.contains(&$item),
             "集合应该包含元素 ({}): {:?}",
-            $context, $item
+            $context,
+            $item
         );
     };
 }
@@ -174,7 +174,8 @@ macro_rules! assert_not_contains {
         assert!(
             !$collection.contains(&$item),
             "集合不应该包含元素 ({}): {:?}",
-            $context, $item
+            $context,
+            $item
         );
     };
 }
@@ -227,17 +228,10 @@ macro_rules! assert_empty {
 #[macro_export]
 macro_rules! assert_not_empty {
     ($collection:expr) => {
-        assert!(
-            !$collection.is_empty(),
-            "集合不应该为空"
-        );
+        assert!(!$collection.is_empty(), "集合不应该为空");
     };
     ($collection:expr, $context:expr) => {
-        assert!(
-            !$collection.is_empty(),
-            "集合不应该为空 ({})",
-            $context
-        );
+        assert!(!$collection.is_empty(), "集合不应该为空 ({})", $context);
     };
 }
 
@@ -248,14 +242,17 @@ macro_rules! assert_str_contains {
         assert!(
             $string.contains($substring),
             "字符串应该包含子串 '{}', 实际字符串: '{}'",
-            $substring, $string
+            $substring,
+            $string
         );
     };
     ($string:expr, $substring:expr, $context:expr) => {
         assert!(
             $string.contains($substring),
             "字符串应该包含子串 '{}' ({}), 实际字符串: '{}'",
-            $substring, $context, $string
+            $substring,
+            $context,
+            $string
         );
     };
 }
@@ -267,14 +264,17 @@ macro_rules! assert_str_not_contains {
         assert!(
             !$string.contains($substring),
             "字符串不应该包含子串 '{}', 实际字符串: '{}'",
-            $substring, $string
+            $substring,
+            $string
         );
     };
     ($string:expr, $substring:expr, $context:expr) => {
         assert!(
             !$string.contains($substring),
             "字符串不应该包含子串 '{}' ({}), 实际字符串: '{}'",
-            $substring, $context, $string
+            $substring,
+            $context,
+            $string
         );
     };
 }
@@ -286,14 +286,19 @@ macro_rules! assert_in_range {
         assert!(
             $value >= $min && $value <= $max,
             "值应该在范围 [{}, {}] 内, 实际值: {}",
-            $min, $max, $value
+            $min,
+            $max,
+            $value
         );
     };
     ($value:expr, $min:expr, $max:expr, $context:expr) => {
         assert!(
             $value >= $min && $value <= $max,
             "值应该在范围 [{}, {}] 内 ({}), 实际值: {}",
-            $min, $max, $context, $value
+            $min,
+            $max,
+            $context,
+            $value
         );
     };
 }
@@ -310,7 +315,10 @@ macro_rules! assert_duration_near {
         assert!(
             diff <= $tolerance,
             "时间差超出容忍范围，期望: {:?}, 实际: {:?}, 容忍: {:?}, 差值: {:?}",
-            $expected, $actual, $tolerance, diff
+            $expected,
+            $actual,
+            $tolerance,
+            diff
         );
     };
 }
@@ -323,7 +331,10 @@ macro_rules! assert_float_eq {
         assert!(
             diff < $epsilon,
             "浮点数不相等，左值: {}, 右值: {}, 差值: {}, 容忍: {}",
-            $left, $right, diff, $epsilon
+            $left,
+            $right,
+            diff,
+            $epsilon
         );
     };
 }
