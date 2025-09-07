@@ -64,7 +64,6 @@ mod terminal_mux_tests {
         // 移除面板
         mux.remove_pane(pane_id).unwrap();
 
-        // 验证面板已移除
         assert!(mux.get_pane(pane_id).is_none());
         assert_eq!(mux.pane_count(), 0);
 
@@ -353,20 +352,23 @@ mod notification_system_tests {
             data: b"hello world".to_vec().into(),
         };
 
-        let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
+        let (event_name, payload) =
+            TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
         assert_eq!(event_name, "terminal_output");
         assert_eq!(payload["paneId"], 1);
         assert_eq!(payload["data"], "hello world");
 
         // 测试PaneAdded通知转换
         let notification = MuxNotification::PaneAdded(PaneId::new(2));
-        let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
+        let (event_name, payload) =
+            TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
         assert_eq!(event_name, "terminal_created");
         assert_eq!(payload["paneId"], 2);
 
         // 测试PaneRemoved通知转换
         let notification = MuxNotification::PaneRemoved(PaneId::new(3));
-        let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
+        let (event_name, payload) =
+            TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
         assert_eq!(event_name, "terminal_closed");
         assert_eq!(payload["paneId"], 3);
 
@@ -375,7 +377,8 @@ mod notification_system_tests {
             pane_id: PaneId::new(4),
             size: terminal_lib::mux::PtySize::new(30, 100),
         };
-        let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
+        let (event_name, payload) =
+            TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
         assert_eq!(event_name, "terminal_resized");
         assert_eq!(payload["paneId"], 4);
         assert_eq!(payload["rows"], 30);
@@ -386,7 +389,8 @@ mod notification_system_tests {
             pane_id: PaneId::new(5),
             exit_code: Some(0),
         };
-        let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
+        let (event_name, payload) =
+            TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
         assert_eq!(event_name, "terminal_exit");
         assert_eq!(payload["paneId"], 5);
         assert_eq!(payload["exitCode"], 0);
@@ -396,7 +400,8 @@ mod notification_system_tests {
             pane_id: PaneId::new(6),
             exit_code: None,
         };
-        let (event_name, payload) = TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
+        let (event_name, payload) =
+            TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
         assert_eq!(event_name, "terminal_exit");
         assert_eq!(payload["paneId"], 6);
         assert_eq!(payload["exitCode"], serde_json::Value::Null);

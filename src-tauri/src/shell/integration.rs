@@ -269,6 +269,11 @@ impl ShellIntegrationManager {
         }
     }
 
+    /// 从文本中移除OSC序列，返回清理后的文本
+    pub fn strip_osc_sequences(&self, data: &str) -> String {
+        self.parser.strip_osc_sequences(data)
+    }
+
     /// 处理 Shell Integration（OSC 133） 序列 - 修复并完善命令状态跟踪
     fn handle_shell_integration(
         &self,

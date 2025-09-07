@@ -9,7 +9,7 @@ use super::types::*;
 use crate::config::commands::ConfigManagerState;
 use crate::config::types::{ShortcutBinding, ShortcutsConfig};
 use crate::utils::error::{TauriResult, ToTauriResult};
-
+use anyhow::Context;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::State;
@@ -223,7 +223,9 @@ pub async fn export_shortcuts_config(
     let config = manager.get_config().await.to_tauri()?;
 
     let json_config =
-        serde_json::to_string_pretty(&config).map_err(|e| format!("序列化配置失败: {}", e))?;
+        serde_json::to_string_pretty(&config)
+        .context("序列化配置失败")
+        .to_tauri()?;
 
     info!("快捷键配置导出成功");
     Ok(json_config)
@@ -237,7 +239,9 @@ pub async fn import_shortcuts_config(
     debug!("导入快捷键配置");
 
     let config: ShortcutsConfig =
-        serde_json::from_str(&config_json).map_err(|e| format!("解析配置失败: {}", e))?;
+        serde_json::from_str(&config_json)
+        .context("解析配置失败")
+        .to_tauri()?;
 
     let manager = state.manager.lock().await;
     manager.update_config(config).await.to_tauri()?;

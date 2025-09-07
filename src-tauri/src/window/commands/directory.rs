@@ -5,18 +5,16 @@
  */
 
 use super::*;
+use crate::utils::error::TauriResult;
+use anyhow::Context;
 
 /// 获取当前目录
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：业务参数在前，state在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn get_current_directory(
     use_cache: Option<bool>,
     state: State<'_, WindowState>,
-) -> Result<String, String> {
+) -> TauriResult<String> {
     let use_cache = use_cache.unwrap_or(true);
     debug!("开始获取当前目录: use_cache={}", use_cache);
 
@@ -34,7 +32,8 @@ pub async fn get_current_directory(
 
     // 尝试获取当前目录
     let current_dir = env::current_dir()
-        .map_err(|e| format!("目录操作失败: 获取当前目录失败: {}", e))?
+        .context("获取当前目录失败")
+        .to_tauri()?
         .to_string_lossy()
         .to_string();
 
@@ -58,15 +57,11 @@ pub async fn get_current_directory(
 
 /// 获取用户家目录
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：业务参数在前，state在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn get_home_directory(
     use_cache: Option<bool>,
     state: State<'_, WindowState>,
-) -> Result<String, String> {
+) -> TauriResult<String> {
     let use_cache = use_cache.unwrap_or(true);
     debug!("开始获取家目录: use_cache={}", use_cache);
 
@@ -98,7 +93,8 @@ pub async fn get_home_directory(
             env::current_dir().map(|p| p.to_string_lossy().to_string())
         })
     }
-    .map_err(|e| format!("目录操作失败: 获取家目录失败: {}", e))?;
+    .context("获取家目录失败")
+    .to_tauri()?;
 
     debug!("系统家目录: {}", home_dir);
 
@@ -117,12 +113,8 @@ pub async fn get_home_directory(
 
 /// 清除目录缓存
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：业务参数在前，state在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
-pub async fn clear_directory_cache(state: State<'_, WindowState>) -> Result<(), String> {
+pub async fn clear_directory_cache(state: State<'_, WindowState>) -> TauriResult<()> {
     debug!("开始清除目录缓存");
 
     // 清除目录相关的缓存
@@ -137,7 +129,7 @@ pub async fn clear_directory_cache(state: State<'_, WindowState>) -> Result<(), 
 
 /// 规范化路径
 #[tauri::command]
-pub async fn normalize_path(path: String) -> Result<String, String> {
+pub async fn normalize_path(path: String) -> TauriResult<String> {
     debug!("开始规范化路径: {}", path);
 
     if path.is_empty() {
@@ -146,7 +138,8 @@ pub async fn normalize_path(path: String) -> Result<String, String> {
 
     let normalized = Path::new(&path)
         .canonicalize()
-        .map_err(|e| format!("路径处理失败 ({}): 路径规范化失败: {}", path, e))?
+        .with_context(|| format!("路径规范化失败: {}", path))
+        .to_tauri()?
         .to_string_lossy()
         .to_string();
 
@@ -156,7 +149,7 @@ pub async fn normalize_path(path: String) -> Result<String, String> {
 
 /// 连接路径
 #[tauri::command]
-pub async fn join_paths(paths: Vec<String>) -> Result<String, String> {
+pub async fn join_paths(paths: Vec<String>) -> TauriResult<String> {
     debug!("开始连接路径: {:?}", paths);
 
     if paths.is_empty() {
@@ -178,7 +171,7 @@ pub async fn join_paths(paths: Vec<String>) -> Result<String, String> {
 
 /// 检查路径是否存在
 #[tauri::command]
-pub async fn path_exists(path: String) -> Result<bool, String> {
+pub async fn path_exists(path: String) -> TauriResult<bool> {
     debug!("开始检查路径是否存在: {}", path);
 
     if path.is_empty() {

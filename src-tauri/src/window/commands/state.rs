@@ -8,11 +8,6 @@ use super::*;
 
 /// 批量窗口状态管理命令
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：业务参数在前，state参数在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
-/// - 批量处理：支持多个操作的原子性执行
 #[tauri::command]
 pub async fn manage_window_state<R: Runtime>(
     request: WindowStateBatchRequest,
@@ -196,7 +191,8 @@ async fn handle_set_always_on_top<R: Runtime>(
     // 设置窗口置顶
     window
         .set_always_on_top(always_on_top)
-        .map_err(|e| format!("设置窗口置顶失败: {}", e))?;
+        .context("设置窗口置顶失败")
+        .to_tauri()?;
 
     // 更新状态管理器
     state
@@ -226,7 +222,8 @@ async fn handle_toggle_always_on_top<R: Runtime>(
     // 设置窗口置顶
     window
         .set_always_on_top(new_state)
-        .map_err(|e| format!("设置窗口置顶失败: {}", e))?;
+        .context("设置窗口置顶失败")
+        .to_tauri()?;
 
     serialize_to_value(&new_state, "切换状态")
 }
@@ -250,7 +247,8 @@ async fn handle_reset_state<R: Runtime>(
     // 重置窗口置顶状态
     window
         .set_always_on_top(false)
-        .map_err(|e| format!("重置窗口置顶失败: {}", e))?;
+        .context("重置窗口置顶失败")
+        .to_tauri()?;
 
     // 清除目录缓存
     let _ = state.cache.remove("current_dir").await;

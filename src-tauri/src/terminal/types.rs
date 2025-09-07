@@ -3,91 +3,9 @@
  */
 
 use crate::mux::PaneId;
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
-use thiserror::Error;
-
-/// 终端上下文错误类型
-#[derive(Debug, Error)]
-pub enum ContextError {
-    #[error("面板不存在: {pane_id}")]
-    PaneNotFound { pane_id: PaneId },
-
-    #[error("没有活跃的终端")]
-    NoActivePane,
-
-    #[error("上下文信息不完整: {reason}")]
-    IncompleteContext { reason: String },
-
-    #[error("Shell集成未启用")]
-    ShellIntegrationDisabled,
-
-    #[error("上下文查询超时")]
-    QueryTimeout,
-
-    #[error("CWD信息过时或缺失")]
-    CwdUnavailable,
-
-    #[error("数据验证失败: {field}")]
-    ValidationFailed { field: String },
-
-    #[error("权限不足: {operation}")]
-    PermissionDenied { operation: String },
-
-    #[error("服务不可用: {service}")]
-    ServiceUnavailable { service: String },
-
-    #[error("内部错误: {source}")]
-    Internal { source: anyhow::Error },
-}
-
-impl ContextError {
-    /// 检查错误是否可以重试
-    pub fn is_retryable(&self) -> bool {
-        matches!(
-            self,
-            ContextError::QueryTimeout
-                | ContextError::CwdUnavailable
-                | ContextError::ServiceUnavailable { .. }
-        )
-    }
-
-    /// 检查错误是否需要回退到默认值
-    pub fn should_fallback(&self) -> bool {
-        matches!(
-            self,
-            ContextError::NoActivePane
-                | ContextError::IncompleteContext { .. }
-                | ContextError::CwdUnavailable
-                | ContextError::ShellIntegrationDisabled
-        )
-    }
-
-    /// 获取错误的严重程度
-    pub fn severity(&self) -> ErrorSeverity {
-        match self {
-            ContextError::Internal { .. } => ErrorSeverity::Critical,
-            ContextError::PaneNotFound { .. } => ErrorSeverity::High,
-            ContextError::PermissionDenied { .. } => ErrorSeverity::High,
-            ContextError::ServiceUnavailable { .. } => ErrorSeverity::Medium,
-            ContextError::QueryTimeout => ErrorSeverity::Medium,
-            ContextError::ValidationFailed { .. } => ErrorSeverity::Medium,
-            ContextError::NoActivePane => ErrorSeverity::Low,
-            ContextError::IncompleteContext { .. } => ErrorSeverity::Low,
-            ContextError::CwdUnavailable => ErrorSeverity::Low,
-            ContextError::ShellIntegrationDisabled => ErrorSeverity::Low,
-        }
-    }
-}
-
-/// 错误严重程度
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ErrorSeverity {
-    Low,
-    Medium,
-    High,
-    Critical,
-}
 
 /// 终端上下文事件类型
 #[derive(Debug, Clone, Serialize)]
@@ -301,29 +219,23 @@ impl TerminalContext {
     }
 
     /// 验证终端上下文的完整性
-    pub fn validate(&self) -> Result<(), ContextError> {
+    pub fn validate(&self) -> Result<()> {
         // 验证面板ID是否有效
         if self.pane_id.as_u32() == 0 {
-            return Err(ContextError::IncompleteContext {
-                reason: "无效的面板ID".to_string(),
-            });
+            return Err(anyhow!("无效的面板ID"));
         }
 
         // 验证命令历史记录的完整性
         for (index, command) in self.command_history.iter().enumerate() {
             if let Err(e) = command.validate() {
-                return Err(ContextError::IncompleteContext {
-                    reason: format!("命令历史记录第{}项无效: {}", index, e),
-                });
+                return Err(anyhow!("命令历史记录第{}项无效: {}", index, e));
             }
         }
 
         // 验证当前命令的完整性
         if let Some(ref command) = self.current_command {
             if let Err(e) = command.validate() {
-                return Err(ContextError::IncompleteContext {
-                    reason: format!("当前命令无效: {}", e),
-                });
+                return Err(anyhow!("当前命令无效: {}", e));
             }
         }
 
@@ -394,12 +306,6 @@ impl TerminalContext {
     pub fn update_window_title(&mut self, title: String) {
         self.window_title = Some(title);
         self.last_activity = SystemTime::now();
-    }
-}
-
-impl From<anyhow::Error> for ContextError {
-    fn from(error: anyhow::Error) -> Self {
-        ContextError::Internal { source: error }
     }
 }
 
@@ -514,12 +420,6 @@ impl ContextQueryOptions {
     }
 }
 
-impl From<ContextError> for String {
-    fn from(error: ContextError) -> Self {
-        error.to_string()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -594,17 +494,6 @@ mod tests {
             ShellType::from_str("unknown"),
             ShellType::Other("unknown".to_string())
         );
-    }
-
-    #[test]
-    fn test_context_error_properties() {
-        let error = ContextError::QueryTimeout;
-        assert!(error.is_retryable());
-        assert_eq!(error.severity(), ErrorSeverity::Medium);
-
-        let error = ContextError::NoActivePane;
-        assert!(error.should_fallback());
-        assert_eq!(error.severity(), ErrorSeverity::Low);
     }
 
     #[test]

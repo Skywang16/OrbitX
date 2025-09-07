@@ -73,22 +73,3 @@ pub struct AnalysisResult {
     pub error_count: usize,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum AstError {
-    #[error("文件不存在: {0}")]
-    FileNotFound(String),
-
-    #[error("不支持的文件类型: {0}")]
-    UnsupportedFileType(String),
-
-    #[error("不支持的语言: {0}")]
-    UnsupportedLanguage(String),
-
-    #[error("解析失败: {0}")]
-    ParseError(String),
-
-    #[error("IO错误: {0}")]
-    IoError(#[from] std::io::Error),
-}
-
-pub type AstResult<T> = Result<T, AstError>;

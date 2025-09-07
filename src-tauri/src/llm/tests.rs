@@ -204,23 +204,6 @@ mod tests {
     }
 
     #[test]
-    fn test_error_types() {
-        let errors = vec![
-            LLMError::Provider("Test provider error".to_string()),
-            LLMError::Config("Test config error".to_string()),
-            LLMError::Network("Test network error".to_string()),
-            LLMError::ModelNotFound("test-model".to_string()),
-            LLMError::UnsupportedProvider("test-provider".to_string()),
-            LLMError::InvalidResponse("Invalid JSON".to_string()),
-        ];
-
-        for error in errors {
-            let error_string = error.to_string();
-            assert!(!error_string.is_empty());
-        }
-    }
-
-    #[test]
     fn test_multimodal_message() {
         let multimodal_message = LLMMessage {
             role: "user".to_string(),

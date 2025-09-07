@@ -36,7 +36,8 @@ pub async fn set_window_opacity<R: Runtime>(
 
     window
         .eval(&script)
-        .map_err(|e| format!("设置窗口透明度失败: {}", e))?;
+        .context("设置窗口透明度失败")
+        .to_tauri()?;
 
     // 使用统一的配置更新风格
     config_state

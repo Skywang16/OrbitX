@@ -1,60 +1,37 @@
 /*!
  * 终端模块的Tauri命令接口
  *
- * 统一的终端命令处理规范：
- * 1. 参数顺序：业务参数在前，state参数在后
- * 2. 异步处理：所有命令都是async，统一错误转换
- * 3. 日志记录：每个命令都记录调用和结果日志
- * 4. 状态管理：统一使用TerminalState访问各组件
- * 5. 错误处理：使用TerminalError统一错误类型
- *
  * Note: Event handling has been moved to terminal::event_handler for unified event management.
  * This module now focuses solely on terminal command implementations.
  */
 
-// 注意：移除未使用的 anyhow 导入，因为所有 Tauri 命令都直接返回 Result<T, String>
-
+use anyhow::{anyhow, Context};
 use tauri::{AppHandle, Runtime, State};
 use tracing::{debug, error, warn};
 
 use crate::mux::{
-    get_mux, ErrorHandler, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager,
-    ShellManagerStats, TerminalConfig, TerminalError, TerminalResult,
+    get_mux, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager, ShellManagerStats,
+    TerminalConfig,
 };
+use crate::utils::error::{AppResult, TauriResult, ToTauriResult};
 
-/// 统一的错误处理函数（使用新的错误系统）
-fn handle_terminal_error(error: TerminalError) -> String {
-    ErrorHandler::to_tauri_error(error)
-}
-
-/// 参数验证辅助函数（使用新的错误系统）
-fn validate_terminal_size(rows: u16, cols: u16) -> TerminalResult<()> {
+/// 参数验证辅助函数
+fn validate_terminal_size(rows: u16, cols: u16) -> AppResult<()> {
     if rows == 0 || cols == 0 {
-        return Err(TerminalError::validation(
-            "terminal_size",
-            format!("终端尺寸不能为0 (当前: {}x{})", cols, rows),
-        ));
+        return Err(anyhow!("终端尺寸不能为0 (当前: {}x{})", cols, rows));
     }
     Ok(())
 }
 
-fn validate_non_empty_string(value: &str, field_name: &str) -> TerminalResult<()> {
+fn validate_non_empty_string(value: &str, field_name: &str) -> AppResult<()> {
     if value.trim().is_empty() {
-        return Err(TerminalError::validation(
-            field_name,
-            format!("{}不能为空", field_name),
-        ));
+        return Err(anyhow!("{}不能为空", field_name));
     }
     Ok(())
 }
 
 /// 终端状态管理
 ///
-/// 统一状态管理规范：
-/// 1. 使用全局单例模式访问TerminalMux
-/// 2. 提供统一的初始化和验证方法
-/// 3. 包含配置验证和错误处理
-/// 4. 支持组件间的依赖注入
 pub struct TerminalState {
     // 注意：我们使用全局单例，所以这里不需要存储 Arc<TerminalMux>
     // 但保留这个结构体以便将来扩展其他状态
@@ -62,7 +39,7 @@ pub struct TerminalState {
 }
 
 impl TerminalState {
-    /// 统一的初始化方法
+    /// 初始化方法
     pub fn new() -> Result<Self, String> {
         let state = Self { _placeholder: () };
 
@@ -85,10 +62,6 @@ impl TerminalState {
 
 /// 创建新终端会话
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：业务参数在前，state在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn create_terminal<R: Runtime>(
     rows: u16,
@@ -101,7 +74,9 @@ pub async fn create_terminal<R: Runtime>(
     debug!("当前Mux状态 - 面板数量: {}", get_mux().pane_count());
 
     // 参数验证
-    validate_terminal_size(rows, cols).map_err(handle_terminal_error)?;
+    validate_terminal_size(rows, cols)
+        .context("终端尺寸验证失败")
+        .to_tauri()?;
 
     let mux = get_mux();
     let size = PtySize::new(rows, cols);
@@ -133,20 +108,12 @@ pub async fn create_terminal<R: Runtime>(
             );
             Ok(pane_id.as_u32())
         }
-        Err(e) => Err(handle_terminal_error(TerminalError::pane(
-            "创建终端",
-            0,
-            e.to_string(),
-        ))),
+        Err(e) => Err(e.context("创建终端失败")).to_tauri(),
     }
 }
 
 /// 向终端写入数据
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：业务参数在前，state在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn write_to_terminal(
     pane_id: u32,
@@ -162,10 +129,7 @@ pub async fn write_to_terminal(
 
     // 参数验证
     if data.is_empty() {
-        return Err(handle_terminal_error(TerminalError::validation(
-            "terminal_data",
-            format!("写入数据不能为空 (面板ID: {})", pane_id),
-        )));
+        return Err(anyhow!("写入数据不能为空 (面板ID: {})", pane_id)).to_tauri();
     }
 
     let mux = get_mux();
@@ -176,20 +140,12 @@ pub async fn write_to_terminal(
             debug!("写入终端成功: ID={}", pane_id);
             Ok(())
         }
-        Err(e) => Err(handle_terminal_error(TerminalError::pane(
-            "写入终端",
-            pane_id,
-            e.to_string(),
-        ))),
+        Err(e) => Err(e.context(format!("写入终端失败 (面板ID: {})", pane_id))).to_tauri(),
     }
 }
 
 /// 调整终端大小
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：业务参数在前，state在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn resize_terminal(
     pane_id: u32,
@@ -200,7 +156,9 @@ pub async fn resize_terminal(
     debug!("调整终端大小: ID={}, 大小={}x{}", pane_id, cols, rows);
 
     // 参数验证
-    validate_terminal_size(rows, cols).map_err(handle_terminal_error)?;
+    validate_terminal_size(rows, cols)
+        .context("终端尺寸验证失败")
+        .to_tauri()?;
 
     let mux = get_mux();
     let pane_id_obj = PaneId::from(pane_id);
@@ -211,23 +169,15 @@ pub async fn resize_terminal(
             debug!("调整终端大小成功: ID={}", pane_id);
             Ok(())
         }
-        Err(e) => Err(handle_terminal_error(TerminalError::pane(
-            "调整终端大小",
-            pane_id,
-            e.to_string(),
-        ))),
+        Err(e) => Err(e.context(format!("调整终端大小失败 (面板ID: {})", pane_id))).to_tauri(),
     }
 }
 
 /// 关闭终端会话
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：业务参数在前，state在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 /// - 防御性编程：优雅处理面板不存在的情况
 #[tauri::command]
-pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> Result<(), String> {
+pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> TauriResult<()> {
     let mux = get_mux();
     let pane_id_obj = PaneId::from(pane_id);
 
@@ -256,24 +206,16 @@ pub async fn close_terminal(pane_id: u32, _state: State<'_, TerminalState>) -> R
                 Ok(())
             } else {
                 // 其他错误，返回失败
-                Err(handle_terminal_error(TerminalError::pane(
-                    "关闭终端",
-                    pane_id,
-                    e.to_string(),
-                )))
+                Err(e.context(format!("关闭终端失败 (面板ID: {})", pane_id))).to_tauri()
             }
         }
     }
 }
 
-/// 获取终端列表（调试用）
+/// 获取终端列表
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：业务参数在前，state在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
-pub async fn list_terminals(_state: State<'_, TerminalState>) -> Result<Vec<u32>, String> {
+pub async fn list_terminals(_state: State<'_, TerminalState>) -> TauriResult<Vec<u32>> {
     debug!("获取终端列表");
 
     let mux = get_mux();
@@ -297,12 +239,8 @@ pub async fn list_terminals(_state: State<'_, TerminalState>) -> Result<Vec<u32>
 
 /// 获取终端缓冲区内容
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：业务参数在前，state在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
-pub async fn get_terminal_buffer(pane_id: u32) -> Result<String, String> {
+pub async fn get_terminal_buffer(pane_id: u32) -> TauriResult<String> {
     debug!("开始获取终端缓冲区内容: ID={}", pane_id);
 
     use crate::completion::output_analyzer::OutputAnalyzer;
@@ -326,12 +264,8 @@ pub async fn get_terminal_buffer(pane_id: u32) -> Result<String, String> {
 
 /// 设置终端缓冲区内容
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：业务参数在前，state在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
-pub async fn set_terminal_buffer(pane_id: u32, content: String) -> Result<(), String> {
+pub async fn set_terminal_buffer(pane_id: u32, content: String) -> TauriResult<()> {
     debug!(
         "开始设置终端缓冲区内容: ID={}, 内容长度={}",
         pane_id,
@@ -355,18 +289,13 @@ pub async fn set_terminal_buffer(pane_id: u32, content: String) -> Result<(), St
 
 /// 获取系统可用的shell列表
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：无业务参数，state参数在后（如果需要）
 /// - 日志记录：记录操作开始、成功和失败
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
-pub async fn get_available_shells() -> Result<Vec<ShellInfo>, String> {
+pub async fn get_available_shells() -> TauriResult<Vec<ShellInfo>> {
     debug!("获取可用shell列表");
 
-    let shells = ErrorHandler::handle_panic("获取可用shell列表", || {
-        ShellManager::detect_available_shells()
-    })
-    .map_err(handle_terminal_error)?;
+    let shells = ShellManager::detect_available_shells();
 
     debug!("获取可用shell列表成功: count={}", shells.len());
 
@@ -382,17 +311,13 @@ pub async fn get_available_shells() -> Result<Vec<ShellInfo>, String> {
 
 /// 获取系统默认shell信息
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：无业务参数，state参数在后（如果需要）
 /// - 日志记录：记录操作开始、成功和失败
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
-pub async fn get_default_shell() -> Result<ShellInfo, String> {
+pub async fn get_default_shell() -> TauriResult<ShellInfo> {
     debug!("获取系统默认shell");
 
-    let default_shell =
-        ErrorHandler::handle_panic("获取默认shell", || ShellManager::get_default_shell())
-            .map_err(handle_terminal_error)?;
+    let default_shell = ShellManager::get_default_shell();
 
     debug!(
         "获取默认shell成功: {} -> {}",
@@ -409,18 +334,17 @@ pub async fn get_default_shell() -> Result<ShellInfo, String> {
 
 /// 验证shell路径是否有效
 ///
-/// 统一命令处理规范：
 /// - 参数顺序：业务参数在前，state参数在后
 /// - 日志记录：记录操作开始、成功和失败
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
-pub async fn validate_shell_path(path: String) -> Result<bool, String> {
+pub async fn validate_shell_path(path: String) -> TauriResult<bool> {
     // 参数验证
-    validate_non_empty_string(&path, "Shell路径").map_err(handle_terminal_error)?;
+    validate_non_empty_string(&path, "Shell路径")
+        .context("Shell路径验证失败")
+        .to_tauri()?;
 
-    let is_valid =
-        ErrorHandler::handle_panic("验证shell路径", || ShellManager::validate_shell(&path))
-            .map_err(handle_terminal_error)?;
+    let is_valid = ShellManager::validate_shell(&path);
 
     debug!("验证shell路径: path={}, valid={}", path, is_valid);
     debug!("Shell路径验证详情: {} -> {}", path, is_valid);
@@ -429,10 +353,6 @@ pub async fn validate_shell_path(path: String) -> Result<bool, String> {
 
 /// 使用指定shell创建终端
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：业务参数在前，state在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 #[tauri::command]
 pub async fn create_terminal_with_shell<R: Runtime>(
     shell_name: Option<String>,
@@ -493,19 +413,18 @@ pub async fn create_terminal_with_shell<R: Runtime>(
 
 /// 根据名称查找shell
 ///
-/// 统一命令处理规范：
 /// - 参数顺序：业务参数在前，state参数在后
 /// - 日志记录：记录操作开始、成功和失败
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
-pub async fn find_shell_by_name(shell_name: String) -> Result<Option<ShellInfo>, String> {
+pub async fn find_shell_by_name(shell_name: String) -> TauriResult<Option<ShellInfo>> {
     debug!("查找shell: {}", shell_name);
 
     // 参数验证
     if shell_name.trim().is_empty() {
         let error_msg = "Shell名称验证失败: Shell名称不能为空";
         error!("查找shell失败: {}", error_msg);
-        return Err(error_msg.to_string());
+        return Err(anyhow!("{}", error_msg)).to_tauri();
     }
 
     match std::panic::catch_unwind(|| ShellManager::find_shell_by_name(&shell_name)) {
@@ -532,19 +451,18 @@ pub async fn find_shell_by_name(shell_name: String) -> Result<Option<ShellInfo>,
 
 /// 根据路径查找shell
 ///
-/// 统一命令处理规范：
 /// - 参数顺序：业务参数在前，state参数在后
 /// - 日志记录：记录操作开始、成功和失败
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
-pub async fn find_shell_by_path(shell_path: String) -> Result<Option<ShellInfo>, String> {
+pub async fn find_shell_by_path(shell_path: String) -> TauriResult<Option<ShellInfo>> {
     debug!("根据路径查找shell: {}", shell_path);
 
     // 参数验证
     if shell_path.trim().is_empty() {
         let error_msg = "Shell路径验证失败: Shell路径不能为空";
         error!("根据路径查找shell失败: {}", error_msg);
-        return Err(error_msg.to_string());
+        return Err(anyhow!("{}", error_msg)).to_tauri();
     }
 
     match std::panic::catch_unwind(|| ShellManager::find_shell_by_path(&shell_path)) {
@@ -574,8 +492,6 @@ pub async fn find_shell_by_path(shell_path: String) -> Result<Option<ShellInfo>,
 
 /// 获取Shell管理器统计信息
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：无业务参数，state参数在后（如果需要）
 /// - 日志记录：记录操作开始、成功和失败
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
@@ -598,15 +514,13 @@ pub async fn get_shell_stats() -> Result<ShellManagerStats, String> {
         Err(_) => {
             let error_msg = "获取Shell统计信息时发生系统错误";
             error!("获取Shell统计信息失败: {}", error_msg);
-            Err(error_msg.to_string())
+            Err(anyhow!("{}", error_msg)).to_tauri()
         }
     }
 }
 
 /// 初始化Shell管理器
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：无业务参数，state参数在后（如果需要）
 /// - 日志记录：记录操作开始、成功和失败
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
@@ -624,15 +538,13 @@ pub async fn initialize_shell_manager() -> Result<(), String> {
         Err(_) => {
             let error_msg = "Shell管理器初始化失败";
             error!("{}", error_msg);
-            Err(error_msg.to_string())
+            Err(anyhow!("{}", error_msg)).to_tauri()
         }
     }
 }
 
 /// 验证Shell管理器状态
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：无业务参数，state参数在后（如果需要）
 /// - 日志记录：记录操作开始、成功和失败
 /// - 错误处理：统一转换为String类型
 #[tauri::command]
@@ -651,7 +563,7 @@ pub async fn validate_shell_manager() -> Result<(), String> {
         Err(_) => {
             let error_msg = "Shell管理器验证失败";
             error!("{}", error_msg);
-            Err(error_msg.to_string())
+            Err(anyhow!("{}", error_msg)).to_tauri()
         }
     }
 }

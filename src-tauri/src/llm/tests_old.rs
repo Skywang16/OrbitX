@@ -167,12 +167,12 @@ mod tests {
     #[test]
     fn test_error_types() {
         let errors = vec![
-            LLMError::Provider("Test provider error".to_string()),
-            LLMError::Config("Test config error".to_string()),
-            LLMError::Network("Test network error".to_string()),
-            LLMError::ModelNotFound("test-model".to_string()),
-            LLMError::UnsupportedProvider("test-provider".to_string()),
-            LLMError::InvalidResponse("Invalid JSON".to_string()),
+            anyhow::anyhow!("Test provider error"),
+            anyhow::anyhow!("Test config error"),
+            anyhow::anyhow!("Test network error"),
+            anyhow::anyhow!("Model not found: test-model"),
+            anyhow::anyhow!("Unsupported provider: test-provider"),
+            anyhow::anyhow!("Invalid response: Invalid JSON"),
         ];
 
         for error in errors {

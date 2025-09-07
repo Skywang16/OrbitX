@@ -10,6 +10,8 @@ use crate::terminal::{
     context_registry::ActiveTerminalContextRegistry, types::*, CommandInfo, ShellType,
     TerminalContext,
 };
+use crate::utils::error::AppResult;
+use anyhow::anyhow;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -119,12 +121,12 @@ impl TerminalContextService {
     ///
     /// # Returns
     /// * `Ok(TerminalContext)` - 活跃终端的上下文信息
-    /// * `Err(ContextError)` - 获取失败的错误信息
-    pub async fn get_active_context(&self) -> Result<TerminalContext, ContextError> {
+    /// * `Err(anyhow::Error)` - 获取失败的错误信息
+    pub async fn get_active_context(&self) -> AppResult<TerminalContext> {
         let active_pane_id = self
             .registry
             .get_active_pane()
-            .ok_or(ContextError::NoActivePane)?;
+            .ok_or(anyhow!("没有活跃的终端"))?;
 
         debug!("获取活跃终端上下文: pane_id={:?}", active_pane_id);
         self.get_context_by_pane(active_pane_id).await
@@ -137,11 +139,8 @@ impl TerminalContextService {
     ///
     /// # Returns
     /// * `Ok(TerminalContext)` - 指定面板的上下文信息
-    /// * `Err(ContextError)` - 获取失败的错误信息
-    pub async fn get_context_by_pane(
-        &self,
-        pane_id: PaneId,
-    ) -> Result<TerminalContext, ContextError> {
+    /// * `Err(anyhow::Error)` - 获取失败的错误信息
+    pub async fn get_context_by_pane(&self, pane_id: PaneId) -> AppResult<TerminalContext> {
         // 首先检查缓存
         if let Some(cached_context) = self.get_cached_context_internal(pane_id) {
             debug!("从缓存获取上下文: pane_id={:?}", pane_id);
@@ -154,10 +153,10 @@ impl TerminalContextService {
         // 使用超时机制查询上下文
         let context = timeout(self.query_timeout, self.query_context_internal(pane_id))
             .await
-            .map_err(|_| ContextError::QueryTimeout)?
+            .map_err(|_| anyhow!("查询终端上下文超时"))?
             .map_err(|e| {
                 warn!("查询终端上下文失败: pane_id={:?}, error={}", pane_id, e);
-                e
+                e.context("查询终端上下文失败")
             })?;
 
         // 缓存结果
@@ -176,11 +175,11 @@ impl TerminalContextService {
     ///
     /// # Returns
     /// * `Ok(TerminalContext)` - 终端上下文信息
-    /// * `Err(ContextError)` - 获取失败的错误信息
+    /// * `Err(anyhow::Error)` - 获取失败的错误信息
     pub async fn get_context_with_fallback(
         &self,
         pane_id: Option<PaneId>,
-    ) -> Result<TerminalContext, ContextError> {
+    ) -> AppResult<TerminalContext> {
         // 1. 尝试获取指定面板的上下文
         if let Some(pane_id) = pane_id {
             if let Ok(context) = self.get_context_by_pane(pane_id).await {
@@ -210,12 +209,12 @@ impl TerminalContextService {
     ///
     /// # Returns
     /// * `Ok(String)` - 当前工作目录路径
-    /// * `Err(ContextError)` - 获取失败的错误信息
-    pub async fn get_active_cwd(&self) -> Result<String, ContextError> {
+    /// * `Err(anyhow::Error)` - 获取失败的错误信息
+    pub async fn get_active_cwd(&self) -> AppResult<String> {
         let active_pane_id = self
             .registry
             .get_active_pane()
-            .ok_or(ContextError::NoActivePane)?;
+            .ok_or(anyhow!("没有活跃的终端"))?;
 
         self.get_pane_cwd(active_pane_id).await
     }
@@ -227,31 +226,29 @@ impl TerminalContextService {
     ///
     /// # Returns
     /// * `Ok(String)` - 当前工作目录路径
-    /// * `Err(ContextError)` - 获取失败的错误信息
-    pub async fn get_pane_cwd(&self, pane_id: PaneId) -> Result<String, ContextError> {
+    /// * `Err(anyhow::Error)` - 获取失败的错误信息
+    pub async fn get_pane_cwd(&self, pane_id: PaneId) -> AppResult<String> {
         // 检查面板是否存在
         if !self.terminal_mux.pane_exists(pane_id) {
-            return Err(ContextError::PaneNotFound { pane_id });
+            return Err(anyhow!("面板不存在: {}", pane_id));
         }
 
         // 从Shell集成管理器获取CWD
         self.terminal_mux
             .get_pane_cwd(pane_id)
-            .ok_or_else(|| ContextError::IncompleteContext {
-                reason: "无法获取当前工作目录".to_string(),
-            })
+            .ok_or_else(|| anyhow!("无法获取当前工作目录"))
     }
 
     /// 获取活跃终端的Shell类型
     ///
     /// # Returns
     /// * `Ok(ShellType)` - Shell类型
-    /// * `Err(ContextError)` - 获取失败的错误信息
-    pub async fn get_active_shell_type(&self) -> Result<ShellType, ContextError> {
+    /// * `Err(anyhow::Error)` - 获取失败的错误信息
+    pub async fn get_active_shell_type(&self) -> AppResult<ShellType> {
         let active_pane_id = self
             .registry
             .get_active_pane()
-            .ok_or(ContextError::NoActivePane)?;
+            .ok_or(anyhow!("没有活跃的终端"))?;
 
         self.get_pane_shell_type(active_pane_id).await
     }
@@ -263,11 +260,11 @@ impl TerminalContextService {
     ///
     /// # Returns
     /// * `Ok(ShellType)` - Shell类型
-    /// * `Err(ContextError)` - 获取失败的错误信息
-    pub async fn get_pane_shell_type(&self, pane_id: PaneId) -> Result<ShellType, ContextError> {
+    /// * `Err(anyhow::Error)` - 获取失败的错误信息
+    pub async fn get_pane_shell_type(&self, pane_id: PaneId) -> AppResult<ShellType> {
         // 检查面板是否存在
         if !self.terminal_mux.pane_exists(pane_id) {
-            return Err(ContextError::PaneNotFound { pane_id });
+            return Err(anyhow!("面板不存在: {}", pane_id));
         }
 
         // 从Shell集成管理器获取Shell状态
@@ -329,13 +326,10 @@ impl TerminalContextService {
     // 私有方法
 
     /// 内部查询上下文的实现
-    async fn query_context_internal(
-        &self,
-        pane_id: PaneId,
-    ) -> Result<TerminalContext, ContextError> {
+    async fn query_context_internal(&self, pane_id: PaneId) -> AppResult<TerminalContext> {
         // 检查面板是否存在
         if !self.terminal_mux.pane_exists(pane_id) {
-            return Err(ContextError::PaneNotFound { pane_id });
+            return Err(anyhow!("面板不存在: {}", pane_id));
         }
 
         // 创建基础上下文
@@ -596,7 +590,8 @@ mod tests {
 
         // 没有活跃终端时应该返回错误
         let result = service.get_active_context().await;
-        assert!(matches!(result, Err(ContextError::NoActivePane)));
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "没有活跃的终端");
     }
 
     #[tokio::test]
@@ -606,10 +601,8 @@ mod tests {
 
         // 不存在的面板应该返回错误
         let result = service.get_context_by_pane(non_existent_pane).await;
-        assert!(matches!(
-            result,
-            Err(ContextError::PaneNotFound { pane_id }) if pane_id == non_existent_pane
-        ));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("面板不存在"));
     }
 
     #[tokio::test]
@@ -693,10 +686,7 @@ mod tests {
 
         // 测试获取活跃终端上下文（应该失败，因为面板不存在）
         let result = service.get_active_context().await;
-        assert!(matches!(
-            result,
-            Err(ContextError::PaneNotFound { pane_id: p }) if p == pane_id
-        ));
+        assert!(result.is_err());
     }
 
     #[tokio::test]
@@ -766,15 +756,14 @@ mod tests {
 
         // 测试获取活跃终端CWD（没有活跃终端）
         let result = service.get_active_cwd().await;
-        assert!(matches!(result, Err(ContextError::NoActivePane)));
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "没有活跃的终端");
 
         // 测试获取不存在面板的CWD
         let non_existent_pane = PaneId::new(999);
         let result = service.get_pane_cwd(non_existent_pane).await;
-        assert!(matches!(
-            result,
-            Err(ContextError::PaneNotFound { pane_id }) if pane_id == non_existent_pane
-        ));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("面板不存在"));
     }
 
     #[tokio::test]
@@ -783,15 +772,14 @@ mod tests {
 
         // 测试获取活跃终端Shell类型（没有活跃终端）
         let result = service.get_active_shell_type().await;
-        assert!(matches!(result, Err(ContextError::NoActivePane)));
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "没有活跃的终端");
 
         // 测试获取不存在面板的Shell类型
         let non_existent_pane = PaneId::new(999);
         let result = service.get_pane_shell_type(non_existent_pane).await;
-        assert!(matches!(
-            result,
-            Err(ContextError::PaneNotFound { pane_id }) if pane_id == non_existent_pane
-        ));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("面板不存在"));
     }
 
     #[tokio::test]

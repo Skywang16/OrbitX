@@ -4,11 +4,16 @@
 
 #[cfg(test)]
 mod tests {
-    use super::manager::TomlConfigManager;
-    use crate::config::{defaults::create_default_config, paths::ConfigPaths, types::AppConfig};
+    use crate::config::{defaults::create_default_config, paths::ConfigPaths};
+    use crate::config::{
+        toml::{
+            ConfigEventSender, TomlConfigManager, TomlConfigReader, TomlConfigValidator,
+            TomlConfigWriter,
+        },
+        ConfigEvent,
+    };
     use std::sync::{Arc, RwLock};
     use tempfile::TempDir;
-    use tokio::sync::broadcast;
     use tokio::time::Duration;
 
     /// 创建测试用的配置管理器
@@ -17,10 +22,10 @@ mod tests {
         let paths = ConfigPaths::with_app_data_dir(temp_dir.path()).unwrap();
 
         // 使用测试路径创建管理器的各个组件
-        let reader = super::reader::TomlConfigReader::new().unwrap();
-        let writer = super::writer::TomlConfigWriter::new(paths.config_file());
-        let validator = super::validator::TomlConfigValidator::new();
-        let event_sender = super::events::ConfigEventSender::new().0;
+        let reader = TomlConfigReader::new().unwrap();
+        let writer = TomlConfigWriter::new(paths.config_file());
+        let validator = TomlConfigValidator::new();
+        let event_sender = ConfigEventSender::new().0;
 
         let manager = TomlConfigManager {
             config_cache: Arc::new(RwLock::new(create_default_config())),
@@ -129,7 +134,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert!(matches!(event, super::events::ConfigEvent::Loaded { .. }));
+        assert!(matches!(event, ConfigEvent::Loaded { .. }));
 
         // 保存配置应该触发事件
         let config = create_default_config();
@@ -140,7 +145,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert!(matches!(event, super::events::ConfigEvent::Saved { .. }));
+        assert!(matches!(event, ConfigEvent::Saved { .. }));
     }
 
     #[tokio::test]

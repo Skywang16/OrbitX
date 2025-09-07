@@ -311,7 +311,6 @@ impl ContextManager {
             if let Some(shell) = terminal_tab_info.get("shell").and_then(|v| v.as_str()) {
                 debug!("🐚 添加终端环境: Shell={}", shell);
                 env_parts.push(format!("Shell: {}", shell));
-                // 工作目录信息已移除 - Agent工具会自动继承
             }
         }
         // 移除fallback工作目录处理 - 不再在prompt中显示技术细节

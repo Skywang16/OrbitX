@@ -7,11 +7,12 @@ use std::collections::HashMap;
 use std::pin::Pin;
 use tokio_stream::Stream;
 
+use anyhow::{anyhow, Context, Result};
 use crate::llm::{
     providers::base::LLMProvider,
     types::{
-        LLMError, LLMMessage, LLMMessageContent, LLMMessagePart, LLMProviderConfig, LLMRequest,
-        LLMResponse, LLMResult, LLMStreamChunk, LLMTool, LLMToolCall, LLMUsage,
+        LLMMessage, LLMMessageContent, LLMMessagePart, LLMProviderConfig, LLMRequest,
+        LLMResponse, LLMStreamChunk, LLMTool, LLMToolCall, LLMUsage,
     },
 };
 
@@ -187,11 +188,11 @@ impl OpenAIProvider {
     }
 
     /// 从提供商响应中解析 LLMResponse
-    fn parse_response(&self, response_json: &Value) -> LLMResult<LLMResponse> {
+    fn parse_response(&self, response_json: &Value) -> Result<LLMResponse> {
         let choice = response_json["choices"]
             .as_array()
             .and_then(|arr| arr.first())
-            .ok_or_else(|| LLMError::InvalidResponse("Missing 'choices' array".to_string()))?;
+            .ok_or_else(|| anyhow!("响应中缺少choices字段"))?;
 
         let content = choice["message"]["content"]
             .as_str()
@@ -215,33 +216,31 @@ impl OpenAIProvider {
     }
 
     /// 从响应中提取工具调用
-    fn extract_tool_calls(&self, choice: &Value) -> LLMResult<Option<Vec<LLMToolCall>>> {
+    fn extract_tool_calls(&self, choice: &Value) -> Result<Option<Vec<LLMToolCall>>> {
         if let Some(tool_calls_json) = choice["message"]["tool_calls"].as_array() {
-            let extracted_calls: LLMResult<Vec<LLMToolCall>> = tool_calls_json
+            let extracted_calls: Result<Vec<LLMToolCall>> = tool_calls_json
                 .iter()
                 .map(|tc| {
                     let id = tc["id"]
                         .as_str()
                         .ok_or_else(|| {
-                            LLMError::InvalidResponse("Missing 'id' in tool_call".to_string())
+                            anyhow!("工具调用中缺少ID字段")
                         })?
                         .to_string();
                     let function = &tc["function"];
                     let name = function["name"]
                         .as_str()
                         .ok_or_else(|| {
-                            LLMError::InvalidResponse(
-                                "Missing 'name' in tool_call function".to_string(),
-                            )
+                            anyhow!("工具调用函数中缺少name字段")
                         })?
                         .to_string();
 
                     let arguments_str = function["arguments"].as_str().unwrap_or("{}");
                     let arguments: Value = serde_json::from_str(arguments_str).map_err(|e| {
-                        LLMError::InvalidResponse(format!(
+                        anyhow!(
                             "Failed to parse tool_call arguments: {}",
                             e
-                        ))
+                        )
                     })?;
 
                     Ok(LLMToolCall {
@@ -269,7 +268,7 @@ impl OpenAIProvider {
     }
 
     /// 处理 API 错误响应
-    fn handle_error_response(&self, status: u16, body: &str) -> LLMError {
+    fn handle_error_response(&self, status: u16, body: &str) -> anyhow::Error {
         if let Ok(error_json) = serde_json::from_str::<Value>(body) {
             if let Some(error_obj) = error_json["error"].as_object() {
                 let error_type = error_obj["type"].as_str().unwrap_or("unknown");
@@ -277,23 +276,23 @@ impl OpenAIProvider {
 
                 return match error_type {
                     "insufficient_quota" => {
-                        LLMError::Provider(format!("Quota exceeded: {}", error_message))
+                        anyhow!("OpenAI API 配额超出: {}", error_message)
                     }
                     "invalid_request_error" => {
-                        LLMError::Config(format!("Invalid request: {}", error_message))
+                        anyhow!("OpenAI API 请求错误: {}", error_message)
                     }
                     "authentication_error" => {
-                        LLMError::Config(format!("Authentication failed: {}", error_message))
+                        anyhow!("OpenAI API 认证失败: {}", error_message)
                     }
-                    _ => LLMError::Provider(format!("OpenAI API error: {}", error_message)),
+                    _ => anyhow!("OpenAI API 错误: {}", error_message),
                 };
             }
         }
-        LLMError::Provider(format!("OpenAI API error {}: {}", status, body))
+        anyhow!("OpenAI API 响应错误 {}: {}", status, body)
     }
 
     /// 解析流式响应中的工具调用增量
-    fn parse_delta_tool_calls(delta: &Value) -> LLMResult<Option<Vec<LLMToolCall>>> {
+    fn parse_delta_tool_calls(delta: &Value) -> Result<Option<Vec<LLMToolCall>>> {
         if let Some(tool_calls_array) = delta["tool_calls"].as_array() {
             let mut parsed_calls = Vec::new();
 
@@ -350,7 +349,7 @@ impl OpenAIProvider {
     }
 
     /// 解析 SSE 流中的单个数据块 (关联函数，不依赖 self)
-    fn parse_stream_chunk(data: &str) -> LLMResult<LLMStreamChunk> {
+    fn parse_stream_chunk(data: &str) -> Result<LLMStreamChunk> {
         if data == "[DONE]" {
             return Ok(LLMStreamChunk::Finish {
                 finish_reason: "stop".to_string(),
@@ -360,18 +359,18 @@ impl OpenAIProvider {
 
         // 跳过空数据或无效数据
         if data.trim().is_empty() {
-            return Err(LLMError::InvalidResponse("Empty stream data".to_string()));
+            anyhow::bail!("流式数据为空");
         }
 
         let json_data: Value = serde_json::from_str(data).map_err(|e| {
-            LLMError::InvalidResponse(format!("Failed to parse stream data: {}", e))
+            anyhow!("解析流式数据失败: {}", e)
         })?;
 
         let choice = json_data["choices"]
             .as_array()
             .and_then(|arr| arr.first())
             .ok_or_else(|| {
-                LLMError::InvalidResponse("Missing 'choices' in stream chunk".to_string())
+                anyhow!("流式数据块中缺少choices字段")
             })?;
 
         if let Some(finish_reason) = choice["finish_reason"].as_str() {
@@ -412,13 +411,11 @@ impl OpenAIProvider {
                 });
             } else {
                 // 跳过空的delta
-                return Err(LLMError::InvalidResponse("Empty delta content".to_string()));
+                anyhow::bail!("流式增量内容为空");
             }
         }
 
-        Err(LLMError::InvalidResponse(
-            "Unknown stream chunk format".to_string(),
-        ))
+        anyhow::bail!("未知的流式数据块格式")
     }
 
     // extract_usage 的静态版本
@@ -436,7 +433,7 @@ impl OpenAIProvider {
 #[async_trait]
 impl LLMProvider for OpenAIProvider {
     /// 非流式调用
-    async fn call(&self, request: LLMRequest) -> LLMResult<LLMResponse> {
+    async fn call(&self, request: LLMRequest) -> Result<LLMResponse> {
         let url = self.get_endpoint();
         let headers = self.get_headers();
         let body = self.build_body(&request);
@@ -446,7 +443,7 @@ impl LLMProvider for OpenAIProvider {
             req_builder = req_builder.header(&key, &value);
         }
 
-        let response = req_builder.send().await.map_err(LLMError::Http)?;
+        let response = req_builder.send().await.context("发送HTTP请求失败")?;
 
         let status = response.status();
         if !status.is_success() {
@@ -457,7 +454,7 @@ impl LLMProvider for OpenAIProvider {
             return Err(self.handle_error_response(status.as_u16(), &error_text));
         }
 
-        let response_json: Value = response.json().await.map_err(LLMError::Http)?;
+        let response_json: Value = response.json().await.context("解析JSON响应失败")?;
         self.parse_response(&response_json)
     }
 
@@ -465,7 +462,7 @@ impl LLMProvider for OpenAIProvider {
     async fn call_stream(
         &self,
         mut request: LLMRequest,
-    ) -> LLMResult<Pin<Box<dyn Stream<Item = LLMResult<LLMStreamChunk>> + Send>>> {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<LLMStreamChunk>> + Send>>> {
         request.stream = true;
         let url = self.get_endpoint();
         let headers = self.get_headers();
@@ -476,7 +473,7 @@ impl LLMProvider for OpenAIProvider {
             req_builder = req_builder.header(&key, &value);
         }
 
-        let response = req_builder.send().await.map_err(LLMError::Http)?;
+        let response = req_builder.send().await.context("发送HTTP请求失败")?;
 
         let status = response.status();
         if !status.is_success() {
@@ -499,7 +496,7 @@ impl LLMProvider for OpenAIProvider {
                             Err(_) => None, // 静默跳过解析错误（通常是空内容）
                         }
                     }
-                    Err(e) => Some(Err(LLMError::Network(e.to_string()))),
+                    Err(e) => Some(Err(anyhow!("网络错误: {}", e))),
                 })
             });
 

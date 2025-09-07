@@ -7,12 +7,6 @@
  * - platform: 平台信息相关命令
  * - opacity: 窗口透明度相关命令
  *
- * 统一的窗口命令处理规范：
- * 1. 参数顺序：业务参数在前，state参数在后
- * 2. 异步处理：所有命令都是async，统一错误转换
- * 3. 日志记录：每个命令都记录调用和结果日志
- * 4. 状态管理：统一使用WindowState访问各组件
- * 5. 错误处理：使用anyhow统一错误类型
  */
 
 // 子模块声明
@@ -29,6 +23,7 @@ pub use state::*;
 
 // 导入依赖
 use crate::utils::error::{serialize_to_value, AppResult, ToTauriResult};
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::{Path, PathBuf};

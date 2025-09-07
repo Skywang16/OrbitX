@@ -5,7 +5,9 @@
  */
 
 use crate::mux::PaneId;
-use crate::terminal::types::{ContextError, TerminalContextEvent};
+use crate::terminal::types::TerminalContextEvent;
+use crate::utils::error::AppResult;
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -65,14 +67,12 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(())` - 设置成功
     /// * `Err(ContextError)` - 设置失败
-    pub fn set_active_pane(&self, pane_id: PaneId) -> Result<(), ContextError> {
+    pub fn set_active_pane(&self, pane_id: PaneId) -> AppResult<()> {
         let old_pane_id = {
-            let mut active_pane =
-                self.global_active_pane
-                    .write()
-                    .map_err(|e| ContextError::Internal {
-                        source: anyhow::anyhow!("获取写锁失败: {}", e),
-                    })?;
+            let mut active_pane = self
+                .global_active_pane
+                .write()
+                .map_err(|e| anyhow!("获取写锁失败: {}", e))?;
 
             let old_id = *active_pane;
 
@@ -121,14 +121,12 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(())` - 清除成功
     /// * `Err(ContextError)` - 清除失败
-    pub fn clear_active_pane(&self) -> Result<(), ContextError> {
+    pub fn clear_active_pane(&self) -> AppResult<()> {
         let old_pane_id = {
-            let mut active_pane =
-                self.global_active_pane
-                    .write()
-                    .map_err(|e| ContextError::Internal {
-                        source: anyhow::anyhow!("获取写锁失败: {}", e),
-                    })?;
+            let mut active_pane = self
+                .global_active_pane
+                .write()
+                .map_err(|e| anyhow!("获取写锁失败: {}", e))?;
 
             let old_id = *active_pane;
             *active_pane = None;
@@ -179,18 +177,12 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(())` - 设置成功
     /// * `Err(ContextError)` - 设置失败
-    pub fn set_window_active_pane(
-        &self,
-        window_id: WindowId,
-        pane_id: PaneId,
-    ) -> Result<(), ContextError> {
+    pub fn set_window_active_pane(&self, window_id: WindowId, pane_id: PaneId) -> AppResult<()> {
         let old_pane_id = {
-            let mut window_panes =
-                self.window_active_panes
-                    .write()
-                    .map_err(|e| ContextError::Internal {
-                        source: anyhow::anyhow!("获取窗口活跃终端写锁失败: {}", e),
-                    })?;
+            let mut window_panes = self
+                .window_active_panes
+                .write()
+                .map_err(|e| anyhow!("获取窗口活跃终端写锁失败: {}", e))?;
 
             window_panes.insert(window_id, pane_id)
         };
@@ -236,17 +228,12 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(Option<PaneId>)` - 移除成功，返回之前的活跃面板ID
     /// * `Err(ContextError)` - 移除失败
-    pub fn remove_window_active_pane(
-        &self,
-        window_id: WindowId,
-    ) -> Result<Option<PaneId>, ContextError> {
+    pub fn remove_window_active_pane(&self, window_id: WindowId) -> AppResult<Option<PaneId>> {
         let removed_pane = {
-            let mut window_panes =
-                self.window_active_panes
-                    .write()
-                    .map_err(|e| ContextError::Internal {
-                        source: anyhow::anyhow!("获取窗口活跃终端写锁失败: {}", e),
-                    })?;
+            let mut window_panes = self
+                .window_active_panes
+                .write()
+                .map_err(|e| anyhow!("获取窗口活跃终端写锁失败: {}", e))?;
 
             window_panes.remove(&window_id)
         };
@@ -285,12 +272,10 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(usize)` - 成功发送，返回接收者数量
     /// * `Err(ContextError)` - 发送失败
-    pub fn send_event(&self, event: TerminalContextEvent) -> Result<usize, ContextError> {
+    pub fn send_event(&self, event: TerminalContextEvent) -> AppResult<usize> {
         self.event_sender
             .send(event)
-            .map_err(|e| ContextError::Internal {
-                source: anyhow::anyhow!("发送事件失败: {}", e),
-            })
+            .map_err(|e| anyhow!("发送事件失败: {}", e))
     }
 
     /// 获取注册表统计信息

@@ -241,11 +241,14 @@ impl IoHandler {
                     let data_str = String::from_utf8_lossy(&data_to_send);
                     shell_integration.process_output(pane_id, &data_str);
 
+                    // 移除OSC序列后再发送给前端
+                    let cleaned_data = shell_integration.strip_osc_sequences(&data_str);
+
                     let notification = MuxNotification::PaneOutput {
                         pane_id,
-                        data: Bytes::from(data_to_send.clone()),
+                        data: Bytes::from(cleaned_data.into_bytes()),
                     };
-                    
+
                     if let Err(e) = notification_sender.send(notification) {
                         error!("面板 {:?} 发送通知失败: {}", pane_id, e);
                     }
@@ -259,9 +262,12 @@ impl IoHandler {
                 let data_str = String::from_utf8_lossy(&batch_data);
                 shell_integration.process_output(pane_id, &data_str);
 
+                // 移除OSC序列后再发送给前端
+                let cleaned_data = shell_integration.strip_osc_sequences(&data_str);
+
                 let notification = MuxNotification::PaneOutput {
                     pane_id,
-                    data: Bytes::from(batch_data),
+                    data: Bytes::from(cleaned_data.into_bytes()),
                 };
                 if let Err(e) = notification_sender.send(notification) {
                     error!("面板 {:?} 发送最终通知失败: {}", pane_id, e);

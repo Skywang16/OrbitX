@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
+use anyhow::{Context, Result};
 use crate::llm::{
     providers::ProviderFactory,
     types::{
-        LLMError, LLMProviderConfig, LLMProviderType, LLMRequest, LLMResponse, LLMResult,
-        LLMStreamChunk,
+        LLMProviderConfig, LLMProviderType, LLMRequest, LLMResponse, LLMStreamChunk,
     },
 };
 use crate::storage::repositories::RepositoryManager;
@@ -20,14 +20,14 @@ impl LLMService {
     }
 
     /// 根据模型ID获取提供商配置
-    async fn get_provider_config(&self, model_id: &str) -> LLMResult<LLMProviderConfig> {
+    async fn get_provider_config(&self, model_id: &str) -> Result<LLMProviderConfig> {
         let model = self
             .repositories
             .ai_models()
             .find_by_string_id(model_id)
             .await
-            .map_err(|e| LLMError::Config(format!("Failed to find model: {}", e)))?
-            .ok_or_else(|| LLMError::ModelNotFound(model_id.to_string()))?;
+            .with_context(|| format!("查找模型失败: {}", model_id))?
+            .ok_or_else(|| anyhow::anyhow!("模型未找到: {}", model_id))?;
 
         let provider_str = model.provider.to_string().to_lowercase();
         let provider_type = match provider_str.as_str() {
@@ -36,7 +36,7 @@ impl LLMService {
             "gemini" => LLMProviderType::Gemini,
             "qwen" => LLMProviderType::Qwen,
             "custom" => LLMProviderType::Custom,
-            _ => return Err(LLMError::UnsupportedProvider(model.provider.to_string())),
+            _ => anyhow::bail!("不支持的提供商类型: {}", model.provider),
         };
 
         Ok(LLMProviderConfig {
@@ -53,7 +53,7 @@ impl LLMService {
                     serde_json::from_value::<std::collections::HashMap<String, serde_json::Value>>(
                         v,
                     )
-                    .map_err(|e| LLMError::Config(format!("Invalid options: {}", e)))?,
+                    .context("解析模型选项失败")?,
                 ),
                 None => None,
             },
@@ -61,7 +61,7 @@ impl LLMService {
     }
 
     /// 非流式调用
-    pub async fn call(&self, request: LLMRequest) -> LLMResult<LLMResponse> {
+    pub async fn call(&self, request: LLMRequest) -> Result<LLMResponse> {
         self.validate_request(&request)?;
         let original_model_id = request.model.clone();
         let config = self.get_provider_config(&request.model).await?;
@@ -97,7 +97,7 @@ impl LLMService {
     pub async fn call_stream(
         &self,
         request: LLMRequest,
-    ) -> LLMResult<impl tokio_stream::Stream<Item = LLMResult<LLMStreamChunk>>> {
+    ) -> Result<impl tokio_stream::Stream<Item = Result<LLMStreamChunk>>> {
         self.validate_request(&request)?;
         let original_model_id = request.model.clone();
         let config = self.get_provider_config(&request.model).await?;
@@ -117,19 +117,19 @@ impl LLMService {
     }
 
     /// 获取可用的模型列表
-    pub async fn get_available_models(&self) -> LLMResult<Vec<String>> {
+    pub async fn get_available_models(&self) -> Result<Vec<String>> {
         let models = self
             .repositories
             .ai_models()
             .find_all_with_decrypted_keys()
             .await
-            .map_err(|e| LLMError::Config(format!("Failed to get models: {}", e)))?;
+            .context("获取模型列表失败")?;
 
         Ok(models.into_iter().map(|m| m.id).collect())
     }
 
     /// 测试模型连接
-    pub async fn test_model_connection(&self, model_id: &str) -> LLMResult<bool> {
+    pub async fn test_model_connection(&self, model_id: &str) -> Result<bool> {
         let test_request = LLMRequest {
             model: model_id.to_string(),
             messages: vec![super::types::LLMMessage {
@@ -153,28 +153,24 @@ impl LLMService {
     }
 
     /// 验证请求参数
-    fn validate_request(&self, request: &LLMRequest) -> LLMResult<()> {
+    fn validate_request(&self, request: &LLMRequest) -> Result<()> {
         if request.model.is_empty() {
-            return Err(LLMError::Config("Model cannot be empty".to_string()));
+            anyhow::bail!("模型名称不能为空");
         }
 
         if request.messages.is_empty() {
-            return Err(LLMError::Config("Messages cannot be empty".to_string()));
+            anyhow::bail!("消息列表不能为空");
         }
 
         if let Some(temp) = request.temperature {
             if temp < 0.0 || temp > 2.0 {
-                return Err(LLMError::Config(
-                    "Temperature must be between 0.0 and 2.0".to_string(),
-                ));
+                anyhow::bail!("温度参数必须在 0.0 到 2.0 之间");
             }
         }
 
         if let Some(max_tokens) = request.max_tokens {
             if max_tokens == 0 {
-                return Err(LLMError::Config(
-                    "Max tokens must be greater than 0".to_string(),
-                ));
+                anyhow::bail!("最大令牌数必须大于 0");
             }
         }
 

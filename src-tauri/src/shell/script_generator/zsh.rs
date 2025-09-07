@@ -48,13 +48,14 @@ __orbitx_precmd() {
     __orbitx_update_cwd
     # A: 提示符开始
     printf '\e]133;A\e\\'
+    # B: 命令开始（提示符结束，准备接收用户输入）
+    printf '\e]133;B\e\\'
 }
 
-# 修改PS1以包含B标记
+# 保持原始PS1不变，不直接嵌入OSC序列
 if [[ -z "$ORBITX_ORIGINAL_PS1" ]]; then
     export ORBITX_ORIGINAL_PS1="$PS1"
 fi
-PS1="${ORBITX_ORIGINAL_PS1}%{\e]133;B\e\\%}"
 
 # 添加钩子函数
 if [[ -z "${precmd_functions[(r)__orbitx_precmd]}" ]]; then
@@ -126,7 +127,7 @@ mod tests {
     fn test_basic_zsh_script_generation() {
         let config = ShellIntegrationConfig::default();
         let script = generate_script(&config);
-        
+
         assert!(script.contains("# OrbitX Shell Integration for Zsh"));
         assert!(script.contains("ORBITX_SHELL_INTEGRATION_LOADED"));
         assert!(script.contains("precmd_functions"));
@@ -139,7 +140,7 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("__orbitx_preexec"));
         assert!(script.contains("__orbitx_precmd"));
         assert!(script.contains("preexec_functions"));
@@ -153,7 +154,7 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("__orbitx_update_cwd"));
         assert!(script.contains("precmd_functions"));
     }
@@ -165,7 +166,7 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("__orbitx_update_title"));
         assert!(script.contains("precmd_functions"));
     }
@@ -174,13 +175,13 @@ mod tests {
     fn test_custom_env_vars() {
         let mut custom_vars = HashMap::new();
         custom_vars.insert("ORBITX_CUSTOM".to_string(), "test_value".to_string());
-        
+
         let config = ShellIntegrationConfig {
             custom_env_vars: custom_vars,
             ..Default::default()
         };
         let script = generate_script(&config);
-        
+
         assert!(script.contains("export ORBITX_CUSTOM=\"test_value\""));
     }
 }

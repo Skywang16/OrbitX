@@ -20,12 +20,13 @@
 //! 负责统一管理和注册所有 Tauri 命令接口
 
 // 文件拖拽处理命令
+use crate::utils::error::TauriResult;
 use std::path::PathBuf;
 use tracing::warn;
 
 /// 处理文件打开事件，返回文件所在的目录路径
 #[tauri::command]
-pub async fn handle_file_open(path: String) -> Result<String, String> {
+pub async fn handle_file_open(path: String) -> TauriResult<String> {
     // 确保路径字符串正确处理中文字符
     let path_buf = PathBuf::from(&path);
 

@@ -127,7 +127,8 @@ pub async fn set_terminal_theme(
     // 发送主题变化事件，确保前端能立即响应
     app_handle
         .emit("theme-changed", &theme_name)
-        .map_err(|e| format!("发送事件失败: {}", e))?;
+        .context("发送事件失败")
+        .to_tauri()?;
 
     Ok(())
 }
@@ -176,10 +177,7 @@ pub async fn set_follow_system_theme(
     // 如果启用跟随系统主题，需要获取当前应该使用的主题并发送事件
     if follow_system {
         // 获取当前系统主题状态
-        let config = config_manager
-            .get_config()
-            .await
-            .to_tauri()?;
+        let config = config_manager.get_config().await.to_tauri()?;
         let is_system_dark = SystemThemeDetector::is_dark_mode();
         let current_theme_name =
             theme_service.get_current_theme_name(&config.appearance.theme_config, is_system_dark);
@@ -187,7 +185,8 @@ pub async fn set_follow_system_theme(
         // 发送主题变化事件
         app_handle
             .emit("theme-changed", &current_theme_name)
-            .map_err(|e| format!("发送事件失败: {}", e))?;
+            .context("发送事件失败")
+        .to_tauri()?;
     }
 
     Ok(())

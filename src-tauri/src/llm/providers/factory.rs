@@ -3,8 +3,9 @@ use crate::llm::{
         anthropic::AnthropicProvider, base::LLMProvider, gemini::GeminiProvider,
         openai::OpenAIProvider,
     },
-    types::{LLMProviderConfig, LLMProviderType, LLMResult},
+    types::{LLMProviderConfig, LLMProviderType},
 };
+use anyhow::Result;
 
 /// Provider 工厂
 ///
@@ -12,7 +13,7 @@ use crate::llm::{
 pub struct ProviderFactory;
 
 impl ProviderFactory {
-    pub fn create_provider(config: LLMProviderConfig) -> LLMResult<Box<dyn LLMProvider>> {
+    pub fn create_provider(config: LLMProviderConfig) -> Result<Box<dyn LLMProvider>> {
         match config.provider_type {
             LLMProviderType::OpenAI | LLMProviderType::Custom | LLMProviderType::Qwen => {
                 // OpenAI, Custom, 和 Qwen (兼容OpenAI) 都使用 OpenAIProvider

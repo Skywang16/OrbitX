@@ -1,19 +1,14 @@
 //! 补全功能的Tauri命令接口
-//!
 //! 提供前端调用的补全API
 //!
-//! 统一的补全命令处理规范：
-//! 1. 参数顺序：业务参数在前，state参数在后
-//! 2. 异步处理：所有命令都是async，统一错误转换
-//! 3. 日志记录：每个命令都记录调用和结果日志
-//! 4. 状态管理：统一使用CompletionState访问各组件
 
 use crate::ai::tool::storage::StorageCoordinatorState;
 use crate::completion::engine::{CompletionEngine, CompletionEngineConfig};
 use crate::completion::types::{
     CompletionContext, CompletionResponse, EnhancedCompletionItem, EnhancedCompletionResponse,
 };
-use crate::utils::error::ToTauriResult;
+use crate::utils::error::{TauriResult, ToTauriResult};
+use anyhow::anyhow;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::State;
@@ -39,37 +34,37 @@ impl CompletionState {
     }
 
     /// 验证状态完整性
-    pub async fn validate(&self) -> Result<(), String> {
+    pub async fn validate(&self) -> TauriResult<()> {
         let engine_state = self
             .engine
             .lock()
-            .map_err(|e| format!("[配置错误] 获取引擎状态锁失败: {e}"))?;
+            .map_err(|_| "获取引擎状态锁失败".to_string())?;
 
         match engine_state.as_ref() {
             Some(_) => Ok(()),
-            None => Err("[配置错误] 补全引擎未初始化".to_string()),
+            None => Err(anyhow!("[配置错误] 补全引擎未初始化")).to_tauri(),
         }
     }
 
     /// 获取引擎实例
-    pub async fn get_engine(&self) -> Result<Arc<CompletionEngine>, String> {
+    pub async fn get_engine(&self) -> TauriResult<Arc<CompletionEngine>> {
         let engine_state = self
             .engine
             .lock()
-            .map_err(|e| format!("[配置错误] 获取引擎状态锁失败: {e}"))?;
+            .map_err(|_| "获取引擎状态锁失败".to_string())?;
 
         match engine_state.as_ref() {
             Some(engine) => Ok(Arc::clone(engine)),
-            None => Err("[配置错误] 补全引擎未初始化".to_string()),
+            None => Err(anyhow!("[配置错误] 补全引擎未初始化")).to_tauri(),
         }
     }
 
     /// 设置引擎实例
-    pub async fn set_engine(&self, engine: Arc<CompletionEngine>) -> Result<(), String> {
+    pub async fn set_engine(&self, engine: Arc<CompletionEngine>) -> TauriResult<()> {
         let mut engine_state = self
             .engine
             .lock()
-            .map_err(|e| format!("[配置错误] 获取引擎状态锁失败: {e}"))?;
+            .map_err(|_| "获取引擎状态锁失败".to_string())?;
 
         *engine_state = Some(engine);
         Ok(())
@@ -84,7 +79,7 @@ pub async fn get_completions(
     working_directory: String,
     max_results: Option<usize>,
     state: State<'_, CompletionState>,
-) -> Result<CompletionResponse, String> {
+) -> TauriResult<CompletionResponse> {
     let engine = state.get_engine().await?;
 
     // 创建补全上下文
@@ -113,7 +108,7 @@ pub async fn get_completions(
 pub async fn init_completion_engine(
     state: State<'_, CompletionState>,
     storage_state: State<'_, StorageCoordinatorState>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     let config = CompletionEngineConfig::default();
     let cache = storage_state.coordinator.cache();
 
@@ -126,16 +121,15 @@ pub async fn init_completion_engine(
     }
 }
 
-/// 清理缓存命令（已简化，无缓存）
+/// 清理缓存命令
 #[tauri::command]
-pub async fn clear_completion_cache(_state: State<'_, CompletionState>) -> Result<(), String> {
-    // 缓存已删除，直接返回成功
+pub async fn clear_completion_cache(_state: State<'_, CompletionState>) -> TauriResult<()> {
     Ok(())
 }
 
 /// 获取统计信息命令
 #[tauri::command]
-pub async fn get_completion_stats(state: State<'_, CompletionState>) -> Result<String, String> {
+pub async fn get_completion_stats(state: State<'_, CompletionState>) -> TauriResult<String> {
     let engine = state.get_engine().await?;
 
     match engine.get_stats() {
@@ -157,7 +151,7 @@ pub async fn get_enhanced_completions(
     cursor_position: usize,
     working_directory: String,
     state: State<'_, CompletionState>,
-) -> Result<EnhancedCompletionResponse, String> {
+) -> TauriResult<EnhancedCompletionResponse> {
     let engine = state.get_engine().await?;
 
     // 创建补全上下文

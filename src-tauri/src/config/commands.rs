@@ -7,6 +7,7 @@
 use crate::config::{defaults::create_default_config, types::AppConfig, TomlConfigManager};
 
 use crate::utils::error::{AppResult, TauriResult, ToTauriResult};
+use anyhow::Context;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
@@ -136,9 +137,7 @@ pub async fn subscribe_config_events(_state: State<'_, ConfigManagerState>) -> T
 
 /// 获取配置文件夹路径
 #[tauri::command]
-pub async fn get_config_folder_path(
-    state: State<'_, ConfigManagerState>,
-) -> TauriResult<String> {
+pub async fn get_config_folder_path(state: State<'_, ConfigManagerState>) -> TauriResult<String> {
     debug!("获取配置文件夹路径");
 
     // 通过toml_manager获取配置路径
@@ -180,7 +179,8 @@ pub async fn open_config_folder<R: tauri::Runtime>(
 
     app.opener()
         .open_path(config_dir.to_string_lossy().to_string(), None::<String>)
-        .map_err(|e| format!("无法打开配置文件夹: {}", e))?;
+        .context("无法打开配置文件夹")
+        .to_tauri()?;
 
     Ok(())
 }

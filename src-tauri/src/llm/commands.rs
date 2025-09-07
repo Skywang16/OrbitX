@@ -8,6 +8,7 @@ use super::{
     types::{LLMProviderType, LLMRequest, LLMResponse, LLMStreamChunk},
 };
 use crate::storage::repositories::RepositoryManager;
+use crate::utils::error::ToTauriResult;
 
 /// LLM 管理器状态
 pub struct LLMManagerState {
@@ -29,7 +30,7 @@ pub async fn llm_call(
     state: State<'_, LLMManagerState>,
     request: LLMRequest,
 ) -> Result<LLMResponse, String> {
-    state.service.call(request).await.map_err(|e| e.to_string())
+    state.service.call(request).await.to_tauri()
 }
 
 /// 流式LLM调用
@@ -45,7 +46,7 @@ pub async fn llm_call_stream(
         .service
         .call_stream(request)
         .await
-        .map_err(|e| e.to_string())?;
+        .to_tauri()?;
 
     tracing::debug!("Stream created successfully, starting to read chunks");
     let mut chunk_count = 0;
@@ -88,7 +89,7 @@ pub async fn llm_get_available_models(
         .service
         .get_available_models()
         .await
-        .map_err(|e| e.to_string())
+        .to_tauri()
 }
 
 /// 测试模型连接
@@ -101,7 +102,7 @@ pub async fn llm_test_model_connection(
         .service
         .test_model_connection(&model_id)
         .await
-        .map_err(|e| e.to_string())
+        .to_tauri()
 }
 
 /// 获取所有供应商信息

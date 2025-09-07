@@ -1,5 +1,7 @@
 use crate::ai::tool::ast::parser::AstParser;
-use crate::ai::tool::ast::types::{AnalysisResult, AnalyzeCodeParams, AstError, AstResult};
+use crate::ai::tool::ast::types::{AnalysisResult, AnalyzeCodeParams};
+use crate::utils::error::ToTauriResult;
+use anyhow::{Context, Result};
 use std::path::Path;
 use tauri::command;
 use walkdir::WalkDir;
@@ -7,7 +9,7 @@ use walkdir::WalkDir;
 #[command]
 pub async fn analyze_code(params: AnalyzeCodeParams) -> Result<AnalysisResult, String> {
     let analyzer = CodeAnalyzer::new();
-    analyzer.analyze(params).await.map_err(|e| e.to_string())
+    analyzer.analyze(params).await.to_tauri()
 }
 
 pub struct CodeAnalyzer {
@@ -21,11 +23,11 @@ impl CodeAnalyzer {
         }
     }
 
-    pub async fn analyze(&self, params: AnalyzeCodeParams) -> AstResult<AnalysisResult> {
+    pub async fn analyze(&self, params: AnalyzeCodeParams) -> Result<AnalysisResult> {
         let path = Path::new(&params.path);
 
         if !path.exists() {
-            return Err(AstError::FileNotFound(params.path));
+            anyhow::bail!("文件不存在: {}", params.path);
         }
 
         let files_to_analyze = if path.is_file() {
@@ -64,7 +66,7 @@ impl CodeAnalyzer {
         })
     }
 
-    fn collect_files(&self, params: &AnalyzeCodeParams) -> AstResult<Vec<String>> {
+    fn collect_files(&self, params: &AnalyzeCodeParams) -> Result<Vec<String>> {
         let mut files = Vec::new();
         let recursive = params.recursive.unwrap_or(false);
         let default_include = vec![];
@@ -79,12 +81,7 @@ impl CodeAnalyzer {
         };
 
         for entry in walker {
-            let entry = entry.map_err(|e| {
-                AstError::IoError(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("遍历目录失败: {}", e),
-                ))
-            })?;
+            let entry = entry.with_context(|| format!("遍历目录失败: {}", params.path))?;
 
             if entry.file_type().is_file() {
                 let file_path = entry.path().to_string_lossy().to_string();

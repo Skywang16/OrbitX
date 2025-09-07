@@ -55,7 +55,7 @@ pub struct TerminalMux {
     /// 跨线程通知发送器
     notification_sender: Sender<MuxNotification>,
 
-    /// 跨线程通知接收器（仅在主线程使用）
+    /// 跨线程通知接收器
     notification_receiver: Arc<RwLock<Option<Receiver<MuxNotification>>>>,
 
     /// I/O 处理器
@@ -71,10 +71,7 @@ pub struct TerminalMux {
 impl TerminalMux {
     /// 创建新的TerminalMux实例
     ///
-    /// 统一状态管理规范：
-    /// - 按依赖顺序初始化各组件
     /// - 验证配置和依赖关系
-    /// - 提供详细的错误信息
     pub fn new() -> Self {
         let (notification_sender, notification_receiver) = unbounded();
         debug!("创建通知通道成功");
@@ -106,10 +103,7 @@ impl TerminalMux {
         }
     }
 
-
     /// 获取状态统计信息
-    ///
-    /// 提供详细的状态信息用于监控和调试
     pub fn get_status(&self) -> AppResult<TerminalMuxStatus> {
         let panes = self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
         let subscribers = self
@@ -155,8 +149,6 @@ impl TerminalMux {
 
     /// 使用指定配置创建新面板
     ///
-    /// 统一日志记录规范：
-    /// - 记录操作开始、关键步骤和完成时间
     /// - 使用结构化日志格式
     /// - 包含性能指标
     #[instrument(skip(self, config), fields(pane_id, shell = %config.shell_config.program))]
@@ -232,19 +224,16 @@ impl TerminalMux {
 
     /// 移除面板
     ///
-    /// 统一日志记录规范：
-    /// - 记录操作开始、关键步骤和完成时间
     /// - 使用结构化日志格式
     /// - 包含性能指标
     #[instrument(skip(self), fields(pane_id = ?pane_id))]
     pub fn remove_pane(&self, pane_id: PaneId) -> AppResult<()> {
         let pane = {
             debug!("获取面板写锁: pane_id={:?}", pane_id);
-            let mut panes = crate::mux::error::ErrorHandler::handle_poison_error(
-                "获取面板写锁",
-                self.panes.write(),
-            )
-            .map_err(|e| anyhow!("无法获取面板写锁: {}", e))?;
+            let mut panes = self
+                .panes
+                .write()
+                .map_err(|_| anyhow!("无法获取面板写锁"))?;
 
             debug!("从映射中移除面板: pane_id={:?}", pane_id);
             let pane = panes.remove(&pane_id).ok_or_else(|| {
@@ -298,8 +287,6 @@ impl TerminalMux {
 
     /// 写入数据到指定面板
     ///
-    /// 统一日志记录规范：
-    /// - 记录操作开始、关键步骤和完成时间
     /// - 使用结构化日志格式
     /// - 包含性能指标
     #[instrument(skip(self, data), fields(pane_id = ?pane_id, data_len = data.len()))]
@@ -322,8 +309,6 @@ impl TerminalMux {
 
     /// 调整面板大小
     ///
-    /// 统一日志记录规范：
-    /// - 记录操作开始、关键步骤和完成时间
     /// - 使用结构化日志格式
     /// - 包含性能指标
     #[instrument(skip(self), fields(pane_id = ?pane_id, size = ?size))]
@@ -489,7 +474,6 @@ impl TerminalMux {
             }
         })
     }
-
 
     // === 调试辅助 ===
     /// 创建一个简单的日志订阅者（用于调试）

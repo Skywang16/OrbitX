@@ -1,4 +1,5 @@
-use crate::ai::tool::ast::types::{AstError, AstResult, CodeAnalysis, CodeSymbol, SymbolType};
+use crate::ai::tool::ast::types::{CodeAnalysis, CodeSymbol, SymbolType};
+use anyhow::{anyhow, Context, Result};
 use oxc_allocator::Allocator;
 use oxc_ast::{ast::*, Visit};
 use oxc_parser::Parser as OxcParser;
@@ -15,14 +16,16 @@ impl AstParser {
         Self
     }
 
-    pub async fn analyze_file(&self, file_path: &str) -> AstResult<CodeAnalysis> {
+    pub async fn analyze_file(&self, file_path: &str) -> Result<CodeAnalysis> {
         let path = Path::new(file_path);
 
         if !path.exists() {
-            return Err(AstError::FileNotFound(file_path.to_string()));
+            return Err(anyhow!("文件不存在: {}", file_path));
         }
 
-        let content = tokio::fs::read_to_string(path).await?;
+        let content = tokio::fs::read_to_string(path)
+            .await
+            .with_context(|| format!("读取文件失败: {}", file_path))?;
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
         match extension {
@@ -30,7 +33,7 @@ impl AstParser {
             "js" | "jsx" => self.analyze_javascript(&content, file_path, extension == "jsx"),
             "py" => self.analyze_python(&content, file_path).await,
             "rs" => self.analyze_rust_code(&content, file_path),
-            _ => Err(AstError::UnsupportedFileType(extension.to_string())),
+            _ => Err(anyhow!("不支持的文件类型: {}", extension)),
         }
     }
 
@@ -39,7 +42,7 @@ impl AstParser {
         content: &str,
         file_path: &str,
         is_tsx: bool,
-    ) -> AstResult<CodeAnalysis> {
+    ) -> Result<CodeAnalysis> {
         let source_type = if is_tsx {
             SourceType::tsx()
         } else {
@@ -55,7 +58,7 @@ impl AstParser {
         content: &str,
         file_path: &str,
         is_jsx: bool,
-    ) -> AstResult<CodeAnalysis> {
+    ) -> Result<CodeAnalysis> {
         let source_type = if is_jsx {
             SourceType::jsx()
         } else {
@@ -74,15 +77,15 @@ impl AstParser {
         source_type: SourceType,
         language: &str,
         error_prefix: &str,
-    ) -> AstResult<CodeAnalysis> {
+    ) -> Result<CodeAnalysis> {
         let allocator = Allocator::default();
         let parser_return = OxcParser::new(&allocator, content, source_type).parse();
 
         if !parser_return.errors.is_empty() {
-            return Err(AstError::ParseError(format!(
+            return Err(anyhow!(
                 "{}解析错误: {:?}",
                 error_prefix, parser_return.errors
-            )));
+            ));
         }
 
         let mut visitor = OxcSymbolVisitor::new(file_path);
@@ -97,9 +100,9 @@ impl AstParser {
         })
     }
 
-    fn analyze_rust_code(&self, content: &str, file_path: &str) -> AstResult<CodeAnalysis> {
+    fn analyze_rust_code(&self, content: &str, file_path: &str) -> Result<CodeAnalysis> {
         let syntax_tree = syn::parse_file(content)
-            .map_err(|e| AstError::ParseError(format!("Rust解析错误: {}", e)))?;
+            .with_context(|| "Rust代码解析失败")?;
 
         let mut visitor = RustSymbolVisitor::new(file_path);
         visitor.visit_file(&syntax_tree);
@@ -113,11 +116,9 @@ impl AstParser {
         })
     }
 
-    async fn analyze_python(&self, _content: &str, _file_path: &str) -> AstResult<CodeAnalysis> {
+    async fn analyze_python(&self, _content: &str, _file_path: &str) -> Result<CodeAnalysis> {
         // 暂时禁用 Python 分析，因为需要正确配置 tree-sitter-python
-        Err(AstError::UnsupportedLanguage(
-            "Python analysis temporarily disabled".to_string(),
-        ))
+        Err(anyhow!("Python 分析功能暂时禁用"))
     }
 }
 

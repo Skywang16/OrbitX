@@ -24,12 +24,6 @@ use tracing::{debug, warn};
 /// # Returns
 /// * `Ok(())` - 缓存失效成功
 /// * `Err(String)` - 操作失败的错误信息
-///
-/// # Examples
-/// ```javascript
-/// // 前端调用示例
-/// await invoke('invalidate_context_cache', { paneId: 123 });
-/// ```
 #[tauri::command]
 pub async fn invalidate_context_cache(
     pane_id: u32,
@@ -62,12 +56,6 @@ pub async fn invalidate_context_cache(
 /// # Returns
 /// * `Ok(())` - 缓存清除成功
 /// * `Err(String)` - 操作失败的错误信息
-///
-/// # Examples
-/// ```javascript
-/// // 前端调用示例
-/// await invoke('clear_all_context_cache');
-/// ```
 #[tauri::command]
 pub async fn clear_all_context_cache(state: State<'_, TerminalContextState>) -> Result<(), String> {
     debug!("清除所有上下文缓存");

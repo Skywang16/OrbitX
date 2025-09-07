@@ -9,7 +9,10 @@
 
 use super::TerminalContextState;
 use crate::mux::PaneId;
-use crate::terminal::{ContextError, TerminalContext};
+use crate::terminal::TerminalContext;
+// 暂时移除未使用的导入
+// use crate::utils::error::ToTauriResult;
+// use anyhow::Context;
 use tauri::State;
 use tracing::{debug, error, warn};
 
@@ -25,16 +28,6 @@ use tracing::{debug, error, warn};
 /// # Returns
 /// * `Ok(TerminalContext)` - 终端上下文信息
 /// * `Err(String)` - 获取失败的错误信息
-///
-/// # Examples
-/// ```javascript
-/// // 获取指定终端的上下文
-/// const context = await invoke('get_terminal_context', { paneId: 123 });
-/// console.log('工作目录:', context.currentWorkingDirectory);
-///
-/// // 获取活跃终端的上下文
-/// const activeContext = await invoke('get_terminal_context');
-/// ```
 #[tauri::command]
 pub async fn get_terminal_context(
     pane_id: Option<u32>,
@@ -76,8 +69,6 @@ pub async fn get_terminal_context(
 
 /// 获取当前活跃终端的上下文信息
 ///
-/// 专门用于获取当前活跃终端的上下文信息的便捷方法。
-/// 这是 `get_terminal_context(None)` 的简化版本。
 ///
 /// # Arguments
 /// * `state` - 终端上下文状态
@@ -85,14 +76,6 @@ pub async fn get_terminal_context(
 /// # Returns
 /// * `Ok(TerminalContext)` - 活跃终端的上下文信息
 /// * `Err(String)` - 获取失败的错误信息
-///
-/// # Examples
-/// ```javascript
-/// // 前端调用示例
-/// const activeContext = await invoke('get_active_terminal_context');
-/// console.log('活跃终端工作目录:', activeContext.currentWorkingDirectory);
-/// console.log('Shell类型:', activeContext.shellType);
-/// ```
 #[tauri::command]
 pub async fn get_active_terminal_context(
     state: State<'_, TerminalContextState>,
@@ -107,7 +90,7 @@ pub async fn get_active_terminal_context(
             );
             Ok(context)
         }
-        Err(ContextError::NoActivePane) => {
+        Err(e) if e.to_string().contains("没有活跃的终端") => {
             // 没有活跃终端时，使用回退逻辑
             debug!("没有活跃终端，使用回退逻辑");
             match state.context_service.get_context_with_fallback(None).await {
@@ -132,9 +115,9 @@ pub async fn get_active_terminal_context(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::mux::PaneId;
     use crate::terminal::commands::tests::create_test_state;
+    use crate::terminal::context_service::TerminalContextService;
 
     #[tokio::test]
     async fn test_get_terminal_context_fallback() {
@@ -158,7 +141,7 @@ mod tests {
 
         // 没有活跃终端时，get_active_context应该返回错误
         let result = state.context_service.get_active_context().await;
-        assert!(matches!(result, Err(ContextError::NoActivePane)));
+        assert!(result.is_err() && result.unwrap_err().to_string().contains("没有活跃的终端"));
 
         // 但是get_context_with_fallback应该返回默认上下文
         let result = state.context_service.get_context_with_fallback(None).await;
@@ -179,7 +162,7 @@ mod tests {
 
         // 测试获取活跃终端上下文（应该失败，因为面板不存在于mux中）
         let result = state.context_service.get_active_context().await;
-        assert!(matches!(result, Err(ContextError::PaneNotFound { .. })));
+        assert!(result.is_err() && result.unwrap_err().to_string().contains("面板不存在"));
 
         // 测试使用回退逻辑
         let result = state

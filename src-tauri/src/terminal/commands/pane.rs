@@ -25,12 +25,6 @@ use tracing::{debug, error, warn};
 /// # Returns
 /// * `Ok(())` - 设置成功
 /// * `Err(String)` - 设置失败的错误信息
-///
-/// # Examples
-/// ```javascript
-/// // 前端调用示例
-/// await invoke('set_active_pane', { paneId: 123 });
-/// ```
 #[tauri::command]
 pub async fn set_active_pane(
     pane_id: u32,
@@ -72,15 +66,6 @@ pub async fn set_active_pane(
 /// * `Ok(Some(u32))` - 当前活跃的面板ID
 /// * `Ok(None)` - 没有活跃的终端
 /// * `Err(String)` - 获取失败的错误信息
-///
-/// # Examples
-/// ```javascript
-/// // 前端调用示例
-/// const activePaneId = await invoke('get_active_pane');
-/// if (activePaneId !== null) {
-///     console.log('当前活跃终端:', activePaneId);
-/// }
-/// ```
 #[tauri::command]
 pub async fn get_active_pane(
     state: State<'_, TerminalContextState>,
@@ -105,12 +90,6 @@ pub async fn get_active_pane(
 /// # Returns
 /// * `Ok(())` - 清除成功
 /// * `Err(String)` - 清除失败的错误信息
-///
-/// # Examples
-/// ```javascript
-/// // 前端调用示例
-/// await invoke('clear_active_pane');
-/// ```
 #[tauri::command]
 pub async fn clear_active_pane(state: State<'_, TerminalContextState>) -> Result<(), String> {
     debug!("清除活跃终端面板");
@@ -139,15 +118,6 @@ pub async fn clear_active_pane(state: State<'_, TerminalContextState>) -> Result
 /// # Returns
 /// * `Ok(bool)` - true表示是活跃终端，false表示不是
 /// * `Err(String)` - 检查失败的错误信息
-///
-/// # Examples
-/// ```javascript
-/// // 前端调用示例
-/// const isActive = await invoke('is_pane_active', { paneId: 123 });
-/// if (isActive) {
-///     console.log('面板123是活跃终端');
-/// }
-/// ```
 #[tauri::command]
 pub async fn is_pane_active(
     pane_id: u32,

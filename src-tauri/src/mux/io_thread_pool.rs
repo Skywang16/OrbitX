@@ -396,8 +396,6 @@ impl IoThreadPool {
             }
         })
     }
-
-    // 旧的批处理器方法已被独立的 BatchProcessor 替代，此方法已删除
 }
 
 // 添加num_cpus依赖的简单实现（如果不想添加外部依赖）

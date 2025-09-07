@@ -301,9 +301,13 @@ impl BatchProcessor {
         let data_str = String::from_utf8_lossy(&data);
         // 将输出交给 Shell Integration 进行处理（用于解析 CWD/命令等上下文）
         shell_integration.process_output(pane_id, &data_str);
+
+        // 移除OSC序列后再发送给前端
+        let cleaned_data = shell_integration.strip_osc_sequences(&data_str);
+
         let notification = MuxNotification::PaneOutput {
             pane_id,
-            data: Bytes::from(data),
+            data: Bytes::from(cleaned_data.into_bytes()),
         };
         if let Err(e) = notification_sender.send(notification) {
             tracing::error!(

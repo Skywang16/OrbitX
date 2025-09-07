@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use std::pin::Pin;
 use tokio_stream::Stream;
+use anyhow::Result;
 
-use crate::llm::types::{LLMRequest, LLMResponse, LLMResult, LLMStreamChunk};
+use crate::llm::types::{LLMRequest, LLMResponse, LLMStreamChunk};
 
 /// LLM Provider 统一接口
 ///
@@ -13,7 +14,7 @@ pub trait LLMProvider: Send + Sync {
     /// 非流式调用
     ///
     /// 发送一个完整的请求，并等待一个完整的响应。
-    async fn call(&self, request: LLMRequest) -> LLMResult<LLMResponse>;
+    async fn call(&self, request: LLMRequest) -> Result<LLMResponse>;
 
     /// 流式调用
     ///
@@ -22,5 +23,5 @@ pub trait LLMProvider: Send + Sync {
     async fn call_stream(
         &self,
         request: LLMRequest,
-    ) -> LLMResult<Pin<Box<dyn Stream<Item = LLMResult<LLMStreamChunk>> + Send>>>;
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<LLMStreamChunk>> + Send>>>;
 }

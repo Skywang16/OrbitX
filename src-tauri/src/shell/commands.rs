@@ -9,6 +9,8 @@ use std::sync::Arc;
 use std::time::Instant;
 use tauri::State;
 use tracing::{debug, error};
+use anyhow::Context;
+use crate::utils::error::{TauriResult, ToTauriResult};
 
 use super::{CommandInfo, PaneShellState, ShellType};
 use crate::mux::{PaneId, TerminalMux};
@@ -148,7 +150,7 @@ impl From<&PaneShellState> for FrontendPaneState {
 pub async fn check_shell_integration_status(
     pane_id: u32,
     state: State<'_, Arc<TerminalMux>>,
-) -> Result<bool, String> {
+) -> TauriResult<bool> {
     let mux = &*state;
     let pane_id = PaneId::from(pane_id);
 
@@ -165,7 +167,7 @@ pub async fn setup_shell_integration(
     pane_id: u32,
     silent: Option<bool>,
     state: State<'_, Arc<TerminalMux>>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     let mux = &*state;
     let pane_id = PaneId::from(pane_id);
     let silent = silent.unwrap_or(true);
@@ -178,11 +180,8 @@ pub async fn setup_shell_integration(
 
     // 真正的Shell Integration设置
     mux.setup_pane_integration_with_script(pane_id, silent)
-        .map_err(|e| {
-            let err = format!("Failed to setup shell integration: {}", e);
-            error!("{}", err);
-            err
-        })?;
+        .context("设置Shell集成失败")
+        .to_tauri()?;
 
     Ok(())
 }
@@ -191,7 +190,7 @@ pub async fn setup_shell_integration(
 pub async fn get_pane_cwd(
     pane_id: u32,
     state: State<'_, Arc<TerminalMux>>,
-) -> Result<Option<String>, String> {
+) -> TauriResult<Option<String>> {
     let mux = &*state;
     let pane_id = PaneId::from(pane_id);
 
@@ -208,7 +207,7 @@ pub async fn update_pane_cwd(
     pane_id: u32,
     cwd: String,
     state: State<'_, Arc<TerminalMux>>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     let mux = &*state;
     let pane_id = PaneId::from(pane_id);
 
@@ -224,7 +223,7 @@ pub async fn update_pane_cwd(
 pub async fn get_pane_shell_state(
     pane_id: u32,
     state: State<'_, Arc<TerminalMux>>,
-) -> Result<Option<FrontendPaneState>, String> {
+) -> TauriResult<Option<FrontendPaneState>> {
     let mux = &*state;
     let pane_id = PaneId::from(pane_id);
 
@@ -243,7 +242,7 @@ pub async fn set_pane_shell_type(
     pane_id: u32,
     shell_type: String,
     state: State<'_, Arc<TerminalMux>>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     let mux = &*state;
     let pane_id = PaneId::from(pane_id);
 
@@ -260,7 +259,7 @@ pub async fn set_pane_shell_type(
 pub async fn generate_shell_integration_script(
     shell_type: String,
     state: State<'_, Arc<TerminalMux>>,
-) -> Result<String, String> {
+) -> TauriResult<String> {
     let mux = &*state;
     let shell_type = ShellType::from_program(&shell_type);
 
@@ -272,14 +271,15 @@ pub async fn generate_shell_integration_script(
     }
 
     mux.generate_shell_integration_script(&shell_type)
-        .map_err(|e| format!("Failed to generate shell script: {}", e))
+        .context("生成Shell集成脚本失败")
+        .to_tauri()
 }
 
 #[tauri::command]
 pub async fn generate_shell_env_vars(
     shell_type: String,
     state: State<'_, Arc<TerminalMux>>,
-) -> Result<HashMap<String, String>, String> {
+) -> TauriResult<HashMap<String, String>> {
     let mux = &*state;
     let shell_type = ShellType::from_program(&shell_type);
 
@@ -291,7 +291,7 @@ pub async fn generate_shell_env_vars(
 pub async fn enable_pane_integration(
     pane_id: u32,
     state: State<'_, Arc<TerminalMux>>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     let mux = &*state;
     let pane_id = PaneId::from(pane_id);
 
@@ -307,7 +307,7 @@ pub async fn enable_pane_integration(
 pub async fn disable_pane_integration(
     pane_id: u32,
     state: State<'_, Arc<TerminalMux>>,
-) -> Result<(), String> {
+) -> TauriResult<()> {
     let mux = &*state;
     let pane_id = PaneId::from(pane_id);
 
@@ -323,7 +323,7 @@ pub async fn disable_pane_integration(
 pub async fn get_pane_current_command(
     pane_id: u32,
     state: State<'_, Arc<TerminalMux>>,
-) -> Result<Option<FrontendCommandInfo>, String> {
+) -> TauriResult<Option<FrontendCommandInfo>> {
     let mux = &*state;
     let pane_id = PaneId::from(pane_id);
 
@@ -341,7 +341,7 @@ pub async fn get_pane_current_command(
 pub async fn get_pane_command_history(
     pane_id: u32,
     state: State<'_, Arc<TerminalMux>>,
-) -> Result<Vec<FrontendCommandInfo>, String> {
+) -> TauriResult<Vec<FrontendCommandInfo>> {
     let mux = &*state;
     let pane_id = PaneId::from(pane_id);
 
@@ -358,13 +358,13 @@ pub async fn get_pane_command_history(
 }
 
 #[tauri::command]
-pub async fn detect_shell_type(shell_program: String) -> Result<String, String> {
+pub async fn detect_shell_type(shell_program: String) -> TauriResult<String> {
     let shell_type = ShellType::from_program(&shell_program);
     Ok(shell_type.display_name().to_string())
 }
 
 #[tauri::command]
-pub async fn check_shell_integration_support(shell_program: String) -> Result<bool, String> {
+pub async fn check_shell_integration_support(shell_program: String) -> TauriResult<bool> {
     let shell_type = ShellType::from_program(&shell_program);
     Ok(shell_type.supports_integration())
 }
@@ -385,7 +385,7 @@ pub struct BackgroundCommandResult {
 pub async fn execute_background_command(
     command: String,
     working_directory: Option<String>,
-) -> Result<BackgroundCommandResult, String> {
+) -> TauriResult<BackgroundCommandResult> {
     debug!("执行后台命令: {}", command);
 
     let start_time = Instant::now();

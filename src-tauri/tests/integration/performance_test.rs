@@ -20,7 +20,6 @@ struct PerformanceTestConfig {
     writes_per_terminal: usize,
     /// 写入数据大小（字节）
     write_data_size: usize,
-
 }
 
 impl Default for PerformanceTestConfig {
@@ -29,7 +28,6 @@ impl Default for PerformanceTestConfig {
             concurrent_terminals: 5,
             writes_per_terminal: 100,
             write_data_size: 1024,
-
         }
     }
 }
@@ -291,8 +289,6 @@ pub async fn run_concurrent_stability_test() -> Result<(), Box<dyn std::error::E
     info!("并发稳定性测试完成");
     Ok(())
 }
-
-// 已移除内存占用调试字段与辅助函数，避免无意义代码噪音
 
 /// 运行所有性能测试
 pub async fn run_all_performance_tests() -> Result<(), Box<dyn std::error::Error>> {

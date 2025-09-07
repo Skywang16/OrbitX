@@ -8,10 +8,6 @@ use super::*;
 
 /// 获取平台信息
 ///
-/// 统一命令处理规范：
-/// - 参数顺序：无业务参数，state参数在后
-/// - 日志记录：记录操作开始、成功和失败
-/// - 错误处理：统一转换为String类型
 /// - 缓存机制：首次检测后缓存结果，后续直接返回缓存
 #[tauri::command]
 pub async fn get_platform_info(state: State<'_, WindowState>) -> Result<PlatformInfo, String> {

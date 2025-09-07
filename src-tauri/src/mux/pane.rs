@@ -52,7 +52,7 @@ impl LocalPane {
         Self::new_with_config(pane_id, size, &TerminalConfig::default())
     }
 
-    /// 使用指定配置创建新的本地面板
+    /// 创建新的本地面板
     pub fn new_with_config(
         pane_id: PaneId,
         size: PtySize,
@@ -242,14 +242,10 @@ impl Pane for LocalPane {
         tracing::debug!("面板 {:?} 写入 {} 字节数据", self.pane_id, data.len());
 
         // 获取writer锁并写入数据
-        let mut writer = crate::mux::error::ErrorHandler::handle_poison_error(
-            "获取writer锁",
-            self.writer.lock(),
-        )
-        .map_err(|e| {
-            tracing::error!("面板 {:?} 无法获取writer锁: {}", self.pane_id, e);
-            anyhow!("无法获取writer锁: {}", e)
-        })?;
+        let mut writer = self
+            .writer
+            .lock()
+            .map_err(|_| anyhow!("获取writer锁失败"))?;
 
         // 使用Write trait写入数据
         use std::io::Write;

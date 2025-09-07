@@ -142,33 +142,3 @@ pub struct LLMProviderConfig {
     pub options: Option<HashMap<String, serde_json::Value>>,
 }
 
-/// LLM 错误类型
-#[derive(Debug, thiserror::Error)]
-pub enum LLMError {
-    #[error("Provider error: {0}")]
-    Provider(String),
-
-    #[error("Configuration error: {0}")]
-    Config(String),
-
-    #[error("Network error: {0}")]
-    Network(String),
-
-    #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
-
-    #[error("HTTP error: {0}")]
-    Http(#[from] reqwest::Error),
-
-    #[error("Model not found: {0}")]
-    ModelNotFound(String),
-
-    #[error("Unsupported provider: {0}")]
-    UnsupportedProvider(String),
-
-    #[error("Invalid response format: {0}")]
-    InvalidResponse(String),
-}
-
-/// LLM 结果类型
-pub type LLMResult<T> = Result<T, LLMError>;

@@ -10,10 +10,11 @@ use tokio_stream::Stream;
 use crate::llm::{
     providers::base::LLMProvider,
     types::{
-        LLMError, LLMMessage, LLMMessageContent, LLMMessagePart, LLMProviderConfig, LLMRequest,
-        LLMResponse, LLMResult, LLMStreamChunk, LLMTool, LLMToolCall, LLMUsage,
+        LLMMessage, LLMMessageContent, LLMMessagePart, LLMProviderConfig, LLMRequest, LLMResponse,
+        LLMStreamChunk, LLMTool, LLMToolCall, LLMUsage,
     },
 };
+use anyhow::{anyhow, Context, Result};
 
 /// Google Gemini Provider
 ///
@@ -156,11 +157,11 @@ impl GeminiProvider {
             .collect()
     }
 
-    fn parse_response(response_json: &Value) -> LLMResult<LLMResponse> {
+    fn parse_response(response_json: &Value) -> Result<LLMResponse> {
         let candidate = response_json["candidates"]
             .as_array()
             .and_then(|arr| arr.first())
-            .ok_or_else(|| LLMError::InvalidResponse("Missing 'candidates' in response".into()))?;
+            .ok_or_else(|| anyhow!("Missing 'candidates' in response"))?;
 
         let mut content_text = String::new();
         let mut tool_calls = Vec::new();
@@ -229,22 +230,21 @@ impl GeminiProvider {
         })
     }
 
-    fn handle_error_response(&self, status: u16, body: &str) -> LLMError {
+    fn handle_error_response(&self, status: u16, body: &str) -> anyhow::Error {
         if let Ok(error_json) = serde_json::from_str::<Value>(body) {
             if let Some(error_obj) = error_json["error"].as_object() {
                 let message = error_obj["message"]
                     .as_str()
                     .unwrap_or("Unknown Gemini error");
-                return LLMError::Provider(message.to_string());
+                return anyhow!(message.to_string());
             }
         }
-        LLMError::Provider(format!("Gemini API error {}: {}", status, body))
+        anyhow!(format!("Gemini API error {}: {}", status, body))
     }
 
-    fn parse_stream_chunk(data: &str) -> LLMResult<LLMStreamChunk> {
-        let json_data: Value = serde_json::from_str(data).map_err(|e| {
-            LLMError::InvalidResponse(format!("Failed to parse stream data: {}", e))
-        })?;
+    fn parse_stream_chunk(data: &str) -> Result<LLMStreamChunk> {
+        let json_data: Value = serde_json::from_str(data)
+            .map_err(|e| anyhow!(format!("Failed to parse stream data: {}", e)))?;
 
         // Stream response is an array of candidates
         if let Ok(response) = Self::parse_response(&json_data) {
@@ -264,13 +264,13 @@ impl GeminiProvider {
             return Ok(chunk);
         }
 
-        Err(LLMError::InvalidResponse("Unknown stream format".into()))
+        anyhow::bail!("Unknown stream format")
     }
 }
 
 #[async_trait]
 impl LLMProvider for GeminiProvider {
-    async fn call(&self, request: LLMRequest) -> LLMResult<LLMResponse> {
+    async fn call(&self, request: LLMRequest) -> Result<LLMResponse> {
         let url = self.get_endpoint(&request);
         let headers = self.get_headers();
         let body = self.build_body(&request);
@@ -280,7 +280,7 @@ impl LLMProvider for GeminiProvider {
             req_builder = req_builder.header(&key, &value);
         }
 
-        let response = req_builder.send().await.map_err(LLMError::Http)?;
+        let response = req_builder.send().await.context("发送HTTP请求失败")?;
 
         let status = response.status();
         if !status.is_success() {
@@ -288,14 +288,14 @@ impl LLMProvider for GeminiProvider {
             return Err(self.handle_error_response(status.as_u16(), &text));
         }
 
-        let response_json: Value = response.json().await.map_err(LLMError::Http)?;
+        let response_json: Value = response.json().await.context("解析JSON响应失败")?;
         Self::parse_response(&response_json)
     }
 
     async fn call_stream(
         &self,
         mut request: LLMRequest,
-    ) -> LLMResult<Pin<Box<dyn Stream<Item = LLMResult<LLMStreamChunk>> + Send>>> {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<LLMStreamChunk>> + Send>>> {
         request.stream = true;
         let url = self.get_endpoint(&request);
         let headers = self.get_headers();
@@ -306,7 +306,7 @@ impl LLMProvider for GeminiProvider {
             req_builder = req_builder.header(&key, &value);
         }
 
-        let response = req_builder.send().await.map_err(LLMError::Http)?;
+        let response = req_builder.send().await.context("发送HTTP请求失败")?;
         let status = response.status();
         if !status.is_success() {
             let text = response.text().await.unwrap_or_default();
@@ -326,7 +326,7 @@ impl LLMProvider for GeminiProvider {
                             Some(Self::parse_stream_chunk(&event.data))
                         }
                     }
-                    Err(e) => Some(Err(LLMError::Network(e.to_string()))),
+                    Err(e) => Some(Err(anyhow!("网络错误: {}", e.to_string()))),
                 })
             });
 

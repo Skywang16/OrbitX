@@ -22,14 +22,6 @@ use tracing::debug;
 /// # Returns
 /// * `Ok(CacheStats)` - 缓存统计信息
 /// * `Err(String)` - 获取失败的错误信息
-///
-/// # Examples
-/// ```javascript
-/// // 前端调用示例
-/// const stats = await invoke('get_context_cache_stats');
-/// console.log('缓存命中率:', stats.hitRate);
-/// console.log('缓存条目数:', stats.totalEntries);
-/// ```
 #[tauri::command]
 pub async fn get_context_cache_stats(
     state: State<'_, TerminalContextState>,
@@ -57,14 +49,6 @@ pub async fn get_context_cache_stats(
 /// # Returns
 /// * `Ok(RegistryStats)` - 注册表统计信息
 /// * `Err(String)` - 获取失败的错误信息
-///
-/// # Examples
-/// ```javascript
-/// // 前端调用示例
-/// const stats = await invoke('get_registry_stats');
-/// console.log('当前活跃终端:', stats.globalActivePaneId);
-/// console.log('事件订阅者数量:', stats.eventSubscriberCount);
-/// ```
 #[tauri::command]
 pub async fn get_registry_stats(
     state: State<'_, TerminalContextState>,

@@ -8,7 +8,7 @@ use super::AIManagerState;
 use crate::ai::types::Message;
 use crate::mux::PaneId;
 use crate::utils::error::ToTauriResult;
-
+use anyhow::Context;
 use tauri::State;
 
 // ===== 智能上下文管理命令 =====
@@ -67,12 +67,14 @@ pub async fn build_prompt_with_context(
         context_service
             .get_context_by_pane(PaneId::new(pane_id))
             .await
-            .map_err(|e| format!("获取终端上下文失败: {}", e))?
+            .context("获取终端上下文失败")
+            .to_tauri()?
     } else {
         context_service
             .get_context_with_fallback(None)
             .await
-            .map_err(|e| format!("获取活跃终端上下文失败: {}", e))?
+            .context("获取活跃终端上下文失败")
+            .to_tauri()?
     };
 
     // 使用智能上下文管理器构建prompt，传递终端上下文
