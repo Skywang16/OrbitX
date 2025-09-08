@@ -24,30 +24,20 @@ export const useVectorIndexSettingsStore = defineStore('vectorIndexSettings', ()
     isLoading.value = true
     error.value = null
 
-    try {
-      // 从后端获取向量索引配置
-      const vectorConfig = await vectorIndexApi.getConfig()
-      config.value = vectorConfig
+    // 从后端获取向量索引配置
+    const vectorConfig = await vectorIndexApi.getConfig()
+    config.value = vectorConfig
 
-      // 如果有有效配置，自动初始化服务
-      if (vectorConfig.qdrantUrl && vectorConfig.qdrantUrl.trim() !== '') {
-        try {
-          await vectorIndexApi.init(vectorConfig)
-        } catch (initError) {
-          console.warn('向量索引服务初始化失败:', initError)
-        }
-      }
-
-      // 获取索引状态
-      await refreshIndexStatus()
-
-      isInitialized.value = true
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err)
-      console.error('Failed to load vector index settings:', err)
-    } finally {
-      isLoading.value = false
+    // 如果有有效配置，自动初始化服务
+    if (vectorConfig.qdrantUrl && vectorConfig.qdrantUrl.trim() !== '') {
+      await vectorIndexApi.init(vectorConfig)
     }
+
+    // 获取索引状态
+    await refreshIndexStatus()
+
+    isInitialized.value = true
+    isLoading.value = false
   }
 
   // 保存配置
@@ -55,39 +45,28 @@ export const useVectorIndexSettingsStore = defineStore('vectorIndexSettings', ()
     isSaving.value = true
     error.value = null
 
-    try {
-      const configToSave: VectorIndexConfig = {
-        qdrantUrl: newConfig.qdrantUrl || 'http://localhost:6334',
-        qdrantApiKey: newConfig.qdrantApiKey || null,
-        collectionName: newConfig.collectionName || 'orbitx-code-vectors',
-        embeddingModelId: newConfig.embeddingModelId || 'text-embedding-3-small',
-        maxConcurrentFiles: newConfig.maxConcurrentFiles || 4,
-      }
-      await vectorIndexApi.saveConfig(configToSave)
-      config.value = configToSave
-
-      // 重新初始化向量索引服务
-      await vectorIndexApi.init(configToSave)
-
-      // 自动刷新索引状态
-      await refreshIndexStatus()
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err)
-      throw err
-    } finally {
-      isSaving.value = false
+    const configToSave: VectorIndexConfig = {
+      qdrantUrl: newConfig.qdrantUrl || 'http://localhost:6334',
+      qdrantApiKey: newConfig.qdrantApiKey || null,
+      collectionName: newConfig.collectionName || 'orbitx-code-vectors',
+      embeddingModelId: newConfig.embeddingModelId || 'text-embedding-3-small',
+      maxConcurrentFiles: newConfig.maxConcurrentFiles || 4,
     }
+    await vectorIndexApi.saveConfig(configToSave)
+    config.value = configToSave
+
+    // 重新初始化向量索引服务
+    await vectorIndexApi.init(configToSave)
+
+    // 自动刷新索引状态
+    await refreshIndexStatus()
+    isSaving.value = false
   }
 
   // 测试连接
   const testConnection = async (testConfig: VectorIndexConfig) => {
-    try {
-      const result = await vectorIndexApi.testConnection(testConfig)
-      return result
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err)
-      throw err
-    }
+    const result = await vectorIndexApi.testConnection(testConfig)
+    return result
   }
 
   // 构建代码索引
@@ -96,41 +75,20 @@ export const useVectorIndexSettingsStore = defineStore('vectorIndexSettings', ()
       throw new Error('Vector index not configured')
     }
 
-    try {
-      const stats = await vectorIndexApi.build()
-
-      return stats
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err)
-      throw err
-    }
+    const stats = await vectorIndexApi.build()
+    return stats
   }
 
   // 取消构建索引
   const cancelBuildIndex = async () => {
-    try {
-      await vectorIndexApi.cancelBuild()
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err)
-      throw err
-    }
+    await vectorIndexApi.cancelBuild()
   }
 
   // 刷新索引状态
   const refreshIndexStatus = async () => {
-    try {
-      const status = await vectorIndexApi.getStatus()
-      indexStatus.value = status
-      return status
-    } catch (err) {
-      // 索引状态获取失败时不设置错误，可能是服务未初始化
-      indexStatus.value = {
-        isInitialized: false,
-        totalVectors: 0,
-        lastUpdated: null,
-      }
-      return indexStatus.value
-    }
+    const status = await vectorIndexApi.getStatus()
+    indexStatus.value = status
+    return status
   }
 
   // 清除索引
@@ -139,15 +97,9 @@ export const useVectorIndexSettingsStore = defineStore('vectorIndexSettings', ()
       throw new Error('No collection configured')
     }
 
-    try {
-      await vectorIndexApi.clear()
-
-      // 刷新状态
-      await refreshIndexStatus()
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err)
-      throw err
-    }
+    await vectorIndexApi.clear()
+    // 刷新状态
+    await refreshIndexStatus()
   }
 
   // 重置到默认值

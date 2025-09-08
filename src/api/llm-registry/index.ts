@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/utils/request'
 import type { ProviderInfo, ModelInfo, LLMProviderType } from '@/types/domain/llm-registry'
 
 export interface LLMRegistryApi {

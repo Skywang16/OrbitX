@@ -162,7 +162,26 @@ export const api = APIClient.getInstance()
 export const apiClient = api
 
 /**
- * 便捷的invoke函数 - 直接调用API
+ * 后端统一API响应结构
  */
-export const invoke = <T>(command: string, args?: Record<string, unknown>, options?: APIOptions): Promise<T> =>
-  api.invoke<T>(command, args, options)
+export interface ApiResponse<T> {
+  code: number
+  message?: string
+  data?: T
+}
+
+/**
+ * 统一的API调用函数 - 处理新的后端响应格式
+ */
+export const invoke = async <T>(command: string, args?: Record<string, unknown>, options?: APIOptions): Promise<T> => {
+  const response = await api.invoke<ApiResponse<T>>(command, args, options)
+
+  if (response.code === 200) {
+    return response.data as T
+  } else {
+    // 统一错误提示 - 后端已完成国际化
+    const { createMessage } = await import('@/ui')
+    createMessage.error(response.message || '操作失败')
+    throw new APIError(response.message || '操作失败', String(response.code))
+  }
+}

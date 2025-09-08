@@ -10,7 +10,6 @@
 <script setup lang="ts">
   import { completionApi } from '@/api'
   import type { CompletionRequest, CompletionResponse } from '@/api'
-  import { handleError } from '@/utils/errorHandler'
   import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
   import { debounce } from 'lodash-es'
 
@@ -188,9 +187,6 @@
         // 如果是取消错误，直接返回
         if (error instanceof Error && error.message === 'Request was aborted') return
 
-        // 使用统一的错误处理，但不显示错误消息（因为有本地补全作为后备）
-        handleError(error, '后端补全调用失败')
-
         // 使用本地补全作为后备方案
         response = getLocalCompletions(input)
       }
@@ -212,15 +208,11 @@
 
       emit('suggestion-change', currentSuggestion.value)
     } catch (error) {
-      // 使用统一的错误处理
-      handleError(error, '获取补全失败')
-
       // 重置状态
       currentSuggestion.value = ''
       completionItems.value = []
       emit('completion-ready', [])
       emit('suggestion-change', '')
-
       // 可以考虑向用户显示错误提示，但这里选择静默处理
       // 因为补全失败不应该中断用户的正常操作
     } finally {

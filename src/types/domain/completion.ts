@@ -30,19 +30,7 @@ export interface CompletionResponse {
   hasMore: boolean
 }
 
-// ===== 增强补全相关类型 =====
 // 使用统一的CompletionItem类型
-
-export interface EnhancedCompletionPosition {
-  x: number
-  y: number
-}
-
-export interface EnhancedCompletionResponse {
-  completions: CompletionItem[]
-  position: EnhancedCompletionPosition
-  hasShellCompletions: boolean
-}
 
 // ===== 统计信息类型 =====
 

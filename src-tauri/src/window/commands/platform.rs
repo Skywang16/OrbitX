@@ -5,12 +5,14 @@
  */
 
 use super::*;
+use crate::utils::TauriApiResult;
+use crate::{api_error, api_success};
 
 /// 获取平台信息
 ///
 /// - 缓存机制：首次检测后缓存结果，后续直接返回缓存
 #[tauri::command]
-pub async fn get_platform_info(state: State<'_, WindowState>) -> Result<PlatformInfo, String> {
+pub async fn get_platform_info(state: State<'_, WindowState>) -> TauriApiResult<PlatformInfo> {
     debug!("开始获取平台信息");
 
     // 尝试从配置管理器获取缓存的平台信息
@@ -25,7 +27,7 @@ pub async fn get_platform_info(state: State<'_, WindowState>) -> Result<Platform
             "从缓存获取平台信息: platform={}, arch={}, is_mac={}",
             info.platform, info.arch, info.is_mac
         );
-        return Ok(info);
+        return Ok(api_success!(info));
     }
 
     debug!("首次检测平台信息");
@@ -52,7 +54,7 @@ pub async fn get_platform_info(state: State<'_, WindowState>) -> Result<Platform
         platform_info.platform, platform_info.arch, platform_info.os_version, platform_info.is_mac
     );
 
-    Ok(platform_info)
+    Ok(api_success!(platform_info))
 }
 
 /// 检测操作系统版本

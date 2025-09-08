@@ -4,7 +4,7 @@
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '@/eko-core/types'
-import { invoke } from '@tauri-apps/api/core'
+import { filesystemApi } from '@/api'
 
 export interface ReadManyFilesParams {
   paths: string[]
@@ -72,10 +72,10 @@ export class ReadManyFilesTool extends ModifiableTool {
         // 尝试检查文件大小（如果权限允许）
         let fileSize: number | undefined = undefined
         try {
-          const metadata = await invoke<{ size: number }>('plugin:fs|metadata', { path: filePath })
+          const metadata = await filesystemApi.getMetadata(filePath)
           fileSize = metadata.size
 
-          if (metadata.size > maxFileSize) {
+          if (metadata.size && metadata.size > maxFileSize) {
             results.push({
               path: filePath,
               success: false,
@@ -89,7 +89,7 @@ export class ReadManyFilesTool extends ModifiableTool {
         }
 
         // 读取文件内容
-        const rawContent = await invoke<ArrayBuffer>('plugin:fs|read_text_file', { path: filePath })
+        const rawContent = await filesystemApi.readTextFile(filePath)
         const content = new TextDecoder('utf-8').decode(rawContent)
         const lines = content.split('\n')
 

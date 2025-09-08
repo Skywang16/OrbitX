@@ -21,9 +21,6 @@
       @suggestion-change="handleSuggestionChange"
     />
 
-    <!-- 提示消息 -->
-    <XMessage :visible="toast.visible" :message="toast.message" :type="toast.type" @close="closeToast" />
-
     <!-- 搜索组件 -->
     <SearchBox
       :visible="searchState.visible"
@@ -59,7 +56,7 @@
   import { useTerminalEvents } from '@/composables/useTerminalEvents'
   import { TERMINAL_CONFIG } from '@/constants/terminal'
   import { useTerminalStore } from '@/stores/Terminal'
-  import { XMessage } from '@/ui/components'
+  import { createMessage } from '@/ui'
   import { convertThemeToXTerm, createDefaultXTermTheme } from '@/utils/themeConverter'
 
   import type { ITheme } from '@xterm/xterm'
@@ -88,8 +85,7 @@
   const terminalSelection = useTerminalSelection()
 
   // 使用新的composables
-  const { inputState, terminalEnv, toast, showToast, closeToast, updateInputLine, handleSuggestionChange } =
-    useTerminalState()
+  const { inputState, terminalEnv, updateInputLine, handleSuggestionChange } = useTerminalState()
   const { searchState, searchBoxRef, closeSearch, handleSearch, findNext, findPrevious, handleOpenTerminalSearch } =
     useTerminalSearch()
   const { handleOutput: handleTerminalOutput, handleExit, cleanup: cleanupOutput } = useTerminalOutput()
@@ -483,7 +479,7 @@
   const handleGoToPath = (path: string) => {
     const cleanPath = path.trim().replace(/^["']|["']$/g, '')
     emit('input', `cd "${cleanPath}"\n`)
-    showToast(`切换到: ${cleanPath}`, 'success')
+    createMessage.success(`切换到: ${cleanPath}`)
   }
 
   const handleFileDrop = async (filePath: string) => {
@@ -491,7 +487,7 @@
       const directory = await windowApi.handleFileOpen(filePath)
       handleGoToPath(directory)
     } catch {
-      showToast('无法处理拖拽的文件', 'error')
+      createMessage.error('无法处理拖拽的文件')
     }
   }
 
@@ -560,15 +556,13 @@
       if (tmeta && tmeta.cwd) {
         terminalEnv.workingDirectory = tmeta.cwd
       } else {
-        // 如果没有保存的工作目录，使用系统默认
-        windowApi
-          .getHomeDirectory()
-          .then((dir: string) => {
-            terminalEnv.workingDirectory = dir
-          })
-          .catch(() => {
-            terminalEnv.workingDirectory = '/tmp'
-          })
+        // 如果没有保存的工作目录，使用系统默认（本地逻辑保留兜底）
+        try {
+          const dir: string = await windowApi.getHomeDirectory()
+          terminalEnv.workingDirectory = dir
+        } catch {
+          terminalEnv.workingDirectory = '/tmp'
+        }
       }
 
       // 注册到终端store的resize回调，避免每个终端都监听window resize

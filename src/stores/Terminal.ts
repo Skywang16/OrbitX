@@ -113,14 +113,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
   }
 
   const queueOperation = async <T>(operation: () => Promise<T>): Promise<T> => {
-    return new Promise((resolve, reject) => {
+    return new Promise(resolve => {
       const wrappedOperation = async () => {
-        try {
-          const result = await operation()
-          resolve(result)
-        } catch (error) {
-          reject(error)
-        }
+        const result = await operation()
+        resolve(result)
       }
 
       _operationQueue.value.push(wrappedOperation)
@@ -295,37 +291,32 @@ export const useTerminalStore = defineStore('Terminal', () => {
       const id = generateId()
       const startTime = Date.now()
 
-      try {
-        const backendId = await terminalApi.createTerminal({
-          rows: 24,
-          cols: 80,
-          cwd: initialDirectory,
-        })
+      const backendId = await terminalApi.createTerminal({
+        rows: 24,
+        cols: 80,
+        cwd: initialDirectory,
+      })
 
-        const defaultShell = await shellApi.getDefaultShell()
+      const defaultShell = await shellApi.getDefaultShell()
 
-        const terminal: RuntimeTerminalState = {
-          id,
-          title: defaultShell.name,
-          cwd: initialDirectory || '~',
-          active: false,
-          shell: defaultShell.name,
-          backendId,
-          shellInfo: defaultShell as ShellInfo,
-        }
-
-        terminals.value.push(terminal)
-        await setActiveTerminal(id)
-        immediateSync()
-
-        const duration = Date.now() - startTime
-        recordPerformanceMetric('create', duration)
-
-        return id
-      } catch (error) {
-        console.error(`创建终端失败:`, error)
-        throw error
+      const terminal: RuntimeTerminalState = {
+        id,
+        title: defaultShell.name,
+        cwd: initialDirectory || '~',
+        active: false,
+        shell: defaultShell.name,
+        backendId,
+        shellInfo: defaultShell as ShellInfo,
       }
+
+      terminals.value.push(terminal)
+      await setActiveTerminal(id)
+      immediateSync()
+
+      const duration = Date.now() - startTime
+      recordPerformanceMetric('create', duration)
+
+      return id
     })
   }
 
@@ -347,11 +338,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       const backendId = terminal.backendId
       terminal.backendId = null
 
-      try {
-        await terminalApi.closeTerminal(backendId)
-      } catch (error) {
-        console.error(`关闭终端失败:`, error)
-      }
+      await terminalApi.closeTerminal(backendId)
 
       await cleanupTerminalState(id)
       immediateSync()
@@ -388,12 +375,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
     // 同步活跃终端状态到后端
     if (targetTerminal.backendId !== null) {
-      try {
-        await terminalContextApi.setActivePaneId(targetTerminal.backendId)
-      } catch (error) {
-        console.warn(`同步活跃终端到后端失败: ${error}`)
-        // 继续执行，不阻塞前端状态更新
-      }
+      await terminalContextApi.setActivePaneId(targetTerminal.backendId)
     }
 
     // 同步活跃标签页ID到会话状态
@@ -408,11 +390,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       return
     }
 
-    try {
-      await terminalApi.writeToTerminal({ paneId: terminal.backendId, data })
-    } catch (error) {
-      console.error(`向终端 '${id}' 写入数据失败:`, error)
-    }
+    await terminalApi.writeToTerminal({ paneId: terminal.backendId, data })
   }
 
   const resizeTerminal = async (id: string, rows: number, cols: number) => {
@@ -422,15 +400,11 @@ export const useTerminalStore = defineStore('Terminal', () => {
       return
     }
 
-    try {
-      await terminalApi.resizeTerminal({
-        paneId: terminalSession.backendId,
-        rows,
-        cols,
-      })
-    } catch (error) {
-      console.error(`调整终端 '${id}' 大小失败:`, error)
-    }
+    await terminalApi.resizeTerminal({
+      paneId: terminalSession.backendId,
+      rows,
+      cols,
+    })
   }
 
   const updateTerminalCwd = (id: string, cwd: string) => {
@@ -472,22 +446,22 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       let newTitle: string
 
-      if (displayPath === '~' || displayPath === '/') {
+      if (displayPath === '~') {
         newTitle = displayPath
-      } else if (pathParts.length === 0) {
-        newTitle = '/'
-      } else if (pathParts.length === 1) {
-        newTitle = pathParts[0]
       } else {
-        const lastTwo = pathParts.slice(-2)
-        newTitle = lastTwo.join('/')
-        if (pathParts.length > 3) {
-          newTitle = `…/${newTitle}`
+        const parts = displayPath === '/' ? [] : pathParts
+        if (parts.length === 0) {
+          newTitle = '/'
+        } else {
+          newTitle = parts.slice(-2).join('/')
+          if (parts.length > 3) {
+            newTitle = `…/${newTitle}`
+          }
         }
       }
 
       if (newTitle.length > 30) {
-        newTitle = '…' + newTitle.slice(-27)
+        newTitle = `…${newTitle.slice(-27)}`
       }
 
       if (terminal.title !== newTitle) {
@@ -505,16 +479,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
   const loadAvailableShells = async () => {
     shellManager.value.isLoading = true
     shellManager.value.error = null
-
-    try {
-      const shells = await shellApi.getAvailableShells()
-      shellManager.value.availableShells = shells as ShellInfo[]
-    } catch (error) {
-      console.error('获取可用shell列表失败:', error)
-      shellManager.value.error = error instanceof Error ? error.message : '获取shell列表失败'
-    } finally {
-      shellManager.value.isLoading = false
-    }
+    const shells = await shellApi.getAvailableShells()
+    shellManager.value.availableShells = shells as ShellInfo[]
+    shellManager.value.isLoading = false
   }
 
   const createAgentTerminal = async (agentName: string = 'AI Agent', initialDirectory?: string): Promise<string> => {
@@ -531,31 +498,26 @@ export const useTerminalStore = defineStore('Terminal', () => {
         return existingAgentTerminal.id
       }
 
-      try {
-        const backendId = await terminalApi.createTerminal({
-          rows: 24,
-          cols: 80,
-          cwd: initialDirectory,
-        })
+      const backendId = await terminalApi.createTerminal({
+        rows: 24,
+        cols: 80,
+        cwd: initialDirectory,
+      })
 
-        const terminal: RuntimeTerminalState = {
-          id,
-          title: agentTerminalTitle,
-          cwd: initialDirectory || '~',
-          active: false,
-          shell: 'agent',
-          backendId,
-        }
-
-        terminals.value.push(terminal)
-        await new Promise(resolve => setTimeout(resolve, 100))
-        await setActiveTerminal(id)
-        immediateSync()
-        return id
-      } catch (error) {
-        console.error(`创建Agent终端失败:`, error)
-        throw error
+      const terminal: RuntimeTerminalState = {
+        id,
+        title: agentTerminalTitle,
+        cwd: initialDirectory || '~',
+        active: false,
+        shell: 'agent',
+        backendId,
       }
+
+      terminals.value.push(terminal)
+      await new Promise(resolve => setTimeout(resolve, 100))
+      await setActiveTerminal(id)
+      immediateSync()
+      return id
     })
   }
 
@@ -569,32 +531,27 @@ export const useTerminalStore = defineStore('Terminal', () => {
         throw new Error(`未找到shell: ${shellName}`)
       }
 
-      try {
-        const backendId = await terminalApi.createTerminalWithShell({
-          shellName,
-          rows: 24,
-          cols: 80,
-        })
+      const backendId = await terminalApi.createTerminalWithShell({
+        shellName,
+        rows: 24,
+        cols: 80,
+      })
 
-        const terminal: RuntimeTerminalState = {
-          id,
-          title,
-          cwd: shellInfo.path || '~',
-          active: false,
-          shell: shellInfo.name,
-          backendId,
-          shellInfo,
-        }
-
-        terminals.value.push(terminal)
-        await setActiveTerminal(id)
-        immediateSync()
-
-        return id
-      } catch (error) {
-        console.error(`创建终端失败:`, error)
-        throw error
+      const terminal: RuntimeTerminalState = {
+        id,
+        title,
+        cwd: shellInfo.path || '~',
+        active: false,
+        shell: shellInfo.name,
+        backendId,
+        shellInfo,
       }
+
+      terminals.value.push(terminal)
+      await setActiveTerminal(id)
+      immediateSync()
+
+      return id
     })
   }
 
@@ -616,83 +573,64 @@ export const useTerminalStore = defineStore('Terminal', () => {
   }
 
   const restoreFromSessionState = async () => {
-    try {
-      if (!sessionStore.initialized) {
-        await sessionStore.initialize()
-      }
+    if (!sessionStore.initialized) {
+      await sessionStore.initialize()
+    }
 
-      const terminalStates = sessionStore.terminals
+    const terminalStates = sessionStore.terminals
 
-      if (!terminalStates || terminalStates.length === 0) {
-        return false
-      }
-
-      terminals.value = []
-      activeTerminalId.value = null
-
-      let shouldActivateTerminalId: string | null = null
-
-      for (const terminalState of terminalStates) {
-        try {
-          const id = await createTerminal(terminalState.cwd)
-
-          const terminal = terminals.value.find(t => t.id === id)
-          if (terminal) {
-            terminal.title = terminalState.title
-          }
-
-          if (terminalState.active && shouldActivateTerminalId === null) {
-            shouldActivateTerminalId = id
-          }
-        } catch (error) {
-          console.error(`恢复终端 ${terminalState.id} 失败:`, error)
-        }
-      }
-
-      const savedActiveTabId = sessionStore.sessionState.activeTabId
-      let terminalToActivate: string | null = null
-
-      if (savedActiveTabId && terminals.value.find(t => t.id === savedActiveTabId)) {
-        terminalToActivate = savedActiveTabId
-      } else if (shouldActivateTerminalId) {
-        terminalToActivate = shouldActivateTerminalId
-      } else if (terminals.value.length > 0) {
-        terminalToActivate = terminals.value[0].id
-      }
-
-      if (terminalToActivate) {
-        await setActiveTerminal(terminalToActivate)
-      }
-
-      if (terminals.value.length === 0) {
-        await createTerminal()
-      }
-      return true
-    } catch (error) {
-      console.error('恢复终端会话状态失败:', error)
+    if (!terminalStates || terminalStates.length === 0) {
       return false
     }
+
+    terminals.value = []
+    activeTerminalId.value = null
+
+    let shouldActivateTerminalId: string | null = null
+
+    for (const terminalState of terminalStates) {
+      const id = await createTerminal(terminalState.cwd)
+
+      const terminal = terminals.value.find(t => t.id === id)
+      if (terminal) {
+        terminal.title = terminalState.title
+      }
+
+      if (terminalState.active && shouldActivateTerminalId === null) {
+        shouldActivateTerminalId = id
+      }
+    }
+
+    const savedActiveTabId = sessionStore.sessionState.activeTabId
+    let terminalToActivate: string | null = null
+
+    if (savedActiveTabId && terminals.value.find(t => t.id === savedActiveTabId)) {
+      terminalToActivate = savedActiveTabId
+    } else if (shouldActivateTerminalId) {
+      terminalToActivate = shouldActivateTerminalId
+    } else if (terminals.value.length > 0) {
+      terminalToActivate = terminals.value[0].id
+    }
+
+    if (terminalToActivate) {
+      await setActiveTerminal(terminalToActivate)
+    }
+
+    if (terminals.value.length === 0) {
+      await createTerminal()
+    }
+    return true
   }
 
   const saveSessionState = async () => {
-    try {
-      syncToSessionStore()
-      await sessionStore.saveSessionState()
-    } catch (error) {
-      console.error('❌ [Terminal Store] 保存终端会话状态失败:', error)
-    }
+    syncToSessionStore()
+    await sessionStore.saveSessionState()
   }
 
   const initializeTerminalStore = async () => {
-    try {
-      await initializeShellManager()
-
-      await restoreFromSessionState()
-
-      await setupGlobalListeners()
-    } catch (error) {
-      console.error('终端Store初始化失败:', error)
-    }
+    await initializeShellManager()
+    await restoreFromSessionState()
+    await setupGlobalListeners()
   }
 
   return {

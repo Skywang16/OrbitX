@@ -3,8 +3,6 @@
   import { useI18n } from 'vue-i18n'
   import { useVectorIndexSettingsStore } from './store'
   import { useAISettingsStore } from '../AI/store'
-  import { createMessage } from '@/ui'
-  import { handleErrorWithMessage } from '@/utils/errorHandler'
 
   const { t } = useI18n()
   const settingsStore = useVectorIndexSettingsStore()
@@ -47,39 +45,25 @@
 
   // 保存配置
   const saveConfig = async () => {
-    try {
-      await settingsStore.saveConfig(configForm)
-      createMessage.success(t('settings.vectorIndex.config_saved'))
-    } catch (error) {
-      handleErrorWithMessage(error, t('settings.vectorIndex.config_save_failed'))
-    }
+    await settingsStore.saveConfig(configForm)
   }
 
   // 测试连接
   const testConnection = async () => {
-    if (!configForm.qdrantUrl.trim()) {
-      createMessage.warning(t('settings.vectorIndex.url_required'))
-      return
-    }
+    if (!configForm.qdrantUrl.trim()) return
 
     isTestingConnection.value = true
 
-    try {
-      const testConfig = {
-        qdrantUrl: configForm.qdrantUrl,
-        qdrantApiKey: configForm.qdrantApiKey || null,
-        collectionName: configForm.collectionName,
-        embeddingModelId: configForm.embeddingModelId,
-        maxConcurrentFiles: configForm.maxConcurrentFiles,
-      }
-
-      await settingsStore.testConnection(testConfig)
-      createMessage.success(t('settings.vectorIndex.connection_test_success'))
-    } catch (error) {
-      handleErrorWithMessage(error, t('settings.vectorIndex.connection_test_failed'))
-    } finally {
-      isTestingConnection.value = false
+    const testConfig = {
+      qdrantUrl: configForm.qdrantUrl,
+      qdrantApiKey: configForm.qdrantApiKey || null,
+      collectionName: configForm.collectionName,
+      embeddingModelId: configForm.embeddingModelId,
+      maxConcurrentFiles: configForm.maxConcurrentFiles,
     }
+
+    await settingsStore.testConnection(testConfig)
+    isTestingConnection.value = false
   }
 
   // 计算属性：表单是否有效

@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core'
-import { Channel } from '@tauri-apps/api/core'
+import { llmApi } from '@/api'
+import { Channel, invoke } from '@tauri-apps/api/core'
 import { NativeLLMRequest, NativeLLMResponse, NativeLLMStreamChunk } from '../types/llm.types'
 import { LLMError, ErrorHandler } from '../common/error'
 
@@ -14,7 +14,7 @@ export class NativeLLMService {
   async call(request: NativeLLMRequest): Promise<NativeLLMResponse> {
     try {
       this.validateRequest(request)
-      const response = await invoke<NativeLLMResponse>('llm_call', { request })
+      const response = await llmApi.call(request)
       return response
     } catch (error) {
       throw this.handleError(error)
@@ -40,7 +40,7 @@ export class NativeLLMService {
       invoke('llm_call_stream', {
         request: { ...request, stream: true },
         onChunk: channel,
-      }).catch(error => {
+      }).catch((error: any) => {
         // Handle invoke errors - the channel will receive error through normal message flow
         console.error('LLM stream invoke error:', error)
       })
@@ -58,7 +58,7 @@ export class NativeLLMService {
    */
   async getAvailableModels(): Promise<string[]> {
     try {
-      return await invoke<string[]>('llm_get_available_models')
+      return await llmApi.getAvailableModels()
     } catch (error) {
       throw this.handleError(error)
     }
@@ -69,7 +69,7 @@ export class NativeLLMService {
    */
   async testModelConnection(modelId: string): Promise<boolean> {
     try {
-      return await invoke<boolean>('llm_test_model_connection', { modelId })
+      return await llmApi.testModelConnection(modelId)
     } catch (error) {
       return false
     }
@@ -78,9 +78,9 @@ export class NativeLLMService {
   /**
    * Cancel a streaming request (if supported by backend)
    */
-  async cancelStream(requestId?: string): Promise<void> {
+  async cancelStream(_requestId?: string): Promise<void> {
     try {
-      await invoke('llm_cancel_stream', { requestId })
+      await llmApi.cancelStream()
     } catch (error) {
       // Ignore cancellation errors as they may not be supported
       console.warn('Stream cancellation not supported:', error)

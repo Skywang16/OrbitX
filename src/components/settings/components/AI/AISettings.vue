@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { handleErrorWithMessage } from '@/utils/errorHandler'
+  
   import { useAISettingsStore } from './store'
   import AIFeatureSettings from './AIFeatureSettings.vue'
   import AIModelConfig from './AIModelConfig.vue'
@@ -11,14 +11,7 @@
 
   onMounted(async () => {
     if (!aiSettingsStore.isInitialized && !aiSettingsStore.isLoading) {
-      try {
-        await aiSettingsStore.loadSettings()
-      } catch (error) {
-        handleErrorWithMessage(
-          error,
-          t('settings.ai.load_error', { error: error instanceof Error ? error.message : String(error) })
-        )
-      }
+      await aiSettingsStore.loadSettings()
     }
   })
 </script>

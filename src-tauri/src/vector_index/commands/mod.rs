@@ -16,7 +16,8 @@
  */
 
 use crate::llm::commands::LLMManagerState;
-use crate::utils::error::{TauriResult, ToTauriResult};
+use crate::utils::{EmptyData, TauriApiResult};
+use crate::{api_error, api_success};
 use crate::vector_index::{
     monitor::FileMonitorService,
     service::VectorIndexService,
@@ -161,7 +162,7 @@ pub async fn init_vector_index<R: Runtime>(
     llm_state: State<'_, LLMManagerState>,
     ai_state: State<'_, crate::ai::AIManagerState>,
     app: AppHandle<R>,
-) -> TauriResult<()> {
+) -> TauriApiResult<EmptyData> {
     let result: Result<()> = async {
         info!("开始初始化向量索引服务");
 
@@ -249,7 +250,10 @@ pub async fn init_vector_index<R: Runtime>(
         }
     }
 
-    result.to_tauri()
+    match result {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("vector_index.init_failed")),
+    }
 }
 
 /// 构建代码索引
@@ -286,7 +290,7 @@ pub async fn build_code_index<R: Runtime>(
     workspace_path: String,
     state: State<'_, VectorIndexState>,
     app: AppHandle<R>,
-) -> TauriResult<IndexStats> {
+) -> TauriApiResult<IndexStats> {
     let result: Result<IndexStats> = async {
         info!("开始构建代码索引: {}", workspace_path);
 
@@ -385,7 +389,10 @@ pub async fn build_code_index<R: Runtime>(
     }
     .await;
 
-    result.to_tauri()
+    match result {
+        Ok(stats) => Ok(api_success!(stats)),
+        Err(_) => Ok(api_error!("vector_index.build_index_failed")),
+    }
 }
 
 /// 搜索代码向量
@@ -418,7 +425,7 @@ pub async fn search_code_vectors<R: Runtime>(
     options: SearchOptions,
     state: State<'_, VectorIndexState>,
     app: AppHandle<R>,
-) -> TauriResult<Vec<SearchResult>> {
+) -> TauriApiResult<Vec<SearchResult>> {
     let result: Result<Vec<SearchResult>> = async {
         debug!("开始搜索代码向量: '{}'", options.query);
 
@@ -501,7 +508,10 @@ pub async fn search_code_vectors<R: Runtime>(
     }
     .await;
 
-    result.to_tauri()
+    match result {
+        Ok(results) => Ok(api_success!(results)),
+        Err(_) => Ok(api_error!("vector_index.search_failed")),
+    }
 }
 
 /// 测试Qdrant数据库连接
@@ -524,7 +534,7 @@ pub async fn search_code_vectors<R: Runtime>(
 /// - 认证失败
 /// - 服务不可用
 #[tauri::command]
-pub async fn test_qdrant_connection(config: VectorIndexConfig) -> TauriResult<String> {
+pub async fn test_qdrant_connection(config: VectorIndexConfig) -> TauriApiResult<String> {
     let result: Result<String> = async {
         info!("开始测试Qdrant数据库连接: {}", config.qdrant_url);
 
@@ -557,12 +567,15 @@ pub async fn test_qdrant_connection(config: VectorIndexConfig) -> TauriResult<St
     }
     .await;
 
-    result.to_tauri()
+    match result {
+        Ok(status) => Ok(api_success!(status)),
+        Err(_) => Ok(api_error!("vector_index.connection_test_failed")),
+    }
 }
 
 /// 获取向量索引状态信息（对象）
 #[tauri::command]
-pub async fn get_vector_index_status(state: State<'_, VectorIndexState>) -> TauriResult<VectorIndexStatus> {
+pub async fn get_vector_index_status(state: State<'_, VectorIndexState>) -> TauriApiResult<VectorIndexStatus> {
     let result: Result<VectorIndexStatus> = async {
         if !state.is_initialized().await {
             return Ok(VectorIndexStatus { is_initialized: false, total_vectors: 0, collection_name: None, last_updated: None });
@@ -585,7 +598,10 @@ pub async fn get_vector_index_status(state: State<'_, VectorIndexState>) -> Taur
     }
     .await;
 
-    result.to_tauri()
+    match result {
+        Ok(status) => Ok(api_success!(status)),
+        Err(_) => Ok(api_error!("vector_index.get_status_failed")),
+    }
 }
 
 /// 启动文件监控服务
@@ -617,7 +633,7 @@ pub async fn start_file_monitoring<R: Runtime>(
     config: VectorIndexConfig,
     state: State<'_, VectorIndexState>,
     app: AppHandle<R>,
-) -> TauriResult<String> {
+) -> TauriApiResult<String> {
     let result: Result<String> = async {
         info!("启动文件监控: {}", workspace_path);
 
@@ -680,7 +696,10 @@ pub async fn start_file_monitoring<R: Runtime>(
     }
     .await;
 
-    result.to_tauri()
+    match result {
+        Ok(msg) => Ok(api_success!(msg)),
+        Err(_) => Ok(api_error!("vector_index.start_monitoring_failed")),
+    }
 }
 
 /// 停止文件监控服务
@@ -699,7 +718,7 @@ pub async fn start_file_monitoring<R: Runtime>(
 pub async fn stop_file_monitoring<R: Runtime>(
     state: State<'_, VectorIndexState>,
     app: AppHandle<R>,
-) -> TauriResult<String> {
+) -> TauriApiResult<String> {
     let result: Result<String> = async {
         info!("停止文件监控");
 
@@ -727,7 +746,10 @@ pub async fn stop_file_monitoring<R: Runtime>(
     }
     .await;
 
-    result.to_tauri()
+    match result {
+        Ok(msg) => Ok(api_success!(msg)),
+        Err(_) => Ok(api_error!("vector_index.stop_monitoring_failed")),
+    }
 }
 
 /// 获取文件监控状态
@@ -745,7 +767,7 @@ pub async fn stop_file_monitoring<R: Runtime>(
 #[tauri::command]
 pub async fn get_file_monitoring_status(
     state: State<'_, VectorIndexState>,
-) -> TauriResult<String> {
+) -> TauriApiResult<String> {
     let result: Result<String> = async {
         let monitor_guard = state.monitor_service.read().await;
         
@@ -774,7 +796,10 @@ pub async fn get_file_monitoring_status(
     }
     .await;
 
-    result.to_tauri()
+    match result {
+        Ok(status) => Ok(api_success!(status)),
+        Err(_) => Ok(api_error!("vector_index.get_monitoring_status_failed")),
+    }
 }
 
 /// 获取向量索引配置
@@ -792,7 +817,7 @@ pub async fn get_file_monitoring_status(
 #[tauri::command]
 pub async fn get_vector_index_config(
     storage_state: State<'_, crate::ai::tool::storage::StorageCoordinatorState>,
-) -> TauriResult<VectorIndexConfig> {
+) -> TauriApiResult<VectorIndexConfig> {
     let result: Result<VectorIndexConfig> = async {
         debug!("获取向量索引配置");
 
@@ -812,7 +837,10 @@ pub async fn get_vector_index_config(
     }
     .await;
 
-    result.to_tauri()
+    match result {
+        Ok(config) => Ok(api_success!(config)),
+        Err(_) => Ok(api_error!("vector_index.get_config_failed")),
+    }
 }
 
 /// 保存向量索引配置
@@ -837,7 +865,7 @@ pub async fn get_vector_index_config(
 pub async fn save_vector_index_config(
     config: VectorIndexConfig,
     storage_state: State<'_, crate::ai::tool::storage::StorageCoordinatorState>,
-) -> TauriResult<String> {
+) -> TauriApiResult<String> {
     let result: Result<String> = async {
         info!("保存向量索引配置");
 
@@ -857,7 +885,10 @@ pub async fn save_vector_index_config(
     }
     .await;
 
-    result.to_tauri()
+    match result {
+        Ok(msg) => Ok(api_success!(msg)),
+        Err(_) => Ok(api_error!("vector_index.save_config_failed")),
+    }
 }
 
 /// 获取当前工作空间路径
@@ -873,7 +904,7 @@ pub async fn save_vector_index_config(
 /// - 无法确定工作空间路径
 /// - 路径不存在或无权限访问
 #[tauri::command]
-pub async fn get_current_workspace_path() -> TauriResult<String> {
+pub async fn get_current_workspace_path() -> TauriApiResult<String> {
     let result: Result<String> = async {
         // 尝试获取当前工作目录
         let current_dir = std::env::current_dir()
@@ -890,7 +921,10 @@ pub async fn get_current_workspace_path() -> TauriResult<String> {
     }
     .await;
 
-    result.to_tauri()
+    match result {
+        Ok(path) => Ok(api_success!(path)),
+        Err(_) => Ok(api_error!("vector_index.get_workspace_path_failed")),
+    }
 }
 
 /// 取消正在进行的索引构建
@@ -909,7 +943,7 @@ pub async fn get_current_workspace_path() -> TauriResult<String> {
 pub async fn cancel_build_index<R: Runtime>(
     state: State<'_, VectorIndexState>,
     app: AppHandle<R>,
-) -> TauriResult<String> {
+) -> TauriApiResult<String> {
     let result: Result<String> = async {
         info!("请求取消索引构建");
 
@@ -940,7 +974,10 @@ pub async fn cancel_build_index<R: Runtime>(
     }
     .await;
 
-    result.to_tauri()
+    match result {
+        Ok(msg) => Ok(api_success!(msg)),
+        Err(_) => Ok(api_error!("vector_index.cancel_build_failed")),
+    }
 }
 
 /// 清空向量索引
@@ -964,7 +1001,7 @@ pub async fn cancel_build_index<R: Runtime>(
 pub async fn clear_vector_index<R: Runtime>(
     state: State<'_, VectorIndexState>,
     app: AppHandle<R>,
-) -> TauriResult<String> {
+) -> TauriApiResult<String> {
     let result: Result<String> = async {
         info!("开始清空向量索引");
 
@@ -1002,5 +1039,8 @@ pub async fn clear_vector_index<R: Runtime>(
     }
     .await;
 
-    result.to_tauri()
+    match result {
+        Ok(msg) => Ok(api_success!(msg)),
+        Err(_) => Ok(api_error!("vector_index.clear_index_failed")),
+    }
 }

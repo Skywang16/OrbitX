@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import { listen } from '@tauri-apps/api/event'
 import { vectorIndexApi } from '@/api/vector-index'
-import { handleErrorWithMessage } from '@/utils/errorHandler'
+import { createMessage } from '@/ui'
 
 // Singleton listener to avoid multiple registrations
 let listenerInstalled = false
@@ -65,7 +65,7 @@ export function useVectorIndexBuild() {
             const raw = payload.data?.message || '构建失败'
             const pretty = formatBuildError(raw)
             _errorMessage.value = pretty
-            handleErrorWithMessage(new Error(pretty), '构建索引失败')
+            createMessage.error('构建索引失败')
             break
           }
           default:

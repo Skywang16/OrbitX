@@ -4,7 +4,6 @@
   import { useThemeStore } from '@/stores/theme'
   import { windowApi } from '@/api/window'
   import { configApi } from '@/api/config'
-  import { handleErrorWithMessage } from '@/utils/errorHandler'
   import { XSelect } from '@/ui'
   import type { SelectOption } from '@/ui'
   import { useSessionStore } from '@/stores/session'
@@ -14,21 +13,17 @@
   const sessionStore = useSessionStore()
 
   onMounted(async () => {
-    try {
-      await themeStore.initialize()
-      const config = themeStore.themeConfig
-      if (config) {
-        if (config.lightTheme) {
-          selectedLightTheme.value = config.lightTheme
-        }
-        if (config.darkTheme) {
-          selectedDarkTheme.value = config.darkTheme
-        }
+    await themeStore.initialize()
+    const config = themeStore.themeConfig
+    if (config) {
+      if (config.lightTheme) {
+        selectedLightTheme.value = config.lightTheme
       }
-      await syncOpacityFromConfig()
-    } catch (error) {
-      console.error('Theme system initialization failed:', error)
+      if (config.darkTheme) {
+        selectedDarkTheme.value = config.darkTheme
+      }
     }
+    await syncOpacityFromConfig()
   })
 
   const selectedLightTheme = ref('light')
@@ -105,28 +100,17 @@
       return
     }
 
-    try {
-      if (mode === 'system') {
-        const lightTheme = selectedLightTheme.value || 'light'
-        const darkTheme = selectedDarkTheme.value || 'dark'
-
-        await themeStore.enableFollowSystem(lightTheme, darkTheme)
-      } else {
-        await themeStore.disableFollowSystem()
-      }
-    } catch (error) {
-      console.error('Failed to switch theme mode:', error)
-      handleErrorWithMessage(error, t('theme_settings.mode_change_failed'))
+    if (mode === 'system') {
+      const lightTheme = selectedLightTheme.value || 'light'
+      const darkTheme = selectedDarkTheme.value || 'dark'
+      await themeStore.enableFollowSystem(lightTheme, darkTheme)
+    } else {
+      await themeStore.disableFollowSystem()
     }
   }
 
   const handleThemeSelect = async (themeName: string) => {
-    try {
-      await themeStore.switchToTheme(themeName)
-    } catch (error) {
-      console.error('Failed to switch theme:', error)
-      handleErrorWithMessage(error, t('theme_settings.theme_change_failed'))
-    }
+    await themeStore.switchToTheme(themeName)
   }
 
   const handleSystemThemeChange = async () => {
@@ -147,12 +131,8 @@
     }
 
     opacityTimeout = setTimeout(async () => {
-      try {
-        await windowApi.setWindowOpacity(opacity.value)
-        await saveOpacityToConfig()
-      } catch (error) {
-        handleErrorWithMessage(error, t('theme_settings.opacity_error', { error }))
-      }
+      await windowApi.setWindowOpacity(opacity.value)
+      await saveOpacityToConfig()
     }, 100)
   }
 

@@ -8,7 +8,8 @@ use super::{
     types::{LLMProviderType, LLMRequest, LLMResponse, LLMStreamChunk},
 };
 use crate::storage::repositories::RepositoryManager;
-use crate::utils::error::ToTauriResult;
+use crate::utils::{EmptyData, TauriApiResult};
+use crate::{api_error, api_success};
 
 /// LLM 管理器状态
 pub struct LLMManagerState {
@@ -29,8 +30,11 @@ impl LLMManagerState {
 pub async fn llm_call(
     state: State<'_, LLMManagerState>,
     request: LLMRequest,
-) -> Result<LLMResponse, String> {
-    state.service.call(request).await.to_tauri()
+) -> TauriApiResult<LLMResponse> {
+    match state.service.call(request).await {
+        Ok(response) => Ok(api_success!(response)),
+        Err(_) => Ok(api_error!("llm.call_failed")),
+    }
 }
 
 /// 流式LLM调用
@@ -39,10 +43,13 @@ pub async fn llm_call_stream(
     state: State<'_, LLMManagerState>,
     request: LLMRequest,
     on_chunk: Channel<LLMStreamChunk>,
-) -> Result<(), String> {
+) -> TauriApiResult<EmptyData> {
     tracing::debug!("Starting stream call for model: {}", request.model);
 
-    let mut stream = state.service.call_stream(request).await.to_tauri()?;
+    let mut stream = match state.service.call_stream(request).await {
+        Ok(stream) => stream,
+        Err(_) => return Ok(api_error!("llm.stream_failed")),
+    };
 
     tracing::debug!("Stream created successfully, starting to read chunks");
     let mut chunk_count = 0;
@@ -73,15 +80,18 @@ pub async fn llm_call_stream(
     }
 
     tracing::debug!("Stream completed, total chunks: {}", chunk_count);
-    Ok(())
+    Ok(api_success!())
 }
 
 /// 获取可用的模型列表
 #[tauri::command]
 pub async fn llm_get_available_models(
     state: State<'_, LLMManagerState>,
-) -> Result<Vec<String>, String> {
-    state.service.get_available_models().await.to_tauri()
+) -> TauriApiResult<Vec<String>> {
+    match state.service.get_available_models().await {
+        Ok(models) => Ok(api_success!(models)),
+        Err(_) => Ok(api_error!("llm.get_models_failed")),
+    }
 }
 
 /// 测试模型连接
@@ -89,25 +99,25 @@ pub async fn llm_get_available_models(
 pub async fn llm_test_model_connection(
     state: State<'_, LLMManagerState>,
     model_id: String,
-) -> Result<bool, String> {
-    state
-        .service
-        .test_model_connection(&model_id)
-        .await
-        .to_tauri()
+) -> TauriApiResult<bool> {
+    match state.service.test_model_connection(&model_id).await {
+        Ok(result) => Ok(api_success!(result)),
+        Err(_) => Ok(api_error!("llm.test_connection_failed")),
+    }
 }
 
 /// 获取所有供应商信息
 #[tauri::command]
 pub async fn llm_get_providers(
     state: State<'_, LLMManagerState>,
-) -> Result<Vec<ProviderInfo>, String> {
-    Ok(state
+) -> TauriApiResult<Vec<ProviderInfo>> {
+    let providers = state
         .registry
         .get_all_providers()
         .into_iter()
         .cloned()
-        .collect())
+        .collect();
+    Ok(api_success!(providers))
 }
 
 /// 获取指定供应商的模型列表
@@ -115,13 +125,14 @@ pub async fn llm_get_providers(
 pub async fn llm_get_provider_models(
     state: State<'_, LLMManagerState>,
     provider_type: LLMProviderType,
-) -> Result<Vec<ModelInfo>, String> {
-    Ok(state
+) -> TauriApiResult<Vec<ModelInfo>> {
+    let models = state
         .registry
         .get_models_for_provider(&provider_type)
         .into_iter()
         .cloned()
-        .collect())
+        .collect();
+    Ok(api_success!(models))
 }
 
 /// 根据模型ID获取模型信息
@@ -129,11 +140,12 @@ pub async fn llm_get_provider_models(
 pub async fn llm_get_model_info(
     state: State<'_, LLMManagerState>,
     model_id: String,
-) -> Result<Option<(ProviderInfo, ModelInfo)>, String> {
-    Ok(state
+) -> TauriApiResult<Option<(ProviderInfo, ModelInfo)>> {
+    let model_info = state
         .registry
         .find_model(&model_id)
-        .map(|(provider, model)| (provider.clone(), model.clone())))
+        .map(|(provider, model)| (provider.clone(), model.clone()));
+    Ok(api_success!(model_info))
 }
 
 /// 检查模型是否支持指定功能
@@ -142,6 +154,7 @@ pub async fn llm_check_model_feature(
     state: State<'_, LLMManagerState>,
     model_id: String,
     feature: String,
-) -> Result<bool, String> {
-    Ok(state.registry.model_supports_feature(&model_id, &feature))
+) -> TauriApiResult<bool> {
+    let supports = state.registry.model_supports_feature(&model_id, &feature);
+    Ok(api_success!(supports))
 }

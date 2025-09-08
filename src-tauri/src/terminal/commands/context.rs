@@ -10,9 +10,8 @@
 use super::TerminalContextState;
 use crate::mux::PaneId;
 use crate::terminal::TerminalContext;
-// 暂时移除未使用的导入
-// use crate::utils::error::ToTauriResult;
-// use anyhow::Context;
+use crate::utils::{TauriApiResult};
+use crate::{api_error, api_success};
 use tauri::State;
 use tracing::{debug, error, warn};
 
@@ -32,15 +31,14 @@ use tracing::{debug, error, warn};
 pub async fn get_terminal_context(
     pane_id: Option<u32>,
     state: State<'_, TerminalContextState>,
-) -> Result<TerminalContext, String> {
+) -> TauriApiResult<TerminalContext> {
     debug!("获取终端上下文: pane_id={:?}", pane_id);
 
     // 参数验证
     if let Some(id) = pane_id {
         if id == 0 {
-            let error_msg = "面板ID不能为0".to_string();
-            warn!("{}", error_msg);
-            return Err(error_msg);
+            warn!("面板ID不能为0");
+            return Ok(api_error!("common.invalid_id"));
         }
     }
 
@@ -57,12 +55,11 @@ pub async fn get_terminal_context(
                 "成功获取终端上下文: pane_id={:?}, cwd={:?}",
                 context.pane_id, context.current_working_directory
             );
-            Ok(context)
+            Ok(api_success!(context))
         }
         Err(e) => {
-            let error_msg = format!("获取终端上下文失败: {}", e);
-            error!("{}", error_msg);
-            Err(error_msg)
+            error!("获取终端上下文失败: {}", e);
+            Ok(api_error!("terminal.get_context_failed"))
         }
     }
 }
@@ -79,7 +76,7 @@ pub async fn get_terminal_context(
 #[tauri::command]
 pub async fn get_active_terminal_context(
     state: State<'_, TerminalContextState>,
-) -> Result<TerminalContext, String> {
+) -> TauriApiResult<TerminalContext> {
     debug!("获取活跃终端上下文");
 
     match state.context_service.get_active_context().await {
@@ -88,7 +85,7 @@ pub async fn get_active_terminal_context(
                 "成功获取活跃终端上下文: pane_id={:?}, cwd={:?}",
                 context.pane_id, context.current_working_directory
             );
-            Ok(context)
+            Ok(api_success!(context))
         }
         Err(e) if e.to_string().contains("没有活跃的终端") => {
             // 没有活跃终端时，使用回退逻辑
@@ -96,19 +93,17 @@ pub async fn get_active_terminal_context(
             match state.context_service.get_context_with_fallback(None).await {
                 Ok(context) => {
                     debug!("使用回退逻辑成功获取终端上下文");
-                    Ok(context)
+                    Ok(api_success!(context))
                 }
                 Err(e) => {
-                    let error_msg = format!("获取活跃终端上下文失败（回退也失败）: {}", e);
-                    error!("{}", error_msg);
-                    Err(error_msg)
+                    error!("获取活跃终端上下文失败（回退也失败）: {}", e);
+                    Ok(api_error!("terminal.get_active_context_failed"))
                 }
             }
         }
         Err(e) => {
-            let error_msg = format!("获取活跃终端上下文失败: {}", e);
-            error!("{}", error_msg);
-            Err(error_msg)
+            error!("获取活跃终端上下文失败: {}", e);
+            Ok(api_error!("terminal.get_active_context_failed"))
         }
     }
 }

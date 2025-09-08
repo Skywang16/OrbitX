@@ -2,7 +2,6 @@
   import { ref, computed, onMounted, onUnmounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { windowApi } from '@/api'
-  import { handleErrorWithMessage } from '@/utils/errorHandler'
   import { useAIChatStore } from '@/components/AIChatSidebar'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { openUrl } from '@tauri-apps/plugin-opener'
@@ -38,7 +37,6 @@
       const newState = await windowApi.toggleAlwaysOnTop()
       isAlwaysOnTop.value = newState
     } catch (error) {
-      handleErrorWithMessage(error, '切换窗口置顶失败')
       isAlwaysOnTop.value = !isAlwaysOnTop.value
     }
   }
@@ -56,7 +54,6 @@
         // 显示成功提示
         // createMessage.success('已在浏览器中打开问题反馈页面')
       } catch (error) {
-        handleErrorWithMessage(error, '无法打开问题反馈页面')
         // 由于错误提示已统一，保留一个非错误级别的提示或注释
         // 如需额外引导用户，可考虑使用 createMessage.info
       }

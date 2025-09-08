@@ -3,7 +3,6 @@ import { ref, computed, readonly } from 'vue'
 import { restoreStateCurrent, StateFlags } from '@tauri-apps/plugin-window-state'
 import { type SessionState, type TerminalState, type UiState, type AiState } from '@/types/domain/storage'
 import { createDefaultSessionState } from '@/types/utils/helpers'
-import { handleErrorWithMessage } from '@/utils/errorHandler'
 import { storageApi } from '@/api/storage'
 
 /**
@@ -42,44 +41,25 @@ export const useSessionStore = defineStore('session', () => {
 
   const saveSessionState = async (): Promise<void> => {
     if (isSaving.value) return
-
-    try {
-      isSaving.value = true
-      error.value = null
-
-      sessionState.value.timestamp = new Date().toISOString()
-
-      await storageApi.saveSessionState(sessionState.value)
-    } catch (err) {
-      const message = handleErrorWithMessage(err, '保存会话状态失败')
-      error.value = message
-      throw err
-    } finally {
+    isSaving.value = true
+    error.value = null
+    sessionState.value.timestamp = new Date().toISOString()
+    await storageApi.saveSessionState(sessionState.value).finally(() => {
       isSaving.value = false
-    }
+    })
   }
 
   const loadSessionState = async (): Promise<void> => {
     if (isLoading.value) return
-
-    try {
-      isLoading.value = true
-      error.value = null
-
-      const state = await storageApi.loadSessionState()
-
-      if (state) {
-        sessionState.value = state
-      }
-
-      await restoreWindowState()
-    } catch (err) {
-      const message = handleErrorWithMessage(err, '加载会话状态失败')
-      error.value = message
-      sessionState.value = createDefaultSessionState()
-    } finally {
+    isLoading.value = true
+    error.value = null
+    const state = await storageApi.loadSessionState().finally(() => {
       isLoading.value = false
+    })
+    if (state) {
+      sessionState.value = state
     }
+    await restoreWindowState()
   }
 
   const updateTerminals = (terminals: TerminalState[]): void => {

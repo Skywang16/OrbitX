@@ -7,7 +7,7 @@
  * - 搜索和格式化
  */
 
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/utils/request'
 import type {
   ShortcutsConfig,
   ShortcutBinding,
@@ -22,87 +22,47 @@ import type {
  */
 export class ShortcutsApi {
   async getConfig(): Promise<ShortcutsConfig> {
-    try {
-      return await invoke<ShortcutsConfig>('get_shortcuts_config')
-    } catch (error) {
-      throw new Error(`获取快捷键配置失败: ${error}`)
-    }
+    return await invoke<ShortcutsConfig>('get_shortcuts_config')
   }
 
   async updateConfig(config: ShortcutsConfig): Promise<void> {
-    try {
-      await invoke('update_shortcuts_config', { config: config })
-    } catch (error) {
-      throw new Error(`更新快捷键配置失败: ${error}`)
-    }
+    await invoke('update_shortcuts_config', { config: config })
   }
 
   async validateConfig(config: ShortcutsConfig): Promise<ShortcutValidationResult> {
-    try {
-      return await invoke<ShortcutValidationResult>('validate_shortcuts_config', {
-        config: config,
-      })
-    } catch (error) {
-      throw new Error(`验证快捷键配置失败: ${error}`)
-    }
+    return await invoke<ShortcutValidationResult>('validate_shortcuts_config', {
+      config: config,
+    })
   }
 
   async detectConflicts(config: ShortcutsConfig): Promise<ConflictDetectionResult> {
-    try {
-      return await invoke<ConflictDetectionResult>('detect_shortcuts_conflicts', {
-        config: config,
-      })
-    } catch (error) {
-      throw new Error(`检测快捷键冲突失败: ${error}`)
-    }
+    return await invoke<ConflictDetectionResult>('detect_shortcuts_conflicts', {
+      config: config,
+    })
   }
 
   async getCurrentPlatform(): Promise<Platform> {
-    try {
-      return await invoke<Platform>('get_current_platform')
-    } catch (error) {
-      throw new Error(`获取当前平台失败: ${error}`)
-    }
+    return await invoke<Platform>('get_current_platform')
   }
 
   async resetToDefaults(): Promise<void> {
-    try {
-      await invoke('reset_shortcuts_to_defaults')
-    } catch (error) {
-      throw new Error(`重置快捷键配置失败: ${error}`)
-    }
+    await invoke('reset_shortcuts_to_defaults')
   }
 
   async getStatistics(): Promise<ShortcutStatistics> {
-    try {
-      return await invoke<ShortcutStatistics>('get_shortcuts_statistics')
-    } catch (error) {
-      throw new Error(`获取快捷键统计信息失败: ${error}`)
-    }
+    return await invoke<ShortcutStatistics>('get_shortcuts_statistics')
   }
 
   async addShortcut(shortcut: ShortcutBinding): Promise<void> {
-    try {
-      await invoke('add_shortcut', { binding: shortcut })
-    } catch (error) {
-      throw new Error(`添加快捷键失败: ${error}`)
-    }
+    await invoke('add_shortcut', { binding: shortcut })
   }
 
   async removeShortcut(index: number): Promise<ShortcutBinding> {
-    try {
-      return await invoke<ShortcutBinding>('remove_shortcut', { index })
-    } catch (error) {
-      throw new Error(`删除快捷键失败: ${error}`)
-    }
+    return await invoke<ShortcutBinding>('remove_shortcut', { index })
   }
 
   async updateShortcut(index: number, shortcut: ShortcutBinding): Promise<void> {
-    try {
-      await invoke('update_shortcut', { index, binding: shortcut })
-    } catch (error) {
-      throw new Error(`更新快捷键失败: ${error}`)
-    }
+    await invoke('update_shortcut', { index, binding: shortcut })
   }
 
   async executeAction(
@@ -111,16 +71,12 @@ export class ShortcutsApi {
     activeTerminalId?: string | null,
     metadata?: any
   ): Promise<any> {
-    try {
-      return await invoke('execute_shortcut_action', {
-        action,
-        keyCombination,
-        activeTerminalId,
-        metadata,
-      })
-    } catch (error) {
-      throw new Error(`执行快捷键动作失败: ${error}`)
-    }
+    return await invoke('execute_shortcut_action', {
+      action,
+      keyCombination,
+      activeTerminalId,
+      metadata,
+    })
   }
 }
 

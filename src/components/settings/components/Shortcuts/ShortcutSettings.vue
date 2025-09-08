@@ -58,9 +58,8 @@
 <script setup lang="ts">
   import { ref, computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { handleErrorWithMessage } from '@/utils/errorHandler'
+
   import { useShortcuts } from '@/composables/useShortcuts'
-  import { createMessage } from '@/ui/composables/message-api'
   import { useShortcutStore } from '@/stores/shortcuts'
 
   import { confirmWarning } from '@/ui/composables/confirm-api'
@@ -70,7 +69,6 @@
   const {
     config,
     loading,
-    hasConflicts,
 
     initialize,
     addShortcut,
@@ -79,30 +77,20 @@
   } = useShortcuts()
 
   const store = useShortcutStore()
-  const lastConflictDetection = computed(() => store.lastConflictDetection)
 
   const editingActionKey = ref<string | null>(null)
   const capturedShortcut = ref<{ key: string; modifiers: string[] } | null>(null)
   const { t } = useI18n()
 
-  const conflicts = computed(() => lastConflictDetection.value?.conflicts || [])
-  const conflictCount = computed(() => conflicts.value.length)
-
   const handleReset = async () => {
-    try {
-      const shouldReset = await confirmWarning(t('shortcuts.reset_confirm_message'), t('shortcuts.reset_confirm_title'))
+    const shouldReset = await confirmWarning(t('shortcuts.reset_confirm_message'), t('shortcuts.reset_confirm_title'))
 
-      if (shouldReset) {
-        await resetToDefaults()
+    if (shouldReset) {
+      await resetToDefaults()
 
-        if ((window as any).reloadShortcuts) {
-          await (window as any).reloadShortcuts()
-        }
-
-        createMessage.success(t('shortcuts.reset_success'))
+      if ((window as any).reloadShortcuts) {
+        await (window as any).reloadShortcuts()
       }
-    } catch (error) {
-      handleErrorWithMessage(error, t('shortcuts.reset_failed'))
     }
   }
 
@@ -185,28 +173,18 @@
   }
 
   const saveShortcut = async (actionKey: string, shortcut: { key: string; modifiers: string[] }) => {
-    try {
-      const shortcutBinding: ShortcutBinding = {
-        key: shortcut.key,
-        modifiers: shortcut.modifiers,
-        action: actionKey,
-      }
+    const shortcutBinding: ShortcutBinding = {
+      key: shortcut.key,
+      modifiers: shortcut.modifiers,
+      action: actionKey,
+    }
 
-      await removeExistingShortcut(actionKey)
+    await removeExistingShortcut(actionKey)
 
-      await addShortcut(shortcutBinding)
+    await addShortcut(shortcutBinding)
 
-      if ((window as any).reloadShortcuts) {
-        await (window as any).reloadShortcuts()
-      }
-
-      createMessage.success(
-        t('shortcuts.save_success', {
-          action: t(`shortcuts.actions.${actionKey}`) || actionKey,
-        })
-      )
-    } catch (error) {
-      handleErrorWithMessage(error, t('shortcuts.save_failed'))
+    if ((window as any).reloadShortcuts) {
+      await (window as any).reloadShortcuts()
     }
   }
 
@@ -223,15 +201,7 @@
 
   onMounted(async () => {
     if (!store.initialized && !loading.value) {
-      try {
-        await initialize()
-        // 初始化后检查冲突并显示警告
-        if (hasConflicts.value) {
-          createMessage.warning(t('shortcuts.conflicts', { count: conflictCount.value }))
-        }
-      } catch (err) {
-        handleErrorWithMessage(err, t('shortcuts.init_failed'))
-      }
+      await initialize()
     }
   })
 </script>

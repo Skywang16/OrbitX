@@ -185,12 +185,8 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
   }
 
   const silentShellIntegration = async () => {
-    try {
-      if (options.backendId != null) {
-        await shellIntegrationApi.setupShellIntegration(options.backendId, true)
-      }
-    } catch {
-      // 静默失败
+    if (options.backendId != null) {
+      await shellIntegrationApi.setupShellIntegration(options.backendId, true)
     }
   }
 

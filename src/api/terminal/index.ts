@@ -8,7 +8,6 @@
  */
 
 import { invoke } from '@/utils/request'
-import { handleError } from '@/utils/errorHandler'
 import type {
   CreateTerminalWithShellOptions,
   ShellInfo,
@@ -28,179 +27,100 @@ export class TerminalApi {
   // ===== 基本操作 =====
 
   async createTerminal(options: TerminalCreateOptions): Promise<number> {
-    try {
-      return await invoke<number>('create_terminal', {
-        rows: options.rows,
-        cols: options.cols,
-        cwd: options.cwd,
-      })
-    } catch (error) {
-      throw new Error(handleError(error, '创建终端失败'))
-    }
+    return await invoke<number>('create_terminal', {
+      rows: options.rows,
+      cols: options.cols,
+      cwd: options.cwd,
+    })
   }
 
   async createTerminalWithShell(options: CreateTerminalWithShellOptions): Promise<number> {
-    try {
-      return await invoke<number>('create_terminal_with_shell', {
-        shellName: options.shellName,
-        rows: options.rows,
-        cols: options.cols,
-      })
-    } catch (error) {
-      throw new Error(handleError(error, '使用指定shell创建终端失败'))
-    }
+    return await invoke<number>('create_terminal_with_shell', {
+      shellName: options.shellName,
+      rows: options.rows,
+      cols: options.cols,
+    })
   }
 
   async writeToTerminal(options: TerminalWriteOptions): Promise<void> {
-    try {
-      await invoke('write_to_terminal', { paneId: options.paneId, data: options.data })
-    } catch (error) {
-      throw new Error(handleError(error, '向终端写入数据失败'))
-    }
+    await invoke<void>('write_to_terminal', { paneId: options.paneId, data: options.data })
   }
 
   async resizeTerminal(options: TerminalResizeOptions): Promise<void> {
-    try {
-      await invoke('resize_terminal', {
-        paneId: options.paneId,
-        rows: options.rows,
-        cols: options.cols,
-      })
-    } catch (error) {
-      throw new Error(handleError(error, '调整终端大小失败'))
-    }
+    await invoke<void>('resize_terminal', {
+      paneId: options.paneId,
+      rows: options.rows,
+      cols: options.cols,
+    })
   }
 
   async closeTerminal(paneId: number): Promise<void> {
-    try {
-      await invoke('close_terminal', { paneId })
-    } catch (error) {
-      throw new Error(handleError(error, '关闭终端失败'))
-    }
+    await invoke<void>('close_terminal', { paneId })
   }
 
   async listTerminals(): Promise<number[]> {
-    try {
-      return await invoke<number[]>('list_terminals')
-    } catch (error) {
-      throw new Error(handleError(error, '获取终端列表失败'))
-    }
+    return await invoke<number[]>('list_terminals')
   }
 
   // ===== Shell 管理 =====
 
   async getAvailableShells(): Promise<ShellInfo[]> {
-    try {
-      return await invoke<ShellInfo[]>('get_available_shells')
-    } catch (error) {
-      throw new Error(handleError(error, '获取可用shell列表失败'))
-    }
+    return await invoke<ShellInfo[]>('get_available_shells')
   }
 
   async getDefaultShell(): Promise<ShellInfo> {
-    try {
-      return await invoke<ShellInfo>('get_default_shell')
-    } catch (error) {
-      throw new Error(handleError(error, '获取默认shell失败'))
-    }
+    return await invoke<ShellInfo>('get_default_shell')
   }
 
   async validateShellPath(path: string): Promise<boolean> {
-    try {
-      return await invoke<boolean>('validate_shell_path', { path })
-    } catch (error) {
-      console.warn('验证shell路径失败:', handleError(error))
-      return false
-    }
+    return await invoke<boolean>('validate_shell_path', { path })
   }
 
   // ===== 缓冲区操作 =====
 
   async getTerminalBuffer(paneId: number): Promise<string> {
-    try {
-      return await invoke<string>('get_terminal_buffer', { paneId })
-    } catch (error) {
-      console.warn('获取终端缓冲区失败:', handleError(error))
-      return ''
-    }
+    return await invoke<string>('get_terminal_buffer', { paneId })
   }
 
   async setTerminalBuffer(paneId: number, content: string): Promise<void> {
-    try {
-      await invoke('set_terminal_buffer', { paneId, content })
-    } catch (error) {
-      throw new Error(handleError(error, '设置终端缓冲区失败'))
-    }
+    await invoke<void>('set_terminal_buffer', { paneId, content })
   }
 
   // ===== 工具方法 =====
 
   async terminalExists(paneId: number): Promise<boolean> {
-    try {
-      const terminals = await this.listTerminals()
-      return terminals.includes(paneId)
-    } catch (error) {
-      console.warn('检查终端存在性失败:', handleError(error))
-      return false
-    }
+    const terminals = await this.listTerminals()
+    return terminals.includes(paneId)
   }
 
   // ===== 终端配置管理 =====
 
   async getTerminalConfig(): Promise<TerminalConfig> {
-    try {
-      return await invoke<TerminalConfig>('get_terminal_config')
-    } catch (error) {
-      throw new Error(handleError(error, '获取终端配置失败'))
-    }
+    return await invoke<TerminalConfig>('get_terminal_config')
   }
 
   async updateTerminalConfig(config: TerminalConfig): Promise<void> {
-    try {
-      await invoke('update_terminal_config', { terminalConfig: config })
-    } catch (error) {
-      throw new Error(handleError(error, '更新终端配置失败'))
-    }
+    await invoke<void>('update_terminal_config', { terminalConfig: config })
   }
 
   async validateTerminalConfig(): Promise<TerminalConfigValidationResult> {
-    try {
-      return await invoke<TerminalConfigValidationResult>('validate_terminal_config')
-    } catch (error) {
-      throw new Error(handleError(error, '验证终端配置失败'))
-    }
+    return await invoke<TerminalConfigValidationResult>('validate_terminal_config')
   }
 
   async resetTerminalConfigToDefaults(): Promise<void> {
-    try {
-      await invoke('reset_terminal_config_to_defaults')
-    } catch (error) {
-      throw new Error(handleError(error, '重置终端配置失败'))
-    }
+    await invoke('reset_terminal_config_to_defaults')
   }
 
   async detectSystemShells(): Promise<SystemShellsResult> {
-    try {
-      return await invoke<SystemShellsResult>('detect_system_shells')
-    } catch (error) {
-      throw new Error(handleError(error, '检测系统Shell失败'))
-    }
+    return await invoke<SystemShellsResult>('detect_system_shells')
   }
 
   async getShellInfo(shellPath: string): Promise<ShellInfo | null> {
-    try {
-      return await invoke<ShellInfo | null>('get_shell_info', { shellPath })
-    } catch (error) {
-      throw new Error(handleError(error, '获取Shell信息失败'))
-    }
+    return await invoke<ShellInfo | null>('get_shell_info', { shellPath })
   }
 
   async updateCursorConfig(cursorConfig: CursorConfig): Promise<void> {
-    try {
-      await invoke('update_cursor_config', { cursorConfig })
-    } catch (error) {
-      throw new Error(handleError(error, '更新光标配置失败'))
-    }
+    await invoke('update_cursor_config', { cursorConfig })
   }
 }
 

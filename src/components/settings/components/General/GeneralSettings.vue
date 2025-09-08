@@ -1,8 +1,7 @@
 <script setup lang="ts">
   import { ref, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { XSwitch } from '@/ui'
-  import { createMessage } from '@/ui'
+  import { XSwitch, createMessage } from '@/ui'
   import { enable as enableAutostart, disable as disableAutostart, isEnabled } from '@tauri-apps/plugin-autostart'
   import { debounce } from 'lodash-es'
 

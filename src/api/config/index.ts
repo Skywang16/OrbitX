@@ -1,50 +1,29 @@
 import { invoke } from '@/utils/request'
-import { handleError } from '@/utils/errorHandler'
 import type { AppConfig, ConfigFileInfo, Theme, ThemeInfo, ThemeConfigStatus } from './types'
 
 class ThemeAPI {
   async getThemeConfigStatus(): Promise<ThemeConfigStatus> {
-    try {
-      return await invoke<ThemeConfigStatus>('get_theme_config_status')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get theme config status'))
-    }
+    return await invoke<ThemeConfigStatus>('get_theme_config_status')
   }
 
   async getCurrentTheme(): Promise<Theme> {
-    try {
-      return await invoke<Theme>('get_current_theme')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get current theme'))
-    }
+    return await invoke<Theme>('get_current_theme')
   }
 
   async getAvailableThemes(): Promise<ThemeInfo[]> {
-    try {
-      return await invoke<ThemeInfo[]>('get_available_themes')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get available themes'))
-    }
+    return await invoke<ThemeInfo[]>('get_available_themes')
   }
 
   async setTerminalTheme(name: string): Promise<void> {
-    try {
-      await invoke('set_terminal_theme', { themeName: name })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to set terminal theme'))
-    }
+    await invoke<void>('set_terminal_theme', { themeName: name })
   }
 
   async setFollowSystemTheme(followSystem: boolean, lightTheme?: string, darkTheme?: string): Promise<void> {
-    try {
-      await invoke('set_follow_system_theme', {
-        followSystem,
-        lightTheme: lightTheme || null,
-        darkTheme: darkTheme || null,
-      })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to set follow system theme'))
-    }
+    await invoke<void>('set_follow_system_theme', {
+      followSystem,
+      lightTheme: lightTheme || null,
+      darkTheme: darkTheme || null,
+    })
   }
 }
 
@@ -52,123 +31,63 @@ export class ConfigApi {
   private themeAPI = new ThemeAPI()
 
   async getConfig(): Promise<AppConfig> {
-    try {
-      return await invoke<AppConfig>('get_config')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get config'))
-    }
+    return await invoke<AppConfig>('get_config')
   }
 
   async updateConfig(config: AppConfig): Promise<void> {
-    try {
-      await invoke('update_config', { newConfig: config })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to update config'))
-    }
+    await invoke<void>('update_config', { newConfig: config })
   }
 
   async saveConfig(): Promise<void> {
-    try {
-      await invoke('save_config')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to save config'))
-    }
+    await invoke<void>('save_config')
   }
 
   async validateConfig(): Promise<void> {
-    try {
-      await invoke('validate_config')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to validate config'))
-    }
+    await invoke<void>('validate_config')
   }
 
   async resetConfig(): Promise<void> {
-    try {
-      await invoke('reset_config')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to reset config'))
-    }
+    await invoke<void>('reset_config')
   }
 
   async reloadConfig(): Promise<void> {
-    try {
-      await invoke('reload_config')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to reload config'))
-    }
+    await invoke<void>('reload_config')
   }
 
   async getConfigFileInfo(): Promise<ConfigFileInfo> {
-    try {
-      return await invoke<ConfigFileInfo>('get_config_file_info')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get config file info'))
-    }
+    return await invoke<ConfigFileInfo>('get_config_file_info')
   }
 
   async exportConfig(): Promise<string> {
-    try {
-      return await invoke<string>('export_config')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to export config'))
-    }
+    return await invoke<string>('export_config')
   }
 
   async importConfig(configData: string): Promise<void> {
-    try {
-      await invoke('import_config', { data: configData })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to import config'))
-    }
+    await invoke<void>('import_config', { data: configData })
   }
 
   async resetToDefaults(): Promise<void> {
-    try {
-      await invoke('reset_config_to_defaults')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to reset config to defaults'))
-    }
+    await invoke<void>('reset_config_to_defaults')
   }
 
   async getFilePath(): Promise<string> {
-    try {
-      return await invoke<string>('get_config_file_path')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get config file path'))
-    }
+    return await invoke<string>('get_config_file_path')
   }
 
   async getFileInfo(): Promise<ConfigFileInfo> {
-    try {
-      return await invoke<ConfigFileInfo>('get_config_file_info')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get config file info'))
-    }
+    return await invoke<ConfigFileInfo>('get_config_file_info')
   }
 
   async openFile(): Promise<void> {
-    try {
-      await invoke('open_config_file')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to open config file'))
-    }
+    await invoke<void>('open_config_file')
   }
 
   async getConfigFolderPath(): Promise<string> {
-    try {
-      return await invoke<string>('get_config_folder_path')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get config folder path'))
-    }
+    return await invoke<string>('get_config_folder_path')
   }
 
   async openConfigFolder(): Promise<void> {
-    try {
-      await invoke('open_config_folder')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to open config folder'))
-    }
+    await invoke<void>('open_config_folder')
   }
 
   async getThemeConfigStatus(): Promise<ThemeConfigStatus> {

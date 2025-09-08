@@ -43,6 +43,7 @@ use setup::{
     ensure_main_window_visible, handle_startup_args, init_logging, init_plugin,
     initialize_app_states, setup_app_events, setup_deep_links,
 };
+use utils::i18n::I18nManager;
 
 use tauri::{Emitter, Manager};
 
@@ -51,6 +52,11 @@ use tauri::{Emitter, Manager};
 pub fn run() {
     // 初始化日志系统
     init_logging();
+
+    // 初始化国际化
+    if let Err(e) = I18nManager::initialize() {
+        eprintln!("初始化国际化失败: {}", e);
+    }
 
     tracing::debug!("OrbitX 应用程序启动");
     println!("OrbitX 应用程序启动 - 控制台输出");

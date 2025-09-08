@@ -5,8 +5,8 @@
  */
 
 use super::*;
-use crate::utils::error::TauriResult;
-use anyhow::Context;
+use crate::utils::{EmptyData, TauriApiResult};
+use crate::{api_error, api_success};
 
 /// 获取当前目录
 ///
@@ -14,7 +14,7 @@ use anyhow::Context;
 pub async fn get_current_directory(
     use_cache: Option<bool>,
     state: State<'_, WindowState>,
-) -> TauriResult<String> {
+) -> TauriApiResult<String> {
     let use_cache = use_cache.unwrap_or(true);
     debug!("开始获取当前目录: use_cache={}", use_cache);
 
@@ -23,7 +23,7 @@ pub async fn get_current_directory(
         if let Some(cached_dir) = state.cache.get("current_dir").await {
             if let Some(dir) = cached_dir.as_str() {
                 debug!("从缓存获取当前目录: {}", dir);
-                return Ok(dir.to_string());
+                return Ok(api_success!(dir.to_string()));
             }
         }
     }
@@ -31,11 +31,10 @@ pub async fn get_current_directory(
     debug!("从系统获取当前目录");
 
     // 尝试获取当前目录
-    let current_dir = env::current_dir()
-        .context("获取当前目录失败")
-        .to_tauri()?
-        .to_string_lossy()
-        .to_string();
+    let current_dir = match env::current_dir() {
+        Ok(dir) => dir.to_string_lossy().to_string(),
+        Err(_) => return Ok(api_error!("window.get_current_directory_failed")),
+    };
 
     debug!("系统当前目录: {}", current_dir);
 
@@ -52,7 +51,7 @@ pub async fn get_current_directory(
     }
 
     debug!("当前目录获取成功: {}", current_dir);
-    Ok(current_dir)
+    Ok(api_success!(current_dir))
 }
 
 /// 获取用户家目录
@@ -61,7 +60,7 @@ pub async fn get_current_directory(
 pub async fn get_home_directory(
     use_cache: Option<bool>,
     state: State<'_, WindowState>,
-) -> TauriResult<String> {
+) -> TauriApiResult<String> {
     let use_cache = use_cache.unwrap_or(true);
     debug!("开始获取家目录: use_cache={}", use_cache);
 
@@ -70,7 +69,7 @@ pub async fn get_home_directory(
         if let Some(cached_dir) = state.cache.get("home_dir").await {
             if let Some(dir) = cached_dir.as_str() {
                 debug!("从缓存获取家目录: {}", dir);
-                return Ok(dir.to_string());
+                return Ok(api_success!(dir.to_string()));
             }
         }
     }
@@ -108,13 +107,13 @@ pub async fn get_home_directory(
     }
 
     debug!("家目录获取成功: {}", home_dir);
-    Ok(home_dir)
+    Ok(api_success!(home_dir))
 }
 
 /// 清除目录缓存
 ///
 #[tauri::command]
-pub async fn clear_directory_cache(state: State<'_, WindowState>) -> TauriResult<()> {
+pub async fn clear_directory_cache(state: State<'_, WindowState>) -> TauriApiResult<EmptyData> {
     debug!("开始清除目录缓存");
 
     // 清除目录相关的缓存
@@ -122,14 +121,14 @@ pub async fn clear_directory_cache(state: State<'_, WindowState>) -> TauriResult
     let _ = state.cache.remove("home_dir").await;
 
     debug!("目录缓存清除成功");
-    Ok(())
+    Ok(api_success!())
 }
 
 // ===== 路径处理工具命令 =====
 
 /// 规范化路径
 #[tauri::command]
-pub async fn normalize_path(path: String) -> TauriResult<String> {
+pub async fn normalize_path(path: String) -> TauriApiResult<String> {
     debug!("开始规范化路径: {}", path);
 
     if path.is_empty() {
@@ -144,12 +143,12 @@ pub async fn normalize_path(path: String) -> TauriResult<String> {
         .to_string();
 
     debug!("路径规范化成功: {} -> {}", path, normalized);
-    Ok(normalized)
+    Ok(api_success!(normalized))
 }
 
 /// 连接路径
 #[tauri::command]
-pub async fn join_paths(paths: Vec<String>) -> TauriResult<String> {
+pub async fn join_paths(paths: Vec<String>) -> TauriApiResult<String> {
     debug!("开始连接路径: {:?}", paths);
 
     if paths.is_empty() {
@@ -166,12 +165,12 @@ pub async fn join_paths(paths: Vec<String>) -> TauriResult<String> {
 
     let joined = result.to_string_lossy().to_string();
     debug!("路径连接成功: {:?} -> {}", paths, joined);
-    Ok(joined)
+    Ok(api_success!(joined))
 }
 
 /// 检查路径是否存在
 #[tauri::command]
-pub async fn path_exists(path: String) -> TauriResult<bool> {
+pub async fn path_exists(path: String) -> TauriApiResult<bool> {
     debug!("开始检查路径是否存在: {}", path);
 
     if path.is_empty() {
@@ -180,5 +179,5 @@ pub async fn path_exists(path: String) -> TauriResult<bool> {
 
     let exists = Path::new(&path).exists();
     debug!("路径存在性检查完成: {} -> {}", path, exists);
-    Ok(exists)
+    Ok(api_success!(exists))
 }

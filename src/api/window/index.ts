@@ -9,7 +9,6 @@
 
 import { createMessage } from '@/ui'
 import { invoke } from '@/utils/request'
-import { handleError } from '@/utils/errorHandler'
 import { useI18n } from 'vue-i18n'
 import type {
   CompleteWindowState,
@@ -31,11 +30,7 @@ export class WindowApi {
   // ===== 窗口状态管理 =====
 
   async manageWindowState(request: WindowStateBatchRequest): Promise<WindowStateBatchResponse> {
-    try {
-      return await invoke<WindowStateBatchResponse>('manage_window_state', { request })
-    } catch (error) {
-      throw new Error(handleError(error, '批量窗口状态管理失败'))
-    }
+    return await invoke<WindowStateBatchResponse>('manage_window_state', { request })
   }
 
   async getCompleteWindowState(): Promise<CompleteWindowState> {
@@ -99,55 +94,30 @@ export class WindowApi {
   // ===== 目录操作 =====
 
   async getCurrentDirectory(options: DirectoryOptions = {}): Promise<string> {
-    try {
-      return await invoke<string>('get_current_directory', { useCache: options.useCache })
-    } catch (error) {
-      throw new Error(handleError(error, '获取当前目录失败'))
-    }
+    return await invoke<string>('get_current_directory', { useCache: options.useCache })
   }
 
   async getHomeDirectory(): Promise<string> {
-    try {
-      return await invoke<string>('get_home_directory', { forceRefresh: true })
-    } catch (error) {
-      throw new Error(handleError(error, '获取家目录失败'))
-    }
+    return await invoke<string>('get_home_directory', { forceRefresh: true })
   }
 
   async clearDirectoryCache(): Promise<void> {
-    try {
-      await invoke('clear_directory_cache')
-      createMessage.success(useI18n().t('cache.directory_cleared'))
-    } catch (error) {
-      throw new Error(handleError(error, '清除目录缓存失败'))
-    }
+    await invoke<void>('clear_directory_cache')
+    createMessage.success(useI18n().t('cache.directory_cleared'))
   }
 
   // ===== 路径操作 =====
 
   async pathExists(path: string): Promise<boolean> {
-    try {
-      return await invoke<boolean>('path_exists', { path })
-    } catch (error) {
-      console.warn('检查路径存在性失败:', handleError(error))
-      return false
-    }
+    return await invoke<boolean>('path_exists', { path })
   }
 
   async normalizePath(path: string): Promise<string> {
-    try {
-      return await invoke<string>('normalize_path', { path })
-    } catch (error) {
-      throw new Error(handleError(error, '路径规范化失败'))
-    }
+    return await invoke<string>('normalize_path', { path })
   }
 
   async joinPaths(...paths: string[]): Promise<string> {
-    try {
-      return await invoke<string>('join_paths', { paths })
-    } catch (error) {
-      throw new Error(handleError(error, '路径连接失败'))
-    }
+    return await invoke<string>('join_paths', { paths })
   }
 
   isAbsolutePath(path: string): boolean {
@@ -176,19 +146,15 @@ export class WindowApi {
   }
 
   async getPathInfo(path: string): Promise<PathInfo> {
-    try {
-      const [exists, normalized] = await Promise.all([this.pathExists(path), this.normalizePath(path)])
+    const [exists, normalized] = await Promise.all([this.pathExists(path), this.normalizePath(path)])
 
-      return {
-        path,
-        exists,
-        isAbsolute: this.isAbsolutePath(path),
-        parent: this.getParentDirectory(path),
-        fileName: this.getFileName(path),
-        normalized,
-      }
-    } catch (error) {
-      throw new Error(handleError(error, '获取路径信息失败'))
+    return {
+      path,
+      exists,
+      isAbsolute: this.isAbsolutePath(path),
+      parent: this.getParentDirectory(path),
+      fileName: this.getFileName(path),
+      normalized,
     }
   }
 
@@ -199,13 +165,9 @@ export class WindowApi {
       return this.platformInfoCache
     }
 
-    try {
-      const platformInfo = await invoke<PlatformInfo>('get_platform_info')
-      this.platformInfoCache = platformInfo
-      return platformInfo
-    } catch (error) {
-      throw new Error(handleError(error, '获取平台信息失败'))
-    }
+    const platformInfo = await invoke<PlatformInfo>('get_platform_info')
+    this.platformInfoCache = platformInfo
+    return platformInfo
   }
 
   async isMac(): Promise<boolean> {
@@ -216,17 +178,13 @@ export class WindowApi {
   // ===== 综合状态 =====
 
   async getWindowState(): Promise<WindowState> {
-    try {
-      const completeState = await this.getCompleteWindowState()
-      this.alwaysOnTopState = completeState.alwaysOnTop
+    const completeState = await this.getCompleteWindowState()
+    this.alwaysOnTopState = completeState.alwaysOnTop
 
-      return {
-        alwaysOnTop: completeState.alwaysOnTop,
-        currentDirectory: completeState.currentDirectory,
-        homeDirectory: completeState.homeDirectory,
-      }
-    } catch (error) {
-      throw new Error(handleError(error, '获取窗口状态失败'))
+    return {
+      alwaysOnTop: completeState.alwaysOnTop,
+      currentDirectory: completeState.currentDirectory,
+      homeDirectory: completeState.homeDirectory,
     }
   }
 
@@ -237,20 +195,12 @@ export class WindowApi {
       throw new Error('透明度值必须在 0 到 1 之间')
     }
 
-    try {
-      await invoke('set_window_opacity', { opacity })
-    } catch (error) {
-      throw new Error(handleError(error, '设置窗口透明度失败'))
-    }
+    await invoke<void>('set_window_opacity', { opacity })
   }
 
   async getWindowOpacity(): Promise<number> {
-    try {
-      const opacity = await invoke<number>('get_window_opacity')
-      return opacity
-    } catch (error) {
-      throw new Error(handleError(error, '获取窗口透明度失败'))
-    }
+    const opacity = await invoke<number>('get_window_opacity')
+    return opacity
   }
 
   async resetWindowOpacity(): Promise<void> {
@@ -260,11 +210,7 @@ export class WindowApi {
   // ===== 文件处理 =====
 
   async handleFileOpen(path: string): Promise<string> {
-    try {
-      return await invoke<string>('handle_file_open', { path })
-    } catch (error) {
-      throw new Error(handleError(error, '处理文件打开失败'))
-    }
+    return await invoke<string>('handle_file_open', { path })
   }
 }
 

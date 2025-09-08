@@ -8,6 +8,8 @@
 use crate::storage::types::SessionState;
 use crate::storage::StorageCoordinator;
 use crate::utils::error::{AppResult, ToTauriResult};
+use crate::utils::{EmptyData, TauriApiResult};
+use crate::{api_error, api_success};
 use anyhow::Context;
 use serde_json::Value;
 use std::sync::Arc;
@@ -89,7 +91,7 @@ pub async fn storage_update_config(
 pub async fn storage_save_session_state(
     session_state: SessionState,
     state: State<'_, StorageCoordinatorState>,
-) -> Result<(), String> {
+) -> TauriApiResult<EmptyData> {
     debug!("📊 会话状态统计:");
     debug!("  - 终端数量: {}", session_state.terminals.len());
     debug!("  - 版本: {}", session_state.version);
@@ -98,11 +100,11 @@ pub async fn storage_save_session_state(
     match state.coordinator.save_session_state(&session_state).await {
         Ok(()) => {
             debug!("✅ 会话状态保存成功");
-            Ok(())
+            Ok(api_success!())
         }
-        Err(e) => {
-            error!("❌ 会话状态保存失败: {}", e);
-            Err(e.to_string())
+        Err(_e) => {
+            error!("❌ 会话状态保存失败");
+            Ok(api_error!("storage.save_session_failed"))
         }
     }
 }
@@ -111,7 +113,7 @@ pub async fn storage_save_session_state(
 #[tauri::command]
 pub async fn storage_load_session_state(
     state: State<'_, StorageCoordinatorState>,
-) -> Result<Option<SessionState>, String> {
+) -> TauriApiResult<Option<SessionState>> {
     debug!("🔍 开始加载会话状态");
 
     match state.coordinator.load_session_state().await {
@@ -120,15 +122,15 @@ pub async fn storage_load_session_state(
             debug!("  - 版本: {}", session_state.version);
             debug!("  - AI可见: {}", session_state.ai.visible);
 
-            Ok(Some(session_state))
+            Ok(api_success!(Some(session_state)))
         }
         Ok(None) => {
             debug!("ℹ️ 没有找到保存的会话状态");
-            Ok(None)
+            Ok(api_success!(None))
         }
-        Err(e) => {
-            error!("❌ 会话状态加载失败: {}", e);
-            Err(e.to_string())
+        Err(_e) => {
+            error!("❌ 会话状态加载失败");
+            Ok(api_error!("storage.load_session_failed"))
         }
     }
 }

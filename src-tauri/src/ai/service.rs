@@ -3,7 +3,6 @@
  */
 
 use crate::ai::types::AIModelConfig;
-use crate::storage::cache::UnifiedCache;
 use crate::storage::repositories::{Repository, RepositoryManager};
 use crate::utils::error::AppResult;
 use anyhow::anyhow;
@@ -13,15 +12,11 @@ use std::time::Duration;
 
 pub struct AIService {
     repositories: Arc<RepositoryManager>,
-    cache: Arc<UnifiedCache>,
 }
 
 impl AIService {
-    pub fn new(repositories: Arc<RepositoryManager>, cache: Arc<UnifiedCache>) -> Self {
-        Self {
-            repositories,
-            cache,
-        }
+    pub fn new(repositories: Arc<RepositoryManager>) -> Self {
+        Self { repositories }
     }
 
     pub async fn initialize(&self) -> AppResult<()> {

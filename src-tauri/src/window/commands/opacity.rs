@@ -5,6 +5,8 @@
  */
 
 use super::*;
+use crate::utils::{ApiResponse, EmptyData as _EmptyDataAlias};
+use crate::utils::{EmptyData, TauriApiResult};
 
 /// 设置窗口透明度
 #[tauri::command]
@@ -13,7 +15,7 @@ pub async fn set_window_opacity<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, WindowState>,
     config_state: State<'_, crate::config::ConfigManagerState>,
-) -> Result<(), String> {
+) -> TauriApiResult<EmptyData> {
     debug!("设置窗口透明度: {}", opacity);
 
     // 验证透明度值范围
@@ -50,14 +52,14 @@ pub async fn set_window_opacity<R: Runtime>(
         .to_tauri()?;
 
     debug!("窗口透明度设置成功并已保存到配置: {}", opacity);
-    Ok(())
+    Ok(ApiResponse::ok(_EmptyDataAlias::default()))
 }
 
 /// 获取窗口透明度
 #[tauri::command]
 pub async fn get_window_opacity(
     config_state: State<'_, crate::config::ConfigManagerState>,
-) -> Result<f64, String> {
+) -> TauriApiResult<f64> {
     debug!("获取窗口透明度");
 
     // 从配置文件获取当前透明度
@@ -65,5 +67,5 @@ pub async fn get_window_opacity(
     let opacity = config.appearance.opacity;
 
     debug!("当前窗口透明度: {}", opacity);
-    Ok(opacity)
+    Ok(ApiResponse::ok(opacity))
 }

@@ -5,6 +5,7 @@
  */
 
 use super::*;
+use crate::utils::{ApiResponse, TauriApiResult};
 
 /// 批量窗口状态管理命令
 ///
@@ -13,7 +14,7 @@ pub async fn manage_window_state<R: Runtime>(
     request: WindowStateBatchRequest,
     app: AppHandle<R>,
     state: State<'_, WindowState>,
-) -> Result<WindowStateBatchResponse, String> {
+) -> TauriApiResult<WindowStateBatchResponse> {
     let start_time = Instant::now();
     debug!(
         "开始批量窗口状态管理: operations_count={}",
@@ -64,10 +65,10 @@ pub async fn manage_window_state<R: Runtime>(
         );
     }
 
-    Ok(WindowStateBatchResponse {
+    Ok(ApiResponse::ok(WindowStateBatchResponse {
         results,
         overall_success,
-    })
+    }))
 }
 
 /// 处理单个窗口操作

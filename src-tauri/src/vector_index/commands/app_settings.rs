@@ -7,6 +7,8 @@
 
 use crate::ai::tool::storage::StorageCoordinatorState;
 use crate::utils::error::ToTauriResult;
+use crate::utils::{ApiResponse, TauriApiResult};
+use crate::{api_error, api_success};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tracing::{debug, info};
@@ -33,23 +35,21 @@ impl Default for VectorIndexAppSettings {
 #[tauri::command]
 pub async fn get_vector_index_app_settings(
     state: State<'_, StorageCoordinatorState>,
-) -> Result<VectorIndexAppSettings, String> {
+) -> TauriApiResult<VectorIndexAppSettings> {
     debug!("获取向量索引应用设置");
 
-    let session_state = state
-        .coordinator
-        .load_session_state()
-        .await
-        .to_tauri()?
-        .unwrap_or_default();
-
-    let settings = VectorIndexAppSettings {
-        enabled: session_state.ai.vector_index_enabled,
-        workspaces: session_state.ai.vector_index_workspaces.clone(),
-    };
-
-    debug!("向量索引应用设置获取成功: {:?}", settings);
-    Ok(settings)
+    match state.coordinator.load_session_state().await {
+        Ok(session_state) => {
+            let session_state = session_state.unwrap_or_default();
+            let settings = VectorIndexAppSettings {
+                enabled: session_state.ai.vector_index_enabled,
+                workspaces: session_state.ai.vector_index_workspaces.clone(),
+            };
+            debug!("向量索引应用设置获取成功: {:?}", settings);
+            Ok(api_success!(settings))
+        }
+        Err(_) => Ok(api_error!("vector_index.get_app_settings_failed")),
+    }
 }
 
 /// 保存向量索引应用设置
@@ -57,7 +57,7 @@ pub async fn get_vector_index_app_settings(
 pub async fn save_vector_index_app_settings(
     settings: VectorIndexAppSettings,
     state: State<'_, StorageCoordinatorState>,
-) -> Result<String, String> {
+) -> TauriApiResult<String> {
     info!("保存向量索引应用设置: {:?}", settings);
 
     // 验证工作目录数量
@@ -87,7 +87,7 @@ pub async fn save_vector_index_app_settings(
         .to_tauri()?;
 
     info!("向量索引应用设置保存成功");
-    Ok("向量索引应用设置保存成功".to_string())
+    Ok(api_success!("向量索引应用设置保存成功".to_string()))
 }
 
 /// 检查指定目录是否启用了向量索引
@@ -95,7 +95,7 @@ pub async fn save_vector_index_app_settings(
 pub async fn is_directory_vector_indexed(
     directory: String,
     state: State<'_, StorageCoordinatorState>,
-) -> Result<bool, String> {
+) -> TauriApiResult<bool> {
     debug!("检查目录是否启用向量索引: {}", directory);
 
     let session_state = state
@@ -107,7 +107,7 @@ pub async fn is_directory_vector_indexed(
 
     // 如果功能未启用，直接返回false
     if !session_state.ai.vector_index_enabled {
-        return Ok(false);
+        return Ok(api_success!(false));
     }
 
     // 检查目录是否在配置的工作目录列表中
@@ -121,7 +121,7 @@ pub async fn is_directory_vector_indexed(
         });
 
     debug!("目录 {} 是否启用向量索引: {}", directory, is_indexed);
-    Ok(is_indexed)
+    Ok(ApiResponse::ok(is_indexed))
 }
 
 /// 添加工作目录到向量索引配置
@@ -129,7 +129,7 @@ pub async fn is_directory_vector_indexed(
 pub async fn add_vector_index_workspace(
     workspace_path: String,
     state: State<'_, StorageCoordinatorState>,
-) -> Result<String, String> {
+) -> TauriApiResult<String> {
     info!("添加向量索引工作目录: {}", workspace_path);
 
     let mut session_state = state
@@ -168,7 +168,7 @@ pub async fn add_vector_index_workspace(
         .to_tauri()?;
 
     info!("向量索引工作目录添加成功");
-    Ok("向量索引工作目录添加成功".to_string())
+    Ok(api_success!("向量索引工作目录添加成功".to_string()))
 }
 
 /// 移除工作目录从向量索引配置
@@ -176,7 +176,7 @@ pub async fn add_vector_index_workspace(
 pub async fn remove_vector_index_workspace(
     workspace_path: String,
     state: State<'_, StorageCoordinatorState>,
-) -> Result<String, String> {
+) -> TauriApiResult<String> {
     info!("移除向量索引工作目录: {}", workspace_path);
 
     let mut session_state = state
@@ -207,5 +207,5 @@ pub async fn remove_vector_index_workspace(
         .to_tauri()?;
 
     info!("向量索引工作目录移除成功");
-    Ok("向量索引工作目录移除成功".to_string())
+    Ok(api_success!("向量索引工作目录移除成功".to_string()))
 }

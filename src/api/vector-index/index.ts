@@ -5,119 +5,65 @@
  */
 
 import { invoke } from '@/utils/request'
-import { handleError } from '@/utils/errorHandler'
 import type { VectorIndexConfig, VectorIndexStatus, IndexStats, VectorSearchOptions, VectorSearchResult } from './types'
 
 export class VectorIndexApi {
   // 配置
   async getConfig(): Promise<VectorIndexConfig> {
-    try {
-      return await invoke<VectorIndexConfig>('get_vector_index_config')
-    } catch (error) {
-      throw new Error(handleError(error, '获取向量索引配置失败'))
-    }
+    return await invoke<VectorIndexConfig>('get_vector_index_config')
   }
 
   async saveConfig(config: VectorIndexConfig): Promise<string> {
-    try {
-      return await invoke<string>('save_vector_index_config', { config })
-    } catch (error) {
-      throw new Error(handleError(error, '保存向量索引配置失败'))
-    }
+    return await invoke<string>('save_vector_index_config', { config })
   }
 
   async init(config: VectorIndexConfig): Promise<void> {
-    try {
-      await invoke('init_vector_index', { config })
-    } catch (error) {
-      throw new Error(handleError(error, '初始化向量索引失败'))
-    }
+    await invoke('init_vector_index', { config })
   }
 
   async testConnection(config: VectorIndexConfig): Promise<string> {
-    try {
-      return await invoke<string>('test_qdrant_connection', { config })
-    } catch (error) {
-      throw new Error(handleError(error, '测试 Qdrant 连接失败'))
-    }
+    return await invoke<string>('test_qdrant_connection', { config })
   }
 
   // 状态与工作空间
   async getStatus(): Promise<VectorIndexStatus> {
-    try {
-      return await invoke<VectorIndexStatus>('get_vector_index_status')
-    } catch (error) {
-      // 后端未初始化时返回未初始化状态
-      return { isInitialized: false, totalVectors: 0, lastUpdated: null }
-    }
+    return await invoke<VectorIndexStatus>('get_vector_index_status')
   }
 
   async getWorkspacePath(): Promise<string> {
-    try {
-      return await invoke<string>('get_current_workspace_path')
-    } catch (error) {
-      throw new Error(handleError(error, '获取工作空间路径失败'))
-    }
+    return await invoke<string>('get_current_workspace_path')
   }
 
   // 构建与维护
   async build(workspacePath?: string): Promise<IndexStats> {
-    try {
-      const path = workspacePath ?? (await this.getWorkspacePath())
-      return await invoke<IndexStats>('build_code_index', { workspacePath: path })
-    } catch (error) {
-      throw new Error(handleError(error, '构建代码索引失败'))
-    }
+    const path = workspacePath ?? (await this.getWorkspacePath())
+    return await invoke<IndexStats>('build_code_index', { workspacePath: path })
   }
 
   async cancelBuild(): Promise<void> {
-    try {
-      await invoke('cancel_build_index')
-    } catch (error) {
-      throw new Error(handleError(error, '取消构建失败'))
-    }
+    await invoke('cancel_build_index')
   }
 
   async clear(): Promise<string> {
-    try {
-      return await invoke<string>('clear_vector_index')
-    } catch (error) {
-      throw new Error(handleError(error, '清空索引失败'))
-    }
+    return await invoke<string>('clear_vector_index')
   }
 
   // 搜索
   async search(options: VectorSearchOptions): Promise<VectorSearchResult[]> {
-    try {
-      return await invoke<VectorSearchResult[]>('search_code_vectors', { options })
-    } catch (error) {
-      throw new Error(handleError(error, '向量搜索失败'))
-    }
+    return await invoke<VectorSearchResult[]>('search_code_vectors', { options })
   }
 
   // 文件监控
   async startFileMonitoring(workspacePath: string, config: VectorIndexConfig): Promise<string> {
-    try {
-      return await invoke<string>('start_file_monitoring', { workspacePath, config })
-    } catch (error) {
-      throw new Error(handleError(error, '启动文件监控失败'))
-    }
+    return await invoke<string>('start_file_monitoring', { workspacePath, config })
   }
 
   async stopFileMonitoring(): Promise<string> {
-    try {
-      return await invoke<string>('stop_file_monitoring')
-    } catch (error) {
-      throw new Error(handleError(error, '停止文件监控失败'))
-    }
+    return await invoke<string>('stop_file_monitoring')
   }
 
   async getFileMonitoringStatus(): Promise<string> {
-    try {
-      return await invoke<string>('get_file_monitoring_status')
-    } catch (error) {
-      throw new Error(handleError(error, '获取文件监控状态失败'))
-    }
+    return await invoke<string>('get_file_monitoring_status')
   }
 }
 

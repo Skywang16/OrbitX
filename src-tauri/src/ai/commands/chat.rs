@@ -8,7 +8,8 @@ use super::AIManagerState;
 use crate::ai::context::handle_truncate_conversation;
 use crate::ai::types::{Conversation, Message};
 use crate::storage::repositories::Repository;
-use crate::utils::error::{ToTauriResult, Validator};
+use crate::utils::{EmptyData, TauriApiResult};
+use crate::{api_error, api_success, validate_not_empty};
 
 use tauri::State;
 use tracing::debug;
@@ -20,10 +21,12 @@ use tracing::debug;
 pub async fn create_conversation(
     title: Option<String>,
     state: State<'_, AIManagerState>,
-) -> Result<i64, String> {
+) -> TauriApiResult<i64> {
     // 验证参数
     if let Some(ref t) = title {
-        Validator::validate_not_empty(t, "会话标题")?;
+        if t.trim().is_empty() {
+            return Ok(api_error!("common.title_empty"));
+        }
     }
 
     let repositories = state.repositories();
@@ -31,12 +34,10 @@ pub async fn create_conversation(
     // 默认使用空标题，前端渲染时用 i18n 占位文案显示
     let conversation = Conversation::new(title.unwrap_or_else(|| "".to_string()));
 
-    let conversation_id = repositories
-        .conversations()
-        .save(&conversation)
-        .await
-        .to_tauri()?;
-    Ok(conversation_id)
+    match repositories.conversations().save(&conversation).await {
+        Ok(conversation_id) => Ok(api_success!(conversation_id)),
+        Err(_) => Ok(api_error!("ai.create_conversation_failed")),
+    }
 }
 
 /// 获取会话列表
@@ -45,18 +46,19 @@ pub async fn get_conversations(
     limit: Option<i64>,
     offset: Option<i64>,
     state: State<'_, AIManagerState>,
-) -> Result<Vec<Conversation>, String> {
+) -> TauriApiResult<Vec<Conversation>> {
     debug!("获取会话列表: limit={:?}, offset={:?}", limit, offset);
 
     let repositories = state.repositories();
 
-    let conversations = repositories
+    match repositories
         .conversations()
         .find_conversations(limit, offset)
         .await
-        .to_tauri()?;
-
-    Ok(conversations)
+    {
+        Ok(conversations) => Ok(api_success!(conversations)),
+        Err(_) => Ok(api_error!("ai.get_conversations_failed")),
+    }
 }
 
 /// 获取会话详情
@@ -64,19 +66,24 @@ pub async fn get_conversations(
 pub async fn get_conversation(
     conversation_id: i64,
     state: State<'_, AIManagerState>,
-) -> Result<Conversation, String> {
+) -> TauriApiResult<Conversation> {
     debug!("获取会话详情: {}", conversation_id);
+
+    if conversation_id <= 0 {
+        return Ok(api_error!("common.invalid_id"));
+    }
 
     let repositories = state.repositories();
 
-    let conversation = repositories
+    match repositories
         .conversations()
         .find_by_id(conversation_id)
         .await
-        .to_tauri()?
-        .ok_or_else(|| format!("会话不存在: {}", conversation_id))?;
-
-    Ok(conversation)
+    {
+        Ok(Some(conversation)) => Ok(api_success!(conversation)),
+        Ok(None) => Ok(api_error!("ai.conversation_not_found")),
+        Err(_) => Ok(api_error!("ai.get_conversation_failed")),
+    }
 }
 
 /// 更新会话标题
@@ -85,20 +92,23 @@ pub async fn update_conversation_title(
     conversation_id: i64,
     title: String,
     state: State<'_, AIManagerState>,
-) -> Result<(), String> {
+) -> TauriApiResult<EmptyData> {
     // 参数验证
-    Validator::validate_id(conversation_id, "会话ID")?;
-    Validator::validate_not_empty(&title, "会话标题")?;
+    if conversation_id <= 0 {
+        return Ok(api_error!("common.invalid_id"));
+    }
+    validate_not_empty!(title, "common.title_empty");
 
     let repositories = state.repositories();
 
-    repositories
+    match repositories
         .conversations()
         .update_title(conversation_id, &title)
         .await
-        .to_tauri()?;
-
-    Ok(())
+    {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("ai.update_title_failed")),
+    }
 }
 
 /// 删除会话
@@ -106,18 +116,18 @@ pub async fn update_conversation_title(
 pub async fn delete_conversation(
     conversation_id: i64,
     state: State<'_, AIManagerState>,
-) -> Result<(), String> {
+) -> TauriApiResult<EmptyData> {
     // 参数验证
-    Validator::validate_id(conversation_id, "会话ID")?;
+    if conversation_id <= 0 {
+        return Ok(api_error!("common.invalid_id"));
+    }
 
     let repositories = state.repositories();
 
-    repositories
-        .conversations()
-        .delete(conversation_id)
-        .await
-        .to_tauri()?;
-    Ok(())
+    match repositories.conversations().delete(conversation_id).await {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("ai.delete_conversation_failed")),
+    }
 }
 
 /// 截断会话（供前端eko使用）
@@ -126,22 +136,23 @@ pub async fn truncate_conversation(
     conversation_id: i64,
     truncate_after_message_id: i64,
     state: State<'_, AIManagerState>,
-) -> Result<(), String> {
+) -> TauriApiResult<EmptyData> {
     if conversation_id <= 0 {
-        return Err("无效的会话ID".to_string());
+        return Ok(api_error!("common.invalid_id"));
     }
     if truncate_after_message_id <= 0 {
-        return Err("无效的消息ID".to_string());
+        return Ok(api_error!("common.invalid_id"));
     }
 
     let repositories = state.repositories();
 
     // 截断会话
-    handle_truncate_conversation(repositories, conversation_id, truncate_after_message_id)
+    match handle_truncate_conversation(repositories, conversation_id, truncate_after_message_id)
         .await
-        .to_tauri()?;
-
-    Ok(())
+    {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("ai.truncate_conversation_failed")),
+    }
 }
 
 // ===== 消息管理命令 =====
@@ -153,15 +164,13 @@ pub async fn save_message(
     role: String,
     content: String,
     state: State<'_, AIManagerState>,
-) -> Result<i64, String> {
+) -> TauriApiResult<i64> {
     if conversation_id <= 0 {
-        return Err("无效的会话ID".to_string());
+        return Ok(api_error!("common.invalid_id"));
     }
-    if content.trim().is_empty() {
-        return Err("消息内容不能为空".to_string());
-    }
+    validate_not_empty!(content, "common.content_empty");
     if !["user", "assistant", "system"].contains(&role.as_str()) {
-        return Err("无效的消息角色".to_string());
+        return Ok(api_error!("common.invalid_role"));
     }
 
     let repositories = state.repositories();
@@ -170,12 +179,10 @@ pub async fn save_message(
     let message = Message::new(conversation_id, role, content);
 
     // 保存消息
-    let message_id = repositories
-        .conversations()
-        .save_message(&message)
-        .await
-        .to_tauri()?;
-    Ok(message_id)
+    match repositories.conversations().save_message(&message).await {
+        Ok(message_id) => Ok(api_success!(message_id)),
+        Err(_) => Ok(api_error!("ai.save_message_failed")),
+    }
 }
 
 /// 更新消息内容
@@ -184,19 +191,20 @@ pub async fn update_message_content(
     message_id: i64,
     content: String,
     state: State<'_, AIManagerState>,
-) -> Result<(), String> {
+) -> TauriApiResult<EmptyData> {
     if message_id <= 0 {
-        return Err("无效的消息ID".to_string());
+        return Ok(api_error!("common.invalid_id"));
     }
 
     let repositories = state.repositories();
-    repositories
+    match repositories
         .conversations()
         .update_message_content(message_id, &content)
         .await
-        .to_tauri()?;
-
-    Ok(())
+    {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("ai.update_message_failed")),
+    }
 }
 
 /// 更新消息步骤数据
@@ -205,19 +213,20 @@ pub async fn update_message_steps(
     message_id: i64,
     steps_json: String,
     state: State<'_, AIManagerState>,
-) -> Result<(), String> {
+) -> TauriApiResult<EmptyData> {
     if message_id <= 0 {
-        return Err("无效的消息ID".to_string());
+        return Ok(api_error!("common.invalid_id"));
     }
 
     let repositories = state.repositories();
-    repositories
+    match repositories
         .conversations()
         .update_message_steps(message_id, &steps_json)
         .await
-        .to_tauri()?;
-
-    Ok(())
+    {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("ai.update_message_failed")),
+    }
 }
 
 /// 更新消息状态
@@ -227,17 +236,18 @@ pub async fn update_message_status(
     status: Option<String>,
     duration_ms: Option<i64>,
     state: State<'_, AIManagerState>,
-) -> Result<(), String> {
+) -> TauriApiResult<EmptyData> {
     if message_id <= 0 {
-        return Err("无效的消息ID".to_string());
+        return Ok(api_error!("common.invalid_id"));
     }
 
     let repositories = state.repositories();
-    repositories
+    match repositories
         .conversations()
         .update_message_status(message_id, status.as_deref(), duration_ms)
         .await
-        .to_tauri()?;
-
-    Ok(())
+    {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("ai.update_message_failed")),
+    }
 }

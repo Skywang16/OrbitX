@@ -1,5 +1,7 @@
 import { createI18n } from 'vue-i18n'
 import { storageApi } from '@/api/storage'
+import { invoke } from '@/utils/request'
+import { listen } from '@tauri-apps/api/event'
 import { useSessionStore } from '@/stores/session'
 import zh from './locales/zh.json'
 import en from './locales/en.json'
@@ -24,8 +26,16 @@ export const i18n = createI18n({
 // 异步初始化语言设置
 export async function initLocale() {
   try {
-    const appConfig = await storageApi.getAppConfig()
-    const savedLocale = appConfig?.language
+    // 优先从后端语言管理器获取（与后端 i18n 保持一致）
+    let savedLocale: string | undefined
+    try {
+      savedLocale = await invoke<string>('get_app_language')
+    } catch {}
+
+    if (!savedLocale) {
+      const appConfig = await storageApi.getAppConfig()
+      savedLocale = appConfig?.language
+    }
 
     let locale = 'en-US'
     if (savedLocale && (savedLocale === 'zh-CN' || savedLocale === 'en-US')) {
@@ -39,6 +49,18 @@ export async function initLocale() {
     }
 
     i18n.global.locale.value = locale as 'zh-CN' | 'en-US'
+
+    // 监听后端语言变化事件，保持回显同步
+    try {
+      await listen<string>('language-changed', event => {
+        const next = event.payload
+        if (next === 'zh-CN' || next === 'en-US') {
+          i18n.global.locale.value = next
+          const sessionStore = useSessionStore()
+          sessionStore.updateUiState({ language: next })
+        }
+      })
+    } catch {}
   } catch (error) {
     console.warn('Failed to load locale from storage, using default:', error)
     // 使用浏览器语言作为回退
@@ -65,12 +87,10 @@ export async function setLocale(locale: string) {
   try {
     i18n.global.locale.value = locale as 'zh-CN' | 'en-US'
 
-    // 保存到后端配置
-    const currentConfig = await storageApi.getAppConfig()
-    await storageApi.updateAppConfig({
-      ...currentConfig,
-      language: locale,
-    })
+    // 通知后端语言管理器（写配置并广播事件）
+    try {
+      await invoke<void>('set_app_language', { language: locale })
+    } catch {}
 
     // 立即保存会话状态
     const sessionStore = useSessionStore()

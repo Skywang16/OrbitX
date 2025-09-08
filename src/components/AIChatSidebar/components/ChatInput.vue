@@ -52,7 +52,7 @@
   const vectorIndexStatus = useVectorIndexStatus()
 
   // 构建索引状态（集中管理）
-  const { isBuilding, progress, errorMessage } = useVectorIndexBuild()
+  const { isBuilding, progress } = useVectorIndexBuild()
 
   // 计算属性
   const inputValue = computed({

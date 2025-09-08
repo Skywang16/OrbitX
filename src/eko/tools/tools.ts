@@ -24,9 +24,9 @@ let isVectorIndexEnabled = false
 // 检查向量索引是否启用
 async function checkVectorIndexEnabled(): Promise<boolean> {
   try {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const settings = await invoke('get_vector_index_app_settings')
-    return (settings as { enabled: boolean }).enabled || false
+    const { vectorIndexAppSettingsApi } = await import('@/api/vector-index/app-settings')
+    const settings = await vectorIndexAppSettingsApi.getSettings()
+    return settings.enabled || false
   } catch (error) {
     console.warn('检查向量索引状态失败:', error)
     return false

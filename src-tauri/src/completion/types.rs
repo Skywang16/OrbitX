@@ -258,46 +258,6 @@ pub struct CompletionResponse {
     pub has_more: bool,
 }
 
-/// 增强补全项
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EnhancedCompletionItem {
-    /// 补全文本
-    pub text: String,
-
-    /// 显示文本
-    pub display_text: Option<String>,
-
-    /// 描述信息
-    pub description: String,
-
-    /// 图标（emoji或图标名称）
-    pub icon: String,
-
-    /// 分类
-    pub category: String,
-
-    /// 优先级（用于排序）
-    pub priority: i32,
-
-    /// 额外元数据
-    pub metadata: HashMap<String, String>,
-}
-
-/// 增强补全响应
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EnhancedCompletionResponse {
-    /// 增强补全项列表
-    pub completions: Vec<EnhancedCompletionItem>,
-
-    /// 补全位置信息
-    pub position: EnhancedCompletionPosition,
-
-    /// 是否有shell原生补全
-    pub has_shell_completions: bool,
-}
-
 /// 命令执行上下文
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -739,15 +699,4 @@ impl ContextSession {
         self.state = SessionState::Ended;
         self.update_last_activity();
     }
-}
-
-/// 增强补全位置信息
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EnhancedCompletionPosition {
-    /// X坐标
-    pub x: i32,
-
-    /// Y坐标
-    pub y: i32,
 }

@@ -7,22 +7,12 @@
 import { computed, readonly, ref } from 'vue'
 import { formatLocaleDateTime } from '@/utils/dateFormatter'
 import { configApi } from '@/api'
-import { type AppConfig, type ConfigFileInfo, ConfigApiError } from '@/api/config'
+import { type AppConfig, type ConfigFileInfo } from '@/api/config'
 import { useI18n } from 'vue-i18n'
 
 // ============================================================================
 // 工具函数
 // ============================================================================
-
-/**
- * 格式化文件大小
- */
-const formatFileSize = (size?: number): string => {
-  if (!size) return useI18n().t('config.unknown_size')
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}
 
 /**
  * 格式化时间戳
@@ -87,11 +77,6 @@ export const useConfig = () => {
       const result = await operation()
       loadingState.value.lastUpdated = new Date()
       return result
-    } catch (error) {
-      const message = error instanceof ConfigApiError ? error.message : String(error)
-      loadingState.value.error = message
-      console.error('配置操作失败:', error)
-      throw error
     } finally {
       loadingState.value.loading = false
     }
@@ -164,11 +149,7 @@ export const useConfig = () => {
 
   // 初始化方法（需要手动调用）
   const initialize = async () => {
-    try {
-      await loadConfig()
-    } catch (error) {
-      console.error('初始化配置失败:', error)
-    }
+    await loadConfig()
   }
 
   return {
@@ -211,39 +192,23 @@ export const useConfigFile = () => {
 
   // 计算属性
   const fileExists = computed(() => fileState.value.info?.exists ?? false)
-  const fileReadable = computed(() => true) // 简化处理
-  const fileWritable = computed(() => true) // 简化处理
-  const fileSize = computed(() => formatFileSize(0)) // 简化处理
   const fileModifiedAt = computed(() => formatTimestamp(fileState.value.info?.lastModified?.toString()))
 
   // 获取配置文件路径
   const getFilePath = async () => {
-    try {
-      const path = await configApi.getFilePath()
-      filePath.value = path
-      return path
-    } catch (error) {
-      const message = error instanceof ConfigApiError ? error.message : String(error)
-      fileState.value.error = message
-      console.error('获取配置文件路径失败:', error)
-      throw error
-    }
+    const path = await configApi.getFilePath()
+    filePath.value = path
+    return path
   }
 
   // 获取配置文件信息
   const getFileInfo = async () => {
     fileState.value.loading = true
     fileState.value.error = null
-
     try {
       const info = await configApi.getFileInfo()
       fileState.value.info = info
       return info
-    } catch (error) {
-      const message = error instanceof ConfigApiError ? error.message : String(error)
-      fileState.value.error = message
-      console.error('获取配置文件信息失败:', error)
-      throw error
     } finally {
       fileState.value.loading = false
     }
@@ -251,14 +216,7 @@ export const useConfigFile = () => {
 
   // 打开配置文件
   const openFile = async () => {
-    try {
-      await configApi.openFile()
-    } catch (error) {
-      const message = error instanceof ConfigApiError ? error.message : String(error)
-      fileState.value.error = message
-
-      throw error
-    }
+    await configApi.openFile()
   }
 
   // 清除文件错误
@@ -279,9 +237,6 @@ export const useConfigFile = () => {
 
     // 计算属性
     fileExists,
-    fileReadable,
-    fileWritable,
-    fileSize,
     fileModifiedAt,
 
     // 方法

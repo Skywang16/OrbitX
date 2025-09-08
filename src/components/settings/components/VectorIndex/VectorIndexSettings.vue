@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { handleErrorWithMessage } from '@/utils/errorHandler'
+  import { createMessage } from '@/ui'
   import { useVectorIndexSettingsStore } from './store'
   import VectorIndexGlobalSettings from './VectorIndexGlobalSettings.vue'
   import VectorIndexConnectionConfig from './VectorIndexConnectionConfig.vue'
@@ -13,8 +13,7 @@
       try {
         await vectorIndexSettingsStore.loadSettings()
       } catch (error) {
-        handleErrorWithMessage(
-          error,
+        createMessage.error(
           t('settings.vectorIndex.load_error', { error: error instanceof Error ? error.message : String(error) })
         )
       }

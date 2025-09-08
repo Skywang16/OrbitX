@@ -43,12 +43,9 @@
 
 <script setup lang="ts">
   import { ref, reactive, onMounted } from 'vue'
-  import { useI18n } from 'vue-i18n'
   import { vectorIndexAppSettingsApi } from '@/api/vector-index/app-settings'
   import XSwitch from '@/ui/components/Switch.vue'
   import XButton from '@/ui/components/Button.vue'
-
-  const { t } = useI18n()
 
   // 响应式数据
   const settings = reactive({
@@ -106,14 +103,14 @@
   }
 
   // 重启应用
-  const restartApp = () => {
-    // TODO: 实现重启逻辑
-  }
+  // const restartApp = () => {
+  //   // TODO: 实现重启逻辑
+  // }
 
   // 忽略重启提示
-  const dismissRestartNotice = () => {
-    needsRestart.value = false
-  }
+  // const dismissRestartNotice = () => {
+  //   needsRestart.value = false
+  // }
 
   // 组件挂载时加载设置
   onMounted(() => {

@@ -8,7 +8,6 @@
  */
 
 import { invoke } from '@/utils/request'
-import { handleError } from '@/utils/errorHandler'
 import type { ShellInfo, BackgroundCommandResult } from './types'
 
 /**
@@ -18,63 +17,36 @@ export class ShellApi {
   // ===== 基本操作 =====
 
   async getAvailableShells(): Promise<ShellInfo[]> {
-    try {
-      return await invoke<ShellInfo[]>('get_available_shells')
-    } catch (error) {
-      throw new Error(handleError(error, '获取可用Shell列表失败'))
-    }
+    return await invoke<ShellInfo[]>('get_available_shells')
   }
 
   async getDefaultShell(): Promise<ShellInfo> {
-    try {
-      return await invoke<ShellInfo>('get_default_shell')
-    } catch (error) {
-      throw new Error(handleError(error, '获取默认Shell失败'))
-    }
+    return await invoke<ShellInfo>('get_default_shell')
   }
 
   async validateShellPath(path: string): Promise<boolean> {
-    try {
-      return await invoke<boolean>('validate_shell_path', { path })
-    } catch (error) {
-      console.warn('验证Shell路径失败:', handleError(error))
-      return false
-    }
+    return await invoke<boolean>('validate_shell_path', { path })
   }
 
   // ===== 查找功能 =====
 
   async findShellByName(name: string): Promise<ShellInfo | null> {
-    try {
-      const shells = await this.getAvailableShells()
-      return shells.find(shell => shell.name.toLowerCase() === name.toLowerCase()) || null
-    } catch (error) {
-      console.warn('根据名称查找Shell失败:', handleError(error))
-      return null
-    }
+    const shells = await this.getAvailableShells()
+    return shells.find(shell => shell.name.toLowerCase() === name.toLowerCase()) || null
   }
 
   async findShellByPath(path: string): Promise<ShellInfo | null> {
-    try {
-      const shells = await this.getAvailableShells()
-      return shells.find(shell => shell.path === path) || null
-    } catch (error) {
-      console.warn('根据路径查找Shell失败:', handleError(error))
-      return null
-    }
+    const shells = await this.getAvailableShells()
+    return shells.find(shell => shell.path === path) || null
   }
 
   // ===== 后台命令执行功能 =====
 
   async executeBackgroundCommand(command: string, workingDirectory?: string): Promise<BackgroundCommandResult> {
-    try {
-      return await invoke<BackgroundCommandResult>('execute_background_command', {
-        command,
-        working_directory: workingDirectory,
-      })
-    } catch (error) {
-      throw new Error(handleError(error, '后台命令执行失败'))
-    }
+    return await invoke<BackgroundCommandResult>('execute_background_command', {
+      command,
+      working_directory: workingDirectory,
+    })
   }
 }
 

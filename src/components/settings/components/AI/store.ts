@@ -1,5 +1,4 @@
 import { aiApi } from '@/api'
-import { handleErrorWithMessage } from '@/utils/errorHandler'
 
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
@@ -56,7 +55,7 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
 
       dataVersion.value++
     } catch (err) {
-      error.value = handleErrorWithMessage(err, 'Failed to load models')
+      error.value = 'Failed to load models'
       throw err
     } finally {
       isLoading.value = false

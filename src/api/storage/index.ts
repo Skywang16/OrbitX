@@ -8,7 +8,6 @@
  */
 
 import { invoke } from '@/utils/request'
-import { handleError } from '@/utils/errorHandler'
 import { ConfigSection } from '@/types'
 import type { SessionState, DataQuery, SaveOptions } from './types'
 
@@ -19,57 +18,33 @@ export class StorageApi {
   // ===== 配置管理 =====
 
   async getConfig<T = any>(section: ConfigSection | string): Promise<T> {
-    try {
-      const sectionName = typeof section === 'string' ? section : section
-      return await invoke<T>('storage_get_config', { section: sectionName })
-    } catch (error) {
-      throw new Error(handleError(error, `获取配置节 ${section} 失败`))
-    }
+    const sectionName = typeof section === 'string' ? section : section
+    return await invoke<T>('storage_get_config', { section: sectionName })
   }
 
   async updateConfig(section: ConfigSection | string, data: any): Promise<void> {
-    try {
-      const sectionName = typeof section === 'string' ? section : section
-      await invoke('storage_update_config', { section: sectionName, data })
-    } catch (error) {
-      throw new Error(handleError(error, `更新配置节 ${section} 失败`))
-    }
+    const sectionName = typeof section === 'string' ? section : section
+    await invoke<void>('storage_update_config', { section: sectionName, data })
   }
 
   // ===== 会话状态管理 =====
 
   async saveSessionState(sessionState: SessionState): Promise<void> {
-    try {
-      await invoke('storage_save_session_state', { sessionState })
-    } catch (error) {
-      throw new Error(handleError(error, '保存会话状态失败'))
-    }
+    await invoke<void>('storage_save_session_state', { sessionState })
   }
 
   async loadSessionState(): Promise<SessionState | null> {
-    try {
-      return await invoke<SessionState | null>('storage_load_session_state')
-    } catch (error) {
-      throw new Error(handleError(error, '加载会话状态失败'))
-    }
+    return await invoke<SessionState | null>('storage_load_session_state')
   }
 
   // ===== 数据操作 =====
 
   async queryData<T = any>(query: DataQuery): Promise<T[]> {
-    try {
-      return await invoke<T[]>('storage_query_data', { query })
-    } catch (error) {
-      throw new Error(handleError(error, '查询数据失败'))
-    }
+    return await invoke<T[]>('storage_query_data', { query })
   }
 
   async saveData(data: any, options: SaveOptions): Promise<void> {
-    try {
-      await invoke('storage_save_data', { data, options })
-    } catch (error) {
-      throw new Error(handleError(error, '保存数据失败'))
-    }
+    await invoke<void>('storage_save_data', { data, options })
   }
 
   // ===== 便捷方法 =====

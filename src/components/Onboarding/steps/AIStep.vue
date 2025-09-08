@@ -101,8 +101,7 @@
 <script setup lang="ts">
   import { ref, reactive, computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { createMessage, XSelect } from '@/ui'
-  import { handleError, handleErrorWithMessage } from '@/utils/errorHandler'
+  import { XSelect } from '@/ui'
 
   import type { AIModelConfig } from '@/types'
   import { useAISettingsStore } from '@/components/settings/components/AI/store'
@@ -244,16 +243,12 @@
   // 保存配置
   const handleSaveConfig = async (): Promise<boolean> => {
     // 如果没有选择提供商，提示用户选择或跳过
-    if (!selectedProvider.value) {
-      createMessage.warning(t('onboarding.ai.select_provider_first'))
-      return false
-    }
+    if (!selectedProvider.value) return false
 
     if (!validateForm()) return false
 
     isSubmitting.value = true
-    try {
-      const newModel: AIModelConfig = {
+    const newModel: AIModelConfig = {
         id: Date.now().toString(),
         name: formData.name,
         provider: formData.provider,
@@ -266,7 +261,6 @@
 
       // 调用AI设置store来保存配置
       await aiSettingsStore.addModel(newModel)
-      createMessage.success(t('onboarding.ai.save_config_success'))
 
       // 重置表单
       selectedProvider.value = ''
@@ -278,20 +272,14 @@
         model: '',
         options: { maxTokens: 4096, temperature: 0.7, timeout: 300000 },
       })
-      errors.value = {}
-      return true
-    } catch (error) {
-      handleErrorWithMessage(error, t('onboarding.ai.save_config_failed'))
-      return false
-    } finally {
-      isSubmitting.value = false
-    }
+    errors.value = {}
+    isSubmitting.value = false
+    return true
   }
 
   // 暂时跳过
   const handleSkip = () => {
-    createMessage.info(t('onboarding.ai.skip_config_message'))
-    return true // 返回true表示可以继续
+    return true
   }
 
   // 暴露给父组件

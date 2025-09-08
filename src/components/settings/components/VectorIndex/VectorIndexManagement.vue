@@ -2,8 +2,7 @@
   import { ref, onMounted, onUnmounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useVectorIndexSettingsStore } from './store'
-  import { createMessage } from '@/ui'
-  import { handleErrorWithMessage } from '@/utils/errorHandler'
+  
   import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
   const { t } = useI18n()
@@ -23,107 +22,76 @@
 
   // 开始构建索引
   const startBuildIndex = async () => {
-    if (!settingsStore.config?.qdrantUrl) {
-      createMessage.warning(t('settings.vectorIndex.configure_connection_first'))
-      return
+    if (!settingsStore.config?.qdrantUrl) return
+
+    isBuildingIndex.value = true
+    buildProgress.value = 0
+    buildStats.value = {
+      totalFiles: 0,
+      processedFiles: 0,
+      totalChunks: 0,
+      currentFile: '',
+      elapsedTime: 0,
     }
 
-    try {
-      isBuildingIndex.value = true
-      buildProgress.value = 0
-      buildStats.value = {
-        totalFiles: 0,
-        processedFiles: 0,
-        totalChunks: 0,
-        currentFile: '',
-        elapsedTime: 0,
+    // 监听构建进度事件
+    unlistenProgress = await listen('vector-index-event', event => {
+      const { type, data } = event.payload as {
+        type: 'progress' | 'completed' | 'error'
+        data: unknown
       }
 
-      // 监听构建进度事件
-      unlistenProgress = await listen('vector-index-event', event => {
-        const { type, data } = event.payload as {
-          type: 'progress' | 'completed' | 'error'
-          data: unknown
+      switch (type) {
+        case 'progress': {
+          const d = data as { progress: number; processedFiles: number; totalFiles: number; currentFile?: string }
+          buildProgress.value = d.progress * 100
+          buildStats.value = {
+            ...buildStats.value,
+            processedFiles: d.processedFiles,
+            totalFiles: d.totalFiles,
+            currentFile: d.currentFile || '',
+          }
+          break
         }
 
-        switch (type) {
-          case 'progress': {
-            const d = data as { progress: number; processedFiles: number; totalFiles: number; currentFile?: string }
-            buildProgress.value = d.progress * 100
+        case 'completed':
+          isBuildingIndex.value = false
+          {
+            const d = data as { totalFiles: number; totalChunks: number; elapsedTime: number }
             buildStats.value = {
               ...buildStats.value,
-              processedFiles: d.processedFiles,
-              totalFiles: d.totalFiles,
-              currentFile: d.currentFile || '',
+              totalChunks: d.totalChunks,
+              elapsedTime: d.elapsedTime,
             }
-            break
           }
+          // success handled by backend; no toast here
+          break
 
-          case 'completed':
-            isBuildingIndex.value = false
-            {
-              const d = data as { totalFiles: number; totalChunks: number; elapsedTime: number }
-              buildStats.value = {
-                ...buildStats.value,
-                totalChunks: d.totalChunks,
-                elapsedTime: d.elapsedTime,
-              }
-            }
-            createMessage.success(
-              t('settings.vectorIndex.build_completed', {
-                files: (data as any).totalFiles,
-                chunks: (data as any).totalChunks,
-                time: Math.round((data as any).elapsedTime / 1000),
-              })
-            )
-            break
+        case 'error':
+          isBuildingIndex.value = false
 
-          case 'error':
-            isBuildingIndex.value = false
-            handleErrorWithMessage(
-              new Error((data as { message: string }).message),
-              t('settings.vectorIndex.build_failed')
-            )
-            break
-        }
-      })
+          break
+      }
+    })
 
-      await settingsStore.buildCodeIndex()
-    } catch (error) {
-      isBuildingIndex.value = false
-      handleErrorWithMessage(error, t('settings.vectorIndex.build_start_failed'))
-    }
+    await settingsStore.buildCodeIndex()
   }
 
   // 取消构建索引
   const cancelBuildIndex = async () => {
-    try {
-      await settingsStore.cancelBuildIndex()
-      isBuildingIndex.value = false
-      buildProgress.value = 0
-      createMessage.info(t('settings.vectorIndex.build_cancelled'))
-    } catch (error) {
-      handleErrorWithMessage(error, t('settings.vectorIndex.cancel_failed'))
-    }
+    await settingsStore.cancelBuildIndex()
+    isBuildingIndex.value = false
+    buildProgress.value = 0
   }
 
   // 获取索引状态
   const refreshIndexStatus = async () => {
-    try {
-      await settingsStore.refreshIndexStatus()
-    } catch (error) {
-      handleErrorWithMessage(error, t('settings.vectorIndex.status_refresh_failed'))
-    }
+    await settingsStore.refreshIndexStatus()
   }
 
   // 清除索引
   const clearIndex = async () => {
-    try {
-      await settingsStore.clearIndex()
-      createMessage.success(t('settings.vectorIndex.index_cleared'))
-    } catch (error) {
-      handleErrorWithMessage(error, t('settings.vectorIndex.clear_failed'))
-    }
+    await settingsStore.clearIndex()
   }
 
   onMounted(() => {

@@ -6,7 +6,8 @@
 
 use super::AIManagerState;
 use crate::ai::types::AIModelConfig;
-use crate::utils::error::ToTauriResult;
+use crate::utils::{EmptyData, TauriApiResult};
+use crate::{api_error, api_success, validate_not_empty};
 
 use tauri::State;
 
@@ -14,9 +15,9 @@ use tauri::State;
 
 /// 获取所有AI模型配置
 #[tauri::command]
-pub async fn get_ai_models(state: State<'_, AIManagerState>) -> Result<Vec<AIModelConfig>, String> {
+pub async fn get_ai_models(state: State<'_, AIManagerState>) -> TauriApiResult<Vec<AIModelConfig>> {
     let models = state.ai_service.get_models().await;
-    Ok(models)
+    Ok(api_success!(models))
 }
 
 /// 添加AI模型配置
@@ -24,17 +25,12 @@ pub async fn get_ai_models(state: State<'_, AIManagerState>) -> Result<Vec<AIMod
 pub async fn add_ai_model(
     config: AIModelConfig,
     state: State<'_, AIManagerState>,
-) -> Result<AIModelConfig, String> {
+) -> TauriApiResult<AIModelConfig> {
     // 保存模型配置，如果保存失败会抛出异常
-    state
-        .ai_service
-        .add_model(config.clone())
-        .await
-        .to_tauri()?;
-
-    // 保存成功，直接返回配置
-    // 注意：这里返回传入的配置，因为save操作成功意味着数据已正确保存
-    Ok(config)
+    match state.ai_service.add_model(config.clone()).await {
+        Ok(_) => Ok(api_success!(config)),
+        Err(_) => Ok(api_error!("ai.add_model_failed")),
+    }
 }
 
 /// 删除AI模型配置
@@ -42,8 +38,13 @@ pub async fn add_ai_model(
 pub async fn remove_ai_model(
     model_id: String,
     state: State<'_, AIManagerState>,
-) -> Result<(), String> {
-    state.ai_service.remove_model(&model_id).await.to_tauri()
+) -> TauriApiResult<EmptyData> {
+    validate_not_empty!(model_id, "common.invalid_params");
+    
+    match state.ai_service.remove_model(&model_id).await {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("ai.remove_model_failed")),
+    }
 }
 
 /// 更新AI模型配置
@@ -52,12 +53,13 @@ pub async fn update_ai_model(
     model_id: String,
     updates: serde_json::Value,
     state: State<'_, AIManagerState>,
-) -> Result<(), String> {
-    state
-        .ai_service
-        .update_model(&model_id, updates)
-        .await
-        .to_tauri()
+) -> TauriApiResult<EmptyData> {
+    validate_not_empty!(model_id, "common.invalid_params");
+
+    match state.ai_service.update_model(&model_id, updates).await {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("ai.update_model_failed")),
+    }
 }
 
 /// 测试AI模型连接（基于表单数据）
@@ -65,24 +67,23 @@ pub async fn update_ai_model(
 pub async fn test_ai_connection_with_config(
     config: AIModelConfig,
     state: State<'_, AIManagerState>,
-) -> Result<bool, String> {
+) -> TauriApiResult<bool> {
     // 参数验证
     if config.api_url.trim().is_empty() {
-        return Err("API URL不能为空".to_string());
+        return Ok(api_error!("ai.api_url_empty"));
     }
     if config.api_key.trim().is_empty() {
-        return Err("API Key不能为空".to_string());
+        return Ok(api_error!("ai.api_key_empty"));
     }
     if config.model.trim().is_empty() {
-        return Err("模型名称不能为空".to_string());
+        return Ok(api_error!("ai.model_name_empty"));
     }
 
     // 直接使用提供的配置进行连接测试
-    state
-        .ai_service
-        .test_connection_with_config(&config)
-        .await
-        .to_tauri()
+    match state.ai_service.test_connection_with_config(&config).await {
+        Ok(result) => Ok(api_success!(result)),
+        Err(_) => Ok(api_error!("ai.test_connection_failed")),
+    }
 }
 
 // ===== 用户前置提示词管理命令 =====
@@ -91,16 +92,15 @@ pub async fn test_ai_connection_with_config(
 #[tauri::command]
 pub async fn get_user_prefix_prompt(
     state: State<'_, AIManagerState>,
-) -> Result<Option<String>, String> {
+) -> TauriApiResult<Option<String>> {
     tracing::debug!("获取用户前置提示词");
 
     let repositories = state.repositories();
 
-    repositories
-        .ai_models()
-        .get_user_prefix_prompt()
-        .await
-        .to_tauri()
+    match repositories.ai_models().get_user_prefix_prompt().await {
+        Ok(prompt) => Ok(api_success!(prompt)),
+        Err(_) => Ok(api_error!("ai.get_prefix_prompt_failed")),
+    }
 }
 
 /// 设置用户前置提示词
@@ -108,12 +108,11 @@ pub async fn get_user_prefix_prompt(
 pub async fn set_user_prefix_prompt(
     prompt: Option<String>,
     state: State<'_, AIManagerState>,
-) -> Result<(), String> {
+) -> TauriApiResult<EmptyData> {
     let repositories = state.repositories();
 
-    repositories
-        .ai_models()
-        .set_user_prefix_prompt(prompt)
-        .await
-        .to_tauri()
+    match repositories.ai_models().set_user_prefix_prompt(prompt).await {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("ai.set_prefix_prompt_failed")),
+    }
 }

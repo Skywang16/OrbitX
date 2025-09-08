@@ -1,7 +1,6 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
-  import { createMessage } from '@/ui'
-  import { handleError, handleErrorWithMessage } from '@/utils/errorHandler'
+  
   import { computed, onMounted, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import AIModelForm from './AIModelForm.vue'
@@ -35,39 +34,22 @@
   }
 
   const handleDeleteModel = async (modelId: string) => {
-    try {
-      await aiSettingsStore.removeModel(modelId)
-      createMessage.success(t('ai_model.delete_success'))
-    } catch (error) {
-      handleErrorWithMessage(error, t('ai_model.delete_failed'))
-    }
+    await aiSettingsStore.removeModel(modelId)
   }
 
   const handleFormSubmit = async (modelData: Omit<AIModelConfig, 'id'>) => {
-    try {
-      if (editingModel.value) {
-        await aiSettingsStore.updateModel(editingModel.value.id, modelData)
-        createMessage.success(t('ai_model.update_success'))
-      } else {
-        // 添加新模型时，不需要手动生成ID，后端会处理
-        const newModelData = {
-          ...modelData,
-          // 确保modelType正确设置
-          modelType: modelData.modelType || defaultModelType.value,
-          enabled: true,
-        }
-
-        await aiSettingsStore.addModel(newModelData as AIModelConfig)
-
-        createMessage.success(t('ai_model.add_success'))
+    if (editingModel.value) {
+      await aiSettingsStore.updateModel(editingModel.value.id, modelData)
+    } else {
+      const newModelData = {
+        ...modelData,
+        modelType: modelData.modelType || defaultModelType.value,
+        enabled: true,
       }
-      showAddForm.value = false
-      editingModel.value = null
-    } catch (error) {
-      console.error('模型操作失败:', error)
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      handleErrorWithMessage(error, `${t('ai_model.operation_failed')}: ${errorMessage}`)
+      await aiSettingsStore.addModel(newModelData as AIModelConfig)
     }
+    showAddForm.value = false
+    editingModel.value = null
   }
 
   const handleFormCancel = () => {

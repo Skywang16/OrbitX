@@ -8,7 +8,6 @@
  */
 
 import { invoke } from '@/utils/request'
-import { handleError } from '@/utils/errorHandler'
 import type { TerminalContext } from './types'
 
 /**
@@ -22,11 +21,7 @@ export class TerminalContextApi {
    * @param paneId 面板ID
    */
   async setActivePaneId(paneId: number): Promise<void> {
-    try {
-      await invoke('set_active_pane', { paneId })
-    } catch (error) {
-      throw new Error(handleError(error, '设置活跃终端失败'))
-    }
+    await invoke('set_active_pane', { paneId })
   }
 
   /**
@@ -34,11 +29,7 @@ export class TerminalContextApi {
    * @returns 活跃终端面板ID，如果没有活跃终端则返回null
    */
   async getActivePaneId(): Promise<number | null> {
-    try {
-      return await invoke<number | null>('get_active_pane')
-    } catch (error) {
-      throw new Error(handleError(error, '获取活跃终端失败'))
-    }
+    return await invoke<number | null>('get_active_pane')
   }
 
   // ===== 终端上下文查询 =====
@@ -49,11 +40,7 @@ export class TerminalContextApi {
    * @returns 终端上下文信息
    */
   async getTerminalContext(paneId?: number): Promise<TerminalContext> {
-    try {
-      return await invoke<TerminalContext>('get_terminal_context', { paneId })
-    } catch (error) {
-      throw new Error(handleError(error, '获取终端上下文失败'))
-    }
+    return await invoke<TerminalContext>('get_terminal_context', { paneId })
   }
 
   /**
@@ -61,11 +48,7 @@ export class TerminalContextApi {
    * @returns 活跃终端的上下文信息
    */
   async getActiveTerminalContext(): Promise<TerminalContext> {
-    try {
-      return await invoke<TerminalContext>('get_active_terminal_context')
-    } catch (error) {
-      throw new Error(handleError(error, '获取活跃终端上下文失败'))
-    }
+    return await invoke<TerminalContext>('get_active_terminal_context')
   }
 
   // ===== 便捷方法 =====
@@ -76,13 +59,8 @@ export class TerminalContextApi {
    * @returns 当前工作目录路径
    */
   async getCurrentWorkingDirectory(paneId?: number): Promise<string | null> {
-    try {
-      const context = await this.getTerminalContext(paneId)
-      return context.currentWorkingDirectory
-    } catch (error) {
-      console.warn('获取当前工作目录失败:', handleError(error))
-      return null
-    }
+    const context = await this.getTerminalContext(paneId)
+    return context.currentWorkingDirectory
   }
 
   /**
@@ -91,13 +69,8 @@ export class TerminalContextApi {
    * @returns Shell类型
    */
   async getShellType(paneId?: number): Promise<string | null> {
-    try {
-      const context = await this.getTerminalContext(paneId)
-      return context.shellType
-    } catch (error) {
-      console.warn('获取Shell类型失败:', handleError(error))
-      return null
-    }
+    const context = await this.getTerminalContext(paneId)
+    return context.shellType
   }
 
   /**
@@ -106,13 +79,8 @@ export class TerminalContextApi {
    * @returns 是否启用Shell集成
    */
   async isShellIntegrationEnabled(paneId?: number): Promise<boolean> {
-    try {
-      const context = await this.getTerminalContext(paneId)
-      return context.shellIntegrationEnabled
-    } catch (error) {
-      console.warn('检查Shell集成状态失败:', handleError(error))
-      return false
-    }
+    const context = await this.getTerminalContext(paneId)
+    return context.shellIntegrationEnabled
   }
 
   /**
@@ -121,12 +89,8 @@ export class TerminalContextApi {
    * @returns 终端是否存在
    */
   async terminalExists(paneId: number): Promise<boolean> {
-    try {
-      await this.getTerminalContext(paneId)
-      return true
-    } catch (error) {
-      return false
-    }
+    await this.getTerminalContext(paneId)
+    return true
   }
 }
 

@@ -9,6 +9,8 @@
 
 use super::TerminalContextState;
 use crate::mux::PaneId;
+use crate::utils::{EmptyData, TauriApiResult};
+use crate::{api_error, api_success};
 use tauri::State;
 use tracing::{debug, warn};
 
@@ -28,21 +30,20 @@ use tracing::{debug, warn};
 pub async fn invalidate_context_cache(
     pane_id: u32,
     state: State<'_, TerminalContextState>,
-) -> Result<(), String> {
+) -> TauriApiResult<EmptyData> {
     debug!("使上下文缓存失效: pane_id={}", pane_id);
 
     // 参数验证
     if pane_id == 0 {
-        let error_msg = "面板ID不能为0".to_string();
-        warn!("{}", error_msg);
-        return Err(error_msg);
+        warn!("面板ID不能为0");
+        return Ok(api_error!("common.invalid_id"));
     }
 
     let pane_id = PaneId::new(pane_id);
     state.context_service.invalidate_cache(pane_id);
 
     debug!("成功使上下文缓存失效: pane_id={:?}", pane_id);
-    Ok(())
+    Ok(api_success!())
 }
 
 /// 清除所有上下文缓存
@@ -57,13 +58,13 @@ pub async fn invalidate_context_cache(
 /// * `Ok(())` - 缓存清除成功
 /// * `Err(String)` - 操作失败的错误信息
 #[tauri::command]
-pub async fn clear_all_context_cache(state: State<'_, TerminalContextState>) -> Result<(), String> {
+pub async fn clear_all_context_cache(state: State<'_, TerminalContextState>) -> TauriApiResult<EmptyData> {
     debug!("清除所有上下文缓存");
 
     state.context_service.clear_all_cache();
 
     debug!("成功清除所有上下文缓存");
-    Ok(())
+    Ok(api_success!())
 }
 
 #[cfg(test)]

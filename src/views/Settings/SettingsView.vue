@@ -8,8 +8,7 @@
   import { VectorIndexSettings } from '@/components/settings/components/VectorIndex'
   import SettingsNav from '@/components/settings/SettingsNav.vue'
   import { useSettingsStore } from '@/components/settings/store'
-  import { createMessage, XButton } from '@/ui'
-  import { handleErrorWithMessage } from '@/utils/errorHandler'
+  import { XButton } from '@/ui'
   import { configApi } from '@/api/config'
   import { onMounted } from 'vue'
   import { debounce } from 'lodash-es'
@@ -27,13 +26,7 @@
   }
 
   const openConfigFolder = async () => {
-    try {
-      await configApi.openConfigFolder()
-      createMessage.success(t('settings.general.config_folder_opened'))
-    } catch (error) {
-      console.error('Failed to open config folder:', error)
-      handleErrorWithMessage(error, t('settings.general.config_folder_error'))
-    }
+    await configApi.openConfigFolder()
   }
 
   // 创建防抖版本的函数，防止用户快速点击导致重复调用

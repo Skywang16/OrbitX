@@ -5,7 +5,7 @@
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '@/eko-core/types'
 import { FileNotFoundError, ToolError } from '../tool-error'
-import { invoke } from '@tauri-apps/api/core'
+import { filesystemApi } from '@/api'
 
 export interface ReadDirectoryParams {
   path: string
@@ -73,7 +73,7 @@ export class ReadDirectoryTool extends ModifiableTool {
 
   private async checkPathExists(path: string): Promise<boolean> {
     try {
-      const exists = await invoke<boolean>('plugin:fs|exists', { path })
+      const exists = await filesystemApi.exists(path)
       return exists
     } catch (error) {
       return false
@@ -89,16 +89,7 @@ export class ReadDirectoryTool extends ModifiableTool {
 
     try {
       // 使用Tauri API读取目录
-      const dirEntries = await invoke<
-        Array<{
-          name: string
-          isDirectory: boolean
-          isFile: boolean
-          isSymlink: boolean
-        }>
-      >('plugin:fs|read_dir', {
-        path: dirPath,
-      })
+      const dirEntries = await filesystemApi.readDir(dirPath)
 
       for (const entry of dirEntries) {
         // 过滤隐藏文件、依赖、缓存等噪音文件

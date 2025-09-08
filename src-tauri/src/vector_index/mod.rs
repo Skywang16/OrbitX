@@ -38,7 +38,7 @@ pub use types::{CodeVector, IndexStats, SearchOptions, SearchResult, VectorIndex
 pub use config_service::VectorIndexConfigService;
 pub use monitor::FileMonitorService;
 pub use parser::CodeParser;
-pub use qdrant::QdrantService;
+pub use qdrant::{QdrantClientImpl, QdrantService};
 pub use service::VectorIndexService;
 pub use vectorizer::VectorizationService;
 

@@ -8,6 +8,8 @@
  */
 
 use super::TerminalContextState;
+use crate::api_success;
+use crate::utils::TauriApiResult;
 use tauri::State;
 use tracing::debug;
 
@@ -25,7 +27,7 @@ use tracing::debug;
 #[tauri::command]
 pub async fn get_context_cache_stats(
     state: State<'_, TerminalContextState>,
-) -> Result<crate::terminal::CacheStats, String> {
+) -> TauriApiResult<crate::terminal::CacheStats> {
     debug!("获取上下文缓存统计信息");
 
     let stats = state.context_service.get_cache_stats();
@@ -36,7 +38,7 @@ pub async fn get_context_cache_stats(
         stats.hit_rate * 100.0
     );
 
-    Ok(stats)
+    Ok(api_success!(stats))
 }
 
 /// 获取活跃终端注册表统计信息
@@ -52,7 +54,7 @@ pub async fn get_context_cache_stats(
 #[tauri::command]
 pub async fn get_registry_stats(
     state: State<'_, TerminalContextState>,
-) -> Result<crate::terminal::context_registry::RegistryStats, String> {
+) -> TauriApiResult<crate::terminal::context_registry::RegistryStats> {
     debug!("获取活跃终端注册表统计信息");
 
     let stats = state.registry.get_stats();
@@ -62,7 +64,7 @@ pub async fn get_registry_stats(
         stats.global_active_pane, stats.event_subscriber_count
     );
 
-    Ok(stats)
+    Ok(api_success!(stats))
 }
 
 #[cfg(test)]

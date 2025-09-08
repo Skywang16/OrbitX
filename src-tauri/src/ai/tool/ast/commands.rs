@@ -1,15 +1,19 @@
 use crate::ai::tool::ast::parser::AstParser;
 use crate::ai::tool::ast::types::{AnalysisResult, AnalyzeCodeParams};
-use crate::utils::error::ToTauriResult;
+use crate::utils::TauriApiResult;
+use crate::{api_error, api_success};
 use anyhow::{Context, Result};
 use std::path::Path;
 use tauri::command;
 use walkdir::WalkDir;
 
 #[command]
-pub async fn analyze_code(params: AnalyzeCodeParams) -> Result<AnalysisResult, String> {
+pub async fn analyze_code(params: AnalyzeCodeParams) -> TauriApiResult<AnalysisResult> {
     let analyzer = CodeAnalyzer::new();
-    analyzer.analyze(params).await.to_tauri()
+    match analyzer.analyze(params).await {
+        Ok(result) => Ok(api_success!(result)),
+        Err(_) => Ok(api_error!("ai.operation_failed")),
+    }
 }
 
 pub struct CodeAnalyzer {

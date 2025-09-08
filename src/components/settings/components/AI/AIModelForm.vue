@@ -1,7 +1,6 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
-  import { createMessage } from '@/ui'
-  import { handleError, handleErrorWithMessage } from '@/utils/errorHandler'
+  
   import { aiApi } from '@/api'
   import { reactive, ref, computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
@@ -201,36 +200,22 @@
 
   // 测试连接
   const handleTestConnection = async () => {
-    if (!validateForm()) {
-      createMessage.warning(t('ai_model.test.fill_config_first'))
-      return
-    }
+    if (!validateForm()) return
 
     isTesting.value = true
-    try {
-      const testConfig: AIModelConfig = {
-        id: 'test-' + Date.now(),
-        name: formData.name || 'Test Model',
-        provider: formData.provider,
-        apiUrl: formData.apiUrl,
-        apiKey: formData.apiKey,
-        model: formData.model,
-        modelType: formData.modelType,
-        options: formData.options,
-      }
-
-      const isConnected = await aiApi.testConnectionWithConfig(testConfig)
-
-      if (isConnected) {
-        createMessage.success(t('ai_model.test.success'))
-      } else {
-        handleErrorWithMessage('Test connection failed', t('ai_model.test.failed'))
-      }
-    } catch (error) {
-      handleErrorWithMessage(error, t('ai_model.test.error'))
-    } finally {
-      isTesting.value = false
+    const testConfig: AIModelConfig = {
+      id: 'test-' + Date.now(),
+      name: formData.name || 'Test Model',
+      provider: formData.provider,
+      apiUrl: formData.apiUrl,
+      apiKey: formData.apiKey,
+      model: formData.model,
+      modelType: formData.modelType,
+      options: formData.options,
     }
+
+    await aiApi.testConnectionWithConfig(testConfig)
+    isTesting.value = false
   }
 </script>
 

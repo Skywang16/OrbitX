@@ -8,11 +8,13 @@
 use super::service::{SystemThemeDetector, ThemeService};
 use super::types::{Theme, ThemeConfig};
 use crate::config::TomlConfigManager;
-use crate::utils::error::{AppResult, TauriResult, ToTauriResult};
+use crate::utils::error::AppResult;
+use crate::utils::{EmptyData, TauriApiResult};
+use crate::{api_error, api_success};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracing::{debug, info};
 
 /// 主题信息
@@ -51,8 +53,11 @@ pub struct ThemeConfigStatus {
 pub async fn get_theme_config_status(
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
-) -> TauriResult<ThemeConfigStatus> {
-    let config = config_manager.get_config().await.to_tauri()?;
+) -> TauriApiResult<ThemeConfigStatus> {
+    let config = match config_manager.get_config().await {
+        Ok(config) => config,
+        Err(_) => return Ok(api_error!("config.get_failed")),
+    };
 
     let theme_config = &config.appearance.theme_config;
     let is_system_dark = SystemThemeDetector::is_dark_mode();
@@ -61,11 +66,10 @@ pub async fn get_theme_config_status(
     let current_theme_name = theme_service.get_current_theme_name(theme_config, is_system_dark);
 
     // 获取所有可用主题
-    let theme_list = theme_service
-        .theme_manager()
-        .list_themes()
-        .await
-        .to_tauri()?;
+    let theme_list = match theme_service.theme_manager().list_themes().await {
+        Ok(list) => list,
+        Err(_) => return Ok(api_error!("config.get_failed")),
+    };
 
     let available_themes = theme_list
         .into_iter()
@@ -76,12 +80,12 @@ pub async fn get_theme_config_status(
         })
         .collect();
 
-    Ok(ThemeConfigStatus {
+    Ok(api_success!(ThemeConfigStatus {
         current_theme_name,
         theme_config: theme_config.clone(),
         is_system_dark,
         available_themes,
-    })
+    }))
 }
 
 /// 获取当前主题数据
@@ -89,75 +93,82 @@ pub async fn get_theme_config_status(
 pub async fn get_current_theme(
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
-) -> TauriResult<Theme> {
-    let config = config_manager.get_config().await.to_tauri()?;
+) -> TauriApiResult<Theme> {
+    let config = match config_manager.get_config().await {
+        Ok(config) => config,
+        Err(_) => return Ok(api_error!("config.get_failed")),
+    };
 
     let theme_config = &config.appearance.theme_config;
     let is_system_dark = SystemThemeDetector::is_dark_mode();
 
-    theme_service
+    match theme_service
         .load_current_theme(theme_config, is_system_dark)
         .await
-        .to_tauri()
+    {
+        Ok(theme) => Ok(api_success!(theme)),
+        Err(_) => Ok(api_error!("config.get_failed")),
+    }
 }
 
 /// 设置终端主题（手动模式）
 #[tauri::command]
-pub async fn set_terminal_theme(
+pub async fn set_terminal_theme<R: Runtime>(
     theme_name: String,
-    app_handle: AppHandle,
+    app_handle: AppHandle<R>,
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
-) -> TauriResult<()> {
+) -> TauriApiResult<EmptyData> {
     // 验证主题是否存在
     if !theme_service.theme_exists(&theme_name).await {
-        return Err(format!("主题不存在: {}", theme_name));
+        return Ok(api_error!("common.not_found"));
     }
 
     // 更新配置
-    config_manager
+    if let Err(_) = config_manager
         .update_config(|config| {
             config.appearance.theme_config.terminal_theme = theme_name.clone();
             config.appearance.theme_config.follow_system = false; // 切换到手动模式
             Ok(())
         })
         .await
-        .to_tauri()?;
+    {
+        return Ok(api_error!("config.update_failed"));
+    }
 
     // 发送主题变化事件，确保前端能立即响应
-    app_handle
-        .emit("theme-changed", &theme_name)
-        .context("发送事件失败")
-        .to_tauri()?;
+    if let Err(_) = app_handle.emit("theme-changed", &theme_name) {
+        return Ok(api_error!("config.update_failed"));
+    }
 
-    Ok(())
+    Ok(api_success!())
 }
 
 /// 设置跟随系统主题
 #[tauri::command]
-pub async fn set_follow_system_theme(
+pub async fn set_follow_system_theme<R: Runtime>(
     follow_system: bool,
     light_theme: Option<String>,
     dark_theme: Option<String>,
-    app_handle: AppHandle,
+    app_handle: AppHandle<R>,
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
-) -> TauriResult<()> {
+) -> TauriApiResult<EmptyData> {
     // 验证主题是否存在
     if let Some(ref light) = light_theme {
         if !theme_service.theme_exists(light).await {
-            return Err(format!("浅色主题不存在: {}", light));
+            return Ok(api_error!("common.not_found"));
         }
     }
 
     if let Some(ref dark) = dark_theme {
         if !theme_service.theme_exists(dark).await {
-            return Err(format!("深色主题不存在: {}", dark));
+            return Ok(api_error!("common.not_found"));
         }
     }
 
     // 更新配置
-    config_manager
+    if let Err(_) = config_manager
         .update_config(|config| {
             config.appearance.theme_config.follow_system = follow_system;
 
@@ -172,36 +183,39 @@ pub async fn set_follow_system_theme(
             Ok(())
         })
         .await
-        .to_tauri()?;
+    {
+        return Ok(api_error!("config.update_failed"));
+    }
 
     // 如果启用跟随系统主题，需要获取当前应该使用的主题并发送事件
     if follow_system {
         // 获取当前系统主题状态
-        let config = config_manager.get_config().await.to_tauri()?;
+        let config = match config_manager.get_config().await {
+            Ok(config) => config,
+            Err(_) => return Ok(api_error!("config.get_failed")),
+        };
         let is_system_dark = SystemThemeDetector::is_dark_mode();
         let current_theme_name =
             theme_service.get_current_theme_name(&config.appearance.theme_config, is_system_dark);
 
         // 发送主题变化事件
-        app_handle
-            .emit("theme-changed", &current_theme_name)
-            .context("发送事件失败")
-            .to_tauri()?;
+        if let Err(_) = app_handle.emit("theme-changed", &current_theme_name) {
+            return Ok(api_error!("config.update_failed"));
+        }
     }
 
-    Ok(())
+    Ok(api_success!())
 }
 
 /// 获取所有可用主题列表
 #[tauri::command]
 pub async fn get_available_themes(
     theme_service: State<'_, Arc<ThemeService>>,
-) -> TauriResult<Vec<ThemeInfo>> {
-    let theme_list = theme_service
-        .theme_manager()
-        .list_themes()
-        .await
-        .to_tauri()?;
+) -> TauriApiResult<Vec<ThemeInfo>> {
+    let theme_list = match theme_service.theme_manager().list_themes().await {
+        Ok(list) => list,
+        Err(_) => return Ok(api_error!("config.get_failed")),
+    };
 
     let themes = theme_list
         .into_iter()
@@ -212,7 +226,7 @@ pub async fn get_available_themes(
         })
         .collect();
 
-    Ok(themes)
+    Ok(api_success!(themes))
 }
 
 /// 系统主题变化处理

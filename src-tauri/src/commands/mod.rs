@@ -20,13 +20,14 @@
 //! 负责统一管理和注册所有 Tauri 命令接口
 
 // 文件拖拽处理命令
-use crate::utils::error::TauriResult;
+use crate::utils::TauriApiResult;
+use crate::{api_error, api_success};
 use std::path::PathBuf;
 use tracing::warn;
 
 /// 处理文件打开事件，返回文件所在的目录路径
 #[tauri::command]
-pub async fn handle_file_open(path: String) -> TauriResult<String> {
+pub async fn handle_file_open(path: String) -> TauriApiResult<String> {
     // 确保路径字符串正确处理中文字符
     let path_buf = PathBuf::from(&path);
 
@@ -47,11 +48,10 @@ pub async fn handle_file_open(path: String) -> TauriResult<String> {
 
         // 使用 to_string_lossy() 确保中文字符正确转换
         let dir_str = dir.to_string_lossy().to_string();
-        Ok(dir_str)
+        Ok(api_success!(dir_str))
     } else {
-        let error_msg = format!("路径不存在: {}", path);
-        warn!("{}", error_msg);
-        Err(error_msg)
+        warn!("路径不存在: {}", path);
+        Ok(api_error!("common.not_found"))
     }
 }
 
@@ -93,7 +93,6 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         // 补全功能命令
         crate::completion::commands::init_completion_engine,
         crate::completion::commands::get_completions,
-        crate::completion::commands::get_enhanced_completions,
         crate::completion::commands::clear_completion_cache,
         crate::completion::commands::get_completion_stats,
         // 配置管理命令
@@ -110,11 +109,17 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::config::commands::subscribe_config_events,
         crate::config::commands::get_config_folder_path,
         crate::config::commands::open_config_folder,
+        // 语言设置命令
+        crate::utils::language_commands::set_app_language,
+        crate::utils::language_commands::get_app_language,
+        crate::utils::language_commands::get_supported_languages,
         // 主题系统命令
         crate::config::theme::commands::get_theme_config_status,
         crate::config::theme::commands::get_current_theme,
         crate::config::theme::commands::get_available_themes,
-        // 注意：set_terminal_theme 和 set_follow_system_theme 需要特殊处理 AppHandle
+        // 主题设置命令（包含需要 AppHandle 的命令）
+        crate::config::theme::commands::set_terminal_theme,
+        crate::config::theme::commands::set_follow_system_theme,
         // 终端配置命令
         crate::config::terminal_commands::get_terminal_config,
         crate::config::terminal_commands::update_terminal_config,

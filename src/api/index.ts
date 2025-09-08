@@ -1,4 +1,5 @@
 export * from '../utils/request'
+export { invoke, type ApiResponse } from '../utils/request'
 
 export { aiApi } from './ai'
 export { configApi } from './config'
@@ -12,6 +13,8 @@ export { completionApi } from './completion'
 export { windowApi } from './window'
 export { llmRegistryApi } from './llm-registry'
 export { vectorIndexApi } from './vector-index'
+export { llmApi } from './llm'
+export { filesystemApi } from './filesystem'
 
 export type { AiApi } from './ai'
 export type { ConfigApi } from './config'
@@ -25,6 +28,8 @@ export type { CompletionApi } from './completion'
 export type { WindowApi } from './window'
 export type { LLMRegistryApi } from './llm-registry'
 export type { VectorIndexApiType } from './vector-index'
+export type { LLMApi } from './llm'
+export type { FilesystemApi } from './filesystem'
 
 export type {
   AIModelConfig,

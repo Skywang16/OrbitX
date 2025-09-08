@@ -2,7 +2,7 @@ import { aiApi } from '@/api'
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useSessionStore } from '@/stores/session'
 import { useTerminalStore } from '@/stores/Terminal'
-import { handleErrorWithMessage } from '@/utils/errorHandler'
+
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import type { ChatMode } from '@/types'
@@ -151,7 +151,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       currentTaskNodes.value = []
       currentTaskId.value = null
     } catch (err) {
-      error.value = handleErrorWithMessage(err, '创建会话失败')
+      error.value = '创建会话失败'
     } finally {
       isLoading.value = false
     }
@@ -175,7 +175,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         )
       }
     } catch (err) {
-      error.value = handleErrorWithMessage(err, '加载会话失败')
+      error.value = '加载会话失败'
     } finally {
       isLoading.value = false
     }
@@ -203,7 +203,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         currentTaskId.value = null
       }
     } catch (err) {
-      error.value = handleErrorWithMessage(err, '删除会话失败')
+      error.value = '删除会话失败'
     }
   }
 
@@ -211,7 +211,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     try {
       conversations.value = await aiApi.getConversations()
     } catch (err) {
-      error.value = handleErrorWithMessage(err, '刷新会话列表失败')
+      error.value = '刷新会话列表失败'
     }
   }
 
@@ -334,7 +334,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
       await refreshConversations()
     } catch (err) {
-      error.value = handleErrorWithMessage(err, '发送消息失败')
+      error.value = '发送消息失败'
       throw err
     } finally {
       isLoading.value = false
@@ -354,7 +354,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       await aiApi.truncateConversation(currentConversationId.value, truncateAfterMessageId)
       await sendMessage(newContent)
     } catch (err) {
-      error.value = handleErrorWithMessage(err, '截断重问失败')
+      error.value = '截断重问失败'
       throw err
     } finally {
       isLoading.value = false

@@ -37,7 +37,7 @@ impl AIManagerState {
         cache: Arc<UnifiedCache>,
         terminal_context_service: Arc<TerminalContextService>,
     ) -> Result<Self, String> {
-        let ai_service = Arc::new(AIService::new(repositories.clone(), cache.clone()));
+        let ai_service = Arc::new(AIService::new(repositories.clone()));
         let context_manager = Arc::new(crate::ai::create_context_manager());
 
         Ok(Self {

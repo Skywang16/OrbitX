@@ -5,7 +5,7 @@
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '@/eko-core/types'
 import { FileNotFoundError, ValidationError, ToolError } from '../tool-error'
-import { invoke } from '@tauri-apps/api/core'
+import { filesystemApi } from '@/api'
 
 export interface ReadFileParams {
   path: string
@@ -77,9 +77,7 @@ export class ReadFileTool extends ModifiableTool {
       }
 
       // 使用Tauri API读取文件
-      const rawContent = await invoke<ArrayBuffer>('plugin:fs|read_text_file', {
-        path: path,
-      })
+      const rawContent = await filesystemApi.readTextFile(path)
 
       // 确保内容不为空
       if (rawContent === null || rawContent === undefined) {
@@ -136,7 +134,7 @@ export class ReadFileTool extends ModifiableTool {
 
   private async checkFileExists(path: string): Promise<boolean> {
     try {
-      const exists = await invoke<boolean>('plugin:fs|exists', { path })
+      const exists = await filesystemApi.exists(path)
       return exists
     } catch (error) {
       return false
@@ -145,8 +143,8 @@ export class ReadFileTool extends ModifiableTool {
 
   private async checkIsDirectory(path: string): Promise<boolean> {
     try {
-      const metadata = await invoke<{ isDir: boolean }>('plugin:fs|metadata', { path })
-      return metadata.isDir
+      const metadata = await filesystemApi.getMetadata(path)
+      return metadata.isDir || false
     } catch {
       return false
     }

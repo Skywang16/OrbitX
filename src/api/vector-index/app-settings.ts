@@ -5,7 +5,6 @@
  */
 
 import { invoke } from '@/utils/request'
-import { handleError } from '@/utils/errorHandler'
 
 export interface VectorIndexAppSettings {
   enabled: boolean
@@ -15,48 +14,27 @@ export interface VectorIndexAppSettings {
 export class VectorIndexAppSettingsApi {
   // 获取向量索引应用设置
   async getSettings(): Promise<VectorIndexAppSettings> {
-    try {
-      return await invoke<VectorIndexAppSettings>('get_vector_index_app_settings')
-    } catch (error) {
-      throw new Error(handleError(error, '获取向量索引应用设置失败'))
-    }
+    return await invoke<VectorIndexAppSettings>('get_vector_index_app_settings')
   }
 
   // 保存向量索引应用设置
   async saveSettings(settings: VectorIndexAppSettings): Promise<string> {
-    try {
-      return await invoke<string>('save_vector_index_app_settings', { settings })
-    } catch (error) {
-      throw new Error(handleError(error, '保存向量索引应用设置失败'))
-    }
+    return await invoke<string>('save_vector_index_app_settings', { settings })
   }
 
   // 检查指定目录是否启用了向量索引
   async isDirectoryIndexed(directory: string): Promise<boolean> {
-    try {
-      return await invoke<boolean>('is_directory_vector_indexed', { directory })
-    } catch (error) {
-      console.warn('检查目录索引状态失败:', error)
-      return false
-    }
+    return await invoke<boolean>('is_directory_vector_indexed', { directory })
   }
 
   // 添加工作目录到向量索引配置
   async addWorkspace(workspacePath: string): Promise<string> {
-    try {
-      return await invoke<string>('add_vector_index_workspace', { workspacePath })
-    } catch (error) {
-      throw new Error(handleError(error, '添加向量索引工作目录失败'))
-    }
+    return await invoke<string>('add_vector_index_workspace', { workspacePath })
   }
 
   // 移除工作目录从向量索引配置
   async removeWorkspace(workspacePath: string): Promise<string> {
-    try {
-      return await invoke<string>('remove_vector_index_workspace', { workspacePath })
-    } catch (error) {
-      throw new Error(handleError(error, '移除向量索引工作目录失败'))
-    }
+    return await invoke<string>('remove_vector_index_workspace', { workspacePath })
   }
 }
 

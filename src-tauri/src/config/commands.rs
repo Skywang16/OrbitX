@@ -6,8 +6,9 @@
 
 use crate::config::{defaults::create_default_config, types::AppConfig, TomlConfigManager};
 
-use crate::utils::error::{AppResult, TauriResult, ToTauriResult};
-use anyhow::Context;
+use crate::utils::error::AppResult;
+use crate::utils::{EmptyData, TauriApiResult};
+use crate::{api_error, api_success};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
@@ -36,8 +37,11 @@ impl ConfigManagerState {
 
 /// 获取当前配置
 #[tauri::command]
-pub async fn get_config(state: State<'_, ConfigManagerState>) -> TauriResult<AppConfig> {
-    state.toml_manager.get_config().await.to_tauri()
+pub async fn get_config(state: State<'_, ConfigManagerState>) -> TauriApiResult<AppConfig> {
+    match state.toml_manager.get_config().await {
+        Ok(config) => Ok(api_success!(config)),
+        Err(_) => Ok(api_error!("config.get_failed")),
+    }
 }
 
 /// 更新配置
@@ -45,59 +49,76 @@ pub async fn get_config(state: State<'_, ConfigManagerState>) -> TauriResult<App
 pub async fn update_config(
     new_config: AppConfig,
     state: State<'_, ConfigManagerState>,
-) -> TauriResult<()> {
-    state
+) -> TauriApiResult<EmptyData> {
+    match state
         .toml_manager
         .update_config(|config| {
             *config = new_config.clone();
             Ok(())
         })
         .await
-        .to_tauri()
+    {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("config.update_failed")),
+    }
 }
 
 /// 保存配置（强制保存当前缓存的配置到文件）
 #[tauri::command]
-pub async fn save_config(state: State<'_, ConfigManagerState>) -> TauriResult<()> {
+pub async fn save_config(state: State<'_, ConfigManagerState>) -> TauriApiResult<EmptyData> {
     // 这个命令主要用于强制保存当前缓存的配置到文件
     // 使用 update_config 确保原子性操作
-    state
+    match state
         .toml_manager
         .update_config(|_config| {
             // 不修改配置，只是触发保存操作
             Ok(())
         })
         .await
-        .to_tauri()
+    {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("config.save_failed")),
+    }
 }
 
 /// 验证配置
 #[tauri::command]
-pub async fn validate_config(state: State<'_, ConfigManagerState>) -> TauriResult<()> {
+pub async fn validate_config(state: State<'_, ConfigManagerState>) -> TauriApiResult<EmptyData> {
     debug!("开始验证配置");
-    let config = state.toml_manager.get_config().await.to_tauri()?;
-    state.toml_manager.validate_config(&config).to_tauri()
+    let config = match state.toml_manager.get_config().await {
+        Ok(config) => config,
+        Err(_) => return Ok(api_error!("config.get_failed")),
+    };
+    match state.toml_manager.validate_config(&config) {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("config.validate_failed")),
+    }
 }
 
 /// 重置配置为默认值
 #[tauri::command]
-pub async fn reset_config_to_defaults(state: State<'_, ConfigManagerState>) -> TauriResult<()> {
+pub async fn reset_config_to_defaults(
+    state: State<'_, ConfigManagerState>,
+) -> TauriApiResult<EmptyData> {
     debug!("开始重置配置为默认值");
     let default_config = create_default_config();
-    state
+    match state
         .toml_manager
         .update_config(|config| {
             *config = default_config.clone();
             Ok(())
         })
         .await
-        .to_tauri()
+    {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("config.reset_failed")),
+    }
 }
 
 /// 获取配置文件路径
 #[tauri::command]
-pub async fn get_config_file_path(_state: State<'_, ConfigManagerState>) -> TauriResult<String> {
-    Ok("config/config.toml".to_string())
+pub async fn get_config_file_path(_state: State<'_, ConfigManagerState>) -> TauriApiResult<String> {
+    Ok(api_success!("config/config.toml".to_string()))
 }
 
 /// 配置文件信息
@@ -111,11 +132,11 @@ pub struct ConfigFileInfo {
 #[tauri::command]
 pub async fn get_config_file_info(
     _state: State<'_, ConfigManagerState>,
-) -> TauriResult<ConfigFileInfo> {
-    Ok(ConfigFileInfo {
+) -> TauriApiResult<ConfigFileInfo> {
+    Ok(api_success!(ConfigFileInfo {
         path: "config/config.toml".to_string(),
         exists: true,
-    })
+    }))
 }
 
 /// 打开配置文件
@@ -123,21 +144,25 @@ pub async fn get_config_file_info(
 pub async fn open_config_file<R: tauri::Runtime>(
     _app: tauri::AppHandle<R>,
     _state: State<'_, ConfigManagerState>,
-) -> TauriResult<()> {
+) -> TauriApiResult<EmptyData> {
     debug!("打开配置文件功能需要重新实现");
-    Ok(())
+    Ok(api_success!())
 }
 
 /// 订阅配置事件
 #[tauri::command]
-pub async fn subscribe_config_events(_state: State<'_, ConfigManagerState>) -> TauriResult<()> {
+pub async fn subscribe_config_events(
+    _state: State<'_, ConfigManagerState>,
+) -> TauriApiResult<EmptyData> {
     debug!("订阅配置事件");
-    Ok(())
+    Ok(api_success!())
 }
 
 /// 获取配置文件夹路径
 #[tauri::command]
-pub async fn get_config_folder_path(state: State<'_, ConfigManagerState>) -> TauriResult<String> {
+pub async fn get_config_folder_path(
+    state: State<'_, ConfigManagerState>,
+) -> TauriApiResult<String> {
     debug!("获取配置文件夹路径");
 
     // 通过toml_manager获取配置路径
@@ -145,9 +170,9 @@ pub async fn get_config_folder_path(state: State<'_, ConfigManagerState>) -> Tau
 
     // 获取配置文件的父目录（即配置文件夹）
     if let Some(config_dir) = config_path.parent() {
-        Ok(config_dir.to_string_lossy().to_string())
+        Ok(api_success!(config_dir.to_string_lossy().to_string()))
     } else {
-        Err("无法获取配置文件夹路径".to_string())
+        Ok(api_error!("config.get_folder_path_failed"))
     }
 }
 
@@ -156,7 +181,7 @@ pub async fn get_config_folder_path(state: State<'_, ConfigManagerState>) -> Tau
 pub async fn open_config_folder<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, ConfigManagerState>,
-) -> TauriResult<()> {
+) -> TauriApiResult<EmptyData> {
     debug!("打开配置文件夹");
 
     // 通过toml_manager获取配置路径
@@ -166,21 +191,22 @@ pub async fn open_config_folder<R: tauri::Runtime>(
     let config_dir = if let Some(dir) = config_path.parent() {
         dir
     } else {
-        return Err("无法获取配置文件夹路径".to_string());
+        return Ok(api_error!("config.get_folder_path_failed"));
     };
 
     // 确保配置目录存在
     if !config_dir.exists() {
-        return Err("配置目录不存在".to_string());
+        return Ok(api_error!("config.get_folder_path_failed"));
     }
 
     // 使用 tauri-plugin-opener 打开文件夹
     use tauri_plugin_opener::OpenerExt;
 
-    app.opener()
+    match app
+        .opener()
         .open_path(config_dir.to_string_lossy().to_string(), None::<String>)
-        .context("无法打开配置文件夹")
-        .to_tauri()?;
-
-    Ok(())
+    {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("config.open_folder_failed")),
+    }
 }

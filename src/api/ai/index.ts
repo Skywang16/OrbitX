@@ -1,6 +1,5 @@
 import type { AIHealthStatus, AIModelConfig, AISettings, AIStats, Conversation, Message } from '@/types'
 import { invoke } from '@/utils/request'
-import { handleError } from '@/utils/errorHandler'
 import type {
   RawConversation,
   RawMessage,
@@ -12,57 +11,33 @@ import type {
 
 class ConversationAPI {
   async createConversation(title?: string): Promise<number> {
-    try {
-      return await invoke('create_conversation', { title })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to create conversation'))
-    }
+    return await invoke<number>('create_conversation', { title })
   }
 
   async getConversations(limit?: number, offset?: number): Promise<Conversation[]> {
-    try {
-      const conversations = await invoke<RawConversation[]>('get_conversations', { limit, offset })
-      return conversations.map(this.convertConversation)
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get conversations'))
-    }
+    const conversations = await invoke<RawConversation[]>('get_conversations', { limit, offset })
+    return conversations.map(this.convertConversation)
   }
 
   async getConversation(conversationId: number): Promise<Conversation> {
-    try {
-      const conversation = await invoke<RawConversation>('get_conversation', { conversationId })
-      return this.convertConversation(conversation)
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get conversation'))
-    }
+    const conversation = await invoke<RawConversation>('get_conversation', { conversationId })
+    return this.convertConversation(conversation)
   }
 
   async updateConversationTitle(conversationId: number, title: string): Promise<void> {
-    try {
-      await invoke('update_conversation_title', { conversationId, title })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to update conversation title'))
-    }
+    await invoke<void>('update_conversation_title', { conversationId, title })
   }
 
   async deleteConversation(conversationId: number): Promise<void> {
-    try {
-      await invoke('delete_conversation', { conversationId })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to delete conversation'))
-    }
+    await invoke<void>('delete_conversation', { conversationId })
   }
 
   async getCompressedContext(conversationId: number, upToMessageId?: number): Promise<Message[]> {
-    try {
-      const messages = await invoke<RawMessage[]>('get_compressed_context', {
-        conversationId,
-        upToMessageId,
-      })
-      return messages.map(this.convertMessage)
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get conversation context'))
-    }
+    const messages = await invoke<RawMessage[]>('get_compressed_context', {
+      conversationId,
+      upToMessageId,
+    })
+    return messages.map(this.convertMessage)
   }
 
   async buildPromptWithContext(
@@ -72,48 +47,32 @@ class ConversationAPI {
     paneId?: number,
     tagContext?: any
   ): Promise<string> {
-    try {
-      const prompt = await invoke<string>('build_prompt_with_context', {
-        conversationId,
-        currentMessage,
-        upToMessageId,
-        paneId,
-        tagContext,
-      })
-      return prompt
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to build prompt'))
-    }
+    const prompt = await invoke<string>('build_prompt_with_context', {
+      conversationId,
+      currentMessage,
+      upToMessageId,
+      paneId,
+      tagContext,
+    })
+    return prompt
   }
 
   async saveMessage(conversationId: number, role: string, content: string): Promise<number> {
-    try {
-      return await invoke('save_message', { conversationId, role, content })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to save message'))
-    }
+    return await invoke<number>('save_message', { conversationId, role, content })
   }
 
   async updateMessageContent(messageId: number, content: string): Promise<void> {
-    try {
-      await invoke('update_message_content', { messageId, content })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to update message content'))
-    }
+    await invoke<void>('update_message_content', { messageId, content })
   }
 
   async updateMessageSteps(messageId: number, steps: any[]): Promise<void> {
-    try {
-      const cleanedSteps = this.cleanStepsData(steps)
+    const cleanedSteps = this.cleanStepsData(steps)
 
-      const stepsJson = JSON.stringify(cleanedSteps)
-      await invoke('update_message_steps', {
-        messageId,
-        stepsJson,
-      })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to update message steps'))
-    }
+    const stepsJson = JSON.stringify(cleanedSteps)
+    await invoke<void>('update_message_steps', {
+      messageId,
+      stepsJson,
+    })
   }
 
   async updateMessageStatus(
@@ -121,23 +80,15 @@ class ConversationAPI {
     status?: 'pending' | 'streaming' | 'complete' | 'error',
     duration?: number
   ): Promise<void> {
-    try {
-      await invoke('update_message_status', {
-        messageId,
-        status,
-        durationMs: duration,
-      })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to update message status'))
-    }
+    await invoke<void>('update_message_status', {
+      messageId,
+      status,
+      durationMs: duration,
+    })
   }
 
   async truncateConversation(conversationId: number, truncateAfterMessageId: number): Promise<void> {
-    try {
-      await invoke('truncate_conversation', { conversationId, truncateAfterMessageId })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to truncate conversation'))
-    }
+    await invoke<void>('truncate_conversation', { conversationId, truncateAfterMessageId })
   }
 
   private cleanStepsData(steps: any[]): any[] {
@@ -183,11 +134,7 @@ class ConversationAPI {
   private convertMessage(raw: RawMessage): Message {
     let steps: any[] | undefined = undefined
     if (raw.stepsJson) {
-      try {
-        steps = JSON.parse(raw.stepsJson)
-      } catch (error) {
-        console.error('Failed to parse steps:', error)
-      }
+      steps = JSON.parse(raw.stepsJson)
     }
 
     return {
@@ -204,122 +151,70 @@ class ConversationAPI {
 }
 
 export async function analyzeCode(params: AnalyzeCodeParams): Promise<AnalysisResult> {
-  try {
-    return await invoke<AnalysisResult>('analyze_code', params as unknown as Record<string, unknown>)
-  } catch (error) {
-    throw new Error(handleError(error, 'Code analysis failed'))
-  }
+  return await invoke<AnalysisResult>('analyze_code', params as unknown as Record<string, unknown>)
 }
 
 export async function webFetchHeadless(request: WebFetchRequest): Promise<WebFetchResponse> {
-  try {
-    return await invoke<WebFetchResponse>('web_fetch_headless', { request })
-  } catch (error) {
-    throw new Error(handleError(error, 'Web request failed'))
-  }
+  return await invoke<WebFetchResponse>('web_fetch_headless', { request })
 }
 
 export class AiApi {
   private conversationAPI = new ConversationAPI()
 
   async getModels(): Promise<AIModelConfig[]> {
-    try {
-      return await invoke<AIModelConfig[]>('get_ai_models')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get AI models'))
-    }
+    return await invoke<AIModelConfig[]>('get_ai_models')
   }
 
   async addModel(model: Omit<AIModelConfig, 'id'>): Promise<AIModelConfig> {
-    try {
-      // 创建完整的模型配置，包含ID和时间戳
-      const fullModel: AIModelConfig = {
-        id: crypto.randomUUID(),
-        ...model,
-        enabled: model.enabled ?? true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }
-      const result = await invoke<AIModelConfig>('add_ai_model', { config: fullModel })
-      return result
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to add AI model'))
+    // 创建完整的模型配置，包含ID和时间戳
+    const fullModel: AIModelConfig = {
+      id: crypto.randomUUID(),
+      ...model,
+      enabled: model.enabled ?? true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     }
+    const result = await invoke<AIModelConfig>('add_ai_model', { config: fullModel })
+    return result
   }
 
   async updateModel(model: AIModelConfig): Promise<void> {
-    try {
-      const { id: modelId, ...updates } = model
-      await invoke('update_ai_model', { modelId, updates })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to update AI model'))
-    }
+    const { id: modelId, ...updates } = model
+    await invoke<void>('update_ai_model', { modelId, updates })
   }
 
   async deleteModel(id: string): Promise<void> {
-    try {
-      await invoke('remove_ai_model', { modelId: id })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to delete AI model'))
-    }
+    await invoke<void>('remove_ai_model', { modelId: id })
   }
 
   async testConnectionWithConfig(config: AIModelConfig): Promise<boolean> {
-    try {
-      return await invoke<boolean>('test_ai_connection_with_config', { config })
-    } catch (error) {
-      throw new Error(handleError(error, 'AI model connection test failed'))
-    }
+    return await invoke<boolean>('test_ai_connection_with_config', { config })
   }
 
   async getUserPrefixPrompt(): Promise<string | null> {
-    try {
-      return await invoke<string | null>('get_user_prefix_prompt')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get user prefix prompt'))
-    }
+    return await invoke<string | null>('get_user_prefix_prompt')
   }
 
   async setUserPrefixPrompt(prompt: string | null): Promise<void> {
-    try {
-      await invoke('set_user_prefix_prompt', { prompt })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to set user prefix prompt'))
-    }
+    await invoke<void>('set_user_prefix_prompt', { prompt })
   }
 
   // embedding模型相关方法已移除，统一使用AI模型接口通过modelType区分
 
   async getSettings(): Promise<AISettings> {
-    try {
-      return await invoke<AISettings>('get_ai_settings')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get AI settings'))
-    }
+    return await invoke<AISettings>('get_ai_settings')
   }
 
   async updateSettings(settings: Partial<AISettings>): Promise<void> {
-    try {
-      await invoke('update_ai_settings', { settings })
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to update AI settings'))
-    }
+    await invoke<void>('update_ai_settings', { settings })
   }
 
   async getStats(): Promise<AIStats> {
-    try {
-      return await invoke<AIStats>('get_ai_stats')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get AI stats'))
-    }
+    return await invoke<AIStats>('get_ai_stats')
   }
 
   async getHealthStatus(): Promise<AIHealthStatus> {
-    try {
-      return await invoke<AIHealthStatus>('get_ai_health_status')
-    } catch (error) {
-      throw new Error(handleError(error, 'Failed to get AI health status'))
-    }
+    return await invoke<AIHealthStatus>('get_ai_health_status')
   }
 
   async createConversation(title?: string) {

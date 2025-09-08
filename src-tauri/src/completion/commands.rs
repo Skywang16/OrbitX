@@ -4,10 +4,10 @@
 
 use crate::ai::tool::storage::StorageCoordinatorState;
 use crate::completion::engine::{CompletionEngine, CompletionEngineConfig};
-use crate::completion::types::{
-    CompletionContext, CompletionResponse, EnhancedCompletionItem, EnhancedCompletionResponse,
-};
+use crate::completion::types::{CompletionContext, CompletionResponse};
 use crate::utils::error::{TauriResult, ToTauriResult};
+use crate::utils::{EmptyData, TauriApiResult};
+use crate::{api_error, api_success};
 use anyhow::anyhow;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -79,8 +79,11 @@ pub async fn get_completions(
     working_directory: String,
     max_results: Option<usize>,
     state: State<'_, CompletionState>,
-) -> TauriResult<CompletionResponse> {
-    let engine = state.get_engine().await?;
+) -> TauriApiResult<CompletionResponse> {
+    let engine = match state.get_engine().await {
+        Ok(engine) => engine,
+        Err(_) => return Ok(api_error!("completion.engine_not_initialized")),
+    };
 
     // 创建补全上下文
     let working_directory = PathBuf::from(&working_directory);
@@ -97,9 +100,9 @@ pub async fn get_completions(
                 }
             }
 
-            Ok(response)
+            Ok(api_success!(response))
         }
-        Err(e) => Err(format!("提供者错误: 获取补全失败: {e}")),
+        Err(_) => Ok(api_error!("completion.get_failed")),
     }
 }
 
@@ -108,29 +111,34 @@ pub async fn get_completions(
 pub async fn init_completion_engine(
     state: State<'_, CompletionState>,
     storage_state: State<'_, StorageCoordinatorState>,
-) -> TauriResult<()> {
+) -> TauriApiResult<EmptyData> {
     let config = CompletionEngineConfig::default();
     let cache = storage_state.coordinator.cache();
 
     match CompletionEngine::with_default_providers(config, cache).await {
-        Ok(engine) => {
-            state.set_engine(Arc::new(engine)).await?;
-            Ok(())
-        }
-        Err(e) => Err(format!("配置错误: 初始化失败: {e}")),
+        Ok(engine) => match state.set_engine(Arc::new(engine)).await {
+            Ok(_) => Ok(api_success!()),
+            Err(_) => Ok(api_error!("completion.init_failed")),
+        },
+        Err(_) => Ok(api_error!("completion.init_failed")),
     }
 }
 
 /// 清理缓存命令
 #[tauri::command]
-pub async fn clear_completion_cache(_state: State<'_, CompletionState>) -> TauriResult<()> {
-    Ok(())
+pub async fn clear_completion_cache(
+    _state: State<'_, CompletionState>,
+) -> TauriApiResult<EmptyData> {
+    Ok(api_success!())
 }
 
 /// 获取统计信息命令
 #[tauri::command]
-pub async fn get_completion_stats(state: State<'_, CompletionState>) -> TauriResult<String> {
-    let engine = state.get_engine().await?;
+pub async fn get_completion_stats(state: State<'_, CompletionState>) -> TauriApiResult<String> {
+    let engine = match state.get_engine().await {
+        Ok(engine) => engine,
+        Err(_) => return Ok(api_error!("completion.engine_not_initialized")),
+    };
 
     match engine.get_stats() {
         Ok(stats) => {
@@ -138,77 +146,8 @@ pub async fn get_completion_stats(state: State<'_, CompletionState>) -> TauriRes
                 "provider_count": stats.provider_count
             });
 
-            Ok(stats_json.to_string())
+            Ok(api_success!(stats_json.to_string()))
         }
-        Err(e) => Err(format!("[提供者错误] 获取统计信息失败: {e}")),
+        Err(_) => Ok(api_error!("completion.stats_failed")),
     }
-}
-
-/// 获取增强补全建议命令
-#[tauri::command]
-pub async fn get_enhanced_completions(
-    current_line: String,
-    cursor_position: usize,
-    working_directory: String,
-    state: State<'_, CompletionState>,
-) -> TauriResult<EnhancedCompletionResponse> {
-    let engine = state.get_engine().await?;
-
-    // 创建补全上下文
-    let working_directory = PathBuf::from(&working_directory);
-    let context = CompletionContext::new(current_line, cursor_position, working_directory);
-
-    // 获取标准补全建议
-    let response = engine.get_completions(&context).await.to_tauri()?;
-
-    // 转换为增强补全格式
-    let enhanced_items: Vec<EnhancedCompletionItem> = response
-        .items
-        .into_iter()
-        .map(|item| {
-            let icon = match item.completion_type.as_str() {
-                "file" => "📄",
-                "directory" => "📁",
-                "command" => "⚡",
-                "history" => "🕒",
-                "environment" => "🌍",
-                "alias" => "🔗",
-                "function" => "⚙️",
-                "option" => "🔧",
-                "subcommand" => "📋",
-                "value" => "💎",
-                _ => "📝",
-            };
-
-            let category = match item.completion_type.as_str() {
-                "file" | "directory" => "filesystem",
-                "command" | "subcommand" => "command",
-                "history" => "history",
-                "environment" => "environment",
-                _ => "general",
-            };
-
-            EnhancedCompletionItem {
-                text: item.text,
-                display_text: item.display_text,
-                description: item.description.unwrap_or_default(),
-                icon: icon.to_string(),
-                category: category.to_string(),
-                priority: item.score as i32,
-                metadata: item.metadata,
-            }
-        })
-        .collect();
-
-    // 计算补全位置
-    let position = crate::completion::types::EnhancedCompletionPosition {
-        x: (cursor_position as i32) * 8, // 假设每个字符8像素宽
-        y: 20,                           // 固定高度
-    };
-
-    Ok(EnhancedCompletionResponse {
-        completions: enhanced_items,
-        position,
-        has_shell_completions: true,
-    })
 }
