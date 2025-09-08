@@ -68,7 +68,7 @@ pub fn generate_test_code_vectors(count: usize) -> Vec<TestCodeVector> {
 /// 创建测试用的Qdrant配置
 pub fn create_test_qdrant_config() -> VectorIndexConfig {
     VectorIndexConfig {
-        qdrant_url: "http://localhost:6333".to_string(),
+        qdrant_url: "http://localhost:6334".to_string(),
         qdrant_api_key: None,
         collection_name: format!("test_collection_{}", Uuid::new_v4().to_string()[..8].to_string()),
         vector_size: 1536,

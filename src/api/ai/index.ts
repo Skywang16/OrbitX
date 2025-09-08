@@ -375,7 +375,7 @@ export class AiApi {
   }
 
   async updateMessageStatus(messageId: number, status?: string, duration?: number) {
-    return this.conversationAPI.updateMessageStatus(messageId, status as unknown, duration)
+    return this.conversationAPI.updateMessageStatus(messageId, status as any, duration)
   }
 
   async truncateConversation(conversationId: number, truncateAfterMessageId: number) {

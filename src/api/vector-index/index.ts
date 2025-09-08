@@ -64,7 +64,7 @@ export class VectorIndexApi {
   async build(workspacePath?: string): Promise<IndexStats> {
     try {
       const path = workspacePath ?? (await this.getWorkspacePath())
-      return await invoke<IndexStats>('build_code_index', { workspace_path: path })
+      return await invoke<IndexStats>('build_code_index', { workspacePath: path })
     } catch (error) {
       throw new Error(handleError(error, '构建代码索引失败'))
     }
@@ -98,7 +98,7 @@ export class VectorIndexApi {
   // 文件监控
   async startFileMonitoring(workspacePath: string, config: VectorIndexConfig): Promise<string> {
     try {
-      return await invoke<string>('start_file_monitoring', { workspace_path: workspacePath, config })
+      return await invoke<string>('start_file_monitoring', { workspacePath, config })
     } catch (error) {
       throw new Error(handleError(error, '启动文件监控失败'))
     }
@@ -125,3 +125,4 @@ export const vectorIndexApi = new VectorIndexApi()
 export type VectorIndexApiType = typeof vectorIndexApi
 export default vectorIndexApi
 export type * from './types'
+export * from './app-settings'

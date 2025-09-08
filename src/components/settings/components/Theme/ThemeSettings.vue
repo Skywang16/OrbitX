@@ -4,7 +4,7 @@
   import { useThemeStore } from '@/stores/theme'
   import { windowApi } from '@/api/window'
   import { configApi } from '@/api/config'
-  import { createMessage } from '@/ui'
+  import { handleErrorWithMessage } from '@/utils/errorHandler'
   import { XSelect } from '@/ui'
   import type { SelectOption } from '@/ui'
   import { useSessionStore } from '@/stores/session'
@@ -116,7 +116,7 @@
       }
     } catch (error) {
       console.error('Failed to switch theme mode:', error)
-      createMessage.error(t('theme_settings.mode_change_failed'))
+      handleErrorWithMessage(error, t('theme_settings.mode_change_failed'))
     }
   }
 
@@ -125,7 +125,7 @@
       await themeStore.switchToTheme(themeName)
     } catch (error) {
       console.error('Failed to switch theme:', error)
-      createMessage.error(t('theme_settings.theme_change_failed'))
+      handleErrorWithMessage(error, t('theme_settings.theme_change_failed'))
     }
   }
 
@@ -151,7 +151,7 @@
         await windowApi.setWindowOpacity(opacity.value)
         await saveOpacityToConfig()
       } catch (error) {
-        createMessage.error(t('theme_settings.opacity_error', { error }))
+        handleErrorWithMessage(error, t('theme_settings.opacity_error', { error }))
       }
     }, 100)
   }

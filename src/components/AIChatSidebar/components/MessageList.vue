@@ -5,9 +5,13 @@
   import UserMessage from './UserMessage.vue'
   import AIMessage from './AIMessage.vue'
   import { useAISettingsStore } from '@/components/settings/components/AI/store'
+  import { vectorIndexAppSettingsApi } from '@/api/vector-index/app-settings'
+  import { useVectorIndexBuild } from '@/composables/useVectorIndexBuild'
 
   const { t } = useI18n()
   const aiSettingsStore = useAISettingsStore()
+  const vectorIndexEnabled = ref(false)
+  const { isBuilding, startBuild, cancelBuild } = useVectorIndexBuild()
 
   interface Props {
     messages: Message[]
@@ -49,7 +53,24 @@
     if (!aiSettingsStore.isInitialized) {
       await aiSettingsStore.loadSettings()
     }
+
+    // 加载向量索引功能开关
+    try {
+      const appSettings = await vectorIndexAppSettingsApi.getSettings()
+      vectorIndexEnabled.value = appSettings.enabled
+    } catch {
+      vectorIndexEnabled.value = false
+    }
   })
+
+  const handleStartBuildIndex = async () => {
+    if (!vectorIndexEnabled.value) return
+    if (isBuilding.value) {
+      await cancelBuild()
+      return
+    }
+    await startBuild()
+  }
 </script>
 
 <template>
@@ -66,12 +87,23 @@
         <div class="empty-icon">
           <svg class="empty-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path
-              d="M21 15a2 2 0 0 1-2 2H10l-3 5c-.3.4-.8.1-.8-.4v-4.6H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z"
+              d="M21 15a2 2 0 0 1-2 2H10l-3 5c-.3 .4-.8 .1-.8-.4v-4.6H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z"
             />
           </svg>
         </div>
         <div class="empty-text">{{ t('message_list.start_conversation') }}</div>
         <div class="empty-hint">{{ t('message_list.send_message_hint') }}</div>
+        <div class="actions">
+          <x-button
+            :variant="isBuilding ? 'secondary' : 'primary'"
+            size="small"
+            :disabled="!vectorIndexEnabled"
+            :loading="false"
+            @click="handleStartBuildIndex"
+          >
+            {{ isBuilding ? t('settings.vectorIndex.cancel_build') : t('settings.vectorIndex.start_build') }}
+          </x-button>
+        </div>
       </div>
     </div>
 

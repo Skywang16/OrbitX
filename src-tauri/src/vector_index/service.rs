@@ -87,6 +87,7 @@ impl VectorIndexService {
         &self,
         workspace_path: &str,
         progress_sender: Option<mpsc::Sender<TaskProgress>>,
+        cancel_flag: Option<Arc<std::sync::atomic::AtomicBool>>,
     ) -> Result<IndexStats> {
         let start_time = Instant::now();
         let task_id = Uuid::new_v4().to_string();
@@ -117,9 +118,19 @@ impl VectorIndexService {
 
         // 3. 并发处理文件（管线式：每批处理完成即上传，避免累计内存）
         let mut processed_files = 0;
+        let mut error_files = 0usize;
+        let mut last_error_detail: Option<String> = None;
         let batch_size = self.config.user_config.max_concurrent_files;
 
         for file_batch in files.chunks(batch_size) {
+            // 检查是否需要取消
+            if let Some(ref flag) = cancel_flag {
+                if flag.load(std::sync::atomic::Ordering::Relaxed) {
+                    tracing::info!("索引构建被用户取消");
+                    return Err(anyhow::anyhow!("索引构建被用户取消"));
+                }
+            }
+
             let mut batch_tasks = Vec::new();
 
             // 并发处理一批文件
@@ -212,8 +223,28 @@ impl VectorIndexService {
                         stats.failed_files.push(file_path.clone());
                         tracing::error!("{} (file: {})", error_msg, file_path);
                         processed_files += 1; // 失败也计入已处理
+                        error_files += 1;
+                        last_error_detail = Some(e.to_string());
                     }
                 }
+            }
+
+            // 失败过多时提前终止，避免长时间无效重试
+            let too_many_errors = error_files >= 20;
+            let error_ratio_high =
+                processed_files > 0 && (error_files as f32 / processed_files as f32) > 0.3;
+            if too_many_errors || error_ratio_high {
+                let base = format!(
+                    "构建中止：文件处理错误过多（{}/{}，错误率 {:.0}%）",
+                    error_files,
+                    processed_files,
+                    (error_files as f32 / processed_files as f32) * 100.0
+                );
+                let detail = last_error_detail
+                    .as_ref()
+                    .map(|d| format!("；根因示例：{}", d))
+                    .unwrap_or_default();
+                return Err(anyhow::anyhow!(format!("{}{}", base, detail)));
             }
 
             // 本批上传，避免全量累加
@@ -262,6 +293,36 @@ impl VectorIndexService {
 
         // 5. 完成统计
         stats.processing_time = start_time.elapsed().as_millis() as u64;
+
+        // 5.1 致命错误判定：如果所有文件都失败，或未生成任何向量，或错误列表包含关键致命错误关键词，则视为失败
+        let all_failed = total_files > 0 && stats.failed_files.len() == total_files;
+        let no_vectors = stats.vectorized_chunks == 0 || stats.uploaded_vectors == 0;
+        let fatal_keywords = [
+            "模型未找到",            // zh
+            "model not found",       // en
+            "解密",                  // zh for decryption
+            "aead::Error",           // specific decrypt error from logs
+            "Embedding API调用失败", // zh
+            "embedding api",         // en
+        ];
+        let has_fatal_error = stats.errors.iter().any(|e| {
+            fatal_keywords
+                .iter()
+                .any(|kw| e.to_lowercase().contains(&kw.to_lowercase()))
+        });
+
+        if all_failed || no_vectors || has_fatal_error {
+            let reason = if all_failed {
+                format!("所有文件处理失败（总计 {} 个）", total_files)
+            } else if no_vectors {
+                "未生成任何有效向量，可能是 Embedding 模型不可用或 API 密钥配置错误".to_string()
+            } else {
+                // 汇总致命错误信息（截断避免过长）
+                let joined = stats.errors.join("; ");
+                format!("检测到致命错误: {}", joined)
+            };
+            return Err(anyhow::anyhow!("构建代码索引失败：{}", reason));
+        }
 
         tracing::info!(
             "索引构建完成: {}/{} 文件，{} 个向量，耗时 {:?}",

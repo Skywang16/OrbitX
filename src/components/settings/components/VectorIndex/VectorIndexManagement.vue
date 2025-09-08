@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n'
   import { useVectorIndexSettingsStore } from './store'
   import { createMessage } from '@/ui'
-  import { handleError } from '@/utils/errorHandler'
+  import { handleErrorWithMessage } from '@/utils/errorHandler'
   import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
   const { t } = useI18n()
@@ -80,7 +80,10 @@
 
           case 'error':
             isBuildingIndex.value = false
-            handleError(new Error((data as { message: string }).message), t('settings.vectorIndex.build_failed'))
+            handleErrorWithMessage(
+              new Error((data as { message: string }).message),
+              t('settings.vectorIndex.build_failed')
+            )
             break
         }
       })
@@ -88,7 +91,7 @@
       await settingsStore.buildCodeIndex()
     } catch (error) {
       isBuildingIndex.value = false
-      handleError(error, t('settings.vectorIndex.build_start_failed'))
+      handleErrorWithMessage(error, t('settings.vectorIndex.build_start_failed'))
     }
   }
 
@@ -100,7 +103,7 @@
       buildProgress.value = 0
       createMessage.info(t('settings.vectorIndex.build_cancelled'))
     } catch (error) {
-      handleError(error, t('settings.vectorIndex.cancel_failed'))
+      handleErrorWithMessage(error, t('settings.vectorIndex.cancel_failed'))
     }
   }
 
@@ -109,7 +112,7 @@
     try {
       await settingsStore.refreshIndexStatus()
     } catch (error) {
-      handleError(error, t('settings.vectorIndex.status_refresh_failed'))
+      handleErrorWithMessage(error, t('settings.vectorIndex.status_refresh_failed'))
     }
   }
 
@@ -119,7 +122,7 @@
       await settingsStore.clearIndex()
       createMessage.success(t('settings.vectorIndex.index_cleared'))
     } catch (error) {
-      handleError(error, t('settings.vectorIndex.clear_failed'))
+      handleErrorWithMessage(error, t('settings.vectorIndex.clear_failed'))
     }
   }
 

@@ -218,6 +218,12 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         // 文件监控相关命令
         crate::vector_index::commands::start_file_monitoring,
         crate::vector_index::commands::stop_file_monitoring,
-        crate::vector_index::commands::get_file_monitoring_status
+        crate::vector_index::commands::get_file_monitoring_status,
+        // 向量索引应用级设置命令
+        crate::vector_index::commands::get_vector_index_app_settings,
+        crate::vector_index::commands::save_vector_index_app_settings,
+        crate::vector_index::commands::is_directory_vector_indexed,
+        crate::vector_index::commands::add_vector_index_workspace,
+        crate::vector_index::commands::remove_vector_index_workspace,
     ])
 }

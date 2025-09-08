@@ -189,6 +189,16 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
     let vector_index_state = crate::vector_index::commands::VectorIndexState::new();
     app.manage(vector_index_state);
 
+    // 异步初始化向量索引（如果启用）
+    let app_handle = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) =
+            crate::vector_index::startup::initialize_vector_index_on_startup(&app_handle).await
+        {
+            tracing::warn!("向量索引启动初始化失败: {}", e);
+        }
+    });
+
     Ok(())
 }
 

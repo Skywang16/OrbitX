@@ -9,6 +9,7 @@
   import SettingsNav from '@/components/settings/SettingsNav.vue'
   import { useSettingsStore } from '@/components/settings/store'
   import { createMessage, XButton } from '@/ui'
+  import { handleErrorWithMessage } from '@/utils/errorHandler'
   import { configApi } from '@/api/config'
   import { onMounted } from 'vue'
   import { debounce } from 'lodash-es'
@@ -31,7 +32,7 @@
       createMessage.success(t('settings.general.config_folder_opened'))
     } catch (error) {
       console.error('Failed to open config folder:', error)
-      createMessage.error(t('settings.general.config_folder_error'))
+      handleErrorWithMessage(error, t('settings.general.config_folder_error'))
     }
   }
 

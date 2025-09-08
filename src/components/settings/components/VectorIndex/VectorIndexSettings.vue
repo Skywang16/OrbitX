@@ -1,11 +1,10 @@
 <script setup lang="ts">
   import { onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { createMessage } from '@/ui'
+  import { handleErrorWithMessage } from '@/utils/errorHandler'
   import { useVectorIndexSettingsStore } from './store'
+  import VectorIndexGlobalSettings from './VectorIndexGlobalSettings.vue'
   import VectorIndexConnectionConfig from './VectorIndexConnectionConfig.vue'
-  import VectorIndexManagement from './VectorIndexManagement.vue'
-
   const vectorIndexSettingsStore = useVectorIndexSettingsStore()
   const { t } = useI18n()
 
@@ -14,7 +13,8 @@
       try {
         await vectorIndexSettingsStore.loadSettings()
       } catch (error) {
-        createMessage.error(
+        handleErrorWithMessage(
+          error,
           t('settings.vectorIndex.load_error', { error: error instanceof Error ? error.message : String(error) })
         )
       }
@@ -25,12 +25,11 @@
 <template>
   <div class="settings-group">
     <h2 class="settings-section-title">{{ t('settings.vectorIndex.title') }}</h2>
-
     <div class="settings-group">
-      <VectorIndexConnectionConfig />
+      <VectorIndexGlobalSettings />
     </div>
     <div class="settings-group">
-      <VectorIndexManagement />
+      <VectorIndexConnectionConfig />
     </div>
   </div>
 </template>

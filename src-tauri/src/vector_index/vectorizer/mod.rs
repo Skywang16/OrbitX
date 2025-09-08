@@ -65,6 +65,19 @@ impl LLMVectorizationService {
         self
     }
 
+    /// 检测是否为不可恢复的致命错误（不应重试）
+    fn is_fatal_error(&self, err: &anyhow::Error) -> bool {
+        let msg = err.to_string().to_lowercase();
+        let keywords = [
+            "model is not embedding",
+            "model not found",
+            "模型未找到",
+            "解密",
+            "aead::error",
+        ];
+        keywords.iter().any(|k| msg.contains(k))
+    }
+
     /// 为单个文本生成embedding（带重试机制）
     async fn create_embedding_with_retry(&self, text: &str) -> Result<Vec<f32>> {
         let mut last_error = None;
@@ -91,6 +104,14 @@ impl LLMVectorizationService {
                     }
                 }
                 Err(e) => {
+                    // 对不可恢复错误直接返回，避免无意义重试
+                    if self.is_fatal_error(&e) {
+                        tracing::error!(
+                            "Embedding API不可恢复错误（不重试）：{}",
+                            e
+                        );
+                        return Err(e);
+                    }
                     tracing::warn!("Embedding API调用失败 (尝试{}): {}", attempt + 1, e);
                     last_error = Some(e);
                 }
@@ -123,6 +144,19 @@ impl VectorizationService for LLMVectorizationService {
                 Ok(results)
             }
             Err(e) => {
+                // 若为不可恢复错误，直接返回错误，避免无意义回退
+                let fatal = {
+                    let msg = e.to_string().to_lowercase();
+                    msg.contains("model is not embedding")
+                        || msg.contains("model not found")
+                        || msg.contains("模型未找到")
+                        || msg.contains("解密")
+                        || msg.contains("aead::error")
+                };
+                if fatal {
+                    tracing::error!("批量embedding发生不可恢复错误：{}", e);
+                    return Err(e);
+                }
                 tracing::warn!("批量embedding失败，回退到单个处理: {}", e);
                 // 回退到单个处理
                 let mut results = Vec::new();

@@ -102,7 +102,7 @@
   import { ref, reactive, computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { createMessage, XSelect } from '@/ui'
-  import { handleError } from '@/utils/errorHandler'
+  import { handleError, handleErrorWithMessage } from '@/utils/errorHandler'
 
   import type { AIModelConfig } from '@/types'
   import { useAISettingsStore } from '@/components/settings/components/AI/store'
@@ -281,7 +281,7 @@
       errors.value = {}
       return true
     } catch (error) {
-      createMessage.error(handleError(error, t('onboarding.ai.save_config_failed')))
+      handleErrorWithMessage(error, t('onboarding.ai.save_config_failed'))
       return false
     } finally {
       isSubmitting.value = false

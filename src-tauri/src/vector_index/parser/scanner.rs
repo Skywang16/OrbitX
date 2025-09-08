@@ -337,7 +337,7 @@ mod tests {
     #[tokio::test]
     async fn test_basic_file_scanning() -> Result<()> {
         let temp_dir = create_test_structure().await?;
-        let config = VectorIndexConfig::default();
+        let config = VectorIndexFullConfig::default();
         let scanner = CodeFileScanner::new(config)?;
 
         let (files, stats) = scanner
@@ -355,7 +355,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_language_detection() -> Result<()> {
-        let config = VectorIndexConfig::default();
+        let config = VectorIndexFullConfig::default();
         let scanner = CodeFileScanner::new(config)?;
 
         assert_eq!(
@@ -385,7 +385,7 @@ mod tests {
         fs::write(root.join("large.rs"), large_content).await?;
         fs::write(root.join("small.rs"), "fn test() {}").await?;
 
-        let config = VectorIndexConfig::default();
+        let config = VectorIndexFullConfig::default();
         let scanner = CodeFileScanner::new(config)?.with_max_file_size(500 * 1024); // 500KB限制
 
         let (files, _) = scanner.scan_directory(root.to_str().unwrap()).await?;

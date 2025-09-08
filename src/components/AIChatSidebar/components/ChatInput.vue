@@ -1,7 +1,9 @@
 <script setup lang="ts">
-  import { computed, ref, nextTick } from 'vue'
+  import { computed, ref, nextTick, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
+  import { useVectorIndexStatus } from '@/composables/useVectorIndexStatus'
+  import { useVectorIndexBuild } from '@/composables/useVectorIndexBuild'
   import TerminalSelectionTag from './TerminalSelectionTag.vue'
   import TerminalTabTag from './TerminalTabTag.vue'
 
@@ -45,6 +47,12 @@
 
   // 终端选择管理
   const terminalSelection = useTerminalSelection()
+
+  // 向量索引状态管理
+  const vectorIndexStatus = useVectorIndexStatus()
+
+  // 构建索引状态（集中管理）
+  const { isBuilding, progress, errorMessage } = useVectorIndexBuild()
 
   // 计算属性
   const inputValue = computed({
@@ -150,16 +158,34 @@
     return terminalSelection.getTagContextInfo()
   }
 
+  // 当终端标签改变时检查向量索引状态
+  watch(
+    () => vectorIndexStatus.currentDirectory.value,
+    () => {
+      vectorIndexStatus.checkCurrentDirectoryIndex()
+    },
+    { immediate: true }
+  )
+
   // 暴露方法给父组件
   defineExpose({
     adjustTextareaHeight,
     focus: () => inputTextarea.value?.focus(),
     getTagContextInfo,
   })
+
+  // 去除本组件的事件监听，统一在可复用的 composable 内管理
 </script>
 
 <template>
   <div class="chat-input">
+    <!-- 索引构建进度条，显示在输入框上方 -->
+    <div v-if="isBuilding" class="progress-container">
+      <div class="progress-bar">
+        <div class="progress-fill" :style="{ width: progress + '%' }"></div>
+      </div>
+      <div class="progress-text">{{ progress }}%</div>
+    </div>
     <!-- 终端标签页标签 -->
     <TerminalTabTag
       :visible="terminalSelection.hasTerminalTab.value"
@@ -177,6 +203,7 @@
       @clear="terminalSelection.clearSelection"
       @insert="handleInsertSelectedText"
     />
+    <!-- 移除错误的自定义向量索引标签，统一由进度与功能开关控制显示 -->
 
     <!-- 主输入区域 -->
     <div class="input-main">
@@ -250,6 +277,30 @@
     border-radius: 8px;
     background-color: var(--bg-400);
     transition: border-color 0.1s ease;
+  }
+
+  .progress-container {
+    margin-bottom: 8px;
+  }
+  .progress-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--bg-500);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--color-primary);
+    transition: width 0.2s ease;
+  }
+
+  .progress-text {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-400);
+    text-align: right;
   }
 
   .chat-input:hover {

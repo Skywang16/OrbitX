@@ -9,7 +9,9 @@
  */
 
 use std::collections::HashMap;
-use terminal_lib::vector_index::types::{SearchOptions, SearchResult, VectorIndexConfig, CodeVector};
+use terminal_lib::vector_index::types::{
+    CodeVector, SearchOptions, SearchResult, VectorIndexConfig,
+};
 use uuid::Uuid;
 
 /// 测试用代码向量
@@ -107,7 +109,7 @@ pub fn generate_scenario_test_vectors() -> HashMap<String, Vec<TestCodeVector>> 
 /// 创建测试用的Qdrant配置
 pub fn create_test_qdrant_config() -> VectorIndexConfig {
     VectorIndexConfig {
-        qdrant_url: "http://localhost:6333".to_string(),
+        qdrant_url: "http://localhost:6334".to_string(),
         qdrant_api_key: None,
         collection_name: format!(
             "test_collection_{}",

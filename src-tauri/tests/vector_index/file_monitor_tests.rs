@@ -26,14 +26,14 @@ mod basic_config_tests {
     async fn test_vector_index_config_creation() -> TestResult {
         // 创建测试配置，验证基本功能
         let mut config = VectorIndexConfig::default();
-        config.qdrant_url = "http://localhost:6333".to_string();
+        config.qdrant_url = "http://localhost:6334".to_string();
         config.collection_name = "test_collection".to_string();
         config.vector_size = 384;
         config.batch_size = 10;
         config.max_concurrent_files = 2;
 
         // 验证配置设置
-        assert_eq!(config.qdrant_url, "http://localhost:6333");
+        assert_eq!(config.qdrant_url, "http://localhost:6334");
         assert_eq!(config.collection_name, "test_collection");
         assert_eq!(config.vector_size, 384);
         assert_eq!(config.batch_size, 10);
@@ -161,7 +161,7 @@ mod functional_tests {
 /// 创建测试配置的辅助函数
 fn _create_test_config() -> VectorIndexConfig {
     let mut config = VectorIndexConfig::default();
-    config.qdrant_url = "http://localhost:6333".to_string();
+    config.qdrant_url = "http://localhost:6334".to_string();
     config.collection_name = "test_monitor_collection".to_string();
     config.vector_size = 384;
     config.batch_size = 10;

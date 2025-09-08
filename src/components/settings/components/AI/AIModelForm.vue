@@ -1,9 +1,9 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
   import { createMessage } from '@/ui'
-  import { handleError } from '@/utils/errorHandler'
+  import { handleError, handleErrorWithMessage } from '@/utils/errorHandler'
   import { aiApi } from '@/api'
-  import { reactive, ref, computed, onMounted, watch } from 'vue'
+  import { reactive, ref, computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useLLMRegistry } from '@/composables/useLLMRegistry'
 
@@ -224,10 +224,10 @@
       if (isConnected) {
         createMessage.success(t('ai_model.test.success'))
       } else {
-        createMessage.error(t('ai_model.test.failed'))
+        handleErrorWithMessage('Test connection failed', t('ai_model.test.failed'))
       }
     } catch (error) {
-      createMessage.error(handleError(error, t('ai_model.test.error')))
+      handleErrorWithMessage(error, t('ai_model.test.error'))
     } finally {
       isTesting.value = false
     }

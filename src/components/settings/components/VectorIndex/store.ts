@@ -29,6 +29,15 @@ export const useVectorIndexSettingsStore = defineStore('vectorIndexSettings', ()
       const vectorConfig = await vectorIndexApi.getConfig()
       config.value = vectorConfig
 
+      // 如果有有效配置，自动初始化服务
+      if (vectorConfig.qdrantUrl && vectorConfig.qdrantUrl.trim() !== '') {
+        try {
+          await vectorIndexApi.init(vectorConfig)
+        } catch (initError) {
+          console.warn('向量索引服务初始化失败:', initError)
+        }
+      }
+
       // 获取索引状态
       await refreshIndexStatus()
 
@@ -48,7 +57,7 @@ export const useVectorIndexSettingsStore = defineStore('vectorIndexSettings', ()
 
     try {
       const configToSave: VectorIndexConfig = {
-        qdrantUrl: newConfig.qdrantUrl || 'http://localhost:6333',
+        qdrantUrl: newConfig.qdrantUrl || 'http://localhost:6334',
         qdrantApiKey: newConfig.qdrantApiKey || null,
         collectionName: newConfig.collectionName || 'orbitx-code-vectors',
         embeddingModelId: newConfig.embeddingModelId || 'text-embedding-3-small',
@@ -59,6 +68,9 @@ export const useVectorIndexSettingsStore = defineStore('vectorIndexSettings', ()
 
       // 重新初始化向量索引服务
       await vectorIndexApi.init(configToSave)
+
+      // 自动刷新索引状态
+      await refreshIndexStatus()
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)
       throw err
@@ -141,16 +153,11 @@ export const useVectorIndexSettingsStore = defineStore('vectorIndexSettings', ()
   // 重置到默认值
   const resetToDefaults = async () => {
     const defaultConfig: VectorIndexConfig = {
-      qdrantUrl: 'http://localhost:6333',
+      qdrantUrl: 'http://localhost:6334',
       qdrantApiKey: null,
       collectionName: 'orbitx-code-vectors',
-      vectorSize: 1536,
-      batchSize: 50,
+      embeddingModelId: 'text-embedding-3-small',
       maxConcurrentFiles: 4,
-      chunkSizeRange: [10, 2000],
-      supportedExtensions: ['.ts', '.tsx', '.js', '.jsx', '.rs', '.py', '.go', '.java', '.c', '.cpp', '.h', '.hpp'],
-      ignorePatterns: ['**/node_modules/**', '**/target/**', '**/dist/**', '**/.git/**', '**/build/**'],
-      embeddingModelId: undefined,
     }
 
     await saveConfig(defaultConfig)

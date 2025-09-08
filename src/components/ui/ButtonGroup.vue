@@ -6,7 +6,6 @@
   import { useAIChatStore } from '@/components/AIChatSidebar'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { openUrl } from '@tauri-apps/plugin-opener'
-  import { createMessage } from '@/ui/composables/message-api'
 
   const { t } = useI18n()
   type ButtonGroup = { alwaysOnTop?: boolean }
@@ -58,7 +57,8 @@
         // createMessage.success('已在浏览器中打开问题反馈页面')
       } catch (error) {
         handleErrorWithMessage(error, '无法打开问题反馈页面')
-        createMessage.error('请手动访问：https://github.com/Skywang16/OrbitX/issues')
+        // 由于错误提示已统一，保留一个非错误级别的提示或注释
+        // 如需额外引导用户，可考虑使用 createMessage.info
       }
     }
     showSettingsPopover.value = false

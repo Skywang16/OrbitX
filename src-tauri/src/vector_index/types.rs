@@ -73,7 +73,7 @@ fn default_max_concurrent_files() -> usize {
 impl Default for VectorIndexConfig {
     fn default() -> Self {
         Self {
-            qdrant_url: "http://localhost:6333".to_string(),
+            qdrant_url: "http://localhost:6334".to_string(),
             qdrant_api_key: None,
             collection_name: "orbitx-code-vectors".to_string(),
             embedding_model_id: "text-embedding-3-small".to_string(),

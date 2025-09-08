@@ -180,7 +180,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_file_filter_creation() {
-        let config = VectorIndexConfig::default();
+        let config = VectorIndexFullConfig::default();
         let filter = FileFilter::new(&config);
 
         // 验证基本属性
@@ -192,7 +192,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_should_process_file() {
-        let config = VectorIndexConfig::default();
+        let config = VectorIndexFullConfig::default();
         let filter = FileFilter::new(&config);
 
         // 创建测试文件
@@ -219,7 +219,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_file_size_filtering() {
-        let config = VectorIndexConfig::default();
+        let config = VectorIndexFullConfig::default();
         let filter = FileFilter::new(&config).with_max_file_size(100); // 100字节限制
 
         let temp_dir = tempdir().unwrap();
@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_ignore_patterns() {
-        let config = VectorIndexConfig::default();
+        let config = VectorIndexFullConfig::default();
         let filter = FileFilter::new(&config);
 
         // 测试常见忽略模式

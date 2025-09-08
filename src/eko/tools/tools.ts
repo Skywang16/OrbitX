@@ -17,36 +17,56 @@ import { webFetchTool } from './toolList/web-fetch'
 
 import { orbitSearchTool } from './toolList/orbit-search'
 import { grepSearchTool } from './toolList/grep-search'
-import { codeSearchTool } from './toolList/code-search'
+
+// 动态导入向量索引功能检查
+let isVectorIndexEnabled = false
+
+// 检查向量索引是否启用
+async function checkVectorIndexEnabled(): Promise<boolean> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const settings = await invoke('get_vector_index_app_settings')
+    return (settings as { enabled: boolean }).enabled || false
+  } catch (error) {
+    console.warn('检查向量索引状态失败:', error)
+    return false
+  }
+}
+
+// 初始化向量索引状态
+checkVectorIndexEnabled().then(enabled => {
+  isVectorIndexEnabled = enabled
+})
+
+/**
+ * 获取基础工具列表（不包含向量索引工具）
+ */
+function getBaseReadOnlyTools(): Tool[] {
+  return [readFileTool, readManyFilesTool, readDirectoryTool, webFetchTool, grepSearchTool]
+}
+
+function getBaseAllTools(): Tool[] {
+  return [
+    readFileTool,
+    readManyFilesTool,
+    readDirectoryTool,
+    createFileTool,
+    editFileTool,
+    shellTool,
+    webFetchTool,
+    grepSearchTool,
+  ]
+}
 
 /**
  * Read-only tools - available in Chat mode
  */
-export const readOnlyTools: Tool[] = [
-  readFileTool,
-  readManyFilesTool,
-  readDirectoryTool,
-  webFetchTool,
-  orbitSearchTool,
-  grepSearchTool,
-  codeSearchTool,
-]
+export const readOnlyTools: Tool[] = getBaseReadOnlyTools().concat(isVectorIndexEnabled ? [orbitSearchTool] : [])
 
 /**
  * All tools - available in Agent mode
  */
-export const allTools: Tool[] = [
-  readFileTool,
-  readManyFilesTool,
-  readDirectoryTool,
-  createFileTool,
-  editFileTool,
-  shellTool,
-  webFetchTool,
-  orbitSearchTool,
-  grepSearchTool,
-  codeSearchTool,
-]
+export const allTools: Tool[] = getBaseAllTools().concat(isVectorIndexEnabled ? [orbitSearchTool] : [])
 
 /**
  * Register all tools to global registry
@@ -110,28 +130,25 @@ export function registerAllTools(): void {
         tags: ['web', 'http', 'fetch', 'api'],
       },
     },
-    {
-      tool: orbitSearchTool,
-      metadata: {
-        description: orbitSearchTool.description,
-        category: 'search',
-        tags: ['search', 'semantic', 'code', 'context', 'intelligent', 'analysis'],
-      },
-    },
+    // 条件性注册orbitSearchTool
+    ...(isVectorIndexEnabled
+      ? [
+          {
+            tool: orbitSearchTool,
+            metadata: {
+              description: orbitSearchTool.description,
+              category: 'search',
+              tags: ['search', 'semantic', 'code', 'context', 'intelligent', 'analysis'],
+            },
+          },
+        ]
+      : []),
     {
       tool: grepSearchTool,
       metadata: {
         description: grepSearchTool.description,
         category: 'search',
         tags: ['search', 'grep', 'text', 'simple', 'direct', 'command'],
-      },
-    },
-    {
-      tool: codeSearchTool,
-      metadata: {
-        description: codeSearchTool.description,
-        category: 'search',
-        tags: ['search', 'vector', 'semantic', 'code', 'embedding', 'similarity'],
       },
     },
   ]

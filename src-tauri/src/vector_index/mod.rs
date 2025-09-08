@@ -27,6 +27,7 @@ pub mod monitor;
 pub mod parser;
 pub mod qdrant;
 pub mod service;
+pub mod startup;
 pub mod types;
 pub mod vectorizer;
 
@@ -43,10 +44,25 @@ pub use vectorizer::VectorizationService;
 
 // Tauri命令导出（用于main.rs注册）
 pub use commands::{
-    build_code_index, cancel_build_index, clear_vector_index, get_current_workspace_path,
-    get_file_monitoring_status, get_vector_index_config, get_vector_index_status,
-    init_vector_index, save_vector_index_config, search_code_vectors, start_file_monitoring,
-    stop_file_monitoring, test_qdrant_connection,
+    add_vector_index_workspace,
+    build_code_index,
+    cancel_build_index,
+    clear_vector_index,
+    get_current_workspace_path,
+    get_file_monitoring_status,
+    // 应用级设置命令
+    get_vector_index_app_settings,
+    get_vector_index_config,
+    get_vector_index_status,
+    init_vector_index,
+    is_directory_vector_indexed,
+    remove_vector_index_workspace,
+    save_vector_index_app_settings,
+    save_vector_index_config,
+    search_code_vectors,
+    start_file_monitoring,
+    stop_file_monitoring,
+    test_qdrant_connection,
 };
 
 // 版本信息

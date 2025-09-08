@@ -22,6 +22,9 @@ use crate::vector_index::{
     service::VectorIndexService,
     types::{IndexStats, SearchOptions, SearchResult, TaskProgress, VectorIndexConfig, VectorIndexStatus},
 };
+
+mod app_settings;
+pub use app_settings::*;
 use anyhow::{ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -86,6 +89,8 @@ pub struct VectorIndexState {
     progress_sender: Arc<RwLock<Option<mpsc::Sender<crate::vector_index::types::TaskProgress>>>>,
     /// 文件监控服务实例
     monitor_service: Arc<RwLock<Option<FileMonitorService>>>,
+    /// 取消标志，用于停止正在进行的索引构建任务
+    cancel_flag: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl VectorIndexState {
@@ -95,6 +100,7 @@ impl VectorIndexState {
             service: Arc::new(RwLock::new(None)),
             progress_sender: Arc::new(RwLock::new(None)),
             monitor_service: Arc::new(RwLock::new(None)),
+            cancel_flag: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -107,6 +113,11 @@ impl VectorIndexState {
     pub async fn is_initialized(&self) -> bool {
         self.service.read().await.is_some()
     }
+
+    /// 设置向量索引服务实例
+    pub async fn set_service(&self, service: Arc<VectorIndexService>) {
+        *self.service.write().await = Some(service);
+    }
 }
 
 impl Clone for VectorIndexState {
@@ -115,6 +126,7 @@ impl Clone for VectorIndexState {
             service: self.service.clone(),
             progress_sender: self.progress_sender.clone(),
             monitor_service: self.monitor_service.clone(),
+            cancel_flag: self.cancel_flag.clone(),
         }
     }
 }
@@ -173,10 +185,31 @@ pub async fn init_vector_index<R: Runtime>(
         
         // 获取embedding模型配置
         let models = ai_state.ai_service.get_models().await;
+        
+        // 调试信息：列出所有可用的embedding模型
+        let available_embedding_models: Vec<String> = models
+            .iter()
+            .filter(|m| m.model_type == crate::ai::types::ModelType::Embedding)
+            .map(|m| format!("{} ({})", m.id, m.name))
+            .collect();
+        
+        debug!("可用的embedding模型: {:?}", available_embedding_models);
+        
         let embedding_model_config = models
             .iter()
             .find(|m| m.id == config.embedding_model_id && m.model_type == crate::ai::types::ModelType::Embedding)
-            .ok_or_else(|| anyhow::anyhow!("找不到指定的embedding模型: {}", config.embedding_model_id))?;
+            .ok_or_else(|| {
+                let available_list = if available_embedding_models.is_empty() {
+                    "无可用的embedding模型，请先在AI设置中添加embedding模型".to_string()
+                } else {
+                    format!("可用模型: {}", available_embedding_models.join(", "))
+                };
+                anyhow::anyhow!(
+                    "找不到指定的embedding模型 '{}'。{}\n\n解决方案:\n1. 在AI设置中添加该模型\n2. 或选择已有的embedding模型\n3. 或使用默认模型 'text-embedding-3-small'", 
+                    config.embedding_model_id, 
+                    available_list
+                )
+            })?;
         
         let embedding_model = embedding_model_config.model.clone();
 
@@ -271,8 +304,12 @@ pub async fn build_code_index<R: Runtime>(
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("向量索引服务未初始化，请先调用 init_vector_index"))?
             .clone();
+        drop(service_guard);
 
-        // 3. 准备进度通知和事件发送
+        // 3. 重置取消标志
+        state.cancel_flag.store(false, std::sync::atomic::Ordering::Relaxed);
+
+        // 4. 准备进度通知和事件发送
         let (progress_sender, mut progress_receiver) = mpsc::channel::<TaskProgress>(100);
         let app_clone = app.clone();
 
@@ -293,15 +330,15 @@ pub async fn build_code_index<R: Runtime>(
             }
         });
 
-        // 4. 执行索引构建
+        // 5. 执行索引构建
         let build_result = service
-            .build_index(&workspace_path, Some(progress_sender))
+            .build_index(&workspace_path, Some(progress_sender), Some(state.cancel_flag.clone()))
             .await;
 
-        // 5. 等待进度报告任务结束
+        // 6. 等待进度报告任务结束
         progress_task.abort();
 
-        // 6. 处理构建结果并发送事件
+        // 7. 处理构建结果并发送事件
         match &build_result {
             Ok(stats) => {
                 info!(
@@ -754,14 +791,14 @@ pub async fn get_file_monitoring_status(
 /// 返回VectorIndexConfig结构，包含所有配置参数
 #[tauri::command]
 pub async fn get_vector_index_config(
-    storage_state: State<'_, crate::storage::coordinator::StorageCoordinator>,
+    storage_state: State<'_, crate::ai::tool::storage::StorageCoordinatorState>,
 ) -> TauriResult<VectorIndexConfig> {
     let result: Result<VectorIndexConfig> = async {
         debug!("获取向量索引配置");
 
         // 1. 创建配置服务
         let config_service = crate::vector_index::VectorIndexConfigService::new(
-            storage_state.repositories()
+            storage_state.coordinator.repositories()
         );
 
         // 2. 加载配置或使用默认配置
@@ -799,14 +836,14 @@ pub async fn get_vector_index_config(
 #[tauri::command]
 pub async fn save_vector_index_config(
     config: VectorIndexConfig,
-    storage_state: State<'_, crate::storage::coordinator::StorageCoordinator>,
+    storage_state: State<'_, crate::ai::tool::storage::StorageCoordinatorState>,
 ) -> TauriResult<String> {
     let result: Result<String> = async {
         info!("保存向量索引配置");
 
         // 1. 创建配置服务
         let config_service = crate::vector_index::VectorIndexConfigService::new(
-            storage_state.repositories()
+            storage_state.coordinator.repositories()
         );
 
         // 2. 保存配置（包含验证逻辑）
@@ -881,10 +918,10 @@ pub async fn cancel_build_index<R: Runtime>(
             return Ok("向量索引服务未初始化，无需取消".to_string());
         }
 
-        // TODO: 实现实际的取消机制
-        // 这需要在VectorIndexService中增加取消支持
-        warn!("索引构建取消功能尚未完全实现");
-
+        // 设置取消标志
+        info!("触发索引构建取消");
+        state.cancel_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        
         // 发送取消事件
         let event = VectorIndexEvent::Error {
             operation: "cancel_build".to_string(),
@@ -899,7 +936,7 @@ pub async fn cancel_build_index<R: Runtime>(
             warn!("发送取消事件失败: {}", e);
         }
 
-        Ok("索引构建取消请求已发送（功能待完善）".to_string())
+        Ok("索引构建已取消".to_string())
     }
     .await;
 

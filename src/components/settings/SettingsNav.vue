@@ -33,12 +33,6 @@
       description: t('settings.ai.description'),
     },
     {
-      id: 'vectorIndex',
-      label: t('settings.vectorIndex.title'),
-      icon: 'database',
-      description: t('settings.vectorIndex.description'),
-    },
-    {
       id: 'theme',
       label: t('settings.theme.title'),
       icon: 'palette',
@@ -55,6 +49,13 @@
       label: t('language.title'),
       icon: 'globe',
       description: t('settings.language.description'),
+    },
+    {
+      id: 'vectorIndex',
+      label: t('settings.vectorIndex.title'),
+      icon: 'database',
+      description: t('settings.vectorIndex.description'),
+      beta: true,
     },
   ])
 
@@ -76,18 +77,18 @@
 
   const getIconSvg = (iconName: string) => {
     const icons: Record<string, string> = {
-      palette: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      palette: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="13.5" cy="6.5" r=".5"/>
         <circle cx="17.5" cy="10.5" r=".5"/>
         <circle cx="8.5" cy="7.5" r=".5"/>
         <circle cx="6.5" cy="12.5" r=".5"/>
         <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
       </svg>`,
-      brain: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      brain: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/>
         <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
       </svg>`,
-      keyboard: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      keyboard: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="2" y="6" width="20" height="12" rx="2"/>
         <circle cx="7" cy="12" r="1"/>
         <circle cx="12" cy="12" r="1"/>
@@ -96,15 +97,16 @@
         <circle cx="12" cy="16" r="1"/>
         <circle cx="17" cy="16" r="1"/>
       </svg>`,
-      globe: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      globe: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
         <line x1="2" y1="12" x2="22" y2="12"/>
         <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
       </svg>`,
-      settings: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      settings: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
         <circle cx="12" cy="12" r="3"/>
       </svg>`,
+      database: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>`,
     }
     return icons[iconName] || ''
   }
@@ -126,7 +128,10 @@
       >
         <div class="settings-navigation-icon" v-html="getIconSvg(item.icon)"></div>
         <div class="settings-navigation-content">
-          <div class="settings-navigation-label">{{ item.label }}</div>
+          <div class="settings-navigation-label">
+            {{ item.label }}
+            <span v-if="item.beta" class="beta-label">Beta</span>
+          </div>
         </div>
       </li>
     </ul>
@@ -134,6 +139,18 @@
 </template>
 
 <style scoped>
+  .settings-navigation-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .beta-label {
+    font-size: 10px;
+    color: var(--color-primary);
+    background: var(--color-primary-alpha);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
   /* 响应式设计 */
   @media (max-width: 480px) {
     .settings-navigation {

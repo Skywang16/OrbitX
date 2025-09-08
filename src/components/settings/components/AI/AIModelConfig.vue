@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
   import { createMessage } from '@/ui'
-  import { handleError } from '@/utils/errorHandler'
+  import { handleError, handleErrorWithMessage } from '@/utils/errorHandler'
   import { computed, onMounted, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import AIModelForm from './AIModelForm.vue'
@@ -39,7 +39,7 @@
       await aiSettingsStore.removeModel(modelId)
       createMessage.success(t('ai_model.delete_success'))
     } catch (error) {
-      createMessage.error(handleError(error, t('ai_model.delete_failed')))
+      handleErrorWithMessage(error, t('ai_model.delete_failed'))
     }
   }
 
@@ -66,7 +66,7 @@
     } catch (error) {
       console.error('模型操作失败:', error)
       const errorMessage = error instanceof Error ? error.message : String(error)
-      createMessage.error(handleError(error, `${t('ai_model.operation_failed')}: ${errorMessage}`))
+      handleErrorWithMessage(error, `${t('ai_model.operation_failed')}: ${errorMessage}`)
     }
   }
 

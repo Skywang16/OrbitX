@@ -72,7 +72,7 @@ mod setup {
         if std::env::var("CHECK_QDRANT_AVAILABILITY").is_ok() {
             match std::process::Command::new("curl")
                 .arg("-f")
-                .arg("http://localhost:6333/health")
+                .arg("http://localhost:6334/health")
                 .output()
             {
                 Ok(output) if output.status.success() => {
