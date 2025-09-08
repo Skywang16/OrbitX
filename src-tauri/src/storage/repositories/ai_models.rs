@@ -9,8 +9,8 @@ use crate::storage::database::DatabaseManager;
 use crate::storage::query::{InsertBuilder, SafeQueryBuilder};
 use crate::utils::error::AppResult;
 use anyhow::anyhow;
-use base64::Engine;
 use chrono::{DateTime, Utc};
+use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
@@ -235,7 +235,6 @@ impl AIModelRepository {
             ))
             .build()?;
 
-
         let mut query_builder = sqlx::query(&query);
         for param in params {
             query_builder = match param {
@@ -257,8 +256,6 @@ impl AIModelRepository {
 
         let rows = query_builder.fetch_all(self.database.pool()).await?;
 
-        let encryption_manager_guard = self.database.encryption_manager();
-        let encryption_manager = encryption_manager_guard.read().await;
         let mut models = Vec::new();
 
         for row in rows {
@@ -270,25 +267,31 @@ impl AIModelRepository {
                 }
             };
 
-            // 解密API密钥
-            if let Some(encrypted_base64) = row.try_get::<Option<String>, _>("api_key_encrypted")? {
-                if !encrypted_base64.is_empty() {
-                    match base64::engine::general_purpose::STANDARD.decode(&encrypted_base64) {
-                        Ok(encrypted_data) => {
-                            match encryption_manager.decrypt_data(&encrypted_data) {
-                                Ok(decrypted_key) => {
-                                    model.api_key = decrypted_key;
-                                }
-                                Err(e) => {
-                                    error!("解密API密钥失败: {}", e);
-                                    model.api_key = String::new();
-                                }
+            // 读取API密钥：从系统密钥链读取
+            if let Some(stored) = row.try_get::<Option<String>, _>("api_key_encrypted")? {
+                if !stored.is_empty() {
+                    if stored.starts_with("keychain:") {
+                        let key_id = stored.trim_start_matches("keychain:");
+                        let entry = match Entry::new("orbitx.ai_models", key_id) {
+                            Ok(e) => e,
+                            Err(e) => {
+                                error!("创建系统密钥链条目失败: {}", e);
+                                model.api_key = String::new();
+                                models.push(model);
+                                continue;
+                            }
+                        };
+                        match entry.get_password() {
+                            Ok(secret) => {
+                                model.api_key = secret;
+                            }
+                            Err(e) => {
+                                error!("从系统密钥链读取API密钥失败: {}", e);
+                                model.api_key = String::new();
                             }
                         }
-                        Err(e) => {
-                            error!("Base64解码失败: {}", e);
-                            model.api_key = String::new();
-                        }
+                    } else {
+                        model.api_key = String::new();
                     }
                 } else {
                     model.api_key = String::new();
@@ -305,15 +308,26 @@ impl AIModelRepository {
     pub async fn save_with_encryption(&self, model: &AIModelConfig) -> AppResult<i64> {
         debug!("保存AI模型: {}", model.name);
 
-        // 加密API密钥
-        let encrypted_api_key = if !model.api_key.is_empty() {
-            let encryption_manager_guard = self.database.encryption_manager();
-            let encryption_manager = encryption_manager_guard.read().await;
-            let encrypted_data = encryption_manager.encrypt_data(&model.api_key)?;
-            drop(encryption_manager); // 显式释放锁
-            Some(encrypted_data)
+        // 如果没有提供新的 api_key，则保留原有的 Keychain 标记，不覆盖
+        let existing_marker: Option<String> =
+            sqlx::query("SELECT api_key_encrypted FROM ai_models WHERE id = ?")
+                .bind(&model.id)
+                .fetch_optional(self.database.pool())
+                .await?
+                .and_then(|row| row.try_get::<Option<String>, _>(0).ok())
+                .flatten();
+
+        // 将API密钥保存到系统密钥链
+        let keychain_marker = if !model.api_key.is_empty() {
+            let entry = Entry::new("orbitx.ai_models", &model.id)
+                .map_err(|e| anyhow!("创建系统密钥链条目失败: {}", e))?;
+            entry
+                .set_password(&model.api_key)
+                .map_err(|e| anyhow!("保存API密钥到系统密钥链失败: {}", e))?;
+            Some(format!("keychain:{}", model.id))
         } else {
-            None
+            // 未提供新 key，沿用原标记（可能为 None）
+            existing_marker
         };
 
         let config_json = model
@@ -329,11 +343,7 @@ impl AIModelRepository {
             .set("api_url", Value::String(model.api_url.clone()))
             .set(
                 "api_key_encrypted",
-                encrypted_api_key
-                    .map(|data| {
-                        Value::String(base64::engine::general_purpose::STANDARD.encode(data))
-                    })
-                    .unwrap_or(Value::Null),
+                keychain_marker.map(Value::String).unwrap_or(Value::Null),
             )
             .set("model_name", Value::String(model.model.clone()))
             .set("model_type", Value::String(model.model_type.to_string()))
@@ -395,6 +405,15 @@ impl AIModelRepository {
     }
 
     pub async fn delete_by_string_id(&self, id: &str) -> AppResult<()> {
+        // 从系统密钥链删除对应条目
+        if let Ok(entry) = Entry::new("orbitx.ai_models", id) {
+            if let Err(e) = entry.delete_password() {
+                debug!("从系统密钥链删除API密钥失败（可忽略）: {}", e);
+            }
+        } else {
+            debug!("创建系统密钥链条目失败，跳过删除");
+        }
+
         let result = sqlx::query("DELETE FROM ai_models WHERE id = ?")
             .bind(id)
             .execute(self.database.pool())

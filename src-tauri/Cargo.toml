@@ -72,6 +72,9 @@ rmp = "0.8"
 rmp-serde = "1.1"
 sha2 = "0.10"
 
+# OS Keychain integration for storing secrets securely
+keyring = "2.3"
+
 # LLM 提供商 SDK
 async-openai = "0.29"
 

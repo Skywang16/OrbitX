@@ -17,7 +17,15 @@ use tauri::State;
 #[tauri::command]
 pub async fn get_ai_models(state: State<'_, AIManagerState>) -> TauriApiResult<Vec<AIModelConfig>> {
     let models = state.ai_service.get_models().await;
-    Ok(api_success!(models))
+    // 不回传明文 API Key：对外返回时清空 api_key 字段
+    let sanitized: Vec<AIModelConfig> = models
+        .into_iter()
+        .map(|mut m| {
+            m.api_key.clear();
+            m
+        })
+        .collect();
+    Ok(api_success!(sanitized))
 }
 
 /// 添加AI模型配置
@@ -28,7 +36,12 @@ pub async fn add_ai_model(
 ) -> TauriApiResult<AIModelConfig> {
     // 保存模型配置，如果保存失败会抛出异常
     match state.ai_service.add_model(config.clone()).await {
-        Ok(_) => Ok(api_success!(config)),
+        Ok(_) => {
+            // 不回传明文 API Key
+            let mut sanitized = config.clone();
+            sanitized.api_key.clear();
+            Ok(api_success!(sanitized))
+        }
         Err(_) => Ok(api_error!("ai.add_model_failed")),
     }
 }

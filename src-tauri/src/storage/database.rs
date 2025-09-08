@@ -10,7 +10,7 @@ use crate::storage::DATABASE_FILE_NAME;
 use crate::utils::error::AppResult;
 use anyhow::{anyhow, Context};
 use argon2::{
-    password_hash::{rand_core::OsRng, SaltString},
+    password_hash::SaltString,
     Argon2, PasswordHasher,
 };
 use base64::Engine;
@@ -78,15 +78,25 @@ impl EncryptionManager {
 
     /// 设置主密钥（从用户密码派生）
     pub fn set_master_password(&mut self, password: &str) -> AppResult<()> {
-        // 生成随机盐值而不是使用固定盐值
-        let salt = SaltString::generate(&mut OsRng);
+        // 使用确定性的盐来确保派生密钥在同一台机器上稳定
+        // 注意：salt 本身不需要保密，但应具有足够熵。这里用密码和固定标签派生。
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(b"OrbitX-Argon2-Deterministic-Salt-v1");
+        hasher.update(password.as_bytes());
+        let digest = hasher.finalize();
+        let salt_bytes = &digest[..16];
+        let salt = SaltString::encode_b64(salt_bytes)
+            .map_err(|e| anyhow!("生成盐失败: {}", e))?;
 
         let password_hash = self
             .argon2
             .hash_password(password.as_bytes(), &salt)
             .map_err(|e| anyhow!("密钥派生失败: {}", e))?;
 
-        let hash = password_hash.hash.unwrap();
+        let hash = password_hash
+            .hash
+            .ok_or_else(|| anyhow!("密钥派生失败: 无效的哈希输出"))?;
         let key_bytes = hash.as_bytes();
         if key_bytes.len() < 32 {
             return Err(anyhow!("密钥长度不足"));
@@ -452,7 +462,7 @@ mod tests {
     }
 
     #[test]
-    fn test_set_master_password_random_salt() {
+    fn test_set_master_password_deterministic_salt() {
         let mut manager1 = EncryptionManager::new();
         let mut manager2 = EncryptionManager::new();
 
@@ -468,12 +478,11 @@ mod tests {
         // 两个管理器都应该有主密钥
         assert!(manager1.master_key.is_some());
         assert!(manager2.master_key.is_some());
-
-        // 由于使用随机盐值，每次生成的密钥应该不同（尽管密码相同）
-        // 注意：理论上有极小概率相同，但实际上几乎不可能
+        
+        // 由于使用确定性的盐，同一密码应产生相同的密钥（确保跨重启可解密）
         let key1 = manager1.master_key.unwrap();
         let key2 = manager2.master_key.unwrap();
-        assert_ne!(key1, key2, "随机盐值应该产生不同的密钥");
+        assert_eq!(key1, key2, "确定性盐应产生相同的密钥");
     }
 
     #[test]
