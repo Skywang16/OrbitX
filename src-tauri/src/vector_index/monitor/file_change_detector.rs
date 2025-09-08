@@ -130,8 +130,6 @@ impl FileChangeDetector {
     pub async fn handle_file_change(&self, event: FileChangeEvent) -> Result<()> {
         // 1. 过滤不需要处理的文件
         if !self.file_filter.should_process_file(&event.file_path) {
-            debug!("跳过文件事件: {}", event.file_path.display());
-
             let mut state = self.state.write().await;
             state.filtered_events += 1;
             return Ok(());

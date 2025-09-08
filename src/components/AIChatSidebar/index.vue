@@ -110,7 +110,7 @@
   const selectedModelId = ref<string | null>(null)
 
   const modelOptions = computed(() => {
-    return aiSettingsStore.enabledModels.map(model => ({
+    return aiSettingsStore.chatModels.map(model => ({
       label: model.name,
       value: model.id,
     }))
@@ -135,7 +135,7 @@
   }
 
   watch(
-    () => aiSettingsStore.enabledModels,
+    () => aiSettingsStore.chatModels,
     newModels => {
       if (newModels.length === 0) return
 

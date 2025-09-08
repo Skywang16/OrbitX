@@ -28,11 +28,6 @@ export const useVectorIndexSettingsStore = defineStore('vectorIndexSettings', ()
     const vectorConfig = await vectorIndexApi.getConfig()
     config.value = vectorConfig
 
-    // 如果有有效配置，自动初始化服务
-    if (vectorConfig.qdrantUrl && vectorConfig.qdrantUrl.trim() !== '') {
-      await vectorIndexApi.init(vectorConfig)
-    }
-
     // 获取索引状态
     await refreshIndexStatus()
 

@@ -171,14 +171,12 @@ impl CodeFileScanner {
 
         // 检查是否匹配ignore patterns
         if self.matches_ignore_patterns(relative_path) {
-            debug!("跳过目录（匹配ignore pattern）: {:?}", relative_path);
             return Ok(true);
         }
 
         // 检查常见的隐藏目录
         if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
             if dir_name.starts_with('.') && dir_name != "." && dir_name != ".." {
-                debug!("跳过隐藏目录: {}", dir_name);
                 return Ok(true);
             }
         }
@@ -197,7 +195,6 @@ impl CodeFileScanner {
 
         // 检查是否匹配ignore patterns
         if self.matches_ignore_patterns(relative_path) {
-            debug!("跳过文件（匹配ignore pattern）: {:?}", relative_path);
             return Ok(false);
         }
 
@@ -210,11 +207,6 @@ impl CodeFileScanner {
         match dir_entry.metadata() {
             Ok(metadata) => {
                 if metadata.len() > self.max_file_size {
-                    debug!(
-                        "跳过文件（文件过大: {}字节）: {:?}",
-                        metadata.len(),
-                        relative_path
-                    );
                     return Ok(false);
                 }
             }

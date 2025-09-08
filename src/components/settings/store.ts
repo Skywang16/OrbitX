@@ -21,18 +21,10 @@ export const useSettingsStore = defineStore('settings', () => {
     activeSection.value = section
   }
 
-  // 初始化所有设置
+  // 初始化全局基础设置（按需懒加载各子页面）
   const initializeSettings = async () => {
-    try {
-      // 初始化主题系统
-      await themeManager.initialize()
-      // 加载AI设置
-      await aiSettings.loadSettings()
-      // 加载向量索引设置
-      await vectorIndexSettings.loadSettings()
-    } catch (error) {
-      console.error('Failed to initialize settings:', error)
-    }
+    // 初始化主题系统
+    await themeManager.initialize()
   }
 
   // 重置所有设置

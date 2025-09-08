@@ -234,17 +234,21 @@ impl VectorIndexService {
             let error_ratio_high =
                 processed_files > 0 && (error_files as f32 / processed_files as f32) > 0.3;
             if too_many_errors || error_ratio_high {
-                let base = format!(
-                    "构建中止：文件处理错误过多（{}/{}，错误率 {:.0}%）",
-                    error_files,
-                    processed_files,
-                    (error_files as f32 / processed_files as f32) * 100.0
-                );
-                let detail = last_error_detail
-                    .as_ref()
-                    .map(|d| format!("；根因示例：{}", d))
-                    .unwrap_or_default();
-                return Err(anyhow::anyhow!(format!("{}{}", base, detail)));
+                // 检查根因类型，返回具体的错误标识
+                if let Some(last_error) = &last_error_detail {
+                    let error_lower = last_error.to_lowercase();
+                    if last_error.contains("模型未找到") || error_lower.contains("model not found")
+                    {
+                        return Err(anyhow::anyhow!("EMBEDDING_MODEL_NOT_FOUND"));
+                    }
+                    if last_error.contains("解密") || error_lower.contains("aead::error") {
+                        return Err(anyhow::anyhow!("EMBEDDING_API_KEY_FAILED"));
+                    }
+                    if error_lower.contains("api") || error_lower.contains("embedding") {
+                        return Err(anyhow::anyhow!("EMBEDDING_API_CALL_FAILED"));
+                    }
+                }
+                return Err(anyhow::anyhow!("TOO_MANY_FILE_ERRORS"));
             }
 
             // 本批上传，避免全量累加
@@ -312,16 +316,25 @@ impl VectorIndexService {
         });
 
         if all_failed || no_vectors || has_fatal_error {
-            let reason = if all_failed {
-                format!("所有文件处理失败（总计 {} 个）", total_files)
+            // 根据具体错误类型返回明确的错误信息，供命令层匹配
+            if has_fatal_error {
+                // 检查具体的致命错误类型
+                for error in &stats.errors {
+                    let error_lower = error.to_lowercase();
+                    if error.contains("模型未找到") || error_lower.contains("model not found")
+                    {
+                        return Err(anyhow::anyhow!("EMBEDDING_MODEL_NOT_FOUND"));
+                    }
+                    if error.contains("解密") || error_lower.contains("aead::error") {
+                        return Err(anyhow::anyhow!("EMBEDDING_API_KEY_FAILED"));
+                    }
+                }
+                return Err(anyhow::anyhow!("EMBEDDING_API_CALL_FAILED"));
             } else if no_vectors {
-                "未生成任何有效向量，可能是 Embedding 模型不可用或 API 密钥配置错误".to_string()
+                return Err(anyhow::anyhow!("NO_VECTORS_GENERATED"));
             } else {
-                // 汇总致命错误信息（截断避免过长）
-                let joined = stats.errors.join("; ");
-                format!("检测到致命错误: {}", joined)
-            };
-            return Err(anyhow::anyhow!("构建代码索引失败：{}", reason));
+                return Err(anyhow::anyhow!("TOO_MANY_FILE_ERRORS"));
+            }
         }
 
         tracing::info!(

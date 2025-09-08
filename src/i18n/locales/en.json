@@ -123,6 +123,8 @@
       "feature_enabled_description": "When enabled, supports code semantic search and intelligent indexing",
       "workspace_management": "Workspace Management",
       "workspace_management_description": "Configure workspace directories for vector indexing (max 3)",
+      "no_workspaces": "No workspaces configured",
+      "no_workspaces_description": "Add workspaces below to build vector index",
       "workspace_paths": "Workspace Paths",
       "add_workspace": "Add Workspace",
       "remove_workspace": "Remove",

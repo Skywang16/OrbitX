@@ -70,6 +70,21 @@ pub enum VectorIndexEvent {
     ServiceStatus { initialized: bool, message: String },
 }
 
+/// 根据错误消息内容映射更精确的 i18n 错误键
+fn map_build_index_error_key(e: &anyhow::Error) -> &'static str {
+    let msg = e.to_string();
+    
+    // 直接匹配服务层返回的具体错误类型
+    match msg.as_str() {
+        "EMBEDDING_MODEL_NOT_FOUND" => "vector_index.embedding_model_not_found",
+        "EMBEDDING_API_KEY_FAILED" => "vector_index.embedding_api_key_failed",
+        "EMBEDDING_API_CALL_FAILED" => "vector_index.embedding_api_call_failed",
+        "NO_VECTORS_GENERATED" => "vector_index.no_vectors_generated",
+        "TOO_MANY_FILE_ERRORS" => "vector_index.too_many_file_errors",
+        _ => "vector_index.build_index_failed", // 默认兜底
+    }
+}
+
 /// 构建完成事件负载
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -291,24 +306,34 @@ pub async fn build_code_index<R: Runtime>(
     state: State<'_, VectorIndexState>,
     app: AppHandle<R>,
 ) -> TauriApiResult<IndexStats> {
+    // 参数与前置条件优雅返回：直接用 i18n key 提前失败，避免后续字符串匹配
+    if workspace_path.trim().is_empty() {
+        return Ok(api_error!("vector_index.workspace_path_empty"));
+    }
+
+    let workspace_path_trimmed = workspace_path.trim().to_string();
+    let path = std::path::Path::new(&workspace_path_trimmed);
+    if !path.exists() {
+        return Ok(api_error!("vector_index.workspace_not_exist"));
+    }
+    if !path.is_dir() {
+        return Ok(api_error!("vector_index.workspace_not_directory"));
+    }
+
+    // 获取服务实例（未初始化时直接返回明确错误）
+    let service = {
+        let service_guard = state.service.read().await;
+        if let Some(svc) = service_guard.as_ref() {
+            svc.clone()
+        } else {
+            return Ok(api_error!("vector_index.service_not_initialized"));
+        }
+    };
+
     let result: Result<IndexStats> = async {
         info!("开始构建代码索引: {}", workspace_path);
 
-        // 1. 参数验证
-        ensure!(!workspace_path.trim().is_empty(), "工作空间路径不能为空");
-
-        let workspace_path = workspace_path.trim();
-        let path = std::path::Path::new(workspace_path);
-        ensure!(path.exists(), "工作空间路径不存在: {}", workspace_path);
-        ensure!(path.is_dir(), "工作空间路径必须是目录: {}", workspace_path);
-
-        // 2. 获取服务实例
-        let service_guard = state.service.read().await;
-        let service = service_guard
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("向量索引服务未初始化，请先调用 init_vector_index"))?
-            .clone();
-        drop(service_guard);
+        let workspace_path = workspace_path_trimmed.as_str();
 
         // 3. 重置取消标志
         state.cancel_flag.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -385,13 +410,16 @@ pub async fn build_code_index<R: Runtime>(
             }
         }
 
-        build_result.context("构建代码索引失败")
+        build_result
     }
     .await;
 
     match result {
         Ok(stats) => Ok(api_success!(stats)),
-        Err(_) => Ok(api_error!("vector_index.build_index_failed")),
+        Err(e) => {
+            let error_key = map_build_index_error_key(&e);
+            Ok(api_error!(error_key))
+        }
     }
 }
 

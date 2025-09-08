@@ -65,7 +65,6 @@ export function useVectorIndexBuild() {
             const raw = payload.data?.message || '构建失败'
             const pretty = formatBuildError(raw)
             _errorMessage.value = pretty
-            createMessage.error('构建索引失败')
             break
           }
           default:

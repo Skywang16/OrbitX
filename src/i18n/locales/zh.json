@@ -123,6 +123,8 @@
       "feature_enabled_description": "开启后，支持代码语义搜索和智能索引功能",
       "workspace_management": "工作目录管理",
       "workspace_management_description": "配置需要建立向量索引的工作目录（最多3个）",
+      "no_workspaces": "暂无工作目录",
+      "no_workspaces_description": "请在下方添加需要建立索引的工作目录",
       "workspace_paths": "工作目录路径",
       "add_workspace": "添加工作目录",
       "remove_workspace": "移除",
