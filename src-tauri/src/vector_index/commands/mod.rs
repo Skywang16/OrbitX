@@ -227,7 +227,7 @@ pub async fn init_vector_index<R: Runtime>(
                 )
             })?;
         
-        let embedding_model = embedding_model_config.model.clone();
+        let embedding_model = embedding_model_config.id.clone();
 
         debug!(
             "配置验证通过: qdrant_url={}, collection_name={}, embedding_model={}, max_concurrent_files={}",

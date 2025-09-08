@@ -127,7 +127,7 @@ async fn try_initialize_vector_service(
     let service = VectorIndexService::new(
         config.clone(),
         llm_service,
-        config.embedding_model_id.clone(),
+        _embedding_model_config.id.clone(),
     )
     .await
     .context("创建向量索引服务失败")?;

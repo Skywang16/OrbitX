@@ -264,9 +264,18 @@ impl OpenAIProvider {
         response_json["usage"]
             .as_object()
             .map(|usage_obj| LLMUsage {
-                prompt_tokens: usage_obj["prompt_tokens"].as_u64().unwrap_or(0) as u32,
-                completion_tokens: usage_obj["completion_tokens"].as_u64().unwrap_or(0) as u32,
-                total_tokens: usage_obj["total_tokens"].as_u64().unwrap_or(0) as u32,
+                prompt_tokens: usage_obj
+                    .get("prompt_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
+                completion_tokens: usage_obj
+                    .get("completion_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
+                total_tokens: usage_obj
+                    .get("total_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
             })
     }
 
@@ -423,9 +432,18 @@ impl OpenAIProvider {
         response_json["usage"]
             .as_object()
             .map(|usage_obj| LLMUsage {
-                prompt_tokens: usage_obj["prompt_tokens"].as_u64().unwrap_or(0) as u32,
-                completion_tokens: usage_obj["completion_tokens"].as_u64().unwrap_or(0) as u32,
-                total_tokens: usage_obj["total_tokens"].as_u64().unwrap_or(0) as u32,
+                prompt_tokens: usage_obj
+                    .get("prompt_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
+                completion_tokens: usage_obj
+                    .get("completion_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
+                total_tokens: usage_obj
+                    .get("total_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
             })
     }
 
