@@ -274,7 +274,7 @@
     width: 90%;
     margin-bottom: 10px;
     border: 1px solid var(--border-300);
-    border-radius: 8px;
+    border-radius: var(--border-radius-lg);
     background-color: var(--bg-400);
     transition: border-color 0.1s ease;
   }
@@ -286,7 +286,7 @@
     width: 100%;
     height: 6px;
     background: var(--bg-500);
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
     overflow: hidden;
   }
 

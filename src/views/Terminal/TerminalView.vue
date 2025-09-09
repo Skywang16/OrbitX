@@ -23,17 +23,13 @@
    * 处理文件路径，根据来源决定行为
    */
   const handleFilePath = async (filePath: string, source: 'app-icon' | 'window' = 'app-icon') => {
-    try {
-      if (source === 'app-icon') {
-        // 拖动到应用图标：新建终端tab并定位到文件所在目录
-        const directory = await windowApi.handleFileOpen(filePath)
-        await terminalStore.createTerminal(directory)
-      } else {
-        // 拖动到窗口内：将文件路径插入到当前终端输入行
-        insertFilePathToCurrentTerminal(filePath)
-      }
-    } catch (error) {
-      console.warn('处理文件路径失败:', error)
+    if (source === 'app-icon') {
+      // 拖动到应用图标：新建终端tab并定位到文件所在目录
+      const directory = await windowApi.handleFileOpen(filePath)
+      await terminalStore.createTerminal(directory)
+    } else {
+      // 拖动到窗口内：将文件路径插入到当前终端输入行
+      insertFilePathToCurrentTerminal(filePath)
     }
   }
 
@@ -111,8 +107,7 @@
         aiChatStore.saveToSessionState()
 
         await terminalStore.saveSessionState()
-      } catch (error) {
-        console.error(' [TerminalView] 状态保存失败:', error)
+      } catch {
         // 保存失败不影响应用关闭
       }
     })

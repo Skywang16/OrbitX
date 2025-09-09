@@ -151,7 +151,7 @@
     padding: 14px 18px;
     margin-bottom: 10px;
     background: var(--bg-400);
-    border-radius: 14px;
+    border-radius: var(--border-radius-xl);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     font-size: 14px;
     color: var(--text-200);

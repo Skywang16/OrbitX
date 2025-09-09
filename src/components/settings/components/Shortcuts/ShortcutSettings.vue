@@ -6,63 +6,75 @@
       <div class="settings-loading-spinner"></div>
       <span>{{ t('shortcuts.loading') }}</span>
     </div>
+
+    <!-- 快捷键配置 -->
     <div v-else class="settings-group">
       <h3 class="settings-group-title">{{ t('shortcuts.title') }}</h3>
-      <div
-        v-for="action in allActions"
-        :key="action.key"
-        class="settings-item shortcut-item"
-        :class="{
-          'shortcut-item--editing': isEditing(action.key),
-          'shortcut-item--configured': action.shortcut,
-        }"
-        @click="startEdit(action.key)"
-        @keydown="handleKeyDown($event, action.key)"
-        @blur="stopEdit(action.key)"
-        tabindex="0"
-      >
-        <div class="settings-item-header">
-          <div class="settings-label">{{ action.displayName }}</div>
-        </div>
-        <div class="settings-item-control">
-          <span v-if="!isEditing(action.key)" class="shortcut-display">
-            <template v-if="action.shortcut">
-              <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="shortcut-modifier">
-                {{ modifier }}
-              </span>
-              <span class="shortcut-key">{{ action.shortcut.key }}</span>
-            </template>
-            <span v-else class="shortcut-not-configured">{{ t('shortcuts.not_configured') }}</span>
-          </span>
-          <span v-else class="shortcut-editing-hint">{{ t('shortcuts.editing_hint') }}</span>
-        </div>
-      </div>
-    </div>
 
-    <div v-if="!loading" class="settings-group">
-      <div class="settings-item">
-        <div class="settings-item-header">
-          <div class="settings-label">{{ t('shortcuts.reset_shortcuts') }}</div>
-          <div class="settings-description">{{ t('shortcuts.reset_description') }}</div>
+      <SettingsCard>
+        <div
+          v-for="action in allActions"
+          :key="action.key"
+          class="settings-item shortcut-item"
+          :class="{
+            'shortcut-item--editing': isEditing(action.key),
+            'shortcut-item--configured': action.shortcut,
+          }"
+          @click="startEdit(action.key)"
+          @keydown="handleKeyDown($event, action.key)"
+          @blur="stopEdit(action.key)"
+          tabindex="0"
+        >
+          <div class="settings-item-header">
+            <div class="settings-label">{{ action.displayName }}</div>
+          </div>
+          <div class="settings-item-control">
+            <span v-if="!isEditing(action.key)" class="shortcut-display">
+              <template v-if="action.shortcut">
+                <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="shortcut-modifier">
+                  {{ modifier }}
+                </span>
+                <span class="shortcut-key">{{ action.shortcut.key }}</span>
+              </template>
+              <span v-else class="shortcut-not-configured">{{ t('shortcuts.not_configured') }}</span>
+            </span>
+            <span v-else class="shortcut-editing-hint">{{ t('shortcuts.editing_hint') }}</span>
+          </div>
         </div>
-        <div class="settings-item-control">
-          <x-button variant="outline" @click="handleReset" :disabled="loading">
-            {{ t('shortcuts.reset_to_default') }}
-          </x-button>
+
+        <!-- 重置快捷键功能直接放在同一个卡片中 -->
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('shortcuts.reset_shortcuts') }}</div>
+            <div class="settings-description">{{ t('shortcuts.reset_description') }}</div>
+          </div>
+          <div class="settings-item-control">
+            <x-popconfirm
+              :title="t('shortcuts.reset_confirm_title')"
+              :description="t('shortcuts.reset_confirm_message')"
+              :confirm-text="t('common.confirm')"
+              :cancel-text="t('common.cancel')"
+              type="danger"
+              placement="top"
+              :trigger-text="t('shortcuts.reset_to_default')"
+              trigger-button-variant="outline"
+              :trigger-button-props="{ disabled: loading }"
+              @confirm="handleReset"
+            />
+          </div>
         </div>
-      </div>
+      </SettingsCard>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted } from 'vue'
+  import { ref, computed } from 'vue'
   import { useI18n } from 'vue-i18n'
 
   import { useShortcuts } from '@/composables/useShortcuts'
-  import { useShortcutStore } from '@/stores/shortcuts'
 
-  import { confirmWarning } from '@/ui/composables/confirm-api'
+  import SettingsCard from '../../SettingsCard.vue'
 
   import type { ShortcutBinding } from '@/types'
 
@@ -76,21 +88,15 @@
     resetToDefaults,
   } = useShortcuts()
 
-  const store = useShortcutStore()
-
   const editingActionKey = ref<string | null>(null)
   const capturedShortcut = ref<{ key: string; modifiers: string[] } | null>(null)
   const { t } = useI18n()
 
   const handleReset = async () => {
-    const shouldReset = await confirmWarning(t('shortcuts.reset_confirm_message'), t('shortcuts.reset_confirm_title'))
+    await resetToDefaults()
 
-    if (shouldReset) {
-      await resetToDefaults()
-
-      if ((window as any).reloadShortcuts) {
-        await (window as any).reloadShortcuts()
-      }
+    if ((window as any).reloadShortcuts) {
+      await (window as any).reloadShortcuts()
     }
   }
 
@@ -199,10 +205,15 @@
     }
   }
 
-  onMounted(async () => {
-    if (!store.initialized && !loading.value) {
-      await initialize()
-    }
+  // 初始化方法，供外部调用
+  const init = async () => {
+    // 强制重新初始化，确保数据正确加载
+    await initialize()
+  }
+
+  // 暴露初始化方法给父组件
+  defineExpose({
+    init,
   })
 </script>
 
@@ -214,19 +225,19 @@
     min-height: 60px; /* 固定最小高度防止抖动 */
   }
 
+  /* 在卡片内的快捷键项不显示任何背景变化 */
   .shortcut-item:hover {
-    background: var(--bg-400);
+    background: transparent;
   }
 
   .shortcut-item:focus {
     outline: none;
-    background: var(--bg-400);
-    border: 1px solid var(--color-primary);
+    background: transparent;
   }
 
+  /* 编辑状态只显示轻微的背景色变化，不加边框 */
   .shortcut-item--editing {
     background: var(--color-primary-alpha);
-    border: 1px solid var(--color-primary);
     animation: pulse 1.5s infinite;
   }
 
@@ -241,9 +252,9 @@
 
   .shortcut-modifier {
     background: var(--bg-600);
-    border: 1px solid var(--border-400);
+    border: none;
     padding: 6px 10px;
-    border-radius: 6px;
+    border-radius: var(--border-radius);
     font-size: 12px;
     color: var(--text-200);
     font-weight: 500;
@@ -260,10 +271,10 @@
 
   .shortcut-key {
     background: var(--bg-600);
-    border: 1px solid var(--border-400);
+    border: none;
     color: var(--text-200);
     padding: 6px 10px;
-    border-radius: 6px;
+    border-radius: var(--border-radius);
     font-size: 12px;
     font-weight: 500;
     min-width: 28px;

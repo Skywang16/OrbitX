@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
-  
+
   import { aiApi } from '@/api'
   import { reactive, ref, computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
@@ -428,18 +428,9 @@
     box-sizing: border-box;
   }
 
-  .form-input:hover {
-    border-color: var(--border-400);
-  }
-
   .form-input:focus {
     outline: none;
-    border-color: var(--color-primary);
     box-shadow: 0 0 0 2px var(--color-primary-alpha);
-  }
-
-  .form-input.error {
-    border-color: var(--color-error);
   }
 
   .form-input.error:focus {
@@ -463,7 +454,7 @@
     background-color: var(--bg-500);
     border-radius: var(--border-radius);
     padding: 4px;
-    border: 1px solid var(--border-300);
+    border: none;
   }
 
   .tab-button {

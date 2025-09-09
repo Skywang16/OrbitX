@@ -156,6 +156,60 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     }
   }
 
+  /**
+   * 关闭左侧全部标签页
+   */
+  const closeLeftTabs = (currentTabId: string) => {
+    const currentIndex = tabs.value.findIndex(tab => tab.id === currentTabId)
+    if (currentIndex <= 0) return
+
+    const leftTabs = tabs.value.slice(0, currentIndex)
+    leftTabs.forEach(tab => {
+      if (tab.closable) {
+        closeTab(tab.id)
+      }
+    })
+  }
+
+  /**
+   * 关闭右侧全部标签页
+   */
+  const closeRightTabs = (currentTabId: string) => {
+    const currentIndex = tabs.value.findIndex(tab => tab.id === currentTabId)
+    if (currentIndex === -1 || currentIndex >= tabs.value.length - 1) return
+
+    const rightTabs = tabs.value.slice(currentIndex + 1)
+    rightTabs.forEach(tab => {
+      if (tab.closable) {
+        closeTab(tab.id)
+      }
+    })
+  }
+
+  /**
+   * 关闭其他所有标签页
+   */
+  const closeOtherTabs = (currentTabId: string) => {
+    const otherTabs = tabs.value.filter(tab => tab.id !== currentTabId)
+    otherTabs.forEach(tab => {
+      if (tab.closable) {
+        closeTab(tab.id)
+      }
+    })
+  }
+
+  /**
+   * 关闭所有标签页
+   */
+  const closeAllTabs = () => {
+    const allTabs = [...tabs.value]
+    allTabs.forEach(tab => {
+      if (tab.closable) {
+        closeTab(tab.id)
+      }
+    })
+  }
+
   return {
     tabs,
     activeTabId,
@@ -163,6 +217,10 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     createSettingsTab,
     setActiveTab,
     closeTab,
+    closeLeftTabs,
+    closeRightTabs,
+    closeOtherTabs,
+    closeAllTabs,
     syncTerminalTabs,
     initialize: syncTerminalTabs,
   }

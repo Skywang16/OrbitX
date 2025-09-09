@@ -109,7 +109,7 @@
     transition: all 0.2s ease;
     padding: 0;
     flex-shrink: 0;
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
   }
 
   .new-session-btn:hover {

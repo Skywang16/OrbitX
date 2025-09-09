@@ -139,27 +139,128 @@
 </template>
 
 <style scoped>
+  .settings-navigation {
+    background: var(--bg-200);
+    border-right: 1px solid var(--border-200);
+    height: 100%;
+  }
+
+  .settings-navigation-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-200);
+    background: var(--bg-200);
+  }
+
+  .settings-navigation-list {
+    list-style: none;
+    padding: 12px 8px;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
   .settings-navigation-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: var(--border-radius-lg);
+    cursor: pointer;
+    transition:
+      background-color 0.1s ease,
+      border-color 0.1s ease;
+    position: relative;
+    background: transparent;
+    border: none;
   }
+
+  .settings-navigation-item:hover {
+    background: var(--bg-300);
+  }
+
+  .settings-navigation-item.active {
+    background: var(--color-primary-alpha);
+    color: var(--color-primary);
+    box-shadow: 0 2px 12px rgba(var(--color-primary-rgb), 0.2);
+  }
+
+  .settings-navigation-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 20px;
+    background: var(--color-primary);
+    border-radius: 0 2px 2px 0;
+  }
+
+  .settings-navigation-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+  }
+
+  .settings-navigation-item:hover .settings-navigation-icon,
+  .settings-navigation-item.active .settings-navigation-icon {
+    opacity: 1;
+  }
+
+  .settings-navigation-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .settings-navigation-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-200);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: color 0.2s ease;
+  }
+
+  .settings-navigation-item:hover .settings-navigation-label {
+    color: var(--text-100);
+  }
+
+  .settings-navigation-item.active .settings-navigation-label {
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
   .beta-label {
-    font-size: 10px;
+    font-size: 8px;
     color: var(--color-primary);
     background: var(--color-primary-alpha);
-    padding: 1px 4px;
-    border-radius: 3px;
+    padding: 2px 6px;
+    border-radius: var(--border-radius-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
+
   /* 响应式设计 */
   @media (max-width: 480px) {
     .settings-navigation {
+      width: 100%;
+      height: auto;
       padding: 8px 0;
+      border-right: none;
+      border-bottom: 1px solid var(--border-200);
     }
 
     .settings-navigation-header {
       padding: 8px 12px;
       margin-bottom: 4px;
+      border-bottom: none;
     }
 
     .settings-navigation-list {
@@ -176,20 +277,13 @@
       flex: 0 0 auto;
       min-width: 120px;
       padding: 8px 12px;
-      border-radius: var(--border-radius);
-      background: var(--bg-400);
-      border: 1px solid var(--border-300);
-      transition: all 0.2s ease;
+      flex-direction: column;
+      gap: 4px;
+      text-align: center;
     }
 
-    .settings-navigation-item:hover {
-      background: var(--bg-500);
-      border-color: var(--border-400);
-    }
-
-    .settings-navigation-item.active {
-      background: var(--color-primary-alpha);
-      border-color: var(--color-primary);
+    .settings-navigation-item::before {
+      display: none;
     }
 
     .settings-navigation-content {
@@ -201,10 +295,12 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      justify-content: center;
     }
 
     .settings-navigation-icon {
-      display: none;
+      width: 16px;
+      height: 16px;
     }
   }
 

@@ -114,48 +114,28 @@ export class ShortcutActionsService {
   }
 
   async increaseOpacity(): Promise<boolean> {
-    try {
-      const currentOpacity = await windowApi.getWindowOpacity()
-      const newOpacity = Math.min(currentOpacity + 0.05, 1.0)
-      await windowApi.setWindowOpacity(newOpacity)
-      return true
-    } catch (error) {
-      console.error('增加透明度失败:', error)
-      return false
-    }
+    const currentOpacity = await windowApi.getWindowOpacity()
+    const newOpacity = Math.min(currentOpacity + 0.05, 1.0)
+    await windowApi.setWindowOpacity(newOpacity)
+    return true
   }
 
   async decreaseOpacity(): Promise<boolean> {
-    try {
-      const currentOpacity = await windowApi.getWindowOpacity()
-      const newOpacity = Math.max(currentOpacity - 0.05, 0.1)
-      await windowApi.setWindowOpacity(newOpacity)
-      return true
-    } catch (error) {
-      console.error('减少透明度失败:', error)
-      return false
-    }
+    const currentOpacity = await windowApi.getWindowOpacity()
+    const newOpacity = Math.max(currentOpacity - 0.05, 0.1)
+    await windowApi.setWindowOpacity(newOpacity)
+    return true
   }
 
   toggleAISidebar(): boolean {
-    try {
-      const aiChatStore = useAIChatStore()
-      aiChatStore.toggleSidebar()
-      return true
-    } catch (error) {
-      console.error('切换AI侧边栏失败:', error)
-      return false
-    }
+    const aiChatStore = useAIChatStore()
+    aiChatStore.toggleSidebar()
+    return true
   }
 
   async toggleWindowPin(): Promise<boolean> {
-    try {
-      await windowApi.toggleAlwaysOnTop()
-      return true
-    } catch (error) {
-      console.error('切换窗口钉住状态失败:', error)
-      return false
-    }
+    await windowApi.toggleAlwaysOnTop()
+    return true
   }
 }
 

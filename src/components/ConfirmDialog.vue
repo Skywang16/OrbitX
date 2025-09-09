@@ -97,7 +97,7 @@
   .confirm-dialog {
     background: var(--bg-200);
     border: 1px solid var(--border-200);
-    border-radius: 8px;
+    border-radius: var(--border-radius);
     width: 400px;
     max-width: 90vw;
     overflow: hidden;
@@ -123,7 +123,7 @@
     width: 100%;
     padding: 8px 12px;
     border: 1px solid var(--border-300);
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
     background: var(--bg-300);
     color: var(--text-100);
     outline: none;
@@ -144,7 +144,7 @@
   .btn {
     padding: 8px 16px;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
     cursor: pointer;
     font-size: 14px;
   }

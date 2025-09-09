@@ -272,7 +272,7 @@
     color: var(--text-300);
     cursor: pointer;
     padding: 4px;
-    border-radius: 3px;
+    border-radius: var(--border-radius-xs);
     transition: all 0.1s ease;
     flex-shrink: 0;
     margin-left: 12px;

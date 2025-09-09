@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref, watch } from 'vue'
+  import { computed, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useThemeStore } from '@/stores/theme'
   import { windowApi } from '@/api/window'
@@ -7,12 +7,14 @@
   import { XSelect } from '@/ui'
   import type { SelectOption } from '@/ui'
   import { useSessionStore } from '@/stores/session'
+  import SettingsCard from '../../SettingsCard.vue'
 
   const themeStore = useThemeStore()
   const { t } = useI18n()
   const sessionStore = useSessionStore()
 
-  onMounted(async () => {
+  // 初始化方法，供外部调用
+  const init = async () => {
     await themeStore.initialize()
     const config = themeStore.themeConfig
     if (config) {
@@ -24,6 +26,11 @@
       }
     }
     await syncOpacityFromConfig()
+  }
+
+  // 暴露初始化方法给父组件
+  defineExpose({
+    init,
   })
 
   const selectedLightTheme = ref('light')
@@ -166,137 +173,150 @@
 <template>
   <div class="settings-group">
     <h2 class="settings-section-title">{{ t('settings.theme.title') }}</h2>
+
+    <!-- 主题模式选择 -->
     <div class="settings-group">
       <h3 class="settings-group-title">{{ t('theme_settings.theme_mode') }}</h3>
 
-      <div
-        class="settings-item clickable"
-        :class="{ active: currentMode === 'manual' }"
-        @click="handleModeChange('manual')"
-      >
-        <div class="settings-item-header">
-          <div class="settings-label">{{ t('theme_settings.manual_selection') }}</div>
-          <div class="settings-description">{{ t('theme_settings.manual_description') }}</div>
+      <SettingsCard>
+        <div
+          class="settings-item clickable"
+          :class="{ active: currentMode === 'manual' }"
+          @click="handleModeChange('manual')"
+        >
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('theme_settings.manual_selection') }}</div>
+            <div class="settings-description">{{ t('theme_settings.manual_description') }}</div>
+          </div>
+          <div class="settings-item-control">
+            <input
+              type="radio"
+              value="manual"
+              :checked="currentMode === 'manual'"
+              class="settings-radio"
+              @change="handleModeChange('manual')"
+            />
+          </div>
         </div>
-        <div class="settings-item-control">
-          <input
-            type="radio"
-            value="manual"
-            :checked="currentMode === 'manual'"
-            class="settings-radio"
-            @change="handleModeChange('manual')"
-          />
-        </div>
-      </div>
 
-      <div
-        class="settings-item clickable"
-        :class="{ active: currentMode === 'system' }"
-        @click="handleModeChange('system')"
-      >
-        <div class="settings-item-header">
-          <div class="settings-label">{{ t('theme_settings.follow_system') }}</div>
-          <div class="settings-description">{{ t('theme_settings.follow_system_description') }}</div>
+        <div
+          class="settings-item clickable"
+          :class="{ active: currentMode === 'system' }"
+          @click="handleModeChange('system')"
+        >
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('theme_settings.follow_system') }}</div>
+            <div class="settings-description">{{ t('theme_settings.follow_system_description') }}</div>
+          </div>
+          <div class="settings-item-control">
+            <input
+              type="radio"
+              value="system"
+              :checked="currentMode === 'system'"
+              class="settings-radio"
+              @change="handleModeChange('system')"
+            />
+          </div>
         </div>
-        <div class="settings-item-control">
-          <input
-            type="radio"
-            value="system"
-            :checked="currentMode === 'system'"
-            class="settings-radio"
-            @change="handleModeChange('system')"
-          />
-        </div>
-      </div>
+      </SettingsCard>
     </div>
 
+    <!-- 手动选择主题 -->
     <div v-if="currentMode === 'manual'" class="settings-group">
       <h3 class="settings-group-title">{{ t('theme_settings.select_theme') }}</h3>
 
-      <div
-        v-for="option in manualThemeOptions"
-        :key="option.value"
-        class="settings-item clickable"
-        :class="{ active: option.isCurrent }"
-        @click="handleThemeSelect(option.value)"
-      >
-        <div class="settings-item-header">
-          <div class="settings-label">{{ option.label }}</div>
-          <div class="settings-description">
-            {{ option.type === 'light' ? t('theme_settings.light_theme') : t('theme_settings.dark_theme') }}
+      <SettingsCard>
+        <div
+          v-for="option in manualThemeOptions"
+          :key="option.value"
+          class="settings-item clickable"
+          :class="{ active: option.isCurrent }"
+          @click="handleThemeSelect(option.value)"
+        >
+          <div class="settings-item-header">
+            <div class="settings-label">{{ option.label }}</div>
+            <div class="settings-description">
+              {{ option.type === 'light' ? t('theme_settings.light_theme') : t('theme_settings.dark_theme') }}
+            </div>
+          </div>
+          <div class="settings-item-control">
+            <input
+              type="radio"
+              :value="option.value"
+              :checked="option.isCurrent"
+              class="settings-radio"
+              @change="handleThemeSelect(option.value)"
+            />
           </div>
         </div>
-        <div class="settings-item-control">
-          <input
-            type="radio"
-            :value="option.value"
-            :checked="option.isCurrent"
-            class="settings-radio"
-            @change="handleThemeSelect(option.value)"
-          />
-        </div>
-      </div>
+      </SettingsCard>
     </div>
 
+    <!-- 系统跟随主题选择 -->
     <div v-if="currentMode === 'system'" class="settings-group">
       <h3 class="settings-group-title">{{ t('theme_settings.select_theme') }}</h3>
 
-      <div class="settings-item">
-        <div class="settings-item-header">
-          <div class="settings-label">{{ t('theme_settings.light_theme') }}</div>
-          <div class="settings-description">{{ t('theme_settings.light_theme_description') }}</div>
+      <SettingsCard>
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('theme_settings.light_theme') }}</div>
+            <div class="settings-description">{{ t('theme_settings.light_theme_description') }}</div>
+          </div>
+          <div class="settings-item-control">
+            <XSelect
+              v-model="selectedLightTheme"
+              :options="lightThemeOptions"
+              :placeholder="t('theme.select_light')"
+              size="medium"
+              @change="handleSystemThemeChange"
+            />
+          </div>
         </div>
-        <div class="settings-item-control">
-          <XSelect
-            v-model="selectedLightTheme"
-            :options="lightThemeOptions"
-            :placeholder="t('theme.select_light')"
-            size="medium"
-            @change="handleSystemThemeChange"
-          />
-        </div>
-      </div>
 
-      <div class="settings-item">
-        <div class="settings-item-header">
-          <div class="settings-label">{{ t('theme_settings.dark_theme') }}</div>
-          <div class="settings-description">{{ t('theme_settings.dark_theme_description') }}</div>
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('theme_settings.dark_theme') }}</div>
+            <div class="settings-description">{{ t('theme_settings.dark_theme_description') }}</div>
+          </div>
+          <div class="settings-item-control">
+            <XSelect
+              v-model="selectedDarkTheme"
+              :options="darkThemeOptions"
+              :placeholder="t('theme.select_dark')"
+              size="medium"
+              @change="handleSystemThemeChange"
+            />
+          </div>
         </div>
-        <div class="settings-item-control">
-          <XSelect
-            v-model="selectedDarkTheme"
-            :options="darkThemeOptions"
-            :placeholder="t('theme.select_dark')"
-            size="medium"
-            @change="handleSystemThemeChange"
-          />
-        </div>
-      </div>
+      </SettingsCard>
     </div>
 
+    <!-- 窗口透明度 -->
     <div class="settings-group">
       <h3 class="settings-group-title">{{ t('theme_settings.window_opacity') }}</h3>
 
-      <div class="settings-item">
-        <div class="settings-item-header">
-          <div class="settings-label">{{ t('theme_settings.opacity') }}</div>
-          <div class="settings-description">
-            {{ t('theme_settings.opacity_description') }}
+      <SettingsCard>
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('theme_settings.opacity') }}</div>
+            <div class="settings-description">
+              {{ t('theme_settings.opacity_description') }}
+            </div>
+          </div>
+          <div class="settings-item-control">
+            <input
+              v-model.number="opacity"
+              type="range"
+              min="0.1"
+              max="1.0"
+              step="0.01"
+              class="settings-slider"
+              @input="handleOpacityChange"
+            />
+            <span class="settings-value">{{ Math.round(opacity * 100) }}%</span>
           </div>
         </div>
-        <div class="settings-item-control">
-          <input
-            v-model.number="opacity"
-            type="range"
-            min="0.1"
-            max="1.0"
-            step="0.01"
-            class="settings-slider"
-            @input="handleOpacityChange"
-          />
-          <span class="settings-value">{{ Math.round(opacity * 100) }}%</span>
-        </div>
-      </div>
+      </SettingsCard>
     </div>
   </div>
 </template>

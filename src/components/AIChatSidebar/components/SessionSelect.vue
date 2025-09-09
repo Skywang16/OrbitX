@@ -89,7 +89,7 @@
     padding: 0.3em 1.6em 0.3em 0.6em;
     min-height: 1.6em;
     font-size: clamp(10px, 3.5vw, 14px);
-    border-radius: 3px;
+    border-radius: var(--border-radius-sm);
     transition: all 0.2s ease;
   }
 

@@ -4,7 +4,7 @@ import type { App, Plugin } from 'vue'
 import './styles/index.css'
 
 // 导入所有组件
-import { XButton, XMessage, XModal, XPopconfirm, XPopover, XSearchInput, XSelect, XSwitch } from './components'
+import { XButton, XMessage, XModal, XPopconfirm, XSearchInput, XSelect, XSwitch } from './components'
 
 // 导入函数式API
 import {
@@ -18,10 +18,16 @@ import {
   type MessageInstance,
 } from './composables'
 
+// 导入系统级菜单 API
+import { createPopover, showContextMenu, showPopoverAt } from './composables/popover-api'
+
 // ==================== 组件导出 ====================
 
 // 主要组件导出（推荐使用）
-export { XButton, XMessage, XModal, XPopconfirm, XPopover, XSearchInput, XSelect, XSwitch }
+export { XButton, XMessage, XModal, XPopconfirm, XSearchInput, XSelect, XSwitch }
+
+// 系统级菜单 API
+export { createPopover, showContextMenu, showPopoverAt }
 
 // ==================== 函数式API导出 ====================
 
@@ -101,9 +107,6 @@ const install = (app: App, options: Partial<XUIGlobalConfig> = {}): void => {
   app.component('XPopconfirm', XPopconfirm)
   app.component('x-popconfirm', XPopconfirm)
 
-  app.component('XPopover', XPopover)
-  app.component('x-popover', XPopover)
-
   app.component('XSearchInput', XSearchInput)
   app.component('x-search-input', XSearchInput)
 
@@ -154,8 +157,6 @@ export type {
   Placement,
   PopconfirmEmits,
   PopconfirmProps,
-  PopoverEmits,
-  PopoverProps,
   SearchInputEmits,
   SearchInputProps,
   SelectEmits,

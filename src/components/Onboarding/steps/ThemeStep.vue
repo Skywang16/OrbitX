@@ -151,13 +151,14 @@
     padding: 20px;
     background: var(--bg-200);
     border: 2px solid var(--border-100);
-    border-radius: 12px;
+    border-radius: var(--border-radius-xl);
     cursor: pointer;
     transition: all 0.2s ease;
     position: relative;
   }
 
-  .theme-option:hover {
+  /* 只给未选中的项目添加hover效果 */
+  .theme-option:not(.selected):hover {
     border-color: var(--color-primary);
     background: var(--bg-300);
   }
@@ -171,7 +172,7 @@
     flex-shrink: 0;
     width: 80px;
     height: 60px;
-    border-radius: 8px;
+    border-radius: var(--border-radius-lg);
     overflow: hidden;
 
     position: relative;

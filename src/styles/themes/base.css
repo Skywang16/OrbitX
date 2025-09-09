@@ -5,10 +5,14 @@
   --spacing-lg: 16px;
   --spacing-xl: 24px;
 
-  --border-radius: 6px;
-  --border-radius-sm: 4px;
-  --border-radius-md: 6px;
-  --border-radius-lg: 10px;
+  /* 圆角系统 - 统一设计标准 */
+  --border-radius-xs: 2px; /* 微小圆角：按钮内元素、小标签 */
+  --border-radius-sm: 4px; /* 小圆角：按钮、输入框、小卡片 */
+  --border-radius: 6px; /* 默认圆角：卡片、弹窗 */
+  --border-radius-md: 6px; /* 中等圆角：同默认 */
+  --border-radius-lg: 8px; /* 大圆角：大卡片、面板 */
+  --border-radius-xl: 12px; /* 超大圆角：主要容器、模态框 */
+  --border-radius-2xl: 16px; /* 特大圆角：特殊装饰性元素 */
 
   --font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
   --font-family-mono: Menlo, Monaco, 'Courier New', monospace;

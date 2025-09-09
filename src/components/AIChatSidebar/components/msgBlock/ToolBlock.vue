@@ -217,7 +217,7 @@
   .tool-block {
     background: var(--bg-500);
     border: 1px solid var(--border-300);
-    border-radius: 6px;
+    border-radius: var(--border-radius);
     font-size: 13px;
     max-width: 100%;
   }
@@ -316,7 +316,7 @@
   .tool-result {
     padding: 8px;
     background: var(--bg-400);
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
   }
 
   .tool-result-content {

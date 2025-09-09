@@ -37,7 +37,7 @@
 <style scoped>
   .edit-result {
     background: var(--bg-400);
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
     overflow: hidden;
   }
 
@@ -53,7 +53,7 @@
     font-size: 11px;
     font-weight: 400;
     padding: 2px 6px;
-    border-radius: 3px;
+    border-radius: var(--border-radius-xs);
   }
 
   .stat.added {

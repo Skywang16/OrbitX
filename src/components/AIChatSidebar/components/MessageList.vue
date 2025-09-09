@@ -64,7 +64,6 @@
   })
 
   const handleStartBuildIndex = async () => {
-    if (!vectorIndexEnabled.value) return
     if (isBuilding.value) {
       await cancelBuild()
       return
@@ -93,11 +92,11 @@
         </div>
         <div class="empty-text">{{ t('message_list.start_conversation') }}</div>
         <div class="empty-hint">{{ t('message_list.send_message_hint') }}</div>
-        <div class="actions">
+
+        <div v-if="vectorIndexEnabled" class="actions">
           <x-button
             :variant="isBuilding ? 'secondary' : 'primary'"
             size="small"
-            :disabled="!vectorIndexEnabled"
             :loading="false"
             @click="handleStartBuildIndex"
           >

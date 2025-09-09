@@ -1,5 +1,5 @@
 version = "1.0.0"
-totalThemes = 10
+totalThemes = 13
 customThemes = []
 
 [lastUpdated]
@@ -116,7 +116,51 @@ fileSize = 1241
 secs_since_epoch = 1755067811
 nanos_since_epoch = 356357322
 
+[[builtinThemes]]
+name = "catppuccin-mocha"
+file = "catppuccin-mocha.toml"
+type = "dark"
+builtin = true
+fileSize = 1024
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1755799200
+nanos_since_epoch = 0
+
+[[builtinThemes]]
+name = "catppuccin-latte"
+file = "catppuccin-latte.toml"
+type = "light"
+builtin = true
+fileSize = 1024
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1755799200
+nanos_since_epoch = 0
+
+[[builtinThemes]]
+name = "github-dark"
+file = "github-dark.toml"
+type = "dark"
+builtin = true
+fileSize = 1024
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1755799200
+nanos_since_epoch = 0
+
+[[builtinThemes]]
+name = "material-dark"
+file = "material-dark.toml"
+type = "dark"
+builtin = true
+fileSize = 1024
+
+[builtinThemes.lastModified]
+secs_since_epoch = 1755799200
+nanos_since_epoch = 0
+
 [defaults]
-lightTheme = "light"
-darkTheme = "dark"
-defaultTheme = "dark"
+lightTheme = "catppuccin-latte"
+darkTheme = "catppuccin-mocha"
+defaultTheme = "catppuccin-mocha"

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-  import { onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   
   import { useAISettingsStore } from './store'
@@ -9,10 +8,16 @@
   const aiSettingsStore = useAISettingsStore()
   const { t } = useI18n()
 
-  onMounted(async () => {
+  // 初始化方法，供外部调用
+  const init = async () => {
     if (!aiSettingsStore.isInitialized && !aiSettingsStore.isLoading) {
       await aiSettingsStore.loadSettings()
     }
+  }
+
+  // 暴露初始化方法给父组件
+  defineExpose({
+    init
   })
 </script>
 

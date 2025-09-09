@@ -170,7 +170,7 @@
     background-color: var(--bg-400);
     border: 1px solid var(--border-300);
     border-bottom: none;
-    border-radius: 8px 8px 0 0;
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 13px;
     box-shadow: none;
@@ -186,7 +186,7 @@
     padding: 6px 12px;
     background-color: var(--bg-400);
     border-bottom: none;
-    border-radius: 8px 8px 0 0;
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
     cursor: pointer;
     user-select: none;
     transition: background-color 0.2s ease;
@@ -241,7 +241,7 @@
     color: var(--text-400);
     background-color: var(--bg-400);
     padding: 2px 6px;
-    border-radius: 10px;
+    border-radius: var(--border-radius-lg);
     font-weight: 500;
   }
 

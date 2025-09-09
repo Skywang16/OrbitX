@@ -22,9 +22,9 @@
   --text-500: #666666;
 
   /* 状态颜色 */
-  --color-primary: #80c7ff;
-  --color-primary-hover: #66b3ff;
-  --color-primary-alpha: rgba(128, 199, 255, 0.1);
+  --color-primary: #18dcfc;
+  --color-primary-hover: #0bbce6;
+  --color-primary-alpha: rgba(24, 220, 252, 0.1);
   --color-success: #0dbc79;
   --color-warning: #ffcc02;
   --color-error: #f44747;

@@ -3,4 +3,3 @@
  */
 
 export { default as VectorIndexSettings } from './VectorIndexSettings.vue'
-export { useVectorIndexSettingsStore } from './store'

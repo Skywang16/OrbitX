@@ -5,6 +5,7 @@
   import { useAIChatStore } from '@/components/AIChatSidebar'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { openUrl } from '@tauri-apps/plugin-opener'
+  import { showPopoverAt } from '@/ui'
 
   const { t } = useI18n()
   type ButtonGroup = { alwaysOnTop?: boolean }
@@ -20,12 +21,18 @@
   const aiChatStore = useAIChatStore()
   const tabManagerStore = useTabManagerStore()
   const isAlwaysOnTop = ref(false)
-  const showSettingsPopover = ref(false)
+  const settingsButtonRef = ref<HTMLElement>()
 
   // 设置菜单项 - 使用计算属性确保响应式更新
   const settingsMenuItems = computed(() => [
-    { label: t('ui.open_settings'), value: 'settings' },
-    { label: t('ui.feedback'), value: 'feedback' },
+    {
+      label: t('ui.open_settings'),
+      onClick: () => handleSettingsAction('settings'),
+    },
+    {
+      label: t('ui.feedback'),
+      onClick: () => handleSettingsAction('feedback'),
+    },
   ])
 
   // 切换窗口置顶状态
@@ -33,32 +40,26 @@
   const toggleAlwaysOnTop = async () => {
     if (!props.controls.alwaysOnTop) return
 
-    try {
-      const newState = await windowApi.toggleAlwaysOnTop()
-      isAlwaysOnTop.value = newState
-    } catch (error) {
-      isAlwaysOnTop.value = !isAlwaysOnTop.value
-    }
+    const newState = await windowApi.toggleAlwaysOnTop()
+    isAlwaysOnTop.value = newState
   }
 
   // 处理设置操作
-  const handleSettingsAction = async (item: { label: string; value: string }) => {
-    if (item.value === 'settings') {
+  const handleSettingsAction = async (action: string) => {
+    if (action === 'settings') {
       tabManagerStore.createSettingsTab()
-    } else if (item.value === 'shortcuts') {
-      tabManagerStore.createSettingsTab()
-    } else if (item.value === 'feedback') {
-      try {
-        // 使用Tauri的opener插件在外部浏览器中打开GitHub Issues页面
-        await openUrl('https://github.com/Skywang16/OrbitX/issues')
-        // 显示成功提示
-        // createMessage.success('已在浏览器中打开问题反馈页面')
-      } catch (error) {
-        // 由于错误提示已统一，保留一个非错误级别的提示或注释
-        // 如需额外引导用户，可考虑使用 createMessage.info
-      }
+    } else if (action === 'feedback') {
+      // 使用Tauri的opener插件在外部浏览器中打开GitHub Issues页面
+      await openUrl('https://github.com/Skywang16/OrbitX/issues')
     }
-    showSettingsPopover.value = false
+  }
+
+  // 处理设置按钮点击
+  const handleSettingsClick = async () => {
+    if (!settingsButtonRef.value) return
+
+    const rect = settingsButtonRef.value.getBoundingClientRect()
+    await showPopoverAt(rect.left, rect.bottom + 8, settingsMenuItems.value)
   }
 
   // 切换AI聊天侧边栏
@@ -102,22 +103,18 @@
         </svg>
       </button>
       <!-- 设置按钮 -->
-      <x-popover
-        v-model="showSettingsPopover"
-        placement="bottom-end"
-        :menu-items="settingsMenuItems"
-        @menu-item-click="handleSettingsAction"
+      <button
+        ref="settingsButtonRef"
+        class="control-btn settings-btn"
+        :title="t('ui.settings')"
+        @click="handleSettingsClick"
       >
-        <template #trigger>
-          <button class="control-btn settings-btn" :title="t('ui.settings')">
-            <svg class="settings-icon" viewBox="0 0 1024 1024" fill="currentColor">
-              <path
-                d="M449.194667 82.346667a128 128 0 0 1 125.610666 0l284.16 160a128 128 0 0 1 65.194667 111.530666v316.245334a128 128 0 0 1-65.194667 111.530666l-284.16 160a128 128 0 0 1-125.610666 0l-284.16-160a128 128 0 0 1-65.194667-111.530666V353.877333A128 128 0 0 1 165.034667 242.346667z m83.754666 74.410666a42.666667 42.666667 0 0 0-41.898666 0L206.933333 316.714667a42.666667 42.666667 0 0 0-21.76 37.162666v316.245334a42.666667 42.666667 0 0 0 21.76 37.162666l284.16 160a42.666667 42.666667 0 0 0 41.898667 0l284.16-160a42.666667 42.666667 0 0 0 21.76-37.162666V353.877333a42.666667 42.666667 0 0 0-21.76-37.162666zM512 341.333333a170.666667 170.666667 0 1 1 0 341.333334 170.666667 170.666667 0 0 1 0-341.333334z m0 85.333334a85.333333 85.333333 0 1 0 0 170.666666 85.333333 85.333333 0 0 0 0-170.666666z"
-              />
-            </svg>
-          </button>
-        </template>
-      </x-popover>
+        <svg class="settings-icon" viewBox="0 0 1024 1024" fill="currentColor">
+          <path
+            d="M449.194667 82.346667a128 128 0 0 1 125.610666 0l284.16 160a128 128 0 0 1 65.194667 111.530666v316.245334a128 128 0 0 1-65.194667 111.530666l-284.16 160a128 128 0 0 1-125.610666 0l-284.16-160a128 128 0 0 1-65.194667-111.530666V353.877333A128 128 0 0 1 165.034667 242.346667z m83.754666 74.410666a42.666667 42.666667 0 0 0-41.898666 0L206.933333 316.714667a42.666667 42.666667 0 0 0-21.76 37.162666v316.245334a42.666667 42.666667 0 0 0 21.76 37.162666l284.16 160a42.666667 42.666667 0 0 0 41.898667 0l284.16-160a42.666667 42.666667 0 0 0 21.76-37.162666V353.877333a42.666667 42.666667 0 0 0-21.76-37.162666zM512 341.333333a170.666667 170.666667 0 1 1 0 341.333334 170.666667 170.666667 0 0 1 0-341.333334z m0 85.333334a85.333333 85.333333 0 1 0 0 170.666666 85.333333 85.333333 0 0 0 0-170.666666z"
+          />
+        </svg>
+      </button>
       <!-- 置顶按钮 -->
       <button
         v-if="controls.alwaysOnTop"
@@ -151,7 +148,7 @@
     background: var(--bg-400);
     border-radius: var(--border-radius-md);
     padding: 2px;
-    border: 1px solid var(--border-300);
+    border: none;
   }
 
   .control-btn {

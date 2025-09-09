@@ -1,10 +1,11 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
-  
+
   import { computed, onMounted, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import AIModelForm from './AIModelForm.vue'
   import { useAISettingsStore } from './store'
+  import SettingsCard from '../../SettingsCard.vue'
 
   const { t } = useI18n()
 
@@ -61,69 +62,81 @@
 <template>
   <div class="settings-group">
     <h3 class="settings-group-title">{{ t('settings.ai.model_config') }}</h3>
-    <div class="settings-item">
-      <div class="settings-item-header">
-        <div class="settings-label">{{ t('ai_model.add_new_model') }}</div>
-        <div class="settings-description">{{ t('ai_model.add_model_description') }}</div>
-      </div>
-      <div class="settings-item-control model-add-buttons">
-        <x-button variant="primary" @click="handleAddModel('chat')">
-          {{ t('ai_model.add_chat_model') }}
-        </x-button>
-        <x-button variant="primary" @click="handleAddModel('embedding')">
-          {{ t('ai_model.add_embedding_model') }}
-        </x-button>
-      </div>
-    </div>
 
+    <!-- 添加模型 -->
+    <SettingsCard>
+      <div class="settings-item">
+        <div class="settings-item-header">
+          <div class="settings-label">{{ t('ai_model.add_new_model') }}</div>
+          <div class="settings-description">{{ t('ai_model.add_model_description') }}</div>
+        </div>
+        <div class="settings-item-control model-add-buttons">
+          <x-button variant="primary" @click="handleAddModel('chat')">
+            {{ t('ai_model.add_chat_model') }}
+          </x-button>
+          <x-button variant="primary" @click="handleAddModel('embedding')">
+            {{ t('ai_model.add_embedding_model') }}
+          </x-button>
+        </div>
+      </div>
+    </SettingsCard>
+
+    <!-- 加载状态 -->
     <div v-if="loading" class="settings-loading">
       <div class="settings-loading-spinner"></div>
       <span>{{ t('ai_model.loading') }}</span>
     </div>
 
-    <div v-else-if="models.length === 0" class="settings-item">
-      <div class="settings-item-header">
-        <div class="settings-label">{{ t('ai_model.no_models') }}</div>
-        <div class="settings-description">{{ t('ai_model_config.empty_description') }}</div>
+    <!-- 空状态 -->
+    <SettingsCard v-else-if="models.length === 0">
+      <div class="settings-item">
+        <div class="settings-item-header">
+          <div class="settings-label">{{ t('ai_model.no_models') }}</div>
+          <div class="settings-description">{{ t('ai_model_config.empty_description') }}</div>
+        </div>
       </div>
-    </div>
+    </SettingsCard>
+
+    <!-- 模型列表 -->
     <div v-else>
-      <!-- 统一的模型列表 -->
       <div class="model-section">
-        <h4 class="model-section-title">{{ t('ai_model.all_models') }}</h4>
-        <div v-for="model in models" :key="model.id" class="settings-item">
-          <div class="settings-item-header">
-            <div class="model-info">
-              <div class="settings-label">
-                {{ model.name }}
-                <span class="model-type-tag" :class="model.modelType">
-                  {{ model.modelType === 'chat' ? t('ai_model.chat') : t('ai_model.embedding') }}
-                </span>
+        <h4 class="settings-group-title">{{ t('ai_model.all_models') }}</h4>
+
+        <SettingsCard>
+          <div v-for="model in models" :key="model.id" class="settings-item">
+            <div class="settings-item-header">
+              <div class="model-info">
+                <div class="settings-label">
+                  {{ model.name }}
+                  <span class="model-type-tag" :class="model.modelType">
+                    {{ model.modelType === 'chat' ? t('ai_model.chat') : t('ai_model.embedding') }}
+                  </span>
+                </div>
+                <div class="settings-description">{{ model.provider }}</div>
               </div>
-              <div class="settings-description">{{ model.provider }}</div>
+            </div>
+            <div class="settings-item-control">
+              <x-button variant="primary" size="small" @click="handleEditModel(model)">
+                {{ t('ai_model.edit') }}
+              </x-button>
+              <x-popconfirm
+                :title="t('ai_model.delete_confirm')"
+                :description="t('ai_model.delete_description', { name: model.name })"
+                type="danger"
+                :confirm-text="t('ai_model.delete_confirm_text')"
+                :cancel-text="t('ai_model.cancel')"
+                placement="top"
+                @confirm="handleDeleteModel(model.id)"
+              >
+                <template #trigger>
+                  <x-button variant="danger" size="small">
+                    {{ t('ai_model.delete') }}
+                  </x-button>
+                </template>
+              </x-popconfirm>
             </div>
           </div>
-          <div class="settings-item-control">
-            <x-button variant="secondary" size="small" @click="handleEditModel(model)">
-              {{ t('ai_model.edit') }}
-            </x-button>
-            <x-popconfirm
-              :title="t('ai_model.delete_confirm')"
-              :description="t('ai_model.delete_description', { name: model.name })"
-              type="danger"
-              :confirm-text="t('ai_model.delete_confirm_text')"
-              :cancel-text="t('ai_model.cancel')"
-              placement="top"
-              @confirm="handleDeleteModel(model.id)"
-            >
-              <template #trigger>
-                <x-button variant="danger" size="small">
-                  {{ t('ai_model.delete') }}
-                </x-button>
-              </template>
-            </x-popconfirm>
-          </div>
-        </div>
+        </SettingsCard>
       </div>
     </div>
 
@@ -144,15 +157,6 @@
 
   .model-section {
     margin-bottom: 24px;
-  }
-
-  .model-section-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-200);
-    margin-bottom: 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border-300);
   }
 
   .settings-item-control {
@@ -182,7 +186,7 @@
     align-items: center;
     gap: 4px;
     padding: 2px 8px;
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
     font-size: 11px;
     font-weight: 500;
     margin-left: 8px;
@@ -207,21 +211,6 @@
     border-bottom: 1px solid var(--border-300);
   }
 
-  .action-header :deep(.x-button) {
-    background: var(--color-primary);
-    color: white;
-    border-radius: 4px;
-    padding: 8px 12px;
-    font-size: 13px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .action-header :deep(.x-button:hover) {
-    background: var(--color-primary-hover);
-  }
-
   .section-title {
     font-size: 20px;
     color: var(--text-100);
@@ -238,7 +227,7 @@
     padding: 48px 24px;
     color: var(--text-400);
     background: var(--bg-500);
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
   }
 
   .empty-icon {
@@ -267,12 +256,13 @@
     justify-content: space-between;
     align-items: center;
     background: var(--bg-500);
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
     padding: 12px 16px;
   }
 
+  /* 移除模型卡片的 hover 效果，因为它们在设置卡片内 */
   .model-card:hover {
-    background: var(--bg-400);
+    background: var(--bg-500);
   }
 
   .model-name {
@@ -285,29 +275,6 @@
     gap: 8px;
   }
 
-  .model-actions :deep(.x-button) {
-    background: transparent;
-    border: 1px solid var(--border-200);
-    color: var(--text-300);
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 12px;
-  }
-
-  .model-actions :deep(.x-button:hover) {
-    background: var(--bg-300);
-    color: var(--text-200);
-  }
-
-  .model-actions :deep(.x-button[variant='danger']) {
-    border-color: var(--error-border);
-    color: var(--error-text);
-  }
-
-  .model-actions :deep(.x-button[variant='danger']:hover) {
-    background: var(--error-bg);
-  }
-
   .loading-state {
     display: flex;
     flex-direction: column;
@@ -315,7 +282,7 @@
     padding: 48px 24px;
     color: var(--text-400);
     background: var(--bg-500);
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
   }
 
   .loading-state p {

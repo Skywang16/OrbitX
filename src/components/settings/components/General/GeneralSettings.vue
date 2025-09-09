@@ -1,9 +1,10 @@
 <script setup lang="ts">
-  import { ref, onMounted } from 'vue'
+  import { ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { XSwitch, createMessage } from '@/ui'
   import { enable as enableAutostart, disable as disableAutostart, isEnabled } from '@tauri-apps/plugin-autostart'
   import { debounce } from 'lodash-es'
+  import SettingsCard from '../../SettingsCard.vue'
 
   const { t } = useI18n()
 
@@ -37,127 +38,36 @@
     }
   }, 300)
 
-  onMounted(() => {
-    loadAutoStartStatus()
+  // 初始化方法，供外部调用
+  const init = async () => {
+    await loadAutoStartStatus()
+  }
+
+  // 暴露初始化方法给父组件
+  defineExpose({
+    init,
   })
 </script>
 
 <template>
-  <div class="general-settings">
-    <div class="settings-header">
-      <h2 class="settings-title">{{ t('settings.general.title') }}</h2>
-      <p class="settings-description">{{ t('settings.general.description') }}</p>
-    </div>
+  <div class="settings-group">
+    <h2 class="settings-section-title">{{ t('settings.general.title') }}</h2>
 
-    <div class="settings-content">
-      <!-- 开机自启动 -->
-      <div class="setting-group">
-        <div class="setting-item">
-          <div class="setting-main">
-            <div class="setting-info">
-              <h3 class="setting-label">{{ t('settings.general.autostart_title') }}</h3>
-            </div>
-            <div class="setting-control">
-              <XSwitch :model-value="autoStartEnabled" @update:model-value="handleAutoStartToggle" />
-            </div>
+    <div class="settings-group">
+      <h3 class="settings-group-title">{{ t('settings.general.startup_title') }}</h3>
+      <SettingsCard>
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('settings.general.autostart_title') }}</div>
+            <div class="settings-description">{{ t('settings.general.description') }}</div>
+          </div>
+          <div class="settings-item-control">
+            <XSwitch :model-value="autoStartEnabled" @update:model-value="handleAutoStartToggle" />
           </div>
         </div>
-      </div>
+      </SettingsCard>
     </div>
   </div>
 </template>
 
-<style scoped>
-  .general-settings {
-    padding: var(--spacing-lg);
-    max-width: 800px;
-  }
-
-  .settings-header {
-    margin-bottom: var(--spacing-xl);
-  }
-
-  .settings-title {
-    font-size: 24px;
-    font-weight: 600;
-    color: var(--text-100);
-    margin: 0 0 var(--spacing-sm) 0;
-  }
-
-  .settings-description {
-    color: var(--text-300);
-    margin: 0;
-    font-size: 14px;
-    line-height: 1.5;
-  }
-
-  .settings-content {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-lg);
-  }
-
-  .setting-group {
-    background: var(--bg-300);
-    border: 1px solid var(--border-300);
-    border-radius: var(--border-radius-lg);
-    overflow: hidden;
-  }
-
-  .setting-item {
-    padding: var(--spacing-md);
-    border-bottom: 1px solid var(--border-300);
-  }
-
-  .setting-item:last-child {
-    border-bottom: none;
-  }
-
-  .setting-main {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-  }
-
-  .setting-info {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .setting-label {
-    font-size: 16px;
-    font-weight: 500;
-    color: var(--text-100);
-    margin: 0 0 var(--spacing-xs) 0;
-  }
-
-  .setting-description {
-    font-size: 13px;
-    color: var(--text-300);
-    margin: 0;
-    line-height: 1.4;
-  }
-
-  .setting-control {
-    flex-shrink: 0;
-  }
-
-  /* 响应式设计 */
-  @media (max-width: 600px) {
-    .general-settings {
-      padding: var(--spacing-md);
-    }
-
-    .setting-main {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: var(--spacing-sm);
-    }
-
-    .setting-control {
-      width: 100%;
-      display: flex;
-      justify-content: flex-end;
-    }
-  }
-</style>
+<style scoped></style>

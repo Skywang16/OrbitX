@@ -22,16 +22,17 @@ use crate::vector_index::{
     monitor::FileMonitorService,
     service::VectorIndexService,
     types::{IndexStats, SearchOptions, SearchResult, TaskProgress, VectorIndexConfig, VectorIndexStatus},
+    vectorizer::VectorizationService,
 };
 
 mod app_settings;
 pub use app_settings::*;
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tokio::sync::{mpsc, RwLock};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// 向量索引事件类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -875,11 +876,13 @@ pub async fn get_vector_index_config(
 ///
 /// 验证并保存向量索引配置到数据库中。
 /// 配置包括Qdrant连接信息、embedding模型选择和性能参数。
+/// 在保存前会动态检测embedding模型的向量维度，确保配置有效。
 ///
 /// # 参数
 ///
 /// - `config`: 要保存的向量索引配置
 /// - `storage_state`: 存储系统状态，用于访问数据库
+/// - `llm_state`: LLM服务状态，用于检测向量维度
 ///
 /// # 返回
 ///
@@ -888,34 +891,94 @@ pub async fn get_vector_index_config(
 /// # 错误
 ///
 /// - 配置参数验证失败
+/// - 模型不可用或向量维度检测失败
 /// - 数据库保存失败
 #[tauri::command]
 pub async fn save_vector_index_config(
     config: VectorIndexConfig,
     storage_state: State<'_, crate::ai::tool::storage::StorageCoordinatorState>,
+    llm_state: State<'_, LLMManagerState>,
 ) -> TauriApiResult<String> {
     let result: Result<String> = async {
-        info!("保存向量索引配置");
+        info!("保存向量索引配置，模型: {}", config.embedding_model_id);
 
-        // 1. 创建配置服务
+        // 1. 检测embedding模型的向量维度
+        info!("开始检测模型 '{}' 的向量维度", config.embedding_model_id);
+        
+        let detected_dimension = detect_embedding_model_dimension(
+            &llm_state.service,
+            &config.embedding_model_id
+        ).await.context("检测向量维度失败")?;
+        
+        info!("成功检测到模型 '{}' 的向量维度: {}", config.embedding_model_id, detected_dimension);
+
+        // 2. 创建配置服务
         let config_service = crate::vector_index::VectorIndexConfigService::new(
             storage_state.coordinator.repositories()
         );
 
-        // 2. 保存配置（包含验证逻辑）
+        // 3. 保存配置（包含验证逻辑）
         config_service
             .save_config(&config)
             .await
             .context("保存向量索引配置失败")?;
 
-        info!("向量索引配置保存成功");
-        Ok("向量索引配置保存成功".to_string())
+        info!("向量索引配置保存成功，向量维度: {}", detected_dimension);
+        Ok(format!("向量索引配置保存成功（向量维度: {}）", detected_dimension))
     }
     .await;
 
     match result {
         Ok(msg) => Ok(api_success!(msg)),
-        Err(_) => Ok(api_error!("vector_index.save_config_failed")),
+        Err(e) => {
+            error!("保存向量索引配置失败: {}", e);
+            Ok(api_error!("vector_index.save_config_failed"))
+        },
+    }
+}
+
+/// 检测embedding模型的向量维度
+/// 
+/// 通过发送测试文本给模型来动态获取实际的向量维度
+async fn detect_embedding_model_dimension(
+    llm_service: &Arc<crate::llm::service::LLMService>,
+    model_id: &str,
+) -> Result<usize> {
+    debug!("开始检测模型 '{}' 的向量维度", model_id);
+    
+    // 使用简单的测试文本
+    let test_text = "dimension test";
+    
+    // 创建临时的向量化服务
+    let temp_vectorizer = crate::vector_index::vectorizer::LLMVectorizationService::new(
+        llm_service.clone(), 
+        model_id.to_string()
+    );
+    
+    match temp_vectorizer.create_embedding(test_text).await {
+        Ok(vector) => {
+            let dimension = vector.len();
+            
+            // 验证维度合理性
+            ensure!(
+                dimension >= 128 && dimension <= 4096,
+                "检测到的向量维度 {} 超出合理范围 [128, 4096]，请检查模型配置",
+                dimension
+            );
+            
+            info!("成功检测到向量维度: {} (模型: {})", dimension, model_id);
+            Ok(dimension)
+        },
+        Err(e) => {
+            error!("向量维度检测失败，模型: {}, 错误: {}", model_id, e);
+            
+            // 如果是模型未找到的错误，返回更具体的错误信息
+            if e.to_string().contains("EMBEDDING_MODEL_NOT_FOUND") {
+                bail!("embedding模型 '{}' 不存在或不可用，请在AI设置中添加该模型", model_id);
+            }
+            
+            bail!("无法连接到embedding模型 '{}'，请检查模型配置和网络连接", model_id);
+        }
     }
 }
 

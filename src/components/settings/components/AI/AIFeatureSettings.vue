@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n'
   import { aiApi } from '@/api'
   import { debounce } from 'lodash-es'
+  import SettingsCard from '../../SettingsCard.vue'
 
   const { t } = useI18n()
 
@@ -45,17 +46,25 @@
   <div class="settings-group">
     <h3 class="settings-group-title">{{ t('ai_feature.user_system_prompt') }}</h3>
 
-    <div class="settings-description" style="margin-bottom: 12px">
-      {{ t('ai_feature.prompt_placeholder') }}
-    </div>
-    <textarea
-      v-model="userPrefixPrompt"
-      class="settings-textarea"
-      :placeholder="t('ai_feature.prompt_placeholder')"
-      :aria-label="t('ai_feature.user_system_prompt')"
-      rows="4"
-      :disabled="isLoadingPrefix"
-    ></textarea>
+    <SettingsCard>
+      <div class="settings-item">
+        <div class="settings-item-header">
+          <div class="settings-label">{{ t('ai_feature.user_system_prompt') }}</div>
+          <div class="settings-description">{{ t('ai_feature.prompt_placeholder') }}</div>
+        </div>
+      </div>
+
+      <div style="padding: 0 20px 20px 20px">
+        <textarea
+          v-model="userPrefixPrompt"
+          class="settings-textarea"
+          :placeholder="t('ai_feature.prompt_placeholder')"
+          :aria-label="t('ai_feature.user_system_prompt')"
+          rows="4"
+          :disabled="isLoadingPrefix"
+        ></textarea>
+      </div>
+    </SettingsCard>
   </div>
 </template>
 

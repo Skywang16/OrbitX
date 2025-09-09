@@ -2,7 +2,9 @@
   import { computed, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useTerminalStore } from '@/stores/Terminal'
+  import { useTabManagerStore } from '@/stores/TabManager'
   import { TabType, type TabItem } from '@/types'
+  import { showPopoverAt } from '@/ui/composables/popover-api'
 
   const { t } = useI18n()
 
@@ -21,15 +23,7 @@
 
   // 使用store
   const terminalStore = useTerminalStore()
-
-  // 弹出菜单状态
-  const showAddMenuPopover = ref(false)
-
-  // 添加菜单项：仅显示可用 shell 名称
-  const addMenuItems = computed(() => {
-    const shells = terminalStore.shellManager.availableShells || []
-    return shells.map(s => ({ label: s.name, value: s.name }))
-  })
+  const tabManagerStore = useTabManagerStore()
 
   // 获取标签样式类
   const getTabClass = (tab: TabItem): string[] => {
@@ -112,6 +106,72 @@
     return tab.title || 'Tab'
   }
 
+  // 添加菜单项：仅显示可用 shell 名称
+  const addMenuItems = computed(() => {
+    const shells = terminalStore.shellManager.availableShells || []
+    return shells.map(s => ({
+      label: s.name,
+      value: s.name,
+      onClick: () => handleAddMenuClick(s.name)
+    }))
+  })
+
+  // 处理右键菜单
+  const handleTabContextMenu = async (event: MouseEvent, tabId: string) => {
+    event.preventDefault()
+    
+    const tab = props.tabs.find(t => t.id === tabId)
+    if (!tab) return
+
+    const currentIndex = props.tabs.findIndex(tab => tab.id === tabId)
+    const hasLeftTabs = currentIndex > 0 && props.tabs.slice(0, currentIndex).some(t => t.closable)
+    const hasRightTabs = currentIndex < props.tabs.length - 1 && props.tabs.slice(currentIndex + 1).some(t => t.closable)
+    const hasOtherTabs = props.tabs.filter(t => t.id !== tabId && t.closable).length > 0
+
+    const menuItems = []
+    
+    // 只有可关闭的标签才显示关闭选项
+    if (tab.closable) {
+      menuItems.push({
+        label: '关闭当前',
+        onClick: () => emit('close', tabId)
+      })
+    }
+    
+    // 批量关闭选项（只有存在可关闭的标签时才显示）
+    if (hasLeftTabs) {
+      menuItems.push({
+        label: '关闭左侧全部',
+        onClick: () => tabManagerStore.closeLeftTabs(tabId)
+      })
+    }
+    
+    if (hasRightTabs) {
+      menuItems.push({
+        label: '关闭右侧全部', 
+        onClick: () => tabManagerStore.closeRightTabs(tabId)
+      })
+    }
+    
+    if (hasOtherTabs) {
+      menuItems.push({
+        label: '关闭其他',
+        onClick: () => tabManagerStore.closeOtherTabs(tabId)
+      })
+    }
+
+    // 如果没有任何菜单项，至少显示一个提示
+    if (menuItems.length === 0) {
+      menuItems.push({
+        label: '无可用操作',
+        disabled: true,
+        onClick: () => {}
+      })
+    }
+
+    await showPopoverAt(event.clientX, event.clientY, menuItems)
+  }
+
   // 左键点击：直接新建默认终端
   const handleAddClick = async () => {
     try {
@@ -122,18 +182,15 @@
   }
 
   // 右键点击：打开选择菜单
-  const handleAddContextMenu = (event: MouseEvent) => {
+  const handleAddContextMenu = async (event: MouseEvent) => {
     event.preventDefault()
-    showAddMenuPopover.value = true
+    await showPopoverAt(event.clientX, event.clientY, addMenuItems.value)
   }
 
   // 处理添加菜单项点击
-  const handleAddMenuClick = async (item: { label: string; value: string }) => {
-    showAddMenuPopover.value = false
-
+  const handleAddMenuClick = async (shellName: string) => {
     try {
-      // 创建终端标签页
-      await terminalStore.createTerminalWithShell(item.value)
+      await terminalStore.createTerminalWithShell(shellName)
     } catch (error) {
       // 静默处理错误
     }
@@ -149,8 +206,6 @@
       }
     }
   }
-
-  // 移除JavaScript滚轮处理，改用CSS实现
 </script>
 
 <template>
@@ -163,6 +218,7 @@
         :style="{ width: needsScroll ? `${MIN_TAB_WIDTH}px` : `${tabWidth}px` }"
         @mousedown="handleMouseDown($event, tab.id)"
         @click="handleTabClick(tab.id)"
+        @contextmenu="handleTabContextMenu($event, tab.id)"
       >
         <div class="tab-content" :title="getTabTooltip(tab)">
           <template v-if="tab.type === TabType.TERMINAL && tab.shell && tab.path">
@@ -198,71 +254,51 @@
       </div>
 
       <!-- 内联添加按钮 -->
-      <x-popover
+      <button
         v-if="!needsScroll && tabWidth >= MAX_TAB_WIDTH"
-        v-model="showAddMenuPopover"
-        placement="bottom-start"
-        trigger="manual"
-        :menu-items="addMenuItems"
-        @menu-item-click="handleAddMenuClick"
+        class="add-tab-btn inline"
+        :title="t('ui.new_terminal_tip')"
+        @click="handleAddClick"
+        @contextmenu="handleAddContextMenu"
       >
-        <template #trigger>
-          <button
-            class="add-tab-btn inline"
-            :title="t('ui.new_terminal_tip')"
-            @click="handleAddClick"
-            @contextmenu="handleAddContextMenu"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="3"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-          </button>
-        </template>
-      </x-popover>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
     </div>
 
     <!-- 固定添加按钮 -->
-    <x-popover
+    <button
       v-if="needsScroll || tabWidth < MAX_TAB_WIDTH"
-      v-model="showAddMenuPopover"
-      placement="bottom-end"
-      trigger="manual"
-      :menu-items="addMenuItems"
-      @menu-item-click="handleAddMenuClick"
+      class="add-tab-btn fixed"
+      :title="t('ui.new_terminal_tip')"
+      @click="handleAddClick"
+      @contextmenu="handleAddContextMenu"
     >
-      <template #trigger>
-        <button
-          class="add-tab-btn fixed"
-          :title="t('ui.new_terminal_tip')"
-          @click="handleAddClick"
-          @contextmenu="handleAddContextMenu"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="3"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-        </button>
-      </template>
-    </x-popover>
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="3"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    </button>
   </div>
 </template>
 
@@ -325,7 +361,7 @@
   .tab.active {
     color: var(--text-100);
     position: relative;
-    border: 1px solid var(--color-primary);
+    border: 1px solid transparent;
   }
 
   .tab.active::before {
@@ -369,7 +405,7 @@
 
   .tab.agent-tab.active {
     background: rgba(117, 190, 255, 0.15);
-    border-color: var(--color-info);
+    border-color: transparent;
   }
 
   .tab.agent-tab.active::before {

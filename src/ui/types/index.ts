@@ -72,43 +72,6 @@ export interface ModalEmits {
   closed: () => void
 }
 
-// 弹出框组件属性类型
-export interface PopoverProps {
-  modelValue?: boolean
-  visible?: boolean
-  trigger?: 'click' | 'hover' | 'manual'
-  triggerText?: string
-  placement?: Placement
-  offset?: number
-  x?: number
-  y?: number
-  content?: string
-  menuItems?: Array<{
-    label: string
-    value?: unknown
-    icon?: string | object
-    disabled?: boolean
-    onClick?: () => void
-  }>
-  width?: string | number
-  maxWidth?: string | number
-  disabled?: boolean
-  mask?: boolean
-  closeOnClickOutside?: boolean
-  closeOnClickInside?: boolean
-}
-
-// 弹出框组件事件类型
-export interface PopoverEmits {
-  'update:modelValue': (value: boolean) => void
-  'update:visible': (value: boolean) => void
-  action: () => void
-  close: () => void
-  show: () => void
-  hide: () => void
-  'menu-item-click': (item: any) => void
-}
-
 // 搜索输入框组件属性类型
 export interface SearchInputProps {
   modelValue?: string
@@ -222,7 +185,6 @@ export interface PopconfirmEmits {
 export type ButtonInstance = InstanceType<typeof import('./Button.vue').default>
 export type SwitchInstance = InstanceType<typeof import('./Switch.vue').default>
 export type ModalInstance = InstanceType<typeof import('./Modal.vue').default>
-export type PopoverInstance = InstanceType<typeof import('./Popover.vue').default>
 export type SearchInputInstance = InstanceType<typeof import('./SearchInput.vue').default>
 export type MessageInstance = InstanceType<typeof import('./Message.vue').default>
 export type SelectInstance = InstanceType<typeof import('./Select.vue').default>

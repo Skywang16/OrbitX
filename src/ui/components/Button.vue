@@ -105,23 +105,23 @@
 
 <style scoped>
   .x-button {
-    --x-button-font-weight: 400;
+    --x-button-font-weight: 500;
     --x-button-border-width: 1px;
     --x-button-border-style: solid;
-    --x-button-border-radius: var(--border-radius);
-    --x-button-transition: all var(--x-duration-normal) var(--x-ease-in-out);
+    --x-button-border-radius: var(--border-radius-sm);
+    --x-button-transition: all 0.12s ease-out;
+    --x-button-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --x-button-shadow-hover: 0 2px 6px 0 rgba(0, 0, 0, 0.12);
+    --x-button-shadow-active: 0 1px 2px 0 rgba(0, 0, 0, 0.08);
 
-    --x-button-height-small: 24px;
-    --x-button-padding-small: 0 var(--spacing-sm);
-    --x-button-font-size-small: var(--font-size-xs);
+    --x-button-padding-small: 4px 6px;
+    --x-button-font-size-small: 12px;
 
-    --x-button-height-medium: 32px;
-    --x-button-padding-medium: 0 var(--spacing-lg);
-    --x-button-font-size-medium: var(--font-size-md);
+    --x-button-padding-medium: 6px 8px;
+    --x-button-font-size-medium: 14px;
 
-    --x-button-height-large: 40px;
-    --x-button-padding-large: 0 var(--spacing-xl);
-    --x-button-font-size-large: var(--font-size-lg);
+    --x-button-padding-large: 8px 10px;
+    --x-button-font-size-large: 16px;
   }
 
   .x-button {
@@ -129,166 +129,239 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: var(--spacing-xs);
-    height: var(--x-button-height-medium);
+    gap: 6px;
     padding: var(--x-button-padding-medium);
     font-size: var(--x-button-font-size-medium);
-    font-family: var(--font-family);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-weight: var(--x-button-font-weight);
-    line-height: 1.5715;
+    line-height: 1.4;
     white-space: nowrap;
     text-align: center;
-    background: var(--bg-400);
+    background: var(--bg-300);
     border: var(--x-button-border-width) var(--x-button-border-style) var(--border-300);
     border-radius: var(--x-button-border-radius);
-    color: var(--text-200);
+    color: var(--text-300);
     cursor: pointer;
-    transition: var(--x-button-transition);
+    /* 移除过渡效果，让hover更即时 */
     user-select: none;
     touch-action: manipulation;
     outline: none;
+    box-shadow: var(--x-button-shadow);
+    overflow: hidden;
+  }
+
+  .x-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.1);
+    opacity: 0;
+    /* 移除过渡效果 */
+    pointer-events: none;
   }
 
   .x-button:hover {
-    color: var(--color-primary);
-    border-color: var(--color-primary);
-    background: var(--color-hover);
+    color: var(--text-200);
+    border-color: var(--border-400);
+    background: var(--bg-400);
+    box-shadow: var(--x-button-shadow-hover);
+  }
+
+  .x-button:hover::before {
+    opacity: 1;
   }
 
   .x-button:focus {
-    color: var(--color-primary);
+    color: var(--text-200);
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px var(--color-primary-alpha);
+    box-shadow:
+      0 0 0 3px var(--color-primary-alpha),
+      var(--x-button-shadow);
+    outline: none;
   }
 
   .x-button:active {
-    color: var(--color-primary);
-    border-color: var(--color-primary);
-    background: var(--color-hover);
+    color: var(--text-200);
+    border-color: var(--border-300);
+    background: var(--bg-200);
+    box-shadow: var(--x-button-shadow-active);
+  }
+
+  .x-button:active::before {
+    opacity: 0;
   }
 
   .x-button--small {
-    height: var(--x-button-height-small);
     padding: var(--x-button-padding-small);
     font-size: var(--x-button-font-size-small);
-    border-radius: var(--border-radius-sm);
+    border-radius: var(--x-button-border-radius);
   }
 
   .x-button--large {
-    height: var(--x-button-height-large);
     padding: var(--x-button-padding-large);
     font-size: var(--x-button-font-size-large);
-    border-radius: var(--border-radius-lg);
+    border-radius: calc(var(--x-button-border-radius) + 2px);
   }
   .x-button--primary {
-    color: var(--text-100);
+    color: #ffffff;
     background: var(--color-primary);
     border-color: var(--color-primary);
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+  }
+
+  .x-button--primary::before {
+    background: rgba(255, 255, 255, 0.1);
   }
 
   .x-button--primary:hover {
-    color: var(--text-100);
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-    opacity: 0.8;
+    color: #ffffff;
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+    box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.15);
   }
 
   .x-button--primary:focus {
-    color: var(--text-100);
+    color: #ffffff;
     background: var(--color-primary);
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px var(--color-primary-alpha);
+    box-shadow:
+      0 0 0 3px var(--color-primary-alpha),
+      0 1px 2px 0 rgba(0, 0, 0, 0.1);
   }
 
   .x-button--primary:active {
-    color: var(--text-100);
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-    opacity: 0.9;
+    color: #ffffff;
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+    box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.1);
   }
 
   .x-button--secondary {
-    color: var(--text-200);
-    background: var(--bg-500);
+    color: var(--text-300);
+    background: var(--bg-400);
     border-color: var(--border-300);
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   }
 
   .x-button--secondary:hover {
-    background: var(--color-hover);
+    color: var(--text-200);
+    background: var(--bg-500);
     border-color: var(--border-400);
+    box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  }
+
+  .x-button--secondary:active {
+    color: var(--text-200);
+    background: var(--bg-300);
+    border-color: var(--border-400);
+    box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   }
   .x-button--danger {
-    color: var(--text-100);
+    color: #ffffff;
     background: var(--color-error);
     border-color: var(--color-error);
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+  }
+
+  .x-button--danger::before {
+    background: rgba(255, 255, 255, 0.1);
   }
 
   .x-button--danger:hover {
-    color: var(--text-100);
-    background: var(--color-error);
-    border-color: var(--color-error);
-    opacity: 0.8;
+    color: #ffffff;
+    background: var(--ansi-red);
+    border-color: var(--ansi-red);
+    box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.15);
   }
 
   .x-button--danger:focus {
-    color: var(--text-100);
+    color: #ffffff;
     background: var(--color-error);
     border-color: var(--color-error);
-    box-shadow: 0 0 0 2px var(--color-primary-alpha);
+    box-shadow:
+      0 0 0 3px rgba(244, 71, 71, 0.2),
+      0 1px 2px 0 rgba(0, 0, 0, 0.1);
   }
 
   .x-button--danger:active {
-    color: var(--text-100);
-    background: var(--color-error);
-    border-color: var(--color-error);
-    opacity: 0.9;
+    color: #ffffff;
+    background: var(--ansi-red);
+    border-color: var(--ansi-red);
+    box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.1);
   }
 
   .x-button--ghost {
-    color: var(--text-200);
+    color: var(--text-300);
     background: transparent;
     border-color: var(--border-300);
+    box-shadow: none;
+  }
+
+  .x-button--ghost::before {
+    background: var(--color-primary-alpha);
   }
 
   .x-button--ghost:hover {
     color: var(--color-primary);
     border-color: var(--color-primary);
     background: var(--color-primary-alpha);
+    box-shadow: 0 2px 8px 0 var(--color-primary-alpha);
+  }
+
+  .x-button--ghost:active {
+    color: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+    background: var(--color-primary-alpha);
+    box-shadow: none;
   }
   .x-button--link {
     color: var(--color-primary);
     background: transparent;
     border-color: transparent;
     box-shadow: none;
+    padding: 0 4px;
+  }
+
+  .x-button--link::before {
+    background: var(--color-primary-alpha);
   }
 
   .x-button--link:hover {
-    color: var(--color-primary);
-    background: transparent;
-    border-color: transparent;
-    opacity: 0.8;
-  }
-
-  .x-button--link:focus {
-    color: var(--color-primary);
-    background: transparent;
+    color: var(--color-primary-hover);
+    background: var(--color-primary-alpha);
     border-color: transparent;
     box-shadow: none;
   }
 
+  .x-button--link:focus {
+    color: var(--color-primary-hover);
+    background: transparent;
+    border-color: transparent;
+    box-shadow: 0 0 0 2px var(--color-primary-alpha);
+    border-radius: calc(var(--x-button-border-radius) - 2px);
+  }
+
   .x-button--link:active {
-    color: var(--color-primary);
-    opacity: 0.9;
+    color: #0284c7;
+    background: var(--color-primary-alpha);
   }
 
   .x-button--disabled,
   .x-button:disabled {
     color: var(--text-500) !important;
-    background: var(--bg-500) !important;
-    border-color: var(--border-300) !important;
+    background: var(--bg-200) !important;
+    border-color: var(--border-200) !important;
     cursor: not-allowed !important;
     box-shadow: none !important;
     opacity: 0.6 !important;
+  }
+
+  .x-button--disabled::before,
+  .x-button:disabled::before {
+    display: none;
   }
 
   .x-button--link.x-button--disabled,
@@ -300,51 +373,64 @@
   .x-button--loading {
     position: relative;
     pointer-events: none;
+    cursor: default;
   }
 
   .x-button--loading .x-button__content {
-    opacity: 0.6;
+    opacity: 0.7;
+  }
+
+  .x-button--loading:hover {
+    transform: none !important;
   }
 
   .x-button--block {
     width: 100%;
   }
   .x-button--round {
-    border-radius: 32px;
+    border-radius: calc(var(--x-button-border-radius) * 3);
   }
 
   .x-button--round.x-button--small {
-    border-radius: 24px;
+    border-radius: calc(var(--x-button-border-radius) * 2.5);
   }
 
   .x-button--round.x-button--large {
-    border-radius: 40px;
+    border-radius: calc(var(--x-button-border-radius) * 3.5);
   }
 
   .x-button--circle {
-    min-width: var(--x-button-height-medium);
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
     padding: 0;
     border-radius: 50%;
   }
 
   .x-button--circle.x-button--small {
-    min-width: var(--x-button-height-small);
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
   }
 
   .x-button--circle.x-button--large {
-    min-width: var(--x-button-height-large);
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
   }
   .x-button--icon-only {
-    padding: 0;
-    min-width: var(--x-button-height-medium);
+    padding: 6px;
+    min-width: 36px;
   }
 
   .x-button--icon-only.x-button--small {
-    min-width: var(--x-button-height-small);
+    padding: 4px;
+    min-width: 28px;
   }
 
   .x-button--icon-only.x-button--large {
-    min-width: var(--x-button-height-large);
+    padding: 8px;
+    min-width: 44px;
   }
 
   .x-button__loading {

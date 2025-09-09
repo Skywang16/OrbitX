@@ -10,12 +10,13 @@ src/ui/
 │   ├── Button.vue      # 按钮组件
 │   ├── Message.vue     # 消息组件
 │   ├── Modal.vue       # 模态框组件
-│   ├── Popover.vue     # 弹出框组件
+│   ├── Popconfirm.vue  # 弹出确认框组件
 │   ├── SearchInput.vue # 搜索输入框组件
 │   └── Switch.vue      # 开关组件
 ├── composables/         # 函数式API
 │   ├── message-api.ts  # 消息API
-│   └── confirm-api.ts  # 确认对话框API
+│   ├── confirm-api.ts  # 确认对话框API
+│   └── popover-api.ts  # 系统菜单API
 ├── styles/             # 样式文件
 │   └── index.css       # 主样式文件
 ├── types/              # 类型定义
@@ -67,7 +68,13 @@ import type { ButtonProps, ModalProps } from '@/ui'
 
 - **XMessage** - 消息提示组件
 - **XModal** - 模态框组件，支持多种尺寸
-- **XPopover** - 弹出框组件，支持菜单功能
+- **XPopconfirm** - 弹出确认框组件，使用系统菜单
+
+### 函数式API
+
+- **createPopover** - 创建系统级弹出菜单
+- **showContextMenu** - 显示右键上下文菜单
+- **showPopoverAt** - 在指定位置显示菜单
 
 ## 🔧 函数式API
 

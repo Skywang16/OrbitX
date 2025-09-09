@@ -229,7 +229,7 @@
     background: var(--bg-500);
     color: var(--text-200);
     padding: 8px 16px;
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
     border: 1px solid var(--border-300);
     font-size: 12px;
     z-index: 100;

@@ -10,7 +10,7 @@
 use anyhow::{ensure, Context, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::vector_index::types::{Language, VectorIndexFullConfig};

@@ -29,15 +29,9 @@ export function useVectorIndexStatus() {
     }
 
     isLoading.value = true
-    try {
-      const isIndexed = await vectorIndexAppSettingsApi.isDirectoryIndexed(currentDirectory.value)
-      isCurrentDirectoryIndexed.value = isIndexed
-    } catch (error) {
-      console.warn('检查当前目录向量索引状态失败:', error)
-      isCurrentDirectoryIndexed.value = false
-    } finally {
-      isLoading.value = false
-    }
+    const isIndexed = await vectorIndexAppSettingsApi.isDirectoryIndexed(currentDirectory.value)
+    isCurrentDirectoryIndexed.value = isIndexed
+    isLoading.value = false
   }
 
   return {

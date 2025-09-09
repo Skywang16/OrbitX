@@ -40,7 +40,7 @@
 
   // 计算属性
   const showCompletion = computed(() => {
-    return props.input.length > 0 && currentSuggestion.value.length > 0
+    return props.input.length > 0 && currentSuggestion.value.length > 0 && completionText.value.length > 0
   })
 
   const shortcutHint = computed(() => {
@@ -152,7 +152,7 @@
 
   // 获取补全建议的核心逻辑
   const fetchCompletions = async (input: string) => {
-    if (!input.trim()) {
+    if (!input || input.length === 0) {
       completionItems.value = []
       currentSuggestion.value = ''
       emit('completion-ready', [])
@@ -306,8 +306,12 @@
     font-size: var(--font-size-md);
     background: var(--bg-500);
     padding: 1px 4px;
-    border-radius: 3px;
+    border-radius: var(--border-radius-xs);
     border: 1px solid var(--border-300);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 60vw;
   }
 
   .completion-hint {
@@ -316,7 +320,7 @@
     font-size: var(--font-size-xs);
     background: var(--bg-400);
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
     border: 1px solid var(--border-200);
     opacity: 0.7;
   }

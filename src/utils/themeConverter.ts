@@ -11,31 +11,26 @@ const getAppBackgroundColor = (): string | null => {
     return null
   }
 
-  try {
-    // 获取根元素的计算样式
-    const rootElement = document.documentElement
-    const computedStyle = window.getComputedStyle(rootElement)
+  // 获取根元素的计算样式
+  const rootElement = document.documentElement
+  const computedStyle = window.getComputedStyle(rootElement)
 
-    // 尝试获取应用背景颜色CSS变量
-    const backgroundColor = computedStyle.getPropertyValue('--bg-200').trim()
+  // 尝试获取应用背景颜色CSS变量
+  const backgroundColor = computedStyle.getPropertyValue('--bg-200').trim()
 
-    if (backgroundColor && backgroundColor !== '') {
-      return backgroundColor
-    }
-
-    // 如果没有找到CSS变量，尝试获取body的背景颜色
-    const bodyStyle = window.getComputedStyle(document.body)
-    const bodyBackground = bodyStyle.backgroundColor
-
-    if (bodyBackground && bodyBackground !== 'rgba(0, 0, 0, 0)' && bodyBackground !== 'transparent') {
-      return bodyBackground
-    }
-
-    return null
-  } catch (error) {
-    console.warn('获取应用背景颜色失败:', error)
-    return null
+  if (backgroundColor && backgroundColor !== '') {
+    return backgroundColor
   }
+
+  // 如果没有找到CSS变量，尝试获取body的背景颜色
+  const bodyStyle = window.getComputedStyle(document.body)
+  const bodyBackground = bodyStyle.backgroundColor
+
+  if (bodyBackground && bodyBackground !== 'rgba(0, 0, 0, 0)' && bodyBackground !== 'transparent') {
+    return bodyBackground
+  }
+
+  return null
 }
 
 /**

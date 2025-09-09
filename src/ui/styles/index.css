@@ -41,7 +41,6 @@
 .x-button,
 .x-message,
 .x-modal,
-.x-popover,
 .x-search-input,
 .x-switch {
   box-sizing: border-box;
@@ -50,7 +49,6 @@
 .x-button *,
 .x-message *,
 .x-modal *,
-.x-popover *,
 .x-search-input *,
 .x-switch * {
   box-sizing: border-box;
@@ -100,8 +98,7 @@
 .x-button:focus-visible,
 .x-search-input:focus-within,
 .x-switch input:focus-visible + .slider,
-.default-trigger:focus-visible,
-.popover-menu-item:focus-visible {
+.default-trigger:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
@@ -109,8 +106,7 @@
 /* 禁用状态统一 */
 .x-button:disabled,
 .x-search-input--disabled,
-.x-switch.is-disabled,
-.popover-menu-item--disabled {
+.x-switch.is-disabled {
   pointer-events: none;
   user-select: none;
 }
@@ -119,7 +115,6 @@
 .x-button,
 .x-message,
 .x-modal-container,
-.x-popover,
 .x-search-input,
 .x-switch .slider {
   will-change: auto;
@@ -130,7 +125,6 @@
   .x-button,
   .x-message,
   .x-modal-container,
-  .x-popover,
   .x-search-input {
     border-width: 2px;
   }
@@ -141,7 +135,6 @@
   .x-button,
   .x-message,
   .x-modal-container,
-  .x-popover,
   .x-search-input,
   .x-switch .slider,
   .x-switch .slider:before {
@@ -172,8 +165,7 @@
 /* 打印样式 */
 @media print {
   .x-message,
-  .x-modal,
-  .x-popover {
+  .x-modal {
     display: none !important;
   }
 

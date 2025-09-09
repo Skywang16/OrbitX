@@ -1,0 +1,77 @@
+[theme]
+name = "catppuccin-latte"
+theme_type = "light"
+
+[theme.ansi]
+black = "#5c5f77"
+red = "#d20f39"
+green = "#40a02b"
+yellow = "#df8e1d"
+blue = "#1e66f5"
+magenta = "#ea76cb"
+cyan = "#179299"
+white = "#acb0be"
+
+[theme.bright]
+black = "#6c6f85"
+red = "#d20f39"
+green = "#40a02b"
+yellow = "#df8e1d"
+blue = "#1e66f5"
+magenta = "#ea76cb"
+cyan = "#179299"
+white = "#bcc0cc"
+
+[theme.syntax]
+comment = "#9ca0b0"
+string = "#40a02b"
+number = "#fe640b"
+keyword = "#8839ef"
+function = "#1e66f5"
+variable = "#4c4f69"
+type_name = "#dc8a78"
+operator = "#04a5e5"
+
+[theme.ui]
+# 背景色层次
+bg_100 = "#eff1f5"
+bg_200 = "#e6e9ef"
+bg_300 = "#dce0e8"
+bg_400 = "#ccd0da"
+bg_500 = "#bcc0cc"
+bg_600 = "#acb0be"
+bg_700 = "#9ca0b0"
+
+# 边框层次
+border_200 = "rgba(92, 95, 119, 0.1)"
+border_300 = "rgba(92, 95, 119, 0.2)"
+border_400 = "rgba(92, 95, 119, 0.3)"
+
+# 文本层次
+text_100 = "#4c4f69"
+text_200 = "#5c5f77"
+text_300 = "#6c6f85"
+text_400 = "#7c7f93"
+text_500 = "#9ca0b0"
+
+# 状态颜色
+primary = "#1e66f5"
+primary_hover = "#04a5e5"
+primary_alpha = "rgba(30, 102, 245, 0.1)"
+success = "#40a02b"
+warning = "#df8e1d"
+error = "#d20f39"
+info = "#179299"
+
+# 交互状态
+hover = "#e6e9ef"
+active = "#dce0e8"
+focus = "#1e66f5"
+selection = "rgba(30, 102, 245, 0.2)"
+
+# 阴影和其他UI变量
+shadow_sm = "0 1px 3px 0 rgba(76, 79, 105, 0.12)"
+shadow_md = "0 4px 6px -1px rgba(76, 79, 105, 0.1)"
+font_family = "'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace"
+border_radius = "8px"
+border_radius_lg = "12px"

@@ -18,12 +18,26 @@
   border-right: 1px solid var(--border-300);
   overflow-y: auto;
   flex-shrink: 0;
+  /* 隐藏滚动条 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.settings-sidebar::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Webkit */
 }
 
 .settings-main {
   flex: 1;
   overflow-y: auto;
   background: var(--bg-200);
+  /* 隐藏滚动条 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.settings-main::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Webkit */
 }
 
 .settings-panel {
@@ -49,26 +63,48 @@
   margin-bottom: 24px;
 }
 
-.settings-section {
-  margin-bottom: 48px;
-  padding-top: 20px;
-}
-
 .settings-item {
   display: flex;
   align-items: center;
   min-height: 32px;
   padding: 16px 20px;
   background: var(--bg-300);
-  border: 1px solid var(--border-200);
+  border: none;
   border-radius: var(--border-radius);
   margin-bottom: 12px;
   transition: all 0.2s ease;
 }
 
-.settings-item:hover {
-  background: var(--bg-400);
-  border-color: var(--border-300);
+/* 设置卡片容器 */
+.settings-card {
+  background: var(--bg-300);
+  border-radius: var(--border-radius);
+  margin-bottom: 12px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.settings-card:hover {
+  background: var(--bg-350, var(--bg-300));
+}
+
+/* 设置卡片内的设置项 */
+.settings-card .settings-item {
+  background: transparent;
+  border-radius: 0;
+  margin-bottom: 0;
+  position: relative;
+}
+
+/* 设置项之间的分割线 */
+.settings-card .settings-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20px;
+  right: 20px;
+  height: 1px;
+  background: var(--border-200, rgba(255, 255, 255, 0.05));
 }
 
 .settings-item.clickable {
@@ -77,7 +113,6 @@
 
 .settings-item.active {
   background: var(--color-primary-alpha);
-  border-color: var(--color-primary);
   transform: none;
 }
 
@@ -115,15 +150,11 @@
 .settings-radio {
   width: 18px;
   height: 18px;
-  border: 1px solid var(--border-300);
+  border: none;
   border-radius: 50%;
   background: var(--bg-500);
   cursor: pointer;
   position: relative;
-}
-
-.settings-radio:checked {
-  border-color: var(--color-primary);
 }
 
 .settings-radio:checked::after {
@@ -142,7 +173,7 @@
   width: 120px;
   height: 4px;
   background: var(--bg-400);
-  border-radius: 2px;
+  border-radius: var(--border-radius-xs);
   outline: none;
   appearance: none;
   cursor: pointer;
@@ -172,7 +203,7 @@
   color: var(--text-300);
   background: var(--bg-400);
   padding: 2px 6px;
-  border-radius: 2px;
+  border-radius: var(--border-radius-xs);
   font-family: var(--font-family-mono);
   min-width: 50px;
   text-align: center;
@@ -183,85 +214,16 @@
   min-height: 80px;
   padding: 12px;
   background: var(--bg-500);
-  border: 1px solid var(--border-300);
+  border: none;
   border-radius: var(--border-radius);
   color: var(--text-200);
   font-size: 13px;
   font-family: var(--font-family-mono);
   resize: vertical;
-  transition: border-color 0.2s ease;
 }
 
 .settings-textarea:focus {
   outline: none;
-  border-color: var(--color-primary);
-}
-
-.settings-navigation {
-  padding: 12px 0;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.settings-navigation-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-300);
-  margin-bottom: 8px;
-  flex-shrink: 0;
-}
-
-.settings-navigation-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  flex: 1;
-  overflow-y: auto;
-}
-
-.settings-navigation-item {
-  display: flex;
-  align-items: center;
-  padding: 8px 16px;
-  cursor: pointer;
-  transition: background-color 0.1s ease;
-  min-height: 32px;
-}
-
-.settings-navigation-item:hover {
-  background: var(--bg-400);
-}
-
-.settings-navigation-item.active {
-  background: var(--color-primary-alpha);
-  border-left-color: var(--color-primary);
-}
-
-.settings-navigation-icon {
-  width: 16px;
-  height: 16px;
-  margin-right: 12px;
-  color: var(--text-400);
-  flex-shrink: 0;
-}
-
-.settings-navigation-item.active .settings-navigation-icon {
-  color: var(--color-primary);
-}
-
-.settings-navigation-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.settings-navigation-label {
-  font-size: 13px;
-  color: var(--text-200);
-}
-
-.settings-navigation-item.active .settings-navigation-label {
-  color: var(--color-primary);
-  font-weight: 500;
 }
 
 .settings-item-control input[type='radio'],
@@ -288,7 +250,7 @@
   padding: 0 14px;
   border-radius: var(--border-radius);
   font-size: 13px;
-  border: 1px solid var(--border-300);
+  border: none;
   background: var(--bg-500);
   color: var(--text-200);
   cursor: pointer;
@@ -395,19 +357,6 @@
     max-width: none;
     justify-content: flex-start;
   }
-
-  .settings-navigation-header {
-    padding: 8px 12px;
-  }
-
-  .settings-navigation-list {
-    max-height: 100px;
-    overflow-y: auto;
-  }
-
-  .settings-navigation-item {
-    padding: 8px 12px;
-  }
 }
 
 @media (max-width: 400px) {
@@ -446,15 +395,11 @@
     font-size: 11px;
   }
 
-  /* 确保选择框在小屏幕上正常显示 */
+  /* 选择框在小屏幕上的容器样式 */
   .settings-item-control :deep(.x-select) {
     min-width: 100px;
     width: 100%;
-  }
-
-  .settings-item-control :deep(.x-select .select-trigger) {
-    padding: 4px 6px;
-    font-size: 11px;
+    max-width: none;
   }
 }
 
@@ -500,6 +445,7 @@
 
   .settings-item-control :deep(.x-select) {
     min-width: 80px;
+    max-width: none;
   }
 
   .settings-slider {
@@ -515,34 +461,28 @@
 
 .settings-item-control :deep(.x-button:hover) {
   background: var(--bg-400);
-  border-color: var(--color-primary);
 }
 
 .settings-item-control :deep(.x-button.primary) {
   background: var(--color-primary);
-  border-color: var(--color-primary);
   color: white;
 }
 
 .settings-item-control :deep(.x-button.primary:hover) {
   background: var(--color-primary-hover);
-  border-color: var(--color-primary-hover);
 }
 
 .settings-item-control :deep(.x-button.secondary) {
   background: var(--bg-500);
-  border-color: var(--border-300);
   color: var(--text-200);
 }
 
 .settings-item-control :deep(.x-button.secondary:hover) {
   background: var(--bg-400);
-  border-color: var(--color-primary);
 }
 
 .settings-item-control :deep(.x-button.danger) {
   background: var(--color-error);
-  border-color: var(--color-error);
   color: white;
 }
 
@@ -551,42 +491,13 @@
   opacity: 0.9;
 }
 
+/* 统一设置页面下拉框容器样式 */
 .settings-item-control :deep(.x-select),
 .settings-item-control :deep(.language-switch) {
-  min-width: 100px;
+  min-width: 120px;
   width: 100%;
   max-width: 200px;
-}
-
-.shortcut-editor {
-  min-width: 100px;
-  width: 100%;
-  max-width: 200px;
-  height: 28px;
-  padding: 0 10px;
-  background: var(--bg-500);
-  border: 1px solid var(--border-300);
-  border-radius: var(--border-radius);
-  font-size: 12px;
-  font-family: var(--font-family-mono);
-  color: var(--text-300);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  transition: all 0.2s ease;
-}
-
-.shortcut-editor:hover {
-  background: var(--bg-400);
-  border-color: var(--color-primary);
-}
-
-.shortcut-editor--editing {
-  background: var(--color-primary-alpha);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  flex-shrink: 0;
 }
 
 .shortcut-display {
@@ -600,8 +511,8 @@
 .shortcut-key {
   padding: 4px 8px;
   background: var(--bg-600);
-  border: 1px solid var(--border-400);
-  border-radius: 6px;
+  border: none;
+  border-radius: var(--border-radius);
   font-size: 11px;
   color: var(--text-200);
   font-weight: 500;
@@ -614,19 +525,8 @@
 
 .shortcut-key {
   background: var(--bg-600);
-  border: 1px solid var(--border-400);
+  border: none;
   color: var(--text-200);
-}
-
-.settings-item--stacked {
-  flex-direction: column;
-  align-items: stretch;
-}
-
-.settings-item--stacked .settings-item-control {
-  min-width: 0;
-  width: 100%;
-  margin-top: 8px;
 }
 
 .settings-loading {
@@ -637,7 +537,7 @@
   padding: 16px;
   color: var(--text-400);
   background: var(--bg-300);
-  border-radius: 2px;
+  border-radius: var(--border-radius-xs);
 }
 
 .settings-loading-spinner {

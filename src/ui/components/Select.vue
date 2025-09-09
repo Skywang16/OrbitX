@@ -554,7 +554,7 @@
 
   .x-select__options::-webkit-scrollbar-thumb {
     background-color: var(--border-300);
-    border-radius: 3px;
+    border-radius: var(--border-radius-xs);
   }
 
   .x-select__options::-webkit-scrollbar-thumb:hover {

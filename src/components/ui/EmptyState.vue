@@ -229,7 +229,7 @@
     padding: 12px 20px;
     background: var(--bg-300);
     border: 1px solid var(--border-200);
-    border-radius: 8px;
+    border-radius: var(--border-radius-lg);
     transition: all 0.2s ease;
     min-width: 200px;
     cursor: pointer;
@@ -265,7 +265,7 @@
     color: var(--text-200);
     background: var(--bg-500);
     border: 1px solid var(--border-400);
-    border-radius: 6px;
+    border-radius: var(--border-radius);
     box-shadow:
       0 2px 4px rgba(0, 0, 0, 0.1),
       0 0 0 1px rgba(255, 255, 255, 0.05) inset;

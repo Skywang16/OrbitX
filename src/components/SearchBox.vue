@@ -158,7 +158,7 @@
     right: 12px;
     background: var(--bg-200);
     border: 1px solid var(--border-200);
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     z-index: 1000;
     min-width: 280px;
@@ -207,7 +207,7 @@
     color: var(--text-200);
     cursor: pointer;
     padding: 4px 6px;
-    border-radius: 2px;
+    border-radius: var(--border-radius-xs);
     font-size: 12px;
     display: flex;
     align-items: center;
@@ -229,7 +229,7 @@
     font-size: 10px;
     min-width: 24px;
     border: 1px solid var(--border-300);
-    border-radius: 2px;
+    border-radius: var(--border-radius-xs);
     margin: 0 1px;
   }
 

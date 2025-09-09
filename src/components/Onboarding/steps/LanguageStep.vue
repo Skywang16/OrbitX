@@ -91,7 +91,7 @@
     padding: 20px;
     background: var(--bg-200);
     border: 2px solid var(--border-100);
-    border-radius: 12px;
+    border-radius: var(--border-radius-xl);
     cursor: pointer;
     transition: all 0.2s ease;
     position: relative;

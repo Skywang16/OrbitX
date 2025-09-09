@@ -134,7 +134,7 @@
   .ai-message-text :deep(code) {
     background: var(--bg-500);
     padding: 0.2em 0.4em;
-    border-radius: 3px;
+    border-radius: var(--border-radius-xs);
     font-family: monospace;
     font-size: 0.9em;
   }

@@ -249,29 +249,29 @@
 
     isSubmitting.value = true
     const newModel: AIModelConfig = {
-        id: Date.now().toString(),
-        name: formData.name,
-        provider: formData.provider,
-        apiUrl: getDefaultApiUrl(),
-        apiKey: formData.apiKey,
-        model: formData.model,
-        modelType: 'chat', // 默认为聊天模型
-        options: formData.options,
-      }
+      id: Date.now().toString(),
+      name: formData.name,
+      provider: formData.provider,
+      apiUrl: getDefaultApiUrl(),
+      apiKey: formData.apiKey,
+      model: formData.model,
+      modelType: 'chat', // 默认为聊天模型
+      options: formData.options,
+    }
 
-      // 调用AI设置store来保存配置
-      await aiSettingsStore.addModel(newModel)
+    // 调用AI设置store来保存配置
+    await aiSettingsStore.addModel(newModel)
 
-      // 重置表单
-      selectedProvider.value = ''
-      Object.assign(formData, {
-        name: '',
-        provider: 'anthropic' as AIModelConfig['provider'],
-        apiKey: '',
-        apiUrl: '',
-        model: '',
-        options: { maxTokens: 4096, temperature: 0.7, timeout: 300000 },
-      })
+    // 重置表单
+    selectedProvider.value = ''
+    Object.assign(formData, {
+      name: '',
+      provider: 'anthropic' as AIModelConfig['provider'],
+      apiKey: '',
+      apiUrl: '',
+      model: '',
+      options: { maxTokens: 4096, temperature: 0.7, timeout: 300000 },
+    })
     errors.value = {}
     isSubmitting.value = false
     return true
@@ -332,7 +332,7 @@
   .ai-option {
     background: var(--bg-200);
     border: 2px solid var(--border-100);
-    border-radius: 12px;
+    border-radius: var(--border-radius-xl);
     cursor: pointer;
     transition:
       border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
@@ -386,7 +386,7 @@
     color: var(--color-primary);
     background: var(--color-primary-alpha);
     padding: 4px 8px;
-    border-radius: 6px;
+    border-radius: var(--border-radius);
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
@@ -404,12 +404,12 @@
 
   .ai-config-dropdown::-webkit-scrollbar-track {
     background: var(--bg-300);
-    border-radius: 3px;
+    border-radius: var(--border-radius-xs);
   }
 
   .ai-config-dropdown::-webkit-scrollbar-thumb {
     background: var(--border-200);
-    border-radius: 3px;
+    border-radius: var(--border-radius-xs);
   }
 
   .ai-config-dropdown::-webkit-scrollbar-thumb:hover {
@@ -441,8 +441,7 @@
     color: var(--text-100);
     background: var(--bg-200);
     border: 2px solid var(--border-100);
-    border-radius: 8px;
-    transition: border-color 0.2s ease;
+    border-radius: var(--border-radius-lg);
   }
 
   .form-input:focus {
@@ -480,8 +479,8 @@
     color: var(--text-100);
     background: var(--bg-200);
     border: 2px solid var(--border-100);
-    border-radius: 8px;
-    transition: border-color 0.2s ease;
+    border-radius: var(--border-radius-lg);
+
     min-height: auto;
   }
 
