@@ -93,6 +93,13 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
   const sessionStore = useSessionStore()
 
+  // 统一的状态保存函数
+  const saveTerminalState = async () => {
+    syncToSessionStore()
+    await sessionStore.saveSessionState()
+  }
+
+  // 兼容旧版本的immediateSync（异步版本）
   const immediateSync = () => {
     syncToSessionStore()
     sessionStore.saveSessionState().catch(() => {})
@@ -311,7 +318,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       terminals.value.push(terminal)
       await setActiveTerminal(id)
-      immediateSync()
+      await saveTerminalState()
 
       const duration = Date.now() - startTime
       recordPerformanceMetric('create', duration)
@@ -329,7 +336,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
       }
 
       if (terminal.backendId === null) {
-        cleanupTerminalState(id)
+        await cleanupTerminalState(id)
+        await saveTerminalState()
         return
       }
 
@@ -341,7 +349,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       await terminalApi.closeTerminal(backendId)
 
       await cleanupTerminalState(id)
-      immediateSync()
+      await saveTerminalState()
       recordPerformanceMetric('close')
     })
   }
@@ -516,7 +524,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       terminals.value.push(terminal)
       await new Promise(resolve => setTimeout(resolve, 100))
       await setActiveTerminal(id)
-      immediateSync()
+      await saveTerminalState()
       return id
     })
   }
@@ -549,7 +557,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       terminals.value.push(terminal)
       await setActiveTerminal(id)
-      immediateSync()
+      await saveTerminalState()
 
       return id
     })
