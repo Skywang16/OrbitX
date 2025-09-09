@@ -170,6 +170,8 @@ export interface ApiResponse<T> {
   data?: T
 }
 
+import { createMessage } from '@/ui'
+
 /**
  * 统一的API调用函数 - 处理新的后端响应格式
  */
@@ -180,7 +182,6 @@ export const invoke = async <T>(command: string, args?: Record<string, unknown>,
     return response.data as T
   } else {
     // 统一错误提示 - 后端已完成国际化
-    const { createMessage } = await import('@/ui')
     createMessage.error(response.message || '操作失败')
     throw new APIError(response.message || '操作失败', String(response.code))
   }

@@ -57,8 +57,6 @@
               </x-button>
             </div>
           </div>
-
-          <div class="popconfirm-arrow" :data-placement="actualPlacement"></div>
         </div>
       </transition>
     </teleport>
@@ -72,7 +70,6 @@
 <script setup lang="ts">
   import { computed, ref, nextTick, onMounted, watch } from 'vue'
   import type { PopconfirmProps } from '../types/index'
-  import type { Placement } from '../types/index'
 
   const props = withDefaults(defineProps<PopconfirmProps>(), {
     title: '确定要执行此操作吗？',
@@ -98,7 +95,6 @@
   const visible = ref(false)
   const triggerRef = ref<HTMLElement>()
   const popoverRef = ref<HTMLElement>()
-  const actualPlacement = ref<Placement>(props.placement)
 
   const confirmButtonVariant = computed(() => {
     switch (props.type) {
@@ -151,7 +147,6 @@
 
     let top = 0
     let left = 0
-    actualPlacement.value = props.placement
 
     // 计算基础位置
     switch (props.placement) {
@@ -179,19 +174,15 @@
     if (props.placement === 'top' && top < margin) {
       // 上方空间不足，改为下方
       top = triggerRect.bottom + props.offset
-      actualPlacement.value = 'bottom'
     } else if (props.placement === 'bottom' && top + popoverHeight > viewportHeight - margin) {
       // 下方空间不足，改为上方
       top = triggerRect.top - popoverHeight - props.offset
-      actualPlacement.value = 'top'
     } else if (props.placement === 'left' && left < margin) {
       // 左侧空间不足，改为右侧
       left = triggerRect.right + props.offset
-      actualPlacement.value = 'right'
     } else if (props.placement === 'right' && left + popoverWidth > viewportWidth - margin) {
       // 右侧空间不足，改为左侧
       left = triggerRect.left - popoverWidth - props.offset
-      actualPlacement.value = 'left'
     }
 
     // 水平位置边界检查
@@ -282,6 +273,7 @@
     position: fixed;
     max-width: 300px;
     min-width: 200px;
+    position: relative;
   }
 
   .popconfirm-content {
@@ -303,6 +295,7 @@
     width: 16px;
     height: 16px;
     margin-top: 2px;
+    color: var(--color-primary);
   }
 
   .popconfirm-icon-svg {
@@ -333,66 +326,12 @@
     gap: var(--spacing-sm);
   }
 
-  .popconfirm-icon {
-    color: var(--color-primary);
-  }
-
   .popconfirm-content[data-type='danger'] .popconfirm-icon {
     color: var(--color-error);
   }
 
   .popconfirm-content[data-type='warning'] .popconfirm-icon {
     color: var(--color-warning, #f59e0b);
-  }
-
-  .popconfirm-arrow {
-    position: absolute;
-    width: 8px;
-    height: 8px;
-    background: var(--bg-100);
-    border: 1px solid var(--border-200);
-    transform: rotate(45deg);
-  }
-
-  /* 根据不同方向的箭头位置和样式 */
-  .popconfirm-popover {
-    position: relative;
-  }
-
-  /* 默认朝上（top placement 时箭头在下方） */
-  .popconfirm-arrow[data-placement='top'] {
-    bottom: -5px;
-    left: 50%;
-    margin-left: -4px;
-    border-top: none;
-    border-left: none;
-  }
-
-  /* 朝下（bottom placement 时箭头在上方） */
-  .popconfirm-arrow[data-placement='bottom'] {
-    top: -5px;
-    left: 50%;
-    margin-left: -4px;
-    border-bottom: none;
-    border-right: none;
-  }
-
-  /* 朝右（left placement 时箭头在右侧） */
-  .popconfirm-arrow[data-placement='left'] {
-    right: -5px;
-    top: 50%;
-    margin-top: -4px;
-    border-top: none;
-    border-right: none;
-  }
-
-  /* 朝左（right placement 时箭头在左侧） */
-  .popconfirm-arrow[data-placement='right'] {
-    left: -5px;
-    top: 50%;
-    margin-top: -4px;
-    border-bottom: none;
-    border-left: none;
   }
 
   .popconfirm-fade-enter-active,

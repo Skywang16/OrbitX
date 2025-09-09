@@ -140,6 +140,22 @@ impl VectorIndexFullConfig {
         }
     }
 
+    /// 根据用户配置和实际检测的维度创建完整配置
+    pub fn from_user_config_with_actual_dimension(
+        user_config: VectorIndexConfig,
+        actual_dimension: usize,
+    ) -> Self {
+        let mut internal_config = VectorIndexInternalConfig::default();
+
+        // 使用实际检测到的维度
+        internal_config.vector_size = actual_dimension;
+
+        Self {
+            user_config,
+            internal_config,
+        }
+    }
+
     /// 获取向量维度大小
     pub fn vector_size(&self) -> usize {
         self.internal_config.vector_size
@@ -166,16 +182,35 @@ impl VectorIndexFullConfig {
     }
 }
 
-/// 根据模型名称推断向量维度
-fn infer_vector_size_from_model(model_name: &str) -> usize {
+/// 根据模型名称推断向量维度（仅作为备用，推荐使用实际检测）
+pub fn infer_vector_size_from_model(model_name: &str) -> usize {
     let model_lower = model_name.to_lowercase();
 
+    // OpenAI 模型
     if model_lower.contains("text-embedding-3-large") {
         3072
     } else if model_lower.contains("text-embedding-3-small")
         || model_lower.contains("text-embedding-ada-002")
     {
         1536
+    }
+    // 豆包/字节跳动模型
+    else if model_lower.contains("doubao-embedding-large") 
+        || model_lower.contains("embedding-large-text") 
+    {
+        2048
+    } else if model_lower.contains("doubao-embedding") {
+        1536
+    }
+    // 其他常见模型维度
+    else if model_lower.contains("bge-large") {
+        1024
+    } else if model_lower.contains("bge-base") {
+        768
+    } else if model_lower.contains("gte-large") {
+        1024
+    } else if model_lower.contains("m3e-large") {
+        1024
     } else {
         // 默认维度
         1536

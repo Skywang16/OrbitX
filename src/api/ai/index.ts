@@ -187,8 +187,8 @@ export class AiApi {
     await invoke<void>('remove_ai_model', { modelId: id })
   }
 
-  async testConnectionWithConfig(config: AIModelConfig): Promise<boolean> {
-    return await invoke<boolean>('test_ai_connection_with_config', { config })
+  async testConnectionWithConfig(config: AIModelConfig): Promise<string> {
+    return await invoke<string>('test_ai_connection_with_config', { config })
   }
 
   async getUserPrefixPrompt(): Promise<string | null> {

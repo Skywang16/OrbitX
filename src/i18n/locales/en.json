@@ -151,6 +151,10 @@
       "restart_later": "Restart Later",
       "feature_enabled_restart_required": "Vector index feature enabled, restart application to take effect",
       "feature_disabled_restart_required": "Vector index feature disabled, restart application to take effect",
+      "config_incomplete": "Configuration incomplete, please fill in complete connection settings",
+      "enable_failed": "Failed to enable vector index feature: {error}",
+      "enable_failed_connection": "Failed to enable vector index feature, please check connection settings",
+      "feature_enabled_success": "Vector index feature enabled successfully",
       "code_index_tag": "codeIndex",
       "code_index_tag_tooltip": "Current directory has code indexing enabled",
       "workspace_path_description": "Workspace directory path",
@@ -266,7 +270,6 @@
       "model_name_required": "Model name is required",
       "api_url_required": "API URL is required",
       "save_config_success": "Configuration saved successfully!",
-      "save_config_failed": "Failed to save configuration",
       "skip_config_message": "AI configuration skipped. You can configure it later in settings",
       "models": {
         "custom": {

@@ -3,6 +3,20 @@ use std::collections::HashMap;
 
 use crate::llm::types::LLMProviderType;
 
+/// 模型类型
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ModelType {
+    Chat,
+    Embedding,
+}
+
+impl Default for ModelType {
+    fn default() -> Self {
+        Self::Chat
+    }
+}
+
 /// 模型特殊能力标志
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +56,8 @@ pub struct ModelInfo {
     pub id: String,
     /// 显示名称
     pub display_name: String,
+    /// 模型类型
+    pub model_type: ModelType,
     /// 模型能力
     pub capabilities: ModelCapabilities,
     /// 是否已弃用
@@ -95,22 +111,25 @@ impl LLMRegistry {
                 ),
                 requires_api_key: true,
                 models: vec![
+                    // 聊天模型
                     ModelInfo {
-                        id: "gpt-4".to_string(),
-                        display_name: "GPT-4".to_string(),
+                        id: "gpt-5".to_string(),
+                        display_name: "GPT-5".to_string(),
+                        model_type: ModelType::Chat,
                         capabilities: ModelCapabilities {
                             supports_tools: true,
                             supports_vision: true,
                             supports_streaming: true,
                             is_reasoning_model: false,
-                            max_context_tokens: 8192,
+                            max_context_tokens: 200000,
                             temperature_range: Some((0.0, 2.0)),
                         },
                         deprecated: false,
                     },
                     ModelInfo {
-                        id: "gpt-4-turbo".to_string(),
-                        display_name: "GPT-4 Turbo".to_string(),
+                        id: "gpt-4o".to_string(),
+                        display_name: "GPT-4o".to_string(),
+                        model_type: ModelType::Chat,
                         capabilities: ModelCapabilities {
                             supports_tools: true,
                             supports_vision: true,
@@ -122,8 +141,110 @@ impl LLMRegistry {
                         deprecated: false,
                     },
                     ModelInfo {
+                        id: "gpt-4o-mini".to_string(),
+                        display_name: "GPT-4o mini".to_string(),
+                        model_type: ModelType::Chat,
+                        capabilities: ModelCapabilities {
+                            supports_tools: true,
+                            supports_vision: true,
+                            supports_streaming: true,
+                            is_reasoning_model: false,
+                            max_context_tokens: 128000,
+                            temperature_range: Some((0.0, 2.0)),
+                        },
+                        deprecated: false,
+                    },
+                    // 向量模型
+                    ModelInfo {
+                        id: "text-embedding-3-large".to_string(),
+                        display_name: "Text Embedding 3 Large".to_string(),
+                        model_type: ModelType::Embedding,
+                        capabilities: ModelCapabilities {
+                            supports_tools: false,
+                            supports_vision: false,
+                            supports_streaming: false,
+                            is_reasoning_model: false,
+                            max_context_tokens: 8191,
+                            temperature_range: None,
+                        },
+                        deprecated: false,
+                    },
+                    ModelInfo {
+                        id: "text-embedding-3-small".to_string(),
+                        display_name: "Text Embedding 3 Small".to_string(),
+                        model_type: ModelType::Embedding,
+                        capabilities: ModelCapabilities {
+                            supports_tools: false,
+                            supports_vision: false,
+                            supports_streaming: false,
+                            is_reasoning_model: false,
+                            max_context_tokens: 8191,
+                            temperature_range: None,
+                        },
+                        deprecated: false,
+                    },
+                    ModelInfo {
+                        id: "text-embedding-ada-002".to_string(),
+                        display_name: "Text Embedding Ada 002".to_string(),
+                        model_type: ModelType::Embedding,
+                        capabilities: ModelCapabilities {
+                            supports_tools: false,
+                            supports_vision: false,
+                            supports_streaming: false,
+                            is_reasoning_model: false,
+                            max_context_tokens: 8191,
+                            temperature_range: None,
+                        },
+                        deprecated: false,
+                    },
+                    // 推理模型
+                    ModelInfo {
+                        id: "o3".to_string(),
+                        display_name: "o3".to_string(),
+                        model_type: ModelType::Chat,
+                        capabilities: ModelCapabilities {
+                            supports_tools: false,
+                            supports_vision: false,
+                            supports_streaming: true,
+                            is_reasoning_model: true,
+                            max_context_tokens: 200000,
+                            temperature_range: None,
+                        },
+                        deprecated: false,
+                    },
+                    ModelInfo {
+                        id: "o3-mini".to_string(),
+                        display_name: "o3-mini".to_string(),
+                        model_type: ModelType::Chat,
+                        capabilities: ModelCapabilities {
+                            supports_tools: false,
+                            supports_vision: false,
+                            supports_streaming: true,
+                            is_reasoning_model: true,
+                            max_context_tokens: 200000,
+                            temperature_range: None,
+                        },
+                        deprecated: false,
+                    },
+                    // 已弃用的模型（保持兼容性）
+                    ModelInfo {
+                        id: "gpt-4".to_string(),
+                        display_name: "GPT-4 (Legacy)".to_string(),
+                        model_type: ModelType::Chat,
+                        capabilities: ModelCapabilities {
+                            supports_tools: true,
+                            supports_vision: true,
+                            supports_streaming: true,
+                            is_reasoning_model: false,
+                            max_context_tokens: 8192,
+                            temperature_range: Some((0.0, 2.0)),
+                        },
+                        deprecated: true,
+                    },
+                    ModelInfo {
                         id: "gpt-3.5-turbo".to_string(),
-                        display_name: "GPT-3.5 Turbo".to_string(),
+                        display_name: "GPT-3.5 Turbo (Legacy)".to_string(),
+                        model_type: ModelType::Chat,
                         capabilities: ModelCapabilities {
                             supports_tools: true,
                             supports_vision: false,
@@ -132,46 +253,7 @@ impl LLMRegistry {
                             max_context_tokens: 16385,
                             temperature_range: Some((0.0, 2.0)),
                         },
-                        deprecated: false,
-                    },
-                    ModelInfo {
-                        id: "o1-preview".to_string(),
-                        display_name: "o1-preview".to_string(),
-                        capabilities: ModelCapabilities {
-                            supports_tools: false,
-                            supports_vision: false,
-                            supports_streaming: true,
-                            is_reasoning_model: true,
-                            max_context_tokens: 32768,
-                            temperature_range: None, // o1 models don't support temperature
-                        },
-                        deprecated: false,
-                    },
-                    ModelInfo {
-                        id: "o1-mini".to_string(),
-                        display_name: "o1-mini".to_string(),
-                        capabilities: ModelCapabilities {
-                            supports_tools: false,
-                            supports_vision: false,
-                            supports_streaming: true,
-                            is_reasoning_model: true,
-                            max_context_tokens: 32768,
-                            temperature_range: None,
-                        },
-                        deprecated: false,
-                    },
-                    ModelInfo {
-                        id: "o3-mini".to_string(),
-                        display_name: "o3-mini".to_string(),
-                        capabilities: ModelCapabilities {
-                            supports_tools: false,
-                            supports_vision: false,
-                            supports_streaming: true,
-                            is_reasoning_model: true,
-                            max_context_tokens: 32768,
-                            temperature_range: None,
-                        },
-                        deprecated: false,
+                        deprecated: true,
                     },
                 ],
             },
@@ -191,8 +273,9 @@ impl LLMRegistry {
                 requires_api_key: true,
                 models: vec![
                     ModelInfo {
-                        id: "claude-3-opus-20240229".to_string(),
-                        display_name: "Claude 3 Opus".to_string(),
+                        id: "claude-opus-4-1-20250805".to_string(),
+                        display_name: "Claude Opus 4.1".to_string(),
+                        model_type: ModelType::Chat,
                         capabilities: ModelCapabilities {
                             supports_tools: true,
                             supports_vision: true,
@@ -204,8 +287,9 @@ impl LLMRegistry {
                         deprecated: false,
                     },
                     ModelInfo {
-                        id: "claude-3-sonnet-20240229".to_string(),
-                        display_name: "Claude 3 Sonnet".to_string(),
+                        id: "claude-sonnet-4-20250805".to_string(),
+                        display_name: "Claude Sonnet 4".to_string(),
+                        model_type: ModelType::Chat,
                         capabilities: ModelCapabilities {
                             supports_tools: true,
                             supports_vision: true,
@@ -217,8 +301,9 @@ impl LLMRegistry {
                         deprecated: false,
                     },
                     ModelInfo {
-                        id: "claude-3-haiku-20240307".to_string(),
-                        display_name: "Claude 3 Haiku".to_string(),
+                        id: "claude-haiku-3-5-20241022".to_string(),
+                        display_name: "Claude Haiku 3.5".to_string(),
+                        model_type: ModelType::Chat,
                         capabilities: ModelCapabilities {
                             supports_tools: true,
                             supports_vision: true,
@@ -244,41 +329,44 @@ impl LLMRegistry {
                 requires_api_key: true,
                 models: vec![
                     ModelInfo {
-                        id: "gemini-pro".to_string(),
-                        display_name: "Gemini Pro".to_string(),
+                        id: "gemini-2.5-pro".to_string(),
+                        display_name: "Gemini 2.5 Pro".to_string(),
+                        model_type: ModelType::Chat,
                         capabilities: ModelCapabilities {
                             supports_tools: true,
-                            supports_vision: false,
+                            supports_vision: true,
                             supports_streaming: true,
-                            is_reasoning_model: false,
-                            max_context_tokens: 32768,
-                            temperature_range: Some((0.0, 1.0)),
+                            is_reasoning_model: true,
+                            max_context_tokens: 1000000,
+                            temperature_range: Some((0.0, 2.0)),
                         },
                         deprecated: false,
                     },
                     ModelInfo {
-                        id: "gemini-pro-vision".to_string(),
-                        display_name: "Gemini Pro Vision".to_string(),
+                        id: "gemini-2.5-flash".to_string(),
+                        display_name: "Gemini 2.5 Flash".to_string(),
+                        model_type: ModelType::Chat,
                         capabilities: ModelCapabilities {
                             supports_tools: true,
                             supports_vision: true,
                             supports_streaming: true,
                             is_reasoning_model: false,
-                            max_context_tokens: 32768,
-                            temperature_range: Some((0.0, 1.0)),
+                            max_context_tokens: 1000000,
+                            temperature_range: Some((0.0, 2.0)),
                         },
                         deprecated: false,
                     },
                     ModelInfo {
-                        id: "gemini-ultra".to_string(),
-                        display_name: "Gemini Ultra".to_string(),
+                        id: "gemini-2.5-flash-lite".to_string(),
+                        display_name: "Gemini 2.5 Flash-Lite".to_string(),
+                        model_type: ModelType::Chat,
                         capabilities: ModelCapabilities {
                             supports_tools: true,
                             supports_vision: true,
                             supports_streaming: true,
                             is_reasoning_model: false,
-                            max_context_tokens: 32768,
-                            temperature_range: Some((0.0, 1.0)),
+                            max_context_tokens: 1000000,
+                            temperature_range: Some((0.0, 2.0)),
                         },
                         deprecated: false,
                     },
@@ -301,6 +389,7 @@ impl LLMRegistry {
                     ModelInfo {
                         id: "qwen-max".to_string(),
                         display_name: "Qwen Max".to_string(),
+                        model_type: ModelType::Chat,
                         capabilities: ModelCapabilities {
                             supports_tools: true,
                             supports_vision: true,
@@ -314,6 +403,7 @@ impl LLMRegistry {
                     ModelInfo {
                         id: "qwen-plus".to_string(),
                         display_name: "Qwen Plus".to_string(),
+                        model_type: ModelType::Chat,
                         capabilities: ModelCapabilities {
                             supports_tools: true,
                             supports_vision: false,
@@ -327,6 +417,7 @@ impl LLMRegistry {
                     ModelInfo {
                         id: "qwen-turbo".to_string(),
                         display_name: "Qwen Turbo".to_string(),
+                        model_type: ModelType::Chat,
                         capabilities: ModelCapabilities {
                             supports_tools: true,
                             supports_vision: false,

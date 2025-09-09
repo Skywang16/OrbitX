@@ -2,9 +2,10 @@
   import type { AIModelConfig } from '@/types'
 
   import { aiApi } from '@/api'
-  import { reactive, ref, computed, onMounted } from 'vue'
+  import { reactive, ref, computed, onMounted, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useLLMRegistry } from '@/composables/useLLMRegistry'
+  import { createMessage } from '@/ui'
 
   interface Props {
     model?: AIModelConfig | null
@@ -21,7 +22,8 @@
   const { t } = useI18n()
 
   // 使用后端LLM注册表
-  const { providerOptions, getModelOptions, loadProviders } = useLLMRegistry()
+  const { providerOptions, getModelOptions, getChatModelOptions, getEmbeddingModelOptions, loadProviders } =
+    useLLMRegistry()
 
   // 配置模式：preset（预设）或 custom（自定义）——默认自定义，避免误判
   const configMode = ref<'preset' | 'custom'>('custom')
@@ -60,9 +62,22 @@
   // 计算属性：当前预设的可用模型
   const availableModels = computed(() => {
     if (isPresetMode.value && selectedPreset.value) {
-      return getModelOptions(selectedPreset.value)
+      // 根据模型类型过滤
+      if (formData.modelType === 'chat') {
+        return getChatModelOptions(selectedPreset.value)
+      } else if (formData.modelType === 'embedding') {
+        return getEmbeddingModelOptions(selectedPreset.value)
+      }
     }
     return []
+  })
+
+  // 计算属性：是否有可用模型（除了提示文本）
+  const hasValidModels = computed(() => {
+    if (!isPresetMode.value || !selectedPreset.value) return false
+    const models = availableModels.value
+    // 如果只有一个模型且其 value 为空，说明是提示文本
+    return models.length > 0 && !(models.length === 1 && models[0].value === '')
   })
 
   // 初始化表单数据
@@ -91,6 +106,19 @@
     }
   }
 
+  // 监听模型类型变化，重置模型选择
+  watch(
+    () => formData.modelType,
+    () => {
+      if (isPresetMode.value && selectedPreset.value) {
+        formData.model = ''
+        formData.name = ''
+        // 重新触发预设选择逻辑
+        handlePresetChange(selectedPreset.value)
+      }
+    }
+  )
+
   // 监听配置模式变化
   const handleConfigModeChange = (mode: 'preset' | 'custom') => {
     configMode.value = mode
@@ -115,11 +143,25 @@
       // 预设模式下，provider = 选中的预设值
       formData.provider = presetValue as AIModelConfig['provider']
       formData.apiUrl = preset.apiUrl
-      const models = getModelOptions(presetValue)
-      if (models.length > 0) {
+
+      // 根据模型类型获取模型选项
+      let models
+      if (formData.modelType === 'chat') {
+        models = getChatModelOptions(presetValue)
+      } else if (formData.modelType === 'embedding') {
+        models = getEmbeddingModelOptions(presetValue)
+      } else {
+        models = getModelOptions(presetValue)
+      }
+
+      if (models.length > 0 && models[0].value !== '') {
         formData.model = models[0].value // 默认选择第一个模型
         // 名称直接等于选中模型的名字
         formData.name = models[0].label
+      } else {
+        // 没有有效模型时，清空模型和名称
+        formData.model = ''
+        formData.name = ''
       }
     }
   }
@@ -127,7 +169,17 @@
   // 更换模型时，若处于预设模式，名称=模型名称
   const handleModelChange = (modelValue: string) => {
     if (configMode.value !== 'preset') return
-    const models = getModelOptions(selectedPreset.value)
+
+    // 根据模型类型获取模型选项
+    let models
+    if (formData.modelType === 'chat') {
+      models = getChatModelOptions(selectedPreset.value)
+    } else if (formData.modelType === 'embedding') {
+      models = getEmbeddingModelOptions(selectedPreset.value)
+    } else {
+      models = getModelOptions(selectedPreset.value)
+    }
+
     const modelInfo = models.find(m => m.value === modelValue)
     if (modelInfo) {
       formData.name = modelInfo.label
@@ -146,7 +198,8 @@
       if (!selectedPreset.value) {
         errors.value.preset = t('ai_model.validation.preset_required')
       }
-      if (!formData.model.trim()) {
+      // 只有在有有效模型时才验证模型选择
+      if (hasValidModels.value && !formData.model.trim()) {
         errors.value.model = t('ai_model.validation.model_required')
       }
     } else {
@@ -168,6 +221,11 @@
   const handleSubmit = () => {
     if (!validateForm()) return
 
+    // 在预设模式下，如果没有有效模型，不允许提交
+    if (isPresetMode.value && !hasValidModels.value) {
+      return
+    }
+
     isSubmitting.value = true
     try {
       // 最终提交前的兜底修正
@@ -179,7 +237,15 @@
         }
         // 若名称为空，使用当前模型的label
         if (!submitData.name.trim()) {
-          const models = getModelOptions(selectedPreset.value)
+          // 根据模型类型获取模型选项
+          let models
+          if (formData.modelType === 'chat') {
+            models = getChatModelOptions(selectedPreset.value)
+          } else if (formData.modelType === 'embedding') {
+            models = getEmbeddingModelOptions(selectedPreset.value)
+          } else {
+            models = getModelOptions(selectedPreset.value)
+          }
           const modelInfo = models.find(m => m.value === submitData.model)
           if (modelInfo) submitData.name = modelInfo.label
         }
@@ -203,19 +269,25 @@
     if (!validateForm()) return
 
     isTesting.value = true
-    const testConfig: AIModelConfig = {
-      id: 'test-' + Date.now(),
-      name: formData.name || 'Test Model',
-      provider: formData.provider,
-      apiUrl: formData.apiUrl,
-      apiKey: formData.apiKey,
-      model: formData.model,
-      modelType: formData.modelType,
-      options: formData.options,
-    }
+    try {
+      const testConfig: AIModelConfig = {
+        id: 'test-' + Date.now(),
+        name: formData.name || 'Test Model',
+        provider: formData.provider,
+        apiUrl: formData.apiUrl,
+        apiKey: formData.apiKey,
+        model: formData.model,
+        modelType: formData.modelType,
+        options: formData.options,
+      }
 
-    await aiApi.testConnectionWithConfig(testConfig)
-    isTesting.value = false
+      const result = await aiApi.testConnectionWithConfig(testConfig)
+      createMessage.success(result)
+    } catch (error) {
+      console.error('连接测试失败:', error)
+    } finally {
+      isTesting.value = false
+    }
   }
 </script>
 
@@ -307,11 +379,18 @@
         <div class="form-group">
           <label class="form-label">{{ t('ai_model.model') }}</label>
           <x-select
-            v-if="availableModels.length > 0"
+            v-if="hasValidModels"
             v-model="formData.model"
             :options="availableModels"
             :placeholder="t('ai_model.select_model')"
             @update:modelValue="handleModelChange"
+          />
+          <x-select
+            v-else-if="availableModels.length > 0 && availableModels[0].value === ''"
+            :model-value="''"
+            :options="availableModels"
+            disabled
+            :placeholder="availableModels[0].label"
           />
           <input
             v-else

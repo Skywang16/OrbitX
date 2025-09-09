@@ -201,7 +201,7 @@
   .modal-container {
     background-color: var(--bg-100);
     border: 1px solid var(--border-300);
-    border-radius: var(--border-radius);
+    border-radius: var(--border-radius-xl);
     box-shadow: var(--x-shadow-xl);
     max-height: 90vh;
     overflow: hidden;

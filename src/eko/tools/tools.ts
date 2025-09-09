@@ -17,14 +17,14 @@ import { webFetchTool } from './toolList/web-fetch'
 
 import { orbitSearchTool } from './toolList/orbit-search'
 import { grepSearchTool } from './toolList/grep-search'
+import { vectorIndexAppSettingsApi } from '@/api/vector-index/app-settings'
 
-// 动态导入向量索引功能检查
+// 向量索引功能检查
 let isVectorIndexEnabled = false
 
 // 检查向量索引是否启用
 async function checkVectorIndexEnabled(): Promise<boolean> {
   try {
-    const { vectorIndexAppSettingsApi } = await import('@/api/vector-index/app-settings')
     const settings = await vectorIndexAppSettingsApi.getSettings()
     return settings.enabled || false
   } catch (error) {

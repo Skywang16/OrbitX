@@ -53,7 +53,7 @@ pub async fn remove_ai_model(
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<EmptyData> {
     validate_not_empty!(model_id, "common.invalid_params");
-    
+
     match state.ai_service.remove_model(&model_id).await {
         Ok(_) => Ok(api_success!()),
         Err(_) => Ok(api_error!("ai.remove_model_failed")),
@@ -80,7 +80,7 @@ pub async fn update_ai_model(
 pub async fn test_ai_connection_with_config(
     config: AIModelConfig,
     state: State<'_, AIManagerState>,
-) -> TauriApiResult<bool> {
+) -> TauriApiResult<String> {
     // 参数验证
     if config.api_url.trim().is_empty() {
         return Ok(api_error!("ai.api_url_empty"));
@@ -92,10 +92,10 @@ pub async fn test_ai_connection_with_config(
         return Ok(api_error!("ai.model_name_empty"));
     }
 
-    // 直接使用提供的配置进行连接测试
+    // 直接使用提供的配置进行连接测试，返回详细的连接结果
     match state.ai_service.test_connection_with_config(&config).await {
         Ok(result) => Ok(api_success!(result)),
-        Err(_) => Ok(api_error!("ai.test_connection_failed")),
+        Err(e) => Ok(api_error!("ai.test_connection_error", "error" => e.to_string())),
     }
 }
 
@@ -124,7 +124,11 @@ pub async fn set_user_prefix_prompt(
 ) -> TauriApiResult<EmptyData> {
     let repositories = state.repositories();
 
-    match repositories.ai_models().set_user_prefix_prompt(prompt).await {
+    match repositories
+        .ai_models()
+        .set_user_prefix_prompt(prompt)
+        .await
+    {
         Ok(_) => Ok(api_success!()),
         Err(_) => Ok(api_error!("ai.set_prefix_prompt_failed")),
     }

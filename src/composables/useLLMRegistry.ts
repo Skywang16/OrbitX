@@ -20,18 +20,41 @@ export function useLLMRegistry() {
   })
 
   // 根据供应商类型获取模型选项
-  const getModelOptions = (providerType: string): ModelOption[] => {
+  const getModelOptions = (providerType: string, modelType?: 'chat' | 'embedding'): ModelOption[] => {
     const provider = providers.value.find(p => p.providerType.toLowerCase() === providerType.toLowerCase())
     if (!provider) return []
 
     return provider.models
       .filter(model => !model.deprecated) // 过滤掉已弃用的模型
+      .filter(model => !modelType || model.modelType === modelType) // 按模型类型过滤
       .map(model => ({
         value: model.id,
         label: model.displayName,
         capabilities: model.capabilities,
         deprecated: model.deprecated,
       }))
+  }
+
+  // 获取聊天模型选项
+  const getChatModelOptions = (providerType: string): ModelOption[] => {
+    return getModelOptions(providerType, 'chat')
+  }
+
+  // 获取向量模型选项
+  const getEmbeddingModelOptions = (providerType: string): ModelOption[] => {
+    const options = getModelOptions(providerType, 'embedding')
+    if (options.length === 0) {
+      // 如果没有向量模型，返回一个提示选项
+      return [
+        {
+          value: '',
+          label: '暂无向量模型',
+          capabilities: undefined,
+          deprecated: false,
+        },
+      ]
+    }
+    return options
   }
 
   // 根据模型ID获取模型信息
@@ -118,6 +141,8 @@ export function useLLMRegistry() {
     // 方法
     loadProviders,
     getModelOptions,
+    getChatModelOptions,
+    getEmbeddingModelOptions,
     getModelInfo,
     checkModelFeature,
     getProviderInfo,

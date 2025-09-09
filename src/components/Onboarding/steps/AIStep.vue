@@ -33,7 +33,8 @@
             <div v-if="selectedProvider === provider.id" class="ai-config-dropdown">
               <div class="config-divider"></div>
 
-              <div class="form-group">
+              <!-- 只有自定义提供商才显示名称输入框 -->
+              <div v-if="selectedProvider === 'custom'" class="form-group">
                 <label class="form-label">{{ t('onboarding.ai.config_name') }}</label>
                 <input
                   v-model="formData.name"
@@ -217,7 +218,10 @@
   const validateForm = () => {
     errors.value = {}
 
-    if (!formData.name.trim()) errors.value.name = t('onboarding.ai.config_name_required')
+    // 只有自定义提供商才需要验证名称
+    if (selectedProvider.value === 'custom' && !formData.name.trim()) {
+      errors.value.name = t('onboarding.ai.config_name_required')
+    }
     if (!formData.apiKey.trim()) errors.value.apiKey = t('onboarding.ai.api_key_required')
     if (!formData.model.trim()) errors.value.model = t('onboarding.ai.model_name_required')
 
@@ -248,9 +252,18 @@
     if (!validateForm()) return false
 
     isSubmitting.value = true
+
+    // 预设提供商自动生成名称
+    let configName = formData.name
+    if (selectedProvider.value !== 'custom') {
+      const models = getModelOptions(selectedProvider.value)
+      const selectedModel = models.find(m => m.value === formData.model)
+      configName = selectedModel ? selectedModel.label : formData.model
+    }
+
     const newModel: AIModelConfig = {
       id: Date.now().toString(),
-      name: formData.name,
+      name: configName,
       provider: formData.provider,
       apiUrl: getDefaultApiUrl(),
       apiKey: formData.apiKey,

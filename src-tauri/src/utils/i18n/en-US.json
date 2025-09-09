@@ -29,6 +29,7 @@
     "remove_model_failed": "Failed to remove model",
     "update_model_failed": "Failed to update model",
     "test_connection_failed": "Failed to test connection",
+    "test_connection_error": "Connection test failed: {error}",
     "api_url_empty": "API URL cannot be empty",
     "api_key_empty": "API Key cannot be empty",
     "model_name_empty": "Model name cannot be empty",
@@ -161,6 +162,7 @@
     "get_monitoring_status_failed": "Failed to get file monitoring status",
     "get_config_failed": "Failed to get vector index configuration",
     "save_config_failed": "Failed to save vector index configuration",
+    "connection_test_failed": "Vector database connection test failed",
     "get_workspace_path_failed": "Failed to get workspace path",
     "cancel_build_failed": "Failed to cancel index build",
     "clear_index_failed": "Failed to clear vector index"

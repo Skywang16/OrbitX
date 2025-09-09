@@ -82,6 +82,41 @@ impl VectorIndexService {
         })
     }
 
+    /// 创建新的向量索引服务（使用实际检测的维度）
+    pub async fn new_with_actual_dimension(
+        user_config: crate::vector_index::types::VectorIndexConfig,
+        llm_service: Arc<LLMService>,
+        embedding_model: String,
+        actual_dimension: usize,
+    ) -> Result<Self> {
+        // 构建完整配置（用户配置 + 实际检测的维度）
+        let full_config =
+            VectorIndexFullConfig::from_user_config_with_actual_dimension(user_config, actual_dimension);
+
+        // 初始化各个组件
+        let parser = TreeSitterParser::new(full_config.clone()).context("初始化代码解析器失败")?;
+
+        let vectorizer =
+            LLMVectorizationService::new(llm_service, embedding_model).with_max_retries(3);
+
+        let storage = QdrantClientImpl::new(full_config.clone())
+            .await
+            .context("初始化Qdrant客户端失败")?;
+
+        // 初始化Qdrant集合
+        storage
+            .initialize_collection()
+            .await
+            .context("初始化Qdrant集合失败")?;
+
+        Ok(Self {
+            config: full_config,
+            parser,
+            vectorizer,
+            storage,
+        })
+    }
+
     /// 构建代码向量索引
     pub async fn build_index(
         &self,

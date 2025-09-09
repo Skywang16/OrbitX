@@ -199,7 +199,18 @@ impl QdrantService for QdrantClientImpl {
             tracing::info!("集合 '{}' 已存在，验证配置", collection_name);
 
             // 验证现有集合的配置
-            self.validate_existing_collection().await?;
+            match self.validate_existing_collection().await {
+                Ok(_) => {
+                    tracing::info!("现有集合配置验证通过");
+                }
+                Err(e) => {
+                    tracing::info!("集合配置不匹配({}), 重新创建", e);
+                    
+                    // 删除现有集合并重新创建
+                    let _ = self.client.delete_collection(collection_name).await;
+                    self.create_new_collection().await?;
+                }
+            }
         } else {
             tracing::info!("创建新集合: {}", collection_name);
 

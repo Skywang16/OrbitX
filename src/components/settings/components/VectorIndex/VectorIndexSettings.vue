@@ -21,177 +21,175 @@
                 </span>
               </template>
             </span>
-            <x-switch v-model="globalSettings.enabled" @update:modelValue="onEnabledChange" />
+            <x-switch v-model="globalSettings.enabled" :disabled="isConnecting" @update:modelValue="onEnabledChange" />
           </div>
         </div>
       </SettingsCard>
     </div>
 
-    <template v-if="globalSettings.enabled">
-      <!-- 工作区管理 -->
-      <div class="settings-group">
-        <h3 class="settings-group-title">{{ t('settings.vectorIndex.workspace_management') }}</h3>
+    <!-- 工作区管理 -->
+    <div class="settings-group">
+      <h3 class="settings-group-title">{{ t('settings.vectorIndex.workspace_management') }}</h3>
 
-        <SettingsCard v-if="globalSettings.workspaces.length > 0">
-          <div v-for="(workspace, index) in globalSettings.workspaces" :key="index" class="settings-item">
-            <div class="settings-item-header">
-              <div class="settings-label">{{ workspace }}</div>
-              <div class="settings-description">{{ t('settings.vectorIndex.workspace_path_description') }}</div>
-            </div>
-            <div class="settings-item-control">
-              <x-button variant="secondary" @click="removeWorkspace(index)">
-                {{ t('settings.vectorIndex.remove_workspace') }}
-              </x-button>
-            </div>
+      <SettingsCard v-if="globalSettings.workspaces.length > 0">
+        <div v-for="(workspace, index) in globalSettings.workspaces" :key="index" class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ workspace }}</div>
+            <div class="settings-description">{{ t('settings.vectorIndex.workspace_path_description') }}</div>
           </div>
-        </SettingsCard>
+          <div class="settings-item-control">
+            <x-button variant="secondary" @click="removeWorkspace(index)">
+              {{ t('settings.vectorIndex.remove_workspace') }}
+            </x-button>
+          </div>
+        </div>
+      </SettingsCard>
 
-        <SettingsCard v-else>
-          <div class="settings-item">
-            <div class="settings-item-header">
-              <div class="settings-label">{{ t('settings.vectorIndex.no_workspaces') }}</div>
-              <div class="settings-description">{{ t('settings.vectorIndex.no_workspaces_description') }}</div>
-            </div>
+      <SettingsCard v-else>
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('settings.vectorIndex.no_workspaces') }}</div>
+            <div class="settings-description">{{ t('settings.vectorIndex.no_workspaces_description') }}</div>
           </div>
-        </SettingsCard>
+        </div>
+      </SettingsCard>
+    </div>
+
+    <!-- 连接配置 -->
+    <div class="settings-group">
+      <h3 class="settings-group-title">{{ t('settings.vectorIndex.connection_config') }}</h3>
+
+      <div class="settings-description" style="margin-bottom: 16px">
+        {{ t('settings.vectorIndex.connection_description') }}
       </div>
 
-      <!-- 连接配置 -->
-      <div class="settings-group">
-        <h3 class="settings-group-title">{{ t('settings.vectorIndex.connection_config') }}</h3>
-
-        <div class="settings-description" style="margin-bottom: 16px">
-          {{ t('settings.vectorIndex.connection_description') }}
+      <SettingsCard>
+        <!-- Qdrant 数据库URL -->
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('settings.vectorIndex.qdrant_url') }}</div>
+            <div class="settings-description">{{ t('settings.vectorIndex.qdrant_url_description') }}</div>
+          </div>
+          <div class="settings-item-control">
+            <input
+              v-model="configForm.qdrantUrl"
+              type="text"
+              class="settings-input"
+              :placeholder="t('settings.vectorIndex.qdrant_url_placeholder')"
+            />
+          </div>
         </div>
 
-        <SettingsCard>
-          <!-- Qdrant 数据库URL -->
-          <div class="settings-item">
-            <div class="settings-item-header">
-              <div class="settings-label">{{ t('settings.vectorIndex.qdrant_url') }}</div>
-              <div class="settings-description">{{ t('settings.vectorIndex.qdrant_url_description') }}</div>
-            </div>
-            <div class="settings-item-control">
-              <input
-                v-model="configForm.qdrantUrl"
-                type="text"
-                class="settings-input"
-                :placeholder="t('settings.vectorIndex.qdrant_url_placeholder')"
-              />
-            </div>
+        <!-- API密钥 -->
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('settings.vectorIndex.api_key') }}</div>
+            <div class="settings-description">{{ t('settings.vectorIndex.api_key_description') }}</div>
           </div>
+          <div class="settings-item-control">
+            <input
+              v-model="configForm.qdrantApiKey"
+              type="password"
+              class="settings-input"
+              :placeholder="t('settings.vectorIndex.api_key_placeholder')"
+            />
+          </div>
+        </div>
 
-          <!-- API密钥 -->
-          <div class="settings-item">
-            <div class="settings-item-header">
-              <div class="settings-label">{{ t('settings.vectorIndex.api_key') }}</div>
-              <div class="settings-description">{{ t('settings.vectorIndex.api_key_description') }}</div>
-            </div>
-            <div class="settings-item-control">
-              <input
-                v-model="configForm.qdrantApiKey"
-                type="password"
-                class="settings-input"
-                :placeholder="t('settings.vectorIndex.api_key_placeholder')"
-              />
-            </div>
+        <!-- 集合名称 -->
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('settings.vectorIndex.collection_name') }}</div>
+            <div class="settings-description">{{ t('settings.vectorIndex.collection_name_description') }}</div>
           </div>
+          <div class="settings-item-control">
+            <input
+              v-model="configForm.collectionName"
+              type="text"
+              class="settings-input"
+              :placeholder="t('settings.vectorIndex.collection_name_placeholder')"
+            />
+          </div>
+        </div>
 
-          <!-- 集合名称 -->
-          <div class="settings-item">
-            <div class="settings-item-header">
-              <div class="settings-label">{{ t('settings.vectorIndex.collection_name') }}</div>
-              <div class="settings-description">{{ t('settings.vectorIndex.collection_name_description') }}</div>
-            </div>
-            <div class="settings-item-control">
-              <input
-                v-model="configForm.collectionName"
-                type="text"
-                class="settings-input"
-                :placeholder="t('settings.vectorIndex.collection_name_placeholder')"
-              />
-            </div>
+        <!-- Embedding模型选择 -->
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('settings.vectorIndex.embedding_model') }}</div>
+            <div class="settings-description">{{ t('settings.vectorIndex.embedding_model_description') }}</div>
           </div>
+          <div class="settings-item-control">
+            <x-select
+              v-model="configForm.embeddingModelId"
+              :options="
+                availableEmbeddingModels.map(model => ({
+                  label: `${model.name} (${model.provider})`,
+                  value: model.id,
+                }))
+              "
+              :placeholder="t('settings.vectorIndex.select_embedding_model')"
+              @update:value="handleEmbeddingModelChange"
+            />
+            <x-button
+              v-if="availableEmbeddingModels.length === 0"
+              variant="primary"
+              size="small"
+              @click="navigateToAISettings"
+            >
+              {{ t('settings.vectorIndex.add_embedding_model') }}
+            </x-button>
+          </div>
+        </div>
 
-          <!-- Embedding模型选择 -->
-          <div class="settings-item">
-            <div class="settings-item-header">
-              <div class="settings-label">{{ t('settings.vectorIndex.embedding_model') }}</div>
-              <div class="settings-description">{{ t('settings.vectorIndex.embedding_model_description') }}</div>
-            </div>
-            <div class="settings-item-control">
-              <x-select
-                v-model="configForm.embeddingModelId"
-                :options="
-                  availableEmbeddingModels.map(model => ({
-                    label: `${model.name} (${model.provider})`,
-                    value: model.id,
-                  }))
-                "
-                :placeholder="t('settings.vectorIndex.select_embedding_model')"
-                @update:value="handleEmbeddingModelChange"
-              />
-              <x-button
-                v-if="availableEmbeddingModels.length === 0"
-                variant="primary"
-                size="small"
-                @click="navigateToAISettings"
-              >
-                {{ t('settings.vectorIndex.add_embedding_model') }}
-              </x-button>
-            </div>
+        <!-- 并发文件数 -->
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('settings.vectorIndex.max_concurrent_files') }}</div>
+            <div class="settings-description">{{ t('settings.vectorIndex.max_concurrent_files_description') }}</div>
           </div>
+          <div class="settings-item-control">
+            <input
+              v-model.number="configForm.maxConcurrentFiles"
+              type="number"
+              class="settings-input"
+              min="1"
+              max="16"
+              step="1"
+            />
+          </div>
+        </div>
 
-          <!-- 并发文件数 -->
-          <div class="settings-item">
-            <div class="settings-item-header">
-              <div class="settings-label">{{ t('settings.vectorIndex.max_concurrent_files') }}</div>
-              <div class="settings-description">{{ t('settings.vectorIndex.max_concurrent_files_description') }}</div>
-            </div>
-            <div class="settings-item-control">
-              <input
-                v-model.number="configForm.maxConcurrentFiles"
-                type="number"
-                class="settings-input"
-                min="1"
-                max="16"
-                step="1"
-              />
-            </div>
+        <!-- 连接测试和保存 -->
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('settings.vectorIndex.test_and_save') }}</div>
+            <div class="settings-description">{{ t('settings.vectorIndex.test_connection_description') }}</div>
           </div>
-
-          <!-- 连接测试和保存 -->
-          <div class="settings-item">
-            <div class="settings-item-header">
-              <div class="settings-label">{{ t('settings.vectorIndex.test_and_save') }}</div>
-              <div class="settings-description">{{ t('settings.vectorIndex.test_connection_description') }}</div>
-            </div>
-            <div class="settings-item-control">
-              <x-button
-                variant="secondary"
-                :loading="isTestingConnection"
-                :disabled="!configForm.qdrantUrl.trim()"
-                @click="testConnection"
-              >
-                {{ t('settings.vectorIndex.test_connection') }}
-              </x-button>
-              <x-popconfirm
-                :title="t('settings.vectorIndex.save_confirm_title')"
-                :description="t('settings.vectorIndex.save_confirm_description')"
-                :confirm-text="t('common.save')"
-                :cancel-text="t('common.cancel')"
-                type="info"
-                placement="top"
-                trigger-text="保存配置"
-                trigger-button-variant="primary"
-                :trigger-button-props="{ disabled: !isFormValid || isSaving, loading: isSaving }"
-                @confirm="saveConfig"
-              />
-            </div>
+          <div class="settings-item-control">
+            <x-button
+              variant="secondary"
+              :loading="isTestingConnection"
+              :disabled="!configForm.qdrantUrl.trim()"
+              @click="testConnection"
+            >
+              {{ t('settings.vectorIndex.test_connection') }}
+            </x-button>
+            <x-popconfirm
+              :title="t('settings.vectorIndex.save_confirm_title')"
+              :description="t('settings.vectorIndex.save_confirm_description')"
+              :confirm-text="t('common.save')"
+              :cancel-text="t('common.cancel')"
+              type="info"
+              placement="top"
+              trigger-text="保存配置"
+              trigger-button-variant="primary"
+              :trigger-button-props="{ disabled: !isFormValid || isSaving, loading: isSaving }"
+              @confirm="saveConfig"
+            />
           </div>
-        </SettingsCard>
-      </div>
-    </template>
+        </div>
+      </SettingsCard>
+    </div>
   </div>
 </template>
 
@@ -244,6 +242,10 @@
     if (isConnecting.value) return '...'
     if (isConnected.value === true) return t('settings.vectorIndex.connection_success')
     if (isConnected.value === false) return t('settings.vectorIndex.connection_failed')
+    // 当功能开启但连接状态为 null 时，显示需要重启的提示
+    if (globalSettings.enabled) {
+      return t('settings.vectorIndex.restart_required')
+    }
     return t('settings.vectorIndex.not_initialized')
   })
 
@@ -332,7 +334,7 @@
         qdrantUrl: configForm.qdrantUrl || 'http://localhost:6334',
         qdrantApiKey: configForm.qdrantApiKey || null,
         collectionName: configForm.collectionName || 'orbitx-code-vectors',
-        embeddingModelId: configForm.embeddingModelId || 'text-embedding-3-small',
+        embeddingModelId: configForm.embeddingModelId || '',
         maxConcurrentFiles: configForm.maxConcurrentFiles || 4,
       }
 
@@ -342,11 +344,6 @@
       await vectorIndexApi.init(configToSave)
 
       createMessage.success(t('common.save_success'))
-    } catch (error) {
-      console.error('保存配置失败:', error)
-      createMessage.error(
-        t('settings.vectorIndex.save_error', { error: error instanceof Error ? error.message : String(error) })
-      )
     } finally {
       isSaving.value = false
     }
@@ -382,20 +379,53 @@
   }
 
   // 开关变更处理
-  const onEnabledChange = (enabled: boolean) => {
-    // 当开关切换时立即保存
-    saveGlobalSettings()
-
-    // 提示用户需要重启应用
+  const onEnabledChange = async (enabled: boolean) => {
     if (enabled) {
-      createMessage.info(t('settings.vectorIndex.feature_enabled_restart_required'))
-      tryConnect()
+      // 开启功能时，先检查配置是否完整
+      if (!isFormValid.value) {
+        // 如果配置不完整，阻止开启并重置开关状态
+        globalSettings.enabled = false
+        createMessage.error(t('settings.vectorIndex.config_incomplete'))
+        return
+      }
+
+      // 配置完整，测试连接
+      isConnecting.value = true
+      try {
+        const testConfig = {
+          qdrantUrl: configForm.qdrantUrl,
+          qdrantApiKey: configForm.qdrantApiKey || null,
+          collectionName: configForm.collectionName,
+          embeddingModelId: configForm.embeddingModelId,
+          maxConcurrentFiles: configForm.maxConcurrentFiles,
+        }
+
+        await vectorIndexApi.testConnection(testConfig)
+        isConnected.value = true
+
+        // 测试成功，保存设置
+        await saveGlobalSettings()
+        createMessage.success(t('settings.vectorIndex.feature_enabled_success'))
+        createMessage.info(t('settings.vectorIndex.feature_enabled_restart_required'))
+      } catch (error) {
+        // 测试连接失败，阻止开启功能
+        globalSettings.enabled = false
+        isConnected.value = false
+        // 只显示一个错误信息，不重复显示连接测试失败的信息
+        createMessage.info(t('settings.vectorIndex.enable_failed_connection'))
+      } finally {
+        isConnecting.value = false
+      }
     } else {
+      // 关闭功能，直接保存设置
+      await saveGlobalSettings()
       createMessage.info(t('settings.vectorIndex.feature_disabled_restart_required'))
+      // 重置连接状态
+      isConnected.value = null
     }
   }
 
-  // 手动尝试连接数据库
+  // 手动尝试连接数据库（仅用于手动测试）
   const tryConnect = async () => {
     isConnecting.value = true
 

@@ -238,8 +238,14 @@ pub async fn init_vector_index<R: Runtime>(
         // 2. 获取LLM服务
         let llm_service = llm_state.service.clone();
 
-        // 3. 创建向量索引服务
-        let service = VectorIndexService::new(config, llm_service, embedding_model)
+        // 检测实际的向量维度
+        let actual_dimension = detect_embedding_model_dimension(
+            &llm_service,
+            &embedding_model
+        ).await.context("检测向量维度失败")?;
+
+        // 3. 创建向量索引服务（使用实际检测的维度）
+        let service = VectorIndexService::new_with_actual_dimension(config, llm_service, embedding_model, actual_dimension)
             .await
             .context("创建向量索引服务失败")?;
 
@@ -563,7 +569,10 @@ pub async fn search_code_vectors<R: Runtime>(
 /// - 认证失败
 /// - 服务不可用
 #[tauri::command]
-pub async fn test_qdrant_connection(config: VectorIndexConfig) -> TauriApiResult<String> {
+pub async fn test_qdrant_connection(
+    config: VectorIndexConfig,
+    llm_state: State<'_, LLMManagerState>,
+) -> TauriApiResult<String> {
     let result: Result<String> = async {
         info!("开始测试Qdrant数据库连接: {}", config.qdrant_url);
 
@@ -577,8 +586,17 @@ pub async fn test_qdrant_connection(config: VectorIndexConfig) -> TauriApiResult
             "集合名称不能为空"
         );
 
-        // 2. 创建临时的Qdrant客户端进行测试
-        let full_config = crate::vector_index::types::VectorIndexFullConfig::new(config.clone());
+        // 2. 检测模型的实际向量维度并创建配置
+        let actual_dimension = detect_embedding_model_dimension(
+            &llm_state.service,
+            &config.embedding_model_id
+        ).await.context("检测向量维度失败")?;
+        
+        let full_config = crate::vector_index::types::VectorIndexFullConfig::from_user_config_with_actual_dimension(
+            config.clone(), 
+            actual_dimension
+        );
+        
         let qdrant_client = crate::vector_index::qdrant::QdrantClientImpl::new(full_config)
             .await
             .context("创建Qdrant客户端失败")?;
@@ -903,14 +921,12 @@ pub async fn save_vector_index_config(
         info!("保存向量索引配置，模型: {}", config.embedding_model_id);
 
         // 1. 检测embedding模型的向量维度
-        info!("开始检测模型 '{}' 的向量维度", config.embedding_model_id);
-        
         let detected_dimension = detect_embedding_model_dimension(
             &llm_state.service,
             &config.embedding_model_id
         ).await.context("检测向量维度失败")?;
         
-        info!("成功检测到模型 '{}' 的向量维度: {}", config.embedding_model_id, detected_dimension);
+        info!("检测到模型 '{}' 的向量维度: {}", config.embedding_model_id, detected_dimension);
 
         // 2. 创建配置服务
         let config_service = crate::vector_index::VectorIndexConfigService::new(

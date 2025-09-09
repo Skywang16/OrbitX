@@ -23,6 +23,8 @@ export interface ModelInfo {
   id: string
   /// 显示名称
   displayName: string
+  /// 模型类型
+  modelType: 'chat' | 'embedding'
   /// 模型能力
   capabilities: ModelCapabilities
   /// 是否已弃用

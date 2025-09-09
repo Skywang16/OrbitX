@@ -29,6 +29,7 @@
     "remove_model_failed": "删除模型失败",
     "update_model_failed": "更新模型失败",
     "test_connection_failed": "测试连接失败",
+    "test_connection_error": "连接测试失败: {error}",
     "api_url_empty": "API URL不能为空",
     "api_key_empty": "API Key不能为空",
     "model_name_empty": "模型名称不能为空",
@@ -161,6 +162,7 @@
     "get_monitoring_status_failed": "获取文件监控状态失败",
     "get_config_failed": "获取向量索引配置失败",
     "save_config_failed": "保存向量索引配置失败",
+    "connection_test_failed": "向量数据库连接测试失败",
     "get_workspace_path_failed": "获取工作空间路径失败",
     "cancel_build_failed": "取消构建索引失败",
     "clear_index_failed": "清空向量索引失败"

@@ -39,14 +39,14 @@ impl GeminiProvider {
             .config
             .api_url
             .as_deref()
-            .unwrap_or("https://generativelanguage.googleapis.com/v1beta/models");
+            .unwrap_or("https://generativelanguage.googleapis.com/v1beta");
         let stream_suffix = if request.stream {
             ":streamGenerateContent"
         } else {
             ":generateContent"
         };
         format!(
-            "{}/{}{}?key={}",
+            "{}/models/{}{}?key={}",
             base, request.model, stream_suffix, self.config.api_key
         )
     }
@@ -272,15 +272,24 @@ impl GeminiProvider {
 impl LLMProvider for GeminiProvider {
     async fn call(&self, request: LLMRequest) -> Result<LLMResponse> {
         let url = self.get_endpoint(&request);
+        tracing::debug!("Gemini请求URL: {}", url);
         let headers = self.get_headers();
         let body = self.build_body(&request);
+        tracing::debug!(
+            "Gemini请求体: {}",
+            serde_json::to_string_pretty(&body).unwrap_or_default()
+        );
 
         let mut req_builder = self.client.post(&url).json(&body);
         for (key, value) in headers {
             req_builder = req_builder.header(&key, &value);
         }
 
-        let response = req_builder.send().await.context("发送HTTP请求失败")?;
+        let response = req_builder
+            .timeout(std::time::Duration::from_secs(30))
+            .send()
+            .await
+            .context("发送HTTP请求失败")?;
 
         let status = response.status();
         if !status.is_success() {
@@ -306,7 +315,11 @@ impl LLMProvider for GeminiProvider {
             req_builder = req_builder.header(&key, &value);
         }
 
-        let response = req_builder.send().await.context("发送HTTP请求失败")?;
+        let response = req_builder
+            .timeout(std::time::Duration::from_secs(30))
+            .send()
+            .await
+            .context("发送HTTP请求失败")?;
         let status = response.status();
         if !status.is_success() {
             let text = response.text().await.unwrap_or_default();

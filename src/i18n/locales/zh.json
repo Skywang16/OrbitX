@@ -151,6 +151,10 @@
       "restart_later": "稍后重启",
       "feature_enabled_restart_required": "向量索引功能已启用，重启应用后生效",
       "feature_disabled_restart_required": "向量索引功能已禁用，重启应用后生效",
+      "config_incomplete": "配置不完整，请先填写完整的连接配置",
+      "enable_failed": "启用向量索引功能失败: {error}",
+      "enable_failed_connection": "启用向量索引功能失败，请先配置向量数据库",
+      "feature_enabled_success": "向量索引功能启用成功",
       "code_index_tag": "代码索引",
       "code_index_tag_tooltip": "当前目录已启用代码索引",
       "status_refresh_failed": "刷新状态失败",
@@ -307,7 +311,7 @@
       "model_name_required": "模型名称不能为空",
       "api_url_required": "API地址不能为空",
       "save_config_success": "配置保存成功！",
-      "save_config_failed": "保存配置失败",
+
       "skip_config_message": "已跳过AI配置，您可以后续在设置中配置",
       "models": {
         "custom": {
