@@ -5,8 +5,8 @@
  * 使用线程安全的全局状态管理当前语言设置。
  */
 
-use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 
 /// 支持的语言类型
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,7 +68,7 @@ impl std::fmt::Display for Language {
 }
 
 /// 全局语言状态
-static CURRENT_LANGUAGE: LazyLock<std::sync::RwLock<Language>> = 
+static CURRENT_LANGUAGE: LazyLock<std::sync::RwLock<Language>> =
     LazyLock::new(|| std::sync::RwLock::new(Language::ZhCN));
 
 /// 语言管理器

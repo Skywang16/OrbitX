@@ -6,7 +6,7 @@
  *
  * Requirements: 3.1, 3.2, 3.3, 3.4
  *
- * 说明：本文件为唯一且权威的 Qdrant 实现入口。为降低阅读成本，简化版实现
+ * 说明：本文件为唯一且权威的 Qdrant 实现入口，整合所有相关功能
  * `mod_simplified.rs` 已被移除/隔离，不再与本实现并存。
  */
 
@@ -205,7 +205,7 @@ impl QdrantService for QdrantClientImpl {
                 }
                 Err(e) => {
                     tracing::info!("集合配置不匹配({}), 重新创建", e);
-                    
+
                     // 删除现有集合并重新创建
                     let _ = self.client.delete_collection(collection_name).await;
                     self.create_new_collection().await?;
@@ -565,26 +565,40 @@ impl QdrantClientImpl {
         }
 
         // 添加用于过滤的索引字段
-        payload.insert(
-            "file_dir".to_string(),
-            Value::from(
-                std::path::Path::new(&vector.file_path)
-                    .parent()
-                    .and_then(|p| p.to_str())
-                    .unwrap_or("")
-                    .to_string(),
-            ),
-        );
+        let file_dir = std::path::Path::new(&vector.file_path)
+            .parent()
+            .and_then(|p| p.to_str())
+            .unwrap_or("")
+            .to_string();
 
+        let file_name = std::path::Path::new(&vector.file_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string();
+
+        payload.insert("file_dir".to_string(), Value::from(file_dir));
+        payload.insert("file_name".to_string(), Value::from(file_name));
+
+        // 添加路径段索引（基于Roo-Code的pathSegments策略）
+        let normalized_path = vector.file_path.replace('\\', "/"); // 统一使用Unix风格路径
+        let path_segments: Vec<&str> = normalized_path
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        // 为每个路径段创建索引（最多5个层级）
+        for (i, segment) in path_segments.iter().enumerate().take(5) {
+            payload.insert(
+                format!("path_segment_{}", i),
+                Value::from(segment.to_string()),
+            );
+        }
+
+        // 添加路径深度信息
         payload.insert(
-            "file_name".to_string(),
-            Value::from(
-                std::path::Path::new(&vector.file_path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("")
-                    .to_string(),
-            ),
+            "path_depth".to_string(),
+            Value::from(path_segments.len() as i64),
         );
 
         // 内容长度（用于过滤）
@@ -616,7 +630,7 @@ impl QdrantClientImpl {
         ))
     }
 
-    /// 构建搜索过滤条件
+    /// 构建搜索过滤条件（增强版，支持路径段索引）
     fn build_search_filters(
         &self,
         options: &SearchOptions,
@@ -625,24 +639,55 @@ impl QdrantClientImpl {
 
         let mut conditions = Vec::new();
 
-        // 目录过滤
+        // 目录过滤（使用路径段索引优化）
         if let Some(directory) = &options.directory_filter {
             tracing::debug!("添加目录过滤: {}", directory);
 
-            let condition = Condition {
-                condition_one_of: Some(qdrant_client::qdrant::condition::ConditionOneOf::Field(
-                    FieldCondition {
-                        key: "file_dir".to_string(),
-                        r#match: Some(Match {
-                            match_value: Some(qdrant_client::qdrant::r#match::MatchValue::Text(
-                                directory.clone(),
-                            )),
-                        }),
-                        ..Default::default()
-                    },
-                )),
-            };
-            conditions.push(condition);
+            // 类似Roo-Code的路径处理逻辑
+            let normalized_dir = directory.replace('\\', "/"); // 统一使用Unix风格路径
+
+            // 检查是否为当前目录
+            if normalized_dir == "." || normalized_dir == "./" {
+                // 不创建过滤器 - 搜索整个工作区
+                tracing::debug!("检测到当前目录标识，将搜索整个工作区");
+            } else {
+                // 移除前导的 "./"
+                let cleaned_dir = if normalized_dir.starts_with("./") {
+                    &normalized_dir[2..]
+                } else {
+                    &normalized_dir
+                };
+
+                // 分割路径段
+                let segments: Vec<&str> =
+                    cleaned_dir.split('/').filter(|s| !s.is_empty()).collect();
+
+                if !segments.is_empty() {
+                    // 使用路径段索引创建过滤条件
+                    for (i, segment) in segments.iter().enumerate() {
+                        let condition = Condition {
+                            condition_one_of: Some(
+                                qdrant_client::qdrant::condition::ConditionOneOf::Field(
+                                    FieldCondition {
+                                        key: format!("path_segment_{}", i),
+                                        r#match: Some(Match {
+                                            match_value: Some(
+                                                qdrant_client::qdrant::r#match::MatchValue::Text(
+                                                    segment.to_string(),
+                                                ),
+                                            ),
+                                        }),
+                                        ..Default::default()
+                                    },
+                                ),
+                            ),
+                        };
+                        conditions.push(condition);
+                    }
+
+                    tracing::debug!("使用路径段索引创建了 {} 个过滤条件", segments.len());
+                }
+            }
         }
 
         // 语言过滤
@@ -677,6 +722,23 @@ impl QdrantClientImpl {
                             match_value: Some(qdrant_client::qdrant::r#match::MatchValue::Text(
                                 chunk_type.clone(),
                             )),
+                        }),
+                        ..Default::default()
+                    },
+                )),
+            };
+            conditions.push(condition);
+        }
+
+        // 文件大小过滤（可选）
+        if let Some(min_content_length) = options.min_content_length {
+            let condition = Condition {
+                condition_one_of: Some(qdrant_client::qdrant::condition::ConditionOneOf::Field(
+                    FieldCondition {
+                        key: "content_length".to_string(),
+                        range: Some(qdrant_client::qdrant::Range {
+                            gte: Some(min_content_length as f64),
+                            ..Default::default()
                         }),
                         ..Default::default()
                     },

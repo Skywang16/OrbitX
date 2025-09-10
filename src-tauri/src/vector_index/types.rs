@@ -96,10 +96,6 @@ impl Default for VectorIndexInternalConfig {
                 ".py".to_string(),
                 ".go".to_string(),
                 ".java".to_string(),
-                ".c".to_string(),
-                ".cpp".to_string(),
-                ".h".to_string(),
-                ".hpp".to_string(),
             ],
             ignore_patterns: vec![
                 "**/node_modules/**".to_string(),
@@ -195,8 +191,8 @@ pub fn infer_vector_size_from_model(model_name: &str) -> usize {
         1536
     }
     // 豆包/字节跳动模型
-    else if model_lower.contains("doubao-embedding-large") 
-        || model_lower.contains("embedding-large-text") 
+    else if model_lower.contains("doubao-embedding-large")
+        || model_lower.contains("embedding-large-text")
     {
         2048
     } else if model_lower.contains("doubao-embedding") {

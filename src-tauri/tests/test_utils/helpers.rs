@@ -1,6 +1,6 @@
 /*!
  * 测试辅助函数和宏
- * 
+ *
  * 提供常用的测试辅助函数：
  * - 测试断言宏
  * - 内存使用测试
@@ -106,7 +106,7 @@ pub fn create_test_files(
 
     for (file_name, content) in files {
         let file_path = temp_dir.path().join(file_name);
-        
+
         // 创建父目录（如果需要）
         if let Some(parent) = file_path.parent() {
             fs::create_dir_all(parent)?;

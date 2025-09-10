@@ -343,25 +343,27 @@ pub async fn create_terminal_with_shell<R: Runtime>(
     cols: u16,
     _app: AppHandle<R>,
     _state: State<'_, TerminalState>,
-) -> Result<u32, String> {
+) -> TauriApiResult<u32> {
+    debug!("使用指定shell创建终端: {:?}, 大小: {}x{}", shell_name, cols, rows);
+
     // 参数验证
-    if rows == 0 || cols == 0 {
-        let error_msg = format!(
-            "终端尺寸验证失败: 终端尺寸不能为0 (当前: {}x{})",
-            cols, rows
-        );
-        error!("创建终端失败: {}", error_msg);
-        return Err(error_msg);
+    if let Err(_) = validate_terminal_size(rows, cols) {
+        return Ok(api_error!("shell.terminal_size_invalid"));
     }
 
     let shell_info = match shell_name {
         Some(name) => {
-            debug!("使用指定shell创建终端: {}, 大小: {}x{}", name, cols, rows);
-            ShellManager::find_shell_by_name(&name)
-                .ok_or_else(|| format!("Shell查找错误: 未找到shell '{}'", name))?
+            debug!("查找指定shell: {}", name);
+            match ShellManager::find_shell_by_name(&name) {
+                Some(shell) => shell,
+                None => {
+                    error!("未找到指定shell: {}", name);
+                    return Ok(api_error!("shell.shell_not_found"));
+                }
+            }
         }
         None => {
-            debug!("使用默认shell创建终端, 大小: {}x{}", cols, rows);
+            debug!("使用默认shell");
             ShellManager::get_default_shell()
         }
     };
@@ -384,12 +386,11 @@ pub async fn create_terminal_with_shell<R: Runtime>(
                 config.shell_config.program,
                 mux.pane_count()
             );
-            Ok(pane_id.as_u32())
+            Ok(api_success!(pane_id.as_u32()))
         }
-        Err(e) => {
-            let error_msg = format!("创建终端失败: {}", e);
-            error!("{}", error_msg);
-            Err(error_msg)
+        Err(_) => {
+            error!("创建终端失败");
+            Ok(api_error!("shell.create_terminal_failed"))
         }
     }
 }

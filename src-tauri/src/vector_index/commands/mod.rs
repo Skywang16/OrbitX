@@ -17,17 +17,19 @@
 
 use crate::llm::commands::LLMManagerState;
 use crate::utils::{EmptyData, TauriApiResult};
-use crate::{api_error, api_success};
 use crate::vector_index::{
     monitor::FileMonitorService,
     service::VectorIndexService,
-    types::{IndexStats, SearchOptions, SearchResult, TaskProgress, VectorIndexConfig, VectorIndexStatus},
+    types::{
+        IndexStats, SearchOptions, SearchResult, TaskProgress, VectorIndexConfig, VectorIndexStatus,
+    },
     vectorizer::VectorizationService,
 };
+use crate::{api_error, api_success};
 
 mod app_settings;
-pub use app_settings::*;
 use anyhow::{bail, ensure, Context, Result};
+pub use app_settings::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Runtime, State};
@@ -55,9 +57,7 @@ pub enum VectorIndexEvent {
         timestamp: String,
     },
     /// 文件监控启动事件
-    MonitorStarted {
-        workspace_path: String,
-    },
+    MonitorStarted { workspace_path: String },
     /// 文件监控停止事件
     MonitorStopped,
     /// 增量更新完成事件
@@ -74,7 +74,7 @@ pub enum VectorIndexEvent {
 /// 根据错误消息内容映射更精确的 i18n 错误键
 fn map_build_index_error_key(e: &anyhow::Error) -> &'static str {
     let msg = e.to_string();
-    
+
     // 直接匹配服务层返回的具体错误类型
     match msg.as_str() {
         "EMBEDDING_MODEL_NOT_FOUND" => "vector_index.embedding_model_not_found",
@@ -199,19 +199,19 @@ pub async fn init_vector_index<R: Runtime>(
             config.max_concurrent_files > 0,
             "最大并发文件数必须大于0"
         );
-        
+
         // 获取embedding模型配置
         let models = ai_state.ai_service.get_models().await;
-        
+
         // 调试信息：列出所有可用的embedding模型
         let available_embedding_models: Vec<String> = models
             .iter()
             .filter(|m| m.model_type == crate::ai::types::ModelType::Embedding)
             .map(|m| format!("{} ({})", m.id, m.name))
             .collect();
-        
+
         debug!("可用的embedding模型: {:?}", available_embedding_models);
-        
+
         let embedding_model_config = models
             .iter()
             .find(|m| m.id == config.embedding_model_id && m.model_type == crate::ai::types::ModelType::Embedding)
@@ -223,11 +223,11 @@ pub async fn init_vector_index<R: Runtime>(
                 };
                 anyhow::anyhow!(
                     "找不到指定的embedding模型 '{}'。{}\n\n解决方案:\n1. 在AI设置中添加该模型\n2. 或选择已有的embedding模型\n3. 或使用默认模型 'text-embedding-3-small'", 
-                    config.embedding_model_id, 
+                    config.embedding_model_id,
                     available_list
                 )
             })?;
-        
+
         let embedding_model = embedding_model_config.id.clone();
 
         debug!(
@@ -266,7 +266,10 @@ pub async fn init_vector_index<R: Runtime>(
 
     // 如果初始化失败，也发送状态事件
     if let Err(ref e) = result {
-        let event = VectorIndexEvent::ServiceStatus { initialized: false, message: format!("向量索引服务初始化失败: {}", e) };
+        let event = VectorIndexEvent::ServiceStatus {
+            initialized: false,
+            message: format!("向量索引服务初始化失败: {}", e),
+        };
         if let Err(emit_err) = app.emit("vector-index-event", &event) {
             warn!("发送服务状态事件失败: {}", emit_err);
         }
@@ -343,7 +346,9 @@ pub async fn build_code_index<R: Runtime>(
         let workspace_path = workspace_path_trimmed.as_str();
 
         // 3. 重置取消标志
-        state.cancel_flag.store(false, std::sync::atomic::Ordering::Relaxed);
+        state
+            .cancel_flag
+            .store(false, std::sync::atomic::Ordering::Relaxed);
 
         // 4. 准备进度通知和事件发送
         let (progress_sender, mut progress_receiver) = mpsc::channel::<TaskProgress>(100);
@@ -368,7 +373,11 @@ pub async fn build_code_index<R: Runtime>(
 
         // 5. 执行索引构建
         let build_result = service
-            .build_index(&workspace_path, Some(progress_sender), Some(state.cancel_flag.clone()))
+            .build_index(
+                &workspace_path,
+                Some(progress_sender),
+                Some(state.cancel_flag.clone()),
+            )
             .await;
 
         // 6. 等待进度报告任务结束
@@ -591,12 +600,12 @@ pub async fn test_qdrant_connection(
             &llm_state.service,
             &config.embedding_model_id
         ).await.context("检测向量维度失败")?;
-        
+
         let full_config = crate::vector_index::types::VectorIndexFullConfig::from_user_config_with_actual_dimension(
-            config.clone(), 
+            config.clone(),
             actual_dimension
         );
-        
+
         let qdrant_client = crate::vector_index::qdrant::QdrantClientImpl::new(full_config)
             .await
             .context("创建Qdrant客户端失败")?;
@@ -622,10 +631,17 @@ pub async fn test_qdrant_connection(
 
 /// 获取向量索引状态信息（对象）
 #[tauri::command]
-pub async fn get_vector_index_status(state: State<'_, VectorIndexState>) -> TauriApiResult<VectorIndexStatus> {
+pub async fn get_vector_index_status(
+    state: State<'_, VectorIndexState>,
+) -> TauriApiResult<VectorIndexStatus> {
     let result: Result<VectorIndexStatus> = async {
         if !state.is_initialized().await {
-            return Ok(VectorIndexStatus { is_initialized: false, total_vectors: 0, collection_name: None, last_updated: None });
+            return Ok(VectorIndexStatus {
+                is_initialized: false,
+                total_vectors: 0,
+                collection_name: None,
+                last_updated: None,
+            });
         }
 
         let service_guard = state.service.read().await;
@@ -637,10 +653,20 @@ pub async fn get_vector_index_status(state: State<'_, VectorIndexState>) -> Taur
                     collection_name: Some(service.collection_name().to_string()),
                     last_updated: None,
                 }),
-                Err(_) => Ok(VectorIndexStatus { is_initialized: true, total_vectors: 0, collection_name: Some(service.collection_name().to_string()), last_updated: None }),
+                Err(_) => Ok(VectorIndexStatus {
+                    is_initialized: true,
+                    total_vectors: 0,
+                    collection_name: Some(service.collection_name().to_string()),
+                    last_updated: None,
+                }),
             }
         } else {
-            Ok(VectorIndexStatus { is_initialized: false, total_vectors: 0, collection_name: None, last_updated: None })
+            Ok(VectorIndexStatus {
+                is_initialized: false,
+                total_vectors: 0,
+                collection_name: None,
+                last_updated: None,
+            })
         }
     }
     .await;
@@ -685,10 +711,7 @@ pub async fn start_file_monitoring<R: Runtime>(
         info!("启动文件监控: {}", workspace_path);
 
         // 1. 参数验证
-        ensure!(
-            !workspace_path.trim().is_empty(),
-            "工作空间路径不能为空"
-        );
+        ensure!(!workspace_path.trim().is_empty(), "工作空间路径不能为空");
 
         let workspace_path = std::path::Path::new(&workspace_path);
         ensure!(
@@ -713,8 +736,8 @@ pub async fn start_file_monitoring<R: Runtime>(
         };
 
         // 4. 创建文件监控服务
-        let mut monitor_service = FileMonitorService::new(config, vector_service)
-            .context("创建文件监控服务失败")?;
+        let mut monitor_service =
+            FileMonitorService::new(config, vector_service).context("创建文件监控服务失败")?;
 
         // 5. 启动监控
         monitor_service
@@ -771,7 +794,7 @@ pub async fn stop_file_monitoring<R: Runtime>(
 
         // 1. 获取并停止监控服务
         let mut monitor_guard = state.monitor_service.write().await;
-        
+
         if let Some(mut monitor_service) = monitor_guard.take() {
             monitor_service
                 .stop_monitoring()
@@ -779,10 +802,7 @@ pub async fn stop_file_monitoring<R: Runtime>(
                 .context("停止文件监控失败")?;
 
             // 2. 发送停止事件
-            let _ = app.emit(
-                "vector-index-event",
-                VectorIndexEvent::MonitorStopped,
-            );
+            let _ = app.emit("vector-index-event", VectorIndexEvent::MonitorStopped);
 
             let success_msg = "文件监控已停止".to_string();
             info!("{}", success_msg);
@@ -817,7 +837,7 @@ pub async fn get_file_monitoring_status(
 ) -> TauriApiResult<String> {
     let result: Result<String> = async {
         let monitor_guard = state.monitor_service.read().await;
-        
+
         if let Some(monitor_service) = monitor_guard.as_ref() {
             if monitor_service.is_monitoring() {
                 let stats = monitor_service.get_stats().await;
@@ -870,7 +890,7 @@ pub async fn get_vector_index_config(
 
         // 1. 创建配置服务
         let config_service = crate::vector_index::VectorIndexConfigService::new(
-            storage_state.coordinator.repositories()
+            storage_state.coordinator.repositories(),
         );
 
         // 2. 加载配置或使用默认配置
@@ -921,16 +941,19 @@ pub async fn save_vector_index_config(
         info!("保存向量索引配置，模型: {}", config.embedding_model_id);
 
         // 1. 检测embedding模型的向量维度
-        let detected_dimension = detect_embedding_model_dimension(
-            &llm_state.service,
-            &config.embedding_model_id
-        ).await.context("检测向量维度失败")?;
-        
-        info!("检测到模型 '{}' 的向量维度: {}", config.embedding_model_id, detected_dimension);
+        let detected_dimension =
+            detect_embedding_model_dimension(&llm_state.service, &config.embedding_model_id)
+                .await
+                .context("检测向量维度失败")?;
+
+        info!(
+            "检测到模型 '{}' 的向量维度: {}",
+            config.embedding_model_id, detected_dimension
+        );
 
         // 2. 创建配置服务
         let config_service = crate::vector_index::VectorIndexConfigService::new(
-            storage_state.coordinator.repositories()
+            storage_state.coordinator.repositories(),
         );
 
         // 3. 保存配置（包含验证逻辑）
@@ -940,7 +963,10 @@ pub async fn save_vector_index_config(
             .context("保存向量索引配置失败")?;
 
         info!("向量索引配置保存成功，向量维度: {}", detected_dimension);
-        Ok(format!("向量索引配置保存成功（向量维度: {}）", detected_dimension))
+        Ok(format!(
+            "向量索引配置保存成功（向量维度: {}）",
+            detected_dimension
+        ))
     }
     .await;
 
@@ -949,51 +975,57 @@ pub async fn save_vector_index_config(
         Err(e) => {
             error!("保存向量索引配置失败: {}", e);
             Ok(api_error!("vector_index.save_config_failed"))
-        },
+        }
     }
 }
 
 /// 检测embedding模型的向量维度
-/// 
+///
 /// 通过发送测试文本给模型来动态获取实际的向量维度
 async fn detect_embedding_model_dimension(
     llm_service: &Arc<crate::llm::service::LLMService>,
     model_id: &str,
 ) -> Result<usize> {
     debug!("开始检测模型 '{}' 的向量维度", model_id);
-    
+
     // 使用简单的测试文本
     let test_text = "dimension test";
-    
+
     // 创建临时的向量化服务
     let temp_vectorizer = crate::vector_index::vectorizer::LLMVectorizationService::new(
-        llm_service.clone(), 
-        model_id.to_string()
+        llm_service.clone(),
+        model_id.to_string(),
     );
-    
+
     match temp_vectorizer.create_embedding(test_text).await {
         Ok(vector) => {
             let dimension = vector.len();
-            
+
             // 验证维度合理性
             ensure!(
                 dimension >= 128 && dimension <= 4096,
                 "检测到的向量维度 {} 超出合理范围 [128, 4096]，请检查模型配置",
                 dimension
             );
-            
+
             info!("成功检测到向量维度: {} (模型: {})", dimension, model_id);
             Ok(dimension)
-        },
+        }
         Err(e) => {
             error!("向量维度检测失败，模型: {}, 错误: {}", model_id, e);
-            
+
             // 如果是模型未找到的错误，返回更具体的错误信息
             if e.to_string().contains("EMBEDDING_MODEL_NOT_FOUND") {
-                bail!("embedding模型 '{}' 不存在或不可用，请在AI设置中添加该模型", model_id);
+                bail!(
+                    "embedding模型 '{}' 不存在或不可用，请在AI设置中添加该模型",
+                    model_id
+                );
             }
-            
-            bail!("无法连接到embedding模型 '{}'，请检查模型配置和网络连接", model_id);
+
+            bail!(
+                "无法连接到embedding模型 '{}'，请检查模型配置和网络连接",
+                model_id
+            );
         }
     }
 }
@@ -1014,8 +1046,7 @@ async fn detect_embedding_model_dimension(
 pub async fn get_current_workspace_path() -> TauriApiResult<String> {
     let result: Result<String> = async {
         // 尝试获取当前工作目录
-        let current_dir = std::env::current_dir()
-            .context("无法获取当前工作目录")?;
+        let current_dir = std::env::current_dir().context("无法获取当前工作目录")?;
 
         let workspace_path = current_dir
             .to_str()
@@ -1061,8 +1092,10 @@ pub async fn cancel_build_index<R: Runtime>(
 
         // 设置取消标志
         info!("触发索引构建取消");
-        state.cancel_flag.store(true, std::sync::atomic::Ordering::Relaxed);
-        
+        state
+            .cancel_flag
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+
         // 发送取消事件
         let event = VectorIndexEvent::Error {
             operation: "cancel_build".to_string(),

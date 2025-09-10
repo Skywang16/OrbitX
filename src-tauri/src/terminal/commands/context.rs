@@ -10,7 +10,7 @@
 use super::TerminalContextState;
 use crate::mux::PaneId;
 use crate::terminal::TerminalContext;
-use crate::utils::{TauriApiResult};
+use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
 use tauri::State;
 use tracing::{debug, error, warn};

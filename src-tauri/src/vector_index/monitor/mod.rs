@@ -31,10 +31,10 @@ use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
 use crate::vector_index::{service::VectorIndexService, types::VectorIndexConfig};
+use crate::vector_index::qdrant::QdrantService;
 
 pub mod file_change_detector;
 pub mod file_filter;
-pub mod incremental_updater;
 
 use file_filter::FileFilter;
 
@@ -301,14 +301,10 @@ impl FileMonitorService {
     async fn handle_file_updated(&self, path: PathBuf) -> Result<()> {
         info!("处理文件更新: {}", path.display());
 
-        // 使用增量更新器处理单个文件
-        let updater = incremental_updater::IncrementalUpdater::new(
-            self.config.clone(),
-            self.vector_service.clone(),
-        );
-
-        updater
-            .update_single_file(&path)
+        // 直接委托 VectorIndexService 执行单文件增量更新
+        let _stats = self
+            .vector_service
+            .update_file(&path.to_string_lossy())
             .await
             .with_context(|| format!("增量更新文件失败: {}", path.display()))?;
 
@@ -327,14 +323,10 @@ impl FileMonitorService {
     async fn handle_file_deleted(&self, path: PathBuf) -> Result<()> {
         info!("处理文件删除: {}", path.display());
 
-        // 使用增量更新器删除文件对应的向量
-        let updater = incremental_updater::IncrementalUpdater::new(
-            self.config.clone(),
-            self.vector_service.clone(),
-        );
-
-        updater
-            .delete_file_vectors(&path)
+        // 直接通过存储层删除文件对应向量
+        self.vector_service
+            .get_storage()
+            .delete_file_vectors(&path.to_string_lossy())
             .await
             .with_context(|| format!("删除文件向量失败: {}", path.display()))?;
 

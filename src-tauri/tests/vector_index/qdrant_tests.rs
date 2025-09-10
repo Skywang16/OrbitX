@@ -12,12 +12,12 @@
  */
 
 use anyhow::Result;
+use std::sync::Arc;
+use std::time::Duration;
 use terminal_lib::vector_index::{
     qdrant::{QdrantClientImpl, QdrantService},
     types::{CodeVector, SearchOptions, VectorIndexConfig},
 };
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::time::timeout;
 
 use crate::test_utils::*;

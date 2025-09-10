@@ -9,10 +9,7 @@ use crate::storage::sql_scripts::SqlScriptLoader;
 use crate::storage::DATABASE_FILE_NAME;
 use crate::utils::error::AppResult;
 use anyhow::{anyhow, Context};
-use argon2::{
-    password_hash::SaltString,
-    Argon2, PasswordHasher,
-};
+use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
 use base64::Engine;
 use chacha20poly1305::{
     aead::{Aead, AeadCore, KeyInit, OsRng as ChaChaOsRng},
@@ -86,8 +83,7 @@ impl EncryptionManager {
         hasher.update(password.as_bytes());
         let digest = hasher.finalize();
         let salt_bytes = &digest[..16];
-        let salt = SaltString::encode_b64(salt_bytes)
-            .map_err(|e| anyhow!("生成盐失败: {}", e))?;
+        let salt = SaltString::encode_b64(salt_bytes).map_err(|e| anyhow!("生成盐失败: {}", e))?;
 
         let password_hash = self
             .argon2
@@ -478,7 +474,7 @@ mod tests {
         // 两个管理器都应该有主密钥
         assert!(manager1.master_key.is_some());
         assert!(manager2.master_key.is_some());
-        
+
         // 由于使用确定性的盐，同一密码应产生相同的密钥（确保跨重启可解密）
         let key1 = manager1.master_key.unwrap();
         let key2 = manager2.master_key.unwrap();

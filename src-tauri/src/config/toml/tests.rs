@@ -5,10 +5,7 @@
 #[cfg(test)]
 mod tests {
     use crate::config::{defaults::create_default_config, paths::ConfigPaths};
-    use crate::config::{
-        toml::TomlConfigManager,
-        ConfigEvent,
-    };
+    use crate::config::{toml::TomlConfigManager, ConfigEvent};
     use tempfile::TempDir;
     use tokio::time::Duration;
 

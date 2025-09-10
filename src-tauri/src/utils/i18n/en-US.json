@@ -119,6 +119,7 @@
     "close_terminal_failed": "Failed to close terminal",
     "set_buffer_failed": "Failed to set buffer",
     "find_shell_failed": "Failed to find shell",
+    "shell_not_found": "Shell not found",
     "get_buffer_failed": "Failed to get buffer",
     "operation_failed": "Operation failed"
   },

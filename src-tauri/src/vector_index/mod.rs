@@ -23,15 +23,26 @@
 // 子模块声明
 pub mod commands;
 pub mod config_service;
+pub mod enhanced_config;
+pub mod error_handler;
+pub mod incremental_updater;
 pub mod monitor;
 pub mod parser;
+pub mod performance_monitor;
 pub mod qdrant;
 pub mod service;
 pub mod startup;
 pub mod types;
 pub mod vectorizer;
 
+#[cfg(test)]
+mod tests;
+
 // 重新导出核心类型和接口
+pub use enhanced_config::EnhancedConfigManager;
+pub use error_handler::{EnhancedErrorHandler, RecoveryStrategy};
+pub use incremental_updater::{IncrementalUpdateStats, IncrementalUpdater};
+pub use performance_monitor::{HealthStatus, MetricType, PerformanceMonitor, PerformanceStats};
 pub use types::{CodeVector, IndexStats, SearchOptions, SearchResult, VectorIndexConfig};
 
 // 导出主要服务接口
@@ -84,4 +95,62 @@ pub mod constants {
 
     /// 默认相似度阈值
     pub const DEFAULT_MIN_SCORE: f32 = 0.3;
+
+    /// 智能分块器常量
+    pub mod smart_chunker {
+        /// 最小分块大小
+        pub const MIN_CHUNK_SIZE: usize = 50;
+        /// 最大分块大小  
+        pub const MAX_CHUNK_SIZE: usize = 2000;
+        /// 最小余块大小
+        pub const MIN_REMAINDER_SIZE: usize = 200;
+        /// 最大容忍倍数
+        pub const MAX_TOLERANCE_FACTOR: f32 = 1.5;
+    }
+
+    /// 性能监控常量
+    pub mod performance {
+        /// 性能警告阈值（毫秒）
+        pub const FILE_PARSING_THRESHOLD: f64 = 1000.0;
+        pub const VECTORIZATION_THRESHOLD: f64 = 5000.0;
+        pub const VECTOR_UPLOAD_THRESHOLD: f64 = 3000.0;
+        pub const SEARCH_RESPONSE_THRESHOLD: f64 = 2000.0;
+        pub const ERROR_RATE_THRESHOLD: f64 = 0.1; // 10%
+
+        /// 性能监控配置
+        pub const MAX_HISTORY_SIZE: usize = 1000;
+        pub const FIVE_MINUTES_MS: u64 = 5 * 60 * 1000;
+    }
+
+    /// Qdrant 默认端口配置
+    pub mod qdrant {
+        /// 默认gRPC端口
+        pub const DEFAULT_GRPC_PORT: u16 = 6334;
+        /// REST端口（用于错误检测）
+        pub const REST_PORT: u16 = 6333;
+        /// Cloud服务端口
+        pub const CLOUD_PORT: u16 = 6334;
+    }
+
+    /// 智能批处理配置
+    pub mod batch_processing {
+        /// 阿里云DashScope embedding API 批量大小限制
+        pub const QWEN_MAX_BATCH_SIZE: usize = 10;
+        /// OpenAI批量大小限制
+        pub const OPENAI_MAX_BATCH_SIZE: usize = 100;
+        /// 其他提供商的保守默认值
+        pub const DEFAULT_MAX_BATCH_SIZE: usize = 20;
+    }
+
+    /// 错误恢复配置
+    pub mod error_recovery {
+        /// 最大重试次数
+        pub const MAX_RETRIES: u32 = 3;
+        /// 初始延迟时间（毫秒）
+        pub const INITIAL_DELAY_MS: u64 = 100;
+        /// 网络重试延迟（毫秒）
+        pub const NETWORK_RETRY_DELAY_MS: u64 = 1000;
+        /// 连接重试延迟（毫秒）
+        pub const CONNECTION_RETRY_DELAY_MS: u64 = 500;
+    }
 }

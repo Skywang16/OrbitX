@@ -10,16 +10,16 @@
  * Requirements: 全系统集成测试覆盖
  */
 
-use terminal_lib::vector_index::{
-    service::VectorIndexService,
-    types::{VectorIndexConfig, IndexStats, SearchOptions},
-    constants::*,
-};
-use terminal_lib::llm::service::LLMService;
 use anyhow::Result;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
+use terminal_lib::llm::service::LLMService;
+use terminal_lib::vector_index::{
+    constants::*,
+    service::VectorIndexService,
+    types::{IndexStats, SearchOptions, VectorIndexConfig},
+};
 use tokio::fs;
 use tokio::sync::mpsc;
 
@@ -44,7 +44,7 @@ mod end_to_end_tests {
 
         // 创建测试配置
         let config = create_test_qdrant_config();
-        
+
         // 模拟LLM服务（在实际测试中可能需要mock）
         let mock_llm_service = create_mock_llm_service().await?;
         let embedding_model = "text-embedding-3-small".to_string();
@@ -54,11 +54,11 @@ mod end_to_end_tests {
             Ok(_mock_llm_service) => {
                 // 创建向量索引服务
                 // let service = VectorIndexService::new(config, mock_llm_service, embedding_model).await?;
-                
+
                 println!("端到端测试跳过：需要真实的LLM服务集成");
                 println!("  工作空间路径: {}", workspace_path);
                 println!("  测试文件数量: 预期 > 0");
-                
+
                 // 暂时模拟成功的构建结果
                 println!("✅ 端到端测试流程验证通过（模拟）");
             }
@@ -92,7 +92,9 @@ mod end_to_end_tests {
             Ok(_service) => {
                 // 添加新文件
                 let new_file_path = temp_dir.path().join("new_feature.ts");
-                fs::write(&new_file_path, r#"
+                fs::write(
+                    &new_file_path,
+                    r#"
 export function newFeature(input: string): string {
     return `New feature: ${input}`;
 }
@@ -102,7 +104,9 @@ export class NewComponent {
         return "New component";
     }
 }
-"#).await?;
+"#,
+                )
+                .await?;
 
                 println!("增量索引测试跳过：需要真实的LLM服务集成");
                 println!("  工作空间: {}", workspace_path);
@@ -131,14 +135,22 @@ mod config_tests {
     #[tokio::test]
     async fn test_default_config_validation() -> TestResult {
         let config = VectorIndexConfig::default();
-        
+
         // 验证默认配置的合理性
-        assert_eq!(config.vector_size, terminal_lib::vector_index::constants::DEFAULT_VECTOR_SIZE);
-        assert_eq!(config.batch_size, terminal_lib::vector_index::constants::DEFAULT_BATCH_SIZE);
+        assert_eq!(
+            config.vector_size,
+            terminal_lib::vector_index::constants::DEFAULT_VECTOR_SIZE
+        );
+        assert_eq!(
+            config.batch_size,
+            terminal_lib::vector_index::constants::DEFAULT_BATCH_SIZE
+        );
         assert!(config.supported_extensions.contains(&".ts".to_string()));
         assert!(config.supported_extensions.contains(&".rs".to_string()));
-        assert!(config.ignore_patterns.contains(&"**/node_modules/**".to_string()));
-        
+        assert!(config
+            .ignore_patterns
+            .contains(&"**/node_modules/**".to_string()));
+
         println!("默认配置验证通过");
         Ok(())
     }
@@ -146,17 +158,17 @@ mod config_tests {
     #[tokio::test]
     async fn test_custom_config_validation() -> TestResult {
         let mut config = create_test_qdrant_config();
-        
+
         // 测试自定义配置
         config.vector_size = 768;
         config.batch_size = 25;
         config.max_concurrent_files = 2;
-        
+
         // 验证配置应用
         assert_eq!(config.vector_size, 768);
         assert_eq!(config.batch_size, 25);
         assert_eq!(config.max_concurrent_files, 2);
-        
+
         println!("自定义配置验证通过");
         Ok(())
     }
@@ -164,14 +176,14 @@ mod config_tests {
     #[tokio::test]
     async fn test_invalid_config_handling() -> TestResult {
         let mut config = create_test_qdrant_config();
-        
+
         // 测试无效配置
         config.vector_size = 0; // 无效的向量大小
-        config.batch_size = 0;  // 无效的批次大小
-        
+        config.batch_size = 0; // 无效的批次大小
+
         // 在实际实现中，这些可能在服务创建时被验证
         // 这里主要测试配置验证逻辑
-        
+
         println!("无效配置处理测试（需要根据实际验证逻辑调整）");
         Ok(())
     }
@@ -211,7 +223,8 @@ mod performance_stress_tests {
 
                 // 性能基准验证
                 let files_per_second = result.total_files as f64 / total_duration.as_secs_f64();
-                let vectors_per_second = result.uploaded_vectors as f64 / total_duration.as_secs_f64();
+                let vectors_per_second =
+                    result.uploaded_vectors as f64 / total_duration.as_secs_f64();
 
                 println!("大型工作空间性能测试:");
                 println!("  总时间: {:?}", total_duration);
@@ -224,7 +237,7 @@ mod performance_stress_tests {
                     "文件处理速度过低: {:.2} 文件/秒",
                     files_per_second
                 );
-                
+
                 assert!(
                     total_duration < Duration::from_secs(300), // 5分钟
                     "总处理时间过长: {:?}",
@@ -278,7 +291,8 @@ mod performance_stress_tests {
         assert!(
             memory_usage < max_memory_mb,
             "内存使用过高: {} bytes (> {} bytes)",
-            memory_usage, max_memory_mb
+            memory_usage,
+            max_memory_mb
         );
 
         Ok(())
@@ -294,12 +308,15 @@ mod error_recovery_tests {
     async fn test_malformed_file_handling() -> TestResult {
         // 创建包含格式错误文件的工作空间
         let temp_dir = TempDir::new()?;
-        
+
         // 创建各种格式错误的文件
         let malformed_files = vec![
             ("syntax_error.ts", "export function broken( { // 语法错误"),
-            ("invalid_encoding.rs", "fn main() {\n// invalid encoding content"),
-            ("empty.py", ""), // 空文件
+            (
+                "invalid_encoding.rs",
+                "fn main() {\n// invalid encoding content",
+            ),
+            ("empty.py", ""),                   // 空文件
             ("binary.dat", "\x00\x01\x02\x03"), // 二进制文件
         ];
 
@@ -316,14 +333,14 @@ mod error_recovery_tests {
             Ok(service) => {
                 let workspace_path = temp_dir.path().to_str().unwrap();
                 let result = service.build_index(workspace_path, None).await;
-                
+
                 match result {
                     Ok(stats) => {
                         // 应该能优雅处理错误文件
                         println!("错误文件处理测试:");
                         println!("  处理文件: {}", stats.total_files);
                         println!("  错误数量: {}", stats.errors.len());
-                        
+
                         // 可能有一些错误，但不应该崩溃
                         if !stats.errors.is_empty() {
                             println!("  错误详情: {:?}", stats.errors);
@@ -361,11 +378,11 @@ mod error_recovery_tests {
 /// 创建测试工作空间
 async fn create_test_workspace() -> Result<TempDir> {
     let temp_dir = TempDir::new()?;
-    
+
     // 创建典型的项目结构
     let src_dir = temp_dir.path().join("src");
     fs::create_dir_all(&src_dir).await?;
-    
+
     // TypeScript文件
     fs::write(
         src_dir.join("app.ts"),
@@ -387,7 +404,8 @@ export interface AppConfig {
     debug: boolean;
 }
 "#,
-    ).await?;
+    )
+    .await?;
 
     // Rust文件
     fs::write(
@@ -417,7 +435,8 @@ impl Config {
     }
 }
 "#,
-    ).await?;
+    )
+    .await?;
 
     // Python文件
     fs::write(
@@ -437,7 +456,8 @@ class DataProcessor:
     def run(self, input_data):
         return process_data(input_data)
 "#,
-    ).await?;
+    )
+    .await?;
 
     Ok(temp_dir)
 }
@@ -451,13 +471,13 @@ async fn create_large_test_workspace(file_count: usize) -> Result<TempDir> {
     for i in 0..file_count {
         let language = match i % 3 {
             0 => "ts",
-            1 => "rs", 
+            1 => "rs",
             _ => "py",
         };
-        
+
         let filename = format!("module_{}.{}", i, language);
         let content = generate_large_file_content(language, i);
-        
+
         fs::write(src_dir.join(filename), content).await?;
     }
 
@@ -579,11 +599,13 @@ def process_data{}(data):
 async fn create_mock_llm_service() -> Result<Arc<LLMService>> {
     // 这里应该创建一个mock的LLM服务
     // 在实际测试中，可能需要根据LLMService的具体实现来调整
-    
+
     // 暂时跳过，避免编译错误
     // 在实际使用时，需要根据LLMService的构造函数来实现
     println!("注意：使用Mock LLM服务");
-    Err(anyhow::anyhow!("Mock LLM服务暂未实现 - 需要实际的LLMService集成"))
+    Err(anyhow::anyhow!(
+        "Mock LLM服务暂未实现 - 需要实际的LLMService集成"
+    ))
 }
 
 /// 验证向量构建成功的宏
@@ -591,7 +613,10 @@ async fn create_mock_llm_service() -> Result<Arc<LLMService>> {
 macro_rules! assert_vector_build_success {
     ($stats:expr) => {
         assert!($stats.total_files > 0, "应该处理至少一个文件");
-        assert!($stats.processing_time.as_secs() < 600, "处理时间不应超过10分钟");
+        assert!(
+            $stats.processing_time.as_secs() < 600,
+            "处理时间不应超过10分钟"
+        );
         // 可以添加更多验证条件
     };
 }

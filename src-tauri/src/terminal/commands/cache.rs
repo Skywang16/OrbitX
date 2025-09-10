@@ -58,7 +58,9 @@ pub async fn invalidate_context_cache(
 /// * `Ok(())` - 缓存清除成功
 /// * `Err(String)` - 操作失败的错误信息
 #[tauri::command]
-pub async fn clear_all_context_cache(state: State<'_, TerminalContextState>) -> TauriApiResult<EmptyData> {
+pub async fn clear_all_context_cache(
+    state: State<'_, TerminalContextState>,
+) -> TauriApiResult<EmptyData> {
     debug!("清除所有上下文缓存");
 
     state.context_service.clear_all_cache();

@@ -33,7 +33,8 @@ impl TomlConfigReader {
     #[cfg(test)]
     pub fn new_with_config_path(config_path: PathBuf) -> AppResult<Self> {
         // 为测试创建一个虚拟的 ConfigPaths
-        let temp_dir = config_path.parent()
+        let temp_dir = config_path
+            .parent()
             .ok_or_else(|| anyhow::anyhow!("配置文件路径无效"))?;
         let paths = ConfigPaths::with_app_data_dir(temp_dir)?;
 

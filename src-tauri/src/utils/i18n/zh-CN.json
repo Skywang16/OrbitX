@@ -119,6 +119,7 @@
     "close_terminal_failed": "关闭终端失败",
     "set_buffer_failed": "设置缓冲区失败",
     "find_shell_failed": "查找shell失败",
+    "shell_not_found": "未找到指定Shell",
     "get_buffer_failed": "获取缓冲区失败",
     "operation_failed": "操作失败"
   },

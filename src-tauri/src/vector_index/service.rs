@@ -31,6 +31,8 @@ use uuid::Uuid;
 
 use crate::llm::service::LLMService;
 use crate::vector_index::{
+    error_handler::EnhancedErrorHandler,
+    incremental_updater::IncrementalUpdateStats,
     parser::{CodeParser, TreeSitterParser},
     qdrant::{QdrantClientImpl, QdrantService},
     types::{
@@ -45,6 +47,8 @@ pub struct VectorIndexService {
     parser: TreeSitterParser,
     vectorizer: LLMVectorizationService,
     storage: QdrantClientImpl,
+    #[allow(dead_code)]
+    error_handler: EnhancedErrorHandler,
 }
 
 impl VectorIndexService {
@@ -68,17 +72,29 @@ impl VectorIndexService {
             .await
             .context("初始化Qdrant客户端失败")?;
 
-        // 初始化Qdrant集合
-        storage
-            .initialize_collection()
-            .await
-            .context("初始化Qdrant集合失败")?;
+        // 初始化Qdrant集合（带维度检查）
+        match storage.initialize_collection().await {
+            Ok(_) => {}
+            Err(e) => {
+                // 检查是否是维度不匹配错误
+                let error_msg = e.to_string().to_lowercase();
+                if error_msg.contains("dimension") || error_msg.contains("维度") {
+                    tracing::warn!("检测到维度不匹配，将使用实际检测的维度重新创建");
+                    return Err(anyhow::anyhow!("DIMENSION_MISMATCH_DETECTED"));
+                } else {
+                    return Err(e).context("初始化Qdrant集合失败");
+                }
+            }
+        }
+
+        let error_handler = EnhancedErrorHandler::new(full_config.clone());
 
         Ok(Self {
             config: full_config,
             parser,
             vectorizer,
             storage,
+            error_handler,
         })
     }
 
@@ -90,8 +106,10 @@ impl VectorIndexService {
         actual_dimension: usize,
     ) -> Result<Self> {
         // 构建完整配置（用户配置 + 实际检测的维度）
-        let full_config =
-            VectorIndexFullConfig::from_user_config_with_actual_dimension(user_config, actual_dimension);
+        let full_config = VectorIndexFullConfig::from_user_config_with_actual_dimension(
+            user_config,
+            actual_dimension,
+        );
 
         // 初始化各个组件
         let parser = TreeSitterParser::new(full_config.clone()).context("初始化代码解析器失败")?;
@@ -109,11 +127,14 @@ impl VectorIndexService {
             .await
             .context("初始化Qdrant集合失败")?;
 
+        let error_handler = EnhancedErrorHandler::new(full_config.clone());
+
         Ok(Self {
             config: full_config,
             parser,
             vectorizer,
             storage,
+            error_handler,
         })
     }
 
@@ -466,6 +487,117 @@ impl VectorIndexService {
         self.storage.clear_all_vectors().await
     }
 
+    /// 增量更新单个文件
+    pub async fn update_file(&self, file_path: &str) -> Result<IncrementalUpdateStats> {
+        let start_time = std::time::Instant::now();
+        tracing::info!("开始增量更新文件: {}", file_path);
+
+        // 步骤1: 删除现有文件的向量
+        self.storage
+            .delete_file_vectors(file_path)
+            .await
+            .with_context(|| format!("删除文件向量失败: {}", file_path))?;
+
+        // 步骤2: 重新处理文件
+        let new_vectors = self
+            .process_single_file(file_path)
+            .await
+            .with_context(|| format!("重新处理文件失败: {}", file_path))?;
+
+        let added_count = new_vectors.len();
+
+        // 步骤3: 上传新向量
+        if !new_vectors.is_empty() {
+            self.storage
+                .upload_vectors(new_vectors)
+                .await
+                .with_context(|| format!("上传新向量失败: {}", file_path))?;
+        }
+
+        let processing_time = start_time.elapsed();
+
+        let stats = IncrementalUpdateStats {
+            updated_files: 1,
+            deleted_vectors: 0, // 实际删除数量由Qdrant内部处理
+            added_vectors: added_count,
+            failed_files: 0,
+            processing_time_ms: processing_time.as_millis() as u64,
+        };
+
+        tracing::info!(
+            "文件更新完成: {} (新增 {} 个向量，耗时 {:?})",
+            file_path,
+            added_count,
+            processing_time
+        );
+
+        Ok(stats)
+    }
+
+    /// 处理单个文件并生成向量（内部方法）
+    async fn process_single_file(&self, file_path: &str) -> Result<Vec<CodeVector>> {
+        // 解析文件
+        let parsed_code = self
+            .parser
+            .parse_file(file_path)
+            .await
+            .with_context(|| format!("解析文件失败: {}", file_path))?;
+
+        if parsed_code.chunks.is_empty() {
+            tracing::debug!("文件 {} 没有有效的代码块", file_path);
+            return Ok(Vec::new());
+        }
+
+        // 准备向量化数据
+        let texts: Vec<String> = parsed_code
+            .chunks
+            .iter()
+            .map(|chunk| {
+                format!(
+                    "// 文件: {}\n// 类型: {}\n{}",
+                    file_path,
+                    chunk.chunk_type.as_str(),
+                    chunk.content
+                )
+            })
+            .collect();
+
+        // 向量化
+        let embeddings = self
+            .vectorizer
+            .create_embeddings(&texts)
+            .await
+            .with_context(|| format!("向量化失败: {}", file_path))?;
+
+        // 构建向量对象
+        let mut vectors = Vec::new();
+        for (chunk, embedding) in parsed_code.chunks.iter().zip(embeddings) {
+            let vector = CodeVector {
+                id: Uuid::new_v4().to_string(),
+                file_path: file_path.to_string(),
+                content: chunk.content.clone(),
+                start_line: chunk.start_line,
+                end_line: chunk.end_line,
+                language: crate::vector_index::types::Language::from_extension(
+                    std::path::Path::new(file_path)
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .unwrap_or(""),
+                )
+                .unwrap_or(crate::vector_index::types::Language::TypeScript)
+                .as_str()
+                .to_string(),
+                chunk_type: chunk.chunk_type.as_str().to_string(),
+                vector: embedding,
+                metadata: chunk.metadata.clone(),
+            };
+            vectors.push(vector);
+        }
+
+        tracing::debug!("文件 {} 生成了 {} 个向量", file_path, vectors.len());
+        Ok(vectors)
+    }
+
     /// 预处理搜索查询文本
     fn preprocess_search_query(&self, query: &str) -> Result<String> {
         // 1. 去除前后空格和小写化
@@ -498,8 +630,8 @@ impl VectorIndexService {
 
     /// 带重试机制的向量化
     async fn vectorize_with_retry(&self, text: &str) -> Result<Vec<f32>> {
-        const MAX_RETRIES: u32 = 3;
-        const INITIAL_DELAY: u64 = 100; // 毫秒
+        const MAX_RETRIES: u32 = crate::vector_index::constants::error_recovery::MAX_RETRIES;
+        const INITIAL_DELAY: u64 = crate::vector_index::constants::error_recovery::INITIAL_DELAY_MS;
 
         let mut last_error = None;
 

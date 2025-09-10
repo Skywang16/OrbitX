@@ -122,10 +122,11 @@ impl AIService {
             .json(&test_payload)
             .timeout(Duration::from_secs(15))
             .send()
-            .await {
-                Ok(response) => response,
-                Err(e) => return Ok(format!("连接失败: {}", e)),
-            };
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => return Ok(format!("连接失败: {}", e)),
+        };
 
         let status = response.status();
 
@@ -143,7 +144,10 @@ impl AIService {
             Ok("连接成功".to_string())
         } else {
             // 抛出详细的错误信息
-            let error_text = response.text().await.unwrap_or_else(|_| "无法读取响应内容".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "无法读取响应内容".to_string());
             let error_msg = format!("OpenAI API 错误: {} - {}", status, error_text);
             tracing::warn!("{}", error_msg);
             Err(anyhow::anyhow!(error_msg))
@@ -168,10 +172,11 @@ impl AIService {
             .json(&test_payload)
             .timeout(Duration::from_secs(15))
             .send()
-            .await {
-                Ok(response) => response,
-                Err(e) => return Ok(format!("连接失败: {}", e)),
-            };
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => return Ok(format!("连接失败: {}", e)),
+        };
 
         let status = response.status();
 
@@ -189,7 +194,10 @@ impl AIService {
             Ok("连接成功".to_string())
         } else {
             // 抛出详细的错误信息
-            let error_text = response.text().await.unwrap_or_else(|_| "无法读取响应内容".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "无法读取响应内容".to_string());
             let error_msg = format!("Claude API 错误: {} - {}", status, error_text);
             tracing::warn!("{}", error_msg);
             Err(anyhow::anyhow!(error_msg))
@@ -227,10 +235,11 @@ impl AIService {
             .json(&test_payload)
             .timeout(Duration::from_secs(15))
             .send()
-            .await {
-                Ok(response) => response,
-                Err(e) => return Ok(format!("连接失败: {}", e)),
-            };
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => return Ok(format!("连接失败: {}", e)),
+        };
 
         let status = response.status();
 
@@ -248,7 +257,10 @@ impl AIService {
             Ok("连接成功".to_string())
         } else {
             // 抛出详细的错误信息
-            let error_text = response.text().await.unwrap_or_else(|_| "无法读取响应内容".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "无法读取响应内容".to_string());
             let error_msg = format!("自定义 API 错误: {} - {}", status, error_text);
             tracing::warn!("{}", error_msg);
             Err(anyhow::anyhow!(error_msg))
@@ -338,10 +350,11 @@ impl AIService {
             .json(&test_payload)
             .timeout(Duration::from_secs(15))
             .send()
-            .await {
-                Ok(response) => response,
-                Err(e) => return Ok(format!("连接失败: {}", e)),
-            };
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => return Ok(format!("连接失败: {}", e)),
+        };
 
         let status = response.status();
 
@@ -359,7 +372,10 @@ impl AIService {
             Ok("连接成功".to_string())
         } else {
             // 抛出详细的错误信息
-            let error_text = response.text().await.unwrap_or_else(|_| "无法读取响应内容".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "无法读取响应内容".to_string());
             let error_msg = format!("Qwen API 错误: {} - {}", status, error_text);
             tracing::warn!("{}", error_msg);
             Err(anyhow::anyhow!(error_msg))

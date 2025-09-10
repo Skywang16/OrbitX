@@ -428,6 +428,21 @@ impl LLMRegistry {
                         },
                         deprecated: false,
                     },
+                    // Embedding 模型
+                    ModelInfo {
+                        id: "text-embedding-v4".to_string(),
+                        display_name: "Text Embedding V4".to_string(),
+                        model_type: ModelType::Embedding,
+                        capabilities: ModelCapabilities {
+                            supports_tools: false,
+                            supports_vision: false,
+                            supports_streaming: false,
+                            is_reasoning_model: false,
+                            max_context_tokens: 8192,
+                            temperature_range: None,
+                        },
+                        deprecated: false,
+                    },
                 ],
             },
         );

@@ -1,6 +1,6 @@
 /*!
  * 测试固定数据和辅助函数
- * 
+ *
  * 提供标准化的测试数据，包括：
  * - 模拟代码向量
  * - 测试配置  
@@ -8,7 +8,9 @@
  */
 
 use std::collections::HashMap;
-use terminal_lib::vector_index::types::{SearchOptions, SearchResult, VectorIndexConfig, CodeVector};
+use terminal_lib::vector_index::types::{
+    CodeVector, SearchOptions, SearchResult, VectorIndexConfig,
+};
 use uuid::Uuid;
 
 /// 测试用代码向量
@@ -25,7 +27,7 @@ pub fn generate_test_code_vectors(count: usize) -> Vec<TestCodeVector> {
     for i in 0..count {
         let language = match i % 4 {
             0 => "typescript",
-            1 => "rust", 
+            1 => "rust",
             2 => "python",
             _ => "javascript",
         };
@@ -70,12 +72,19 @@ pub fn create_test_qdrant_config() -> VectorIndexConfig {
     VectorIndexConfig {
         qdrant_url: "http://localhost:6334".to_string(),
         qdrant_api_key: None,
-        collection_name: format!("test_collection_{}", Uuid::new_v4().to_string()[..8].to_string()),
+        collection_name: format!(
+            "test_collection_{}",
+            Uuid::new_v4().to_string()[..8].to_string()
+        ),
         vector_size: 1536,
         batch_size: 50,
         supported_extensions: vec![
-            ".ts".to_string(), ".tsx".to_string(), ".js".to_string(), ".jsx".to_string(),
-            ".rs".to_string(), ".py".to_string(),
+            ".ts".to_string(),
+            ".tsx".to_string(),
+            ".js".to_string(),
+            ".jsx".to_string(),
+            ".rs".to_string(),
+            ".py".to_string(),
         ],
         ignore_patterns: vec![
             "**/node_modules/**".to_string(),
@@ -128,7 +137,10 @@ pub fn create_test_search_result_detailed(
 ) -> SearchResult {
     SearchResult {
         file_path: file_path.to_string(),
-        content: format!("content for {} lines {}-{}", file_path, start_line, end_line),
+        content: format!(
+            "content for {} lines {}-{}",
+            file_path, start_line, end_line
+        ),
         start_line,
         end_line,
         language: "typescript".to_string(),
@@ -159,7 +171,7 @@ pub fn create_mock_search_results(count: usize) -> Vec<SearchResult> {
 fn get_extension_for_language(language: &str) -> &str {
     match language {
         "typescript" => "ts",
-        "javascript" => "js", 
+        "javascript" => "js",
         "rust" => "rs",
         "python" => "py",
         _ => "txt",
@@ -210,7 +222,7 @@ fn generate_expected_search_terms(language: &str, chunk_type: &str, index: usize
         }
         "rust" => {
             terms.push("pub".to_string());
-            terms.push("struct".to_string()); 
+            terms.push("struct".to_string());
         }
         "python" => {
             terms.push("def".to_string());

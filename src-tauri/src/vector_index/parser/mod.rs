@@ -20,9 +20,11 @@ use crate::vector_index::types::{
 
 // 子模块
 pub mod scanner;
+pub mod smart_chunker;
 
-// 重新导出扫描器
+// 重新导出扫描器和分块器
 pub use scanner::{CodeFileScanner, ScanStats};
+pub use smart_chunker::SmartChunker;
 
 /// 代码解析器接口
 pub trait CodeParser {
@@ -50,6 +52,8 @@ pub struct TreeSitterParser {
     config: VectorIndexFullConfig,
     /// 语言配置缓存
     languages: HashMap<Language, TSLanguage>,
+    /// 智能分块器
+    smart_chunker: SmartChunker,
 }
 
 impl TreeSitterParser {
@@ -58,6 +62,7 @@ impl TreeSitterParser {
         let mut parser = Self {
             config,
             languages: HashMap::new(),
+            smart_chunker: SmartChunker::new(),
         };
 
         // 初始化支持的语言
@@ -121,13 +126,45 @@ impl TreeSitterParser {
             .ok_or_else(|| anyhow::anyhow!("解析代码失败"))?;
 
         let root_node = tree.root_node();
-        let mut chunks = Vec::new();
+        let mut raw_chunks = Vec::new();
 
         // 遍历AST节点提取代码块
-        self.walk_node_recursive(&root_node, content, &mut chunks, language)?;
+        self.walk_node_recursive(&root_node, content, &mut raw_chunks, language)?;
 
-        debug!("从文件 {} 提取了 {} 个代码块", file_path, chunks.len());
-        Ok(chunks)
+        // 使用智能分块器处理过大的代码块
+        let mut final_chunks = Vec::new();
+        let file_hash = self.smart_chunker.generate_content_hash(
+            content,
+            file_path,
+            1,
+            content.lines().count() as u32,
+        );
+        let raw_chunks_len = raw_chunks.len();
+
+        for chunk in raw_chunks {
+            let chunk_size = chunk.content.len();
+            if chunk_size > self.config.chunk_size_range()[1] {
+                // 使用智能分块器处理过大的块
+                let sub_chunks = self.smart_chunker.chunk_large_content(
+                    &chunk.content,
+                    file_path,
+                    &file_hash,
+                    chunk.chunk_type,
+                    chunk.start_line,
+                )?;
+                final_chunks.extend(sub_chunks);
+            } else {
+                final_chunks.push(chunk);
+            }
+        }
+
+        debug!(
+            "从文件 {} 提取了 {} 个代码块（智能分块后 {} 个）",
+            file_path,
+            raw_chunks_len,
+            final_chunks.len()
+        );
+        Ok(final_chunks)
     }
 
     /// 递归遍历AST节点，提取有意义的代码块
