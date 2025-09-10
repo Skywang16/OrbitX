@@ -209,3 +209,36 @@ pub async fn remove_vector_index_workspace(
     info!("向量索引工作目录移除成功");
     Ok(api_success!("向量索引工作目录移除成功".to_string()))
 }
+
+/// 获取所有可见的工作区（状态为Ready）
+#[tauri::command]
+pub async fn get_visible_workspaces(
+    state: State<'_, StorageCoordinatorState>,
+) -> TauriApiResult<Vec<crate::storage::repositories::vector_workspaces::VectorWorkspace>> {
+    debug!("获取可见工作区列表");
+
+    match state.coordinator.repositories().vector_workspaces().find_visible_workspaces().await {
+        Ok(workspaces) => {
+            debug!("找到 {} 个可见工作区", workspaces.len());
+            Ok(api_success!(workspaces))
+        }
+        Err(_) => Ok(api_error!("vector_index.get_workspaces_failed"))
+    }
+}
+
+/// 删除工作区（从数据库中完全移除）
+#[tauri::command]
+pub async fn delete_workspace(
+    workspace_id: String,
+    state: State<'_, StorageCoordinatorState>,
+) -> TauriApiResult<String> {
+    info!("删除工作区: {}", workspace_id);
+
+    match state.coordinator.repositories().vector_workspaces().delete_by_string_id(&workspace_id).await {
+        Ok(_) => {
+            info!("工作区删除成功");
+            Ok(api_success!("工作区删除成功".to_string()))
+        }
+        Err(_) => Ok(api_error!("vector_index.delete_workspace_failed"))
+    }
+}

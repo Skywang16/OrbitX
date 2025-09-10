@@ -31,6 +31,28 @@
     <div class="settings-group">
       <h3 class="settings-group-title">{{ t('settings.vectorIndex.workspace_management') }}</h3>
 
+      <!-- 快速添加当前工作目录 -->
+      <SettingsCard>
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">
+              {{ t('settings.vectorIndex.add_current_workspace') || '添加当前工作目录' }}
+            </div>
+            <div class="settings-description">
+              {{
+                t('settings.vectorIndex.add_current_workspace_desc') ||
+                  '将当前终端所在目录加入可索引工作区（最多3个）'
+              }}
+            </div>
+          </div>
+          <div class="settings-item-control">
+            <x-button variant="primary" @click="addCurrentWorkspace">
+              {{ t('settings.vectorIndex.add_workspace') || '添加当前工作目录' }}
+            </x-button>
+          </div>
+        </div>
+      </SettingsCard>
+
       <SettingsCard v-if="globalSettings.workspaces.length > 0">
         <div v-for="(workspace, index) in globalSettings.workspaces" :key="index" class="settings-item">
           <div class="settings-item-header">
@@ -272,6 +294,39 @@
       console.error('加载向量索引全局设置失败:', error)
       createMessage.error(
         t('settings.vectorIndex.load_error', { error: error instanceof Error ? error.message : String(error) })
+      )
+    }
+  }
+
+  // 添加当前工作目录到工作区列表
+  const addCurrentWorkspace = async () => {
+    try {
+      if (globalSettings.workspaces.length >= 3) {
+        createMessage.error(t('settings.vectorIndex.max_workspaces_reached') || '最多只能添加3个工作目录')
+        return
+      }
+
+      const path = await vectorIndexApi.getWorkspacePath()
+      if (!path) {
+        createMessage.error(t('settings.vectorIndex.get_workspace_path_failed') || '无法获取当前工作目录')
+        return
+      }
+
+      if (globalSettings.workspaces.includes(path)) {
+        createMessage.info(t('settings.vectorIndex.workspace_exists') || '该目录已在列表中')
+        return
+      }
+
+      await vectorIndexAppSettingsApi.addWorkspace(path)
+      globalSettings.workspaces.push(path)
+      await saveGlobalSettings()
+      createMessage.success(t('settings.vectorIndex.workspace_added') || '已添加工作目录')
+    } catch (error) {
+      console.error('添加工作目录失败:', error)
+      createMessage.error(
+        t('settings.vectorIndex.add_workspace_failed', {
+          error: error instanceof Error ? error.message : String(error),
+        }) || '添加工作目录失败'
       )
     }
   }

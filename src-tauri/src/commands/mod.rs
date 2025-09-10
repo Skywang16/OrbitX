@@ -230,5 +230,8 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::vector_index::commands::is_directory_vector_indexed,
         crate::vector_index::commands::add_vector_index_workspace,
         crate::vector_index::commands::remove_vector_index_workspace,
+        // 工作区管理命令
+        crate::vector_index::commands::get_visible_workspaces,
+        crate::vector_index::commands::delete_workspace,
     ])
 }

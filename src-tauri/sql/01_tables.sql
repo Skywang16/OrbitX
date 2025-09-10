@@ -115,3 +115,14 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     version TEXT PRIMARY KEY,
     applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 向量索引工作区管理表
+CREATE TABLE IF NOT EXISTS vector_workspaces (
+    id TEXT PRIMARY KEY,
+    path TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'uninitialized'
+        CHECK (status IN ('uninitialized', 'building', 'ready', 'error')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

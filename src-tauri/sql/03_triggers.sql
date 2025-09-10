@@ -37,4 +37,14 @@ BEGIN
     WHERE id = OLD.conversation_id;
 END;
 
+-- 向量索引工作区自动更新时间戳
+CREATE TRIGGER IF NOT EXISTS trigger_vector_workspaces_updated_at
+AFTER UPDATE ON vector_workspaces
+FOR EACH ROW
+BEGIN
+    UPDATE vector_workspaces
+    SET updated_at = CURRENT_TIMESTAMP
+    WHERE id = NEW.id;
+END;
+
 

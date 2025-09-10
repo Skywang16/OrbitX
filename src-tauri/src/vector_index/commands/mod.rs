@@ -17,6 +17,7 @@
 
 use crate::llm::commands::LLMManagerState;
 use crate::utils::{EmptyData, TauriApiResult};
+use crate::storage::repositories::Repository;
 use crate::vector_index::{
     monitor::FileMonitorService,
     service::VectorIndexService,
@@ -30,6 +31,7 @@ use crate::{api_error, api_success};
 mod app_settings;
 use anyhow::{bail, ensure, Context, Result};
 pub use app_settings::*;
+pub use app_settings::{get_visible_workspaces, delete_workspace};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Runtime, State};
@@ -314,6 +316,7 @@ pub async fn init_vector_index<R: Runtime>(
 pub async fn build_code_index<R: Runtime>(
     workspace_path: String,
     state: State<'_, VectorIndexState>,
+    storage_state: State<'_, crate::ai::tool::storage::StorageCoordinatorState>,
     app: AppHandle<R>,
 ) -> TauriApiResult<IndexStats> {
     // 参数与前置条件优雅返回：直接用 i18n key 提前失败，避免后续字符串匹配
@@ -344,6 +347,45 @@ pub async fn build_code_index<R: Runtime>(
         info!("开始构建代码索引: {}", workspace_path);
 
         let workspace_path = workspace_path_trimmed.as_str();
+
+        // === 工作区状态管理逻辑 ===
+        use uuid::Uuid;
+        use crate::storage::repositories::vector_workspaces::{VectorWorkspace, WorkspaceStatus};
+
+        let repo_manager = storage_state.coordinator.repositories();
+        
+        // 1. 获取工作区名称
+        let workspace_name = std::path::Path::new(&workspace_path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("未知工作区")
+            .to_string();
+
+        // 2. 创建或更新工作区记录
+        let mut workspace = match repo_manager.vector_workspaces().find_by_path(&workspace_path).await {
+            Ok(Some(mut ws)) => {
+                // 工作区已存在，更新状态为构建中
+                ws.set_status(WorkspaceStatus::Building);
+                repo_manager.vector_workspaces().update(&ws).await
+                    .context("更新工作区状态失败")?;
+                ws
+            },
+            Ok(None) => {
+                // 新工作区，创建记录
+                let mut ws = VectorWorkspace::new(
+                    Uuid::new_v4().to_string(),
+                    workspace_path.to_string(),
+                    workspace_name,
+                );
+                ws.set_status(WorkspaceStatus::Building);
+                repo_manager.vector_workspaces().save(&ws).await
+                    .context("保存工作区记录失败")?;
+                ws
+            },
+            Err(e) => return Err(anyhow::anyhow!("数据库错误: {}", e)),
+        };
+
+        info!("工作区记录已准备: {} ({})", workspace.name, workspace.id);
 
         // 3. 重置取消标志
         state
@@ -383,7 +425,7 @@ pub async fn build_code_index<R: Runtime>(
         // 6. 等待进度报告任务结束
         progress_task.abort();
 
-        // 7. 处理构建结果并发送事件
+        // 7. 处理构建结果并更新工作区状态
         match &build_result {
             Ok(stats) => {
                 info!(
@@ -393,6 +435,44 @@ pub async fn build_code_index<R: Runtime>(
                     stats.uploaded_vectors,
                     stats.processing_time
                 );
+
+                // 更新工作区状态为就绪
+                workspace.set_status(WorkspaceStatus::Ready);
+                if let Err(e) = repo_manager.vector_workspaces().update(&workspace).await {
+                    warn!("更新工作区状态失败: {}", e);
+                }
+
+                // 同步到应用级工作区列表（若未存在且未超出数量上限）
+                // 这样用户在“向量设置”页面可以看到最近成功构建的工作区
+                match storage_state.coordinator.load_session_state().await {
+                    Ok(maybe_state) => {
+                        let mut session_state = maybe_state.unwrap_or_default();
+                        let ws_path = workspace_path.to_string();
+                        if !session_state.ai.vector_index_workspaces.contains(&ws_path) {
+                            if session_state.ai.vector_index_workspaces.len() < 3 {
+                                session_state.ai.vector_index_workspaces.push(ws_path.clone());
+                                session_state.timestamp = chrono::Utc::now();
+                                if let Err(e) = storage_state
+                                    .coordinator
+                                    .save_session_state(&session_state)
+                                    .await
+                                {
+                                    warn!("保存应用级工作区列表失败: {}", e);
+                                } else {
+                                    info!("已将工作区添加到应用级设置: {}", ws_path);
+                                }
+                            } else {
+                                warn!(
+                                    "应用级工作区列表已满(3)，未自动添加: {}",
+                                    ws_path
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("加载应用级设置失败，无法自动添加工作区: {}", e);
+                    }
+                }
 
                 // 发送构建完成事件（与前端契约一致）
                 let payload = CompletedPayload {
@@ -409,6 +489,12 @@ pub async fn build_code_index<R: Runtime>(
             Err(e) => {
                 let error_msg = format!("构建代码索引失败: {}", e);
                 warn!("{}", error_msg);
+
+                // 更新工作区状态为错误
+                workspace.set_status(WorkspaceStatus::Error);
+                if let Err(err) = repo_manager.vector_workspaces().update(&workspace).await {
+                    warn!("更新工作区错误状态失败: {}", err);
+                }
 
                 // 发送错误事件
                 let event = VectorIndexEvent::Error {
@@ -1032,7 +1118,12 @@ async fn detect_embedding_model_dimension(
 
 /// 获取当前工作空间路径
 ///
-/// 返回当前应用的工作空间路径，用于代码索引构建。
+/// 返回当前活跃终端的工作目录路径，用于代码索引构建。
+/// 优先使用终端上下文服务获取当前活跃终端的CWD，如果无法获取则回退到进程工作目录。
+///
+/// # 参数
+///
+/// - `ai_state`: AI管理器状态，包含终端上下文服务
 ///
 /// # 返回
 ///
@@ -1043,9 +1134,22 @@ async fn detect_embedding_model_dimension(
 /// - 无法确定工作空间路径
 /// - 路径不存在或无权限访问
 #[tauri::command]
-pub async fn get_current_workspace_path() -> TauriApiResult<String> {
+pub async fn get_current_workspace_path(
+    ai_state: State<'_, crate::ai::AIManagerState>,
+) -> TauriApiResult<String> {
     let result: Result<String> = async {
-        // 尝试获取当前工作目录
+        // 优先尝试从终端上下文服务获取当前活跃终端的工作目录
+        match ai_state.get_terminal_context_service().get_active_cwd().await {
+            Ok(cwd) => {
+                debug!("从终端上下文获取工作空间路径: {}", cwd);
+                return Ok(cwd);
+            }
+            Err(e) => {
+                debug!("从终端上下文获取工作目录失败: {}", e);
+            }
+        }
+
+        // 回退到进程工作目录
         let current_dir = std::env::current_dir().context("无法获取当前工作目录")?;
 
         let workspace_path = current_dir
@@ -1053,7 +1157,7 @@ pub async fn get_current_workspace_path() -> TauriApiResult<String> {
             .ok_or_else(|| anyhow::anyhow!("工作空间路径包含无效字符"))?
             .to_string();
 
-        debug!("当前工作空间路径: {}", workspace_path);
+        debug!("使用进程工作目录作为工作空间路径: {}", workspace_path);
 
         Ok(workspace_path)
     }
