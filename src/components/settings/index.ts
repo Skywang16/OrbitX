@@ -2,9 +2,6 @@
  * 设置模块统一导出
  */
 
-// 导出主 store
-export * from './store'
-
 // 导出子组件
 export * from './components/AI'
 export * from './components/Theme'

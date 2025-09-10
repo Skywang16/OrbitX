@@ -1,0 +1,25 @@
+[package]
+name = "ck-chunk"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Text chunking and parsing for ck semantic search"
+repository = "https://github.com/BeaconBay/ck"
+keywords = ["parsing", "chunking", "tree-sitter"]
+categories = ["parsing"]
+
+[dependencies]
+ck-core = { version = "0.3.2", path = "../ck-core" }
+
+anyhow = { workspace = true }
+serde = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-python = { workspace = true }
+tree-sitter-typescript = { workspace = true }
+tree-sitter-haskell = { workspace = true }
+tree-sitter-rust = { workspace = true }
+tree-sitter-ruby = { workspace = true }
+tree-sitter-go = { workspace = true }
+tracing = { workspace = true }

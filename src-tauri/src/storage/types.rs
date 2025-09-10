@@ -123,10 +123,6 @@ pub struct AiState {
     pub conversation_id: Option<i64>,
     /// 选中的模型ID
     pub selected_model_id: Option<String>,
-    /// 向量索引功能开关
-    pub vector_index_enabled: bool,
-    /// 支持向量索引的工作目录列表（最多3个）
-    pub vector_index_workspaces: Vec<String>,
 }
 
 impl Default for AiState {
@@ -137,8 +133,6 @@ impl Default for AiState {
             mode: "chat".to_string(),
             conversation_id: None,
             selected_model_id: None,
-            vector_index_enabled: false,
-            vector_index_workspaces: Vec::new(),
         }
     }
 }

@@ -5,9 +5,7 @@
   import ShortcutSettings from '@/components/settings/components/Shortcuts/ShortcutSettings.vue'
   import { LanguageSettings } from '@/components/settings/components/Language'
   import { GeneralSettings } from '@/components/settings/components/General'
-  import { VectorIndexSettings } from '@/components/settings/components/VectorIndex'
   import SettingsNav from '@/components/settings/SettingsNav.vue'
-  import { useThemeStore } from '@/stores/theme'
   import { XButton } from '@/ui'
   import { configApi } from '@/api/config'
   import { onMounted, ref, nextTick } from 'vue'
@@ -15,15 +13,13 @@
 
   const { t } = useI18n()
   const activeSection = ref<string>('general')
-  const themeStore = useThemeStore()
-  
+
   // 组件引用，用于调用各页面的初始化方法
   const aiSettingsRef = ref()
   const themeSettingsRef = ref()
   const shortcutSettingsRef = ref()
   const generalSettingsRef = ref()
-  const vectorIndexSettingsRef = ref()
-  
+
   // 移除这个缓存机制，每次切换都重新初始化
 
   onMounted(async () => {
@@ -33,11 +29,11 @@
 
   const initializeCurrentSection = async () => {
     const section = activeSection.value
-    
+
     try {
       // 等待组件渲染完成
       await nextTick()
-      
+
       switch (section) {
         case 'general':
           if (generalSettingsRef.value?.init) {
@@ -47,11 +43,6 @@
         case 'ai':
           if (aiSettingsRef.value?.init) {
             await aiSettingsRef.value.init()
-          }
-          break
-        case 'vectorIndex':
-          if (vectorIndexSettingsRef.value?.init) {
-            await vectorIndexSettingsRef.value.init()
           }
           break
         case 'theme':
@@ -109,11 +100,6 @@
         <div class="settings-panel">
           <GeneralSettings v-if="activeSection === 'general'" ref="generalSettingsRef" />
           <AISettings v-else-if="activeSection === 'ai'" ref="aiSettingsRef" />
-          <VectorIndexSettings
-            v-else-if="activeSection === 'vectorIndex'"
-            ref="vectorIndexSettingsRef"
-            @navigateToSection="handleNavigationChange"
-          />
           <ThemeSettings v-else-if="activeSection === 'theme'" ref="themeSettingsRef" />
           <ShortcutSettings v-else-if="activeSection === 'shortcuts'" ref="shortcutSettingsRef" />
           <LanguageSettings v-else-if="activeSection === 'language'" />

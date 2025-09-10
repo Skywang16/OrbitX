@@ -5,13 +5,9 @@
   import UserMessage from './UserMessage.vue'
   import AIMessage from './AIMessage.vue'
   import { useAISettingsStore } from '@/components/settings/components/AI/store'
-  import { vectorIndexAppSettingsApi } from '@/api/vector-index/app-settings'
-  import { useVectorIndexBuild } from '@/composables/useVectorIndexBuild'
 
   const { t } = useI18n()
   const aiSettingsStore = useAISettingsStore()
-  const vectorIndexEnabled = ref(false)
-  const { isBuilding, startBuild, cancelBuild } = useVectorIndexBuild()
 
   interface Props {
     messages: Message[]
@@ -53,23 +49,7 @@
     if (!aiSettingsStore.isInitialized) {
       await aiSettingsStore.loadSettings()
     }
-
-    // 加载向量索引功能开关
-    try {
-      const appSettings = await vectorIndexAppSettingsApi.getSettings()
-      vectorIndexEnabled.value = appSettings.enabled
-    } catch {
-      vectorIndexEnabled.value = false
-    }
   })
-
-  const handleStartBuildIndex = async () => {
-    if (isBuilding.value) {
-      await cancelBuild()
-      return
-    }
-    await startBuild()
-  }
 </script>
 
 <template>
@@ -92,17 +72,6 @@
         </div>
         <div class="empty-text">{{ t('message_list.start_conversation') }}</div>
         <div class="empty-hint">{{ t('message_list.send_message_hint') }}</div>
-
-        <div v-if="vectorIndexEnabled" class="actions">
-          <x-button
-            :variant="isBuilding ? 'secondary' : 'primary'"
-            size="small"
-            :loading="false"
-            @click="handleStartBuildIndex"
-          >
-            {{ isBuilding ? t('settings.vectorIndex.cancel_build') : t('settings.vectorIndex.start_build') }}
-          </x-button>
-        </div>
       </div>
     </div>
 

@@ -50,13 +50,6 @@
       icon: 'globe',
       description: t('settings.language.description'),
     },
-    {
-      id: 'vectorIndex',
-      label: t('settings.vectorIndex.title'),
-      icon: 'database',
-      description: t('settings.vectorIndex.description'),
-      beta: true,
-    },
   ])
 
   const handleItemClick = (sectionId: string) => {
@@ -130,7 +123,6 @@
         <div class="settings-navigation-content">
           <div class="settings-navigation-label">
             {{ item.label }}
-            <span v-if="item.beta" class="beta-label">Beta</span>
           </div>
         </div>
       </li>

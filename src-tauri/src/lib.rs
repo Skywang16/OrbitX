@@ -35,7 +35,6 @@ pub mod shell;
 pub mod storage;
 pub mod terminal;
 pub mod utils;
-pub mod vector_index;
 pub mod window;
 
 use commands::register_all_commands;

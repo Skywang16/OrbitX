@@ -3,8 +3,6 @@ import { configApi } from '@/api/config'
 import { windowApi } from '@/api/window'
 
 import { useAISettingsStore } from '@/components/settings/components/AI'
-import { vectorIndexApi } from '@/api/vector-index'
-import { vectorIndexAppSettingsApi } from '@/api/vector-index/app-settings'
 import { useAIChatStore } from '@/components/AIChatSidebar/store'
 import { useThemeStore } from '@/stores/theme'
 import { useSessionStore } from '@/stores/session'
@@ -61,18 +59,6 @@ const initializeServices = async () => {
   const aiChatStore = useAIChatStore()
   await aiChatStore.initializeEko()
 
-  // 向量索引：若已开启且配置有效，则在启动时尝试自动连接初始化
-  try {
-    const appSettings = await vectorIndexAppSettingsApi.getSettings()
-    if (appSettings.enabled) {
-      const cfg = await vectorIndexApi.getConfig()
-      if (cfg.qdrantUrl && cfg.qdrantUrl.trim() !== '') {
-        await vectorIndexApi.init(cfg)
-      }
-    }
-  } catch (e) {
-    console.warn('向量索引自动初始化失败:', e)
-  }
 }
 
 const initializeOpacity = async () => {

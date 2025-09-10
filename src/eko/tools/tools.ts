@@ -15,28 +15,7 @@ import { editFileTool } from './toolList/edit-file'
 import { shellTool } from './toolList/shell'
 import { webFetchTool } from './toolList/web-fetch'
 
-import { orbitSearchTool } from './toolList/orbit-search'
 import { grepSearchTool } from './toolList/grep-search'
-import { vectorIndexAppSettingsApi } from '@/api/vector-index/app-settings'
-
-// 向量索引功能检查
-let isVectorIndexEnabled = false
-
-// 检查向量索引是否启用
-async function checkVectorIndexEnabled(): Promise<boolean> {
-  try {
-    const settings = await vectorIndexAppSettingsApi.getSettings()
-    return settings.enabled || false
-  } catch (error) {
-    console.warn('检查向量索引状态失败:', error)
-    return false
-  }
-}
-
-// 初始化向量索引状态
-checkVectorIndexEnabled().then(enabled => {
-  isVectorIndexEnabled = enabled
-})
 
 /**
  * 获取基础工具列表（不包含向量索引工具）
@@ -61,12 +40,12 @@ function getBaseAllTools(): Tool[] {
 /**
  * Read-only tools - available in Chat mode
  */
-export const readOnlyTools: Tool[] = getBaseReadOnlyTools().concat(isVectorIndexEnabled ? [orbitSearchTool] : [])
+export const readOnlyTools: Tool[] = getBaseReadOnlyTools()
 
 /**
  * All tools - available in Agent mode
  */
-export const allTools: Tool[] = getBaseAllTools().concat(isVectorIndexEnabled ? [orbitSearchTool] : [])
+export const allTools: Tool[] = getBaseAllTools()
 
 /**
  * Register all tools to global registry
@@ -130,19 +109,6 @@ export function registerAllTools(): void {
         tags: ['web', 'http', 'fetch', 'api'],
       },
     },
-    // 条件性注册orbitSearchTool
-    ...(isVectorIndexEnabled
-      ? [
-          {
-            tool: orbitSearchTool,
-            metadata: {
-              description: orbitSearchTool.description,
-              category: 'search',
-              tags: ['search', 'semantic', 'code', 'context', 'intelligent', 'analysis'],
-            },
-          },
-        ]
-      : []),
     {
       tool: grepSearchTool,
       metadata: {

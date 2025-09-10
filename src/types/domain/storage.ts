@@ -59,9 +59,6 @@ export interface AiState {
   mode: 'chat' | 'agent'
   conversationId?: number
   selectedModelId?: string | null
-  // 与后端对齐的向量索引设置
-  vectorIndexEnabled: boolean
-  vectorIndexWorkspaces: string[]
 }
 
 export interface SessionState {
