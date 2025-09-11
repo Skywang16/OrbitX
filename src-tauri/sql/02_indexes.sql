@@ -34,3 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_operation ON audit_logs(operation);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_table_name ON audit_logs(table_name);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_success ON audit_logs(success);
 
+-- 向量工作区索引
+CREATE INDEX IF NOT EXISTS idx_vector_workspaces_path ON vector_workspaces(workspace_path);
+CREATE INDEX IF NOT EXISTS idx_vector_workspaces_status ON vector_workspaces(status);
+

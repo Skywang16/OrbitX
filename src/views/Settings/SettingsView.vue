@@ -5,6 +5,7 @@
   import ShortcutSettings from '@/components/settings/components/Shortcuts/ShortcutSettings.vue'
   import { LanguageSettings } from '@/components/settings/components/Language'
   import { GeneralSettings } from '@/components/settings/components/General'
+  import { VectorIndexSettings } from '@/components/settings/components/VectorIndex'
   import SettingsNav from '@/components/settings/SettingsNav.vue'
   import { XButton } from '@/ui'
   import { configApi } from '@/api/config'
@@ -19,6 +20,7 @@
   const themeSettingsRef = ref()
   const shortcutSettingsRef = ref()
   const generalSettingsRef = ref()
+  const vectorIndexSettingsRef = ref()
 
   // 移除这个缓存机制，每次切换都重新初始化
 
@@ -53,6 +55,11 @@
         case 'shortcuts':
           if (shortcutSettingsRef.value?.init) {
             await shortcutSettingsRef.value.init()
+          }
+          break
+        case 'vectorIndex':
+          if (vectorIndexSettingsRef.value?.init) {
+            await vectorIndexSettingsRef.value.init()
           }
           break
         case 'language':
@@ -100,6 +107,7 @@
         <div class="settings-panel">
           <GeneralSettings v-if="activeSection === 'general'" ref="generalSettingsRef" />
           <AISettings v-else-if="activeSection === 'ai'" ref="aiSettingsRef" />
+          <VectorIndexSettings v-else-if="activeSection === 'vectorIndex'" ref="vectorIndexSettingsRef" />
           <ThemeSettings v-else-if="activeSection === 'theme'" ref="themeSettingsRef" />
           <ShortcutSettings v-else-if="activeSection === 'shortcuts'" ref="shortcutSettingsRef" />
           <LanguageSettings v-else-if="activeSection === 'language'" />

@@ -30,64 +30,6 @@ export interface RawMessage {
 
 // ===== 工具调用类型 =====
 
-/** 代码符号信息 */
-export interface CodeSymbol {
-  /** 符号名称 */
-  name: string
-  /** 符号类型 */
-  type: string
-  /** 所在行号 */
-  line: number
-  /** 所在列号 */
-  column: number
-  /** 符号范围 */
-  range?: {
-    start: { line: number; column: number }
-    end: { line: number; column: number }
-  }
-}
-
-/** 单个文件的代码分析结果 */
-export interface CodeAnalysis {
-  /** 文件路径 */
-  file: string
-  /** 编程语言 */
-  language: string
-  /** 符号列表 */
-  symbols: CodeSymbol[]
-  /** 导入语句 */
-  imports: string[]
-  /** 导出语句 */
-  exports: string[]
-}
-
-/** 批量代码分析结果 */
-export interface BatchCodeAnalysis {
-  /** 分析结果列表 */
-  analyses: CodeAnalysis[]
-  /** 总文件数 */
-  total_files: number
-  /** 成功分析的文件数 */
-  success_count: number
-  /** 失败的文件数 */
-  error_count: number
-}
-
-/** 分析代码参数 */
-export interface AnalyzeCodeParams {
-  /** 文件路径 */
-  path: string
-  /** 是否递归分析 */
-  recursive?: boolean
-  /** 包含的文件模式 */
-  include?: string[]
-  /** 排除的文件模式 */
-  exclude?: string[]
-}
-
-/** 分析结果类型 */
-export type AnalysisResult = BatchCodeAnalysis
-
 /** Web 请求类型 */
 export interface WebFetchRequest {
   /** 请求URL */

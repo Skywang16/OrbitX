@@ -8,12 +8,20 @@
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '@/eko-core/types'
 import { ValidationError, ToolError } from '../tool-error'
-import { vectorIndexApi } from '@/api'
-import type { VectorSearchOptions, VectorSearchResult } from '@/api/vector-index'
+import { ckApi } from '@/api/workspace-index'
+import type { VectorSearchResult } from '@/api/workspace-index'
+import { terminalContextApi } from '@/api/terminal-context'
+import { windowApi } from '@/api/window'
 
 // ===== Type Definitions =====
 
-type OrbitSearchParams = VectorSearchOptions
+interface OrbitSearchParams {
+  query: string
+  maxResults?: number
+  minScore?: number
+  directoryFilter?: string
+  languageFilter?: string
+}
 
 export interface OrbitSearchResponse {
   results: VectorSearchResult[]
@@ -82,30 +90,50 @@ export class OrbitSearchTool extends ModifiableTool {
     try {
       const startTime = Date.now()
 
-      // Check vector index service status
-      const indexStatus = await vectorIndexApi.getStatus()
-      if (!indexStatus.isInitialized) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'Vector index not initialized. Please configure the vector database connection and build the code index in settings.',
-            },
-          ],
+      // Resolve working directory (prefer active terminal CWD, fallback to app current dir)
+      let cwd = ''
+      try {
+        const ctx = await terminalContextApi.getActiveTerminalContext()
+        cwd = ctx.currentWorkingDirectory || ''
+      } catch (e) {
+        console.warn('orbit-search: no active terminal context', e)
+      }
+      if (!cwd) {
+        try {
+          cwd = await windowApi.getCurrentDirectory({ useCache: true })
+        } catch (e) {
+          console.warn('orbit-search: getCurrentDirectory fallback failed', e)
         }
       }
 
-      // Build search options
-      const searchOptions: VectorSearchOptions = {
+      // Build search params for ck
+      let resolvedDirectory = cwd
+      if (directoryFilter && directoryFilter.trim()) {
+        const dirf = directoryFilter.trim()
+        try {
+          resolvedDirectory = cwd ? await windowApi.joinPaths(cwd, dirf) : dirf
+        } catch {
+          resolvedDirectory = dirf
+        }
+      }
+
+      const ckParams = {
         query: query.trim(),
         maxResults,
         minScore,
-        directoryFilter: directoryFilter?.trim() || undefined,
+        directory: resolvedDirectory,
         languageFilter: languageFilter?.trim() || undefined,
+        mode: 'semantic' as const,
       }
 
-      // Execute vector search through API
-      const searchResults = await vectorIndexApi.search(searchOptions)
+      const searchOptions = {
+        minScore,
+        directoryFilter,
+        languageFilter,
+      }
+
+      // Execute search through ck API
+      const searchResults = await ckApi.search(ckParams)
 
       const searchTime = Date.now() - startTime
 
@@ -158,12 +186,12 @@ export class OrbitSearchTool extends ModifiableTool {
         }
       }
 
-      if (errorMessage.includes('Qdrant')) {
+      if (errorMessage.includes('index')) {
         return {
           content: [
             {
               type: 'text',
-              text: `Vector database connection failed: ${errorMessage}. Please check database configuration and connection status.`,
+              text: `Vector index error: ${errorMessage}. Please check if the code index needs to be built or rebuilt.`,
             },
           ],
         }

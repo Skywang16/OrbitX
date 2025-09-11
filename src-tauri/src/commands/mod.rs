@@ -206,7 +206,13 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         // 网络请求命令
         crate::ai::tool::network::web_fetch_headless,
         crate::ai::tool::network::simple_web_fetch,
-        // AST代码分析命令
-        crate::ai::tool::ast::commands::analyze_code,
+        // ck search commands
+        crate::ck::commands::ck_search,
+        // 工作区索引管理命令
+        crate::storage::commands::check_current_workspace_index,
+        crate::storage::commands::build_workspace_index,
+        crate::storage::commands::get_all_workspace_indexes,
+        crate::storage::commands::delete_workspace_index,
+        crate::storage::commands::refresh_workspace_index,
     ])
 }

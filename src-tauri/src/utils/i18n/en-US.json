@@ -155,6 +155,12 @@
     "query_failed": "Query failed",
     "save_failed": "Save failed",
     "delete_failed": "Delete failed",
-    "update_failed": "Update failed"
+    "update_failed": "Update failed",
+    "get_current_directory_failed": "Failed to get current working directory",
+    "workspace_path_empty": "Workspace path cannot be empty",
+    "workspace_name_empty": "Workspace name cannot be empty",
+    "check_workspace_index_failed": "Failed to check workspace index status",
+    "get_workspace_indexes_failed": "Failed to get workspace index list",
+    "invalid_workspace_id": "Invalid workspace ID"
   }
 }

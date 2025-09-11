@@ -155,6 +155,12 @@
     "query_failed": "查询失败",
     "save_failed": "保存失败",
     "delete_failed": "删除失败",
-    "update_failed": "更新失败"
+    "update_failed": "更新失败",
+    "get_current_directory_failed": "获取当前工作目录失败",
+    "workspace_path_empty": "工作区路径不能为空",
+    "workspace_name_empty": "工作区名称不能为空",
+    "check_workspace_index_failed": "检查工作区索引状态失败",
+    "get_workspace_indexes_failed": "获取工作区索引列表失败",
+    "invalid_workspace_id": "无效的工作区ID"
   }
 }

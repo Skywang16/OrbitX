@@ -204,41 +204,6 @@ export interface TruncateAndResendRequest {
   modelId?: string
 }
 
-export interface CodeSymbol {
-  name: string
-  type: string
-  line: number
-  column: number
-  range?: {
-    start: { line: number; column: number }
-    end: { line: number; column: number }
-  }
-}
-
-export interface CodeAnalysis {
-  file: string
-  language: string
-  symbols: CodeSymbol[]
-  imports: string[]
-  exports: string[]
-}
-
-export interface BatchCodeAnalysis {
-  analyses: CodeAnalysis[]
-  total_files: number
-  success_count: number
-  error_count: number
-}
-
-export interface AnalyzeCodeParams {
-  path: string
-  recursive?: boolean
-  include?: string[]
-  exclude?: string[]
-}
-
-export type AnalysisResult = BatchCodeAnalysis
-
 export interface WebFetchRequest {
   url: string
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'

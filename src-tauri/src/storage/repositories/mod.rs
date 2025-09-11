@@ -95,14 +95,14 @@ impl RepositoryManager {
         &self.conversations
     }
 
-    /// 获取数据库管理器
-    pub fn database(&self) -> &DatabaseManager {
-        &self.database
-    }
-
     /// 获取向量工作区Repository
     pub fn vector_workspaces(&self) -> &VectorWorkspaceRepository {
         &self.vector_workspaces
+    }
+
+    /// 获取数据库管理器
+    pub fn database(&self) -> &DatabaseManager {
+        &self.database
     }
 }
 

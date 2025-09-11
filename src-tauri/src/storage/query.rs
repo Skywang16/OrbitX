@@ -28,6 +28,26 @@ pub enum QueryCondition {
     Or(Vec<QueryCondition>),
 }
 
+impl QueryCondition {
+    /// 创建等于条件
+    pub fn new(field: &str, operator: &str) -> Self {
+        match operator {
+            "=" => QueryCondition::Eq(field.to_string(), Value::Null),
+            "!=" => QueryCondition::Ne(field.to_string(), Value::Null),
+            "<" => QueryCondition::Lt(field.to_string(), Value::Null),
+            "<=" => QueryCondition::Le(field.to_string(), Value::Null),
+            ">" => QueryCondition::Gt(field.to_string(), Value::Null),
+            ">=" => QueryCondition::Ge(field.to_string(), Value::Null),
+            _ => QueryCondition::Eq(field.to_string(), Value::Null),
+        }
+    }
+    
+    /// 创建等于条件
+    pub fn eq(field: &str, value: Value) -> Self {
+        QueryCondition::Eq(field.to_string(), value)
+    }
+}
+
 /// 排序方向
 #[derive(Debug, Clone)]
 pub enum QueryOrder {
@@ -95,6 +115,11 @@ impl SafeQueryBuilder {
     pub fn join(mut self, join_clause: impl Into<String>) -> Self {
         self.joins.push(join_clause.into());
         self
+    }
+
+    /// 构建SELECT查询
+    pub fn build_select_all(self) -> AppResult<(String, Vec<Value>)> {
+        self.build()
     }
 
     /// 构建查询
@@ -250,6 +275,21 @@ impl InsertBuilder {
 
     pub fn on_conflict_ignore(mut self) -> Self {
         self.on_conflict = Some("IGNORE".to_string());
+        self
+    }
+
+    pub fn add_field(mut self, field: &str, value: &impl serde::Serialize) -> Self {
+        let json_value = serde_json::to_value(value).unwrap_or(Value::Null);
+        self.fields.insert(field.to_string(), json_value);
+        self
+    }
+
+    pub fn add_field_opt<T: serde::Serialize>(mut self, field: &str, value: Option<&T>) -> Self {
+        let json_value = match value {
+            Some(v) => serde_json::to_value(v).unwrap_or(Value::Null),
+            None => Value::Null,
+        };
+        self.fields.insert(field.to_string(), json_value);
         self
     }
 

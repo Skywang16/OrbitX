@@ -36,6 +36,7 @@ pub mod storage;
 pub mod terminal;
 pub mod utils;
 pub mod window;
+pub mod ck;
 
 use commands::register_all_commands;
 use setup::{

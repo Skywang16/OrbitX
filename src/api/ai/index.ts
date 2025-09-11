@@ -1,13 +1,6 @@
 import type { AIHealthStatus, AIModelConfig, AISettings, AIStats, Conversation, Message } from '@/types'
 import { invoke } from '@/utils/request'
-import type {
-  RawConversation,
-  RawMessage,
-  AnalyzeCodeParams,
-  AnalysisResult,
-  WebFetchRequest,
-  WebFetchResponse,
-} from './types'
+import type { RawConversation, RawMessage, WebFetchRequest, WebFetchResponse } from './types'
 
 class ConversationAPI {
   async createConversation(title?: string): Promise<number> {
@@ -150,10 +143,6 @@ class ConversationAPI {
   }
 }
 
-export async function analyzeCode(params: AnalyzeCodeParams): Promise<AnalysisResult> {
-  return await invoke<AnalysisResult>('analyze_code', params as unknown as Record<string, unknown>)
-}
-
 export async function webFetchHeadless(request: WebFetchRequest): Promise<WebFetchResponse> {
   return await invoke<WebFetchResponse>('web_fetch_headless', { request })
 }
@@ -275,10 +264,6 @@ export class AiApi {
 
   async truncateConversation(conversationId: number, truncateAfterMessageId: number) {
     return this.conversationAPI.truncateConversation(conversationId, truncateAfterMessageId)
-  }
-
-  async analyzeCode(params: AnalyzeCodeParams): Promise<AnalysisResult> {
-    return analyzeCode(params)
   }
 
   async webFetch(request: WebFetchRequest): Promise<WebFetchResponse> {

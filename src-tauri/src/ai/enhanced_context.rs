@@ -830,21 +830,6 @@ impl ContextManager {
                     self.format_generic_params(params)
                 }
             }
-            // 代码分析工具
-            "analyze_code" | "code_review" => {
-                let mut parts = Vec::new();
-                if let Some(path) = params.get("path").and_then(|p| p.as_str()) {
-                    parts.push(format!("path: {}", path));
-                }
-                if let Some(lang) = params.get("language").and_then(|l| l.as_str()) {
-                    parts.push(format!("language: {}", lang));
-                }
-                if parts.is_empty() {
-                    self.format_generic_params(params)
-                } else {
-                    parts.join(", ")
-                }
-            }
             _ => {
                 // 对于未知工具，使用通用格式化
                 self.format_generic_params(params)

@@ -99,20 +99,17 @@ oxc_ast = "0.41"
 oxc_span = "0.41"
 oxc_allocator = "0.41"
 oxc_syntax = "0.41"
-tree-sitter = "0.24"
-tree-sitter-python = "0.23"
-tree-sitter-rust = "0.23"
-
-tree-sitter-typescript = "0.23"
-tree-sitter-javascript = "0.23"
-tree-sitter-go = "0.23"
-tree-sitter-java = "0.23"
 syn = { version = "2.0", features = ["full", "visit"] }
 quote = "1.0"
 glob = "0.3"
 tauri-plugin-window-state = "2.4.0"
 tauri-plugin-autostart = "2.5.0"
 eventsource-stream = "0.2.3"
+ck-core = { path = "../ck-main/ck-core", version = "0.3.7" }
+ck-index = { path = "../ck-main/ck-index", version = "0.3.7" }
+ck-engine = { path = "../ck-main/ck-engine", version = "0.3.7" }
+ck-embed = { path = "../ck-main/ck-embed", version = "0.3.7" }
+ck-ann = { path = "../ck-main/ck-ann", version = "0.3.7" }
 
 # 文件监控系统依赖
 notify = "6.1"
