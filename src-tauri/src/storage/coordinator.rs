@@ -103,13 +103,13 @@ impl StorageCoordinator {
         Ok(coordinator)
     }
 
-    pub async fn get_config(&self, section: &str) -> AppResult<Value> {
+    pub async fn config_get(&self, section: &str) -> AppResult<Value> {
         debug!("获取配置节: {}", section);
 
         // 从配置管理器获取配置（使用缓存）
         let config = self
             .config_manager
-            .get_config()
+            .config_get()
             .await
             .context("获取配置失败")?;
 
@@ -130,12 +130,12 @@ impl StorageCoordinator {
         Ok(section_value)
     }
 
-    pub async fn update_config(&self, section: &str, data: Value) -> AppResult<()> {
+    pub async fn config_update(&self, section: &str, data: Value) -> AppResult<()> {
         debug!("更新配置节: {}", section);
 
-        // 使用配置管理器的 update_config 闭包模式，确保原子性操作
+        // 使用配置管理器的 config_update 闭包模式，确保原子性操作
         self.config_manager
-            .update_config(|config| {
+            .config_update(|config| {
                 // 使用内部方法更新指定配置节
                 self.config_manager
                     .update_config_section(config, section, data.clone())?;

@@ -2,7 +2,7 @@
  * Manual test for Terminal Store
  *
  * This test verifies the updated Terminal Store functionality:
- * 1. setActiveTerminal calls backend set_active_pane
+ * 1. setActiveTerminal calls backend terminal_context_set_active_pane
  * 2. CWD updates are subscription-only (no backend writes)
  * 3. State synchronization works correctly
  */

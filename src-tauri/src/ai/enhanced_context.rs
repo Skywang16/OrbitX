@@ -249,7 +249,7 @@ impl ContextManager {
         let mut parts = Vec::new();
 
         // 添加前置提示词
-        if let Ok(Some(prefix)) = repos.ai_models().get_user_prefix_prompt().await {
+        if let Ok(Some(prefix)) = repos.ai_models().ai_conversation_get_user_prefix_prompt().await {
             if !prefix.trim().is_empty() {
                 parts.push(format!("【前置提示】\n{}\n", prefix));
             }
@@ -412,7 +412,7 @@ impl ContextManager {
         };
 
         // 保存摘要消息到数据库
-        let _summary_id = repos.conversations().save_message(&summary_msg).await?;
+        let _summary_id = repos.conversations().ai_conversation_save_message(&summary_msg).await?;
 
         // 构建新的消息列表：摘要 + 保留的消息
         let mut result = vec![summary_msg];

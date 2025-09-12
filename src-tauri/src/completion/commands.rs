@@ -73,7 +73,7 @@ impl CompletionState {
 
 /// 获取补全建议命令
 #[tauri::command]
-pub async fn get_completions(
+pub async fn completion_get(
     input: String,
     cursor_position: usize,
     working_directory: String,
@@ -90,7 +90,7 @@ pub async fn get_completions(
     let context = CompletionContext::new(input, cursor_position, working_directory);
 
     // 获取补全建议
-    match engine.get_completions(&context).await {
+    match engine.completion_get(&context).await {
         Ok(mut response) => {
             // 如果指定了最大结果数，进行限制
             if let Some(max_results) = max_results {
@@ -108,7 +108,7 @@ pub async fn get_completions(
 
 /// 初始化补全引擎命令
 #[tauri::command]
-pub async fn init_completion_engine(
+pub async fn completion_init_engine(
     state: State<'_, CompletionState>,
     storage_state: State<'_, StorageCoordinatorState>,
 ) -> TauriApiResult<EmptyData> {
@@ -126,7 +126,7 @@ pub async fn init_completion_engine(
 
 /// 清理缓存命令
 #[tauri::command]
-pub async fn clear_completion_cache(
+pub async fn completion_clear_cache(
     _state: State<'_, CompletionState>,
 ) -> TauriApiResult<EmptyData> {
     Ok(api_success!())
@@ -134,7 +134,7 @@ pub async fn clear_completion_cache(
 
 /// 获取统计信息命令
 #[tauri::command]
-pub async fn get_completion_stats(state: State<'_, CompletionState>) -> TauriApiResult<String> {
+pub async fn completion_get_stats(state: State<'_, CompletionState>) -> TauriApiResult<String> {
     let engine = match state.get_engine().await {
         Ok(engine) => engine,
         Err(_) => return Ok(api_error!("completion.engine_not_initialized")),

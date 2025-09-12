@@ -97,7 +97,7 @@
         <!-- 底部按钮区域 -->
         <div class="settings-sidebar-footer">
           <XButton variant="primary" size="medium" @click="handleOpenConfigFolder">
-            {{ t('settings.general.open_config_folder') }}
+            {{ t('settings.general.config_open_folder') }}
           </XButton>
         </div>
       </div>

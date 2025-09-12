@@ -263,7 +263,7 @@ impl VectorWorkspaceRepository {
     }
 
     /// 检查工作区路径是否已存在
-    pub async fn path_exists(&self, workspace_path: &str) -> AppResult<bool> {
+    pub async fn window_path_exists(&self, workspace_path: &str) -> AppResult<bool> {
         let query = "SELECT COUNT(*) as count FROM vector_workspaces WHERE workspace_path = ?";
         let pool = self.database.pool();
 

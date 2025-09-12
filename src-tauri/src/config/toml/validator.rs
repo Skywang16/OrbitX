@@ -21,7 +21,7 @@ impl TomlConfigValidator {
     }
 
     /// 验证完整配置
-    pub fn validate_config(&self, config: &AppConfig) -> AppResult<()> {
+    pub fn config_validate(&self, config: &AppConfig) -> AppResult<()> {
         debug!("开始验证配置");
 
         let mut errors = Vec::new();
@@ -42,7 +42,7 @@ impl TomlConfigValidator {
         }
 
         // 验证终端配置
-        if let Err(e) = self.validate_terminal_config(&config.terminal) {
+        if let Err(e) = self.config_terminal_validate(&config.terminal) {
             errors.push(format!("终端配置验证失败: {}", e));
         }
 
@@ -148,7 +148,7 @@ impl TomlConfigValidator {
     }
 
     /// 验证终端配置
-    fn validate_terminal_config(
+    fn config_terminal_validate(
         &self,
         terminal_config: &crate::config::types::TerminalConfig,
     ) -> AppResult<()> {

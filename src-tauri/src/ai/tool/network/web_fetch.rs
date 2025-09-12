@@ -45,7 +45,7 @@ pub struct WebFetchResponse {
 
 /// 执行无头 HTTP 请求
 #[command]
-pub async fn web_fetch_headless(request: WebFetchRequest) -> Result<WebFetchResponse, String> {
+pub async fn network_web_fetch_headless(request: WebFetchRequest) -> Result<WebFetchResponse, String> {
     tracing::debug!("🌐 [WebFetch] 开始无头请求: {}", request.url);
 
     let start_time = std::time::Instant::now();
@@ -282,7 +282,7 @@ pub async fn web_fetch_headless(request: WebFetchRequest) -> Result<WebFetchResp
 
 /// 简化的网络请求命令（只需要 URL）
 #[command]
-pub async fn simple_web_fetch(url: String) -> Result<WebFetchResponse, String> {
+pub async fn network_simple_web_fetch(url: String) -> Result<WebFetchResponse, String> {
     let request = WebFetchRequest {
         url,
         method: Some("GET".to_string()),
@@ -296,7 +296,7 @@ pub async fn simple_web_fetch(url: String) -> Result<WebFetchResponse, String> {
         use_jina_reader: Some(false), // 不使用jina_reader
     };
 
-    web_fetch_headless(request).await
+    network_web_fetch_headless(request).await
 }
 
 /// 提取 HTML 内容的主要文本（改进版）

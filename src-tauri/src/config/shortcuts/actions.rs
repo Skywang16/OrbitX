@@ -162,12 +162,12 @@ impl ActionRegistry {
         handlers.contains_key(action_name)
     }
 
-    pub async fn get_action_metadata(&self, action_name: &str) -> Option<ActionMetadata> {
+    pub async fn shortcuts_get_action_metadata(&self, action_name: &str) -> Option<ActionMetadata> {
         let metadata = self.metadata.read().await;
         metadata.get(action_name).cloned()
     }
 
-    pub async fn get_registered_actions(&self) -> Vec<String> {
+    pub async fn shortcuts_get_registered_actions(&self) -> Vec<String> {
         let handlers = self.handlers.read().await;
         handlers.keys().cloned().collect()
     }

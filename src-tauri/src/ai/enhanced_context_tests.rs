@@ -52,7 +52,7 @@ async fn create_conversation_with_messages(
         m.status = Some("complete".to_string());
         repos
             .conversations()
-            .save_message(&m)
+            .ai_conversation_save_message(&m)
             .await
             .expect("failed to save message");
     }

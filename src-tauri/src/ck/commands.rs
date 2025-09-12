@@ -50,7 +50,7 @@ async fn extract_content_from_span(file: &std::path::Path, span: &ck_core::Span)
 }
 
 #[tauri::command]
-pub async fn ck_search(params: CkSearchParams) -> TauriApiResult<Vec<CkSearchResultItem>> {
+pub async fn code_search(params: CkSearchParams) -> TauriApiResult<Vec<CkSearchResultItem>> {
     // Validate
     if params.query.trim().len() < 3 {
         return Ok(api_error!("common.invalid_params"));

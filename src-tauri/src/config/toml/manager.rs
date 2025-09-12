@@ -104,16 +104,16 @@ impl TomlConfigManager {
     }
 
     /// 保存配置到文件
-    pub async fn save_config(&self, config: &AppConfig) -> AppResult<()> {
+    pub async fn config_save(&self, config: &AppConfig) -> AppResult<()> {
         // 验证配置
-        if let Err(e) = self.validator.validate_config(config) {
+        if let Err(e) = self.validator.config_validate(config) {
             let errors = vec![e.to_string()];
             self.event_sender.send_validation_failed(errors);
             return Err(e);
         }
 
         // 保存到文件
-        self.writer.save_config(config).await?;
+        self.writer.config_save(config).await?;
 
         // 更新缓存
         {
@@ -153,14 +153,14 @@ impl TomlConfigManager {
         self.update_config_section(&mut current_config, section, data_value)?;
 
         // 验证更新后的配置
-        if let Err(e) = self.validator.validate_config(&current_config) {
+        if let Err(e) = self.validator.config_validate(&current_config) {
             let errors = vec![e.to_string()];
             self.event_sender.send_validation_failed(errors);
             return Err(e);
         }
 
         // 保存配置
-        self.writer.save_config(&current_config).await?;
+        self.writer.config_save(&current_config).await?;
 
         // 更新缓存
         {
@@ -178,7 +178,7 @@ impl TomlConfigManager {
     }
 
     /// 获取当前配置
-    pub async fn get_config(&self) -> AppResult<AppConfig> {
+    pub async fn config_get(&self) -> AppResult<AppConfig> {
         let cache = self
             .config_cache
             .read()
@@ -192,8 +192,8 @@ impl TomlConfigManager {
     }
 
     /// 验证配置
-    pub fn validate_config(&self, config: &AppConfig) -> AppResult<()> {
-        match self.validator.validate_config(config) {
+    pub fn config_validate(&self, config: &AppConfig) -> AppResult<()> {
+        match self.validator.config_validate(config) {
             Ok(()) => Ok(()),
             Err(e) => {
                 // 发送验证失败事件
@@ -210,7 +210,7 @@ impl TomlConfigManager {
     }
 
     /// 使用更新函数更新配置
-    pub async fn update_config<F>(&self, updater: F) -> AppResult<()>
+    pub async fn config_update<F>(&self, updater: F) -> AppResult<()>
     where
         F: FnOnce(&mut AppConfig) -> AppResult<()> + Send,
     {
@@ -227,14 +227,14 @@ impl TomlConfigManager {
         updater(&mut current_config)?;
 
         // 验证更新后的配置
-        if let Err(e) = self.validator.validate_config(&current_config) {
+        if let Err(e) = self.validator.config_validate(&current_config) {
             let errors = vec![e.to_string()];
             self.event_sender.send_validation_failed(errors);
             return Err(e);
         }
 
         // 保存配置
-        self.save_config(&current_config).await?;
+        self.config_save(&current_config).await?;
 
         Ok(())
     }

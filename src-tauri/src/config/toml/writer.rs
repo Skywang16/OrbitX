@@ -22,7 +22,7 @@ impl TomlConfigWriter {
     }
 
     /// 保存配置到文件
-    pub async fn save_config(&self, config: &AppConfig) -> AppResult<()> {
+    pub async fn config_save(&self, config: &AppConfig) -> AppResult<()> {
         // 确保配置目录存在
         self.ensure_config_directory().await?;
 
@@ -199,7 +199,7 @@ impl TomlConfigWriter {
 
         // 使用默认配置
         let default_config = create_default_config();
-        self.save_config(&default_config).await?;
+        self.config_save(&default_config).await?;
 
         Ok(default_config)
     }

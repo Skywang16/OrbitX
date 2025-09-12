@@ -12,8 +12,8 @@ pub mod types;
 
 // 重新导出核心类型和函数
 pub use commands::{
-    get_available_themes, get_current_theme, get_theme_config_status, handle_system_theme_change,
-    set_follow_system_theme, set_terminal_theme, ThemeConfigStatus, ThemeInfo,
+    theme_get_available, theme_get_current, theme_get_config_status, handle_system_theme_change,
+    theme_set_follow_system, theme_set_terminal, ThemeConfigStatus, ThemeInfo,
 };
 pub use defaults::create_default_theme_config;
 pub use manager::{

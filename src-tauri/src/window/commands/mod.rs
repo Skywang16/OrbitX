@@ -210,7 +210,7 @@ impl WindowConfigManager {
         self.platform_info = Some(info);
     }
 
-    pub fn get_platform_info(&self) -> Option<&PlatformInfo> {
+    pub fn window_get_platform_info(&self) -> Option<&PlatformInfo> {
         self.platform_info.as_ref()
     }
 

@@ -35,7 +35,7 @@ export class ShellIntegrationApi {
    * @param silent 是否静默设置
    */
   async setupShellIntegration(paneId: number, silent: boolean = true): Promise<void> {
-    await invoke('setup_shell_integration', { paneId, silent })
+    await invoke('shell_setup_integration', { paneId, silent })
   }
 
   /**
@@ -43,7 +43,7 @@ export class ShellIntegrationApi {
    * @param paneId 终端面板ID
    */
   async checkShellIntegrationStatus(paneId: number): Promise<boolean> {
-    return await invoke<boolean>('check_shell_integration_status', { paneId })
+    return await invoke<boolean>('shell_check_integration_status', { paneId })
   }
 
   // ===== 工作目录管理 =====
@@ -53,7 +53,7 @@ export class ShellIntegrationApi {
    * @param paneId 终端面板ID
    */
   async getPaneCwd(paneId: number): Promise<string | null> {
-    return await invoke<string | null>('get_pane_cwd', { paneId })
+    return await invoke<string | null>('shell_get_pane_cwd', { paneId })
   }
 
   // ===== 高级功能 =====

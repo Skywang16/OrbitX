@@ -16,27 +16,27 @@ pub mod types;
 
 // 重新导出核心类型和函数
 pub use commands::{
-    get_config, get_config_file_info, get_config_file_path, get_config_folder_path,
-    open_config_file, open_config_folder, reset_config_to_defaults, save_config,
-    subscribe_config_events, update_config, validate_config, ConfigManagerState,
+    config_get, config_get_file_info, config_get_file_path, config_get_folder_path,
+    config_open_file, config_open_folder, config_reset_to_defaults, config_save,
+    config_subscribe_events, config_update, config_validate, ConfigManagerState,
 };
 pub use defaults::*;
 pub use paths::ConfigPaths;
 pub use shortcuts::{
-    add_shortcut, detect_shortcuts_conflicts, execute_shortcut_action, export_shortcuts_config,
-    get_action_metadata, get_current_platform, get_registered_actions, get_shortcuts_config,
-    get_shortcuts_statistics, import_shortcuts_config, remove_shortcut,
-    reset_shortcuts_to_defaults, search_shortcuts, update_shortcut, update_shortcuts_config,
-    validate_key_combination, validate_shortcuts_config, ShortcutManagerState,
+    shortcuts_add, shortcuts_detect_conflicts, shortcuts_execute_action, shortcuts_export_config,
+    shortcuts_get_action_metadata, shortcuts_get_current_platform, shortcuts_get_registered_actions, shortcuts_get_config,
+    shortcuts_get_statistics, shortcuts_import_config, shortcuts_remove,
+    shortcuts_reset_to_defaults, shortcuts_search, shortcuts_update, shortcuts_update_config,
+    shortcuts_validate_key_combination, shortcuts_validate_config, ShortcutManagerState,
 };
 pub use terminal_commands::{
-    detect_system_shells, get_shell_info, get_terminal_config, reset_terminal_config_to_defaults,
-    update_cursor_config, update_terminal_behavior_config, update_terminal_config,
-    validate_terminal_config, validate_terminal_shell_path,
+    config_terminal_detect_system_shells, config_terminal_get_shell_info, config_terminal_get, config_terminal_reset_to_defaults,
+    config_terminal_update_cursor, config_terminal_update_behavior, config_terminal_update,
+    config_terminal_validate, config_terminal_validate_shell_path,
 };
 pub use theme::{
-    get_available_themes, get_current_theme, get_theme_config_status, handle_system_theme_change,
-    set_follow_system_theme, set_terminal_theme, SystemThemeDetector, ThemeConfigStatus,
+    theme_get_available, theme_get_current, theme_get_config_status, handle_system_theme_change,
+    theme_set_follow_system, theme_set_terminal, SystemThemeDetector, ThemeConfigStatus,
     ThemeIndex, ThemeIndexEntry, ThemeInfo, ThemeManager, ThemeManagerOptions, ThemeService,
     ThemeValidationResult, ThemeValidator,
 };

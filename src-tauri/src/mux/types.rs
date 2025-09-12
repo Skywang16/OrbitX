@@ -174,7 +174,7 @@ impl ShellConfig {
 
     pub fn with_default_shell() -> Self {
         Self {
-            program: ShellManager::get_default_shell().path,
+            program: ShellManager::terminal_get_default_shell().path,
             args: Vec::new(),
             working_directory: None,
             env: None,
@@ -308,7 +308,7 @@ impl ShellManager {
         let mut cache_guard = cache.lock().unwrap();
 
         // 检查缓存是否存在且未过期
-        let config = ConfigManager::get_config();
+        let config = ConfigManager::config_get();
         if let Some(entry) = cache_guard.as_mut() {
             if !entry.is_expired(config.shell_cache_ttl()) {
                 entry.access();
@@ -338,7 +338,7 @@ impl ShellManager {
         let mut cache_guard = cache.lock().unwrap();
 
         // 检查缓存是否存在且未过期
-        let config = ConfigManager::get_config();
+        let config = ConfigManager::config_get();
         if let Some(entry) = cache_guard.as_mut() {
             if !entry.is_expired(config.shell_cache_ttl()) {
                 entry.access();
@@ -374,7 +374,7 @@ impl ShellManager {
         let cache_guard = cache.lock().unwrap();
 
         if let Some(entry) = cache_guard.as_ref() {
-            let config = ConfigManager::get_config();
+            let config = ConfigManager::config_get();
             (
                 !entry.is_expired(config.shell_cache_ttl()),
                 Some(entry.timestamp),
@@ -394,7 +394,7 @@ impl ShellManager {
     fn detect_available_shells_internal() -> Vec<ShellInfo> {
         debug!("执行shell检测");
         let mut shells = Vec::new();
-        let config = ConfigManager::get_config();
+        let config = ConfigManager::config_get();
 
         // 从配置获取shell路径
         let shell_paths = if cfg!(windows) {
@@ -470,7 +470,7 @@ impl ShellManager {
     }
 
     /// 获取默认shell（公共接口，使用缓存）
-    pub fn get_default_shell() -> ShellInfo {
+    pub fn terminal_get_default_shell() -> ShellInfo {
         Self::get_cached_default_shell()
     }
 
@@ -565,7 +565,7 @@ impl ShellManager {
     }
 
     /// 根据名称查找shell（使用缓存）
-    pub fn find_shell_by_name(name: &str) -> Option<ShellInfo> {
+    pub fn terminal_find_shell_by_name(name: &str) -> Option<ShellInfo> {
         if name.trim().is_empty() {
             return None;
         }
@@ -587,7 +587,7 @@ impl ShellManager {
     }
 
     /// 根据路径查找shell（使用缓存）
-    pub fn find_shell_by_path(path: &str) -> Option<ShellInfo> {
+    pub fn terminal_find_shell_by_path(path: &str) -> Option<ShellInfo> {
         if path.trim().is_empty() {
             return None;
         }

@@ -4,29 +4,29 @@ import type { RawConversation, RawMessage, WebFetchRequest, WebFetchResponse } f
 
 class ConversationAPI {
   async createConversation(title?: string): Promise<number> {
-    return await invoke<number>('create_conversation', { title })
+    return await invoke<number>('ai_conversation_create', { title })
   }
 
   async getConversations(limit?: number, offset?: number): Promise<Conversation[]> {
-    const conversations = await invoke<RawConversation[]>('get_conversations', { limit, offset })
+    const conversations = await invoke<RawConversation[]>('ai_conversation_get_all', { limit, offset })
     return conversations.map(this.convertConversation)
   }
 
   async getConversation(conversationId: number): Promise<Conversation> {
-    const conversation = await invoke<RawConversation>('get_conversation', { conversationId })
+    const conversation = await invoke<RawConversation>('ai_conversation_get', { conversationId })
     return this.convertConversation(conversation)
   }
 
   async updateConversationTitle(conversationId: number, title: string): Promise<void> {
-    await invoke<void>('update_conversation_title', { conversationId, title })
+    await invoke<void>('ai_conversation_update_title', { conversationId, title })
   }
 
   async deleteConversation(conversationId: number): Promise<void> {
-    await invoke<void>('delete_conversation', { conversationId })
+    await invoke<void>('ai_conversation_delete', { conversationId })
   }
 
   async getCompressedContext(conversationId: number, upToMessageId?: number): Promise<Message[]> {
-    const messages = await invoke<RawMessage[]>('get_compressed_context', {
+    const messages = await invoke<RawMessage[]>('ai_conversation_get_compressed_context', {
       conversationId,
       upToMessageId,
     })
@@ -40,7 +40,7 @@ class ConversationAPI {
     paneId?: number,
     tagContext?: any
   ): Promise<string> {
-    const prompt = await invoke<string>('build_prompt_with_context', {
+    const prompt = await invoke<string>('ai_conversation_build_prompt_with_context', {
       conversationId,
       currentMessage,
       upToMessageId,
@@ -51,18 +51,18 @@ class ConversationAPI {
   }
 
   async saveMessage(conversationId: number, role: string, content: string): Promise<number> {
-    return await invoke<number>('save_message', { conversationId, role, content })
+    return await invoke<number>('ai_conversation_save_message', { conversationId, role, content })
   }
 
   async updateMessageContent(messageId: number, content: string): Promise<void> {
-    await invoke<void>('update_message_content', { messageId, content })
+    await invoke<void>('ai_conversation_update_message_content', { messageId, content })
   }
 
   async updateMessageSteps(messageId: number, steps: any[]): Promise<void> {
     const cleanedSteps = this.cleanStepsData(steps)
 
     const stepsJson = JSON.stringify(cleanedSteps)
-    await invoke<void>('update_message_steps', {
+    await invoke<void>('ai_conversation_update_message_steps', {
       messageId,
       stepsJson,
     })
@@ -73,7 +73,7 @@ class ConversationAPI {
     status?: 'pending' | 'streaming' | 'complete' | 'error',
     duration?: number
   ): Promise<void> {
-    await invoke<void>('update_message_status', {
+    await invoke<void>('ai_conversation_update_message_status', {
       messageId,
       status,
       durationMs: duration,
@@ -81,7 +81,7 @@ class ConversationAPI {
   }
 
   async truncateConversation(conversationId: number, truncateAfterMessageId: number): Promise<void> {
-    await invoke<void>('truncate_conversation', { conversationId, truncateAfterMessageId })
+    await invoke<void>('ai_conversation_truncate', { conversationId, truncateAfterMessageId })
   }
 
   private cleanStepsData(steps: any[]): any[] {
@@ -144,14 +144,14 @@ class ConversationAPI {
 }
 
 export async function webFetchHeadless(request: WebFetchRequest): Promise<WebFetchResponse> {
-  return await invoke<WebFetchResponse>('web_fetch_headless', { request })
+  return await invoke<WebFetchResponse>('network_web_fetch_headless', { request })
 }
 
 export class AiApi {
   private conversationAPI = new ConversationAPI()
 
   async getModels(): Promise<AIModelConfig[]> {
-    return await invoke<AIModelConfig[]>('get_ai_models')
+    return await invoke<AIModelConfig[]>('ai_models_get')
   }
 
   async addModel(model: Omit<AIModelConfig, 'id'>): Promise<AIModelConfig> {
@@ -163,29 +163,29 @@ export class AiApi {
       createdAt: new Date(),
       updatedAt: new Date(),
     }
-    const result = await invoke<AIModelConfig>('add_ai_model', { config: fullModel })
+    const result = await invoke<AIModelConfig>('ai_models_add', { config: fullModel })
     return result
   }
 
   async updateModel(model: AIModelConfig): Promise<void> {
     const { id: modelId, ...updates } = model
-    await invoke<void>('update_ai_model', { modelId, updates })
+    await invoke<void>('ai_models_update', { modelId, updates })
   }
 
   async deleteModel(id: string): Promise<void> {
-    await invoke<void>('remove_ai_model', { modelId: id })
+    await invoke<void>('ai_models_remove', { modelId: id })
   }
 
   async testConnectionWithConfig(config: AIModelConfig): Promise<string> {
-    return await invoke<string>('test_ai_connection_with_config', { config })
+    return await invoke<string>('ai_models_test_connection', { config })
   }
 
   async getUserPrefixPrompt(): Promise<string | null> {
-    return await invoke<string | null>('get_user_prefix_prompt')
+    return await invoke<string | null>('ai_conversation_get_user_prefix_prompt')
   }
 
   async setUserPrefixPrompt(prompt: string | null): Promise<void> {
-    await invoke<void>('set_user_prefix_prompt', { prompt })
+    await invoke<void>('ai_conversation_set_user_prefix_prompt', { prompt })
   }
 
   // embedding模型相关方法已移除，统一使用AI模型接口通过modelType区分

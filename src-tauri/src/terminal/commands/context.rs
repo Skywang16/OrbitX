@@ -28,7 +28,7 @@ use tracing::{debug, error, warn};
 /// * `Ok(TerminalContext)` - 终端上下文信息
 /// * `Err(String)` - 获取失败的错误信息
 #[tauri::command]
-pub async fn get_terminal_context(
+pub async fn terminal_context_get(
     pane_id: Option<u32>,
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<TerminalContext> {
@@ -74,7 +74,7 @@ pub async fn get_terminal_context(
 /// * `Ok(TerminalContext)` - 活跃终端的上下文信息
 /// * `Err(String)` - 获取失败的错误信息
 #[tauri::command]
-pub async fn get_active_terminal_context(
+pub async fn terminal_context_get_active(
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<TerminalContext> {
     debug!("获取活跃终端上下文");
@@ -153,7 +153,7 @@ mod tests {
         let pane_id = PaneId::new(123);
 
         // 设置活跃终端
-        state.registry.set_active_pane(pane_id).unwrap();
+        state.registry.terminal_context_set_active_pane(pane_id).unwrap();
 
         // 测试获取活跃终端上下文（应该失败，因为面板不存在于mux中）
         let result = state.context_service.get_active_context().await;

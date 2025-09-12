@@ -530,13 +530,13 @@ impl TerminalMux {
     }
 
     /// 获取面板的当前工作目录
-    pub fn get_pane_cwd(&self, pane_id: PaneId) -> Option<String> {
+    pub fn shell_get_pane_cwd(&self, pane_id: PaneId) -> Option<String> {
         self.shell_integration
             .get_current_working_directory(pane_id)
     }
 
     /// 更新面板的当前工作目录
-    pub fn update_pane_cwd(&self, pane_id: PaneId, cwd: String) {
+    pub fn shell_update_pane_cwd(&self, pane_id: PaneId, cwd: String) {
         self.shell_integration
             .update_current_working_directory(pane_id, cwd);
     }

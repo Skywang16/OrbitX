@@ -57,10 +57,10 @@ pub mod pane;
 pub mod stats;
 
 // 重新导出所有命令函数，保持向后兼容
-pub use cache::{clear_all_context_cache, invalidate_context_cache};
-pub use context::{get_active_terminal_context, get_terminal_context};
-pub use pane::{clear_active_pane, get_active_pane, is_pane_active, set_active_pane};
-pub use stats::{get_context_cache_stats, get_registry_stats};
+pub use cache::{terminal_context_clear_all_cache, terminal_context_invalidate_cache};
+pub use context::{terminal_context_get_active, terminal_context_get};
+pub use pane::{terminal_context_clear_active_pane, terminal_context_get_active_pane, terminal_context_is_pane_active, terminal_context_set_active_pane};
+pub use stats::{terminal_context_get_cache_stats, terminal_context_get_registry_stats};
 
 #[cfg(test)]
 mod tests {

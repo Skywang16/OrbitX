@@ -147,7 +147,7 @@ impl From<&PaneShellState> for FrontendPaneState {
 }
 
 #[tauri::command]
-pub async fn check_shell_integration_status(
+pub async fn shell_check_integration_status(
     pane_id: u32,
     state: State<'_, Arc<TerminalMux>>,
 ) -> TauriApiResult<bool> {
@@ -163,7 +163,7 @@ pub async fn check_shell_integration_status(
 }
 
 #[tauri::command]
-pub async fn setup_shell_integration(
+pub async fn shell_setup_integration(
     pane_id: u32,
     silent: Option<bool>,
     state: State<'_, Arc<TerminalMux>>,
@@ -185,7 +185,7 @@ pub async fn setup_shell_integration(
 }
 
 #[tauri::command]
-pub async fn get_pane_cwd(
+pub async fn shell_get_pane_cwd(
     pane_id: u32,
     state: State<'_, Arc<TerminalMux>>,
 ) -> TauriApiResult<Option<String>> {
@@ -196,12 +196,12 @@ pub async fn get_pane_cwd(
         return Ok(api_error!("shell.pane_not_exist"));
     }
 
-    let cwd = mux.get_pane_cwd(pane_id);
+    let cwd = mux.shell_get_pane_cwd(pane_id);
     Ok(api_success!(cwd))
 }
 
 #[tauri::command]
-pub async fn update_pane_cwd(
+pub async fn shell_update_pane_cwd(
     pane_id: u32,
     cwd: String,
     state: State<'_, Arc<TerminalMux>>,
@@ -213,7 +213,7 @@ pub async fn update_pane_cwd(
         return Ok(api_error!("shell.pane_not_exist"));
     }
 
-    mux.update_pane_cwd(pane_id, cwd);
+    mux.shell_update_pane_cwd(pane_id, cwd);
     Ok(api_success!())
 }
 
@@ -378,7 +378,7 @@ pub struct BackgroundCommandResult {
 
 /// 在后台执行命令，不显示在终端UI中
 #[tauri::command]
-pub async fn execute_background_command(
+pub async fn shell_execute_background_command(
     command: String,
     working_directory: Option<String>,
 ) -> TauriApiResult<BackgroundCommandResult> {

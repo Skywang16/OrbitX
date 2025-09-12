@@ -67,7 +67,7 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(())` - 设置成功
     /// * `Err(ContextError)` - 设置失败
-    pub fn set_active_pane(&self, pane_id: PaneId) -> AppResult<()> {
+    pub fn terminal_context_set_active_pane(&self, pane_id: PaneId) -> AppResult<()> {
         let old_pane_id = {
             let mut active_pane = self
                 .global_active_pane
@@ -106,7 +106,7 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Some(PaneId)` - 当前活跃的面板ID
     /// * `None` - 没有活跃的终端
-    pub fn get_active_pane(&self) -> Option<PaneId> {
+    pub fn terminal_context_get_active_pane(&self) -> Option<PaneId> {
         match self.global_active_pane.read() {
             Ok(active_pane) => *active_pane,
             Err(e) => {
@@ -121,7 +121,7 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(())` - 清除成功
     /// * `Err(ContextError)` - 清除失败
-    pub fn clear_active_pane(&self) -> AppResult<()> {
+    pub fn terminal_context_clear_active_pane(&self) -> AppResult<()> {
         let old_pane_id = {
             let mut active_pane = self
                 .global_active_pane
@@ -158,7 +158,7 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `true` - 该面板是活跃终端
     /// * `false` - 该面板不是活跃终端或获取状态失败
-    pub fn is_pane_active(&self, pane_id: PaneId) -> bool {
+    pub fn terminal_context_is_pane_active(&self, pane_id: PaneId) -> bool {
         match self.global_active_pane.read() {
             Ok(active_pane) => active_pane.map_or(false, |id| id == pane_id),
             Err(e) => {
@@ -195,8 +195,8 @@ impl ActiveTerminalContextRegistry {
         );
 
         // 如果这是主窗口或者没有全局活跃终端，也更新全局状态
-        if window_id.as_u32() == 0 || self.get_active_pane().is_none() {
-            self.set_active_pane(pane_id)?;
+        if window_id.as_u32() == 0 || self.terminal_context_get_active_pane().is_none() {
+            self.terminal_context_set_active_pane(pane_id)?;
         }
 
         Ok(())
@@ -246,8 +246,8 @@ impl ActiveTerminalContextRegistry {
             );
 
             // 如果移除的是当前全局活跃终端，清除全局状态
-            if self.get_active_pane() == Some(pane_id) {
-                self.clear_active_pane()?;
+            if self.terminal_context_get_active_pane() == Some(pane_id) {
+                self.terminal_context_clear_active_pane()?;
             }
         }
 
@@ -283,7 +283,7 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `RegistryStats` - 注册表统计信息
     pub fn get_stats(&self) -> RegistryStats {
-        let global_active = self.get_active_pane();
+        let global_active = self.terminal_context_get_active_pane();
         let window_count = self
             .window_active_panes
             .read()
@@ -337,18 +337,18 @@ mod tests {
         let pane_id = PaneId::new(1);
 
         // 初始状态应该没有活跃终端
-        assert_eq!(registry.get_active_pane(), None);
-        assert!(!registry.is_pane_active(pane_id));
+        assert_eq!(registry.terminal_context_get_active_pane(), None);
+        assert!(!registry.terminal_context_is_pane_active(pane_id));
 
         // 设置活跃终端
-        registry.set_active_pane(pane_id).unwrap();
-        assert_eq!(registry.get_active_pane(), Some(pane_id));
-        assert!(registry.is_pane_active(pane_id));
+        registry.terminal_context_set_active_pane(pane_id).unwrap();
+        assert_eq!(registry.terminal_context_get_active_pane(), Some(pane_id));
+        assert!(registry.terminal_context_is_pane_active(pane_id));
 
         // 清除活跃终端
-        registry.clear_active_pane().unwrap();
-        assert_eq!(registry.get_active_pane(), None);
-        assert!(!registry.is_pane_active(pane_id));
+        registry.terminal_context_clear_active_pane().unwrap();
+        assert_eq!(registry.terminal_context_get_active_pane(), None);
+        assert!(!registry.terminal_context_is_pane_active(pane_id));
     }
 
     #[tokio::test]
@@ -377,7 +377,7 @@ mod tests {
         let pane_id = PaneId::new(1);
 
         // 设置活跃终端应该触发事件
-        registry.set_active_pane(pane_id).unwrap();
+        registry.terminal_context_set_active_pane(pane_id).unwrap();
 
         // 接收事件
         let event = timeout(Duration::from_millis(100), receiver.recv())
@@ -409,14 +409,14 @@ mod tests {
                 let pane_id = PaneId::new(i);
 
                 // 设置活跃终端
-                registry_clone.set_active_pane(pane_id).unwrap();
+                registry_clone.terminal_context_set_active_pane(pane_id).unwrap();
 
                 // 检查状态
-                let active = registry_clone.get_active_pane();
-                let is_active = registry_clone.is_pane_active(pane_id);
+                let active = registry_clone.terminal_context_get_active_pane();
+                let is_active = registry_clone.terminal_context_is_pane_active(pane_id);
 
                 // 清除活跃终端
-                registry_clone.clear_active_pane().unwrap();
+                registry_clone.terminal_context_clear_active_pane().unwrap();
 
                 (active, is_active)
             });
@@ -431,7 +431,7 @@ mod tests {
         }
 
         // 最终状态应该是没有活跃终端
-        assert_eq!(registry.get_active_pane(), None);
+        assert_eq!(registry.terminal_context_get_active_pane(), None);
     }
 
     #[test]
@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(stats.window_active_pane_count, 0);
 
         // 设置活跃终端后的统计
-        registry.set_active_pane(pane_id).unwrap();
+        registry.terminal_context_set_active_pane(pane_id).unwrap();
         registry.set_window_active_pane(window_id, pane_id).unwrap();
 
         let stats = registry.get_stats();

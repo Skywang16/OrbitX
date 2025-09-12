@@ -10,7 +10,7 @@ use crate::utils::{ApiResponse, TauriApiResult};
 /// 批量窗口状态管理命令
 ///
 #[tauri::command]
-pub async fn manage_window_state<R: Runtime>(
+pub async fn window_manage_state<R: Runtime>(
     request: WindowStateBatchRequest,
     app: AppHandle<R>,
     state: State<'_, WindowState>,
@@ -150,7 +150,7 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
 
     // 获取平台信息
     let platform_info = state
-        .with_config_manager(|config| Ok(config.get_platform_info().cloned()))
+        .with_config_manager(|config| Ok(config.window_get_platform_info().cloned()))
         .await
         .to_tauri()?
         .unwrap_or_else(|| PlatformInfo {

@@ -22,47 +22,47 @@ import type {
  */
 export class ShortcutsApi {
   async getConfig(): Promise<ShortcutsConfig> {
-    return await invoke<ShortcutsConfig>('get_shortcuts_config')
+    return await invoke<ShortcutsConfig>('shortcuts_get_config')
   }
 
   async updateConfig(config: ShortcutsConfig): Promise<void> {
-    await invoke('update_shortcuts_config', { config: config })
+    await invoke('shortcuts_update_config', { config: config })
   }
 
   async validateConfig(config: ShortcutsConfig): Promise<ShortcutValidationResult> {
-    return await invoke<ShortcutValidationResult>('validate_shortcuts_config', {
+    return await invoke<ShortcutValidationResult>('shortcuts_validate_config', {
       config: config,
     })
   }
 
   async detectConflicts(config: ShortcutsConfig): Promise<ConflictDetectionResult> {
-    return await invoke<ConflictDetectionResult>('detect_shortcuts_conflicts', {
+    return await invoke<ConflictDetectionResult>('shortcuts_detect_conflicts', {
       config: config,
     })
   }
 
   async getCurrentPlatform(): Promise<Platform> {
-    return await invoke<Platform>('get_current_platform')
+    return await invoke<Platform>('shortcuts_get_current_platform')
   }
 
   async resetToDefaults(): Promise<void> {
-    await invoke('reset_shortcuts_to_defaults')
+    await invoke('shortcuts_reset_to_defaults')
   }
 
   async getStatistics(): Promise<ShortcutStatistics> {
-    return await invoke<ShortcutStatistics>('get_shortcuts_statistics')
+    return await invoke<ShortcutStatistics>('shortcuts_get_statistics')
   }
 
   async addShortcut(shortcut: ShortcutBinding): Promise<void> {
-    await invoke('add_shortcut', { binding: shortcut })
+    await invoke('shortcuts_add', { binding: shortcut })
   }
 
   async removeShortcut(index: number): Promise<ShortcutBinding> {
-    return await invoke<ShortcutBinding>('remove_shortcut', { index })
+    return await invoke<ShortcutBinding>('shortcuts_remove', { index })
   }
 
   async updateShortcut(index: number, shortcut: ShortcutBinding): Promise<void> {
-    await invoke('update_shortcut', { index, binding: shortcut })
+    await invoke('shortcuts_update', { index, binding: shortcut })
   }
 
   async executeAction(
@@ -71,7 +71,7 @@ export class ShortcutsApi {
     activeTerminalId?: string | null,
     metadata?: any
   ): Promise<any> {
-    return await invoke('execute_shortcut_action', {
+    return await invoke('shortcuts_execute_action', {
       action,
       keyCombination,
       activeTerminalId,

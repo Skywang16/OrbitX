@@ -36,7 +36,7 @@ export interface VectorSearchResult {
 
 export class CkApi {
   async search(params: CkSearchParams): Promise<VectorSearchResult[]> {
-    const raw = await invoke<CkSearchResultItemRaw[]>('ck_search', { params })
+    const raw = await invoke<CkSearchResultItemRaw[]>('code_search', { params })
     return raw.map(r => ({
       filePath: r.file_path,
       content: r.content,
@@ -49,26 +49,26 @@ export class CkApi {
   }
 
   async checkCurrentWorkspace(): Promise<WorkspaceIndex | null> {
-    return await invoke<WorkspaceIndex | null>('check_current_workspace_index')
+    return await invoke<WorkspaceIndex | null>('workspace_check_current_index')
   }
 
   async buildWorkspaceIndex(params: BuildWorkspaceIndexParams): Promise<WorkspaceIndex> {
-    return await invoke<WorkspaceIndex>('build_workspace_index', {
+    return await invoke<WorkspaceIndex>('workspace_build_index', {
       workspacePath: params.path,
       name: params.name,
     })
   }
 
   async getAllWorkspaces(): Promise<WorkspaceIndex[]> {
-    return await invoke<WorkspaceIndex[]>('get_all_workspace_indexes')
+    return await invoke<WorkspaceIndex[]>('workspace_get_all_indexes')
   }
 
   async deleteWorkspace(id: number): Promise<void> {
-    return await invoke<void>('delete_workspace_index', { id })
+    return await invoke<void>('workspace_delete_index', { id })
   }
 
   async refreshWorkspace(id: number): Promise<WorkspaceIndex> {
-    return await invoke<WorkspaceIndex>('refresh_workspace_index', { id })
+    return await invoke<WorkspaceIndex>('workspace_refresh_index', { id })
   }
 }
 

@@ -31,7 +31,7 @@
             stroke-linejoin="round"
           />
         </svg>
-        {{ t('storage.build_workspace_index') }}
+        {{ t('storage.workspace_build_index') }}
       </button>
 
       <!-- 构建进度 -->
@@ -161,31 +161,6 @@
   // 获取目录名称
   const getDirectoryName = (path: string): string => {
     return path.split('/').pop() || path
-  }
-
-  // 模拟构建进度更新（实际应该通过事件或轮询获取）
-  // const simulateBuildProgress = () => {
-    if (!isBuilding.value) return
-
-    const interval = setInterval(() => {
-      if (!isBuilding.value) {
-        clearInterval(interval)
-        return
-      }
-
-      buildProgress.value.percentage = Math.min(buildProgress.value.percentage + Math.random() * 10, 95)
-      buildProgress.value.processedFiles = Math.floor(
-        (buildProgress.value.percentage / 100) * buildProgress.value.totalFiles
-      )
-
-      // 模拟当前处理文件
-      const files = ['src/main.ts', 'package.json', 'README.md', 'src/components/App.vue']
-      buildProgress.value.currentFile = files[Math.floor(Math.random() * files.length)]
-
-      if (buildProgress.value.percentage >= 95) {
-        clearInterval(interval)
-      }
-    }, 500)
   }
 
   onMounted(() => {

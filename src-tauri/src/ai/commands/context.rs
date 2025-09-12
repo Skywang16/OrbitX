@@ -15,7 +15,7 @@ use tauri::State;
 
 /// 获取压缩上下文（供前端eko使用）
 #[tauri::command]
-pub async fn get_compressed_context(
+pub async fn ai_conversation_get_compressed_context(
     conversation_id: i64,
     up_to_message_id: Option<i64>,
     state: State<'_, AIManagerState>,
@@ -44,7 +44,7 @@ pub async fn get_compressed_context(
 
 /// 构建带智能上下文的prompt（专门用于AI推理）
 #[tauri::command]
-pub async fn build_prompt_with_context(
+pub async fn ai_conversation_build_prompt_with_context(
     conversation_id: i64,
     current_message: String,
     up_to_message_id: Option<i64>,

@@ -36,7 +36,7 @@ pub struct BuildWorkspaceIndexRequest {
 ///
 /// 自动检测当前活动终端的工作目录，并返回该目录的索引状态
 #[tauri::command]
-pub async fn check_current_workspace_index(
+pub async fn workspace_check_current_index(
     ai_state: State<'_, AIManagerState>,
     terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<Option<WorkspaceIndex>> {
@@ -87,7 +87,7 @@ pub async fn check_current_workspace_index(
 ///
 /// 为指定路径构建向量索引，如果不指定路径则使用当前终端工作目录
 #[tauri::command]
-pub async fn build_workspace_index(
+pub async fn workspace_build_index(
     request: BuildWorkspaceIndexRequest,
     ai_state: State<'_, AIManagerState>,
     terminal_state: State<'_, TerminalContextState>,
@@ -132,7 +132,7 @@ pub async fn build_workspace_index(
 
     // 构建索引
     match index_service
-        .build_workspace_index(&workspace_path, request.name)
+        .workspace_build_index(&workspace_path, request.name)
         .await
     {
         Ok(workspace_index) => {
@@ -155,7 +155,7 @@ pub async fn build_workspace_index(
 /// 返回系统中所有已建立的工作区索引信息，按更新时间倒序排列
 /// 当发生错误时返回空数组，确保前端能正常处理
 #[tauri::command]
-pub async fn get_all_workspace_indexes(
+pub async fn workspace_get_all_indexes(
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<Vec<WorkspaceIndex>> {
     debug!("开始获取所有工作区索引列表");
@@ -182,7 +182,7 @@ pub async fn get_all_workspace_indexes(
 ///
 /// 删除指定ID的工作区索引，包括数据库记录和磁盘文件
 #[tauri::command]
-pub async fn delete_workspace_index(
+pub async fn workspace_delete_index(
     id: i32,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<EmptyData> {
@@ -197,7 +197,7 @@ pub async fn delete_workspace_index(
     let index_service = WorkspaceIndexService::new(Arc::clone(&state.repositories));
 
     // 删除索引
-    match index_service.delete_workspace_index(id).await {
+    match index_service.workspace_delete_index(id).await {
         Ok(_) => {
             info!("工作区索引删除成功: id={}", id);
             Ok(api_success!())
@@ -214,7 +214,7 @@ pub async fn delete_workspace_index(
 ///
 /// 重新构建指定ID的工作区索引
 #[tauri::command]
-pub async fn refresh_workspace_index(
+pub async fn workspace_refresh_index(
     id: i32,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<WorkspaceIndex> {
@@ -229,7 +229,7 @@ pub async fn refresh_workspace_index(
     let index_service = WorkspaceIndexService::new(Arc::clone(&state.repositories));
 
     // 刷新索引
-    match index_service.refresh_workspace_index(id).await {
+    match index_service.workspace_refresh_index(id).await {
         Ok(workspace_index) => {
             info!(
                 "工作区索引刷新任务已启动: id={}, path={}",
@@ -281,7 +281,7 @@ mod tests {
     #[tokio::test]
     async fn test_check_current_workspace_index_no_index() {
         let state = create_test_state().await;
-        let result = check_current_workspace_index(State::from(&state)).await;
+        let result = workspace_check_current_index(State::from(&state)).await;
 
         assert!(result.is_ok());
         if let Ok(response) = result {
@@ -294,7 +294,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_all_workspace_indexes_empty() {
         let state = create_test_state().await;
-        let result = get_all_workspace_indexes(State::from(&state)).await;
+        let result = workspace_get_all_indexes(State::from(&state)).await;
 
         assert!(result.is_ok());
         if let Ok(response) = result {
@@ -310,7 +310,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_string_lossy().to_string();
 
-        let result = build_workspace_index(
+        let result = workspace_build_index(
             Some(temp_path.clone()),
             Some("Test Workspace".to_string()),
             State::from(&state),
@@ -329,7 +329,7 @@ mod tests {
     #[tokio::test]
     async fn test_build_workspace_index_empty_path() {
         let state = create_test_state().await;
-        let result = build_workspace_index(Some("".to_string()), None, State::from(&state)).await;
+        let result = workspace_build_index(Some("".to_string()), None, State::from(&state)).await;
 
         assert!(result.is_ok());
         if let Ok(response) = result {
@@ -344,7 +344,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_string_lossy().to_string();
 
-        let result = build_workspace_index(
+        let result = workspace_build_index(
             Some(temp_path),
             Some("   ".to_string()), // 空白字符串
             State::from(&state),
@@ -363,7 +363,7 @@ mod tests {
         let state = create_test_state().await;
         let nonexistent_path = "/nonexistent/path/that/should/not/exist";
 
-        let result = build_workspace_index(
+        let result = workspace_build_index(
             Some(nonexistent_path.to_string()),
             None,
             State::from(&state),
@@ -380,7 +380,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_workspace_index_invalid_id() {
         let state = create_test_state().await;
-        let result = delete_workspace_index(-1, State::from(&state)).await;
+        let result = workspace_delete_index(-1, State::from(&state)).await;
 
         assert!(result.is_ok());
         if let Ok(response) = result {
@@ -392,7 +392,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_workspace_index_zero_id() {
         let state = create_test_state().await;
-        let result = delete_workspace_index(0, State::from(&state)).await;
+        let result = workspace_delete_index(0, State::from(&state)).await;
 
         assert!(result.is_ok());
         if let Ok(response) = result {
@@ -404,7 +404,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_workspace_index_nonexistent() {
         let state = create_test_state().await;
-        let result = delete_workspace_index(999, State::from(&state)).await;
+        let result = workspace_delete_index(999, State::from(&state)).await;
 
         assert!(result.is_ok());
         if let Ok(response) = result {
@@ -416,7 +416,7 @@ mod tests {
     #[tokio::test]
     async fn test_refresh_workspace_index_invalid_id() {
         let state = create_test_state().await;
-        let result = refresh_workspace_index(0, State::from(&state)).await;
+        let result = workspace_refresh_index(0, State::from(&state)).await;
 
         assert!(result.is_ok());
         if let Ok(response) = result {
@@ -428,7 +428,7 @@ mod tests {
     #[tokio::test]
     async fn test_refresh_workspace_index_negative_id() {
         let state = create_test_state().await;
-        let result = refresh_workspace_index(-5, State::from(&state)).await;
+        let result = workspace_refresh_index(-5, State::from(&state)).await;
 
         assert!(result.is_ok());
         if let Ok(response) = result {
@@ -440,7 +440,7 @@ mod tests {
     #[tokio::test]
     async fn test_refresh_workspace_index_nonexistent() {
         let state = create_test_state().await;
-        let result = refresh_workspace_index(999, State::from(&state)).await;
+        let result = workspace_refresh_index(999, State::from(&state)).await;
 
         assert!(result.is_ok());
         if let Ok(response) = result {
@@ -454,7 +454,7 @@ mod tests {
         let state = create_test_state().await;
 
         // 测试使用当前目录（不传path参数）
-        let result = build_workspace_index(
+        let result = workspace_build_index(
             None,
             Some("Current Dir Test".to_string()),
             State::from(&state),

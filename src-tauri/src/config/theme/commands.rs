@@ -50,11 +50,11 @@ pub struct ThemeConfigStatus {
 
 /// 获取当前主题配置状态
 #[tauri::command]
-pub async fn get_theme_config_status(
+pub async fn theme_get_config_status(
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
 ) -> TauriApiResult<ThemeConfigStatus> {
-    let config = match config_manager.get_config().await {
+    let config = match config_manager.config_get().await {
         Ok(config) => config,
         Err(_) => return Ok(api_error!("config.get_failed")),
     };
@@ -90,11 +90,11 @@ pub async fn get_theme_config_status(
 
 /// 获取当前主题数据
 #[tauri::command]
-pub async fn get_current_theme(
+pub async fn theme_get_current(
     config_manager: State<'_, Arc<TomlConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
 ) -> TauriApiResult<Theme> {
-    let config = match config_manager.get_config().await {
+    let config = match config_manager.config_get().await {
         Ok(config) => config,
         Err(_) => return Ok(api_error!("config.get_failed")),
     };
@@ -113,7 +113,7 @@ pub async fn get_current_theme(
 
 /// 设置终端主题（手动模式）
 #[tauri::command]
-pub async fn set_terminal_theme<R: Runtime>(
+pub async fn theme_set_terminal<R: Runtime>(
     theme_name: String,
     app_handle: AppHandle<R>,
     config_manager: State<'_, Arc<TomlConfigManager>>,
@@ -126,7 +126,7 @@ pub async fn set_terminal_theme<R: Runtime>(
 
     // 更新配置
     if let Err(_) = config_manager
-        .update_config(|config| {
+        .config_update(|config| {
             config.appearance.theme_config.terminal_theme = theme_name.clone();
             config.appearance.theme_config.follow_system = false; // 切换到手动模式
             Ok(())
@@ -146,7 +146,7 @@ pub async fn set_terminal_theme<R: Runtime>(
 
 /// 设置跟随系统主题
 #[tauri::command]
-pub async fn set_follow_system_theme<R: Runtime>(
+pub async fn theme_set_follow_system<R: Runtime>(
     follow_system: bool,
     light_theme: Option<String>,
     dark_theme: Option<String>,
@@ -169,7 +169,7 @@ pub async fn set_follow_system_theme<R: Runtime>(
 
     // 更新配置
     if let Err(_) = config_manager
-        .update_config(|config| {
+        .config_update(|config| {
             config.appearance.theme_config.follow_system = follow_system;
 
             if let Some(light) = light_theme {
@@ -190,7 +190,7 @@ pub async fn set_follow_system_theme<R: Runtime>(
     // 如果启用跟随系统主题，需要获取当前应该使用的主题并发送事件
     if follow_system {
         // 获取当前系统主题状态
-        let config = match config_manager.get_config().await {
+        let config = match config_manager.config_get().await {
             Ok(config) => config,
             Err(_) => return Ok(api_error!("config.get_failed")),
         };
@@ -209,7 +209,7 @@ pub async fn set_follow_system_theme<R: Runtime>(
 
 /// 获取所有可用主题列表
 #[tauri::command]
-pub async fn get_available_themes(
+pub async fn theme_get_available(
     theme_service: State<'_, Arc<ThemeService>>,
 ) -> TauriApiResult<Vec<ThemeInfo>> {
     let theme_list = match theme_service.theme_manager().list_themes().await {
@@ -239,7 +239,7 @@ pub async fn handle_system_theme_change<R: tauri::Runtime>(
     let config_manager = app_handle.state::<Arc<TomlConfigManager>>();
     let theme_service = app_handle.state::<Arc<ThemeService>>();
 
-    let config = config_manager.get_config().await?;
+    let config = config_manager.config_get().await?;
 
     // 只有在跟随系统主题时才处理
     if config.appearance.theme_config.follow_system {

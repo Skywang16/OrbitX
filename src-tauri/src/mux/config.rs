@@ -397,7 +397,7 @@ impl ConfigManager {
     }
 
     /// 获取配置的只读副本
-    pub fn get_config() -> TerminalSystemConfig {
+    pub fn config_get() -> TerminalSystemConfig {
         let config_guard = Self::get();
         let config = config_guard
             .lock()
@@ -406,7 +406,7 @@ impl ConfigManager {
     }
 
     /// 更新配置
-    pub fn update_config<F>(updater: F) -> Result<(), Box<dyn std::error::Error>>
+    pub fn config_update<F>(updater: F) -> Result<(), Box<dyn std::error::Error>>
     where
         F: FnOnce(&mut TerminalSystemConfig),
     {

@@ -64,7 +64,7 @@ impl TerminalState {
 /// 创建新终端会话
 ///
 #[tauri::command]
-pub async fn create_terminal<R: Runtime>(
+pub async fn terminal_create<R: Runtime>(
     rows: u16,
     cols: u16,
     cwd: Option<String>,
@@ -116,7 +116,7 @@ pub async fn create_terminal<R: Runtime>(
 /// 向终端写入数据
 ///
 #[tauri::command]
-pub async fn write_to_terminal(
+pub async fn terminal_write(
     pane_id: u32,
     data: String,
     _state: State<'_, TerminalState>,
@@ -148,7 +148,7 @@ pub async fn write_to_terminal(
 /// 调整终端大小
 ///
 #[tauri::command]
-pub async fn resize_terminal(
+pub async fn terminal_resize(
     pane_id: u32,
     rows: u16,
     cols: u16,
@@ -177,7 +177,7 @@ pub async fn resize_terminal(
 /// 关闭终端会话
 ///
 #[tauri::command]
-pub async fn close_terminal(
+pub async fn terminal_close(
     pane_id: u32,
     _state: State<'_, TerminalState>,
 ) -> TauriApiResult<EmptyData> {
@@ -218,7 +218,7 @@ pub async fn close_terminal(
 /// 获取终端列表
 ///
 #[tauri::command]
-pub async fn list_terminals(_state: State<'_, TerminalState>) -> TauriApiResult<Vec<u32>> {
+pub async fn terminal_list(_state: State<'_, TerminalState>) -> TauriApiResult<Vec<u32>> {
     debug!("获取终端列表");
 
     let mux = get_mux();
@@ -234,7 +234,7 @@ pub async fn list_terminals(_state: State<'_, TerminalState>) -> TauriApiResult<
 /// 获取终端缓冲区内容
 ///
 #[tauri::command]
-pub async fn get_terminal_buffer(pane_id: u32) -> TauriApiResult<String> {
+pub async fn terminal_get_buffer(pane_id: u32) -> TauriApiResult<String> {
     debug!("开始获取终端缓冲区内容: ID={}", pane_id);
 
     use crate::completion::output_analyzer::OutputAnalyzer;
@@ -259,7 +259,7 @@ pub async fn get_terminal_buffer(pane_id: u32) -> TauriApiResult<String> {
 /// 设置终端缓冲区内容
 ///
 #[tauri::command]
-pub async fn set_terminal_buffer(pane_id: u32, content: String) -> TauriApiResult<EmptyData> {
+pub async fn terminal_set_buffer(pane_id: u32, content: String) -> TauriApiResult<EmptyData> {
     debug!(
         "开始设置终端缓冲区内容: ID={}, 内容长度={}",
         pane_id,
@@ -280,7 +280,7 @@ pub async fn set_terminal_buffer(pane_id: u32, content: String) -> TauriApiResul
 /// 获取系统可用的shell列表
 ///
 #[tauri::command]
-pub async fn get_available_shells() -> TauriApiResult<Vec<ShellInfo>> {
+pub async fn terminal_get_available_shells() -> TauriApiResult<Vec<ShellInfo>> {
     debug!("获取可用shell列表");
 
     let shells = ShellManager::detect_available_shells();
@@ -300,10 +300,10 @@ pub async fn get_available_shells() -> TauriApiResult<Vec<ShellInfo>> {
 /// 获取系统默认shell信息
 ///
 #[tauri::command]
-pub async fn get_default_shell() -> TauriApiResult<ShellInfo> {
+pub async fn terminal_get_default_shell() -> TauriApiResult<ShellInfo> {
     debug!("获取系统默认shell");
 
-    let default_shell = ShellManager::get_default_shell();
+    let default_shell = ShellManager::terminal_get_default_shell();
 
     debug!(
         "获取默认shell成功: {} -> {}",
@@ -321,7 +321,7 @@ pub async fn get_default_shell() -> TauriApiResult<ShellInfo> {
 /// 验证shell路径是否有效
 ///
 #[tauri::command]
-pub async fn validate_shell_path(path: String) -> TauriApiResult<bool> {
+pub async fn terminal_validate_shell_path(path: String) -> TauriApiResult<bool> {
     // 参数验证
     validate_non_empty_string(&path, "Shell路径")
         .context("Shell路径验证失败")
@@ -337,7 +337,7 @@ pub async fn validate_shell_path(path: String) -> TauriApiResult<bool> {
 /// 使用指定shell创建终端
 ///
 #[tauri::command]
-pub async fn create_terminal_with_shell<R: Runtime>(
+pub async fn terminal_create_with_shell<R: Runtime>(
     shell_name: Option<String>,
     rows: u16,
     cols: u16,
@@ -354,7 +354,7 @@ pub async fn create_terminal_with_shell<R: Runtime>(
     let shell_info = match shell_name {
         Some(name) => {
             debug!("查找指定shell: {}", name);
-            match ShellManager::find_shell_by_name(&name) {
+            match ShellManager::terminal_find_shell_by_name(&name) {
                 Some(shell) => shell,
                 None => {
                     error!("未找到指定shell: {}", name);
@@ -364,7 +364,7 @@ pub async fn create_terminal_with_shell<R: Runtime>(
         }
         None => {
             debug!("使用默认shell");
-            ShellManager::get_default_shell()
+            ShellManager::terminal_get_default_shell()
         }
     };
 
@@ -398,7 +398,7 @@ pub async fn create_terminal_with_shell<R: Runtime>(
 /// 根据名称查找shell
 ///
 #[tauri::command]
-pub async fn find_shell_by_name(shell_name: String) -> TauriApiResult<Option<ShellInfo>> {
+pub async fn terminal_find_shell_by_name(shell_name: String) -> TauriApiResult<Option<ShellInfo>> {
     debug!("查找shell: {}", shell_name);
 
     // 参数验证
@@ -406,7 +406,7 @@ pub async fn find_shell_by_name(shell_name: String) -> TauriApiResult<Option<She
         return Ok(api_error!("common.empty_content"));
     }
 
-    match std::panic::catch_unwind(|| ShellManager::find_shell_by_name(&shell_name)) {
+    match std::panic::catch_unwind(|| ShellManager::terminal_find_shell_by_name(&shell_name)) {
         Ok(shell_info) => {
             match &shell_info {
                 Some(shell) => {
@@ -427,7 +427,7 @@ pub async fn find_shell_by_name(shell_name: String) -> TauriApiResult<Option<She
 /// 根据路径查找shell
 ///
 #[tauri::command]
-pub async fn find_shell_by_path(shell_path: String) -> TauriApiResult<Option<ShellInfo>> {
+pub async fn terminal_find_shell_by_path(shell_path: String) -> TauriApiResult<Option<ShellInfo>> {
     debug!("根据路径查找shell: {}", shell_path);
 
     // 参数验证
@@ -435,7 +435,7 @@ pub async fn find_shell_by_path(shell_path: String) -> TauriApiResult<Option<She
         return Ok(api_error!("common.empty_content"));
     }
 
-    match std::panic::catch_unwind(|| ShellManager::find_shell_by_path(&shell_path)) {
+    match std::panic::catch_unwind(|| ShellManager::terminal_find_shell_by_path(&shell_path)) {
         Ok(shell_info) => {
             match &shell_info {
                 Some(shell) => {
@@ -459,7 +459,7 @@ pub async fn find_shell_by_path(shell_path: String) -> TauriApiResult<Option<She
 /// 获取Shell管理器统计信息
 ///
 #[tauri::command]
-pub async fn get_shell_stats() -> TauriApiResult<ShellManagerStats> {
+pub async fn terminal_get_shell_stats() -> TauriApiResult<ShellManagerStats> {
     debug!("获取Shell管理器统计信息");
 
     match std::panic::catch_unwind(|| {
@@ -486,7 +486,7 @@ pub async fn get_shell_stats() -> TauriApiResult<ShellManagerStats> {
 /// 初始化Shell管理器
 ///
 #[tauri::command]
-pub async fn initialize_shell_manager() -> TauriApiResult<EmptyData> {
+pub async fn terminal_initialize_shell_manager() -> TauriApiResult<EmptyData> {
     debug!("初始化Shell管理器");
 
     // ShellManager 不需要单独的初始化方法，创建实例时自动初始化
@@ -508,7 +508,7 @@ pub async fn initialize_shell_manager() -> TauriApiResult<EmptyData> {
 /// 验证Shell管理器状态
 ///
 #[tauri::command]
-pub async fn validate_shell_manager() -> TauriApiResult<EmptyData> {
+pub async fn terminal_validate_shell_manager() -> TauriApiResult<EmptyData> {
     debug!("验证Shell管理器状态");
 
     // ShellManager 不需要单独的验证方法，创建实例时自动验证

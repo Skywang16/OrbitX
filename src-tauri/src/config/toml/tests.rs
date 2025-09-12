@@ -27,7 +27,7 @@ mod tests {
         let manager = TomlConfigManager::new().await.unwrap();
 
         // 验证管理器创建成功
-        let config = manager.get_config().await.unwrap();
+        let config = manager.config_get().await.unwrap();
         assert_eq!(config.version, "1.0.0");
         assert_eq!(config.app.language, "zh-CN");
     }
@@ -51,7 +51,7 @@ mod tests {
         config.app.language = "en-US".to_string();
         config.appearance.font.size = 16.0;
 
-        manager.save_config(&config).await.unwrap();
+        manager.config_save(&config).await.unwrap();
         let loaded_config = manager.load_config().await.unwrap();
 
         assert_eq!(loaded_config.app.language, "en-US");
@@ -71,7 +71,7 @@ mod tests {
             .await
             .unwrap();
 
-        let config = manager.get_config().await.unwrap();
+        let config = manager.config_get().await.unwrap();
         assert_eq!(config.app.language, "en-US");
 
         // 更新字体大小
@@ -80,7 +80,7 @@ mod tests {
             .await
             .unwrap();
 
-        let config = manager.get_config().await.unwrap();
+        let config = manager.config_get().await.unwrap();
         assert_eq!(config.appearance.font.size, 18.0);
     }
 
@@ -90,17 +90,17 @@ mod tests {
 
         // 测试有效配置
         let valid_config = create_default_config();
-        assert!(manager.validate_config(&valid_config).is_ok());
+        assert!(manager.config_validate(&valid_config).is_ok());
 
         // 测试无效配置
         let mut invalid_config = create_default_config();
         invalid_config.app.language = "invalid-lang".to_string();
-        assert!(manager.validate_config(&invalid_config).is_err());
+        assert!(manager.config_validate(&invalid_config).is_err());
 
         // 测试字体大小超出范围
         let mut invalid_font_config = create_default_config();
         invalid_font_config.appearance.font.size = 100.0;
-        assert!(manager.validate_config(&invalid_font_config).is_err());
+        assert!(manager.config_validate(&invalid_font_config).is_err());
     }
 
     #[tokio::test]
@@ -122,7 +122,7 @@ mod tests {
 
         // 保存配置应该触发事件
         let config = create_default_config();
-        manager.save_config(&config).await.unwrap();
+        manager.config_save(&config).await.unwrap();
 
         let event = tokio::time::timeout(Duration::from_millis(100), event_receiver.recv())
             .await
@@ -172,17 +172,17 @@ mod tests {
         // 测试验证失败的配置
         let mut invalid_config = create_default_config();
         invalid_config.app.language = "invalid-language".to_string();
-        let result = manager.validate_config(&invalid_config);
+        let result = manager.config_validate(&invalid_config);
         assert!(result.is_err(), "无效配置应该验证失败");
 
         // 测试字体大小超出范围
         invalid_config.appearance.font.size = 1000.0;
-        let result = manager.validate_config(&invalid_config);
+        let result = manager.config_validate(&invalid_config);
         assert!(result.is_err(), "字体大小超出范围应该验证失败");
 
         // 测试滚动缓冲区超出范围
         invalid_config.terminal.scrollback = 50;
-        let result = manager.validate_config(&invalid_config);
+        let result = manager.config_validate(&invalid_config);
         assert!(result.is_err(), "滚动缓冲区超出范围应该验证失败");
     }
 }

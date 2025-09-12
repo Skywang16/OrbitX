@@ -47,7 +47,7 @@ impl ShortcutManager {
         Ok(manager)
     }
 
-    pub async fn get_config(&self) -> AppResult<ShortcutsConfig> {
+    pub async fn config_get(&self) -> AppResult<ShortcutsConfig> {
         debug!("获取快捷键配置");
 
         {
@@ -59,10 +59,10 @@ impl ShortcutManager {
         self.reload_config().await
     }
 
-    pub async fn update_config(&self, new_config: ShortcutsConfig) -> AppResult<()> {
+    pub async fn config_update(&self, new_config: ShortcutsConfig) -> AppResult<()> {
         debug!("更新快捷键配置");
 
-        let validation_result = self.validate_config(&new_config).await?;
+        let validation_result = self.config_validate(&new_config).await?;
         if !validation_result.is_valid {
             let error_messages: Vec<String> = validation_result
                 .errors
@@ -78,7 +78,7 @@ impl ShortcutManager {
         }
 
         self.config_manager
-            .update_config(|config| {
+            .config_update(|config| {
                 config.shortcuts = new_config.clone();
                 Ok(())
             })
@@ -95,10 +95,10 @@ impl ShortcutManager {
         Ok(())
     }
 
-    pub async fn add_shortcut(&self, binding: ShortcutBinding) -> AppResult<()> {
+    pub async fn shortcuts_add(&self, binding: ShortcutBinding) -> AppResult<()> {
         debug!("添加快捷键: {:?}", binding);
 
-        let mut config = self.get_config().await?;
+        let mut config = self.config_get().await?;
 
         let key_combo = KeyCombination::from_binding(&binding);
         if self.has_conflict_in_config(&config, &key_combo).await {
@@ -107,36 +107,36 @@ impl ShortcutManager {
 
         self.validate_single_binding(&binding).await?;
         config.push(binding);
-        self.update_config(config).await?;
+        self.config_update(config).await?;
 
         info!("快捷键添加成功");
         Ok(())
     }
 
-    pub async fn remove_shortcut(&self, index: usize) -> AppResult<ShortcutBinding> {
+    pub async fn shortcuts_remove(&self, index: usize) -> AppResult<ShortcutBinding> {
         debug!("删除快捷键: 索引 {}", index);
 
-        let mut config = self.get_config().await?;
+        let mut config = self.config_get().await?;
 
         if index >= config.len() {
             bail!("快捷键索引超出范围: {}", index);
         }
 
         let removed_binding = config.remove(index);
-        self.update_config(config).await?;
+        self.config_update(config).await?;
 
         info!("快捷键删除成功");
         Ok(removed_binding)
     }
 
-    pub async fn update_shortcut(
+    pub async fn shortcuts_update(
         &self,
         index: usize,
         new_binding: ShortcutBinding,
     ) -> AppResult<()> {
         debug!("更新快捷键: 索引 {}, 新绑定 {:?}", index, new_binding);
 
-        let mut config = self.get_config().await?;
+        let mut config = self.config_get().await?;
         self.validate_single_binding(&new_binding).await?;
 
         if index >= config.len() {
@@ -144,7 +144,7 @@ impl ShortcutManager {
         }
 
         config[index] = new_binding;
-        self.update_config(config).await?;
+        self.config_update(config).await?;
 
         info!("快捷键更新成功");
         Ok(())
@@ -154,13 +154,13 @@ impl ShortcutManager {
         debug!("重置快捷键配置到默认值");
 
         let default_config = crate::config::defaults::create_default_shortcuts_config();
-        self.update_config(default_config).await?;
+        self.config_update(default_config).await?;
 
         info!("快捷键配置重置成功");
         Ok(())
     }
 
-    pub async fn validate_config(&self, config: &ShortcutsConfig) -> AppResult<ValidationResult> {
+    pub async fn config_validate(&self, config: &ShortcutsConfig) -> AppResult<ValidationResult> {
         debug!("验证快捷键配置");
 
         let mut errors = Vec::new();
@@ -258,7 +258,7 @@ impl ShortcutManager {
     pub async fn get_statistics(&self) -> AppResult<ShortcutStatistics> {
         debug!("获取快捷键统计信息");
 
-        let config = self.get_config().await?;
+        let config = self.config_get().await?;
         let total_count = config.len();
         let mut modifier_counts: HashMap<String, usize> = HashMap::new();
         for binding in config.iter() {
@@ -285,10 +285,10 @@ impl ShortcutManager {
         })
     }
 
-    pub async fn search_shortcuts(&self, options: SearchOptions) -> AppResult<SearchResult> {
+    pub async fn shortcuts_search(&self, options: SearchOptions) -> AppResult<SearchResult> {
         debug!("搜索快捷键: {:?}", options);
 
-        let config = self.get_config().await?;
+        let config = self.config_get().await?;
         let mut matches = Vec::new();
 
         for (index, binding) in config.iter().enumerate() {
@@ -388,7 +388,7 @@ impl ShortcutManager {
     // 私有方法
 
     async fn reload_config(&self) -> AppResult<ShortcutsConfig> {
-        let config = self.config_manager.get_config().await?;
+        let config = self.config_manager.config_get().await?;
         let shortcuts_config = config.shortcuts;
 
         {

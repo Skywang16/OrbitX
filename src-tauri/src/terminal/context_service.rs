@@ -125,7 +125,7 @@ impl TerminalContextService {
     pub async fn get_active_context(&self) -> AppResult<TerminalContext> {
         let active_pane_id = self
             .registry
-            .get_active_pane()
+            .terminal_context_get_active_pane()
             .ok_or(anyhow!("没有活跃的终端"))?;
 
         debug!("获取活跃终端上下文: pane_id={:?}", active_pane_id);
@@ -213,10 +213,10 @@ impl TerminalContextService {
     pub async fn get_active_cwd(&self) -> AppResult<String> {
         let active_pane_id = self
             .registry
-            .get_active_pane()
+            .terminal_context_get_active_pane()
             .ok_or(anyhow!("没有活跃的终端"))?;
 
-        self.get_pane_cwd(active_pane_id).await
+        self.shell_get_pane_cwd(active_pane_id).await
     }
 
     /// 获取指定面板的当前工作目录
@@ -227,7 +227,7 @@ impl TerminalContextService {
     /// # Returns
     /// * `Ok(String)` - 当前工作目录路径
     /// * `Err(anyhow::Error)` - 获取失败的错误信息
-    pub async fn get_pane_cwd(&self, pane_id: PaneId) -> AppResult<String> {
+    pub async fn shell_get_pane_cwd(&self, pane_id: PaneId) -> AppResult<String> {
         // 检查面板是否存在
         if !self.terminal_mux.pane_exists(pane_id) {
             return Err(anyhow!("面板不存在: {}", pane_id));
@@ -235,7 +235,7 @@ impl TerminalContextService {
 
         // 从Shell集成管理器获取CWD
         self.terminal_mux
-            .get_pane_cwd(pane_id)
+            .shell_get_pane_cwd(pane_id)
             .ok_or_else(|| anyhow!("无法获取当前工作目录"))
     }
 
@@ -247,7 +247,7 @@ impl TerminalContextService {
     pub async fn get_active_shell_type(&self) -> AppResult<ShellType> {
         let active_pane_id = self
             .registry
-            .get_active_pane()
+            .terminal_context_get_active_pane()
             .ok_or(anyhow!("没有活跃的终端"))?;
 
         self.get_pane_shell_type(active_pane_id).await
@@ -336,10 +336,10 @@ impl TerminalContextService {
         let mut context = TerminalContext::new(pane_id);
 
         // 设置活跃状态
-        context.set_active(self.registry.is_pane_active(pane_id));
+        context.set_active(self.registry.terminal_context_is_pane_active(pane_id));
 
         // 获取当前工作目录
-        if let Some(cwd) = self.terminal_mux.get_pane_cwd(pane_id) {
+        if let Some(cwd) = self.terminal_mux.shell_get_pane_cwd(pane_id) {
             context.update_cwd(cwd);
         }
 
@@ -678,11 +678,11 @@ mod tests {
         let pane_id = PaneId::new(1);
 
         // 设置活跃终端
-        registry.set_active_pane(pane_id).unwrap();
+        registry.terminal_context_set_active_pane(pane_id).unwrap();
 
         // 验证活跃终端状态
-        assert_eq!(registry.get_active_pane(), Some(pane_id));
-        assert!(registry.is_pane_active(pane_id));
+        assert_eq!(registry.terminal_context_get_active_pane(), Some(pane_id));
+        assert!(registry.terminal_context_is_pane_active(pane_id));
 
         // 测试获取活跃终端上下文（应该失败，因为面板不存在）
         let result = service.get_active_context().await;
@@ -761,7 +761,7 @@ mod tests {
 
         // 测试获取不存在面板的CWD
         let non_existent_pane = PaneId::new(999);
-        let result = service.get_pane_cwd(non_existent_pane).await;
+        let result = service.shell_get_pane_cwd(non_existent_pane).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("面板不存在"));
     }

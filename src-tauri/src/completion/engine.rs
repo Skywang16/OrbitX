@@ -117,7 +117,7 @@ impl CompletionEngine {
     }
 
     /// 获取补全建议
-    pub async fn get_completions(
+    pub async fn completion_get(
         &self,
         context: &CompletionContext,
     ) -> AppResult<CompletionResponse> {

@@ -30,7 +30,7 @@ mod tests {
         let pane_id = PaneId::new(1);
 
         // 1. 设置活跃终端
-        registry.set_active_pane(pane_id).unwrap();
+        registry.terminal_context_set_active_pane(pane_id).unwrap();
 
         // 2. 通过Shell集成管理器更新状态
         shell_integration.set_pane_shell_type(pane_id, ShellType::Bash);
@@ -88,7 +88,7 @@ mod tests {
         let mut event_receiver = registry.subscribe_events();
 
         // 设置活跃终端
-        registry.set_active_pane(pane_id).unwrap();
+        registry.terminal_context_set_active_pane(pane_id).unwrap();
 
         // 接收活跃终端变化事件
         let event = tokio::time::timeout(Duration::from_millis(100), event_receiver.recv())

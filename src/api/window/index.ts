@@ -30,7 +30,7 @@ export class WindowApi {
   // ===== 窗口状态管理 =====
 
   async manageWindowState(request: WindowStateBatchRequest): Promise<WindowStateBatchResponse> {
-    return await invoke<WindowStateBatchResponse>('manage_window_state', { request })
+    return await invoke<WindowStateBatchResponse>('window_manage_state', { request })
   }
 
   async getCompleteWindowState(): Promise<CompleteWindowState> {
@@ -94,30 +94,30 @@ export class WindowApi {
   // ===== 目录操作 =====
 
   async getCurrentDirectory(options: DirectoryOptions = {}): Promise<string> {
-    return await invoke<string>('get_current_directory', { useCache: options.useCache })
+    return await invoke<string>('window_get_current_directory', { useCache: options.useCache })
   }
 
   async getHomeDirectory(): Promise<string> {
-    return await invoke<string>('get_home_directory', { forceRefresh: true })
+    return await invoke<string>('window_get_home_directory', { forceRefresh: true })
   }
 
   async clearDirectoryCache(): Promise<void> {
-    await invoke<void>('clear_directory_cache')
+    await invoke<void>('window_clear_directory_cache')
     createMessage.success(useI18n().t('cache.directory_cleared'))
   }
 
   // ===== 路径操作 =====
 
   async pathExists(path: string): Promise<boolean> {
-    return await invoke<boolean>('path_exists', { path })
+    return await invoke<boolean>('window_path_exists', { path })
   }
 
   async normalizePath(path: string): Promise<string> {
-    return await invoke<string>('normalize_path', { path })
+    return await invoke<string>('window_normalize_path', { path })
   }
 
   async joinPaths(...paths: string[]): Promise<string> {
-    return await invoke<string>('join_paths', { paths })
+    return await invoke<string>('window_join_paths', { paths })
   }
 
   isAbsolutePath(path: string): boolean {
@@ -165,7 +165,7 @@ export class WindowApi {
       return this.platformInfoCache
     }
 
-    const platformInfo = await invoke<PlatformInfo>('get_platform_info')
+    const platformInfo = await invoke<PlatformInfo>('window_get_platform_info')
     this.platformInfoCache = platformInfo
     return platformInfo
   }
@@ -195,11 +195,11 @@ export class WindowApi {
       throw new Error('透明度值必须在 0 到 1 之间')
     }
 
-    await invoke<void>('set_window_opacity', { opacity })
+    await invoke<void>('window_set_opacity', { opacity })
   }
 
   async getWindowOpacity(): Promise<number> {
-    const opacity = await invoke<number>('get_window_opacity')
+    const opacity = await invoke<number>('window_get_opacity')
     return opacity
   }
 
@@ -210,7 +210,7 @@ export class WindowApi {
   // ===== 文件处理 =====
 
   async handleFileOpen(path: string): Promise<string> {
-    return await invoke<string>('handle_file_open', { path })
+    return await invoke<string>('file_handle_open', { path })
   }
 }
 

@@ -29,7 +29,7 @@ export async function initLocale() {
     // 优先从后端语言管理器获取（与后端 i18n 保持一致）
     let savedLocale: string | undefined
     try {
-      savedLocale = await invoke<string>('get_app_language')
+      savedLocale = await invoke<string>('language_get_app_language')
     } catch {}
 
     if (!savedLocale) {
@@ -89,7 +89,7 @@ export async function setLocale(locale: string) {
 
     // 通知后端语言管理器（写配置并广播事件）
     try {
-      await invoke<void>('set_app_language', { language: locale })
+      await invoke<void>('language_set_app_language', { language: locale })
     } catch {}
 
     // 立即保存会话状态

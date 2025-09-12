@@ -11,7 +11,7 @@ use crate::{api_error, api_success};
 /// 获取当前目录
 ///
 #[tauri::command]
-pub async fn get_current_directory(
+pub async fn window_get_current_directory(
     use_cache: Option<bool>,
     state: State<'_, WindowState>,
 ) -> TauriApiResult<String> {
@@ -57,7 +57,7 @@ pub async fn get_current_directory(
 /// 获取用户家目录
 ///
 #[tauri::command]
-pub async fn get_home_directory(
+pub async fn window_get_home_directory(
     use_cache: Option<bool>,
     state: State<'_, WindowState>,
 ) -> TauriApiResult<String> {
@@ -113,7 +113,9 @@ pub async fn get_home_directory(
 /// 清除目录缓存
 ///
 #[tauri::command]
-pub async fn clear_directory_cache(state: State<'_, WindowState>) -> TauriApiResult<EmptyData> {
+pub async fn window_clear_directory_cache(
+    state: State<'_, WindowState>,
+) -> TauriApiResult<EmptyData> {
     debug!("开始清除目录缓存");
 
     // 清除目录相关的缓存
@@ -128,7 +130,7 @@ pub async fn clear_directory_cache(state: State<'_, WindowState>) -> TauriApiRes
 
 /// 规范化路径
 #[tauri::command]
-pub async fn normalize_path(path: String) -> TauriApiResult<String> {
+pub async fn window_normalize_path(path: String) -> TauriApiResult<String> {
     debug!("开始规范化路径: {}", path);
 
     if path.is_empty() {
@@ -148,7 +150,7 @@ pub async fn normalize_path(path: String) -> TauriApiResult<String> {
 
 /// 连接路径
 #[tauri::command]
-pub async fn join_paths(paths: Vec<String>) -> TauriApiResult<String> {
+pub async fn window_join_paths(paths: Vec<String>) -> TauriApiResult<String> {
     debug!("开始连接路径: {:?}", paths);
 
     if paths.is_empty() {
@@ -170,7 +172,7 @@ pub async fn join_paths(paths: Vec<String>) -> TauriApiResult<String> {
 
 /// 检查路径是否存在
 #[tauri::command]
-pub async fn path_exists(path: String) -> TauriApiResult<bool> {
+pub async fn window_path_exists(path: String) -> TauriApiResult<bool> {
     debug!("开始检查路径是否存在: {}", path);
 
     if path.is_empty() {

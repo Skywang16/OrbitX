@@ -36,7 +36,7 @@ impl WorkspaceIndexService {
         debug!("检查工作区索引状态: {}", path);
 
         // 标准化路径
-        let normalized_path = self.normalize_path(path)?;
+        let normalized_path = self.window_normalize_path(path)?;
 
         // 查询数据库中的索引记录
         let workspace_index = self
@@ -81,7 +81,7 @@ impl WorkspaceIndexService {
     /// # 返回
     ///
     /// 返回创建的工作区索引信息
-    pub async fn build_workspace_index(
+    pub async fn workspace_build_index(
         &self,
         path: &str,
         name: Option<String>,
@@ -89,7 +89,7 @@ impl WorkspaceIndexService {
         info!("开始构建工作区索引: {} (名称: {:?})", path, name);
 
         // 标准化路径
-        let normalized_path = self.normalize_path(path)?;
+        let normalized_path = self.window_normalize_path(path)?;
 
         // 验证路径存在
         if !Path::new(&normalized_path).exists() {
@@ -100,7 +100,7 @@ impl WorkspaceIndexService {
         if self
             .repositories
             .vector_workspaces()
-            .path_exists(&normalized_path)
+            .window_path_exists(&normalized_path)
             .await?
         {
             bail!("工作区索引已存在: {}", normalized_path);
@@ -148,7 +148,7 @@ impl WorkspaceIndexService {
     /// # 参数
     ///
     /// * `id` - 工作区索引ID
-    pub async fn delete_workspace_index(&self, id: i32) -> AppResult<()> {
+    pub async fn workspace_delete_index(&self, id: i32) -> AppResult<()> {
         info!("删除工作区索引: {}", id);
 
         // 查找索引记录
@@ -188,7 +188,7 @@ impl WorkspaceIndexService {
     /// # 参数
     ///
     /// * `id` - 工作区索引ID
-    pub async fn refresh_workspace_index(&self, id: i32) -> AppResult<WorkspaceIndex> {
+    pub async fn workspace_refresh_index(&self, id: i32) -> AppResult<WorkspaceIndex> {
         info!("刷新工作区索引: {}", id);
 
         // 查找现有索引记录
@@ -373,7 +373,7 @@ impl WorkspaceIndexService {
     }
 
     /// 标准化路径
-    fn normalize_path(&self, path: &str) -> AppResult<String> {
+    fn window_normalize_path(&self, path: &str) -> AppResult<String> {
         let path_buf = PathBuf::from(path);
         let canonical_path = path_buf.canonicalize().context("无法标准化路径")?;
 
@@ -442,11 +442,11 @@ Indexing complete
         let service = WorkspaceIndexService::new(repositories);
 
         // 测试相对路径
-        let result = service.normalize_path(".");
+        let result = service.window_normalize_path(".");
         assert!(result.is_ok());
 
         // 测试绝对路径
-        let result = service.normalize_path("/tmp");
+        let result = service.window_normalize_path("/tmp");
         assert!(result.is_ok() || result.is_err()); // 可能不存在，但不应该panic
     }
 }

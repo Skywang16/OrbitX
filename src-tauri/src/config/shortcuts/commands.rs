@@ -32,13 +32,13 @@ impl ShortcutManagerState {
 
 // Tauri 命令
 #[tauri::command]
-pub async fn get_shortcuts_config(
+pub async fn shortcuts_get_config(
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<ShortcutsConfig> {
     debug!("获取快捷键配置");
 
     let manager = state.manager.lock().await;
-    match manager.get_config().await {
+    match manager.config_get().await {
         Ok(config) => {
             info!("获取快捷键配置成功");
             Ok(api_success!(config))
@@ -48,14 +48,14 @@ pub async fn get_shortcuts_config(
 }
 
 #[tauri::command]
-pub async fn update_shortcuts_config(
+pub async fn shortcuts_update_config(
     config: ShortcutsConfig,
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<EmptyData> {
     debug!("更新快捷键配置");
 
     let manager = state.manager.lock().await;
-    match manager.update_config(config).await {
+    match manager.config_update(config).await {
         Ok(_) => {
             info!("快捷键配置更新成功");
             Ok(api_success!())
@@ -65,14 +65,14 @@ pub async fn update_shortcuts_config(
 }
 
 #[tauri::command]
-pub async fn validate_shortcuts_config(
+pub async fn shortcuts_validate_config(
     config: ShortcutsConfig,
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<ValidationResult> {
     debug!("验证快捷键配置");
 
     let manager = state.manager.lock().await;
-    match manager.validate_config(&config).await {
+    match manager.config_validate(&config).await {
         Ok(result) => {
             debug!("快捷键配置验证完成");
             Ok(api_success!(result))
@@ -82,7 +82,7 @@ pub async fn validate_shortcuts_config(
 }
 
 #[tauri::command]
-pub async fn detect_shortcuts_conflicts(
+pub async fn shortcuts_detect_conflicts(
     config: ShortcutsConfig,
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<ConflictResult> {
@@ -99,14 +99,14 @@ pub async fn detect_shortcuts_conflicts(
 }
 
 #[tauri::command]
-pub async fn add_shortcut(
+pub async fn shortcuts_add(
     binding: ShortcutBinding,
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<EmptyData> {
     debug!("添加快捷键: {:?}", binding);
 
     let manager = state.manager.lock().await;
-    match manager.add_shortcut(binding).await {
+    match manager.shortcuts_add(binding).await {
         Ok(_) => {
             info!("添加快捷键成功");
             Ok(api_success!())
@@ -116,14 +116,14 @@ pub async fn add_shortcut(
 }
 
 #[tauri::command]
-pub async fn remove_shortcut(
+pub async fn shortcuts_remove(
     index: usize,
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<ShortcutBinding> {
     debug!("删除快捷键: 索引 {}", index);
 
     let manager = state.manager.lock().await;
-    match manager.remove_shortcut(index).await {
+    match manager.shortcuts_remove(index).await {
         Ok(removed) => {
             info!("删除快捷键成功");
             Ok(api_success!(removed))
@@ -133,7 +133,7 @@ pub async fn remove_shortcut(
 }
 
 #[tauri::command]
-pub async fn update_shortcut(
+pub async fn shortcuts_update(
     index: usize,
     binding: ShortcutBinding,
     state: State<'_, ShortcutManagerState>,
@@ -141,7 +141,7 @@ pub async fn update_shortcut(
     debug!("更新快捷键: 索引 {}, 新绑定 {:?}", index, binding);
 
     let manager = state.manager.lock().await;
-    match manager.update_shortcut(index, binding).await {
+    match manager.shortcuts_update(index, binding).await {
         Ok(_) => {
             info!("更新快捷键成功");
             Ok(api_success!())
@@ -151,7 +151,7 @@ pub async fn update_shortcut(
 }
 
 #[tauri::command]
-pub async fn reset_shortcuts_to_defaults(
+pub async fn shortcuts_reset_to_defaults(
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<EmptyData> {
     debug!("重置快捷键到默认配置");
@@ -167,7 +167,7 @@ pub async fn reset_shortcuts_to_defaults(
 }
 
 #[tauri::command]
-pub async fn get_shortcuts_statistics(
+pub async fn shortcuts_get_statistics(
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<ShortcutStatistics> {
     debug!("获取快捷键统计信息");
@@ -183,14 +183,14 @@ pub async fn get_shortcuts_statistics(
 }
 
 #[tauri::command]
-pub async fn search_shortcuts(
+pub async fn shortcuts_search(
     options: SearchOptions,
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<SearchResult> {
     debug!("搜索快捷键: {:?}", options);
 
     let manager = state.manager.lock().await;
-    match manager.search_shortcuts(options).await {
+    match manager.shortcuts_search(options).await {
         Ok(result) => {
             debug!("快捷键搜索完成，找到 {} 个匹配项", result.total);
             Ok(api_success!(result))
@@ -200,7 +200,7 @@ pub async fn search_shortcuts(
 }
 
 #[tauri::command]
-pub async fn execute_shortcut_action(
+pub async fn shortcuts_execute_action(
     action: crate::config::types::ShortcutAction,
     key_combination: String,
     active_terminal_id: Option<String>,
@@ -230,7 +230,7 @@ pub async fn execute_shortcut_action(
 }
 
 #[tauri::command]
-pub async fn get_current_platform() -> TauriApiResult<Platform> {
+pub async fn shortcuts_get_current_platform() -> TauriApiResult<Platform> {
     debug!("获取当前平台信息");
 
     let platform = if cfg!(target_os = "macos") {
@@ -245,13 +245,13 @@ pub async fn get_current_platform() -> TauriApiResult<Platform> {
 }
 
 #[tauri::command]
-pub async fn export_shortcuts_config(
+pub async fn shortcuts_export_config(
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<String> {
     debug!("导出快捷键配置");
 
     let manager = state.manager.lock().await;
-    let config = match manager.get_config().await {
+    let config = match manager.config_get().await {
         Ok(c) => c,
         Err(_) => return Ok(api_error!("shortcuts.get_failed")),
     };
@@ -266,7 +266,7 @@ pub async fn export_shortcuts_config(
 }
 
 #[tauri::command]
-pub async fn import_shortcuts_config(
+pub async fn shortcuts_import_config(
     config_json: String,
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<EmptyData> {
@@ -278,7 +278,7 @@ pub async fn import_shortcuts_config(
     };
 
     let manager = state.manager.lock().await;
-    match manager.update_config(config).await {
+    match manager.config_update(config).await {
         Ok(_) => {
             info!("快捷键配置导入成功");
             Ok(api_success!())
@@ -288,7 +288,7 @@ pub async fn import_shortcuts_config(
 }
 
 #[tauri::command]
-pub async fn get_registered_actions(
+pub async fn shortcuts_get_registered_actions(
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<Vec<String>> {
     debug!("获取已注册的动作列表");
@@ -296,14 +296,14 @@ pub async fn get_registered_actions(
     let manager = state.manager.lock().await;
     let registry = manager.get_action_registry().await;
     let registry_guard = registry.read().await;
-    let actions = registry_guard.get_registered_actions().await;
+    let actions = registry_guard.shortcuts_get_registered_actions().await;
 
     debug!("获取已注册动作列表成功，共 {} 个动作", actions.len());
     Ok(api_success!(actions))
 }
 
 #[tauri::command]
-pub async fn get_action_metadata(
+pub async fn shortcuts_get_action_metadata(
     action_name: String,
     state: State<'_, ShortcutManagerState>,
 ) -> TauriApiResult<Option<super::actions::ActionMetadata>> {
@@ -312,13 +312,13 @@ pub async fn get_action_metadata(
     let manager = state.manager.lock().await;
     let registry = manager.get_action_registry().await;
     let registry_guard = registry.read().await;
-    let metadata = registry_guard.get_action_metadata(&action_name).await;
+    let metadata = registry_guard.shortcuts_get_action_metadata(&action_name).await;
 
     Ok(api_success!(metadata))
 }
 
 #[tauri::command]
-pub async fn validate_key_combination(
+pub async fn shortcuts_validate_key_combination(
     key: String,
     modifiers: Vec<String>,
 ) -> TauriApiResult<ValidationResult> {
@@ -389,7 +389,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_key_combination_validation() {
-        let resp = validate_key_combination("c".to_string(), vec!["cmd".to_string()])
+        let resp = shortcuts_validate_key_combination("c".to_string(), vec!["cmd".to_string()])
             .await
             .unwrap();
         let result = resp.data.expect("data should be present");
@@ -400,7 +400,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_key_validation() {
-        let resp = validate_key_combination("".to_string(), vec!["invalid".to_string()])
+        let resp = shortcuts_validate_key_combination("".to_string(), vec!["invalid".to_string()])
             .await
             .unwrap();
         let result = resp.data.expect("data should be present");

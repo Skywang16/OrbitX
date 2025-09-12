@@ -37,8 +37,8 @@ impl ConfigManagerState {
 
 /// 获取当前配置
 #[tauri::command]
-pub async fn get_config(state: State<'_, ConfigManagerState>) -> TauriApiResult<AppConfig> {
-    match state.toml_manager.get_config().await {
+pub async fn config_get(state: State<'_, ConfigManagerState>) -> TauriApiResult<AppConfig> {
+    match state.toml_manager.config_get().await {
         Ok(config) => Ok(api_success!(config)),
         Err(_) => Ok(api_error!("config.get_failed")),
     }
@@ -46,13 +46,13 @@ pub async fn get_config(state: State<'_, ConfigManagerState>) -> TauriApiResult<
 
 /// 更新配置
 #[tauri::command]
-pub async fn update_config(
+pub async fn config_update(
     new_config: AppConfig,
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
     match state
         .toml_manager
-        .update_config(|config| {
+        .config_update(|config| {
             *config = new_config.clone();
             Ok(())
         })
@@ -65,12 +65,12 @@ pub async fn update_config(
 
 /// 保存配置（强制保存当前缓存的配置到文件）
 #[tauri::command]
-pub async fn save_config(state: State<'_, ConfigManagerState>) -> TauriApiResult<EmptyData> {
+pub async fn config_save(state: State<'_, ConfigManagerState>) -> TauriApiResult<EmptyData> {
     // 这个命令主要用于强制保存当前缓存的配置到文件
-    // 使用 update_config 确保原子性操作
+    // 使用 config_update 确保原子性操作
     match state
         .toml_manager
-        .update_config(|_config| {
+        .config_update(|_config| {
             // 不修改配置，只是触发保存操作
             Ok(())
         })
@@ -83,13 +83,13 @@ pub async fn save_config(state: State<'_, ConfigManagerState>) -> TauriApiResult
 
 /// 验证配置
 #[tauri::command]
-pub async fn validate_config(state: State<'_, ConfigManagerState>) -> TauriApiResult<EmptyData> {
+pub async fn config_validate(state: State<'_, ConfigManagerState>) -> TauriApiResult<EmptyData> {
     debug!("开始验证配置");
-    let config = match state.toml_manager.get_config().await {
+    let config = match state.toml_manager.config_get().await {
         Ok(config) => config,
         Err(_) => return Ok(api_error!("config.get_failed")),
     };
-    match state.toml_manager.validate_config(&config) {
+    match state.toml_manager.config_validate(&config) {
         Ok(_) => Ok(api_success!()),
         Err(_) => Ok(api_error!("config.validate_failed")),
     }
@@ -97,14 +97,14 @@ pub async fn validate_config(state: State<'_, ConfigManagerState>) -> TauriApiRe
 
 /// 重置配置为默认值
 #[tauri::command]
-pub async fn reset_config_to_defaults(
+pub async fn config_reset_to_defaults(
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
     debug!("开始重置配置为默认值");
     let default_config = create_default_config();
     match state
         .toml_manager
-        .update_config(|config| {
+        .config_update(|config| {
             *config = default_config.clone();
             Ok(())
         })
@@ -117,7 +117,7 @@ pub async fn reset_config_to_defaults(
 
 /// 获取配置文件路径
 #[tauri::command]
-pub async fn get_config_file_path(_state: State<'_, ConfigManagerState>) -> TauriApiResult<String> {
+pub async fn config_get_file_path(_state: State<'_, ConfigManagerState>) -> TauriApiResult<String> {
     Ok(api_success!("config/config.toml".to_string()))
 }
 
@@ -130,7 +130,7 @@ pub struct ConfigFileInfo {
 
 /// 获取配置文件信息
 #[tauri::command]
-pub async fn get_config_file_info(
+pub async fn config_get_file_info(
     _state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<ConfigFileInfo> {
     Ok(api_success!(ConfigFileInfo {
@@ -141,7 +141,7 @@ pub async fn get_config_file_info(
 
 /// 打开配置文件
 #[tauri::command]
-pub async fn open_config_file<R: tauri::Runtime>(
+pub async fn config_open_file<R: tauri::Runtime>(
     _app: tauri::AppHandle<R>,
     _state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
@@ -151,7 +151,7 @@ pub async fn open_config_file<R: tauri::Runtime>(
 
 /// 订阅配置事件
 #[tauri::command]
-pub async fn subscribe_config_events(
+pub async fn config_subscribe_events(
     _state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
     debug!("订阅配置事件");
@@ -160,7 +160,7 @@ pub async fn subscribe_config_events(
 
 /// 获取配置文件夹路径
 #[tauri::command]
-pub async fn get_config_folder_path(
+pub async fn config_get_folder_path(
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<String> {
     debug!("获取配置文件夹路径");
@@ -178,7 +178,7 @@ pub async fn get_config_folder_path(
 
 /// 打开配置文件夹
 #[tauri::command]
-pub async fn open_config_folder<R: tauri::Runtime>(
+pub async fn config_open_folder<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {

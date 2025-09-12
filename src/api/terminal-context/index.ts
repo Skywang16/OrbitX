@@ -21,7 +21,7 @@ export class TerminalContextApi {
    * @param paneId 面板ID
    */
   async setActivePaneId(paneId: number): Promise<void> {
-    await invoke('set_active_pane', { paneId })
+    await invoke('terminal_context_set_active_pane', { paneId })
   }
 
   /**
@@ -29,7 +29,7 @@ export class TerminalContextApi {
    * @returns 活跃终端面板ID，如果没有活跃终端则返回null
    */
   async getActivePaneId(): Promise<number | null> {
-    return await invoke<number | null>('get_active_pane')
+    return await invoke<number | null>('terminal_context_get_active_pane')
   }
 
   // ===== 终端上下文查询 =====
@@ -40,7 +40,7 @@ export class TerminalContextApi {
    * @returns 终端上下文信息
    */
   async getTerminalContext(paneId?: number): Promise<TerminalContext> {
-    return await invoke<TerminalContext>('get_terminal_context', { paneId })
+    return await invoke<TerminalContext>('terminal_context_get', { paneId })
   }
 
   /**
@@ -48,7 +48,7 @@ export class TerminalContextApi {
    * @returns 活跃终端的上下文信息
    */
   async getActiveTerminalContext(): Promise<TerminalContext> {
-    return await invoke<TerminalContext>('get_active_terminal_context')
+    return await invoke<TerminalContext>('terminal_context_get_active')
   }
 
   // ===== 便捷方法 =====

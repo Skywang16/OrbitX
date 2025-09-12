@@ -3,23 +3,23 @@ import type { AppConfig, ConfigFileInfo, Theme, ThemeInfo, ThemeConfigStatus } f
 
 class ThemeAPI {
   async getThemeConfigStatus(): Promise<ThemeConfigStatus> {
-    return await invoke<ThemeConfigStatus>('get_theme_config_status')
+    return await invoke<ThemeConfigStatus>('theme_get_config_status')
   }
 
   async getCurrentTheme(): Promise<Theme> {
-    return await invoke<Theme>('get_current_theme')
+    return await invoke<Theme>('theme_get_current')
   }
 
   async getAvailableThemes(): Promise<ThemeInfo[]> {
-    return await invoke<ThemeInfo[]>('get_available_themes')
+    return await invoke<ThemeInfo[]>('theme_get_available')
   }
 
   async setTerminalTheme(name: string): Promise<void> {
-    await invoke<void>('set_terminal_theme', { themeName: name })
+    await invoke<void>('theme_set_terminal', { themeName: name })
   }
 
   async setFollowSystemTheme(followSystem: boolean, lightTheme?: string, darkTheme?: string): Promise<void> {
-    await invoke<void>('set_follow_system_theme', {
+    await invoke<void>('theme_set_follow_system', {
       followSystem,
       lightTheme: lightTheme || null,
       darkTheme: darkTheme || null,
@@ -31,19 +31,19 @@ export class ConfigApi {
   private themeAPI = new ThemeAPI()
 
   async getConfig(): Promise<AppConfig> {
-    return await invoke<AppConfig>('get_config')
+    return await invoke<AppConfig>('config_get')
   }
 
   async updateConfig(config: AppConfig): Promise<void> {
-    await invoke<void>('update_config', { newConfig: config })
+    await invoke<void>('config_update', { newConfig: config })
   }
 
   async saveConfig(): Promise<void> {
-    await invoke<void>('save_config')
+    await invoke<void>('config_save')
   }
 
   async validateConfig(): Promise<void> {
-    await invoke<void>('validate_config')
+    await invoke<void>('config_validate')
   }
 
   async resetConfig(): Promise<void> {
@@ -55,7 +55,7 @@ export class ConfigApi {
   }
 
   async getConfigFileInfo(): Promise<ConfigFileInfo> {
-    return await invoke<ConfigFileInfo>('get_config_file_info')
+    return await invoke<ConfigFileInfo>('config_get_file_info')
   }
 
   async exportConfig(): Promise<string> {
@@ -67,27 +67,27 @@ export class ConfigApi {
   }
 
   async resetToDefaults(): Promise<void> {
-    await invoke<void>('reset_config_to_defaults')
+    await invoke<void>('config_reset_to_defaults')
   }
 
   async getFilePath(): Promise<string> {
-    return await invoke<string>('get_config_file_path')
+    return await invoke<string>('config_get_file_path')
   }
 
   async getFileInfo(): Promise<ConfigFileInfo> {
-    return await invoke<ConfigFileInfo>('get_config_file_info')
+    return await invoke<ConfigFileInfo>('config_get_file_info')
   }
 
   async openFile(): Promise<void> {
-    await invoke<void>('open_config_file')
+    await invoke<void>('config_open_file')
   }
 
   async getConfigFolderPath(): Promise<string> {
-    return await invoke<string>('get_config_folder_path')
+    return await invoke<string>('config_get_folder_path')
   }
 
   async openConfigFolder(): Promise<void> {
-    await invoke<void>('open_config_folder')
+    await invoke<void>('config_open_folder')
   }
 
   async getThemeConfigStatus(): Promise<ThemeConfigStatus> {

@@ -18,7 +18,7 @@ use tracing::debug;
 
 /// 创建新会话
 #[tauri::command]
-pub async fn create_conversation(
+pub async fn ai_conversation_create(
     title: Option<String>,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<i64> {
@@ -42,7 +42,7 @@ pub async fn create_conversation(
 
 /// 获取会话列表
 #[tauri::command]
-pub async fn get_conversations(
+pub async fn ai_conversation_get_all(
     limit: Option<i64>,
     offset: Option<i64>,
     state: State<'_, AIManagerState>,
@@ -63,7 +63,7 @@ pub async fn get_conversations(
 
 /// 获取会话详情
 #[tauri::command]
-pub async fn get_conversation(
+pub async fn ai_conversation_get(
     conversation_id: i64,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<Conversation> {
@@ -88,7 +88,7 @@ pub async fn get_conversation(
 
 /// 更新会话标题
 #[tauri::command]
-pub async fn update_conversation_title(
+pub async fn ai_conversation_update_title(
     conversation_id: i64,
     title: String,
     state: State<'_, AIManagerState>,
@@ -113,7 +113,7 @@ pub async fn update_conversation_title(
 
 /// 删除会话
 #[tauri::command]
-pub async fn delete_conversation(
+pub async fn ai_conversation_delete(
     conversation_id: i64,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<EmptyData> {
@@ -132,7 +132,7 @@ pub async fn delete_conversation(
 
 /// 截断会话（供前端eko使用）
 #[tauri::command]
-pub async fn truncate_conversation(
+pub async fn ai_conversation_truncate(
     conversation_id: i64,
     truncate_after_message_id: i64,
     state: State<'_, AIManagerState>,
@@ -159,7 +159,7 @@ pub async fn truncate_conversation(
 
 /// 保存单条消息（供前端eko使用）
 #[tauri::command]
-pub async fn save_message(
+pub async fn ai_conversation_save_message(
     conversation_id: i64,
     role: String,
     content: String,
@@ -179,7 +179,7 @@ pub async fn save_message(
     let message = Message::new(conversation_id, role, content);
 
     // 保存消息
-    match repositories.conversations().save_message(&message).await {
+    match repositories.conversations().ai_conversation_save_message(&message).await {
         Ok(message_id) => Ok(api_success!(message_id)),
         Err(_) => Ok(api_error!("ai.save_message_failed")),
     }
@@ -187,7 +187,7 @@ pub async fn save_message(
 
 /// 更新消息内容
 #[tauri::command]
-pub async fn update_message_content(
+pub async fn ai_conversation_update_message_content(
     message_id: i64,
     content: String,
     state: State<'_, AIManagerState>,
@@ -199,7 +199,7 @@ pub async fn update_message_content(
     let repositories = state.repositories();
     match repositories
         .conversations()
-        .update_message_content(message_id, &content)
+        .ai_conversation_update_message_content(message_id, &content)
         .await
     {
         Ok(_) => Ok(api_success!()),
@@ -209,7 +209,7 @@ pub async fn update_message_content(
 
 /// 更新消息步骤数据
 #[tauri::command]
-pub async fn update_message_steps(
+pub async fn ai_conversation_update_message_steps(
     message_id: i64,
     steps_json: String,
     state: State<'_, AIManagerState>,
@@ -221,7 +221,7 @@ pub async fn update_message_steps(
     let repositories = state.repositories();
     match repositories
         .conversations()
-        .update_message_steps(message_id, &steps_json)
+        .ai_conversation_update_message_steps(message_id, &steps_json)
         .await
     {
         Ok(_) => Ok(api_success!()),
@@ -231,7 +231,7 @@ pub async fn update_message_steps(
 
 /// 更新消息状态
 #[tauri::command]
-pub async fn update_message_status(
+pub async fn ai_conversation_update_message_status(
     message_id: i64,
     status: Option<String>,
     duration_ms: Option<i64>,
@@ -244,7 +244,7 @@ pub async fn update_message_status(
     let repositories = state.repositories();
     match repositories
         .conversations()
-        .update_message_status(message_id, status.as_deref(), duration_ms)
+        .ai_conversation_update_message_status(message_id, status.as_deref(), duration_ms)
         .await
     {
         Ok(_) => Ok(api_success!()),

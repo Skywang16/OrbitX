@@ -15,7 +15,7 @@ use tauri::{Emitter, State};
 /// # Arguments
 /// * `language` - 语言字符串，如 "zh-CN", "en-US"
 #[tauri::command]
-pub async fn set_app_language<R: tauri::Runtime>(
+pub async fn language_set_app_language<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, StorageCoordinatorState>,
     language: String,
@@ -31,7 +31,7 @@ pub async fn set_app_language<R: tauri::Runtime>(
     // 保存到配置文件中的 app.language
     if let Err(_) = state
         .coordinator
-        .update_config("app.language", Value::String(language.clone()))
+        .config_update("app.language", Value::String(language.clone()))
         .await
     {
         return Ok(api_error!("config.update_failed"));
@@ -45,13 +45,13 @@ pub async fn set_app_language<R: tauri::Runtime>(
 
 /// 获取当前应用程序语言
 #[tauri::command]
-pub async fn get_app_language() -> TauriApiResult<String> {
+pub async fn language_get_app_language() -> TauriApiResult<String> {
     let lang = LanguageManager::get_language_string();
     Ok(api_success!(lang))
 }
 /// 获取所有支持的语言列表
 #[tauri::command]
-pub async fn get_supported_languages() -> TauriApiResult<Vec<LanguageInfo>> {
+pub async fn language_get_supported_languages() -> TauriApiResult<Vec<LanguageInfo>> {
     let languages: Vec<LanguageInfo> = Language::all()
         .into_iter()
         .map(|lang| LanguageInfo {

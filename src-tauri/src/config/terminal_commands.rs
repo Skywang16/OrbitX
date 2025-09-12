@@ -61,12 +61,12 @@ pub struct SystemShellsResult {
 
 /// 获取终端配置
 #[tauri::command]
-pub async fn get_terminal_config(
+pub async fn config_terminal_get(
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<TerminalConfig> {
     debug!("开始获取终端配置");
 
-    match state.toml_manager.get_config().await {
+    match state.toml_manager.config_get().await {
         Ok(config) => {
             let terminal_config = config.terminal.clone();
             info!("获取终端配置成功");
@@ -78,16 +78,16 @@ pub async fn get_terminal_config(
 
 /// 更新终端配置
 #[tauri::command]
-pub async fn update_terminal_config(
+pub async fn config_terminal_update(
     update_request: TerminalConfigUpdateRequest,
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
     debug!("开始更新终端配置: {:?}", update_request);
 
-    // 使用update_config方法更新配置
+    // 使用config_update方法更新配置
     let result = state
         .toml_manager
-        .update_config(|config| {
+        .config_update(|config| {
             // 更新滚动缓冲区
             if let Some(scrollback) = update_request.scrollback {
                 config.terminal.scrollback = scrollback;
@@ -123,12 +123,12 @@ pub async fn update_terminal_config(
 
 /// 验证终端配置
 #[tauri::command]
-pub async fn validate_terminal_config(
+pub async fn config_terminal_validate(
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<TerminalConfigValidationResult> {
     debug!("开始验证终端配置");
 
-    let config = match state.toml_manager.get_config().await {
+    let config = match state.toml_manager.config_get().await {
         Ok(c) => c,
         Err(_) => return Ok(api_error!("config.get_failed")),
     };
@@ -183,7 +183,7 @@ pub async fn validate_terminal_config(
 
 /// 重置终端配置为默认值
 #[tauri::command]
-pub async fn reset_terminal_config_to_defaults(
+pub async fn config_terminal_reset_to_defaults(
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
     debug!("开始重置终端配置为默认值");
@@ -193,7 +193,7 @@ pub async fn reset_terminal_config_to_defaults(
     // 更新配置
     let result = state
         .toml_manager
-        .update_config(|config| {
+        .config_update(|config| {
             config.terminal = default_terminal_config.clone();
             Ok(())
         })
@@ -210,7 +210,7 @@ pub async fn reset_terminal_config_to_defaults(
 
 /// 检测系统可用的Shell
 #[tauri::command]
-pub async fn detect_system_shells(
+pub async fn config_terminal_detect_system_shells(
     _state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<SystemShellsResult> {
     debug!("开始检测系统可用的Shell");
@@ -282,7 +282,7 @@ pub async fn detect_system_shells(
 
 /// 更新光标配置
 #[tauri::command]
-pub async fn update_cursor_config(
+pub async fn config_terminal_update_cursor(
     cursor_config: CursorConfig,
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
@@ -291,7 +291,7 @@ pub async fn update_cursor_config(
     // 更新配置
     let result = state
         .toml_manager
-        .update_config(|config| {
+        .config_update(|config| {
             config.terminal.cursor = cursor_config.clone();
             Ok(())
         })
@@ -308,7 +308,7 @@ pub async fn update_cursor_config(
 
 /// 更新终端行为配置
 #[tauri::command]
-pub async fn update_terminal_behavior_config(
+pub async fn config_terminal_update_behavior(
     behavior_config: TerminalBehaviorConfig,
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
@@ -317,7 +317,7 @@ pub async fn update_terminal_behavior_config(
     // 更新配置
     let result = state
         .toml_manager
-        .update_config(|config| {
+        .config_update(|config| {
             config.terminal.behavior = behavior_config.clone();
             Ok(())
         })
@@ -333,14 +333,14 @@ pub async fn update_terminal_behavior_config(
 }
 /// 获取Shell信息
 #[tauri::command]
-pub async fn get_shell_info(_state: State<'_, ConfigManagerState>) -> TauriApiResult<String> {
+pub async fn config_terminal_get_shell_info(_state: State<'_, ConfigManagerState>) -> TauriApiResult<String> {
     debug!("开始获取Shell信息");
     Ok(api_success!("zsh".to_string()))
 }
 
 /// 验证终端Shell路径（存根实现）
 #[tauri::command]
-pub async fn validate_terminal_shell_path(
+pub async fn config_terminal_validate_shell_path(
     _path: String,
     _state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<bool> {

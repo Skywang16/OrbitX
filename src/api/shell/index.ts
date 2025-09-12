@@ -17,15 +17,15 @@ export class ShellApi {
   // ===== 基本操作 =====
 
   async getAvailableShells(): Promise<ShellInfo[]> {
-    return await invoke<ShellInfo[]>('get_available_shells')
+    return await invoke<ShellInfo[]>('terminal_get_available_shells')
   }
 
   async getDefaultShell(): Promise<ShellInfo> {
-    return await invoke<ShellInfo>('get_default_shell')
+    return await invoke<ShellInfo>('terminal_get_default_shell')
   }
 
   async validateShellPath(path: string): Promise<boolean> {
-    return await invoke<boolean>('validate_shell_path', { path })
+    return await invoke<boolean>('terminal_validate_shell_path', { path })
   }
 
   // ===== 查找功能 =====
@@ -43,7 +43,7 @@ export class ShellApi {
   // ===== 后台命令执行功能 =====
 
   async executeBackgroundCommand(command: string, workingDirectory?: string): Promise<BackgroundCommandResult> {
-    return await invoke<BackgroundCommandResult>('execute_background_command', {
+    return await invoke<BackgroundCommandResult>('shell_execute_background_command', {
       command,
       working_directory: workingDirectory,
     })

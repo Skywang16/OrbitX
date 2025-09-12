@@ -152,7 +152,7 @@
     const currentStepName = steps[currentStep.value]
     switch (currentStepName) {
       case 'ai':
-        return t('onboarding.navigation.save_config')
+        return t('onboarding.navigation.config_save')
       default:
         return t('onboarding.navigation.next')
     }

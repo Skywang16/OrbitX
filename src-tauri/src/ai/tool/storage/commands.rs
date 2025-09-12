@@ -67,7 +67,7 @@ pub async fn storage_get_config(
 ) -> Result<Value, String> {
     debug!("存储命令: 获取配置节 {}", section);
 
-    state.coordinator.get_config(&section).await.to_tauri()
+    state.coordinator.config_get(&section).await.to_tauri()
 }
 
 /// 更新配置数据
@@ -81,7 +81,7 @@ pub async fn storage_update_config(
 
     state
         .coordinator
-        .update_config(&section, data)
+        .config_update(&section, data)
         .await
         .to_tauri()
 }

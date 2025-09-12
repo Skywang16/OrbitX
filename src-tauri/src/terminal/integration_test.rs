@@ -25,7 +25,7 @@ mod tests {
 
         // 设置活跃面板
         let pane_id = PaneId::new(1);
-        registry.set_active_pane(pane_id).unwrap();
+        registry.terminal_context_set_active_pane(pane_id).unwrap();
 
         // 验证事件被发送
         let event = timeout(Duration::from_millis(100), event_receiver.recv())
@@ -56,7 +56,7 @@ mod tests {
 
         // 设置活跃面板
         let pane_id = PaneId::new(1);
-        registry.set_active_pane(pane_id).unwrap();
+        registry.terminal_context_set_active_pane(pane_id).unwrap();
 
         // 验证活跃面板变化事件
         let event = timeout(Duration::from_millis(100), event_receiver.recv())
@@ -70,7 +70,7 @@ mod tests {
         ));
 
         // 验证上下文服务可以获取活跃面板
-        assert_eq!(registry.get_active_pane(), Some(pane_id));
+        assert_eq!(registry.terminal_context_get_active_pane(), Some(pane_id));
     }
 
     #[tokio::test]
@@ -84,7 +84,7 @@ mod tests {
 
         // 设置活跃面板
         let pane_id = PaneId::new(1);
-        registry.set_active_pane(pane_id).unwrap();
+        registry.terminal_context_set_active_pane(pane_id).unwrap();
 
         // 验证所有订阅者都收到事件
         let event1 = timeout(Duration::from_millis(100), receiver1.recv())
@@ -148,8 +148,8 @@ mod tests {
         let pane_id = PaneId::new(1);
 
         // 设置相同的活跃面板两次
-        registry.set_active_pane(pane_id).unwrap();
-        registry.set_active_pane(pane_id).unwrap();
+        registry.terminal_context_set_active_pane(pane_id).unwrap();
+        registry.terminal_context_set_active_pane(pane_id).unwrap();
 
         // 应该只收到一个事件（第一次设置）
         let event = timeout(Duration::from_millis(100), event_receiver.recv())

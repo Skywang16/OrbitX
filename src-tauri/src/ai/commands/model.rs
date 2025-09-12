@@ -15,7 +15,7 @@ use tauri::State;
 
 /// 获取所有AI模型配置
 #[tauri::command]
-pub async fn get_ai_models(state: State<'_, AIManagerState>) -> TauriApiResult<Vec<AIModelConfig>> {
+pub async fn ai_models_get(state: State<'_, AIManagerState>) -> TauriApiResult<Vec<AIModelConfig>> {
     let models = state.ai_service.get_models().await;
     // 不回传明文 API Key：对外返回时清空 api_key 字段
     let sanitized: Vec<AIModelConfig> = models
@@ -30,7 +30,7 @@ pub async fn get_ai_models(state: State<'_, AIManagerState>) -> TauriApiResult<V
 
 /// 添加AI模型配置
 #[tauri::command]
-pub async fn add_ai_model(
+pub async fn ai_models_add(
     config: AIModelConfig,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<AIModelConfig> {
@@ -48,7 +48,7 @@ pub async fn add_ai_model(
 
 /// 删除AI模型配置
 #[tauri::command]
-pub async fn remove_ai_model(
+pub async fn ai_models_remove(
     model_id: String,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<EmptyData> {
@@ -62,7 +62,7 @@ pub async fn remove_ai_model(
 
 /// 更新AI模型配置
 #[tauri::command]
-pub async fn update_ai_model(
+pub async fn ai_models_update(
     model_id: String,
     updates: serde_json::Value,
     state: State<'_, AIManagerState>,
@@ -77,7 +77,7 @@ pub async fn update_ai_model(
 
 /// 测试AI模型连接（基于表单数据）
 #[tauri::command]
-pub async fn test_ai_connection_with_config(
+pub async fn ai_models_test_connection(
     config: AIModelConfig,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<String> {
@@ -103,14 +103,14 @@ pub async fn test_ai_connection_with_config(
 
 /// 获取用户前置提示词
 #[tauri::command]
-pub async fn get_user_prefix_prompt(
+pub async fn ai_conversation_get_user_prefix_prompt(
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<Option<String>> {
     tracing::debug!("获取用户前置提示词");
 
     let repositories = state.repositories();
 
-    match repositories.ai_models().get_user_prefix_prompt().await {
+    match repositories.ai_models().ai_conversation_get_user_prefix_prompt().await {
         Ok(prompt) => Ok(api_success!(prompt)),
         Err(_) => Ok(api_error!("ai.get_prefix_prompt_failed")),
     }
@@ -118,7 +118,7 @@ pub async fn get_user_prefix_prompt(
 
 /// 设置用户前置提示词
 #[tauri::command]
-pub async fn set_user_prefix_prompt(
+pub async fn ai_conversation_set_user_prefix_prompt(
     prompt: Option<String>,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<EmptyData> {
@@ -126,7 +126,7 @@ pub async fn set_user_prefix_prompt(
 
     match repositories
         .ai_models()
-        .set_user_prefix_prompt(prompt)
+        .ai_conversation_set_user_prefix_prompt(prompt)
         .await
     {
         Ok(_) => Ok(api_success!()),

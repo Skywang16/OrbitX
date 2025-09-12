@@ -107,7 +107,7 @@ impl OutputAnalyzer {
             entry.content.push_str(data);
 
             // 安全截断缓冲区，防止内存泄漏和无限循环
-            let config = ConfigManager::get_config();
+            let config = ConfigManager::config_get();
             if entry.content.len() > config.buffer.max_size {
                 self.safe_truncate_buffer(&mut entry.content)?;
             }
@@ -135,7 +135,7 @@ impl OutputAnalyzer {
 
     /// 安全截断缓冲区，防止无限循环
     fn safe_truncate_buffer(&self, content: &mut String) -> AppResult<()> {
-        let config = ConfigManager::get_config();
+        let config = ConfigManager::config_get();
         let target_start = content.len().saturating_sub(config.buffer.keep_size);
         let mut byte_start = target_start;
         let mut attempts = 0;
@@ -211,7 +211,7 @@ impl OutputAnalyzer {
 
     /// 定期清理过期的缓冲区，防止内存泄漏
     fn maybe_cleanup_stale_buffers(&self) -> AppResult<()> {
-        let config = ConfigManager::get_config();
+        let config = ConfigManager::config_get();
         let should_cleanup = {
             let cleanup_guard = self
                 .last_global_cleanup
@@ -231,7 +231,7 @@ impl OutputAnalyzer {
     fn cleanup_stale_buffers(&self) -> AppResult<()> {
         debug!("开始清理过期缓冲区");
 
-        let config = ConfigManager::get_config();
+        let config = ConfigManager::config_get();
         let stale_threshold = config.stale_threshold();
         let mut removed_count = 0;
 

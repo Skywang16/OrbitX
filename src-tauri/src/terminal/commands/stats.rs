@@ -25,7 +25,7 @@ use tracing::debug;
 /// * `Ok(CacheStats)` - 缓存统计信息
 /// * `Err(String)` - 获取失败的错误信息
 #[tauri::command]
-pub async fn get_context_cache_stats(
+pub async fn terminal_context_get_cache_stats(
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<crate::terminal::CacheStats> {
     debug!("获取上下文缓存统计信息");
@@ -52,7 +52,7 @@ pub async fn get_context_cache_stats(
 /// * `Ok(RegistryStats)` - 注册表统计信息
 /// * `Err(String)` - 获取失败的错误信息
 #[tauri::command]
-pub async fn get_registry_stats(
+pub async fn terminal_context_get_registry_stats(
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<crate::terminal::context_registry::RegistryStats> {
     debug!("获取活跃终端注册表统计信息");

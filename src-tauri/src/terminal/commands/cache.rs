@@ -27,7 +27,7 @@ use tracing::{debug, warn};
 /// * `Ok(())` - 缓存失效成功
 /// * `Err(String)` - 操作失败的错误信息
 #[tauri::command]
-pub async fn invalidate_context_cache(
+pub async fn terminal_context_invalidate_cache(
     pane_id: u32,
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<EmptyData> {
@@ -58,7 +58,7 @@ pub async fn invalidate_context_cache(
 /// * `Ok(())` - 缓存清除成功
 /// * `Err(String)` - 操作失败的错误信息
 #[tauri::command]
-pub async fn clear_all_context_cache(
+pub async fn terminal_context_clear_all_cache(
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<EmptyData> {
     debug!("清除所有上下文缓存");

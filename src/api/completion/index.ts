@@ -15,11 +15,11 @@ import type { CompletionEngineStatus, CompletionRequest, CompletionResponse, Com
  */
 export class CompletionApi {
   async initEngine(): Promise<void> {
-    await invoke<void>('init_completion_engine')
+    await invoke<void>('completion_init_engine')
   }
 
   async getCompletions(request: CompletionRequest): Promise<CompletionResponse> {
-    return await invoke<CompletionResponse>('get_completions', {
+    return await invoke<CompletionResponse>('completion_get', {
       input: request.input,
       cursorPosition: request.cursorPosition,
       workingDirectory: request.workingDirectory,
@@ -28,11 +28,11 @@ export class CompletionApi {
   }
 
   async clearCache(): Promise<void> {
-    await invoke<void>('clear_completion_cache')
+    await invoke<void>('completion_clear_cache')
   }
 
   async getStats(): Promise<CompletionStats> {
-    const stats = await invoke<string>('get_completion_stats')
+    const stats = await invoke<string>('completion_get_stats')
     return JSON.parse(stats) as CompletionStats
   }
 

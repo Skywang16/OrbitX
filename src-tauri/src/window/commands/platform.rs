@@ -12,12 +12,14 @@ use crate::utils::TauriApiResult;
 ///
 /// - 缓存机制：首次检测后缓存结果，后续直接返回缓存
 #[tauri::command]
-pub async fn get_platform_info(state: State<'_, WindowState>) -> TauriApiResult<PlatformInfo> {
+pub async fn window_get_platform_info(
+    state: State<'_, WindowState>,
+) -> TauriApiResult<PlatformInfo> {
     debug!("开始获取平台信息");
 
     // 尝试从配置管理器获取缓存的平台信息
     let platform_info = state
-        .with_config_manager(|config| Ok(config.get_platform_info().cloned()))
+        .with_config_manager(|config| Ok(config.window_get_platform_info().cloned()))
         .await
         .to_tauri()?;
 
