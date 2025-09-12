@@ -1,4 +1,5 @@
 import { invoke } from '@/utils/request'
+import type { WorkspaceIndex, BuildWorkspaceIndexParams } from './types'
 
 export interface CkSearchParams {
   query: string
@@ -46,7 +47,33 @@ export class CkApi {
       score: r.score,
     }))
   }
+
+  async checkCurrentWorkspace(): Promise<WorkspaceIndex | null> {
+    return await invoke<WorkspaceIndex | null>('check_current_workspace_index')
+  }
+
+  async buildWorkspaceIndex(params: BuildWorkspaceIndexParams): Promise<WorkspaceIndex> {
+    return await invoke<WorkspaceIndex>('build_workspace_index', {
+      workspacePath: params.path,
+      name: params.name,
+    })
+  }
+
+  async getAllWorkspaces(): Promise<WorkspaceIndex[]> {
+    return await invoke<WorkspaceIndex[]>('get_all_workspace_indexes')
+  }
+
+  async deleteWorkspace(id: number): Promise<void> {
+    return await invoke<void>('delete_workspace_index', { id })
+  }
+
+  async refreshWorkspace(id: number): Promise<WorkspaceIndex> {
+    return await invoke<WorkspaceIndex>('refresh_workspace_index', { id })
+  }
 }
 
 export const ckApi = new CkApi()
+export const workspaceIndexApi = ckApi
 
+// 导出类型
+export type * from './types'

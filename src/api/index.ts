@@ -1,0 +1,44 @@
+/**
+ * API 统一导出文件
+ *
+ * 将所有子模块的API实例和类型统一导出，
+ * 提供便捷的 '@/api' 导入方式
+ */
+
+// API 实例导出
+export { aiApi } from './ai'
+export { completionApi } from './completion'
+export { configApi } from './config'
+export { filesystemApi } from './filesystem'
+export { llmApi } from './llm'
+export { llmRegistryApi } from './llm-registry'
+export { shellApi } from './shell'
+export { shellIntegrationApi } from './shellIntegration'
+export { shortcutsApi } from './shortcuts'
+export { storageApi } from './storage'
+export { terminalApi } from './terminal'
+export { terminalContextApi } from './terminal-context'
+export { windowApi } from './window'
+export { workspaceIndexApi } from './workspace-index'
+
+// 类型导出 - 避免重复，选择性导出
+export type * from './ai/types'
+export type * from './completion/types'
+export type * from './shortcuts/types'
+export type * from './storage/types'
+export type * from './terminal-context/types'
+export type * from './workspace-index/types'
+
+// 从config导出但排除与terminal重复的类型
+export type { AppConfig, ConfigFileInfo } from './config/types'
+// 从shell导出但排除与terminal重复的类型
+export type { ShellInfo, BackgroundCommandResult } from './shell/types'
+// 从terminal导出所有类型
+export type * from './terminal/types'
+
+// 从 index.ts 导出类型（没有单独 types.ts 文件的模块）
+export type { FilesystemApi } from './filesystem'
+export type { LLMApi } from './llm'
+export type { LLMRegistryApi } from './llm-registry'
+export type { ShellIntegrationApi } from './shellIntegration'
+export type { WindowApi } from './window'

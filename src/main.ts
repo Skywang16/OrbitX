@@ -58,7 +58,6 @@ const initializeServices = async () => {
 
   const aiChatStore = useAIChatStore()
   await aiChatStore.initializeEko()
-
 }
 
 const initializeOpacity = async () => {

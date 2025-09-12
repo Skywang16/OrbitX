@@ -78,6 +78,7 @@
   import { ref, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { workspaceIndexApi } from '@/api/workspace-index'
+  import type { WorkspaceIndex } from '@/api/workspace-index'
 
   interface BuildProgress {
     percentage: number
@@ -163,7 +164,7 @@
   }
 
   // 模拟构建进度更新（实际应该通过事件或轮询获取）
-  const simulateBuildProgress = () => {
+  // const simulateBuildProgress = () => {
     if (!isBuilding.value) return
 
     const interval = setInterval(() => {
