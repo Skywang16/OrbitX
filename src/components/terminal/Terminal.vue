@@ -298,7 +298,6 @@
 
       updateTerminalCursorPosition()
 
-      // showToast('补全已接受', 'success')
     } catch {
     }
   }

@@ -11,18 +11,15 @@ const getAppBackgroundColor = (): string | null => {
     return null
   }
 
-  // 获取根元素的计算样式
   const rootElement = document.documentElement
   const computedStyle = window.getComputedStyle(rootElement)
 
-  // 尝试获取应用背景颜色CSS变量
   const backgroundColor = computedStyle.getPropertyValue('--bg-200').trim()
 
   if (backgroundColor && backgroundColor !== '') {
     return backgroundColor
   }
 
-  // 如果没有找到CSS变量，尝试获取body的背景颜色
   const bodyStyle = window.getComputedStyle(document.body)
   const bodyBackground = bodyStyle.backgroundColor
 
@@ -132,7 +129,6 @@ export const convertThemeToXTerm = (theme: Theme): XTermTheme => {
  * @returns 默认的 XTerm.js 主题对象
  */
 export const createDefaultXTermTheme = (): XTermTheme => {
-  // 尝试获取应用背景颜色，如果失败则使用默认深色背景
   const appBackground = getAppBackgroundColor() || '#1e1e1e'
 
   return {
@@ -141,7 +137,6 @@ export const createDefaultXTermTheme = (): XTermTheme => {
     cursor: '#ffffff',
     selectionBackground: '#3391ff',
 
-    // ANSI 标准颜色
     black: '#000000',
     red: '#cd3131',
     green: '#0dbc79',
@@ -151,7 +146,6 @@ export const createDefaultXTermTheme = (): XTermTheme => {
     cyan: '#11a8cd',
     white: '#e5e5e5',
 
-    // ANSI 明亮颜色
     brightBlack: '#666666',
     brightRed: '#f14c4c',
     brightGreen: '#23d18b',

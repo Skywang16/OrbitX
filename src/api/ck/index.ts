@@ -17,6 +17,7 @@ export interface CkSearchParams {
 export interface CkIndexStatus {
   isReady: boolean // 后端字段已更改
   path: string
+  size?: string // 索引大小
 }
 
 /**
@@ -82,11 +83,6 @@ export class CkApi {
   }
 }
 
-// 导出单例实例
 export const ckApi = new CkApi()
-
-// 导出类型
 export type * from './types'
-
-// 默认导出
 export default ckApi

@@ -53,20 +53,16 @@ export function useShortcutListener() {
   }
 
   const handleWheel = async (event: WheelEvent) => {
-    // 检查是否按下了 Cmd (Mac) 或 Ctrl (Windows/Linux)
     const isModifierPressed = event.metaKey || event.ctrlKey
 
     if (!isModifierPressed) return
 
-    // 阻止默认滚轮行为
     event.preventDefault()
     event.stopPropagation()
 
-    // 根据滚轮方向确定动作
     const action = event.deltaY < 0 ? 'increase_opacity' : 'decrease_opacity'
     const keyCombo = `${event.metaKey ? 'cmd' : 'ctrl'}+wheel`
 
-    // 创建虚拟快捷键绑定
     const virtualShortcut: ShortcutBinding = {
       key: 'wheel',
       modifiers: [event.metaKey ? 'cmd' : 'ctrl'],
@@ -186,12 +182,10 @@ export function useShortcutListener() {
     isListening.value = false
   }
 
-  // 自动初始化
   onMounted(() => {
     initializeListener()
   })
 
-  // 清理
   onUnmounted(() => {
     stopListener()
   })

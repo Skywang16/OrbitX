@@ -49,7 +49,6 @@ class PromptComponentRegistry {
     ])
 
     this.loaded = true
-    console.log(`组件注册表已加载: ${Object.keys(this.registry).length} 个组件`)
   }
 
   /**

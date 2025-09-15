@@ -191,7 +191,8 @@
     "close": "关闭"
   },
   "message": {
-    "generating": "正在生成..."
+    "generating": "正在生成...",
+    "duration_info": "耗时: {duration}"
   },
   "tool": {
     "data_error": "数据错误"
@@ -249,11 +250,20 @@
     "invalid_time": "无效时间"
   },
   "ck": {
-    "index_ready": "CK 语义索引已就绪",
-    "index_not_ready": "CK 语义索引未就绪",
-    "build_index": "构建 CK 语义索引",
+    "index_ready": "已构建向量索引",
+    "index_not_ready": "语义索引未就绪",
+    "build_index": "构建语义索引",
     "index_button_disabled_in_settings": "在设置页面时不可用",
     "index_button_select_non_home": "请选择非初始目录后再使用",
-    "send_button_disabled_in_settings": "在设置页面时不可用"
+    "send_button_disabled_in_settings": "在设置页面时不可用",
+    "title": "代码库索引",
+    "subtitle": "配置代码库索引设置以启用项目的语义搜索。",
+    "current_workspace": "当前工作区",
+    "build_index_button": "构建索引",
+    "build_index_tooltip_disabled": "请选择非初始目录后再构建",
+    "build_index_tooltip_enabled": "构建索引",
+    "refresh": "刷新",
+    "delete": "删除",
+    "loading_size": "计算中..."
   }
 }

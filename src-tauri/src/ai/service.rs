@@ -1,7 +1,3 @@
-/*!
- * AI服务
- */
-
 use crate::ai::types::AIModelConfig;
 use crate::storage::repositories::{Repository, RepositoryManager};
 use crate::utils::error::AppResult;

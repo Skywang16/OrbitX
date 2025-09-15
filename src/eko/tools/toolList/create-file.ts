@@ -64,5 +64,4 @@ Suggestion: Use read_file tool to verify file content, or use edit_file tool for
   }
 }
 
-// 导出工具实例
 export const createFileTool = new CreateFileTool()

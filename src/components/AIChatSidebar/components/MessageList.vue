@@ -61,7 +61,6 @@
         <div class="empty-hint">{{ t('message_list.configure_model_hint') }}</div>
       </div>
 
-      <!-- 正常的空状态 -->
       <div v-else class="normal-empty-state">
         <div class="empty-icon">
           <svg class="empty-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -77,10 +76,8 @@
 
     <div v-else class="message-container">
       <template v-for="message in msgList" :key="message.id">
-        <!-- 用户消息 -->
         <UserMessage v-if="message.type === 'user'" :message="message" />
 
-        <!-- AI消息 -->
         <AIMessage v-else-if="message.type === 'assistant'" :message="message" />
       </template>
     </div>

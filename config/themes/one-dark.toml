@@ -68,7 +68,7 @@ info = "#56b6c2"
 # 交互状态
 hover = "#2c313c"
 active = "#3e4451"
-focus = "#61afef"
+focus = "#80c7ff"
 selection = "rgba(62, 68, 81, 0.8)"
 
 # 阴影和其他UI变量

@@ -18,13 +18,10 @@ export class OrbitXEko {
   constructor(config: EkoInstanceConfig = {}) {
     this.config = { ...config }
 
-    // 初始化选中的模型ID
     this.selectedModelId = config.selectedModelId || null
 
-    // 创建回调
     this.callback = config.callback || createSidebarCallback()
 
-    // 创建单一Agent实例，通过模式控制行为
     this.agent = createTerminalAgent('chat', config.agentConfig)
   }
 
@@ -33,7 +30,6 @@ export class OrbitXEko {
    */
   async initialize(options: EkoConfigOptions = {}): Promise<void> {
     try {
-      // 获取Eko配置，传递选中的模型ID
       const ekoConfig = await getEkoConfig({
         ...options,
         selectedModelId: this.selectedModelId,
@@ -46,18 +42,14 @@ export class OrbitXEko {
         return
       }
 
-      // 更新Agent模式
       this.agent.setMode(this.mode)
 
-      // 创建Eko实例
       this.eko = new Eko({
         llms: ekoConfig.llms,
         agent: this.agent,
         planLlms: ekoConfig.planLlms,
         callback: this.callback,
       })
-
-      // 初始化完成，无需输出额外日志
     } catch (error) {
       console.error('❌ Eko实例初始化失败:', error)
       // 不抛出错误，允许应用继续启动
@@ -87,7 +79,6 @@ export class OrbitXEko {
    */
   private async updateLLMConfig(): Promise<void> {
     try {
-      // 重新获取最新的LLM配置，传递选中的模型ID
       const newLLMsConfig = await getEkoLLMsConfig(this.selectedModelId)
 
       // 如果没有AI模型配置，清除Eko实例
@@ -96,10 +87,8 @@ export class OrbitXEko {
         return
       }
 
-      // 更新Agent模式
       this.agent.setMode(this.mode)
 
-      // 重新创建Eko实例
       this.eko = new Eko({
         llms: newLLMsConfig,
         agent: this.agent,
@@ -123,7 +112,6 @@ export class OrbitXEko {
       if (!this.eko) {
         await this.initialize()
       } else {
-        // 每次运行时都更新LLM配置，确保使用最新的AI模型配置
         await this.updateLLMConfig()
       }
 
@@ -138,22 +126,17 @@ export class OrbitXEko {
         }
       }
 
-      // 设置运行状态
       this.isRunning = true
 
-      // 设置终端上下文并自动继承工作目录
       if (options.terminalId) {
         this.agent.setDefaultTerminalId(options.terminalId)
 
-        // Agent自动继承终端工作目录
         await this.agent.getWorkingDirectoryFromTerminal(options.terminalId)
       }
 
-      // 生成唯一的taskId
       const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
       this.currentTaskId = taskId
 
-      // 执行任务，直接使用用户原始prompt
       const result = await this.eko.run(prompt, taskId)
 
       const duration = Date.now() - startTime
@@ -208,15 +191,12 @@ export class OrbitXEko {
         await this.initialize()
       }
 
-      // 设置终端上下文并自动继承工作目录
       if (options.terminalId) {
         this.agent.setDefaultTerminalId(options.terminalId)
 
-        // Agent自动继承终端工作目录
         await this.agent.getWorkingDirectoryFromTerminal(options.terminalId)
       }
 
-      // 执行任务
       const result = await this.eko!.execute(task.taskId)
 
       const duration = Date.now() - startTime
@@ -281,12 +261,11 @@ export class OrbitXEko {
    */
   async setMode(mode: 'chat' | 'agent'): Promise<void> {
     if (this.mode === mode) {
-      return // 模式未改变，无需重新初始化
+      return
     }
 
     this.mode = mode
 
-    // 重新初始化Eko实例
     if (this.eko) {
       await this.initialize()
     }
@@ -306,7 +285,6 @@ export class OrbitXEko {
     try {
       await this.agent.cleanupAgentTerminal()
     } catch (error) {
-      // 清理失败不影响程序运行
     }
   }
 
@@ -343,10 +321,8 @@ export class OrbitXEko {
    * 销毁实例
    */
   destroy(): void {
-    // 中断任何正在运行的任务
     this.abort()
     this.eko = null
-    // 保持静默销毁，避免冗余日志
   }
 }
 

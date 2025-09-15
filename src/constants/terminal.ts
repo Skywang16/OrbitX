@@ -51,7 +51,6 @@ export const TERMINAL_CONFIG: TerminalConfig = {
   wordSeparator: ' ()[]{}\'",;', // 为中文优化的词分隔符
 
   // 滚动和缓冲区优化
-  // scrollback已在上面定义
   scrollSensitivity: 3, // 提高滚动灵敏度，改善用户体验
   fastScrollSensitivity: 5, // 快速滚动灵敏度
   smoothScrollDuration: 0, // 禁用平滑滚动，减少渲染开销

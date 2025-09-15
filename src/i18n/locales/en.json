@@ -191,7 +191,8 @@
     "close": "Close"
   },
   "message": {
-    "generating": "Generating..."
+    "generating": "Generating...",
+    "duration_info": "Duration: {duration}"
   },
   "tool": {
     "data_error": "Data Error"
@@ -249,11 +250,21 @@
     "invalid_time": "Invalid time"
   },
   "ck": {
-    "index_ready": "CK semantic index is ready",
-    "index_not_ready": "CK semantic index is not ready",
-    "build_index": "Build CK semantic index",
+    "index_ready": "semantic index is ready",
+    "index_not_ready": "semantic index is not ready",
+    "build_index": "Build semantic index",
     "index_button_disabled_in_settings": "Not available on the Settings page",
     "index_button_select_non_home": "Please select a non-initial directory first",
-    "send_button_disabled_in_settings": "Not available on the Settings page"
+    "send_button_disabled_in_settings": "Not available on the Settings page",
+    "title": "Code Repository Index",
+    "subtitle": "Configure code repository index settings to enable semantic search for your project.",
+    "current_workspace": "Current Workspace",
+    "build_index_button": "Build Index",
+    "build_index_tooltip_disabled": "Please select a non-initial directory before building",
+    "build_index_tooltip_enabled": "Build Index",
+    "refresh": "Refresh",
+    "delete": "Delete",
+
+    "loading_size": "Calculating..."
   }
 }

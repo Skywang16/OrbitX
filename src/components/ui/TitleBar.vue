@@ -37,10 +37,8 @@
 
 <template>
   <div class="title-bar" data-tauri-drag-region @mousedown="startDrag" @dblclick="handleDoubleClick">
-    <!-- 左侧按钮区域预留空间 -->
     <div class="left-buttons-space"></div>
 
-    <!-- 中间标签栏区域 -->
     <div class="tab-bar-container" data-tauri-drag-region="false">
       <TabBar
         :tabs="props.tabs"
@@ -50,7 +48,6 @@
       />
     </div>
 
-    <!-- 右侧窗口控制按钮 -->
     <div class="window-controls-container">
       <ButtonGroup />
     </div>

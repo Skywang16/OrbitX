@@ -5,7 +5,6 @@
  * 提供便捷的 '@/api' 导入方式
  */
 
-// API 实例导出
 export { aiApi } from './ai'
 export { ckApi } from './ck'
 export { completionApi } from './completion'
@@ -21,7 +20,6 @@ export { terminalApi } from './terminal'
 export { terminalContextApi } from './terminal-context'
 export { windowApi } from './window'
 
-// 类型导出 - 避免重复，选择性导出
 export type * from './ai/types'
 export type * from './ck/types'
 export type * from './completion/types'
@@ -36,7 +34,6 @@ export type { ShellInfo, BackgroundCommandResult } from './shell/types'
 // 从terminal导出所有类型
 export type * from './terminal/types'
 
-// 从 index.ts 导出类型（没有单独 types.ts 文件的模块）
 export type { CkApi, CkSearchParams, CkIndexStatus } from './ck'
 export type { FilesystemApi } from './filesystem'
 export type { LLMApi } from './llm'

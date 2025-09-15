@@ -91,7 +91,6 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
   const addModel = async (model: AIModelConfig) => {
     try {
       const savedModel = await aiApi.addModel(model)
-      console.log('模型添加成功:', savedModel)
       await loadModels()
     } catch (error) {
       console.error('模型添加失败:', error)

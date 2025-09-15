@@ -50,7 +50,6 @@
           }"
         >
           <div class="task-status">
-            <!-- 待处理状态 -->
             <svg
               v-if="node.status === 'pending'"
               class="status-icon pending"
@@ -61,7 +60,6 @@
               <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" fill="none" />
             </svg>
 
-            <!-- 运行中状态 -->
             <svg
               v-else-if="node.status === 'running'"
               class="status-icon running"
@@ -73,7 +71,6 @@
               <circle cx="8" cy="8" r="2" fill="currentColor" />
             </svg>
 
-            <!-- 已完成状态 -->
             <svg
               v-else-if="node.status === 'completed'"
               class="status-icon completed"
@@ -85,7 +82,6 @@
               <path d="M5.5 8l2 2 3.5-3.5" stroke="currentColor" stroke-width="1.5" fill="none" />
             </svg>
 
-            <!-- 默认状态 -->
             <svg v-else class="status-icon default" width="14" height="14" viewBox="0 0 16 16">
               <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" fill="none" />
             </svg>

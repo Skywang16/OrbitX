@@ -42,8 +42,6 @@ export class APIClient {
    * 执行Tauri命令调用
    */
   async invoke<T>(command: string, args?: Record<string, unknown>, options?: APIOptions): Promise<T> {
-    // const startTime = Date.now()
-
     try {
       // 检查是否已被取消
       if (options?.signal?.aborted) {

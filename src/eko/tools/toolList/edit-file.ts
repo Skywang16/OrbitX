@@ -104,5 +104,4 @@ Status: Content has been successfully replaced.`,
   }
 }
 
-// 导出工具实例
 export const editFileTool = new EditFileTool()

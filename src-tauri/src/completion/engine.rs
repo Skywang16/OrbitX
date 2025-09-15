@@ -293,5 +293,3 @@ impl Default for CompletionEngine {
     }
 }
 
-// 为了支持downcast，需要为CompletionProvider添加as_any方法
-// 这需要修改trait定义，但为了保持简单，我们先用这个版本

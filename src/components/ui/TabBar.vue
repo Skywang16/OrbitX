@@ -254,7 +254,6 @@
         </button>
       </div>
 
-      <!-- 内联添加按钮 -->
       <button
         v-if="!needsScroll && tabWidth >= MAX_TAB_WIDTH"
         class="add-tab-btn inline"
@@ -278,7 +277,6 @@
       </button>
     </div>
 
-    <!-- 固定添加按钮 -->
     <button
       v-if="needsScroll || tabWidth < MAX_TAB_WIDTH"
       class="add-tab-btn fixed"

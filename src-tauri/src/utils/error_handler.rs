@@ -212,8 +212,6 @@ mod tests {
         let error_result: Result<i32, &str> = Err("test error");
 
         // 需要初始化i18n才能测试
-        // let success_response = success_result.to_api_response();
-        // let error_response = error_result.to_api_response();
     }
 
     #[test]
@@ -222,7 +220,5 @@ mod tests {
         let none_value: Option<i32> = None;
 
         // 需要初始化i18n才能测试
-        // let success_response = some_value.to_api_response();
-        // let error_response = none_value.to_api_response();
     }
 }

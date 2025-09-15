@@ -124,11 +124,6 @@ export class TerminalApi {
   }
 }
 
-// 导出单例实例
 export const terminalApi = new TerminalApi()
-
-// 导出类型
 export type * from './types'
-
-// 默认导出
 export default terminalApi

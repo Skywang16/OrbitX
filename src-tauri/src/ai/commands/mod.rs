@@ -1,15 +1,7 @@
-/*!
- * AI功能的Tauri命令接口
- *
- * 统一管理AI相关的命令模块，包括模型管理、对话管理和上下文管理
- */
-
-// 子模块声明
 pub mod chat;
 pub mod context;
 pub mod model;
 
-// 重新导出所有命令函数
 pub use chat::*;
 pub use context::*;
 pub use model::*;
@@ -22,7 +14,6 @@ use crate::utils::error::ToTauriResult;
 
 use std::sync::Arc;
 
-/// AI管理器状态
 pub struct AIManagerState {
     pub ai_service: Arc<AIService>,
     pub repositories: Arc<RepositoryManager>,

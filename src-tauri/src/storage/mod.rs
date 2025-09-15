@@ -8,7 +8,6 @@
 // 核心模块
 pub mod cache;
 pub mod coordinator;
-// pub mod filesystem; // 已移动到 ai::tool::filesystem
 pub mod messagepack;
 pub mod paths;
 pub mod recovery;

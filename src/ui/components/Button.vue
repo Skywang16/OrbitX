@@ -458,6 +458,12 @@
     justify-content: center;
   }
 
+  /* 让通过 #icon 插槽传入的 SVG 图标按按钮尺寸规范显示（不覆盖其 fill/stroke） */
+  .x-button__icon :slotted(svg) {
+    width: 14px;
+    height: 14px;
+  }
+
   .x-button__icon-svg {
     width: 14px;
     height: 14px;
@@ -469,7 +475,17 @@
     height: 12px;
   }
 
+  .x-button--small .x-button__icon :slotted(svg) {
+    width: 12px;
+    height: 12px;
+  }
+
   .x-button--large .x-button__icon-svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .x-button--large .x-button__icon :slotted(svg) {
     width: 16px;
     height: 16px;
   }

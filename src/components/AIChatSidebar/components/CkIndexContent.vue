@@ -5,14 +5,14 @@
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
-  import { useI18n } from '@/i18n'
-
+  import { useI18n } from 'vue-i18n'
   const { t } = useI18n()
 
   interface Props {
     indexStatus: {
       hasIndex: boolean
       path: string
+      size?: string
     }
   }
 
@@ -50,6 +50,7 @@
   const displayPath = ref(props.indexStatus.path)
   const resolvedPath = ref<string>(props.indexStatus.path || '.')
   const homePath = ref<string>('')
+  const indexSize = ref<string>('')
 
   const simplify = (p: string) => {
     const parts = p.replace(/\/$/, '').split(/[/\\]/).filter(Boolean)
@@ -102,8 +103,14 @@
 
   watch(
     () => props.indexStatus,
-    () => {
+    newStatus => {
       refreshDisplayPath()
+      // 直接使用 indexStatus 中的 size 字段
+      if (newStatus.hasIndex && newStatus.path) {
+        indexSize.value = newStatus.size || ''
+      } else {
+        indexSize.value = ''
+      }
     },
     { deep: true, immediate: true }
   )
@@ -120,24 +127,24 @@
   <div class="ck-index-content">
     <div class="header">
       <div class="title-section">
-        <h3 class="title">代码库索引</h3>
-        <p class="subtitle">配置代码库索引设置以启用项目的语义搜索。</p>
+        <h3 class="title">{{ t('ck.title') }}</h3>
+        <p class="subtitle">{{ t('ck.subtitle') }}</p>
       </div>
     </div>
 
     <div class="body">
       <div v-if="!indexStatus.hasIndex" class="workspace-section">
         <div class="workspace-info">
-          <div class="workspace-label">当前工作区</div>
+          <div class="workspace-label">{{ t('ck.current_workspace') }}</div>
           <div class="workspace-path">{{ displayPath }}</div>
         </div>
         <x-button
           variant="primary"
           :disabled="!canBuild"
-          :title="!canBuild ? '请选择非初始目录后再构建' : '构建索引'"
+          :title="!canBuild ? t('ck.build_index_tooltip_disabled') : t('ck.build_index_tooltip_enabled')"
           @click="handleBuild"
         >
-          构建索引
+          {{ t('ck.build_index_button') }}
         </x-button>
       </div>
 
@@ -145,25 +152,32 @@
         <div class="status-row">
           <div class="status-info">
             <span class="status-text">{{ statusText }}</span>
+            <div class="index-size-info" v-if="indexSize">
+              <span class="size-value">{{ indexSize }}</span>
+            </div>
           </div>
           <div class="action-buttons">
-            <x-button variant="secondary" @click="handleRefresh">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                <path d="M3 3v5h5" />
-                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                <path d="M21 21v-5h-5" />
-              </svg>
-              刷新
+            <x-button size="small" variant="primary" @click="handleRefresh">
+              <template #icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                  <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                  <path d="M21 21v-5h-5" />
+                </svg>
+              </template>
+              {{ t('ck.refresh') }}
             </x-button>
-            <x-button variant="danger" @click="handleDelete">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="m3 6 3 12c0 .6.4 1 1 1h8c.6 0 1-.4 1-1l3-12" />
-                <path d="M8 6V4c0-.6.4-1 1-1h4c.6 0 1 .4 1 1v2" />
-                <line x1="10" y1="11" x2="10" y2="17" />
-                <line x1="14" y1="11" x2="14" y2="17" />
-              </svg>
-              删除
+            <x-button size="small" variant="danger" @click="handleDelete">
+              <template #icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3,6 5,6 21,6"></polyline>
+                  <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
+                  <line x1="10" x2="10" y1="11" y2="17"></line>
+                  <line x1="14" x2="14" y1="11" y2="17"></line>
+                </svg>
+              </template>
+              {{ t('ck.delete') }}
             </x-button>
           </div>
         </div>
@@ -268,8 +282,8 @@
 
   .status-info {
     display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
+    flex-direction: column;
+    gap: var(--spacing-xs);
   }
 
   .status-text {
@@ -278,15 +292,36 @@
     color: var(--text-100);
   }
 
+  .index-size-info {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: var(--font-size-xs);
+  }
+
+  .size-value {
+    color: var(--text-200);
+    font-family: var(--font-family-mono);
+    background: var(--bg-300);
+    padding: 2px var(--spacing-xs);
+    border-radius: var(--border-radius-xs);
+    border: 1px solid var(--border-200);
+  }
+
   .action-buttons {
     display: flex;
     gap: var(--spacing-sm);
   }
 
+  /* 增加系统 x-button 内部图标与文字的间距，仅作用于本组件按钮区 */
+  .action-buttons :deep(.x-button) {
+    gap: 6px;
+  }
+
   .action-button {
     display: flex;
     align-items: center;
-    gap: var(--spacing-xs);
+    gap: var(--spacing-sm);
     padding: var(--spacing-xs) var(--spacing-sm);
     border: 1px solid var(--border-200);
     border-radius: var(--border-radius-sm);

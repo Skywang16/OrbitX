@@ -42,11 +42,6 @@ export class CompletionApi {
   }
 }
 
-// 导出单例实例
 export const completionApi = new CompletionApi()
-
-// 导出类型
 export type * from './types'
-
-// 默认导出
 export default completionApi

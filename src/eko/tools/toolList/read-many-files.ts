@@ -167,5 +167,4 @@ ${processedContent}`
   }
 }
 
-// 导出工具实例
 export const readManyFilesTool = new ReadManyFilesTool()

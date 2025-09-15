@@ -290,10 +290,8 @@
     </template>
 
     <form @submit.prevent="handleSubmit" class="ai-form">
-      <!-- 模型类型选择 - 隐藏，固定为 chat -->
       <input type="hidden" v-model="formData.modelType" value="chat" />
 
-      <!-- 配置类型选择 -->
       <div class="form-row">
         <div class="form-group full-width">
           <label class="form-label">{{ t('ai_model.config_type') }}</label>
@@ -319,7 +317,6 @@
         </div>
       </div>
 
-      <!-- 预设模式 -->
       <div v-if="isPresetMode" class="form-row">
         <div class="form-group">
           <label class="form-label">{{ t('ai_model.provider') }}</label>
@@ -358,7 +355,6 @@
         </div>
       </div>
 
-      <!-- 自定义模式 -->
       <template v-if="!isPresetMode">
         <div class="form-row">
           <div class="form-group">
@@ -399,7 +395,6 @@
         </div>
       </template>
 
-      <!-- API Key -->
       <div class="form-row">
         <div class="form-group full-width">
           <label class="form-label">{{ t('ai_model.api_key') }}</label>

@@ -87,9 +87,7 @@
 
 <template>
   <div class="window-controls" data-tauri-drag-region="false">
-    <!-- 按钮组 -->
     <div class="button-group">
-      <!-- AI聊天按钮 -->
       <button
         class="control-btn ai-chat-btn"
         :class="{ active: aiChatStore.isVisible }"
@@ -102,7 +100,6 @@
           />
         </svg>
       </button>
-      <!-- 设置按钮 -->
       <button
         ref="settingsButtonRef"
         class="control-btn settings-btn"
@@ -115,7 +112,6 @@
           />
         </svg>
       </button>
-      <!-- 置顶按钮 -->
       <button
         v-if="controls.alwaysOnTop"
         class="control-btn pin-btn"

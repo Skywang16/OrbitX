@@ -7,7 +7,6 @@
 
     <div class="ai-options">
       <TransitionGroup name="provider-list" tag="div" class="provider-container">
-        <!-- 选择提供商 -->
         <div
           v-for="provider in visibleProviders"
           :key="provider.id"
@@ -18,7 +17,6 @@
             'move-to-top': selectedProvider === provider.id,
           }"
         >
-          <!-- 卡片头部 -->
           <div class="ai-option-header" @click="selectProvider(provider.id)">
             <div class="ai-info">
               <div class="ai-name">{{ provider.name }}</div>
@@ -28,7 +26,6 @@
             </div>
           </div>
 
-          <!-- 展开的配置表单 -->
           <Transition name="dropdown" appear>
             <div v-if="selectedProvider === provider.id" class="ai-config-dropdown">
               <div class="config-divider"></div>

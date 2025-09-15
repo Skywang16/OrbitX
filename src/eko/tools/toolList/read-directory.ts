@@ -288,5 +288,4 @@ export class ReadDirectoryTool extends ModifiableTool {
   }
 }
 
-// 导出工具实例
 export const readDirectoryTool = new ReadDirectoryTool()

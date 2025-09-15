@@ -103,7 +103,6 @@ export class SimpleSseMcpClient implements IMcpClient {
         version: '1.0.0',
       },
     })
-    // this.request("notifications/initialized", {});
   }
 
   private ping() {

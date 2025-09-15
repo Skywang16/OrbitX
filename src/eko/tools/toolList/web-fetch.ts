@@ -193,5 +193,5 @@ export class WebFetchTool extends ModifiableTool {
   }
 }
 
-// 导出工具实例
+
 export const webFetchTool = new WebFetchTool()

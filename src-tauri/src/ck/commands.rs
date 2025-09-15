@@ -34,6 +34,50 @@ fn is_index_ready(search_path: &Path) -> bool {
     ready_marker.exists()
 }
 
+/// 计算 .ck 目录大小（仅顶层与其下一层子目录的文件，避免深度递归）
+fn ck_dir_top_level_size(dir: &Path) -> u64 {
+    let mut total: u64 = 0;
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if let Ok(meta) = fs::metadata(&p) {
+                if meta.is_file() {
+                    total = total.saturating_add(meta.len());
+                } else if meta.is_dir() {
+                    if let Ok(sub_entries) = fs::read_dir(&p) {
+                        for sub in sub_entries.flatten() {
+                            let sp = sub.path();
+                            if let Ok(sm) = fs::metadata(&sp) {
+                                if sm.is_file() {
+                                    total = total.saturating_add(sm.len());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    total
+}
+
+/// 将字节数格式化为可读字符串
+fn format_bytes(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = KB * 1024.0;
+    const GB: f64 = MB * 1024.0;
+    let b = bytes as f64;
+    if b >= GB {
+        format!("{:.2} GB", b / GB)
+    } else if b >= MB {
+        format!("{:.2} MB", b / MB)
+    } else if b >= KB {
+        format!("{:.2} KB", b / KB)
+    } else {
+        format!("{} B", bytes)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CkSearchParams {
@@ -192,6 +236,7 @@ pub async fn ck_search(
 pub struct CkIndexStatusResult {
     pub is_ready: bool,
     pub path: String,
+    pub size: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -288,9 +333,15 @@ pub async fn ck_index_status(
         path_str, is_ready
     );
 
+    // 仅统计 .ck 顶层文件大小，避免递归带来的性能影响
+    let ck_dir = search_path.join(".ck");
+    let size_bytes = if ck_dir.exists() { ck_dir_top_level_size(&ck_dir) } else { 0 };
+    let size_str = format_bytes(size_bytes);
+
     Ok(api_success!(CkIndexStatusResult {
         is_ready,
         path: path_str,
+        size: size_str,
     }))
 }
 

@@ -36,9 +36,7 @@ interface StateSnapshot {
 }
 
 export const useThemeStore = defineStore('theme', () => {
-  // ========================================================================
   // 状态定义
-  // ========================================================================
 
   // 核心状态
   const configStatus = ref<ThemeConfigStatus | null>(null)
@@ -50,9 +48,7 @@ export const useThemeStore = defineStore('theme', () => {
   const error = ref<string | null>(null)
   const lastOperation = ref<ThemeOperation | null>(null)
 
-  // ========================================================================
   // 计算属性
-  // ========================================================================
 
   const themeConfig = computed(() => configStatus.value?.themeConfig || null)
   const currentThemeName = computed(() => configStatus.value?.currentThemeName || '')
@@ -69,9 +65,7 @@ export const useThemeStore = defineStore('theme', () => {
     }))
   })
 
-  // ========================================================================
   // 核心业务逻辑
-  // ========================================================================
 
   /**
    * 主题切换核心逻辑
@@ -229,9 +223,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   const themeSwitcher = new ThemeSwitcher()
 
-  // ========================================================================
   // 数据加载
-  // ========================================================================
 
   async function loadThemeConfigStatus(): Promise<void> {
     try {
@@ -262,9 +254,7 @@ export const useThemeStore = defineStore('theme', () => {
     }
   }
 
-  // ========================================================================
   // 初始化和清理
-  // ========================================================================
 
   async function initialize(): Promise<void> {
     await Promise.all([loadThemeConfigStatus(), loadCurrentTheme()])
@@ -274,9 +264,7 @@ export const useThemeStore = defineStore('theme', () => {
     error.value = null
   }
 
-  // ========================================================================
   // 公开接口
-  // ========================================================================
 
   return {
     // 状态

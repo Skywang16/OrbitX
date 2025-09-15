@@ -7,7 +7,6 @@
       <span>{{ t('shortcuts.loading') }}</span>
     </div>
 
-    <!-- 快捷键配置 -->
     <div v-else class="settings-group">
       <h3 class="settings-group-title">{{ t('shortcuts.title') }}</h3>
 

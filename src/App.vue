@@ -35,7 +35,6 @@
 
 <template>
   <div class="app-layout">
-    <!-- 引导页面 -->
     <OnboardingView v-if="showOnboarding" @complete="handleOnboardingComplete" />
     <TerminalView v-else />
   </div>

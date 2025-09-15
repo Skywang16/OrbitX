@@ -19,7 +19,6 @@ import { convertTools, getTool, convertToolResult } from '../llm/conversion-util
 // Export conversion utilities from llm module
 export { convertTools, getTool, convertToolResult }
 
-// Temporary compatibility functions for memory module (will be refactored in task 5)
 export function removeDuplicateToolUse(
   results: Array<{ type: 'text'; text: string } | NativeLLMToolCall>
 ): Array<{ type: 'text'; text: string } | NativeLLMToolCall> {
@@ -76,10 +75,6 @@ export async function callAgentLLM(
       onMessage: async () => {},
     }
 
-  // Debug: 检查回调函数是否正确传递
-  console.warn('🔍 Debug: streamCallback available:', !!streamCallback)
-  console.warn('🔍 Debug: callback parameter:', !!callback)
-  console.warn('🔍 Debug: context.config.callback:', !!context.config.callback)
   const stepController = new AbortController()
   const signal = AbortSignal.any([context.controller.signal, stepController.signal])
   let request: LLMRequest = {

@@ -15,29 +15,22 @@ export interface ShellIntegrationOptions {
 export const useShellIntegration = (options: ShellIntegrationOptions) => {
   const terminalStore = useTerminalStore()
 
-  // Shell Integration状态跟踪
   let currentCommandId: string | null = null
   let isCommandActive: boolean = false
 
-  // 处理命令开始
   const handleCommandStart = () => {
-    // 总是创建新的命令ID，因为每个B序列都表示新命令开始
     currentCommandId = `cmd_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
     isCommandActive = true
 
-    // 调用命令开始回调
     if (options.onCommandStarted && currentCommandId) {
       options.onCommandStarted(currentCommandId)
     }
 
-    // 发布命令开始事件
     terminalStore.emitCommandEvent(options.terminalId, 'started', { commandId: currentCommandId })
   }
 
-  // 处理命令结束
   const handleCommandFinished = (payload: string) => {
     if (currentCommandId && isCommandActive) {
-      // 解析退出码，支持多种格式
       let exitCode = 0
       if (payload && payload.trim()) {
         const parsed = parseInt(payload.trim(), 10)
@@ -47,7 +40,6 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
       }
       const isSuccess = exitCode === 0
 
-      // 调用命令完成回调
       if (options.onCommandFinished) {
         try {
           options.onCommandFinished(exitCode, isSuccess)
@@ -56,14 +48,12 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
         }
       }
 
-      // 发布命令完成事件
       terminalStore.emitCommandEvent(options.terminalId, 'finished', {
         commandId: currentCommandId,
         exitCode,
         isSuccess,
       })
 
-      // 重置状态
       currentCommandId = null
       isCommandActive = false
     }
@@ -82,21 +72,16 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
 
       switch (command) {
         case 'A':
-          // 提示符开始 - 无需处理
           break
         case 'B':
-          // 命令开始（提示符结束）
           handleCommandStart()
           break
         case 'C':
-          // 命令执行开始 - 无需处理，只是标记
           break
         case 'D':
-          // 命令结束，可能包含退出码
           handleCommandFinished(payload)
           break
         case 'P':
-          // 属性更新
           handlePropertyUpdate(payload)
           break
       }
@@ -163,7 +148,6 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
           break
       }
     } catch {
-      // 静默忽略解析错误
     }
   }
 
@@ -180,7 +164,6 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
       await new Promise(resolve => setTimeout(resolve, 500))
       await silentShellIntegration()
     } catch {
-      // 静默失败
     }
   }
 

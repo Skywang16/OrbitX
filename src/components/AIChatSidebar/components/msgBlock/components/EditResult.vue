@@ -1,19 +1,15 @@
 <template>
   <div class="edit-result">
-    <!-- 统计信息 -->
     <div class="stats">
       <span class="stat removed">-{{ getLineCount(editData.old) }}</span>
       <span class="stat added">+{{ getLineCount(editData.new) }}</span>
     </div>
 
-    <!-- 代码对比 -->
     <div class="code-diff">
-      <!-- 移除的行 -->
       <div class="diff-line removed">
         <span class="line-prefix">-</span>
         <span class="line-content">{{ editData.old }}</span>
       </div>
-      <!-- 添加的行 -->
       <div class="diff-line added">
         <span class="line-prefix">+</span>
         <span class="line-content">{{ editData.new }}</span>

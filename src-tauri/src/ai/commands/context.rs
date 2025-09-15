@@ -109,9 +109,6 @@ pub async fn get_context_config() -> TauriApiResult<crate::ai::enhanced_context:
 pub async fn update_context_config(
     _config: crate::ai::enhanced_context::ContextConfig,
 ) -> TauriApiResult<EmptyData> {
-    // TODO: 实现配置持久化
-    // 可以保存到数据库或配置文件
-
     Ok(api_success!())
 }
 

@@ -52,10 +52,6 @@
         </div>
 
         <div v-else-if="step.type === 'error'" class="error-output step-block">
-          <div class="error-header">
-            <span class="error-icon">❌</span>
-            <span class="error-label">执行错误</span>
-          </div>
           <div class="error-content">{{ step.content }}</div>
         </div>
 
@@ -175,15 +171,6 @@
     font-size: var(--font-size-sm);
   }
 
-  .error-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-    font-weight: 600;
-    margin-bottom: var(--spacing-xs);
-    color: var(--color-error);
-  }
-
   .error-icon {
     font-size: var(--font-size-md);
   }
@@ -253,16 +240,6 @@
     border: 1px solid var(--color-error);
     border-radius: var(--border-radius);
     background: var(--bg-300);
-  }
-
-  .error-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-    padding: var(--spacing-sm) var(--spacing-md);
-    background: rgba(var(--color-error-rgb), 0.1);
-    border-bottom: 1px solid var(--color-error);
-    border-radius: var(--border-radius) var(--border-radius) 0 0;
   }
 
   .error-icon {

@@ -174,7 +174,6 @@
   <div class="settings-group">
     <h2 class="settings-section-title">{{ t('settings.theme.title') }}</h2>
 
-    <!-- 主题模式选择 -->
     <div class="settings-group">
       <h3 class="settings-group-title">{{ t('theme_settings.theme_mode') }}</h3>
 
@@ -221,7 +220,6 @@
       </SettingsCard>
     </div>
 
-    <!-- 手动选择主题 -->
     <div v-if="currentMode === 'manual'" class="settings-group">
       <h3 class="settings-group-title">{{ t('theme_settings.select_theme') }}</h3>
 
@@ -252,7 +250,6 @@
       </SettingsCard>
     </div>
 
-    <!-- 系统跟随主题选择 -->
     <div v-if="currentMode === 'system'" class="settings-group">
       <h3 class="settings-group-title">{{ t('theme_settings.select_theme') }}</h3>
 
@@ -291,7 +288,6 @@
       </SettingsCard>
     </div>
 
-    <!-- 窗口透明度 -->
     <div class="settings-group">
       <h3 class="settings-group-title">{{ t('theme_settings.window_opacity') }}</h3>
 

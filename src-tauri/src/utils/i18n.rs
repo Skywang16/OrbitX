@@ -232,7 +232,5 @@ mod tests {
     #[test]
     fn test_macro() {
         // 这些测试需要在初始化I18n后运行
-        // let result = t!("common.success");
-        // assert!(!result.is_empty());
     }
 }

@@ -1,5 +1,3 @@
-// Native LLM Types - Complete refactor without ai-sdk dependencies
-
 // Simplified JSONSchema type
 export type JSONSchema7 = any
 

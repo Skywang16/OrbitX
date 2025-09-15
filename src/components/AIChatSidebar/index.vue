@@ -152,7 +152,6 @@
 
 <template>
   <div class="ai-chat-sidebar" :style="{ width: aiChatStore.sidebarWidth + 'px' }">
-    <!-- 拖拽调整手柄 -->
     <ResizeHandle
       :is-dragging="isDragging"
       :is-hovering="isHovering"
@@ -163,7 +162,6 @@
     />
 
     <div class="ai-chat-content">
-      <!-- 聊天头部 -->
       <ChatHeader
         :sessions="aiChatStore.conversations"
         :current-session-id="aiChatStore.currentConversationId"
@@ -174,17 +172,14 @@
         @refresh-sessions="refreshSessions"
       />
 
-      <!-- 任务列表 -->
       <TaskList v-if="aiChatStore.chatMode === 'agent'" :task-nodes="[]" />
 
-      <!-- 消息列表 -->
       <MessageList
         :messages="aiChatStore.messageList"
         :is-loading="aiChatStore.isLoading"
         :chat-mode="aiChatStore.chatMode"
       />
 
-      <!-- 消息输入 -->
       <ChatInput
         ref="chatInputRef"
         v-model="messageInput"

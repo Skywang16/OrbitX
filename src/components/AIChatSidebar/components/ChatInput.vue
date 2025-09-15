@@ -144,9 +144,11 @@
   const indexStatus = ref<{
     isReady: boolean
     path: string
+    size?: string
   }>({
     isReady: false,
     path: '.',
+    size: '',
   })
 
   const buildProgress = ref(0)
@@ -431,7 +433,7 @@
 
     <InputPopover :visible="showIndexModal" :target-ref="inputTextarea" @update:visible="showIndexModal = $event">
       <CkIndexContent
-        :index-status="{ hasIndex: indexStatus.isReady, path: indexStatus.path }"
+        :index-status="{ hasIndex: indexStatus.isReady, path: indexStatus.path, size: indexStatus.size }"
         @build="buildCkIndex"
         @delete="deleteCkIndex"
         @refresh="checkCkIndexStatus"

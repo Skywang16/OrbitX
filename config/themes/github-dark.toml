@@ -55,9 +55,9 @@ text_400 = "#9198a1"
 text_500 = "#6e7681"
 
 # 状态颜色
-primary = "#58a6ff"
-primary_hover = "#388bfd"
-primary_alpha = "rgba(88, 166, 255, 0.15)"
+primary = "#bc8cff"
+primary_hover = "#a371f7"
+primary_alpha = "rgba(188, 140, 255, 0.15)"
 success = "#238636"
 warning = "#9e6a03"
 error = "#da3633"
@@ -66,7 +66,7 @@ info = "#1f6feb"
 # 交互状态
 hover = "#161b22"
 active = "#21262d"
-focus = "#58a6ff"
+focus = "#bc8cff"
 selection = "rgba(88, 166, 255, 0.25)"
 
 # 阴影和其他UI变量

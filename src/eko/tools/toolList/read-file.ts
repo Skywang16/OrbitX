@@ -239,5 +239,4 @@ export class ReadFileTool extends ModifiableTool {
   }
 }
 
-// 导出工具实例
 export const readFileTool = new ReadFileTool()

@@ -50,11 +50,6 @@ export class ShellApi {
   }
 }
 
-// 导出单例实例
 export const shellApi = new ShellApi()
-
-// 导出类型
 export type * from './types'
-
-// 默认导出
 export default shellApi

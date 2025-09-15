@@ -90,11 +90,6 @@ export class StorageApi {
   }
 }
 
-// 导出单例实例
 export const storageApi = new StorageApi()
-
-// 导出类型
 export type * from './types'
-
-// 默认导出
 export default storageApi

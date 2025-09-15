@@ -179,7 +179,6 @@ export class EkoMemory {
         lastMessage.role == 'user' &&
         message.content == lastMessage.content
       ) {
-        // remove duplicate user messages
         removeIds.push(message.id)
       }
       if (
@@ -188,7 +187,6 @@ export class EkoMemory {
         lastMessage.content.filter(part => part.type == 'tool-call').length > 0 &&
         message.role != 'tool'
       ) {
-        // add tool result message
         this.messages.push({
           role: 'tool',
           id: this.genMessageId(),

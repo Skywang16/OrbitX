@@ -54,7 +54,6 @@ export default class TaskNodeStatusTool implements Tool {
       if (done && todo) {
         throw new Error('The ID cannot appear in both doneIds and todoIds simultaneously, nodeId: ' + nodeId)
       } else if (!done && !todo) {
-        // throw new Error("Node status update exception, nodeId: " + i);
       }
       node.setAttribute('status', done ? 'done' : 'todo')
     })
