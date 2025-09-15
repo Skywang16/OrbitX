@@ -315,7 +315,9 @@
           startProgressPolling(targetPath)
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Failed to start progress polling:', e)
+    }
   })
 
   defineExpose({

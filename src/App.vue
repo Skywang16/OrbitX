@@ -1,4 +1,3 @@
-
 <script setup lang="ts">
   import TerminalView from '@/views/Terminal/TerminalView.vue'
   import { OnboardingView } from '@/components/Onboarding'
@@ -25,11 +24,11 @@
 
   // 开发环境下暴露到全局
   if (import.meta.env.DEV) {
-    ;(window as any).showOnboarding = showOnboardingForTesting
+    window.showOnboarding = showOnboardingForTesting
   }
 
   onMounted(() => {
-    ;(window as any).reloadShortcuts = reloadConfig
+    window.reloadShortcuts = reloadConfig
   })
 </script>
 

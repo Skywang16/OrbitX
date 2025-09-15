@@ -204,20 +204,19 @@ impl ErrorHandler {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn test_result_wrapper() {
-        let success_result: Result<i32, &str> = Ok(42);
-        let error_result: Result<i32, &str> = Err("test error");
+        let _success_result: Result<i32, &str> = Ok(42);
+        let _error_result: Result<i32, &str> = Err("test error");
 
         // 需要初始化i18n才能测试
     }
 
     #[test]
     fn test_option_wrapper() {
-        let some_value: Option<i32> = Some(42);
-        let none_value: Option<i32> = None;
+        let _some_value: Option<i32> = Some(42);
+        let _none_value: Option<i32> = None;
 
         // 需要初始化i18n才能测试
     }

@@ -12,14 +12,21 @@ pub fn generate_script(config: &ShellIntegrationConfig) -> String {
     script.push_str(
         r#"
 # OrbitX Integration Start
-if [[ -z "$ORBITX_INTEGRATION_LOADED" ]]; then
+if [[ -z "$ORBITX_SHELL_INTEGRATION" ]]; then
+    export ORBITX_SHELL_INTEGRATION=1
     export ORBITX_INTEGRATION_LOADED=1
 
     # 原始 PS1 备份
     if [[ -z "$ORBITX_ORIGINAL_PS1" ]]; then
         export ORBITX_ORIGINAL_PS1="$PS1"
     fi
+"#,
+    );
 
+    // 只有启用命令跟踪时才添加相关函数
+    if config.enable_command_tracking {
+        script.push_str(
+            r#"
     # OSC 序列函数
     orbitx_osc() {
         printf "\e]6969;%s\a" "$1" >/dev/tty
@@ -36,7 +43,8 @@ if [[ -z "$ORBITX_INTEGRATION_LOADED" ]]; then
         orbitx_osc "AfterCommand;$(pwd);$exit_code"
     }
 "#,
-    );
+        );
+    }
 
     // 添加命令跟踪功能
     if config.enable_command_tracking {

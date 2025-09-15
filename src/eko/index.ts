@@ -285,6 +285,7 @@ export class OrbitXEko {
     try {
       await this.agent.cleanupAgentTerminal()
     } catch (error) {
+      console.warn('Failed to cleanup agent terminal:', error)
     }
   }
 

@@ -219,7 +219,7 @@ export interface ShortcutEvent {
   /** 相关的快捷键绑定 */
   shortcut?: ShortcutBinding
   /** 事件数据 */
-  data?: any
+  data?: Record<string, unknown>
   /** 时间戳 */
   timestamp: number
 }

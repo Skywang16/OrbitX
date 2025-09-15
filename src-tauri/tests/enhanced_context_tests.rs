@@ -101,6 +101,8 @@ async fn test_build_context_with_compression_path_executes() {
     let cfg = ContextConfig {
         max_tokens: 200,          // 非常小的 token 上限
         compress_threshold: 0.50, // 一半就压缩
+        max_messages: 30,         // 最大消息数量
+        protect_recent_count: 3,  // 保护最近3条消息
     };
     let ctx_mgr = create_context_manager_with_config(cfg);
 

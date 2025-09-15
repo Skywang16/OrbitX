@@ -147,7 +147,8 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
         case 'OSType':
           break
       }
-    } catch {
+    } catch (error) {
+      console.warn('Shell integration processing failed:', error)
     }
   }
 
@@ -163,7 +164,8 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
     try {
       await new Promise(resolve => setTimeout(resolve, 500))
       await silentShellIntegration()
-    } catch {
+    } catch (error) {
+      console.warn('Retry shell integration failed:', error)
     }
   }
 

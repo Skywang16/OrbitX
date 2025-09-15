@@ -5,6 +5,7 @@ import type { TerminalState } from '@/types/domain/storage'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
 import { computed, ref, watch, nextTick } from 'vue'
+import { debounce } from 'lodash-es'
 interface TerminalEventListeners {
   onOutput: (data: string) => void
   onExit: (exitCode: number | null) => void
@@ -92,14 +93,20 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
   const sessionStore = useSessionStore()
 
+  // 保存持久化：使用轻量防抖合并短时间内的多次更新，避免保存风暴
+  const debouncedPersist = debounce(() => {
+    sessionStore.saveSessionState().catch(() => {})
+  }, 80)
+
   const saveTerminalState = async () => {
     syncToSessionStore()
     await sessionStore.saveSessionState()
   }
 
   const immediateSync = () => {
+    // 仅同步到 SessionStore，由具体的调用方（如 create/close/setActive）控制何时保存，避免重复/竞态保存
     syncToSessionStore()
-    sessionStore.saveSessionState().catch(() => {})
+    debouncedPersist()
   }
 
   watch(
@@ -322,7 +329,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       terminals.value.push(terminal)
       await setActiveTerminal(id)
-      await saveTerminalState()
+
+      immediateSync()
 
       const duration = Date.now() - startTime
       recordPerformanceMetric('create', duration)
@@ -341,7 +349,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       if (terminal.backendId === null) {
         await cleanupTerminalState(id)
-        await saveTerminalState()
+        // 依赖 watch + 轻量防抖合并保存，避免重复保存
+        immediateSync()
         return
       }
 
@@ -353,7 +362,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
       await terminalApi.closeTerminal(backendId)
 
       await cleanupTerminalState(id)
-      await saveTerminalState()
+      // 依赖 watch + 轻量防抖合并保存，避免重复保存
+      immediateSync()
       recordPerformanceMetric('close')
     })
   }

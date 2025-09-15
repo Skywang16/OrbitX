@@ -2,6 +2,8 @@
  * 配置模块相关的类型定义
  */
 
+import type { ShortcutsConfig } from '@/types/domain/shortcuts'
+
 // 配置 API 错误类
 export class ConfigApiError extends Error {
   constructor(
@@ -66,9 +68,9 @@ export interface AppConfig {
     }
   }
   shortcuts: {
-    global: any[]
-    terminal: any[]
-    custom: any[]
+    global: ShortcutsConfig
+    terminal: ShortcutsConfig
+    custom: ShortcutsConfig
   }
 }
 

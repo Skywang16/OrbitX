@@ -359,5 +359,4 @@ export class ShellTool extends ModifiableTool {
   }
 }
 
-
 export const shellTool = new ShellTool()

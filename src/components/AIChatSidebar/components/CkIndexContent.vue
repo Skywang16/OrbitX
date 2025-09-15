@@ -55,8 +55,7 @@
   const simplify = (p: string) => {
     const parts = p.replace(/\/$/, '').split(/[/\\]/).filter(Boolean)
     if (parts.length === 0) return '~'
-    const last = parts[parts.length - 1]
-    return last.length > 15 ? last.slice(0, 12) + '...' : last
+    return parts[parts.length - 1]
   }
 
   const normalize = (p: string) => p.replace(/\\/g, '/').replace(/\/$/, '')
@@ -78,7 +77,7 @@
       if (!p || p === '.') {
         try {
           const ctx = await terminalContextApi.getActiveTerminalContext()
-          const cwd = ctx?.current_working_directory || ctx?.currentWorkingDirectory
+          const cwd = ctx?.currentWorkingDirectory
           if (cwd) p = cwd
         } catch (e) {
           console.error('Failed to get active terminal context', e)

@@ -406,7 +406,7 @@ mod tests {
     fn test_parse_shell_integration_sequences() {
         let parser = OscParser::new().unwrap();
 
-        let sequences = parser.parse("\x1b]633;A\x07\x1b]633;B\x07\x1b]633;C\x07\x1b]633;D;0\x07");
+        let sequences = parser.parse("\x1b]133;A\x07\x1b]133;B\x07\x1b]133;C\x07\x1b]133;D;0\x07");
 
         assert_eq!(sequences.len(), 4);
 
@@ -433,7 +433,7 @@ mod tests {
     fn test_strip_osc_sequences() {
         let parser = OscParser::new().unwrap();
 
-        let input = "Hello\x1b]7;/home/user\x07World\x1b]633;A\x07!";
+        let input = "Hello\x1b]7;/home/user\x07World\x1b]133;A\x07!";
         let output = parser.strip_osc_sequences(input);
 
         assert_eq!(output, "HelloWorld!");
@@ -443,23 +443,23 @@ mod tests {
     fn test_contains_shell_integration() {
         let parser = OscParser::new().unwrap();
 
-        assert!(parser.contains_shell_integration("\x1b]633;A\x07"));
+        assert!(parser.contains_shell_integration("\x1b]133;A\x07"));
         assert!(!parser.contains_shell_integration("\x1b]7;/home/user\x07"));
         assert!(!parser.contains_shell_integration("regular text"));
     }
 
     #[test]
     fn test_osc_generator() {
-        // 测试 Shell Integration 633 序列生成
+        // 测试 Shell Integration 133 序列生成
         let prompt_start =
             OscGenerator::shell_integration_sequence(&IntegrationMarker::PromptStart, None);
-        assert_eq!(prompt_start, "\x1b]633;A\x07");
+        assert_eq!(prompt_start, "\x1b]133;A\x07");
 
         let command_finished = OscGenerator::shell_integration_sequence(
             &IntegrationMarker::CommandFinished { exit_code: Some(0) },
             None,
         );
-        assert_eq!(command_finished, "\x1b]633;D;0\x07");
+        assert_eq!(command_finished, "\x1b]133;D;0\x07");
 
         // 测试CWD序列生成
         let cwd = OscGenerator::cwd_sequence("/home/user");

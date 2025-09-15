@@ -38,11 +38,23 @@ pub async fn semantic_search_v3_with_progress(
     // Collect all sidecar files and their embeddings
     let mut file_chunks: Vec<(std::path::PathBuf, ck_index::ChunkEntry)> = Vec::new();
 
+    // Determine expected sidecar extension from index dir
+    let expected_ext = if index_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n == ".oxi")
+        .unwrap_or(false)
+    {
+        "oxi"
+    } else {
+        "ck"
+    };
+
     for entry in WalkDir::new(&index_dir) {
         let entry = entry?;
         if entry.file_type().is_file() {
             let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("ck") {
+            if path.extension().and_then(|s| s.to_str()) == Some(expected_ext) {
                 // Load the sidecar file
                 if let Ok(index_entry) = ck_index::load_index_entry(path) {
                     let original_file = reconstruct_original_path(path, &index_dir, &index_root);
@@ -249,14 +261,24 @@ fn reconstruct_original_path(
     index_dir: &Path,
     repo_root: &Path,
 ) -> Option<std::path::PathBuf> {
-    // Remove the index directory prefix and .ck extension
+    // Remove the index directory prefix and sidecar extension
     let relative_path = sidecar_path.strip_prefix(index_dir).ok()?;
     let mut original_path = relative_path.with_extension("");
 
-    // Handle the .ck extension removal
+    // Determine expected extension from index dir and strip only that
+    let expected_ext = if index_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n == ".oxi")
+        .unwrap_or(false)
+    {
+        ".oxi"
+    } else {
+        ".ck"
+    };
     if let Some(name) = original_path.file_name() {
         let name_str = name.to_string_lossy();
-        if let Some(original_name) = name_str.strip_suffix(".ck") {
+        if let Some(original_name) = name_str.strip_suffix(expected_ext) {
             let mut new_path = original_path.clone();
             new_path.set_file_name(original_name);
             original_path = new_path;

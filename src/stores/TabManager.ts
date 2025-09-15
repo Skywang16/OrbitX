@@ -135,14 +135,14 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     }
   }
 
-  const closeTab = (tabId: string) => {
+  const closeTab = async (tabId: string) => {
     const tabIndex = tabs.value.findIndex(tab => tab.id === tabId)
     if (tabIndex === -1) return
 
     const tab = tabs.value[tabIndex]
 
     if (tab.type === TabType.TERMINAL) {
-      terminalStore.closeTerminal(tabId)
+      await terminalStore.closeTerminal(tabId)
       return
     }
 
@@ -159,55 +159,53 @@ export const useTabManagerStore = defineStore('TabManager', () => {
   /**
    * 关闭左侧全部标签页
    */
-  const closeLeftTabs = (currentTabId: string) => {
+  const closeLeftTabs = async (currentTabId: string) => {
     const currentIndex = tabs.value.findIndex(tab => tab.id === currentTabId)
     if (currentIndex <= 0) return
 
-    const leftTabs = tabs.value.slice(0, currentIndex)
-    leftTabs.forEach(tab => {
-      if (tab.closable) {
-        closeTab(tab.id)
-      }
-    })
+    const idsToClose = tabs.value
+      .slice(0, currentIndex)
+      .filter(t => t.closable)
+      .map(t => t.id)
+    for (const id of idsToClose) {
+      await closeTab(id)
+    }
   }
 
   /**
    * 关闭右侧全部标签页
    */
-  const closeRightTabs = (currentTabId: string) => {
+  const closeRightTabs = async (currentTabId: string) => {
     const currentIndex = tabs.value.findIndex(tab => tab.id === currentTabId)
     if (currentIndex === -1 || currentIndex >= tabs.value.length - 1) return
 
-    const rightTabs = tabs.value.slice(currentIndex + 1)
-    rightTabs.forEach(tab => {
-      if (tab.closable) {
-        closeTab(tab.id)
-      }
-    })
+    const idsToClose = tabs.value
+      .slice(currentIndex + 1)
+      .filter(t => t.closable)
+      .map(t => t.id)
+    for (const id of idsToClose) {
+      await closeTab(id)
+    }
   }
 
   /**
    * 关闭其他所有标签页
    */
-  const closeOtherTabs = (currentTabId: string) => {
-    const otherTabs = tabs.value.filter(tab => tab.id !== currentTabId)
-    otherTabs.forEach(tab => {
-      if (tab.closable) {
-        closeTab(tab.id)
-      }
-    })
+  const closeOtherTabs = async (currentTabId: string) => {
+    const idsToClose = tabs.value.filter(tab => tab.id !== currentTabId && tab.closable).map(t => t.id)
+    for (const id of idsToClose) {
+      await closeTab(id)
+    }
   }
 
   /**
    * 关闭所有标签页
    */
-  const closeAllTabs = () => {
-    const allTabs = [...tabs.value]
-    allTabs.forEach(tab => {
-      if (tab.closable) {
-        closeTab(tab.id)
-      }
-    })
+  const closeAllTabs = async () => {
+    const idsToClose = tabs.value.filter(tab => tab.closable).map(t => t.id)
+    for (const id of idsToClose) {
+      await closeTab(id)
+    }
   }
 
   return {

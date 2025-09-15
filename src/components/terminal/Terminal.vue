@@ -277,7 +277,8 @@
             acceptCompletion(completionText)
           }
         }
-      } catch {
+      } catch (error) {
+        console.warn('Failed to accept completion:', error)
       }
     }
   }
@@ -297,8 +298,8 @@
       emit('input', completionText)
 
       updateTerminalCursorPosition()
-
-    } catch {
+    } catch (error) {
+      console.warn('Failed to update terminal cursor position:', error)
     }
   }
 
@@ -538,7 +539,6 @@
     document.removeEventListener('open-terminal-search', () =>
       handleOpenTerminalSearch(props.isActive, searchAddon.value)
     )
-
 
     if (timers.resize) clearTimeout(timers.resize)
     if (timers.themeUpdate) clearTimeout(timers.themeUpdate)

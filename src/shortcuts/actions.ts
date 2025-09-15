@@ -3,6 +3,7 @@ import { useTerminalStore } from '@/stores/Terminal'
 
 import { windowApi } from '@/api/window'
 import { useAIChatStore } from '@/components/AIChatSidebar'
+import { useWindowStore } from '@/stores/Window'
 
 export class ShortcutActionsService {
   private get tabManagerStore() {
@@ -134,7 +135,9 @@ export class ShortcutActionsService {
   }
 
   async toggleWindowPin(): Promise<boolean> {
-    await windowApi.toggleAlwaysOnTop()
+    const newState = await windowApi.toggleAlwaysOnTop()
+    const windowStore = useWindowStore()
+    windowStore.setAlwaysOnTop(newState)
     return true
   }
 }

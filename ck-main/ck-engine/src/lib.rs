@@ -1,3 +1,15 @@
+// Helpers to resolve index directory location
+fn default_index_dir(base: &Path) -> PathBuf {
+    base.join(".oxi")
+}
+
+fn resolve_index_dir(base: &Path) -> PathBuf {
+    let oxi = base.join(".oxi");
+    if oxi.exists() {
+        return oxi;
+    }
+    base.join(".ck")
+}
 use anyhow::Result;
 use ck_ann::AnnIndex;
 use ck_core::{CkError, SearchMode, SearchOptions, SearchResult, Span};
@@ -47,7 +59,7 @@ fn find_nearest_index_root(path: &Path) -> Option<StdPathBuf> {
         path
     };
     loop {
-        if current.join(".ck").exists() {
+        if current.join(".oxi").exists() || current.join(".ck").exists() {
             return Some(current.to_path_buf());
         }
         match current.parent() {
@@ -319,7 +331,7 @@ async fn lexical_search(options: &SearchOptions) -> Result<Vec<SearchResult>> {
         }
     });
 
-    let index_dir = index_root.join(".ck");
+    let index_dir = resolve_index_dir(&index_root);
     if !index_dir.exists() {
         return Err(CkError::Index("No index found. Run 'ck index' first.".to_string()).into());
     }
@@ -432,7 +444,7 @@ async fn build_tantivy_index(options: &SearchOptions) -> Result<Vec<SearchResult
         &options.path
     };
 
-    let index_dir = index_root.join(".ck");
+    let index_dir = default_index_dir(index_root);
     let tantivy_index_path = index_dir.join("tantivy_index");
 
     fs::create_dir_all(&tantivy_index_path)?;
@@ -465,8 +477,7 @@ async fn build_tantivy_index(options: &SearchOptions) -> Result<Vec<SearchResult
         .commit()
         .map_err(|e| CkError::Index(format!("Failed to commit index: {}", e)))?;
 
-    // After building, search again with the same options
-    let tantivy_index_path = index_root.join(".ck").join("tantivy_index");
+    // After building, search again with the same options (use the path we just built)
     let mut schema_builder = Schema::builder();
     let content_field = schema_builder.add_text_field("content", TEXT | STORED);
     let path_field = schema_builder.add_text_field("path", TEXT | STORED);
@@ -579,7 +590,7 @@ async fn semantic_search_with_progress(
         }
     });
 
-    let index_dir = index_root.join(".ck");
+    let index_dir = resolve_index_dir(&index_root);
     if !index_dir.exists() {
         return Err(CkError::Index("No index found. Run 'ck index' first.".to_string()).into());
     }
@@ -704,7 +715,7 @@ async fn build_semantic_index_with_progress(
         &options.path
     };
 
-    let index_dir = index_root.join(".ck");
+    let index_dir = default_index_dir(index_root);
     let ann_index_path = index_dir.join("ann_index.bin");
     let embeddings_path = index_dir.join("embeddings.json");
 

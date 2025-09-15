@@ -70,6 +70,39 @@ pub type EnhancedProgressCallback = Box<dyn Fn(IndexingProgress) + Send + Sync>;
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 static HANDLER_INIT: Once = Once::new();
 
+/// Return the default index directory for writing new indexes (always `.oxi`).
+fn default_index_dir(base: &Path) -> PathBuf {
+    base.join(".oxi")
+}
+
+/// Resolve the effective index directory for reading: prefer `.oxi`, otherwise `.ck`.
+fn resolve_index_dir(base: &Path) -> PathBuf {
+    let oxi = base.join(".oxi");
+    if oxi.exists() {
+        return oxi;
+    }
+    base.join(".ck")
+}
+
+/// Build the sidecar path for a given target index directory. If target dir is `.ck`,
+/// use legacy `.ck` sidecar extension; otherwise use `.oxi` (new default).
+fn sidecar_path_for_dir(repo_root: &Path, file_path: &Path, index_dir: &Path) -> PathBuf {
+    let relative = file_path.strip_prefix(repo_root).unwrap_or(file_path);
+    let mut sidecar = index_dir.to_path_buf();
+    sidecar.push(relative);
+    let use_ck = index_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n == ".ck")
+        .unwrap_or(false);
+    let ext = relative
+        .extension()
+        .map(|e| format!("{}.{}", e.to_string_lossy(), if use_ck { "ck" } else { "oxi" }))
+        .unwrap_or_else(|| (if use_ck { "ck" } else { "oxi" }).to_string());
+    sidecar.set_extension(ext);
+    sidecar
+}
+
 /// Build override patterns for excluding files during directory traversal
 fn build_overrides(
     base_path: &Path,
@@ -138,7 +171,8 @@ pub fn collect_files(
     respect_gitignore: bool,
     exclude_patterns: &[String],
 ) -> Result<Vec<PathBuf>> {
-    let index_dir = path.join(".ck");
+    let index_dir_ck = path.join(".ck");
+    let index_dir_oxi = path.join(".oxi");
     let overrides = build_overrides(path, exclude_patterns)?;
 
     if respect_gitignore {
@@ -154,7 +188,8 @@ pub fn collect_files(
                 let path = entry.path();
                 entry.file_type().is_some_and(|ft| ft.is_file())
                     && is_text_file(path)
-                    && !path.starts_with(&index_dir)
+                    && !path.starts_with(&index_dir_ck)
+                    && !path.starts_with(&index_dir_oxi)
             })
             .map(|entry| entry.path().to_path_buf())
             .collect())
@@ -178,7 +213,8 @@ pub fn collect_files(
                 let path = entry.path();
                 entry.file_type().is_some_and(|ft| ft.is_file())
                     && is_text_file(path)
-                    && !path.starts_with(&index_dir)
+                    && !path.starts_with(&index_dir_ck)
+                    && !path.starts_with(&index_dir_oxi)
             })
             .map(|entry| entry.path().to_path_buf())
             .collect())
@@ -206,7 +242,7 @@ pub async fn index_directory(
         "index_directory called with compute_embeddings={}",
         compute_embeddings
     );
-    let index_dir = path.join(".ck");
+    let index_dir = default_index_dir(path);
     fs::create_dir_all(&index_dir)?;
 
     let manifest_path = index_dir.join("manifest.json");
@@ -260,7 +296,7 @@ pub async fn index_directory(
             match index_single_file(file_path, path, Some(&mut embedder)) {
                 Ok(entry) => {
                     // Write sidecar immediately
-                    let sidecar_path = get_sidecar_path(path, file_path);
+                    let sidecar_path = sidecar_path_for_dir(path, file_path, &index_dir);
                     save_index_entry(&sidecar_path, &entry)?;
 
                     // Update and save manifest immediately
@@ -321,7 +357,7 @@ pub async fn index_directory(
         // Main thread: stream results as they arrive
         while let Ok((file_path, entry)) = rx.recv() {
             // Write sidecar immediately
-            let sidecar_path = get_sidecar_path(path, &file_path);
+            let sidecar_path = sidecar_path_for_dir(path, &file_path, &index_dir);
             save_index_entry(&sidecar_path, &entry)?;
 
             // Update and save manifest immediately
@@ -354,7 +390,7 @@ pub async fn index_directory(
 
 pub async fn index_file(file_path: &Path, compute_embeddings: bool) -> Result<()> {
     let repo_root = find_repo_root(file_path)?;
-    let index_dir = repo_root.join(".ck");
+    let index_dir = default_index_dir(&repo_root);
     fs::create_dir_all(&index_dir)?;
 
     let manifest_path = index_dir.join("manifest.json");
@@ -368,7 +404,7 @@ pub async fn index_file(file_path: &Path, compute_embeddings: bool) -> Result<()
     } else {
         index_single_file(file_path, &repo_root, None)?
     };
-    let sidecar_path = get_sidecar_path(&repo_root, file_path);
+    let sidecar_path = sidecar_path_for_dir(&repo_root, file_path, &index_dir);
 
     save_index_entry(&sidecar_path, &entry)?;
     manifest
@@ -390,7 +426,7 @@ pub async fn update_index(
     respect_gitignore: bool,
     exclude_patterns: &[String],
 ) -> Result<()> {
-    let index_dir = path.join(".ck");
+    let index_dir = resolve_index_dir(path);
     if !index_dir.exists() {
         return index_directory(
             path,
@@ -483,7 +519,7 @@ pub async fn update_index(
     };
 
     for (file_path, entry) in updates {
-        let sidecar_path = get_sidecar_path(path, &file_path);
+        let sidecar_path = sidecar_path_for_dir(path, &file_path, &index_dir);
         save_index_entry(&sidecar_path, &entry)?;
         manifest.files.insert(file_path, entry.metadata);
     }
@@ -500,9 +536,10 @@ pub async fn update_index(
 }
 
 pub fn clean_index(path: &Path) -> Result<()> {
-    let index_dir = path.join(".ck");
-    if index_dir.exists() {
-        fs::remove_dir_all(&index_dir)?;
+    for dir in [path.join(".oxi"), path.join(".ck")] {
+        if dir.exists() {
+            fs::remove_dir_all(&dir)?;
+        }
     }
     Ok(())
 }
@@ -512,7 +549,7 @@ pub fn cleanup_index(
     respect_gitignore: bool,
     exclude_patterns: &[String],
 ) -> Result<CleanupStats> {
-    let index_dir = path.join(".ck");
+    let index_dir = resolve_index_dir(path);
     if !index_dir.exists() {
         return Ok(CleanupStats::default());
     }
@@ -548,11 +585,23 @@ pub fn cleanup_index(
 
     // Find and remove orphaned sidecar files
     if index_dir.exists() {
+        // Determine expected sidecar extension from index_dir
+        let expected_ext = if index_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| n == ".oxi")
+            .unwrap_or(false)
+        {
+            "oxi"
+        } else {
+            "ck"
+        };
+
         for entry in WalkDir::new(&index_dir) {
             let entry = entry?;
             if entry.file_type().is_file() {
                 let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("ck") {
+                if path.extension().and_then(|s| s.to_str()) == Some(expected_ext) {
                     // Try to reconstruct the original file path
                     if let Some(original_path) = sidecar_to_original_path(path, &index_dir, path)
                         && !current_files.contains(&original_path)
@@ -582,7 +631,7 @@ pub fn cleanup_index(
 }
 
 pub fn get_index_stats(path: &Path) -> Result<IndexStats> {
-    let index_dir = path.join(".ck");
+    let index_dir = resolve_index_dir(path);
     if !index_dir.exists() {
         return Ok(IndexStats::default());
     }
@@ -599,20 +648,20 @@ pub fn get_index_stats(path: &Path) -> Result<IndexStats> {
 
     // Calculate total chunks and size
     for file_path in manifest.files.keys() {
-        let sidecar_path = get_sidecar_path(path, file_path);
-        if sidecar_path.exists()
-            && let Ok(entry) = load_index_entry(&sidecar_path)
-        {
-            stats.total_chunks += entry.chunks.len();
-            stats.total_size_bytes += entry.metadata.size;
+        let sidecar_path = sidecar_path_for_dir(path, file_path, &index_dir);
+        if sidecar_path.exists() {
+            if let Ok(entry) = load_index_entry(&sidecar_path) {
+                stats.total_chunks += entry.chunks.len();
+                stats.total_size_bytes += entry.metadata.size;
 
-            // Count embedded chunks
-            let embedded = entry
-                .chunks
-                .iter()
-                .filter(|c| c.embedding.is_some())
-                .count();
-            stats.embedded_chunks += embedded;
+                // Count embedded chunks
+                let embedded = entry
+                    .chunks
+                    .iter()
+                    .filter(|c| c.embedding.is_some())
+                    .count();
+                stats.embedded_chunks += embedded;
+            }
         }
     }
 
@@ -685,7 +734,7 @@ pub async fn smart_update_index_with_detailed_progress(
     exclude_patterns: &[String],
     model: Option<&str>,
 ) -> Result<UpdateStats> {
-    let index_dir = path.join(".ck");
+    let index_dir = resolve_index_dir(path);
     let mut stats = UpdateStats::default();
 
     // Set up interrupt handler (only once per process)
@@ -1205,7 +1254,7 @@ fn find_repo_root(path: &Path) -> Result<PathBuf> {
     };
 
     loop {
-        if current.join(".ck").exists() || current.join(".git").exists() {
+        if current.join(".oxi").exists() || current.join(".ck").exists() || current.join(".git").exists() {
             return Ok(current.to_path_buf());
         }
 
@@ -1248,10 +1297,20 @@ fn sidecar_to_original_path(
     let relative_path = sidecar_path.strip_prefix(index_dir).ok()?;
     let original_path = relative_path.with_extension("");
 
-    // Handle the .ck extension removal
+    // Strip only the expected extension based on index_dir name
+    let expected_ext = if index_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n == ".oxi")
+        .unwrap_or(false)
+    {
+        ".oxi"
+    } else {
+        ".ck"
+    };
     if let Some(name) = original_path.file_name() {
         let name_str = name.to_string_lossy();
-        if let Some(original_name) = name_str.strip_suffix(".ck") {
+        if let Some(original_name) = name_str.strip_suffix(expected_ext) {
             let mut result = original_path.clone();
             result.set_file_name(original_name);
             return Some(result);
@@ -1423,12 +1482,12 @@ mod tests {
         let index_dir = temp_dir.path().join(".ck");
 
         // Test normal file
-        let sidecar = index_dir.join("test.txt.ck");
+        let sidecar = index_dir.join("test.txt.oxi");
         let original = sidecar_to_original_path(&sidecar, &index_dir, temp_dir.path());
         assert_eq!(original, Some(PathBuf::from("test.txt")));
 
         // Test nested file
-        let nested_sidecar = index_dir.join("src").join("main.rs.ck");
+        let nested_sidecar = index_dir.join("src").join("main.rs.oxi");
         let nested_original =
             sidecar_to_original_path(&nested_sidecar, &index_dir, temp_dir.path());
         assert_eq!(nested_original, Some(PathBuf::from("src/main.rs")));

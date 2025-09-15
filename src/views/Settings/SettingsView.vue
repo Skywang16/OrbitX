@@ -19,7 +19,6 @@
   const shortcutSettingsRef = ref()
   const generalSettingsRef = ref()
 
-
   onMounted(async () => {
     await initializeCurrentSection()
   })

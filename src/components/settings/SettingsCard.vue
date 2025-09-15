@@ -8,5 +8,4 @@
   // 无需特殊逻辑，仅提供样式容器
 </script>
 
-<style scoped>
-</style>
+<style scoped></style>

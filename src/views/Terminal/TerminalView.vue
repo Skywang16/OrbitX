@@ -87,7 +87,8 @@
         aiChatStore.saveToSessionState()
 
         await terminalStore.saveSessionState()
-      } catch {
+      } catch (error) {
+        console.warn('Failed to save session state:', error)
       }
     })
   })

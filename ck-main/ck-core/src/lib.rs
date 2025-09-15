@@ -273,8 +273,9 @@ impl Default for SearchOptions {
 /// These are common cache, build, and system directories that rarely contain user code.
 pub fn get_default_exclude_patterns() -> Vec<String> {
     vec![
-        // ck's own index directory
+        // index directories
         ".ck".to_string(),
+        ".oxi".to_string(),
         // AI/ML model cache directories
         ".fastembed_cache".to_string(),
         ".cache".to_string(),
@@ -311,12 +312,12 @@ pub fn get_default_exclude_patterns() -> Vec<String> {
 
 pub fn get_sidecar_path(repo_root: &Path, file_path: &Path) -> PathBuf {
     let relative = file_path.strip_prefix(repo_root).unwrap_or(file_path);
-    let mut sidecar = repo_root.join(".ck");
+    let mut sidecar = repo_root.join(".oxi");
     sidecar.push(relative);
     let ext = relative
         .extension()
-        .map(|e| format!("{}.ck", e.to_string_lossy()))
-        .unwrap_or_else(|| "ck".to_string());
+        .map(|e| format!("{}.oxi", e.to_string_lossy()))
+        .unwrap_or_else(|| "oxi".to_string());
     sidecar.set_extension(ext);
     sidecar
 }
@@ -462,7 +463,7 @@ mod tests {
         let file_path = PathBuf::from("/home/user/project/src/main.rs");
 
         let sidecar = get_sidecar_path(&repo_root, &file_path);
-        let expected = PathBuf::from("/home/user/project/.ck/src/main.rs.ck");
+        let expected = PathBuf::from("/home/user/project/.oxi/src/main.rs.oxi");
 
         assert_eq!(sidecar, expected);
     }
@@ -473,7 +474,7 @@ mod tests {
         let file_path = PathBuf::from("/project/README");
 
         let sidecar = get_sidecar_path(&repo_root, &file_path);
-        let expected = PathBuf::from("/project/.ck/README.ck");
+        let expected = PathBuf::from("/project/.oxi/README.oxi");
 
         assert_eq!(sidecar, expected);
     }

@@ -193,5 +193,4 @@ export class WebFetchTool extends ModifiableTool {
   }
 }
 
-
 export const webFetchTool = new WebFetchTool()

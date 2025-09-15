@@ -543,20 +543,20 @@ mod tests {
     fn test_model_capabilities() {
         let registry = LLMRegistry::new();
 
-        // Test o1 model (reasoning model)
-        assert!(registry.model_supports_feature("o1-preview", "reasoning"));
-        assert!(!registry.model_supports_feature("o1-preview", "tools"));
+        // Test o3-mini model (reasoning model)
+        assert!(registry.model_supports_feature("o3-mini", "reasoning"));
+        assert!(!registry.model_supports_feature("o3-mini", "tools"));
 
-        // Test GPT-4 (regular model)
-        assert!(registry.model_supports_feature("gpt-4", "tools"));
-        assert!(registry.model_supports_feature("gpt-4", "vision"));
-        assert!(!registry.model_supports_feature("gpt-4", "reasoning"));
+        // Test GPT-4o (current model)
+        assert!(registry.model_supports_feature("gpt-4o", "tools"));
+        assert!(registry.model_supports_feature("gpt-4o", "vision"));
+        assert!(!registry.model_supports_feature("gpt-4o", "reasoning"));
     }
 
     #[test]
     fn test_model_availability() {
         let registry = LLMRegistry::new();
-        assert!(registry.is_model_available("gpt-4"));
+        assert!(registry.is_model_available("gpt-4o"));
         assert!(!registry.is_model_available("non-existent-model"));
     }
 }

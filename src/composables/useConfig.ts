@@ -10,7 +10,6 @@ import { configApi } from '@/api'
 import { type AppConfig, type ConfigFileInfo } from '@/api/config'
 import { useI18n } from 'vue-i18n'
 
-
 /**
  * 格式化时间戳
  */
@@ -22,7 +21,6 @@ const formatTimestamp = (timestamp?: string): string => {
     return useI18n().t('config.invalid_time')
   }
 }
-
 
 /**
  * 配置加载状态
@@ -41,7 +39,6 @@ export interface ConfigFileState {
   loading: boolean
   error: string | null
 }
-
 
 /**
  * 配置管理主要组合函数
@@ -165,7 +162,6 @@ export const useConfig = () => {
   }
 }
 
-
 /**
  * 配置文件管理组合函数
  */
@@ -235,8 +231,6 @@ export const useConfigFile = () => {
     clearFileError,
   }
 }
-
-
 
 export default {
   useConfig,

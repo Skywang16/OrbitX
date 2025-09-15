@@ -8,6 +8,7 @@
  */
 
 import { invoke } from '@/utils/request'
+import type { ShortcutAction } from '@/types/domain/shortcuts'
 import type {
   ShortcutsConfig,
   ShortcutBinding,
@@ -66,11 +67,11 @@ export class ShortcutsApi {
   }
 
   async executeAction(
-    action: any,
+    action: ShortcutAction,
     keyCombination: string,
     activeTerminalId?: string | null,
-    metadata?: any
-  ): Promise<any> {
+    metadata?: Record<string, unknown>
+  ): Promise<unknown> {
     return await invoke('shortcuts_execute_action', {
       action,
       keyCombination,

@@ -17,6 +17,8 @@ export const useSessionStore = defineStore('session', () => {
 
   /** 是否正在保存 */
   const isSaving = ref(false)
+  /** 有保存在进行时是否积压了新的保存请求 */
+  const pendingSave = ref(false)
 
   /** 错误信息 */
   const error = ref<string | null>(null)
@@ -40,13 +42,24 @@ export const useSessionStore = defineStore('session', () => {
   const aiState = computed(() => sessionState.value.ai)
 
   const saveSessionState = async (): Promise<void> => {
-    if (isSaving.value) return
+    // 如果正在保存，标记一次待保存；当前保存完成后会再补一次，直到没有新的待保存
+    if (isSaving.value) {
+      pendingSave.value = true
+      return
+    }
+
     isSaving.value = true
     error.value = null
-    sessionState.value.timestamp = new Date().toISOString()
-    await storageApi.saveSessionState(sessionState.value).finally(() => {
+
+    try {
+      do {
+        pendingSave.value = false
+        sessionState.value.timestamp = new Date().toISOString()
+        await storageApi.saveSessionState(sessionState.value)
+      } while (pendingSave.value)
+    } finally {
       isSaving.value = false
-    })
+    }
   }
 
   const loadSessionState = async (): Promise<void> => {

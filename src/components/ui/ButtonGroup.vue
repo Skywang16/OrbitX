@@ -6,6 +6,7 @@
   import { useTabManagerStore } from '@/stores/TabManager'
   import { openUrl } from '@tauri-apps/plugin-opener'
   import { showPopoverAt } from '@/ui'
+  import { useWindowStore } from '@/stores/Window'
 
   const { t } = useI18n()
   type ButtonGroup = { alwaysOnTop?: boolean }
@@ -20,7 +21,8 @@
 
   const aiChatStore = useAIChatStore()
   const tabManagerStore = useTabManagerStore()
-  const isAlwaysOnTop = ref(false)
+  const windowStore = useWindowStore()
+  const isAlwaysOnTop = computed(() => windowStore.alwaysOnTop)
   const settingsButtonRef = ref<HTMLElement>()
 
   // 设置菜单项 - 使用计算属性确保响应式更新
@@ -41,7 +43,7 @@
     if (!props.controls.alwaysOnTop) return
 
     const newState = await windowApi.toggleAlwaysOnTop()
-    isAlwaysOnTop.value = newState
+    windowStore.setAlwaysOnTop(newState)
   }
 
   // 处理设置操作
@@ -67,22 +69,12 @@
     aiChatStore.toggleSidebar()
   }
 
-  // 监听快捷键触发的窗口状态变化
-  const handleShortcutToggle = (event: CustomEvent) => {
-    if (event.detail?.action === 'toggle_window_pin') {
-      // 快捷键触发时，直接切换状态
-      isAlwaysOnTop.value = !isAlwaysOnTop.value
-    }
-  }
-
-  onMounted(() => {
-    // 监听快捷键事件
-    window.addEventListener('shortcut-action', handleShortcutToggle as EventListener)
+  onMounted(async () => {
+    // 初始化时同步置顶状态到全局 store
+    await windowStore.initFromSystem()
   })
 
-  onUnmounted(() => {
-    window.removeEventListener('shortcut-action', handleShortcutToggle as EventListener)
-  })
+  onUnmounted(() => {})
 </script>
 
 <template>
