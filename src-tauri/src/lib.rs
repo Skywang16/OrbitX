@@ -29,6 +29,7 @@ pub mod completion;
 pub mod config;
 pub mod llm;
 // pub mod lock_optimization_demo;
+pub mod ck;
 pub mod mux;
 pub mod setup;
 pub mod shell;
@@ -36,7 +37,6 @@ pub mod storage;
 pub mod terminal;
 pub mod utils;
 pub mod window;
-pub mod ck;
 
 use commands::register_all_commands;
 use setup::{

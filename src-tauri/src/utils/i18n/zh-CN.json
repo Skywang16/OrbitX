@@ -1,21 +1,16 @@
 {
   "common": {
-    "success": "操作成功",
     "invalid_params": "参数无效",
     "not_found": "资源不存在",
-    "permission_denied": "权限不足",
-    "operation_failed": "操作失败",
-    "network_error": "网络错误",
-    "system_error": "系统错误",
     "invalid_id": "无效的ID",
     "empty_content": "内容不能为空",
     "invalid_role": "无效的角色",
     "title_empty": "标题不能为空",
-    "content_empty": "内容不能为空"
+    "content_empty": "内容不能为空",
+    "path_empty": "路径不能为空"
   },
   "ai": {
     "conversation_not_found": "会话不存在",
-    "message_not_found": "消息不存在",
     "create_conversation_failed": "创建会话失败",
     "get_conversations_failed": "获取会话列表失败",
     "get_conversation_failed": "获取会话详情失败",
@@ -24,11 +19,9 @@
     "truncate_conversation_failed": "截断会话失败",
     "save_message_failed": "保存消息失败",
     "update_message_failed": "更新消息失败",
-    "get_models_failed": "获取模型列表失败",
     "add_model_failed": "添加模型失败",
     "remove_model_failed": "删除模型失败",
     "update_model_failed": "更新模型失败",
-    "test_connection_failed": "测试连接失败",
     "test_connection_error": "连接测试失败: {error}",
     "api_url_empty": "API URL不能为空",
     "api_key_empty": "API Key不能为空",
@@ -36,62 +29,23 @@
     "get_prefix_prompt_failed": "获取前置提示词失败",
     "set_prefix_prompt_failed": "设置前置提示词失败",
     "get_context_failed": "获取上下文失败",
-    "build_prompt_failed": "构建提示词失败",
-    "get_config_failed": "获取配置失败",
-    "update_config_failed": "更新配置失败",
-    "get_cache_stats_failed": "获取缓存统计失败",
-    "cleanup_cache_failed": "清理缓存失败",
-    "invalidate_cache_failed": "失效缓存失败",
-    "operation_failed": "AI操作失败"
+    "build_prompt_failed": "构建提示词失败"
   },
   "completion": {
-    "input_empty": "输入文本不能为空",
     "get_failed": "获取补全建议失败",
-    "invalid_item": "补全项无效",
-    "apply_failed": "应用补全失败",
-    "history_failed": "获取补全历史失败",
-    "clear_history_failed": "清空补全历史失败",
     "init_failed": "初始化补全引擎失败",
     "engine_not_initialized": "补全引擎未初始化",
-    "stats_failed": "获取统计信息失败",
-    "enhanced_get_failed": "获取增强补全建议失败"
+    "stats_failed": "获取统计信息失败"
   },
   "config": {
     "get_failed": "获取配置失败",
-    "update_failed": "更新配置失败",
-    "save_failed": "保存配置失败",
-    "validate_failed": "验证配置失败",
-    "reset_failed": "重置配置失败",
-    "get_path_failed": "获取配置路径失败",
-    "get_info_failed": "获取配置信息失败",
-    "open_file_failed": "打开配置文件失败",
-    "subscribe_events_failed": "订阅配置事件失败",
-    "get_folder_path_failed": "获取配置文件夹路径失败",
-    "open_folder_failed": "打开配置文件夹失败"
-  },
-  "shortcuts": {
-    "get_failed": "获取快捷键配置失败",
-    "update_failed": "更新快捷键配置失败",
-    "validate_failed": "验证快捷键配置失败",
-    "detect_conflicts_failed": "检测快捷键冲突失败",
-    "add_failed": "添加快捷键失败",
-    "remove_failed": "删除快捷键失败",
-    "reset_failed": "重置快捷键失败",
-    "get_stats_failed": "获取快捷键统计失败",
-    "search_failed": "搜索快捷键失败",
-    "export_failed": "导出快捷键配置失败",
-    "import_parse_failed": "导入配置解析失败",
-    "import_failed": "导入快捷键配置失败"
+    "save_failed": "保存配置失败"
   },
   "llm": {
     "call_failed": "LLM调用失败",
     "stream_failed": "流式调用失败",
     "get_models_failed": "获取模型列表失败",
-    "test_connection_failed": "测试模型连接失败",
-    "get_providers_failed": "获取供应商列表失败",
-    "get_provider_models_failed": "获取供应商模型失败",
-    "get_model_info_failed": "获取模型信息失败",
-    "check_feature_failed": "检查模型功能失败"
+    "test_connection_failed": "测试模型连接失败"
   },
   "shell": {
     "pane_not_exist": "终端面板不存在",
@@ -127,40 +81,19 @@
     "get_context_failed": "获取终端上下文失败",
     "get_active_context_failed": "获取活跃终端上下文失败",
     "set_active_pane_failed": "设置活跃面板失败",
-    "get_active_pane_failed": "获取活跃面板失败",
-    "clear_active_pane_failed": "清除活跃面板失败",
-    "check_pane_active_failed": "检查面板状态失败",
-    "clear_cache_failed": "清除缓存失败",
-    "invalidate_cache_failed": "失效缓存失败",
-    "get_cache_stats_failed": "获取缓存统计失败",
-    "get_registry_stats_failed": "获取注册表统计失败"
+    "clear_active_pane_failed": "清除活跃面板失败"
   },
   "window": {
-    "get_state_failed": "获取窗口状态失败",
-    "set_always_on_top_failed": "设置窗口置顶失败",
-    "toggle_always_on_top_failed": "切换窗口置顶失败",
-    "reset_state_failed": "重置窗口状态失败",
-    "batch_operation_failed": "批量操作失败",
-    "get_complete_state_failed": "获取完整窗口状态失败",
     "get_current_directory_failed": "获取当前目录失败",
-    "get_home_directory_failed": "获取用户主目录失败",
-    "get_platform_info_failed": "获取平台信息失败",
     "set_opacity_failed": "设置窗口透明度失败",
-    "get_opacity_failed": "获取窗口透明度失败",
     "opacity_out_of_range": "透明度值必须在0.0-1.0之间"
   },
-  "storage": {
-    "operation_failed": "存储操作失败",
-    "connection_failed": "数据库连接失败",
-    "query_failed": "查询失败",
-    "save_failed": "保存失败",
-    "delete_failed": "删除失败",
-    "update_failed": "更新失败",
-    "get_current_directory_failed": "获取当前工作目录失败",
-    "workspace_path_empty": "工作区路径不能为空",
-    "workspace_name_empty": "工作区名称不能为空",
-    "check_workspace_index_failed": "检查工作区索引状态失败",
-    "get_workspace_indexes_failed": "获取工作区索引列表失败",
-    "invalid_workspace_id": "无效的工作区ID"
+  "ck": {
+    "invalid_query": "搜索查询长度至少需要3个字符",
+    "search_failed": "代码搜索失败",
+    "index_not_found": "索引未就绪，请先构建索引或启用自动重建",
+    "build_failed": "索引构建失败",
+    "build_canceled": "索引构建已取消",
+    "delete_failed": "删除索引失败"
   }
 }

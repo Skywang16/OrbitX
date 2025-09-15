@@ -15,15 +15,15 @@ cargo build --release
 ```
 
 ```bash
-# Index your project for semantic search
+# Index your project for semantic search (one-time setup)
 ck --index src/
 
-# Search by meaning
+# Search by meaning - automatically updates index for changed files
 ck --sem "error handling" src/
 ck --sem "authentication logic" src/
 ck --sem "database connection pooling" src/
 
-# Traditional grep-compatible search still works  
+# Traditional grep-compatible search still works
 ck -n "TODO" *.rs
 ck -R "TODO|FIXME" .
 
@@ -35,7 +35,7 @@ ck --hybrid "connection timeout" src/
 
 **For Developers:** Stop hunting through thousands of regex false positives. Find the code you actually need by describing what it does.
 
-**For AI Agents:** Get structured, semantic search results in JSON format. Perfect for code analysis, documentation generation, and automated refactoring.
+**For AI Agents:** Get structured, semantic search results in JSONL format. Stream-friendly, error-resilient output perfect for LLM workflows, code analysis, documentation generation, and automated refactoring.
 
 
 
@@ -81,12 +81,46 @@ ck -l --hybrid "database" src/      # List files using hybrid search
 ```
 
 ### 🤖 **Agent-Friendly Output**
-Perfect JSON output for LLMs, scripts, and automation.
+Perfect structured output for LLMs, scripts, and automation. JSONL format provides superior parsing reliability for AI agents.
 
 ```bash
+# JSONL format - one JSON object per line (recommended for agents)
+ck --jsonl --sem "error handling" src/
+ck --jsonl --no-snippet "function" .        # Metadata only
+ck --jsonl --topk 5 --threshold 0.7 "auth"  # High-confidence results
+
+# Traditional JSON (single array)
 ck --json --sem "error handling" src/ | jq '.file'
 ck --json --topk 5 "TODO" . | jq -r '.preview'
 ck --json --full-section --sem "database" . | jq -r '.preview'  # Complete functions
+```
+
+**Why JSONL for AI agents?**
+- ✅ **Streaming friendly**: Process results as they arrive, no waiting for complete response
+- ✅ **Memory efficient**: Parse one result at a time, not entire array into memory
+- ✅ **Error resilient**: One malformed line doesn't break entire response
+- ✅ **Composable**: Works perfectly with Unix pipes and stream processing
+- ✅ **Standard format**: Used by OpenAI API, Anthropic API, and modern ML pipelines
+
+**JSONL Output Format:**
+```json
+{"path":"./src/auth.rs","span":{"byte_start":1203,"byte_end":1456,"line_start":42,"line_end":58},"language":"rust","snippet":"fn authenticate(user: User) -> Result<Token> { ... }","score":0.89}
+{"path":"./src/error.rs","span":{"byte_start":234,"byte_end":678,"line_start":15,"line_end":25},"language":"rust","snippet":"impl Error for AuthError { ... }","score":0.76}
+```
+
+**Agent Processing Example:**
+```python
+# Stream-process JSONL results (memory efficient)
+import json, subprocess
+
+proc = subprocess.Popen(['ck', '--jsonl', '--sem', 'error handling', 'src/'], 
+                       stdout=subprocess.PIPE, text=True)
+
+for line in proc.stdout:
+    result = json.loads(line)
+    if result['score'] > 0.8:  # High-confidence matches only
+        print(f"📍 {result['path']}:{result['span']['line_start']}")
+        print(f"🔍 {result['snippet'][:100]}...")
 ```
 
 ### 📁 **Smart File Filtering**
@@ -98,7 +132,7 @@ ck "pattern" .                           # Follows .gitignore rules
 ck --no-ignore "pattern" .               # Search all files including ignored ones
 
 # These are also excluded by default:
-# .git, node_modules, target/, .fastembed_cache, __pycache__
+# .git, node_modules, target/, __pycache__
 
 # Override defaults:
 ck --no-default-excludes "pattern" .     # Search everything
@@ -122,12 +156,35 @@ ck --sem "error handling" .
 ck --sem "authentication" .
 ```
 
-### 2. **Three Search Modes**
+### 2. **Embedding Model Selection**
+Choose the right model for your needs when creating the index:
+
+```bash
+# Default: BGE-Small (fast, precise chunking)
+ck --index .
+
+# Enhanced: Nomic V1.5 (8K context, optimal for large functions)
+ck --index --model nomic-v1.5 .
+
+# Code-specialized: Jina Code (optimized for programming languages)
+ck --index --model jina-code .
+```
+
+**Model Comparison:**
+- **`bge-small`** (default): 400-token chunks, fast indexing, good for most code
+- **`nomic-v1.5`**: 1024-token chunks with 8K model capacity, better for large functions and classes
+- **`jina-code`**: 1024-token chunks with 8K model capacity, specialized for code understanding
+
+**New in v0.4.5:** Token-aware chunking uses actual model tokenizers for precise sizing, with model-specific chunk configurations balancing precision vs context.
+
+**Note:** Model choice is set during indexing. Existing indexes will automatically use their original model.
+
+### 3. **Three Search Modes**
 - **`--regex`** (default): Classic grep behavior, no indexing required
 - **`--sem`**: Pure semantic search using embeddings (requires index)
 - **`--hybrid`**: Combines regex + semantic with intelligent ranking
 
-### 3. **Relevance Scoring**
+### 4. **Relevance Scoring**
 ```bash
 ck --sem --scores "machine learning" docs/
 # [0.847] ./ai_guide.txt: Machine learning introduction...
@@ -184,6 +241,28 @@ ck --index .
 ck --add new_file.rs
 ```
 
+### File Inspection (New in v0.4.5)
+Analyze how files will be chunked for embedding with the enhanced `--inspect` command:
+
+```bash
+# Inspect file chunking and token usage
+ck --inspect src/main.rs
+# Output: File info, chunk count, token statistics, and chunk details
+
+# Example output:
+# File: src/main.rs (49.6 KB, 1378 lines, 12083 tokens)
+# Language: rust
+#
+# Chunks: 17 (tokens: min=4, max=3942, avg=644)
+#    1. mod: 4 tokens | L9-9 | mod progress;
+#    2. func: 1185 tokens | L88-294 | struct Cli { ... }
+#    3. func: 442 tokens | L296-341 | fn expand_glob_patterns(...
+
+# Check different model configurations
+ck --inspect --model bge-small src/main.rs      # 400-token chunking
+ck --inspect --model nomic-v1.5 src/main.rs    # 1024-token chunking
+```
+
 ## File Support
 
 | Language | Indexing | Tree-sitter Parsing | Semantic Chunking |
@@ -192,12 +271,16 @@ ck --add new_file.rs
 | JavaScript | ✅ | ✅ | ✅ Functions, classes, methods |
 | TypeScript | ✅ | ✅ | ✅ Functions, classes, methods |
 | Haskell | ✅ | ✅ | ✅ Functions, types, instances |
+| Rust | ✅ | ✅ | ✅ Functions, structs, traits |
+| Ruby | ✅ | ✅ | ✅ Classes, methods, modules |
+| Go | ✅ | ✅ | ✅ Functions, types, methods, variables |
+| C# | ✅ | ✅ | ✅ Classes, interfaces, methods, variables |
 
 **Text Formats:** Markdown, JSON, YAML, TOML, XML, HTML, CSS, shell scripts, SQL, log files, config files, and any other text format.
 
 **Smart Binary Detection:** Uses ripgrep-style content analysis (NUL byte detection) instead of extension-based filtering, automatically indexing any text file regardless of extension while correctly excluding binary files.
 
-**Smart Exclusions:** Automatically skips `.git`, `node_modules`, `target/`, `build/`, `dist/`, `__pycache__/`, `.fastembed_cache`, `.venv`, `venv`, and other common build/cache/virtual environment directories.
+**Smart Exclusions:** Automatically skips `.git`, `node_modules`, `target/`, `build/`, `dist/`, `__pycache__/`, `.venv`, `venv`, and other common build/cache/virtual environment directories.
 
 ## Installation
 
@@ -206,6 +289,12 @@ ck --add new_file.rs
 git clone https://github.com/BeaconBay/ck
 cd ck
 cargo install --path ck-cli
+```
+
+### From crates.io
+```bash
+# Install latest release from crates.io
+cargo install ck-search
 ```
 
 ### Package Managers (Planned)
@@ -306,7 +395,7 @@ ck --help | grep -A 20 exclude
 # These directories are excluded by default:
 # .git, .svn, .hg                    # Version control
 # node_modules, target, build        # Build artifacts  
-# .cache, __pycache__, .fastembed_cache  # Caches
+# .cache, __pycache__  # Caches
 # .vscode, .idea                     # IDE files
 ```
 
@@ -328,12 +417,13 @@ embedding_model = "BAAI/bge-small-en-v1.5"
 
 ## Performance
 
-- **Indexing:** ~1M LOC in under 2 minutes (with smart exclusions and optimized embedding computation)
-- **Search:** Sub-500ms queries on typical codebases  
+- **Indexing:** ~1M LOC in under 2 minutes (with smart exclusions and token-aware chunking)
+- **Search:** Sub-500ms queries on typical codebases
 - **Index size:** ~2x source code size with compression
 - **Memory:** Efficient streaming for large repositories with span-based content extraction
 - **File filtering:** Automatic exclusion of virtual environments and build artifacts
 - **Output:** Clean stdout/stderr separation for reliable piping and scripting
+- **Token precision:** HuggingFace tokenizers for exact model-specific token counting (v0.4.5+)
 
 ## Testing
 
@@ -369,9 +459,9 @@ cargo test
 
 ## Roadmap
 
-### Current (v0.3+)
+### Current (v0.4+)
 - ✅ grep-compatible CLI with semantic search and file listing flags (`-l`, `-L`)
-- ✅ FastEmbed integration with BGE models
+- ✅ FastEmbed integration with BGE models and enhanced model selection
 - ✅ File exclusion patterns and glob support
 - ✅ Threshold filtering and relevance scoring with visual highlighting
 - ✅ Tree-sitter parsing and intelligent chunking (Python, TypeScript, JavaScript, Go, Haskell, Rust, Ruby)
@@ -379,10 +469,15 @@ cargo test
 - ✅ Enhanced indexing strategy with v3 semantic search optimization
 - ✅ Clean stdout/stderr separation for reliable scripting
 - ✅ Incremental index updates with hash-based change detection
+- ✅ Token-aware chunking with HuggingFace tokenizers (v0.4.5)
+- ✅ Model-specific chunk sizing and FastEmbed capacity utilization (v0.4.5)
+- ✅ Enhanced `--inspect` command with token analysis (v0.4.5)
+- ✅ Granular indexing progress with file-level and chunk-level progress bars (v0.4.5)
 
-### Next (v0.4-0.5)  
+### Next (v0.5+)
+- ✅ Published to crates.io (`cargo install ck-search`)
 - 🚧 Configuration file support
-- 🚧 Package manager distributions
+- 🚧 Package manager distributions (brew, apt)
 
 ## FAQ
 
@@ -403,6 +498,14 @@ A: Absolutely. The `--json` flag provides structured output perfect for automate
 
 **Q: What about privacy/security?**  
 A: Everything runs locally. No code or queries are sent to external services. The embedding model is downloaded once and cached locally.
+
+**Q: Where are the embedding models cached?**  
+A: The embedding models (ONNX format) are downloaded and cached in platform-specific directories:
+- Linux/macOS: `~/.cache/ck/models/` (or `$XDG_CACHE_HOME/ck/models/` if set)
+- Windows: `%LOCALAPPDATA%\ck\cache\models\`
+- Fallback: `.ck_models/models/` in the current directory (only if no home directory is found)
+
+The models are downloaded automatically on first use and reused for subsequent runs.
 
 ## License
 

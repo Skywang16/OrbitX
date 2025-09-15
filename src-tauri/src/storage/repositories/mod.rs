@@ -9,7 +9,6 @@ pub mod ai_models;
 pub mod audit_logs;
 pub mod command_history;
 pub mod conversations;
-pub mod vector_workspaces;
 
 // 重新导出所有Repository
 pub use ai_features::AIFeaturesRepository;
@@ -17,7 +16,6 @@ pub use ai_models::AIModelRepository;
 pub use audit_logs::AuditLogRepository;
 pub use command_history::CommandHistoryRepository;
 pub use conversations::ConversationRepository;
-pub use vector_workspaces::VectorWorkspaceRepository;
 
 use crate::storage::database::DatabaseManager;
 use crate::utils::error::AppResult;
@@ -53,7 +51,6 @@ pub struct RepositoryManager {
     audit_logs: AuditLogRepository,
     command_history: CommandHistoryRepository,
     conversations: ConversationRepository,
-    vector_workspaces: VectorWorkspaceRepository,
 }
 
 impl RepositoryManager {
@@ -65,7 +62,6 @@ impl RepositoryManager {
             audit_logs: AuditLogRepository::new(Arc::clone(&database)),
             command_history: CommandHistoryRepository::new(Arc::clone(&database)),
             conversations: ConversationRepository::new(Arc::clone(&database)),
-            vector_workspaces: VectorWorkspaceRepository::new(Arc::clone(&database)),
             database,
         }
     }
@@ -95,10 +91,6 @@ impl RepositoryManager {
         &self.conversations
     }
 
-    /// 获取向量工作区Repository
-    pub fn vector_workspaces(&self) -> &VectorWorkspaceRepository {
-        &self.vector_workspaces
-    }
 
     /// 获取数据库管理器
     pub fn database(&self) -> &DatabaseManager {

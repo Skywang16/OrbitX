@@ -516,7 +516,7 @@
 
   .x-select__filter {
     padding: 8px;
-    border-bottom: 1px solid var(--border-300);
+    border-bottom: 1px solid var(--border-200);
   }
 
   .x-select__filter-input {

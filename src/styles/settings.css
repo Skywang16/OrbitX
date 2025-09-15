@@ -15,7 +15,7 @@
   min-width: 200px;
   max-width: 280px;
   background: var(--bg-300);
-  border-right: 1px solid var(--border-300);
+  border-right: 1px solid var(--border-200);
   overflow-y: auto;
   flex-shrink: 0;
   /* 隐藏滚动条 */
@@ -327,7 +327,7 @@
     height: auto;
     max-height: 150px;
     border-right: none;
-    border-bottom: 1px solid var(--border-300);
+    border-bottom: 1px solid var(--border-200);
     flex-shrink: 0;
   }
 

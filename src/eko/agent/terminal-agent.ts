@@ -6,7 +6,7 @@
 import { Agent } from '@/eko-core'
 import type { TerminalAgentConfig } from '../types'
 import { getToolsForMode } from '../tools'
-import { terminalApi, shellIntegrationApi } from '@/api'
+import { terminalApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'
 
 // Define mode types
@@ -79,14 +79,14 @@ export class TerminalAgent extends Agent {
       this.description = `You are ${this.config.name}, a skilled DevOps engineer and terminal expert.
 
 CHAT MODE (Read-Only): Analyze files and provide command suggestions
-- Use read_file, read_directory, orbit_search, grep_search, web_fetch
+- Use orbit_search, read_file, read_directory, web_fetch
 - DO NOT execute commands or modify files
 - Provide detailed analysis and step-by-step command suggestions
 - For execution needs, tell user to switch to agent mode`
     } else {
       this.description = `You are ${this.config.name}, a skilled DevOps engineer and terminal expert.
 
-AGENT MODE (Full Authority): Execute commands and complete tasks autonomously  
+AGENT MODE (Full Authority): Execute commands and complete tasks autonomously
 - Use all tools: shell commands, file operations, system modifications
 - Work methodically: analyze → plan → execute → verify → complete
 - Continue until task fully resolved, then return to user
@@ -207,13 +207,7 @@ AGENT MODE (Full Authority): Execute commands and complete tasks autonomously
         return null
       }
 
-      // 首先尝试从终端面板的Shell Integration获取CWD
-      const cwd = await shellIntegrationApi.getPaneCwd(targetTerminalId)
-      if (cwd) {
-        return cwd
-      }
-
-      // 如果Shell Integration没有CWD信息，尝试从终端状态获取
+      // 从前端 Terminal Store 获取 CWD
       const terminalStore = useTerminalStore()
       const terminal = terminalStore.terminals.find(t => t.backendId === targetTerminalId)
       if (terminal?.cwd && terminal.cwd !== '~') {

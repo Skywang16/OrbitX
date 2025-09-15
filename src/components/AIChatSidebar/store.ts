@@ -107,6 +107,17 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     return !isLoading.value && aiSettingsStore.hasModels
   })
 
+  const currentConversation = computed(() => {
+    if (!currentConversationId.value) return null
+    const conversation = conversations.value.find(c => c.id === currentConversationId.value)
+    if (!conversation) return null
+
+    return {
+      ...conversation,
+      messages: messageList.value,
+    }
+  })
+
   const toggleSidebar = async () => {
     isVisible.value = !isVisible.value
     if (isVisible.value) {
@@ -817,6 +828,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     isVisible,
     sidebarWidth,
     currentConversationId,
+    currentConversation,
     messageList,
     streamingContent,
     isLoading,

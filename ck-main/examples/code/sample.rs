@@ -8,13 +8,13 @@ impl Calculator {
     pub fn new() -> Self {
         Calculator { memory: 0.0 }
     }
-    
+
     pub fn add(&mut self, a: f64, b: f64) -> f64 {
         let result = a + b;
         self.memory = result;
         result
     }
-    
+
     pub fn multiply(&mut self, a: f64, b: f64) -> f64 {
         let result = a * b;
         self.memory = result;
@@ -33,3 +33,4 @@ pub mod utils {
         format!("{:.2}", n)
     }
 }
+

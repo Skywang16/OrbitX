@@ -2,6 +2,119 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.5] - 2025-09-13
+
+### Added
+- **Enhanced token-based chunking**: Implemented model-specific token-aware chunking using HuggingFace tokenizers for precise token counting instead of character estimation
+- **Model-specific configurations**: Chunks now sized according to model capacity - 1024 tokens for large models (nomic/jina) vs 400 tokens for small models (bge-small)
+- **Streamlined --inspect command**: Enhanced file inspection showing token counts per chunk, language detection, and clean visualization without visual noise
+- **FastEmbed capacity utilization**: Configured FastEmbed to use full model capacity (8192 tokens for nomic/jina models vs previous 512 token truncation)
+- **Indexing progress transparency**: Added model name and chunk configuration display during indexing operations
+
+### Fixed
+- **Token estimation accuracy**: Replaced rough character-based estimation with actual model tokenizers for precise chunking
+- **Model capacity underutilization**: Fixed FastEmbed configuration to use full 8K context for large models instead of 512-token default
+- **Clippy compliance**: Resolved all compiler warnings to meet CI/CD standards with `-D warnings` flag
+- **Unused code cleanup**: Removed dead code and properly annotated intentional allowances for CI compliance
+
+### Technical
+- **HuggingFace tokenizer integration**: Added hf-hub and tokenizers dependencies for precise token counting
+- **Model-aware chunking system**: `get_model_chunk_config()` function providing balanced precision vs context chunking strategy
+- **Enhanced --inspect visualization**: Complete rewrite showing essential chunking information without progress bar clutter
+- **Comprehensive quality checks**: All 88 tests passing with clippy compliance and code formatting standards
+
+## [0.4.4] - 2025-09-13
+
+### Fixed
+- **`--add` command argument parsing**: Fixed issue where file paths were incorrectly parsed as pattern arguments, preventing single file additions to the index
+- **Empty pattern behavior**: Empty regex patterns now match each line once (consistent with grep/ripgrep) instead of matching at every character position causing massive duplication
+
+## [0.4.3] - 2025-09-13
+
+### Added
+- **Enhanced embedding models**: Added support for Nomic V1.5 (8192 tokens, 768 dimensions) and Jina Code (8192 tokens, code-specialized) models
+- **Model selection**: New `--model` flag for choosing embedding model during indexing (`bge-small`, `nomic-v1.5`, `jina-code`)
+- **Index-time model configuration**: Model selection is now properly configured at index creation time and stored in index manifest
+- **Automatic model detection**: Search operations automatically use the model stored in the index manifest
+- **Reranking support**: Added cross-encoder reranking with `--rerank` flag and `--rerank-model` option for improved search relevance
+- **Striding for large chunks**: Implemented text striding with overlap for chunks exceeding model token limits
+- **Token estimation**: Added token counting utilities to optimize chunk sizes for different models
+
+### Fixed
+- **Ctrl-C interrupt handling**: Fixed issue where indexing could not be properly cancelled - now uses `try_for_each` to stop all parallel workers immediately
+- **Model compatibility checking**: Index operations now validate model compatibility and provide clear error messages for mismatches
+
+### Technical
+- **Model registry system**: New `ck-models` crate with centralized model configuration and limits
+- **Index manifest enhancement**: Added `embedding_model` and `embedding_dimensions` fields to track model used for indexing
+- **Backward compatibility**: Existing indexes without model metadata continue to work with default BGE model
+- **Architecture fix**: Corrected design where model selection was incorrectly a search-time option instead of index-time configuration
+
+### Documentation
+- **README model guide**: Added comprehensive section explaining embedding model options and their trade-offs
+- **CLI help improvements**: Enhanced help text with clear model selection examples and implications
+
+## [0.4.2] - 2025-09-11
+
+### Fixed
+- **Hidden file indexing bug**: Fixed critical bug where hidden directories (especially `.git`) were being indexed despite exclusion patterns
+- **Semantic search pollution**: Eliminated `.git` files appearing in semantic search results for unrelated queries
+- **Index size reduction**: Significantly reduced index size by properly excluding hidden files and directories
+
+### Technical
+- **WalkBuilder configuration**: Changed `.hidden(false)` to `.hidden(true)` to respect hidden file conventions
+- **Exclusion pattern enforcement**: Hidden file exclusion now takes precedence, preventing override patterns from being ignored
+- **Performance improvement**: Reduced indexing time and storage by not processing `.git` and other hidden directories
+
+## [0.4.1] - 2025-09-10
+
+### Added
+- **JSONL output format**: Stream-friendly `--jsonl` flag for AI agent workflows with structured output
+- **No-snippet mode**: `--no-snippet` flag for metadata-only output to reduce bandwidth for agents
+- **Agent documentation**: Comprehensive README section explaining JSONL benefits over traditional JSON
+- **Agent examples**: Python code demonstrating stream processing patterns for AI workflows
+- **UTF-8 warning suppression**: Eliminated noisy warnings for binary files in .git directories
+- **JSONL output format**: Stream-friendly `--jsonl` flag for AI agent workflows with structured output
+- **No-snippet mode**: `--no-snippet` flag for metadata-only output to reduce bandwidth for agents
+- **Agent documentation**: Comprehensive README section explaining JSONL benefits over traditional JSON
+- **Agent examples**: Python code demonstrating stream processing patterns for AI workflows
+- **UTF-8 warning suppression**: Eliminated noisy warnings for binary files in .git directories
+
+### Technical
+- **JsonlSearchResult struct**: New agent-friendly output format with conversion methods
+- **Extended SearchResult**: Added chunk_hash and index_epoch fields for future agent features
+- **Comprehensive test coverage**: 4 new integration tests validating JSONL functionality
+- **Updated help text**: Dedicated JSONL section explaining streaming benefits for agents
+- **Phase 1 PRD**: Complete specification for agent-ready code navigation features
+
+### Why JSONL for AI Agents?
+- **Streaming friendly**: Process results as they arrive, no waiting for complete response
+- **Memory efficient**: Parse one result at a time, not entire array into memory
+- **Error resilient**: Malformed lines don't break entire response
+- **Standard format**: Used by OpenAI, Anthropic, and modern ML pipelines
+
+## [0.3.9] - 2025-09-10
+
+### Added
+- **Streaming producer-consumer indexing**: Implemented efficient streaming architecture for large-scale indexing operations
+- **Memory-efficient processing**: Reduces memory footprint during indexing of large codebases
+- **Performance optimization**: Better resource utilization through streaming data flow
+
+### Technical
+- **Producer-consumer pattern**: Separates file discovery from processing for better parallelization
+- **Streaming integration**: Compatible with existing smart update and exclude pattern functionality
+
+## [0.3.8] - 2025-09-09
+
+### Added
+- **Enhanced model caching documentation**: Updated README with comprehensive information about embedding model cache locations
+- **Platform-specific cache paths**: Documented cache directories for Linux/macOS (`~/.cache/ck/models/`), Windows (`%LOCALAPPDATA%\ck\cache\models\`), and fallback locations
+- **Model download transparency**: Clear documentation of where fastembed stores ONNX models when downloaded during indexing
+
+### Fixed
+- **Documentation accuracy**: Removed outdated `.fastembed_cache` references and provided correct cache path information
+- **FAQ section**: Added frequently asked questions about embedding model storage and management
+
 ## [0.3.7] - 2025-09-08
 
 ### Improved

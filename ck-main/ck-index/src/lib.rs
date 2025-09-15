@@ -7,10 +7,68 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::Once;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
 pub type ProgressCallback = Box<dyn Fn(&str) + Send + Sync>;
+
+/// Detailed progress information for embedding operations
+#[derive(Debug, Clone)]
+pub struct EmbeddingProgress {
+    pub file_name: String,
+    pub file_index: usize,
+    pub total_files: usize,
+    pub chunk_index: usize,
+    pub total_chunks: usize,
+    pub chunk_size: usize,
+}
+
+pub type DetailedProgressCallback = Box<dyn Fn(EmbeddingProgress) + Send + Sync>;
+
+/// Enhanced progress information for granular indexing feedback
+#[derive(Debug, Clone)]
+pub enum IndexingProgress {
+    /// Starting indexing process
+    Starting { total_files: usize },
+    /// Processing a specific file
+    ProcessingFile {
+        file: String,
+        file_number: usize,
+        total_files: usize,
+        file_size: u64,
+    },
+    /// Chunking a file
+    ChunkingFile { file: String, chunks_found: usize },
+    /// Processing chunk for embedding
+    ProcessingChunk {
+        file: String,
+        chunk_number: usize,
+        total_chunks: usize,
+        chunk_size: usize,
+    },
+    /// Finished processing a file
+    FileComplete {
+        file: String,
+        chunks_processed: usize,
+        file_number: usize,
+        total_files: usize,
+        elapsed_ms: u64,
+    },
+    /// Overall completion
+    Complete {
+        total_files: usize,
+        total_chunks: usize,
+        total_elapsed_ms: u64,
+    },
+}
+
+pub type EnhancedProgressCallback = Box<dyn Fn(IndexingProgress) + Send + Sync>;
+
+// Global interrupt flag
+static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+static HANDLER_INIT: Once = Once::new();
 
 /// Build override patterns for excluding files during directory traversal
 fn build_overrides(
@@ -51,6 +109,10 @@ pub struct IndexManifest {
     pub created: u64,
     pub updated: u64,
     pub files: HashMap<PathBuf, FileMetadata>,
+    /// Embedding model used for this index (added in v0.4.2+)
+    pub embedding_model: Option<String>,
+    /// Embedding model dimensions (for validation)
+    pub embedding_dimensions: Option<usize>,
 }
 
 impl Default for IndexManifest {
@@ -65,6 +127,8 @@ impl Default for IndexManifest {
             created: now,
             updated: now,
             files: HashMap::new(),
+            embedding_model: None, // Default to None for backward compatibility
+            embedding_dimensions: None,
         }
     }
 }
@@ -82,7 +146,7 @@ pub fn collect_files(
             .git_ignore(true)
             .git_global(true)
             .git_exclude(true)
-            .hidden(false)
+            .hidden(true)
             .overrides(overrides)
             .build()
             .filter_map(|entry| entry.ok())
@@ -106,7 +170,7 @@ pub fn collect_files(
 
         Ok(WalkBuilder::new(path)
             .git_ignore(false)
-            .hidden(false)
+            .hidden(true)
             .overrides(combined_overrides)
             .build()
             .filter_map(|entry| entry.ok())
@@ -136,6 +200,7 @@ pub async fn index_directory(
     compute_embeddings: bool,
     respect_gitignore: bool,
     exclude_patterns: &[String],
+    model: Option<&str>,
 ) -> Result<()> {
     tracing::info!(
         "index_directory called with compute_embeddings={}",
@@ -147,13 +212,49 @@ pub async fn index_directory(
     let manifest_path = index_dir.join("manifest.json");
     let mut manifest = load_or_create_manifest(&manifest_path)?;
 
+    // Handle model configuration for embeddings
+    let resolved_model = if compute_embeddings {
+        // Resolve the model name and get its dimensions
+        let model_registry = ck_models::ModelRegistry::default();
+        let selected_model = if let Some(model_name) = model {
+            // User specified a model
+            if let Some(model_config) = model_registry.get_model(model_name) {
+                model_config.name.clone()
+            } else {
+                return Err(anyhow::anyhow!(
+                    "Unknown model '{}'. Available models: bge-small, nomic-v1.5, jina-code",
+                    model_name
+                ));
+            }
+        } else {
+            // Use default model
+            let default_config = model_registry
+                .get_default_model()
+                .ok_or_else(|| anyhow::anyhow!("No default model available"))?;
+            default_config.name.clone()
+        };
+
+        // Set the model info in the manifest for new indexes
+        manifest.embedding_model = Some(selected_model.clone());
+        if let Some(model_name) = model {
+            if let Some(model_config) = model_registry.get_model(model_name) {
+                manifest.embedding_dimensions = Some(model_config.dimensions);
+            }
+        } else if let Some(default_config) = model_registry.get_default_model() {
+            manifest.embedding_dimensions = Some(default_config.dimensions);
+        }
+
+        Some(selected_model)
+    } else {
+        None
+    };
+
     let files = collect_files(path, respect_gitignore, exclude_patterns)?;
 
     if compute_embeddings {
-        // Sequential processing with streaming - write each file immediately
+        // Sequential processing with small-batch embeddings for streaming performance
         tracing::info!("Creating embedder for {} files", files.len());
-        let mut embedder = ck_embed::create_embedder(None)?;
-        let mut _processed_count = 0;
+        let mut embedder = ck_embed::create_embedder(resolved_model.as_deref())?;
 
         for file_path in files.iter() {
             match index_single_file(file_path, path, Some(&mut embedder)) {
@@ -169,10 +270,17 @@ pub async fn index_directory(
                         .unwrap()
                         .as_secs();
                     save_manifest(&manifest_path, &manifest)?;
-                    _processed_count += 1;
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to index {:?}: {}", file_path, e);
+                    // Suppress warnings for binary files and UTF-8 errors in .git directories
+                    let error_msg = e.to_string();
+                    let is_binary_skip = error_msg.contains("Binary file, skipping");
+                    let is_utf8_error = error_msg.contains("stream did not contain valid UTF-8");
+                    let is_git_file = file_path.components().any(|c| c.as_os_str() == ".git");
+
+                    if !(is_binary_skip || is_utf8_error && is_git_file) {
+                        tracing::warn!("Failed to index {:?}: {}", file_path, e);
+                    }
                 }
             }
         }
@@ -195,7 +303,16 @@ pub async fn index_directory(
                         }
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to index {:?}: {}", file_path, e);
+                        // Suppress warnings for binary files and UTF-8 errors in .git directories
+                        let error_msg = e.to_string();
+                        let is_binary_skip = error_msg.contains("Binary file, skipping");
+                        let is_utf8_error =
+                            error_msg.contains("stream did not contain valid UTF-8");
+                        let is_git_file = file_path.components().any(|c| c.as_os_str() == ".git");
+
+                        if !(is_binary_skip || is_utf8_error && is_git_file) {
+                            tracing::warn!("Failed to index {:?}: {}", file_path, e);
+                        }
                     }
                 }
             });
@@ -244,7 +361,9 @@ pub async fn index_file(file_path: &Path, compute_embeddings: bool) -> Result<()
     let mut manifest = load_or_create_manifest(&manifest_path)?;
 
     let entry = if compute_embeddings {
-        let mut embedder = ck_embed::create_embedder(None)?;
+        // Use the model from the existing index, or default if none specified
+        let model_name = manifest.embedding_model.as_deref();
+        let mut embedder = ck_embed::create_embedder(model_name)?;
         index_single_file(file_path, &repo_root, Some(&mut embedder))?
     } else {
         index_single_file(file_path, &repo_root, None)?
@@ -278,6 +397,7 @@ pub async fn update_index(
             compute_embeddings,
             respect_gitignore,
             exclude_patterns,
+            None, // model - use existing from manifest for update
         )
         .await;
     }
@@ -288,8 +408,9 @@ pub async fn update_index(
     let files = collect_files(path, respect_gitignore, exclude_patterns)?;
 
     let updates: Vec<(PathBuf, IndexEntry)> = if compute_embeddings {
-        // Sequential processing when computing embeddings
-        let mut embedder = ck_embed::create_embedder(None)?;
+        // Sequential processing when computing embeddings (for memory efficiency)
+        let model_name = manifest.embedding_model.as_deref();
+        let mut embedder = ck_embed::create_embedder(model_name)?;
         files
             .iter()
             .filter_map(|file_path| {
@@ -304,7 +425,17 @@ pub async fn update_index(
                     match index_single_file(file_path, path, Some(&mut embedder)) {
                         Ok(entry) => Some((file_path.clone(), entry)),
                         Err(e) => {
-                            tracing::warn!("Failed to index {:?}: {}", file_path, e);
+                            // Suppress warnings for binary files and UTF-8 errors in .git directories
+                            let error_msg = e.to_string();
+                            let is_binary_skip = error_msg.contains("Binary file, skipping");
+                            let is_utf8_error =
+                                error_msg.contains("stream did not contain valid UTF-8");
+                            let is_git_file =
+                                file_path.components().any(|c| c.as_os_str() == ".git");
+
+                            if !(is_binary_skip || is_utf8_error && is_git_file) {
+                                tracing::warn!("Failed to index {:?}: {}", file_path, e);
+                            }
                             None
                         }
                     }
@@ -330,7 +461,17 @@ pub async fn update_index(
                     match index_single_file(file_path, path, None) {
                         Ok(entry) => Some((file_path.clone(), entry)),
                         Err(e) => {
-                            tracing::warn!("Failed to index {:?}: {}", file_path, e);
+                            // Suppress warnings for binary files and UTF-8 errors in .git directories
+                            let error_msg = e.to_string();
+                            let is_binary_skip = error_msg.contains("Binary file, skipping");
+                            let is_utf8_error =
+                                error_msg.contains("stream did not contain valid UTF-8");
+                            let is_git_file =
+                                file_path.components().any(|c| c.as_os_str() == ".git");
+
+                            if !(is_binary_skip || is_utf8_error && is_git_file) {
+                                tracing::warn!("Failed to index {:?}: {}", file_path, e);
+                            }
                             None
                         }
                     }
@@ -505,6 +646,7 @@ pub async fn smart_update_index(
         compute_embeddings,
         respect_gitignore,
         exclude_patterns,
+        None, // model - use default for backward compatibility
     )
     .await
 }
@@ -516,9 +658,46 @@ pub async fn smart_update_index_with_progress(
     compute_embeddings: bool,
     respect_gitignore: bool,
     exclude_patterns: &[String],
+    model: Option<&str>,
+) -> Result<UpdateStats> {
+    smart_update_index_with_detailed_progress(
+        path,
+        force_rebuild,
+        progress_callback,
+        None, // No detailed progress callback for backward compatibility
+        compute_embeddings,
+        respect_gitignore,
+        exclude_patterns,
+        model,
+    )
+    .await
+}
+
+/// Enhanced indexing with detailed embedding progress
+#[allow(clippy::too_many_arguments)]
+pub async fn smart_update_index_with_detailed_progress(
+    path: &Path,
+    force_rebuild: bool,
+    progress_callback: Option<ProgressCallback>,
+    detailed_progress_callback: Option<DetailedProgressCallback>,
+    compute_embeddings: bool,
+    respect_gitignore: bool,
+    exclude_patterns: &[String],
+    model: Option<&str>,
 ) -> Result<UpdateStats> {
     let index_dir = path.join(".ck");
     let mut stats = UpdateStats::default();
+
+    // Set up interrupt handler (only once per process)
+    HANDLER_INIT.call_once(|| {
+        let _ = ctrlc::set_handler(move || {
+            INTERRUPTED.store(true, Ordering::SeqCst);
+            eprintln!("\nIndexing interrupted by user. Cleaning up...");
+        });
+    });
+
+    // Reset interrupt flag for this indexing operation
+    INTERRUPTED.store(false, Ordering::SeqCst);
 
     if force_rebuild {
         clean_index(path)?;
@@ -527,6 +706,7 @@ pub async fn smart_update_index_with_progress(
             compute_embeddings,
             respect_gitignore,
             exclude_patterns,
+            model,
         )
         .await?;
         let index_stats = get_index_stats(path)?;
@@ -544,6 +724,64 @@ pub async fn smart_update_index_with_progress(
     let manifest_path = index_dir.join("manifest.json");
     let mut manifest = load_or_create_manifest(&manifest_path)?;
 
+    // Handle model configuration for embeddings
+    let (resolved_model, _model_dimensions) = if compute_embeddings {
+        // Resolve the model name and get its dimensions
+        let model_registry = ck_models::ModelRegistry::default();
+        let (selected_model, model_dims) = if let Some(model_name) = model {
+            // User specified a model
+            if let Some(model_config) = model_registry.get_model(model_name) {
+                (model_config.name.clone(), model_config.dimensions)
+            } else {
+                return Err(anyhow::anyhow!(
+                    "Unknown model '{}'. Available models: bge-small, nomic-v1.5, jina-code",
+                    model_name
+                ));
+            }
+        } else {
+            // Use default model
+            let default_config = model_registry
+                .get_default_model()
+                .ok_or_else(|| anyhow::anyhow!("No default model available"))?;
+            (default_config.name.clone(), default_config.dimensions)
+        };
+
+        // Check for model compatibility with existing index
+        let (final_model, final_dims) = if let Some(existing_model) = &manifest.embedding_model {
+            // If we're updating an existing index and no model was specified,
+            // use the existing model from the index
+            if model.is_none() {
+                // Use the existing model - this is an auto-update during search
+                (
+                    existing_model.clone(),
+                    manifest.embedding_dimensions.unwrap_or(384),
+                )
+            } else if existing_model != &selected_model {
+                // User explicitly specified a different model - that's an error
+                return Err(anyhow::anyhow!(
+                    "Model mismatch: Index was created with '{}', but you're trying to use '{}'. \
+                    Please run 'ck --clean .' to remove the old index, then 'ck --index --model {}' to rebuild with the new model.",
+                    existing_model,
+                    selected_model,
+                    model.unwrap_or("default")
+                ));
+            } else {
+                // Model matches, proceed
+                (selected_model, model_dims)
+            }
+        } else {
+            // This is either a new index or an old index without model info
+            // Set the model info in the manifest
+            manifest.embedding_model = Some(selected_model.clone());
+            manifest.embedding_dimensions = Some(model_dims);
+            (selected_model, model_dims)
+        };
+
+        (Some(final_model), Some(final_dims))
+    } else {
+        (None, None)
+    };
+
     let current_files = collect_files(path, respect_gitignore, exclude_patterns)?;
 
     // First pass: determine which files need updating and collect stats
@@ -551,6 +789,12 @@ pub async fn smart_update_index_with_progress(
     let mut manifest_changed = false;
 
     for file_path in current_files {
+        // Check for interrupt
+        if INTERRUPTED.load(Ordering::SeqCst) {
+            eprintln!("Indexing interrupted during file scanning.");
+            return Ok(stats);
+        }
+
         if let Some(metadata) = manifest.files.get(&file_path) {
             let fs_meta = match fs::metadata(&file_path) {
                 Ok(m) => m,
@@ -608,17 +852,40 @@ pub async fn smart_update_index_with_progress(
     // Second pass: index the files that need updating
     if compute_embeddings {
         // Sequential processing with streaming - write each file immediately
-        let mut embedder = ck_embed::create_embedder(None)?;
+        let mut embedder = ck_embed::create_embedder(resolved_model.as_deref())?;
         let mut _processed_count = 0;
 
         for file_path in files_to_update.iter() {
+            // Check for interrupt
+            if INTERRUPTED.load(Ordering::SeqCst) {
+                eprintln!(
+                    "Indexing interrupted. {} files processed.",
+                    _processed_count
+                );
+                break;
+            }
+
             if let Some(ref callback) = progress_callback
                 && let Some(file_name) = file_path.file_name()
             {
                 callback(&file_name.to_string_lossy());
             }
 
-            match index_single_file(file_path, path, Some(&mut embedder)) {
+            // Call detailed progress version if callback is provided, otherwise use regular version
+            let result = if let Some(ref detailed_callback) = detailed_progress_callback {
+                index_single_file_with_progress(
+                    file_path,
+                    path,
+                    Some(&mut embedder),
+                    Some(detailed_callback),
+                    _processed_count,
+                    files_to_update.len(),
+                )
+            } else {
+                index_single_file(file_path, path, Some(&mut embedder))
+            };
+
+            match result {
                 Ok(entry) => {
                     // Write sidecar immediately
                     let sidecar_path = get_sidecar_path(path, file_path);
@@ -634,7 +901,15 @@ pub async fn smart_update_index_with_progress(
                     _processed_count += 1;
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to index {:?}: {}", file_path, e);
+                    // Suppress warnings for binary files and UTF-8 errors in .git directories
+                    let error_msg = e.to_string();
+                    let is_binary_skip = error_msg.contains("Binary file, skipping");
+                    let is_utf8_error = error_msg.contains("stream did not contain valid UTF-8");
+                    let is_git_file = file_path.components().any(|c| c.as_os_str() == ".git");
+
+                    if !(is_binary_skip || is_utf8_error && is_git_file) {
+                        tracing::warn!("Failed to index {:?}: {}", file_path, e);
+                    }
                     stats.files_errored += 1;
                 }
             }
@@ -652,23 +927,57 @@ pub async fn smart_update_index_with_progress(
 
         // Spawn worker thread for parallel processing
         let worker_handle = thread::spawn(move || {
-            files_clone.par_iter().for_each(|file_path| {
+            use rayon::prelude::*;
+
+            // Use par_iter with try_for_each to allow early exit on interrupt
+            let result = files_clone.par_iter().try_for_each(|file_path| {
+                // Check for interrupt
+                if INTERRUPTED.load(Ordering::SeqCst) {
+                    return Err("interrupted");
+                }
+
                 match index_single_file(file_path, &path_clone, None) {
                     Ok(entry) => {
                         if tx.send((file_path.clone(), entry)).is_err() {
                             // Receiver dropped, stop processing
+                            return Err("receiver_dropped");
                         }
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to index {:?}: {}", file_path, e);
+                        // Suppress warnings for binary files and UTF-8 errors in .git directories
+                        let error_msg = e.to_string();
+                        let is_binary_skip = error_msg.contains("Binary file, skipping");
+                        let is_utf8_error =
+                            error_msg.contains("stream did not contain valid UTF-8");
+                        let is_git_file = file_path.components().any(|c| c.as_os_str() == ".git");
+
+                        if !(is_binary_skip || is_utf8_error && is_git_file) {
+                            tracing::warn!("Failed to index {:?}: {}", file_path, e);
+                        }
                     }
                 }
+                Ok(())
             });
+
+            // Log the result for debugging
+            if let Err(reason) = result {
+                tracing::debug!("Worker thread stopped due to: {}", reason);
+            }
         });
 
         // Main thread: stream results as they arrive
         let mut _processed_count = 0;
         while let Ok((file_path, entry)) = rx.recv() {
+            // Check for interrupt
+            if INTERRUPTED.load(Ordering::SeqCst) {
+                eprintln!(
+                    "Indexing interrupted. {} files processed.",
+                    _processed_count
+                );
+                drop(rx); // Drop receiver to signal worker to stop
+                break;
+            }
+
             if let Some(ref callback) = progress_callback
                 && let Some(file_name) = file_path.file_name()
             {
@@ -717,6 +1026,22 @@ fn index_single_file(
     _repo_root: &Path,
     embedder: Option<&mut Box<dyn ck_embed::Embedder>>,
 ) -> Result<IndexEntry> {
+    index_single_file_with_progress(file_path, _repo_root, embedder, None, 0, 1)
+}
+
+fn index_single_file_with_progress(
+    file_path: &Path,
+    _repo_root: &Path,
+    embedder: Option<&mut Box<dyn ck_embed::Embedder>>,
+    detailed_progress: Option<&DetailedProgressCallback>,
+    file_index: usize,
+    total_files: usize,
+) -> Result<IndexEntry> {
+    // Skip binary files to avoid UTF-8 warnings
+    if !is_text_file(file_path) {
+        return Err(anyhow::anyhow!("Binary file, skipping"));
+    }
+
     let content = fs::read_to_string(file_path)?;
     let hash = compute_file_hash(file_path)?;
     let metadata = fs::metadata(file_path)?;
@@ -737,19 +1062,37 @@ fn index_single_file(
     let chunks = ck_chunk::chunk_text(&content, lang)?;
 
     let chunk_entries: Vec<ChunkEntry> = if let Some(embedder) = embedder {
-        // Compute embeddings for all chunks
-        let chunk_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
-        tracing::info!(
-            "Computing embeddings for {} chunks in {:?}",
-            chunk_texts.len(),
-            file_path
-        );
-        let embeddings = embedder.embed(&chunk_texts)?;
+        let total_chunks = chunks.len();
+        let file_name = file_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
 
-        chunks
-            .into_iter()
-            .zip(embeddings)
-            .map(|(chunk, embedding)| {
+        // Process chunks with progress reporting
+        if let Some(ref callback) = detailed_progress {
+            tracing::info!(
+                "Computing embeddings for {} chunks in {:?}",
+                total_chunks,
+                file_path
+            );
+
+            let mut chunk_entries = Vec::new();
+            for (chunk_index, chunk) in chunks.into_iter().enumerate() {
+                // Report progress before processing chunk
+                callback(EmbeddingProgress {
+                    file_name: file_name.clone(),
+                    file_index,
+                    total_files,
+                    chunk_index,
+                    total_chunks,
+                    chunk_size: chunk.text.len(),
+                });
+
+                // Embed single chunk
+                let embeddings = embedder.embed(std::slice::from_ref(&chunk.text))?;
+                let embedding = embeddings.into_iter().next().unwrap();
+
                 let chunk_type_str = match chunk.chunk_type {
                     ck_chunk::ChunkType::Function => Some("function".to_string()),
                     ck_chunk::ChunkType::Class => Some("class".to_string()),
@@ -757,13 +1100,43 @@ fn index_single_file(
                     ck_chunk::ChunkType::Module => Some("module".to_string()),
                     ck_chunk::ChunkType::Text => None,
                 };
-                ChunkEntry {
+
+                chunk_entries.push(ChunkEntry {
                     span: chunk.span,
                     embedding: Some(embedding),
                     chunk_type: chunk_type_str,
-                }
-            })
-            .collect()
+                });
+            }
+            chunk_entries
+        } else {
+            // Fallback to batch processing for backward compatibility
+            let chunk_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
+            tracing::info!(
+                "Computing embeddings for {} chunks in {:?}",
+                chunk_texts.len(),
+                file_path
+            );
+            let embeddings = embedder.embed(&chunk_texts)?;
+
+            chunks
+                .into_iter()
+                .zip(embeddings)
+                .map(|(chunk, embedding)| {
+                    let chunk_type_str = match chunk.chunk_type {
+                        ck_chunk::ChunkType::Function => Some("function".to_string()),
+                        ck_chunk::ChunkType::Class => Some("class".to_string()),
+                        ck_chunk::ChunkType::Method => Some("method".to_string()),
+                        ck_chunk::ChunkType::Module => Some("module".to_string()),
+                        ck_chunk::ChunkType::Text => None,
+                    };
+                    ChunkEntry {
+                        span: chunk.span,
+                        embedding: Some(embedding),
+                        chunk_type: chunk_type_str,
+                    }
+                })
+                .collect()
+        }
     } else {
         // No embedder, just store spans without embeddings
         chunks

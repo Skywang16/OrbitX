@@ -6,7 +6,8 @@
   // Props定义
   interface Props {
     sessions: Conversation[]
-    currentSessionId: number | null
+    currentSession?: Conversation | null
+    chatMode?: 'chat' | 'agent'
     isLoading?: boolean
   }
 
@@ -49,7 +50,7 @@
       <!-- 会话选择下拉菜单 -->
       <SessionSelect
         :sessions="sessions"
-        :current-session-id="currentSessionId"
+        :current-session-id="currentSession?.id || null"
         :loading="isLoading"
         @select-session="handleSelectSession"
         @create-new-session="handleCreateNewSession"
@@ -75,7 +76,7 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    border-bottom: 1px solid var(--border-300);
+    border-bottom: 1px solid var(--border-200);
     background-color: var(--bg-300);
     padding: 0.5em 0.8em;
     gap: 0.5em;

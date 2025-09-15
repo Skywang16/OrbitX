@@ -226,7 +226,7 @@
     gap: var(--spacing-sm);
     margin-top: var(--spacing-sm);
     padding-top: var(--spacing-xs);
-    border-top: 1px solid var(--border-300);
+    border-top: 1px solid var(--border-200);
   }
 
   .ai-message-time {
@@ -335,7 +335,7 @@
 
   /* 未知步骤样式 */
   .unknown-step {
-    border: 1px solid var(--border-300);
+    border: 1px solid var(--border-200);
     border-radius: var(--border-radius);
     background: var(--bg-300);
     opacity: 0.7;
@@ -347,7 +347,7 @@
     gap: var(--spacing-xs);
     padding: var(--spacing-sm) var(--spacing-md);
     background: var(--bg-400);
-    border-bottom: 1px solid var(--border-300);
+    border-bottom: 1px solid var(--border-200);
     border-radius: var(--border-radius) var(--border-radius) 0 0;
   }
 

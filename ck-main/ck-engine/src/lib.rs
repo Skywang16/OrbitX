@@ -18,6 +18,8 @@ mod semantic_v3;
 pub use semantic_v3::{semantic_search_v3, semantic_search_v3_with_progress};
 
 pub type SearchProgressCallback = Box<dyn Fn(&str) + Send + Sync>;
+pub type IndexingProgressCallback = Box<dyn Fn(&str) + Send + Sync>;
+pub type DetailedIndexingProgressCallback = Box<dyn Fn(ck_index::EmbeddingProgress) + Send + Sync>;
 
 /// Extract content from a file using a span
 async fn extract_content_from_span(file_path: &Path, span: &ck_core::Span) -> Result<String> {
@@ -56,13 +58,38 @@ fn find_nearest_index_root(path: &Path) -> Option<StdPathBuf> {
 }
 
 pub async fn search(options: &SearchOptions) -> Result<Vec<SearchResult>> {
-    search_with_progress(options, None).await
+    let results = search_enhanced(options).await?;
+    Ok(results.matches)
 }
 
 pub async fn search_with_progress(
     options: &SearchOptions,
     progress_callback: Option<SearchProgressCallback>,
 ) -> Result<Vec<SearchResult>> {
+    let results = search_enhanced_with_progress(options, progress_callback).await?;
+    Ok(results.matches)
+}
+
+/// Enhanced search that includes near-miss information for threshold queries
+pub async fn search_enhanced(options: &SearchOptions) -> Result<ck_core::SearchResults> {
+    search_enhanced_with_progress(options, None).await
+}
+
+/// Enhanced search with progress callback that includes near-miss information
+pub async fn search_enhanced_with_progress(
+    options: &SearchOptions,
+    progress_callback: Option<SearchProgressCallback>,
+) -> Result<ck_core::SearchResults> {
+    search_enhanced_with_indexing_progress(options, progress_callback, None, None).await
+}
+
+/// Enhanced search with both search and indexing progress callbacks
+pub async fn search_enhanced_with_indexing_progress(
+    options: &SearchOptions,
+    progress_callback: Option<SearchProgressCallback>,
+    indexing_progress_callback: Option<IndexingProgressCallback>,
+    detailed_indexing_progress_callback: Option<DetailedIndexingProgressCallback>,
+) -> Result<ck_core::SearchResults> {
     // Validate that the search path exists
     if !options.path.exists() {
         return Err(ck_core::CkError::Search(format!(
@@ -75,18 +102,45 @@ pub async fn search_with_progress(
     // Auto-update index if needed (unless it's regex-only mode)
     if !matches!(options.mode, SearchMode::Regex) {
         let need_embeddings = matches!(options.mode, SearchMode::Semantic | SearchMode::Hybrid);
-        ensure_index_updated(&options.path, options.reindex, need_embeddings).await?;
+        ensure_index_updated_with_progress(
+            &options.path,
+            options.reindex,
+            need_embeddings,
+            indexing_progress_callback,
+            detailed_indexing_progress_callback,
+        )
+        .await?;
     }
 
-    match options.mode {
-        SearchMode::Regex => regex_search(options),
-        SearchMode::Lexical => lexical_search(options).await,
+    let search_results = match options.mode {
+        SearchMode::Regex => {
+            let matches = regex_search(options)?;
+            ck_core::SearchResults {
+                matches,
+                closest_below_threshold: None,
+            }
+        }
+        SearchMode::Lexical => {
+            let matches = lexical_search(options).await?;
+            ck_core::SearchResults {
+                matches,
+                closest_below_threshold: None,
+            }
+        }
         SearchMode::Semantic => {
             // Use v3 semantic search (reads pre-computed embeddings from sidecars using spans)
-            semantic_search_v3_with_progress(options, progress_callback).await
+            semantic_search_v3_with_progress(options, progress_callback).await?
         }
-        SearchMode::Hybrid => hybrid_search_with_progress(options, progress_callback).await,
-    }
+        SearchMode::Hybrid => {
+            let matches = hybrid_search_with_progress(options, progress_callback).await?;
+            ck_core::SearchResults {
+                matches,
+                closest_below_threshold: None,
+            }
+        }
+    };
+
+    Ok(search_results)
 }
 
 fn regex_search(options: &SearchOptions) -> Result<Vec<SearchResult>> {
@@ -173,8 +227,10 @@ fn search_file(
     for (line_idx, line) in lines.iter().enumerate() {
         let line_number = line_idx + 1;
 
-        // Find all matches in the line with their positions
-        for mat in regex.find_iter(line) {
+        // Special handling for empty pattern - match the entire line once
+        // An empty regex pattern will match at every position, so we need to handle it specially
+        if regex.as_str().is_empty() {
+            // Empty pattern matches the whole line once (grep compatibility)
             let preview = if options.full_section {
                 // Try to find the containing code section
                 if let Some(ref sections) = code_sections {
@@ -194,8 +250,8 @@ fn search_file(
             results.push(SearchResult {
                 file: file_path.to_path_buf(),
                 span: Span {
-                    byte_start: byte_offset + mat.start(),
-                    byte_end: byte_offset + mat.end(),
+                    byte_start: byte_offset,
+                    byte_end: byte_offset + line.len(),
                     line_start: line_number,
                     line_end: line_number,
                 },
@@ -203,7 +259,44 @@ fn search_file(
                 preview,
                 lang: ck_core::Language::from_path(file_path),
                 symbol: None,
+                chunk_hash: None,
+                index_epoch: None,
             });
+        } else {
+            // Find all matches in the line with their positions
+            for mat in regex.find_iter(line) {
+                let preview = if options.full_section {
+                    // Try to find the containing code section
+                    if let Some(ref sections) = code_sections {
+                        if let Some(section) = find_containing_section(sections, line_idx) {
+                            section.clone()
+                        } else {
+                            // Fall back to context lines if no section found
+                            get_context_preview(&lines, line_idx, options)
+                        }
+                    } else {
+                        get_context_preview(&lines, line_idx, options)
+                    }
+                } else {
+                    get_context_preview(&lines, line_idx, options)
+                };
+
+                results.push(SearchResult {
+                    file: file_path.to_path_buf(),
+                    span: Span {
+                        byte_start: byte_offset + mat.start(),
+                        byte_end: byte_offset + mat.end(),
+                        line_start: line_number,
+                        line_end: line_number,
+                    },
+                    score: 1.0,
+                    preview,
+                    lang: ck_core::Language::from_path(file_path),
+                    symbol: None,
+                    chunk_hash: None,
+                    index_epoch: None,
+                });
+            }
         }
 
         // Update byte offset for next line (add line length + newline character)
@@ -298,6 +391,8 @@ async fn lexical_search(options: &SearchOptions) -> Result<Vec<SearchResult>> {
                 preview,
                 lang: ck_core::Language::from_path(&PathBuf::from(path_text)),
                 symbol: None,
+                chunk_hash: None,
+                index_epoch: None,
             },
         ));
     }
@@ -433,6 +528,8 @@ async fn build_tantivy_index(options: &SearchOptions) -> Result<Vec<SearchResult
                 preview,
                 lang: ck_core::Language::from_path(&PathBuf::from(path_text)),
                 symbol: None,
+                chunk_hash: None,
+                index_epoch: None,
             },
         ));
     }
@@ -582,6 +679,8 @@ async fn semantic_search_with_progress(
                 preview,
                 lang: ck_core::Language::from_path(file_path),
                 symbol: None,
+                chunk_hash: None,
+                index_epoch: None,
             });
         }
     }
@@ -775,6 +874,8 @@ async fn build_semantic_index_with_progress(
                 preview,
                 lang: ck_core::Language::from_path(file_path),
                 symbol: None,
+                chunk_hash: None,
+                index_epoch: None,
             });
         }
     }
@@ -811,7 +912,7 @@ async fn hybrid_search_with_progress(
             .push((rank + 1, result.clone()));
     }
 
-    for (rank, result) in semantic_results.iter().enumerate() {
+    for (rank, result) in semantic_results.matches.iter().enumerate() {
         let key = format!("{}:{}", result.file.display(), result.span.line_start);
         combined
             .entry(key)
@@ -942,10 +1043,12 @@ fn collect_files(
     Ok(files)
 }
 
-async fn ensure_index_updated(
+async fn ensure_index_updated_with_progress(
     path: &Path,
     force_reindex: bool,
     need_embeddings: bool,
+    progress_callback: Option<ck_index::ProgressCallback>,
+    detailed_progress_callback: Option<ck_index::DetailedProgressCallback>,
 ) -> Result<()> {
     // Handle both files and directories and reuse nearest existing .ck index up the tree
     let index_root_buf = find_nearest_index_root(path).unwrap_or_else(|| {
@@ -959,13 +1062,15 @@ async fn ensure_index_updated(
 
     // If force reindex is requested, always update
     if force_reindex {
-        let stats = ck_index::smart_update_index_with_progress(
+        let stats = ck_index::smart_update_index_with_detailed_progress(
             index_root,
             false,
-            None,
+            progress_callback,
+            detailed_progress_callback,
             need_embeddings,
             true,
-            &[], // Empty exclude patterns for internal engine use
+            &[],  // Empty exclude patterns for internal engine use
+            None, // model - use existing from index
         )
         .await?;
         if stats.files_indexed > 0 || stats.orphaned_files_removed > 0 {
@@ -979,13 +1084,15 @@ async fn ensure_index_updated(
     }
 
     // Always use smart_update_index for incremental updates (handles both new and existing indexes)
-    let stats = ck_index::smart_update_index_with_progress(
+    let stats = ck_index::smart_update_index_with_detailed_progress(
         index_root,
         false,
-        None,
+        progress_callback,
+        detailed_progress_callback,
         need_embeddings,
         true,
         &[],
+        None, // model - use existing from index
     )
     .await?;
     if stats.files_indexed > 0 || stats.orphaned_files_removed > 0 {

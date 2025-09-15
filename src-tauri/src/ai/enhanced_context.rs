@@ -4,8 +4,11 @@ use crate::utils::error::AppResult;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
+use std::path::Path;
+use std::pin::Pin;
+use std::future::Future;
 use tiktoken_rs::{cl100k_base, CoreBPE};
-use tracing::debug;
+use tracing::{debug, warn};
 
 // ============= 配置层 =============
 
@@ -263,7 +266,8 @@ impl ContextManager {
 
         // 添加当前工作目录信息
         if let Some(cwd) = current_working_directory {
-            parts.push(format!("【当前工作区】\n{}\n", cwd));
+            let workspace_info = self.build_workspace_context(cwd).await;
+            parts.push(workspace_info);
         }
 
         // 添加对话历史
@@ -936,6 +940,205 @@ impl ContextManager {
             serde_json::Value::Number(n) => n.to_string(),
             serde_json::Value::Null => "null".to_string(),
         }
+    }
+
+    /// 构建工作区上下文信息
+    async fn build_workspace_context(&self, cwd: &str) -> String {
+        debug!("构建工作区上下文: {}", cwd);
+        
+        let path = Path::new(cwd);
+        if !path.exists() || !path.is_dir() {
+            return format!("【当前工作区】\n{}\n", cwd);
+        }
+
+        match self.scan_workspace_directory(path).await {
+            Ok(workspace_info) => {
+                format!("【当前工作区】\n{}\n{}\n", cwd, workspace_info)
+            }
+            Err(e) => {
+                warn!("扫描工作区目录失败: {}", e);
+                format!("【当前工作区】\n{}\n", cwd)
+            }
+        }
+    }
+
+    /// 扫描工作区目录结构
+    async fn scan_workspace_directory(&self, root_path: &Path) -> AppResult<String> {
+        let mut output = String::new();
+        let mut file_count = 0;
+        let mut dir_count = 0;
+        let max_files = 150; // 限制文件数量避免提示词过长
+        let max_depth = 4;   // 限制目录深度
+
+        // 忽略的目录和文件模式
+        let ignore_patterns = [
+            "node_modules", ".git", "target", "dist", "build", ".next", 
+            ".nuxt", "coverage", ".nyc_output", ".DS_Store", "Thumbs.db",
+            "*.log", "*.tmp", "*.temp", ".vscode", ".idea"
+        ];
+
+        let entries = self.collect_directory_entries(
+            root_path, 
+            root_path, 
+            0, 
+            max_depth, 
+            &mut file_count, 
+            &mut dir_count, 
+            max_files,
+            &ignore_patterns
+        ).await?;
+
+        if file_count + dir_count >= max_files {
+            output.push_str(&format!("Found {} files and {} directories (truncated due to limits)\n\n", 
+                                   file_count, dir_count));
+        } else {
+            output.push_str(&format!("Found {} files and {} directories\n\n", 
+                                   file_count, dir_count));
+        }
+
+        output.push_str(&entries);
+
+        if file_count + dir_count >= max_files {
+            output.push_str("\n(File list truncated. Use find_by_name or list_dir tools to explore specific subdirectories if needed.)\n");
+        }
+
+        Ok(output)
+    }
+
+    /// 递归收集目录条目
+    fn collect_directory_entries<'a>(
+        &'a self,
+        current_path: &'a Path,
+        root_path: &'a Path,
+        depth: usize,
+        max_depth: usize,
+        file_count: &'a mut usize,
+        dir_count: &'a mut usize,
+        max_files: usize,
+        ignore_patterns: &'a [&str],
+    ) -> Pin<Box<dyn Future<Output = AppResult<String>> + Send + 'a>> {
+        Box::pin(async move {
+        if depth > max_depth || *file_count + *dir_count >= max_files {
+            return Ok(String::new());
+        }
+
+        let mut entries = Vec::new();
+        let mut read_dir = match tokio::fs::read_dir(current_path).await {
+            Ok(dir) => dir,
+            Err(e) => {
+                warn!("无法读取目录 {}: {}", current_path.display(), e);
+                return Ok(String::new());
+            }
+        };
+
+        while let Ok(Some(entry)) = read_dir.next_entry().await {
+            if *file_count + *dir_count >= max_files {
+                break;
+            }
+
+            let path = entry.path();
+            let file_name = path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string();
+
+            // 检查是否应该忽略
+            if self.should_ignore_file(&file_name, &path, ignore_patterns) {
+                continue;
+            }
+
+            let metadata = match entry.metadata().await {
+                Ok(meta) => meta,
+                Err(_) => continue,
+            };
+
+            let relative_path = path.strip_prefix(root_path)
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| file_name.clone());
+
+            if metadata.is_dir() {
+                *dir_count += 1;
+                let children = if depth < max_depth {
+                    self.collect_directory_entries(
+                        &path, 
+                        root_path, 
+                        depth + 1, 
+                        max_depth, 
+                        file_count, 
+                        dir_count, 
+                        max_files,
+                        ignore_patterns
+                    ).await?
+                } else {
+                    String::new()
+                };
+
+                entries.push((relative_path, true, None, children));
+            } else {
+                *file_count += 1;
+                let size = if metadata.len() > 1024 * 1024 {
+                    Some(format!("({:.1}MB)", metadata.len() as f64 / (1024.0 * 1024.0)))
+                } else if metadata.len() > 1024 {
+                    Some(format!("({:.1}KB)", metadata.len() as f64 / 1024.0))
+                } else if metadata.len() > 0 {
+                    Some(format!("({}B)", metadata.len()))
+                } else {
+                    None
+                };
+                entries.push((relative_path, false, size, String::new()));
+            }
+        }
+
+        // 排序：目录在前，文件在后
+        entries.sort_by(|a, b| {
+            match (a.1, b.1) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.0.cmp(&b.0),
+            }
+        });
+
+        let mut result = String::new();
+        let indent = "  ".repeat(depth);
+
+        for (path, is_dir, size, children) in entries {
+            if is_dir {
+                result.push_str(&format!("{}{}/ \n", indent, path));
+                if !children.is_empty() {
+                    result.push_str(&children);
+                }
+            } else {
+                let size_info = size.unwrap_or_default();
+                result.push_str(&format!("{}{}{}\n", indent, path, size_info));
+            }
+        }
+
+        Ok(result)
+        })
+    }
+
+    /// 检查是否应该忽略文件/目录
+    fn should_ignore_file(&self, file_name: &str, _path: &Path, ignore_patterns: &[&str]) -> bool {
+        // 隐藏文件检查
+        if file_name.starts_with('.') && file_name != ".gitignore" && file_name != ".env" {
+            return true;
+        }
+
+        // 模式匹配检查
+        for pattern in ignore_patterns {
+            if pattern.contains('*') {
+                if pattern.starts_with('*') && file_name.ends_with(&pattern[1..]) {
+                    return true;
+                }
+                if pattern.ends_with('*') && file_name.starts_with(&pattern[..pattern.len()-1]) {
+                    return true;
+                }
+            } else if file_name == *pattern {
+                return true;
+            }
+        }
+
+        false
     }
 
     /// 获取缓存统计

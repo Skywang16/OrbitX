@@ -168,7 +168,7 @@
   .task-list {
     margin: 6px 10px 0 10px;
     background-color: var(--bg-400);
-    border: 1px solid var(--border-300);
+    border: 1px solid var(--border-200);
     border-bottom: none;
     border-radius: var(--border-radius) var(--border-radius) 0 0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -255,7 +255,7 @@
     display: flex;
     align-items: center;
     padding: 4px 12px;
-    border-bottom: 1px solid var(--border-400);
+    border-bottom: 1px solid var(--border-200);
     transition: background-color 0.2s ease;
     min-height: 24px;
   }

@@ -2,11 +2,63 @@ use anyhow::Result;
 use ck_core::Span;
 use serde::{Deserialize, Serialize};
 
+/// Import token estimation from ck-embed
+pub use ck_embed::TokenEstimator;
+
+/// Fallback to estimation if precise tokenization fails
+fn estimate_tokens(text: &str) -> usize {
+    TokenEstimator::estimate_tokens(text)
+}
+
+/// Get model-specific chunk configuration (target_tokens, overlap_tokens)
+/// Balanced for precision vs context - larger models can handle bigger chunks but not too big
+fn get_model_chunk_config(model_name: Option<&str>) -> (usize, usize) {
+    let model = model_name.unwrap_or("nomic-embed-text-v1.5");
+
+    match model {
+        // Small models - keep chunks smaller for better precision
+        "BAAI/bge-small-en-v1.5" | "sentence-transformers/all-MiniLM-L6-v2" => {
+            (400, 80) // 400 tokens target, 80 token overlap (~20%)
+        }
+
+        // Large context models - can use bigger chunks while preserving precision
+        // Sweet spot: enough context to be meaningful, small enough to be precise
+        "nomic-embed-text-v1" | "nomic-embed-text-v1.5" | "jina-embeddings-v2-base-code" => {
+            (1024, 200) // 1024 tokens target, 200 token overlap (~20%) - good balance
+        }
+
+        // BGE variants - stick to smaller for precision
+        "BAAI/bge-base-en-v1.5" | "BAAI/bge-large-en-v1.5" => {
+            (400, 80) // 400 tokens target, 80 token overlap (~20%)
+        }
+
+        // Default to large model config since nomic-v1.5 is default
+        _ => (1024, 200), // Good balance of context vs precision
+    }
+}
+
+/// Information about chunk striding for large chunks that exceed token limits
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StrideInfo {
+    /// Unique ID for the original chunk before striding
+    pub original_chunk_id: String,
+    /// Index of this stride (0-based)
+    pub stride_index: usize,
+    /// Total number of strides for the original chunk
+    pub total_strides: usize,
+    /// Byte offset where overlap with previous stride begins
+    pub overlap_start: usize,
+    /// Byte offset where overlap with next stride ends
+    pub overlap_end: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chunk {
     pub span: Span,
     pub text: String,
     pub chunk_type: ChunkType,
+    /// Stride information if this chunk was created by striding a larger chunk
+    pub stride_info: Option<StrideInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -27,6 +79,7 @@ pub enum ParseableLanguage {
     Rust,
     Ruby,
     Go,
+    CSharp,
 }
 
 impl std::fmt::Display for ParseableLanguage {
@@ -39,6 +92,7 @@ impl std::fmt::Display for ParseableLanguage {
             ParseableLanguage::Rust => "rust",
             ParseableLanguage::Ruby => "ruby",
             ParseableLanguage::Go => "go",
+            ParseableLanguage::CSharp => "csharp",
         };
         write!(f, "{}", name)
     }
@@ -56,6 +110,7 @@ impl TryFrom<ck_core::Language> for ParseableLanguage {
             ck_core::Language::Rust => Ok(ParseableLanguage::Rust),
             ck_core::Language::Ruby => Ok(ParseableLanguage::Ruby),
             ck_core::Language::Go => Ok(ParseableLanguage::Go),
+            ck_core::Language::CSharp => Ok(ParseableLanguage::CSharp),
             _ => Err(anyhow::anyhow!(
                 "Language {:?} is not supported for parsing",
                 lang
@@ -65,40 +120,114 @@ impl TryFrom<ck_core::Language> for ParseableLanguage {
 }
 
 pub fn chunk_text(text: &str, language: Option<ck_core::Language>) -> Result<Vec<Chunk>> {
+    chunk_text_with_config(text, language, &ChunkConfig::default())
+}
+
+/// Configuration for chunking behavior
+#[derive(Debug, Clone)]
+pub struct ChunkConfig {
+    /// Maximum tokens per chunk (for striding)
+    pub max_tokens: usize,
+    /// Overlap size for striding (in tokens)
+    pub stride_overlap: usize,
+    /// Enable striding for chunks that exceed max_tokens
+    pub enable_striding: bool,
+}
+
+impl Default for ChunkConfig {
+    fn default() -> Self {
+        Self {
+            max_tokens: 8192,     // Default to Nomic model limit
+            stride_overlap: 1024, // 12.5% overlap
+            enable_striding: true,
+        }
+    }
+}
+
+/// New function that accepts model name for model-specific chunking
+pub fn chunk_text_with_model(
+    text: &str,
+    language: Option<ck_core::Language>,
+    model_name: Option<&str>,
+) -> Result<Vec<Chunk>> {
+    let (target_tokens, overlap_tokens) = get_model_chunk_config(model_name);
+
+    // Create a config based on model-specific parameters
+    let config = ChunkConfig {
+        max_tokens: target_tokens,
+        stride_overlap: overlap_tokens,
+        enable_striding: true,
+    };
+
+    chunk_text_with_config_and_model(text, language, &config, model_name)
+}
+
+pub fn chunk_text_with_config(
+    text: &str,
+    language: Option<ck_core::Language>,
+    config: &ChunkConfig,
+) -> Result<Vec<Chunk>> {
+    chunk_text_with_config_and_model(text, language, config, None)
+}
+
+fn chunk_text_with_config_and_model(
+    text: &str,
+    language: Option<ck_core::Language>,
+    config: &ChunkConfig,
+    model_name: Option<&str>,
+) -> Result<Vec<Chunk>> {
     tracing::debug!(
-        "Chunking text with language: {:?}, length: {} chars",
+        "Chunking text with language: {:?}, length: {} chars, config: {:?}",
         language,
-        text.len()
+        text.len(),
+        config
     );
 
     let result = match language.map(ParseableLanguage::try_from) {
         Some(Ok(lang)) => {
             tracing::debug!("Using {} tree-sitter parser", lang);
-            chunk_language(text, lang)
+            chunk_language_with_model(text, lang, model_name)
         }
         Some(Err(_)) => {
             tracing::debug!("Language not supported for parsing, using generic chunking strategy");
-            chunk_generic(text)
+            chunk_generic_with_token_config(text, model_name)
         }
         None => {
             tracing::debug!("Using generic chunking strategy");
-            chunk_generic(text)
+            chunk_generic_with_token_config(text, model_name)
         }
     };
 
-    match &result {
-        Ok(chunks) => tracing::debug!("Successfully created {} chunks", chunks.len()),
-        Err(e) => tracing::warn!("Chunking failed: {}", e),
+    let mut chunks = result?;
+
+    // Apply striding if enabled and necessary
+    if config.enable_striding {
+        chunks = apply_striding(chunks, config)?;
     }
 
-    result
+    tracing::debug!("Successfully created {} final chunks", chunks.len());
+    Ok(chunks)
 }
 
 fn chunk_generic(text: &str) -> Result<Vec<Chunk>> {
+    chunk_generic_with_token_config(text, None)
+}
+
+fn chunk_generic_with_token_config(text: &str, model_name: Option<&str>) -> Result<Vec<Chunk>> {
     let mut chunks = Vec::new();
     let lines: Vec<&str> = text.lines().collect();
-    let chunk_size = 20;
-    let overlap = 5;
+
+    // Get model-specific optimal chunk size in tokens
+    let (target_tokens, overlap_tokens) = get_model_chunk_config(model_name);
+
+    // Convert token targets to approximate line counts
+    // This is a rough heuristic - we'll validate with actual token counting
+    let avg_tokens_per_line = 10.0; // Rough estimate for code
+    let target_lines = ((target_tokens as f32) / avg_tokens_per_line) as usize;
+    let overlap_lines = ((overlap_tokens as f32) / avg_tokens_per_line) as usize;
+
+    let chunk_size = target_lines.max(5); // Minimum 5 lines
+    let overlap = overlap_lines.max(1); // Minimum 1 line overlap
 
     // Pre-compute cumulative byte offsets for O(1) lookup
     let mut line_byte_offsets = Vec::with_capacity(lines.len() + 1);
@@ -127,6 +256,7 @@ fn chunk_generic(text: &str) -> Result<Vec<Chunk>> {
             },
             text: chunk_text,
             chunk_type: ChunkType::Text,
+            stride_info: None,
         });
 
         i += chunk_size - overlap;
@@ -150,6 +280,7 @@ fn chunk_language(text: &str, language: ParseableLanguage) -> Result<Vec<Chunk>>
         ParseableLanguage::Rust => parser.set_language(&tree_sitter_rust::language())?,
         ParseableLanguage::Ruby => parser.set_language(&tree_sitter_ruby::language())?,
         ParseableLanguage::Go => parser.set_language(&tree_sitter_go::language())?,
+        ParseableLanguage::CSharp => parser.set_language(&tree_sitter_c_sharp::language())?,
     }
 
     let tree = parser
@@ -166,6 +297,17 @@ fn chunk_language(text: &str, language: ParseableLanguage) -> Result<Vec<Chunk>>
     }
 
     Ok(chunks)
+}
+
+fn chunk_language_with_model(
+    text: &str,
+    language: ParseableLanguage,
+    _model_name: Option<&str>,
+) -> Result<Vec<Chunk>> {
+    // For now, language-based chunking doesn't need model-specific behavior
+    // since it's based on semantic code boundaries rather than token counts
+    // We could potentially optimize this in the future by validating chunk token counts
+    chunk_language(text, language)
 }
 
 fn extract_code_chunks(
@@ -211,6 +353,13 @@ fn extract_code_chunks(
                 | "var_declaration"
                 | "const_declaration"
         ),
+        ParseableLanguage::CSharp => matches!(
+            node_kind,
+            "method_declaration"
+                | "class_declaration"
+                | "interface_declaration"
+                | "variable_declaration"
+        ),
     };
 
     if is_chunk {
@@ -246,9 +395,21 @@ fn extract_code_chunks(
             | "deftype"
             | "type_declaration" => ChunkType::Class,
             "method_definition" | "method_declaration" | "defmacro" => ChunkType::Method,
-            "data_type" | "newtype" | "type_synomym" | "type_family" | "impl_item"
-            | "trait_item" | "mod_item" | "defmodule" | "module" | "defprotocol" | "ns"
-            | "var_declaration" | "const_declaration" => ChunkType::Module,
+            "data_type"
+            | "newtype"
+            | "type_synomym"
+            | "type_family"
+            | "impl_item"
+            | "trait_item"
+            | "mod_item"
+            | "defmodule"
+            | "module"
+            | "defprotocol"
+            | "interface_declaration"
+            | "ns"
+            | "var_declaration"
+            | "const_declaration"
+            | "variable_declaration" => ChunkType::Module,
             _ => ChunkType::Text,
         };
 
@@ -261,6 +422,7 @@ fn extract_code_chunks(
             },
             text: text.to_string(),
             chunk_type,
+            stride_info: None,
         });
     }
 
@@ -274,6 +436,117 @@ fn extract_code_chunks(
         cursor.goto_parent();
     }
 }
+
+/// Apply striding to chunks that exceed the token limit
+fn apply_striding(chunks: Vec<Chunk>, config: &ChunkConfig) -> Result<Vec<Chunk>> {
+    let mut result = Vec::new();
+
+    for chunk in chunks {
+        let estimated_tokens = estimate_tokens(&chunk.text);
+
+        if estimated_tokens <= config.max_tokens {
+            // Chunk fits within limit, no striding needed
+            result.push(chunk);
+        } else {
+            // Chunk exceeds limit, apply striding
+            tracing::debug!(
+                "Chunk with {} tokens exceeds limit of {}, applying striding",
+                estimated_tokens,
+                config.max_tokens
+            );
+
+            let strided_chunks = stride_large_chunk(chunk, config)?;
+            result.extend(strided_chunks);
+        }
+    }
+
+    Ok(result)
+}
+
+/// Create strided chunks from a large chunk that exceeds token limits
+fn stride_large_chunk(chunk: Chunk, config: &ChunkConfig) -> Result<Vec<Chunk>> {
+    let text = &chunk.text;
+    let text_len = text.len();
+
+    // Calculate stride parameters in characters (approximate)
+    // Use a conservative estimate to ensure we stay under token limits
+    let chars_per_token = text_len as f32 / estimate_tokens(text) as f32;
+    let window_chars = ((config.max_tokens as f32 * 0.9) * chars_per_token) as usize; // 10% buffer
+    let overlap_chars = (config.stride_overlap as f32 * chars_per_token) as usize;
+    let stride_chars = window_chars.saturating_sub(overlap_chars);
+
+    if stride_chars == 0 {
+        return Err(anyhow::anyhow!("Stride size is too small"));
+    }
+
+    let mut strided_chunks = Vec::new();
+    let original_chunk_id = format!("{}:{}", chunk.span.byte_start, chunk.span.byte_end);
+    let mut start_pos = 0;
+    let mut stride_index = 0;
+
+    // Calculate total number of strides
+    let total_strides = if text_len <= window_chars {
+        1
+    } else {
+        ((text_len - overlap_chars) as f32 / stride_chars as f32).ceil() as usize
+    };
+
+    while start_pos < text_len {
+        let end_pos = (start_pos + window_chars).min(text_len);
+        let stride_text = &text[start_pos..end_pos];
+
+        // Calculate overlap information
+        let overlap_start = if stride_index > 0 { overlap_chars } else { 0 };
+        let overlap_end = if end_pos < text_len { overlap_chars } else { 0 };
+
+        // Calculate span for this stride
+        let byte_offset_start = chunk.span.byte_start + start_pos;
+        let byte_offset_end = chunk.span.byte_start + end_pos;
+
+        // Estimate line numbers (approximate)
+        let text_before_start = &text[..start_pos];
+        let line_offset_start = text_before_start.lines().count().saturating_sub(1);
+        let stride_lines = stride_text.lines().count();
+
+        let stride_chunk = Chunk {
+            span: Span {
+                byte_start: byte_offset_start,
+                byte_end: byte_offset_end,
+                line_start: chunk.span.line_start + line_offset_start,
+                line_end: chunk.span.line_start + line_offset_start + stride_lines,
+            },
+            text: stride_text.to_string(),
+            chunk_type: chunk.chunk_type.clone(),
+            stride_info: Some(StrideInfo {
+                original_chunk_id: original_chunk_id.clone(),
+                stride_index,
+                total_strides,
+                overlap_start,
+                overlap_end,
+            }),
+        };
+
+        strided_chunks.push(stride_chunk);
+
+        // Move to next stride
+        if end_pos >= text_len {
+            break;
+        }
+
+        start_pos += stride_chars;
+        stride_index += 1;
+    }
+
+    tracing::debug!(
+        "Created {} strides from chunk of {} tokens",
+        strided_chunks.len(),
+        estimate_tokens(text)
+    );
+
+    Ok(strided_chunks)
+}
+
+// Removed duplicate estimate_tokens function - using the one from ck-embed via TokenEstimator
 
 #[cfg(test)]
 mod tests {
@@ -458,6 +731,48 @@ func main() {
         assert!(chunk_types.contains(&&ChunkType::Module)); // const and var
         assert!(chunk_types.contains(&&ChunkType::Class)); // struct and interface
         assert!(chunk_types.contains(&&ChunkType::Function)); // functions
+        assert!(chunk_types.contains(&&ChunkType::Method)); // methods
+    }
+
+    #[test]
+    fn test_chunk_csharp() {
+        let csharp_code = r#"
+namespace Calculator;
+
+public interface ICalculator 
+{
+    double Add(double x, double y);
+}
+
+public class Calculator 
+{
+    public static const double PI = 3.14159;
+    private double _memory;
+
+    public Calculator() 
+    {
+        _memory = 0.0;
+    }
+
+    public double Add(double x, double y) 
+    {
+        return x + y;
+    }
+
+    public static void Main(string[] args)
+    {
+        var calc = new Calculator();
+    }
+}
+"#;
+
+        let chunks = chunk_language(csharp_code, ParseableLanguage::CSharp).unwrap();
+        assert!(!chunks.is_empty());
+
+        // Should find variable, class, method and interface declarations
+        let chunk_types: Vec<&ChunkType> = chunks.iter().map(|c| &c.chunk_type).collect();
+        assert!(chunk_types.contains(&&ChunkType::Module)); // var, interface
+        assert!(chunk_types.contains(&&ChunkType::Class)); // class
         assert!(chunk_types.contains(&&ChunkType::Method)); // methods
     }
 }

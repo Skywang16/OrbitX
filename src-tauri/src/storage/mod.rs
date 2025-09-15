@@ -19,12 +19,7 @@ pub mod database;
 pub mod query;
 pub mod repositories;
 
-// 服务层模块
-pub mod workspace_index_service;
-
 // 命令和脚本
-pub mod commands; // 工作区索引管理命令
-// pub mod commands; // 已移动到 ai::tool::storage
 pub mod sql_scripts;
 
 // 重新导出核心类型和功能
@@ -37,7 +32,6 @@ pub use paths::{StoragePaths, StoragePathsBuilder};
 pub use query::{QueryCondition, QueryOrder, SafeQueryBuilder};
 pub use repositories::*;
 pub use types::{SessionState, StorageLayer};
-pub use workspace_index_service::WorkspaceIndexService;
 
 // 重新导出统一的错误处理类型
 pub use crate::utils::error::{AppError, AppResult};

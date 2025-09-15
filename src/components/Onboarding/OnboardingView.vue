@@ -25,24 +25,24 @@
 
       <!-- 导航按钮 -->
       <div class="navigation-buttons">
-        <XButton v-if="currentStep > 0" variant="secondary" size="medium" @click="handlePrevious">
+        <x-button v-if="currentStep > 0" variant="secondary" size="medium" @click="handlePrevious">
           {{ t('onboarding.navigation.previous') }}
-        </XButton>
+        </x-button>
 
         <div class="button-spacer" />
 
         <!-- AI步骤时显示跳过按钮 -->
-        <XButton v-if="isAIStep" variant="secondary" size="medium" @click="handleSkip">
+        <x-button v-if="isAIStep" variant="secondary" size="medium" @click="handleSkip">
           {{ t('onboarding.navigation.skip_temporarily') }}
-        </XButton>
+        </x-button>
 
-        <XButton v-if="currentStep < steps.length - 1" variant="primary" size="medium" @click="handleNext">
+        <x-button v-if="currentStep < steps.length - 1" variant="primary" size="medium" @click="handleNext">
           {{ getNextButtonText() }}
-        </XButton>
+        </x-button>
 
-        <XButton v-else variant="primary" size="medium" @click="handleNext">
+        <x-button v-else variant="primary" size="medium" @click="handleNext">
           {{ getFinishButtonText() }}
-        </XButton>
+        </x-button>
       </div>
     </div>
   </div>
@@ -52,7 +52,7 @@
   import { ref, computed } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { getCurrentWindow } from '@tauri-apps/api/window'
-  import { XButton } from '@/ui'
+
   import LanguageStep from './steps/LanguageStep.vue'
   import ThemeStep from './steps/ThemeStep.vue'
   import AIStep from './steps/AIStep.vue'

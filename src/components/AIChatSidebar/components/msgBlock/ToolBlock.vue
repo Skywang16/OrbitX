@@ -121,10 +121,6 @@
 
   // 获取工具图标
   const getToolIcon = (toolName: string) => {
-    // grep_search 使用和 orbit_search 相同的图标
-    if (toolName === 'grep_search') {
-      return toolIcons.orbit_search
-    }
     return toolIcons[toolName as keyof typeof toolIcons] || toolIcons.unknown
   }
 
@@ -147,9 +143,6 @@
 
       case 'orbit_search':
         return formatText(params.query as string)
-
-      case 'grep_search':
-        return formatText(params.pattern as string)
 
       case 'shell':
         return formatText(params.command as string)
@@ -216,7 +209,7 @@
 <style scoped>
   .tool-block {
     background: var(--bg-500);
-    border: 1px solid var(--border-300);
+    border: 1px solid var(--border-200);
     border-radius: var(--border-radius);
     font-size: 13px;
     max-width: 100%;

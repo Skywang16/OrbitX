@@ -1,6 +1,13 @@
 use anyhow::Result;
-use std::path::Path;
-use std::path::PathBuf;
+
+#[cfg(feature = "fastembed")]
+use std::path::{Path, PathBuf};
+
+pub mod reranker;
+pub mod tokenizer;
+
+pub use reranker::{RerankResult, Reranker, create_reranker, create_reranker_with_progress};
+pub use tokenizer::TokenEstimator;
 
 pub trait Embedder: Send + Sync {
     fn id(&self) -> &'static str;
@@ -30,6 +37,7 @@ pub fn create_embedder_with_progress(
 
     #[cfg(not(feature = "fastembed"))]
     {
+        let _ = model; // Suppress unused variable warning
         if let Some(callback) = progress_callback {
             callback("Using dummy embedder (no model download required)");
         }
@@ -49,7 +57,7 @@ impl Default for DummyEmbedder {
 
 impl DummyEmbedder {
     pub fn new() -> Self {
-        Self { dim: 384 }
+        Self { dim: 384 } // Match default BGE model
     }
 }
 
@@ -86,9 +94,21 @@ impl FastEmbedder {
         use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
         let model = match model_name {
+            // Current models
             "BAAI/bge-small-en-v1.5" => EmbeddingModel::BGESmallENV15,
             "sentence-transformers/all-MiniLM-L6-v2" => EmbeddingModel::AllMiniLML6V2,
-            _ => EmbeddingModel::BGESmallENV15,
+
+            // Enhanced models with longer context
+            "nomic-embed-text-v1" => EmbeddingModel::NomicEmbedTextV1,
+            "nomic-embed-text-v1.5" => EmbeddingModel::NomicEmbedTextV15,
+            "jina-embeddings-v2-base-code" => EmbeddingModel::JinaEmbeddingsV2BaseCode,
+
+            // BGE variants
+            "BAAI/bge-base-en-v1.5" => EmbeddingModel::BGEBaseENV15,
+            "BAAI/bge-large-en-v1.5" => EmbeddingModel::BGELargeENV15,
+
+            // Default to Nomic v1.5 for better performance
+            _ => EmbeddingModel::NomicEmbedTextV15,
         };
 
         // Configure permanent model cache directory
@@ -111,9 +131,26 @@ impl FastEmbedder {
             }
         }
 
+        // Configure max_length based on model capacity
+        let max_length = match model {
+            // Small models - keep at 512
+            EmbeddingModel::BGESmallENV15 | EmbeddingModel::AllMiniLML6V2 => 512,
+            EmbeddingModel::BGEBaseENV15 => 512,
+
+            // Large context models - use their full capacity!
+            EmbeddingModel::NomicEmbedTextV1 | EmbeddingModel::NomicEmbedTextV15 => 8192,
+            EmbeddingModel::JinaEmbeddingsV2BaseCode => 8192,
+
+            // BGE large can handle more
+            EmbeddingModel::BGELargeENV15 => 512, // Conservative for BGE
+
+            _ => 512, // Safe default
+        };
+
         let init_options = InitOptions::new(model.clone())
             .with_show_download_progress(progress_callback.is_some())
-            .with_cache_dir(model_cache_dir);
+            .with_cache_dir(model_cache_dir)
+            .with_max_length(max_length);
 
         let embedding = TextEmbedding::try_new(init_options)?;
 
@@ -122,9 +159,20 @@ impl FastEmbedder {
         }
 
         let dim = match model {
+            // Small models (384 dimensions)
             EmbeddingModel::BGESmallENV15 => 384,
             EmbeddingModel::AllMiniLML6V2 => 384,
-            _ => 384,
+
+            // Large context models (768 dimensions)
+            EmbeddingModel::NomicEmbedTextV1 => 768,
+            EmbeddingModel::NomicEmbedTextV15 => 768,
+            EmbeddingModel::JinaEmbeddingsV2BaseCode => 768,
+            EmbeddingModel::BGEBaseENV15 => 768,
+
+            // Large models (1024 dimensions)
+            EmbeddingModel::BGELargeENV15 => 1024,
+
+            _ => 384, // Default to 384 for BGE default
         };
 
         Ok(Self {

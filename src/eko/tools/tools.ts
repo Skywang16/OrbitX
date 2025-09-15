@@ -15,13 +15,13 @@ import { editFileTool } from './toolList/edit-file'
 import { shellTool } from './toolList/shell'
 import { webFetchTool } from './toolList/web-fetch'
 
-import { grepSearchTool } from './toolList/grep-search'
+import { orbitSearchTool } from './toolList/orbit-search'
 
 /**
  * 获取基础工具列表（不包含向量索引工具）
  */
 function getBaseReadOnlyTools(): Tool[] {
-  return [readFileTool, readManyFilesTool, readDirectoryTool, webFetchTool, grepSearchTool]
+  return [readFileTool, readManyFilesTool, readDirectoryTool, webFetchTool, orbitSearchTool]
 }
 
 function getBaseAllTools(): Tool[] {
@@ -33,7 +33,7 @@ function getBaseAllTools(): Tool[] {
     editFileTool,
     shellTool,
     webFetchTool,
-    grepSearchTool,
+    orbitSearchTool,
   ]
 }
 
@@ -110,11 +110,11 @@ export function registerAllTools(): void {
       },
     },
     {
-      tool: grepSearchTool,
+      tool: orbitSearchTool,
       metadata: {
-        description: grepSearchTool.description,
+        description: orbitSearchTool.description,
         category: 'search',
-        tags: ['search', 'grep', 'text', 'simple', 'direct', 'command'],
+        tags: ['search', 'semantic', 'vector', 'ai', 'code', 'orbit'],
       },
     },
   ]

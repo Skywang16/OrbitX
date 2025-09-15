@@ -24,7 +24,7 @@ export class ReadDirectoryTool extends ModifiableTool {
   constructor() {
     super(
       'read_directory',
-      `List directory contents in tree format. Use this for basic directory structure overview when search tools (orbit_search or grep_search) results need additional context. Recursively lists files and subdirectories up to 5 levels deep. For code understanding and finding specific functionality, prefer search tools instead. Must use absolute paths.`,
+      `List directory contents in tree format. Use this for basic directory structure overview when orbit_search results need additional context. Recursively lists files and subdirectories up to 5 levels deep. For code understanding and finding specific functionality, prefer orbit_search instead. Must use absolute paths.`,
       {
         type: 'object',
         properties: {
@@ -42,6 +42,8 @@ export class ReadDirectoryTool extends ModifiableTool {
   protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
     const { path } = context.parameters as unknown as ReadDirectoryParams
 
+    console.warn(`[ReadDirectoryTool] 输入参数: ${path}`)
+
     try {
       // 检查目录是否存在
       const exists = await this.checkPathExists(path)
@@ -55,6 +57,8 @@ export class ReadDirectoryTool extends ModifiableTool {
       // 格式化为树形输出
       const output = await this.formatTreeOutput(path, entries)
 
+      console.warn(`[ReadDirectoryTool] 输出结果:\n${output}`)
+
       return {
         content: [
           {
@@ -64,6 +68,7 @@ export class ReadDirectoryTool extends ModifiableTool {
         ],
       }
     } catch (error) {
+      console.error(`[ReadDirectoryTool] 执行失败:`, error)
       if (error instanceof FileNotFoundError) {
         throw error
       }
@@ -227,14 +232,23 @@ export class ReadDirectoryTool extends ModifiableTool {
     }
 
     const lines: string[] = []
-    const rootName = rootPath.split('/').pop() || rootPath
-    lines.push(`${rootName}/`)
+    const allFiles: string[] = []
 
-    const totalItems = await this.buildTree(rootPath, entries, lines, '', 0, 5)
+    // 收集所有文件路径
+    await this.collectAllFiles(rootPath, entries, allFiles, 0, 5)
+
+    // 计算相对路径的基础路径
+    const basePath = rootPath.endsWith('/') ? rootPath.slice(0, -1) : rootPath
+
+    // 输出所有文件的相对路径
+    for (const filePath of allFiles.sort()) {
+      const relativePath = filePath.replace(basePath + '/', '')
+      lines.push(relativePath)
+    }
 
     // 添加LLM友好的提示
     const MAX_DISPLAY_ITEMS = 1000
-    if (totalItems > MAX_DISPLAY_ITEMS) {
+    if (allFiles.length > MAX_DISPLAY_ITEMS) {
       lines.push('')
       lines.push(`Important note: Directory structure has been truncated (maximum 5 levels deep).`)
       lines.push(`Status: Partial content shown, actual project may contain more files.`)
@@ -244,45 +258,33 @@ export class ReadDirectoryTool extends ModifiableTool {
     return lines.join('\n')
   }
 
-  private async buildTree(
-    _currentPath: string,
+  private async collectAllFiles(
+    rootPath: string,
     entries: FileEntry[],
-    lines: string[],
-    prefix: string,
+    allFiles: string[],
     currentDepth: number,
     maxDepth: number
-  ): Promise<number> {
+  ): Promise<void> {
     if (currentDepth >= maxDepth) {
-      return 0
+      return
     }
 
-    let totalItems = entries.length
-
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i]
-      const isLast = i === entries.length - 1
-      const currentPrefix = isLast ? '└── ' : '├── '
-      const nextPrefix = prefix + (isLast ? '    ' : '│   ')
-
+    for (const entry of entries) {
       if (entry.isDirectory) {
-        lines.push(`${prefix}${currentPrefix}${entry.name}/`)
-
         // 递归读取子目录
         try {
           const subEntries = await this.readDirectoryRecursive(entry.path, currentDepth + 1, maxDepth)
           if (subEntries.length > 0) {
-            const subTotal = await this.buildTree(entry.path, subEntries, lines, nextPrefix, currentDepth + 1, maxDepth)
-            totalItems += subTotal
+            await this.collectAllFiles(rootPath, subEntries, allFiles, currentDepth + 1, maxDepth)
           }
         } catch (error) {
           // 忽略无法读取的目录
         }
       } else {
-        lines.push(`${prefix}${currentPrefix}${entry.name}`)
+        // 收集文件路径
+        allFiles.push(entry.path)
       }
     }
-
-    return totalItems
   }
 }
 

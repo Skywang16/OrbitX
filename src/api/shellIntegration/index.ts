@@ -48,14 +48,6 @@ export class ShellIntegrationApi {
 
   // ===== 工作目录管理 =====
 
-  /**
-   * 获取面板工作目录
-   * @param paneId 终端面板ID
-   */
-  async getPaneCwd(paneId: number): Promise<string | null> {
-    return await invoke<string | null>('shell_get_pane_cwd', { paneId })
-  }
-
   // ===== 高级功能 =====
 
   /**
@@ -64,11 +56,9 @@ export class ShellIntegrationApi {
    */
   async getShellIntegrationStatus(paneId: number): Promise<ShellIntegrationStatus> {
     const isEnabled = await this.checkShellIntegrationStatus(paneId)
-    const currentCwd = await this.getPaneCwd(paneId)
-
     return {
       enabled: isEnabled,
-      currentCwd,
+      currentCwd: null,
       paneId,
     }
   }

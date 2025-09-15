@@ -1,35 +1,12 @@
 {
   "common": {
-    "ok": "OK",
     "cancel": "Cancel",
     "confirm": "Confirm",
-    "delete": "Delete",
-    "edit": "Edit",
     "save": "Save",
-    "loading": "Loading...",
-    "error": "Error",
-    "success": "Success",
-    "retry": "Retry",
-    "search": "Search",
-    "refresh": "Refresh",
-    "close": "Close",
-    "processing": "Processing...",
-    "new": "New",
     "add": "Add",
-    "copy": "Copy",
-    "paste": "Paste",
-    "cut": "Cut",
-    "undo": "Undo",
-    "redo": "Redo",
-    "settings": "Settings",
-    "help": "Help",
-    "about": "About",
     "select_placeholder": "Please select",
     "no_data": "No data",
-    "search_options": "Search options",
-    "open_feedback_error": "Unable to open feedback page",
-    "visit_manually": "Please visit manually: https://github.com/Skywang16/OrbitX/issues",
-    "dismiss": "Dismiss"
+    "search_options": "Search options"
   },
   "settings": {
     "title": "Settings",
@@ -37,22 +14,11 @@
     "general": {
       "title": "General Settings",
       "description": "General application configuration",
-      "config_management": "Configuration Management",
-      "config_folder": "Configuration Folder",
-      "config_folder_description": "Open the folder containing application configuration files",
-      "open_config_folder": "Open Config Folder",
-      "config_folder_opened": "Configuration folder opened",
-      "config_folder_error": "Unable to open configuration folder",
+      "config_open_folder": "Open Config Folder",
       "startup_title": "Startup Settings",
       "autostart_title": "Auto Start",
       "autostart_enabled": "Auto start enabled",
-      "autostart_disabled": "Auto start disabled",
-      "terminal_features_title": "Terminal Features",
-      "smart_completion_title": "Smart Completion",
-      "smart_completion_description": "Provide intelligent auto-completion suggestions for terminal commands",
-      "smart_completion_enabled": "Smart completion enabled",
-      "smart_completion_disabled": "Smart completion disabled",
-      "advanced_features_title": "Advanced Features"
+      "autostart_disabled": "Auto start disabled"
     },
     "theme": {
       "title": "Theme Settings",
@@ -61,40 +27,7 @@
     "ai": {
       "title": "AI Settings",
       "description": "Configure AI models and features",
-      "load_error": "Failed to load AI settings: {error}",
-      "model_config": "Model Configuration",
-      "feature_settings": "Feature Settings"
-    },
-    "vectorIndex": {
-      "title": "Vector Index",
-      "description": "Manage workspace vector indexes",
-      "statistics_title": "Statistics",
-      "workspace_list_title": "Workspace List",
-      "total_workspaces": "Total Workspaces",
-      "ready_workspaces": "Ready Workspaces",
-      "total_files": "Total Files",
-      "total_size": "Total Size",
-      "files": "Files",
-      "size": "Size",
-      "updated": "Updated",
-      "refresh": "Refresh",
-      "delete": "Delete",
-      "loading": "Loading...",
-      "no_workspaces": "No workspace indexes",
-      "no_workspaces_description": "You haven't built indexes for any workspaces yet. You can build indexes when opening workspaces in AI chat.",
-      "delete_confirm_title": "Confirm Delete",
-      "delete_confirm_message": "Are you sure you want to delete the index for workspace \"{name}\"?",
-      "delete_warning": "This action will permanently delete the index files and cannot be undone.",
-      "load_error": "Failed to load workspace list",
-      "refresh_success": "Refresh successful",
-      "refresh_error": "Refresh failed",
-      "delete_success": "Delete successful",
-      "delete_error": "Delete failed",
-      "status": {
-        "building": "Building",
-        "ready": "Ready",
-        "error": "Error"
-      }
+      "model_config": "Model Configuration"
     },
     "shortcuts": {
       "title": "Shortcut Settings",
@@ -108,23 +41,7 @@
   "chat": {
     "new_session": "New Session",
     "session_select": "Select Session",
-    "input_placeholder": "Type a message...",
-    "thinking": "Thinking...",
-    "tool_execution": "Tool Execution",
-    "error_occurred": "An error occurred",
-    "retry_message": "Retry Message",
-    "copy_message": "Copy Message",
-    "delete_message": "Delete Message"
-  },
-  "terminal": {
-    "title": "Terminal",
-    "new_tab": "New Tab",
-    "close_tab": "Close Tab",
-    "rename_tab": "Rename Tab",
-    "duplicate_tab": "Duplicate Tab",
-    "search_placeholder": "Search...",
-    "completion_available": "Auto-completion available",
-    "command_not_found": "Command not found"
+    "input_placeholder": "Type a message..."
   },
   "search": {
     "placeholder": "Search",
@@ -132,98 +49,44 @@
     "whole_word": "Whole word",
     "previous": "Previous",
     "next": "Next",
-    "close": "Close",
-    "clear": "Clear"
+    "close": "Close"
   },
   "onboarding": {
     "navigation": {
       "previous": "Previous",
       "next": "Next",
       "finish": "Get Started",
-      "save_config": "Save Configuration",
+      "config_save": "Save Configuration",
       "skip_temporarily": "Skip for Now"
-    },
-    "language": {
-      "title": "Choose Your Language",
-      "description": "Select your preferred language"
-    },
-    "welcome": {
-      "title": "Welcome to OrbitX",
-      "subtitle": "A powerful terminal simulator with AI assistance",
-      "get_started": "Get Started",
-      "features": {
-        "terminal": {
-          "title": "Modern Terminal",
-          "description": "Fast and efficient terminal experience"
-        },
-        "ai": {
-          "title": "AI Assistant",
-          "description": "Smart coding companion and command helper"
-        },
-        "customize": {
-          "title": "Fully Customizable",
-          "description": "Themes, shortcuts, and personalization"
-        }
-      }
     },
     "theme": {
       "title": "Choose Your Theme",
-      "description": "Select a theme that matches your style",
-      "options": {
-        "dark": {
-          "name": "Dark Theme",
-          "description": "Perfect for low-light environments"
-        },
-        "light": {
-          "name": "Light Theme",
-          "description": "Clean and bright appearance"
-        },
-        "auto": {
-          "name": "Auto Theme",
-          "description": "Follow system preferences"
-        }
-      }
+      "description": "Select a theme that matches your style"
     },
     "ai": {
       "title": "AI Assistant Setup",
       "description": "Configure your AI coding companion",
-      "enable_title": "Enable AI Assistant",
-      "enable_description": "Get help with commands, coding, and terminal tasks",
-      "model_title": "Choose AI Model",
-      "model_description": "Select your preferred AI model",
-      "voice_title": "Voice Features",
-      "voice_description": "Enable voice interaction with AI",
       "recommended": "Recommended",
+      "api_key_placeholder": "Enter your API key",
+      "api_url_placeholder": "Enter API URL",
+      "model_name": "Model Name",
+      "model_name_placeholder": "Enter model name",
       "config_name": "Configuration Name",
       "config_name_placeholder": "e.g., Claude Production",
-      "save_config": "Save Configuration",
-      "skip_temporarily": "Skip for Now",
-      "select_provider_first": "Please select an AI provider first, or click \"Skip for Now\"",
       "config_name_required": "Configuration name is required",
       "api_key_required": "API key is required",
       "model_name_required": "Model name is required",
       "api_url_required": "API URL is required",
-      "save_config_success": "Configuration saved successfully!",
-      "skip_config_message": "AI configuration skipped. You can configure it later in settings",
       "models": {
         "custom": {
           "name": "Custom"
         }
-      },
-      "preview_title": "Preview",
-      "preview_user_message": "How do I list files in a directory?",
-      "preview_ai_message": "Use the `ls` command to list files, or `ls -la` for detailed view including hidden files.",
-      "start_using": "Start Using OrbitX"
+      }
     }
   },
   "ai": {
     "select_mode": "Select mode",
-    "select_model": "Select AI model",
-    "provider": "Select AI provider",
-    "model_name_placeholder": "e.g., GPT-4 Production",
-    "system_prompt_placeholder": "Enter your system prompt here, e.g.: Please answer all questions in English...",
-    "add_model": "Add Model",
-    "empty_description": "Click \\\"Add Model\\\" button to start configuring your first AI model"
+    "select_model": "Select AI model"
   },
   "ai_model": {
     "add_title": "Add AI Model",
@@ -248,72 +111,38 @@
     "testing": "Testing...",
     "add_model": "Add Model",
     "loading": "Loading...",
-    "empty_title": "No AI Models",
-    "empty_description": "Click \"Add Model\" button to configure your first AI model",
     "edit": "Edit",
     "delete": "Delete",
     "delete_confirm": "Delete this model?",
-    "delete_description": "Cannot be undone",
     "delete_confirm_text": "Confirm Delete",
     "cancel": "Cancel",
-    "delete_success": "Model deleted successfully",
-    "delete_failed": "Failed to delete",
-    "update_success": "Model updated successfully",
-    "add_success": "Model added successfully",
-    "operation_failed": "Operation failed",
     "save": "Save",
     "add": "Add",
     "add_new_model": "Add New Model",
     "add_model_description": "Configure AI model connection information",
     "no_models": "No Model Configuration",
-    "default_provider": "AI Model",
     "all_models": "All Models",
     "chat": "Chat",
-    "embedding": "Embedding",
     "add_chat_model": "Add Chat Model",
-    "add_embedding_model": "Add Embedding Model",
-    "model_type": "Model Type",
-    "model_type_chat": "Chat Model",
-    "model_type_embedding": "Embedding Model",
-    "model_type_chat_description": "AI model for conversation and text generation",
-    "model_type_embedding_description": "Model for text vectorization and semantic search",
-    "select_model_type": "Select Model Type",
-    "chat_models": "Chat Models",
-    "embedding_models": "Embedding Models",
-
     "validation": {
       "api_key_required": "API Key is required",
       "preset_required": "Please select a preset provider",
       "model_required": "Please select a model",
       "config_name_required": "Configuration name is required",
       "api_url_required": "API URL is required",
-      "model_name_required": "Model name is required",
-      "required_fields": "Please fill in API URL, API Key and Model Name first"
-    },
-    "test": {
-      "fill_config_first": "Please fill in the complete configuration information first",
-      "success": "Connection test successful",
-      "failed": "Connection test failed",
-      "error": "Connection test error"
-    },
-    "connection_test": {
-      "success": "Connection test successful!",
-      "failed": "Connection test failed, please check configuration",
-      "error": "Connection test failed"
+      "model_name_required": "Model name is required"
     }
   },
   "session": {
     "search_placeholder": "Search sessions...",
     "no_data": "No session history",
-    "chat_placeholder": "Chat with Orbit...",
     "clear_selection": "Clear selection",
     "unnamed_session": "Unnamed session",
     "messages": "messages",
     "current_session": "Current session",
     "selected_content": "selected content",
     "click_to_insert": "Click to insert to input",
-    "current_terminal": "Current Terminal",
-    "clear_terminal_tag": "Clear terminal tag"
+    "current_terminal": "Current Terminal"
   },
   "theme": {
     "select_light": "Select light theme",
@@ -321,20 +150,12 @@
   },
   "shortcuts": {
     "title": "Shortcut Settings",
-    "conflicts": "Detected {count} shortcut conflicts",
     "loading": "Loading...",
-    "global": "Global Shortcuts",
-    "terminal": "Terminal Shortcuts",
     "not_configured": "Click to configure",
     "editing_hint": "Press new key combination...",
     "reset_to_default": "Reset to Default",
     "reset_confirm_title": "Reset Shortcut Configuration",
     "reset_confirm_message": "This will reset all shortcuts to default configuration, current custom settings will be lost.",
-    "reset_success": "Shortcut configuration has been reset to default",
-    "reset_failed": "Failed to reset configuration",
-    "save_success": "{action} shortcut configured successfully",
-    "save_failed": "Failed to save shortcut",
-    "init_failed": "Failed to initialize shortcut settings",
     "reset_shortcuts": "Reset Shortcuts",
     "reset_description": "Restore all shortcuts to default settings",
     "actions": {
@@ -358,11 +179,6 @@
       "toggle_window_pin": "Pin/Unpin Window"
     }
   },
-  "tab": {
-    "close": "Close tab",
-    "new_terminal": "New terminal (Left click) / Select Shell (Right click)",
-    "pin": "Pin to top"
-  },
   "language": {
     "title": "Language",
     "chinese": "中文",
@@ -374,43 +190,25 @@
     "confirm": "Confirm",
     "close": "Close"
   },
-
   "message": {
-    "execution_failed": "Execution Failed",
-    "generating": "Generating...",
-    "duration_info": "Duration: {duration}",
-    "error_details": "Details: {details}"
+    "generating": "Generating..."
   },
   "tool": {
     "data_error": "Data Error"
   },
   "ai_feature": {
     "user_system_prompt": "User System Prompt",
-    "prompt_description": "Set a universal system prompt that will be automatically added to all AI requests",
     "prompt_placeholder": "Enter your system prompt here, e.g., Please answer all questions in Chinese..."
   },
   "ai_model_form": {
-    "basic_info": "Basic Information",
-    "config_name": "Configuration Name",
-    "provider": "Provider",
-    "connection_config": "Connection Configuration",
-    "model_name": "Model Name",
-    "config_name_placeholder": "e.g., GPT-4 Production",
-    "provider_placeholder": "Select AI Provider",
     "api_url": "API URL",
-    "api_key": "API Key",
-    "edit_title": "Edit AI Model",
-    "add_title": "Add AI Model",
-    "api_url_required": "Please enter API URL",
-    "api_key_required": "Please enter API Key",
-    "model_name_required": "Please enter model name"
+    "api_key": "API Key"
   },
   "message_list": {
     "start_conversation": "Start conversation",
     "send_message_hint": "Send a message to start chatting with Orbit",
     "no_model_configured": "No AI model configured",
-    "configure_model_hint": "Please configure an AI model in settings before starting a conversation",
-    "go_to_settings": "Go to Settings"
+    "configure_model_hint": "Please configure an AI model in settings before starting a conversation"
   },
   "theme_settings": {
     "theme_mode": "Theme Mode",
@@ -425,14 +223,7 @@
     "dark_theme_description": "Theme to use when system is in dark mode",
     "window_opacity": "Window Opacity",
     "opacity": "Opacity",
-    "opacity_description": "Adjust window transparency",
-    "opacity_error": "Failed to set opacity: {error}",
-    "theme_changed": "Theme changed successfully",
-    "theme_change_failed": "Failed to change theme",
-    "mode_changed": "Theme mode changed successfully",
-    "mode_change_failed": "Failed to change theme mode",
-    "loading": "Loading themes...",
-    "init_failed": "Failed to initialize theme system"
+    "opacity_description": "Adjust window transparency"
   },
   "ui": {
     "clear": "Clear",
@@ -450,51 +241,11 @@
     "exited": "Process exited, exit code: {code}",
     "unknown_exit_code": "unknown"
   },
-  "shortcuts_actions": {
-    "cannot_close_last_tab": "Cannot close the last terminal tab"
-  },
   "cache": {
     "directory_cleared": "Directory cache cleared"
   },
   "config": {
-    "unknown_size": "Unknown",
     "unknown_time": "Unknown",
     "invalid_time": "Invalid time"
-  },
-  "storage": {
-    "get_current_directory_failed": "Failed to get current working directory",
-    "check_workspace_index_failed": "Failed to check workspace index",
-    "workspace_path_empty": "Workspace path cannot be empty",
-    "workspace_name_empty": "Workspace name cannot be empty",
-    "get_workspace_indexes_failed": "Failed to get workspace index list",
-    "invalid_workspace_id": "Invalid workspace index ID",
-    "workspace_index_management": "Workspace Index Management",
-    "build_index": "Build Index",
-    "building_index": "Building index...",
-    "index_ready": "Index Ready",
-    "index_error": "Index Error",
-    "delete_index": "Delete Index",
-    "refresh_index": "Refresh Index",
-    "index_status": "Index Status",
-    "file_count": "File Count",
-    "index_size": "Index Size",
-    "last_updated": "Last Updated",
-    "workspace_path": "Workspace Path",
-    "workspace_name": "Workspace Name",
-    "no_index_found": "No index found",
-    "build_workspace_index": "Build Workspace Index",
-    "index_building_started": "Index building started",
-    "index_delete_confirm": "Are you sure you want to delete this workspace index?",
-    "index_deleted_success": "Workspace index deleted successfully",
-    "index_refresh_started": "Index refresh started",
-    "workspace_no_index_prompt": "Current workspace has no vector index",
-    "workspace_no_index_description": "Build an index to enable semantic search functionality",
-    "building_workspace_index": "Building workspace index...",
-    "index_build_progress": "Index build progress",
-    "cancel_build": "Cancel Build",
-    "index_build_success": "Index build successful",
-    "index_build_failed": "Index build failed",
-    "retry_build": "Retry Build",
-    "checking_workspace_index": "Checking workspace index status..."
   }
 }

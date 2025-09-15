@@ -200,9 +200,9 @@ impl TerminalContextService {
             return Ok(cached_context);
         }
 
-        // 4. 创建默认上下文
+        // 4. 创建默认上下文（使用系统当前目录而不是 ~）
         debug!("创建默认上下文作为最后回退");
-        Ok(self.create_default_context())
+        Ok(self.create_default_context_with_system_cwd())
     }
 
     /// 获取活跃终端的当前工作目录
@@ -436,6 +436,21 @@ impl TerminalContextService {
     fn create_default_context(&self) -> TerminalContext {
         let mut context = TerminalContext::new(PaneId::new(0));
         context.update_cwd("~".to_string());
+        context.update_shell_type(ShellType::Bash);
+        context.set_shell_integration(false);
+        context
+    }
+
+    /// 创建使用系统当前目录的默认上下文
+    fn create_default_context_with_system_cwd(&self) -> TerminalContext {
+        let mut context = TerminalContext::new(PaneId::new(0));
+        
+        // 使用系统当前工作目录而不是 ~
+        let current_dir = std::env::current_dir()
+            .map(|dir| dir.to_string_lossy().to_string())
+            .unwrap_or_else(|_| "~".to_string());
+        
+        context.update_cwd(current_dir);
         context.update_shell_type(ShellType::Bash);
         context.set_shell_integration(false);
         context

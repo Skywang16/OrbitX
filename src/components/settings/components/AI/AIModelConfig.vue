@@ -15,7 +15,7 @@
   const editingModel = ref<AIModelConfig | null>(null)
   const defaultModelType = ref<'chat' | 'embedding'>('chat')
 
-  const models = computed(() => aiSettingsStore.models)
+  const models = computed(() => aiSettingsStore.models.filter(model => model.modelType === 'chat'))
   const loading = computed(() => aiSettingsStore.isLoading)
 
   onMounted(async () => {
@@ -74,9 +74,6 @@
           <x-button variant="primary" @click="handleAddModel('chat')">
             {{ t('ai_model.add_chat_model') }}
           </x-button>
-          <x-button variant="primary" @click="handleAddModel('embedding')">
-            {{ t('ai_model.add_embedding_model') }}
-          </x-button>
         </div>
       </div>
     </SettingsCard>
@@ -108,8 +105,8 @@
               <div class="model-info">
                 <div class="settings-label">
                   {{ model.name }}
-                  <span class="model-type-tag" :class="model.modelType">
-                    {{ model.modelType === 'chat' ? t('ai_model.chat') : t('ai_model.embedding') }}
+                  <span class="model-type-tag chat">
+                    {{ t('ai_model.chat') }}
                   </span>
                 </div>
                 <div class="settings-description">{{ model.provider }}</div>
@@ -208,7 +205,7 @@
   .action-header {
     margin-bottom: 20px;
     padding-bottom: 16px;
-    border-bottom: 1px solid var(--border-300);
+    border-bottom: 1px solid var(--border-200);
   }
 
   .section-title {

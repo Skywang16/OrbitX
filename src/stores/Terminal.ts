@@ -48,7 +48,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
   const _resizeCallbacks = ref<Map<string, ResizeCallback>>(new Map())
   let _globalResizeListener: (() => void) | null = null
 
-  // 命令事件系统 - 简单的发布订阅模式
   const _commandEventListeners = ref<Array<(terminalId: string, event: 'started' | 'finished', data?: any) => void>>([])
 
   const subscribeToCommandEvents = (
@@ -93,13 +92,11 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
   const sessionStore = useSessionStore()
 
-  // 统一的状态保存函数
   const saveTerminalState = async () => {
     syncToSessionStore()
     await sessionStore.saveSessionState()
   }
 
-  // 兼容旧版本的immediateSync（异步版本）
   const immediateSync = () => {
     syncToSessionStore()
     sessionStore.saveSessionState().catch(() => {})
@@ -114,6 +111,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
   )
 
   const activeTerminal = computed(() => terminals.value.find(t => t.id === activeTerminalId.value))
+  const currentWorkingDirectory = computed(() => activeTerminal.value?.cwd || null)
 
   const generateId = (): string => {
     return `terminal-${nextId++}`
@@ -181,6 +179,15 @@ export const useTerminalStore = defineStore('Terminal', () => {
   }
 
   const setupGlobalListeners = async () => {
+    listen('pane_cwd_changed', (event: any) => {
+      const { pane_id, cwd } = event.payload
+      if (pane_id && cwd) {
+        const terminal = terminals.value.find(t => t.backendId === pane_id)
+        if (terminal) {
+          terminal.cwd = cwd
+        }
+      }
+    })
     if (_isListenerSetup) return
 
     const findTerminalByBackendId = (backendId: number): RuntimeTerminalState | undefined => {
@@ -223,7 +230,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
       try {
         const terminal = findTerminalByBackendId(event.payload.paneId)
         if (terminal) {
-          // 只订阅后端CWD变化事件，不进行回写
           terminal.cwd = event.payload.cwd
           updateTerminalTitle(terminal, event.payload.cwd)
         }
@@ -254,10 +260,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
   const unregisterTerminalCallbacks = (id: string, callbacks?: TerminalEventListeners) => {
     if (!callbacks) {
-      // 如果没有指定回调，清除所有监听器
       _listeners.value.delete(id)
     } else {
-      // 只移除指定的监听器
       const listeners = _listeners.value.get(id) || []
       const filtered = listeners.filter(listener => listener.callbacks !== callbacks)
       if (filtered.length > 0) {
@@ -360,7 +364,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
       terminals.value.splice(index, 1)
     }
 
-    // 如果关闭的是当前活动终端，需要切换到其他终端
     if (activeTerminalId.value === id) {
       if (terminals.value.length > 0) {
         await setActiveTerminal(terminals.value[0].id)
@@ -371,22 +374,18 @@ export const useTerminalStore = defineStore('Terminal', () => {
   }
 
   const setActiveTerminal = async (id: string) => {
-    // 确保终端存在
     const targetTerminal = terminals.value.find(t => t.id === id)
     if (!targetTerminal) {
       console.warn(`尝试激活不存在的终端: ${id}`)
       return
     }
 
-    // 更新前端状态
     activeTerminalId.value = id
 
-    // 同步活跃终端状态到后端
     if (targetTerminal.backendId !== null) {
       await terminalContextApi.setActivePaneId(targetTerminal.backendId)
     }
 
-    // 同步活跃标签页ID到会话状态
     sessionStore.setActiveTabId(id)
     immediateSync()
   }
@@ -426,11 +425,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
       return
     }
 
-    // 仅更新前端UI状态，不回写到后端
-    // 后端是CWD的单一数据源，前端只订阅变化事件
     terminal.cwd = cwd
 
-    // 智能更新终端标题
     updateTerminalTitle(terminal, cwd)
     immediateSync()
   }
@@ -645,6 +641,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     terminals,
     activeTerminalId,
     activeTerminal,
+    currentWorkingDirectory,
     shellManager,
     setupGlobalListeners,
     teardownGlobalListeners,

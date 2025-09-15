@@ -6,6 +6,7 @@
 
 use super::*;
 use crate::utils::{ApiResponse, TauriApiResult};
+use crate::api_error;
 
 /// 批量窗口状态管理命令
 ///
@@ -33,9 +34,13 @@ pub async fn window_manage_state<R: Runtime>(
     debug!("使用窗口ID: {}", window_id);
 
     // 获取窗口实例
-    let window = app
-        .get_webview_window(&window_id)
-        .ok_or_else(|| format!("窗口操作失败 ({}): 无法获取窗口实例", window_id))?;
+    let window = match app.get_webview_window(&window_id) {
+        Some(window) => window,
+        None => {
+            error!("无法获取窗口实例: {}", window_id);
+            return Ok(api_error!("window.get_instance_failed"));
+        }
+    };
 
     // 逐个处理操作
     for operation_request in request.operations {
@@ -183,11 +188,14 @@ async fn handle_set_always_on_top<R: Runtime>(
 ) -> Result<serde_json::Value, String> {
     debug!("处理设置置顶状态操作");
 
-    let always_on_top = request
+    let always_on_top = match request
         .params
         .as_ref()
-        .and_then(|p| p.always_on_top)
-        .ok_or_else(|| "设置置顶状态需要alwaysOnTop参数".to_string())?;
+        .and_then(|p| p.always_on_top) 
+    {
+        Some(value) => value,
+        None => return Err("window.missing_always_on_top_param".to_string()),
+    };
 
     // 设置窗口置顶
     window

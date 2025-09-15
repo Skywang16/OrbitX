@@ -126,6 +126,18 @@ pub struct SearchResult {
     pub lang: Option<Language>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chunk_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index_epoch: Option<u64>,
+}
+
+/// Enhanced search results that include near-miss information for threshold queries
+#[derive(Debug, Clone)]
+pub struct SearchResults {
+    pub matches: Vec<SearchResult>,
+    /// The highest scoring result below the threshold (if any)
+    pub closest_below_threshold: Option<SearchResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,6 +150,21 @@ pub struct JsonSearchResult {
     pub signals: SearchSignals,
     pub preview: String,
     pub model: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonlSearchResult {
+    pub path: String,
+    pub span: Span,
+    pub language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub score: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chunk_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index_epoch: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,6 +198,8 @@ pub struct SearchOptions {
     pub after_context_lines: usize,
     pub recursive: bool,
     pub json_output: bool,
+    pub jsonl_output: bool,
+    pub no_snippet: bool,
     pub reindex: bool,
     pub show_scores: bool,
     pub show_filenames: bool,
@@ -179,6 +208,31 @@ pub struct SearchOptions {
     pub exclude_patterns: Vec<String>,
     pub respect_gitignore: bool,
     pub full_section: bool,
+    // Enhanced embedding options (search-time only)
+    pub rerank: bool,
+    pub rerank_model: Option<String>,
+}
+
+impl JsonlSearchResult {
+    pub fn from_search_result(result: &SearchResult, include_snippet: bool) -> Self {
+        Self {
+            path: result.file.to_string_lossy().to_string(),
+            span: result.span.clone(),
+            language: result.lang.as_ref().map(|l| l.to_string()),
+            snippet: if include_snippet {
+                Some(result.preview.clone())
+            } else {
+                None
+            },
+            score: if result.score >= 0.0 {
+                Some(result.score)
+            } else {
+                None
+            },
+            chunk_hash: result.chunk_hash.clone(),
+            index_epoch: result.index_epoch,
+        }
+    }
 }
 
 impl Default for SearchOptions {
@@ -198,6 +252,8 @@ impl Default for SearchOptions {
             after_context_lines: 0,
             recursive: true,
             json_output: false,
+            jsonl_output: false,
+            no_snippet: false,
             reindex: false,
             show_scores: false,
             show_filenames: false,
@@ -206,6 +262,9 @@ impl Default for SearchOptions {
             exclude_patterns: get_default_exclude_patterns(),
             respect_gitignore: true,
             full_section: false,
+            // Enhanced embedding options (search-time only)
+            rerank: false,
+            rerank_model: None,
         }
     }
 }
@@ -341,6 +400,8 @@ mod tests {
             preview: "hello world".to_string(),
             lang: Some(Language::Rust),
             symbol: Some("main".to_string()),
+            chunk_hash: Some("abc123".to_string()),
+            index_epoch: Some(1699123456),
         };
 
         let json = serde_json::to_string(&result).unwrap();
@@ -351,6 +412,48 @@ mod tests {
         assert_eq!(result.preview, deserialized.preview);
         assert_eq!(result.lang, deserialized.lang);
         assert_eq!(result.symbol, deserialized.symbol);
+        assert_eq!(result.chunk_hash, deserialized.chunk_hash);
+        assert_eq!(result.index_epoch, deserialized.index_epoch);
+    }
+
+    #[test]
+    fn test_jsonl_search_result_conversion() {
+        let result = SearchResult {
+            file: PathBuf::from("src/auth.rs"),
+            span: Span {
+                byte_start: 1203,
+                byte_end: 1456,
+                line_start: 42,
+                line_end: 58,
+            },
+            score: 0.89,
+            preview: "function authenticate(user) {...}".to_string(),
+            lang: Some(Language::Rust),
+            symbol: Some("authenticate".to_string()),
+            chunk_hash: Some("abc123def456".to_string()),
+            index_epoch: Some(1699123456),
+        };
+
+        // Test with snippet
+        let jsonl_with_snippet = JsonlSearchResult::from_search_result(&result, true);
+        assert_eq!(jsonl_with_snippet.path, "src/auth.rs");
+        assert_eq!(jsonl_with_snippet.span.line_start, 42);
+        assert_eq!(jsonl_with_snippet.language, Some("rust".to_string()));
+        assert_eq!(
+            jsonl_with_snippet.snippet,
+            Some("function authenticate(user) {...}".to_string())
+        );
+        assert_eq!(jsonl_with_snippet.score, Some(0.89));
+        assert_eq!(
+            jsonl_with_snippet.chunk_hash,
+            Some("abc123def456".to_string())
+        );
+        assert_eq!(jsonl_with_snippet.index_epoch, Some(1699123456));
+
+        // Test without snippet
+        let jsonl_no_snippet = JsonlSearchResult::from_search_result(&result, false);
+        assert_eq!(jsonl_no_snippet.snippet, None);
+        assert_eq!(jsonl_no_snippet.path, "src/auth.rs");
     }
 
     #[test]

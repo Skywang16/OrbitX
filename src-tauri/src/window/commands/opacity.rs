@@ -5,8 +5,8 @@
  */
 
 use super::*;
-use crate::utils::{ApiResponse, EmptyData as _EmptyDataAlias};
 use crate::utils::{EmptyData, TauriApiResult};
+use crate::{api_error, api_success};
 
 /// 设置窗口透明度
 #[tauri::command]
@@ -20,7 +20,7 @@ pub async fn window_set_opacity<R: Runtime>(
 
     // 验证透明度值范围
     if !(0.0..=1.0).contains(&opacity) {
-        return Err("透明度值必须在 0.0 到 1.0 之间".to_string());
+        return Ok(api_error!("window.opacity_out_of_range"));
     }
 
     // 获取窗口实例
@@ -29,30 +29,40 @@ pub async fn window_set_opacity<R: Runtime>(
         .await
         .to_tauri()?;
 
-    let window = app
-        .get_webview_window(&window_id)
-        .ok_or_else(|| "无法获取窗口实例".to_string())?;
+    let window = match app.get_webview_window(&window_id) {
+        Some(window) => window,
+        None => return Ok(api_error!("window.get_instance_failed")),
+    };
 
     // 设置整体透明度
     let script = format!("document.documentElement.style.opacity = '{}';", opacity);
 
-    window
-        .eval(&script)
-        .context("设置窗口透明度失败")
-        .to_tauri()?;
+    match window.eval(&script) {
+        Ok(_) => (),
+        Err(e) => {
+            error!("设置窗口透明度失败: {}", e);
+            return Ok(api_error!("window.set_opacity_failed"));
+        }
+    }
 
     // 使用统一的配置更新风格
-    config_state
+    match config_state
         .toml_manager
         .config_update(|config| {
             config.appearance.opacity = opacity;
             Ok(())
         })
         .await
-        .to_tauri()?;
+    {
+        Ok(_) => (),
+        Err(e) => {
+            error!("保存透明度配置失败: {}", e);
+            return Ok(api_error!("config.save_failed"));
+        }
+    }
 
     debug!("窗口透明度设置成功并已保存到配置: {}", opacity);
-    Ok(ApiResponse::ok(_EmptyDataAlias::default()))
+    Ok(api_success!())
 }
 
 /// 获取窗口透明度
@@ -63,9 +73,15 @@ pub async fn window_get_opacity(
     debug!("获取窗口透明度");
 
     // 从配置文件获取当前透明度
-    let config = config_state.toml_manager.config_get().await.to_tauri()?;
-    let opacity = config.appearance.opacity;
-
-    debug!("当前窗口透明度: {}", opacity);
-    Ok(ApiResponse::ok(opacity))
+    match config_state.toml_manager.config_get().await {
+        Ok(config) => {
+            let opacity = config.appearance.opacity;
+            debug!("当前窗口透明度: {}", opacity);
+            Ok(api_success!(opacity))
+        }
+        Err(e) => {
+            error!("获取透明度配置失败: {}", e);
+            Ok(api_error!("config.get_failed"))
+        }
+    }
 }

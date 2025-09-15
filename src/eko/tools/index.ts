@@ -18,7 +18,7 @@
  * - web-fetch: 🌐 HTTP请求（支持各种方法、头部、超时）
  *
  * 🔍 搜索工具：
- * - grep-search: 🔍 文本搜索（直接执行 grep 命令的文本搜索）
+ * - orbit-search: 🔍 语义搜索（基于向量的代码片段搜索，支持自然语言查询）
  *
  * 🔧 基础设施：
  * - tool-error: 错误处理和类型定义
@@ -46,7 +46,7 @@ export { editFileTool } from './toolList/edit-file'
 export { shellTool } from './toolList/shell'
 export { webFetchTool } from './toolList/web-fetch'
 
-export { grepSearchTool } from './toolList/grep-search'
+export { orbitSearchTool } from './toolList/orbit-search'
 
 // 导出主要的工具集合
 export { allTools, readOnlyTools, registerAllTools, getToolsForMode } from './tools'

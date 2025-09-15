@@ -1,6 +1,6 @@
 use console::{Term, style};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub struct StatusReporter {
     term: Term,
@@ -181,7 +181,138 @@ macro_rules! status_warn {
     };
 }
 
+#[allow(unused_attributes)]
 #[macro_export]
+/// Enhanced indexing progress tracker with multiple progress bars
+#[allow(dead_code)]
+pub struct EnhancedIndexingProgress {
+    overall_progress: ProgressBar,
+    current_file_progress: Option<ProgressBar>,
+    start_time: Instant,
+    files_completed: usize,
+    total_files: usize,
+    total_chunks: usize,
+}
+
+#[allow(dead_code)]
+impl EnhancedIndexingProgress {
+    pub fn new(status: &StatusReporter, total_files: usize) -> Self {
+        let overall_pb = status
+            .multi_progress
+            .add(ProgressBar::new(total_files as u64));
+        overall_pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} files {msg}")
+                .unwrap()
+                .progress_chars("█▉▊▋▌▍▎▏  "),
+        );
+        overall_pb.set_message("Starting indexing...");
+
+        Self {
+            overall_progress: overall_pb,
+            current_file_progress: None,
+            start_time: Instant::now(),
+            files_completed: 0,
+            total_files,
+            total_chunks: 0,
+        }
+    }
+
+    pub fn start_file(
+        &mut self,
+        status: &StatusReporter,
+        file_name: &str,
+        estimated_chunks: usize,
+    ) {
+        // Finish previous file progress bar if exists
+        if let Some(old_pb) = self.current_file_progress.take() {
+            old_pb.finish_and_clear();
+        }
+
+        // Create new progress bar for this file
+        let file_pb = status.multi_progress.insert_after(
+            &self.overall_progress,
+            ProgressBar::new(estimated_chunks as u64),
+        );
+        file_pb.set_style(
+            ProgressStyle::default_bar()
+                .template("  {spinner:.yellow} [{bar:30.yellow/dim}] {pos}/{len} chunks {msg}")
+                .unwrap()
+                .progress_chars("●◐○  "),
+        );
+        file_pb.set_message(format!("📄 {}", file_name));
+
+        self.current_file_progress = Some(file_pb);
+    }
+
+    pub fn update_chunk_progress(&mut self, chunk_number: usize, chunk_size: usize) {
+        if let Some(ref pb) = self.current_file_progress {
+            pb.set_position(chunk_number as u64);
+            pb.set_message(format!("🔢 chunk {} ({} chars)", chunk_number, chunk_size));
+        }
+    }
+
+    pub fn complete_file(&mut self, file_name: &str, chunks_processed: usize) {
+        self.files_completed += 1;
+        self.total_chunks += chunks_processed;
+
+        // Update overall progress
+        self.overall_progress
+            .set_position(self.files_completed as u64);
+        let elapsed = self.start_time.elapsed();
+        let files_per_sec = if elapsed.as_secs() > 0 {
+            self.files_completed as f64 / elapsed.as_secs() as f64
+        } else {
+            0.0
+        };
+
+        self.overall_progress.set_message(format!(
+            "{} ({:.1}/s, {} chunks total)",
+            file_name.split('/').next_back().unwrap_or(file_name),
+            files_per_sec,
+            self.total_chunks
+        ));
+
+        // Complete current file progress bar
+        if let Some(pb) = self.current_file_progress.take() {
+            pb.finish_with_message(format!("✓ {} chunks", chunks_processed));
+        }
+    }
+
+    pub fn finish(self, status: &StatusReporter) {
+        let elapsed = self.start_time.elapsed();
+
+        self.overall_progress.finish_with_message(format!(
+            "✅ {} files, {} chunks in {:.1}s",
+            self.files_completed,
+            self.total_chunks,
+            elapsed.as_secs_f64()
+        ));
+
+        // Show exciting completion stats
+        let files_per_sec = if elapsed.as_secs() > 0 {
+            self.files_completed as f64 / elapsed.as_secs() as f64
+        } else {
+            self.files_completed as f64
+        };
+        let chunks_per_sec = if elapsed.as_secs() > 0 {
+            self.total_chunks as f64 / elapsed.as_secs() as f64
+        } else {
+            self.total_chunks as f64
+        };
+
+        status.success(&format!(
+            "🚀 Indexed {} files ({} chunks) in {:.2}s - {:.1} files/sec, {:.1} chunks/sec",
+            self.files_completed,
+            self.total_chunks,
+            elapsed.as_secs_f64(),
+            files_per_sec,
+            chunks_per_sec
+        ));
+    }
+}
+
+#[allow(unused_macros)]
 macro_rules! status_error {
     ($reporter:expr, $($arg:tt)*) => {
         $reporter.error(&format!($($arg)*))

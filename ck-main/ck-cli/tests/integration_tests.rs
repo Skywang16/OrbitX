@@ -437,3 +437,288 @@ fn test_error_handling() {
     // Should fail gracefully with invalid regex
     assert!(!output.status.success());
 }
+
+#[test]
+fn test_jsonl_basic_output() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create test files
+    fs::write(
+        temp_dir.path().join("test.rs"),
+        "fn main() {\n    println!(\"Hello Rust\");\n}",
+    )
+    .unwrap();
+    fs::write(
+        temp_dir.path().join("test.py"),
+        "print('Hello Python')\ndef main():\n    pass",
+    )
+    .unwrap();
+
+    let output = Command::new(get_ck_binary())
+        .args(["fn main", "--jsonl", temp_dir.path().to_str().unwrap()])
+        .output()
+        .expect("Failed to run ck");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    // Should output JSONL format
+    assert!(!stdout.trim().is_empty());
+
+    // Each line should be valid JSON
+    for line in stdout.lines() {
+        if !line.trim().is_empty() {
+            let json: serde_json::Value = serde_json::from_str(line).expect("Invalid JSON line");
+
+            // Verify required JSONL fields exist
+            assert!(json.get("path").is_some());
+            assert!(json.get("span").is_some());
+            assert!(json.get("language").is_some());
+            assert!(json.get("snippet").is_some());
+            assert!(json.get("score").is_some());
+
+            // Verify span structure
+            let span = json.get("span").unwrap().as_object().unwrap();
+            assert!(span.get("byte_start").is_some());
+            assert!(span.get("byte_end").is_some());
+            assert!(span.get("line_start").is_some());
+            assert!(span.get("line_end").is_some());
+        }
+    }
+}
+
+#[test]
+fn test_jsonl_no_snippet_flag() {
+    let temp_dir = TempDir::new().unwrap();
+
+    fs::write(
+        temp_dir.path().join("test.rs"),
+        "fn main() {\n    println!(\"Hello Rust\");\n}",
+    )
+    .unwrap();
+
+    let output = Command::new(get_ck_binary())
+        .args([
+            "fn main",
+            "--jsonl",
+            "--no-snippet",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("Failed to run ck");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    // Should output JSONL format without snippets
+    for line in stdout.lines() {
+        if !line.trim().is_empty() {
+            let json: serde_json::Value = serde_json::from_str(line).expect("Invalid JSON line");
+
+            // Should not have snippet field when --no-snippet is used
+            assert!(json.get("snippet").is_none());
+
+            // Should still have other required fields
+            assert!(json.get("path").is_some());
+            assert!(json.get("span").is_some());
+            assert!(json.get("language").is_some());
+            assert!(json.get("score").is_some());
+        }
+    }
+}
+
+#[test]
+fn test_jsonl_vs_regular_output() {
+    let temp_dir = TempDir::new().unwrap();
+
+    fs::write(
+        temp_dir.path().join("test.rs"),
+        "fn main() {\n    println!(\"Hello Rust\");\n}",
+    )
+    .unwrap();
+
+    // Regular output
+    let regular_output = Command::new(get_ck_binary())
+        .args(["fn main", temp_dir.path().to_str().unwrap()])
+        .output()
+        .expect("Failed to run ck");
+
+    // JSONL output
+    let jsonl_output = Command::new(get_ck_binary())
+        .args(["fn main", "--jsonl", temp_dir.path().to_str().unwrap()])
+        .output()
+        .expect("Failed to run ck");
+
+    assert!(regular_output.status.success());
+    assert!(jsonl_output.status.success());
+
+    let regular_stdout = String::from_utf8(regular_output.stdout).unwrap();
+    let jsonl_stdout = String::from_utf8(jsonl_output.stdout).unwrap();
+
+    // Regular output should NOT be JSON
+    assert!(!regular_stdout.contains("{\"path\":"));
+
+    // JSONL output should be JSON
+    assert!(jsonl_stdout.contains("{\"path\":"));
+    assert!(jsonl_stdout.contains("\"span\":"));
+    assert!(jsonl_stdout.contains("\"language\":"));
+}
+
+#[test]
+fn test_jsonl_with_different_languages() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create files in different languages
+    fs::write(
+        temp_dir.path().join("test.rs"),
+        "fn main() {\n    println!(\"Hello Rust\");\n}",
+    )
+    .unwrap();
+    fs::write(
+        temp_dir.path().join("test.py"),
+        "def main():\n    print('Hello Python')",
+    )
+    .unwrap();
+    fs::write(
+        temp_dir.path().join("test.js"),
+        "function main() {\n    console.log('Hello JS');\n}",
+    )
+    .unwrap();
+
+    let output = Command::new(get_ck_binary())
+        .args(["main", "--jsonl", temp_dir.path().to_str().unwrap()])
+        .output()
+        .expect("Failed to run ck");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    let mut rust_found = false;
+    let mut python_found = false;
+    let mut js_found = false;
+
+    // Check that different languages are correctly detected
+    for line in stdout.lines() {
+        if !line.trim().is_empty() {
+            let json: serde_json::Value = serde_json::from_str(line).expect("Invalid JSON line");
+
+            let language = json.get("language").unwrap().as_str().unwrap();
+            match language {
+                "rust" => rust_found = true,
+                "python" => python_found = true,
+                "javascript" => js_found = true,
+                _ => {}
+            }
+        }
+    }
+
+    // Should detect all three languages
+    assert!(rust_found);
+    assert!(python_found);
+    assert!(js_found);
+}
+
+#[test]
+fn test_add_single_file_to_index() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create a test file to add
+    let test_file = temp_dir.path().join("test_file.txt");
+    fs::write(&test_file, "This is test content for indexing").unwrap();
+
+    // First create an index in the directory
+    let output = Command::new(get_ck_binary())
+        .args(["--index", "."])
+        .current_dir(temp_dir.path())
+        .output()
+        .expect("Failed to create index");
+
+    assert!(output.status.success(), "Failed to create initial index");
+
+    // Create another file after index creation
+    let new_file = temp_dir.path().join("new_file.txt");
+    fs::write(&new_file, "New file content to be added").unwrap();
+
+    // Test adding the new file with absolute path
+    let output = Command::new(get_ck_binary())
+        .args(["--add", new_file.to_str().unwrap()])
+        .output()
+        .expect("Failed to run ck --add");
+
+    assert!(
+        output.status.success(),
+        "Failed to add file: stderr: {}, stdout: {}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+
+    // Check for success message in either stdout or stderr
+    assert!(
+        stdout.contains("Added") || stderr.contains("Added"),
+        "Expected 'Added' in output, got stdout: {}, stderr: {}",
+        stdout,
+        stderr
+    );
+
+    // Verify the file was actually added by searching for it
+    let output = Command::new(get_ck_binary())
+        .args(["New file", "."])
+        .current_dir(temp_dir.path())
+        .output()
+        .expect("Failed to search for added file");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("New file content"),
+        "Added file content not found in search"
+    );
+}
+
+#[test]
+fn test_add_file_with_relative_path() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create index first
+    let output = Command::new(get_ck_binary())
+        .args(["--index", "."])
+        .current_dir(temp_dir.path())
+        .output()
+        .expect("Failed to create index");
+
+    assert!(output.status.success());
+
+    // Create a new file to add
+    fs::write(
+        temp_dir.path().join("relative_file.txt"),
+        "Relative path content",
+    )
+    .unwrap();
+
+    // Test adding with relative path from the temp directory
+    let output = Command::new(get_ck_binary())
+        .args(["--add", "relative_file.txt"])
+        .current_dir(temp_dir.path())
+        .output()
+        .expect("Failed to run ck --add with relative path");
+
+    assert!(
+        output.status.success(),
+        "Failed to add file with relative path: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Verify file was added
+    let output = Command::new(get_ck_binary())
+        .args(["Relative path", "."])
+        .current_dir(temp_dir.path())
+        .output()
+        .expect("Failed to search");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Relative path content"));
+}

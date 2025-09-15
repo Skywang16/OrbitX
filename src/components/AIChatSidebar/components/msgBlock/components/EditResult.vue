@@ -46,7 +46,7 @@
     display: flex;
     gap: 12px;
     background: var(--bg-300);
-    border-bottom: 1px solid var(--border-300);
+    border-bottom: 1px solid var(--border-200);
   }
 
   .stat {

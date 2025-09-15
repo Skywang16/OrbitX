@@ -1,21 +1,16 @@
 {
   "common": {
-    "success": "Operation successful",
     "invalid_params": "Invalid parameters",
     "not_found": "Resource not found",
-    "permission_denied": "Permission denied",
-    "operation_failed": "Operation failed",
-    "network_error": "Network error",
-    "system_error": "System error",
     "invalid_id": "Invalid ID",
     "empty_content": "Content cannot be empty",
     "invalid_role": "Invalid role",
     "title_empty": "Title cannot be empty",
-    "content_empty": "Content cannot be empty"
+    "content_empty": "Content cannot be empty",
+    "path_empty": "Path cannot be empty"
   },
   "ai": {
     "conversation_not_found": "Conversation not found",
-    "message_not_found": "Message not found",
     "create_conversation_failed": "Failed to create conversation",
     "get_conversations_failed": "Failed to get conversation list",
     "get_conversation_failed": "Failed to get conversation details",
@@ -24,11 +19,9 @@
     "truncate_conversation_failed": "Failed to truncate conversation",
     "save_message_failed": "Failed to save message",
     "update_message_failed": "Failed to update message",
-    "get_models_failed": "Failed to get model list",
     "add_model_failed": "Failed to add model",
     "remove_model_failed": "Failed to remove model",
     "update_model_failed": "Failed to update model",
-    "test_connection_failed": "Failed to test connection",
     "test_connection_error": "Connection test failed: {error}",
     "api_url_empty": "API URL cannot be empty",
     "api_key_empty": "API Key cannot be empty",
@@ -36,62 +29,23 @@
     "get_prefix_prompt_failed": "Failed to get prefix prompt",
     "set_prefix_prompt_failed": "Failed to set prefix prompt",
     "get_context_failed": "Failed to get context",
-    "build_prompt_failed": "Failed to build prompt",
-    "get_config_failed": "Failed to get configuration",
-    "update_config_failed": "Failed to update configuration",
-    "get_cache_stats_failed": "Failed to get cache statistics",
-    "cleanup_cache_failed": "Failed to cleanup cache",
-    "invalidate_cache_failed": "Failed to invalidate cache",
-    "operation_failed": "AI operation failed"
+    "build_prompt_failed": "Failed to build prompt"
   },
   "completion": {
-    "input_empty": "Input text cannot be empty",
     "get_failed": "Failed to get completion suggestions",
-    "invalid_item": "Invalid completion item",
-    "apply_failed": "Failed to apply completion",
-    "history_failed": "Failed to get completion history",
-    "clear_history_failed": "Failed to clear completion history",
     "init_failed": "Failed to initialize completion engine",
     "engine_not_initialized": "Completion engine not initialized",
-    "stats_failed": "Failed to get completion statistics",
-    "enhanced_get_failed": "Failed to get enhanced completion suggestions"
+    "stats_failed": "Failed to get completion statistics"
   },
   "config": {
     "get_failed": "Failed to get configuration",
-    "update_failed": "Failed to update configuration",
-    "save_failed": "Failed to save configuration",
-    "validate_failed": "Failed to validate configuration",
-    "reset_failed": "Failed to reset configuration",
-    "get_path_failed": "Failed to get configuration path",
-    "get_info_failed": "Failed to get configuration info",
-    "open_file_failed": "Failed to open configuration file",
-    "subscribe_events_failed": "Failed to subscribe to configuration events",
-    "get_folder_path_failed": "Failed to get configuration folder path",
-    "open_folder_failed": "Failed to open configuration folder"
-  },
-  "shortcuts": {
-    "get_failed": "Failed to get shortcuts configuration",
-    "update_failed": "Failed to update shortcuts configuration",
-    "validate_failed": "Failed to validate shortcuts configuration",
-    "detect_conflicts_failed": "Failed to detect shortcuts conflicts",
-    "add_failed": "Failed to add shortcut",
-    "remove_failed": "Failed to remove shortcut",
-    "reset_failed": "Failed to reset shortcuts",
-    "get_stats_failed": "Failed to get shortcuts statistics",
-    "search_failed": "Failed to search shortcuts",
-    "export_failed": "Failed to export shortcuts configuration",
-    "import_parse_failed": "Failed to parse imported configuration",
-    "import_failed": "Failed to import shortcuts configuration"
+    "save_failed": "Failed to save configuration"
   },
   "llm": {
     "call_failed": "LLM call failed",
     "stream_failed": "Stream call failed",
     "get_models_failed": "Failed to get model list",
-    "test_connection_failed": "Failed to test model connection",
-    "get_providers_failed": "Failed to get provider list",
-    "get_provider_models_failed": "Failed to get provider models",
-    "get_model_info_failed": "Failed to get model info",
-    "check_feature_failed": "Failed to check model feature"
+    "test_connection_failed": "Failed to test model connection"
   },
   "shell": {
     "pane_not_exist": "Terminal pane does not exist",
@@ -127,40 +81,19 @@
     "get_context_failed": "Failed to get terminal context",
     "get_active_context_failed": "Failed to get active terminal context",
     "set_active_pane_failed": "Failed to set active pane",
-    "get_active_pane_failed": "Failed to get active pane",
-    "clear_active_pane_failed": "Failed to clear active pane",
-    "check_pane_active_failed": "Failed to check pane status",
-    "clear_cache_failed": "Failed to clear cache",
-    "invalidate_cache_failed": "Failed to invalidate cache",
-    "get_cache_stats_failed": "Failed to get cache statistics",
-    "get_registry_stats_failed": "Failed to get registry statistics"
+    "clear_active_pane_failed": "Failed to clear active pane"
   },
   "window": {
-    "get_state_failed": "Failed to get window state",
-    "set_always_on_top_failed": "Failed to set window always on top",
-    "toggle_always_on_top_failed": "Failed to toggle window always on top",
-    "reset_state_failed": "Failed to reset window state",
-    "batch_operation_failed": "Batch operation failed",
-    "get_complete_state_failed": "Failed to get complete window state",
     "get_current_directory_failed": "Failed to get current directory",
-    "get_home_directory_failed": "Failed to get home directory",
-    "get_platform_info_failed": "Failed to get platform info",
     "set_opacity_failed": "Failed to set window opacity",
-    "get_opacity_failed": "Failed to get window opacity",
     "opacity_out_of_range": "Opacity value must be between 0.0-1.0"
   },
-  "storage": {
-    "operation_failed": "Storage operation failed",
-    "connection_failed": "Database connection failed",
-    "query_failed": "Query failed",
-    "save_failed": "Save failed",
-    "delete_failed": "Delete failed",
-    "update_failed": "Update failed",
-    "get_current_directory_failed": "Failed to get current working directory",
-    "workspace_path_empty": "Workspace path cannot be empty",
-    "workspace_name_empty": "Workspace name cannot be empty",
-    "check_workspace_index_failed": "Failed to check workspace index status",
-    "get_workspace_indexes_failed": "Failed to get workspace index list",
-    "invalid_workspace_id": "Invalid workspace ID"
+  "ck": {
+    "invalid_query": "Search query must be at least 3 characters long",
+    "search_failed": "Code search failed",
+    "index_not_found": "Index not ready, please build index first or enable auto-rebuild",
+    "build_failed": "Index build failed",
+    "build_canceled": "Index build canceled",
+    "delete_failed": "Failed to delete index"
   }
 }

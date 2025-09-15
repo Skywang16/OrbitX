@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n'
-  
+
   import { useAISettingsStore } from './store'
   import AIFeatureSettings from './AIFeatureSettings.vue'
   import AIModelConfig from './AIModelConfig.vue'
@@ -17,7 +17,7 @@
 
   // 暴露初始化方法给父组件
   defineExpose({
-    init
+    init,
   })
 </script>
 

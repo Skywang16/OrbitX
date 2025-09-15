@@ -1,35 +1,12 @@
 {
   "common": {
-    "ok": "确定",
     "cancel": "取消",
     "confirm": "确认",
-    "delete": "删除",
-    "edit": "编辑",
     "save": "保存",
-    "loading": "加载中...",
-    "error": "错误",
-    "success": "成功",
-    "retry": "重试",
-    "search": "搜索",
-    "refresh": "刷新",
-    "close": "关闭",
-    "processing": "处理中...",
-    "new": "新建",
     "add": "添加",
-    "copy": "复制",
-    "paste": "粘贴",
-    "cut": "剪切",
-    "undo": "撤销",
-    "redo": "重做",
-    "settings": "设置",
-    "help": "帮助",
-    "about": "关于",
     "select_placeholder": "请选择",
     "no_data": "无数据",
-    "search_options": "搜索选项",
-    "open_feedback_error": "无法打开问题反馈页面",
-    "visit_manually": "请手动访问：https://github.com/Skywang16/OrbitX/issues",
-    "dismiss": "关闭"
+    "search_options": "搜索选项"
   },
   "settings": {
     "title": "设置",
@@ -37,22 +14,11 @@
     "general": {
       "title": "通用设置",
       "description": "应用程序通用配置",
-      "config_management": "配置管理",
-      "config_folder": "配置文件夹",
-      "config_folder_description": "打开应用程序配置文件所在的文件夹",
-      "open_config_folder": "打开配置文件夹",
-      "config_folder_opened": "配置文件夹已打开",
-      "config_folder_error": "无法打开配置文件夹",
+      "config_open_folder": "打开配置文件夹",
       "startup_title": "启动设置",
       "autostart_title": "开机自启动",
       "autostart_enabled": "开机自启动已开启",
-      "autostart_disabled": "开机自启动已关闭",
-      "terminal_features_title": "终端功能",
-      "smart_completion_title": "智能补全",
-      "smart_completion_description": "为终端命令提供智能自动补全建议",
-      "smart_completion_enabled": "智能补全已开启",
-      "smart_completion_disabled": "智能补全已关闭",
-      "advanced_features_title": "高级功能"
+      "autostart_disabled": "开机自启动已关闭"
     },
     "theme": {
       "title": "主题设置",
@@ -60,38 +26,8 @@
     },
     "ai": {
       "title": "AI 设置",
-      "description": "配置 AI 模型和功能"
-    },
-    "vectorIndex": {
-      "title": "向量索引",
-      "description": "管理工作区向量索引",
-      "statistics_title": "统计信息",
-      "workspace_list_title": "工作区列表",
-      "total_workspaces": "总工作区",
-      "ready_workspaces": "就绪工作区",
-      "total_files": "总文件数",
-      "total_size": "总大小",
-      "files": "文件",
-      "size": "大小",
-      "updated": "更新时间",
-      "refresh": "刷新",
-      "delete": "删除",
-      "loading": "加载中...",
-      "no_workspaces": "暂无工作区索引",
-      "no_workspaces_description": "您还没有为任何工作区建立索引。在 AI 聊天中打开工作区时可以构建索引。",
-      "delete_confirm_title": "确认删除",
-      "delete_confirm_message": "确定要删除工作区 \"{name}\" 的索引吗？",
-      "delete_warning": "此操作将永久删除索引文件，无法恢复。",
-      "load_error": "加载工作区列表失败",
-      "refresh_success": "刷新成功",
-      "refresh_error": "刷新失败",
-      "delete_success": "删除成功",
-      "delete_error": "删除失败",
-      "status": {
-        "building": "构建中",
-        "ready": "就绪",
-        "error": "错误"
-      }
+      "description": "配置 AI 模型和功能",
+      "model_config": "模型配置"
     },
     "shortcuts": {
       "title": "快捷键设置",
@@ -102,54 +38,10 @@
       "description": "选择界面显示语言"
     }
   },
-  "features": {
-    "groups": {
-      "general": "通用设置",
-      "general_desc": "基本功能和系统设置",
-      "terminal": "终端相关",
-      "terminal_desc": "终端增强功能和操作优化",
-      "ai": "AI 功能",
-      "ai_desc": "智能化功能和 AI 助手配置",
-      "appearance": "外观设置",
-      "appearance_desc": "界面外观和交互体验设置",
-      "performance": "性能优化",
-      "performance_desc": "系统性能和资源优化配置",
-      "developer": "开发者选项",
-      "developer_desc": "高级功能和调试选项"
-    },
-    "dependencies": "依赖",
-    "restart_required": "需要重启",
-    "restart_notification": "某些功能的更改需要重启应用才能生效",
-    "restart_now": "立即重启",
-    "restart_initiated": "正在重启应用...",
-    "restart_failed": "重启应用失败",
-    "enabled_success": "功能 {feature} 已开启",
-    "disabled_success": "功能 {feature} 已关闭",
-    "toggle_failed": "功能切换失败",
-    "reset_defaults": "重置默认值",
-    "reset_success": "已重置为默认设置",
-    "reset_failed": "重置设置失败"
-  },
   "chat": {
     "new_session": "新建会话",
     "session_select": "选择会话",
-    "input_placeholder": "输入消息...",
-    "thinking": "思考中...",
-    "tool_execution": "工具执行",
-    "error_occurred": "发生错误",
-    "retry_message": "重试消息",
-    "copy_message": "复制消息",
-    "delete_message": "删除消息"
-  },
-  "terminal": {
-    "title": "终端",
-    "new_tab": "新标签页",
-    "close_tab": "关闭标签页",
-    "rename_tab": "重命名标签页",
-    "duplicate_tab": "复制标签页",
-    "search_placeholder": "搜索...",
-    "completion_available": "自动补全可用",
-    "command_not_found": "命令未找到"
+    "input_placeholder": "输入消息..."
   },
   "search": {
     "placeholder": "搜索",
@@ -157,67 +49,23 @@
     "whole_word": "全字匹配",
     "previous": "上一个",
     "next": "下一个",
-    "close": "关闭",
-    "clear": "清除"
+    "close": "关闭"
   },
   "onboarding": {
     "navigation": {
       "previous": "上一步",
       "next": "下一步",
       "finish": "开始使用",
-      "save_config": "保存配置",
+      "config_save": "保存配置",
       "skip_temporarily": "暂时跳过"
-    },
-    "language": {
-      "title": "选择语言",
-      "description": "请选择您偏好的语言"
-    },
-    "welcome": {
-      "title": "欢迎使用 OrbitX",
-      "subtitle": "功能强大的终端模拟器，内置AI助手",
-      "get_started": "开始使用",
-      "features": {
-        "terminal": {
-          "title": "现代终端",
-          "description": "快速高效的终端体验"
-        },
-        "ai": {
-          "title": "AI助手",
-          "description": "智能编程伴侣和命令助手"
-        },
-        "customize": {
-          "title": "完全可定制",
-          "description": "主题、快捷键和个性化设置"
-        }
-      }
     },
     "theme": {
       "title": "选择您的主题",
-      "description": "选择符合您风格的主题",
-      "options": {
-        "dark": {
-          "name": "深色主题",
-          "description": "适合低光环境"
-        },
-        "light": {
-          "name": "浅色主题",
-          "description": "清爽明亮的外观"
-        },
-        "auto": {
-          "name": "自动主题",
-          "description": "跟随系统设置"
-        }
-      }
+      "description": "选择符合您风格的主题"
     },
     "ai": {
       "title": "AI助手设置",
       "description": "配置您的AI编程伴侣",
-      "enable_title": "启用AI助手",
-      "enable_description": "获取命令、编程和终端任务的帮助",
-      "model_title": "选择AI模型",
-      "model_description": "选择您偏好的AI模型",
-      "voice_title": "语音功能",
-      "voice_description": "启用与AI的语音交互",
       "recommended": "推荐",
       "api_key_placeholder": "请输入您的API密钥",
       "api_url_placeholder": "请输入API地址",
@@ -225,35 +73,20 @@
       "model_name_placeholder": "请输入模型名称",
       "config_name": "配置名称",
       "config_name_placeholder": "例如：Claude生产环境",
-      "save_config": "保存配置",
-      "skip_temporarily": "暂时跳过",
-      "select_provider_first": "请先选择一个AI提供商，或点击\"暂时跳过\"",
       "config_name_required": "配置名称不能为空",
       "api_key_required": "API密钥不能为空",
       "model_name_required": "模型名称不能为空",
       "api_url_required": "API地址不能为空",
-      "save_config_success": "配置保存成功！",
-
-      "skip_config_message": "已跳过AI配置，您可以后续在设置中配置",
       "models": {
         "custom": {
           "name": "自定义"
         }
-      },
-      "preview_title": "预览",
-      "preview_user_message": "如何列出目录中的文件？",
-      "preview_ai_message": "使用 `ls` 命令列出文件，或使用 `ls -la` 显示详细信息包括隐藏文件。",
-      "start_using": "开始使用 OrbitX"
+      }
     }
   },
   "ai": {
     "select_mode": "选择模式",
-    "select_model": "选择AI模型",
-    "provider": "选择AI提供商",
-    "model_name_placeholder": "例如：GPT-4 生产环境",
-    "system_prompt_placeholder": "在这里输入你的前置提示词，例如：请用中文回答所有问题...",
-    "add_model": "添加模型",
-    "empty_description": "点击 \\\"添加模型\\\" 按钮开始配置您的第一个AI模型"
+    "select_model": "选择AI模型"
   },
   "ai_model": {
     "add_title": "添加 AI 模型",
@@ -277,74 +110,39 @@
     "test_connection": "测试连接",
     "testing": "测试中...",
     "add_model": "添加模型",
-    "add_chat_model": "添加AI模型",
-    "add_embedding_model": "添加向量模型",
-    "model_type": "模型类型",
-    "model_type_chat": "AI聊天模型",
-    "model_type_embedding": "向量模型",
-    "model_type_chat_description": "用于对话和文本生成的AI模型",
-    "model_type_embedding_description": "用于文本向量化和语义搜索的模型",
-    "select_model_type": "选择模型类型",
-    "chat_models": "AI聊天模型",
-    "embedding_models": "向量模型",
     "loading": "加载中...",
-    "empty_title": "暂无AI模型",
-    "empty_description": "点击\"添加模型\"按钮开始配置您的第一个AI模型",
     "edit": "编辑",
     "delete": "删除",
-    "delete_title": "删除模型",
     "delete_confirm": "确定删除模型？",
-    "delete_description": "删除后无法恢复",
     "delete_confirm_text": "确认",
     "cancel": "取消",
-    "delete_success": "模型删除成功",
-    "delete_failed": "删除失败",
-    "update_success": "模型更新成功",
-    "add_success": "模型添加成功",
-    "operation_failed": "操作失败",
     "save": "保存",
     "add": "添加",
     "add_new_model": "添加新模型",
     "add_model_description": "配置AI模型和向量模型连接信息",
     "no_models": "暂无模型配置",
-    "default_provider": "AI模型",
     "all_models": "所有模型",
     "chat": "聊天",
-    "embedding": "向量",
-
+    "add_chat_model": "添加AI模型",
     "validation": {
       "api_key_required": "API Key 是必填项",
       "preset_required": "请选择一个预设提供商",
       "model_required": "请选择一个模型",
       "config_name_required": "配置名称是必填项",
       "api_url_required": "API URL 是必填项",
-      "model_name_required": "模型名称是必填项",
-      "required_fields": "请先填写API地址、API密钥和模型名称"
-    },
-    "test": {
-      "fill_config_first": "请先填写完整的配置信息",
-      "success": "连接测试成功",
-      "failed": "连接测试失败",
-      "error": "连接测试出错"
-    },
-    "connection_test": {
-      "success": "连接测试成功！",
-      "failed": "连接测试失败，请检查配置",
-      "error": "连接测试失败"
+      "model_name_required": "模型名称是必填项"
     }
   },
   "session": {
     "search_placeholder": "搜索会话...",
     "no_data": "暂无会话历史",
-    "chat_placeholder": "与 Orbit 对话...",
     "clear_selection": "清除选择",
     "unnamed_session": "未命名会话",
     "messages": "条消息",
     "current_session": "当前会话",
     "selected_content": "已选择内容",
     "click_to_insert": "点击插入到输入框",
-    "current_terminal": "当前终端",
-    "clear_terminal_tag": "清除终端标签"
+    "current_terminal": "当前终端"
   },
   "theme": {
     "select_light": "选择浅色主题",
@@ -352,20 +150,12 @@
   },
   "shortcuts": {
     "title": "快捷键设置",
-    "conflicts": "检测到 {count} 个快捷键冲突",
     "loading": "加载中...",
-    "global": "全局快捷键",
-    "terminal": "终端快捷键",
     "not_configured": "点击配置",
     "editing_hint": "按下新的快捷键组合...",
     "reset_to_default": "重置到默认",
     "reset_confirm_title": "重置快捷键配置",
     "reset_confirm_message": "此操作将重置所有快捷键到默认配置，当前的自定义设置将会丢失。",
-    "reset_success": "快捷键配置已重置为默认",
-    "reset_failed": "重置配置失败",
-    "save_success": "{action} 快捷键设置成功",
-    "save_failed": "保存快捷键失败",
-    "init_failed": "快捷键设置初始化失败",
     "reset_shortcuts": "重置快捷键",
     "reset_description": "将所有快捷键恢复为默认设置",
     "actions": {
@@ -389,11 +179,6 @@
       "toggle_window_pin": "钉住/取消钉住窗口"
     }
   },
-  "tab": {
-    "close": "关闭标签",
-    "new_terminal": "新建终端（左键） / 选择Shell（右键）",
-    "pin": "置顶"
-  },
   "language": {
     "title": "语言",
     "chinese": "中文",
@@ -405,49 +190,25 @@
     "confirm": "确认",
     "close": "关闭"
   },
-
   "message": {
-    "execution_failed": "执行失败",
-    "generating": "正在生成...",
-    "duration_info": "耗时 {duration}",
-    "error_details": "详细信息: {details}"
+    "generating": "正在生成..."
   },
   "tool": {
     "data_error": "数据错误"
   },
   "ai_feature": {
     "user_system_prompt": "用户前置提示词",
-    "prompt_description": "设置一个通用的前置提示词，它会自动添加到所有AI请求的前面",
-    "prompt_placeholder": "在这里输入你的前置提示词，例如：请用中文回答所有问题...",
-    "embedding_model": "向量模型配置",
-    "embedding_model_description": "选择用于代码向量化的模型，该模型将用于代码语义搜索功能",
-    "select_embedding_model": "选择向量模型",
-    "embedding_model_hint": "选择一个支持embedding功能的模型用于代码向量化",
-    "select_model_placeholder": "请选择向量模型",
-    "current_embedding_model": "当前向量模型"
+    "prompt_placeholder": "在这里输入你的前置提示词，例如：请用中文回答所有问题..."
   },
   "ai_model_form": {
-    "basic_info": "基本信息",
-    "config_name": "配置名称",
-    "provider": "提供商",
-    "connection_config": "连接配置",
-    "model_name": "模型名称",
-    "config_name_placeholder": "例如：GPT-4 生产环境",
-    "provider_placeholder": "选择AI提供商",
     "api_url": "API地址",
-    "api_key": "API密钥",
-    "edit_title": "编辑AI模型",
-    "add_title": "添加AI模型",
-    "api_url_required": "请输入API地址",
-    "api_key_required": "请输入API密钥",
-    "model_name_required": "请输入模型名称"
+    "api_key": "API密钥"
   },
   "message_list": {
     "start_conversation": "开始对话吧",
     "send_message_hint": "发送消息开始与Orbit对话",
     "no_model_configured": "尚未配置AI模型",
-    "configure_model_hint": "请先在设置中配置AI模型后再开始对话",
-    "go_to_settings": "前往设置"
+    "configure_model_hint": "请先在设置中配置AI模型后再开始对话"
   },
   "theme_settings": {
     "theme_mode": "主题模式",
@@ -462,14 +223,7 @@
     "dark_theme_description": "系统深色模式时使用的主题",
     "window_opacity": "窗口透明度",
     "opacity": "透明度",
-    "opacity_description": "调整窗口的透明度",
-    "opacity_error": "设置透明度失败: {error}",
-    "theme_changed": "主题切换成功",
-    "theme_change_failed": "主题切换失败",
-    "mode_changed": "主题模式切换成功",
-    "mode_change_failed": "主题模式切换失败",
-    "loading": "正在加载主题...",
-    "init_failed": "主题系统初始化失败"
+    "opacity_description": "调整窗口的透明度"
   },
   "ui": {
     "clear": "清除",
@@ -487,51 +241,11 @@
     "exited": "进程已退出，退出码: {code}",
     "unknown_exit_code": "未知"
   },
-  "shortcuts_actions": {
-    "cannot_close_last_tab": "无法关闭最后一个终端标签页"
-  },
   "cache": {
     "directory_cleared": "目录缓存已清除"
   },
   "config": {
-    "unknown_size": "未知",
     "unknown_time": "未知",
     "invalid_time": "无效时间"
-  },
-  "storage": {
-    "get_current_directory_failed": "获取当前工作目录失败",
-    "check_workspace_index_failed": "检查工作区索引失败",
-    "workspace_path_empty": "工作区路径不能为空",
-    "workspace_name_empty": "工作区名称不能为空",
-    "get_workspace_indexes_failed": "获取工作区索引列表失败",
-    "invalid_workspace_id": "无效的工作区索引ID",
-    "workspace_index_management": "工作区索引管理",
-    "build_index": "构建索引",
-    "building_index": "正在构建索引...",
-    "index_ready": "索引就绪",
-    "index_error": "索引错误",
-    "delete_index": "删除索引",
-    "refresh_index": "刷新索引",
-    "index_status": "索引状态",
-    "file_count": "文件数量",
-    "index_size": "索引大小",
-    "last_updated": "最后更新",
-    "workspace_path": "工作区路径",
-    "workspace_name": "工作区名称",
-    "no_index_found": "未找到索引",
-    "build_workspace_index": "构建工作区索引",
-    "index_building_started": "索引构建已开始",
-    "index_delete_confirm": "确定要删除此工作区索引吗？",
-    "index_deleted_success": "工作区索引删除成功",
-    "index_refresh_started": "索引刷新已开始",
-    "workspace_no_index_prompt": "当前工作区未建立向量索引",
-    "workspace_no_index_description": "构建索引后可以使用语义搜索功能",
-    "building_workspace_index": "正在构建工作区索引...",
-    "index_build_progress": "索引构建进度",
-    "cancel_build": "取消构建",
-    "index_build_success": "索引构建成功",
-    "index_build_failed": "索引构建失败",
-    "retry_build": "重试构建",
-    "checking_workspace_index": "检查工作区索引状态..."
   }
 }

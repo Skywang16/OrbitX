@@ -185,22 +185,6 @@ pub async fn shell_setup_integration(
 }
 
 #[tauri::command]
-pub async fn shell_get_pane_cwd(
-    pane_id: u32,
-    state: State<'_, Arc<TerminalMux>>,
-) -> TauriApiResult<Option<String>> {
-    let mux = &*state;
-    let pane_id = PaneId::from(pane_id);
-
-    if !mux.pane_exists(pane_id) {
-        return Ok(api_error!("shell.pane_not_exist"));
-    }
-
-    let cwd = mux.shell_get_pane_cwd(pane_id);
-    Ok(api_success!(cwd))
-}
-
-#[tauri::command]
 pub async fn shell_update_pane_cwd(
     pane_id: u32,
     cwd: String,

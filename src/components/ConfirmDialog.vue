@@ -135,7 +135,7 @@
 
   .confirm-actions {
     padding: 16px 20px;
-    border-top: 1px solid var(--border-300);
+    border-top: 1px solid var(--border-200);
     display: flex;
     gap: 8px;
     justify-content: flex-end;

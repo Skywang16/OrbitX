@@ -7,6 +7,7 @@
 
 // API 实例导出
 export { aiApi } from './ai'
+export { ckApi } from './ck'
 export { completionApi } from './completion'
 export { configApi } from './config'
 export { filesystemApi } from './filesystem'
@@ -19,15 +20,14 @@ export { storageApi } from './storage'
 export { terminalApi } from './terminal'
 export { terminalContextApi } from './terminal-context'
 export { windowApi } from './window'
-export { workspaceIndexApi } from './workspace-index'
 
 // 类型导出 - 避免重复，选择性导出
 export type * from './ai/types'
+export type * from './ck/types'
 export type * from './completion/types'
 export type * from './shortcuts/types'
 export type * from './storage/types'
 export type * from './terminal-context/types'
-export type * from './workspace-index/types'
 
 // 从config导出但排除与terminal重复的类型
 export type { AppConfig, ConfigFileInfo } from './config/types'
@@ -37,6 +37,7 @@ export type { ShellInfo, BackgroundCommandResult } from './shell/types'
 export type * from './terminal/types'
 
 // 从 index.ts 导出类型（没有单独 types.ts 文件的模块）
+export type { CkApi, CkSearchParams, CkIndexStatus } from './ck'
 export type { FilesystemApi } from './filesystem'
 export type { LLMApi } from './llm'
 export type { LLMRegistryApi } from './llm-registry'

@@ -1,43 +1,40 @@
 /**
- * Semantic code search tool - Vector-based code snippet search
+ * Semantic code search tool - CK-based code snippet search
  *
- * Provides semantic code search using vector embeddings,
+ * Provides semantic code search using CK (seek) engine,
  * allowing natural language queries to find relevant code fragments.
  */
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '@/eko-core/types'
 import { ValidationError, ToolError } from '../tool-error'
-import { ckApi } from '@/api/workspace-index'
-import type { VectorSearchResult } from '@/api/workspace-index'
+import { ckApi, type CkSearchResult } from '@/api/ck'
 import { terminalContextApi } from '@/api/terminal-context'
-import { windowApi } from '@/api/window'
 
 // ===== Type Definitions =====
 
 interface OrbitSearchParams {
   query: string
   maxResults?: number
-  minScore?: number
-  directoryFilter?: string
-  languageFilter?: string
+  path?: string
+  mode?: 'semantic' | 'hybrid' | 'regex'
 }
 
 export interface OrbitSearchResponse {
-  results: VectorSearchResult[]
+  results: CkSearchResult[]
   totalFound: number
   query: string
   searchTime: number
 }
 
 /**
- * Semantic code search tool
+ * Semantic code search tool using CK engine
  */
 export class OrbitSearchTool extends ModifiableTool {
   constructor() {
     super(
       'orbit_search',
-      `Search for code snippets in the current project using semantic vector search. Describe the functionality you're looking for in natural language. Examples: "user authentication logic", "database connection config", "file upload handling". Returns the most relevant code fragments based on semantic similarity.`,
+      `Search for code snippets in the current project using CK semantic search. Describe the functionality you're looking for in natural language. Examples: "user authentication logic", "database connection config", "file upload handling". Returns the most relevant code fragments based on semantic similarity.`,
       {
         type: 'object',
         properties: {
@@ -49,20 +46,17 @@ export class OrbitSearchTool extends ModifiableTool {
           maxResults: {
             type: 'number',
             description: 'Maximum number of results to return, defaults to 10, range 1-50',
+            minimum: 1,
+            maximum: 50,
           },
-          minScore: {
-            type: 'number',
-            description:
-              'Minimum similarity threshold (0-1), defaults to 0.3. Only results above this score will be returned',
-          },
-          directoryFilter: {
+          path: {
             type: 'string',
-            description:
-              'Limit search to specific directory path. Examples: "src/components", "api". If omitted, searches entire project',
+            description: 'Optional path to search within, defaults to current working directory',
           },
-          languageFilter: {
+          mode: {
             type: 'string',
-            description: 'Limit search to specific programming language. Examples: "typescript", "rust", "python"',
+            enum: ['semantic', 'hybrid', 'regex'],
+            description: 'Search mode: semantic (default), hybrid (combines keywords + semantics), or regex',
           },
         },
         required: ['query'],
@@ -70,253 +64,117 @@ export class OrbitSearchTool extends ModifiableTool {
     )
   }
 
-  protected async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
+  async executeImpl(context: ToolExecutionContext): Promise<ToolResult> {
     const params = context.parameters as unknown as OrbitSearchParams
-    const { query, maxResults = 10, minScore = 0.3, directoryFilter, languageFilter } = params
-
-    // Parameter validation
-    if (!query || query.trim().length < 3) {
-      throw new ValidationError('Query must be at least 3 characters')
-    }
-
-    if (maxResults < 1 || maxResults > 50) {
-      throw new ValidationError('maxResults must be between 1-50')
-    }
-
-    if (minScore < 0 || minScore > 1) {
-      throw new ValidationError('minScore must be between 0-1')
-    }
-
     try {
+      // 参数验证
+      if (!params.query || params.query.trim().length === 0) {
+        throw new ValidationError('Query cannot be empty')
+      }
+
+      if (params.maxResults && (params.maxResults < 1 || params.maxResults > 50)) {
+        throw new ValidationError('maxResults must be between 1 and 50')
+      }
+
+      // 获取搜索路径
+      let searchPath = params.path
+      if (!searchPath) {
+        try {
+          const terminalContext = await terminalContextApi.getActiveTerminalContext()
+          searchPath = terminalContext?.currentWorkingDirectory || '.'
+        } catch (error) {
+          console.warn('无法获取终端上下文，使用当前工作目录')
+          searchPath = '.'
+        }
+      }
+
+      // 执行CK搜索
       const startTime = Date.now()
-
-      // Resolve working directory (prefer active terminal CWD, fallback to app current dir)
-      let cwd = ''
-      try {
-        const ctx = await terminalContextApi.getActiveTerminalContext()
-        cwd = ctx.currentWorkingDirectory || ''
-      } catch (e) {
-        console.warn('orbit-search: no active terminal context', e)
-      }
-      if (!cwd) {
-        try {
-          cwd = await windowApi.getCurrentDirectory({ useCache: true })
-        } catch (e) {
-          console.warn('orbit-search: getCurrentDirectory fallback failed', e)
-        }
-      }
-
-      // Build search params for ck
-      let resolvedDirectory = cwd
-      if (directoryFilter && directoryFilter.trim()) {
-        const dirf = directoryFilter.trim()
-        try {
-          resolvedDirectory = cwd ? await windowApi.joinPaths(cwd, dirf) : dirf
-        } catch {
-          resolvedDirectory = dirf
-        }
-      }
-
-      const ckParams = {
-        query: query.trim(),
-        maxResults,
-        minScore,
-        directory: resolvedDirectory,
-        languageFilter: languageFilter?.trim() || undefined,
-        mode: 'semantic' as const,
-      }
-
-      const searchOptions = {
-        minScore,
-        directoryFilter,
-        languageFilter,
-      }
-
-      // Execute search through ck API
-      const searchResults = await ckApi.search(ckParams)
+      const searchResults = await ckApi.search({
+        query: params.query.trim(),
+        path: searchPath,
+        mode: params.mode || 'semantic',
+        maxResults: params.maxResults || 10,
+      })
 
       const searchTime = Date.now() - startTime
 
-      if (searchResults.length === 0) {
+      // 格式化结果
+      const response: OrbitSearchResponse = {
+        results: searchResults,
+        totalFound: searchResults.length,
+        query: params.query.trim(),
+        searchTime,
+      }
+
+      // 生成用户友好的结果摘要
+      if (response.results.length === 0) {
         return {
           content: [
             {
               type: 'text',
-              text: this.formatNoResultsMessage(query, searchOptions),
+              text: `No code found matching "${params.query}". Try using different keywords or check if the directory is indexed.`,
             },
           ],
         }
       }
 
-      // Format search results
-      const formattedResults = this.formatSearchResults({
-        results: searchResults,
-        totalFound: searchResults.length,
-        query,
-        searchTime,
-      })
+      const summary = this.formatSearchSummary(response)
+      const details = this.formatSearchDetails(response)
 
       return {
         content: [
           {
             type: 'text',
-            text: formattedResults,
+            text: `${summary}\n\n${details}`,
           },
         ],
       }
     } catch (error) {
-      console.error('Code search failed:', error)
+      console.error('Orbit search failed:', error)
 
-      // Handle specific error types
       if (error instanceof ValidationError) {
         throw error
       }
 
-      // Handle backend errors
-      const errorMessage = error instanceof Error ? error.message : String(error)
-
-      if (errorMessage.includes('Vector index service not initialized')) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'Vector index service not initialized. Please configure the vector index and build the code index in settings.',
-            },
-          ],
-        }
+      // 处理CK相关错误
+      if (
+        error instanceof Error &&
+        (error.message?.includes('index not found') || error.message?.includes('no index'))
+      ) {
+        throw new ToolError(
+          'No semantic index found. Please build an index first using the CK index button in the chat interface.',
+          'INDEX_NOT_FOUND'
+        )
       }
 
-      if (errorMessage.includes('index')) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Vector index error: ${errorMessage}. Please check if the code index needs to be built or rebuilt.`,
-            },
-          ],
-        }
+      if (error instanceof Error && error.message?.includes('ck not found')) {
+        throw new ToolError(
+          'CK search engine not found. Please ensure ck-main is properly compiled and available.',
+          'CK_NOT_FOUND'
+        )
       }
 
-      throw new ToolError(`Code search failed: ${errorMessage}`)
+      throw new ToolError(`Search failed: ${error instanceof Error ? error.message : String(error)}`, 'SEARCH_FAILED')
     }
   }
 
-  // Status check is handled through vectorIndexApi.getStatus(), no local methods needed
-
-  /**
-   * Format no results message
-   */
-  private formatNoResultsMessage(
-    query: string,
-    options: { minScore?: number; directoryFilter?: string; languageFilter?: string }
-  ): string {
-    let message = `No code snippets found related to "${query}".\n\n`
-
-    message += 'Suggestions:\n'
-    message += '• Try using more general terms like "config", "auth", "handler"\n'
-    message += '• Lower similarity threshold (minScore), current: ' + options.minScore + '\n'
-    message += '• Check if filters are limiting the search scope\n'
-
-    if (options.directoryFilter) {
-      message += `• Current directory filter: ${options.directoryFilter}\n`
-    }
-
-    if (options.languageFilter) {
-      message += `• Current language filter: ${options.languageFilter}\n`
-    }
-
-    message += '\nIf the issue persists, consider rebuilding the code index.'
-
-    return message
+  private formatSearchSummary(response: OrbitSearchResponse): string {
+    const { totalFound, query, searchTime } = response
+    return `Found ${totalFound} code snippet${totalFound !== 1 ? 's' : ''} matching "${query}" (${searchTime}ms)`
   }
 
-  /**
-   * Format search results
-   */
-  private formatSearchResults(response: OrbitSearchResponse): string {
-    const { results, totalFound, query, searchTime } = response
-
-    let output = `🔍 **Code Search Results** (Query: "${query}")\n\n`
-    output += `Found ${totalFound} relevant code snippets in ${searchTime}ms\n\n`
-
-    // Group results by similarity score
-    const highScoreResults = results.filter(r => r.score >= 0.7)
-    const mediumScoreResults = results.filter(r => r.score >= 0.5 && r.score < 0.7)
-    const lowScoreResults = results.filter(r => r.score < 0.5)
-
-    if (highScoreResults.length > 0) {
-      output += `### 🎯 High Relevance Matches (${highScoreResults.length})\n\n`
-      output += this.formatResultSection(highScoreResults)
-    }
-
-    if (mediumScoreResults.length > 0) {
-      output += `### 📋 Medium Relevance Matches (${mediumScoreResults.length})\n\n`
-      output += this.formatResultSection(mediumScoreResults)
-    }
-
-    if (lowScoreResults.length > 0) {
-      output += `### 📌 Low Relevance Matches (${lowScoreResults.length})\n\n`
-      output += this.formatResultSection(lowScoreResults.slice(0, 3)) // Show only first 3
-    }
-
-    // Add usage tips
-    output += '\n---\n\n'
-    output += '💡 **Usage Tips**:\n'
-    output += '• Use `directoryFilter` parameter to limit search directory\n'
-    output += '• Use `languageFilter` parameter to limit programming language\n'
-    output += '• Use `minScore` parameter to adjust similarity threshold\n'
-
-    return output
-  }
-
-  /**
-   * Format result section
-   */
-  private formatResultSection(results: VectorSearchResult[]): string {
-    return results
+  private formatSearchDetails(response: OrbitSearchResponse): string {
+    return response.results
       .map((result, index) => {
-        const { filePath, content, startLine, endLine, language, chunkType, score } = result
+        const scoreText = result.score ? ` (${(result.score * 100).toFixed(1)}%)` : ''
+        const location = `${result.path}:${result.span.line_start}-${result.span.line_end}`
+        const snippet = result.snippet.length > 200 ? result.snippet.substring(0, 200) + '...' : result.snippet
 
-        // 生成相对路径显示
-        const displayPath = this.getDisplayPath(filePath)
-
-        let section = `**${index + 1}. ${displayPath}** `
-        section += `(${language}, lines ${startLine}-${endLine})\n`
-        section += `Similarity: ${(score * 100).toFixed(1)}% | Type: ${chunkType}\n\n`
-
-        // Format code content
-        const codeBlock = '```' + language + '\n' + content.trim() + '\n```\n\n'
-        section += codeBlock
-
-        return section
+        return `${index + 1}. ${location}${scoreText}\n   ${snippet.replace(/\n/g, '\n   ')}`
       })
-      .join('---\n\n')
-  }
-
-  /**
-   * Generate display path
-   */
-  private getDisplayPath(fullPath: string): string {
-    // Simplify path display, prioritize project-relative paths
-    const pathParts = fullPath.split('/')
-    const projectIndicators = ['src', 'lib', 'components', 'pages', 'api', 'utils']
-
-    let startIndex = -1
-    for (let i = pathParts.length - 1; i >= 0; i--) {
-      if (projectIndicators.includes(pathParts[i])) {
-        startIndex = i
-        break
-      }
-    }
-
-    if (startIndex !== -1) {
-      return pathParts.slice(startIndex).join('/')
-    }
-
-    // If no project indicators found, show last 3 directory levels
-    return pathParts.slice(-3).join('/')
+      .join('\n\n')
   }
 }
 
-// Export tool instance
 export const orbitSearchTool = new OrbitSearchTool()

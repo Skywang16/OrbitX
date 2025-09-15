@@ -112,51 +112,52 @@
     return shells.map(s => ({
       label: s.name,
       value: s.name,
-      onClick: () => handleAddMenuClick(s.name)
+      onClick: () => handleAddMenuClick(s.name),
     }))
   })
 
   // 处理右键菜单
   const handleTabContextMenu = async (event: MouseEvent, tabId: string) => {
     event.preventDefault()
-    
+
     const tab = props.tabs.find(t => t.id === tabId)
     if (!tab) return
 
     const currentIndex = props.tabs.findIndex(tab => tab.id === tabId)
     const hasLeftTabs = currentIndex > 0 && props.tabs.slice(0, currentIndex).some(t => t.closable)
-    const hasRightTabs = currentIndex < props.tabs.length - 1 && props.tabs.slice(currentIndex + 1).some(t => t.closable)
+    const hasRightTabs =
+      currentIndex < props.tabs.length - 1 && props.tabs.slice(currentIndex + 1).some(t => t.closable)
     const hasOtherTabs = props.tabs.filter(t => t.id !== tabId && t.closable).length > 0
 
     const menuItems = []
-    
+
     // 只有可关闭的标签才显示关闭选项
     if (tab.closable) {
       menuItems.push({
         label: '关闭当前',
-        onClick: () => emit('close', tabId)
+        onClick: () => emit('close', tabId),
       })
     }
-    
+
     // 批量关闭选项（只有存在可关闭的标签时才显示）
     if (hasLeftTabs) {
       menuItems.push({
         label: '关闭左侧全部',
-        onClick: () => tabManagerStore.closeLeftTabs(tabId)
+        onClick: () => tabManagerStore.closeLeftTabs(tabId),
       })
     }
-    
+
     if (hasRightTabs) {
       menuItems.push({
-        label: '关闭右侧全部', 
-        onClick: () => tabManagerStore.closeRightTabs(tabId)
+        label: '关闭右侧全部',
+        onClick: () => tabManagerStore.closeRightTabs(tabId),
       })
     }
-    
+
     if (hasOtherTabs) {
       menuItems.push({
         label: '关闭其他',
-        onClick: () => tabManagerStore.closeOtherTabs(tabId)
+        onClick: () => tabManagerStore.closeOtherTabs(tabId),
       })
     }
 
@@ -165,7 +166,7 @@
       menuItems.push({
         label: '无可用操作',
         disabled: true,
-        onClick: () => {}
+        onClick: () => {},
       })
     }
 

@@ -110,18 +110,6 @@ CREATE TABLE IF NOT EXISTS ai_model_usage_stats (
     FOREIGN KEY (model_id) REFERENCES ai_models(id) ON DELETE CASCADE
 );
 
--- 向量工作区索引管理表
-CREATE TABLE IF NOT EXISTS vector_workspaces (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    workspace_path TEXT NOT NULL UNIQUE,
-    name TEXT,
-    status TEXT NOT NULL CHECK (status IN ('building', 'ready', 'error')) DEFAULT 'building',
-    file_count INTEGER DEFAULT 0,
-    index_size_bytes INTEGER DEFAULT 0,
-    error_message TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
 
 -- 迁移记录表
 CREATE TABLE IF NOT EXISTS schema_migrations (

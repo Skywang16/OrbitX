@@ -44,9 +44,34 @@ impl Default for ModelRegistry {
             },
         );
 
+        // Add enhanced models
+        models.insert(
+            "nomic-v1.5".to_string(),
+            ModelConfig {
+                name: "nomic-embed-text-v1.5".to_string(),
+                provider: "fastembed".to_string(),
+                dimensions: 768,
+                max_tokens: 8192,
+                description: "High-quality English embedding model with large context window"
+                    .to_string(),
+            },
+        );
+
+        models.insert(
+            "jina-code".to_string(),
+            ModelConfig {
+                name: "jina-embeddings-v2-base-code".to_string(),
+                provider: "fastembed".to_string(),
+                dimensions: 768,
+                max_tokens: 8192,
+                description: "Code-specific embedding model optimized for programming tasks"
+                    .to_string(),
+            },
+        );
+
         Self {
             models,
-            default_model: "bge-small".to_string(),
+            default_model: "bge-small".to_string(), // Keep BGE as default for backward compatibility
         }
     }
 }

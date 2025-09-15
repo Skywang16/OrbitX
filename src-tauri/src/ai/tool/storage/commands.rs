@@ -7,7 +7,7 @@
 
 use crate::storage::types::SessionState;
 use crate::storage::StorageCoordinator;
-use crate::utils::error::{AppResult, ToTauriResult};
+use crate::utils::error::AppResult;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use anyhow::Context;
@@ -64,10 +64,24 @@ impl StorageCoordinatorState {
 pub async fn storage_get_config(
     section: String,
     state: State<'_, StorageCoordinatorState>,
-) -> Result<Value, String> {
+) -> TauriApiResult<Value> {
     debug!("存储命令: 获取配置节 {}", section);
 
-    state.coordinator.config_get(&section).await.to_tauri()
+    // 参数验证
+    if section.trim().is_empty() {
+        return Ok(api_error!("common.invalid_params"));
+    }
+
+    match state.coordinator.config_get(&section).await {
+        Ok(config) => {
+            debug!("配置节 {} 获取成功", section);
+            Ok(api_success!(config))
+        }
+        Err(e) => {
+            error!("配置节 {} 获取失败: {}", section, e);
+            Ok(api_error!("storage.get_config_failed"))
+        }
+    }
 }
 
 /// 更新配置数据
@@ -76,14 +90,28 @@ pub async fn storage_update_config(
     section: String,
     data: Value,
     state: State<'_, StorageCoordinatorState>,
-) -> Result<(), String> {
+) -> TauriApiResult<EmptyData> {
     debug!("存储命令: 更新配置节 {}", section);
 
-    state
+    // 参数验证
+    if section.trim().is_empty() {
+        return Ok(api_error!("common.invalid_params"));
+    }
+
+    match state
         .coordinator
         .config_update(&section, data)
         .await
-        .to_tauri()
+    {
+        Ok(()) => {
+            debug!("配置节 {} 更新成功", section);
+            Ok(api_success!())
+        }
+        Err(e) => {
+            error!("配置节 {} 更新失败: {}", section, e);
+            Ok(api_error!("storage.update_config_failed"))
+        }
+    }
 }
 
 /// 保存会话状态

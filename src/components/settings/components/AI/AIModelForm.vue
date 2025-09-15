@@ -22,8 +22,7 @@
   const { t } = useI18n()
 
   // 使用后端LLM注册表
-  const { providerOptions, getModelOptions, getChatModelOptions, getEmbeddingModelOptions, loadProviders } =
-    useLLMRegistry()
+  const { providerOptions, getChatModelOptions, loadProviders } = useLLMRegistry()
 
   // 配置模式：preset（预设）或 custom（自定义）——默认自定义，避免误判
   const configMode = ref<'preset' | 'custom'>('custom')
@@ -43,7 +42,7 @@
     apiUrl: '',
     apiKey: '',
     model: '',
-    modelType: (props.defaultModelType || 'chat') as AIModelConfig['modelType'],
+    modelType: 'chat' as AIModelConfig['modelType'],
     options: {
       maxTokens: 4096,
       temperature: 0.7,
@@ -62,12 +61,8 @@
   // 计算属性：当前预设的可用模型
   const availableModels = computed(() => {
     if (isPresetMode.value && selectedPreset.value) {
-      // 根据模型类型过滤
-      if (formData.modelType === 'chat') {
-        return getChatModelOptions(selectedPreset.value)
-      } else if (formData.modelType === 'embedding') {
-        return getEmbeddingModelOptions(selectedPreset.value)
-      }
+      // 只返回聊天模型
+      return getChatModelOptions(selectedPreset.value)
     }
     return []
   })
@@ -88,7 +83,7 @@
       apiUrl: props.model.apiUrl,
       apiKey: props.model.apiKey,
       model: props.model.model,
-      modelType: props.model.modelType || 'chat',
+      modelType: 'chat',
       options: {
         maxTokens: props.model.options?.maxTokens || 4096,
         temperature: props.model.options?.temperature || 0.7,
@@ -144,15 +139,8 @@
       formData.provider = presetValue as AIModelConfig['provider']
       formData.apiUrl = preset.apiUrl
 
-      // 根据模型类型获取模型选项
-      let models
-      if (formData.modelType === 'chat') {
-        models = getChatModelOptions(presetValue)
-      } else if (formData.modelType === 'embedding') {
-        models = getEmbeddingModelOptions(presetValue)
-      } else {
-        models = getModelOptions(presetValue)
-      }
+      // 只获取聊天模型选项
+      const models = getChatModelOptions(presetValue)
 
       if (models.length > 0 && models[0].value !== '') {
         formData.model = models[0].value // 默认选择第一个模型
@@ -170,15 +158,8 @@
   const handleModelChange = (modelValue: string) => {
     if (configMode.value !== 'preset') return
 
-    // 根据模型类型获取模型选项
-    let models
-    if (formData.modelType === 'chat') {
-      models = getChatModelOptions(selectedPreset.value)
-    } else if (formData.modelType === 'embedding') {
-      models = getEmbeddingModelOptions(selectedPreset.value)
-    } else {
-      models = getModelOptions(selectedPreset.value)
-    }
+    // 只获取聊天模型选项
+    const models = getChatModelOptions(selectedPreset.value)
 
     const modelInfo = models.find(m => m.value === modelValue)
     if (modelInfo) {
@@ -237,15 +218,8 @@
         }
         // 若名称为空，使用当前模型的label
         if (!submitData.name.trim()) {
-          // 根据模型类型获取模型选项
-          let models
-          if (formData.modelType === 'chat') {
-            models = getChatModelOptions(selectedPreset.value)
-          } else if (formData.modelType === 'embedding') {
-            models = getEmbeddingModelOptions(selectedPreset.value)
-          } else {
-            models = getModelOptions(selectedPreset.value)
-          }
+          // 只获取聊天模型选项
+          const models = getChatModelOptions(selectedPreset.value)
           const modelInfo = models.find(m => m.value === submitData.model)
           if (modelInfo) submitData.name = modelInfo.label
         }
@@ -316,27 +290,8 @@
     </template>
 
     <form @submit.prevent="handleSubmit" class="ai-form">
-      <!-- 模型类型选择 -->
-      <div class="form-row">
-        <div class="form-group full-width">
-          <label class="form-label">{{ t('ai_model.model_type') }}</label>
-          <x-select
-            v-model="formData.modelType"
-            :options="[
-              { value: 'chat', label: t('ai_model.model_type_chat') },
-              { value: 'embedding', label: t('ai_model.model_type_embedding') },
-            ]"
-            :placeholder="t('ai_model.select_model_type')"
-          />
-          <div class="form-description">
-            {{
-              formData.modelType === 'chat'
-                ? t('ai_model.model_type_chat_description')
-                : t('ai_model.model_type_embedding_description')
-            }}
-          </div>
-        </div>
-      </div>
+      <!-- 模型类型选择 - 隐藏，固定为 chat -->
+      <input type="hidden" v-model="formData.modelType" value="chat" />
 
       <!-- 配置类型选择 -->
       <div class="form-row">

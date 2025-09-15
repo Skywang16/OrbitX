@@ -26,7 +26,7 @@
         <div v-if="showFooter" class="modal-footer">
           <slot name="footer">
             <div class="modal-actions">
-              <XButton
+              <x-button
                 v-if="showCancelButton"
                 variant="secondary"
                 size="small"
@@ -34,8 +34,8 @@
                 :disabled="loading"
               >
                 {{ cancelText || t('dialog.cancel') }}
-              </XButton>
-              <XButton
+              </x-button>
+              <x-button
                 v-if="showConfirmButton"
                 :variant="confirmButtonClass === 'danger' ? 'danger' : 'primary'"
                 size="small"
@@ -44,7 +44,7 @@
                 :disabled="loading"
               >
                 {{ confirmText || t('dialog.confirm') }}
-              </XButton>
+              </x-button>
             </div>
           </slot>
         </div>
@@ -56,7 +56,6 @@
 <script setup lang="ts">
   import { computed, onMounted, onUnmounted, watch, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import XButton from './Button.vue'
 
   interface Props {
     visible?: boolean
@@ -249,7 +248,7 @@
     justify-content: space-between;
     align-items: center;
     padding: var(--spacing-xl) var(--spacing-xl) var(--spacing-lg) var(--spacing-xl);
-    border-bottom: 1px solid var(--border-300);
+    border-bottom: 1px solid var(--border-200);
     flex-shrink: 0;
   }
 
