@@ -40,7 +40,7 @@ from typing import Optional
 class DatabaseConnection:
     def __init__(self, db_path: str):
         self.connection = sqlite3.connect(db_path)
-        
+
     def authenticate_user(self, username: str, password_hash: str) -> Optional[dict]:
         cursor = self.connection.cursor()
         try:
@@ -52,7 +52,7 @@ class DatabaseConnection:
         except Exception as e:
             print(f"Database error: {e}")
             return None
-            
+
     def handle_connection_error(self, error):
         log.error(f"Database connection failed: {error}")
 EOF
@@ -66,18 +66,18 @@ class AuthController {
         try {
             const { username, password } = req.body;
             const user = await this.findUser(username);
-            
+
             if (!user || !bcrypt.compare(password, user.password)) {
                 return res.status(401).json({ error: 'Authentication failed' });
             }
-            
+
             const token = this.generateToken(user);
             res.json({ token });
         } catch (error) {
             this.handleError(error, res);
         }
     }
-    
+
     handleError(error, res) {
         console.error('Login error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -91,7 +91,7 @@ cat > README.md << EOF
 A multi-language authentication system with:
 
 - Rust backend service
-- Python database layer  
+- Python database layer
 - JavaScript API endpoints
 
 ## Error Handling
@@ -204,7 +204,7 @@ ck --hybrid "auth" .
 # Pattern match + semantic relevance
 ck --hybrid "error" --topk 10 .
 
-# Filter hybrid results by RRF score threshold  
+# Filter hybrid results by RRF score threshold
 ck --hybrid "auth" --threshold 0.02 .
 
 # Show scores for hybrid search (RRF scores ~0.01-0.05)
@@ -274,6 +274,7 @@ ck --sem "error handling" . --json | jq -r '.preview'
 ```
 
 This finds:
+
 - Rust: `Err(AuthError::InvalidCredentials)`
 - Python: `except Exception as e:`
 - JavaScript: `catch (error)`
@@ -287,7 +288,7 @@ echo "Searching for 'auth' with different methods:"
 echo "=== Regex (exact text matching) ==="
 ck "auth" .
 
-echo "=== Lexical (BM25 ranking) ==="  
+echo "=== Lexical (BM25 ranking) ==="
 ck --lex "auth" .
 
 echo "=== Semantic (conceptual similarity) ==="
@@ -331,16 +332,17 @@ ck --hybrid "auth.*TODO" . --json | \
 ### File Type Support
 
 ck indexes these file types:
+
 - Code: `.rs`, `.py`, `.js`, `.ts`, `.go`, `.java`, `.c`, `.cpp`, `.rb`, `.php`, `.swift`, `.kt`
-- Docs: `.md`, `.txt`, `.rst`  
+- Docs: `.md`, `.txt`, `.rst`
 - Config: `.json`, `.yaml`, `.toml`, `.xml`
 - Scripts: `.sh`, `.bash`, `.ps1`, `.sql`
 
 ## Tips and Tricks
 
 1. **Start with regex** for exact matching, then explore with semantic search
-2. **Use `--topk`** to limit results when exploring large codebases  
-3. **Use `--threshold`** to filter low-relevance results (semantic/lexical: 0.6-0.8, hybrid RRF: 0.02-0.05)  
+2. **Use `--topk`** to limit results when exploring large codebases
+3. **Use `--threshold`** to filter low-relevance results (semantic/lexical: 0.6-0.8, hybrid RRF: 0.02-0.05)
 4. **Use `--scores`** to see match quality and fine-tune your threshold
 5. **Combine with shell tools**: `ck --json --sem "query" | jq`
 6. **Index smaller directories** for faster semantic search
@@ -354,7 +356,7 @@ ck status .                    # Check if index exists
 ck index . && ck --sem "query" # Create index first
 
 # Index too large?
-ck status . --verbose         # Check size statistics  
+ck status . --verbose         # Check size statistics
 ck clean . --orphans          # Remove orphaned files
 
 # Stale results?

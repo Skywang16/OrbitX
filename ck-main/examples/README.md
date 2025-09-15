@@ -5,11 +5,13 @@ This folder demonstrates practical use cases for `ck` (semantic grep) with real 
 ## Quick Start
 
 1. **Index the examples first** (required for semantic/lexical/hybrid search):
+
    ```bash
    ck --index examples/
    ```
 
 2. **Try the quick demo**:
+
    ```bash
    ./examples/quick_demo.sh
    ```
@@ -19,24 +21,27 @@ This folder demonstrates practical use cases for `ck` (semantic grep) with real 
 ## Demo Files
 
 ### Code Examples (`code/`)
-- **`full_section_demo.py`** - Python code with classes, functions, error handling  
+
+- **`full_section_demo.py`** - Python code with classes, functions, error handling
 - **`web_server.rs`** - Rust web server with authentication, database connections, error handling
 - **`api_client.js`** - JavaScript API client with HTTP requests, retry logic, authentication
 
 ### Text Samples (`text_samples/`)
+
 - **`fixtures/`** - Simple demo text files (demo1.txt to demo10.txt)
 - **`wiki_articles/`** - Wikipedia articles on various topics (AI, science, technology, etc.)
 
 ## Search Mode Examples
 
 ### 1. **Regex Search** (Default - no indexing required)
+
 Classic grep-style pattern matching:
 
 ```bash
 # Basic text search
 ck "error" examples/
 
-# Case-insensitive search  
+# Case-insensitive search
 ck -i "database" examples/
 
 # Whole word matching
@@ -50,6 +55,7 @@ ck -n -C 2 "error" examples/
 ```
 
 ### 2. **Semantic Search** (Finds conceptually similar code)
+
 Understands meaning, not just text matches:
 
 ```bash
@@ -70,6 +76,7 @@ ck --sem --threshold 0.8 "function" examples/
 ```
 
 ### 3. **Lexical Search** (BM25 full-text search with ranking)
+
 Better than regex for phrase matching:
 
 ```bash
@@ -81,6 +88,7 @@ ck --lex "error handling patterns" examples/
 ```
 
 ### 4. **Hybrid Search** (Best of both worlds)
+
 Combines regex precision with semantic understanding:
 
 ```bash
@@ -97,6 +105,7 @@ ck --hybrid "error" --scores examples/
 ## Advanced Features
 
 ### Full Section Mode
+
 Get complete code blocks instead of just matching lines:
 
 ```bash
@@ -108,6 +117,7 @@ ck --hybrid --full-section "database" examples/
 ```
 
 ### JSON Output
+
 Machine-readable results for scripts and tools:
 
 ```bash
@@ -119,6 +129,7 @@ ck --json --sem "database" examples/ | jq '.preview'
 ```
 
 ### Context and Formatting
+
 ```bash
 # Show surrounding lines
 ck -A 3 -B 1 "class" examples/    # 3 after, 1 before
@@ -132,6 +143,7 @@ ck -L "nonexistent" examples/     # List files without matches
 ## Practical Use Cases
 
 ### 1. **Code Review**
+
 ```bash
 # Find potential security issues
 ck --sem "sql injection" examples/
@@ -141,7 +153,8 @@ ck --sem "password storage" examples/
 ck --sem "exception handling" examples/
 ```
 
-### 2. **Code Exploration** 
+### 2. **Code Exploration**
+
 ```bash
 # Understand new codebase
 ck --sem "main entry point" examples/
@@ -152,6 +165,7 @@ ck --sem "data validation" examples/
 ```
 
 ### 3. **Refactoring**
+
 ```bash
 # Find deprecated patterns
 ck --hybrid "old api" examples/
@@ -161,6 +175,7 @@ ck --sem "async operations" examples/
 ```
 
 ### 4. **Documentation**
+
 ```bash
 # Find examples of usage
 ck --sem "example usage" examples/
@@ -172,9 +187,9 @@ ck --sem "rest api" examples/
 ## Performance Tips
 
 - **Index once, search many times**: Use `ck --index` before semantic searches
-- **Use appropriate search modes**: 
+- **Use appropriate search modes**:
   - Regex for exact patterns
-  - Semantic for concept-based searches  
+  - Semantic for concept-based searches
   - Hybrid for comprehensive results
 - **Adjust thresholds**: Lower values = more results, higher = more precise
 - **Use --limit**: Control result count for large codebases
@@ -190,7 +205,7 @@ ck --index examples/
 # Compare different search modes on the same query
 echo "=== Regex ==="
 ck "error" examples/
-echo "=== Semantic ==="  
+echo "=== Semantic ==="
 ck --sem "error" examples/
 echo "=== Hybrid ==="
 ck --hybrid "error" examples/

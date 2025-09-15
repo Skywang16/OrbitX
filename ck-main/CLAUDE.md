@@ -3,7 +3,6 @@
 This file contains project-specific instructions for Claude and other AI agents working on the ck codebase.
 Whenever you actually use ck and it does something unexpected, jot it down in a file could UNEXPECTED.md - supply what you ran, what you expected to happen, what happened instead.
 
-
 ## Release Process
 
 ### Version Tagging Convention
@@ -26,7 +25,7 @@ Always check existing tags first: `git tag --sort=-version:refname`
 **ALWAYS** run these commands in order before any commit:
 
 1. **Linting**: `cargo clippy` - Fix all warnings
-2. **Formatting**: `cargo fmt` - Format all code  
+2. **Formatting**: `cargo fmt` - Format all code
 3. **Testing**: `cargo test` - Ensure all tests pass
 
 ### Version Bump Process
@@ -49,14 +48,17 @@ Always update CHANGELOG.md with new releases. Follow this structure:
 ## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
+
 - **Feature name**: Clear user-facing description
 - **Technical capability**: What it enables
 
-### Fixed  
+### Fixed
+
 - **Bug description**: What was broken and how it's fixed
 - **Performance issue**: Specific improvements made
 
 ### Technical
+
 - **Implementation details**: For maintainers and contributors
 - **Dependencies**: New dependencies added
 ```
@@ -71,7 +73,7 @@ Always update CHANGELOG.md with new releases. Follow this structure:
 ### Common Patterns in this Codebase
 
 - **Error handling**: Use `anyhow::Result` consistently
-- **Async/await**: Tokio runtime for async operations  
+- **Async/await**: Tokio runtime for async operations
 - **Parallel processing**: Rayon for CPU-intensive tasks
 - **File I/O**: Memory-mapped files for large data access
 - **Configuration**: Workspace-level dependency management

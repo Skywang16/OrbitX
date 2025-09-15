@@ -1,5 +1,6 @@
 import type { Terminal } from '@xterm/xterm'
 import { shellIntegrationApi } from '@/api'
+import { terminalApi } from '@/api/terminal'
 import { useTerminalStore } from '@/stores/Terminal'
 
 export interface ShellIntegrationOptions {
@@ -17,6 +18,7 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
 
   let currentCommandId: string | null = null
   let isCommandActive: boolean = false
+  let disposed = false
 
   const handleCommandStart = () => {
     currentCommandId = `cmd_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
@@ -163,6 +165,7 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
 
     try {
       await new Promise(resolve => setTimeout(resolve, 500))
+      if (disposed) return
       await silentShellIntegration()
     } catch (error) {
       console.warn('Retry shell integration failed:', error)
@@ -171,7 +174,12 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
 
   const silentShellIntegration = async () => {
     if (options.backendId != null) {
-      await shellIntegrationApi.setupShellIntegration(options.backendId, true)
+      // 在调用前确认面板仍然存在，避免快速删除后的竞态导致 500 错误
+      try {
+        const exists = await terminalApi.terminalExists(options.backendId)
+        if (!exists || disposed) return
+        await shellIntegrationApi.setupShellIntegration(options.backendId, true)
+      } catch (e) {}
     }
   }
 
@@ -180,9 +188,14 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
     isCommandActive = false
   }
 
+  const dispose = () => {
+    disposed = true
+  }
+
   return {
     processTerminalOutput,
     initShellIntegration,
     resetState,
+    dispose,
   }
 }

@@ -545,6 +545,13 @@
 
     cleanupOutput()
 
+    // 防止组件卸载后仍触发Shell Integration的异步调用
+    try {
+      shellIntegration.dispose()
+    } catch {
+      // ignore
+    }
+
     terminalStore.unregisterResizeCallback(props.terminalId)
 
     if (keyListener) {
