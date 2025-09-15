@@ -54,7 +54,6 @@
   box-sizing: border-box;
 }
 
-/* 确认对话框样式 */
 .confirm-modal {
   --modal-max-width: 400px;
 }
@@ -94,7 +93,6 @@
   font-size: var(--font-size-sm);
 }
 
-/* 焦点样式统一 */
 .x-button:focus-visible,
 .x-search-input:focus-within,
 .x-switch input:focus-visible + .slider,
@@ -103,7 +101,6 @@
   outline-offset: 2px;
 }
 
-/* 禁用状态统一 */
 .x-button:disabled,
 .x-search-input--disabled,
 .x-switch.is-disabled {
@@ -111,7 +108,6 @@
   user-select: none;
 }
 
-/* 动画性能优化 */
 .x-button,
 .x-message,
 .x-modal-container,
@@ -120,7 +116,6 @@
   will-change: auto;
 }
 
-/* 高对比度模式支持 */
 @media (prefers-contrast: high) {
   .x-button,
   .x-message,
@@ -130,7 +125,6 @@
   }
 }
 
-/* 减少动画模式支持 */
 @media (prefers-reduced-motion: reduce) {
   .x-button,
   .x-message,
@@ -143,7 +137,6 @@
   }
 }
 
-/* 触摸设备优化 */
 @media (hover: none) and (pointer: coarse) {
   .x-button {
     min-height: 44px;
@@ -162,7 +155,6 @@
   }
 }
 
-/* 打印样式 */
 @media print {
   .x-message,
   .x-modal {
@@ -176,7 +168,6 @@
   }
 }
 
-/* RTL 支持 */
 [dir='rtl'] .x-search-input .search-icon {
   left: auto;
   right: var(--spacing-sm);
@@ -208,7 +199,6 @@
   transform: translateX(-28px);
 }
 
-/* 无障碍支持 */
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
@@ -217,7 +207,6 @@
   }
 }
 
-/* 强制颜色模式支持 */
 @media (forced-colors: active) {
   .x-button {
     border: 1px solid ButtonText;

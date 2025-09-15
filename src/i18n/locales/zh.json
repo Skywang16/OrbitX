@@ -247,5 +247,12 @@
   "config": {
     "unknown_time": "未知",
     "invalid_time": "无效时间"
+  },
+  "ck": {
+    "index_ready": "CK 语义索引已就绪",
+    "build_index": "构建 CK 语义索引",
+    "index_button_disabled_in_settings": "在设置页面时不可用",
+    "index_button_select_non_home": "请选择非初始目录后再使用",
+    "send_button_disabled_in_settings": "在设置页面时不可用"
   }
 }

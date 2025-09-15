@@ -18,26 +18,24 @@
   border-right: 1px solid var(--border-200);
   overflow-y: auto;
   flex-shrink: 0;
-  /* 隐藏滚动条 */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .settings-sidebar::-webkit-scrollbar {
-  display: none; /* Chrome/Safari/Webkit */
+  display: none;
 }
 
 .settings-main {
   flex: 1;
   overflow-y: auto;
   background: var(--bg-200);
-  /* 隐藏滚动条 */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .settings-main::-webkit-scrollbar {
-  display: none; /* Chrome/Safari/Webkit */
+  display: none;
 }
 
 .settings-panel {
@@ -75,7 +73,6 @@
   transition: all 0.2s ease;
 }
 
-/* 设置卡片容器 */
 .settings-card {
   background: var(--bg-300);
   border-radius: var(--border-radius);
@@ -88,7 +85,6 @@
   background: var(--bg-350, var(--bg-300));
 }
 
-/* 设置卡片内的设置项 */
 .settings-card .settings-item {
   background: transparent;
   border-radius: 0;
@@ -96,7 +92,6 @@
   position: relative;
 }
 
-/* 设置项之间的分割线 */
 .settings-card .settings-item:not(:last-child)::after {
   content: '';
   position: absolute;
@@ -257,8 +252,6 @@
   transition: all 0.2s ease;
 }
 
-/* 响应式设计 */
-/* 中等屏幕优化 */
 @media (max-width: 900px) {
   .settings-sidebar {
     width: 30%;
@@ -395,7 +388,6 @@
     font-size: 11px;
   }
 
-  /* 选择框在小屏幕上的容器样式 */
   .settings-item-control :deep(.x-select) {
     min-width: 100px;
     width: 100%;
@@ -403,7 +395,6 @@
   }
 }
 
-/* 超小屏幕优化 */
 @media (max-width: 320px) {
   .settings-container {
     font-size: 11px;
@@ -491,7 +482,6 @@
   opacity: 0.9;
 }
 
-/* 统一设置页面下拉框容器样式 */
 .settings-item-control :deep(.x-select),
 .settings-item-control :deep(.language-switch) {
   min-width: 120px;

@@ -247,5 +247,12 @@
   "config": {
     "unknown_time": "Unknown",
     "invalid_time": "Invalid time"
+  },
+  "ck": {
+    "index_ready": "CK semantic index is ready",
+    "build_index": "Build CK semantic index",
+    "index_button_disabled_in_settings": "Not available on the Settings page",
+    "index_button_select_non_home": "Please select a non-initial directory first",
+    "send_button_disabled_in_settings": "Not available on the Settings page"
   }
 }

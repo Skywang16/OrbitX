@@ -35,19 +35,20 @@ use tauri::State;
 use tokio::task::JoinHandle;
 use tracing::debug;
 
-// 检查给定路径的索引是否就绪
+// 检查给定路径的索引是否就绪（仅使用新格式判定）
 fn is_index_ready(search_path: &Path) -> bool {
     let ck_dir = search_path.join(".ck");
-    let embeddings = ck_dir.join("embeddings.json");
-    let ann = ck_dir.join("ann_index.bin");
-    let building_lock = ck_dir.join("building.lock");
-    let ready_marker = ck_dir.join("ready.marker");
+    if !ck_dir.exists() {
+        return false;
+    }
 
-    ck_dir.exists()
-        && embeddings.exists()
-        && ann.exists()
-        && ready_marker.exists()
-        && !building_lock.exists()
+    let building_lock = ck_dir.join("building.lock");
+    if building_lock.exists() {
+        return false;
+    }
+
+    let ready_marker = ck_dir.join("ready.marker");
+    ready_marker.exists()
 }
 
 #[derive(Debug, Clone, Deserialize)]

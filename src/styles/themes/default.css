@@ -1,6 +1,4 @@
-/* 全新的颜色层次系统 - 提供默认值，避免闪烁 */
 :root {
-  /* 背景色层次 - 默认深色主题值 */
   --bg-100: #1a1a1a;
   --bg-200: #1e1e1e;
   --bg-300: #252526;
@@ -9,19 +7,16 @@
   --bg-600: #4d4d4d;
   --bg-700: #5a5a5a;
 
-  /* 边框层次 */
   --border-200: rgba(255, 255, 255, 0.08);
   --border-300: rgba(255, 255, 255, 0.12);
   --border-400: rgba(255, 255, 255, 0.16);
 
-  /* 文本层次 */
   --text-100: #ffffff;
   --text-200: #e0e0e0;
   --text-300: #cccccc;
   --text-400: #999999;
   --text-500: #666666;
 
-  /* 状态颜色 */
   --color-primary: #18dcfc;
   --color-primary-hover: #0bbce6;
   --color-primary-alpha: rgba(24, 220, 252, 0.1);
@@ -30,13 +25,11 @@
   --color-error: #f44747;
   --color-info: #75beff;
 
-  /* 交互状态 */
   --color-hover: rgba(255, 255, 255, 0.1);
   --color-active: rgba(255, 255, 255, 0.2);
   --color-focus: #007acc;
   --color-selection: rgba(51, 145, 255, 0.3);
 
-  /* ANSI 颜色 */
   --ansi-black: #000000;
   --ansi-red: #cd3131;
   --ansi-green: #0dbc79;
@@ -46,7 +39,6 @@
   --ansi-cyan: #11a8cd;
   --ansi-white: #e5e5e5;
 
-  /* 明亮 ANSI 颜色 */
   --ansi-bright-black: #666666;
   --ansi-bright-red: #f14c4c;
   --ansi-bright-green: #23d18b;
@@ -56,7 +48,6 @@
   --ansi-bright-cyan: #29b8db;
   --ansi-bright-white: #ffffff;
 
-  /* 语法高亮颜色 */
   --syntax-comment: #6a9955;
   --syntax-keyword: #569cd6;
   --syntax-string: #ce9178;
@@ -66,14 +57,12 @@
   --syntax-type: #4ec9b0;
   --syntax-operator: #d4d4d4;
 
-  /* 阴影 */
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.3);
   --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.3);
 }
 
-/* 浅色主题阴影调整 */
 [data-theme='light'] {
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
