@@ -63,12 +63,10 @@
   const inputRef = ref<HTMLInputElement>()
   const inputValue = ref(props.modelValue)
 
-  // 使用lodash防抖搜索
   const debouncedSearch = debounce((value: string) => {
     emit('search', value)
   }, props.debounce)
 
-  // 监听外部值变化
   watch(
     () => props.modelValue,
     newValue => {
@@ -76,13 +74,11 @@
     }
   )
 
-  // 处理输入
   const handleInput = () => {
     emit('update:modelValue', inputValue.value)
     debouncedSearch(inputValue.value)
   }
 
-  // 处理焦点
   const handleFocus = (event: FocusEvent) => {
     emit('focus', event)
   }
@@ -91,20 +87,17 @@
     emit('blur', event)
   }
 
-  // 处理回车
   const handleEnter = () => {
     debouncedSearch.cancel() // 取消防抖，立即搜索
     emit('search', inputValue.value)
   }
 
-  // 处理ESC
   const handleEscape = () => {
     if (inputValue.value) {
       handleClear()
     }
   }
 
-  // 清除输入
   const handleClear = () => {
     debouncedSearch.cancel() // 取消防抖
     inputValue.value = ''
@@ -114,19 +107,16 @@
     inputRef.value?.focus()
   }
 
-  // 聚焦方法
   const focus = () => {
     inputRef.value?.focus()
   }
 
-  // 暴露方法
   defineExpose({
     focus,
   })
 </script>
 
 <style scoped>
-  /* 搜索输入框样式 - 使用全局主题变量 */
   .search-input {
     position: relative;
     display: flex;
@@ -143,7 +133,6 @@
     border-color: var(--border-400);
   }
 
-  /* 搜索图标 */
   .search-icon {
     position: relative;
     left: var(--spacing-sm);
@@ -160,7 +149,6 @@
     height: 14px;
   }
 
-  /* 输入框 */
   .search-field {
     width: 100%;
     padding: 0 var(--spacing-xl) 0 var(--spacing-md);
@@ -177,7 +165,6 @@
     color: var(--text-400);
   }
 
-  /* 清除按钮 */
   .clear-button {
     position: absolute;
     right: var(--spacing-sm);
@@ -205,7 +192,6 @@
     height: 12px;
   }
 
-  /* 尺寸变体 */
   .search-input--small {
     height: 24px;
   }
@@ -222,7 +208,6 @@
     font-size: var(--font-size-lg);
   }
 
-  /* 禁用状态 */
   .search-input--disabled {
     background-color: var(--bg-500);
     border-color: var(--border-300);
@@ -239,7 +224,6 @@
     pointer-events: none;
   }
 
-  /* 响应式设计 */
   @media (max-width: 768px) {
     .search-input {
       height: 36px;
@@ -250,7 +234,6 @@
     }
   }
 
-  /* 减少动画模式支持 */
   @media (prefers-reduced-motion: reduce) {
     .search-input,
     .clear-button {

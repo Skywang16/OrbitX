@@ -122,7 +122,6 @@
     height: 8px;
   }
 
-  /* 下拉选项样式优化 */
   .session-select :deep(.x-select__option) {
     padding: 0.5em 0.8em;
     min-height: 2.2em;

@@ -1,6 +1,4 @@
 <template>
-  <!-- 内联补全建议 -->
-  <!-- 显示补全文本和快捷键提示，Mac系统显示Cmd+→，其他系统显示Ctrl+→ -->
   <div v-if="showCompletion" class="completion-suggestion" :style="completionStyle">
     <span class="completion-text">{{ completionText }}</span>
     <span class="completion-hint">{{ shortcutHint }}</span>
@@ -32,13 +30,11 @@
 
   const emit = defineEmits<Emits>()
 
-  // 状态
   const completionItems = ref<any[]>([])
   const currentSuggestion = ref('')
   const isLoading = ref(false)
   let currentRequest: AbortController | null = null
 
-  // 计算属性
   const showCompletion = computed(() => {
     return props.input.length > 0 && currentSuggestion.value.length > 0 && completionText.value.length > 0
   })

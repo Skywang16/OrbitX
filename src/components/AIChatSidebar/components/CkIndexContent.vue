@@ -5,6 +5,9 @@
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
+  import { useI18n } from '@/i18n'
+
+  const { t } = useI18n()
 
   interface Props {
     indexStatus: {
@@ -36,23 +39,14 @@
 
   const statusText = computed(() => {
     if (props.indexStatus.hasIndex) {
-      return '索引已就绪'
+      return t('ck.index_ready')
     }
-    return '未建立索引'
+    return t('ck.index_not_ready')
   })
 
-  const statusIcon = computed(() => {
-    if (props.indexStatus.hasIndex) {
-      return '✅'
-    }
-    return '⚪'
-  })
-
-  // 与 TerminalSelectionTag 同源：通过 store 获取当前活动终端的路径信息
   const tabManagerStore = useTabManagerStore()
   const terminalStore = useTerminalStore()
 
-  // 使用活跃终端上下文兜底，保证显示与顶部/标签一致
   const displayPath = ref(props.indexStatus.path)
   const resolvedPath = ref<string>(props.indexStatus.path || '.')
   const homePath = ref<string>('')
@@ -69,34 +63,31 @@
   const refreshDisplayPath = async () => {
     let p = props.indexStatus.path
     if (!p || p === '.') {
-      // 优先从 store 获取与终端标签同源的路径
       const activeTab = tabManagerStore.activeTab
       if (activeTab && activeTab.type === TabType.TERMINAL) {
-        // 先看 tab.path
         if (activeTab.path && activeTab.path !== '~') {
           p = activeTab.path
         } else {
-          // 再看 terminalStore 中对应 terminal 的 cwd（完整路径，用于 canBuild 判断）
           const terminal = terminalStore.terminals.find(t => t.id === activeTab.id)
           if (terminal?.cwd) {
             p = terminal.cwd
           }
         }
       }
-      // 如果 store 没有，则退回 API 获取活跃终端上下文
       if (!p || p === '.') {
         try {
           const ctx = await terminalContextApi.getActiveTerminalContext()
-          const cwd = (ctx as any)?.current_working_directory || (ctx as any)?.currentWorkingDirectory
+          const cwd = ctx?.current_working_directory || ctx?.currentWorkingDirectory
           if (cwd) p = cwd
-        } catch {}
+        } catch (e) {
+          console.error('Failed to get active terminal context', e)
+        }
       }
     }
     resolvedPath.value = p || '.'
     displayPath.value = p && p !== '.' ? simplify(p) : '.'
   }
 
-  // 初始目录（如 '.' 或空）时不允许构建
   const canBuild = computed(() => {
     const pRaw = resolvedPath.value
     if (!pRaw) return false
@@ -119,7 +110,6 @@
 
   onMounted(() => {
     refreshDisplayPath()
-    // 预取用户主目录，用于判断是否是初始目录
     homeDir()
       .then(path => (homePath.value = path))
       .catch(() => {})
@@ -147,10 +137,6 @@
           :title="!canBuild ? '请选择非初始目录后再构建' : '构建索引'"
           @click="handleBuild"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 6v6l4 2" />
-          </svg>
           构建索引
         </x-button>
       </div>
@@ -158,7 +144,6 @@
       <div v-if="indexStatus.hasIndex" class="indexed-section">
         <div class="status-row">
           <div class="status-info">
-            <span class="status-icon">{{ statusIcon }}</span>
             <span class="status-text">{{ statusText }}</span>
           </div>
           <div class="action-buttons">
@@ -219,7 +204,6 @@
     padding: var(--spacing-lg);
   }
 
-  /* 未构建索引时的布局 */
   .workspace-section {
     display: flex;
     flex-direction: column;
@@ -269,7 +253,6 @@
     background: var(--color-primary-dark);
   }
 
-  /* 已构建索引时的布局 */
   .indexed-section {
     display: flex;
     flex-direction: column;
@@ -287,10 +270,6 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
-  }
-
-  .status-icon {
-    font-size: 16px;
   }
 
   .status-text {

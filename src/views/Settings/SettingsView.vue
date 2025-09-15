@@ -14,16 +14,13 @@
   const { t } = useI18n()
   const activeSection = ref<string>('general')
 
-  // 组件引用，用于调用各页面的初始化方法
   const aiSettingsRef = ref()
   const themeSettingsRef = ref()
   const shortcutSettingsRef = ref()
   const generalSettingsRef = ref()
 
-  // 移除这个缓存机制，每次切换都重新初始化
 
   onMounted(async () => {
-    // 初始化当前显示的页面（默认是general）
     await initializeCurrentSection()
   })
 
@@ -31,7 +28,6 @@
     const section = activeSection.value
 
     try {
-      // 等待组件渲染完成
       await nextTick()
 
       switch (section) {
@@ -56,7 +52,6 @@
           }
           break
         case 'language':
-          // 语言设置没有需要初始化的接口
           break
         default:
           break
@@ -68,7 +63,6 @@
 
   const handleNavigationChange = async (section: string) => {
     activeSection.value = section
-    // 当切换页面时，初始化新页面
     await initializeCurrentSection()
   }
 
@@ -76,18 +70,15 @@
     await configApi.openConfigFolder()
   }
 
-  // 创建防抖版本的函数，防止用户快速点击导致重复调用
   const handleOpenConfigFolder = debounce(openConfigFolder, 500)
 </script>
 
 <template>
   <div class="settings-container">
     <div class="settings-content">
-      <!-- 左侧导航 -->
       <div class="settings-sidebar">
         <SettingsNav :activeSection="activeSection" @change="handleNavigationChange" />
 
-        <!-- 底部按钮区域 -->
         <div class="settings-sidebar-footer">
           <x-button variant="primary" size="medium" @click="handleOpenConfigFolder">
             {{ t('settings.general.config_open_folder') }}
@@ -95,7 +86,6 @@
         </div>
       </div>
 
-      <!-- 右侧内容区域 -->
       <div class="settings-main">
         <div class="settings-panel">
           <GeneralSettings v-if="activeSection === 'general'" ref="generalSettingsRef" />
@@ -124,7 +114,6 @@
     border-top: 1px solid var(--border-200);
   }
 
-  /* 响应式设计 */
   @media (max-width: 480px) {
     .settings-sidebar-footer {
       padding: var(--spacing-sm);

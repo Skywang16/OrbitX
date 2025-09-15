@@ -23,9 +23,7 @@
     </div>
 
     <div v-if="isExpanded && step.toolExecution.result" class="tool-result" @click.stop>
-      <!-- 特殊渲染edit_file工具的结果 -->
       <EditResult v-if="isEditResult()" :editData="getEditData(step.toolExecution.result)" />
-      <!-- 普通工具结果 -->
       <div v-else class="tool-result-content">{{ cleanToolResult }}</div>
     </div>
   </div>
@@ -58,12 +56,10 @@
 
   const isExpanded = ref(false)
 
-  // 计算属性：判断是否为可展开的工具（只有edit_file工具可以展开）
   const isExpandable = computed(() => {
     return props.step?.toolExecution?.name === 'edit_file'
   })
 
-  // 工具图标映射
   const toolIcons = {
     read_file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.89 22 5.99 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -119,12 +115,10 @@
     </svg>`,
   }
 
-  // 获取工具图标
   const getToolIcon = (toolName: string) => {
     return toolIcons[toolName as keyof typeof toolIcons] || toolIcons.unknown
   }
 
-  // 获取工具参数显示
   const getToolParam = (toolExecution: ToolExecution) => {
     const { name, params } = toolExecution
 
@@ -152,7 +146,6 @@
     }
   }
 
-  // 格式化路径显示
   const formatPath = (path: string) => {
     if (!path) return ''
     const parts = path.split('/')
@@ -162,7 +155,6 @@
     return path
   }
 
-  // 格式化URL显示
   const formatUrl = (url: string) => {
     if (!url) return ''
     try {
@@ -173,30 +165,25 @@
     }
   }
 
-  // 格式化文本显示
   const formatText = (text: string) => {
     if (!text) return ''
     return text.length > 50 ? text.substring(0, 47) + '...' : text
   }
 
   const toggleExpanded = () => {
-    // 只有可展开的工具才能切换展开状态
     if (isExpandable.value) {
       isExpanded.value = !isExpanded.value
     }
   }
 
-  // 判断是否为edit_file工具的结果
   const isEditResult = (): boolean => {
     return props.step?.toolExecution?.name === 'edit_file'
   }
 
-  // 获取EditData
   const getEditData = (result: unknown): SimpleEditResult => {
     return (result as { content?: { data?: SimpleEditResult }[] })?.content?.[0]?.data || ({} as SimpleEditResult)
   }
 
-  // 清理工具结果中的ANSI序列
   const cleanToolResult = computed(() => {
     const result = props.step?.toolExecution?.result
     if (typeof result === 'string') {
@@ -223,7 +210,6 @@
     transition: background-color 0.2s ease;
   }
 
-  /* 可展开的工具样式 */
   .tool-header.expandable {
     cursor: pointer;
   }
@@ -232,7 +218,6 @@
     background: var(--bg-600);
   }
 
-  /* 不可展开的工具样式 */
   .tool-header.non-expandable {
     cursor: default;
     opacity: 0.8;
@@ -247,7 +232,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    min-width: 0; /* 允许flex子元素收缩 */
+    min-width: 0;
   }
 
   .tool-icon {

@@ -364,7 +364,6 @@
     will-change: background-color;
   }
 
-  /* 只有未选中时才显示hover效果 */
   .ai-option:not(.selected):hover .ai-option-header {
     background: var(--bg-300);
   }
@@ -410,7 +409,6 @@
     overflow-y: auto;
   }
 
-  /* 自定义滚动条样式 */
   .ai-config-dropdown::-webkit-scrollbar {
     width: 6px;
   }
@@ -476,7 +474,6 @@
     margin-top: 4px;
   }
 
-  /* XSelect样式调整，使其与表单输入框保持一致 */
   .form-group :deep(.x-select) {
     width: 100%;
   }
@@ -513,7 +510,6 @@
     color: var(--text-100);
   }
 
-  /* 动画效果优化 */
   .provider-list-enter-active {
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -536,7 +532,6 @@
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* 下拉展开动画优化 */
   .dropdown-enter-active {
     transition:
       max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1) 0.1s,
@@ -569,20 +564,17 @@
     max-height: 350px;
   }
 
-  /* 选中状态的卡片样式调整 */
   .ai-option.expanded {
     border-color: var(--color-primary);
     background: var(--bg-250);
   }
 
-  /* 移动到顶部的动画优化 */
   .ai-option.move-to-top {
     order: -1;
     will-change: transform, order;
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* 为未选中的卡片添加位移动画 */
   .ai-option:not(.move-to-top) {
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }

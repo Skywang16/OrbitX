@@ -222,10 +222,9 @@
     cursor: pointer;
     transition: all 0.2s ease;
     border-radius: var(--border-radius);
-    min-height: 60px; /* 固定最小高度防止抖动 */
+    min-height: 60px;
   }
 
-  /* 在卡片内的快捷键项不显示任何背景变化 */
   .shortcut-item:hover {
     background: transparent;
   }
@@ -235,7 +234,6 @@
     background: transparent;
   }
 
-  /* 编辑状态只显示轻微的背景色变化，不加边框 */
   .shortcut-item--editing {
     background: var(--color-primary-alpha);
     animation: pulse 1.5s infinite;
@@ -247,7 +245,7 @@
     gap: 4px;
     flex-wrap: wrap;
     justify-content: flex-end;
-    min-height: 28px; /* 确保有固定高度 */
+    min-height: 28px;
   }
 
   .shortcut-modifier {
@@ -291,7 +289,7 @@
   .shortcut-not-configured {
     color: var(--text-400);
     font-style: italic;
-    min-height: 28px; /* 与按键相同高度 */
+    min-height: 28px;
     display: flex;
     align-items: center;
   }
@@ -299,7 +297,7 @@
   .shortcut-editing-hint {
     color: var(--color-primary);
     font-style: italic;
-    min-height: 28px; /* 与按键相同高度 */
+    min-height: 28px;
     display: flex;
     align-items: center;
   }
@@ -341,7 +339,6 @@
     }
   }
 
-  /* 响应式设计 */
   @media (max-width: 480px) {
     .shortcut-display {
       gap: 1px;

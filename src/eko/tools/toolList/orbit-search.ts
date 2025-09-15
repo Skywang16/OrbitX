@@ -71,6 +71,9 @@ export class OrbitSearchTool extends ModifiableTool {
       if (!params.query || params.query.trim().length === 0) {
         throw new ValidationError('Query cannot be empty')
       }
+      if (params.query.trim().length < 3) {
+        throw new ValidationError('Query must be at least 3 characters')
+      }
 
       if (params.maxResults && (params.maxResults < 1 || params.maxResults > 50)) {
         throw new ValidationError('maxResults must be between 1 and 50')
@@ -88,12 +91,31 @@ export class OrbitSearchTool extends ModifiableTool {
         }
       }
 
+      // 搜索模式
+      const mode: 'semantic' | 'hybrid' | 'regex' = params.mode || 'semantic'
+
+      // 对需要索引的模式提前检查索引是否就绪，避免依赖错误信息内容
+      if (mode !== 'regex' && searchPath && searchPath !== '.') {
+        try {
+          const status = await ckApi.getIndexStatus({ path: searchPath })
+          if (!status.isReady) {
+            throw new ToolError(
+              'No semantic index found. Please build an index first using the CK index button in the chat interface.',
+              'INDEX_NOT_FOUND'
+            )
+          }
+        } catch (e) {
+          if (e instanceof ToolError) throw e
+          // 如果索引状态检查失败，继续搜索流程，由后端返回更准确的错误
+        }
+      }
+
       // 执行CK搜索
       const startTime = Date.now()
       const searchResults = await ckApi.search({
         query: params.query.trim(),
         path: searchPath,
-        mode: params.mode || 'semantic',
+        mode,
         maxResults: params.maxResults || 10,
       })
 
@@ -137,18 +159,8 @@ export class OrbitSearchTool extends ModifiableTool {
         throw error
       }
 
-      // 处理CK相关错误
-      if (
-        error instanceof Error &&
-        (error.message?.includes('index not found') || error.message?.includes('no index'))
-      ) {
-        throw new ToolError(
-          'No semantic index found. Please build an index first using the CK index button in the chat interface.',
-          'INDEX_NOT_FOUND'
-        )
-      }
-
-      if (error instanceof Error && error.message?.includes('ck not found')) {
+      // 处理CK相关错误（更稳健的处理已通过索引就绪预检查完成；此处保留兜底）
+      if (error instanceof Error && /ck\s+not\s+found/i.test(error.message || '')) {
         throw new ToolError(
           'CK search engine not found. Please ensure ck-main is properly compiled and available.',
           'CK_NOT_FOUND'
@@ -168,8 +180,8 @@ export class OrbitSearchTool extends ModifiableTool {
     return response.results
       .map((result, index) => {
         const scoreText = result.score ? ` (${(result.score * 100).toFixed(1)}%)` : ''
-        const location = `${result.path}:${result.span.line_start}-${result.span.line_end}`
-        const snippet = result.snippet.length > 200 ? result.snippet.substring(0, 200) + '...' : result.snippet
+        const location = `${result.filePath}:${result.startLine}-${result.endLine}`
+        const snippet = result.content.length > 200 ? result.content.substring(0, 200) + '...' : result.content
 
         return `${index + 1}. ${location}${scoreText}\n   ${snippet.replace(/\n/g, '\n   ')}`
       })

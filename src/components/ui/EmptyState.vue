@@ -2,7 +2,6 @@
   <div class="empty-state">
     <div class="orbit-logo">
       <svg width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
-        <!-- 背景光晕 -->
         <defs>
           <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
             <stop offset="0%" style="stop-color: var(--text-200); stop-opacity: 0.15" />
@@ -19,13 +18,10 @@
           </filter>
         </defs>
 
-        <!-- 中心光晕 -->
         <circle cx="80" cy="80" r="35" fill="url(#centerGlow)" opacity="0.8" />
 
-        <!-- 中心星球 -->
         <circle cx="80" cy="80" r="6" fill="var(--text-200)" filter="url(#glow)" />
 
-        <!-- 第一个轨道环 - 45度 -->
         <ellipse
           cx="80"
           cy="80"
@@ -38,7 +34,6 @@
           transform="rotate(45 80 80)"
         />
 
-        <!-- 第二个轨道环 - 水平 -->
         <ellipse
           cx="80"
           cy="80"
@@ -51,7 +46,6 @@
           transform="rotate(0 80 80)"
         />
 
-        <!-- 第三个轨道环 - -45度 -->
         <ellipse
           cx="80"
           cy="80"
@@ -64,7 +58,6 @@
           transform="rotate(-45 80 80)"
         />
 
-        <!-- 行星 -->
         <circle class="planet planet-1" cx="80" cy="80" r="2.5" fill="var(--text-200)" opacity="0.9" />
         <circle class="planet planet-2" cx="80" cy="80" r="2" fill="var(--text-300)" opacity="0.8" />
         <circle class="planet planet-3" cx="80" cy="80" r="1.5" fill="var(--text-400)" opacity="0.7" />
@@ -96,12 +89,10 @@
 
   const { t } = useI18n()
 
-  // 处理新建标签页点击
   const handleNewTabClick = async () => {
     await shortcutActionsService.newTab()
   }
 
-  // 处理切换AI侧边栏点击
   const handleToggleAISidebarClick = () => {
     shortcutActionsService.toggleAISidebar()
   }
@@ -148,7 +139,6 @@
     transform-origin: 80px 80px;
   }
 
-  /* 主行星轨道 */
   .planet-1 {
     --x-amplitude: 35px;
     --y-amplitude: 18px;

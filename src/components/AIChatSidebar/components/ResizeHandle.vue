@@ -74,7 +74,6 @@
     display: none;
   }
 
-  /* 拖拽时的全局覆盖层 */
   .resize-handle--dragging {
     position: fixed !important;
     left: 0 !important;

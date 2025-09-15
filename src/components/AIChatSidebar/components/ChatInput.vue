@@ -151,6 +151,7 @@
 
   const buildProgress = ref(0)
   const isBuilding = ref(false)
+  const progressHasData = ref(false)
   let progressTimer: number | undefined
 
   const showIndexModal = ref(false)
@@ -180,6 +181,7 @@
       clearInterval(progressTimer)
       progressTimer = undefined
     }
+    progressHasData.value = false
     progressTimer = window.setInterval(async () => {
       try {
         const progress = await ckApi.getBuildProgress({ path: targetPath })
@@ -194,7 +196,13 @@
             pct += (chunkDone / progress.totalChunks) * perFile
           }
 
-          buildProgress.value = Math.min(progress.isComplete ? 100 : 99, Math.max(0, pct))
+          const nextPct = Math.min(progress.isComplete ? 100 : 99, Math.max(0, pct))
+          if (!progressHasData.value) {
+            progressHasData.value = true
+            buildProgress.value = nextPct
+          } else {
+            buildProgress.value = Math.max(buildProgress.value, nextPct)
+          }
         }
 
         if (progress.isComplete) {
@@ -211,8 +219,8 @@
         }
       } catch (error) {
         console.warn('获取构建进度失败:', error)
-        if (buildProgress.value < 90) {
-          buildProgress.value += Math.random() * 6 + 2
+        if (progressHasData.value && buildProgress.value < 95) {
+          buildProgress.value = Math.min(95, buildProgress.value + (Math.random() * 3 + 0.5))
         }
       }
     }, 600)
@@ -223,6 +231,8 @@
       const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
       if (!activeTerminal || !activeTerminal.cwd) return
       const targetPath = activeTerminal.cwd
+
+      showIndexModal.value = false
 
       isBuilding.value = true
       buildProgress.value = 0
@@ -303,8 +313,7 @@
           startProgressPolling(targetPath)
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   })
 
   defineExpose({
@@ -312,7 +321,6 @@
     focus: () => inputTextarea.value?.focus(),
     getTagContextInfo,
   })
-
 </script>
 
 <template>

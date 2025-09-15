@@ -250,6 +250,7 @@
   },
   "ck": {
     "index_ready": "CK semantic index is ready",
+    "index_not_ready": "CK semantic index is not ready",
     "build_index": "Build CK semantic index",
     "index_button_disabled_in_settings": "Not available on the Settings page",
     "index_button_select_non_home": "Please select a non-initial directory first",

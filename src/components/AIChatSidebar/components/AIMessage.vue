@@ -16,7 +16,6 @@
   const props = defineProps<Props>()
   const aiChatStore = useAIChatStore()
 
-  // 按时间戳排序确保正确的显示顺序
   const sortedSteps = computed(() => {
     if (!props.message.steps) {
       return []
@@ -25,14 +24,12 @@
     return props.message.steps
   })
 
-  // 格式化持续时间
   const formatDuration = (ms: number) => {
     if (ms < 1000) return `${ms}ms`
     const seconds = (ms / 1000).toFixed(1)
     return `${seconds}s`
   }
 
-  // 渲染markdown
   const renderMarkdown = (content: string) => {
     return marked(content)
   }
@@ -40,27 +37,20 @@
 
 <template>
   <div class="ai-message">
-    <!-- 瀑布式渲染所有步骤 -->
     <template v-if="message.steps && message.steps.length > 0">
-      <!-- 按时间戳排序确保正确的显示顺序 -->
       <template v-for="(step, index) in sortedSteps" :key="`${step.timestamp}-${index}`">
-        <!-- 思考块：可折叠，带计时器 -->
         <ThinkingBlock v-if="step.type === 'thinking'" :step="step" class="step-block" />
 
-        <!-- 工具调用块 -->
         <ToolBlock v-else-if="step.type === 'tool_use'" :step="step" class="step-block" />
 
-        <!-- AI文本回复 -->
         <div v-else-if="step.type === 'text'" class="ai-message-text step-block">
           <div v-html="renderMarkdown(step.content)"></div>
         </div>
 
-        <!-- 任务思考内容 -->
         <div v-else-if="step.type === 'task_thought'" class="ai-message-text step-block">
           <div v-html="renderMarkdown(step.content)"></div>
         </div>
 
-        <!-- 错误信息 -->
         <div v-else-if="step.type === 'error'" class="error-output step-block">
           <div class="error-header">
             <span class="error-icon">❌</span>
@@ -69,7 +59,6 @@
           <div class="error-content">{{ step.content }}</div>
         </div>
 
-        <!-- 未知类型的步骤 -->
         <div v-else class="unknown-step step-block">
           <div class="unknown-header">
             <span class="unknown-icon">❓</span>
@@ -80,7 +69,6 @@
       </template>
     </template>
 
-    <!-- 消息时间和状态 -->
     <div class="ai-message-footer">
       <div class="ai-message-time">{{ formatTime(message.createdAt) }}</div>
 
@@ -119,7 +107,6 @@
     word-break: break-word;
   }
 
-  /* Markdown样式 */
   .ai-message-text :deep(h1),
   .ai-message-text :deep(h2),
   .ai-message-text :deep(h3) {
@@ -162,7 +149,6 @@
     font-weight: 600;
   }
 
-  /* 步骤块通用样式 */
   .step-block {
     margin-bottom: var(--spacing-sm);
   }
@@ -171,7 +157,6 @@
     margin-bottom: 0;
   }
 
-  /* 错误块 */
   .error-block {
     padding: var(--spacing-sm);
     border: 1px solid var(--color-error);
@@ -182,7 +167,6 @@
     font-size: var(--font-size-sm);
   }
 
-  /* 错误消息样式 */
   .error-message {
     padding: var(--spacing-sm);
     border-radius: var(--border-radius);
@@ -219,7 +203,6 @@
     opacity: 0.8;
   }
 
-  /* 消息底部信息 */
   .ai-message-footer {
     display: flex;
     align-items: center;
@@ -266,7 +249,6 @@
     }
   }
 
-  /* 错误输出样式 */
   .error-output {
     border: 1px solid var(--color-error);
     border-radius: var(--border-radius);
@@ -300,7 +282,6 @@
     color: var(--color-error);
   }
 
-  /* 工作流输出样式 */
   .workflow-output {
     border: 1px solid var(--color-primary);
     border-radius: var(--border-radius);
@@ -333,7 +314,6 @@
     color: var(--text-300);
   }
 
-  /* 未知步骤样式 */
   .unknown-step {
     border: 1px solid var(--border-200);
     border-radius: var(--border-radius);

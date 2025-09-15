@@ -142,7 +142,6 @@
     border-radius: var(--x-button-border-radius);
     color: var(--text-300);
     cursor: pointer;
-    /* 移除过渡效果，让hover更即时 */
     user-select: none;
     touch-action: manipulation;
     outline: none;
@@ -159,7 +158,6 @@
     bottom: 0;
     background: rgba(255, 255, 255, 0.1);
     opacity: 0;
-    /* 移除过渡效果 */
     pointer-events: none;
   }
 

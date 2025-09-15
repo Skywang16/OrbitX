@@ -70,12 +70,15 @@ export class CkApi {
    * 执行CK代码搜索
    */
   async search(params: CkSearchParams): Promise<CkSearchResult[]> {
-    return await invoke('ck_search', {
-      query: params.query,
-      path: params.path, // 字段名已更正
-      mode: params.mode || 'semantic',
-      maxResults: params.maxResults || 10,
+    const results = await invoke<CkSearchResult[]>('ck_search', {
+      params: {
+        query: params.query,
+        path: params.path,
+        mode: params.mode || 'semantic',
+        maxResults: params.maxResults || 10,
+      },
     })
+    return results
   }
 }
 

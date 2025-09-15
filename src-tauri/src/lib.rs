@@ -1,23 +1,3 @@
-/*
- * Copyright (C) 2025 OrbitX Contributors
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
- */
-
-//! OrbitX 终端应用后端
-//!
-//! 这是一个基于 Tauri 框架的终端应用后端实现，提供跨平台的终端功能。
 //! 主要功能包括：
 //! - 多终端会话管理
 //! - 终端输入输出处理

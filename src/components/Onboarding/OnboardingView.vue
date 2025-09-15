@@ -1,10 +1,8 @@
 <template>
   <div class="onboarding-container">
-    <!-- 拖动区域 -->
     <div class="drag-area" data-tauri-drag-region @mousedown="startDrag"></div>
 
     <div class="onboarding-content">
-      <!-- 进度指示器 -->
       <div class="progress-indicator">
         <div
           v-for="(step, index) in steps"
@@ -16,14 +14,12 @@
         />
       </div>
 
-      <!-- 步骤内容 -->
       <div class="step-content">
         <Transition :name="transitionName" mode="out-in">
           <component :is="currentStepComponent" :key="currentStep" ref="currentStepRef" @next="handleNext" />
         </Transition>
       </div>
 
-      <!-- 导航按钮 -->
       <div class="navigation-buttons">
         <x-button v-if="currentStep > 0" variant="secondary" size="medium" @click="handlePrevious">
           {{ t('onboarding.navigation.previous') }}
@@ -31,7 +27,6 @@
 
         <div class="button-spacer" />
 
-        <!-- AI步骤时显示跳过按钮 -->
         <x-button v-if="isAIStep" variant="secondary" size="medium" @click="handleSkip">
           {{ t('onboarding.navigation.skip_temporarily') }}
         </x-button>
@@ -59,55 +54,46 @@
 
   const { t } = useI18n()
 
-  // 定义 AI 步骤组件接口
   interface AIStepComponent {
     handleSaveConfig: () => Promise<boolean>
     handleSkip: () => void
   }
 
-  // 定义步骤
   const steps = ['language', 'ai', 'theme'] as const
   const currentStep = ref(0)
   const transitionName = ref('slide-right')
   const currentStepRef = ref()
 
-  // 步骤组件映射
   const stepComponents = {
     language: LanguageStep,
     ai: AIStep,
     theme: ThemeStep,
   }
 
-  // 当前步骤组件
   const currentStepComponent = computed(() => {
     return stepComponents[steps[currentStep.value]]
   })
 
-  // 是否是AI步骤
   const isAIStep = computed(() => {
     return steps[currentStep.value] === 'ai'
   })
 
-  // 发出事件
   const emit = defineEmits<{
     complete: []
   }>()
 
-  // 开始拖拽窗口
   const startDrag = async () => {
     await getCurrentWindow().startDragging()
   }
 
-  // 处理下一步
   const handleNext = async () => {
-    // 如果是AI步骤，需要特殊处理
     if (steps[currentStep.value] === 'ai') {
       const aiStepRef = currentStepRef.value as AIStepComponent
 
       if (aiStepRef && typeof aiStepRef.handleSaveConfig === 'function') {
         const success = await aiStepRef.handleSaveConfig()
         if (!success) {
-          return // 如果保存失败，不继续
+          return
         }
       }
     }
@@ -116,12 +102,10 @@
       transitionName.value = 'slide-right'
       currentStep.value++
     } else {
-      // 完成引导
       emit('complete')
     }
   }
 
-  // 处理跳过
   const handleSkip = () => {
     if (steps[currentStep.value] === 'ai') {
       const aiStepRef = currentStepRef.value as AIStepComponent
@@ -129,7 +113,6 @@
         aiStepRef.handleSkip()
       }
 
-      // 继续到下一步或完成
       if (currentStep.value < steps.length - 1) {
         transitionName.value = 'slide-right'
         currentStep.value++
@@ -139,7 +122,6 @@
     }
   }
 
-  // 处理上一步
   const handlePrevious = () => {
     if (currentStep.value > 0) {
       transitionName.value = 'slide-left'
@@ -147,7 +129,6 @@
     }
   }
 
-  // 获取下一步按钮文本
   const getNextButtonText = () => {
     const currentStepName = steps[currentStep.value]
     switch (currentStepName) {
@@ -158,7 +139,6 @@
     }
   }
 
-  // 获取完成按钮文本
   const getFinishButtonText = () => {
     return t('onboarding.navigation.finish')
   }
@@ -178,7 +158,6 @@
     justify-content: center;
   }
 
-  /* 拖动区域 */
   .drag-area {
     position: fixed;
     top: 0;
@@ -200,7 +179,6 @@
     margin: 0 auto;
   }
 
-  /* 进度指示器 */
   .progress-indicator {
     display: flex;
     justify-content: center;
@@ -230,7 +208,6 @@
     transform: scale(1.1);
   }
 
-  /* 移除过于激进的脉冲动画，使用更微妙的效果 */
   .progress-dot.active::after {
     content: '';
     position: absolute;
@@ -256,7 +233,6 @@
     }
   }
 
-  /* 步骤内容 */
   .step-content {
     flex: 1;
     display: flex;
@@ -268,7 +244,6 @@
     padding: 8vh 0 2vh 0;
   }
 
-  /* 导航按钮 */
   .navigation-buttons {
     display: flex;
     align-items: center;
@@ -282,7 +257,6 @@
     flex: 1;
   }
 
-  /* 过渡动画 */
   .slide-right-enter-active,
   .slide-right-leave-active,
   .slide-left-enter-active,
@@ -310,7 +284,6 @@
     opacity: 0;
   }
 
-  /* 响应式设计 */
   @media (max-width: 768px) {
     .onboarding-content {
       width: 95%;

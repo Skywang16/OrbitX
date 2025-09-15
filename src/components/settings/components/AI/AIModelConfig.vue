@@ -19,7 +19,6 @@
   const loading = computed(() => aiSettingsStore.isLoading)
 
   onMounted(async () => {
-    // 强制刷新模型列表
     await aiSettingsStore.loadModels()
   })
 
@@ -63,7 +62,6 @@
   <div class="settings-group">
     <h3 class="settings-group-title">{{ t('settings.ai.model_config') }}</h3>
 
-    <!-- 添加模型 -->
     <SettingsCard>
       <div class="settings-item">
         <div class="settings-item-header">
@@ -78,13 +76,11 @@
       </div>
     </SettingsCard>
 
-    <!-- 加载状态 -->
     <div v-if="loading" class="settings-loading">
       <div class="settings-loading-spinner"></div>
       <span>{{ t('ai_model.loading') }}</span>
     </div>
 
-    <!-- 空状态 -->
     <SettingsCard v-else-if="models.length === 0">
       <div class="settings-item">
         <div class="settings-item-header">
@@ -94,7 +90,6 @@
       </div>
     </SettingsCard>
 
-    <!-- 模型列表 -->
     <div v-else>
       <div class="model-section">
         <h4 class="settings-group-title">{{ t('ai_model.all_models') }}</h4>
@@ -257,7 +252,6 @@
     padding: 12px 16px;
   }
 
-  /* 移除模型卡片的 hover 效果，因为它们在设置卡片内 */
   .model-card:hover {
     background: var(--bg-500);
   }

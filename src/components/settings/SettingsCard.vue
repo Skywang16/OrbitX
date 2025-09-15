@@ -9,5 +9,4 @@
 </script>
 
 <style scoped>
-  /* 样式已在全局 settings.css 中定义 */
 </style>

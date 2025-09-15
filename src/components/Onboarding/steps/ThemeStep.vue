@@ -157,7 +157,6 @@
     position: relative;
   }
 
-  /* 只给未选中的项目添加hover效果 */
   .theme-option:not(.selected):hover {
     border-color: var(--color-primary);
     background: var(--bg-300);
@@ -178,7 +177,6 @@
     position: relative;
   }
 
-  /* 深色主题预览 */
   .theme-dark {
     background: #1a1a1a;
     color: #e5e5e5;
@@ -197,7 +195,6 @@
     background: #00ff88;
   }
 
-  /* 浅色主题预览 */
   .theme-light {
     background: #ffffff;
     color: #1a1a1a;
@@ -216,7 +213,6 @@
     background: #007acc;
   }
 
-  /* 系统主题预览（垂直分割） */
   .theme-system {
     background: linear-gradient(90deg, #1a1a1a 50%, #ffffff 50%);
     position: relative;
@@ -343,7 +339,6 @@
     padding: 16px 32px;
   }
 
-  /* 响应式设计 */
   @media (max-width: 480px) {
     .step-title {
       font-size: 28px;

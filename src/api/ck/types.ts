@@ -3,16 +3,13 @@
  */
 
 export interface CkSearchResult {
-  path: string
-  span: {
-    byte_start: number
-    byte_end: number
-    line_start: number
-    line_end: number
-  }
+  filePath: string
+  content: string
+  startLine: number
+  endLine: number
   language: string
-  snippet: string
-  score?: number
+  chunkType: string
+  score: number
 }
 
 export interface CkBuildProgress {

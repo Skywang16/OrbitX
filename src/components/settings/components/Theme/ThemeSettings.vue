@@ -328,7 +328,6 @@
     gap: var(--settings-spacing-compact);
   }
 
-  /* 响应式设计 */
   @media (max-width: 480px) {
     .settings-item input[type='range'] {
       width: 100%;

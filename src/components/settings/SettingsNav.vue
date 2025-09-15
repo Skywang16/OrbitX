@@ -237,7 +237,6 @@
     letter-spacing: 0.5px;
   }
 
-  /* 响应式设计 */
   @media (max-width: 480px) {
     .settings-navigation {
       width: 100%;
