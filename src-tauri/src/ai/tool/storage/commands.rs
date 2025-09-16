@@ -27,7 +27,6 @@ impl StorageCoordinatorState {
         use std::env;
         use tracing::debug;
 
-        // 获取应用数据目录
         let app_dir = if let Ok(dir) = env::var("OrbitX_DATA_DIR") {
             debug!("使用环境变量指定的数据目录: {}", dir);
             std::path::PathBuf::from(dir)
@@ -67,7 +66,6 @@ pub async fn storage_get_config(
 ) -> TauriApiResult<Value> {
     debug!("存储命令: 获取配置节 {}", section);
 
-    // 参数验证
     if section.trim().is_empty() {
         return Ok(api_error!("common.invalid_params"));
     }
@@ -93,7 +91,6 @@ pub async fn storage_update_config(
 ) -> TauriApiResult<EmptyData> {
     debug!("存储命令: 更新配置节 {}", section);
 
-    // 参数验证
     if section.trim().is_empty() {
         return Ok(api_error!("common.invalid_params"));
     }

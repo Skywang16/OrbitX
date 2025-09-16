@@ -68,9 +68,7 @@ impl CommandInfo {
 /// 面板Shell状态
 #[derive(Debug, Clone)]
 pub struct PaneShellState {
-    /// Shell Integration状态
     pub integration_state: ShellIntegrationState,
-    /// Shell类型
     pub shell_type: Option<ShellType>,
     /// 当前工作目录
     pub current_working_directory: Option<String>,
@@ -154,7 +152,7 @@ pub trait ContextServiceIntegration: Send + Sync {
     fn send_shell_integration_changed_event(&self, pane_id: PaneId, enabled: bool);
 }
 
-/// Shell Integration管理器 - 支持完整的Shell集成功能
+/// Shell 集成管理器
 pub struct ShellIntegrationManager {
     /// 面板状态映射
     pane_states: Arc<Mutex<HashMap<PaneId, PaneShellState>>>,
@@ -288,7 +286,6 @@ impl ShellIntegrationManager {
             match marker {
                 IntegrationMarker::PromptStart => {
                     // A: 提示符开始 - 准备接收新命令
-                    // 如果有未完成的命令，先结束它
                     if state.current_command.is_some() {
                         state.finish_command(None);
                     }
@@ -455,7 +452,6 @@ impl ShellIntegrationManager {
             let old_shell_type = state.shell_type.clone();
             state.shell_type = Some(shell_type.clone());
 
-            // 如果Shell类型发生变化，通知上下文服务
             if old_shell_type.as_ref() != Some(&shell_type) {
                 drop(states); // 释放锁
                 self.notify_context_service_cache_invalidation(pane_id);
@@ -483,7 +479,6 @@ impl ShellIntegrationManager {
             state.integration_state = ShellIntegrationState::Enabled;
         }
 
-        // 如果状态发生变化，通知上下文服务
         if !was_enabled {
             self.notify_context_service_integration_changed(pane_id, true);
         }
@@ -498,7 +493,6 @@ impl ShellIntegrationManager {
             state.integration_state = ShellIntegrationState::Disabled;
         }
 
-        // 如果状态发生变化，通知上下文服务
         if was_enabled {
             self.notify_context_service_integration_changed(pane_id, false);
         }
@@ -761,7 +755,6 @@ mod tests {
         let snapshot = manager.get_pane_state_snapshot(pane_id);
         assert!(snapshot.is_none()); // 初始状态应该为空
 
-        // 设置一些状态
         manager.set_pane_shell_type(pane_id, ShellType::Bash);
         manager.update_current_working_directory(pane_id, "/test/path".to_string());
 
@@ -808,7 +801,6 @@ mod tests {
         let manager = ShellIntegrationManager::new().unwrap();
         let pane_id = PaneId::new(1);
 
-        // 设置一些状态
         manager.set_pane_shell_type(pane_id, ShellType::Bash);
         manager.update_current_working_directory(pane_id, "/test/path".to_string());
 

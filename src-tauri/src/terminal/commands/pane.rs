@@ -1,12 +1,3 @@
-/*!
- * 终端面板管理命令
- *
- * 提供活跃终端面板的管理功能，包括：
- * - 设置活跃面板
- * - 获取活跃面板
- * - 清除活跃面板
- * - 检查面板活跃状态
- */
 
 use super::TerminalContextState;
 use crate::mux::PaneId;
@@ -16,17 +7,6 @@ use tauri::State;
 use tracing::{debug, error, warn};
 
 /// 设置活跃终端面板
-///
-/// 将指定的面板ID设置为当前活跃的终端。这会更新后端的活跃终端注册表，
-/// 并触发相应的事件通知前端。
-///
-/// # Arguments
-/// * `pane_id` - 要设置为活跃的面板ID
-/// * `state` - 终端上下文状态
-///
-/// # Returns
-/// * `Ok(())` - 设置成功
-/// * `Err(String)` - 设置失败的错误信息
 #[tauri::command]
 pub async fn terminal_context_set_active_pane(
     pane_id: u32,
@@ -34,7 +14,6 @@ pub async fn terminal_context_set_active_pane(
 ) -> TauriApiResult<EmptyData> {
     debug!("设置活跃终端面板: pane_id={}", pane_id);
 
-    // 参数验证
     if pane_id == 0 {
         warn!("面板ID不能为0");
         return Ok(api_error!("common.invalid_id"));
@@ -42,7 +21,6 @@ pub async fn terminal_context_set_active_pane(
 
     let pane_id = PaneId::new(pane_id);
 
-    // 调用注册表设置活跃终端
     match state.registry.terminal_context_set_active_pane(pane_id) {
         Ok(()) => {
             debug!("成功设置活跃终端面板: pane_id={:?}", pane_id);
@@ -56,16 +34,6 @@ pub async fn terminal_context_set_active_pane(
 }
 
 /// 获取当前活跃终端面板ID
-///
-/// 返回当前活跃的终端面板ID。如果没有活跃的终端，返回None。
-///
-/// # Arguments
-/// * `state` - 终端上下文状态
-///
-/// # Returns
-/// * `Ok(Some(u32))` - 当前活跃的面板ID
-/// * `Ok(None)` - 没有活跃的终端
-/// * `Err(String)` - 获取失败的错误信息
 #[tauri::command]
 pub async fn terminal_context_get_active_pane(
     state: State<'_, TerminalContextState>,
@@ -80,16 +48,6 @@ pub async fn terminal_context_get_active_pane(
 }
 
 /// 清除当前活跃终端
-///
-/// 清除当前设置的活跃终端，使系统回到没有活跃终端的状态。
-/// 这通常在所有终端都关闭时调用。
-///
-/// # Arguments
-/// * `state` - 终端上下文状态
-///
-/// # Returns
-/// * `Ok(())` - 清除成功
-/// * `Err(String)` - 清除失败的错误信息
 #[tauri::command]
 pub async fn terminal_context_clear_active_pane(
     state: State<'_, TerminalContextState>,
@@ -109,16 +67,6 @@ pub async fn terminal_context_clear_active_pane(
 }
 
 /// 检查指定面板是否为活跃终端
-///
-/// 检查给定的面板ID是否是当前活跃的终端。
-///
-/// # Arguments
-/// * `pane_id` - 要检查的面板ID
-/// * `state` - 终端上下文状态
-///
-/// # Returns
-/// * `Ok(bool)` - true表示是活跃终端，false表示不是
-/// * `Err(String)` - 检查失败的错误信息
 #[tauri::command]
 pub async fn terminal_context_is_pane_active(
     pane_id: u32,
@@ -126,7 +74,6 @@ pub async fn terminal_context_is_pane_active(
 ) -> TauriApiResult<bool> {
     debug!("检查面板是否为活跃终端: pane_id={}", pane_id);
 
-    // 参数验证
     if pane_id == 0 {
         warn!("面板ID不能为0");
         return Ok(api_error!("common.invalid_id"));
@@ -152,33 +99,26 @@ mod tests {
         let state = create_test_state();
         let pane_id = 123u32;
 
-        // 初始状态应该没有活跃终端
         let result = state.registry.terminal_context_get_active_pane();
         assert_eq!(result, None);
 
-        // 设置活跃终端
         let result = state.registry.terminal_context_set_active_pane(PaneId::new(pane_id));
         assert!(result.is_ok());
 
-        // 验证活跃终端已设置
         let result = state.registry.terminal_context_get_active_pane();
         assert_eq!(result, Some(PaneId::new(pane_id)));
     }
 
     #[tokio::test]
     async fn test_invalid_pane_id_validation() {
-        // 测试参数验证逻辑
-        assert!(PaneId::new(0).as_u32() == 0); // 验证0是有效的PaneId值
+        assert!(PaneId::new(0).as_u32() == 0);
 
-        // 实际的验证逻辑在命令函数中，这里测试基础功能
         let state = create_test_state();
         let valid_pane_id = PaneId::new(123);
 
-        // 测试设置有效的面板ID
         let result = state.registry.terminal_context_set_active_pane(valid_pane_id);
         assert!(result.is_ok());
 
-        // 测试检查面板活跃状态
         let is_active = state.registry.terminal_context_is_pane_active(valid_pane_id);
         assert!(is_active);
     }
@@ -188,16 +128,13 @@ mod tests {
         let state = create_test_state();
         let pane_id = PaneId::new(123);
 
-        // 初始状态下面板不应该是活跃的
         let is_active = state.registry.terminal_context_is_pane_active(pane_id);
         assert!(!is_active);
 
-        // 设置活跃终端后应该返回true
         state.registry.terminal_context_set_active_pane(pane_id).unwrap();
         let is_active = state.registry.terminal_context_is_pane_active(pane_id);
         assert!(is_active);
 
-        // 其他面板应该不是活跃的
         let other_pane = PaneId::new(456);
         let is_active = state.registry.terminal_context_is_pane_active(other_pane);
         assert!(!is_active);
@@ -208,15 +145,12 @@ mod tests {
         let state = create_test_state();
         let pane_id = PaneId::new(123);
 
-        // 设置活跃终端
         state.registry.terminal_context_set_active_pane(pane_id).unwrap();
         assert_eq!(state.registry.terminal_context_get_active_pane(), Some(pane_id));
 
-        // 清除活跃终端
         let result = state.registry.terminal_context_clear_active_pane();
         assert!(result.is_ok());
 
-        // 验证活跃终端已清除
         assert_eq!(state.registry.terminal_context_get_active_pane(), None);
     }
 }

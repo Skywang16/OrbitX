@@ -126,7 +126,6 @@ impl SqlScriptLoader {
                 continue;
             }
 
-            // 处理多行注释
             if trimmed.starts_with("/*") {
                 in_multiline_comment = true;
                 continue;
@@ -158,7 +157,6 @@ impl SqlScriptLoader {
             }
             current_statement.push_str(trimmed);
 
-            // 如果在触发器块中，仅当遇到 END; 才结束一个完整语句
             if in_trigger_block {
                 let upper = trimmed.to_uppercase();
                 if upper.ends_with("END;") || upper == "END;" {
@@ -191,7 +189,6 @@ impl SqlScriptLoader {
             }
         }
 
-        // 处理最后一个语句（如果没有分号结尾）
         let final_statement = current_statement.trim();
         if !final_statement.is_empty() {
             statements.push(final_statement.to_string());
@@ -264,7 +261,6 @@ mod tests {
         let sql_dir = temp_dir.path().join("sql");
         fs::create_dir_all(&sql_dir).await.unwrap();
 
-        // 创建测试SQL文件
         create_test_sql_file(
             &sql_dir,
             "01_tables.sql",

@@ -1,10 +1,4 @@
-//! Git命令增强补全提供者
-//!
-//! 为git命令提供智能补全，包括：
-//! - 分支名称补全
-//! - 远程仓库补全
-//! - 标签补全
-//! - 文件状态补全
+//! Git命令补全提供者
 
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
@@ -34,7 +28,6 @@ impl GitCompletionProvider {
         let path_str = working_directory.to_string_lossy().to_string();
         let cache_key = format!("git_repo:{}", path_str);
 
-        // 检查缓存
         if let Some(cached_result) = self.cache.get(&cache_key).await {
             if let Some(is_repo) = cached_result.as_bool() {
                 return Ok(is_repo);
@@ -231,7 +224,6 @@ impl CompletionProvider for GitCompletionProvider {
     }
 
     fn should_provide(&self, context: &CompletionContext) -> bool {
-        // 检查是否是git命令
         context.input.trim_start().starts_with("git ")
     }
 
@@ -239,7 +231,6 @@ impl CompletionProvider for GitCompletionProvider {
         &self,
         context: &CompletionContext,
     ) -> AppResult<Vec<CompletionItem>> {
-        // 检查是否在git仓库中
         if !self.is_git_repository(&context.working_directory).await? {
             return Ok(vec![]);
         }
@@ -250,7 +241,6 @@ impl CompletionProvider for GitCompletionProvider {
             None => return Ok(vec![]),
         };
 
-        // 如果没有子命令，提供子命令补全
         if subcommand.is_empty() {
             return Ok(self.get_subcommand_completions(&context.current_word));
         }

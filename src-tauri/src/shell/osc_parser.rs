@@ -210,7 +210,6 @@ impl OscParser {
             if url.scheme() == "file" {
                 let path = url.path().to_string();
 
-                // 处理Windows路径格式
                 #[cfg(windows)]
                 {
                     if path.starts_with('/') && path.len() > 3 && path.chars().nth(2) == Some(':') {
@@ -222,7 +221,6 @@ impl OscParser {
             }
         }
 
-        // 处理直接路径格式
         if !data.is_empty() {
             let path = if data.starts_with("file://") {
                 let without_scheme = data.strip_prefix("file://").unwrap_or(data);

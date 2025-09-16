@@ -1,15 +1,8 @@
-/*!
- * 窗口状态管理相关命令
- *
- * 负责窗口状态的批量管理、置顶状态控制等功能
- */
 
 use super::*;
 use crate::utils::{ApiResponse, TauriApiResult};
 use crate::api_error;
 
-/// 批量窗口状态管理命令
-///
 #[tauri::command]
 pub async fn window_manage_state<R: Runtime>(
     request: WindowStateBatchRequest,
@@ -25,7 +18,6 @@ pub async fn window_manage_state<R: Runtime>(
     let mut results = Vec::new();
     let mut overall_success = true;
 
-    // 获取默认窗口ID
     let window_id = state
         .with_config_manager(|config| Ok(config.get_default_window_id().to_string()))
         .await
@@ -33,7 +25,6 @@ pub async fn window_manage_state<R: Runtime>(
 
     debug!("使用窗口ID: {}", window_id);
 
-    // 获取窗口实例
     let window = match app.get_webview_window(&window_id) {
         Some(window) => window,
         None => {
@@ -42,7 +33,6 @@ pub async fn window_manage_state<R: Runtime>(
         }
     };
 
-    // 逐个处理操作
     for operation_request in request.operations {
         let operation_result =
             process_single_window_operation(&operation_request, &window, &state).await;
@@ -76,7 +66,7 @@ pub async fn window_manage_state<R: Runtime>(
     }))
 }
 
-/// 处理单个窗口操作
+// 处理单个窗口操作
 async fn process_single_window_operation<R: Runtime>(
     request: &WindowStateOperationRequest,
     window: &tauri::WebviewWindow<R>,
@@ -124,19 +114,16 @@ async fn process_single_window_operation<R: Runtime>(
     }
 }
 
-// ===== 窗口操作处理函数 =====
 
-/// 处理获取窗口状态操作
+// 处理获取窗口状态操作
 async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::Value, String> {
     debug!("处理获取窗口状态操作");
 
-    // 获取当前窗口状态
     let always_on_top = state
         .with_state_manager(|manager| Ok(manager.get_always_on_top()))
         .await
         .to_tauri()?;
 
-    // 获取目录信息
     let current_directory = if let Some(cached_dir) = state.cache.get("current_dir").await {
         cached_dir.as_str().unwrap_or("/").to_string()
     } else {
@@ -153,7 +140,6 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
             .unwrap_or_else(|_| "/".to_string())
     };
 
-    // 获取平台信息
     let platform_info = state
         .with_config_manager(|config| Ok(config.window_get_platform_info().cloned()))
         .await
@@ -165,7 +151,6 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
             is_mac: cfg!(target_os = "macos"),
         });
 
-    // 构建完整状态
     let complete_state = CompleteWindowState {
         always_on_top,
         current_directory,
@@ -180,7 +165,7 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
     serialize_to_value(&complete_state, "窗口状态")
 }
 
-/// 处理设置置顶状态操作
+// 处理设置置顶状态操作
 async fn handle_set_always_on_top<R: Runtime>(
     request: &WindowStateOperationRequest,
     window: &tauri::WebviewWindow<R>,
@@ -197,13 +182,11 @@ async fn handle_set_always_on_top<R: Runtime>(
         None => return Err("window.missing_always_on_top_param".to_string()),
     };
 
-    // 设置窗口置顶
     window
         .set_always_on_top(always_on_top)
         .context("设置窗口置顶失败")
         .to_tauri()?;
 
-    // 更新状态管理器
     state
         .with_state_manager_mut(|manager| {
             manager.set_always_on_top(always_on_top);
@@ -215,20 +198,18 @@ async fn handle_set_always_on_top<R: Runtime>(
     serialize_to_value(&always_on_top, "置顶状态")
 }
 
-/// 处理切换置顶状态操作
+// 处理切换置顶状态操作
 async fn handle_toggle_always_on_top<R: Runtime>(
     window: &tauri::WebviewWindow<R>,
     state: &State<'_, WindowState>,
 ) -> Result<serde_json::Value, String> {
     debug!("处理切换置顶状态操作");
 
-    // 切换状态管理器中的状态
     let new_state = state
         .with_state_manager_mut(|manager| Ok(manager.toggle_always_on_top()))
         .await
         .to_tauri()?;
 
-    // 设置窗口置顶
     window
         .set_always_on_top(new_state)
         .context("设置窗口置顶失败")
@@ -237,14 +218,13 @@ async fn handle_toggle_always_on_top<R: Runtime>(
     serialize_to_value(&new_state, "切换状态")
 }
 
-/// 处理重置窗口状态操作
+// 处理重置窗口状态操作
 async fn handle_reset_state<R: Runtime>(
     window: &tauri::WebviewWindow<R>,
     state: &State<'_, WindowState>,
 ) -> Result<serde_json::Value, String> {
     debug!("处理重置窗口状态操作");
 
-    // 重置状态管理器
     state
         .with_state_manager_mut(|manager| {
             manager.reset();
@@ -253,13 +233,11 @@ async fn handle_reset_state<R: Runtime>(
         .await
         .to_tauri()?;
 
-    // 重置窗口置顶状态
     window
         .set_always_on_top(false)
         .context("重置窗口置顶失败")
         .to_tauri()?;
 
-    // 清除目录缓存
     let _ = state.cache.remove("current_dir").await;
     let _ = state.cache.remove("home_dir").await;
 

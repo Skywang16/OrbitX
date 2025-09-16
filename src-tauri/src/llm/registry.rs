@@ -99,7 +99,6 @@ impl LLMRegistry {
 
     /// 初始化默认供应商
     fn initialize_default_providers(&mut self) {
-        // OpenAI
         self.providers.insert(
             LLMProviderType::OpenAI,
             ProviderInfo {
@@ -259,7 +258,6 @@ impl LLMRegistry {
             },
         );
 
-        // Anthropic
         self.providers.insert(
             LLMProviderType::Anthropic,
             ProviderInfo {
@@ -318,7 +316,7 @@ impl LLMRegistry {
             },
         );
 
-        // Google Gemini
+        // Gemini
         self.providers.insert(
             LLMProviderType::Gemini,
             ProviderInfo {
@@ -374,7 +372,6 @@ impl LLMRegistry {
             },
         );
 
-        // Qwen
         self.providers.insert(
             LLMProviderType::Qwen,
             ProviderInfo {
@@ -543,11 +540,11 @@ mod tests {
     fn test_model_capabilities() {
         let registry = LLMRegistry::new();
 
-        // Test o3-mini model (reasoning model)
+        // 测试o3-mini模型（推理模型）
         assert!(registry.model_supports_feature("o3-mini", "reasoning"));
         assert!(!registry.model_supports_feature("o3-mini", "tools"));
 
-        // Test GPT-4o (current model)
+        // 测试GPT-4o模型
         assert!(registry.model_supports_feature("gpt-4o", "tools"));
         assert!(registry.model_supports_feature("gpt-4o", "vision"));
         assert!(!registry.model_supports_feature("gpt-4o", "reasoning"));

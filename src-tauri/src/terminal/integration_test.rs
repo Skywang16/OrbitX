@@ -17,13 +17,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_event_integration_flow() {
-        // 创建终端上下文注册表
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
 
         // 订阅事件
         let mut event_receiver = registry.subscribe_events();
 
-        // 设置活跃面板
         let pane_id = PaneId::new(1);
         registry.terminal_context_set_active_pane(pane_id).unwrap();
 
@@ -47,14 +45,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_service_event_integration() {
-        // 创建终端上下文服务
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
         let _context_service = TerminalContextService::default();
 
         // 订阅事件
         let mut event_receiver = registry.subscribe_events();
 
-        // 设置活跃面板
         let pane_id = PaneId::new(1);
         registry.terminal_context_set_active_pane(pane_id).unwrap();
 
@@ -75,14 +71,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_event_subscribers() {
-        // 创建终端上下文注册表
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
 
-        // 创建多个订阅者
         let mut receiver1 = registry.subscribe_events();
         let mut receiver2 = registry.subscribe_events();
 
-        // 设置活跃面板
         let pane_id = PaneId::new(1);
         registry.terminal_context_set_active_pane(pane_id).unwrap();
 
@@ -139,7 +132,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_event_deduplication() {
-        // 创建终端上下文注册表
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
 
         // 订阅事件
@@ -147,7 +139,6 @@ mod tests {
 
         let pane_id = PaneId::new(1);
 
-        // 设置相同的活跃面板两次
         registry.terminal_context_set_active_pane(pane_id).unwrap();
         registry.terminal_context_set_active_pane(pane_id).unwrap();
 

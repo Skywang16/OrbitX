@@ -10,42 +10,40 @@ use std::sync::{Arc, Mutex};
 use tiktoken_rs::{cl100k_base, CoreBPE};
 use tracing::{debug, warn};
 
-// ============= 配置层 =============
 
-/// 简化的上下文管理配置
+/// 上下文管理配置
 #[derive(Debug, Clone)]
 pub struct ContextConfig {
     /// 最大token数量
     pub max_tokens: usize,
     /// 压缩触发阈值(0.0-1.0)
     pub compress_threshold: f32,
-    /// 最大消息数量（类似eko-core的maxMessages）
+    /// 最大消息数量
     pub max_messages: usize,
-    /// 保护最近消息数量（类似eko-core的保护策略）
+    /// 保护最近消息数量
     pub protect_recent_count: usize,
 }
 
 impl Default for ContextConfig {
     fn default() -> Self {
         Self {
-            max_tokens: 120000,       // 适当的token上限
-            compress_threshold: 0.70, // 70%触发压缩
-            max_messages: 20,         // 最大消息数量
-            protect_recent_count: 5,  // 保护最近5条消息不被删除
+            max_tokens: 120000,
+            compress_threshold: 0.70,
+            max_messages: 20,
+            protect_recent_count: 5,
         }
     }
 }
 
-// ============= 简化的缓存层 =============
 
-/// 简单的缓存项
+/// 缓存项
 #[derive(Debug, Clone)]
 pub struct CacheEntry {
     pub content: String,
     pub created_at: DateTime<Utc>,
 }
 
-/// 简化的缓存管理器
+/// 缓存管理器
 pub struct SimpleCache {
     cache: Arc<Mutex<HashMap<String, CacheEntry>>>,
 }
@@ -57,13 +55,13 @@ impl SimpleCache {
         }
     }
 
-    /// 简单的缓存获取
+    /// 缓存获取
     pub fn get(&self, key: &str) -> Option<String> {
         let cache = self.cache.lock().ok()?;
         cache.get(key).map(|entry| entry.content.clone())
     }
 
-    /// 简单的缓存设置
+    /// 缓存设置
     pub fn set(&self, key: String, content: String) {
         if let Ok(mut cache) = self.cache.lock() {
             cache.insert(
@@ -82,21 +80,19 @@ impl SimpleCache {
             let now = Utc::now();
             cache.retain(|_, entry| {
                 now.signed_duration_since(entry.created_at).num_seconds() < 3600
-                // 1小时过期
             });
         }
     }
 }
 
-/// 简化的缓存统计
+/// 缓存统计
 #[derive(Debug, Clone)]
 pub struct CacheStats {
     pub total_entries: usize,
 }
 
-// ============= 管理层 =============
 
-/// 简化的上下文管理器
+/// 上下文管理器
 pub struct ContextManager {
     config: ContextConfig,
     cache: SimpleCache,
@@ -113,7 +109,7 @@ impl ContextManager {
         }
     }
 
-    /// 构建智能上下文 - 主要API
+    /// 构建智能上下文
     pub async fn build_context(
         &self,
         repos: &RepositoryManager,
@@ -139,7 +135,7 @@ impl ContextManager {
         let token_count = self.estimate_tokens(&raw_msgs);
         let original_count = raw_msgs.len();
 
-        // 2. 先进行消息数量管理（类似eko-core的策略）
+        // 进行消息数量管理
         let mut processed_msgs = if raw_msgs.len() > self.config.max_messages {
             debug!(
                 "消息数量超限: {}/{}, 进行数量压缩",
@@ -164,9 +160,9 @@ impl ContextManager {
                 processed_msgs.len()
             );
 
-            // 使用更保守的压缩策略
+            // 使用保守的压缩策略
             let keep_count = (processed_msgs.len() as f32 * 0.6) // 保留60%
-                .max(self.config.protect_recent_count as f32) // 至少保护最近几条
+                .max(self.config.protect_recent_count as f32)
                 .min(processed_msgs.len() as f32) as usize;
 
             let compress_from = processed_msgs.len().saturating_sub(keep_count);
@@ -209,7 +205,7 @@ impl ContextManager {
         })
     }
 
-    /// 构建简化的prompt
+    /// 构建prompt
     pub async fn build_prompt(
         &self,
         repos: &RepositoryManager,
@@ -314,7 +310,6 @@ impl ContextManager {
     fn add_tag_context_to_prompt(&self, parts: &mut Vec<String>, tag_context: &serde_json::Value) {
         let mut env_parts = Vec::new();
 
-        // 处理终端标签页信息（仅保留Shell信息，移除工作目录）
         if let Some(terminal_tab_info) = tag_context.get("terminalTabInfo") {
             if let Some(shell) = terminal_tab_info.get("shell").and_then(|v| v.as_str()) {
                 debug!("🐚 添加终端环境: Shell={}", shell);
@@ -327,7 +322,6 @@ impl ContextManager {
             parts.push(format!("【当前环境】\n{}\n", env_parts.join("\n")));
         }
 
-        // 处理选中内容信息
         if let Some(selection_info) = tag_context.get("terminalSelectionInfo") {
             if let Some(selected_text) = selection_info.get("selectedText").and_then(|v| v.as_str())
             {
@@ -350,7 +344,7 @@ impl ContextManager {
         }
     }
 
-    /// 管理消息数量（类似eko-core的消息数量限制）
+    /// 管理消息数量
     async fn manage_message_count(&self, messages: Vec<Message>) -> AppResult<Vec<Message>> {
         if messages.len() <= self.config.max_messages {
             return Ok(messages);
@@ -359,7 +353,7 @@ impl ContextManager {
         // 计算需要删除的消息数量
         let excess = messages.len() - self.config.max_messages;
 
-        // 保护最近的消息，删除最早的消息（类似eko-core的滑动窗口）
+        // 保护最近的消息，删除最早的消息
         let keep_from = excess;
 
         debug!(
@@ -370,7 +364,6 @@ impl ContextManager {
         Ok(messages[keep_from..].to_vec())
     }
 
-    // ============= 私有方法 =============
 
     /// 简化的压缩函数
     async fn compress_with_summary(
@@ -407,7 +400,6 @@ impl ContextManager {
         // 生成简单的摘要
         let summary = self.generate_simple_summary(to_compress);
 
-        // 创建摘要消息
         let summary_msg = Message {
             id: None,
             conversation_id: conv_id,
@@ -473,7 +465,6 @@ impl ContextManager {
 
         if token_count > 1500 {
             // 提高token限制，允许更详细的摘要
-            // 如果摘要太长，进行截断
             let max_chars = (summary.chars().count() * 1500) / token_count;
             if max_chars < summary.chars().count() {
                 summary = summary.chars().take(max_chars).collect();
@@ -547,7 +538,6 @@ impl ContextManager {
             .or_else(|| safe_content.rfind('\n'))
             .or_else(|| safe_content.rfind(' '))
             .unwrap_or_else(|| {
-                // 如果找不到合适的截断点，就截断到max_len-3个字符
                 std::cmp::max(3, max_len.saturating_sub(3))
             });
 
@@ -577,7 +567,6 @@ impl ContextManager {
             .get_messages(conv_id, None, None)
             .await?;
 
-        // 如果指定了up_to_message_id，只获取该消息之前的历史（不包含该消息本身）
         let filtered_msgs = if let Some(up_to_id) = up_to_msg_id {
             all.into_iter()
                 .filter(|m| {
@@ -646,7 +635,6 @@ impl ContextManager {
             if let Ok(steps_value) = serde_json::from_str(steps_json) {
                 let tool_summary = self.extract_tool_summary(&steps_value);
 
-                // 如果有工具调用信息，即使内容是 "Thinking..." 也要保留
                 if tool_summary != "Completed" && !tool_summary.is_empty() {
                     // AbortError特殊处理: 只保留工具信息，不显示中断文本
                     if msg.content.contains("AbortError") {
@@ -1069,7 +1057,6 @@ impl ContextManager {
                     .unwrap_or("")
                     .to_string();
 
-                // 检查是否应该忽略
                 if self.should_ignore_file(&file_name, &path, ignore_patterns) {
                     continue;
                 }
@@ -1189,7 +1176,6 @@ impl ContextManager {
     }
 }
 
-// ============= 结果类型 =============
 
 /// 上下文构建结果
 #[derive(Debug)]
@@ -1210,7 +1196,6 @@ impl ContextResult {
     }
 }
 
-// ============= 工厂方法 =============
 
 /// 创建默认上下文管理器
 pub fn create_context_manager() -> ContextManager {

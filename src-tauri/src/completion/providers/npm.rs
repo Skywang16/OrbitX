@@ -1,10 +1,4 @@
-//! NPM命令增强补全提供者
-//!
-//! 为npm/yarn/pnpm命令提供智能补全，包括：
-//! - 包名称补全（从npm registry）
-//! - 脚本补全（从package.json）
-//! - 版本补全
-//! - 配置选项补全
+//! NPM命令补全提供者
 
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
@@ -246,7 +240,6 @@ impl NpmCompletionProvider {
             return Ok(vec![]);
         }
 
-        // 检查缓存
         let cache_key = format!("npm_search:{}", query);
         if let Some(cached_result) = self.cache.get(&cache_key).await {
             if let Ok(items) = serde_json::from_value::<Vec<CompletionItem>>(cached_result) {
@@ -320,7 +313,6 @@ impl CompletionProvider for NpmCompletionProvider {
             None => return Ok(vec![]),
         };
 
-        // 如果没有子命令，提供子命令补全
         if subcommand.is_empty() {
             return Ok(self.get_subcommand_completions(&context.current_word));
         }
@@ -341,7 +333,6 @@ impl CompletionProvider for NpmCompletionProvider {
                     .get_installed_packages(&context.working_directory, &context.current_word)
                     .await?;
 
-                // 如果查询长度足够，添加搜索结果
                 if context.current_word.len() >= 3 {
                     let search_results = self
                         .get_package_search_completions(&context.current_word)

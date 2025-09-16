@@ -38,6 +38,9 @@
   import { FitAddon } from '@xterm/addon-fit'
   import { WebLinksAddon } from '@xterm/addon-web-links'
   import { SearchAddon } from '@xterm/addon-search'
+  import { WebglAddon } from '@xterm/addon-webgl'
+  import { LigaturesAddon } from '@xterm/addon-ligatures'
+  import { Unicode11Addon } from '@xterm/addon-unicode11'
   import { Terminal } from '@xterm/xterm'
 
   import type { Theme } from '@/types'
@@ -48,11 +51,11 @@
   import { useTerminalSearch } from '@/composables/useTerminalSearch'
   import { useShellIntegration } from '@/composables/useShellIntegration'
   import { useTerminalOutput } from '@/composables/useTerminalOutput'
-  import { useTerminalEvents } from '@/composables/useTerminalEvents'
   import { TERMINAL_CONFIG } from '@/constants/terminal'
   import { useTerminalStore } from '@/stores/Terminal'
   import { createMessage } from '@/ui'
   import { convertThemeToXTerm, createDefaultXTermTheme } from '@/utils/themeConverter'
+  import { terminalChannelApi } from '@/api/terminal/channel'
 
   import type { ITheme } from '@xterm/xterm'
   import TerminalCompletion from './TerminalCompletion.vue'
@@ -94,6 +97,7 @@
 
   let hasDisposed = false
   let keyListener: { dispose: () => void } | null = null
+  let channelSub: { unsubscribe: () => Promise<void> } | null = null
 
   // === 性能优化 ===
   const timers = {
@@ -141,6 +145,32 @@
         theme: xtermTheme,
       })
 
+      // 处理 Unicode 宽字符与合字宽度问题（例如中文、emoji、Nerd Font 图标）
+      try {
+        const unicode11 = new Unicode11Addon()
+        terminal.value.loadAddon(unicode11)
+        terminal.value.unicode.activeVersion = '11'
+      } catch (e) {
+        console.warn('Unicode11 addon failed to load.', e)
+      }
+
+      // 尝试启用 WebGL 渲染器以减少闪烁并提升性能，若不支持则自动回退
+      try {
+        const webglAddon = new WebglAddon()
+        terminal.value.loadAddon(webglAddon)
+        console.warn('WebGL renderer enabled for xterm.js')
+      } catch (e) {
+        console.warn('WebGL addon failed to load, falling back to default renderer.', e)
+      }
+
+      // 启用连字支持，提升编程连字与特殊字符的显示效果
+      try {
+        const ligaturesAddon = new LigaturesAddon()
+        terminal.value.loadAddon(ligaturesAddon)
+      } catch (e) {
+        console.warn('Ligatures addon failed to load.', e)
+      }
+
       fitAddon.value = new FitAddon() // 创建自适应大小插件实例
       terminal.value.loadAddon(fitAddon.value) // 自适应大小插件
 
@@ -155,6 +185,16 @@
         })
       ) // 链接点击插件
       terminal.value.open(terminalRef.value)
+
+      // 加载插件与 open 之后，重新应用主题并强制刷新以确保 WebGL 下颜色正确
+      try {
+        terminal.value.options.theme = xtermTheme
+        if (terminal.value.rows > 0) {
+          terminal.value.refresh(0, terminal.value.rows - 1)
+        }
+      } catch {
+        // ignore
+      }
 
       terminal.value.onResize(({ rows, cols }) => emit('resize', rows, cols)) // 大小变化
 
@@ -484,16 +524,10 @@
     handleTerminalOutput(terminal.value, data, shellIntegration.processTerminalOutput)
   }
 
-  useTerminalEvents(props.terminalId, {
-    onOutput: handleOutput,
-    onExit: (exitCode: number | null) => handleExit(terminal.value, exitCode),
-  })
-
   // === Lifecycle ===
   onMounted(() => {
     nextTick(async () => {
       await initPlatformInfo()
-
       await initXterm()
 
       const tmeta = terminalStore.terminals.find(t => t.id === props.terminalId)
@@ -508,8 +542,6 @@
         }
       }
 
-      terminalStore.registerResizeCallback(props.terminalId, resizeTerminal)
-
       if (terminalRef.value) {
         terminalRef.value.addEventListener('accept-completion', handleAcceptCompletionShortcut)
         terminalRef.value.addEventListener('clear-terminal', handleClearTerminal)
@@ -522,6 +554,19 @@
       )
 
       await shellIntegration.initShellIntegration(terminal.value)
+
+      // Subscribe to terminal output via Tauri Channel (binary streaming)
+      if (props.backendId != null) {
+        try {
+          channelSub = terminalChannelApi.subscribe(props.backendId, text => {
+            handleOutput(text)
+            // 同时分发给已注册的回调（如 ShellTool）
+            terminalStore.dispatchOutputForBackendId(props.backendId, text)
+          })
+        } catch (e) {
+          console.warn('Failed to subscribe terminal channel:', e)
+        }
+      }
     })
   })
 
@@ -553,6 +598,16 @@
     }
 
     terminalStore.unregisterResizeCallback(props.terminalId)
+
+    // 取消 Tauri Channel 订阅，避免后端通道残留
+    if (channelSub) {
+      channelSub
+        .unsubscribe()
+        .catch(() => {})
+        .finally(() => {
+          channelSub = null
+        })
+    }
 
     if (keyListener) {
       try {
@@ -588,11 +643,37 @@
       if (isActive) {
         nextTick(() => {
           focusTerminal()
-          resizeTerminal() // resize会触发必要的重绘，不需要额外的refresh
+          resizeTerminal()
         })
       }
     },
     { immediate: true }
+  )
+
+  // Re-subscribe when backendId changes
+  watch(
+    () => props.backendId,
+    newId => {
+      // cleanup previous
+      if (channelSub) {
+        channelSub
+          .unsubscribe()
+          .catch(() => {})
+          .finally(() => {
+            channelSub = null
+          })
+      }
+      // subscribe new
+      if (newId != null) {
+        try {
+          channelSub = terminalChannelApi.subscribe(newId, text => {
+            handleOutput(text)
+          })
+        } catch (e) {
+          console.warn('Failed to subscribe terminal channel:', e)
+        }
+      }
+    }
   )
 
   // === Expose ===

@@ -1,8 +1,3 @@
-/*!
- * 数据库管理器模块
- *
- * 提供SQLite数据库的核心管理功能，包括连接池、初始化、加密等
- */
 
 use crate::storage::paths::StoragePaths;
 use crate::storage::sql_scripts::SqlScriptLoader;
@@ -26,18 +21,12 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-/// 数据库管理器选项
 #[derive(Debug, Clone)]
 pub struct DatabaseOptions {
-    /// 是否启用加密
     pub encryption: bool,
-    /// 连接池大小
     pub pool_size: u32,
-    /// 连接超时时间（秒）
     pub connection_timeout: u64,
-    /// 查询超时时间（秒）
     pub query_timeout: u64,
-    /// 是否启用WAL模式
     pub wal_mode: bool,
 }
 
@@ -179,7 +168,6 @@ impl DatabaseManager {
             .busy_timeout(Duration::from_secs(options.connection_timeout))
             .disable_statement_logging();
 
-        // 创建连接池
         let db_pool = SqlitePoolOptions::new()
             .max_connections(options.pool_size)
             .acquire_timeout(Duration::from_secs(options.connection_timeout))
@@ -187,7 +175,6 @@ impl DatabaseManager {
             .await
             .with_context(|| format!("数据库连接失败: {}", db_path.display()))?;
 
-        // 初始化SQL脚本加载器
         let sql_dir = if cfg!(debug_assertions) {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sql")
         } else {
@@ -222,7 +209,6 @@ impl DatabaseManager {
     pub async fn initialize(&self) -> AppResult<()> {
         info!("初始化SQLite数据库");
 
-        // 设置默认主密钥
         self.set_default_master_key().await?;
 
         // 执行SQL脚本

@@ -1,6 +1,4 @@
-/*!
- * 核心数据类型定义
- */
+//! 核心数据类型定义
 
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
@@ -288,7 +286,6 @@ impl ShellManager {
                     .as_secs(),
             );
         } else {
-            // 如果缓存为空，触发检测
             drop(cache_guard);
             let _ = Self::get_cached_shells();
             self.update_stats();
@@ -307,7 +304,6 @@ impl ShellManager {
         let cache = Self::get_cache();
         let mut cache_guard = cache.lock().unwrap();
 
-        // 检查缓存是否存在且未过期
         let config = ConfigManager::config_get();
         if let Some(entry) = cache_guard.as_mut() {
             if !entry.is_expired(config.shell_cache_ttl()) {
@@ -337,7 +333,6 @@ impl ShellManager {
         let cache = Self::get_cache();
         let mut cache_guard = cache.lock().unwrap();
 
-        // 检查缓存是否存在且未过期
         let config = ConfigManager::config_get();
         if let Some(entry) = cache_guard.as_mut() {
             if !entry.is_expired(config.shell_cache_ttl()) {
@@ -441,7 +436,6 @@ impl ShellManager {
                     if Self::validate_shell(&shell_path)
                         && !shells.iter().any(|s| s.path == shell_path)
                     {
-                        // 获取不带扩展名的shell名称用于匹配
                         let base_name = if cfg!(windows) {
                             shell_name.strip_suffix(".exe").unwrap_or(shell_name)
                         } else {
@@ -515,7 +509,6 @@ impl ShellManager {
                 }
             }
 
-            // 如果环境变量不可用，尝试检测常见的默认shell
             let preferred_shells = [
                 ("zsh", "/bin/zsh", "Zsh"),
                 ("bash", "/bin/bash", "Bash"),

@@ -145,7 +145,6 @@ impl ShellScriptGenerator {
                 .with_context(|| format!("Failed to create config directory: {:?}", parent))?;
         }
 
-        // 检查是否已经安装
         if self.is_integration_already_setup(shell_type)? {
             return Ok(());
         }

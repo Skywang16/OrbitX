@@ -1,4 +1,7 @@
 use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio_stream::StreamExt;
+use tokio_util::sync::CancellationToken;
 
 use crate::llm::{
     providers::ProviderFactory,
@@ -10,17 +13,19 @@ use crate::llm::{
 use crate::storage::repositories::RepositoryManager;
 use anyhow::{Context, Result};
 
-/// LLM 服务
 pub struct LLMService {
     repositories: Arc<RepositoryManager>,
+    active_stream_cancel: Arc<Mutex<Option<CancellationToken>>>,
 }
 
 impl LLMService {
     pub fn new(repositories: Arc<RepositoryManager>) -> Self {
-        Self { repositories }
+        Self {
+            repositories,
+            active_stream_cancel: Arc::new(Mutex::new(None)),
+        }
     }
 
-    /// 根据模型ID获取提供商配置
     async fn get_provider_config(&self, model_id: &str) -> Result<LLMProviderConfig> {
         let model = self
             .repositories
@@ -68,7 +73,6 @@ impl LLMService {
         let config = self.get_provider_config(&request.model).await?;
         let provider = ProviderFactory::create_provider(config.clone())?;
 
-        // 创建新的请求，使用真实的模型名称而不是数据库ID
         let mut actual_request = request.clone();
         actual_request.model = config.model.clone();
 
@@ -104,7 +108,9 @@ impl LLMService {
         let config = self.get_provider_config(&request.model).await?;
         let provider = ProviderFactory::create_provider(config.clone())?;
 
-        // 创建新的请求，使用真实的模型名称而不是数据库ID
+        let token = CancellationToken::new();
+        *self.active_stream_cancel.lock().await = Some(token.clone());
+
         let mut actual_request = request.clone();
         actual_request.model = config.model.clone();
 
@@ -113,8 +119,45 @@ impl LLMService {
             actual_request.model,
             original_model_id
         );
+
         let stream = provider.call_stream(actual_request).await?;
-        Ok(stream)
+
+        let stream_with_cancel = tokio_stream::wrappers::ReceiverStream::new({
+            let (tx, rx) = tokio::sync::mpsc::channel(10);
+            let mut stream = Box::pin(stream);
+
+            tokio::spawn(async move {
+                loop {
+                    tokio::select! {
+                        _ = token.cancelled() => {
+                            tracing::debug!("Stream cancelled by token.");
+                            break;
+                        }
+                        item = stream.next() => {
+                            if let Some(item) = item {
+                                if tx.send(item).await.is_err() {
+                                    break;
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+            rx
+        });
+
+        Ok(stream_with_cancel)
+    }
+
+    /// 取消当前的流式调用
+    pub async fn cancel_stream(&self) -> Result<()> {
+        if let Some(token) = self.active_stream_cancel.lock().await.take() {
+            token.cancel();
+            tracing::debug!("Stream cancellation requested.");
+        }
+        Ok(())
     }
 
     /// Embedding调用
@@ -123,7 +166,6 @@ impl LLMService {
         let config = self.get_provider_config(&request.model).await?;
         let provider = ProviderFactory::create_provider(config.clone())?;
 
-        // 创建新的请求，使用真实的模型名称而不是数据库ID
         let mut actual_request = request.clone();
         actual_request.model = config.model.clone();
 

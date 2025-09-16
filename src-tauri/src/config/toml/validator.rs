@@ -1,8 +1,4 @@
-/*!
- * TOML配置验证器
- *
- * 负责验证配置的有效性和完整性
- */
+//! TOML配置验证器
 
 use crate::{
     config::{theme::ThemeConfig, types::AppConfig},

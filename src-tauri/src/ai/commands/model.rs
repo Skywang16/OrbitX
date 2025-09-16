@@ -1,8 +1,4 @@
-/*!
- * AI模型管理命令
- *
- * 负责AI模型的配置、管理和连接测试功能
- */
+//! AI模型管理命令
 
 use super::AIManagerState;
 use crate::ai::types::AIModelConfig;
@@ -11,13 +7,11 @@ use crate::{api_error, api_success, validate_not_empty};
 
 use tauri::State;
 
-// ===== AI模型管理命令 =====
 
 /// 获取所有AI模型配置
 #[tauri::command]
 pub async fn ai_models_get(state: State<'_, AIManagerState>) -> TauriApiResult<Vec<AIModelConfig>> {
     let models = state.ai_service.get_models().await;
-    // 不回传明文 API Key：对外返回时清空 api_key 字段
     let sanitized: Vec<AIModelConfig> = models
         .into_iter()
         .map(|mut m| {
@@ -34,10 +28,8 @@ pub async fn ai_models_add(
     config: AIModelConfig,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<AIModelConfig> {
-    // 保存模型配置，如果保存失败会抛出异常
     match state.ai_service.add_model(config.clone()).await {
         Ok(_) => {
-            // 不回传明文 API Key
             let mut sanitized = config.clone();
             sanitized.api_key.clear();
             Ok(api_success!(sanitized))
@@ -75,13 +67,12 @@ pub async fn ai_models_update(
     }
 }
 
-/// 测试AI模型连接（基于表单数据）
+/// 测试AI模型连接
 #[tauri::command]
 pub async fn ai_models_test_connection(
     config: AIModelConfig,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<String> {
-    // 参数验证
     if config.api_url.trim().is_empty() {
         return Ok(api_error!("ai.api_url_empty"));
     }
@@ -92,14 +83,12 @@ pub async fn ai_models_test_connection(
         return Ok(api_error!("ai.model_name_empty"));
     }
 
-    // 直接使用提供的配置进行连接测试，返回详细的连接结果
     match state.ai_service.test_connection_with_config(&config).await {
         Ok(result) => Ok(api_success!(result)),
         Err(e) => Ok(api_error!("ai.test_connection_error", "error" => e.to_string())),
     }
 }
 
-// ===== 用户前置提示词管理命令 =====
 
 /// 获取用户前置提示词
 #[tauri::command]

@@ -23,11 +23,6 @@ export interface CreateTerminalWithShellOptions {
   cols: number
 }
 
-export interface TerminalOutputEvent {
-  paneId: number
-  data: string
-}
-
 export interface TerminalExitEvent {
   paneId: number
   exitCode: number | null
@@ -153,6 +148,5 @@ export interface TerminalRetryOptions {
 }
 
 export interface TerminalEvents {
-  OUTPUT: 'terminal_output'
   EXIT: 'terminal_exit'
 }

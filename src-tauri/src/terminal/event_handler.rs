@@ -1,14 +1,8 @@
-/*!
- * 统一的终端事件处理器
- *
- * 提供单一的事件集成路径，整合所有终端相关事件的处理逻辑，
- * 确保事件的单一来源和清晰的传播路径。
- */
+//! 终端事件处理器
 
 use serde_json::json;
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-use tauri::{AppHandle, Emitter, Runtime};
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::broadcast;
 use tracing::{debug, error, warn};
 
@@ -23,9 +17,6 @@ pub struct TerminalEventHandler<R: Runtime> {
     app_handle: AppHandle<R>,
     mux_subscriber_id: Option<usize>,
     context_event_receiver: Option<broadcast::Receiver<TerminalContextEvent>>,
-    // 将高频终端输出做轻量缓冲，按固定帧率批量推送，缓解前端背压
-    output_buffers: Arc<RwLock<HashMap<u32, String>>>,
-    output_flush_interval_ms: u64,
 }
 
 // Implement Send and Sync to allow the handler to be managed by Tauri
@@ -39,8 +30,6 @@ impl<R: Runtime> TerminalEventHandler<R> {
             app_handle,
             mux_subscriber_id: None,
             context_event_receiver: None,
-            output_buffers: Arc::new(RwLock::new(HashMap::new())),
-            output_flush_interval_ms: 16, // ~60 FPS 默认节流
         }
     }
 
@@ -58,20 +47,17 @@ impl<R: Runtime> TerminalEventHandler<R> {
 
         // 订阅 TerminalMux 事件（对 PaneOutput 采用缓冲节流，其它事件即时发送）
         let app_handle = self.app_handle.clone();
-        let buffers = Arc::clone(&self.output_buffers);
         let mux_subscriber: SubscriberCallback = Box::new(move |notification| match notification {
             MuxNotification::PaneOutput { pane_id, data } => {
-                let text = String::from_utf8_lossy(data).to_string();
-                if let Ok(mut map) = buffers.write() {
-                    let entry = map.entry(pane_id.as_u32()).or_insert_with(String::new);
-                    entry.push_str(&text);
-                }
+                // 使用 ChannelManager 直接发送字节流，避免在后端进行任何字符串解码
+                let state = app_handle.state::<crate::terminal::channel_state::TerminalChannelState>();
+                state.manager.send_data(pane_id.as_u32(), data.as_ref());
                 true
             }
             MuxNotification::PaneRemoved(pane_id) => {
-                if let Ok(mut map) = buffers.write() {
-                    map.remove(&pane_id.as_u32());
-                }
+                // 通知 Channel 已关闭
+                let state = app_handle.state::<crate::terminal::channel_state::TerminalChannelState>();
+                state.manager.close(pane_id.as_u32());
                 let (event_name, payload) = Self::mux_notification_to_tauri_event(notification);
                 if let Err(e) = app_handle.emit(event_name, payload.clone()) {
                     error!(
@@ -101,9 +87,6 @@ impl<R: Runtime> TerminalEventHandler<R> {
         // 启动上下文事件处理任务
         self.start_context_event_task();
 
-        // 启动输出缓冲的定时刷新任务
-        self.start_output_flush_task();
-
         debug!("终端事件处理器已启动，Mux订阅者ID: {}", subscriber_id);
         Ok(())
     }
@@ -124,38 +107,7 @@ impl<R: Runtime> TerminalEventHandler<R> {
         Ok(())
     }
 
-    /// 启动输出缓冲的定时刷新任务
-    fn start_output_flush_task(&self) {
-        let app_handle = self.app_handle.clone();
-        let buffers = Arc::clone(&self.output_buffers);
-        let interval_ms = self.output_flush_interval_ms;
-
-        tauri::async_runtime::spawn(async move {
-            let mut ticker = tokio::time::interval(std::time::Duration::from_millis(interval_ms));
-            loop {
-                ticker.tick().await;
-
-                // 提取并清空当前缓冲
-                let mut drained: Vec<(u32, String)> = Vec::new();
-                if let Ok(mut map) = buffers.write() {
-                    for (pane_id, buf) in map.iter_mut() {
-                        if !buf.is_empty() {
-                            drained.push((*pane_id, std::mem::take(buf)));
-                        }
-                    }
-                }
-
-                // 批量向前端发送
-                for (pane_id, chunk) in drained.into_iter() {
-                    let payload = json!({
-                        "paneId": pane_id,
-                        "data": chunk
-                    });
-                    let _ = app_handle.emit("terminal_output", payload);
-                }
-            }
-        });
-    }
+    // 旧的字符串缓冲刷新任务已移除，改为通过 Channel 直接推送字节流
 
     /// 启动上下文事件处理任务
     fn start_context_event_task(&mut self) {

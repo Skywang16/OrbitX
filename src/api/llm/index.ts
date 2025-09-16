@@ -8,7 +8,7 @@
  */
 
 import { invoke } from '@/utils/request'
-import { Channel } from '@tauri-apps/api/core'
+import { llmChannelApi } from '@/api/channel/llm'
 import type { NativeLLMRequest, NativeLLMResponse, NativeLLMStreamChunk } from '@/eko-core/types/llm.types'
 
 /**
@@ -26,8 +26,6 @@ export class LLMApi {
    * 流式LLM调用
    */
   async callStream(request: NativeLLMRequest): Promise<ReadableStream<NativeLLMStreamChunk>> {
-    const channel = new Channel<NativeLLMStreamChunk>()
-
     // Handle abort signal if provided
     if (request.abortSignal) {
       request.abortSignal.addEventListener('abort', () => {
@@ -35,23 +33,8 @@ export class LLMApi {
       })
     }
 
-    // Start the streaming call
-    invoke('llm_call_stream', {
-      request,
-      onEvent: channel.onmessage,
-    })
-
-    return new ReadableStream({
-      start(controller) {
-        channel.onmessage = (chunk: NativeLLMStreamChunk) => {
-          controller.enqueue(chunk)
-          // Close the stream when receiving a finish or error chunk
-          if (chunk.type === 'finish' || chunk.type === 'error') {
-            controller.close()
-          }
-        }
-      },
-    })
+    // 使用统一的 Channel API
+    return llmChannelApi.createStream({ request })
   }
 
   /**
@@ -72,7 +55,7 @@ export class LLMApi {
    * 取消流式调用
    */
   async cancelStream(): Promise<void> {
-    await invoke('llm_cancel_stream', { requestId: 'current' })
+    return llmChannelApi.cancelStream()
   }
 }
 

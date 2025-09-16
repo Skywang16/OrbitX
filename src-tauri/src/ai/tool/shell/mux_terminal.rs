@@ -74,7 +74,6 @@ pub async fn terminal_create<R: Runtime>(
     debug!("创建终端会话: {}x{}, 初始目录: {:?}", cols, rows, cwd);
     debug!("当前Mux状态 - 面板数量: {}", get_mux().pane_count());
 
-    // 参数验证
     if let Err(_) = validate_terminal_size(rows, cols) {
         return Ok(api_error!("shell.terminal_size_invalid"));
     }
@@ -128,7 +127,6 @@ pub async fn terminal_write(
         &data[..std::cmp::min(50, data.len())]
     );
 
-    // 参数验证
     if data.is_empty() {
         return Ok(api_error!("common.empty_content"));
     }
@@ -156,7 +154,6 @@ pub async fn terminal_resize(
 ) -> TauriApiResult<EmptyData> {
     debug!("调整终端大小: ID={}, 大小={}x{}", pane_id, cols, rows);
 
-    // 参数验证
     if let Err(_) = validate_terminal_size(rows, cols) {
         return Ok(api_error!("shell.terminal_size_invalid"));
     }
@@ -201,7 +198,6 @@ pub async fn terminal_close(
             Ok(api_success!())
         }
         Err(e) => {
-            // 检查是否是"面板不存在"的错误
             let error_str = e.to_string();
             if error_str.contains("not found") || error_str.contains("不存在") {
                 // 面板不存在，认为操作成功
@@ -229,7 +225,6 @@ pub async fn terminal_list(_state: State<'_, TerminalState>) -> TauriApiResult<V
     Ok(api_success!(pane_ids))
 }
 
-// === Shell 管理命令 ===
 
 /// 获取终端缓冲区内容
 ///
@@ -322,7 +317,6 @@ pub async fn terminal_get_default_shell() -> TauriApiResult<ShellInfo> {
 ///
 #[tauri::command]
 pub async fn terminal_validate_shell_path(path: String) -> TauriApiResult<bool> {
-    // 参数验证
     validate_non_empty_string(&path, "Shell路径")
         .context("Shell路径验证失败")
         .to_tauri()?;
@@ -346,7 +340,6 @@ pub async fn terminal_create_with_shell<R: Runtime>(
 ) -> TauriApiResult<u32> {
     debug!("使用指定shell创建终端: {:?}, 大小: {}x{}", shell_name, cols, rows);
 
-    // 参数验证
     if let Err(_) = validate_terminal_size(rows, cols) {
         return Ok(api_error!("shell.terminal_size_invalid"));
     }
@@ -373,7 +366,6 @@ pub async fn terminal_create_with_shell<R: Runtime>(
     let mux = get_mux();
     let size = PtySize::new(rows, cols);
 
-    // 创建 ShellConfig 而不是直接传递 ShellInfo
     let shell_config = ShellConfig::with_shell(&shell_info);
     let config = TerminalConfig::with_shell(shell_config);
 
@@ -401,7 +393,6 @@ pub async fn terminal_create_with_shell<R: Runtime>(
 pub async fn terminal_find_shell_by_name(shell_name: String) -> TauriApiResult<Option<ShellInfo>> {
     debug!("查找shell: {}", shell_name);
 
-    // 参数验证
     if shell_name.trim().is_empty() {
         return Ok(api_error!("common.empty_content"));
     }
@@ -430,7 +421,6 @@ pub async fn terminal_find_shell_by_name(shell_name: String) -> TauriApiResult<O
 pub async fn terminal_find_shell_by_path(shell_path: String) -> TauriApiResult<Option<ShellInfo>> {
     debug!("根据路径查找shell: {}", shell_path);
 
-    // 参数验证
     if shell_path.trim().is_empty() {
         return Ok(api_error!("common.empty_content"));
     }

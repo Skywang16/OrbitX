@@ -76,7 +76,6 @@ impl ActiveTerminalContextRegistry {
 
             let old_id = *active_pane;
 
-            // 检查是否真的有变化
             if old_id == Some(pane_id) {
                 debug!("活跃终端未变化，跳过事件发送: {:?}", pane_id);
                 return Ok(());
@@ -194,7 +193,6 @@ impl ActiveTerminalContextRegistry {
             Some(pane_id)
         );
 
-        // 如果这是主窗口或者没有全局活跃终端，也更新全局状态
         if window_id.as_u32() == 0 || self.terminal_context_get_active_pane().is_none() {
             self.terminal_context_set_active_pane(pane_id)?;
         }
@@ -245,7 +243,6 @@ impl ActiveTerminalContextRegistry {
                 pane_id
             );
 
-            // 如果移除的是当前全局活跃终端，清除全局状态
             if self.terminal_context_get_active_pane() == Some(pane_id) {
                 self.terminal_context_clear_active_pane()?;
             }
@@ -340,7 +337,6 @@ mod tests {
         assert_eq!(registry.terminal_context_get_active_pane(), None);
         assert!(!registry.terminal_context_is_pane_active(pane_id));
 
-        // 设置活跃终端
         registry.terminal_context_set_active_pane(pane_id).unwrap();
         assert_eq!(registry.terminal_context_get_active_pane(), Some(pane_id));
         assert!(registry.terminal_context_is_pane_active(pane_id));
@@ -360,7 +356,6 @@ mod tests {
         // 初始状态应该没有窗口活跃终端
         assert_eq!(registry.get_window_active_pane(window_id), None);
 
-        // 设置窗口活跃终端
         registry.set_window_active_pane(window_id, pane_id).unwrap();
         assert_eq!(registry.get_window_active_pane(window_id), Some(pane_id));
 
@@ -376,7 +371,6 @@ mod tests {
         let mut receiver = registry.subscribe_events();
         let pane_id = PaneId::new(1);
 
-        // 设置活跃终端应该触发事件
         registry.terminal_context_set_active_pane(pane_id).unwrap();
 
         // 接收事件
@@ -408,10 +402,8 @@ mod tests {
             let handle = tokio::spawn(async move {
                 let pane_id = PaneId::new(i);
 
-                // 设置活跃终端
                 registry_clone.terminal_context_set_active_pane(pane_id).unwrap();
 
-                // 检查状态
                 let active = registry_clone.terminal_context_get_active_pane();
                 let is_active = registry_clone.terminal_context_is_pane_active(pane_id);
 
@@ -445,7 +437,6 @@ mod tests {
         assert_eq!(stats.global_active_pane, None);
         assert_eq!(stats.window_active_pane_count, 0);
 
-        // 设置活跃终端后的统计
         registry.terminal_context_set_active_pane(pane_id).unwrap();
         registry.set_window_active_pane(window_id, pane_id).unwrap();
 

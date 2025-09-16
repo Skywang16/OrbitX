@@ -15,12 +15,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_complete_integration_flow() {
-        // 创建所有组件
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
         let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
         let terminal_mux = Arc::new(TerminalMux::new());
 
-        // 创建带集成的上下文服务
         let context_service = TerminalContextService::new_with_integration(
             registry.clone(),
             shell_integration.clone(),
@@ -87,7 +85,6 @@ mod tests {
         // 订阅事件
         let mut event_receiver = registry.subscribe_events();
 
-        // 设置活跃终端
         registry.terminal_context_set_active_pane(pane_id).unwrap();
 
         // 接收活跃终端变化事件
@@ -110,7 +107,6 @@ mod tests {
         // 通过Shell集成启用集成状态
         shell_integration.enable_integration(pane_id);
 
-        // 这里我们不能直接测试Shell集成事件，因为它们是通过弱引用发送的
         // 但我们可以验证状态确实被更新了
         assert!(shell_integration.is_integration_enabled(pane_id));
     }
@@ -120,7 +116,6 @@ mod tests {
         let manager = ShellIntegrationManager::new().unwrap();
         let pane_ids: Vec<PaneId> = (1..=10).map(PaneId::new).collect();
 
-        // 设置多个面板的状态
         for &pane_id in &pane_ids {
             manager.set_pane_shell_type(pane_id, ShellType::Bash);
             manager.update_current_working_directory(pane_id, format!("/path/{}", pane_id));

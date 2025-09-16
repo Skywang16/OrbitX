@@ -4,7 +4,7 @@ use std::path::Path;
 use walkdir::WalkDir;
 
 use super::{
-    SearchProgressCallback, extract_content_from_span, find_nearest_index_root, resolve_index_dir, default_index_dir,
+    SearchProgressCallback, extract_content_from_span, find_nearest_index_root, resolve_index_dir,
 };
 
 /// New semantic search implementation using span-based storage

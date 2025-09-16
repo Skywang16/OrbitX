@@ -1,9 +1,4 @@
-/*!
- * 文件系统管理模块
- *
- * 提供统一的文件系统操作接口，包括文件读写、备份、原子操作等
- * 支持跨平台文件操作和错误恢复
- */
+//! 文件系统管理模块
 
 use crate::storage::paths::StoragePaths;
 use crate::utils::error::AppResult;
@@ -23,9 +18,9 @@ pub struct FileSystemOptions {
     pub backup_count: usize,
     /// 是否使用原子写入
     pub atomic_write: bool,
-    /// 文件权限（Unix系统）
+    /// 文件权限
     pub file_permissions: Option<u32>,
-    /// 目录权限（Unix系统）
+    /// 目录权限
     pub dir_permissions: Option<u32>,
 }
 
@@ -56,7 +51,7 @@ impl FileSystemManager {
     /// 确保所有必要的目录存在
     pub async fn initialize(&self) -> AppResult<()> {
         self.paths.ensure_directories()?;
-        // 文件系统管理器初始化完成
+        // 初始化完成
         Ok(())
     }
 
@@ -114,7 +109,6 @@ impl FileSystemManager {
 
     /// 原子写入（同步）
     fn atomic_write_sync(&self, path: &Path, content: &[u8]) -> AppResult<()> {
-        // 创建临时文件
         let temp_path = self.get_temp_path(path);
 
         // 确保父目录存在
@@ -127,7 +121,6 @@ impl FileSystemManager {
         fs::write(&temp_path, content)
             .with_context(|| format!("写入临时文件失败: {}", temp_path.display()))?;
 
-        // 设置文件权限
         #[cfg(unix)]
         if let Some(permissions) = self.options.file_permissions {
             use std::os::unix::fs::PermissionsExt;
@@ -136,7 +129,6 @@ impl FileSystemManager {
                 .with_context(|| format!("设置文件权限失败: {}", temp_path.display()))?;
         }
 
-        // 创建备份
         if self.options.backup_enabled && path.exists() {
             self.create_backup_sync(path)?;
         }
@@ -153,7 +145,6 @@ impl FileSystemManager {
 
     /// 原子写入（异步）
     async fn atomic_write(&self, path: &Path, content: &[u8]) -> AppResult<()> {
-        // 创建临时文件
         let temp_path = self.get_temp_path(path);
 
         // 确保父目录存在
@@ -168,7 +159,6 @@ impl FileSystemManager {
             .await
             .with_context(|| format!("写入临时文件失败: {}", temp_path.display()))?;
 
-        // 设置文件权限
         #[cfg(unix)]
         if let Some(permissions) = self.options.file_permissions {
             use std::os::unix::fs::PermissionsExt;
@@ -178,7 +168,6 @@ impl FileSystemManager {
                 .map_err(|e| anyhow!("设置文件权限失败: {}", e))?;
         }
 
-        // 创建备份
         if self.options.backup_enabled && tokio_fs::try_exists(path).await.unwrap_or(false) {
             self.create_backup(path).await?;
         }
@@ -200,7 +189,6 @@ impl FileSystemManager {
             fs::create_dir_all(parent).map_err(|e| anyhow!("创建父目录失败: {}", e))?;
         }
 
-        // 创建备份
         if self.options.backup_enabled && path.exists() {
             self.create_backup_sync(path)?;
         }
@@ -208,7 +196,6 @@ impl FileSystemManager {
         // 直接写入
         fs::write(path, content).with_context(|| format!("写入文件失败: {}", path.display()))?;
 
-        // 设置文件权限
         #[cfg(unix)]
         if let Some(permissions) = self.options.file_permissions {
             use std::os::unix::fs::PermissionsExt;
@@ -228,7 +215,6 @@ impl FileSystemManager {
                 .map_err(|e| anyhow!("创建父目录失败: {}", e))?;
         }
 
-        // 创建备份
         if self.options.backup_enabled && tokio_fs::try_exists(path).await.unwrap_or(false) {
             self.create_backup(path).await?;
         }
@@ -238,7 +224,6 @@ impl FileSystemManager {
             .await
             .with_context(|| format!("写入文件失败: {}", path.display()))?;
 
-        // 设置文件权限
         #[cfg(unix)]
         if let Some(permissions) = self.options.file_permissions {
             use std::os::unix::fs::PermissionsExt;

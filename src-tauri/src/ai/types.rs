@@ -8,13 +8,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::pin::Pin;
 
-// ===== AI提供商类型 =====
 
-// ===== AI模型配置 =====
 // 重新导出Repository中的类型
 pub use crate::storage::repositories::ai_models::{AIModelConfig, AIProvider, ModelType};
 
-// ===== AI请求和响应类型 =====
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -73,7 +70,6 @@ pub struct AIResponseMetadata {
     pub response_time: Option<u64>,
 }
 
-// ===== AI设置类型 =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -96,7 +92,6 @@ impl AISettings {
 
     /// 添加模型
     pub fn add_model(&mut self, model: AIModelConfig) -> Result<(), String> {
-        // 检查ID是否已存在
         if self.models.iter().any(|m| m.id == model.id) {
             return Err(format!("Model with ID '{}' already exists", model.id));
         }
@@ -171,7 +166,6 @@ impl Default for AIPerformanceSettings {
     }
 }
 
-// ===== 统计和监控类型 =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -203,7 +197,6 @@ pub enum HealthStatus {
     Unhealthy,
 }
 
-// ===== 缓存相关类型 =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -225,7 +218,6 @@ pub struct CacheStats {
     pub newest_entry: Option<DateTime<Utc>>,
 }
 
-// ===== 流式响应类型 =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -239,7 +231,6 @@ pub struct StreamChunk {
 pub type AIStreamResponse =
     Pin<Box<dyn Stream<Item = Result<StreamChunk, crate::utils::error::AppError>> + Send>>;
 
-// ===== 适配器能力类型 =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -253,7 +244,6 @@ pub struct AdapterCapabilities {
     pub supported_models: Vec<String>,
 }
 
-// ===== 健康检查类型 =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -282,7 +272,6 @@ pub struct ModelInfo {
     pub capabilities: Option<AdapterCapabilities>,
 }
 
-// ===== AI会话上下文管理系统 - 全新数据结构 =====
 
 // 重新导出Repository中的会话和消息类型
 pub use crate::storage::repositories::conversations::{Conversation, Message};

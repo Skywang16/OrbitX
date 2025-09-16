@@ -1,6 +1,4 @@
 //! 终端系统配置管理
-//!
-//! 提供灵活的配置管理机制，支持文件、环境变量等多种配置源
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;

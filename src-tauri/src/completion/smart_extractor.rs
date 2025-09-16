@@ -1,6 +1,4 @@
 //! 智能实体提取器
-//!
-//! 使用可配置的规则引擎来提取命令输出中的实体，而不是硬编码解析器
 
 use crate::utils::error::AppResult;
 use anyhow::anyhow;
@@ -172,8 +170,8 @@ impl SmartExtractor {
             name: "filesystem".to_string(),
             command_patterns: vec!["ls.*".to_string(), "find.*".to_string()],
             output_signatures: vec![
-                r"^[drwx-]{10}".to_string(), // ls -l 输出
-                r"^\./".to_string(),         // find 输出
+                r"^[drwx-]{10}".to_string(), // ls -l输出
+                r"^\./".to_string(),         // find输出
             ],
             entity_patterns: vec![
                 EntityPattern {
@@ -202,7 +200,7 @@ impl SmartExtractor {
             command_patterns: vec!["git.*".to_string()],
             output_signatures: vec![
                 "commit [a-f0-9]{40}".to_string(),
-                r"\* \w+".to_string(), // git branch 输出
+                r"\* \w+".to_string(), // git branch输出
             ],
             entity_patterns: vec![
                 EntityPattern {
@@ -302,7 +300,6 @@ impl SmartExtractor {
                 continue;
             }
 
-            // 检查命令模式
             let command_matches = rule.command_patterns.iter().any(|pattern| {
                 if let Some(regex) = self.patterns.get(&format!(
                     "{}_cmd_{}",
@@ -318,7 +315,6 @@ impl SmartExtractor {
                 }
             });
 
-            // 检查输出特征
             let output_matches = rule.output_signatures.is_empty()
                 || rule.output_signatures.iter().any(|signature| {
                     if let Some(regex) = self.patterns.get(&format!(
@@ -365,7 +361,6 @@ impl SmartExtractor {
             if let Some(matched) = captures.get(capture_group) {
                 let value = matched.as_str().to_string();
 
-                // 检查上下文要求
                 if let Some(requirements) = &pattern.context_requirements {
                     if !self.check_context_requirements(requirements, output, matched.start()) {
                         continue;

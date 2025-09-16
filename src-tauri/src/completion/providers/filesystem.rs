@@ -1,6 +1,4 @@
 //! 文件系统补全提供者
-//!
-//! 提供文件和目录路径的补全功能
 
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
@@ -204,7 +202,6 @@ impl CompletionProvider for FilesystemProvider {
     ) -> AppResult<Vec<CompletionItem>> {
         let current_word = &context.current_word;
 
-        // 如果当前词为空，列出当前目录的内容
         if current_word.is_empty() {
             return self.get_directory_entries(&context.working_directory).await;
         }
@@ -213,10 +210,8 @@ impl CompletionProvider for FilesystemProvider {
         let full_path = self.resolve_path(current_word, &context.working_directory);
 
         let result = if full_path.is_dir() {
-            // 如果是目录，列出目录内容
             self.get_directory_entries(&full_path).await
         } else {
-            // 如果是部分路径，尝试补全
             let parent_dir = full_path.parent().unwrap_or(&context.working_directory);
 
             let file_name = full_path
@@ -252,7 +247,6 @@ impl CompletionProvider for FilesystemProvider {
 
                 Ok(items)
             } else {
-                // 如果父目录不存在，尝试递归搜索
                 self.search_files_recursive(&context.working_directory, &file_name)
             }
         };

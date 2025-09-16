@@ -92,14 +92,12 @@ impl OutputAnalyzer {
     pub fn analyze_output(&self, pane_id: u32, data: &str) -> AppResult<()> {
         debug!("分析面板 {} 的输出，数据长度: {}", pane_id, data.len());
 
-        // 检查是否需要全局清理
         self.maybe_cleanup_stale_buffers()?;
 
         // 一次性处理所有缓冲区操作，避免多次获取锁
         let (should_process_commands, processed_output) = {
             let mut buffer = self.get_buffer_lock()?;
 
-            // 获取或创建面板缓冲区条目
             let entry = buffer.entry(pane_id).or_insert_with(PaneBufferEntry::new);
             entry.access();
 
@@ -112,7 +110,6 @@ impl OutputAnalyzer {
                 self.safe_truncate_buffer(&mut entry.content)?;
             }
 
-            // 检查是否需要处理命令
             let should_process = self.has_complete_command(&entry.content);
             let content_copy = if should_process {
                 Some(entry.content.clone())
@@ -149,7 +146,6 @@ impl OutputAnalyzer {
             attempts += 1;
         }
 
-        // 如果找不到合适的字符边界，使用更保守的截断策略
         if attempts >= config.buffer.max_truncation_attempts {
             warn!("字符边界查找超过最大尝试次数，使用保守截断策略");
             byte_start = content.len().saturating_sub(config.buffer.keep_size / 2);
@@ -185,7 +181,6 @@ impl OutputAnalyzer {
         if let Some((command, command_output)) = self.detect_command_completion(output) {
             debug!("检测到完整命令: {}", command);
 
-            // 处理完整的命令
             self.process_complete_command(&command, &command_output)?;
 
             // 清理缓冲区中已处理的部分（一次性操作）
@@ -293,7 +288,6 @@ impl OutputAnalyzer {
                 // 收集命令输出（从下一行开始到下一个提示符或结尾）
                 let mut command_output = String::new();
                 for output_line in lines.iter().skip(i + 1) {
-                    // 如果遇到新的提示符，停止收集
                     if self.is_prompt_line(output_line) {
                         break;
                     }
@@ -302,7 +296,6 @@ impl OutputAnalyzer {
                     command_output.push('\n');
                 }
 
-                // 检查命令是否完整
                 if !command.is_empty() && self.is_command_complete(&command, &command_output) {
                     return Some((command, command_output.trim().to_string()));
                 }
@@ -362,7 +355,6 @@ impl OutputAnalyzer {
         // 记录命令输出到上下文感知提供者
         let provider = self.get_context_provider_lock()?;
 
-        // 创建一个增强的命令输出记录，包含提取的实体
         let mut enhanced_output = output.to_string();
         if !entities.is_empty() {
             enhanced_output.push_str("\n\n<!-- 提取的实体: ");

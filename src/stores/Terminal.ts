@@ -226,18 +226,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
       return terminals.value.find(t => t.backendId === backendId)
     }
 
-    const unlistenOutput = await listen<{ paneId: number; data: string }>('terminal_output', event => {
-      try {
-        const terminal = findTerminalByBackendId(event.payload.paneId)
-        if (terminal) {
-          const listeners = _listeners.value.get(terminal.id) || []
-          listeners.forEach(listener => listener.callbacks.onOutput(event.payload.data))
-        }
-      } catch (error) {
-        console.error('处理终端输出事件时发生错误:', error)
-      }
-    })
-
     const unlistenExit = await listen<{
       paneId: number
       exitCode: number | null
@@ -270,7 +258,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       }
     })
 
-    _globalListenersUnlisten = [unlistenOutput, unlistenExit, unlistenCwdChanged]
+    _globalListenersUnlisten = [unlistenExit, unlistenCwdChanged]
     _isListenerSetup = true
   }
 
@@ -302,6 +290,20 @@ export const useTerminalStore = defineStore('Terminal', () => {
         _listeners.value.delete(id)
       }
     }
+  }
+
+  // 由 Channel 订阅直接分发输出给已注册回调
+  const dispatchOutputForBackendId = (backendId: number, data: string) => {
+    const terminal = terminals.value.find(t => t.backendId === backendId)
+    if (!terminal) return
+    const listeners = _listeners.value.get(terminal.id) || []
+    listeners.forEach(listener => {
+      try {
+        listener.callbacks.onOutput(data)
+      } catch (error) {
+        console.error('分发终端输出时发生错误:', error)
+      }
+    })
   }
 
   const registerResizeCallback = (terminalId: string, callback: ResizeCallback) => {
@@ -682,6 +684,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     teardownGlobalListeners,
     registerTerminalCallbacks,
     unregisterTerminalCallbacks,
+    dispatchOutputForBackendId,
     registerResizeCallback,
     unregisterResizeCallback,
     createTerminal,

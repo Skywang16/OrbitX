@@ -17,27 +17,18 @@ use crate::mux::{
 use crate::shell::ShellIntegrationManager;
 use crate::utils::error::AppResult;
 
-/// 订阅者回调函数类型
 pub type SubscriberCallback = Box<dyn Fn(&MuxNotification) -> bool + Send + Sync>;
 
-/// TerminalMux状态信息
 #[derive(Debug, Clone)]
 pub struct TerminalMuxStatus {
-    /// 当前面板数量
     pub pane_count: usize,
-    /// 当前订阅者数量
     pub subscriber_count: usize,
-    /// 下一个面板ID
     pub next_pane_id: u32,
-    /// 下一个订阅者ID
     pub next_subscriber_id: u32,
-    /// 主线程ID
     pub main_thread_id: thread::ThreadId,
 }
 
-/// TerminalMux - 核心终端多路复用器
 pub struct TerminalMux {
-    /// 面板存储 - 使用RwLock支持并发读取
     panes: RwLock<HashMap<PaneId, Arc<dyn Pane>>>,
 
     /// 事件订阅者 - 订阅ID -> 回调函数
@@ -139,7 +130,6 @@ impl TerminalMux {
         self.next_subscriber_id.fetch_add(1, Ordering::Relaxed) as usize
     }
 
-    // === 面板管理方法 ===
 
     /// 创建新面板
     pub async fn create_pane(&self, size: PtySize) -> AppResult<PaneId> {
@@ -159,7 +149,6 @@ impl TerminalMux {
     ) -> AppResult<PaneId> {
         let pane_id = self.next_pane_id();
 
-        // 创建面板实例
         debug!("创建LocalPane实例: pane_id={:?}", pane_id);
         let pane = Arc::new(
             LocalPane::new_with_config(pane_id, size, config)
@@ -283,7 +272,6 @@ impl TerminalMux {
         self.panes.read().map(|panes| panes.len()).unwrap_or(0)
     }
 
-    // === I/O 操作方法 ===
 
     /// 写入数据到指定面板
     ///
@@ -332,7 +320,6 @@ impl TerminalMux {
         Ok(())
     }
 
-    // === 通知系统方法 ===
 
     /// 订阅事件通知
     pub fn subscribe<F>(&self, subscriber: F) -> usize
@@ -430,7 +417,6 @@ impl TerminalMux {
     pub fn process_notifications(&self) {
         if let Ok(receiver_guard) = self.notification_receiver.read() {
             if let Some(receiver) = receiver_guard.as_ref() {
-                // 处理所有待处理的通知
                 while let Ok(notification) = receiver.try_recv() {
                     self.notify_internal(&notification);
                 }
@@ -475,7 +461,6 @@ impl TerminalMux {
         })
     }
 
-    // === 调试辅助 ===
     /// 创建一个简单的日志订阅者（用于调试）
     pub fn create_debug_subscriber() -> SubscriberCallback {
         Box::new(|notification| {
@@ -484,7 +469,6 @@ impl TerminalMux {
         })
     }
 
-    // === Shell Integration 方法 ===
 
     /// 设置面板的Shell Integration
     pub fn setup_pane_integration(&self, pane_id: PaneId) -> AppResult<()> {
@@ -588,7 +572,6 @@ impl TerminalMux {
         self.shell_integration.get_command_history(pane_id)
     }
 
-    // === 生命周期管理 ===
 
     /// 清理所有资源
     pub fn shutdown(&self) -> AppResult<()> {
@@ -598,7 +581,6 @@ impl TerminalMux {
         self.shutting_down
             .store(true, std::sync::atomic::Ordering::Relaxed);
 
-        // 获取所有面板ID和引用
         let pane_ids: Vec<PaneId> = self.list_panes();
         tracing::debug!("准备关闭 {} 个面板", pane_ids.len());
 
@@ -624,7 +606,6 @@ impl TerminalMux {
                 }
             }
 
-            // 如果单个面板关闭时间过长，总体超时保护
             if shutdown_start.elapsed() > Duration::from_secs(3) {
                 tracing::warn!("关闭超时，强制退出剩余面板");
                 break;

@@ -8,8 +8,10 @@ export const TERMINAL_CONFIG: TerminalConfig = {
   enabled: true,
 
   fontFamily:
-    'Menlo, Monaco, "SF Mono", "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", "Source Han Sans CN", "WenQuanYi Micro Hei", "Courier New", monospace',
+    '"JetBrainsMono Nerd Font", "FiraCode Nerd Font", "Fira Code", "JetBrains Mono", Menlo, Monaco, "SF Mono", "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", "Source Han Sans CN", "WenQuanYi Micro Hei", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Courier New", monospace',
   fontSize: 14,
+  allowProposedApi: true,
+  allowTransparency: false,
   cursorBlink: true,
   theme: {
     background: '#1e1e1e',
@@ -36,7 +38,7 @@ export const TERMINAL_CONFIG: TerminalConfig = {
     copyOnSelect: false,
   },
 
-  convertEol: true, // 自动转换行尾符，有助于处理不同系统的换行符
+  convertEol: false,
   cursorStyle: 'block',
   drawBoldTextInBrightColors: true,
   fontWeight: 400,
@@ -46,7 +48,7 @@ export const TERMINAL_CONFIG: TerminalConfig = {
 
   // 中文和国际化优化
   macOptionIsMeta: false, // 在Mac上，Option键不作为Meta键，避免中文输入问题
-  minimumContrastRatio: 1, // 保持原始颜色，避免对比度调整影响中文显示
+  minimumContrastRatio: 1, // 使用原始颜色，避免在浅色主题下被强制提亮为白色
   rightClickSelectsWord: false, // 避免右键选择干扰中文词语
   wordSeparator: ' ()[]{}\'",;', // 为中文优化的词分隔符
 
@@ -63,6 +65,5 @@ export const TERMINAL_CONFIG: TerminalConfig = {
 
 // 终端事件常量
 export const TERMINAL_EVENTS = {
-  OUTPUT: 'terminal_output',
   EXIT: 'terminal_exit',
 } as const

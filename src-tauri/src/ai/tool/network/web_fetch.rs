@@ -162,7 +162,6 @@ pub async fn network_web_fetch_headless(request: WebFetchRequest) -> Result<WebF
                 .to_string();
             let final_url = response.url().to_string();
 
-            // 获取响应头
             let mut headers = HashMap::new();
             for (key, value) in response.headers() {
                 if let Ok(value_str) = value.to_str() {
@@ -172,10 +171,8 @@ pub async fn network_web_fetch_headless(request: WebFetchRequest) -> Result<WebF
 
             tracing::debug!("📡 [WebFetch] 收到响应: {} {}", status, status_text);
 
-            // 获取内容类型
             let content_type = headers.get("content-type").cloned();
 
-            // 获取响应体
             let raw_data = match response.text().await {
                 Ok(text) => text,
                 Err(e) => {
@@ -213,12 +210,9 @@ pub async fn network_web_fetch_headless(request: WebFetchRequest) -> Result<WebF
                 (None, None)
             };
 
-            // 处理最终数据 - 避免不必要的克隆
             let final_data = if extract_content && extracted_text.is_some() {
-                // 如果提取了内容，返回摘要
                 create_content_summary(extracted_text.as_ref().unwrap(), &final_url)
             } else {
-                // 处理数据格式
                 match request.response_format.as_deref().unwrap_or("text") {
                     "json" => {
                         match serde_json::from_str::<serde_json::Value>(&raw_data) {

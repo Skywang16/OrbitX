@@ -1,8 +1,3 @@
-/*!
- * AI对话管理命令
- *
- * 负责对话的创建、管理和消息处理功能
- */
 
 use super::AIManagerState;
 use crate::ai::context::handle_truncate_conversation;
@@ -14,15 +9,12 @@ use crate::{api_error, api_success, validate_not_empty};
 use tauri::State;
 use tracing::debug;
 
-// ===== AI会话管理命令 =====
-
 /// 创建新会话
 #[tauri::command]
 pub async fn ai_conversation_create(
     title: Option<String>,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<i64> {
-    // 验证参数
     if let Some(ref t) = title {
         if t.trim().is_empty() {
             return Ok(api_error!("common.title_empty"));
@@ -31,7 +23,6 @@ pub async fn ai_conversation_create(
 
     let repositories = state.repositories();
 
-    // 默认使用空标题，前端渲染时用 i18n 占位文案显示
     let conversation = Conversation::new(title.unwrap_or_else(|| "".to_string()));
 
     match repositories.conversations().save(&conversation).await {
@@ -93,7 +84,6 @@ pub async fn ai_conversation_update_title(
     title: String,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<EmptyData> {
-    // 参数验证
     if conversation_id <= 0 {
         return Ok(api_error!("common.invalid_id"));
     }
@@ -117,7 +107,6 @@ pub async fn ai_conversation_delete(
     conversation_id: i64,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<EmptyData> {
-    // 参数验证
     if conversation_id <= 0 {
         return Ok(api_error!("common.invalid_id"));
     }
@@ -130,7 +119,7 @@ pub async fn ai_conversation_delete(
     }
 }
 
-/// 截断会话（供前端eko使用）
+/// 截断会话
 #[tauri::command]
 pub async fn ai_conversation_truncate(
     conversation_id: i64,
@@ -146,7 +135,6 @@ pub async fn ai_conversation_truncate(
 
     let repositories = state.repositories();
 
-    // 截断会话
     match handle_truncate_conversation(repositories, conversation_id, truncate_after_message_id)
         .await
     {
@@ -155,9 +143,7 @@ pub async fn ai_conversation_truncate(
     }
 }
 
-// ===== 消息管理命令 =====
-
-/// 保存单条消息（供前端eko使用）
+/// 保存单条消息
 #[tauri::command]
 pub async fn ai_conversation_save_message(
     conversation_id: i64,
@@ -175,10 +161,8 @@ pub async fn ai_conversation_save_message(
 
     let repositories = state.repositories();
 
-    // 创建消息对象
     let message = Message::new(conversation_id, role, content);
 
-    // 保存消息
     match repositories.conversations().ai_conversation_save_message(&message).await {
         Ok(message_id) => Ok(api_success!(message_id)),
         Err(_) => Ok(api_error!("ai.save_message_failed")),

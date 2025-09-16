@@ -1,9 +1,4 @@
-/*!
- * 配置系统数据类型定义
- *
- * 定义配置系统中使用的所有数据结构，包括主配置、主题配置、
- * 元数据和事件等。结构与 TOML 配置文件格式保持完全一致。
- */
+//! 配置系统数据类型定义
 
 use crate::config::theme::ThemeConfig;
 use serde::{Deserialize, Serialize};

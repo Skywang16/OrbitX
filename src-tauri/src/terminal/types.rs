@@ -1,11 +1,18 @@
-/*!
- * 终端上下文相关类型定义
- */
+// 终端上下文相关类型定义
 
 use crate::mux::PaneId;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
+
+/// 终端 Channel 消息类型
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+pub enum TerminalChannelMessage {
+    Data { pane_id: u32, data: Vec<u8> },
+    Error { pane_id: u32, error: String },
+    Close { pane_id: u32 },
+}
 
 /// 终端上下文事件类型
 #[derive(Debug, Clone, Serialize)]

@@ -1,13 +1,4 @@
-/*!
- * TOML配置管理模块
- *
- * 提供统一的TOML配置文件管理功能，按功能域组织：
- * - events: 事件系统
- * - reader: 配置读取
- * - writer: 配置写入
- * - validator: 配置验证
- * - manager: 核心管理器
- */
+//! TOML配置管理模块
 
 pub mod events;
 pub mod manager;

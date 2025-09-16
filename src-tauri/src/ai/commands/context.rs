@@ -1,8 +1,4 @@
-/*!
- * AI上下文管理命令
- *
- * 负责智能上下文、终端上下文和缓存管理功能
- */
+//! AI上下文管理命令
 
 use super::AIManagerState;
 use crate::ai::types::Message;
@@ -11,9 +7,8 @@ use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success, validate_not_empty};
 use tauri::State;
 
-// ===== 智能上下文管理命令 =====
 
-/// 获取压缩上下文（供前端eko使用）
+/// 获取压缩上下文
 #[tauri::command]
 pub async fn ai_conversation_get_compressed_context(
     conversation_id: i64,
@@ -26,7 +21,6 @@ pub async fn ai_conversation_get_compressed_context(
 
     let repositories = state.repositories();
 
-    // 使用context.rs中的build_context_for_request函数
     let config = crate::ai::types::AIConfig::default();
     let _context_manager = state.get_context_manager();
     match crate::ai::context::build_context_for_request(
@@ -42,7 +36,7 @@ pub async fn ai_conversation_get_compressed_context(
     }
 }
 
-/// 构建带智能上下文的prompt（专门用于AI推理）
+/// 构建带上下文的prompt
 #[tauri::command]
 pub async fn ai_conversation_build_prompt_with_context(
     conversation_id: i64,
@@ -52,7 +46,6 @@ pub async fn ai_conversation_build_prompt_with_context(
     tag_context: Option<serde_json::Value>,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<String> {
-    // 参数验证
     if conversation_id <= 0 {
         return Ok(api_error!("common.invalid_id"));
     }
@@ -61,7 +54,6 @@ pub async fn ai_conversation_build_prompt_with_context(
     let repositories = state.repositories();
     let context_service = state.get_terminal_context_service();
 
-    // 使用 TerminalContextService 解析上下文
     let terminal_context = if let Some(pane_id) = pane_id {
         match context_service
             .get_context_by_pane(PaneId::new(pane_id))
@@ -77,7 +69,6 @@ pub async fn ai_conversation_build_prompt_with_context(
         }
     };
 
-    // 使用智能上下文管理器构建prompt，传递终端上下文
     let _context_manager = state.get_context_manager();
     match crate::ai::context::build_intelligent_prompt_with_context(
         repositories,
@@ -94,7 +85,6 @@ pub async fn ai_conversation_build_prompt_with_context(
     }
 }
 
-// ===== 智能上下文配置管理命令 =====
 
 /// 获取上下文配置
 #[tauri::command]
@@ -112,7 +102,6 @@ pub async fn update_context_config(
     Ok(api_success!())
 }
 
-// ===== 缓存管理命令 =====
 
 /// 获取KV缓存统计
 #[tauri::command]

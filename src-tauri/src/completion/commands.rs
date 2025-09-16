@@ -1,6 +1,4 @@
-//! 补全功能的Tauri命令接口
-//! 提供前端调用的补全API
-//!
+//! 补全功能命令
 
 use crate::ai::tool::storage::StorageCoordinatorState;
 use crate::completion::engine::{CompletionEngine, CompletionEngineConfig};
@@ -13,9 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::State;
 
-/// 补全模块状态管理
 pub struct CompletionState {
-    /// 补全引擎实例
     pub engine: Arc<Mutex<Option<Arc<CompletionEngine>>>>,
 }
 
@@ -26,14 +22,12 @@ impl Default for CompletionState {
 }
 
 impl CompletionState {
-    /// 创建新的补全状态
     pub fn new() -> Self {
         Self {
             engine: Arc::new(Mutex::new(None)),
         }
     }
 
-    /// 验证状态完整性
     pub async fn validate(&self) -> TauriResult<()> {
         let engine_state = self
             .engine
@@ -85,14 +79,11 @@ pub async fn completion_get(
         Err(_) => return Ok(api_error!("completion.engine_not_initialized")),
     };
 
-    // 创建补全上下文
     let working_directory = PathBuf::from(&working_directory);
     let context = CompletionContext::new(input, cursor_position, working_directory);
 
-    // 获取补全建议
     match engine.completion_get(&context).await {
         Ok(mut response) => {
-            // 如果指定了最大结果数，进行限制
             if let Some(max_results) = max_results {
                 if response.items.len() > max_results {
                     response.items.truncate(max_results);

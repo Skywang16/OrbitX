@@ -183,7 +183,6 @@ impl ContextAnalyzer {
             }
         }
 
-        // 如果光标在最后，可能在创建新token
         if let Some(last_token) = tokens.last() {
             if cursor_pos > last_token.end {
                 return Some(tokens.len());
@@ -211,7 +210,6 @@ impl ContextAnalyzer {
 
         let command_name = &tokens[0].text;
 
-        // 检查是否有命令元数据
         if let Some(cmd_meta) = self.command_db.get(command_name) {
             return self.analyze_with_metadata(tokens, current_index, cmd_meta);
         }
@@ -230,7 +228,6 @@ impl ContextAnalyzer {
         if current_index >= tokens.len() {
             // 在最后位置，检查前一个token
             if let Some(prev_token) = tokens.get(current_index - 1) {
-                // 检查是否是需要值的选项
                 for option in &meta.options {
                     if option.takes_value {
                         if let Some(long) = &option.long {
@@ -254,14 +251,12 @@ impl ContextAnalyzer {
 
         let current_token = tokens.get(current_index);
 
-        // 检查是否是选项
         if let Some(token) = current_token {
             if token.text.starts_with('-') {
                 return CompletionPosition::Option;
             }
         }
 
-        // 检查子命令
         if !meta.subcommands.is_empty() {
             let non_option_args: Vec<&Token> = tokens[1..]
                 .iter()
@@ -291,14 +286,12 @@ impl ContextAnalyzer {
     fn analyze_heuristic(&self, tokens: &[Token], current_index: usize) -> CompletionPosition {
         let current_token = tokens.get(current_index);
 
-        // 检查是否是选项
         if let Some(token) = current_token {
             if token.text.starts_with('-') {
                 return CompletionPosition::Option;
             }
         }
 
-        // 检查前一个token是否是需要值的选项
         if current_index > 0 {
             if let Some(prev_token) = tokens.get(current_index - 1) {
                 if self.is_option_that_takes_value(&prev_token.text) {
@@ -309,7 +302,6 @@ impl ContextAnalyzer {
             }
         }
 
-        // 检查是否看起来像文件路径
         if let Some(token) = current_token {
             if self.looks_like_path(&token.text) {
                 return CompletionPosition::FilePath;
@@ -596,7 +588,7 @@ impl ContextAnalyzer {
     }
 }
 
-/// Token 结构
+/// 令牌结构
 #[derive(Debug, Clone)]
 pub struct Token {
     pub text: String,

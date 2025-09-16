@@ -16,9 +16,7 @@ use crate::llm::{
 };
 use anyhow::{anyhow, Context, Result};
 
-/// Google Gemini Provider
-///
-/// 实现了与 Google Gemini API 的所有交互逻辑
+/// Gemini提供者
 pub struct GeminiProvider {
     client: Client,
     config: LLMProviderConfig,
@@ -176,7 +174,7 @@ impl GeminiProvider {
                     if let (Some(name), Some(args)) = (fc["name"].as_str(), fc["args"].as_object())
                     {
                         let tool_call = LLMToolCall {
-                            // Gemini doesn't provide a unique ID, so we generate one.
+                            // Gemini不提供唯一ID，所以我们生成一个
                             id: format!("tool-call-{}", uuid::Uuid::new_v4()),
                             name: name.to_string(),
                             arguments: json!(args),
@@ -193,7 +191,6 @@ impl GeminiProvider {
 
         let finish_reason = match candidate["finishReason"].as_str() {
             Some("STOP") => {
-                // 如果有工具调用，则finish_reason应该是tool_calls
                 if !tool_calls.is_empty() {
                     "tool_calls".to_string()
                 } else {
@@ -246,7 +243,7 @@ impl GeminiProvider {
         let json_data: Value = serde_json::from_str(data)
             .map_err(|e| anyhow!(format!("Failed to parse stream data: {}", e)))?;
 
-        // Stream response is an array of candidates
+        // 流式响应是一个候选数组
         if let Ok(response) = Self::parse_response(&json_data) {
             let chunk = LLMStreamChunk::Delta {
                 content: Some(response.content),

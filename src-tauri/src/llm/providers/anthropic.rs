@@ -16,9 +16,7 @@ use crate::llm::{
 };
 use anyhow::{anyhow, Context, Result};
 
-/// Anthropic Provider
-///
-/// 实现了与 Anthropic Claude API 的所有交互逻辑
+/// Anthropic提供者
 pub struct AnthropicProvider {
     client: Client,
     config: LLMProviderConfig,
@@ -32,7 +30,6 @@ impl AnthropicProvider {
         }
     }
 
-    // --- Private Helper Methods ---
 
     fn get_endpoint(&self) -> String {
         let base = self
@@ -88,7 +85,6 @@ impl AnthropicProvider {
                                 "tool_use_id": tool_call_id,
                                 "content": result.to_string(),
                             })),
-                            // Image/File part
                             LLMMessagePart::File { mime_type, data } => {
                                 if mime_type.starts_with("image/") {
                                     Some(json!({
@@ -122,7 +118,7 @@ impl AnthropicProvider {
         let mut body = json!({
             "model": request.model,
             "messages": messages,
-            "max_tokens": request.max_tokens.unwrap_or(4096), // Anthropic requires max_tokens
+            "max_tokens": request.max_tokens.unwrap_or(4096),
             "stream": request.stream,
         });
 
@@ -236,13 +232,10 @@ impl AnthropicProvider {
             let id = content_block["id"].as_str().unwrap_or("").to_string();
             let name = content_block["name"].as_str().unwrap_or("").to_string();
 
-            // Anthropic在content_block_start中可能只有部分信息
-            // 完整的input会在后续的content_block_delta事件中提供
             if !name.is_empty() {
                 let tool_call = LLMToolCall {
                     id,
                     name,
-                    // 初始化为空对象，后续会通过delta更新
                     arguments: serde_json::json!({}),
                 };
 
@@ -264,16 +257,14 @@ impl AnthropicProvider {
     }
 
     fn parse_stream_chunk(data: &str) -> Option<Result<LLMStreamChunk>> {
-        // eventsource_stream::Eventsource 已经为我们解析出每个 SSE 事件，传入的就是纯 data 字段
         let event_json: Value = match serde_json::from_str(data) {
             Ok(json) => json,
-            Err(_) => return None, // 非 JSON 行忽略
+            Err(_) => return None,
         };
 
         let event_type = event_json["type"].as_str().unwrap_or("");
 
         match event_type {
-            // 文本增量
             "content_block_delta" => {
                 if event_json["delta"]["type"] == "text_delta" {
                     let content = event_json["delta"]["text"].as_str().map(|s| s.to_string());
@@ -282,22 +273,15 @@ impl AnthropicProvider {
                         tool_calls: None,
                     }))
                 } else if event_json["delta"]["type"] == "input_json_delta" {
-                    // 处理工具调用参数的增量更新
-                    // 这里我们暂时不处理增量参数，等待完整的工具调用
                     None
                 } else {
                     None
                 }
             }
-            // 内容块开始 - 处理工具调用
             "content_block_start" => Self::parse_content_block_start(&event_json),
-            // 内容块结束 - 工具调用完成
             "content_block_stop" => {
-                // 工具调用块结束，这里可以做一些清理工作
-                // 但通常不需要发送额外的消息，因为工具调用信息已经在start事件中发送了
                 None
             }
-            // 流结束
             "message_stop" => {
                 let stop_reason = event_json["stop_reason"].as_str().unwrap_or("stop");
                 let finish_reason = match stop_reason {
@@ -310,11 +294,9 @@ impl AnthropicProvider {
                 );
                 Some(Ok(LLMStreamChunk::Finish {
                     finish_reason,
-                    // Anthropic 的 usage 常出现在 message_delta 事件，这里简化为 None
                     usage: None,
                 }))
             }
-            // 流错误
             "error" => {
                 let error_message = event_json["error"]["message"]
                     .as_str()
@@ -322,7 +304,7 @@ impl AnthropicProvider {
                     .to_string();
                 Some(Err(anyhow!("Anthropic streaming error: {}", error_message)))
             }
-            _ => None, // 其他事件类型：message_start/content_block_start 等忽略
+            _ => None,
         }
     }
 }
@@ -379,7 +361,6 @@ impl LLMProvider for AnthropicProvider {
             .filter_map(|event_result| {
                 futures::future::ready(match event_result {
                     Ok(event) => {
-                        // 解析Anthropic SSE事件数据
                         Self::parse_stream_chunk(&event.data)
                     }
                     Err(e) => Some(Err(anyhow!("网络错误: {}", e))),

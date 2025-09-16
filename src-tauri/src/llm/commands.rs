@@ -11,7 +11,14 @@ use crate::storage::repositories::RepositoryManager;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 
-/// LLM 管理器状态
+#[tauri::command]
+pub async fn llm_cancel_stream(state: State<'_, LLMManagerState>) -> TauriApiResult<EmptyData> {
+    match state.service.cancel_stream().await {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("llm.cancel_failed")),
+    }
+}
+
 pub struct LLMManagerState {
     pub service: Arc<LLMService>,
     pub registry: Arc<LLMRegistry>,
@@ -25,7 +32,6 @@ impl LLMManagerState {
     }
 }
 
-/// 非流式LLM调用
 #[tauri::command]
 pub async fn llm_call(
     state: State<'_, LLMManagerState>,
@@ -37,7 +43,6 @@ pub async fn llm_call(
     }
 }
 
-/// 流式LLM调用
 #[tauri::command]
 pub async fn llm_call_stream(
     state: State<'_, LLMManagerState>,

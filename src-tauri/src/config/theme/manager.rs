@@ -1,9 +1,3 @@
-/*!
- * 主题系统核心模块
- *
- * 提供主题管理功能，包括主题加载、验证、索引管理和缓存。
- * 支持内置主题和用户自定义主题的统一管理。
- */
 
 use super::types::{AnsiColors, SyntaxHighlight, Theme, ThemeType, UIColors};
 use crate::storage::cache::UnifiedCache;
@@ -19,36 +13,25 @@ use std::{
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
-// ============================================================================
-// 主题系统数据结构
-// ============================================================================
 
-/// 主题文件包装结构 - 用于解析嵌套的 [theme] 格式
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ThemeFileWrapper {
-    /// 主题数据
     pub theme: Theme,
 }
 
-/// 主题索引条目
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ThemeIndexEntry {
-    /// 主题名称
     pub name: String,
 
-    /// 文件名
     pub file: String,
 
-    /// 主题类型
     #[serde(rename = "type")]
     pub theme_type: String,
 
-    /// 是否为内置主题
     pub builtin: bool,
 
-    /// 文件大小（字节）
     pub file_size: Option<u64>,
 
     /// 最后修改时间
@@ -111,9 +94,7 @@ impl Default for ThemeManagerOptions {
     }
 }
 
-// ============================================================================
 // 主题管理器核心结构
-// ============================================================================
 
 /// 主题管理器
 ///
@@ -158,10 +139,8 @@ impl ThemeManager {
             last_index_refresh: Arc::new(Mutex::new(None)),
         };
 
-        // 初始化主题目录
         manager.ensure_theme_directories().await?;
 
-        // 创建内置主题文件（如果不存在）
         manager.create_builtin_themes().await?;
 
         // 直接刷新索引而不是加载现有索引（确保索引与实际文件同步）
@@ -366,7 +345,6 @@ impl ThemeManager {
             }
         };
 
-        // 如果索引未初始化，重新加载
         if themes.is_none() {
             warn!("主题索引未初始化，尝试重新加载");
             self.load_theme_index().await?;
@@ -388,7 +366,6 @@ impl ThemeManager {
 
         let themes = themes.unwrap();
 
-        // 如果主题列表为空，尝试刷新索引
         if themes.is_empty() {
             warn!("主题列表为空，尝试刷新索引");
             self.refresh_index().await?;
@@ -435,7 +412,6 @@ impl ThemeManager {
         // 根据主题索引文件中的信息区分内置和自定义主题
         let (builtin_themes, custom_themes) = self.categorize_themes(all_themes).await;
 
-        // 创建新索引
         let total_themes = custom_themes.len() + builtin_themes.len();
         let new_index = ThemeIndex {
             version: "1.0.0".to_string(),
@@ -577,7 +553,6 @@ impl ThemeManager {
         // 尝试从资源目录复制主题文件
         self.copy_themes_from_resources(themes_dir).await?;
 
-        // 如果资源复制失败，回退到创建默认主题
         self.ensure_default_themes_exist(themes_dir).await?;
 
         // 内置主题文件检查完成
@@ -595,7 +570,6 @@ impl ThemeManager {
     /// 扫描主题目录并加载现有主题文件
     #[allow(dead_code)]
     async fn scan_and_load_existing_themes(&self, themes_dir: &Path) -> AppResult<()> {
-        // 检查主题目录是否存在
         if !themes_dir.exists() {
             self.create_default_theme_files(themes_dir).await?;
             return Ok(());
@@ -663,7 +637,6 @@ impl ThemeManager {
     async fn create_default_theme_files(&self, themes_dir: &Path) -> AppResult<()> {
         info!("创建默认主题文件");
 
-        // 创建默认的深色主题
         let dark_theme_content = r##"[theme]
 name = "dark"
 theme_type = "dark"
@@ -743,7 +716,6 @@ selection = "rgba(173, 214, 255, 0.3)"
             .await
             .with_context(|| format!("无法创建默认深色主题文件: {}", dark_theme_path.display()))?;
 
-        // 创建默认的浅色主题
         let light_theme_content = r##"[theme]
 name = "light"
 theme_type = "light"
@@ -833,7 +805,6 @@ selection = "rgba(3, 102, 214, 0.3)"
 
     /// 确保默认主题存在
     async fn ensure_default_themes_exist(&self, themes_dir: &Path) -> AppResult<()> {
-        // 检查是否存在基本的 dark 和 light 主题
         let dark_theme_path = themes_dir.join("dark.toml");
         let light_theme_path = themes_dir.join("light.toml");
 
@@ -863,9 +834,7 @@ selection = "rgba(3, 102, 214, 0.3)"
     }
 }
 
-// ============================================================================
 // 主题验证相关结构
-// ============================================================================
 
 /// 主题验证结果
 #[derive(Debug, Clone, Serialize, Deserialize)]

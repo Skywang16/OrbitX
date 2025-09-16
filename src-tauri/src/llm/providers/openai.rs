@@ -17,9 +17,7 @@ use crate::llm::{
 };
 use anyhow::{anyhow, Context, Result};
 
-/// OpenAI Provider
-///
-/// 实现了与 OpenAI API (以及兼容 OpenAI API 的服务) 的所有交互逻辑
+/// OpenAI提供者
 pub struct OpenAIProvider {
     client: Client,
     config: LLMProviderConfig,
@@ -33,9 +31,7 @@ impl OpenAIProvider {
         }
     }
 
-    // --- Private Helper Methods ---
 
-    /// 构建请求体
     fn build_body(&self, request: &LLMRequest) -> Value {
         let mut body = json!({
             "model": request.model,
@@ -309,7 +305,6 @@ impl OpenAIProvider {
             let mut parsed_calls = Vec::new();
 
             for tool_call_delta in tool_calls_array {
-                // 获取工具调用的基本信息
                 let index = tool_call_delta["index"].as_u64().unwrap_or(0) as usize;
 
                 // 工具调用ID（可能在第一个delta中出现）
@@ -333,7 +328,6 @@ impl OpenAIProvider {
                         serde_json::Value::Object(serde_json::Map::new())
                     } else {
                         serde_json::from_str(arguments_str).unwrap_or_else(|_| {
-                            // 如果不是完整的JSON，创建一个包含原始文本的对象
                             serde_json::json!({
                                 "_streaming_args": arguments_str,
                                 "_is_streaming": true
@@ -385,11 +379,9 @@ impl OpenAIProvider {
         if let Some(finish_reason) = choice["finish_reason"].as_str() {
             // 当finish_reason是"tool_calls"时，检查是否有工具调用需要处理
             if finish_reason == "tool_calls" {
-                // 检查delta中是否有工具调用信息
                 if let Some(delta) = choice.get("delta") {
                     let tool_calls = Self::parse_delta_tool_calls(delta)?;
                     if tool_calls.is_some() {
-                        // 如果有工具调用，先发送delta消息
                         return Ok(LLMStreamChunk::Delta {
                             content: None,
                             tool_calls,

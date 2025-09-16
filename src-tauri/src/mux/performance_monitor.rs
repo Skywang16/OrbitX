@@ -114,7 +114,6 @@ impl PerformanceMonitor {
 
     /// 检查性能警告
     pub fn check_performance_warnings(&self, metrics: &PerformanceMetrics) {
-        // 检查内存使用
         if metrics.estimated_memory_usage > 100 * 1024 * 1024 {
             // 超过100MB
             warn!(
@@ -124,12 +123,10 @@ impl PerformanceMonitor {
             );
         }
 
-        // 检查面板数量
         if metrics.active_panes > 50 {
             warn!("活跃面板数量较多: {}", metrics.active_panes);
         }
 
-        // 检查批次大小效率
         if metrics.total_batches_processed > 0 && metrics.avg_batch_size < 100.0 {
             warn!(
                 "平均批次大小较小: {:.2} 字节，可能影响性能",

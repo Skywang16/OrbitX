@@ -55,9 +55,7 @@ pub struct SystemShellsResult {
     pub user_shell: String,
 }
 
-// ============================================================================
 // Tauri 命令接口
-// ============================================================================
 
 /// 获取终端配置
 #[tauri::command]
@@ -233,7 +231,6 @@ pub async fn config_terminal_detect_system_shells(
         "/opt/homebrew/bin/fish",
     ];
 
-    // 检查每个Shell是否存在
     for shell_path in &shell_paths {
         if std::path::Path::new(shell_path).exists() {
             if let Some(shell_name) = std::path::Path::new(shell_path).file_name() {
@@ -246,14 +243,12 @@ pub async fn config_terminal_detect_system_shells(
         }
     }
 
-    // 获取默认Shell
     let default_shell = if cfg!(windows) {
         "powershell.exe".to_string()
     } else {
         "zsh".to_string()
     };
 
-    // 获取用户当前Shell
     let user_shell = if cfg!(windows) {
         // Windows平台通常没有SHELL环境变量，使用默认shell
         default_shell.clone()

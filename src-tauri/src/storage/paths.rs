@@ -103,13 +103,11 @@ impl StoragePaths {
 
     /// 验证路径的有效性
     pub fn validate(&self) -> AppResult<()> {
-        // 如果应用目录不存在，尝试创建它
         if !self.app_dir.exists() {
             fs::create_dir_all(&self.app_dir)
                 .with_context(|| format!("无法创建应用目录: {}", self.app_dir.display()))?;
         }
 
-        // 检查是否有写权限
         if let Err(e) = fs::metadata(&self.app_dir) {
             return Err(anyhow!(
                 "无法访问应用目录: {} - {}",

@@ -308,7 +308,6 @@ impl AIModelRepository {
     pub async fn save_with_encryption(&self, model: &AIModelConfig) -> AppResult<i64> {
         debug!("保存AI模型: {}", model.name);
 
-        // 如果没有提供新的 api_key，则保留原有的 Keychain 标记，不覆盖
         let existing_marker: Option<String> =
             sqlx::query("SELECT api_key_encrypted FROM ai_models WHERE id = ?")
                 .bind(&model.id)

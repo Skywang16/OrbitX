@@ -1,10 +1,3 @@
-/*!
- * 存储协调器模块
- *
- * 管理三层存储架构的协调器，采用Repository模式
- * 集成配置管理器、MessagePack状态层和数据库层
- * 提供统一的存储访问接口
- */
 
 use crate::config::TomlConfigManager;
 use crate::storage::cache::UnifiedCache;
@@ -35,7 +28,6 @@ impl Default for StorageCoordinatorOptions {
     }
 }
 
-/// 三层存储系统协调器，采用Repository模式管理数据访问
 pub struct StorageCoordinator {
     paths: StoragePaths,
     options: StorageCoordinatorOptions,
@@ -63,27 +55,23 @@ impl StorageCoordinator {
             database_options,
         } = options;
 
-        // 初始化MessagePack状态管理器
         let messagepack_manager = Arc::new(
             MessagePackManager::new(paths.clone(), messagepack_options)
                 .await
                 .context("初始化MessagePack管理器失败")?,
         );
 
-        // 初始化数据库管理器
         let database_manager = Arc::new(
             DatabaseManager::new(paths.clone(), database_options)
                 .await
                 .context("初始化数据库管理器失败")?,
         );
 
-        // 初始化数据库
         database_manager
             .initialize()
             .await
             .context("初始化数据库失败")?;
 
-        // 初始化Repository管理器
         let repository_manager = Arc::new(RepositoryManager::new(Arc::clone(&database_manager)));
 
         let coordinator = Self {

@@ -44,7 +44,6 @@ impl SystemCommandsProvider {
 
         let mut commands = self.commands.write().await;
 
-        // 获取PATH环境变量
         let path_var = env::var("PATH").unwrap_or_default();
         let paths: Vec<&str> = path_var
             .split(if cfg!(windows) { ';' } else { ':' })
@@ -68,7 +67,6 @@ impl SystemCommandsProvider {
                     if let Some(file_name) = entry_path.file_name() {
                         let name = file_name.to_string_lossy().to_string();
 
-                        // 检查是否为可执行文件
                         if self.is_executable(&entry_path).await {
                             commands.insert(name);
                         }
@@ -170,14 +168,12 @@ impl CompletionProvider for SystemCommandsProvider {
     }
 
     fn should_provide(&self, context: &CompletionContext) -> bool {
-        // 如果是命令行的第一个词（命令名），且不包含路径分隔符
         let parts: Vec<&str> = context.input.split_whitespace().collect();
 
         if parts.is_empty() {
             return false;
         }
 
-        // 检查是否在补全第一个词（命令名）
         let is_first_word =
             parts.len() == 1 || (parts.len() > 1 && context.cursor_position <= parts[0].len());
 

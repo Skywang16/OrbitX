@@ -1,6 +1,4 @@
-//! Shell Integration Tauri Commands
-//!
-//! 提供前端调用的Shell Integration相关命令
+//! Shell 集成命令
 
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
@@ -15,7 +13,6 @@ use tracing::{debug, error};
 use super::{CommandInfo, PaneShellState, ShellType};
 use crate::mux::{PaneId, TerminalMux};
 
-/// 解析命令行，正确处理引号
 fn parse_command_line(command: &str) -> Result<Vec<String>, String> {
     let mut parts = Vec::new();
     let mut current_part = String::new();
@@ -48,7 +45,6 @@ fn parse_command_line(command: &str) -> Result<Vec<String>, String> {
         parts.push(current_part);
     }
 
-    // 检查引号是否匹配
     if in_single_quote || in_double_quote {
         return Err("引号不匹配".to_string());
     }
@@ -59,7 +55,7 @@ fn parse_command_line(command: &str) -> Result<Vec<String>, String> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrontendCommandInfo {
     pub id: u64,
-    pub start_time: u64, // timestamp
+    pub start_time: u64, // 时间戳
     pub end_time: Option<u64>,
     pub exit_code: Option<i32>,
     pub status: String,
@@ -383,11 +379,9 @@ pub async fn shell_execute_background_command(
     let program = &parts[0];
     let args = &parts[1..];
 
-    // 创建命令
     let mut cmd = Command::new(program);
     cmd.args(args);
 
-    // 设置工作目录
     if let Some(cwd) = working_directory {
         cmd.current_dir(cwd);
     }

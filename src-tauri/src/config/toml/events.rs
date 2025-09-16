@@ -1,8 +1,4 @@
-/*!
- * TOML配置事件系统
- *
- * 处理配置变更的事件通知机制
- */
+//! TOML配置事件系统
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;

@@ -1,8 +1,4 @@
-/*!
- * TOML配置写入器
- *
- * 负责将配置写入文件系统，支持原子写入和备份恢复
- */
+//! TOML配置写入器
 
 use crate::{config::types::AppConfig, utils::error::AppResult};
 use anyhow::{anyhow, Context};
@@ -99,7 +95,6 @@ impl TomlConfigWriter {
         // 首先尝试直接写入（最可靠的方法）
         debug!("尝试直接写入配置文件");
 
-        // 创建备份（如果原文件存在）
         let backup_path = if self.config_path.exists() {
             let backup = self.config_path.with_extension("backup");
             match fs::copy(&self.config_path, &backup).await {
@@ -131,7 +126,6 @@ impl TomlConfigWriter {
             Err(write_err) => {
                 warn!("直接写入失败，尝试原子写入方法: {}", write_err);
 
-                // 如果直接写入失败，尝试原子写入方法
                 let temp_path = self
                     .config_path
                     .with_extension(&format!("tmp.{}", std::process::id()));
@@ -162,7 +156,6 @@ impl TomlConfigWriter {
                         // 清理临时文件
                         let _ = fs::remove_file(&temp_path).await;
 
-                        // 如果有备份，尝试恢复
                         if let Some(backup) = backup_path {
                             if let Err(restore_err) = fs::copy(&backup, &self.config_path).await {
                                 warn!("恢复配置备份失败: {}", restore_err);
@@ -187,7 +180,6 @@ impl TomlConfigWriter {
     pub async fn create_backup_and_use_default(&self) -> AppResult<AppConfig> {
         use crate::config::defaults::create_default_config;
 
-        // 创建备份
         if self.config_path.exists() {
             let backup_path = self.config_path.with_extension("backup");
             if let Err(e) = fs::copy(&self.config_path, &backup_path).await {

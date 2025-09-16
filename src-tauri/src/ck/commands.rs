@@ -1,8 +1,3 @@
-/*!
- * CK 代码搜索引擎 Tauri 命令接口
- *
- * 提供语义搜索、索引管理等功能的前端调用接口
- */
 
 use crate::terminal::commands::TerminalContextState;
 use crate::utils::TauriApiResult;
@@ -18,7 +13,6 @@ use tauri::State;
 use tokio::task::JoinHandle;
 use tracing::debug;
 
-// 索引目录工具：默认写入 .oxi；读取优先 .oxi，否则回退 .ck（仅读取，绝不创建 .ck）
 fn default_index_dir(base: &Path) -> PathBuf { base.join(".oxi") }
 fn resolve_index_dir(base: &Path) -> PathBuf {
     let oxi = base.join(".oxi");
@@ -26,7 +20,6 @@ fn resolve_index_dir(base: &Path) -> PathBuf {
     base.join(".ck")
 }
 
-// 检查给定路径的索引是否就绪
 fn is_index_ready(search_path: &Path) -> bool {
     let idx_dir = resolve_index_dir(search_path);
     if !idx_dir.exists() { return false; }
@@ -38,7 +31,6 @@ fn is_index_ready(search_path: &Path) -> bool {
     ready_marker.exists()
 }
 
-/// 计算索引目录大小（仅顶层与其下一层子目录的文件，避免深度递归）
 fn index_dir_top_level_size(dir: &Path) -> u64 {
     let mut total: u64 = 0;
     if let Ok(entries) = fs::read_dir(dir) {

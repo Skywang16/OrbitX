@@ -55,12 +55,14 @@ pub mod cache;
 pub mod context;
 pub mod pane;
 pub mod stats;
+pub mod stream;
 
 // 重新导出所有命令函数，保持向后兼容
 pub use cache::{terminal_context_clear_all_cache, terminal_context_invalidate_cache};
 pub use context::{terminal_context_get_active, terminal_context_get};
 pub use pane::{terminal_context_clear_active_pane, terminal_context_get_active_pane, terminal_context_is_pane_active, terminal_context_set_active_pane};
 pub use stats::{terminal_context_get_cache_stats, terminal_context_get_registry_stats};
+pub use stream::{terminal_subscribe_output, terminal_subscribe_output_cancel};
 
 #[cfg(test)]
 mod tests {

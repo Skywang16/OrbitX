@@ -1,6 +1,4 @@
 //! 智能补全提供者
-//!
-//! 基于上下文分析，智能选择合适的补全策略
 
 use crate::completion::context_analyzer::{
     ArgType, CompletionContext, CompletionPosition, ContextAnalyzer,
@@ -11,20 +9,14 @@ use crate::utils::error::AppResult;
 use async_trait::async_trait;
 use std::sync::Arc;
 
-/// 智能补全提供者
 pub struct SmartCompletionProvider {
-    /// 上下文分析器
     context_analyzer: Arc<ContextAnalyzer>,
-    /// 文件系统提供者
     filesystem_provider: Arc<dyn CompletionProvider>,
-    /// 系统命令提供者
     system_commands_provider: Arc<dyn CompletionProvider>,
-    /// 历史记录提供者
     history_provider: Arc<dyn CompletionProvider>,
 }
 
 impl SmartCompletionProvider {
-    /// 创建新的智能补全提供者
     pub fn new(
         filesystem_provider: Arc<dyn CompletionProvider>,
         system_commands_provider: Arc<dyn CompletionProvider>,
@@ -114,7 +106,6 @@ impl SmartCompletionProvider {
                                     .with_source("builtin".to_string())
                                     .with_score(90.0);
 
-                            // 如果需要值，添加占位符
                             if option.takes_value {
                                 item = item.with_display_text(format!("{} <value>", long));
                             }

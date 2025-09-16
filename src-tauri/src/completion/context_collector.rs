@@ -1,6 +1,4 @@
-//! 上下文收集器模块
-//!
-//! 负责捕获和解析命令执行的输出结果，提取有用的上下文信息
+//! 上下文收集器
 
 use crate::completion::types::{
     CommandExecutionContext, CommandOutput, OutputDataType, OutputEntity, 
@@ -13,30 +11,21 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// 上下文收集器
 pub struct ContextCollector {
-    /// 输出解析器映射
     parsers: HashMap<String, Box<dyn OutputParser + Send + Sync>>,
     
-    /// 收集的上下文数据
     contexts: Arc<RwLock<Vec<CommandExecutionContext>>>,
     
-    /// 最大保存的上下文数量
     max_contexts: usize,
 }
 
-/// 输出解析器特征
 pub trait OutputParser {
-    /// 解析器名称
     fn name(&self) -> &'static str;
     
-    /// 检查是否可以解析该命令的输出
     fn can_parse(&self, command: &str) -> bool;
     
-    /// 解析命令输出
     fn parse(&self, command: &str, output: &str) -> AppResult<ParsedOutputData>;
     
-    /// 解析器优先级
     fn priority(&self) -> i32 {
         0
     }
@@ -83,14 +72,12 @@ impl ContextCollector {
         exit_code: Option<i32>,
         duration: Option<u64>,
     ) -> AppResult<()> {
-        // 创建命令输出
         let output = CommandOutput::new(stdout.clone(), stderr.clone());
         
         // 尝试解析输出
         let parsed_output = self.parse_output(&command, &stdout)?;
         let output_with_parsed = output.with_parsed_data(parsed_output);
         
-        // 创建命令执行上下文
         let mut context = CommandExecutionContext::new(command, args, working_directory);
         context = context.with_output(output_with_parsed);
         

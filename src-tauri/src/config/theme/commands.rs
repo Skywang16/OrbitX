@@ -62,10 +62,8 @@ pub async fn theme_get_config_status(
     let theme_config = &config.appearance.theme_config;
     let is_system_dark = SystemThemeDetector::is_dark_mode();
 
-    // 获取当前主题名称
     let current_theme_name = theme_service.get_current_theme_name(theme_config, is_system_dark);
 
-    // 获取所有可用主题
     let theme_list = match theme_service.theme_manager().list_themes().await {
         Ok(list) => list,
         Err(_) => return Ok(api_error!("config.get_failed")),
@@ -187,9 +185,7 @@ pub async fn theme_set_follow_system<R: Runtime>(
         return Ok(api_error!("config.update_failed"));
     }
 
-    // 如果启用跟随系统主题，需要获取当前应该使用的主题并发送事件
     if follow_system {
-        // 获取当前系统主题状态
         let config = match config_manager.config_get().await {
             Ok(config) => config,
             Err(_) => return Ok(api_error!("config.get_failed")),

@@ -11,7 +11,7 @@ pub enum LLMMessagePart {
     File {
         #[serde(rename = "mimeType")]
         mime_type: String,
-        data: String, // base64 encoded
+        data: String, // base64编码
     },
     #[serde(rename = "tool-call")]
     ToolCall {

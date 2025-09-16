@@ -1,8 +1,3 @@
-/*!
- * 终端上下文服务实现
- *
- * 提供统一的终端上下文访问接口，整合来自多个数据源的终端信息
- */
 
 use crate::mux::{PaneId, TerminalMux};
 use crate::shell::{ContextServiceIntegration, ShellIntegrationManager};
@@ -18,7 +13,6 @@ use std::time::{Duration, Instant};
 use tokio::time::timeout;
 use tracing::{debug, warn};
 
-/// 缓存的上下文信息
 #[derive(Debug, Clone)]
 pub struct CachedContext {
     pub context: TerminalContext,
@@ -27,13 +21,11 @@ pub struct CachedContext {
 }
 
 impl CachedContext {
-    /// 检查缓存是否过期
     pub fn is_expired(&self) -> bool {
         self.cached_at.elapsed() > self.ttl
     }
 }
 
-/// 缓存统计信息
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheStats {
@@ -109,7 +101,6 @@ impl TerminalContextService {
     ) -> Arc<Self> {
         let service = Arc::new(Self::new(registry, shell_integration, terminal_mux));
 
-        // 设置Shell集成管理器的上下文服务集成
         service.shell_integration.set_context_service_integration(
             Arc::downgrade(&service) as std::sync::Weak<dyn ContextServiceIntegration>
         );
@@ -228,7 +219,6 @@ impl TerminalContextService {
     /// * `Ok(String)` - 当前工作目录路径
     /// * `Err(anyhow::Error)` - 获取失败的错误信息
     pub async fn shell_get_pane_cwd(&self, pane_id: PaneId) -> AppResult<String> {
-        // 检查面板是否存在
         if !self.terminal_mux.pane_exists(pane_id) {
             return Err(anyhow!("面板不存在: {}", pane_id));
         }
@@ -262,7 +252,6 @@ impl TerminalContextService {
     /// * `Ok(ShellType)` - Shell类型
     /// * `Err(anyhow::Error)` - 获取失败的错误信息
     pub async fn get_pane_shell_type(&self, pane_id: PaneId) -> AppResult<ShellType> {
-        // 检查面板是否存在
         if !self.terminal_mux.pane_exists(pane_id) {
             return Err(anyhow!("面板不存在: {}", pane_id));
         }
@@ -327,40 +316,31 @@ impl TerminalContextService {
 
     /// 内部查询上下文的实现
     async fn query_context_internal(&self, pane_id: PaneId) -> AppResult<TerminalContext> {
-        // 检查面板是否存在
         if !self.terminal_mux.pane_exists(pane_id) {
             return Err(anyhow!("面板不存在: {}", pane_id));
         }
 
-        // 创建基础上下文
         let mut context = TerminalContext::new(pane_id);
 
-        // 设置活跃状态
         context.set_active(self.registry.terminal_context_is_pane_active(pane_id));
 
-        // 获取当前工作目录
         if let Some(cwd) = self.terminal_mux.shell_get_pane_cwd(pane_id) {
             context.update_cwd(cwd);
         }
 
-        // 获取Shell状态信息
         if let Some(shell_state) = self.terminal_mux.get_pane_shell_state(pane_id) {
-            // 设置Shell类型
             if let Some(shell_type) = shell_state.shell_type {
                 context.update_shell_type(self.convert_shell_type(shell_type));
             }
 
-            // 设置Shell集成状态
             context.set_shell_integration(
                 shell_state.integration_state == crate::shell::ShellIntegrationState::Enabled,
             );
 
-            // 设置当前命令
             if let Some(current_cmd) = shell_state.current_command {
                 context.set_current_command(Some(self.convert_command_info(current_cmd)));
             }
 
-            // 设置命令历史
             let history: Vec<CommandInfo> = shell_state
                 .command_history
                 .into_iter()
@@ -368,7 +348,6 @@ impl TerminalContextService {
                 .collect();
             context.command_history = history;
 
-            // 设置窗口标题
             if let Some(title) = shell_state.window_title {
                 context.update_window_title(title);
             }
@@ -627,7 +606,6 @@ mod tests {
         let service = TerminalContextService::default();
         let pane_id = PaneId::new(1);
 
-        // 创建一个测试上下文并缓存
         let mut test_context = TerminalContext::new(pane_id);
         test_context.update_cwd("/test/path".to_string());
         service.cache_context(pane_id, test_context.clone());
@@ -651,7 +629,6 @@ mod tests {
         let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
         let terminal_mux = Arc::new(TerminalMux::new());
 
-        // 创建一个TTL很短的服务
         let mut service = TerminalContextService::new(registry, shell_integration, terminal_mux);
         service.default_cache_ttl = Duration::from_millis(10); // 10ms TTL
 
@@ -679,7 +656,6 @@ mod tests {
 
         let pane_id = PaneId::new(1);
 
-        // 设置活跃终端
         registry.terminal_context_set_active_pane(pane_id).unwrap();
 
         // 验证活跃终端状态

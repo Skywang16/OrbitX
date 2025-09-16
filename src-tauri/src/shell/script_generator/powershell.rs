@@ -1,6 +1,4 @@
-//! PowerShell Integration Script Generator
-//!
-//! 为 PowerShell 生成集成脚本，包括命令跟踪、CWD同步等功能
+//! PowerShell集成脚本生成器
 
 use super::ShellIntegrationConfig;
 
@@ -8,7 +6,6 @@ use super::ShellIntegrationConfig;
 pub fn generate_script(config: &ShellIntegrationConfig) -> String {
     let mut script = String::new();
 
-    // 检查是否已经注入过
     script.push_str(
         r#"
 # OrbitX Shell Integration for PowerShell
@@ -116,7 +113,6 @@ function global:prompt {
         }
     }
 
-    // 初始化
     script.push_str(
         r#"
 # 初始化CWD和标题

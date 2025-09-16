@@ -123,7 +123,6 @@ impl IoThreadPool {
         let pane_registry: Arc<std::sync::Mutex<HashMap<PaneId, Weak<dyn Pane>>>> =
             Arc::new(std::sync::Mutex::new(HashMap::new()));
 
-        // 创建独立的批处理器
         let batch_config = BatchProcessorConfig {
             processor_threads: (config.worker_threads / 2).clamp(2, 4),
             batch_size: config.batch_size,

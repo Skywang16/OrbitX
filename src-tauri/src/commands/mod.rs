@@ -1,24 +1,19 @@
 
-// 文件拖拽处理命令
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
 use std::path::PathBuf;
 use tracing::warn;
 
-/// 处理文件打开事件，返回文件所在的目录路径
 #[tauri::command]
 pub async fn file_handle_open(path: String) -> TauriApiResult<String> {
-    // 参数验证
     if path.trim().is_empty() {
         return Ok(api_error!("common.path_empty"));
     }
 
-    // 确保路径字符串正确处理中文字符
     let path_buf = PathBuf::from(&path);
 
     if path_buf.exists() {
         let dir = if path_buf.is_file() {
-            // 如果是文件，返回其父目录
             match path_buf.parent() {
                 Some(parent) => parent,
                 None => {
@@ -27,11 +22,9 @@ pub async fn file_handle_open(path: String) -> TauriApiResult<String> {
                 }
             }
         } else {
-            // 如果是目录，直接返回
             &path_buf
         };
 
-        // 使用 to_string_lossy() 确保中文字符正确转换
         let dir_str = dir.to_string_lossy().to_string();
         Ok(api_success!(dir_str))
     } else {
@@ -40,155 +33,156 @@ pub async fn file_handle_open(path: String) -> TauriApiResult<String> {
     }
 }
 
-/// 注册所有 Tauri 命令
 pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.invoke_handler(tauri::generate_handler![
-        // 窗口管理命令
-        crate::window::commands::window_manage_state, // window_manage_state
-        crate::window::commands::window_get_current_directory, // window_get_current_directory
-        crate::window::commands::window_get_home_directory, // window_get_home_directory
-        crate::window::commands::window_clear_directory_cache, // window_clear_directory_cache
-        crate::window::commands::window_normalize_path, // window_normalize_path
-        crate::window::commands::window_join_paths,   // window_join_paths
-        crate::window::commands::window_path_exists,  // window_path_exists
-        crate::window::commands::window_get_platform_info, // window_get_platform_info
-        crate::window::commands::window_set_opacity,  // window_set_opacity
-        crate::window::commands::window_get_opacity,  // window_get_opacity
+        crate::window::commands::window_manage_state,
+        crate::window::commands::window_get_current_directory,
+        crate::window::commands::window_get_home_directory,
+        crate::window::commands::window_clear_directory_cache,
+        crate::window::commands::window_normalize_path,
+        crate::window::commands::window_join_paths,
+        crate::window::commands::window_path_exists,
+        crate::window::commands::window_get_platform_info,
+        crate::window::commands::window_set_opacity,
+        crate::window::commands::window_get_opacity,
         // 文件拖拽命令
-        file_handle_open, // file_handle_open
+        file_handle_open,
         // 终端管理命令
-        crate::ai::tool::shell::terminal_create, // terminal_create
-        crate::ai::tool::shell::terminal_write,  // terminal_write
-        crate::ai::tool::shell::terminal_resize, // terminal_resize
-        crate::ai::tool::shell::terminal_close,  // terminal_close
-        crate::ai::tool::shell::terminal_list,   // terminal_list
-        crate::ai::tool::shell::terminal_get_available_shells, // terminal_get_available_shells
-        crate::ai::tool::shell::terminal_get_default_shell, // terminal_get_default_shell
-        crate::ai::tool::shell::terminal_validate_shell_path, // terminal_validate_shell_path
-        crate::ai::tool::shell::terminal_create_with_shell, // terminal_create_with_shell
-        crate::ai::tool::shell::terminal_find_shell_by_name, // terminal_find_shell_by_name
-        crate::ai::tool::shell::terminal_find_shell_by_path, // terminal_find_shell_by_path
-        crate::ai::tool::shell::terminal_get_shell_stats, // terminal_get_shell_stats
-        crate::ai::tool::shell::terminal_initialize_shell_manager, // terminal_initialize_shell_manager
-        crate::ai::tool::shell::terminal_validate_shell_manager, // terminal_validate_shell_manager
-        crate::ai::tool::shell::terminal_get_buffer,             // terminal_get_buffer
-        crate::ai::tool::shell::terminal_set_buffer,             // terminal_set_buffer
+        crate::ai::tool::shell::terminal_create,
+        crate::ai::tool::shell::terminal_write,
+        crate::ai::tool::shell::terminal_resize,
+        crate::ai::tool::shell::terminal_close,
+        crate::ai::tool::shell::terminal_list,
+        crate::ai::tool::shell::terminal_get_available_shells,
+        crate::ai::tool::shell::terminal_get_default_shell,
+        crate::ai::tool::shell::terminal_validate_shell_path,
+        crate::ai::tool::shell::terminal_create_with_shell,
+        crate::ai::tool::shell::terminal_find_shell_by_name,
+        crate::ai::tool::shell::terminal_find_shell_by_path,
+        crate::ai::tool::shell::terminal_get_shell_stats,
+        crate::ai::tool::shell::terminal_initialize_shell_manager,
+        crate::ai::tool::shell::terminal_validate_shell_manager,
+        crate::ai::tool::shell::terminal_get_buffer,
+        crate::ai::tool::shell::terminal_set_buffer,
         // 终端上下文管理命令
-        crate::terminal::commands::pane::terminal_context_set_active_pane, // terminal_context_set_active_pane
-        crate::terminal::commands::pane::terminal_context_get_active_pane, // terminal_context_get_active_pane
-        crate::terminal::commands::pane::terminal_context_clear_active_pane, // terminal_context_clear_active_pane
-        crate::terminal::commands::pane::terminal_context_is_pane_active, // terminal_context_is_pane_active
-        crate::terminal::commands::context::terminal_context_get,         // terminal_context_get
-        crate::terminal::commands::context::terminal_context_get_active, // terminal_context_get_active
-        crate::terminal::commands::cache::terminal_context_invalidate_cache, // terminal_context_invalidate_cache
-        crate::terminal::commands::cache::terminal_context_clear_all_cache, // terminal_context_clear_all_cache
-        crate::terminal::commands::stats::terminal_context_get_cache_stats, // terminal_context_get_cache_stats
-        crate::terminal::commands::stats::terminal_context_get_registry_stats, // terminal_context_get_registry_stats
+        crate::terminal::commands::pane::terminal_context_set_active_pane,
+        crate::terminal::commands::pane::terminal_context_get_active_pane,
+        crate::terminal::commands::pane::terminal_context_clear_active_pane,
+        crate::terminal::commands::pane::terminal_context_is_pane_active,
+        crate::terminal::commands::context::terminal_context_get,
+        crate::terminal::commands::context::terminal_context_get_active,
+        crate::terminal::commands::cache::terminal_context_invalidate_cache,
+        crate::terminal::commands::cache::terminal_context_clear_all_cache,
+        crate::terminal::commands::stats::terminal_context_get_cache_stats,
+        crate::terminal::commands::stats::terminal_context_get_registry_stats,
+        // 终端 Channel 流命令
+        crate::terminal::commands::stream::terminal_subscribe_output,
+        crate::terminal::commands::stream::terminal_subscribe_output_cancel,
         // Shell 集成命令
-        crate::shell::commands::shell_execute_background_command, // shell_execute_background_command
-        crate::shell::commands::shell_setup_integration,          // shell_setup_integration
-        crate::shell::commands::shell_check_integration_status,   // shell_check_integration_status
-        crate::shell::commands::shell_update_pane_cwd,            // shell_update_pane_cwd
+        crate::shell::commands::shell_execute_background_command,
+        crate::shell::commands::shell_setup_integration,
+        crate::shell::commands::shell_check_integration_status,
+        crate::shell::commands::shell_update_pane_cwd,
         // 补全功能命令
-        crate::completion::commands::completion_init_engine, // completion_init_engine
-        crate::completion::commands::completion_get,         // completion_get
-        crate::completion::commands::completion_clear_cache, // completion_clear_cache
-        crate::completion::commands::completion_get_stats,   // completion_get_stats
+        crate::completion::commands::completion_init_engine,
+        crate::completion::commands::completion_get,
+        crate::completion::commands::completion_clear_cache,
+        crate::completion::commands::completion_get_stats,
         // 配置管理命令
-        crate::config::commands::config_get,      // config_get
-        crate::config::commands::config_update,   // config_update
-        crate::config::commands::config_save,     // config_save
-        crate::config::commands::config_validate, // config_validate
-        crate::config::commands::config_reset_to_defaults, // config_reset_to_defaults
-        crate::config::commands::config_get_file_path, // config_get_file_path
-        crate::config::commands::config_get_file_info, // config_get_file_info
-        crate::config::commands::config_open_file, // config_open_file
-        crate::config::commands::config_subscribe_events, // config_subscribe_events
-        crate::config::commands::config_get_folder_path, // config_get_folder_path
-        crate::config::commands::config_open_folder, // config_open_folder
+        crate::config::commands::config_get,
+        crate::config::commands::config_update,
+        crate::config::commands::config_save,
+        crate::config::commands::config_validate,
+        crate::config::commands::config_reset_to_defaults,
+        crate::config::commands::config_get_file_path,
+        crate::config::commands::config_get_file_info,
+        crate::config::commands::config_open_file,
+        crate::config::commands::config_subscribe_events,
+        crate::config::commands::config_get_folder_path,
+        crate::config::commands::config_open_folder,
         // 终端配置命令
-        crate::config::terminal_commands::config_terminal_get, // config_terminal_get
-        crate::config::terminal_commands::config_terminal_update, // config_terminal_update
-        crate::config::terminal_commands::config_terminal_validate, // config_terminal_validate
-        crate::config::terminal_commands::config_terminal_reset_to_defaults, // config_terminal_reset_to_defaults
-        crate::config::terminal_commands::config_terminal_detect_system_shells, // config_terminal_detect_system_shells
-        crate::config::terminal_commands::config_terminal_validate_shell_path, // config_terminal_validate_shell_path
-        crate::config::terminal_commands::config_terminal_get_shell_info, // config_terminal_get_shell_info
-        crate::config::terminal_commands::config_terminal_update_cursor, // config_terminal_update_cursor
-        crate::config::terminal_commands::config_terminal_update_behavior, // config_terminal_update_behavior
+        crate::config::terminal_commands::config_terminal_get,
+        crate::config::terminal_commands::config_terminal_update,
+        crate::config::terminal_commands::config_terminal_validate,
+        crate::config::terminal_commands::config_terminal_reset_to_defaults,
+        crate::config::terminal_commands::config_terminal_detect_system_shells,
+        crate::config::terminal_commands::config_terminal_validate_shell_path,
+        crate::config::terminal_commands::config_terminal_get_shell_info,
+        crate::config::terminal_commands::config_terminal_update_cursor,
+        crate::config::terminal_commands::config_terminal_update_behavior,
         // 主题系统命令
-        crate::config::theme::commands::theme_get_config_status, // theme_get_config_status
-        crate::config::theme::commands::theme_get_current,       // theme_get_current
-        crate::config::theme::commands::theme_get_available,     // theme_get_available
-        crate::config::theme::commands::theme_set_terminal,      // theme_set_terminal
-        crate::config::theme::commands::theme_set_follow_system, // theme_set_follow_system
+        crate::config::theme::commands::theme_get_config_status,
+        crate::config::theme::commands::theme_get_current,
+        crate::config::theme::commands::theme_get_available,
+        crate::config::theme::commands::theme_set_terminal,
+        crate::config::theme::commands::theme_set_follow_system,
         // 快捷键系统命令
-        crate::config::shortcuts::shortcuts_get_config, // shortcuts_get_config
-        crate::config::shortcuts::shortcuts_update_config, // shortcuts_update_config
-        crate::config::shortcuts::shortcuts_validate_config, // shortcuts_validate_config
-        crate::config::shortcuts::shortcuts_detect_conflicts, // shortcuts_detect_conflicts
-        crate::config::shortcuts::shortcuts_add,        // shortcuts_add
-        crate::config::shortcuts::shortcuts_remove,     // shortcuts_remove
-        crate::config::shortcuts::shortcuts_update,     // shortcuts_update
-        crate::config::shortcuts::shortcuts_reset_to_defaults, // shortcuts_reset_to_defaults
-        crate::config::shortcuts::shortcuts_get_statistics, // shortcuts_get_statistics
-        crate::config::shortcuts::shortcuts_search,     // shortcuts_search
-        crate::config::shortcuts::shortcuts_execute_action, // shortcuts_execute_action
-        crate::config::shortcuts::shortcuts_get_current_platform, // shortcuts_get_current_platform
-        crate::config::shortcuts::shortcuts_export_config, // shortcuts_export_config
-        crate::config::shortcuts::shortcuts_import_config, // shortcuts_import_config
-        crate::config::shortcuts::shortcuts_get_registered_actions, // shortcuts_get_registered_actions
-        crate::config::shortcuts::shortcuts_get_action_metadata,    // shortcuts_get_action_metadata
-        crate::config::shortcuts::shortcuts_validate_key_combination, // shortcuts_validate_key_combination
+        crate::config::shortcuts::shortcuts_get_config,
+        crate::config::shortcuts::shortcuts_update_config,
+        crate::config::shortcuts::shortcuts_validate_config,
+        crate::config::shortcuts::shortcuts_detect_conflicts,
+        crate::config::shortcuts::shortcuts_add,
+        crate::config::shortcuts::shortcuts_remove,
+        crate::config::shortcuts::shortcuts_update,
+        crate::config::shortcuts::shortcuts_reset_to_defaults,
+        crate::config::shortcuts::shortcuts_get_statistics,
+        crate::config::shortcuts::shortcuts_search,
+        crate::config::shortcuts::shortcuts_execute_action,
+        crate::config::shortcuts::shortcuts_get_current_platform,
+        crate::config::shortcuts::shortcuts_export_config,
+        crate::config::shortcuts::shortcuts_import_config,
+        crate::config::shortcuts::shortcuts_get_registered_actions,
+        crate::config::shortcuts::shortcuts_get_action_metadata,
+        crate::config::shortcuts::shortcuts_validate_key_combination,
         // 语言设置命令
-        crate::utils::language_commands::language_set_app_language, // language_set_app_language
-        crate::utils::language_commands::language_get_app_language, // language_get_app_language
-        crate::utils::language_commands::language_get_supported_languages, // language_get_supported_languages
+        crate::utils::language_commands::language_set_app_language,
+        crate::utils::language_commands::language_get_app_language,
+        crate::utils::language_commands::language_get_supported_languages,
         // AI 模型管理命令
-        crate::ai::commands::ai_models_get,    // ai_models_get
-        crate::ai::commands::ai_models_add,    // ai_models_add
-        crate::ai::commands::ai_models_update, // ai_models_update
-        crate::ai::commands::ai_models_remove, // ai_models_remove
-        crate::ai::commands::ai_models_test_connection, // ai_models_test_connection
+        crate::ai::commands::ai_models_get,
+        crate::ai::commands::ai_models_add,
+        crate::ai::commands::ai_models_update,
+        crate::ai::commands::ai_models_remove,
+        crate::ai::commands::ai_models_test_connection,
         // AI 会话上下文管理命令
-        crate::ai::commands::ai_conversation_create, // ai_conversation_create
-        crate::ai::commands::ai_conversation_get_all, // ai_conversation_get_all
-        crate::ai::commands::ai_conversation_get,    // ai_conversation_get
-        crate::ai::commands::ai_conversation_update_title, // ai_conversation_update_title
-        crate::ai::commands::ai_conversation_delete, // ai_conversation_delete
-        crate::ai::commands::ai_conversation_get_compressed_context, // ai_conversation_get_compressed_context
-        crate::ai::commands::ai_conversation_build_prompt_with_context, // ai_conversation_build_prompt_with_context
-        crate::ai::commands::ai_conversation_get_user_prefix_prompt, // ai_conversation_get_user_prefix_prompt
-        crate::ai::commands::ai_conversation_set_user_prefix_prompt, // ai_conversation_set_user_prefix_prompt
-        crate::ai::commands::ai_conversation_save_message,           // ai_conversation_save_message
-        crate::ai::commands::ai_conversation_update_message_content, // ai_conversation_update_message_content
-        crate::ai::commands::ai_conversation_update_message_steps, // ai_conversation_update_message_steps
-        crate::ai::commands::ai_conversation_update_message_status, // ai_conversation_update_message_status
-        crate::ai::commands::ai_conversation_truncate,              // ai_conversation_truncate
+        crate::ai::commands::ai_conversation_create,
+        crate::ai::commands::ai_conversation_get_all,
+        crate::ai::commands::ai_conversation_get,
+        crate::ai::commands::ai_conversation_update_title,
+        crate::ai::commands::ai_conversation_delete,
+        crate::ai::commands::ai_conversation_get_compressed_context,
+        crate::ai::commands::ai_conversation_build_prompt_with_context,
+        crate::ai::commands::ai_conversation_get_user_prefix_prompt,
+        crate::ai::commands::ai_conversation_set_user_prefix_prompt,
+        crate::ai::commands::ai_conversation_save_message,
+        crate::ai::commands::ai_conversation_update_message_content,
+        crate::ai::commands::ai_conversation_update_message_steps,
+        crate::ai::commands::ai_conversation_update_message_status,
+        crate::ai::commands::ai_conversation_truncate,
         // LLM 调用命令
-        crate::llm::commands::llm_call,                  // llm_call
-        crate::llm::commands::llm_call_stream,           // llm_call_stream
-        crate::llm::commands::llm_get_available_models,  // llm_get_available_models
-        crate::llm::commands::llm_test_model_connection, // llm_test_model_connection
-        crate::llm::commands::llm_get_providers,         // llm_get_providers
-        crate::llm::commands::llm_get_provider_models,   // llm_get_provider_models
-        crate::llm::commands::llm_get_model_info,        // llm_get_model_info
-        crate::llm::commands::llm_check_model_feature,   // llm_check_model_feature
+        crate::llm::commands::llm_call,
+        crate::llm::commands::llm_call_stream,
+        crate::llm::commands::llm_get_available_models,
+        crate::llm::commands::llm_test_model_connection,
+        crate::llm::commands::llm_get_providers,
+        crate::llm::commands::llm_get_provider_models,
+        crate::llm::commands::llm_get_model_info,
+        crate::llm::commands::llm_check_model_feature,
         // 存储系统命令
-        crate::ai::tool::storage::storage_get_config, // storage_get_config
-        crate::ai::tool::storage::storage_update_config, // storage_update_config
-        crate::ai::tool::storage::storage_save_session_state, // storage_save_session_state
-        crate::ai::tool::storage::storage_load_session_state, // storage_load_session_state
+        crate::ai::tool::storage::storage_get_config,
+        crate::ai::tool::storage::storage_update_config,
+        crate::ai::tool::storage::storage_save_session_state,
+        crate::ai::tool::storage::storage_load_session_state,
         // 网络请求命令
-        crate::ai::tool::network::network_web_fetch_headless, // network_web_fetch_headless
-        crate::ai::tool::network::network_simple_web_fetch,   // network_simple_web_fetch
+        crate::ai::tool::network::network_web_fetch_headless,
+        crate::ai::tool::network::network_simple_web_fetch,
         // 代码搜索命令
-        crate::ck::commands::ck_search, // ck_search
+        crate::ck::commands::ck_search,
         // CK索引管理命令
-        crate::ck::commands::ck_index_status, // ck_index_status
-        crate::ck::commands::ck_build_index,      // ck_build_index
-        crate::ck::commands::ck_delete_index,     // ck_delete_index
-        crate::ck::commands::ck_get_build_progress, // ck_get_build_progress
-        crate::ck::commands::ck_cancel_build,     // ck_cancel_build
+        crate::ck::commands::ck_index_status,
+        crate::ck::commands::ck_build_index,
+        crate::ck::commands::ck_delete_index,
+        crate::ck::commands::ck_get_build_progress,
+        crate::ck::commands::ck_cancel_build,
     ])
 }

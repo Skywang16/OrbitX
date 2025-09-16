@@ -33,11 +33,6 @@ export interface CreateTerminalWithShellOptions {
 
 // ===== 事件相关类型 =====
 
-export interface TerminalOutputEvent {
-  paneId: number
-  data: string
-}
-
 export interface TerminalExitEvent {
   paneId: number
   exitCode: number | null

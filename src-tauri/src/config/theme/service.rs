@@ -85,13 +85,11 @@ impl ThemeService {
 
                 // 尝试加载后备主题
                 let fallback_theme = if theme_config.follow_system {
-                    // 如果是跟随系统模式，尝试另一个主题
                     match is_system_dark {
                         Some(true) => &theme_config.light_theme,
                         _ => &theme_config.dark_theme,
                     }
                 } else {
-                    // 如果是手动模式，尝试深色主题作为后备
                     &theme_config.dark_theme
                 };
 
@@ -124,7 +122,6 @@ impl ThemeService {
     ) -> AppResult<Vec<String>> {
         let mut missing_themes = Vec::new();
 
-        // 检查终端主题
         if self
             .theme_manager
             .load_theme(&theme_config.terminal_theme)
@@ -134,7 +131,6 @@ impl ThemeService {
             missing_themes.push(theme_config.terminal_theme.clone());
         }
 
-        // 检查浅色主题
         if self
             .theme_manager
             .load_theme(&theme_config.light_theme)
@@ -144,7 +140,6 @@ impl ThemeService {
             missing_themes.push(theme_config.light_theme.clone());
         }
 
-        // 检查深色主题
         if self
             .theme_manager
             .load_theme(&theme_config.dark_theme)
@@ -199,7 +194,6 @@ impl SystemThemeDetector {
                 let is_dark = result.trim().eq_ignore_ascii_case("true");
                 Some(is_dark)
             } else {
-                // 如果 osascript 失败，尝试检查系统设置的替代方法
                 let output = Command::new("defaults")
                     .args(["read", "-g", "AppleInterfaceStyle"])
                     .output()
@@ -224,7 +218,6 @@ impl SystemThemeDetector {
         #[cfg(target_os = "linux")]
         {
             // Linux 系统主题检测
-            // 检查常见的环境变量
             if let Ok(theme) = std::env::var("GTK_THEME") {
                 Some(theme.to_lowercase().contains("dark"))
             } else if let Ok(theme) = std::env::var("QT_STYLE_OVERRIDE") {

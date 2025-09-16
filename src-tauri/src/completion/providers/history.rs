@@ -138,7 +138,6 @@ impl HistoryProvider {
             // 根据Shell类型解析不同格式
             let command = match self.shell_type {
                 ShellType::Zsh => {
-                    // 处理zsh历史格式：: 时间戳:0;命令
                     if line.starts_with(": ") && line.contains(';') {
                         line.find(';')
                             .map(|pos| line[pos + 1..].trim())
@@ -251,12 +250,10 @@ impl CompletionProvider for HistoryProvider {
     }
 
     fn should_provide(&self, context: &CompletionContext) -> bool {
-        // 检查是否有历史文件
         if self.history_file.is_none() {
             return false;
         }
 
-        // 检查输入是否适合历史命令补全
         let word = &context.current_word;
         !word.is_empty()
             && !word.starts_with('/')
@@ -327,7 +324,6 @@ git commit -m "test"
         assert!(commands.contains(&"npm install".to_string()));
         assert!(commands.contains(&"git commit -m \"test\"".to_string()));
 
-        // 检查去重效果
         let ls_count = commands.iter().filter(|&cmd| cmd == "ls -la").count();
         assert_eq!(ls_count, 1);
     }

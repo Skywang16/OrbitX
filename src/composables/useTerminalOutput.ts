@@ -3,8 +3,8 @@ import type { Terminal } from '@xterm/xterm'
 import { useI18n } from 'vue-i18n'
 
 export const useTerminalOutput = () => {
-  const OUTPUT_FLUSH_INTERVAL = 0
-  const MAX_BUFFER_LENGTH = 1024
+  const OUTPUT_FLUSH_INTERVAL = 16
+  const MAX_BUFFER_LENGTH = 2048
 
   let outputBuffer = ''
   const outputFlushTimer = ref<number | null>(null)
@@ -26,13 +26,7 @@ export const useTerminalOutput = () => {
   }
 
   const scheduleOutputFlush = (terminal: Terminal | null) => {
-    if (OUTPUT_FLUSH_INTERVAL === 0) {
-      flushOutputBuffer(terminal)
-      return
-    }
-
     if (outputFlushTimer.value) return
-
     outputFlushTimer.value = window.setTimeout(() => {
       flushOutputBuffer(terminal)
     }, OUTPUT_FLUSH_INTERVAL)
@@ -45,13 +39,7 @@ export const useTerminalOutput = () => {
           processOutput(data)
         }
 
-        if (OUTPUT_FLUSH_INTERVAL === 0) {
-          terminal.write(data)
-          return
-        }
-
         outputBuffer += data
-
         if (outputBuffer.length >= MAX_BUFFER_LENGTH) {
           flushOutputBuffer(terminal)
         } else {

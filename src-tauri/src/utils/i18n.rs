@@ -1,32 +1,19 @@
-/*!
- * 国际化(i18n)模块
- *
- * 提供通用的多语言支持系统，支持动态加载语言包、
- * 参数插值、嵌套键值查找等功能。
- * 设计为通用模块，可用于错误消息、UI文本、提示信息等。
- */
 
 use crate::utils::language::{Language, LanguageManager};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-/// 国际化消息存储类型
 type I18nMessages = HashMap<String, HashMap<String, Value>>;
 
-/// 全局国际化消息存储
 static I18N_MESSAGES: LazyLock<std::sync::RwLock<I18nMessages>> =
     LazyLock::new(|| std::sync::RwLock::new(HashMap::new()));
 
 /// 国际化管理器
-///
-/// 提供多语言文本的加载、查询和格式化功能
 pub struct I18nManager;
 
 impl I18nManager {
     /// 初始化国际化系统
-    ///
-    /// 从JSON文件加载所有语言的翻译文本
     pub fn initialize() -> Result<(), String> {
         Self::load_language_pack(Language::ZhCN)?;
         Self::load_language_pack(Language::EnUS)?;
@@ -34,9 +21,6 @@ impl I18nManager {
     }
 
     /// 加载指定语言包
-    ///
-    /// # Arguments
-    /// * `language` - 要加载的语言
     fn load_language_pack(language: Language) -> Result<(), String> {
         let lang_code = language.to_string();
         let json_content = Self::load_language_file(&lang_code)?;
@@ -88,7 +72,6 @@ impl I18nManager {
             }
         }
 
-        // 如果都没有找到，返回键本身
         key.to_string()
     }
 

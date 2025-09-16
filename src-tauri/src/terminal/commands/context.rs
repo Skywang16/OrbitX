@@ -34,7 +34,6 @@ pub async fn terminal_context_get(
 ) -> TauriApiResult<TerminalContext> {
     debug!("获取终端上下文: pane_id={:?}", pane_id);
 
-    // 参数验证
     if let Some(id) = pane_id {
         if id == 0 {
             warn!("面板ID不能为0");
@@ -151,7 +150,6 @@ mod tests {
         let state = create_test_state();
         let pane_id = PaneId::new(123);
 
-        // 设置活跃终端
         state
             .registry
             .terminal_context_set_active_pane(pane_id)

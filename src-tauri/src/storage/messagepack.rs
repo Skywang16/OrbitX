@@ -1,9 +1,3 @@
-/*!
- * MessagePack状态管理器模块
- *
- * 管理会话状态的序列化和压缩存储
- * 支持数据压缩、校验和验证、原子写入和备份管理
- */
 
 use crate::storage::paths::StoragePaths;
 use crate::storage::types::SessionState;
@@ -109,7 +103,6 @@ impl MessagePackManager {
 
         debug!("MessagePack序列化完成，原始大小: {} bytes", buf.len());
 
-        // 如果启用压缩，则压缩数据
         let (final_data, compressed) = if self.options.compression {
             let compressed_data = self.compress_data(&buf)?;
             debug!(
@@ -122,7 +115,6 @@ impl MessagePackManager {
             (buf, false)
         };
 
-        // 创建序列化包装器
         let serialized = SerializedSessionState::new(state, compressed, final_data)?;
 
         // 序列化包装器
@@ -131,7 +123,6 @@ impl MessagePackManager {
             .serialize(&mut Serializer::new(&mut result))
             .map_err(|e| anyhow!("包装器序列化失败: {}", e))?;
 
-        // 检查文件大小限制
         if result.len() > self.options.max_file_size {
             return Err(anyhow!(
                 "序列化数据过大: {} bytes，超过限制 {} bytes",
@@ -195,7 +186,6 @@ impl MessagePackManager {
     }
 
     pub async fn save_state(&self, state: &SessionState) -> AppResult<()> {
-        // 开始保存会话状态（静默）
 
         // 确保状态目录存在
         self.ensure_state_directory().await?;
@@ -203,10 +193,8 @@ impl MessagePackManager {
         // 序列化状态
         let serialized_data = self.serialize_state(state)?;
 
-        // 获取状态文件路径
         let state_file = self.get_state_file_path();
 
-        // 创建备份（如果文件存在）
         if state_file.exists() {
             self.create_backup(&state_file).await?;
         }
@@ -229,7 +217,6 @@ impl MessagePackManager {
             return Ok(None);
         }
 
-        // 开始加载会话状态（静默）: {}
 
         // 读取文件
         let data = async_fs::read(&state_file)
@@ -274,7 +261,6 @@ impl MessagePackManager {
             return Ok(None);
         }
 
-        // 获取所有备份文件，按时间排序
         let mut backups = Vec::new();
         let mut entries = async_fs::read_dir(&backup_dir)
             .await
@@ -355,7 +341,6 @@ impl MessagePackManager {
             return Ok(());
         }
 
-        // 获取所有备份文件
         let mut backups = Vec::new();
         let mut entries = async_fs::read_dir(&backup_dir)
             .await
@@ -376,7 +361,6 @@ impl MessagePackManager {
             }
         }
 
-        // 如果备份数量超过限制，删除最旧的
         if backups.len() > self.options.backup_count {
             // 按修改时间升序排序（最旧的在前）
             backups.sort_by(|a, b| a.1.cmp(&b.1));

@@ -1,6 +1,4 @@
-//! 补全引擎核心模块
-//!
-//! 协调各种补全提供者，提供统一的补全接口
+//! 补全引擎
 
 use crate::completion::providers::{
     CompletionProvider, ContextAwareProviderWrapper, FilesystemProvider, GitCompletionProvider,
@@ -16,17 +14,12 @@ use std::time::Duration;
 use tokio::time::{sleep, timeout};
 use tracing::info;
 
-/// 补全引擎配置
 #[derive(Debug, Clone)]
 pub struct CompletionEngineConfig {
-    /// 最大返回结果数
     pub max_results: usize,
-    /// 单个提供者的超时时间
     pub provider_timeout: Duration,
 
-    /// 最大重试次数
     pub max_retries: u32,
-    /// 重试间隔
     pub retry_interval: Duration,
 }
 
@@ -42,11 +35,8 @@ impl Default for CompletionEngineConfig {
     }
 }
 
-/// 补全引擎
 pub struct CompletionEngine {
-    /// 补全提供者列表
     providers: Vec<Arc<dyn CompletionProvider>>,
-    /// 配置
     config: CompletionEngineConfig,
 }
 
@@ -75,25 +65,20 @@ impl CompletionEngine {
     ) -> AppResult<Self> {
         let mut engine = Self::new(config)?;
 
-        // 创建基础提供者
         let filesystem_provider = Arc::new(FilesystemProvider::default());
         let system_commands_provider = Arc::new(SystemCommandsProvider::default());
         let history_provider = Arc::new(HistoryProvider::new(cache));
 
-        // 创建增强提供者
         let git_provider = Arc::new(GitCompletionProvider::default());
         let npm_provider = Arc::new(NpmCompletionProvider::default());
 
-        // 获取全局的上下文感知提供者
         let context_aware_provider = {
             use crate::completion::output_analyzer::OutputAnalyzer;
             let analyzer = OutputAnalyzer::global();
             let provider_mutex = analyzer.get_context_provider();
-            // 这里我们需要创建一个包装器来适配Arc<dyn CompletionProvider>
             Arc::new(ContextAwareProviderWrapper::new(provider_mutex))
         };
 
-        // 创建智能提供者（组合所有基础提供者）
         let smart_provider = Arc::new(SmartCompletionProvider::new(
             filesystem_provider.clone(),
             system_commands_provider.clone(),
@@ -266,7 +251,6 @@ impl CompletionEngine {
             }
         }
 
-        // 如果所有重试都失败了，返回最后一个错误
         Ok(Err(last_error.unwrap_or_else(|| {
             anyhow!("提供者错误: 所有重试都失败了")
         })))

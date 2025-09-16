@@ -1,29 +1,21 @@
-/*!
- * 平台信息相关命令
- *
- * 负责获取操作系统、架构等平台相关信息
- */
+// 平台信息相关命令
 
 use super::*;
 use crate::api_success;
 use crate::utils::TauriApiResult;
 
-/// 获取平台信息
-///
-/// - 缓存机制：首次检测后缓存结果，后续直接返回缓存
+// 获取平台信息，支持缓存
 #[tauri::command]
 pub async fn window_get_platform_info(
     state: State<'_, WindowState>,
 ) -> TauriApiResult<PlatformInfo> {
     debug!("开始获取平台信息");
 
-    // 尝试从配置管理器获取缓存的平台信息
     let platform_info = state
         .with_config_manager(|config| Ok(config.window_get_platform_info().cloned()))
         .await
         .to_tauri()?;
 
-    // 如果有缓存的平台信息，直接返回
     if let Some(info) = platform_info {
         debug!(
             "从缓存获取平台信息: platform={}, arch={}, is_mac={}",
@@ -34,7 +26,6 @@ pub async fn window_get_platform_info(
 
     debug!("首次检测平台信息");
 
-    // 首次检测平台信息
     let platform_info = PlatformInfo {
         platform: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
@@ -42,7 +33,6 @@ pub async fn window_get_platform_info(
         is_mac: cfg!(target_os = "macos"),
     };
 
-    // 缓存平台信息到配置管理器
     state
         .with_config_manager_mut(|config| {
             config.set_platform_info(platform_info.clone());
@@ -59,7 +49,7 @@ pub async fn window_get_platform_info(
     Ok(api_success!(platform_info))
 }
 
-/// 检测操作系统版本
+// 检测操作系统版本
 fn detect_os_version() -> String {
     #[cfg(target_os = "macos")]
     {

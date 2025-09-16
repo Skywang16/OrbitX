@@ -1,6 +1,4 @@
-//! 独立的批处理调度器
-//!
-//! 将批处理逻辑从工作线程中分离，实现真正的多终端并发支持
+//! 批处理调度器
 
 use anyhow::anyhow;
 use crossbeam_channel::{bounded, Receiver, Sender};
@@ -54,15 +52,15 @@ pub struct BatchProcessorConfig {
 impl Default for BatchProcessorConfig {
     fn default() -> Self {
         Self {
-            processor_threads: (num_cpus::get() / 2).clamp(2, 4), // 2-4个批处理线程
+            processor_threads: (num_cpus::get() / 2).clamp(2, 4),
             batch_size: 1024,
-            flush_interval: Duration::from_millis(16), // ~60 FPS
+            flush_interval: Duration::from_millis(16),
             task_queue_capacity: 500,
         }
     }
 }
 
-/// 独立的批处理调度器
+/// 批处理器
 pub struct BatchProcessor {
     config: BatchProcessorConfig,
     task_sender: Sender<BatchTask>,
@@ -164,7 +162,6 @@ impl BatchProcessor {
             let mut active_panes: HashMap<PaneId, PaneBatchState> = HashMap::new();
 
             loop {
-                // 处理新的任务（非阻塞）
                 match task_receiver.try_recv() {
                     Ok(BatchTask::RegisterPane {
                         pane,
@@ -205,10 +202,8 @@ impl BatchProcessor {
                     }
                 }
 
-                // 处理所有活跃面板的数据
                 let mut panes_to_remove = Vec::new();
                 for (pane_id, state) in active_panes.iter_mut() {
-                    // 检查面板是否还存活
                     let pane_alive = if let Some(pane) = state.pane.upgrade() {
                         !pane.is_dead()
                     } else {
@@ -235,7 +230,6 @@ impl BatchProcessor {
                         }
                     }
 
-                    // 检查是否需要刷新
                     let should_flush = !state.batch_data.is_empty()
                         && (state.batch_data.len() >= config.batch_size
                             || state.last_flush.elapsed() >= config.flush_interval);

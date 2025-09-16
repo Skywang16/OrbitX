@@ -1,8 +1,4 @@
-/*!
- * 统一缓存系统 - 极简版本
- *
- * 为整个应用提供统一的缓存服务
- */
+//! 统一缓存系统
 
 use crate::utils::error::AppResult;
 use serde_json::Value;
@@ -11,8 +7,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// 统一缓存管理器
-///
-/// 提供简单的键值对缓存，供所有模块使用
 #[derive(Clone)]
 pub struct UnifiedCache {
     data: Arc<RwLock<HashMap<String, Value>>>,

@@ -1,6 +1,4 @@
-/*!
- * TOML配置管理模块的单元测试
- */
+//! TOML配置管理模块测试
 
 #[cfg(test)]
 mod tests {
@@ -112,7 +110,6 @@ mod tests {
         // 加载配置应该触发事件
         manager.load_config().await.unwrap();
 
-        // 检查是否收到加载事件
         let event = tokio::time::timeout(Duration::from_millis(100), event_receiver.recv())
             .await
             .unwrap()

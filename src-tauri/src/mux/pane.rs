@@ -1,6 +1,4 @@
-//! Pane trait and implementations
-//!
-//! 定义面板接口和基本实现
+//! 面板接口和实现
 
 use anyhow::{anyhow, bail, Context};
 use std::io::{Read, Write};
@@ -12,42 +10,32 @@ use crate::mux::{PaneId, PtySize, TerminalConfig};
 use crate::utils::error::AppResult;
 use portable_pty::{CommandBuilder, MasterPty, PtySize as PortablePtySize, SlavePty};
 
-/// 面板接口定义
 pub trait Pane: Send + Sync {
-    /// 获取面板ID
     fn pane_id(&self) -> PaneId;
 
-    /// 写入数据到PTY
     fn write(&self, data: &[u8]) -> AppResult<()>;
 
-    /// 调整PTY大小
     fn resize(&self, size: PtySize) -> AppResult<()>;
 
-    /// 获取读取器（用于I/O线程）
     fn reader(&self) -> AppResult<Box<dyn Read + Send>>;
 
-    /// 检查面板是否已死亡
     fn is_dead(&self) -> bool;
 
-    /// 标记面板为死亡状态
     fn mark_dead(&self);
 
-    /// 获取面板当前大小
     fn get_size(&self) -> PtySize;
 }
 
-/// 本地PTY面板实现
 pub struct LocalPane {
     pane_id: PaneId,
     size: Arc<Mutex<PtySize>>,
     dead: Arc<AtomicBool>,
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    _slave: Arc<Mutex<Box<dyn SlavePty + Send>>>, // 保持引用但不直接使用
+    _slave: Arc<Mutex<Box<dyn SlavePty + Send>>>,
 }
 
 impl LocalPane {
-    /// 创建新的本地面板，集成portable-pty库
     pub fn new(pane_id: PaneId, size: PtySize) -> AppResult<Self> {
         Self::new_with_config(pane_id, size, &TerminalConfig::default())
     }
@@ -65,7 +53,6 @@ impl LocalPane {
             config.shell_config.program
         );
 
-        // 创建PTY系统
         let pty_system = portable_pty::native_pty_system();
 
         // 转换尺寸格式
@@ -76,7 +63,6 @@ impl LocalPane {
             pixel_height: size.pixel_height,
         };
 
-        // 创建PTY对
         let pty_pair = pty_system
             .openpty(pty_size)
             .with_context(|| format!("创建PTY失败: pane_id={:?}", pane_id))?;
@@ -92,13 +78,11 @@ impl LocalPane {
         let mut cmd = CommandBuilder::new(&config.shell_config.program);
         cmd.args(shell_args);
 
-        // 设置工作目录
         if let Some(cwd) = &config.shell_config.working_directory {
             cmd.cwd(cwd);
             tracing::debug!("设置工作目录: {:?}", cwd);
         }
 
-        // 设置环境变量
         if let Some(env_vars) = &config.shell_config.env {
             for (key, value) in env_vars {
                 cmd.env(key, value);
@@ -122,7 +106,6 @@ impl LocalPane {
             if let Ok(integration_script) =
                 script_generator.generate_integration_script(&shell_type)
             {
-                // 设置环境变量标识
                 cmd.env("ORBITX_SHELL_INTEGRATION", "1");
 
                 // 静默注入：通过环境变量和配置文件
@@ -142,7 +125,6 @@ impl LocalPane {
                                 let _ = writeln!(file, "# Load user zshrc if exists");
                                 let _ = writeln!(file, "[[ -f ~/.zshrc ]] && source ~/.zshrc");
 
-                                // 设置ZDOTDIR指向临时目录
                                 if let Some(original_zdotdir) = std::env::var_os("ZDOTDIR") {
                                     cmd.env("ORBITX_ORIGINAL_ZDOTDIR", original_zdotdir);
                                 }
@@ -165,7 +147,6 @@ impl LocalPane {
                                 let _ = writeln!(file, "# Load user bashrc if exists");
                                 let _ = writeln!(file, "[[ -f ~/.bashrc ]] && source ~/.bashrc");
 
-                                // 设置BASH_ENV指向临时文件
                                 cmd.env("BASH_ENV", temp_bashrc);
                             }
                         }
@@ -188,7 +169,6 @@ impl LocalPane {
         } else {
             tracing::debug!("Shell {} 不支持自动集成", shell_type.display_name());
         }
-        // 设置输入法相关环境变量
         cmd.env("XMODIFIERS", "@im=ibus");
         cmd.env("GTK_IM_MODULE", "ibus");
         cmd.env("QT_IM_MODULE", "ibus");
@@ -206,7 +186,6 @@ impl LocalPane {
 
         tracing::debug!("子进程启动成功");
 
-        // 获取写入器
         let writer = pty_pair
             .master
             .take_writer()
@@ -241,7 +220,6 @@ impl Pane for LocalPane {
 
         tracing::debug!("面板 {:?} 写入 {} 字节数据", self.pane_id, data.len());
 
-        // 获取writer锁并写入数据
         let mut writer = self
             .writer
             .lock()
@@ -304,7 +282,6 @@ impl Pane for LocalPane {
             bail!("面板已关闭");
         }
 
-        // 获取master锁并克隆读取器
         let master = self
             .master
             .lock()
@@ -326,7 +303,6 @@ impl Pane for LocalPane {
 
     fn get_size(&self) -> PtySize {
         self.size.lock().map(|size| *size).unwrap_or_else(|_| {
-            // 如果锁被污染，返回默认大小
             PtySize::default()
         })
     }

@@ -1,8 +1,4 @@
-/*!
- * TOML配置读取器
- *
- * 负责从文件系统读取和解析TOML配置文件
- */
+//! TOML配置读取器
 
 use crate::{
     config::{defaults::create_default_config, paths::ConfigPaths, types::AppConfig},
@@ -60,7 +56,6 @@ impl TomlConfigReader {
                 }
                 Err(e) => {
                     warn!("配置文件解析失败: {}, 使用默认配置", e);
-                    // 返回错误，让调用者处理备份和默认配置
                     Err(e)
                 }
             }

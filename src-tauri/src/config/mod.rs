@@ -1,9 +1,4 @@
-/*!
- * 统一配置系统模块
- *
- * 提供基于 TOML 格式的统一配置管理功能，包括配置解析、验证和
- * 缓存等核心功能。
- */
+// 配置系统模块
 
 pub mod commands;
 pub mod defaults;
@@ -14,7 +9,6 @@ pub mod theme;
 pub mod toml;
 pub mod types;
 
-// 重新导出核心类型和函数
 pub use commands::{
     config_get, config_get_file_info, config_get_file_path, config_get_folder_path,
     config_open_file, config_open_folder, config_reset_to_defaults, config_save,

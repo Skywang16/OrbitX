@@ -1,8 +1,4 @@
-/*!
- * TOML配置管理器
- *
- * 整合读取、写入、验证和事件功能的核心管理器
- */
+//! TOML配置管理器
 
 use super::{
     events::{ConfigEvent, ConfigEventSender},
@@ -24,8 +20,6 @@ use tokio::sync::broadcast;
 use tracing::debug;
 
 /// TOML配置管理器
-///
-/// 负责TOML配置文件的完整生命周期管理，包括读写、验证和事件通知。
 pub struct TomlConfigManager {
     config_cache: Arc<RwLock<AppConfig>>,
     reader: TomlConfigReader,
@@ -83,7 +77,6 @@ impl TomlConfigManager {
                 self.event_sender
                     .send_validation_failed(vec!["配置文件读取或解析失败".to_string()]);
 
-                // 创建备份并使用默认配置
                 self.writer.create_backup_and_use_default().await?
             }
         };
@@ -137,7 +130,6 @@ impl TomlConfigManager {
     {
         debug!("更新配置节: {}", section);
 
-        // 获取当前配置
         let mut current_config = {
             let cache = self
                 .config_cache
@@ -214,7 +206,6 @@ impl TomlConfigManager {
     where
         F: FnOnce(&mut AppConfig) -> AppResult<()> + Send,
     {
-        // 获取当前配置
         let mut current_config = {
             let cache = self
                 .config_cache

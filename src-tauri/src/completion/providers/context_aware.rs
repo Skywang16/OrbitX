@@ -104,7 +104,6 @@ impl ContextAwareProvider {
         // 分析当前输入，确定需要什么类型的补全
         let current_command = context.current_word.clone();
 
-        // 获取历史记录
         let history = self
             .command_history
             .read()
@@ -342,7 +341,6 @@ impl CompletionProvider for ContextAwareProviderWrapper {
         // 克隆上下文以避免跨 await 边界的借用问题
         let context_clone = context.clone();
 
-        // 获取锁并立即释放，避免跨 await 边界
         let result = {
             if let Ok(provider) = self.provider.lock() {
                 // 直接调用同步方法，避免异步调用

@@ -1,14 +1,9 @@
-/*!
- * 配置文件生成工具
- *
- * 用于生成正确格式的默认配置文件
- */
+//! 配置文件生成工具
 
 use terminal_lib::config::defaults::create_default_config;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 创建默认配置
     let default_config = create_default_config();
 
     // 序列化为TOML

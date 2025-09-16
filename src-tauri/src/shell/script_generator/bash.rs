@@ -1,6 +1,4 @@
-//! Bash Shell Integration Script Generator
-//!
-//! 为 Bash shell 生成集成脚本，包括命令跟踪、CWD同步等功能
+//! Bash集成脚本生成器
 
 use super::ShellIntegrationConfig;
 
@@ -8,7 +6,6 @@ use super::ShellIntegrationConfig;
 pub fn generate_script(config: &ShellIntegrationConfig) -> String {
     let mut script = String::new();
 
-    // 检查是否已经注入过
     script.push_str(
         r#"
 # OrbitX Integration Start
@@ -132,7 +129,6 @@ if [[ -z "$ORBITX_SHELL_INTEGRATION" ]]; then
         }
     }
 
-    // 结束集成代码块
     script.push_str(
         r#"
     # 初始化完成通知

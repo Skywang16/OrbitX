@@ -33,7 +33,6 @@ pub async fn terminal_context_invalidate_cache(
 ) -> TauriApiResult<EmptyData> {
     debug!("使上下文缓存失效: pane_id={}", pane_id);
 
-    // 参数验证
     if pane_id == 0 {
         warn!("面板ID不能为0");
         return Ok(api_error!("common.invalid_id"));

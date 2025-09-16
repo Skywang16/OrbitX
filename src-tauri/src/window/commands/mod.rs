@@ -1,27 +1,15 @@
-/*!
- * 窗口功能的Tauri命令接口模块
- *
- * 按功能域组织的模块化结构：
- * - state: 窗口状态管理相关命令
- * - directory: 目录和路径操作相关命令  
- * - platform: 平台信息相关命令
- * - opacity: 窗口透明度相关命令
- *
- */
+// 窗口功能的Tauri命令接口模块
 
-// 子模块声明
 pub mod directory;
 pub mod opacity;
 pub mod platform;
 pub mod state;
 
-// 重新导出所有命令函数
 pub use directory::*;
 pub use opacity::*;
 pub use platform::*;
 pub use state::*;
 
-// 导入依赖
 use crate::utils::error::{serialize_to_value, AppResult, ToTauriResult};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -33,9 +21,8 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::Mutex;
 use tracing::{debug, error, warn};
 
-// ===== 共享类型定义 =====
 
-/// 窗口状态管理
+// 窗口状态管理
 pub struct WindowState {
     pub cache: crate::storage::cache::UnifiedCache,
     pub config_manager: Arc<Mutex<WindowConfigManager>>,
@@ -50,7 +37,6 @@ pub struct PlatformInfo {
     pub is_mac: bool,
 }
 
-// ===== 窗口状态管理类型 =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -122,7 +108,6 @@ pub struct WindowStateManager {
     cache_ttl: std::time::Duration,
 }
 
-// ===== WindowStateManager 实现 =====
 
 impl Default for WindowStateManager {
     fn default() -> Self {
@@ -195,7 +180,6 @@ impl WindowStateManager {
     }
 }
 
-// ===== WindowConfigManager 实现 =====
 
 impl WindowConfigManager {
     pub fn new() -> Self {
@@ -237,7 +221,6 @@ impl Default for WindowConfigManager {
     }
 }
 
-// ===== WindowState 实现 =====
 
 impl WindowState {
     pub fn new() -> AppResult<Self> {
