@@ -276,7 +276,7 @@ export class EkoMemory {
               // Handle other types like reasoning by converting to text
               return {
                 type: 'text',
-                text: (part as any).text || '',
+                text: (part as { text?: string }).text || '',
               }
             }
           }),

@@ -58,7 +58,8 @@ export interface ComponentContext {
   context?: Context
   tools?: Tool[]
   extSysPrompt?: string
-  [key: string]: any
+  _templateOverride?: string
+  [key: string]: unknown
 }
 
 /**

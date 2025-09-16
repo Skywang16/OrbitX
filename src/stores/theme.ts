@@ -9,7 +9,6 @@ import { themeAPI } from '@/api/config'
 import type { ThemeConfigStatus, Theme, ThemeInfo } from '@/types/domain/theme'
 import { applyThemeToUI } from '@/utils/themeApplier'
 
-// 主题操作状态枚举
 enum ThemeOperationState {
   IDLE = 'idle',
   SWITCHING = 'switching',
@@ -17,7 +16,6 @@ enum ThemeOperationState {
   ERROR = 'error',
 }
 
-// 主题切换操作类型
 interface ThemeOperation {
   type: 'SWITCH_THEME' | 'SET_FOLLOW_SYSTEM' | 'LOAD_CONFIG'
   payload?: {
@@ -29,26 +27,19 @@ interface ThemeOperation {
   timestamp: number
 }
 
-// 状态快照类型
 interface StateSnapshot {
   configStatus: ThemeConfigStatus | null
   currentTheme: Theme | null
 }
 
 export const useThemeStore = defineStore('theme', () => {
-  // 状态定义
-
-  // 核心状态
   const configStatus = ref<ThemeConfigStatus | null>(null)
   const currentTheme = ref<Theme | null>(null)
   const availableThemes = ref<ThemeInfo[]>([])
 
-  // 操作状态
   const operationState = ref<ThemeOperationState>(ThemeOperationState.IDLE)
   const error = ref<string | null>(null)
   const lastOperation = ref<ThemeOperation | null>(null)
-
-  // 计算属性
 
   const themeConfig = computed(() => configStatus.value?.themeConfig || null)
   const currentThemeName = computed(() => configStatus.value?.currentThemeName || '')
@@ -264,10 +255,7 @@ export const useThemeStore = defineStore('theme', () => {
     error.value = null
   }
 
-  // 公开接口
-
   return {
-    // 状态
     configStatus: readonly(configStatus),
     currentTheme: readonly(currentTheme),
     availableThemes: readonly(availableThemes),
@@ -275,7 +263,6 @@ export const useThemeStore = defineStore('theme', () => {
     error: readonly(error),
     lastOperation: readonly(lastOperation),
 
-    // 计算属性
     themeConfig,
     currentThemeName,
     isSystemDark,
@@ -283,14 +270,12 @@ export const useThemeStore = defineStore('theme', () => {
     isLoading,
     themeOptions,
 
-    // 操作
     switchToTheme: themeSwitcher.switchToTheme.bind(themeSwitcher),
     setFollowSystem: themeSwitcher.setFollowSystem.bind(themeSwitcher),
     enableFollowSystem: (lightTheme: string, darkTheme: string) =>
       themeSwitcher.setFollowSystem(true, lightTheme, darkTheme),
     disableFollowSystem: () => themeSwitcher.setFollowSystem(false),
 
-    // 生命周期
     initialize,
     loadThemeConfigStatus,
     loadCurrentTheme,

@@ -80,7 +80,6 @@ export class ShellIntegrationApi {
   }
 }
 
-// 导出单例实例
 export const shellIntegrationApi = new ShellIntegrationApi()
 
 // 默认导出

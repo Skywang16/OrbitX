@@ -1,12 +1,9 @@
 import type { App, Plugin } from 'vue'
 
-// 导入组件库样式
 import './styles/index.css'
 
-// 导入所有组件
 import { XButton, XMessage, XModal, XPopconfirm, XSearchInput, XSelect, XSwitch } from './components'
 
-// 导入函数式API
 import {
   confirm,
   confirmDanger,
@@ -18,18 +15,13 @@ import {
   type MessageInstance,
 } from './composables'
 
-// 导入系统级菜单 API
 import { createPopover, showContextMenu, showPopoverAt } from './composables/popover-api'
-
-// ==================== 组件导出 ====================
 
 // 主要组件导出（推荐使用）
 export { XButton, XMessage, XModal, XPopconfirm, XSearchInput, XSelect, XSwitch }
 
 // 系统级菜单 API
 export { createPopover, showContextMenu, showPopoverAt }
-
-// ==================== 函数式API导出 ====================
 
 // 消息API
 export { createMessage }
@@ -46,8 +38,6 @@ export type { ConfirmConfig }
 // createMessage.info(message, duration?)
 // createMessage.closeAll()
 // createMessage.close(id)
-
-// ==================== 配置和工具函数导出 ====================
 
 // 全局配置接口
 export interface XUIGlobalConfig {
@@ -127,8 +117,6 @@ type XUIPlugin = Plugin & {
   install: (app: App, options?: Partial<XUIGlobalConfig>) => void
 }
 
-// ==================== 插件和安装函数导出 ====================
-
 // 组件库插件
 const XUI: XUIPlugin = {
   install,
@@ -141,12 +129,8 @@ export { install }
 // 默认导出（插件）
 export default XUI
 
-// ==================== 类型定义导出 ====================
-
-// 导出所有类型定义
 export * from './types/index'
 
-// 重新导出常用类型（便于使用）
 export type {
   ButtonEmits,
   ButtonProps,

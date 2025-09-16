@@ -2,7 +2,6 @@
  * AI 模块类型定义
  */
 
-// 重新导出主要类型
 export type { AIHealthStatus, AIModelConfig, AISettings, AIStats, Conversation, Message } from '@/types'
 
 // ===== 会话管理类型 =====
@@ -16,6 +15,36 @@ export interface RawConversation {
   updatedAt: string
 }
 
+export type PersistedNonToolStepType = 'thinking' | 'task' | 'task_thought' | 'text' | 'error'
+export type PersistedToolStepType = 'tool_use' | 'tool_result'
+export type PersistedStepType = PersistedNonToolStepType | PersistedToolStepType
+
+export interface PersistedNonToolStep {
+  type: PersistedNonToolStepType
+  content?: string
+  timestamp?: number
+}
+
+export interface PersistedToolExecution {
+  name: string
+  status: 'running' | 'completed' | 'error' | 'failed'
+  params?: Record<string, unknown>
+  result?: unknown
+  error?: string
+  toolId?: string
+  startTime?: number
+  endTime?: number
+}
+
+export interface PersistedToolStep {
+  type: PersistedToolStepType
+  content?: string
+  timestamp?: number
+  toolExecution: PersistedToolExecution
+}
+
+export type PersistedStep = PersistedNonToolStep | PersistedToolStep
+
 /** 原始消息数据格式（后端返回） */
 export interface RawMessage {
   id: number
@@ -28,9 +57,6 @@ export interface RawMessage {
   createdAt: string
 }
 
-// ===== 工具调用类型 =====
-
-/** Web 请求类型 */
 export interface WebFetchRequest {
   /** 请求URL */
   url: string
@@ -44,7 +70,6 @@ export interface WebFetchRequest {
   timeout?: number
 }
 
-/** Web 响应类型 */
 export interface WebFetchResponse {
   /** 响应状态码 */
   status: number

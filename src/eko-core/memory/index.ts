@@ -5,6 +5,7 @@ import { RetryLanguageModel } from '../llm'
 import { mergeTools } from '../common/utils'
 import { AgentContext, generateNodeId } from '../core/context'
 import Log from '../common/log'
+import type { StreamCallback, HumanCallback, LLMRequest } from '../types'
 
 export function extractUsedTool<T extends Tool | NativeLLMTool>(messages: NativeLLMMessage[], agentTools: T[]): T[] {
   let tools: T[] = []
@@ -71,7 +72,7 @@ export async function compressAgentMessages(
   rlm: RetryLanguageModel,
   messages: NativeLLMMessage[],
   tools: NativeLLMTool[],
-  callAgentLLM: any
+  callAgentLLM: CallAgentLLM
 ) {
   if (messages.length < 5) {
     return
@@ -79,7 +80,7 @@ export async function compressAgentMessages(
   try {
     await doCompressAgentMessages(agentContext, rlm, messages, tools, callAgentLLM)
   } catch (e) {
-    Log.error('Error compressing agent messages:', e)
+    Log.error('Error compressing agent messages:', e instanceof Error ? e : String(e))
   }
 }
 
@@ -88,7 +89,7 @@ async function doCompressAgentMessages(
   rlm: RetryLanguageModel,
   messages: NativeLLMMessage[],
   tools: NativeLLMTool[],
-  callAgentLLM: any
+  callAgentLLM: CallAgentLLM
 ) {
   // extract used tool
   const usedTools = extractUsedTool(messages, tools)
@@ -120,20 +121,18 @@ async function doCompressAgentMessages(
     ],
   })
   // compress snapshot
-  const result = await callAgentLLM(agentContext, rlm, newMessages, newTools, true, {
-    type: 'tool',
-    toolName: snapshotTool.name,
-  })
-  const toolCall = result.filter((s: any) => s.type == 'tool-call')[0]
-  const args = typeof toolCall.args == 'string' ? JSON.parse(toolCall.args || '{}') : toolCall.args || {}
+  const result = await callAgentLLM(agentContext, rlm, newMessages, newTools, true, snapshotTool.name)
+  const toolCall = result.find(isToolCall)
+  const argsRaw = toolCall?.args
+  const args = typeof argsRaw === 'string' ? JSON.parse(argsRaw || '{}') : argsRaw || {}
   const nativeToolCall: NativeLLMToolCall = {
-    id: toolCall.toolCallId,
-    name: toolCall.toolName,
+    id: toolCall?.toolCallId || '',
+    name: toolCall?.toolName || snapshotTool.name,
     arguments: args,
   }
   const toolResult = await snapshotTool.execute(args, agentContext, nativeToolCall)
   const callback = agentContext.context.config.callback
-  if (callback) {
+  if (callback && toolCall) {
     const toolResultNodeId =
       agentContext.context.currentNodeId || generateNodeId(agentContext.context.taskId, 'execution')
     await callback.onMessage(
@@ -158,14 +157,34 @@ async function doCompressAgentMessages(
       break
     }
   }
-  // system, user, assistant, tool(first), [...], <user>, assistant, tool(last), ...
+
   const textContent = toolResult.content
-    .filter(s => s.type == 'text')
-    .map(s => ({ type: 'text' as const, text: (s as any).text }))
+    .filter((s): s is { type: 'text'; text: string } => s.type === 'text')
+    .map(s => ({ type: 'text' as const, text: (s as { type: 'text'; text: string }).text }))
   messages.splice(firstToolIndex + 1, lastToolIndex - firstToolIndex - 2, {
     role: 'user',
     content: textContent,
   })
+}
+
+type ToolCallResult = { type: 'tool-call'; toolCallId: string; toolName: string; args: unknown }
+type TextResult = { type: 'text'; text: string }
+type LlmCallResult = ToolCallResult | TextResult | NativeLLMToolCall
+
+type CallAgentLLM = (
+  agentContext: AgentContext,
+  rlm: RetryLanguageModel,
+  messages: NativeLLMMessage[],
+  tools: NativeLLMTool[],
+  noCompress?: boolean,
+  toolChoice?: string,
+  retryNum?: number,
+  callback?: (StreamCallback & HumanCallback),
+  requestHandler?: (request: LLMRequest) => void
+) => Promise<LlmCallResult[]>
+
+function isToolCall(item: LlmCallResult): item is ToolCallResult {
+  return 'type' in item && item.type === 'tool-call'
 }
 
 export function handleLargeContextMessages(messages: NativeLLMMessage[]) {

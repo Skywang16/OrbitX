@@ -58,9 +58,9 @@
         <div v-else class="unknown-step step-block">
           <div class="unknown-header">
             <span class="unknown-icon">❓</span>
-            <span class="unknown-label">未知步骤类型: {{ (step as any).type }}</span>
+            <span class="unknown-label">未知步骤类型: {{ step.type }}</span>
           </div>
-          <div class="unknown-content">{{ (step as any).content }}</div>
+          <div class="unknown-content">{{ step.content }}</div>
         </div>
       </template>
     </template>

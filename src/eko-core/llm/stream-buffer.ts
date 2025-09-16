@@ -27,7 +27,7 @@ export const DEFAULT_BUFFER_CONFIG: StreamBufferConfig = {
  * Optimized for memory efficiency and fast access patterns
  */
 export class StreamBuffer {
-  private buffer: NativeLLMStreamChunk[]
+  private buffer: Array<NativeLLMStreamChunk | undefined>
   private head: number = 0
   private tail: number = 0
   private size: number = 0
@@ -65,7 +65,7 @@ export class StreamBuffer {
     }
 
     const chunk = this.buffer[this.head]
-    this.buffer[this.head] = undefined as any // Help GC
+    this.buffer[this.head] = undefined // Help GC
     this.head = (this.head + 1) % this.maxSize
     this.size--
     return chunk
@@ -132,7 +132,7 @@ export class StreamBuffer {
   clear(): void {
     // Help GC by clearing references
     for (let i = 0; i < this.maxSize; i++) {
-      this.buffer[i] = undefined as any
+      this.buffer[i] = undefined
     }
     this.head = 0
     this.tail = 0
@@ -214,7 +214,7 @@ export class StreamBuffer {
       }
     }
 
-    console.log(`Buffer compressed from ${allChunks.length} to ${compressed.length} chunks`)
+    console.warn(`Buffer compressed from ${allChunks.length} to ${compressed.length} chunks`)
   }
 
   /**

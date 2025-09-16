@@ -7,7 +7,7 @@
 
 <script setup lang="ts">
   import { completionApi } from '@/api'
-  import type { CompletionRequest, CompletionResponse } from '@/api'
+  import type { CompletionRequest, CompletionResponse, CompletionItem } from '@/api'
   import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
   import { debounce } from 'lodash-es'
 
@@ -24,13 +24,13 @@
 
   // Emits
   interface Emits {
-    (e: 'completion-ready', items: any[]): void
+    (e: 'completion-ready', items: CompletionItem[]): void
     (e: 'suggestion-change', suggestion: string): void
   }
 
   const emit = defineEmits<Emits>()
 
-  const completionItems = ref<any[]>([])
+  const completionItems = ref<CompletionItem[]>([])
   const currentSuggestion = ref('')
   const isLoading = ref(false)
   let currentRequest: AbortController | null = null

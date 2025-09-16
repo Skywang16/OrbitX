@@ -125,7 +125,7 @@ async function doTaskResultCheck(
       completionStatus: args.completionStatus as 'completed' | 'incomplete',
     }
   } catch (e) {
-    Log.error('TaskResultCheckTool error', e)
+    Log.error('TaskResultCheckTool error', e instanceof Error ? e : String(e))
     return {
       completionStatus: 'completed',
     }

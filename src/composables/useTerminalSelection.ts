@@ -140,7 +140,6 @@ export const useTerminalSelection = () => {
   }
 
   return {
-    // 状态
     selectedText,
     hasSelection,
     selectionInfo,

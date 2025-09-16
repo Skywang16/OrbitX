@@ -176,14 +176,12 @@ export class Agent {
     for (let i = 0; i < toolCallResults.length; i++) {
       let result = toolCallResults[i]
       let toolResult: ToolResult
-      // Create compatibility adapter for ToolChain
-      const toolCallAdapter = {
-        type: 'tool-call' as const,
-        toolCallId: result.id,
-        toolName: result.name,
-        input: result.arguments,
+      const nativeToolCall: NativeLLMToolCall = {
+        id: result.id,
+        name: result.name,
+        arguments: result.arguments,
       }
-      let toolChain = new ToolChain(toolCallAdapter as any, agentContext.context.chain.planRequest as LLMRequest)
+      let toolChain = new ToolChain(nativeToolCall, agentContext.context.chain.planRequest as LLMRequest)
       agentContext.context.chain.push(toolChain)
       try {
         let args = result.arguments || {}
@@ -192,7 +190,7 @@ export class Agent {
         if (!tool) {
           throw new Error(result.name + ' tool does not exist')
         }
-        toolResult = await tool.execute(args, agentContext, result)
+        toolResult = await tool.execute(args, agentContext, nativeToolCall)
         toolChain.updateToolResult(toolResult)
 
         // 统一到Result-based模式：检查 toolResult.isError
@@ -207,7 +205,7 @@ export class Agent {
         }
       } catch (e) {
         // 处理工具不存在或其他系统级异常（非业务逻辑错误）
-        Log.error('tool call system error: ', result.name, result.arguments, e)
+        Log.error('tool call system error: ', result.name, result.arguments as Record<string, unknown>, e instanceof Error ? e : String(e))
         toolResult = {
           content: [
             {
@@ -344,7 +342,7 @@ export class Agent {
       }
       return mcpTools
     } catch (e) {
-      Log.error('Mcp listTools error', e)
+      Log.error('Mcp listTools error', e instanceof Error ? e : String(e))
       return []
     }
   }
@@ -391,7 +389,7 @@ export class Agent {
     handleLargeContextMessages(_messages)
   }
 
-  protected async callInnerTool(fun: () => Promise<any>): Promise<ToolResult> {
+  protected async callInnerTool(fun: () => Promise<unknown>): Promise<ToolResult> {
     let result = await fun()
     return {
       content: [

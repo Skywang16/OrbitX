@@ -6,6 +6,14 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
 import { computed, ref, watch, nextTick } from 'vue'
 import { debounce } from 'lodash-es'
+
+declare global {
+  interface Window {
+    os?: {
+      homedir?: () => string
+    }
+  }
+}
 interface TerminalEventListeners {
   onOutput: (data: string) => void
   onExit: (exitCode: number | null) => void
@@ -49,11 +57,20 @@ export const useTerminalStore = defineStore('Terminal', () => {
   const _resizeCallbacks = ref<Map<string, ResizeCallback>>(new Map())
   let _globalResizeListener: (() => void) | null = null
 
-  const _commandEventListeners = ref<Array<(terminalId: string, event: 'started' | 'finished', data?: any) => void>>([])
+  type CommandEventType = 'started' | 'finished'
+  interface CommandEventStartedPayload {
+    commandId: string
+  }
+  interface CommandEventFinishedPayload {
+    commandId: string
+    exitCode: number
+    isSuccess: boolean
+  }
+  type CommandEventPayload = CommandEventStartedPayload | CommandEventFinishedPayload
+  type CommandEventCallback = (terminalId: string, event: CommandEventType, data?: CommandEventPayload) => void
+  const _commandEventListeners = ref<CommandEventCallback[]>([])
 
-  const subscribeToCommandEvents = (
-    callback: (terminalId: string, event: 'started' | 'finished', data?: any) => void
-  ) => {
+  const subscribeToCommandEvents = (callback: CommandEventCallback) => {
     _commandEventListeners.value.push(callback)
     return () => {
       const index = _commandEventListeners.value.indexOf(callback)
@@ -63,7 +80,15 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  const emitCommandEvent = (terminalId: string, event: 'started' | 'finished', data?: any) => {
+  type CommandEventPayloadMap = {
+    started: CommandEventStartedPayload
+    finished: CommandEventFinishedPayload
+  }
+  function emitCommandEvent<E extends CommandEventType>(
+    terminalId: string,
+    event: E,
+    data: CommandEventPayloadMap[E]
+  ): void {
     _commandEventListeners.value.forEach(callback => {
       try {
         callback(terminalId, event, data)
@@ -186,7 +211,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
   }
 
   const setupGlobalListeners = async () => {
-    listen('pane_cwd_changed', (event: any) => {
+    listen<{ pane_id: number; cwd: string }>('pane_cwd_changed', event => {
       const { pane_id, cwd } = event.payload
       if (pane_id && cwd) {
         const terminal = terminals.value.find(t => t.backendId === pane_id)
@@ -449,8 +474,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       let displayPath = cwd
 
-      if (typeof window !== 'undefined' && (window as any).os && (window as any).os.homedir) {
-        const homeDir = (window as any).os.homedir()
+      if (typeof window !== 'undefined' && window.os?.homedir) {
+        const homeDir = window.os.homedir?.()
         if (homeDir && cwd.startsWith(homeDir)) {
           displayPath = cwd.replace(homeDir, '~')
         }

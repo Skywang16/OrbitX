@@ -34,3 +34,5 @@ docs/
 *.njsproj
 *.sln
 *.sw?
+*.oxi
+*.ck

@@ -32,7 +32,7 @@ CORE PRINCIPLES:
 - **Safety first**: Explain before executing potentially destructive commands`,
   fn: async (context: ComponentContext) => {
     const { agent } = context
-    const template = (context as any)._templateOverride || agentRoleComponent.template!
+    const template = context._templateOverride || agentRoleComponent.template!
     return resolveTemplate(template, {
       name: agent.Name,
     })
@@ -137,7 +137,7 @@ export const agentRulesComponent: ComponentConfig = {
 - Consider cross-platform compatibility when suggesting commands
 - Always validate command syntax before execution`,
   fn: async (context: ComponentContext) => {
-    const template = (context as any)._templateOverride || agentRulesComponent.template!
+    const template = context._templateOverride || agentRulesComponent.template!
     return resolveTemplate(template, {})
   },
 }
@@ -172,7 +172,7 @@ assistant: I'll use orbit_search to find TODO comments across all files.
 
 Always be direct and technical in your communication, avoiding conversational phrases like "Great!" or "Sure!". Focus on providing actionable information and clear explanations of your actions.`,
   fn: async (context: ComponentContext) => {
-    const template = (context as any)._templateOverride || workMethodologyComponent.template!
+    const template = context._templateOverride || workMethodologyComponent.template!
     return resolveTemplate(template, {})
   },
 }

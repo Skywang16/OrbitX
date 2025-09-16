@@ -215,9 +215,10 @@ export class ShellTool extends ModifiableTool {
             console.warn(`Shell Tool: Command started via event - ${data?.commandId}`)
           }
         } else if (event === 'finished') {
+          const finishedData = data as { commandId: string; exitCode: number; isSuccess: boolean }
           if (process.env.NODE_ENV === 'development') {
             console.warn(
-              `Shell Tool: Command finished via event - exitCode=${data?.exitCode}, isSuccess=${data?.isSuccess}`
+              `Shell Tool: Command finished via event - exitCode=${finishedData?.exitCode}, isSuccess=${finishedData?.isSuccess}`
             )
           }
 
@@ -225,11 +226,11 @@ export class ShellTool extends ModifiableTool {
             isCompleted = true
             cleanup()
 
-            if (data?.isSuccess) {
+            if (finishedData?.isSuccess) {
               const cleanOutput = cleanOutputFn(outputBuffer, command)
               resolve(cleanOutput)
             } else {
-              reject(new ToolError(`Command execution failed with exit code: ${data?.exitCode}`))
+              reject(new ToolError(`Command execution failed with exit code: ${finishedData?.exitCode}`))
             }
           }
         }

@@ -18,24 +18,28 @@ use tauri::State;
 use tokio::task::JoinHandle;
 use tracing::debug;
 
-// 检查给定路径的索引是否就绪（仅使用新格式判定）
+// 索引目录工具：默认写入 .oxi；读取优先 .oxi，否则回退 .ck（仅读取，绝不创建 .ck）
+fn default_index_dir(base: &Path) -> PathBuf { base.join(".oxi") }
+fn resolve_index_dir(base: &Path) -> PathBuf {
+    let oxi = base.join(".oxi");
+    if oxi.exists() { return oxi; }
+    base.join(".ck")
+}
+
+// 检查给定路径的索引是否就绪
 fn is_index_ready(search_path: &Path) -> bool {
-    let ck_dir = search_path.join(".ck");
-    if !ck_dir.exists() {
-        return false;
-    }
+    let idx_dir = resolve_index_dir(search_path);
+    if !idx_dir.exists() { return false; }
 
-    let building_lock = ck_dir.join("building.lock");
-    if building_lock.exists() {
-        return false;
-    }
+    let building_lock = idx_dir.join("building.lock");
+    if building_lock.exists() { return false; }
 
-    let ready_marker = ck_dir.join("ready.marker");
+    let ready_marker = idx_dir.join("ready.marker");
     ready_marker.exists()
 }
 
-/// 计算 .ck 目录大小（仅顶层与其下一层子目录的文件，避免深度递归）
-fn ck_dir_top_level_size(dir: &Path) -> u64 {
+/// 计算索引目录大小（仅顶层与其下一层子目录的文件，避免深度递归）
+fn index_dir_top_level_size(dir: &Path) -> u64 {
     let mut total: u64 = 0;
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
@@ -264,16 +268,16 @@ fn get_progress_store() -> &'static Arc<Mutex<HashMap<String, CkBuildProgress>>>
     BUILD_PROGRESS_STORE.get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
 }
 
-/// 更新并持久化构建进度
+/// 更新并持久化构建进度（写入 .oxi）
 fn update_build_progress(path: &str, progress: CkBuildProgress) {
     let store = get_progress_store();
     if let Ok(mut map) = store.lock() {
         map.insert(path.to_string(), progress.clone());
     }
 
-    let ck_dir = Path::new(path).join(".ck");
-    if fs::create_dir_all(&ck_dir).is_ok() {
-        let progress_path = ck_dir.join("progress.json");
+    let idx_dir = default_index_dir(Path::new(path));
+    if fs::create_dir_all(&idx_dir).is_ok() {
+        let progress_path = idx_dir.join("progress.json");
         if let Ok(json) = serde_json::to_string(&progress) {
             let _ = fs::write(progress_path, json);
         }
@@ -295,10 +299,12 @@ pub async fn ck_get_build_progress(
     let progress = store.lock().unwrap().get(&path_key).cloned();
 
     let final_progress = progress.unwrap_or_else(|| {
-        let progress_path = search_path.join(".ck").join("progress.json");
-        fs::read_to_string(progress_path)
+        let progress_path_oxi = search_path.join(".oxi").join("progress.json");
+        let progress_path_ck = search_path.join(".ck").join("progress.json");
+        fs::read_to_string(&progress_path_oxi)
             .ok()
             .and_then(|content| serde_json::from_str(&content).ok())
+            .or_else(|| fs::read_to_string(&progress_path_ck).ok().and_then(|c| serde_json::from_str(&c).ok()))
             .unwrap_or_else(|| CkBuildProgress {
                 current_file: None,
                 files_completed: 0,
@@ -333,9 +339,9 @@ pub async fn ck_index_status(
         path_str, is_ready
     );
 
-    // 仅统计 .ck 顶层文件大小，避免递归带来的性能影响
-    let ck_dir = search_path.join(".ck");
-    let size_bytes = if ck_dir.exists() { ck_dir_top_level_size(&ck_dir) } else { 0 };
+    // 仅统计索引目录顶层文件大小，避免递归带来的性能影响
+    let idx_dir = resolve_index_dir(&search_path);
+    let size_bytes = if idx_dir.exists() { index_dir_top_level_size(&idx_dir) } else { 0 };
     let size_str = format_bytes(size_bytes);
 
     Ok(api_success!(CkIndexStatusResult {
@@ -374,10 +380,11 @@ pub async fn ck_build_index(
         },
     );
 
-    let ck_dir = search_path.join(".ck");
-    let _ = fs::create_dir_all(&ck_dir);
-    let building_lock = ck_dir.join("building.lock");
-    let ready_marker = ck_dir.join("ready.marker");
+    // 写入 .oxi 索引目录的构建标记文件
+    let idx_dir = default_index_dir(&search_path);
+    let _ = fs::create_dir_all(&idx_dir);
+    let building_lock = idx_dir.join("building.lock");
+    let ready_marker = idx_dir.join("ready.marker");
     let _ = fs::remove_file(&ready_marker);
     let _ = fs::write(&building_lock, b"building");
 
@@ -488,9 +495,9 @@ pub async fn ck_cancel_build(
             },
         );
 
-        let ck_dir = search_path.join(".ck");
-        let _ = fs::remove_file(ck_dir.join("building.lock"));
-        let _ = fs::remove_file(ck_dir.join("ready.marker"));
+        let idx_dir = resolve_index_dir(&search_path);
+        let _ = fs::remove_file(idx_dir.join("building.lock"));
+        let _ = fs::remove_file(idx_dir.join("ready.marker"));
     }
 
     Ok(api_success!(()))
@@ -512,9 +519,12 @@ pub async fn ck_delete_index(
         debug!("删除索引前，取消了正在进行的构建任务: {}", &path_key);
     }
 
-    let ck_dir = search_path.join(".ck");
-    if ck_dir.exists() {
-        match tokio::fs::remove_dir_all(&ck_dir).await {
+    // 删除 .oxi 索引目录；若不存在则尝试删除旧的 .ck
+    let idx_dir_oxi = search_path.join(".oxi");
+    let idx_dir_ck = search_path.join(".ck");
+    let target = if idx_dir_oxi.exists() { &idx_dir_oxi } else { &idx_dir_ck };
+    if target.exists() {
+        match tokio::fs::remove_dir_all(target).await {
             Ok(_) => {
                 get_progress_store().lock().unwrap().remove(&path_key);
                 debug!("✅ 成功删除CK索引: {}", path_key);

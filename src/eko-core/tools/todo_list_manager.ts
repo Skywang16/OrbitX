@@ -145,7 +145,7 @@ async function doTodoListManager(
       ],
     })
   } catch (e) {
-    Log.error('TodoListManagerTool error', e)
+    Log.error('TodoListManagerTool error', e instanceof Error ? e : String(e))
   }
 }
 

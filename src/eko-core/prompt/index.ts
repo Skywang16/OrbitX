@@ -3,7 +3,6 @@
  * 基于组件化架构的现代提示词工程系统
  */
 
-// 导出模板引擎
 export {
   EkoTemplateEngine,
   resolveTemplate,
@@ -12,7 +11,6 @@ export {
   type TemplateOptions,
 } from './template-engine'
 
-// 导出组件类型
 export {
   PromptComponent,
   PromptType,
@@ -24,10 +22,8 @@ export {
   type PromptVariant,
 } from './components/types'
 
-// 导出组件注册表
 export { getComponentRegistry, getComponent, getAllComponents } from './components/registry'
 
-// 导出构建器
 export { PromptBuilder, buildPrompt } from './builders/prompt-builder'
 export {
   AgentPromptBuilder,
@@ -47,7 +43,6 @@ export {
   buildPlanUserPrompt as getPlanUserPrompt,
 } from './builders/plan-builder'
 
-// 导出配置管理
 export {
   PromptConfigManager,
   getPromptConfig,

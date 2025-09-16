@@ -1,3 +1,5 @@
+import { NativeLLMRequest, NativeLLMToolCall } from '../types/llm.types'
+
 /**
  * Simplified error handling system for native backend
  * Replaces complex ai-sdk error handling with streamlined approach
@@ -44,6 +46,7 @@ export interface RetryConfig {
   maxDelay: number
   backoffMultiplier: number
   jitterEnabled: boolean
+  [key: string]: string | number | boolean | undefined
 }
 
 export const DEFAULT_RETRY_CONFIG: RetryConfig = {
@@ -217,7 +220,7 @@ export class ValidationError extends Error {
   }
 }
 
-export function validateLLMRequest(request: any): void {
+export function validateLLMRequest(request: NativeLLMRequest): void {
   if (!request.model) {
     throw new ValidationError('Model is required', 'model', request.model)
   }
@@ -229,7 +232,7 @@ export function validateLLMRequest(request: any): void {
   }
 }
 
-export function validateToolCall(toolCall: any): void {
+export function validateToolCall(toolCall: NativeLLMToolCall): void {
   if (!toolCall.id) {
     throw new ValidationError('Tool call ID is required', 'id', toolCall.id)
   }

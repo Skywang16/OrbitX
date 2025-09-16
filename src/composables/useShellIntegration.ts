@@ -179,7 +179,9 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
         const exists = await terminalApi.terminalExists(options.backendId)
         if (!exists || disposed) return
         await shellIntegrationApi.setupShellIntegration(options.backendId, true)
-      } catch (e) {}
+      } catch (e) {
+        console.error('Silent shell integration failed:', e)
+      }
     }
   }
 

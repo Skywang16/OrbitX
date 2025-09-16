@@ -171,7 +171,7 @@ export interface PopconfirmProps {
   triggerText?: string
   triggerButtonVariant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'link'
   triggerButtonSize?: Size
-  triggerButtonProps?: Record<string, any>
+  triggerButtonProps?: Record<string, unknown>
 }
 
 // 气泡确认框组件事件类型

@@ -42,7 +42,6 @@ export const useShortcuts = () => {
   const clearError = () => store.clearError()
 
   return {
-    // 状态
     config,
     loading,
     error,

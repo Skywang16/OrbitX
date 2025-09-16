@@ -52,7 +52,6 @@ export const useConfig = () => {
     lastUpdated: null,
   })
 
-  // 计算属性
   const isLoaded = computed(() => config.value !== null)
   const hasError = computed(() => loadingState.value.error !== null)
   const isLoading = computed(() => loadingState.value.loading)
@@ -141,11 +140,9 @@ export const useConfig = () => {
   }
 
   return {
-    // 状态
     config: readonly(config),
     loadingState: readonly(loadingState),
 
-    // 计算属性
     isLoaded,
     hasError,
     isLoading,
@@ -174,7 +171,6 @@ export const useConfigFile = () => {
 
   const filePath = ref<string>('')
 
-  // 计算属性
   const fileExists = computed(() => fileState.value.info?.exists ?? false)
   const fileModifiedAt = computed(() => formatTimestamp(fileState.value.info?.lastModified?.toString()))
 
@@ -215,11 +211,9 @@ export const useConfigFile = () => {
   }
 
   return {
-    // 状态
     fileState: readonly(fileState),
     filePath: readonly(filePath),
 
-    // 计算属性
     fileExists,
     fileModifiedAt,
 

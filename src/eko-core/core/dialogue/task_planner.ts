@@ -1,4 +1,4 @@
-import { JSONSchema7 } from 'json-schema'
+import { JSONSchema7 } from '../../types'
 import { Eko } from '../eko'
 import { EkoDialogue } from '../dialogue'
 import { DialogueParams, DialogueTool, ToolResult } from '../../types'
@@ -63,7 +63,9 @@ export default class TaskPlannerTool implements DialogueTool {
       ...this.ekoDialogue.getConfig(),
       callback: this.params.callback?.taskCallback,
     })
-    const task = await eko.generate(taskDescription, taskId, this.ekoDialogue.getGlobalContext())
+    // 将 Map<string, unknown> 转换为 Record<string, unknown> 满足类型约束
+    const globalContext = Object.fromEntries(this.ekoDialogue.getGlobalContext()) as Record<string, unknown>
+    const task = await eko.generate(taskDescription, taskId, globalContext)
     this.ekoDialogue.addEko(taskId, eko)
     const taskPlan = task.xml
     return {

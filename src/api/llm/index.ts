@@ -76,7 +76,6 @@ export class LLMApi {
   }
 }
 
-// 导出单例实例
 export const llmApi = new LLMApi()
 
 // 默认导出

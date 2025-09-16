@@ -74,6 +74,8 @@
     "eslint-define-config": "^2.1.0",
     "eslint-plugin-prettier": "^5.5.3",
     "eslint-plugin-vue": "^10.3.0",
+    "prettier": "^3.3.3",
+    "vue-eslint-parser": "^9.4.3",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
     "vue-tsc": "^2.1.10"

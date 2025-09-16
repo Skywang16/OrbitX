@@ -24,11 +24,11 @@
 
   // 开发环境下暴露到全局
   if (import.meta.env.DEV) {
-    window.showOnboarding = showOnboardingForTesting
+    ;(window as any).showOnboarding = showOnboardingForTesting
   }
 
   onMounted(() => {
-    window.reloadShortcuts = reloadConfig
+    ;(window as any).reloadShortcuts = reloadConfig
   })
 </script>
 

@@ -8,6 +8,7 @@ import Context from '../../core/context'
 
 import { PromptBuilder } from './prompt-builder'
 import { resolveTemplate } from '../template-engine'
+import type { Agent } from '../../agent'
 
 /**
  * Plan提示词构建器
@@ -17,18 +18,18 @@ export class PlanPromptBuilder extends PromptBuilder {
    * 构建规划系统提示词
    */
   async buildPlanSystemPrompt(context: Context): Promise<string> {
-    const agent = context.agent
+    const agent = context.agent as Agent & { ignorePlan?: boolean }
     const tools = await agent.loadTools(context)
 
     // 生成agent信息
     let agentPrompt = ''
-    if (!(agent as any).ignorePlan) {
+    if (!agent.ignorePlan) {
       agentPrompt = `<agent name="${agent.Name}">
 Description: ${agent.PlanDescription || agent.Description}
 Tools:
 ${tools
-  .filter((tool: any) => !tool.noPlan)
-  .map((tool: any) => `  - ${tool.name}: ${tool.planDescription || tool.description || ''}`)
+  .filter(tool => !tool.noPlan)
+  .map(tool => `  - ${tool.name}: ${tool.planDescription || tool.description || ''}`)
   .join('\n')}
 </agent>`
     }

@@ -94,9 +94,7 @@
   const handleReset = async () => {
     await resetToDefaults()
 
-    if ((window as any).reloadShortcuts) {
-      await (window as any).reloadShortcuts()
-    }
+    await (window as any).reloadShortcuts?.()
   }
 
   const allActionKeys = [
@@ -188,9 +186,7 @@
 
     await addShortcut(shortcutBinding)
 
-    if ((window as any).reloadShortcuts) {
-      await (window as any).reloadShortcuts()
-    }
+    await (window as any).reloadShortcuts?.()
   }
 
   const removeExistingShortcut = async (actionKey: string) => {

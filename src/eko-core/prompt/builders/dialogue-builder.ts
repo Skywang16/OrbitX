@@ -5,6 +5,7 @@
 
 import config from '../../config'
 import { PromptComponent, ComponentContext } from '../components/types'
+import type { Agent } from '../../agent'
 import { PromptBuilder } from './prompt-builder'
 
 /**
@@ -17,7 +18,10 @@ export class DialoguePromptBuilder extends PromptBuilder {
   async buildDialogueSystemPrompt(extSysPrompt?: string): Promise<string> {
     // 准备组件上下文
     const componentContext: ComponentContext = {
-      agent: { Name: config.name, Description: 'AI assistant specialized for terminal emulator applications' } as any,
+      agent: {
+        Name: config.name,
+        Description: 'AI assistant specialized for terminal emulator applications',
+      } as unknown as Agent,
       extSysPrompt,
     }
 

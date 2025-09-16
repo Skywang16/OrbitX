@@ -4,6 +4,7 @@ import { createSidebarCallback } from './core/callbacks'
 import { TerminalAgent, createTerminalAgent } from './agent/terminal-agent'
 import { allTools } from './tools'
 import type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult } from './types'
+import type { Task } from '@/eko-core/types/core.types'
 
 export class OrbitXEko {
   private eko: Eko | null = null
@@ -165,7 +166,7 @@ export class OrbitXEko {
   /**
    * 生成任务（不执行）
    */
-  async generate(prompt: string): Promise<any> {
+  async generate(prompt: string): Promise<Task> {
     try {
       if (!this.eko) {
         await this.initialize()
@@ -183,7 +184,7 @@ export class OrbitXEko {
   /**
    * 执行已生成的任务
    */
-  async execute(task: any, options: EkoRunOptions = {}): Promise<EkoRunResult> {
+  async execute(task: Task, options: EkoRunOptions = {}): Promise<EkoRunResult> {
     const startTime = Date.now()
 
     try {
@@ -341,7 +342,6 @@ const createOrbitXEko = async (config: EkoInstanceConfig = {}): Promise<OrbitXEk
  */
 const createTerminalEko = createOrbitXEko
 
-// 导出所有类型和工具
 export type { TerminalCallback, TerminalAgentConfig, EkoInstanceConfig, EkoRunOptions, EkoRunResult, EkoConfigOptions }
 
 // 类型别名

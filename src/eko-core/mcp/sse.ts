@@ -14,7 +14,13 @@ type SseHandler = {
   onmessage: (data: SseEventData) => void
   onerror: (e: unknown) => void
   readyState?: 0 | 1 | 2 // 0 init; 1 connected; 2 closed
-  close?: Function
+  close?: () => void
+}
+
+type McpResponse<T = unknown> = {
+  id: string
+  result?: T & { isError?: boolean; content?: unknown }
+  error?: string | { message: string }
 }
 
 export class SimpleSseMcpClient implements IMcpClient {
@@ -22,11 +28,11 @@ export class SimpleSseMcpClient implements IMcpClient {
   private clientName: string
   private sseHandler?: SseHandler
   private msgUrl?: string
-  private pingTimer?: any
-  private reconnectTimer?: any
+  private pingTimer?: ReturnType<typeof setInterval>
+  private reconnectTimer?: ReturnType<typeof setTimeout>
   private headers: Record<string, string>
   private protocolVersion: string = '2024-11-05'
-  private requestMap: Map<string, (messageData: any) => void>
+  private requestMap: Map<string, (messageData: McpResponse<unknown>) => void>
 
   constructor(sseServerUrl: string, clientName: string = 'EkoMcpClient', headers: Record<string, string> = {}) {
     this.sseUrl = sseServerUrl
@@ -53,7 +59,7 @@ export class SimpleSseMcpClient implements IMcpClient {
         },
         onmessage: data => this.onmessage(data),
         onerror: e => {
-          Log.error('MCP Client, error: ', e)
+          Log.error('MCP Client, error: ', e instanceof Error ? e : String(e))
           clearTimeout(timer)
           if (this.sseHandler?.readyState === 2) {
             this.pingTimer && clearInterval(this.pingTimer)
@@ -106,35 +112,39 @@ export class SimpleSseMcpClient implements IMcpClient {
   }
 
   private ping() {
-    this.request('ping', {})
+    void this.request('ping', {})
   }
 
   async listTools(param: McpListToolParam, signal?: AbortSignal): Promise<McpListToolResult> {
-    const message = await this.request(
+    const message = await this.request<{ tools?: McpListToolResult }>(
       'tools/list',
       {
         ...param,
       },
       signal
     )
-    return message.result.tools || []
+    return message.result?.tools || []
   }
 
   async callTool(param: McpCallToolParam, signal?: AbortSignal): Promise<ToolResult> {
-    const message = await this.request(
+    const message = await this.request<ToolResult>(
       'tools/call',
       {
         ...param,
       },
       signal
     )
-    return message.result
+    return message.result as ToolResult
   }
 
-  private async request(method: string, params: Record<string, any>, signal?: AbortSignal): Promise<any> {
+  private async request<T = unknown>(
+    method: string,
+    params: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<McpResponse<T>> {
     const id = uuidv4()
     try {
-      const callback = new Promise<any>((resolve, reject) => {
+      const callback = new Promise<McpResponse<T>>((resolve, reject) => {
         if (signal) {
           signal.addEventListener('abort', () => {
             const error = new Error('Operation was interrupted')
@@ -142,7 +152,7 @@ export class SimpleSseMcpClient implements IMcpClient {
             reject(error)
           })
         }
-        this.requestMap.set(id, resolve)
+        this.requestMap.set(id, msg => resolve(msg as McpResponse<T>))
       })
       Log.debug(`MCP Client, ${method}`, id, params)
       const response = await fetch(this.msgUrl as string, {
@@ -171,14 +181,11 @@ export class SimpleSseMcpClient implements IMcpClient {
           )
         }
         if (message.result?.isError == true) {
-          if (message.result.content) {
-            throw new Error(
-              `MCP ${method} error: ` +
-                (typeof message.result.content === 'string' ? message.result.content : message.result.content[0].text)
-            )
-          } else {
-            throw new Error(`MCP ${method} error: ` + JSON.stringify(message.result))
+          const content = message.result.content as unknown
+          if (typeof content === 'string') {
+            throw new Error(`MCP ${method} error: ` + content)
           }
+          throw new Error(`MCP ${method} error: ` + JSON.stringify(message.result))
         }
         return message
       } else {
@@ -257,9 +264,10 @@ async function connectSse(
         str = chunks[chunks.length - 1]
       }
     }
-  } catch (e: any) {
-    if (e?.name !== 'AbortError') {
-      Log.error('MCP Client, connectSse error:', e)
+  } catch (e) {
+    const err = e as { name?: string }
+    if (err?.name !== 'AbortError') {
+      Log.error('MCP Client, connectSse error:', e instanceof Error ? e : String(e))
       hander.onerror(e)
     }
   } finally {

@@ -116,12 +116,18 @@ export type SupportedShortcutAction =
   | 'toggle_ai_sidebar'
   | 'toggle_window_pin'
 
+export interface ShortcutBackendResult {
+  success: boolean
+  message?: string
+  data?: Record<string, unknown>
+}
+
 export interface ShortcutExecutionResult {
   success: boolean
   actionName: string
   keyCombo: string
   frontendResult?: boolean
-  backendResult?: any
+  backendResult?: ShortcutBackendResult
   error?: string
 }
 
@@ -133,10 +139,17 @@ export interface ShortcutListenerConfig {
 
 // ===== 事件类型 =====
 
+export interface ShortcutEventData {
+  conflictsWith?: ShortcutBinding[]
+  oldBinding?: ShortcutBinding
+  newBinding?: ShortcutBinding
+  metadata?: Record<string, unknown>
+}
+
 export interface ShortcutEvent {
   type: 'shortcut_triggered' | 'shortcut_conflict' | 'shortcut_updated'
   shortcut?: ShortcutBinding
-  data?: any
+  data?: ShortcutEventData
   timestamp: number
 }
 

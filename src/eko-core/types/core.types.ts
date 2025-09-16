@@ -119,20 +119,20 @@ export type Task = {
 }
 
 export interface HumanCallback {
-  onHumanConfirm?: (agentContext: AgentContext, prompt: string, extInfo?: any) => Promise<boolean>
-  onHumanInput?: (agentContext: AgentContext, prompt: string, extInfo?: any) => Promise<string>
+  onHumanConfirm?: (agentContext: AgentContext, prompt: string, extInfo?: Record<string, unknown>) => Promise<boolean>
+  onHumanInput?: (agentContext: AgentContext, prompt: string, extInfo?: Record<string, unknown>) => Promise<string>
   onHumanSelect?: (
     agentContext: AgentContext,
     prompt: string,
     options: string[],
     multiple?: boolean,
-    extInfo?: any
+    extInfo?: Record<string, unknown>
   ) => Promise<string[]>
   onHumanHelp?: (
     agentContext: AgentContext,
     helpType: 'request_login' | 'request_assistance',
     prompt: string,
-    extInfo?: any
+    extInfo?: Record<string, unknown>
   ) => Promise<boolean>
 }
 

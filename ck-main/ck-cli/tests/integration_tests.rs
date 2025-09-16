@@ -144,8 +144,8 @@ fn test_index_command() {
             || stderr.contains("✓ Indexed")
     );
 
-    // Check that .ck directory was created
-    assert!(temp_dir.path().join(".ck").exists());
+    // Check that .oxi directory was created
+    assert!(temp_dir.path().join(".oxi").exists());
 }
 
 #[test]
@@ -354,7 +354,7 @@ fn test_clean_command() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        temp_dir.path().join(".ck").exists(),
+        temp_dir.path().join(".oxi").exists(),
         "Index directory not created"
     );
 

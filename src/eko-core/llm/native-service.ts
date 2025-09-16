@@ -40,7 +40,7 @@ export class NativeLLMService {
       invoke('llm_call_stream', {
         request: { ...request, stream: true },
         onChunk: channel,
-      }).catch((error: any) => {
+      }).catch((error: unknown) => {
         // Handle invoke errors - the channel will receive error through normal message flow
         console.error('LLM stream invoke error:', error)
       })

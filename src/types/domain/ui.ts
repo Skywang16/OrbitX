@@ -18,14 +18,14 @@ export interface TabItem {
   closable?: boolean
   shell?: string
   path?: string
-  data?: { section?: string; backendId?: number | null; [key: string]: any }
+  data?: { section?: string; backendId?: number | null; [key: string]: unknown }
 }
 
 // ===== 应用设置类型 =====
 
 export interface AppSettings {
   theme: {
-    mode: any
+    mode: ThemeMode
     terminalTheme: string
   }
   terminal: {
@@ -49,7 +49,7 @@ export interface AppSettings {
 
 // ===== 组件基础类型 =====
 
-export type Theme = 'light' | 'dark'
+export type ThemeMode = 'light' | 'dark' | 'auto'
 export type Placement = 'top' | 'bottom' | 'left' | 'right'
 
 export interface SelectOption {

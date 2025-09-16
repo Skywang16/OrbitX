@@ -41,7 +41,7 @@ export interface ComponentConfigOptions {
 export interface ConditionalRule {
   condition: string // 条件表达式
   action: 'include' | 'exclude' | 'modify'
-  params?: Record<string, any>
+  params?: Record<string, unknown>
 }
 
 /**

@@ -26,19 +26,14 @@
  * - modifiable-tool: 可扩展的工具基类
  */
 
-// 导出所有工具
 export * from './tools'
 
-// 导出工具注册系统
 export * from './tool-registry'
 
-// 导出基础工具类
 export * from './modifiable-tool'
 
-// 导出错误类型
 export * from './tool-error'
 
-// 导出具体工具实例
 export { readFileTool } from './toolList/read-file'
 export { readManyFilesTool } from './toolList/read-many-files'
 export { createFileTool } from './toolList/create-file'
@@ -48,7 +43,6 @@ export { webFetchTool } from './toolList/web-fetch'
 
 export { orbitSearchTool } from './toolList/orbit-search'
 
-// 导出主要的工具集合
 export { allTools, readOnlyTools, registerAllTools, getToolsForMode } from './tools'
 
 // 默认导出所有工具

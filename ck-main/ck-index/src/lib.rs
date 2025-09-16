@@ -734,7 +734,11 @@ pub async fn smart_update_index_with_detailed_progress(
     exclude_patterns: &[String],
     model: Option<&str>,
 ) -> Result<UpdateStats> {
-    let index_dir = resolve_index_dir(path);
+    // Prefer existing .oxi/.ck for reading; if none exists, write to .oxi
+    let mut index_dir = resolve_index_dir(path);
+    if !index_dir.exists() {
+        index_dir = default_index_dir(path);
+    }
     let mut stats = UpdateStats::default();
 
     // Set up interrupt handler (only once per process)
@@ -936,8 +940,8 @@ pub async fn smart_update_index_with_detailed_progress(
 
             match result {
                 Ok(entry) => {
-                    // Write sidecar immediately
-                    let sidecar_path = get_sidecar_path(path, file_path);
+                    // Write sidecar immediately to the selected index_dir
+                    let sidecar_path = sidecar_path_for_dir(path, file_path, &index_dir);
                     save_index_entry(&sidecar_path, &entry)?;
 
                     // Update and save manifest immediately
@@ -1033,8 +1037,8 @@ pub async fn smart_update_index_with_detailed_progress(
                 callback(&file_name.to_string_lossy());
             }
 
-            // Write sidecar immediately
-            let sidecar_path = get_sidecar_path(path, &file_path);
+            // Write sidecar immediately to the selected index_dir
+            let sidecar_path = sidecar_path_for_dir(path, &file_path, &index_dir);
             save_index_entry(&sidecar_path, &entry)?;
 
             // Update and save manifest immediately

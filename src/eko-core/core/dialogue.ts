@@ -24,13 +24,13 @@ export class EkoDialogue {
   protected tools: DialogueTool[]
   protected config: EkoDialogueConfig
   protected ekoMap: Map<string, Eko>
-  protected globalContext: Map<string, any>
+  protected globalContext: Map<string, unknown>
 
   constructor(config: EkoDialogueConfig, memory?: EkoMemory, tools?: DialogueTool[]) {
     this.config = config
     this.tools = tools ?? []
     this.ekoMap = new Map<string, Eko>()
-    this.globalContext = new Map<string, any>()
+    this.globalContext = new Map<string, unknown>()
     this.memory = memory ?? new EkoMemory(getDialogueSystemPrompt())
   }
 
@@ -156,7 +156,7 @@ export class EkoDialogue {
 
           toolResult = await tool.execute(args, toolCall)
         } catch (e) {
-          Log.error('tool call error: ', result.toolName, result.args, e)
+          Log.error('tool call error: ', result.toolName, result.args as Record<string, unknown>, e instanceof Error ? e : String(e))
           toolResult = {
             content: [
               {

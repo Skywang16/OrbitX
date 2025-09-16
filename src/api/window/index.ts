@@ -45,8 +45,10 @@ export class WindowApi {
     const response = await this.manageWindowState(request)
     if (response.overallSuccess && response.results.length > 0) {
       const state = response.results[0].data
-      this.alwaysOnTopState = state.alwaysOnTop
-      return state
+      if (state && typeof state === 'object' && 'alwaysOnTop' in state) {
+        this.alwaysOnTopState = state.alwaysOnTop
+        return state as CompleteWindowState
+      }
     }
     throw new Error('获取窗口状态失败')
   }
@@ -81,8 +83,10 @@ export class WindowApi {
     const response = await this.manageWindowState(request)
     if (response.overallSuccess && response.results.length > 0) {
       const newState = response.results[0].data
-      this.alwaysOnTopState = newState
-      return newState
+      if (typeof newState === 'boolean') {
+        this.alwaysOnTopState = newState
+        return newState
+      }
     }
     throw new Error('切换窗口置顶状态失败')
   }
@@ -214,10 +218,8 @@ export class WindowApi {
   }
 }
 
-// 导出单例实例
 export const windowApi = new WindowApi()
 
-// 导出类型
 export type * from './types'
 
 // 默认导出

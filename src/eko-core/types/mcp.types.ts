@@ -1,4 +1,4 @@
-import { JSONSchema7 } from 'json-schema'
+import { JSONSchema7 } from '../types'
 import { ToolResult } from '../types/tools.types'
 
 export type McpListToolParam = {

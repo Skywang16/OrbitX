@@ -9,7 +9,7 @@ declare module "*.vue" {
 // 扩展 Window 接口用于开发环境的全局函数
 declare global {
   interface Window {
-    showOnboarding?: () => void;
-    reloadShortcuts?: () => void;
+    showOnboarding?: (() => void);
+    reloadShortcuts?: (() => void);
   }
 }

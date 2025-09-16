@@ -292,11 +292,11 @@ export const globalPerformanceMonitor = new PerformanceMonitor()
 /**
  * Decorator for monitoring function performance
  */
-export function monitorPerformance<T extends (...args: any[]) => any>(
+export function monitorPerformance<T extends (...args: unknown[]) => unknown>(
   fn: T,
   monitor: PerformanceMonitor = globalPerformanceMonitor
 ): T {
-  return ((...args: any[]) => {
+  return ((...args: unknown[]) => {
     const startTime = performance.now()
     try {
       const result = fn(...args)

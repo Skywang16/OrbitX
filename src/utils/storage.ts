@@ -1,4 +1,4 @@
-export class StorageManager<T = any> {
+export class StorageManager<T = unknown> {
   constructor(private key: string) {}
 
   save(data: T): boolean {

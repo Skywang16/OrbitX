@@ -1,4 +1,4 @@
-import { JSONSchema7 } from 'json-schema'
+import { JSONSchema7 } from '../../types'
 import { EkoDialogue } from '../dialogue'
 
 import { TOOL_NAME as task_planner } from './task_planner'

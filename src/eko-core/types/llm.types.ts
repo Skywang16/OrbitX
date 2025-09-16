@@ -1,5 +1,5 @@
-// Simplified JSONSchema type
-export type JSONSchema7 = any
+import type { JSONSchema7 as LibJSONSchema7 } from 'json-schema'
+export type JSONSchema7 = LibJSONSchema7 | boolean
 
 // Core message types
 export interface NativeLLMMessage {
@@ -22,7 +22,7 @@ export interface NativeLLMMessagePart {
 export interface NativeLLMTool {
   name: string
   description: string
-  parameters: any // JSONSchema
+  parameters: JSONSchema7
 }
 
 export interface NativeLLMToolCall {

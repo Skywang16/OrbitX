@@ -3,6 +3,7 @@ import { AgentContext } from '../core/context'
 import { Tool, ToolResult, NativeLLMToolCall, LLMRequest } from '../types'
 import { RetryLanguageModel } from '../llm'
 import { toImage } from '../common/utils'
+import type { Agent } from '../agent'
 
 export const TOOL_NAME = 'human_interact'
 
@@ -86,15 +87,16 @@ request_help: Request assistance from the user; for instance, when an operation 
           break
         case 'request_help':
           if (callback.onHumanHelp) {
-            if (args.helpType == 'request_login' && (await this.checkIsLogined(agentContext))) {
+            if (
+              (args.helpType as 'request_login' | undefined) == 'request_login' &&
+              (await this.checkIsLogined(agentContext))
+            ) {
               resultText = 'Already logged in'
               break
             }
-            let result = await callback.onHumanHelp(
-              agentContext,
-              (args.helpType || 'request_assistance') as any,
-              args.prompt as string
-            )
+            const helpType =
+              (args.helpType as 'request_login' | 'request_assistance' | undefined) ?? 'request_assistance'
+            let result = await callback.onHumanHelp(agentContext, helpType, args.prompt as string)
             resultText = `request_help result: ${result ? 'Solved' : 'Unresolved'}`
           }
           break
@@ -123,15 +125,15 @@ request_help: Request assistance from the user; for instance, when an operation 
   }
 
   private async checkIsLogined(agentContext: AgentContext) {
-    let screenshot = (agentContext.agent as any)['screenshot']
-    if (!screenshot) {
+    type AgentWithScreenshot = Agent & {
+      screenshot?: (ctx: AgentContext) => Promise<{ imageBase64: string; imageType: 'image/jpeg' | 'image/png' }>
+    }
+    const agent = agentContext.agent as unknown as AgentWithScreenshot
+    if (!agent.screenshot) {
       return false
     }
     try {
-      let imageResult = (await screenshot.call(agentContext.agent, agentContext)) as {
-        imageBase64: string
-        imageType: 'image/jpeg' | 'image/png'
-      }
+      const imageResult = await agent.screenshot(agentContext)
       let rlm = new RetryLanguageModel(agentContext.context.config.llms, agentContext.agent.Llms)
       let image = toImage(imageResult.imageBase64)
       let request: LLMRequest = {

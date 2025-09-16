@@ -6,6 +6,7 @@
   import { configApi } from '@/api/config'
   import { XSelect } from '@/ui'
   import type { SelectOption } from '@/ui'
+  import type { ThemeOption } from '@/types/domain/theme'
   import { useSessionStore } from '@/stores/session'
   import SettingsCard from '../../SettingsCard.vue'
 
@@ -45,7 +46,7 @@
 
   // 缓存主题选项以避免重复计算
   const themeOptionsCache = computed(() => {
-    return themeStore.themeOptions.map((option: any) => ({
+    return themeStore.themeOptions.map((option: ThemeOption) => ({
       value: option.value,
       label: option.label,
       type: option.type,

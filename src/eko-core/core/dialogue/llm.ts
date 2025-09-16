@@ -6,6 +6,7 @@ import {
   NativeLLMStreamChunk,
   LLMRequest,
 } from '../../types/llm.types'
+import type { FinishReason } from '../../types/llm.types'
 import config from '../../config'
 import Log from '../../common/log'
 import { RetryLanguageModel } from '../../llm'
@@ -108,7 +109,7 @@ export async function callChatLLM(
 
           await streamCallback.onMessage({
             type: 'finish',
-            finishReason: chunk.finishReason as any,
+            finishReason: chunk.finishReason as unknown as FinishReason,
             usage: {
               promptTokens: chunk.usage?.promptTokens || 0,
               completionTokens: chunk.usage?.completionTokens || 0,

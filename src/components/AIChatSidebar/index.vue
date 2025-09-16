@@ -134,7 +134,6 @@
     }
   }
 
-  // 生命周期
   onMounted(async () => {
     await aiChatStore.initialize()
 

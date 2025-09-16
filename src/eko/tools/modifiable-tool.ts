@@ -33,9 +33,14 @@ export abstract class ModifiableTool implements Tool {
    * 验证参数
    */
   protected validateParameters(params: Record<string, unknown>): void {
-    if (!this.parameters.required) return
+    // JSON Schema 可能为 boolean（true/false），需先做类型缩小
+    if (typeof this.parameters !== 'object' || this.parameters === null) return
 
-    for (const required of this.parameters.required) {
+    // 仅当为对象 schema 且存在 required 字段时校验
+    const req = (this.parameters as Record<string, unknown>).required as unknown
+    if (!Array.isArray(req)) return
+
+    for (const required of req as string[]) {
       if (!(required in params) || params[required] === undefined || params[required] === null) {
         throw new ToolError(`缺少必需参数: ${required}`, 'MISSING_PARAMETER')
       }

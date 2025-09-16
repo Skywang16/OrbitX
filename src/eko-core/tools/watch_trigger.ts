@@ -3,6 +3,7 @@ import { LLMRequest, JSONSchema7, NativeLLMToolCall } from '../types'
 import { toImage } from '../common/utils'
 import { RetryLanguageModel } from '../llm'
 import { AgentContext } from '../core/context'
+import type { Agent } from '../agent'
 import { extractAgentXmlNode } from '../common/xml'
 import { Tool, ToolResult } from '../types/tools.types'
 
@@ -140,11 +141,12 @@ export default class WatchTriggerTool implements Tool {
   }
 
   private async get_screenshot(agentContext: AgentContext): Promise<ImageSource> {
-    const screenshot = (agentContext.agent as any)['screenshot']
-    const imageResult = (await screenshot.call(agentContext.agent, agentContext)) as {
-      imageBase64: string
-      imageType: 'image/jpeg' | 'image/png'
+    type AgentWithScreenshot = Agent & {
+      screenshot?: (ctx: AgentContext) => Promise<{ imageBase64: string; imageType: 'image/jpeg' | 'image/png' }>
     }
+    const agent = agentContext.agent as unknown as AgentWithScreenshot
+    if (!agent.screenshot) throw new Error('Agent does not support screenshot')
+    const imageResult = await agent.screenshot(agentContext)
     const image = toImage(imageResult.imageBase64)
     return {
       image: image,
@@ -154,29 +156,31 @@ export default class WatchTriggerTool implements Tool {
 
   private async init_eko_observer(agentContext: AgentContext): Promise<void> {
     try {
-      const screenshot = (agentContext.agent as any)['execute_script']
-      await screenshot.call(
-        agentContext.agent,
-        agentContext,
-        () => {
-          let _window = window as any
-          _window.has_eko_changed = false
-          _window.eko_observer && _window.eko_observer.disconnect()
-          let eko_observer = new MutationObserver(function () {
-            _window.has_eko_changed = true
-          })
-          eko_observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeOldValue: true,
-            characterData: true,
-            characterDataOldValue: true,
-          })
-          _window.eko_observer = eko_observer
-        },
-        []
-      )
+      type AgentWithExec = Agent & {
+        execute_script?: (ctx: AgentContext, fn: () => void, args: unknown[]) => Promise<unknown>
+      }
+      const agent = agentContext.agent as unknown as AgentWithExec
+      if (!agent.execute_script) throw new Error('Agent does not support execute_script')
+      await agent.execute_script(agentContext, () => {
+        const _window = window as unknown as {
+          has_eko_changed?: boolean
+          eko_observer?: MutationObserver
+        }
+        _window.has_eko_changed = false
+        _window.eko_observer && _window.eko_observer.disconnect()
+        const eko_observer = new MutationObserver(function () {
+          _window.has_eko_changed = true
+        })
+        eko_observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeOldValue: true,
+          characterData: true,
+          characterDataOldValue: true,
+        })
+        _window.eko_observer = eko_observer
+      }, [])
     } catch (error) {
       console.error('Error initializing Eko observer:', error)
     }
@@ -184,16 +188,15 @@ export default class WatchTriggerTool implements Tool {
 
   private async has_eko_changed(agentContext: AgentContext): Promise<'true' | 'false' | 'undefined'> {
     try {
-      const screenshot = (agentContext.agent as any)['execute_script']
-      let result = (await screenshot.call(
-        agentContext.agent,
-        agentContext,
-        () => {
-          return (window as any).has_eko_changed + ''
-        },
-        []
-      )) as string
-      return result as any
+      type AgentWithExec = Agent & {
+        execute_script?: (ctx: AgentContext, fn: () => string, args: unknown[]) => Promise<string>
+      }
+      const agent = agentContext.agent as unknown as AgentWithExec
+      if (!agent.execute_script) throw new Error('Agent does not support execute_script')
+      const result = await agent.execute_script(agentContext, () => {
+        return (window as unknown as { has_eko_changed?: boolean }).has_eko_changed + ''
+      }, [])
+      return result as 'true' | 'false' | 'undefined'
     } catch (e) {
       console.error('Error checking Eko change:', e)
       return 'undefined'
@@ -244,7 +247,7 @@ export default class WatchTriggerTool implements Tool {
       resultText = resultText.substring(resultText.indexOf('{'), resultText.lastIndexOf('}') + 1)
       return JSON.parse(resultText)
     } catch (error) {
-      Log.error('Error in is_dom_change:', error)
+      Log.error('Error in is_dom_change:', error instanceof Error ? error : String(error))
     }
     return {
       changed: false,

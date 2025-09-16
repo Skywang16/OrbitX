@@ -51,7 +51,7 @@ export function convertToolResult(toolCall: NativeLLMToolCall, toolResult: ToolR
     }
   } else {
     // Handle multi-part content
-    const parts: any[] = []
+    const parts: unknown[] = []
     for (const content of toolResult.content) {
       if (content.type === 'text') {
         parts.push({ type: 'text', text: content.text })

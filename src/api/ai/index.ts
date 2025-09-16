@@ -1,6 +1,15 @@
-import type { AIHealthStatus, AIModelConfig, AISettings, AIStats, Conversation, Message } from '@/types'
+import type {
+  AIHealthStatus,
+  AIModelConfig,
+  AISettings,
+  AIStats,
+  Conversation,
+  Message,
+  TagContextInfo,
+  AIOutputStep,
+} from '@/types'
 import { invoke } from '@/utils/request'
-import type { RawConversation, RawMessage, WebFetchRequest, WebFetchResponse } from './types'
+import type { RawConversation, RawMessage, WebFetchRequest, WebFetchResponse, PersistedStep } from './types'
 
 class ConversationAPI {
   async createConversation(title?: string): Promise<number> {
@@ -38,7 +47,7 @@ class ConversationAPI {
     currentMessage: string,
     upToMessageId?: number,
     paneId?: number,
-    tagContext?: any
+    tagContext?: TagContextInfo
   ): Promise<string> {
     const prompt = await invoke<string>('ai_conversation_build_prompt_with_context', {
       conversationId,
@@ -58,7 +67,7 @@ class ConversationAPI {
     await invoke<void>('ai_conversation_update_message_content', { messageId, content })
   }
 
-  async updateMessageSteps(messageId: number, steps: any[]): Promise<void> {
+  async updateMessageSteps(messageId: number, steps: PersistedStep[]): Promise<void> {
     const cleanedSteps = this.cleanStepsData(steps)
 
     const stepsJson = JSON.stringify(cleanedSteps)
@@ -84,27 +93,36 @@ class ConversationAPI {
     await invoke<void>('ai_conversation_truncate', { conversationId, truncateAfterMessageId })
   }
 
-  private cleanStepsData(steps: any[]): any[] {
-    return steps.map(step => {
-      if (step && typeof step === 'object') {
-        const cleanedStep = { ...step }
-
-        if (cleanedStep.result && typeof cleanedStep.result === 'object') {
-          if (typeof cleanedStep.result.text === 'string') {
-            cleanedStep.result.text = this.cleanJsonEscapes(cleanedStep.result.text)
+  private cleanStepsData(steps: PersistedStep[]): PersistedStep[] {
+    const isToolStep = (s: PersistedStep): s is Extract<PersistedStep, { type: 'tool_use' | 'tool_result' }> =>
+      s.type === 'tool_use' || s.type === 'tool_result'
+    return steps.map(s => {
+      const step: PersistedStep = { ...s }
+      if (step.type === 'text' && typeof step.content === 'string') {
+        step.content = this.cleanJsonEscapes(step.content)
+      }
+      if (isToolStep(step)) {
+        const te = { ...step.toolExecution }
+        const r = te.result
+        if (typeof r === 'string') {
+          te.result = this.cleanJsonEscapes(r)
+        } else if (r && typeof r === 'object') {
+          const obj = r as Record<string, unknown>
+          if (typeof obj['text'] === 'string') {
+            obj['text'] = this.cleanJsonEscapes(obj['text'] as string)
           }
-
-          if (Array.isArray(cleanedStep.result.content)) {
-            cleanedStep.result.content = cleanedStep.result.content.map((item: any) => {
-              if (item && typeof item.text === 'string') {
-                return { ...item, text: this.cleanJsonEscapes(item.text) }
+          const content = obj['content']
+          if (Array.isArray(content)) {
+            obj['content'] = (content as Array<Record<string, unknown>>).map(item => {
+              if (item && typeof item['text'] === 'string') {
+                return { ...item, text: this.cleanJsonEscapes(item['text'] as string) }
               }
               return item
             })
           }
+          te.result = obj
         }
-
-        return cleanedStep
+        step.toolExecution = te
       }
       return step
     })
@@ -125,9 +143,14 @@ class ConversationAPI {
   }
 
   private convertMessage(raw: RawMessage): Message {
-    let steps: any[] | undefined = undefined
+    let steps: AIOutputStep[] | undefined = undefined
     if (raw.stepsJson) {
-      steps = JSON.parse(raw.stepsJson)
+      try {
+        const parsed = JSON.parse(raw.stepsJson) as PersistedStep[]
+        steps = this.convertPersistedSteps(parsed)
+      } catch {
+        steps = undefined
+      }
     }
 
     return {
@@ -140,6 +163,45 @@ class ConversationAPI {
       duration: raw.durationMs || undefined,
       createdAt: new Date(raw.createdAt),
     }
+  }
+
+  private convertPersistedSteps(steps: PersistedStep[]): AIOutputStep[] {
+    const isToolStep = (s: PersistedStep): s is Extract<PersistedStep, { type: 'tool_use' | 'tool_result' }> =>
+      s.type === 'tool_use' || s.type === 'tool_result'
+    return steps.map(s => {
+      const ts = typeof s.timestamp === 'number' ? s.timestamp : Date.now()
+      if (isToolStep(s)) {
+        const exec = s.toolExecution
+        let status: 'running' | 'completed' | 'error'
+        if (exec.status === 'running') {
+          status = 'running'
+        } else if (exec.status === 'failed' || exec.status === 'error') {
+          status = 'error'
+        } else {
+          status = 'completed'
+        }
+        return {
+          type: 'tool_use',
+          content: s.content ?? '',
+          timestamp: ts,
+          toolExecution: {
+            name: exec.name,
+            params: exec.params && typeof exec.params === 'object' ? (exec.params as Record<string, unknown>) : {},
+            status,
+            startTime: exec.startTime,
+            endTime: exec.endTime,
+            result: exec.result,
+            error: exec.error,
+            toolId: exec.toolId,
+          },
+        } as AIOutputStep
+      }
+      return {
+        type: s.type as 'thinking' | 'task' | 'task_thought' | 'text' | 'error',
+        content: s.content ?? '',
+        timestamp: ts,
+      } as AIOutputStep
+    })
   }
 }
 
@@ -235,7 +297,7 @@ export class AiApi {
     currentMessage: string,
     upToMessageId?: number,
     paneId?: number,
-    tagContext?: any
+    tagContext?: TagContextInfo
   ) {
     return this.conversationAPI.buildPromptWithContext(
       conversationId,
@@ -254,12 +316,16 @@ export class AiApi {
     return this.conversationAPI.updateMessageContent(messageId, content)
   }
 
-  async updateMessageSteps(messageId: number, steps: any[]) {
+  async updateMessageSteps(messageId: number, steps: PersistedStep[]) {
     return this.conversationAPI.updateMessageSteps(messageId, steps)
   }
 
-  async updateMessageStatus(messageId: number, status?: string, duration?: number) {
-    return this.conversationAPI.updateMessageStatus(messageId, status as any, duration)
+  async updateMessageStatus(
+    messageId: number,
+    status?: 'pending' | 'streaming' | 'complete' | 'error',
+    duration?: number
+  ) {
+    return this.conversationAPI.updateMessageStatus(messageId, status, duration)
   }
 
   async truncateConversation(conversationId: number, truncateAfterMessageId: number) {

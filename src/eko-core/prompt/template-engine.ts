@@ -4,7 +4,7 @@
  */
 
 export interface TemplateContext {
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export interface TemplateOptions {
@@ -66,10 +66,10 @@ export class EkoTemplateEngine {
    * @param obj 对象
    * @param path 路径，如 'user.profile.name'
    */
-  private getNestedValue(obj: any, path: string): any {
+  private getNestedValue(obj: unknown, path: string): unknown {
     if (!path) return undefined
 
-    return path.split('.').reduce((current, key) => {
+    return path.split('.').reduce<unknown>((current, key) => {
       if (current === null || current === undefined) {
         return undefined
       }
@@ -78,11 +78,13 @@ export class EkoTemplateEngine {
       const arrayMatch = key.match(/^(\w+)\[(\d+)\]$/)
       if (arrayMatch) {
         const [, arrayKey, index] = arrayMatch
-        const array = current[arrayKey]
-        return Array.isArray(array) ? array[parseInt(index, 10)] : undefined
+        const record = current as Record<string, unknown>
+        const array = record[arrayKey]
+        return Array.isArray(array) ? (array as unknown[])[parseInt(index, 10)] : undefined
       }
 
-      return current[key]
+      const record = current as Record<string, unknown>
+      return record[key]
     }, obj)
   }
 

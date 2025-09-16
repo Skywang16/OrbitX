@@ -181,7 +181,6 @@ export const useShortcutStore = defineStore('shortcuts', () => {
   )
 
   return {
-    // 状态
     config,
     currentPlatform,
     statistics,
@@ -191,7 +190,6 @@ export const useShortcutStore = defineStore('shortcuts', () => {
     error,
     initialized,
 
-    // 计算属性
     hasConfig,
     hasConflicts,
     hasValidationErrors,

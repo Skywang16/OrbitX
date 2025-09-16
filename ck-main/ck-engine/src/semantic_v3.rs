@@ -3,7 +3,9 @@ use ck_core::{CkError, SearchOptions, SearchResult};
 use std::path::Path;
 use walkdir::WalkDir;
 
-use super::{SearchProgressCallback, extract_content_from_span, find_nearest_index_root};
+use super::{
+    SearchProgressCallback, extract_content_from_span, find_nearest_index_root, resolve_index_dir,
+};
 
 /// New semantic search implementation using span-based storage
 pub async fn semantic_search_v3(options: &SearchOptions) -> Result<ck_core::SearchResults> {
@@ -23,7 +25,7 @@ pub async fn semantic_search_v3_with_progress(
         }
     });
 
-    let index_dir = index_root.join(".ck");
+    let index_dir = resolve_index_dir(&index_root);
     if !index_dir.exists() {
         return Err(CkError::Index(
             "No index found. Run 'ck --index' first with embeddings.".to_string(),

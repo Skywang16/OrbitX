@@ -72,7 +72,6 @@ export class FilesystemApi {
   }
 }
 
-// 导出单例实例
 export const filesystemApi = new FilesystemApi()
 
 // 默认导出

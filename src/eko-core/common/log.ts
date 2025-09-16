@@ -21,14 +21,14 @@ export interface Transport {
 export class ConsoleTransport implements Transport {
   log(level: LogLevel, message: string): void {
     const methods = {
-      [LogLevel.DEBUG]: console.debug,
-      [LogLevel.INFO]: console.info,
+      [LogLevel.DEBUG]: console.warn,
+      [LogLevel.INFO]: console.warn,
       [LogLevel.WARN]: console.warn,
       [LogLevel.ERROR]: console.error,
       [LogLevel.FATAL]: console.error,
       [LogLevel.OFF]: () => {},
     }
-    const method = methods[level] || console.log
+    const method = methods[level] || console.warn
     method(message)
   }
 }
@@ -38,6 +38,16 @@ export class Logger {
   protected prefix: string
   protected dateFormat: boolean
   protected transports: Transport[]
+
+  // Acceptable log argument types
+  private static isErrorLike(arg: unknown): arg is { message: string; stack?: string } {
+    return (
+      !!arg &&
+      typeof arg === 'object' &&
+      'message' in (arg as Record<string, unknown>) &&
+      typeof (arg as Record<string, unknown>).message === 'string'
+    )
+  }
 
   constructor(options: LoggerOptions = {}) {
     this.level = options.level ?? LogLevel.INFO
@@ -88,7 +98,11 @@ export class Logger {
     return formattedMessage
   }
 
-  protected log(level: LogLevel, message: string | Error, ...args: any[]): void {
+  protected log(
+    level: LogLevel,
+    message: string | Error,
+    ...args: Array<string | number | boolean | Error | Record<string, unknown> | null | undefined>
+  ): void {
     if (level < this.level) {
       return
     }
@@ -108,8 +122,9 @@ export class Logger {
           .map(arg => {
             if (arg == null || arg == undefined) {
               return arg + ''
-            } else if (arg instanceof Error || (arg.stack && arg.message)) {
-              return `${arg.message}\n${arg.stack}`
+            } else if (arg instanceof Error || Logger.isErrorLike(arg)) {
+              const err = arg as { message: string; stack?: string }
+              return `${err.message}\n${err.stack ?? ''}`
             } else if (typeof arg === 'object') {
               return JSON.stringify(arg)
             }
@@ -129,7 +144,10 @@ export class Logger {
     return this.level <= LogLevel.DEBUG
   }
 
-  public debug(message: string | Error, ...args: any[]): void {
+  public debug(
+    message: string | Error,
+    ...args: Array<string | number | boolean | Error | Record<string, unknown> | null | undefined>
+  ): void {
     this.log(LogLevel.DEBUG, message, ...args)
   }
 
@@ -137,19 +155,31 @@ export class Logger {
     return this.level <= LogLevel.INFO
   }
 
-  public info(message: string | Error, ...args: any[]): void {
+  public info(
+    message: string | Error,
+    ...args: Array<string | number | boolean | Error | Record<string, unknown> | null | undefined>
+  ): void {
     this.log(LogLevel.INFO, message, ...args)
   }
 
-  public warn(message: string | Error, ...args: any[]): void {
+  public warn(
+    message: string | Error,
+    ...args: Array<string | number | boolean | Error | Record<string, unknown> | null | undefined>
+  ): void {
     this.log(LogLevel.WARN, message, ...args)
   }
 
-  public error(message: string | Error, ...args: any[]): void {
+  public error(
+    message: string | Error,
+    ...args: Array<string | number | boolean | Error | Record<string, unknown> | null | undefined>
+  ): void {
     this.log(LogLevel.ERROR, message, ...args)
   }
 
-  public fatal(message: string | Error, ...args: any[]): void {
+  public fatal(
+    message: string | Error,
+    ...args: Array<string | number | boolean | Error | Record<string, unknown> | null | undefined>
+  ): void {
     this.log(LogLevel.FATAL, message, ...args)
   }
 

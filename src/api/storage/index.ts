@@ -9,7 +9,17 @@
 
 import { invoke } from '@/utils/request'
 import { ConfigSection } from '@/types'
-import type { SessionState, DataQuery, SaveOptions } from './types'
+import type {
+  SessionState,
+  DataQuery,
+  SaveOptions,
+  AppSection,
+  AppearanceSection,
+  TerminalSection,
+  ShortcutsSection,
+  AiSection,
+  ConfigSectionMap,
+} from './types'
 
 /**
  * 存储 API 接口类
@@ -17,14 +27,12 @@ import type { SessionState, DataQuery, SaveOptions } from './types'
 export class StorageApi {
   // ===== 配置管理 =====
 
-  async getConfig<T = any>(section: ConfigSection | string): Promise<T> {
-    const sectionName = typeof section === 'string' ? section : section
-    return await invoke<T>('storage_get_config', { section: sectionName })
+  async getConfig<S extends ConfigSection>(section: S): Promise<ConfigSectionMap[S]> {
+    return await invoke<ConfigSectionMap[S]>('storage_get_config', { section })
   }
 
-  async updateConfig(section: ConfigSection | string, data: any): Promise<void> {
-    const sectionName = typeof section === 'string' ? section : section
-    await invoke<void>('storage_update_config', { section: sectionName, data })
+  async updateConfig<S extends ConfigSection>(section: S, data: ConfigSectionMap[S]): Promise<void> {
+    await invoke<void>('storage_update_config', { section, data })
   }
 
   // ===== 会话状态管理 =====
@@ -39,53 +47,53 @@ export class StorageApi {
 
   // ===== 数据操作 =====
 
-  async queryData<T = any>(query: DataQuery): Promise<T[]> {
+  async queryData<T>(query: DataQuery): Promise<T[]> {
     return await invoke<T[]>('storage_query_data', { query })
   }
 
-  async saveData(data: any, options: SaveOptions): Promise<void> {
+  async saveData(data: Record<string, unknown> | Array<unknown> | string, options: SaveOptions): Promise<void> {
     await invoke<void>('storage_save_data', { data, options })
   }
 
   // ===== 便捷方法 =====
 
-  async getAppConfig<T = any>(): Promise<T> {
-    return this.getConfig<T>(ConfigSection.App)
+  async getAppConfig(): Promise<AppSection> {
+    return this.getConfig(ConfigSection.App)
   }
 
-  async getAppearanceConfig<T = any>(): Promise<T> {
-    return this.getConfig<T>(ConfigSection.Appearance)
+  async getAppearanceConfig(): Promise<AppearanceSection> {
+    return this.getConfig(ConfigSection.Appearance)
   }
 
-  async getTerminalConfig<T = any>(): Promise<T> {
-    return this.getConfig<T>(ConfigSection.Terminal)
+  async getTerminalConfig(): Promise<TerminalSection> {
+    return this.getConfig(ConfigSection.Terminal)
   }
 
-  async getShortcutsConfig<T = any>(): Promise<T> {
-    return this.getConfig<T>(ConfigSection.Shortcuts)
+  async getShortcutsConfig(): Promise<ShortcutsSection> {
+    return this.getConfig(ConfigSection.Shortcuts)
   }
 
-  async getAiConfig<T = any>(): Promise<T> {
-    return this.getConfig<T>(ConfigSection.Ai)
+  async getAiConfig(): Promise<AiSection> {
+    return this.getConfig(ConfigSection.Ai)
   }
 
-  async updateAppConfig(data: any): Promise<void> {
+  async updateAppConfig(data: AppSection): Promise<void> {
     return this.updateConfig(ConfigSection.App, data)
   }
 
-  async updateAppearanceConfig(data: any): Promise<void> {
+  async updateAppearanceConfig(data: AppearanceSection): Promise<void> {
     return this.updateConfig(ConfigSection.Appearance, data)
   }
 
-  async updateTerminalConfig(data: any): Promise<void> {
+  async updateTerminalConfig(data: TerminalSection): Promise<void> {
     return this.updateConfig(ConfigSection.Terminal, data)
   }
 
-  async updateShortcutsConfig(data: any): Promise<void> {
+  async updateShortcutsConfig(data: ShortcutsSection): Promise<void> {
     return this.updateConfig(ConfigSection.Shortcuts, data)
   }
 
-  async updateAiConfig(data: any): Promise<void> {
+  async updateAiConfig(data: AiSection): Promise<void> {
     return this.updateConfig(ConfigSection.Ai, data)
   }
 }

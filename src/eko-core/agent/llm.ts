@@ -13,6 +13,7 @@ import {
   NativeLLMTool,
   NativeLLMToolCall,
   NativeLLMStreamChunk,
+  FinishReason,
 } from '../types'
 import { convertTools, getTool, convertToolResult } from '../llm/conversion-utils'
 
@@ -90,7 +91,7 @@ export async function callAgentLLM(
   try {
     context.currentStepControllers.add(stepController)
     result = await rlm.callStream(request)
-  } catch (e: any) {
+  } catch (e: unknown) {
     context.currentStepControllers.delete(stepController)
     await context.checkAborted()
 
@@ -191,7 +192,7 @@ export async function callAgentLLM(
               agentName: agentContext.agent.Name,
               nodeId: agentContext.context.taskId,
               type: 'finish',
-              finishReason: chunk.finishReason as any,
+              finishReason: (chunk.finishReason as FinishReason) || 'stop',
               usage: chunk.usage || {
                 promptTokens: 0,
                 completionTokens: 0,

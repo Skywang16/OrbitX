@@ -1,4 +1,5 @@
 import { aiApi } from '@/api'
+import type { PersistedStep } from '@/api/ai/types'
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useSessionStore } from '@/stores/session'
 import { useTerminalStore } from '@/stores/Terminal'
@@ -93,7 +94,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   const isInitialized = ref(false)
 
-  const debouncedSaveSteps = debounce(async (messageId: number, steps: unknown[]) => {
+  const debouncedSaveSteps = debounce(async (messageId: number, steps: PersistedStep[]) => {
     try {
       await aiApi.updateMessageSteps(messageId, steps)
     } catch {
@@ -751,7 +752,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               messageList.value[messageIndex] = { ...tempMessage }
             }
 
-            debouncedSaveSteps(tempMessage.id, tempMessage.steps)
+            debouncedSaveSteps(tempMessage.id, tempMessage.steps as PersistedStep[])
           } catch (error) {
             console.error('处理流式消息时发生错误:', error)
             // 不要抛出错误，避免中断执行流程

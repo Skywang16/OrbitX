@@ -56,7 +56,7 @@ export interface WindowStateOperationRequest {
   operation: WindowStateOperation
   params?: {
     alwaysOnTop?: boolean
-    [key: string]: any
+    [key: string]: string | number | boolean | undefined
   }
 }
 
@@ -73,7 +73,7 @@ export interface WindowStateBatchRequest {
 export interface WindowStateOperationResult {
   operation: WindowStateOperation
   success: boolean
-  data?: any
+  data?: WindowState | boolean | string
   error?: string
 }
 

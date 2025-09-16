@@ -154,14 +154,12 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   return {
-    // 状态
     sessionState: readonly(sessionState),
     isLoading: readonly(isLoading),
     isSaving: readonly(isSaving),
     error: readonly(error),
     initialized: readonly(initialized),
 
-    // 计算属性
     isOperating,
     terminals,
     activeTerminal,

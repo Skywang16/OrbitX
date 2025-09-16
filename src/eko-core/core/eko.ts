@@ -24,7 +24,7 @@ export class Eko {
   public async generate(
     taskPrompt: string,
     taskId: string = uuidv4(),
-    _contextParams?: Record<string, any>
+    _contextParams?: Record<string, unknown>
   ): Promise<Task> {
     const chain: Chain = new Chain(taskPrompt)
     const context = new Context(taskId, this.config, this.agent, chain)
@@ -65,13 +65,15 @@ export class Eko {
     }
     try {
       return await this.doRunTask(context)
-    } catch (e: any) {
-      Log.error('execute error', e)
+    } catch (e: unknown) {
+      Log.error('execute error', e instanceof Error ? e : String(e))
+      const errName = (e as { name?: string }).name || 'Error'
+      const errMsg = (e as { message?: string }).message || ''
       return {
         taskId,
         success: false,
-        stopReason: e?.name == 'AbortError' ? 'abort' : 'error',
-        result: e ? e.name + ': ' + e.message : 'Error',
+        stopReason: (e as { name?: string })?.name == 'AbortError' ? 'abort' : 'error',
+        result: e ? `${errName}: ${errMsg}` : 'Error',
         error: e,
       }
     }
@@ -80,9 +82,8 @@ export class Eko {
   public async run(
     taskPrompt: string,
     taskId: string = uuidv4(),
-    _contextParams?: Record<string, any>
+    _contextParams?: Record<string, unknown>
   ): Promise<EkoResult> {
-    // 参考gemini-cli: 直接让Agent处理用户输入，不预生成task
     const chain: Chain = new Chain(taskPrompt)
     const context = new Context(taskId, this.config, this.agent, chain)
 
@@ -102,13 +103,13 @@ export class Eko {
 
     try {
       return await this.doRunTask(context)
-    } catch (e: any) {
+    } catch (e) {
       this.deleteTask(taskId)
       throw e
     }
   }
 
-  public async initContext(task: Task, _contextParams?: Record<string, any>): Promise<Context> {
+  public async initContext(task: Task, _contextParams?: Record<string, unknown>): Promise<Context> {
     const chain: Chain = new Chain(task.taskPrompt || task.name)
     const context = new Context(task.taskId, this.config, this.agent, chain)
     // Context parameters no longer supported - use conversation history instead
@@ -161,7 +162,7 @@ export class Eko {
         stopReason: 'done',
         result: result,
       }
-    } catch (e: any) {
+    } catch (e) {
       // Notify task error
       this.config.callback &&
         (await this.config.callback.onMessage(
@@ -224,9 +225,10 @@ export class Eko {
   }
 
   private async onTaskStatus(_context: Context, status: string, reason?: string) {
-    const onTaskStatus = (this.agent as any)['onTaskStatus']
-    if (onTaskStatus) {
-      await onTaskStatus.call(this.agent, status, reason)
+    type AgentWithOnTaskStatus = Agent & { onTaskStatus?: (status: string, reason?: string) => Promise<void> | void }
+    const agent = this.agent as unknown as AgentWithOnTaskStatus
+    if (agent.onTaskStatus) {
+      await agent.onTaskStatus(status, reason)
     }
   }
 }

@@ -9,6 +9,12 @@ type SseEventData = {
   [key: string]: unknown
 }
 
+type McpResponse<T = unknown> = {
+  id: string
+  result?: T & { isError?: boolean; content?: unknown }
+  error?: string | { message: string }
+}
+
 export class SimpleHttpMcpClient implements IMcpClient {
   private httpUrl: string
   private clientName: string
@@ -47,25 +53,25 @@ export class SimpleHttpMcpClient implements IMcpClient {
   }
 
   async listTools(param: McpListToolParam, signal?: AbortSignal): Promise<McpListToolResult> {
-    const message = await this.request(
+    const message = await this.request<{ tools?: McpListToolResult }>(
       'tools/list',
       {
         ...param,
       },
       signal
     )
-    return message.result.tools || []
+    return message.result?.tools || []
   }
 
   async callTool(param: McpCallToolParam, signal?: AbortSignal): Promise<ToolResult> {
-    const message = await this.request(
+    const message = await this.request<ToolResult>(
       'tools/call',
       {
         ...param,
       },
       signal
     )
-    return message.result
+    return message.result as ToolResult
   }
 
   isConnected(): boolean {
@@ -83,7 +89,11 @@ export class SimpleHttpMcpClient implements IMcpClient {
     }
   }
 
-  async request(method: string, params: Record<string, any>, signal?: AbortSignal): Promise<any> {
+  async request<T = unknown>(
+    method: string,
+    params: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<McpResponse<T>> {
     try {
       const id = uuidv4()
       const extHeaders: Record<string, string> = {}
@@ -123,7 +133,7 @@ export class SimpleHttpMcpClient implements IMcpClient {
         }
         const reader = response.body.getReader() as ReadableStreamDefaultReader
         let str = ''
-        let message: any
+        let message: McpResponse<T> | undefined
         const decoder = new TextDecoder()
         while (true) {
           const { value, done } = await reader.read()
@@ -138,32 +148,36 @@ export class SimpleHttpMcpClient implements IMcpClient {
               const chunk = chunks[i]
               const chunkData = this.parseChunk(chunk)
               if (chunkData.event == 'message') {
-                message = JSON.parse(chunkData.data as string)
-                if (message.id == id) {
-                  return message
+                const parsed = JSON.parse(chunkData.data as string) as McpResponse<T>
+                if (parsed.id == id) {
+                  return parsed
                 }
               }
             }
             str = chunks[chunks.length - 1]
           }
         }
+        if (!message) {
+          throw new Error(`MCP ${method} error: no response`)
+        }
         this.handleError(method, message)
         return message
       } else {
         // JSON
-        const message = await response.json()
+        const message = (await response.json()) as McpResponse<T>
         this.handleError(method, message)
         return message
       }
-    } catch (e: any) {
-      if (e?.name !== 'AbortError') {
-        Log.error('MCP Client, connectSse error:', e)
+    } catch (e) {
+      const err = e as { name?: string }
+      if (err?.name !== 'AbortError') {
+        Log.error('MCP Client, connectSse error:', e instanceof Error ? e : String(e))
       }
       throw e
     }
   }
 
-  private handleError(method: string, message: any) {
+  private handleError(method: string, message: McpResponse<unknown>) {
     if (!message) {
       throw new Error(`MCP ${method} error: no response`)
     }
@@ -174,14 +188,11 @@ export class SimpleHttpMcpClient implements IMcpClient {
       )
     }
     if (message.result?.isError == true) {
-      if (message.result.content) {
-        throw new Error(
-          `MCP ${method} error: ` +
-            (typeof message.result.content === 'string' ? message.result.content : message.result.content[0].text)
-        )
-      } else {
-        throw new Error(`MCP ${method} error: ` + JSON.stringify(message.result))
+      const content = message.result.content
+      if (typeof content === 'string') {
+        throw new Error(`MCP ${method} error: ` + content)
       }
+      throw new Error(`MCP ${method} error: ` + JSON.stringify(message.result))
     }
   }
 
