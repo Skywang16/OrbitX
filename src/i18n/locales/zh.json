@@ -61,7 +61,21 @@
     },
     "theme": {
       "title": "选择您的主题",
-      "description": "选择符合您风格的主题"
+      "description": "选择符合您风格的主题",
+      "options": {
+        "dark": {
+          "name": "深色主题",
+          "description": "适合低光环境使用的深色界面"
+        },
+        "light": {
+          "name": "浅色主题", 
+          "description": "明亮清晰的浅色界面"
+        },
+        "auto": {
+          "name": "跟随系统",
+          "description": "根据系统设置自动切换主题"
+        }
+      }
     },
     "ai": {
       "title": "AI助手设置",

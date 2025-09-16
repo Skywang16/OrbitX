@@ -61,7 +61,21 @@
     },
     "theme": {
       "title": "Choose Your Theme",
-      "description": "Select a theme that matches your style"
+      "description": "Select a theme that matches your style",
+      "options": {
+        "dark": {
+          "name": "Dark Theme",
+          "description": "Dark interface suitable for low-light environments"
+        },
+        "light": {
+          "name": "Light Theme",
+          "description": "Bright and clear light interface"
+        },
+        "auto": {
+          "name": "Follow System",
+          "description": "Automatically switch theme based on system settings"
+        }
+      }
     },
     "ai": {
       "title": "AI Assistant Setup",

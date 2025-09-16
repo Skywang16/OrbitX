@@ -515,11 +515,17 @@
   }
 
   .stop-button {
-    color: var(--color-error) !important;
+    color: var(--color-error);
+    background: var(--color-error);
+    border-radius: 50%;
+  }
+
+  .stop-button svg {
+    color: white;
   }
 
   .stop-button:hover:not(:disabled) {
-    color: var(--ansi-red) !important;
+    background: var(--ansi-red);
   }
 
   .input-bottom {

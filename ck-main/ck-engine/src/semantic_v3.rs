@@ -4,7 +4,7 @@ use std::path::Path;
 use walkdir::WalkDir;
 
 use super::{
-    SearchProgressCallback, extract_content_from_span, find_nearest_index_root, resolve_index_dir,
+    SearchProgressCallback, extract_content_from_span, find_nearest_index_root, resolve_index_dir, default_index_dir,
 };
 
 /// New semantic search implementation using span-based storage
@@ -25,12 +25,29 @@ pub async fn semantic_search_v3_with_progress(
         }
     });
 
-    let index_dir = resolve_index_dir(&index_root);
+    let mut index_dir = resolve_index_dir(&index_root);
+    tracing::debug!(
+        "semantic_v3: resolved index_root={}, initial index_dir={}, exists={}",
+        index_root.display(),
+        index_dir.display(),
+        index_dir.exists()
+    );
     if !index_dir.exists() {
+        // Fallback: prefer new default .oxi if present
+        let fallback = index_root.join(".oxi");
+        if fallback.exists() {
+            index_dir = fallback;
+            tracing::debug!(
+                "semantic_v3: fallback to .oxi index_dir={}, exists={}",
+                index_dir.display(),
+                index_dir.exists()
+            );
+        } else {
         return Err(CkError::Index(
             "No index found. Run 'ck --index' first with embeddings.".to_string(),
         )
         .into());
+        }
     }
 
     if let Some(ref callback) = progress_callback {

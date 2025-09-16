@@ -392,18 +392,10 @@ pub async fn ck_build_index(
 
     let build_task = tokio::spawn(async move {
         let path_key = path_key_for_task;
-        let options = ck_core::SearchOptions {
-            mode: ck_core::SearchMode::Semantic,
-            query: "".to_string(),
-            path: search_path,
-            reindex: true,
-            exclude_patterns: ck_core::get_default_exclude_patterns(),
-            respect_gitignore: true,
-            ..Default::default()
-        };
 
+        // Detailed progress callback for ck-index
         let progress_cb_path = path_key.clone();
-        let detailed_cb = Some(Box::new(move |ep: EmbeddingProgress| {
+        let detailed_cb_idx = Some(Box::new(move |ep: EmbeddingProgress| {
             update_build_progress(
                 &progress_cb_path,
                 CkBuildProgress {
@@ -416,12 +408,23 @@ pub async fn ck_build_index(
                     error: None,
                 },
             );
-        }) as ck_engine::DetailedIndexingProgressCallback);
+        }) as ck_index::DetailedProgressCallback);
 
-        match ck_engine::search_enhanced_with_indexing_progress(&options, None, None, detailed_cb)
-            .await
-        {
-            Ok(_) => {
+        // Build index directly without running a semantic search
+        let result = ck_index::smart_update_index_with_detailed_progress(
+            &search_path,
+            false,                       // force_rebuild
+            None,                        // progress_callback (coarse)
+            detailed_cb_idx,             // detailed progress
+            true,                        // compute_embeddings
+            true,                        // respect_gitignore
+            &ck_core::get_default_exclude_patterns(),
+            None,                        // model
+        )
+        .await;
+
+        match result {
+            Ok(_stats) => {
                 debug!("✅ 索引构建成功: {}", path_key);
                 update_build_progress(
                     &path_key,
@@ -435,7 +438,17 @@ pub async fn ck_build_index(
                         error: None,
                     },
                 );
-                let _ = fs::write(&ready_marker, b"ready");
+                // Double-check index presence before marking ready
+                let idx_dir = default_index_dir(&search_path);
+                if idx_dir.exists() && idx_dir.join("manifest.json").exists() {
+                    let _ = fs::write(&ready_marker, b"ready");
+                } else {
+                    debug!(
+                        "⚠️ 构建后未检测到索引目录或 manifest: dir={}, manifest={}",
+                        idx_dir.display(),
+                        idx_dir.join("manifest.json").display()
+                    );
+                }
             }
             Err(e) => {
                 debug!("❌ 索引构建失败: {}, Error: {}", path_key, e);
