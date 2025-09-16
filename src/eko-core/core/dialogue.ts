@@ -156,7 +156,12 @@ export class EkoDialogue {
 
           toolResult = await tool.execute(args, toolCall)
         } catch (e) {
-          Log.error('tool call error: ', result.toolName, result.args as Record<string, unknown>, e instanceof Error ? e : String(e))
+          Log.error(
+            'tool call error: ',
+            result.toolName,
+            result.args as Record<string, unknown>,
+            e instanceof Error ? e : String(e)
+          )
           toolResult = {
             content: [
               {

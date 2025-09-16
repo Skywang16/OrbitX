@@ -179,7 +179,7 @@ type CallAgentLLM = (
   noCompress?: boolean,
   toolChoice?: string,
   retryNum?: number,
-  callback?: (StreamCallback & HumanCallback),
+  callback?: StreamCallback & HumanCallback,
   requestHandler?: (request: LLMRequest) => void
 ) => Promise<LlmCallResult[]>
 

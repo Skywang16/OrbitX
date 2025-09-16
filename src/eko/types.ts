@@ -55,5 +55,6 @@ export interface EkoRunResult {
   result: string
   duration: number
   success: boolean
+  stopReason?: 'abort' | 'error' | 'done'
   error?: string
 }

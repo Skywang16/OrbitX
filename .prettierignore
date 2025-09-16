@@ -67,3 +67,12 @@ pnpm-lock.yaml
 
 # Generated files
 *.d.ts
+
+# Rust build directory
+ck-main/target/
+
+# Claude settings
+.claude/
+
+# JSON files that shouldn't be formatted differently
+src/i18n/locales/*.json

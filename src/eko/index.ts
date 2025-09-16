@@ -145,7 +145,13 @@ export class OrbitXEko {
       return {
         result: result.result,
         duration,
-        success: true,
+        success: result.success,
+        stopReason: result.stopReason,
+        error: result.success
+          ? undefined
+          : result.error instanceof Error
+            ? result.error.message
+            : String(result.error ?? ''),
       }
     } catch (error) {
       const duration = Date.now() - startTime
@@ -155,6 +161,7 @@ export class OrbitXEko {
         result: '',
         duration,
         success: false,
+        stopReason: 'error',
         error: errorMessage,
       }
     } finally {
@@ -205,7 +212,13 @@ export class OrbitXEko {
       return {
         result: result.result,
         duration,
-        success: true,
+        success: result.success,
+        stopReason: result.stopReason,
+        error: result.success
+          ? undefined
+          : result.error instanceof Error
+            ? result.error.message
+            : String(result.error ?? ''),
       }
     } catch (error) {
       const duration = Date.now() - startTime
@@ -216,6 +229,7 @@ export class OrbitXEko {
         result: '',
         duration,
         success: false,
+        stopReason: 'error',
         error: errorMessage,
       }
     }

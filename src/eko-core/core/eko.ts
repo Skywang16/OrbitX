@@ -1,7 +1,6 @@
 import Context, { generateNodeId } from './context'
 import { Agent } from '../agent'
 import { Planner } from './plan'
-import Log from '../common/log'
 import Chain from './chain'
 import { uuidv4 } from '../common/utils'
 import { EkoConfig, EkoResult, Task } from '../types/core.types'
@@ -63,20 +62,7 @@ export class Eko {
     if (context.controller.signal.aborted) {
       context.controller = new AbortController()
     }
-    try {
-      return await this.doRunTask(context)
-    } catch (e: unknown) {
-      Log.error('execute error', e instanceof Error ? e : String(e))
-      const errName = (e as { name?: string }).name || 'Error'
-      const errMsg = (e as { message?: string }).message || ''
-      return {
-        taskId,
-        success: false,
-        stopReason: (e as { name?: string })?.name == 'AbortError' ? 'abort' : 'error',
-        result: e ? `${errName}: ${errMsg}` : 'Error',
-        error: e,
-      }
-    }
+    return await this.doRunTask(context)
   }
 
   public async run(
@@ -101,12 +87,7 @@ export class Eko {
 
     this.taskMap.set(taskId, context)
 
-    try {
-      return await this.doRunTask(context)
-    } catch (e) {
-      this.deleteTask(taskId)
-      throw e
-    }
+    return await this.doRunTask(context)
   }
 
   public async initContext(task: Task, _contextParams?: Record<string, unknown>): Promise<Context> {
@@ -151,6 +132,7 @@ export class Eko {
             type: 'agent_result',
             task: task,
             result: result,
+            stopReason: 'done',
           },
           this.agent.AgentContext
         ))
@@ -163,7 +145,8 @@ export class Eko {
         result: result,
       }
     } catch (e) {
-      // Notify task error
+      const isAbort = (e as { name?: string })?.name === 'AbortError'
+      // Notify task end with stopReason
       this.config.callback &&
         (await this.config.callback.onMessage(
           {
@@ -171,12 +154,19 @@ export class Eko {
             agentName: this.agent.Name,
             type: 'agent_result',
             task: task,
-            error: e,
+            ...(isAbort ? { stopReason: 'abort' as const } : { stopReason: 'error' as const, error: e }),
           },
           this.agent.AgentContext
         ))
 
-      throw e
+      await this.onTaskStatus(context, isAbort ? 'abort' : 'error')
+      return {
+        taskId: context.taskId,
+        success: false,
+        stopReason: isAbort ? 'abort' : 'error',
+        result: '',
+        error: e,
+      }
     }
   }
 

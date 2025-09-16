@@ -205,7 +205,12 @@ export class Agent {
         }
       } catch (e) {
         // 处理工具不存在或其他系统级异常（非业务逻辑错误）
-        Log.error('tool call system error: ', result.name, result.arguments as Record<string, unknown>, e instanceof Error ? e : String(e))
+        Log.error(
+          'tool call system error: ',
+          result.name,
+          result.arguments as Record<string, unknown>,
+          e instanceof Error ? e : String(e)
+        )
         toolResult = {
           content: [
             {

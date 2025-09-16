@@ -314,18 +314,27 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         await aiApi.updateMessageContent(tempAIMessage.id, tempAIMessage.content)
         await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
       } else if (tempAIMessage) {
-        tempAIMessage.status = 'error'
+        const isAbortStop = (response as { stopReason?: string }).stopReason === 'abort'
+        const errStr = typeof response.error === 'string' ? response.error : String(response.error)
+        const isAbortHeuristic = /AbortError|Operation was interrupted|aborted|canceled/i.test(errStr)
+        const isAbort = isAbortStop || isAbortHeuristic
         tempAIMessage.duration = Date.now() - tempAIMessage.createdAt.getTime()
 
-        tempAIMessage.steps?.push({
-          type: 'error',
-          content: ``,
-          timestamp: Date.now(),
-          metadata: {
-            errorType: 'EkoError',
-            errorDetails: response.error,
-          },
-        })
+        if (isAbort) {
+          // 手动中断：不创建错误步骤，不渲染错误框
+          tempAIMessage.status = 'complete'
+        } else {
+          tempAIMessage.status = 'error'
+          tempAIMessage.steps?.push({
+            type: 'error',
+            content: ``,
+            timestamp: Date.now(),
+            metadata: {
+              errorType: 'EkoError',
+              errorDetails: response.error,
+            },
+          })
+        }
 
         if (tempAIMessage) {
           const messageIndex = messageList.value.findIndex(m => m.id === tempAIMessage!.id)
@@ -333,13 +342,13 @@ export const useAIChatStore = defineStore('ai-chat', () => {
             messageList.value[messageIndex] = { ...tempAIMessage }
           }
 
-          if (tempAIMessage.steps) {
-            try {
-              await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
+          try {
+            await aiApi.updateMessageStatus(tempAIMessage.id, tempAIMessage.status, tempAIMessage.duration)
+            if (!isAbort && tempAIMessage.steps) {
               await aiApi.updateMessageSteps(tempAIMessage.id, tempAIMessage.steps)
-            } catch {
-              // Ignore non-critical database failures
             }
+          } catch {
+            // Ignore non-critical database failures
           }
         }
       }
@@ -707,7 +716,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               case 'agent_result':
                 // 代理执行完成
                 if (message.type === 'agent_result') {
-                  if (message.error) {
+                  if (message.stopReason === 'abort') {
+                    // 手动中断：不作为错误处理，标记为完成以关闭流式态
+                    console.warn('代理执行已被用户中断')
+                    tempMessage.status = 'complete'
+                  } else if (message.stopReason === 'error' || message.error) {
                     console.error(`代理执行失败:`, message.error)
                     tempMessage.status = 'error'
                   } else {

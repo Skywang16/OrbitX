@@ -59,6 +59,7 @@ export type StreamCallbackMessage = {
   | {
       type: 'agent_result'
       task: Task
+      stopReason?: 'abort' | 'error' | 'done'
       error?: unknown
       result?: string
     }
