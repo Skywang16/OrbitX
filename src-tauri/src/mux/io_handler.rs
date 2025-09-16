@@ -214,6 +214,10 @@ impl IoHandler {
             let mut buffer = vec![0; buffer_size];
             let mut batch_data = Vec::with_capacity(batch_size);
             let mut last_flush = Instant::now();
+            // 在批次之间携带未完成的 UTF-8 多字节序列，
+            // 避免在读取/刷新边界被拆分后触发 from_utf8_lossy 的 U+FFFD（�）替代符。
+            // 这些尾部残留会在下一次与新数据合并再尝试解码。
+            let mut pending_incomplete: Vec<u8> = Vec::new();
 
             loop {
                 match reader.read(&mut buffer) {
@@ -236,41 +240,88 @@ impl IoHandler {
                     && (batch_data.len() >= batch_size || last_flush.elapsed() >= flush_interval);
 
                 if should_flush {
-                    let data_to_send = std::mem::take(&mut batch_data);
+                    let mut data_to_send = std::mem::take(&mut batch_data);
 
-                    let data_str = String::from_utf8_lossy(&data_to_send);
-                    shell_integration.process_output(pane_id, &data_str);
+                    // 把上次遗留的未完成字节拼接到本次要发送的数据前面
+                    if !pending_incomplete.is_empty() {
+                        let mut combined = Vec::with_capacity(pending_incomplete.len() + data_to_send.len());
+                        combined.extend_from_slice(&pending_incomplete);
+                        combined.extend_from_slice(&data_to_send);
+                        data_to_send = combined;
+                        pending_incomplete.clear();
+                    }
 
-                    // 移除OSC序列后再发送给前端
-                    let cleaned_data = shell_integration.strip_osc_sequences(&data_str);
-
-                    let notification = MuxNotification::PaneOutput {
-                        pane_id,
-                        data: Bytes::from(cleaned_data.into_bytes()),
+                    // 计算“最长有效 UTF-8 前缀”，仅对这部分做解码与处理
+                    let (valid_prefix, remainder_start) = match std::str::from_utf8(&data_to_send) {
+                        Ok(s) => (s, data_to_send.len()),
+                        Err(err) => {
+                            let valid_up_to = err.valid_up_to();
+                            let prefix = unsafe { std::str::from_utf8_unchecked(&data_to_send[..valid_up_to]) };
+                            (prefix, valid_up_to)
+                        }
                     };
 
-                    if let Err(e) = notification_sender.send(notification) {
-                        error!("面板 {:?} 发送通知失败: {}", pane_id, e);
+                    // 把本次未能组成完整 UTF-8 的尾部字节保存起来，留到下次继续拼接
+                    if remainder_start < data_to_send.len() {
+                        pending_incomplete.extend_from_slice(&data_to_send[remainder_start..]);
                     }
+
+                    if !valid_prefix.is_empty() {
+                        shell_integration.process_output(pane_id, valid_prefix);
+
+                        // 移除OSC序列后再发送给前端
+                        let cleaned_data = shell_integration.strip_osc_sequences(valid_prefix);
+
+                        if !cleaned_data.is_empty() {
+                            let notification = MuxNotification::PaneOutput {
+                                pane_id,
+                                data: Bytes::from(cleaned_data.into_bytes()),
+                            };
+
+                            if let Err(e) = notification_sender.send(notification) {
+                                error!("面板 {:?} 发送通知失败: {}", pane_id, e);
+                            }
+                        }
+                    }
+
                     last_flush = Instant::now();
                 } else if batch_data.is_empty() {
                     thread::sleep(Duration::from_millis(1));
                 }
             }
 
-            if !batch_data.is_empty() {
-                let data_str = String::from_utf8_lossy(&batch_data);
-                shell_integration.process_output(pane_id, &data_str);
+            if !batch_data.is_empty() || !pending_incomplete.is_empty() {
+                let mut data_to_send = std::mem::take(&mut batch_data);
+                if !pending_incomplete.is_empty() {
+                    let mut combined = Vec::with_capacity(pending_incomplete.len() + data_to_send.len());
+                    combined.extend_from_slice(&pending_incomplete);
+                    combined.extend_from_slice(&data_to_send);
+                    data_to_send = combined;
+                    pending_incomplete.clear();
+                }
 
-                // 移除OSC序列后再发送给前端
-                let cleaned_data = shell_integration.strip_osc_sequences(&data_str);
-
-                let notification = MuxNotification::PaneOutput {
-                    pane_id,
-                    data: Bytes::from(cleaned_data.into_bytes()),
+                let (valid_prefix, remainder_start) = match std::str::from_utf8(&data_to_send) {
+                    Ok(s) => (s, data_to_send.len()),
+                    Err(err) => {
+                        let valid_up_to = err.valid_up_to();
+                        let prefix = unsafe { std::str::from_utf8_unchecked(&data_to_send[..valid_up_to]) };
+                        (prefix, valid_up_to)
+                    }
                 };
-                if let Err(e) = notification_sender.send(notification) {
-                    error!("面板 {:?} 发送最终通知失败: {}", pane_id, e);
+
+                // 进程结束时仍然残留的尾部字节将被丢弃（无法形成有效 UTF-8）
+                if !valid_prefix.is_empty() {
+                    shell_integration.process_output(pane_id, valid_prefix);
+                    let cleaned_data = shell_integration.strip_osc_sequences(valid_prefix);
+                    if !cleaned_data.is_empty() {
+                        let notification = MuxNotification::PaneOutput {
+                            pane_id,
+                            data: Bytes::from(cleaned_data.into_bytes()),
+                        };
+                        if let Err(e) = notification_sender.send(notification) {
+                            error!("面板 {:?} 发送最终通知失败: {}", pane_id, e);
+                        }
+                    }
                 }
             }
             // 发送退出通知，保持与线程池模式一致

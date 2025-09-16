@@ -34,6 +34,10 @@ struct PaneBatchState {
     data_receiver: Receiver<Vec<u8>>,
     batch_data: Vec<u8>,
     last_flush: Instant,
+    // UTF-8 流式解码的“尾部残留”字节缓冲。
+    // 作用：在批次之间保存未完成的多字节序列，
+    // 避免在批次边界把字符截断而产生 U+FFFD（�）替代符。
+    pending_incomplete: Vec<u8>,
 }
 
 /// 批处理器配置
@@ -175,15 +179,18 @@ impl BatchProcessor {
                                 data_receiver,
                                 batch_data: Vec::new(),
                                 last_flush: Instant::now(),
+                                pending_incomplete: Vec::new(),
                             };
                             active_panes.insert(pane_id, state);
                         }
                     }
                     Ok(BatchTask::UnregisterPane { pane_id }) => {
-                        if let Some(state) = active_panes.remove(&pane_id) {
-                            Self::flush_pane_data(
+                        if let Some(mut state) = active_panes.remove(&pane_id) {
+                            let data_to_send = std::mem::take(&mut state.batch_data);
+                            Self::flush_pane_data_streaming(
                                 pane_id,
-                                state.batch_data,
+                                &mut state,
+                                data_to_send,
                                 &notification_sender,
                                 &shell_integration,
                             );
@@ -236,8 +243,9 @@ impl BatchProcessor {
 
                     if should_flush {
                         let data_to_send = std::mem::take(&mut state.batch_data);
-                        Self::flush_pane_data(
+                        Self::flush_pane_data_streaming(
                             *pane_id,
+                            state,
                             data_to_send,
                             &notification_sender,
                             &shell_integration,
@@ -247,10 +255,12 @@ impl BatchProcessor {
                 }
 
                 for pane_id in panes_to_remove {
-                    if let Some(state) = active_panes.remove(&pane_id) {
-                        Self::flush_pane_data(
+                    if let Some(mut state) = active_panes.remove(&pane_id) {
+                        let data_to_send = std::mem::take(&mut state.batch_data);
+                        Self::flush_pane_data_streaming(
                             pane_id,
-                            state.batch_data,
+                            &mut state,
+                            data_to_send,
                             &notification_sender,
                             &shell_integration,
                         );
@@ -270,10 +280,12 @@ impl BatchProcessor {
                 }
             }
 
-            for (pane_id, state) in active_panes {
-                Self::flush_pane_data(
+            for (pane_id, mut state) in active_panes {
+                let data_to_send = std::mem::take(&mut state.batch_data);
+                Self::flush_pane_data_streaming(
                     pane_id,
-                    state.batch_data,
+                    &mut state,
+                    data_to_send,
                     &notification_sender,
                     &shell_integration,
                 );
@@ -281,34 +293,69 @@ impl BatchProcessor {
         })
     }
 
-    /// 刷新面板数据
-    fn flush_pane_data(
+    /// 刷新面板数据（UTF-8 流式安全）
+    ///
+    /// 注意：不要用 from_utf8_lossy，这会把跨批次的多字节字符切断为 U+FFFD。
+    /// 这里我们把上一次遗留的未完成字节拼接进来，找到最长的有效 UTF-8 前缀，
+    /// 仅对这部分做解码与 OSC 清洗，其余不完整字节保留到下次。
+    fn flush_pane_data_streaming(
         pane_id: PaneId,
-        data: Vec<u8>,
+        state: &mut PaneBatchState,
+        mut data: Vec<u8>,
         notification_sender: &Sender<MuxNotification>,
         shell_integration: &Arc<ShellIntegrationManager>,
     ) {
-        if data.is_empty() {
+        if data.is_empty() && state.pending_incomplete.is_empty() {
             return;
         }
 
-        let data_str = String::from_utf8_lossy(&data);
-        // 将输出交给 Shell Integration 进行处理（用于解析 CWD/命令等上下文）
-        shell_integration.process_output(pane_id, &data_str);
+        if !state.pending_incomplete.is_empty() {
+            let mut combined = Vec::with_capacity(state.pending_incomplete.len() + data.len());
+            combined.extend_from_slice(&state.pending_incomplete);
+            combined.extend_from_slice(&data);
+            data = combined;
+            state.pending_incomplete.clear();
+        }
 
-        // 移除OSC序列后再发送给前端
-        let cleaned_data = shell_integration.strip_osc_sequences(&data_str);
-
-        let notification = MuxNotification::PaneOutput {
-            pane_id,
-            data: Bytes::from(cleaned_data.into_bytes()),
+        // 尝试整块解析为 UTF-8；如果末尾有未完成的多字节字符，则切掉末尾留待下次。
+        let (valid_prefix, remainder_start) = match std::str::from_utf8(&data) {
+            Ok(s) => (s, data.len()),
+            Err(err) => {
+                let valid_up_to = err.valid_up_to();
+                // 如果 error_len 是 None，说明是末尾不完整；否则是真正的非法字节，
+                // 我们也一并先保留到 pending，避免误插入替代符。
+                let prefix = unsafe { std::str::from_utf8_unchecked(&data[..valid_up_to]) };
+                (prefix, valid_up_to)
+            }
         };
-        if let Err(e) = notification_sender.send(notification) {
-            tracing::error!(
-                "BatchProcessor发送PaneOutput通知失败: pane_id={:?}, error={}",
-                pane_id,
-                e
-            );
+
+        // 把余下的尾部字节保留到下次（可能是不完整或非法序列）
+        if remainder_start < data.len() {
+            state
+                .pending_incomplete
+                .extend_from_slice(&data[remainder_start..]);
+        }
+
+        if !valid_prefix.is_empty() {
+            // 先喂给 Shell Integration 做解析（命令生命周期、CWD等）
+            shell_integration.process_output(pane_id, valid_prefix);
+
+            // 移除 OSC 序列，发送给前端
+            let cleaned = shell_integration.strip_osc_sequences(valid_prefix);
+
+            if !cleaned.is_empty() {
+                let notification = MuxNotification::PaneOutput {
+                    pane_id,
+                    data: Bytes::from(cleaned.into_bytes()),
+                };
+                if let Err(e) = notification_sender.send(notification) {
+                    tracing::error!(
+                        "BatchProcessor发送PaneOutput通知失败: pane_id={:?}, error={}",
+                        pane_id,
+                        e
+                    );
+                }
+            }
         }
     }
 }
