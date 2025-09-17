@@ -10,7 +10,6 @@ use std::sync::{Arc, Mutex};
 use tiktoken_rs::{cl100k_base, CoreBPE};
 use tracing::{debug, warn};
 
-
 /// 上下文管理配置
 #[derive(Debug, Clone)]
 pub struct ContextConfig {
@@ -34,7 +33,6 @@ impl Default for ContextConfig {
         }
     }
 }
-
 
 /// 缓存项
 #[derive(Debug, Clone)]
@@ -90,7 +88,6 @@ impl SimpleCache {
 pub struct CacheStats {
     pub total_entries: usize,
 }
-
 
 /// 上下文管理器
 pub struct ContextManager {
@@ -364,7 +361,6 @@ impl ContextManager {
         Ok(messages[keep_from..].to_vec())
     }
 
-
     /// 简化的压缩函数
     async fn compress_with_summary(
         &self,
@@ -537,9 +533,7 @@ impl ContextManager {
             .rfind('。')
             .or_else(|| safe_content.rfind('\n'))
             .or_else(|| safe_content.rfind(' '))
-            .unwrap_or_else(|| {
-                std::cmp::max(3, max_len.saturating_sub(3))
-            });
+            .unwrap_or_else(|| std::cmp::max(3, max_len.saturating_sub(3)));
 
         let truncated: String = safe_content.chars().take(truncate_at).collect();
         format!("{}...", truncated)
@@ -1013,7 +1007,7 @@ impl ContextManager {
         output.push_str(&entries);
 
         if file_count + dir_count >= max_files {
-            output.push_str("\n(File list truncated. Use find_by_name or list_dir tools to explore specific subdirectories if needed.)\n");
+            output.push_str("\n(File list truncated. Use read-directory tools to explore specific subdirectories if needed.)\n");
         }
 
         Ok(output)
@@ -1176,7 +1170,6 @@ impl ContextManager {
     }
 }
 
-
 /// 上下文构建结果
 #[derive(Debug)]
 pub struct ContextResult {
@@ -1195,7 +1188,6 @@ impl ContextResult {
         }
     }
 }
-
 
 /// 创建默认上下文管理器
 pub fn create_context_manager() -> ContextManager {

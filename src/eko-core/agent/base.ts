@@ -190,6 +190,11 @@ export class Agent {
         if (!tool) {
           throw new Error(result.name + ' tool does not exist')
         }
+
+        // 打印工具输入参数
+        console.log(`[工具执行] ${result.name}`)
+        console.log('输入参数:', JSON.stringify(args, null, 2))
+
         toolResult = await tool.execute(args, agentContext, nativeToolCall)
         toolChain.updateToolResult(toolResult)
 

@@ -325,9 +325,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           tempAIMessage.status = 'complete'
         } else {
           tempAIMessage.status = 'error'
+
+          const errorContent =
+            typeof response.error === 'string' ? response.error : String(response.error || '未知错误')
           tempAIMessage.steps?.push({
             type: 'error',
-            content: ``,
+            content: errorContent,
             timestamp: Date.now(),
             metadata: {
               errorType: 'EkoError',
@@ -736,9 +739,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               case 'error':
                 // 错误处理
                 if (message.type === 'error') {
+                  const errorContent =
+                    typeof message.error === 'string' ? message.error : String(message.error || '执行过程中发生错误')
                   const errorStep: NonToolStep = {
                     type: 'error',
-                    content: '',
+                    content: errorContent,
                     timestamp: Date.now(),
                     metadata: {
                       errorType: 'execution_error',

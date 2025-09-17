@@ -209,18 +209,19 @@ export async function callAgentLLM(
           break
         }
         case 'error': {
-          Log.error(`${agentContext.agent.Name} agent error: `, chunk.error)
+          const errorMsg = typeof chunk.error === 'string' ? chunk.error : String(chunk.error || 'Unknown error')
+          Log.error(`${agentContext.agent.Name} agent error: `, errorMsg)
           await streamCallback.onMessage(
             {
               taskId: context.taskId,
               agentName: agentContext.agent.Name,
               nodeId: agentContext.context.taskId,
               type: 'error',
-              error: chunk.error,
+              error: errorMsg,
             },
             agentContext
           )
-          throw new Error('LLM Error: ' + chunk.error)
+          throw new Error('LLM Error: ' + errorMsg)
         }
       }
     }

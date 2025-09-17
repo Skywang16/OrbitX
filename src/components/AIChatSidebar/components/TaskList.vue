@@ -162,7 +162,7 @@
 
 <style scoped>
   .task-list {
-    margin: 6px 10px 0 10px;
+    margin: 6px auto 0 auto;
     background-color: var(--bg-400);
     border: 1px solid var(--border-200);
     border-bottom: none;
@@ -170,7 +170,10 @@
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 13px;
     box-shadow: none;
-    width: calc(90% - 20px);
+    width: 80%;
+    max-width: 80%;
+    overflow-x: hidden;
+    box-sizing: border-box;
     margin-left: auto;
     margin-right: auto;
   }
@@ -245,6 +248,7 @@
     background-color: var(--bg-400);
     max-height: 240px;
     overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .task-item {
@@ -260,16 +264,8 @@
     border-bottom: none;
   }
 
-  .task-item:hover {
-    background-color: var(--color-hover);
-  }
-
   .task-running {
     background-color: rgba(0, 122, 204, 0.1);
-  }
-
-  .task-running:hover {
-    background-color: rgba(0, 122, 204, 0.15);
   }
 
   .task-status {
@@ -307,6 +303,8 @@
     line-height: 1.4;
     color: var(--text-300);
     word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     transition: all 0.2s ease;
   }
 

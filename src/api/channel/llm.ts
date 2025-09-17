@@ -1,5 +1,6 @@
 import { channelApi } from './index'
 import type { NativeLLMStreamChunk } from '@/eko-core/types/llm.types'
+import { invoke } from '@/utils/request'
 
 /**
  * LLM 专用 Channel API
@@ -25,9 +26,6 @@ class LLMChannelApi {
    * 取消流式调用
    */
   async cancelStream(requestId = 'current'): Promise<void> {
-    // 这里可以调用统一的取消逻辑
-    // 或者直接使用 invoke 调用后端
-    const { invoke } = await import('@/utils/request')
     await invoke('llm_cancel_stream', { requestId })
   }
 }

@@ -170,14 +170,13 @@
         @delete-session="deleteSession"
         @refresh-sessions="refreshSessions"
       />
-
-      <TaskList v-if="aiChatStore.chatMode === 'agent'" :task-nodes="[]" />
-
       <MessageList
         :messages="aiChatStore.messageList"
         :is-loading="aiChatStore.isLoading"
         :chat-mode="aiChatStore.chatMode"
       />
+
+      <TaskList :task-nodes="aiChatStore.currentTaskNodes" :task-id="aiChatStore.currentTaskId || ''" />
 
       <ChatInput
         ref="chatInputRef"
