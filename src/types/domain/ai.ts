@@ -1,4 +1,5 @@
 import type { BaseConfig } from '../core'
+import type { PersistedStep } from '../../api/ai/types'
 
 export interface ToolExecution {
   name: string
@@ -166,7 +167,7 @@ export interface Message {
   role: 'user' | 'assistant' | 'system'
   createdAt: Date
 
-  steps?: AIOutputStep[]
+  steps?: PersistedStep[]
   status?: 'pending' | 'streaming' | 'complete' | 'error'
   duration?: number
 

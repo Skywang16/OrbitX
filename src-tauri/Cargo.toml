@@ -110,6 +110,7 @@ ck-index = { path = "../ck-main/ck-index", version = "0.4.5" }
 ck-engine = { path = "../ck-main/ck-engine", version = "0.4.5" }
 ck-embed = { path = "../ck-main/ck-embed", version = "0.4.5" }
 ck-ann = { path = "../ck-main/ck-ann", version = "0.4.5" }
+ignore = "0.4"
 
 # 文件监控系统依赖
 notify = "6.1"

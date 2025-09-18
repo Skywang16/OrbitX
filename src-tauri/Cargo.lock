@@ -4853,6 +4853,7 @@ dependencies = [
  "fuzzy-matcher",
  "glob",
  "html2text",
+ "ignore",
  "keyring",
  "libc",
  "lru",

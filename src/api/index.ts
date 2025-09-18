@@ -18,6 +18,7 @@ export { shortcutsApi } from './shortcuts'
 export { storageApi } from './storage'
 export { terminalApi } from './terminal'
 export { terminalContextApi } from './terminal-context'
+export { codeApi } from './code'
 export { windowApi } from './window'
 
 export type * from './ai/types'
@@ -26,6 +27,7 @@ export type * from './completion/types'
 export type * from './shortcuts/types'
 export type * from './storage/types'
 export type * from './terminal-context/types'
+export type { CodeDefinition } from './code'
 
 // 从config导出但排除与terminal重复的类型
 export type { AppConfig, ConfigFileInfo } from './config/types'

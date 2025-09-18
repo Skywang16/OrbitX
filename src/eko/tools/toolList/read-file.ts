@@ -68,12 +68,12 @@ export class ReadFileTool extends ModifiableTool {
       // 检查是否为目录
       const isDirectory = await this.checkIsDirectory(path)
       if (isDirectory) {
-        throw new ValidationError(`路径 ${path} 是一个目录，请使用 read_directory 工具读取目录内容`)
+        throw new ValidationError(`Path ${path} is a directory, please use list_files tool to view directory contents`)
       }
 
       // 检查是否为二进制文件
       if (this.isBinaryFile(path)) {
-        throw new ValidationError(`文件 ${path} 是二进制文件，无法以文本方式读取`)
+        throw new ValidationError(`File ${path} is binary, cannot read as text`)
       }
 
       // 使用Tauri API读取文件
@@ -81,7 +81,7 @@ export class ReadFileTool extends ModifiableTool {
 
       // 确保内容不为空
       if (rawContent === null || rawContent === undefined) {
-        throw new ToolError('文件内容为空或无法读取')
+        throw new ToolError('File is empty or cannot be read')
       }
 
       // 将ArrayBuffer转换为字符串

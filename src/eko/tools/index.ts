@@ -8,7 +8,7 @@
  * 📁 文件操作工具：
  * - read-file: 📖 单文件读取（支持行号、范围、文件信息）
  * - read-many-files: 📚 批量文件读取（支持模式匹配、大小限制）
- * - create-file: 📄 文件创建（创建新文件或覆盖现有文件）
+ * - write-to-file: 📄 文件写入（创建新文件或覆盖现有文件）
  * - edit-file: 📝 文件编辑（精确替换、行号定位、多种编辑模式）
  *
  * 🖥️ 系统工具：
@@ -36,8 +36,12 @@ export * from './tool-error'
 
 export { readFileTool } from './toolList/read-file'
 export { readManyFilesTool } from './toolList/read-many-files'
-export { createFileTool } from './toolList/create-file'
+export { writeToFileTool } from './toolList/write-to-file'
 export { editFileTool } from './toolList/edit-file'
+export { applyDiffTool } from './toolList/apply-diff'
+export { insertContentTool } from './toolList/insert-content'
+export { listFilesTool } from './toolList/list-files'
+export { listCodeDefinitionNamesTool } from './toolList/list-code-definition-names'
 export { shellTool } from './toolList/shell'
 export { webFetchTool } from './toolList/web-fetch'
 

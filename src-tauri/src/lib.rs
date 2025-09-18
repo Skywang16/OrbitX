@@ -11,6 +11,7 @@ pub mod storage;
 pub mod terminal;
 pub mod utils;
 pub mod window;
+pub mod filesystem;
 
 use commands::register_all_commands;
 use setup::{

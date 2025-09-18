@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
+  import { computed, ref, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import { useTabManagerStore } from '@/stores/TabManager'
@@ -59,6 +59,7 @@
 
   const tabManagerStore = useTabManagerStore()
   const terminalStore = useTerminalStore()
+  const activeTerminalCwd = computed(() => terminalStore.activeTerminal?.cwd || null)
 
   const isInSettingsTab = computed(() => {
     return tabManagerStore.activeTab?.type === TabType.SETTINGS
@@ -151,6 +152,27 @@
     size: '',
   })
 
+  const syncResolvedPath = () => {
+    const cwd = activeTerminalCwd.value
+    if (cwd) {
+      resolvedPath.value = cwd
+      return
+    }
+
+    const indexPath = indexStatus.value.path
+    resolvedPath.value = indexPath || '.'
+  }
+
+  watch(
+    [activeTerminalCwd, () => indexStatus.value.path],
+    () => {
+      syncResolvedPath()
+    },
+    {
+      immediate: true,
+    }
+  )
+
   const buildProgress = ref(0)
   const isBuilding = ref(false)
   const progressHasData = ref(false)
@@ -177,6 +199,14 @@
       indexStatus.value = { isReady: false, path: '' }
     }
   }
+
+  watch(activeTerminalCwd, cwd => {
+    if (!cwd) {
+      indexStatus.value = { isReady: false, path: '' }
+      return
+    }
+    checkCkIndexStatus()
+  })
 
   const startProgressPolling = (targetPath: string) => {
     if (progressTimer) {
@@ -293,10 +323,10 @@
       console.warn('获取用户主目录失败:', error)
     }
     await checkCkIndexStatus()
-    resolvedPath.value = indexStatus.value.path || terminalStore.currentWorkingDirectory || '.'
+    syncResolvedPath()
 
     try {
-      const targetPath = indexStatus.value.path || terminalStore.currentWorkingDirectory
+      const targetPath = indexStatus.value.path || activeTerminalCwd.value
       if (targetPath) {
         const progress = await ckApi.getBuildProgress({ path: targetPath })
         if (!progress.isComplete && (progress.totalFiles > 0 || progress.error !== 'progress_unavailable')) {

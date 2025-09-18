@@ -23,6 +23,12 @@ export interface PersistedNonToolStep {
   type: PersistedNonToolStepType
   content?: string
   timestamp?: number
+  metadata?: {
+    thinkingDuration?: number
+    errorType?: string
+    errorDetails?: string
+    streamId?: string // 流式ID，用于识别同一轮流式更新
+  }
 }
 
 export interface PersistedToolExecution {

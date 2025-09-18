@@ -92,10 +92,6 @@ export abstract class ModifiableTool implements Tool {
       // 验证参数
       this.validateParameters(parameters)
 
-      // 打印工具输入参数
-      console.error(`[ModifiableTool执行] ${this.name}`)
-      console.error('ModifiableTool输入参数:', JSON.stringify(parameters, null, 2))
-
       const context: ToolExecutionContext = {
         agentContext,
         parameters,

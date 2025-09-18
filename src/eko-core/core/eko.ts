@@ -45,6 +45,7 @@ export class Eko {
       return await this.generate(modifyTaskPrompt, taskId)
     }
     // A2A client removed - single agent mode
+    context.chain.taskPrompt = modifyTaskPrompt
     const planner = new Planner(context)
     context.task = await planner.replan(modifyTaskPrompt)
     return context.task

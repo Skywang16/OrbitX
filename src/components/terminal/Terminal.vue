@@ -55,7 +55,7 @@
   import { useTerminalStore } from '@/stores/Terminal'
   import { createMessage } from '@/ui'
   import { convertThemeToXTerm, createDefaultXTermTheme } from '@/utils/themeConverter'
-  import { terminalChannelApi } from '@/api/terminal/channel'
+  import { terminalChannelApi } from '@/api/channel/terminal'
 
   import type { ITheme } from '@xterm/xterm'
   import TerminalCompletion from './TerminalCompletion.vue'
@@ -158,17 +158,8 @@
       try {
         const webglAddon = new WebglAddon()
         terminal.value.loadAddon(webglAddon)
-        console.warn('WebGL renderer enabled for xterm.js')
       } catch (e) {
         console.warn('WebGL addon failed to load, falling back to default renderer.', e)
-      }
-
-      // 启用连字支持，提升编程连字与特殊字符的显示效果
-      try {
-        const ligaturesAddon = new LigaturesAddon()
-        terminal.value.loadAddon(ligaturesAddon)
-      } catch (e) {
-        console.warn('Ligatures addon failed to load.', e)
       }
 
       fitAddon.value = new FitAddon() // 创建自适应大小插件实例
@@ -184,7 +175,18 @@
           }
         })
       ) // 链接点击插件
+
+      // 先打开终端
       terminal.value.open(terminalRef.value)
+
+      // 启用连字支持，提升编程连字与特殊字符的显示效果
+      // 必须在终端打开后加载，因为连字插件需要注册字符连接器
+      try {
+        const ligaturesAddon = new LigaturesAddon()
+        terminal.value.loadAddon(ligaturesAddon)
+      } catch (e) {
+        console.warn('Ligatures addon failed to load.', e)
+      }
 
       // 加载插件与 open 之后，重新应用主题并强制刷新以确保 WebGL 下颜色正确
       try {

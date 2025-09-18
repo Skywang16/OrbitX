@@ -93,6 +93,26 @@
     flex-direction: column;
   }
 
+  /* 自定义滚动条样式 */
+  .message-list::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .message-list::-webkit-scrollbar-track {
+    background: var(--bg-200);
+    border-radius: 4px;
+  }
+
+  .message-list::-webkit-scrollbar-thumb {
+    background: var(--border-300);
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+  }
+
+  .message-list::-webkit-scrollbar-thumb:hover {
+    background: var(--border-400);
+  }
+
   .empty-state {
     flex: 1;
     display: flex;

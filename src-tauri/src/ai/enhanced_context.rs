@@ -251,7 +251,7 @@ impl ContextManager {
             .await
         {
             if !prefix.trim().is_empty() {
-                parts.push(format!("【前置提示】\n{}\n", prefix));
+                parts.push(format!("## 前置提示\n{}\n", prefix));
             }
         }
 
@@ -287,14 +287,14 @@ impl ContextManager {
                 };
 
                 parts.push(format!(
-                    "【对话历史】(共{}条消息{})\n{}\n",
+                    "## 对话历史 (共{}条消息{})\n{}\n",
                     actual_count, compression_info, history
                 ));
             }
         }
 
         // 添加当前问题
-        parts.push(format!("【当前问题】\n{}", current_msg));
+        parts.push(format!("## 当前问题\n{}", current_msg));
 
         let final_prompt = parts.join("\n");
 
@@ -316,7 +316,7 @@ impl ContextManager {
         // 移除fallback工作目录处理 - 不再在prompt中显示技术细节
 
         if !env_parts.is_empty() {
-            parts.push(format!("【当前环境】\n{}\n", env_parts.join("\n")));
+            parts.push(format!("## 当前环境\n{}\n", env_parts.join("\n")));
         }
 
         if let Some(selection_info) = tag_context.get("terminalSelectionInfo") {
@@ -333,7 +333,7 @@ impl ContextManager {
 
                     debug!("✂️ 添加选中内容: {} 字符", selected_text.len());
                     parts.push(format!(
-                        "【当前选中】{}\n```\n{}\n```\n",
+                        "## 当前选中{}\n```\n{}\n```\n",
                         selection_desc, selected_text
                     ));
                 }
@@ -937,16 +937,16 @@ impl ContextManager {
 
         let path = Path::new(cwd);
         if !path.exists() || !path.is_dir() {
-            return format!("【当前工作区】\n{}\n", cwd);
+            return format!("## 当前工作区\n{}\n", cwd);
         }
 
         match self.scan_workspace_directory(path).await {
             Ok(workspace_info) => {
-                format!("【当前工作区】\n{}\n{}\n", cwd, workspace_info)
+                format!("## 当前工作区\n{}\n{}\n", cwd, workspace_info)
             }
             Err(e) => {
                 warn!("扫描工作区目录失败: {}", e);
-                format!("【当前工作区】\n{}\n", cwd)
+                format!("## 当前工作区\n{}\n", cwd)
             }
         }
     }

@@ -198,6 +198,14 @@ export class Agent {
         toolResult = await tool.execute(args, agentContext, nativeToolCall)
         toolChain.updateToolResult(toolResult)
 
+        // 打印工具输出结果
+        try {
+          console.log(`[工具输出] ${result.name}`)
+          console.log('输出结果:', JSON.stringify(toolResult, null, 2))
+        } catch (_e) {
+          console.log('输出结果: [unserializable]')
+        }
+
         // 统一到Result-based模式：检查 toolResult.isError
         if (toolResult.isError) {
           const errorText = toolResult.content[0]?.type === 'text' ? toolResult.content[0].text : 'Unknown error'

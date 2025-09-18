@@ -1,15 +1,16 @@
-import type {
-  AIHealthStatus,
-  AIModelConfig,
-  AISettings,
-  AIStats,
-  Conversation,
-  Message,
-  TagContextInfo,
-  AIOutputStep,
-} from '@/types'
+import type { AIHealthStatus, AIModelConfig, AISettings, AIStats, Conversation, Message, TagContextInfo } from '@/types'
 import { invoke } from '@/utils/request'
 import type { RawConversation, RawMessage, WebFetchRequest, WebFetchResponse, PersistedStep } from './types'
+
+// 优雅的JSON解析工具函数
+const safeJsonParse = <T>(json: string | null | undefined): T | undefined => {
+  if (!json) return undefined
+  try {
+    return JSON.parse(json) as T
+  } catch {
+    return undefined
+  }
+}
 
 class ConversationAPI {
   async createConversation(title?: string): Promise<number> {
@@ -93,116 +94,77 @@ class ConversationAPI {
     await invoke<void>('ai_conversation_truncate', { conversationId, truncateAfterMessageId })
   }
 
-  private cleanStepsData(steps: PersistedStep[]): PersistedStep[] {
-    const isToolStep = (s: PersistedStep): s is Extract<PersistedStep, { type: 'tool_use' | 'tool_result' }> =>
-      s.type === 'tool_use' || s.type === 'tool_result'
-    return steps.map(s => {
-      const step: PersistedStep = { ...s }
-      if (step.type === 'text' && typeof step.content === 'string') {
-        step.content = this.cleanJsonEscapes(step.content)
-      }
-      if (isToolStep(step)) {
-        const te = { ...step.toolExecution }
-        const r = te.result
-        if (typeof r === 'string') {
-          te.result = this.cleanJsonEscapes(r)
-        } else if (r && typeof r === 'object') {
-          const obj = r as Record<string, unknown>
-          if (typeof obj['text'] === 'string') {
-            obj['text'] = this.cleanJsonEscapes(obj['text'] as string)
-          }
-          const content = obj['content']
-          if (Array.isArray(content)) {
-            obj['content'] = (content as Array<Record<string, unknown>>).map(item => {
-              if (item && typeof item['text'] === 'string') {
-                return { ...item, text: this.cleanJsonEscapes(item['text'] as string) }
-              }
-              return item
-            })
-          }
-          te.result = obj
-        }
-        step.toolExecution = te
-      }
-      return step
-    })
+  private cleanStepsData = (steps: PersistedStep[]): PersistedStep[] => steps.map(this.cleanSingleStep)
+
+  private cleanSingleStep = (step: PersistedStep): PersistedStep => {
+    if (step.type === 'text' && step.content) {
+      return { ...step, content: this.cleanJsonEscapes(step.content) }
+    }
+
+    if (this.isToolStep(step)) {
+      return { ...step, toolExecution: this.cleanToolExecution(step.toolExecution) }
+    }
+
+    return step
   }
+
+  private isToolStep = (step: PersistedStep): step is Extract<PersistedStep, { type: 'tool_use' | 'tool_result' }> =>
+    step.type === 'tool_use' || step.type === 'tool_result'
+
+  private cleanToolExecution = (execution: any) => ({
+    ...execution,
+    result: this.cleanExecutionResult(execution.result),
+  })
+
+  private cleanExecutionResult = (result: any): any => {
+    if (!result) return result
+
+    // 字符串直接清理
+    if (result.constructor === String) {
+      return this.cleanJsonEscapes(String(result))
+    }
+
+    // 对象递归清理
+    if (result.constructor === Object) {
+      return this.cleanObjectResult(result)
+    }
+
+    return result
+  }
+
+  private cleanObjectResult = (obj: any): any => ({
+    ...obj,
+    ...(obj.text && { text: this.cleanJsonEscapes(obj.text) }),
+    ...(obj.content &&
+      Array.isArray(obj.content) && {
+        content: obj.content.map(this.cleanContentItem),
+      }),
+  })
+
+  private cleanContentItem = (item: any) => (item?.text ? { ...item, text: this.cleanJsonEscapes(item.text) } : item)
 
   private cleanJsonEscapes(text: string): string {
     return text.replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\')
   }
 
-  private convertConversation(raw: RawConversation): Conversation {
-    return {
-      id: raw.id,
-      title: raw.title,
-      messageCount: raw.messageCount,
-      createdAt: new Date(raw.createdAt),
-      updatedAt: new Date(raw.updatedAt),
-    }
-  }
+  private convertConversation = (raw: RawConversation): Conversation => ({
+    id: raw.id,
+    title: raw.title,
+    messageCount: raw.messageCount,
+    createdAt: new Date(raw.createdAt),
+    updatedAt: new Date(raw.updatedAt),
+  })
 
-  private convertMessage(raw: RawMessage): Message {
-    let steps: AIOutputStep[] | undefined = undefined
-    if (raw.stepsJson) {
-      try {
-        const parsed = JSON.parse(raw.stepsJson) as PersistedStep[]
-        steps = this.convertPersistedSteps(parsed)
-      } catch {
-        steps = undefined
-      }
-    }
-
-    return {
-      id: raw.id,
-      conversationId: raw.conversationId,
-      role: raw.role,
-      content: raw.content,
-      steps,
-      status: raw.status,
-      duration: raw.durationMs || undefined,
-      createdAt: new Date(raw.createdAt),
-    }
-  }
-
-  private convertPersistedSteps(steps: PersistedStep[]): AIOutputStep[] {
-    const isToolStep = (s: PersistedStep): s is Extract<PersistedStep, { type: 'tool_use' | 'tool_result' }> =>
-      s.type === 'tool_use' || s.type === 'tool_result'
-    return steps.map(s => {
-      const ts = typeof s.timestamp === 'number' ? s.timestamp : Date.now()
-      if (isToolStep(s)) {
-        const exec = s.toolExecution
-        let status: 'running' | 'completed' | 'error'
-        if (exec.status === 'running') {
-          status = 'running'
-        } else if (exec.status === 'failed' || exec.status === 'error') {
-          status = 'error'
-        } else {
-          status = 'completed'
-        }
-        return {
-          type: 'tool_use',
-          content: s.content ?? '',
-          timestamp: ts,
-          toolExecution: {
-            name: exec.name,
-            params: exec.params && typeof exec.params === 'object' ? (exec.params as Record<string, unknown>) : {},
-            status,
-            startTime: exec.startTime,
-            endTime: exec.endTime,
-            result: exec.result,
-            error: exec.error,
-            toolId: exec.toolId,
-          },
-        } as AIOutputStep
-      }
-      return {
-        type: s.type as 'thinking' | 'task' | 'task_thought' | 'text' | 'error',
-        content: s.content ?? '',
-        timestamp: ts,
-      } as AIOutputStep
-    })
-  }
+  private convertMessage = (raw: RawMessage): Message => ({
+    id: raw.id,
+    conversationId: raw.conversationId,
+    role: raw.role,
+    content: raw.content,
+    steps: safeJsonParse<PersistedStep[]>(raw.stepsJson),
+    status: raw.status,
+    duration: raw.durationMs || undefined,
+    createdAt: new Date(raw.createdAt),
+  })
 }
 
 export async function webFetchHeadless(request: WebFetchRequest): Promise<WebFetchResponse> {

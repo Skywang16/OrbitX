@@ -8,10 +8,13 @@ import { globalToolRegistry } from './tool-registry'
 // Import all tools
 import { readFileTool } from './toolList/read-file'
 import { readManyFilesTool } from './toolList/read-many-files'
-import { readDirectoryTool } from './toolList/read-directory'
 
-import { createFileTool } from './toolList/create-file'
+import { writeToFileTool } from './toolList/write-to-file'
 import { editFileTool } from './toolList/edit-file'
+import { applyDiffTool } from './toolList/apply-diff'
+import { insertContentTool } from './toolList/insert-content'
+import { listFilesTool } from './toolList/list-files'
+import { listCodeDefinitionNamesTool } from './toolList/list-code-definition-names'
 import { shellTool } from './toolList/shell'
 import { webFetchTool } from './toolList/web-fetch'
 
@@ -21,16 +24,19 @@ import { orbitSearchTool } from './toolList/orbit-search'
  * 获取基础工具列表（不包含向量索引工具）
  */
 function getBaseReadOnlyTools(): Tool[] {
-  return [readFileTool, readManyFilesTool, readDirectoryTool, webFetchTool, orbitSearchTool]
+  return [readFileTool, readManyFilesTool, listFilesTool, listCodeDefinitionNamesTool, webFetchTool, orbitSearchTool]
 }
 
 function getBaseAllTools(): Tool[] {
   return [
     readFileTool,
     readManyFilesTool,
-    readDirectoryTool,
-    createFileTool,
+    listFilesTool,
+    listCodeDefinitionNamesTool,
     editFileTool,
+    applyDiffTool,
+    insertContentTool,
+    writeToFileTool,
     shellTool,
     webFetchTool,
     orbitSearchTool,
@@ -69,20 +75,20 @@ export function registerAllTools(): void {
       },
     },
     {
-      tool: readDirectoryTool,
+      tool: listFilesTool,
       metadata: {
-        description: readDirectoryTool.description,
+        description: listFilesTool.description,
         category: 'file',
-        tags: ['directory', 'list', 'folder'],
+        tags: ['directory', 'list', 'non-recursive', 'gitignore', 'ignore'],
       },
     },
 
     {
-      tool: createFileTool,
+      tool: listCodeDefinitionNamesTool,
       metadata: {
-        description: createFileTool.description,
-        category: 'file',
-        tags: ['file', 'create', 'new'],
+        description: listCodeDefinitionNamesTool.description,
+        category: 'code',
+        tags: ['code', 'definitions', 'symbols', 'ts', 'js'],
       },
     },
     {
@@ -91,6 +97,30 @@ export function registerAllTools(): void {
         description: editFileTool.description,
         category: 'file',
         tags: ['file', 'edit', 'modify', 'replace', 'line'],
+      },
+    },
+    {
+      tool: applyDiffTool,
+      metadata: {
+        description: applyDiffTool.description,
+        category: 'file',
+        tags: ['file', 'diff', 'multi-file', 'hunk', 'preview', 'approval'],
+      },
+    },
+    {
+      tool: insertContentTool,
+      metadata: {
+        description: insertContentTool.description,
+        category: 'file',
+        tags: ['file', 'insert', 'line', 'append', 'preview', 'approval'],
+      },
+    },
+    {
+      tool: writeToFileTool,
+      metadata: {
+        description: writeToFileTool.description,
+        category: 'file',
+        tags: ['file', 'write', 'overwrite', 'create', 'preview', 'approval'],
       },
     },
     {

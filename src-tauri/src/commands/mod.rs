@@ -1,4 +1,3 @@
-
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
 use std::path::PathBuf;
@@ -178,6 +177,9 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::ai::tool::network::network_simple_web_fetch,
         // 代码搜索命令
         crate::ck::commands::ck_search,
+        // 文件/代码定义命令
+        crate::filesystem::commands::fs_list_directory,
+        crate::filesystem::commands::code_list_definition_names,
         // CK索引管理命令
         crate::ck::commands::ck_index_status,
         crate::ck::commands::ck_build_index,

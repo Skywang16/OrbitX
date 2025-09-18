@@ -3,16 +3,6 @@ import { Task, TaskNode, TaskTextNode } from '../types/core.types'
 
 // All Workflow-related functions removed - Task-only architecture
 
-// Escape text content to be safe inside XML elements/attributes
-function xmlEscape(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;')
-}
-
 export function parseTask(taskId: string, xml: string, done: boolean): Task | null {
   // Parse XML directly for single-agent task mode
   try {
@@ -78,50 +68,6 @@ export function parseTask(taskId: string, xml: string, done: boolean): Task | nu
 
 export function resetTaskXml(task: Task) {
   task.modified = false
-}
-
-export function buildSimpleTaskWorkflow({
-  taskId,
-  name,
-  agentName,
-  task,
-  taskNodes,
-}: {
-  taskId: string
-  name: string
-  agentName: string
-  task: string
-  taskNodes?: string[]
-}): Task {
-  const nodes: TaskNode[] = (taskNodes || []).map(
-    (nodeText): TaskNode =>
-      ({
-        type: 'normal',
-        text: nodeText,
-      }) as TaskTextNode
-  )
-
-  const safeTask = xmlEscape(task)
-  const safeAgentName = xmlEscape(agentName)
-  const safeNodeXmlList = (taskNodes || []).map(node => `<node>${xmlEscape(node)}</node>`)
-
-  const xml = `<agent name="${safeAgentName}">
-  <task>${safeTask}</task>
-  <nodes>
-    ${safeNodeXmlList.join('\n    ')}
-  </nodes>
-</agent>`
-
-  return {
-    taskId,
-    name,
-    thought: '',
-    description: task,
-    nodes,
-    status: 'init',
-    xml,
-    modified: false,
-  }
 }
 
 export function buildAgentRootXml(

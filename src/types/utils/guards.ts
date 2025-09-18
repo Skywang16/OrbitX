@@ -2,11 +2,11 @@
  * 类型守卫函数
  */
 
-import type { AIOutputStep, ToolStep } from '../domain/ai'
+import type { PersistedStep, PersistedToolStep } from '../../api/ai/types'
 
 // ===== AI相关类型守卫 =====
 
-export function isToolStep(step: AIOutputStep): step is ToolStep {
+export function isToolStep(step: PersistedStep): step is PersistedToolStep {
   return step.type === 'tool_use' || step.type === 'tool_result'
 }
 

@@ -72,4 +72,4 @@ export type { RetryConfig } from './common/error'
 
 export { RetryManager, globalRetryManager, type RetryAttempt, type RetryStats } from './common/retry-manager'
 
-export { parseTask, resetTaskXml, buildSimpleTaskWorkflow, buildAgentRootXml, extractAgentXmlNode } from './common/xml'
+export { parseTask, resetTaskXml, buildAgentRootXml, extractAgentXmlNode } from './common/xml'

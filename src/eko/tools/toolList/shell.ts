@@ -68,7 +68,7 @@ export class ShellTool extends ModifiableTool {
         content: [
           {
             type: 'text',
-            text: result || '(无输出)',
+            text: result || '(no output)',
           },
         ],
       }
@@ -79,7 +79,7 @@ export class ShellTool extends ModifiableTool {
 
   private validateCommand(command: string): void {
     if (!command || command.trim() === '') {
-      throw new ValidationError('命令不能为空')
+      throw new ValidationError('Command cannot be empty')
     }
 
     const lowerCommand = command.toLowerCase().trim()
@@ -87,13 +87,13 @@ export class ShellTool extends ModifiableTool {
     // 检查危险命令
     for (const dangerous of this.dangerousCommands) {
       if (lowerCommand.includes(dangerous)) {
-        throw new ValidationError(`检测到危险命令，已阻止执行: ${command}`)
+        throw new ValidationError(`Dangerous command detected and blocked: ${command}`)
       }
     }
 
     // 检查命令长度
     if (command.length > 1000) {
-      throw new ValidationError('命令过长，请分解为多个较短的命令')
+      throw new ValidationError('Command too long, please break into shorter commands')
     }
   }
 
@@ -126,7 +126,7 @@ export class ShellTool extends ModifiableTool {
       cleanLines.push(trimmed)
     }
 
-    return cleanLines.join('\n') || '(无输出)'
+    return cleanLines.join('\n') || '(no output)'
   }
 
   /**
@@ -138,7 +138,7 @@ export class ShellTool extends ModifiableTool {
     // 找到对应的终端会话
     const terminalSession = terminalStore.terminals.find(t => t.backendId === terminalId)
     if (!terminalSession) {
-      throw new ToolError('找不到对应的终端会话')
+      throw new ToolError('Cannot find corresponding terminal session')
     }
 
     return new Promise<string>((resolve, reject) => {
@@ -201,7 +201,7 @@ export class ShellTool extends ModifiableTool {
 
           isCompleted = true
           cleanup()
-          reject(new ToolError(`命令执行超时 (${timeout}ms): ${command}`))
+          reject(new ToolError(`Command execution timeout (${timeout}ms): ${command}`))
         }
       }, timeout)
 
@@ -332,7 +332,7 @@ export class ShellTool extends ModifiableTool {
         // 验证终端是否存在
         const exists = await terminalContextApi.terminalExists(paneId)
         if (!exists) {
-          throw new ToolError(`指定的终端不存在: ${paneId}`)
+          throw new ToolError(`Specified terminal does not exist: ${paneId}`)
         }
         return paneId
       }
@@ -340,19 +340,19 @@ export class ShellTool extends ModifiableTool {
       // 否则从后端获取活跃终端ID
       const activePaneId = await terminalContextApi.getActivePaneId()
       if (activePaneId === null) {
-        throw new ToolError('没有可用的活跃终端')
+        throw new ToolError('No active terminal available')
       }
 
       return activePaneId
     } catch (error) {
       // 如果后端查询失败，回退到前端 Store 查询（向后兼容）
-      console.warn('后端终端上下文查询失败，回退到前端查询:', error)
+      console.warn('Backend terminal context query failed, falling back to frontend query:', error)
 
       const terminalStore = useTerminalStore()
       const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
 
       if (!activeTerminal || !activeTerminal.backendId) {
-        throw new ToolError('没有可用的活跃终端（后端和前端查询都失败）')
+        throw new ToolError('No active terminal available (both backend and frontend queries failed)')
       }
 
       return activeTerminal.backendId

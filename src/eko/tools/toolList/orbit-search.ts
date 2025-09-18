@@ -1,7 +1,7 @@
 /**
- * Semantic code search tool - CK-based code snippet search
+ * Semantic code search tool
  *
- * Provides semantic code search using CK (seek) engine,
+ * Provides semantic code search functionality,
  * allowing natural language queries to find relevant code fragments.
  */
 
@@ -28,13 +28,13 @@ export interface OrbitSearchResponse {
 }
 
 /**
- * Semantic code search tool using CK engine
+ * Semantic code search tool
  */
 export class OrbitSearchTool extends ModifiableTool {
   constructor() {
     super(
       'orbit_search',
-      `Search for code snippets in the current project using CK semantic search. Describe the functionality you're looking for in natural language. Examples: "user authentication logic", "database connection config", "file upload handling". Returns the most relevant code fragments based on semantic similarity.`,
+      `Search for code snippets in the current project. Describe the functionality you're looking for in natural language. Examples: "user authentication logic", "database connection config", "file upload handling". Returns the most relevant code fragments.`,
       {
         type: 'object',
         properties: {

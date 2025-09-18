@@ -124,8 +124,9 @@ export const agentRulesComponent: ComponentConfig = {
 ## Tool Usage Strategy
 - Prefer 'orbit_search' when you do NOT know the exact file or location.
 - If the user or context provides a concrete file path/line, call 'read_file' directly.
-- It is allowed to use 'read_directory' to discover file paths when needed.
 - Do not call tools without required parameters. If information is missing, first ask for it or use discovery tools.
+- Use 'list_files' for directory listing. Provide 'recursive=true' when you truly need a recursive listing. Paths may be relative to the active terminal working directory.
+- Use 'list_code_definition_names' to quickly enumerate functions/classes/exports from TS/JS files for a single file or all top-level files in a directory (non-recursive). This is useful for mapping structure before refactors or feature work.
 
 ## Tool Call Contract
 - All tool calls MUST include a valid JSON arguments object matching the schema exactly.
@@ -135,7 +136,6 @@ export const agentRulesComponent: ComponentConfig = {
 
 ## Path Policy
 - Prefer absolute paths. If only a relative path is known, resolve it using the active terminal working directory or ask the user.
-- If the path is unknown, you may first call 'read_directory' to explore structure, then proceed with 'read_file' or 'orbit_search'.
 
 ## Command Execution
 - You cannot change directories with 'cd' - use absolute paths when needed
@@ -186,8 +186,7 @@ assistant: I'll perform a global, idempotent replacement.
 
 user: Unknown where the config lives
 assistant: I'll list the directory to discover paths first.
-[tool_call: read_directory] {"path":"/absolute/path/to/project"}
-
+[tool_call: list_files] {"path":"/absolute/path/to/project","recursive":true}
 
 Always be direct and technical in your communication, avoiding conversational phrases like "Great!" or "Sure!". Focus on providing actionable information and clear explanations of your actions.`,
   fn: async (context: ComponentContext) => {

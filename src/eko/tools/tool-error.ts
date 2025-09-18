@@ -21,7 +21,7 @@ export class ValidationError extends ToolError {
 
 export class FileNotFoundError extends ToolError {
   constructor(path: string) {
-    super(`文件或目录不存在: ${path}`, 'FILE_NOT_FOUND')
+    super(`File or directory not found: ${path}`, 'FILE_NOT_FOUND')
     this.name = 'FileNotFoundError'
   }
 }

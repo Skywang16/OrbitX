@@ -4,6 +4,7 @@
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '@/eko-core/types'
+import { ValidationError } from '../tool-error'
 import { filesystemApi } from '@/api'
 
 export interface ReadManyFilesParams {
@@ -63,6 +64,17 @@ export class ReadManyFilesTool extends ModifiableTool {
       maxFileSize = 1048576,
     } = context.parameters as unknown as ReadManyFilesParams
 
+    // 参数验证
+    if (!Array.isArray(paths) || paths.length === 0) {
+      throw new ValidationError('paths must be a non-empty array')
+    }
+
+    for (const path of paths) {
+      if (!path || typeof path !== 'string' || !path.trim()) {
+        throw new ValidationError('All paths must be non-empty strings')
+      }
+    }
+
     const results: FileReadResult[] = []
     const MAX_LINES_PER_FILE = 2000
     const MAX_LINE_LENGTH = 2000
@@ -79,7 +91,7 @@ export class ReadManyFilesTool extends ModifiableTool {
             results.push({
               path: filePath,
               success: false,
-              error: `文件过大 (${metadata.size} bytes > ${maxFileSize} bytes)`,
+              error: `File too large (${metadata.size} bytes > ${maxFileSize} bytes)`,
               size: metadata.size,
             })
             continue
@@ -144,7 +156,7 @@ ${processedContent}`
     }
 
     // 格式化输出
-    let resultText = `批量文件读取结果 (${results.length} 个文件):\n\n`
+    let resultText = `Batch file read results (${results.length} files):\n\n`
 
     for (const result of results) {
       if (result.success) {

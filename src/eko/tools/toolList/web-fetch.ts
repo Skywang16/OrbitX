@@ -4,7 +4,7 @@
 
 import { ModifiableTool, type ToolExecutionContext } from '../modifiable-tool'
 import type { ToolResult } from '@/eko-core/types'
-import { NetworkError, ValidationError } from '../tool-error'
+import { NetworkError, ValidationError, ToolError } from '../tool-error'
 import { aiApi } from '@/api'
 
 export interface WebFetchParams {
