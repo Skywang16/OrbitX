@@ -38,7 +38,7 @@
   import { FitAddon } from '@xterm/addon-fit'
   import { WebLinksAddon } from '@xterm/addon-web-links'
   import { SearchAddon } from '@xterm/addon-search'
-  import { WebglAddon } from '@xterm/addon-webgl'
+  import { CanvasAddon } from '@xterm/addon-canvas'
   import { LigaturesAddon } from '@xterm/addon-ligatures'
   import { Unicode11Addon } from '@xterm/addon-unicode11'
   import { Terminal } from '@xterm/xterm'
@@ -85,7 +85,7 @@
   const { inputState, terminalEnv, updateInputLine, handleSuggestionChange } = useTerminalState()
   const { searchState, searchBoxRef, closeSearch, handleSearch, findNext, findPrevious, handleOpenTerminalSearch } =
     useTerminalSearch()
-  const { handleOutput: handleTerminalOutput, handleExit, cleanup: cleanupOutput } = useTerminalOutput()
+  const { handleOutputBinary: handleTerminalOutputBinary } = useTerminalOutput()
 
   // === 核心引用 ===
   const terminalRef = ref<HTMLElement | null>(null)
@@ -94,23 +94,52 @@
 
   const fitAddon = ref<FitAddon | null>(null)
   const searchAddon = ref<SearchAddon | null>(null)
+  // 流式 UTF-8 解码器：仅用于 OSC 解析与状态分发，渲染走 writeUtf8
+  const binaryDecoder = new TextDecoder('utf-8', { fatal: false })
+  let resizeObserver: ResizeObserver | null = null
 
   let hasDisposed = false
-  let keyListener: { dispose: () => void } | null = null
   let channelSub: { unsubscribe: () => Promise<void> } | null = null
+  let keyListener: { dispose: () => void } | null = null
 
-  // === 性能优化 ===
-  const timers = {
-    resize: null as number | null,
-    themeUpdate: null as number | null,
+  // 统一的事件资源管理
+  const disposers: Array<() => void> = []
+  const addDomListener = (target: EventTarget, type: string, handler: EventListenerOrEventListenerObject) => {
+    target.addEventListener(type, handler as EventListener)
+    disposers.push(() => target.removeEventListener(type, handler as EventListener))
+  }
+  const trackDisposable = (d: { dispose: () => void } | undefined | null) => {
+    if (d && typeof d.dispose === 'function') {
+      disposers.push(() => d.dispose())
+    }
   }
 
-  const styleCache = ref<{
-    charWidth: number
-    lineHeight: number
-    paddingLeft: number
-    paddingTop: number
-  } | null>(null)
+  // === 性能优化 ===
+  let resizeTimer: number | null = null
+
+  const MAX_SELECTION_LENGTH = 4096
+
+  const syncSelection = () => {
+    try {
+      const selectedText = terminal.value?.getSelection()
+
+      if (!selectedText || !selectedText.trim()) {
+        terminalSelection.clearSelection()
+        return
+      }
+
+      const truncatedText =
+        selectedText.length > MAX_SELECTION_LENGTH ? `${selectedText.slice(0, MAX_SELECTION_LENGTH)}...` : selectedText
+      const selection = terminal.value?.getSelectionPosition()
+      const startLine = selection ? selection.start.y + 1 : 1
+      const endLine = selection ? selection.end.y + 1 : undefined
+
+      terminalSelection.setSelectedText(truncatedText, startLine, endLine, terminalEnv.workingDirectory)
+    } catch (error) {
+      console.warn('Selection processing error:', error)
+      terminalSelection.clearSelection()
+    }
+  }
 
   // Shell Integration 设置
   const shellIntegration = useShellIntegration({
@@ -154,12 +183,12 @@
         console.warn('Unicode11 addon failed to load.', e)
       }
 
-      // 尝试启用 WebGL 渲染器以减少闪烁并提升性能，若不支持则自动回退
+      // 使用 Canvas 渲染器提升性能
       try {
-        const webglAddon = new WebglAddon()
-        terminal.value.loadAddon(webglAddon)
+        const canvasAddon = new CanvasAddon()
+        terminal.value.loadAddon(canvasAddon)
       } catch (e) {
-        console.warn('WebGL addon failed to load, falling back to default renderer.', e)
+        console.warn('Canvas addon failed to load, falling back to default renderer.', e)
       }
 
       fitAddon.value = new FitAddon() // 创建自适应大小插件实例
@@ -188,7 +217,7 @@
         console.warn('Ligatures addon failed to load.', e)
       }
 
-      // 加载插件与 open 之后，重新应用主题并强制刷新以确保 WebGL 下颜色正确
+      // 加载插件与 open 之后，重新应用主题并强制刷新以确保颜色正确
       try {
         terminal.value.options.theme = xtermTheme
         if (terminal.value.rows > 0) {
@@ -198,40 +227,32 @@
         // ignore
       }
 
-      terminal.value.onResize(({ rows, cols }) => emit('resize', rows, cols)) // 大小变化
+      trackDisposable(terminal.value.onResize(({ rows, cols }) => emit('resize', rows, cols))) // 大小变化
 
-      terminal.value.onData(data => {
-        emit('input', data)
-        updateInputLine(data)
-        updateTerminalCursorPosition()
-      })
+      trackDisposable(
+        terminal.value.onData(data => {
+          emit('input', data)
+          updateInputLine(data)
+          updateTerminalCursorPosition()
+        })
+      )
 
-      keyListener = terminal.value.onKey(e => handleKeyDown(e.domEvent))
+      trackDisposable(terminal.value.onKey(e => handleKeyDown(e.domEvent)))
 
-      const viewportElement = terminalRef.value.querySelector('.xterm-viewport')
-      if (viewportElement) {
-        viewportElement.addEventListener('scroll', updateTerminalCursorPosition)
-      }
+      trackDisposable(terminal.value.onCursorMove(updateTerminalCursorPosition))
+      // 移除 onScroll 事件监听，减少滚动时的性能开销
 
-      terminal.value.onCursorMove(updateTerminalCursorPosition)
-      terminal.value.onScroll(updateTerminalCursorPosition)
+      trackDisposable(terminal.value.onSelectionChange(syncSelection))
 
-      terminal.value.onSelectionChange(() => {
-        const selectedText = terminal.value?.getSelection()
-
-        if (!selectedText?.trim()) {
-          terminalSelection.clearSelection()
-          return
-        }
-
-        const selection = terminal.value?.getSelectionPosition()
-        const startLine = selection ? selection.start.y + 1 : 1 // xterm行号从0开始
-        const endLine = selection ? selection.end.y + 1 : undefined
-
-        terminalSelection.setSelectedText(selectedText, startLine, endLine, terminalEnv.workingDirectory)
-      })
-
+      // 初始尺寸适配
       resizeTerminal()
+      // 使用 ResizeObserver 监听容器尺寸变化，自动适配
+      if (typeof ResizeObserver !== 'undefined' && terminalRef.value) {
+        resizeObserver = new ResizeObserver(() => {
+          resizeTerminal()
+        })
+        resizeObserver.observe(terminalRef.value)
+      }
       focusTerminal()
     } catch {
       if (!hasDisposed && terminal.value) {
@@ -275,15 +296,9 @@
   watch(
     () => themeStore.currentTheme,
     newTheme => {
-      if (timers.themeUpdate) {
-        clearTimeout(timers.themeUpdate)
-      }
-
-      timers.themeUpdate = window.setTimeout(() => {
-        updateTerminalTheme(newTheme)
-      }, 16) // 16ms 防抖，与输出刷新频率保持一致
+      updateTerminalTheme(newTheme)
     },
-    { immediate: true } // 移除深度监听，只在主题对象引用变化时更新
+    { immediate: true }
   )
 
   // === 事件处理器 ===
@@ -391,6 +406,10 @@
     }
   }
 
+  const handleOpenTerminalSearchEvent = () => {
+    handleOpenTerminalSearch(props.isActive, searchAddon.value)
+  }
+
   /**
    * 聚焦终端
    * 使终端获得焦点，允许用户输入
@@ -412,14 +431,13 @@
   const resizeTerminal = () => {
     try {
       if (terminal.value && fitAddon.value && terminalRef.value) {
-        if (timers.resize) {
-          clearTimeout(timers.resize)
+        if (resizeTimer) {
+          clearTimeout(resizeTimer)
         }
 
-        timers.resize = window.setTimeout(() => {
+        resizeTimer = window.setTimeout(() => {
           try {
             fitAddon.value?.fit()
-            styleCache.value = null
           } catch {
             // ignore
           }
@@ -432,12 +450,13 @@
 
   /**
    * 更新终端光标位置
-   * 使用更精确的方法计算光标在屏幕上的坐标位置
    */
   const updateTerminalCursorPosition = () => {
-    try {
-      if (!terminal.value || !terminalRef.value) return
+    if (!props.isActive || !terminal.value || !terminalRef.value) {
+      return
+    }
 
+    try {
       const buffer = terminal.value.buffer.active
 
       const cursorElement = terminalRef.value.querySelector('.xterm-cursor')
@@ -450,6 +469,7 @@
         return
       }
 
+      // 后备方案：手动计算光标位置
       const xtermScreen = terminalRef.value.querySelector('.xterm-screen')
       if (!xtermScreen) return
 
@@ -522,9 +542,6 @@
   }
 
   // === Event Handlers for Terminal ===
-  const handleOutput = (data: string) => {
-    handleTerminalOutput(terminal.value, data, shellIntegration.processTerminalOutput)
-  }
 
   // === Lifecycle ===
   onMounted(() => {
@@ -545,25 +562,29 @@
       }
 
       if (terminalRef.value) {
-        terminalRef.value.addEventListener('accept-completion', handleAcceptCompletionShortcut)
-        terminalRef.value.addEventListener('clear-terminal', handleClearTerminal)
+        addDomListener(terminalRef.value, 'accept-completion', handleAcceptCompletionShortcut)
+        addDomListener(terminalRef.value, 'clear-terminal', handleClearTerminal)
       }
 
-      document.addEventListener('font-size-change', handleFontSizeChange)
+      addDomListener(document, 'font-size-change', handleFontSizeChange)
 
-      document.addEventListener('open-terminal-search', () =>
-        handleOpenTerminalSearch(props.isActive, searchAddon.value)
-      )
+      addDomListener(document, 'open-terminal-search', handleOpenTerminalSearchEvent)
 
       await shellIntegration.initShellIntegration(terminal.value)
 
-      // Subscribe to terminal output via Tauri Channel (binary streaming)
+      // 通过 Tauri Channel 订阅终端输出（二进制流）
       if (props.backendId != null) {
         try {
-          channelSub = terminalChannelApi.subscribe(props.backendId, text => {
-            handleOutput(text)
-            // 同时分发给已注册的回调（如 ShellTool）
-            terminalStore.dispatchOutputForBackendId(props.backendId, text)
+          const paneId = props.backendId
+          channelSub = terminalChannelApi.subscribeBinary(paneId, bytes => {
+            // 最小化解码：用于 Shell 集成与 Store 分发
+            const text = binaryDecoder.decode(bytes, { stream: true })
+            if (text) {
+              shellIntegration.processTerminalOutput(text)
+              terminalStore.dispatchOutputForBackendId(paneId, text)
+            }
+            // 高吞吐渲染路径：直接写入 UTF-8 字节
+            handleTerminalOutputBinary(terminal.value, bytes)
           })
         } catch (e) {
           console.warn('Failed to subscribe terminal channel:', e)
@@ -576,6 +597,15 @@
     if (hasDisposed) return
     hasDisposed = true
 
+    // 刷新解码器尾部残留，避免丢字符
+    const remaining = binaryDecoder.decode()
+    if (remaining) {
+      shellIntegration.processTerminalOutput(remaining)
+      if (props.backendId != null) {
+        terminalStore.dispatchOutputForBackendId(props.backendId, remaining)
+      }
+    }
+
     if (terminalRef.value) {
       terminalRef.value.removeEventListener('accept-completion', handleAcceptCompletionShortcut)
       terminalRef.value.removeEventListener('clear-terminal', handleClearTerminal)
@@ -583,14 +613,9 @@
 
     document.removeEventListener('font-size-change', handleFontSizeChange)
 
-    document.removeEventListener('open-terminal-search', () =>
-      handleOpenTerminalSearch(props.isActive, searchAddon.value)
-    )
+    document.removeEventListener('open-terminal-search', handleOpenTerminalSearchEvent)
 
-    if (timers.resize) clearTimeout(timers.resize)
-    if (timers.themeUpdate) clearTimeout(timers.themeUpdate)
-
-    cleanupOutput()
+    if (resizeTimer) clearTimeout(resizeTimer)
 
     // 防止组件卸载后仍触发Shell Integration的异步调用
     try {
@@ -620,11 +645,6 @@
       keyListener = null
     }
 
-    const viewportElement = terminalRef.value?.querySelector('.xterm-viewport')
-    if (viewportElement) {
-      viewportElement.removeEventListener('scroll', updateTerminalCursorPosition)
-    }
-
     if (terminal.value) {
       try {
         terminal.value.dispose()
@@ -634,8 +654,13 @@
       terminal.value = null
     }
 
+    if (resizeObserver && terminalRef.value) {
+      resizeObserver.unobserve(terminalRef.value)
+      resizeObserver.disconnect()
+      resizeObserver = null
+    }
+
     fitAddon.value = null
-    styleCache.value = null
   })
 
   // === Watchers ===
@@ -665,11 +690,24 @@
             channelSub = null
           })
       }
+      // 切换前刷新解码器尾部，避免丢字符
+      const remaining = binaryDecoder.decode()
+      if (remaining) {
+        shellIntegration.processTerminalOutput(remaining)
+        if (typeof newId === 'number') {
+          terminalStore.dispatchOutputForBackendId(newId, remaining)
+        }
+      }
       // subscribe new
       if (newId != null) {
         try {
-          channelSub = terminalChannelApi.subscribe(newId, text => {
-            handleOutput(text)
+          channelSub = terminalChannelApi.subscribeBinary(newId, bytes => {
+            const text = binaryDecoder.decode(bytes, { stream: true })
+            if (text) {
+              shellIntegration.processTerminalOutput(text)
+              terminalStore.dispatchOutputForBackendId(newId, text)
+            }
+            handleTerminalOutputBinary(terminal.value, bytes)
           })
         } catch (e) {
           console.warn('Failed to subscribe terminal channel:', e)
@@ -691,7 +729,6 @@
     height: 100%;
     width: 100%;
     padding: 10px 10px 0 10px;
-    contain: layout style;
   }
 
   .terminal-container {
@@ -707,6 +744,9 @@
 
   .terminal-container :global(.xterm .xterm-viewport) {
     height: 100% !important;
+    /* 优化滚动性能 */
+    overscroll-behavior: contain;
+    scroll-behavior: auto;
   }
 
   :global(.xterm-link-layer a) {

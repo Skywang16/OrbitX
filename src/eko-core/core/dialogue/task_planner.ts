@@ -2,6 +2,7 @@ import { JSONSchema7 } from '../../types'
 import { Eko } from '../eko'
 import { EkoDialogue } from '../dialogue'
 import { DialogueParams, DialogueTool, ToolResult } from '../../types'
+import { Planner } from '../plan'
 
 export const TOOL_NAME = 'taskPlanner'
 
@@ -43,7 +44,13 @@ export default class TaskPlannerTool implements DialogueTool {
       if (eko) {
         // modify the old action plan
         const task = await eko.modify(oldTaskId, taskDescription)
-        const taskPlan = task.xml
+        const context = eko.getTask(oldTaskId)
+        const planner = context ? new Planner(context) : null
+        const plannedTask = planner ? await planner.plan(taskDescription) : task
+        const taskPlan = plannedTask.xml
+        if (context) {
+          context.task = plannedTask
+        }
         return {
           content: [
             {
@@ -66,8 +73,14 @@ export default class TaskPlannerTool implements DialogueTool {
     // 将 Map<string, unknown> 转换为 Record<string, unknown> 满足类型约束
     const globalContext = Object.fromEntries(this.ekoDialogue.getGlobalContext()) as Record<string, unknown>
     const task = await eko.generate(taskDescription, taskId, globalContext)
+    const context = eko.getTask(taskId)
+    const planner = context ? new Planner(context) : null
+    const plannedTask = planner ? await planner.plan(taskDescription) : task
+    if (context && planner) {
+      context.task = plannedTask
+    }
     this.ekoDialogue.addEko(taskId, eko)
-    const taskPlan = task.xml
+    const taskPlan = plannedTask.xml
     return {
       content: [
         {

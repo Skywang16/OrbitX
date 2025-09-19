@@ -208,6 +208,11 @@ Notes:
     // 预览模式：仅返回统计与命中行信息
     const matchedLines = computeMatchLineNumbers(target, pattern, hasRange ? targetStart + 1 : 1)
 
+    // 为前端diff显示准备old和new内容
+    const firstMatch = pattern.exec(target)
+    const oldContent = firstMatch ? firstMatch[0] : (search as string)
+    const newContent = replace as string
+
     if (previewOnly) {
       const message = `Preview: ${matchCount} replacement(s) will be made in '${path}'.
 Lines affected (first 50): ${matchedLines.slice(0, 50).join(', ')}`
@@ -227,6 +232,8 @@ Lines affected (first 50): ${matchedLines.slice(0, 50).join(', ')}`
           startLine: startLine ?? null,
           endLine: endLine ?? null,
           previewOnly: true,
+          old: oldContent,
+          new: newContent,
         },
       }
     }
@@ -257,6 +264,8 @@ Status: ${matchCount} replacement(s) applied.`
         startLine: startLine ?? null,
         endLine: endLine ?? null,
         previewOnly: false,
+        old: oldContent,
+        new: newContent,
       },
     }
   }

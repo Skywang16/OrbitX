@@ -63,7 +63,7 @@ export class ShellTool extends ModifiableTool {
 
     try {
       // 使用事件驱动的方式等待命令完成
-      const result = await this.executeCommandWithCallback(targetTerminalId, command, 30000)
+      const result = await this.executeCommandWithCallback(targetTerminalId, command, 120000)
       return {
         content: [
           {

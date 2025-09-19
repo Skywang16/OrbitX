@@ -91,7 +91,7 @@ async function doTodoListManager(
       ],
     })
     const result = await callAgentLLM(agentContext, rlm, newMessages, newTools, true, todoListManager.name)
-    const toolCall = result.find(s => 'id' in s && 'name' in s) as NativeLLMToolCall
+    const toolCall = result.toolCalls[0]
     if (!toolCall) {
       throw new Error('No tool call found in result')
     }

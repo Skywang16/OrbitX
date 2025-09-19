@@ -128,6 +128,7 @@
     "edit": "Edit",
     "delete": "Delete",
     "delete_confirm": "Delete this model?",
+    "delete_description": "This action cannot be undone. Please confirm.",
     "delete_confirm_text": "Confirm Delete",
     "cancel": "Cancel",
     "save": "Save",

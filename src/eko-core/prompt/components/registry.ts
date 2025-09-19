@@ -10,6 +10,7 @@ import * as toolComponents from './tools'
 import * as taskComponents from './task'
 import * as planningComponents from './planning'
 import * as dialogueComponents from './dialogue'
+import * as workspaceComponents from './workspace'
 
 /**
  * 全局组件注册表
@@ -46,6 +47,8 @@ class PromptComponentRegistry {
       ...Object.values(planningComponents),
       // 对话组件
       ...Object.values(dialogueComponents),
+      // 工作区组件
+      ...Object.values(workspaceComponents),
     ])
 
     this.loaded = true

@@ -96,7 +96,7 @@ export interface EkoConfigOptions {
  * 获取完整的Eko配置
  */
 export const getEkoConfig = async (options: EkoConfigOptions = {}) => {
-  const { debug = false, maxRetries = 3, timeout = 30000, selectedModelId } = options
+  const { debug = false, maxRetries = 3, timeout = 120000, selectedModelId } = options
 
   try {
     // 获取LLM配置，传递选中的模型ID

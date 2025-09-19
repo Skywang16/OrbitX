@@ -2,6 +2,8 @@ type GlobalConfig = {
   name: string // product name
   platform: 'windows' | 'mac' | 'linux'
   maxReactNum: number
+  maxReactIdleRounds: number
+  maxReactErrorStreak: number
   maxTokens: number
   maxRetryNum: number
 
@@ -20,6 +22,8 @@ const config: GlobalConfig = {
   name: 'OrbitX',
   platform: 'mac',
   maxReactNum: 500,
+  maxReactIdleRounds: 5,
+  maxReactErrorStreak: 4,
   maxTokens: 16000,
   maxRetryNum: 3,
 

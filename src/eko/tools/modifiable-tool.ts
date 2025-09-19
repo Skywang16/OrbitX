@@ -4,6 +4,7 @@
 
 import type { AgentContext } from '@/eko-core'
 import type { Tool, ToolResult } from '@/eko-core/types'
+import { call_timeout } from '@/eko-core/common/utils'
 
 import { ToolError, formatToolError } from './tool-error'
 // 与 Eko Tool 的参数类型保持一致，避免 JSON Schema 类型不兼容
@@ -86,37 +87,46 @@ export abstract class ModifiableTool implements Tool {
    * 工具执行入口
    */
   public async execute(params: unknown, agentContext: AgentContext): Promise<ToolResult> {
-    try {
-      const parameters = params as Record<string, unknown>
+    // 使用统一的2分钟超时机制包装整个执行过程
+    return await call_timeout(
+      async () => {
+        try {
+          const parameters = params as Record<string, unknown>
 
-      // 验证参数
-      this.validateParameters(parameters)
+          // 验证参数
+          this.validateParameters(parameters)
 
-      const context: ToolExecutionContext = {
-        agentContext,
-        parameters,
-        toolName: this.name,
+          const context: ToolExecutionContext = {
+            agentContext,
+            parameters,
+            toolName: this.name,
+          }
+
+          // 执行前钩子
+          await this.beforeExecute(context)
+
+          // 执行具体逻辑
+          const result = await this.executeImpl(context)
+
+          // 执行后钩子
+          await this.afterExecute(context, result)
+
+          return result
+        } catch (error) {
+          const context: ToolExecutionContext = {
+            agentContext,
+            parameters: params as Record<string, unknown>,
+            toolName: this.name,
+          }
+
+          return this.onError(context, error)
+        }
+      },
+      120000, // 2分钟超时
+      (errorMessage: string) => {
+        console.error(`工具 ${this.name} 执行超时: ${errorMessage}`)
       }
-
-      // 执行前钩子
-      await this.beforeExecute(context)
-
-      // 执行具体逻辑
-      const result = await this.executeImpl(context)
-
-      // 执行后钩子
-      await this.afterExecute(context, result)
-
-      return result
-    } catch (error) {
-      const context: ToolExecutionContext = {
-        agentContext,
-        parameters: params as Record<string, unknown>,
-        toolName: this.name,
-      }
-
-      return this.onError(context, error)
-    }
+    )
   }
 }
 

@@ -25,6 +25,17 @@ export {
   RetryLanguageModel,
 }
 
+export { ReactRuntime } from './react'
+export type {
+  ReactRuntimeSnapshot,
+  ReactIteration,
+  ReactThought,
+  ReactAction,
+  ReactObservation,
+  ReactRuntimeConfig,
+  ReactPhase,
+} from './react'
+
 export { Agent, type AgentParams, ContextCompressorService } from './agent'
 
 export { HumanInteractTool, TaskNodeStatusTool, ForeachTaskTool, WatchTriggerTool } from './tools'

@@ -5,6 +5,7 @@ import ForeachTaskTool from './foreach_task'
 import HumanInteractTool from './human_interact'
 import TaskNodeStatusTool from './task_node_status'
 import WatchTriggerTool from './watch_trigger'
+import ReactPlannerTool from './react_planner'
 import { Tool, ToolResult } from '../types/tools.types'
 
 export class McpTool implements Tool {
@@ -29,4 +30,4 @@ export class McpTool implements Tool {
   }
 }
 
-export { ForeachTaskTool, HumanInteractTool, TaskNodeStatusTool, WatchTriggerTool }
+export { ForeachTaskTool, HumanInteractTool, TaskNodeStatusTool, WatchTriggerTool, ReactPlannerTool }

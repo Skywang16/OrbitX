@@ -14,40 +14,39 @@ import {
   NativeLLMToolCall,
   NativeLLMStreamChunk,
   FinishReason,
+  NativeLLMUsage,
 } from '../types'
 import { convertTools, getTool, convertToolResult } from '../llm/conversion-utils'
 
 // Export conversion utilities from llm module
 export { convertTools, getTool, convertToolResult }
 
-export function removeDuplicateToolUse(
-  results: Array<{ type: 'text'; text: string } | NativeLLMToolCall>
-): Array<{ type: 'text'; text: string } | NativeLLMToolCall> {
-  if (results.length <= 1) {
-    return results
-  }
+export interface AgentLLMCallResult {
+  rawText: string
+  thinkingText: string
+  responseText: string
+  toolCalls: NativeLLMToolCall[]
+  finishReason?: FinishReason
+  usage?: NativeLLMUsage
+}
 
-  const toolCalls = results.filter(r => 'id' in r) as NativeLLMToolCall[]
+export function removeDuplicateToolUse(toolCalls: NativeLLMToolCall[]): NativeLLMToolCall[] {
   if (toolCalls.length <= 1) {
-    return results
+    return toolCalls
   }
 
-  const _results: Array<{ type: 'text'; text: string } | NativeLLMToolCall> = []
-  const tool_uniques: string[] = []
+  const deduped: NativeLLMToolCall[] = []
+  const seen: string[] = []
 
-  for (const result of results) {
-    if ('id' in result) {
-      const key = result.name + JSON.stringify(result.arguments)
-      if (tool_uniques.indexOf(key) === -1) {
-        _results.push(result)
-        tool_uniques.push(key)
-      }
-    } else {
-      _results.push(result)
+  for (const toolCall of toolCalls) {
+    const key = `${toolCall.name}:${JSON.stringify(toolCall.arguments || {})}`
+    if (!seen.includes(key)) {
+      deduped.push(toolCall)
+      seen.push(key)
     }
   }
 
-  return _results
+  return deduped
 }
 
 export async function callAgentLLM(
@@ -60,7 +59,7 @@ export async function callAgentLLM(
   retryNum: number = 0,
   callback?: StreamCallback & HumanCallback,
   requestHandler?: (request: LLMRequest) => void
-): Promise<Array<{ type: 'text'; text: string } | NativeLLMToolCall>> {
+): Promise<AgentLLMCallResult> {
   await agentContext.context.checkAborted()
   if (messages.length >= config.compressThreshold && !noCompress) {
     await memory.compressAgentMessages(agentContext, rlm, messages, tools, callAgentLLM)
@@ -114,10 +113,17 @@ export async function callAgentLLM(
   }
 
   let streamText = ''
-  let textStreamId = uuidv4()
-  let textStreamDone = false
   const toolCalls: NativeLLMToolCall[] = []
   const reader = result.stream.getReader()
+  let finishReason: FinishReason | undefined
+  let finishUsage: NativeLLMUsage | undefined
+  // Use stable node and stream IDs for streaming updates
+  const textNodeId = agentContext.context.currentNodeId || generateNodeId(context.taskId, 'execution')
+  const textStreamId = uuidv4()
+  const thinkingStreamId = uuidv4()
+  let sawThinkingTag = false
+  let lastThinkingSent = ''
+  let lastVisibleSent = ''
 
   try {
     while (true) {
@@ -133,18 +139,67 @@ export async function callAgentLLM(
           // Handle text content
           if (chunk.content) {
             streamText += chunk.content
-            await streamCallback.onMessage(
-              {
-                taskId: context.taskId,
-                agentName: agentContext.agent.Name,
-                nodeId: agentContext.context.taskId,
-                type: 'text',
-                streamId: textStreamId,
-                streamDone: false,
-                text: streamText,
-              },
-              agentContext
-            )
+            // Detect whether thinking tag appears in the stream
+            if (!sawThinkingTag && streamText.includes('<thinking')) {
+              sawThinkingTag = true
+            }
+
+            // Stream incremental thinking/text updates using stable streamIds
+            const { thinking, visible, hasOpenThinking } = splitThinkingSections(streamText)
+            const thinkingTrim = thinking.trim()
+            const canSendVisible =
+              !!visible && !visible.includes('<thinking') && !hasOpenThinking && visible.trim().length > 0
+
+            if (sawThinkingTag) {
+              // Maintain order: send thinking first; if no thinking content yet, hold text updates
+              if (thinkingTrim.length > 0 && thinkingTrim !== lastThinkingSent) {
+                lastThinkingSent = thinkingTrim
+                await streamCallback.onMessage(
+                  {
+                    taskId: context.taskId,
+                    agentName: agentContext.agent.Name,
+                    nodeId: textNodeId,
+                    type: 'thinking',
+                    streamId: thinkingStreamId,
+                    streamDone: false,
+                    text: thinkingTrim,
+                  },
+                  agentContext
+                )
+              }
+              if (canSendVisible && visible !== lastVisibleSent && lastThinkingSent.trim().length > 0) {
+                lastVisibleSent = visible
+                await streamCallback.onMessage(
+                  {
+                    taskId: context.taskId,
+                    agentName: agentContext.agent.Name,
+                    nodeId: textNodeId,
+                    type: 'text',
+                    streamId: textStreamId,
+                    streamDone: false,
+                    text: visible,
+                  },
+                  agentContext
+                )
+              }
+            } else {
+              // No thinking tag seen: stream text normally
+              if (canSendVisible && visible !== lastVisibleSent) {
+                lastVisibleSent = visible
+                await streamCallback.onMessage(
+                  {
+                    taskId: context.taskId,
+                    agentName: agentContext.agent.Name,
+                    nodeId: textNodeId,
+                    type: 'text',
+                    streamId: textStreamId,
+                    streamDone: false,
+                    text: visible,
+                  },
+                  agentContext
+                )
+              }
+            }
           }
 
           // Handle tool calls
@@ -156,7 +211,7 @@ export async function callAgentLLM(
                 {
                   taskId: context.taskId,
                   agentName: agentContext.agent.Name,
-                  nodeId: agentContext.context.taskId,
+                  nodeId: textNodeId,
                   type: 'tool_use',
                   toolId: toolCall.id,
                   toolName: toolCall.name,
@@ -169,43 +224,8 @@ export async function callAgentLLM(
           break
         }
         case 'finish': {
-          if (!textStreamDone && streamText) {
-            textStreamDone = true
-            const textNodeId = agentContext.context.currentNodeId || generateNodeId(context.taskId, 'execution')
-            await streamCallback.onMessage(
-              {
-                taskId: context.taskId,
-                agentName: agentContext.agent.Name,
-                nodeId: textNodeId,
-                type: 'text',
-                streamId: textStreamId,
-                streamDone: true,
-                text: streamText,
-              },
-              agentContext
-            )
-          }
-
-          await streamCallback.onMessage(
-            {
-              taskId: context.taskId,
-              agentName: agentContext.agent.Name,
-              nodeId: agentContext.context.taskId,
-              type: 'finish',
-              finishReason: (chunk.finishReason as FinishReason) || 'stop',
-              usage: chunk.usage || {
-                promptTokens: 0,
-                completionTokens: 0,
-                totalTokens: 0,
-              },
-            },
-            agentContext
-          )
-
-          if (chunk.finishReason === 'length' && messages.length >= 5 && !noCompress && retryNum < config.maxRetryNum) {
-            await memory.compressAgentMessages(agentContext, rlm, messages, tools, callAgentLLM)
-            return callAgentLLM(agentContext, rlm, messages, tools, noCompress, toolChoice, ++retryNum, streamCallback)
-          }
+          finishReason = (chunk.finishReason as FinishReason) || 'stop'
+          finishUsage = chunk.usage
           break
         }
         case 'error': {
@@ -215,7 +235,7 @@ export async function callAgentLLM(
             {
               taskId: context.taskId,
               agentName: agentContext.agent.Name,
-              nodeId: agentContext.context.taskId,
+              nodeId: textNodeId,
               type: 'error',
               error: errorMsg,
             },
@@ -242,17 +262,77 @@ export async function callAgentLLM(
     context.currentStepControllers.delete(stepController)
   }
 
+  // Final thinking/text processing: close both streams using the latest split
+  const { thinking: finalThinking, visible: finalVisible } = splitThinkingSections(streamText)
+  const finalThought = finalThinking.trim()
+  const finalText = finalVisible.trim()
+  if (sawThinkingTag && (finalThought || lastThinkingSent)) {
+    await streamCallback.onMessage(
+      {
+        taskId: context.taskId,
+        agentName: agentContext.agent.Name,
+        nodeId: textNodeId,
+        type: 'thinking',
+        streamId: thinkingStreamId,
+        streamDone: true,
+        text: finalThought || lastThinkingSent,
+      },
+      agentContext
+    )
+  }
+  if (finalText) {
+    await streamCallback.onMessage(
+      {
+        taskId: context.taskId,
+        agentName: agentContext.agent.Name,
+        nodeId: textNodeId,
+        type: 'text',
+        streamId: textStreamId,
+        streamDone: true,
+        text: finalText,
+      },
+      agentContext
+    )
+  }
+
+  if (finishReason) {
+    const usage = finishUsage || {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+    }
+    await streamCallback.onMessage(
+      {
+        taskId: context.taskId,
+        agentName: agentContext.agent.Name,
+        nodeId: textNodeId,
+        type: 'finish',
+        finishReason,
+        usage,
+      },
+      agentContext
+    )
+
+    if (finishReason === 'length' && messages.length >= 5 && !noCompress && retryNum < config.maxRetryNum) {
+      await memory.compressAgentMessages(agentContext, rlm, messages, tools, callAgentLLM)
+      return callAgentLLM(agentContext, rlm, messages, tools, noCompress, toolChoice, ++retryNum, streamCallback)
+    }
+  }
+
   // Store result in chain for single agent mode
   agentContext.context.chain.planResult = streamText
 
-  // Return results in native format
-  const results: Array<{ type: 'text'; text: string } | NativeLLMToolCall> = []
-  if (streamText) {
-    results.push({ type: 'text', text: streamText })
-  }
-  results.push(...toolCalls)
+  const dedupedToolCalls = removeDuplicateToolUse(toolCalls)
 
-  return results
+  const { thinking: retThinking, visible: retVisible } = splitThinkingSections(streamText)
+  return {
+    rawText: streamText,
+    thinkingText: retThinking.trim(),
+    responseText: retVisible.trim(),
+    toolCalls: dedupedToolCalls,
+    finishReason,
+    usage: finishUsage,
+  }
 }
 
 function appendUserConversation(agentContext: AgentContext, messages: NativeLLMMessage[]) {
@@ -268,4 +348,51 @@ function appendUserConversation(agentContext: AgentContext, messages: NativeLLMM
       content: prompt,
     })
   }
+}
+
+// Streaming-aware thinking/text splitter
+// - thinking: all closed <thinking>...</thinking> blocks + any open partial after the last <thinking>
+// - visible: raw text with closed blocks removed and any trailing open or incomplete <thinking left out
+// - hasOpenThinking: whether the stream is currently inside an open or incomplete <thinking> block
+function splitThinkingSections(raw: string): { thinking: string; visible: string; hasOpenThinking: boolean } {
+  if (!raw) {
+    return { thinking: '', visible: '', hasOpenThinking: false }
+  }
+
+  // Collect closed thinking blocks
+  const closedRegex = /<thinking>([\s\S]*?)<\/thinking>/gi
+  const thinkingParts: string[] = []
+  let m: RegExpExecArray | null
+  while ((m = closedRegex.exec(raw)) !== null) {
+    thinkingParts.push(m[1])
+  }
+
+  // Remove closed blocks for further processing
+  let working = raw.replace(closedRegex, '')
+
+  // Detect open or incomplete thinking markers on working
+  let hasOpenThinking = false
+  const lastThinkingIdx = working.lastIndexOf('<thinking')
+  let partial = ''
+  let visible = working
+
+  if (lastThinkingIdx !== -1) {
+    const endBracket = working.indexOf('>', lastThinkingIdx)
+    if (endBracket === -1) {
+      // Incomplete tag, treat as open-thinking-in-progress; drop it from visible
+      hasOpenThinking = true
+      visible = working.substring(0, lastThinkingIdx)
+    } else {
+      // Complete <thinking> without a matching close in 'working' (since closed ones were removed)
+      hasOpenThinking = true
+      const lastOpenIdx = working.lastIndexOf('<thinking>')
+      if (lastOpenIdx !== -1) {
+        visible = working.substring(0, lastOpenIdx)
+        partial = working.substring(lastOpenIdx + '<thinking>'.length)
+      }
+    }
+  }
+
+  const thinkingAll = [thinkingParts.join('\n'), partial].filter(Boolean).join('\n').trim()
+  return { thinking: thinkingAll, visible, hasOpenThinking }
 }

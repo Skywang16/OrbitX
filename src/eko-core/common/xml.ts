@@ -72,13 +72,26 @@ export function resetTaskXml(task: Task) {
 
 export function buildAgentRootXml(
   agentXml: string,
-  _taskPrompt: string,
+  taskPrompt: string,
   nodeCallback?: (nodeId: string, node: Element) => void
 ): string {
   try {
     const parser = new DOMParser()
     const doc = parser.parseFromString(`<root>${agentXml}</root>`, 'text/xml')
     const root = doc.documentElement
+
+    // Insert user's instruction to ensure LLM gets the actual task context
+    if (taskPrompt && taskPrompt.trim().length > 0) {
+      const instructionEl = doc.createElement('instruction')
+      // Use textContent to avoid breaking XML with special chars
+      instructionEl.textContent = taskPrompt
+      // Prepend instruction before nodes for visibility
+      if (root.firstChild) {
+        root.insertBefore(instructionEl, root.firstChild)
+      } else {
+        root.appendChild(instructionEl)
+      }
+    }
 
     // Apply node callback if provided
     if (nodeCallback) {

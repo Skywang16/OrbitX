@@ -76,7 +76,7 @@ export class WebFetchTool extends ModifiableTool {
       url: params.url,
       method: 'GET',
       headers: {},
-      timeout: 10000,
+      timeout: 120000,
     })
 
     return response
@@ -155,7 +155,7 @@ export class WebFetchTool extends ModifiableTool {
 
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
+      const timeoutId = setTimeout(() => controller.abort(), 120000)
 
       const response = await fetch(jinaUrl, {
         method: 'GET',

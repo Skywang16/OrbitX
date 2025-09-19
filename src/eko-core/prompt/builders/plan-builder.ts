@@ -54,6 +54,7 @@ Your task is to understand the user's requirements and plan the execution steps.
 - **Sequential execution**: Break down complex tasks into logical sequential steps only when necessary.
 - **Tool utilization**: Make use of available tools and capabilities.
 - **Efficient planning**: Focus on the most direct path to complete the user's task.
+- **Avoid redundant discovery**: If the user's message already contains a workspace snapshot (e.g., current working directory and a file list), do not add a step to list files for the same path. Only plan directory listings when exploring new subpaths, verifying changes, or when the scope was not included in the snapshot.
 
 ## Agent Information
 {agent}

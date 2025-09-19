@@ -2,6 +2,9 @@ import type { Agent } from '../agent'
 import { sleep } from '../common/utils'
 import Chain from './chain'
 import { EkoConfig, NativeLLMMessage, Task } from '../types'
+import config from '../config'
+import ReactRuntime from '../react/runtime'
+import { ReactRuntimeConfig } from '../react/types'
 
 /**
  * 生成节点ID
@@ -32,6 +35,7 @@ export default class Context {
   currentNodeId?: string // 当前执行的节点ID
   private pauseStatus: 0 | 1 | 2 = 0
   readonly currentStepControllers: Set<AbortController> = new Set()
+  readonly reactRuntime: ReactRuntime
 
   constructor(taskId: string, config: EkoConfig, agent: Agent, chain: Chain) {
     this.taskId = taskId
@@ -39,6 +43,7 @@ export default class Context {
     this.agent = agent
     this.chain = chain
     this.controller = new AbortController()
+    this.reactRuntime = new ReactRuntime(this.createReactRuntimeConfig())
   }
 
   async checkAborted(noCheckPause?: boolean): Promise<void> {
@@ -82,6 +87,14 @@ export default class Context {
         c.abort('Pause')
       })
       this.currentStepControllers.clear()
+    }
+  }
+
+  private createReactRuntimeConfig(): ReactRuntimeConfig {
+    return {
+      maxIterations: config.maxReactNum,
+      maxIdleRounds: config.maxReactIdleRounds,
+      maxConsecutiveErrors: config.maxReactErrorStreak,
     }
   }
 }

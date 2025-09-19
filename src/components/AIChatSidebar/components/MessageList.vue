@@ -91,6 +91,7 @@
     padding: var(--spacing-md);
     display: flex;
     flex-direction: column;
+    scrollbar-gutter: stable;
   }
 
   /* 自定义滚动条样式 */

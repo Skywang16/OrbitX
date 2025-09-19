@@ -72,7 +72,8 @@ Notes:
     } else {
       const isDir = await filesystemApi.isDirectory(path)
       if (isDir) throw new ValidationError(`Path ${path} is a directory, cannot insert content`)
-      if (isBinaryFile(path)) throw new ValidationError(`File ${path} appears to be binary, text insertion not supported`)
+      if (isBinaryFile(path))
+        throw new ValidationError(`File ${path} appears to be binary, text insertion not supported`)
 
       try {
         fileContent = await readTextFile(path)

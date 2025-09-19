@@ -1,4 +1,5 @@
 import Log from '../common/log'
+import { uuidv4 } from '../common/utils'
 import Context from './context'
 import { RetryLanguageModel } from '../llm'
 import { parseTask } from '../common/xml'
@@ -111,12 +112,23 @@ export class Planner {
         Log.info('Planner result: \n' + streamText)
       }
     }
+    // Split final output into XML part and any trailing markdown/text outside </root>
+    const rootClose = '</root>'
+    let xmlText = streamText
+    let trailingText = ''
+    const closeIdx = streamText.lastIndexOf(rootClose)
+    if (closeIdx !== -1) {
+      xmlText = streamText.substring(0, closeIdx + rootClose.length)
+      trailingText = streamText.substring(closeIdx + rootClose.length)
+    }
+
     if (saveHistory) {
       const chain = this.context.chain
       chain.planRequest = request
       chain.planResult = streamText
     }
-    let task = parseTask(this.taskId, streamText, true) as Task
+    // Keep task in 'init' state after planning. Execution phase will update it to 'running'.
+    let task = parseTask(this.taskId, xmlText, false) as Task
     if (this.callback) {
       await this.callback.onMessage({
         taskId: this.taskId,
@@ -125,6 +137,20 @@ export class Planner {
         streamDone: true,
         task: task,
       })
+    }
+    // If the model produced additional markdown/content after the XML root, send it as a text step for proper rendering
+    if (this.callback) {
+      const extra = (trailingText || '').trim()
+      if (extra.length > 0) {
+        await this.callback.onMessage({
+          taskId: this.taskId,
+          agentName: 'Planer',
+          type: 'text',
+          streamId: uuidv4(),
+          streamDone: true,
+          text: extra,
+        })
+      }
     }
     if (task.taskPrompt) {
       task.taskPrompt += '\n' + taskPrompt.trim()

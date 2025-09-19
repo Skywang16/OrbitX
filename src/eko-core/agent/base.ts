@@ -5,7 +5,7 @@ import { RetryLanguageModel } from '../llm'
 import { ToolWrapper } from '../tools/wrapper'
 import { ToolChain } from '../core/chain'
 import Context, { AgentContext, generateNodeId } from '../core/context'
-import { ForeachTaskTool, McpTool, WatchTriggerTool } from '../tools'
+import { ForeachTaskTool, McpTool, WatchTriggerTool, ReactPlannerTool } from '../tools'
 import { mergeTools } from '../common/utils'
 import {
   Task,
@@ -21,10 +21,19 @@ import {
   NativeLLMMessagePart,
   NativeLLMToolCall,
 } from '../types'
-import { callAgentLLM, convertTools, getTool, convertToolResult, removeDuplicateToolUse } from './llm'
+import {
+  callAgentLLM,
+  convertTools,
+  getTool,
+  convertToolResult,
+  removeDuplicateToolUse,
+  AgentLLMCallResult,
+} from './llm'
 import { doTaskResultCheck } from '../tools/task_result_check'
+import { TOOL_NAME as task_node_status } from '../tools/task_node_status'
 import { getAgentSystemPrompt, getAgentUserPrompt } from '../prompt'
 import { doTodoListManager } from '../tools/todo_list_manager'
+import { ReactIteration } from '../react/types'
 
 export type AgentParams = {
   name: string
@@ -34,6 +43,12 @@ export type AgentParams = {
   mcpClient?: IMcpClient
   planDescription?: string
   requestHandler?: (request: LLMRequest) => void
+}
+
+type ReActIterationOutcome = {
+  finalText?: string
+  toolExecuted: boolean
+  hadError: boolean
 }
 
 export class Agent {
@@ -81,12 +96,13 @@ export class Agent {
     this.agentContext = agentContext
     const context = agentContext.context
     const task = context.task
+    const runtime = context.reactRuntime
 
-    // 设置执行阶段的nodeId
     context.currentNodeId = generateNodeId(context.taskId, 'execution')
-    const tools = [...this.tools, ...this.system_auto_tools(task)]
-    const systemPrompt = await this.buildSystemPrompt(agentContext, tools)
-    const userPrompt = await this.buildUserPrompt(agentContext, tools)
+    const staticTools = [...this.tools]
+    const baseTools = mergeTools(staticTools, this.system_auto_tools(task))
+    const systemPrompt = await this.buildSystemPrompt(agentContext, baseTools)
+    const userPrompt = await this.buildUserPrompt(agentContext, baseTools)
     const messages: NativeLLMMessage[] = [
       {
         role: 'system',
@@ -100,26 +116,37 @@ export class Agent {
     ]
     agentContext.messages = messages
     const rlm = new RetryLanguageModel(context.config.llms, this.llms)
-    let agentTools = tools
+    let agentTools = baseTools
+
     while (loopNum < maxReactNum) {
       await context.checkAborted()
+
+      if (runtime.shouldHalt()) {
+        throw new Error('ReAct loop halted by runtime guard')
+      }
+
+      const latestBaseTools = mergeTools(staticTools, this.system_auto_tools(context.task))
+      agentTools = latestBaseTools
+
       if (mcpClient) {
         const controlMcp = await this.controlMcpTools(agentContext, messages, loopNum)
         if (controlMcp.mcpTools) {
-          const mcpTools = await this.listTools(context, mcpClient, task, controlMcp.mcpParams)
+          const mcpTools = await this.listTools(context, mcpClient, context.task, controlMcp.mcpParams)
           const usedTools: Tool[] = extractUsedTool(messages, agentTools)
-          const _agentTools = mergeTools(tools, usedTools)
-          agentTools = mergeTools(_agentTools, mcpTools)
+          const mergedTools = mergeTools(latestBaseTools, mergeTools(usedTools, mcpTools))
+          agentTools = mergedTools
         }
       }
-      await this.handleMessages(agentContext, messages, tools)
-      const llm_tools = convertTools(agentTools)
 
-      const results = await callAgentLLM(
+      await this.handleMessages(agentContext, messages, latestBaseTools)
+      const llmTools = convertTools(agentTools)
+      const iteration = runtime.startIteration()
+
+      const llmOutput = await callAgentLLM(
         agentContext,
         rlm,
         messages,
-        llm_tools,
+        llmTools,
         false,
         undefined,
         0,
@@ -127,159 +154,224 @@ export class Agent {
         this.requestHandler
       )
 
-      // Force stop functionality removed with variable storage
-      const finalResult = await this.handleCallResult(agentContext, messages, agentTools, results)
+      if (llmOutput.rawText) {
+        const normalizedThought = llmOutput.thinkingText || llmOutput.rawText
+        runtime.recordThought(iteration, llmOutput.rawText, normalizedThought)
+      }
+
+      const outcome = await this.handleCallResult(agentContext, messages, agentTools, llmOutput, iteration)
       loopNum++
 
-      if (!finalResult) {
-        if (config.expertMode && loopNum % config.expertModeTodoLoopNum == 0) {
-          await doTodoListManager(agentContext, rlm, messages, llm_tools)
-        }
-        continue
-      }
-      if (config.expertMode && checkNum == 0) {
-        checkNum++
-        const { completionStatus } = await doTaskResultCheck(agentContext, rlm, messages, llm_tools)
-        if (completionStatus === 'incomplete') {
+      if (outcome.finalText) {
+        const finalText = outcome.finalText.trim()
+        if (!finalText) {
+          runtime.markIdleRound()
           continue
         }
+
+        if (config.expertMode && checkNum === 0) {
+          checkNum++
+          const { completionStatus } = await doTaskResultCheck(agentContext, rlm, messages, llmTools)
+          if (completionStatus === 'incomplete') {
+            runtime.markIdleRound()
+            continue
+          }
+        }
+
+        runtime.completeIteration(iteration, finalText, llmOutput.finishReason)
+        if (!llmOutput.finishReason) {
+          runtime.setStopReason('stop')
+        }
+        return finalText
       }
-      return finalResult
+
+      if (outcome.toolExecuted) {
+        if (config.expertMode && loopNum % config.expertModeTodoLoopNum === 0) {
+          await doTodoListManager(agentContext, rlm, messages, llmTools)
+        }
+
+        if (outcome.hadError && runtime.shouldHalt()) {
+          throw new Error('ReAct loop halted after repeated tool failures')
+        }
+
+        continue
+      }
+
+      runtime.markIdleRound()
     }
-    return 'Unfinished'
+
+    runtime.setStopReason('length')
+    return runtime.getSnapshot().finalResponse || 'Unfinished'
   }
 
   protected async handleCallResult(
     agentContext: AgentContext,
     messages: NativeLLMMessage[],
     agentTools: Tool[],
-    results: Array<{ type: 'text'; text: string } | NativeLLMToolCall>
-  ): Promise<string | null> {
-    let text: string | null = null
-    let context = agentContext.context
-    let toolResults: NativeLLMMessagePart[] = []
-    results = removeDuplicateToolUse(results)
-    if (results.length == 0) {
-      return null
+    llmOutput: AgentLLMCallResult,
+    iteration: ReactIteration
+  ): Promise<ReActIterationOutcome> {
+    const context = agentContext.context
+    const runtime = context.reactRuntime
+    const assistantContent: NativeLLMMessagePart[] = []
+    const toolResults: NativeLLMMessagePart[] = []
+    const toolCalls = removeDuplicateToolUse(llmOutput.toolCalls)
+
+    if (llmOutput.rawText) {
+      assistantContent.push({ type: 'text', text: llmOutput.rawText })
     }
 
-    // Separate text and tool calls
-    const textResults = results.filter(r => 'type' in r && r.type === 'text') as Array<{ type: 'text'; text: string }>
-    const toolCallResults = results.filter(r => 'id' in r) as NativeLLMToolCall[]
+    toolCalls.forEach(toolCall => {
+      assistantContent.push({
+        type: 'tool-call',
+        toolCallId: toolCall.id,
+        toolName: toolCall.name,
+        args: toolCall.arguments,
+      })
+    })
 
-    // Handle text results
-    if (textResults.length > 0) {
-      text = textResults.map(r => r.text).join('')
+    if (assistantContent.length > 0) {
+      messages.push({
+        role: 'assistant',
+        content: assistantContent,
+      })
     }
 
-    // Handle tool calls
-    for (let i = 0; i < toolCallResults.length; i++) {
-      let result = toolCallResults[i]
-      let toolResult: ToolResult
-      const nativeToolCall: NativeLLMToolCall = {
-        id: result.id,
-        name: result.name,
-        arguments: result.arguments,
+    if (toolCalls.length === 0) {
+      const finalText = llmOutput.responseText || llmOutput.rawText
+      return {
+        finalText: finalText || undefined,
+        toolExecuted: false,
+        hadError: false,
       }
-      let toolChain = new ToolChain(nativeToolCall, agentContext.context.chain.planRequest as LLMRequest)
+    }
+
+    if (toolCalls.length > 1) {
+      Log.warn('Multiple tool calls detected in a single ReAct iteration; executing sequentially.')
+    }
+
+    let hadError = false
+
+    for (const toolCall of toolCalls) {
+      const nativeToolCall: NativeLLMToolCall = {
+        id: toolCall.id,
+        name: toolCall.name,
+        arguments: toolCall.arguments,
+      }
+      const toolChain = new ToolChain(nativeToolCall, agentContext.context.chain.planRequest as LLMRequest)
       agentContext.context.chain.push(toolChain)
+      const args = toolCall.arguments || {}
+      toolChain.params = args
+      runtime.recordAction(iteration, toolCall.name, args)
+
+      let toolResult: ToolResult
       try {
-        let args = result.arguments || {}
-        toolChain.params = args
-        let tool = getTool(agentTools, result.name)
+        const tool = getTool(agentTools, toolCall.name)
         if (!tool) {
-          throw new Error(result.name + ' tool does not exist')
+          throw new Error(`${toolCall.name} tool does not exist`)
         }
 
-        // 打印工具输入参数
-        console.log(`[工具执行] ${result.name}`)
-        console.log('输入参数:', JSON.stringify(args, null, 2))
-
+        Log.warn(`[工具执行] ${toolCall.name}`)
+        try {
+          Log.warn('输入参数: ' + JSON.stringify(args, null, 2))
+        } catch (_e) {
+          Log.warn('输入参数: [unserializable]')
+        }
         toolResult = await tool.execute(args, agentContext, nativeToolCall)
+        // Persist task node status updates back to context
+        if (toolCall.name === task_node_status) {
+          try {
+            const firstPart = toolResult.content[0] as
+              | { type: 'text'; text: string }
+              | { type: 'image'; data: string; mimeType?: string }
+              | undefined
+            if (firstPart && firstPart.type === 'text' && agentContext.context.task) {
+              agentContext.context.task.xml = firstPart.text
+            }
+            // Update current node pointer to the next todo id if provided
+            const todoIdsRaw = (args as Record<string, unknown>)['todoIds']
+            const todoIds = Array.isArray(todoIdsRaw) ? todoIdsRaw : undefined
+            const nextId = todoIds && typeof todoIds[0] === 'string' ? (todoIds[0] as string) : undefined
+            if (typeof nextId === 'string' && nextId.startsWith('node-')) {
+              const idxStr = nextId.substring('node-'.length)
+              const idx = parseInt(idxStr, 10)
+              if (!Number.isNaN(idx)) {
+                agentContext.context.currentNodeId = generateNodeId(agentContext.context.taskId, 'execution', idx)
+              }
+            }
+          } catch (_e) {
+            // non-fatal; keep going
+          }
+        }
         toolChain.updateToolResult(toolResult)
 
-        // 打印工具输出结果
+        runtime.recordObservation(iteration, toolCall.name, toolResult)
+
         try {
-          console.log(`[工具输出] ${result.name}`)
-          console.log('输出结果:', JSON.stringify(toolResult, null, 2))
+          Log.warn(`[工具输出] ${toolCall.name}`)
+          Log.warn('输出结果: ' + JSON.stringify(toolResult, null, 2))
         } catch (_e) {
-          console.log('输出结果: [unserializable]')
+          Log.warn('输出结果: [unserializable]')
         }
 
-        // 统一到Result-based模式：检查 toolResult.isError
         if (toolResult.isError) {
           const errorText = toolResult.content[0]?.type === 'text' ? toolResult.content[0].text : 'Unknown error'
           agentContext.consecutiveErrorNum++
+          hadError = true
+          runtime.failIteration(iteration, `Tool ${toolCall.name} failed: ${errorText}`)
           if (agentContext.consecutiveErrorNum >= 5) {
-            throw new Error(`Tool ${result.name} failed: ${errorText}`)
+            throw new Error(`Tool ${toolCall.name} failed repeatedly: ${errorText}`)
           }
         } else {
           agentContext.consecutiveErrorNum = 0
+          runtime.resetErrorCounter()
         }
       } catch (e) {
-        // 处理工具不存在或其他系统级异常（非业务逻辑错误）
         Log.error(
           'tool call system error: ',
-          result.name,
-          result.arguments as Record<string, unknown>,
+          toolCall.name,
+          toolCall.arguments as Record<string, unknown>,
           e instanceof Error ? e : String(e)
         )
+        const errorMessage = e instanceof Error ? e.message : String(e)
         toolResult = {
           content: [
             {
               type: 'text',
-              text: e + '',
+              text: errorMessage,
             },
           ],
           isError: true,
         }
         toolChain.updateToolResult(toolResult)
+        runtime.recordObservation(iteration, toolCall.name, toolResult)
         agentContext.consecutiveErrorNum++
+        hadError = true
+        runtime.failIteration(iteration, errorMessage)
         if (agentContext.consecutiveErrorNum >= 5) {
           throw e
         }
       }
+
       const callback = this.callback || context.config.callback
       if (callback) {
         await callback.onMessage(
           {
             taskId: context.taskId,
             agentName: agentContext.agent.Name,
-            nodeId: agentContext.context.taskId,
+            nodeId: context.currentNodeId || generateNodeId(context.taskId, 'execution'),
             type: 'tool_result',
-            toolId: result.id,
-            toolName: result.name,
-            params: result.arguments,
-            toolResult: toolResult,
+            toolId: toolCall.id,
+            toolName: toolCall.name,
+            params: toolCall.arguments,
+            toolResult,
           },
           agentContext
         )
       }
-      const llmToolResult = convertToolResult(result, toolResult)
+
+      const llmToolResult = convertToolResult(toolCall, toolResult)
       toolResults.push(llmToolResult)
-    }
-
-    // Add assistant message with results
-    if (textResults.length > 0 || toolCallResults.length > 0) {
-      const assistantContent: NativeLLMMessagePart[] = []
-
-      if (text) {
-        assistantContent.push({ type: 'text', text })
-      }
-
-      toolCallResults.forEach(toolCall => {
-        assistantContent.push({
-          type: 'tool-call',
-          toolCallId: toolCall.id,
-          toolName: toolCall.name,
-          args: toolCall.arguments,
-        })
-      })
-
-      messages.push({
-        role: 'assistant',
-        content: assistantContent,
-      })
     }
 
     if (toolResults.length > 0) {
@@ -287,28 +379,28 @@ export class Agent {
         role: 'tool',
         content: toolResults,
       })
-      return null
-    } else {
-      return text
+    }
+
+    return {
+      toolExecuted: true,
+      hadError,
     }
   }
 
   protected system_auto_tools(task?: Task): Tool[] {
-    let tools: Tool[] = []
-    if (!task) return tools
-
-    let taskXml = task.xml
+    const autoTools: Tool[] = [new ReactPlannerTool()]
+    let taskXml = task?.xml || ''
 
     let hasForeach = taskXml.indexOf('</forEach>') > -1
     if (hasForeach) {
-      tools.push(new ForeachTaskTool())
+      autoTools.push(new ForeachTaskTool())
     }
     let hasWatch = taskXml.indexOf('</watch>') > -1
     if (hasWatch) {
-      tools.push(new WatchTriggerTool())
+      autoTools.push(new WatchTriggerTool())
     }
-    let toolNames = this.tools.map(tool => tool.name)
-    return tools.filter(tool => toolNames.indexOf(tool.name) == -1)
+    let existingNames = this.tools.map(tool => tool.name)
+    return autoTools.filter(tool => existingNames.indexOf(tool.name) === -1)
   }
 
   protected async buildSystemPrompt(agentContext: AgentContext, tools: Tool[]): Promise<string> {

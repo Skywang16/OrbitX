@@ -1007,7 +1007,7 @@ impl ContextManager {
         output.push_str(&entries);
 
         if file_count + dir_count >= max_files {
-            output.push_str("\n(File list truncated. Use read-directory tools to explore specific subdirectories if needed.)\n");
+            output.push_str("\n(File list truncated. Use list_files tools to explore specific subdirectories if needed.)\n");
         }
 
         Ok(output)

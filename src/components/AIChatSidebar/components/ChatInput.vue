@@ -54,6 +54,7 @@
   const { t } = useI18n()
 
   const inputTextarea = ref<HTMLTextAreaElement>()
+  const isComposing = ref(false)
 
   const terminalSelection = useTerminalSelection()
 
@@ -100,10 +101,18 @@
   ])
 
   const handleKeydown = (event: KeyboardEvent) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === 'Enter' && !event.shiftKey && !isComposing.value) {
       event.preventDefault()
       handleButtonClick()
     }
+  }
+
+  const handleCompositionStart = () => {
+    isComposing.value = true
+  }
+
+  const handleCompositionEnd = () => {
+    isComposing.value = false
   }
 
   const adjustTextareaHeight = () => {
@@ -385,6 +394,8 @@
           rows="1"
           @keydown="handleKeydown"
           @input="adjustTextareaHeight"
+          @compositionstart="handleCompositionStart"
+          @compositionend="handleCompositionEnd"
         />
       </div>
     </div>

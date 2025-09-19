@@ -33,7 +33,32 @@ class TerminalChannelApi {
           }
         },
         onError: err => {
-          console.warn('[terminalChannelApi] channel error:', err)
+          console.warn('[terminalChannelApi] 通道错误:', err)
+        },
+      }
+    )
+  }
+
+  /**
+   * 二进制流订阅（高吞吐渲染）
+   * 直接向上游传递 Uint8Array，供前端使用 xterm 的 writeUtf8 渲染。
+   * 与 subscribe 的区别：不做任何文本解码。
+   */
+  subscribeBinary(paneId: number, onOutput: (bytes: Uint8Array) => void) {
+    return channelApi.subscribe<TerminalChannelMessage>(
+      'terminal_subscribe_output',
+      { args: { pane_id: paneId } },
+      {
+        onMessage: msg => {
+          if (msg.type === 'Data') {
+            const bytes = new Uint8Array(msg.data)
+            if (bytes.length) onOutput(bytes)
+          } else if (msg.type === 'Close') {
+            // no-op for binary variant (caller may handle flushing/cleanup)
+          }
+        },
+        onError: err => {
+          console.warn('[terminalChannelApi] 通道错误:', err)
         },
       }
     )

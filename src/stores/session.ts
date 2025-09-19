@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
-import { restoreStateCurrent, StateFlags } from '@tauri-apps/plugin-window-state'
 import { type SessionState, type TerminalState, type UiState, type AiState } from '@/types/domain/storage'
 import { createDefaultSessionState } from '@/types/utils/helpers'
 import { storageApi } from '@/api/storage'
@@ -72,7 +71,6 @@ export const useSessionStore = defineStore('session', () => {
     if (state) {
       sessionState.value = state
     }
-    await restoreWindowState()
   }
 
   const updateTerminals = (terminals: TerminalState[]): void => {
@@ -132,14 +130,6 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null
   }
 
-  const restoreWindowState = async (): Promise<void> => {
-    try {
-      await restoreStateCurrent(StateFlags.ALL)
-    } catch (error) {
-      console.warn('窗口状态恢复失败:', error)
-    }
-  }
-
   const cleanup = (): void => {}
   const initialize = async (): Promise<void> => {
     if (initialized.value) return
@@ -169,7 +159,6 @@ export const useSessionStore = defineStore('session', () => {
     // 核心方法
     saveSessionState,
     loadSessionState,
-    restoreWindowState,
     initialize,
     cleanup,
 

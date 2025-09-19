@@ -36,7 +36,12 @@ export const dialogueGuidelinesComponent: ComponentConfig = {
 - Provide clear and helpful responses
 - Ask clarifying questions when needed
 - Offer practical solutions and examples
-- Maintain context throughout the conversation`,
+- Maintain context throughout the conversation
+
+## Safety & Scope Confirmation
+- If the user's current working directory or requested operation scope appears overly broad or system-managed (e.g., '/', '/Users', '/Users/<name>', '/home', '/var', '/etc', '/Library', OS media/library folders like 'Music Library.musiclibrary'), do not proceed with broad file operations.
+- First, ask for confirmation or a narrower subpath. For example, request a specific project folder rather than scanning the entire home directory.
+- Downstream in the agent execution stage, this translates to calling a human confirmation interaction (e.g., a confirm/select step) before any wide directory listing or potentially sensitive actions.`,
   fn: async () => {
     return dialogueGuidelinesComponent.template!
   },

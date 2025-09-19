@@ -6,6 +6,7 @@ import { mergeTools } from '../common/utils'
 import { AgentContext, generateNodeId } from '../core/context'
 import Log from '../common/log'
 import type { StreamCallback, HumanCallback, LLMRequest } from '../types'
+import type { AgentLLMCallResult } from '../agent/llm'
 
 export function extractUsedTool<T extends Tool | NativeLLMTool>(messages: NativeLLMMessage[], agentTools: T[]): T[] {
   let tools: T[] = []
@@ -31,40 +32,6 @@ export function extractUsedTool<T extends Tool | NativeLLMTool>(messages: Native
     }
   }
   return tools
-}
-
-export function removeDuplicateToolUse(
-  results: Array<
-    | { type: 'text'; text: string }
-    | { type: 'tool-call'; toolCallId: string; toolName: string; args: Record<string, unknown> }
-  >
-): Array<
-  | { type: 'text'; text: string }
-  | { type: 'tool-call'; toolCallId: string; toolName: string; args: Record<string, unknown> }
-> {
-  if (results.length <= 1 || results.filter(r => r.type == 'tool-call').length <= 1) {
-    return results
-  }
-  let _results = []
-  let tool_uniques = []
-  for (let i = 0; i < results.length; i++) {
-    if (results[i].type === 'tool-call') {
-      let tool = results[i] as {
-        type: 'tool-call'
-        toolCallId: string
-        toolName: string
-        args: Record<string, unknown>
-      }
-      let key = tool.toolName + JSON.stringify(tool.args)
-      if (tool_uniques.indexOf(key) == -1) {
-        _results.push(results[i])
-        tool_uniques.push(key)
-      }
-    } else {
-      _results.push(results[i])
-    }
-  }
-  return _results
 }
 
 export async function compressAgentMessages(
@@ -122,12 +89,14 @@ async function doCompressAgentMessages(
   })
   // compress snapshot
   const result = await callAgentLLM(agentContext, rlm, newMessages, newTools, true, snapshotTool.name)
-  const toolCall = result.find(isToolCall)
-  const argsRaw = toolCall?.args
-  const args = typeof argsRaw === 'string' ? JSON.parse(argsRaw || '{}') : argsRaw || {}
+  const toolCall = result.toolCalls[0]
+  if (!toolCall) {
+    throw new Error('Snapshot tool was not invoked by the agent')
+  }
+  const args = toolCall.arguments || {}
   const nativeToolCall: NativeLLMToolCall = {
-    id: toolCall?.toolCallId || '',
-    name: toolCall?.toolName || snapshotTool.name,
+    id: toolCall.id,
+    name: toolCall.name,
     arguments: args,
   }
   const toolResult = await snapshotTool.execute(args, agentContext, nativeToolCall)
@@ -160,16 +129,12 @@ async function doCompressAgentMessages(
 
   const textContent = toolResult.content
     .filter((s): s is { type: 'text'; text: string } => s.type === 'text')
-    .map(s => ({ type: 'text' as const, text: (s as { type: 'text'; text: string }).text }))
+    .map(s => ({ type: 'text' as const, text: s.text }))
   messages.splice(firstToolIndex + 1, lastToolIndex - firstToolIndex - 2, {
     role: 'user',
     content: textContent,
   })
 }
-
-type ToolCallResult = { type: 'tool-call'; toolCallId: string; toolName: string; args: unknown }
-type TextResult = { type: 'text'; text: string }
-type LlmCallResult = ToolCallResult | TextResult | NativeLLMToolCall
 
 type CallAgentLLM = (
   agentContext: AgentContext,
@@ -181,11 +146,7 @@ type CallAgentLLM = (
   retryNum?: number,
   callback?: StreamCallback & HumanCallback,
   requestHandler?: (request: LLMRequest) => void
-) => Promise<LlmCallResult[]>
-
-function isToolCall(item: LlmCallResult): item is ToolCallResult {
-  return 'type' in item && item.type === 'tool-call'
-}
+) => Promise<AgentLLMCallResult>
 
 export function handleLargeContextMessages(messages: NativeLLMMessage[]) {
   let imageNum = 0

@@ -19,14 +19,27 @@
 </template>
 
 <script setup lang="ts">
-  import type { SimpleEditResult } from '@/eko/tools/toolList/edit-file'
+  import { computed } from 'vue'
 
-  defineProps<{
-    editData: SimpleEditResult
+  interface EditResultData {
+    file: string
+    replacedCount: number
+    affectedLines?: number[]
+    useRegex: boolean
+    ignoreCase: boolean
+    startLine: number | null
+    endLine: number | null
+    previewOnly: boolean
+    old: string
+    new: string
+  }
+
+  const props = defineProps<{
+    editData: EditResultData
   }>()
 
   const getLineCount = (text: string) => {
-    return text.split('\n').length
+    return text ? text.split('\n').length : 0
   }
 </script>
 

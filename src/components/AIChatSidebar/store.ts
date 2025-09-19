@@ -605,7 +605,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           try {
             // 打印eko回调信息，方便调试查看有哪些类型
             console.warn('🔔 Eko回调类型:', message.type, message)
-            
+
             const tempMessage = messageList.value[messageList.value.length - 1]
             if (!tempMessage || tempMessage.role !== 'assistant') {
               return

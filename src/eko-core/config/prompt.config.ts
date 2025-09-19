@@ -55,8 +55,8 @@ export const defaultPromptConfig: PromptConfig = {
       PromptComponent.AGENT_RULES,
       PromptComponent.WORK_METHODOLOGY,
       PromptComponent.SYSTEM_INFO,
-      PromptComponent.TOOLS_DESCRIPTION,
       PromptComponent.TASK_CONTEXT,
+      PromptComponent.TOOLS_DESCRIPTION,
       PromptComponent.TASK_NODES,
       PromptComponent.HUMAN_INTERACTION,
       PromptComponent.FOREACH_TOOLS,
@@ -164,6 +164,11 @@ export const defaultPromptConfig: PromptConfig = {
     [PromptComponent.DATETIME]: {
       enabled: true,
       priority: 11,
+    },
+    [PromptComponent.WORKSPACE_SNAPSHOT]: {
+      enabled: true,
+      priority: 5,
+      dependencies: [],
     },
     [PromptComponent.TOOLS_DESCRIPTION]: {
       enabled: true,

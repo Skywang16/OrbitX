@@ -61,11 +61,11 @@ pub async fn llm_call_stream(
 
     while let Some(chunk_result) = stream.next().await {
         chunk_count += 1;
-        tracing::debug!("Received chunk #{}: {:?}", chunk_count, chunk_result);
+        // tracing::debug!("Received chunk #{}: {:?}", chunk_count, chunk_result);
 
         match chunk_result {
             Ok(chunk) => {
-                tracing::debug!("Sending chunk to frontend: {:?}", chunk);
+                // tracing::debug!("Sending chunk to frontend: {:?}", chunk);
                 if let Err(e) = on_chunk.send(chunk) {
                     tracing::error!("Failed to send chunk: {}", e);
                     break;

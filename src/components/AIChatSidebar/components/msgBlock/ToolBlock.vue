@@ -45,7 +45,16 @@
   import type { AIOutputStep } from '@/types'
   import type { ToolExecution } from '@/types'
   import EditResult from './components/EditResult.vue'
-  import type { SimpleEditResult } from '@/eko/tools/toolList/edit-file'
+  interface EditResultData {
+    file: string
+    replacedCount: number
+    affectedLines?: number[]
+    useRegex: boolean
+    ignoreCase: boolean
+    startLine: number | null
+    endLine: number | null
+    previewOnly: boolean
+  }
   import stripAnsi from 'strip-ansi'
 
   const { t } = useI18n()
@@ -210,8 +219,10 @@
     return props.step?.toolExecution?.name === 'edit_file'
   }
 
-  const getEditData = (result: unknown): SimpleEditResult => {
-    return (result as { content?: { data?: SimpleEditResult }[] })?.content?.[0]?.data || ({} as SimpleEditResult)
+  const getEditData = (result: unknown): EditResultData => {
+    // The new edit-file tool returns result in extInfo
+    const toolResult = result as { extInfo?: EditResultData }
+    return toolResult?.extInfo || ({} as EditResultData)
   }
 
   const cleanToolResult = computed(() => {
