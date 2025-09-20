@@ -615,6 +615,59 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
             // 处理消息
             switch (message.type) {
+              case 'task_spawn': {
+                // 切换到子任务并初始化节点视图
+                currentTaskId.value = message.taskId
+                if (message.task?.nodes && message.task.nodes.length > 0) {
+                  currentTaskNodes.value = message.task.nodes
+                    .filter(node => node.type === 'normal' && 'text' in node)
+                    .map((node, index) => ({
+                      type: node.type,
+                      text: 'text' in node ? node.text : '',
+                      status: (index === 0 ? 'pending' : 'pending') as 'pending' | 'running' | 'completed',
+                    }))
+                  currentNodeIndex.value = 0
+                  taskStreamDone.value = false
+                } else {
+                  currentTaskNodes.value = []
+                  currentNodeIndex.value = 0
+                }
+                // 在父任务对话中追加系统提示
+                updateOrCreateStep(tempMessage, {
+                  type: 'text',
+                  content: `[Subtask Spawned] id=${message.taskId} parent=${message.parentTaskId}`,
+                })
+                break
+              }
+              case 'task_pause': {
+                updateOrCreateStep(tempMessage, {
+                  type: 'text',
+                  content: `[Task Paused] id=${message.taskId} reason=${message.reason || ''}`,
+                })
+                break
+              }
+              case 'task_resume': {
+                updateOrCreateStep(tempMessage, {
+                  type: 'text',
+                  content: `[Task Resumed] id=${message.taskId} reason=${message.reason || ''}`,
+                })
+                break
+              }
+              case 'task_child_result': {
+                updateOrCreateStep(tempMessage, {
+                  type: 'text',
+                  content: `[Subtask Completed] id=${message.taskId} -> parent=${message.parentTaskId} summary=${message.summary}`,
+                })
+                break
+              }
+              case 'task_status': {
+                // 简单记录状态变更
+                updateOrCreateStep(tempMessage, {
+                  type: 'text',
+                  content: `[Task Status] id=${message.taskId} status=${message.status}`,
+                })
+                break
+              }
               case 'tool_use':
                 handleToolUse(tempMessage, message)
                 break

@@ -3,7 +3,7 @@ import { Planner } from '../core/plan'
 import { AgentContext } from '../core/context'
 import { Tool, ToolResult } from '../types/tools.types'
 
-export const TOOL_NAME = 'task_planner'
+export const TOOL_NAME = 'react_planner'
 
 export default class ReactPlannerTool implements Tool {
   readonly name = TOOL_NAME

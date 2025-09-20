@@ -172,6 +172,20 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::ai::tool::storage::storage_update_config,
         crate::ai::tool::storage::storage_save_session_state,
         crate::ai::tool::storage::storage_load_session_state,
+        // 任务持久化命令（M2）
+        crate::ai::tool::storage::task_save_ui_messages,
+        crate::ai::tool::storage::task_read_ui_messages,
+        crate::ai::tool::storage::task_save_api_messages,
+        crate::ai::tool::storage::task_read_api_messages,
+        crate::ai::tool::storage::task_save_metadata,
+        crate::ai::tool::storage::task_read_metadata,
+        crate::ai::tool::storage::task_checkpoint_save,
+        crate::ai::tool::storage::task_checkpoint_list,
+        crate::ai::tool::storage::task_purge_all,
+        // 任务索引检索命令（M3）
+        crate::ai::tool::storage::task_get,
+        crate::ai::tool::storage::task_list,
+        crate::ai::tool::storage::task_delete,
         // 网络请求命令
         crate::ai::tool::network::network_web_fetch_headless,
         crate::ai::tool::network::network_simple_web_fetch,

@@ -36,6 +36,20 @@ export default class Context {
   private pauseStatus: 0 | 1 | 2 = 0
   readonly currentStepControllers: Set<AbortController> = new Set()
   readonly reactRuntime: ReactRuntime
+  // 任务树字段
+  rootTaskId?: string
+  parentTaskId?: string
+  children: string[] = []
+  // 与 Eko 的弱引用能力（避免循环依赖）
+  spawnChildTask?: (parentTaskId: string, message: string) => Promise<string>
+  completeChildTask?: (childTaskId: string, summary: string, payload?: unknown) => Promise<void>
+  executeTask?: (taskId: string) => Promise<{
+    taskId: string
+    success: boolean
+    stopReason: 'abort' | 'error' | 'done'
+    result: string
+    error?: unknown
+  }>
 
   constructor(taskId: string, config: EkoConfig, agent: Agent, chain: Chain) {
     this.taskId = taskId
@@ -44,6 +58,29 @@ export default class Context {
     this.chain = chain
     this.controller = new AbortController()
     this.reactRuntime = new ReactRuntime(this.createReactRuntimeConfig())
+  }
+
+  // 绑定父/根任务ID
+  attachParent(parentTaskId: string, rootTaskId?: string) {
+    this.parentTaskId = parentTaskId
+    this.rootTaskId = rootTaskId || parentTaskId
+    if (this.task) {
+      this.task.parentTaskId = parentTaskId
+      this.task.rootTaskId = this.rootTaskId
+    }
+  }
+
+  // 添加子任务ID
+  addChild(childTaskId: string) {
+    if (!this.children.includes(childTaskId)) {
+      this.children.push(childTaskId)
+    }
+    if (this.task) {
+      const existing = this.task.childTaskIds || []
+      if (!existing.includes(childTaskId)) {
+        this.task.childTaskIds = [...existing, childTaskId]
+      }
+    }
   }
 
   async checkAborted(noCheckPause?: boolean): Promise<void> {

@@ -9,6 +9,7 @@ pub mod ai_models;
 pub mod audit_logs;
 pub mod command_history;
 pub mod conversations;
+pub mod tasks;
 
 // 重新导出所有Repository
 pub use ai_features::AIFeaturesRepository;
@@ -16,6 +17,7 @@ pub use ai_models::AIModelRepository;
 pub use audit_logs::AuditLogRepository;
 pub use command_history::CommandHistoryRepository;
 pub use conversations::ConversationRepository;
+pub use tasks::TaskRepository;
 
 use crate::storage::database::DatabaseManager;
 use crate::utils::error::AppResult;
@@ -51,6 +53,7 @@ pub struct RepositoryManager {
     audit_logs: AuditLogRepository,
     command_history: CommandHistoryRepository,
     conversations: ConversationRepository,
+    tasks: TaskRepository,
 }
 
 impl RepositoryManager {
@@ -62,6 +65,7 @@ impl RepositoryManager {
             audit_logs: AuditLogRepository::new(Arc::clone(&database)),
             command_history: CommandHistoryRepository::new(Arc::clone(&database)),
             conversations: ConversationRepository::new(Arc::clone(&database)),
+            tasks: TaskRepository::new(Arc::clone(&database)),
             database,
         }
     }
@@ -89,6 +93,11 @@ impl RepositoryManager {
     /// 获取会话Repository
     pub fn conversations(&self) -> &ConversationRepository {
         &self.conversations
+    }
+
+    /// 获取任务持久化Repository
+    pub fn tasks(&self) -> &TaskRepository {
+        &self.tasks
     }
 
 

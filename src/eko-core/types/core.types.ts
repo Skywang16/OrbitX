@@ -56,6 +56,31 @@ export type StreamCallbackMessage = {
       params: Record<string, unknown>
       toolResult: ToolResult
     }
+  // Task Tree events (new)
+  | {
+      type: 'task_spawn'
+      parentTaskId: string
+      rootTaskId: string
+      task: Task
+    }
+  | {
+      type: 'task_pause'
+      reason?: string
+    }
+  | {
+      type: 'task_resume'
+      reason?: string
+    }
+  | {
+      type: 'task_child_result'
+      parentTaskId: string
+      summary: string
+      payload?: unknown
+    }
+  | {
+      type: 'task_status'
+      status: Task['status']
+    }
   | {
       type: 'agent_result'
       task: Task
@@ -117,6 +142,10 @@ export type Task = {
   xml: string
   modified?: boolean
   taskPrompt?: string
+  // Task Tree
+  rootTaskId?: string
+  parentTaskId?: string
+  childTaskIds?: string[]
 }
 
 export interface HumanCallback {

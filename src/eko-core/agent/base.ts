@@ -5,7 +5,7 @@ import { RetryLanguageModel } from '../llm'
 import { ToolWrapper } from '../tools/wrapper'
 import { ToolChain } from '../core/chain'
 import Context, { AgentContext, generateNodeId } from '../core/context'
-import { ForeachTaskTool, McpTool, WatchTriggerTool, ReactPlannerTool } from '../tools'
+import { ForeachTaskTool, McpTool, WatchTriggerTool } from '../tools'
 import { mergeTools } from '../common/utils'
 import {
   Task,
@@ -388,7 +388,7 @@ export class Agent {
   }
 
   protected system_auto_tools(task?: Task): Tool[] {
-    const autoTools: Tool[] = [new ReactPlannerTool()]
+    const autoTools: Tool[] = []
     let taskXml = task?.xml || ''
 
     let hasForeach = taskXml.indexOf('</forEach>') > -1

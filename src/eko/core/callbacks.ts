@@ -4,6 +4,7 @@
  */
 
 import type { TerminalCallback, StreamCallbackMessage } from '../types'
+import { taskPersistence } from '@/eko-core/persistence/task_persistence'
 import type { AgentContext } from '@/eko-core'
 
 /**
@@ -17,9 +18,30 @@ export const createSidebarCallback = (
     onMessage: async (message: StreamCallbackMessage): Promise<void> => {
       // 添加错误处理，避免回调错误中断执行流程
       try {
+        // 最小元数据维护：状态变更与 spawn（仅写入任务索引/元数据，不记录 UI 事件流）
+        try {
+          if (message?.taskId && message.type === 'task_status') {
+            await taskPersistence.updateMetadataPartial(message.taskId, {
+              status: message.status,
+              updatedAt: Date.now(),
+            })
+          } else if (message?.taskId && message.type === 'task_spawn') {
+            await taskPersistence.updateMetadataPartial(message.taskId, {
+              parentTaskId: message.parentTaskId,
+              rootTaskId: message.rootTaskId,
+              name: message.task?.name,
+              createdAt: Date.now(),
+            })
+          }
+        } catch (_) {
+          // 忽略元数据持久化错误
+        }
+
         if (onMessage) {
           await onMessage(message)
         }
+
+        // UI 事件不再写入新表，结束时无需刷新
       } catch (error) {
         console.error('回调处理错误:', error)
         // 不要抛出错误，避免中断执行流程

@@ -11,10 +11,8 @@ import {
 import { NativeLLMMessagePart, NativeLLMToolCall } from '../types/llm.types'
 import { callChatLLM, convertToolResults, convertAssistantToolResults } from './dialogue/llm'
 import { Eko } from './eko'
-import TaskPlannerTool, { TOOL_NAME as task_planner } from './dialogue/task_planner'
 import { RetryLanguageModel } from '../llm'
 import { EkoMemory } from '../memory/memory'
-import ExecuteTaskTool from './dialogue/execute_task'
 import { getDialogueSystemPrompt } from '../prompt'
 
 import { convertTools, getTool, convertToolResult } from '../llm/conversion-utils'
@@ -39,11 +37,9 @@ export class EkoDialogue {
   }
 
   public async segmentedExecution(params: Omit<DialogueParams, 'user'>): Promise<string> {
+    // Legacy segmentedExecution gating is disabled.
+    // Fallback: continue chat using the last user message, without enforcing a specific planner tool.
     const messages = this.memory.getMessages()
-    const lastMessage = messages[messages.length - 1]
-    if (lastMessage.role !== 'tool' || !lastMessage.content.some(part => part.toolName === task_planner)) {
-      throw new Error('No task planner tool call found')
-    }
     const userMessages = messages.filter(message => message.role === 'user')
     const lastUserMessage = userMessages[userMessages.length - 1]
     if (!lastUserMessage) {
@@ -84,9 +80,7 @@ export class EkoDialogue {
       if (finalResult) {
         return finalResult
       }
-      if (this.config.segmentedExecution && results.some(r => r.type == 'tool-call' && r.toolName == task_planner)) {
-        return 'segmentedExecution'
-      }
+      // segmentedExecution no longer depends on specific planner tool calls
     }
     return 'Unfinished'
   }
@@ -102,8 +96,9 @@ export class EkoDialogue {
     return message
   }
 
-  protected buildInnerTools(params: DialogueParams): DialogueTool[] {
-    return [new TaskPlannerTool(this, params), new ExecuteTaskTool(this)]
+  protected buildInnerTools(_params: DialogueParams): DialogueTool[] {
+    // Disable legacy dialogue-level task planner & executor tools
+    return []
   }
 
   public addEko(taskId: string, eko: Eko): void {

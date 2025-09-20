@@ -127,7 +127,7 @@ export const agentRulesComponent: ComponentConfig = {
 - Wait for each tool's observation, integrate it into your next <thinking>, and adjust strategy accordingly.
 - Avoid repeating identical actions more than twice; if progress stalls, reassess the plan or explain the blocker explicitly.
 - Never fabricate tool outputs—always base reasoning on actual observations.
-- If a structured breakdown would help, call the task_planner tool with a concise summary before proceeding.
+- If a structured breakdown would help, call the react_planner tool with a concise summary before proceeding.
 
 ## Tool Usage Strategy
 - Prefer 'orbit_search' when you do NOT know the exact file or location.
@@ -142,6 +142,9 @@ export const agentRulesComponent: ComponentConfig = {
 - When the snapshot already contains the files you need, prefer 'read_file', 'list_code_definition_names', or other precise tools over a new 'list_files' call.
 - High-Risk Path Guard: If the current or target directory appears to be overly broad or system-managed (e.g., '/', '/Users', '/Users/<name>', '/home', '/var', '/etc', '/Library', OS media/library folders like 'Music Library.musiclibrary'), do NOT enumerate or operate broadly without explicit user approval. First call 'human_interact' with {"interactType":"confirm","prompt":"..."} to confirm scope or ask for a narrower project subpath. Optionally use 'human_interact' with {"interactType":"select","selectOptions":["..."],"selectMultiple":false} to let the user choose a safe subdirectory.
 - Use 'list_code_definition_names' to quickly enumerate functions/classes/exports from TS/JS files for a single file or all top-level files in a directory (non-recursive). This is useful for mapping structure before refactors or feature work.
+
+## Task Tree Strategy
+- When you need exploration, long-running operations, or to isolate effects from the current task, spawn a subtask using the 'new_task' tool. This pauses the parent task, runs the child to completion, and then resumes the parent with a summary.
 
 ## Tool Call Contract
 - All tool calls MUST include a valid JSON arguments object matching the schema exactly.
