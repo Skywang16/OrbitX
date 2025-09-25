@@ -10,9 +10,7 @@ pub mod i18n;
 
 pub mod error_handler;
 
-pub mod language_commands;
-
 pub use api_response::{ApiResponse, EmptyData, TauriApiResult};
 pub use error_handler::{ErrorHandler, OptionToApiResponse, TauriCommandWrapper};
 pub use language::{Language, LanguageManager};
-pub use language_commands::LanguageInfo;
+pub use i18n::commands::LanguageInfo;

@@ -59,8 +59,6 @@ export const defaultPromptConfig: PromptConfig = {
       PromptComponent.TOOLS_DESCRIPTION,
       PromptComponent.TASK_NODES,
       PromptComponent.HUMAN_INTERACTION,
-      PromptComponent.FOREACH_TOOLS,
-      PromptComponent.WATCH_TOOLS,
       PromptComponent.CUSTOM_INSTRUCTIONS,
       PromptComponent.DATETIME,
     ],
@@ -125,26 +123,6 @@ export const defaultPromptConfig: PromptConfig = {
       conditionalRules: [
         {
           condition: 'hasHumanTool',
-          action: 'include',
-        },
-      ],
-    },
-    [PromptComponent.FOREACH_TOOLS]: {
-      enabled: true,
-      priority: 6,
-      conditionalRules: [
-        {
-          condition: 'hasForEachTool',
-          action: 'include',
-        },
-      ],
-    },
-    [PromptComponent.WATCH_TOOLS]: {
-      enabled: true,
-      priority: 7,
-      conditionalRules: [
-        {
-          condition: 'hasWatchTool',
           action: 'include',
         },
       ],

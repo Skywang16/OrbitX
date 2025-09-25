@@ -101,3 +101,11 @@ export type LLMRequest = {
   stopSequences?: string[]
   abortSignal?: AbortSignal
 }
+
+// Eko memory message type (replaces old dialogue message types)
+export interface EkoMessage {
+  id: string
+  role: 'user' | 'assistant' | 'tool'
+  timestamp: number
+  content: string | NativeLLMMessagePart[]
+}

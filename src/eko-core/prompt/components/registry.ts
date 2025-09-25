@@ -34,22 +34,26 @@ class PromptComponentRegistry {
     if (this.loaded) return
 
     // 注册各类组件
-    this.registerComponents([
-      // Agent组件
+    const isComponentConfig = (v: unknown): v is ComponentConfig => {
+      return (
+        typeof v === 'object' &&
+        v !== null &&
+        'id' in (v as Record<string, unknown>) &&
+        'fn' in (v as Record<string, unknown>)
+      )
+    }
+
+    const all = [
       ...Object.values(agentComponents),
-      // 系统组件
       ...Object.values(systemComponents),
-      // 工具组件
       ...Object.values(toolComponents),
-      // 任务组件
       ...Object.values(taskComponents),
-      // 规划组件
       ...Object.values(planningComponents),
-      // 对话组件
       ...Object.values(dialogueComponents),
-      // 工作区组件
       ...Object.values(workspaceComponents),
-    ])
+    ]
+
+    this.registerComponents(all.filter(isComponentConfig))
 
     this.loaded = true
   }

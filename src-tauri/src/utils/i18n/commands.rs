@@ -5,7 +5,6 @@ use crate::{api_error, api_success};
 use serde_json::Value;
 use tauri::{Emitter, State};
 
-/// 设置应用程序语言
 #[tauri::command]
 pub async fn language_set_app_language<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -31,13 +30,12 @@ pub async fn language_set_app_language<R: tauri::Runtime>(
     Ok(api_success!())
 }
 
-/// 获取当前应用程序语言
 #[tauri::command]
 pub async fn language_get_app_language() -> TauriApiResult<String> {
     let lang = LanguageManager::get_language_string();
     Ok(api_success!(lang))
 }
-/// 获取所有支持的语言列表
+
 #[tauri::command]
 pub async fn language_get_supported_languages() -> TauriApiResult<Vec<LanguageInfo>> {
     let languages: Vec<LanguageInfo> = Language::all()
@@ -51,11 +49,8 @@ pub async fn language_get_supported_languages() -> TauriApiResult<Vec<LanguageIn
     Ok(api_success!(languages))
 }
 
-/// 语言信息结构
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct LanguageInfo {
-    /// 语言代码，如 "zh-CN"
     pub code: String,
-    /// 语言显示名称，如 "简体中文"
     pub name: String,
 }

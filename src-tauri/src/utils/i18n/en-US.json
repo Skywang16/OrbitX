@@ -95,5 +95,25 @@
     "build_failed": "Index build failed",
     "build_canceled": "Index build canceled",
     "delete_failed": "Failed to delete index"
+  },
+  "storage": {
+    "get_config_failed": "Failed to get configuration",
+    "update_config_failed": "Failed to update configuration",
+    "save_session_failed": "Failed to save session state",
+    "load_session_failed": "Failed to load session state"
+  },
+  "eko_ctx": {
+    "upsert_state_failed": "Failed to update Eko state",
+    "append_event_failed": "Failed to append Eko event",
+    "snapshot_save_failed": "Failed to save Eko snapshot",
+    "get_state_failed": "Failed to get Eko state",
+    "rebuild_failed": "Failed to rebuild Eko context",
+    "build_prompt_failed": "Failed to build prompt"
+  },
+  "ui_task": {
+    "upsert_failed": "Failed to create/update UI task",
+    "bulk_upsert_failed": "Failed to bulk operate UI tasks",
+    "list_failed": "Failed to get UI task list",
+    "delete_failed": "Failed to delete UI task"
   }
 }

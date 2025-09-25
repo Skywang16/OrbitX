@@ -95,11 +95,10 @@ impl RepositoryManager {
         &self.conversations
     }
 
-    /// 获取任务持久化Repository
+    /// 获取任务Repository
     pub fn tasks(&self) -> &TaskRepository {
         &self.tasks
     }
-
 
     /// 获取数据库管理器
     pub fn database(&self) -> &DatabaseManager {

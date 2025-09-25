@@ -53,12 +53,19 @@ export interface UiState {
   language?: string
 }
 
+export interface TaskNode {
+  type: string
+  text: string
+  status?: 'pending' | 'running' | 'completed'
+}
+
 export interface AiState {
   visible: boolean
   width: number
   mode: 'chat' | 'agent'
   conversationId?: number
   selectedModelId?: string | null
+  // 注意：任务状态现在由TaskManager管理，不再存储在session中
 }
 
 export interface SessionState {

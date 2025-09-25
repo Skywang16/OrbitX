@@ -33,6 +33,7 @@ export const createDefaultSessionState = () => ({
     mode: 'chat' as const,
     conversationId: undefined,
     selectedModelId: undefined,
+    // 注意：任务状态现在由TaskManager管理，不再存储在session中
   },
   timestamp: new Date().toISOString(),
 })

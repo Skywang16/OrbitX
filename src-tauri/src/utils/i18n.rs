@@ -1,3 +1,4 @@
+pub mod commands;
 
 use crate::utils::language::{Language, LanguageManager};
 use serde_json::Value;

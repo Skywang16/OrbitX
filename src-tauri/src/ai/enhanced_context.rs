@@ -932,7 +932,7 @@ impl ContextManager {
     }
 
     /// 构建工作区上下文信息
-    async fn build_workspace_context(&self, cwd: &str) -> String {
+    pub async fn build_workspace_context(&self, cwd: &str) -> String {
         debug!("构建工作区上下文: {}", cwd);
 
         let path = Path::new(cwd);

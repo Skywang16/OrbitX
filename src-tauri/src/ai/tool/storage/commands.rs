@@ -3,8 +3,11 @@
  *
  * 提供统一的存储API命令，基于新的Repository架构实现
  * 包含配置管理、会话状态、数据查询等功能
+ *
+ * NOTE: Task-related commands removed during refactor
  */
 
+use crate::storage::repositories::tasks::{EkoContext, UITask};
 use crate::storage::types::SessionState;
 use crate::storage::StorageCoordinator;
 use crate::utils::error::AppResult;
@@ -19,300 +22,6 @@ use tracing::{debug, error};
 /// 存储协调器状态管理
 pub struct StorageCoordinatorState {
     pub coordinator: Arc<StorageCoordinator>,
-}
-
-// =========================
-// M3: Task Index/List Retrieval (no UI)
-// =========================
-
-#[tauri::command]
-pub async fn task_get(
-    task_id: String,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<Option<Value>> {
-    debug!("获取任务详情(SQL): {}", task_id);
-    match (|| -> AppResult<Option<Value>> {
-        let repos = state.coordinator.repositories();
-        let v = tauri::async_runtime::block_on(async { repos.tasks().get_task(&task_id).await })?;
-        Ok(v)
-    })() {
-        Ok(v) => Ok(api_success!(v)),
-        Err(e) => {
-            error!("获取任务详情(SQL)失败: {}", e);
-            Ok(api_error!("task.get_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn task_list(
-    status: Option<String>,
-    parent_task_id: Option<String>,
-    root_task_id: Option<String>,
-    limit: Option<i64>,
-    offset: Option<i64>,
-    order_desc: Option<bool>,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<Vec<Value>> {
-    debug!("列出任务(SQL)");
-    match (|| -> AppResult<Vec<Value>> {
-        let repos = state.coordinator.repositories();
-        let mut filter = crate::storage::repositories::tasks::TaskListFilter::default();
-        filter.status = status;
-        filter.parent_task_id = parent_task_id;
-        filter.root_task_id = root_task_id;
-        if limit.is_some() {
-            filter.limit = limit;
-        }
-        if offset.is_some() {
-            filter.offset = offset;
-        }
-        if let Some(desc) = order_desc {
-            filter.order_desc = desc;
-        }
-        let list = tauri::async_runtime::block_on(async { repos.tasks().list_tasks(filter).await })?;
-        Ok(list)
-    })() {
-        Ok(list) => Ok(api_success!(list)),
-        Err(e) => {
-            error!("列出任务(SQL)失败: {}", e);
-            Ok(api_error!("task.list_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn task_delete(
-    task_id: String,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<EmptyData> {
-    debug!("删除任务(SQL): {}", task_id);
-    match (|| -> AppResult<()> {
-        let repos = state.coordinator.repositories();
-        tauri::async_runtime::block_on(async { repos.tasks().delete_task(&task_id).await })?;
-        Ok(())
-    })() {
-        Ok(()) => Ok(api_success!()),
-        Err(e) => {
-            error!("删除任务(SQL)失败: {}", e);
-            Ok(api_error!("task.delete_failed"))
-        }
-    }
-}
-
-// =========================
-// M2: Task Persistence APIs (Pure SQL via Repository)
-// =========================
-
-#[tauri::command]
-pub async fn task_save_ui_messages(
-    task_id: String,
-    messages: Value,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<EmptyData> {
-    debug!("保存任务 UI 消息(SQL): {}", task_id);
-    match (|| -> AppResult<()> {
-        // messages can be an array or { events: [...] }
-        let events: Vec<Value> = if let Some(arr) = messages.as_array() {
-            arr.clone()
-        } else if let Some(ev) = messages.get("events").and_then(|v| v.as_array()) {
-            ev.clone()
-        } else {
-            return Err(anyhow::anyhow!("无效的UI消息格式: 需要数组或{{events: []}}"));
-        };
-        let repos = state.coordinator.repositories();
-        tauri::async_runtime::block_on(async {
-            repos.tasks().replace_ui_events(&task_id, &events).await
-        })?;
-        Ok(())
-    })() {
-        Ok(()) => Ok(api_success!()),
-        Err(e) => {
-            error!("保存 UI 消息(SQL)失败: {}", e);
-            Ok(api_error!("task.save_ui_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn task_read_ui_messages(
-    task_id: String,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<Value> {
-    debug!("读取任务 UI 消息(SQL): {}", task_id);
-    match (|| -> AppResult<Value> {
-        let repos = state.coordinator.repositories();
-        let events =
-            tauri::async_runtime::block_on(async { repos.tasks().read_ui_events(&task_id).await })?;
-        Ok(Value::Array(events))
-    })() {
-        Ok(v) => Ok(api_success!(v)),
-        Err(e) => {
-            error!("读取 UI 消息(SQL)失败: {}", e);
-            Ok(api_error!("task.read_ui_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn task_save_api_messages(
-    task_id: String,
-    messages: Value,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<EmptyData> {
-    debug!("保存任务 API 消息(SQL): {}", task_id);
-    match (|| -> AppResult<()> {
-        let repos = state.coordinator.repositories();
-        tauri::async_runtime::block_on(async {
-            repos.tasks().save_api_messages(&task_id, &messages).await
-        })?;
-        Ok(())
-    })() {
-        Ok(()) => Ok(api_success!()),
-        Err(e) => {
-            error!("保存 API 消息(SQL)失败: {}", e);
-            Ok(api_error!("task.save_api_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn task_read_api_messages(
-    task_id: String,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<Value> {
-    debug!("读取任务 API 消息(SQL): {}", task_id);
-    match (|| -> AppResult<Value> {
-        let repos = state.coordinator.repositories();
-        let v = tauri::async_runtime::block_on(async {
-            repos.tasks().read_api_messages(&task_id).await
-        })?;
-        Ok(v)
-    })() {
-        Ok(v) => Ok(api_success!(v)),
-        Err(e) => {
-            error!("读取 API 消息(SQL)失败: {}", e);
-            Ok(api_error!("task.read_api_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn task_save_metadata(
-    task_id: String,
-    metadata: Value,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<EmptyData> {
-    debug!("保存任务元数据(SQL): {}", task_id);
-    match (|| -> AppResult<()> {
-        let repos = state.coordinator.repositories();
-        tauri::async_runtime::block_on(async {
-            repos.tasks().save_metadata(&task_id, &metadata).await
-        })?;
-        // 同步写索引（name/status/parent/root 可选）
-        let name = metadata.get("name").and_then(|v| v.as_str());
-        let status = metadata.get("status").and_then(|v| v.as_str());
-        let parent = metadata.get("parentTaskId").and_then(|v| v.as_str());
-        let root = metadata.get("rootTaskId").and_then(|v| v.as_str());
-        tauri::async_runtime::block_on(async {
-            repos
-                .tasks()
-                .upsert_task_index(&task_id, name, status, parent, root, Some(&metadata))
-                .await
-        })?;
-        Ok(())
-    })() {
-        Ok(()) => Ok(api_success!()),
-        Err(e) => {
-            error!("保存元数据(SQL)失败: {}", e);
-            Ok(api_error!("task.save_metadata_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn task_read_metadata(
-    task_id: String,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<Value> {
-    debug!("读取任务元数据(SQL): {}", task_id);
-    match (|| -> AppResult<Value> {
-        let repos = state.coordinator.repositories();
-        let v =
-            tauri::async_runtime::block_on(async { repos.tasks().read_metadata(&task_id).await })?;
-        Ok(v)
-    })() {
-        Ok(v) => Ok(api_success!(v)),
-        Err(e) => {
-            error!("读取元数据(SQL)失败: {}", e);
-            Ok(api_error!("task.read_metadata_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn task_checkpoint_save(
-    task_id: String,
-    checkpoint: Value,
-    name: Option<String>,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<String> {
-    debug!("保存任务检查点(SQL): {}", task_id);
-    match (|| -> AppResult<String> {
-        let repos = state.coordinator.repositories();
-        let saved = tauri::async_runtime::block_on(async {
-            repos
-                .tasks()
-                .save_checkpoint(&task_id, name.as_deref(), &checkpoint)
-                .await
-        })?;
-        Ok(saved)
-    })() {
-        Ok(name) => Ok(api_success!(name)),
-        Err(e) => {
-            error!("保存检查点(SQL)失败: {}", e);
-            Ok(api_error!("task.save_checkpoint_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn task_checkpoint_list(
-    task_id: String,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<Vec<String>> {
-    debug!("列出任务检查点(SQL): {}", task_id);
-    match (|| -> AppResult<Vec<String>> {
-        let repos = state.coordinator.repositories();
-        let list = tauri::async_runtime::block_on(async {
-            repos.tasks().list_checkpoints(&task_id).await
-        })?;
-        Ok(list)
-    })() {
-        Ok(list) => Ok(api_success!(list)),
-        Err(e) => {
-            error!("列出检查点(SQL)失败: {}", e);
-            Ok(api_error!("task.list_checkpoint_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn task_purge_all(
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<EmptyData> {
-    debug!("清理所有任务数据(SQL)");
-    match (|| -> AppResult<()> {
-        let repos = state.coordinator.repositories();
-        tauri::async_runtime::block_on(async { repos.tasks().purge_all().await })?;
-        Ok(())
-    })() {
-        Ok(()) => Ok(api_success!()),
-        Err(e) => {
-            error!("清理任务数据(SQL)失败: {}", e);
-            Ok(api_error!("task.purge_failed"))
-        }
-    }
 }
 
 impl StorageCoordinatorState {
@@ -446,6 +155,305 @@ pub async fn storage_load_session_state(
         Err(_e) => {
             error!("❌ 会话状态加载失败");
             Ok(api_error!("storage.load_session_failed"))
+        }
+    }
+}
+// ============================================================================
+// 双轨制任务系统 API - 按照 task-system-architecture-final.md 设计
+// ============================================================================
+
+// ---- 原始上下文轨 API ----
+
+/// 更新或插入任务状态到上下文轨
+#[tauri::command]
+pub async fn eko_ctx_upsert_state(
+    task_id: String,
+    context: String,
+    conversation_id: Option<i64>,
+    node_id: Option<String>,
+    status: Option<String>,
+    state: State<'_, StorageCoordinatorState>,
+) -> TauriApiResult<i64> {
+    let eko_context = EkoContext {
+        id: None,
+        task_id: task_id.clone(),
+        conversation_id: conversation_id.unwrap_or(1), // 默认会话ID
+        kind: crate::storage::repositories::tasks::EkoContextKind::State,
+        name: None,
+        node_id,
+        status: status
+            .and_then(|s| crate::storage::repositories::tasks::EkoStatus::from_str(&s).ok()),
+        payload_json: context,
+        created_at: chrono::Utc::now(),
+    };
+
+    match state
+        .coordinator
+        .repositories()
+        .tasks()
+        .save_eko_context(&eko_context)
+        .await
+    {
+        Ok(id) => Ok(api_success!(id)),
+        Err(e) => {
+            error!("Eko状态保存失败: {}", e);
+            Ok(api_error!("eko_ctx.upsert_state_failed"))
+        }
+    }
+}
+
+/// 追加事件到上下文轨
+#[tauri::command]
+pub async fn eko_ctx_append_event(
+    task_id: String,
+    event: String,
+    node_id: Option<String>,
+    state: State<'_, StorageCoordinatorState>,
+) -> TauriApiResult<i64> {
+    let eko_context = EkoContext {
+        id: None,
+        task_id: task_id.clone(),
+        conversation_id: 1, // TODO: 从当前会话获取
+        kind: crate::storage::repositories::tasks::EkoContextKind::Event,
+        name: None,
+        node_id,
+        status: None,
+        payload_json: event,
+        created_at: chrono::Utc::now(),
+    };
+
+    match state
+        .coordinator
+        .repositories()
+        .tasks()
+        .save_eko_context(&eko_context)
+        .await
+    {
+        Ok(id) => Ok(api_success!(id)),
+        Err(_) => Ok(api_error!("eko_ctx.append_event_failed")),
+    }
+}
+
+/// 保存快照到上下文轨
+#[tauri::command]
+pub async fn eko_ctx_snapshot_save(
+    task_id: String,
+    name: Option<String>,
+    snapshot: String,
+    state: State<'_, StorageCoordinatorState>,
+) -> TauriApiResult<i64> {
+    let eko_context = EkoContext {
+        id: None,
+        task_id: task_id.clone(),
+        conversation_id: 1, // TODO: 从当前会话获取
+        kind: crate::storage::repositories::tasks::EkoContextKind::Snapshot,
+        name,
+        node_id: None,
+        status: None,
+        payload_json: snapshot,
+        created_at: chrono::Utc::now(),
+    };
+
+    match state
+        .coordinator
+        .repositories()
+        .tasks()
+        .save_eko_context(&eko_context)
+        .await
+    {
+        Ok(id) => {
+            debug!("Eko快照保存成功，ID: {}", id);
+            Ok(api_success!(id))
+        }
+        Err(e) => {
+            error!("Eko快照保存失败: {}", e);
+            Ok(api_error!("eko_ctx.snapshot_save_failed"))
+        }
+    }
+}
+
+/// 获取任务的最新状态
+#[tauri::command]
+pub async fn eko_ctx_get_state(
+    task_id: String,
+    state: State<'_, StorageCoordinatorState>,
+) -> TauriApiResult<Option<EkoContext>> {
+    match state
+        .coordinator
+        .repositories()
+        .tasks()
+        .get_latest_eko_state(&task_id)
+        .await
+    {
+        Ok(context) => {
+            debug!("Eko状态获取成功");
+            Ok(api_success!(context))
+        }
+        Err(e) => {
+            error!("Eko状态获取失败: {}", e);
+            Ok(api_error!("eko_ctx.get_state_failed"))
+        }
+    }
+}
+
+/// 重建任务执行上下文（用于恢复/重跑）
+#[tauri::command]
+pub async fn eko_ctx_rebuild(
+    task_id: String,
+    from_snapshot_name: Option<String>,
+    state: State<'_, StorageCoordinatorState>,
+) -> TauriApiResult<String> {
+    match state
+        .coordinator
+        .repositories()
+        .tasks()
+        .rebuild_eko_context(&task_id, from_snapshot_name.as_deref())
+        .await
+    {
+        Ok(context) => {
+            debug!("Eko上下文重建成功");
+            Ok(api_success!(context))
+        }
+        Err(e) => {
+            error!("Eko上下文重建失败: {}", e);
+            Ok(api_error!("eko_ctx.rebuild_failed"))
+        }
+    }
+}
+
+/// 构建Prompt（统一入口）
+#[tauri::command]
+pub async fn eko_ctx_build_prompt(
+    task_id: String,
+    user_input: String,
+    pane_id: Option<String>,
+    tag_context: Option<String>,
+    state: State<'_, StorageCoordinatorState>,
+) -> TauriApiResult<String> {
+    match state
+        .coordinator
+        .repositories()
+        .tasks()
+        .build_prompt(
+            &task_id,
+            &user_input,
+            pane_id.as_deref(),
+            tag_context.as_deref(),
+        )
+        .await
+    {
+        Ok(prompt) => {
+            debug!("Prompt构建成功");
+            Ok(api_success!(prompt))
+        }
+        Err(e) => {
+            error!("Prompt构建失败: {}", e);
+            Ok(api_error!("eko_ctx.build_prompt_failed"))
+        }
+    }
+}
+
+// ---- UI 轨 API ----
+
+/// 创建或更新UI任务
+#[tauri::command]
+pub async fn ui_task_upsert(
+    record: UITask,
+    state: State<'_, StorageCoordinatorState>,
+) -> TauriApiResult<i64> {
+    debug!("UI任务: 创建/更新 task_id={}", record.task_id);
+
+    match state
+        .coordinator
+        .repositories()
+        .tasks()
+        .upsert_ui_task(&record)
+        .await
+    {
+        Ok(ui_id) => {
+            debug!("UI任务操作成功，ID: {}", ui_id);
+            Ok(api_success!(ui_id))
+        }
+        Err(e) => {
+            error!("UI任务操作失败: {}", e);
+            Ok(api_error!("ui_task.upsert_failed"))
+        }
+    }
+}
+
+/// 批量创建或更新UI任务
+#[tauri::command]
+pub async fn ui_task_bulk_upsert(
+    records: Vec<UITask>,
+    state: State<'_, StorageCoordinatorState>,
+) -> TauriApiResult<Vec<i64>> {
+    debug!("UI任务: 批量操作 {} 个任务", records.len());
+
+    let mut results = Vec::new();
+    for record in records {
+        match state
+            .coordinator
+            .repositories()
+            .tasks()
+            .upsert_ui_task(&record)
+            .await
+        {
+            Ok(ui_id) => results.push(ui_id),
+            Err(e) => {
+                error!("批量UI任务操作失败: {}", e);
+                return Ok(api_error!("ui_task.bulk_upsert_failed"));
+            }
+        }
+    }
+
+    debug!("批量UI任务操作成功");
+    Ok(api_success!(results))
+}
+
+/// 获取会话的UI任务列表
+#[tauri::command]
+pub async fn ui_task_list(
+    conversation_id: i64,
+    _filters: Option<String>,
+    state: State<'_, StorageCoordinatorState>,
+) -> TauriApiResult<Vec<UITask>> {
+    match state
+        .coordinator
+        .repositories()
+        .tasks()
+        .get_ui_tasks(conversation_id)
+        .await
+    {
+        Ok(tasks) => Ok(api_success!(tasks)),
+        Err(e) => {
+            error!("UI任务列表获取失败: {}", e);
+            Ok(api_error!("ui_task.list_failed"))
+        }
+    }
+}
+
+/// 删除UI任务
+#[tauri::command]
+pub async fn ui_task_delete(
+    ui_id: i64,
+    state: State<'_, StorageCoordinatorState>,
+) -> TauriApiResult<EmptyData> {
+    debug!("UI任务: 删除 ui_id={}", ui_id);
+
+    match state
+        .coordinator
+        .repositories()
+        .tasks()
+        .delete_ui_task(ui_id)
+        .await
+    {
+        Ok(()) => {
+            debug!("UI任务删除成功");
+            Ok(api_success!())
+        }
+        Err(e) => {
+            error!("UI任务删除失败: {}", e);
+            Ok(api_error!("ui_task.delete_failed"))
         }
     }
 }

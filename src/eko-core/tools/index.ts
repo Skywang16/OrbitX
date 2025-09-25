@@ -1,12 +1,12 @@
 import { JSONSchema7, NativeLLMToolCall } from '../types'
 import { ToolWrapper } from './wrapper'
 import { AgentContext } from '../core/context'
-import ForeachTaskTool from './foreach_task'
 import HumanInteractTool from './human_interact'
 import TaskNodeStatusTool from './task_node_status'
-import WatchTriggerTool from './watch_trigger'
 import ReactPlannerTool from './react_planner'
 import NewTaskTool from './new_task'
+import ReplanSubtreeTool from './replan_subtree'
+import TaskTreeEditTool from './task_tree_edit'
 import { Tool, ToolResult } from '../types/tools.types'
 
 export class McpTool implements Tool {
@@ -31,4 +31,4 @@ export class McpTool implements Tool {
   }
 }
 
-export { ForeachTaskTool, HumanInteractTool, TaskNodeStatusTool, WatchTriggerTool, ReactPlannerTool, NewTaskTool }
+export { HumanInteractTool, TaskNodeStatusTool, ReactPlannerTool, NewTaskTool, ReplanSubtreeTool, TaskTreeEditTool }

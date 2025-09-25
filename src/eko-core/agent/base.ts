@@ -1,20 +1,18 @@
 import config from '../config'
 import Log from '../common/log'
-import { extractUsedTool, handleLargeContextMessages } from '../memory'
+import { handleLargeContextMessages } from '../memory'
 import { RetryLanguageModel } from '../llm'
-import { ToolWrapper } from '../tools/wrapper'
 import { ToolChain } from '../core/chain'
 import Context, { AgentContext, generateNodeId } from '../core/context'
-import { ForeachTaskTool, McpTool, WatchTriggerTool } from '../tools'
+import { NewTaskTool, ReplanSubtreeTool, TaskTreeEditTool } from '../tools'
 import { mergeTools } from '../common/utils'
+import type { ToolContext } from '../tools/registry'
 import {
   Task,
   IMcpClient,
   LLMRequest,
   Tool,
-  ToolExecuter,
   ToolResult,
-  ToolSchema,
   StreamCallback,
   HumanCallback,
   NativeLLMMessage,
@@ -61,6 +59,7 @@ export class Agent {
   protected requestHandler?: (request: LLMRequest) => void
   protected callback?: StreamCallback & HumanCallback
   protected agentContext?: AgentContext
+  // Tool registry is now accessed via context.toolRegistry
 
   constructor(params: AgentParams) {
     this.name = params.name
@@ -87,7 +86,7 @@ export class Agent {
 
   public async runWithContext(
     agentContext: AgentContext,
-    mcpClient?: IMcpClient,
+    _mcpClient?: IMcpClient,
     maxReactNum: number = 100,
     historyMessages: NativeLLMMessage[] = []
   ): Promise<string> {
@@ -98,9 +97,14 @@ export class Agent {
     const task = context.task
     const runtime = context.reactRuntime
 
+    // 将 Agent 级 MCP 客户端注入到上下文的 ToolRegistry（若存在）
+    if (this.mcpClient) {
+      context.toolRegistry.registerMcpClient('agent', this.mcpClient)
+    }
+
     context.currentNodeId = generateNodeId(context.taskId, 'execution')
-    const staticTools = [...this.tools]
-    const baseTools = mergeTools(staticTools, this.system_auto_tools(task))
+    const availableTools = await this.loadTools(context)
+    const baseTools = mergeTools(availableTools, this.system_auto_tools(task))
     const systemPrompt = await this.buildSystemPrompt(agentContext, baseTools)
     const userPrompt = await this.buildUserPrompt(agentContext, baseTools)
     const messages: NativeLLMMessage[] = [
@@ -121,26 +125,18 @@ export class Agent {
     while (loopNum < maxReactNum) {
       await context.checkAborted()
 
-      if (runtime.shouldHalt()) {
-        throw new Error('ReAct loop halted by runtime guard')
+      if (runtime.shouldHalt() || context.stateManager.shouldHalt()) {
+        throw new Error('ReAct loop halted by runtime/state guard')
       }
 
-      const latestBaseTools = mergeTools(staticTools, this.system_auto_tools(context.task))
+      const latestAvailable = await this.loadTools(context)
+      const latestBaseTools = mergeTools(latestAvailable, this.system_auto_tools(context.task))
       agentTools = latestBaseTools
-
-      if (mcpClient) {
-        const controlMcp = await this.controlMcpTools(agentContext, messages, loopNum)
-        if (controlMcp.mcpTools) {
-          const mcpTools = await this.listTools(context, mcpClient, context.task, controlMcp.mcpParams)
-          const usedTools: Tool[] = extractUsedTool(messages, agentTools)
-          const mergedTools = mergeTools(latestBaseTools, mergeTools(usedTools, mcpTools))
-          agentTools = mergedTools
-        }
-      }
 
       await this.handleMessages(agentContext, messages, latestBaseTools)
       const llmTools = convertTools(agentTools)
       const iteration = runtime.startIteration()
+      context.stateManager.incrementIteration()
 
       const llmOutput = await callAgentLLM(
         agentContext,
@@ -166,6 +162,7 @@ export class Agent {
         const finalText = outcome.finalText.trim()
         if (!finalText) {
           runtime.markIdleRound()
+          context.stateManager.markIdleRound()
           continue
         }
 
@@ -174,6 +171,7 @@ export class Agent {
           const { completionStatus } = await doTaskResultCheck(agentContext, rlm, messages, llmTools)
           if (completionStatus === 'incomplete') {
             runtime.markIdleRound()
+            context.stateManager.markIdleRound()
             continue
           }
         }
@@ -198,6 +196,7 @@ export class Agent {
       }
 
       runtime.markIdleRound()
+      context.stateManager.markIdleRound()
     }
 
     runtime.setStopReason('length')
@@ -288,7 +287,6 @@ export class Agent {
             if (firstPart && firstPart.type === 'text' && agentContext.context.task) {
               agentContext.context.task.xml = firstPart.text
             }
-            // Update current node pointer to the next todo id if provided
             const todoIdsRaw = (args as Record<string, unknown>)['todoIds']
             const todoIds = Array.isArray(todoIdsRaw) ? todoIdsRaw : undefined
             const nextId = todoIds && typeof todoIds[0] === 'string' ? (todoIds[0] as string) : undefined
@@ -317,6 +315,7 @@ export class Agent {
         if (toolResult.isError) {
           const errorText = toolResult.content[0]?.type === 'text' ? toolResult.content[0].text : 'Unknown error'
           agentContext.consecutiveErrorNum++
+          agentContext.context.stateManager.incrementErrorCount()
           hadError = true
           runtime.failIteration(iteration, `Tool ${toolCall.name} failed: ${errorText}`)
           if (agentContext.consecutiveErrorNum >= 5) {
@@ -325,6 +324,7 @@ export class Agent {
         } else {
           agentContext.consecutiveErrorNum = 0
           runtime.resetErrorCounter()
+          agentContext.context.stateManager.resetErrorCount()
         }
       } catch (e) {
         Log.error(
@@ -346,6 +346,7 @@ export class Agent {
         toolChain.updateToolResult(toolResult)
         runtime.recordObservation(iteration, toolCall.name, toolResult)
         agentContext.consecutiveErrorNum++
+        agentContext.context.stateManager.incrementErrorCount()
         hadError = true
         runtime.failIteration(iteration, errorMessage)
         if (agentContext.consecutiveErrorNum >= 5) {
@@ -387,19 +388,9 @@ export class Agent {
     }
   }
 
-  protected system_auto_tools(task?: Task): Tool[] {
-    const autoTools: Tool[] = []
-    let taskXml = task?.xml || ''
-
-    let hasForeach = taskXml.indexOf('</forEach>') > -1
-    if (hasForeach) {
-      autoTools.push(new ForeachTaskTool())
-    }
-    let hasWatch = taskXml.indexOf('</watch>') > -1
-    if (hasWatch) {
-      autoTools.push(new WatchTriggerTool())
-    }
-    let existingNames = this.tools.map(tool => tool.name)
+  protected system_auto_tools(_task?: Task): Tool[] {
+    const autoTools: Tool[] = [new NewTaskTool(), new ReplanSubtreeTool(), new TaskTreeEditTool()]
+    const existingNames = this.tools.map(tool => tool.name)
     return autoTools.filter(tool => existingNames.indexOf(tool.name) === -1)
   }
 
@@ -421,81 +412,13 @@ export class Agent {
     return ''
   }
 
-  private async listTools(
-    context: Context,
-    mcpClient: IMcpClient,
-    task?: Task,
-    mcpParams?: Record<string, unknown>
-  ): Promise<Tool[]> {
-    try {
-      if (!mcpClient.isConnected()) {
-        await mcpClient.connect(context.controller.signal)
-      }
-      let list = await mcpClient.listTools(
-        {
-          taskId: context.taskId,
-          nodeId: task?.taskId,
-          environment: config.platform,
-          agent_name: this.name,
-          params: {},
-          prompt: task?.description || context.chain.taskPrompt,
-          ...(mcpParams || {}),
-        },
-        context.controller.signal
-      )
-      let mcpTools: Tool[] = []
-      for (let i = 0; i < list.length; i++) {
-        let toolSchema: ToolSchema = list[i]
-        let execute = this.toolExecuter(mcpClient, toolSchema.name)
-        let toolWrapper = new ToolWrapper(toolSchema, execute)
-        mcpTools.push(new McpTool(toolWrapper))
-      }
-      return mcpTools
-    } catch (e) {
-      Log.error('Mcp listTools error', e instanceof Error ? e : String(e))
-      return []
-    }
-  }
-
-  protected async controlMcpTools(
-    _agentContext: AgentContext,
-    _messages: NativeLLMMessage[],
-    _loopNum: number
-  ): Promise<{
-    mcpTools: boolean
-    mcpParams?: Record<string, unknown>
-  }> {
-    return {
-      mcpTools: _loopNum == 0,
-    }
-  }
-
-  protected toolExecuter(mcpClient: IMcpClient, name: string): ToolExecuter {
-    return {
-      execute: async function (args, agentContext): Promise<ToolResult> {
-        return await mcpClient.callTool(
-          {
-            name: name,
-            arguments: args,
-            extInfo: {
-              taskId: agentContext.context.taskId,
-              nodeId: agentContext.context.taskId,
-              environment: config.platform,
-              agent_name: agentContext.agent.Name,
-            },
-          },
-          agentContext.context.controller.signal
-        )
-      },
-    }
-  }
+  // MCP 工具获取逻辑已迁移至 Context 的 ToolRegistry
 
   protected async handleMessages(
     _agentContext: AgentContext,
     _messages: NativeLLMMessage[],
     _tools: Tool[]
   ): Promise<void> {
-    // Only keep the last image / file, large tool-text-result
     handleLargeContextMessages(_messages)
   }
 
@@ -512,22 +435,24 @@ export class Agent {
   }
 
   public async loadTools(context: Context): Promise<Tool[]> {
-    if (this.mcpClient) {
-      let mcpTools = await this.listTools(context, this.mcpClient, context.task)
-      if (mcpTools && mcpTools.length > 0) {
-        return mergeTools(this.tools, mcpTools)
-      }
+    // 刷新静态工具快照（支持 Agent.setMode 等动态变更）
+    context.toolRegistry.registerStaticTools(this.tools)
+    const toolContext: ToolContext = {
+      taskId: context.taskId,
+      nodeId: context.currentNodeId,
+      agentName: this.name,
+      environment: config.platform,
+      iteration: context.stateManager.getState().iterations,
+      abortSignal: context.controller.signal,
     }
-    return this.tools
+    return await context.toolRegistry.getAvailableTools(toolContext)
   }
 
   public addTool(tool: Tool) {
     this.tools.push(tool)
   }
 
-  protected async onTaskStatus(_status: 'pause' | 'abort' | 'resume-pause', _reason?: string) {
-    // Task status handling - variables removed
-  }
+  protected async onTaskStatus(_status: 'pause' | 'abort' | 'resume-pause', _reason?: string) {}
 
   get Llms(): string[] | undefined {
     return this.llms

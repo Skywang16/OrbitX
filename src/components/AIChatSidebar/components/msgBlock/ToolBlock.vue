@@ -42,8 +42,7 @@
 <script setup lang="ts">
   import { ref, computed } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import type { AIOutputStep } from '@/types'
-  import type { ToolExecution } from '@/types'
+  import type { PersistedToolStep } from '@/api/ai/types'
   import EditResult from './components/EditResult.vue'
   interface EditResultData {
     file: string
@@ -54,13 +53,15 @@
     startLine: number | null
     endLine: number | null
     previewOnly: boolean
+    old: string
+    new: string
   }
   import stripAnsi from 'strip-ansi'
 
   const { t } = useI18n()
 
   const props = defineProps<{
-    step: AIOutputStep & { toolExecution?: ToolExecution }
+    step: PersistedToolStep
   }>()
 
   const isExpanded = ref(false)
@@ -149,7 +150,8 @@
     return toolIcons[toolName as keyof typeof toolIcons] || toolIcons.unknown
   }
 
-  const getToolParam = (toolExecution: ToolExecution) => {
+  type AnyToolExecution = { name: string; params?: Record<string, unknown> }
+  const getToolParam = (toolExecution: AnyToolExecution) => {
     const { name, params } = toolExecution
 
     switch (name) {
@@ -157,28 +159,28 @@
       case 'read_file':
       case 'write_to_file':
       case 'insert_content':
-        return formatPath(params.path as string)
+        return formatPath((params?.path as string) || '')
 
       case 'read_many_files':
-        return `${(params.paths as string[])?.length || 0} files`
+        return `${(params?.paths as string[])?.length || 0} files`
 
       case 'web_fetch':
-        return formatUrl(params.url as string)
+        return formatUrl((params?.url as string) || '')
 
       case 'orbit_search':
-        return formatText(params.query as string)
+        return formatText((params?.query as string) || '')
 
       case 'shell':
-        return formatText(params.command as string)
+        return formatText((params?.command as string) || '')
 
       case 'list_files':
-        return formatPath(params.path as string)
+        return formatPath((params?.path as string) || '')
 
       case 'list_code_definition_names':
-        return formatPath(params.path as string)
+        return formatPath((params?.path as string) || '')
 
       case 'apply_diff':
-        return `${(params.files as { path: string; hunks: unknown[] }[])?.length || 0} files`
+        return `${(params?.files as { path: string; hunks: unknown[] }[])?.length || 0} files`
 
       default:
         return ''

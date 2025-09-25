@@ -19,8 +19,6 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue'
-
   interface EditResultData {
     file: string
     replacedCount: number
@@ -34,7 +32,7 @@
     new: string
   }
 
-  const props = defineProps<{
+  defineProps<{
     editData: EditResultData
   }>()
 

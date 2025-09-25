@@ -4,29 +4,63 @@
 
 ## 项目结构
 
-```
+```text
 src-tauri/src/
-├── main.rs          # 应用程序入口点
-├── lib.rs           # 主库文件，负责应用初始化
-├── commands/        # Tauri 命令模块
-│   ├── mod.rs       # 命令模块导出
-│   ├── mux_terminal.rs  # 基于 Mux 的终端命令
-│   └── window.rs    # 窗口相关命令
-├── mux/             # 终端多路复用器核心模块
-│   ├── mod.rs       # 模块导出和类型定义
-│   ├── terminal_mux.rs  # 核心 Mux 管理器
-│   ├── pane.rs      # 面板接口和实现
-│   ├── io_handler.rs    # I/O 处理器
-│   ├── singleton.rs # 全局单例管理
-│   └── types.rs     # 核心数据类型
-├── state/           # 应用状态管理
-│   └── mod.rs       # 状态管理
-├── terminal/        # 终端核心功能
-│   └── mod.rs       # 终端管理器
-└── utils/           # 工具模块
-    ├── mod.rs       # 工具模块导出
-    ├── error.rs     # 错误处理
-    └── logging.rs   # 日志系统
+├── main.rs                        # 应用程序入口
+├── lib.rs                         # 应用初始化、插件加载、命令注册入口
+├── commands/
+│   └── mod.rs                     # 统一注册所有领域命令（invoke_handler 聚合器）
+├── setup/
+│   └── mod.rs                     # 初始化日志、状态注入、统一事件/深链/启动参数
+├── mux/                           # 终端多路复用器核心模块
+│   ├── mod.rs
+│   ├── terminal_mux.rs            # 核心 Mux 管理器
+│   ├── io_handler.rs              # I/O 处理
+│   ├── io_thread_pool.rs          # I/O 线程池
+│   ├── pane.rs                    # Pane 接口与实现
+│   ├── performance_monitor.rs     # 性能监控
+│   └── singleton.rs               # 全局单例（应用生命周期）
+├── terminal/                      # 终端上下文与事件
+│   ├── mod.rs
+│   ├── commands/                  # 终端上下文相关的 Tauri 命令
+│   ├── context_registry.rs
+│   ├── context_service.rs
+│   ├── event_handler.rs           # 统一将 Mux 事件转为 Tauri 事件
+│   ├── channel_manager.rs
+│   └── channel_state.rs
+├── shell/
+│   └── commands.rs                # Shell 集成命令（与 Pane/终端交互）
+├── ai/
+│   ├── mod.rs
+│   ├── commands/                  # AI 相关命令（模型、会话等）
+│   ├── service.rs
+│   └── tool/
+│       └── shell/
+│           └── mux_terminal.rs    # AI 工具对终端的适配命令
+├── llm/
+│   ├── mod.rs
+│   ├── commands.rs                # LLM 调用/流式/模型注册等
+│   ├── registry.rs
+│   ├── service.rs
+│   └── providers/
+├── ck/
+│   └── commands.rs                # CK 索引管理与搜索命令
+├── filesystem/
+│   └── commands.rs                # 文件系统与代码结构解析命令
+├── config/
+│   ├── mod.rs
+│   ├── commands.rs
+│   ├── terminal_commands.rs
+│   ├── shortcuts/
+│   └── theme/
+└── utils/
+    ├── mod.rs
+    ├── api_response.rs
+    ├── error.rs
+    ├── error_handler.rs
+    ├── language.rs
+    ├── language_commands.rs
+    └── i18n.rs
 ```
 
 ## 核心功能
@@ -70,7 +104,7 @@ src-tauri/src/
 1. **TerminalMux**: 核心多路复用器，管理所有终端面板
 2. **Pane**: 面板接口，封装 PTY 操作
 3. **IoHandler**: I/O 处理器，负责高效的数据读写
-4. **通知系统**: 事件驱动的组件间通信
+4. **统一事件转发**: 在 `terminal/event_handler.rs` 中订阅 `mux::singleton` 事件并转发为 Tauri 事件
 
 ### 关键特性
 
@@ -85,15 +119,17 @@ src-tauri/src/
 
 ### 日志系统
 
-基于 `tracing` 的结构化日志，支持不同级别的日志输出，包含详细的操作跟踪。
+基于 `tracing` 的结构化日志，由 `setup::init_logging()` 初始化；支持不同级别的日志输出，包含详细的操作跟踪。
 
 ## 扩展性
 
 ### 添加新功能
 
-1. 在 `mux` 模块中扩展核心功能
-2. 在 `commands/mux_terminal.rs` 中添加对应的 Tauri 命令
-3. 在 `lib.rs` 中注册新的命令处理器
+1. 在 `mux/` 或 `terminal/` 中扩展核心能力（如事件、上下文、I/O）
+2. 在对应领域的 `commands` 中添加 Tauri 命令：
+   - 终端/壳集成：`shell/commands.rs` 或 `terminal/commands/*`
+   - AI 工具对终端的适配：`ai/tool/shell/mux_terminal.rs`
+3. 在 `commands/mod.rs` 中统一聚合注册（无需在 `lib.rs` 分散注册）
 
 ### 添加新的终端功能
 
@@ -104,10 +140,10 @@ src-tauri/src/
 
 ### 扩展通知系统
 
-1. 在 `MuxNotification` 枚举中添加新的通知类型
-2. 在 `TerminalMux::notification_to_tauri_event` 中添加转换逻辑
+1. 在 `terminal/event_handler.rs` 中扩展 `TerminalEventHandler` 以订阅新的 Mux 事件
+2. 将事件转换/转发为 Tauri 事件
 3. 前端监听对应的事件
 
 ### 错误处理扩展
 
-在 `mux/error.rs` 中的 `MuxError` 和 `PaneError` 枚举添加新的错误类型。
+在相应领域的错误定义中添加新的错误类型（如 `mux/`、`terminal/` 等）。

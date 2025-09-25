@@ -134,9 +134,9 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::config::shortcuts::shortcuts_get_action_metadata,
         crate::config::shortcuts::shortcuts_validate_key_combination,
         // 语言设置命令
-        crate::utils::language_commands::language_set_app_language,
-        crate::utils::language_commands::language_get_app_language,
-        crate::utils::language_commands::language_get_supported_languages,
+        crate::utils::i18n::commands::language_set_app_language,
+        crate::utils::i18n::commands::language_get_app_language,
+        crate::utils::i18n::commands::language_get_supported_languages,
         // AI 模型管理命令
         crate::ai::commands::ai_models_get,
         crate::ai::commands::ai_models_add,
@@ -150,7 +150,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::ai::commands::ai_conversation_update_title,
         crate::ai::commands::ai_conversation_delete,
         crate::ai::commands::ai_conversation_get_compressed_context,
-        crate::ai::commands::ai_conversation_build_prompt_with_context,
+        // 统一使用eko_ctx_build_prompt替代ai_conversation_build_prompt_with_context
         crate::ai::commands::ai_conversation_get_user_prefix_prompt,
         crate::ai::commands::ai_conversation_set_user_prefix_prompt,
         crate::ai::commands::ai_conversation_save_message,
@@ -172,20 +172,17 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::ai::tool::storage::storage_update_config,
         crate::ai::tool::storage::storage_save_session_state,
         crate::ai::tool::storage::storage_load_session_state,
-        // 任务持久化命令（M2）
-        crate::ai::tool::storage::task_save_ui_messages,
-        crate::ai::tool::storage::task_read_ui_messages,
-        crate::ai::tool::storage::task_save_api_messages,
-        crate::ai::tool::storage::task_read_api_messages,
-        crate::ai::tool::storage::task_save_metadata,
-        crate::ai::tool::storage::task_read_metadata,
-        crate::ai::tool::storage::task_checkpoint_save,
-        crate::ai::tool::storage::task_checkpoint_list,
-        crate::ai::tool::storage::task_purge_all,
-        // 任务索引检索命令（M3）
-        crate::ai::tool::storage::task_get,
-        crate::ai::tool::storage::task_list,
-        crate::ai::tool::storage::task_delete,
+        // 双轨制任务系统命令
+        crate::ai::tool::storage::eko_ctx_upsert_state,
+        crate::ai::tool::storage::eko_ctx_append_event,
+        crate::ai::tool::storage::eko_ctx_snapshot_save,
+        crate::ai::tool::storage::eko_ctx_get_state,
+        crate::ai::tool::storage::eko_ctx_rebuild,
+        crate::ai::tool::storage::eko_ctx_build_prompt,
+        crate::ai::tool::storage::ui_task_upsert,
+        crate::ai::tool::storage::ui_task_bulk_upsert,
+        crate::ai::tool::storage::ui_task_list,
+        crate::ai::tool::storage::ui_task_delete,
         // 网络请求命令
         crate::ai::tool::network::network_web_fetch_headless,
         crate::ai::tool::network::network_simple_web_fetch,

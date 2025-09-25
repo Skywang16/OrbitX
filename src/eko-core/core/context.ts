@@ -1,10 +1,14 @@
 import type { Agent } from '../agent'
+import type { PlannedTask } from '../types/core.types'
 import { sleep } from '../common/utils'
 import Chain from './chain'
 import { EkoConfig, NativeLLMMessage, Task } from '../types'
 import config from '../config'
 import ReactRuntime from '../react/runtime'
 import { ReactRuntimeConfig } from '../react/types'
+import { EventEmitter } from '../events/emitter'
+import { StateManager } from '../state/manager'
+import { ToolRegistry } from '../tools/registry'
 
 /**
  * 生成节点ID
@@ -36,12 +40,34 @@ export default class Context {
   private pauseStatus: 0 | 1 | 2 = 0
   readonly currentStepControllers: Set<AbortController> = new Set()
   readonly reactRuntime: ReactRuntime
+  // 事件与统一状态管理器（统一架构）
+  eventEmitter!: EventEmitter
+  stateManager!: StateManager
+  // 工具注册表（由 Eko 注入，Agent 统一从此处获取工具）
+  toolRegistry!: ToolRegistry
   // 任务树字段
   rootTaskId?: string
   parentTaskId?: string
   children: string[] = []
   // 与 Eko 的弱引用能力（避免循环依赖）
-  spawnChildTask?: (parentTaskId: string, message: string) => Promise<string>
+  spawnChildTask?: (
+    parentTaskId: string,
+    message: string,
+    options?: { silent?: boolean; pauseParent?: boolean }
+  ) => Promise<string>
+  spawnPlannedTree?: (
+    parentTaskId: string,
+    planned: {
+      name?: string
+      thought?: string
+      description?: string
+      nodes?: { text: string }[]
+      subtasks?: PlannedTask[]
+    },
+    options?: { silent?: boolean }
+  ) => Promise<{ rootId: string; allTaskIds: string[]; leafTaskIds: string[] }>
+  getTaskContext?: (taskId: string) => Context | undefined
+  deleteTask?: (taskId: string) => boolean
   completeChildTask?: (childTaskId: string, summary: string, payload?: unknown) => Promise<void>
   executeTask?: (taskId: string) => Promise<{
     taskId: string

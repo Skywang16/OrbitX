@@ -300,7 +300,7 @@ impl IoHandler {
                     pending_incomplete.clear();
                 }
 
-                let (valid_prefix, remainder_start) = match std::str::from_utf8(&data_to_send) {
+                let (valid_prefix, _remainder_start) = match std::str::from_utf8(&data_to_send) {
                     Ok(s) => (s, data_to_send.len()),
                     Err(err) => {
                         let valid_up_to = err.valid_up_to();

@@ -1,10 +1,10 @@
 import { NativeLLMMessage, NativeLLMMessagePart, NativeLLMTool, NativeLLMToolCall } from '../types/llm.types'
-import { Tool, DialogueTool, ToolResult } from '../types'
+import { Tool, ToolResult } from '../types'
 
 /**
  * Convert tools to native format
  */
-export function convertTools(tools: Tool[] | DialogueTool[]): NativeLLMTool[] {
+export function convertTools(tools: Tool[]): NativeLLMTool[] {
   return tools.map(tool => ({
     name: tool.name,
     description: tool.description || '',
@@ -15,7 +15,7 @@ export function convertTools(tools: Tool[] | DialogueTool[]): NativeLLMTool[] {
 /**
  * Get tool by name from tool array
  */
-export function getTool<T extends Tool | DialogueTool>(tools: T[], name: string): T | null {
+export function getTool<T extends Tool>(tools: T[], name: string): T | null {
   for (let i = 0; i < tools.length; i++) {
     if (tools[i].name === name) {
       return tools[i]

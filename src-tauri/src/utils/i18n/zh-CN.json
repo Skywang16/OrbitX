@@ -95,5 +95,25 @@
     "build_failed": "索引构建失败",
     "build_canceled": "索引构建已取消",
     "delete_failed": "删除索引失败"
+  },
+  "storage": {
+    "get_config_failed": "获取配置失败",
+    "update_config_failed": "更新配置失败",
+    "save_session_failed": "保存会话状态失败",
+    "load_session_failed": "加载会话状态失败"
+  },
+  "eko_ctx": {
+    "upsert_state_failed": "更新Eko状态失败",
+    "append_event_failed": "追加Eko事件失败",
+    "snapshot_save_failed": "保存Eko快照失败",
+    "get_state_failed": "获取Eko状态失败",
+    "rebuild_failed": "重建Eko上下文失败",
+    "build_prompt_failed": "构建Prompt失败"
+  },
+  "ui_task": {
+    "upsert_failed": "创建/更新UI任务失败",
+    "bulk_upsert_failed": "批量操作UI任务失败",
+    "list_failed": "获取UI任务列表失败",
+    "delete_failed": "删除UI任务失败"
   }
 }

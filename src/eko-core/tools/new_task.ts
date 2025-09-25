@@ -1,40 +1,30 @@
 import { JSONSchema7 } from '../types'
+import type { PlannedTask } from '../types'
 import { AgentContext } from '../core/context'
 import { Tool, ToolResult } from '../types/tools.types'
+import { TreePlanner } from '../core/plan-tree'
 
 export const TOOL_NAME = 'new_task'
 
 /**
- * Spawn a subtask with isolated context and objective.
- * MVP: serial execution (pause parent -> run child -> resume parent)
+ * Plan a TWO-LEVEL task tree under the current task and execute all leaf subtasks sequentially.
+ * Flow: plan -> spawn silently (parent -> groups -> subtasks) -> pause parent -> run leaves in order -> resume parent
  */
 export default class NewTaskTool implements Tool {
   readonly name = TOOL_NAME
   readonly description =
-    'Spawn a subtask with an isolated context. Use when you need exploration, long-running work, or to isolate effects.'
+    'Plan a two-level task tree (groups -> subtasks), create tasks under the current task, and execute all subtasks sequentially.'
   readonly parameters: JSONSchema7 = {
     type: 'object',
     properties: {
       message: {
         type: 'string',
-        description: 'Subtask objective/instruction',
-      },
-      mode: {
-        type: 'string',
-        enum: ['code', 'debug', 'architect', 'general'],
-        default: 'general',
-        description: 'Optional execution mode for the child task (reserved for future use).',
-      },
-      todos: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Optional initial todos to seed the child task with.',
+        description: 'High-level objective; the planner will produce groups and subtasks with concrete steps.',
       },
     },
     required: ['message'],
   }
-  readonly planDescription =
-    'Creates a child task, pauses the parent, runs the child to completion, then resumes the parent with a summary.'
+  readonly planDescription = 'Creates a two-level task plan and runs all leaf subtasks sequentially.'
   readonly noPlan = true
 
   async execute(args: Record<string, unknown>, agentContext: AgentContext): Promise<ToolResult> {
@@ -42,61 +32,100 @@ export default class NewTaskTool implements Tool {
     const message = String(args?.message || '').trim()
     if (!message) {
       return {
-        content: [
-          {
-            type: 'text',
-            text: 'new_task: parameter "message" is required',
-          },
-        ],
+        content: [{ type: 'text', text: 'new_task: parameter "message" is required' }],
         isError: true,
       }
     }
 
-    if (!context.spawnChildTask || !context.completeChildTask || !context.executeTask) {
+    if (!context.spawnPlannedTree || !context.executeTask) {
       return {
-        content: [
-          {
-            type: 'text',
-            text: 'new_task: environment not ready (missing Eko bindings).',
-          },
-        ],
+        content: [{ type: 'text', text: 'new_task: environment not ready (missing Eko bindings).' }],
         isError: true,
       }
     }
+
+    const planner = new TreePlanner(context)
+    let planned: PlannedTask
+    try {
+      planned = await planner.planTree(message)
+    } catch (e) {
+      const errText = e instanceof Error ? e.message : String(e)
+      return { content: [{ type: 'text', text: `Tree planning failed: ${errText}` }], isError: true }
+    }
+
+    // Sanitize plan: ensure names/descriptions, clamp to two levels
+    const sanitize = (plan: PlannedTask, depth: number): PlannedTask => {
+      const p: PlannedTask = { ...plan }
+      if (!p.name || !String(p.name).trim()) p.name = (p.description && String(p.description).trim()) || ''
+      if (!p.description || !String(p.description).trim()) p.description = p.name || ''
+      if (depth >= 2) {
+        // drop deeper nesting
+        delete p.subtasks
+        return p
+      }
+      if (Array.isArray(p.subtasks)) {
+        p.subtasks = p.subtasks.map((child: PlannedTask) => sanitize(child, depth + 1))
+      }
+      return p
+    }
+    planned = sanitize({ ...planned, name: planned.name || message, description: planned.description || message }, 0)
 
     const parentTaskId = context.taskId
-    // 1) spawn child
-    const childTaskId = await context.spawnChildTask(parentTaskId, message)
+    const { allTaskIds, leafTaskIds } = await context.spawnPlannedTree(parentTaskId, planned, { silent: true })
 
-    // 2) run child to completion
-    let childResultText = ''
-    try {
-      const execResult = await context.executeTask(childTaskId)
-      childResultText = execResult.result || ''
-    } catch (e) {
-      // Even on error, attempt to resume parent with an error summary
-      const errText = e instanceof Error ? e.message : String(e)
-      await context.completeChildTask(childTaskId, `[Error] ${errText}`)
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Child task ${childTaskId} failed: ${errText}`,
-          },
-        ],
-        isError: true,
+    // Pause parent and execute leaves sequentially in the background to avoid blocking tool_result
+    const cb = context.config.callback
+    ;(async () => {
+      try {
+        // Pause parent (UI hint)
+        context.setPause(true)
+        await cb?.onMessage({
+          type: 'task_pause',
+          taskId: parentTaskId,
+          agentName: agentContext.agent.Name,
+          nodeId: context.currentNodeId,
+          reason: 'new_task_seq_start',
+        })
+
+        for (const id of leafTaskIds) {
+          try {
+            const res = await context.executeTask!(id)
+            // Stream child result to parent
+            await cb?.onMessage({
+              type: 'task_child_result',
+              taskId: id,
+              agentName: agentContext.agent.Name,
+              nodeId: context.currentNodeId,
+              parentTaskId: parentTaskId,
+              summary: res.result,
+            })
+          } catch (e) {
+            await cb?.onMessage({
+              type: 'error',
+              taskId: parentTaskId,
+              agentName: agentContext.agent.Name,
+              nodeId: context.currentNodeId,
+              error: e instanceof Error ? e.message : String(e),
+            })
+          }
+        }
+      } finally {
+        context.setPause(false)
+        await cb?.onMessage({
+          type: 'task_resume',
+          taskId: parentTaskId,
+          agentName: agentContext.agent.Name,
+          nodeId: context.currentNodeId,
+          reason: 'new_task_seq_done',
+        })
       }
-    }
-
-    // 3) flow summary back to parent and resume
-    const summary = childResultText?.slice(0, 1000) || 'Child task completed.'
-    await context.completeChildTask(childTaskId, summary)
+    })()
 
     return {
       content: [
         {
           type: 'text',
-          text: `Spawned and executed subtask: ${childTaskId}`,
+          text: `Created ${allTaskIds.length} tasks (${leafTaskIds.length} subtasks). Executing subtasks sequentially...`,
         },
       ],
     }

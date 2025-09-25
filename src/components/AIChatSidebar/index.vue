@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue'
+  import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useAIChatStore } from './store'
   import { useAISettingsStore } from '@/components/settings/components/AI'
@@ -147,6 +147,11 @@
 
     await handleModelChange(selectedModelId.value)
   })
+
+  // 在组件卸载前保存状态
+  onBeforeUnmount(() => {
+    // Task state is now managed by TaskManager, no need to save manually
+  })
 </script>
 
 <template>
@@ -170,13 +175,15 @@
         @delete-session="deleteSession"
         @refresh-sessions="refreshSessions"
       />
-      <MessageList
-        :messages="aiChatStore.messageList"
-        :is-loading="aiChatStore.isLoading"
-        :chat-mode="aiChatStore.chatMode"
-      />
+      <div class="messages-and-tasks">
+        <MessageList
+          :messages="aiChatStore.messageList"
+          :is-loading="aiChatStore.isLoading"
+          :chat-mode="aiChatStore.chatMode"
+        />
 
-      <TaskList :task-nodes="aiChatStore.currentTaskNodes" :task-id="aiChatStore.currentTaskId || ''" />
+        <TaskList />
+      </div>
 
       <ChatInput
         ref="chatInputRef"
@@ -212,6 +219,13 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    overflow: hidden;
+  }
+
+  .messages-and-tasks {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
   }
 </style>

@@ -110,8 +110,8 @@ async function doCompressAgentMessages(
         agentName: agentContext.agent.Name,
         nodeId: toolResultNodeId,
         type: 'tool_result',
-        toolId: toolCall.toolCallId,
-        toolName: toolCall.toolName,
+        toolId: toolCall.id,
+        toolName: toolCall.name,
         params: args,
         toolResult: toolResult,
       },
@@ -127,9 +127,8 @@ async function doCompressAgentMessages(
     }
   }
 
-  const textContent = toolResult.content
-    .filter((s): s is { type: 'text'; text: string } => s.type === 'text')
-    .map(s => ({ type: 'text' as const, text: s.text }))
+  const textItems = toolResult.content.filter(s => s.type === 'text') as Array<{ type: 'text'; text: string }>
+  const textContent = textItems.map(s => ({ type: 'text' as const, text: s.text }))
   messages.splice(firstToolIndex + 1, lastToolIndex - firstToolIndex - 2, {
     role: 'user',
     content: textContent,

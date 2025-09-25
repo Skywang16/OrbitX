@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n'
   import { marked } from 'marked'
   import type { Message } from '@/types'
+  import type { PersistedStep, PersistedNonToolStep, PersistedToolStep } from '@/api/ai/types'
   import ThinkingBlock from './msgBlock/ThinkingBlock.vue'
   import ToolBlock from './msgBlock/ToolBlock.vue'
   import { useAIChatStore } from '../store'
@@ -18,10 +19,9 @@
 
   const sortedSteps = computed(() => {
     if (!props.message.steps) {
-      return []
+      return [] as PersistedStep[]
     }
-
-    return props.message.steps
+    return props.message.steps as PersistedStep[]
   })
 
   const formatDuration = (ms: number) => {
@@ -30,8 +30,8 @@
     return `${seconds}s`
   }
 
-  const renderMarkdown = (content: string) => {
-    return marked(content)
+  const renderMarkdown = (content?: string) => {
+    return marked(content || '')
   }
 </script>
 
@@ -39,9 +39,9 @@
   <div class="ai-message">
     <template v-if="message.steps && message.steps.length > 0">
       <template v-for="(step, index) in sortedSteps" :key="`${step.timestamp}-${index}`">
-        <ThinkingBlock v-if="step.type === 'thinking'" :step="step" class="step-block" />
+        <ThinkingBlock v-if="step.type === 'thinking'" :step="step as PersistedNonToolStep" class="step-block" />
 
-        <ToolBlock v-else-if="step.type === 'tool_use'" :step="step" class="step-block" />
+        <ToolBlock v-else-if="step.type === 'tool_use'" :step="step as PersistedToolStep" class="step-block" />
 
         <div v-else-if="step.type === 'text'" class="ai-message-text step-block">
           <div v-html="renderMarkdown(step.content)"></div>

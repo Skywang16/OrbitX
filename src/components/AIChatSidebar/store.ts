@@ -1,8 +1,10 @@
 import { aiApi } from '@/api'
 import type { PersistedStep } from '@/api/ai/types'
+import { TaskAPI } from '@/api/tasks'
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useSessionStore } from '@/stores/session'
 import { useTerminalStore } from '@/stores/Terminal'
+import { useTaskManager } from '@/stores/taskManager'
 
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
@@ -19,6 +21,7 @@ const isToolResultError = (toolResult: unknown): boolean => {
 
 export const useAIChatStore = defineStore('ai-chat', () => {
   const sessionStore = useSessionStore()
+  const taskManager = useTaskManager()
 
   const isVisible = ref(false)
   const sidebarWidth = ref(350)
@@ -30,7 +33,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const conversations = ref<Conversation[]>([])
   const cancelFunction = ref<(() => void) | null>(null)
 
-  // 任务节点管理
+  // 遗留任务节点管理，仅用于向后兼容
   const currentTaskNodes = ref<
     Array<{
       type: string
@@ -38,9 +41,40 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       status?: 'pending' | 'running' | 'completed'
     }>
   >([])
-  const currentTaskId = ref<string | null>(null)
-  const currentNodeIndex = ref<number>(0) // 当前执行的节点索引
-  const taskStreamDone = ref(false) // 任务流是否完成
+  const currentNodeIndex = ref<number>(0)
+  const taskStreamDone = ref(false)
+
+  // 任务管理集成
+  const currentTaskId = computed(() => taskManager.activeTaskId)
+  const activeTaskId = computed(() => taskManager.activeTaskId)
+
+  const getTask = (taskId: string) => {
+    return taskManager.getTask(taskId)
+  }
+
+  const getAllTasks = () => {
+    return taskManager.currentTasks
+  }
+
+  const getActiveTasks = () => {
+    return taskManager.activeTasks
+  }
+
+  const switchToTask = async (taskId: string) => {
+    await taskManager.switchToTask(taskId)
+
+    const task = taskManager.getTask(taskId)
+    if (task?.render_json) {
+      try {
+        const renderData = JSON.parse(task.render_json)
+        currentTaskNodes.value = renderData.nodes || []
+      } catch {
+        currentTaskNodes.value = []
+      }
+    } else {
+      currentTaskNodes.value = []
+    }
+  }
 
   // 节点状态更新函数
   const updateNodeStatus = (nodeIndex: number, status: 'pending' | 'running' | 'completed') => {
@@ -147,9 +181,10 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       if (existingEmptyConversation) {
         currentConversationId.value = existingEmptyConversation.id
         messageList.value = []
-        // 清空任务列表
+        // Switch TaskManager to this conversation
+        await taskManager.switchToConversation(existingEmptyConversation.id)
+        // Clear legacy task state
         currentTaskNodes.value = []
-        currentTaskId.value = null
         return
       }
 
@@ -159,9 +194,10 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       conversations.value.unshift(newConversation)
       currentConversationId.value = newConversation.id
       messageList.value = []
-      // 清空任务列表
+      // Switch TaskManager to new conversation
+      await taskManager.switchToConversation(newConversation.id)
+      // Clear legacy task state
       currentTaskNodes.value = []
-      currentTaskId.value = null
     } catch (err) {
       error.value = '创建会话失败'
     } finally {
@@ -196,9 +232,10 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const switchToConversation = async (conversationId: number): Promise<void> => {
     stopCurrentConversation()
     messageList.value = []
-    // 清空任务列表
+    // Switch TaskManager to new conversation
+    await taskManager.switchToConversation(conversationId)
+    // Clear legacy task state
     currentTaskNodes.value = []
-    currentTaskId.value = null
     await loadConversation(conversationId, true)
   }
 
@@ -210,9 +247,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       if (currentConversationId.value === conversationId) {
         currentConversationId.value = null
         messageList.value = []
-        // 清空任务列表
+        // 在新架构中，任务会自动按会话隔离，无需手动清理
+        // Clear legacy task state
         currentTaskNodes.value = []
-        currentTaskId.value = null
       }
     } catch (err) {
       error.value = '删除会话失败'
@@ -267,12 +304,29 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
       let fullPrompt: string
       try {
-        fullPrompt = await aiApi.buildPromptWithContext(currentConversationId.value, content, userMessageId, paneId)
+        // 统一使用eko的prompt构建 - 基于当前任务ID或会话ID
+        const taskId = taskManager.activeTaskId || `conv_${currentConversationId.value}`
+        console.log('🔧 构建Prompt - taskId:', taskId, 'activeTaskId:', taskManager.activeTaskId)
+
+        fullPrompt = await TaskAPI.ekoCtxBuildPrompt(taskId, content, paneId?.toString())
+
+        // 打印构建的prompt内容
+        console.log('📝 构建的Prompt内容:')
+
+        console.log(fullPrompt)
       } catch (contextError) {
-        console.warn('获取终端上下文失败，使用回退逻辑:', contextError)
-        // 回退逻辑：不传递 paneId，让后端使用默认上下文
+        console.warn('获取eko上下文失败，使用回退逻辑:', contextError)
+        // 回退逻辑：使用会话ID作为taskId
         try {
-          fullPrompt = await aiApi.buildPromptWithContext(currentConversationId.value, content, userMessageId)
+          const fallbackTaskId = `conv_${currentConversationId.value}`
+          console.log('🔄 使用回退taskId:', fallbackTaskId)
+
+          fullPrompt = await TaskAPI.ekoCtxBuildPrompt(fallbackTaskId, content)
+
+          // 打印回退构建的prompt内容
+          console.log('📝 回退构建的Prompt内容:')
+          console.log('='.repeat(80))
+          console.log(fullPrompt)
         } catch (fallbackError) {
           console.error('构建AI提示失败:', fallbackError)
           throw new Error('无法构建AI提示，请检查终端状态')
@@ -462,10 +516,16 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
+  // 仅对当前激活任务的流式事件进行步骤渲染
+  const isForCurrentTask = (message: StreamCallbackMessage): boolean => {
+    return !taskManager.activeTaskId || message.taskId === taskManager.activeTaskId
+  }
+
   const handleToolUse = (tempMessage: Message, message: StreamCallbackMessage) => {
     if (message.type !== 'tool_use' || !message.toolName) {
       return
     }
+    if (!isForCurrentTask(message)) return
 
     // 使用 toolId 查找已存在的工具步骤（可能由 tool_streaming 创建）
     const toolStep = findOrCreateToolStep(tempMessage, message.toolName, message.toolId)
@@ -482,6 +542,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   const handleToolStreaming = (tempMessage: Message, message: StreamCallbackMessage) => {
     if (message.type !== 'tool_streaming' || !message.toolName) return
+    if (!isForCurrentTask(message)) return
 
     // 立即创建或获取工具步骤以显示执行状态，使用 toolId 进行精确匹配
     const toolStep = findOrCreateToolStep(tempMessage, message.toolName, message.toolId)
@@ -512,6 +573,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     if (message.type !== 'tool_result') {
       return
     }
+    if (!isForCurrentTask(message)) return
 
     // 优先根据 toolId 查找对应的工具步骤
     let toolStep: ToolStep | undefined = undefined
@@ -603,8 +665,10 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       if (!ekoInstance.value) {
         const handleStreamMessage = async (message: StreamCallbackMessage) => {
           try {
-            // 打印eko回调信息，方便调试查看有哪些类型
-            console.warn('🔔 Eko回调类型:', message.type, message)
+            // Forward all messages to TaskManager for processing
+            if (currentConversationId.value) {
+              taskManager.handleEkoMessage(message, currentConversationId.value)
+            }
 
             const tempMessage = messageList.value[messageList.value.length - 1]
             if (!tempMessage || tempMessage.role !== 'assistant') {
@@ -613,61 +677,19 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
             tempMessage.steps = tempMessage.steps || []
 
-            // 处理消息
+            // Handle message rendering (keep existing logic for UI steps)
             switch (message.type) {
-              case 'task_spawn': {
-                // 切换到子任务并初始化节点视图
-                currentTaskId.value = message.taskId
-                if (message.task?.nodes && message.task.nodes.length > 0) {
-                  currentTaskNodes.value = message.task.nodes
-                    .filter(node => node.type === 'normal' && 'text' in node)
-                    .map((node, index) => ({
-                      type: node.type,
-                      text: 'text' in node ? node.text : '',
-                      status: (index === 0 ? 'pending' : 'pending') as 'pending' | 'running' | 'completed',
-                    }))
-                  currentNodeIndex.value = 0
-                  taskStreamDone.value = false
-                } else {
-                  currentTaskNodes.value = []
-                  currentNodeIndex.value = 0
-                }
-                // 在父任务对话中追加系统提示
-                updateOrCreateStep(tempMessage, {
-                  type: 'text',
-                  content: `[Subtask Spawned] id=${message.taskId} parent=${message.parentTaskId}`,
-                })
+              // Task-related events are now handled by TaskManager
+              // We only keep the UI rendering logic here
+              case 'task_spawn':
+              case 'task_pause':
+              case 'task_resume':
+              case 'task_child_result':
+              case 'task_status':
+              case 'task_tree_update':
+                // These are now handled by TaskManager
+                // No UI rendering needed for these events
                 break
-              }
-              case 'task_pause': {
-                updateOrCreateStep(tempMessage, {
-                  type: 'text',
-                  content: `[Task Paused] id=${message.taskId} reason=${message.reason || ''}`,
-                })
-                break
-              }
-              case 'task_resume': {
-                updateOrCreateStep(tempMessage, {
-                  type: 'text',
-                  content: `[Task Resumed] id=${message.taskId} reason=${message.reason || ''}`,
-                })
-                break
-              }
-              case 'task_child_result': {
-                updateOrCreateStep(tempMessage, {
-                  type: 'text',
-                  content: `[Subtask Completed] id=${message.taskId} -> parent=${message.parentTaskId} summary=${message.summary}`,
-                })
-                break
-              }
-              case 'task_status': {
-                // 简单记录状态变更
-                updateOrCreateStep(tempMessage, {
-                  type: 'text',
-                  content: `[Task Status] id=${message.taskId} status=${message.status}`,
-                })
-                break
-              }
               case 'tool_use':
                 handleToolUse(tempMessage, message)
                 break
@@ -682,6 +704,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
               case 'thinking':
                 if (message.type === 'thinking') {
+                  if (!isForCurrentTask(message)) break
                   updateOrCreateStep(tempMessage, {
                     type: 'thinking',
                     content: message.text || '',
@@ -702,6 +725,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
               case 'text':
                 if (message.type === 'text') {
+                  if (!isForCurrentTask(message)) break
                   updateOrCreateStep(tempMessage, {
                     type: 'text',
                     content: message.text || '',
@@ -733,30 +757,38 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
               case 'task':
                 if (message.type === 'task') {
-                  updateOrCreateStep(tempMessage, {
-                    type: 'task_thought',
-                    content: message.task?.thought || '',
-                    streamId: `task_${message.taskId}`,
-                    streamDone: message.streamDone,
-                  })
+                  // Task data is now handled by TaskManager
+                  // Only handle UI rendering for current task
+                  const isCurrent = taskManager.activeTaskId === message.taskId || !taskManager.activeTaskId
 
-                  // 更新任务节点 - 只处理 TaskTextNode 类型
-                  if (message.task?.nodes && message.task.nodes.length > 0) {
-                    currentTaskNodes.value = message.task.nodes
-                      .filter(node => node.type === 'normal' && 'text' in node)
+                  if (isCurrent) {
+                    // Update legacy node state for backward compatibility
+                    const newNodes = message.task?.nodes
+                      ?.filter(node => node.type === 'normal' && 'text' in node)
                       .map((node, index) => ({
                         type: node.type,
                         text: 'text' in node ? node.text : '',
                         status: (index === 0 ? 'pending' : 'pending') as 'pending' | 'running' | 'completed',
                       }))
-                    currentTaskId.value = message.taskId
-                    currentNodeIndex.value = 0
-                    taskStreamDone.value = false // 重置状态
-                  }
 
-                  if (message.streamDone) {
-                    tempMessage.content = message.task?.thought || ''
-                    taskStreamDone.value = true // 标记任务流完成
+                    if (newNodes && newNodes.length > 0) {
+                      currentTaskNodes.value = newNodes
+                      currentNodeIndex.value = 0
+                      taskStreamDone.value = false
+                    }
+
+                    // Render task thought for current task
+                    updateOrCreateStep(tempMessage, {
+                      type: 'task_thought',
+                      content: message.task?.thought || '',
+                      streamId: `task_${message.taskId}`,
+                      streamDone: message.streamDone,
+                    })
+
+                    if (message.streamDone) {
+                      tempMessage.content = message.task?.thought || ''
+                      taskStreamDone.value = true
+                    }
                   }
                 }
                 break
@@ -764,6 +796,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               case 'agent_start':
                 // 代理开始执行，可以添加状态指示
                 if (message.type === 'agent_start') {
+                  if (!isForCurrentTask(message)) break
                   // 任务开始，将第一个节点设为运行中
                   if (currentTaskNodes.value.length > 0) {
                     updateNodeStatus(0, 'running')
@@ -775,6 +808,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
               case 'agent_result':
                 // 代理执行完成
                 if (message.type === 'agent_result') {
+                  if (!isForCurrentTask(message)) break
                   if (message.stopReason === 'abort') {
                     // 手动中断：不作为错误处理，标记为完成以关闭流式态
                     console.warn('代理执行已被用户中断')
@@ -885,6 +919,13 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     if (isInitialized.value) return
 
     await sessionStore.initialize()
+
+    // Initialize TaskManager
+    if (!taskManager.isInitialized) {
+      await taskManager.initialize()
+    }
+
+    // 首先恢复基本状态
     restoreFromSessionState()
 
     if (currentConversationId.value) {
@@ -919,6 +960,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     taskStreamDone,
     updateNodeStatus,
     advanceNodeProgress,
+    // Task management integration (delegated to TaskManager)
+    activeTaskId,
+    getTask,
+    getAllTasks,
+    getActiveTasks,
+    switchToTask,
     isInitialized,
     hasMessages,
     canSendMessage,

@@ -78,6 +78,12 @@ export type StreamCallbackMessage = {
       payload?: unknown
     }
   | {
+      type: 'task_tree_update'
+      parentTaskId: string
+      childTaskIds: string[]
+      removedTaskIds?: string[]
+    }
+  | {
       type: 'task_status'
       status: Task['status']
     }
@@ -147,6 +153,21 @@ export type Task = {
   parentTaskId?: string
   childTaskIds?: string[]
 }
+
+// Planned Task Tree types for tree planning (not persisted directly)
+export type PlannedTaskNode = {
+  text: string
+}
+
+export type PlannedTask = {
+  name?: string
+  thought?: string
+  description?: string
+  nodes?: PlannedTaskNode[]
+  subtasks?: PlannedTask[]
+}
+
+export type PlannedTaskTree = PlannedTask
 
 export interface HumanCallback {
   onHumanConfirm?: (agentContext: AgentContext, prompt: string, extInfo?: Record<string, unknown>) => Promise<boolean>

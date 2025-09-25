@@ -1,5 +1,5 @@
 import { uuidv4, getMimeType } from '../common/utils'
-import { EkoMessage, NativeLLMMessage } from '../types'
+import { EkoMessage, NativeLLMMessage, NativeLLMMessagePart } from '../types'
 
 export interface MemoryConfig {
   maxMessages?: number
@@ -129,19 +129,19 @@ export class EkoMemory {
       // compress messages
       for (let i = 0; i < this.messages.length; i++) {
         const message = this.messages[i]
-        if (message.role == 'assistant') {
-          message.content = message.content.map(part => {
-            if (part.type == 'text' && part.text.length > this.compressionMaxLength) {
+        if (message.role == 'assistant' && Array.isArray(message.content)) {
+          message.content = message.content.map((part: NativeLLMMessagePart) => {
+            if (part.type == 'text' && (part.text || '').length > this.compressionMaxLength) {
               return {
                 type: 'text',
-                text: part.text.slice(0, this.compressionMaxLength) + '...',
+                text: (part.text || '').slice(0, this.compressionMaxLength) + '...',
               }
             }
             return part
           })
         }
-        if (message.role == 'tool') {
-          message.content = message.content.map(part => {
+        if (message.role == 'tool' && Array.isArray(message.content)) {
+          message.content = message.content.map((part: NativeLLMMessagePart) => {
             if (typeof part.result === 'string' && part.result.length > this.compressionMaxLength) {
               return {
                 ...part,
@@ -184,16 +184,17 @@ export class EkoMemory {
       if (
         lastMessage &&
         lastMessage.role == 'assistant' &&
-        lastMessage.content.filter(part => part.type == 'tool-call').length > 0 &&
+        Array.isArray(lastMessage.content) &&
+        lastMessage.content.filter((part: NativeLLMMessagePart) => part.type == 'tool-call').length > 0 &&
         message.role != 'tool'
       ) {
         this.messages.push({
           role: 'tool',
           id: this.genMessageId(),
           timestamp: message.timestamp + 1,
-          content: lastMessage.content
-            .filter(part => part.type == 'tool-call')
-            .map(part => {
+          content: (lastMessage.content as NativeLLMMessagePart[])
+            .filter((part: NativeLLMMessagePart) => part.type == 'tool-call')
+            .map((part: NativeLLMMessagePart) => {
               return {
                 type: 'tool-result',
                 toolCallId: part.toolCallId,
@@ -251,7 +252,7 @@ export class EkoMemory {
                     return {
                       type: 'file',
                       data: part.data,
-                      mimeType: part.mimeType || getMimeType(part.data),
+                      mimeType: part.mimeType || getMimeType(part.data || ''),
                     }
                   }
                 }),
@@ -259,39 +260,48 @@ export class EkoMemory {
       } else if (message.role == 'assistant') {
         llmMessages.push({
           role: message.role,
-          content: message.content.map(part => {
-            if (part.type == 'text') {
-              return {
-                type: 'text',
-                text: part.text,
-              }
-            } else if (part.type == 'tool-call') {
-              return {
-                type: 'tool-call',
-                toolCallId: part.toolCallId,
-                toolName: part.toolName,
-                args: part.args,
-              }
-            } else {
-              // Handle other types like reasoning by converting to text
-              return {
-                type: 'text',
-                text: (part as { text?: string }).text || '',
-              }
-            }
-          }),
+          content: Array.isArray(message.content)
+            ? (message.content as NativeLLMMessagePart[]).map((part: NativeLLMMessagePart) => {
+                if (part.type == 'text') {
+                  return {
+                    type: 'text',
+                    text: part.text || '',
+                  }
+                } else if (part.type == 'tool-call') {
+                  return {
+                    type: 'tool-call',
+                    toolCallId: part.toolCallId,
+                    toolName: part.toolName,
+                    args: part.args,
+                  }
+                } else {
+                  // Handle other types like reasoning by converting to text
+                  return {
+                    type: 'text',
+                    text: (part as { text?: string }).text || '',
+                  }
+                }
+              })
+            : [
+                {
+                  type: 'text',
+                  text: String(message.content || ''),
+                },
+              ],
         })
       } else if (message.role == 'tool') {
         llmMessages.push({
           role: message.role,
-          content: message.content.map(part => {
-            return {
-              type: 'tool-result',
-              toolCallId: part.toolCallId,
-              toolName: part.toolName,
-              result: part.result,
-            }
-          }),
+          content: Array.isArray(message.content)
+            ? (message.content as NativeLLMMessagePart[]).map((part: NativeLLMMessagePart) => {
+                return {
+                  type: 'tool-result',
+                  toolCallId: part.toolCallId,
+                  toolName: part.toolName,
+                  result: part.result,
+                }
+              })
+            : [],
         })
       }
     }

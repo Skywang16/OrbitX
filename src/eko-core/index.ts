@@ -3,7 +3,7 @@ import Log from './common/log'
 import { Planner } from './core/plan'
 import { RetryLanguageModel } from './llm'
 import { EkoMemory } from './memory/memory'
-import { Eko, EkoDialogue } from './core/index'
+import { Eko } from './core/index'
 import Chain from './core/chain'
 import Context, { AgentContext } from './core/context'
 import { SimpleSseMcpClient, SimpleHttpMcpClient } from './mcp'
@@ -12,7 +12,6 @@ export default Eko
 
 export {
   Eko,
-  EkoDialogue,
   EkoMemory,
   Log,
   config,
@@ -38,7 +37,14 @@ export type {
 
 export { Agent, type AgentParams, ContextCompressorService } from './agent'
 
-export { HumanInteractTool, TaskNodeStatusTool, ForeachTaskTool, WatchTriggerTool } from './tools'
+export {
+  HumanInteractTool,
+  TaskNodeStatusTool,
+  ReactPlannerTool,
+  NewTaskTool,
+  ReplanSubtreeTool,
+  TaskTreeEditTool,
+} from './tools'
 
 export {
   type LLMs,
@@ -84,3 +90,8 @@ export type { RetryConfig } from './common/error'
 export { RetryManager, globalRetryManager, type RetryAttempt, type RetryStats } from './common/retry-manager'
 
 export { parseTask, resetTaskXml, buildAgentRootXml, extractAgentXmlNode } from './common/xml'
+
+// New core infrastructure exports
+export { EventEmitter } from './events/emitter'
+export { StateManager, type TaskState, type TaskStatus } from './state/manager'
+export { ToolRegistry, type ToolProvider, type ToolContext } from './tools/registry'
