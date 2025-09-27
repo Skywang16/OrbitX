@@ -37,14 +37,7 @@ export type {
 
 export { Agent, type AgentParams, ContextCompressorService } from './agent'
 
-export {
-  HumanInteractTool,
-  TaskNodeStatusTool,
-  ReactPlannerTool,
-  NewTaskTool,
-  ReplanSubtreeTool,
-  TaskTreeEditTool,
-} from './tools'
+export { TaskNodeStatusTool, ReactPlannerTool, NewTaskTool, ReplanSubtreeTool, TaskTreeEditTool } from './tools'
 
 export {
   type LLMs,

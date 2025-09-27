@@ -1,4 +1,3 @@
-
 use crate::storage::paths::StoragePaths;
 use crate::storage::types::SessionState;
 use crate::storage::SESSION_STATE_FILE_NAME;
@@ -186,7 +185,6 @@ impl MessagePackManager {
     }
 
     pub async fn save_state(&self, state: &SessionState) -> AppResult<()> {
-
         // 确保状态目录存在
         self.ensure_state_directory().await?;
 
@@ -216,7 +214,6 @@ impl MessagePackManager {
             debug!("状态文件不存在: {}", state_file.display());
             return Ok(None);
         }
-
 
         // 读取文件
         let data = async_fs::read(&state_file)

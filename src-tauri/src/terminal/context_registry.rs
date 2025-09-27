@@ -402,7 +402,9 @@ mod tests {
             let handle = tokio::spawn(async move {
                 let pane_id = PaneId::new(i);
 
-                registry_clone.terminal_context_set_active_pane(pane_id).unwrap();
+                registry_clone
+                    .terminal_context_set_active_pane(pane_id)
+                    .unwrap();
 
                 let active = registry_clone.terminal_context_get_active_pane();
                 let is_active = registry_clone.terminal_context_is_pane_active(pane_id);

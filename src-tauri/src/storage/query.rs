@@ -41,7 +41,7 @@ impl QueryCondition {
             _ => QueryCondition::Eq(field.to_string(), Value::Null),
         }
     }
-    
+
     /// 创建等于条件
     pub fn eq(field: &str, value: Value) -> Self {
         QueryCondition::Eq(field.to_string(), value)

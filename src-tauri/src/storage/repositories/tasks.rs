@@ -916,7 +916,6 @@ impl TaskRepository {
         }
     }
 
-
     /// 获取快照列表
     pub async fn get_snapshots(&self, task_id: &str) -> AppResult<Vec<EkoContext>> {
         let rows = sqlx::query(

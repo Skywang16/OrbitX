@@ -1,4 +1,3 @@
-
 use super::types::{AnsiColors, SyntaxHighlight, Theme, ThemeType, UIColors};
 use crate::storage::cache::UnifiedCache;
 use crate::{config::paths::ConfigPaths, utils::error::AppResult};
@@ -12,7 +11,6 @@ use std::{
 };
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]

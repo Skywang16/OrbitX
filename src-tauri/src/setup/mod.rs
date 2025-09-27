@@ -7,8 +7,8 @@ use crate::completion::commands::CompletionState;
 use crate::config::{ConfigManagerState, ShortcutManagerState};
 use crate::llm::commands::LLMManagerState;
 use crate::terminal::{
-    commands::TerminalContextState, ActiveTerminalContextRegistry, TerminalContextService,
-    TerminalChannelState,
+    commands::TerminalContextState, ActiveTerminalContextRegistry, TerminalChannelState,
+    TerminalContextService,
 };
 use crate::window::commands::WindowState;
 
@@ -156,6 +156,27 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
     };
     app.manage(llm_state);
 
+    // 初始化TaskExecutor状态
+    let task_executor_state = {
+        let storage_state = app.state::<StorageCoordinatorState>();
+        let llm_state = app.state::<LLMManagerState>();
+        let repositories = storage_state.coordinator.repositories();
+        let llm_registry = llm_state.registry.clone();
+
+        tauri::async_runtime::block_on(async {
+            let tool_registry = crate::agent::tools::create_tool_registry().await;
+            let executor = std::sync::Arc::new(crate::agent::core::TaskExecutor::new(
+                repositories,
+                llm_registry,
+                tool_registry,
+            ));
+            Ok::<crate::agent::core::commands::TaskExecutorState, anyhow::Error>(
+                crate::agent::core::commands::TaskExecutorState::new(executor),
+            )
+        })?
+    };
+    app.manage(task_executor_state);
+
     let window_state =
         WindowState::new().map_err(|e| anyhow::anyhow!("窗口状态初始化失败: {}", e))?;
     app.manage(window_state);
@@ -166,7 +187,6 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
     // Manage Terminal Channel State for streaming bytes via Tauri Channel
     let terminal_channel_state = TerminalChannelState::new();
     app.manage(terminal_channel_state);
-
 
     Ok(())
 }

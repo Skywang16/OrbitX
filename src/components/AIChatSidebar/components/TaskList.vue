@@ -6,18 +6,18 @@
           <ChevronIcon :expanded="!isCollapsed" />
           <TreeIcon />
           <span class="tree-title">Tasks</span>
-          <span class="task-count">{{ taskManager.activeTasks.length }}</span>
+          <span class="task-count">{{ activeTasks.length }}</span>
         </div>
       </div>
 
       <transition name="tree-collapse">
         <div v-show="!isCollapsed" class="tree-content">
-          <div v-if="taskManager.activeTasks.length > 0" class="tree-container">
+          <div v-if="activeTasks.length > 0" class="tree-container">
             <TaskItem
-              v-for="task in taskManager.activeTasks"
+              v-for="task in activeTasks"
               :key="task.task_id"
               :task="task"
-              :is-current="task.task_id === taskManager.activeTaskId"
+              :is-current="task.task_id === currentAgentTaskId"
               @click="handleSwitchTask(task.task_id)"
             />
           </div>
@@ -30,7 +30,7 @@
 
 <script setup lang="ts">
   import { computed, ref, watch, onMounted } from 'vue'
-  import { useTaskManager } from '@/stores/taskManager'
+  import { useAgentStateSyncAdapter } from '@/stores/agentStateSyncAdapter'
   import { useAIChatStore } from '@/components/AIChatSidebar/store'
 
   // Components
@@ -39,19 +39,20 @@
   import TaskItem from './TaskItem.vue'
   import EmptyState from './EmptyState.vue'
 
-  const taskManager = useTaskManager()
+  const { initialize, activeAgentTasks, hasActiveAgentTasks, currentAgentTaskId, switchToAgentTask } =
+    useAgentStateSyncAdapter()
   const aiChatStore = useAIChatStore()
 
   const isCollapsed = ref(false)
 
   // 计算属性
-  const hasActiveTasks = computed(() => taskManager.activeTasks.length > 0)
+  const hasActiveTasks = computed(() => hasActiveAgentTasks.value)
+  const activeTasks = computed(() => activeAgentTasks.value)
 
   // 处理任务切换
   const handleSwitchTask = async (taskId: string) => {
     try {
-      await taskManager.switchToTask(taskId)
-      await aiChatStore.switchToTask(taskId)
+      await switchToAgentTask(taskId)
     } catch (error) {
       console.error('Failed to switch task:', error)
     }
@@ -67,7 +68,7 @@
     () => aiChatStore.currentConversationId,
     async newConversationId => {
       if (newConversationId) {
-        await taskManager.switchToConversation(newConversationId)
+        // 初始化适配器在 AIChatStore.initialize() 里已经调用过；这里无需重复
       }
     },
     { immediate: true }
@@ -75,9 +76,7 @@
 
   // 生命周期钩子
   onMounted(async () => {
-    if (!taskManager.isInitialized) {
-      await taskManager.initialize()
-    }
+    await initialize()
   })
 </script>
 <style scoped>

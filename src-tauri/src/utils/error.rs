@@ -1,4 +1,3 @@
-
 use anyhow::{anyhow, Result as AnyhowResult};
 
 pub type AppResult<T> = AnyhowResult<T>;
@@ -6,7 +5,6 @@ pub type AppResult<T> = AnyhowResult<T>;
 pub type AppError = anyhow::Error;
 
 pub type TauriResult<T> = Result<T, String>;
-
 
 pub fn app_error(msg: impl Into<String>) -> AppError {
     anyhow!(msg.into())
@@ -19,7 +17,6 @@ where
 {
     move |err| anyhow!("{}: {}", msg, err)
 }
-
 
 pub fn to_tauri_result<T>(result: AppResult<T>) -> Result<T, String> {
     result.map_err(|e| e.to_string())
@@ -34,7 +31,6 @@ impl<T> ToTauriResult<T> for AppResult<T> {
         to_tauri_result(self)
     }
 }
-
 
 #[macro_export]
 macro_rules! app_bail {
@@ -82,7 +78,6 @@ impl Validator {
         }
     }
 }
-
 
 pub fn serialize_to_json<T: serde::Serialize>(value: &T, context: &str) -> Result<String, String> {
     serde_json::to_string(value).map_err(|e| format!("{}序列化失败: {}", context, e))

@@ -21,7 +21,6 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::Mutex;
 use tracing::{debug, error, warn};
 
-
 // 窗口状态管理
 pub struct WindowState {
     pub cache: crate::storage::cache::UnifiedCache,
@@ -36,7 +35,6 @@ pub struct PlatformInfo {
     pub os_version: String,
     pub is_mac: bool,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -107,7 +105,6 @@ pub struct WindowStateManager {
     last_update: Option<Instant>,
     cache_ttl: std::time::Duration,
 }
-
 
 impl Default for WindowStateManager {
     fn default() -> Self {
@@ -180,7 +177,6 @@ impl WindowStateManager {
     }
 }
 
-
 impl WindowConfigManager {
     pub fn new() -> Self {
         Self {
@@ -220,7 +216,6 @@ impl Default for WindowConfigManager {
         Self::new()
     }
 }
-
 
 impl WindowState {
     pub fn new() -> AppResult<Self> {

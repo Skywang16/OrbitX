@@ -30,7 +30,6 @@ impl AnthropicProvider {
         }
     }
 
-
     fn get_endpoint(&self) -> String {
         let base = self
             .config
@@ -279,9 +278,7 @@ impl AnthropicProvider {
                 }
             }
             "content_block_start" => Self::parse_content_block_start(&event_json),
-            "content_block_stop" => {
-                None
-            }
+            "content_block_stop" => None,
             "message_stop" => {
                 let stop_reason = event_json["stop_reason"].as_str().unwrap_or("stop");
                 let finish_reason = match stop_reason {
@@ -360,9 +357,7 @@ impl LLMProvider for AnthropicProvider {
             .eventsource()
             .filter_map(|event_result| {
                 futures::future::ready(match event_result {
-                    Ok(event) => {
-                        Self::parse_stream_chunk(&event.data)
-                    }
+                    Ok(event) => Self::parse_stream_chunk(&event.data),
                     Err(e) => Some(Err(anyhow!("网络错误: {}", e))),
                 })
             });

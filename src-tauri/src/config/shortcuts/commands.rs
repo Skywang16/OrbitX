@@ -312,7 +312,9 @@ pub async fn shortcuts_get_action_metadata(
     let manager = state.manager.lock().await;
     let registry = manager.get_action_registry().await;
     let registry_guard = registry.read().await;
-    let metadata = registry_guard.shortcuts_get_action_metadata(&action_name).await;
+    let metadata = registry_guard
+        .shortcuts_get_action_metadata(&action_name)
+        .await;
 
     Ok(api_success!(metadata))
 }

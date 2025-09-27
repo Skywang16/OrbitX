@@ -45,7 +45,9 @@ pub struct WebFetchResponse {
 
 /// 执行无头 HTTP 请求
 #[command]
-pub async fn network_web_fetch_headless(request: WebFetchRequest) -> Result<WebFetchResponse, String> {
+pub async fn network_web_fetch_headless(
+    request: WebFetchRequest,
+) -> Result<WebFetchResponse, String> {
     tracing::debug!("🌐 [WebFetch] 开始无头请求: {}", request.url);
 
     let start_time = std::time::Instant::now();

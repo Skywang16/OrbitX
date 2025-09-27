@@ -1,4 +1,3 @@
-
 use crate::config::{defaults::create_default_config, types::AppConfig, TomlConfigManager};
 
 use crate::utils::error::AppResult;
@@ -55,13 +54,7 @@ pub async fn config_update(
 
 #[tauri::command]
 pub async fn config_save(state: State<'_, ConfigManagerState>) -> TauriApiResult<EmptyData> {
-    match state
-        .toml_manager
-        .config_update(|_config| {
-            Ok(())
-        })
-        .await
-    {
+    match state.toml_manager.config_update(|_config| Ok(())).await {
         Ok(_) => Ok(api_success!()),
         Err(_) => Ok(api_error!("config.save_failed")),
     }

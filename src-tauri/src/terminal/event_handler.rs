@@ -50,13 +50,15 @@ impl<R: Runtime> TerminalEventHandler<R> {
         let mux_subscriber: SubscriberCallback = Box::new(move |notification| match notification {
             MuxNotification::PaneOutput { pane_id, data } => {
                 // 使用 ChannelManager 直接发送字节流，避免在后端进行任何字符串解码
-                let state = app_handle.state::<crate::terminal::channel_state::TerminalChannelState>();
+                let state =
+                    app_handle.state::<crate::terminal::channel_state::TerminalChannelState>();
                 state.manager.send_data(pane_id.as_u32(), data.as_ref());
                 true
             }
             MuxNotification::PaneRemoved(pane_id) => {
                 // 通知 Channel 已关闭
-                let state = app_handle.state::<crate::terminal::channel_state::TerminalChannelState>();
+                let state =
+                    app_handle.state::<crate::terminal::channel_state::TerminalChannelState>();
                 state.manager.close(pane_id.as_u32());
                 let (event_name, payload) = Self::mux_notification_to_tauri_event(notification);
                 if let Err(e) = app_handle.emit(event_name, payload.clone()) {

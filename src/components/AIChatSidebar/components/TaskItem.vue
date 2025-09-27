@@ -3,7 +3,7 @@
     class="task-node"
     :class="{
       'is-current': isCurrent,
-      'is-active': task.status === 'active',
+      'is-active': task.status === 'running',
       'is-paused': task.status === 'paused',
       'is-completed': task.status === 'completed',
       'is-error': task.status === 'error',
@@ -17,20 +17,16 @@
 
     <!-- Task information -->
     <div class="task-info">
-      <div class="task-title">{{ task.name || 'Untitled Task' }}</div>
+      <div class="task-title">{{ displayName }}</div>
       <div class="task-meta">
-        <span class="task-status" :class="getStatusClass(task.status)">
-          {{ getStatusText(task.status) }}
-        </span>
-        <span v-if="renderData.nodes && renderData.nodes.length > 0" class="node-count">
-          {{ renderData.nodes.length }} step{{ renderData.nodes.length > 1 ? 's' : '' }}
-        </span>
-        <span v-if="renderData.parentTaskId" class="task-type">subtask</span>
+        <span class="task-status" :class="getStatusClass(task.status)">{{ getStatusText(task.status) }}</span>
+        <span class="node-count">iter: {{ task.current_iteration }}</span>
+        <span v-if="task.error" class="task-type">error: {{ task.error }}</span>
       </div>
     </div>
 
-    <!-- Progress indicator for active tasks -->
-    <div v-if="task.status === 'active' && hasProgress" class="progress-indicator">
+    <!-- Progress indicator for active tasks (keep original style) -->
+    <div v-if="task.status === 'running' && hasProgress" class="progress-indicator">
       <div class="progress-bar">
         <div class="progress-fill" :style="{ width: `${progressPercentage}%` }"></div>
       </div>
@@ -40,10 +36,10 @@
 
 <script setup lang="ts">
   import { computed } from 'vue'
-  import type { UITask } from '@/api/tasks'
+  import type { AgentTaskState } from '@/api/agent'
 
   interface Props {
-    task: UITask
+    task: AgentTaskState
     isCurrent?: boolean
   }
 
@@ -55,32 +51,27 @@
     click: []
   }>()
 
-  // 解析渲染数据
-  const renderData = computed(() => {
-    if (!props.task.render_json) return {}
-    try {
-      return JSON.parse(props.task.render_json)
-    } catch {
-      return {}
+  // Derive a display name similar to previous UI's title
+  const displayName = computed(() => {
+    // 尝试使用用户提示作为标题的第一行，否则回退到task_id后缀
+    const prompt = props.task.user_prompt
+    if (prompt && prompt.trim()) {
+      return (prompt.split('\n')[0] || '').slice(0, 60) || props.task.task_id
     }
+    return `Task-${props.task.task_id.slice(-8)}`
   })
 
-  // Calculate progress based on completed nodes
-  const hasProgress = computed(() => {
-    return renderData.value.nodes && renderData.value.nodes.length > 0
-  })
-
+  // Keep progress bar UI: approximate progress by iteration (purely visual)
+  const hasProgress = computed(() => true)
   const progressPercentage = computed(() => {
-    const nodes = renderData.value.nodes
-    if (!nodes || nodes.length === 0) return 0
-
-    const completedNodes = nodes.filter((node: any) => node.status === 'completed').length
-    return Math.round((completedNodes / nodes.length) * 100)
+    const iter = props.task.current_iteration || 0
+    // 显示一个0-95%的进度，避免满格直到完成事件
+    return Math.min(95, Math.max(0, (iter % 10) * 10))
   })
 
   const getStatusClass = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'running':
         return 'status-active'
       case 'paused':
         return 'status-paused'
@@ -88,6 +79,8 @@
         return 'status-completed'
       case 'error':
         return 'status-error'
+      case 'cancelled':
+        return 'status-init'
       default:
         return 'status-init'
     }
@@ -95,14 +88,18 @@
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'active':
-        return 'Active'
+      case 'running':
+        return 'Running'
       case 'paused':
         return 'Paused'
       case 'completed':
         return 'Completed'
       case 'error':
         return 'Error'
+      case 'created':
+        return 'Created'
+      case 'cancelled':
+        return 'Cancelled'
       default:
         return 'Init'
     }

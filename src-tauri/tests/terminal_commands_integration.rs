@@ -56,7 +56,10 @@ async fn test_active_pane_management_integration() {
     assert!(result.is_ok(), "设置活跃终端应该成功");
 
     // 验证活跃终端状态
-    assert_eq!(state.registry().terminal_context_get_active_pane(), Some(pane_id));
+    assert_eq!(
+        state.registry().terminal_context_get_active_pane(),
+        Some(pane_id)
+    );
     assert!(state.registry().terminal_context_is_pane_active(pane_id));
 
     // 验证其他面板不是活跃的
@@ -97,7 +100,10 @@ async fn test_terminal_context_service_integration() {
     assert!(!context.shell_integration_enabled);
 
     // 设置活跃终端后测试
-    state.registry().terminal_context_set_active_pane(pane_id).unwrap();
+    state
+        .registry()
+        .terminal_context_set_active_pane(pane_id)
+        .unwrap();
 
     // 测试获取活跃终端上下文（面板不存在于mux中，应该失败）
     let result = state.context_service().get_active_context().await;
@@ -145,7 +151,10 @@ async fn test_registry_statistics() {
     assert_eq!(stats.window_active_pane_count, 0);
 
     // 设置活跃终端后的统计
-    state.registry().terminal_context_set_active_pane(pane_id).unwrap();
+    state
+        .registry()
+        .terminal_context_set_active_pane(pane_id)
+        .unwrap();
 
     let stats = state.registry().get_stats();
     assert_eq!(stats.global_active_pane, Some(pane_id));
@@ -163,10 +172,14 @@ async fn test_concurrent_active_pane_operations() {
         let state_clone = Arc::clone(&state);
         let handle = tokio::spawn(async move {
             // 每个任务都尝试设置自己的面板为活跃
-            let set_result = state_clone.registry().terminal_context_set_active_pane(pane_id);
+            let set_result = state_clone
+                .registry()
+                .terminal_context_set_active_pane(pane_id);
 
             // 检查是否成功设置
-            let is_active = state_clone.registry().terminal_context_is_pane_active(pane_id);
+            let is_active = state_clone
+                .registry()
+                .terminal_context_is_pane_active(pane_id);
 
             // 尝试获取上下文
             let context_result = state_clone
@@ -240,8 +253,14 @@ async fn test_complete_workflow_integration() {
     assert!(!state.registry().terminal_context_is_pane_active(pane_id));
 
     // 2. 设置活跃终端
-    state.registry().terminal_context_set_active_pane(pane_id).unwrap();
-    assert_eq!(state.registry().terminal_context_get_active_pane(), Some(pane_id));
+    state
+        .registry()
+        .terminal_context_set_active_pane(pane_id)
+        .unwrap();
+    assert_eq!(
+        state.registry().terminal_context_get_active_pane(),
+        Some(pane_id)
+    );
     assert!(state.registry().terminal_context_is_pane_active(pane_id));
 
     // 3. 获取终端上下文（使用回退逻辑）
@@ -258,7 +277,10 @@ async fn test_complete_workflow_integration() {
     assert_eq!(stats.total_entries, 0);
 
     // 5. 清除活跃终端
-    state.registry().terminal_context_clear_active_pane().unwrap();
+    state
+        .registry()
+        .terminal_context_clear_active_pane()
+        .unwrap();
     assert_eq!(state.registry().terminal_context_get_active_pane(), None);
     assert!(!state.registry().terminal_context_is_pane_active(pane_id));
 
@@ -280,7 +302,10 @@ async fn test_event_system_integration() {
     let mut event_receiver = state.registry().subscribe_events();
 
     // 设置活跃终端应该触发事件
-    state.registry().terminal_context_set_active_pane(pane_id).unwrap();
+    state
+        .registry()
+        .terminal_context_set_active_pane(pane_id)
+        .unwrap();
 
     // 尝试接收事件（使用超时避免测试挂起）
     let event_result =

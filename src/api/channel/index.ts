@@ -48,13 +48,9 @@ class ChannelApi {
     const channel = new Channel<T>()
     let isStreamClosed = false
 
-    // 启动后端命令
-    invoke(command, { ...payload, channel }).catch(error => {
-      console.error(`[channelApi] stream invoke ${command} error:`, error)
-    })
-
     return new ReadableStream({
       start(controller) {
+        // 在调用后端之前先绑定消息与错误处理，避免早期事件丢失
         channel.onmessage = (chunk: T) => {
           if (isStreamClosed) return
 
@@ -83,6 +79,15 @@ class ChannelApi {
             }
           }
         }
+
+        // 绑定完回调后再启动后端命令，确保不会错过早期事件
+        invoke(command, { ...payload, channel }).catch(error => {
+          console.error(`[channelApi] stream invoke ${command} error:`, error)
+          if (!isStreamClosed) {
+            isStreamClosed = true
+            controller.error(error)
+          }
+        })
       },
       cancel() {
         isStreamClosed = true

@@ -55,7 +55,7 @@ const initializeServices = async () => {
   await completionApi.initEngine()
 
   const aiChatStore = useAIChatStore()
-  await aiChatStore.initializeEko()
+  await aiChatStore.initialize()
 }
 
 const initializeOpacity = async () => {

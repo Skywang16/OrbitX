@@ -4,18 +4,8 @@
 
 import { ComponentConfig, ComponentContext, PromptComponent } from './types'
 import { resolveTemplate } from '../template-engine'
-import { TOOL_NAME as human_interact } from '../../tools/human_interact'
 
-const HUMAN_PROMPT = `
-# Human Interaction
-When you need to interact with humans, you can use the human interaction tools to:
-- Ask for confirmation before executing critical operations
-- Request additional information or clarification
-- Get user input for decision making
-- Provide status updates and progress reports
-
-Always be clear and specific in your human interactions.
-`
+// Human Interaction component removed: handled by per-tool UI confirmation, not a standalone tool
 
 /**
  * 工具描述组件
@@ -39,19 +29,4 @@ export const toolsDescriptionComponent: ComponentConfig = {
   },
 }
 
-/**
- * 人机交互工具组件
- */
-export const humanInteractionComponent: ComponentConfig = {
-  id: PromptComponent.HUMAN_INTERACTION,
-  name: 'Human Interaction',
-  description: 'Human interaction tools description',
-  required: false,
-  template: HUMAN_PROMPT,
-  fn: async (context: ComponentContext) => {
-    const { tools = [] } = context
-    const hasHumanTool = tools.some(tool => tool.name === human_interact)
-
-    return hasHumanTool ? humanInteractionComponent.template! : undefined
-  },
-}
+// Human Interaction prompt component removed

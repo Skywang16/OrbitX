@@ -1,7 +1,7 @@
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
-use ignore::WalkBuilder;
 use ignore::gitignore::GitignoreBuilder;
+use ignore::WalkBuilder;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -341,7 +341,8 @@ pub async fn code_list_definition_names(path: String) -> TauriApiResult<Vec<Code
                             D::FunctionDeclaration(func) => {
                                 if let Some(ident) = &func.id {
                                     let name = ident.name.to_string();
-                                    let line = offset_to_line(&line_offsets, func.span.start as usize);
+                                    let line =
+                                        offset_to_line(&line_offsets, func.span.start as usize);
                                     defs.push(CodeDefItem {
                                         file: file.display().to_string(),
                                         kind: "function".into(),
@@ -355,7 +356,8 @@ pub async fn code_list_definition_names(path: String) -> TauriApiResult<Vec<Code
                             D::ClassDeclaration(class) => {
                                 if let Some(ident) = &class.id {
                                     let name = ident.name.to_string();
-                                    let line = offset_to_line(&line_offsets, class.span.start as usize);
+                                    let line =
+                                        offset_to_line(&line_offsets, class.span.start as usize);
                                     defs.push(CodeDefItem {
                                         file: file.display().to_string(),
                                         kind: "class".into(),
@@ -407,12 +409,18 @@ pub async fn code_list_definition_names(path: String) -> TauriApiResult<Vec<Code
                                     if let Some(init) = &decl.init {
                                         let is_fn_like = matches!(
                                             init,
-                                            Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_)
+                                            Expression::FunctionExpression(_)
+                                                | Expression::ArrowFunctionExpression(_)
                                         );
                                         if is_fn_like {
-                                            if let Some(ident) = decl.id.kind.get_binding_identifier() {
+                                            if let Some(ident) =
+                                                decl.id.kind.get_binding_identifier()
+                                            {
                                                 let name = ident.name.to_string();
-                                                let line = offset_to_line(&line_offsets, decl.span.start as usize);
+                                                let line = offset_to_line(
+                                                    &line_offsets,
+                                                    decl.span.start as usize,
+                                                );
                                                 defs.push(CodeDefItem {
                                                     file: file.display().to_string(),
                                                     kind: "var-function".into(),

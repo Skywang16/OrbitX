@@ -24,7 +24,6 @@ export enum PromptComponent {
 
   // 工具相关组件
   TOOLS_DESCRIPTION = 'TOOLS_DESCRIPTION',
-  HUMAN_INTERACTION = 'HUMAN_INTERACTION',
 
   // 任务相关组件
   TASK_CONTEXT = 'TASK_CONTEXT',

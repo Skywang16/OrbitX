@@ -437,7 +437,10 @@ impl AIModelRepository {
         Ok(prompt)
     }
 
-    pub async fn ai_conversation_set_user_prefix_prompt(&self, prompt: Option<String>) -> AppResult<()> {
+    pub async fn ai_conversation_set_user_prefix_prompt(
+        &self,
+        prompt: Option<String>,
+    ) -> AppResult<()> {
         debug!("设置用户前置提示词: {:?}", prompt.as_ref().map(|p| p.len()));
 
         *self.user_prefix_prompt.write().await = prompt;

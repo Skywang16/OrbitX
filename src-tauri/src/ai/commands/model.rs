@@ -7,7 +7,6 @@ use crate::{api_error, api_success, validate_not_empty};
 
 use tauri::State;
 
-
 /// 获取所有AI模型配置
 #[tauri::command]
 pub async fn ai_models_get(state: State<'_, AIManagerState>) -> TauriApiResult<Vec<AIModelConfig>> {
@@ -89,7 +88,6 @@ pub async fn ai_models_test_connection(
     }
 }
 
-
 /// 获取用户前置提示词
 #[tauri::command]
 pub async fn ai_conversation_get_user_prefix_prompt(
@@ -99,7 +97,11 @@ pub async fn ai_conversation_get_user_prefix_prompt(
 
     let repositories = state.repositories();
 
-    match repositories.ai_models().ai_conversation_get_user_prefix_prompt().await {
+    match repositories
+        .ai_models()
+        .ai_conversation_get_user_prefix_prompt()
+        .await
+    {
         Ok(prompt) => Ok(api_success!(prompt)),
         Err(_) => Ok(api_error!("ai.get_prefix_prompt_failed")),
     }

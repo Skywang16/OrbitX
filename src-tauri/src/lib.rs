@@ -1,9 +1,11 @@
+pub mod agent;
 pub mod ai;
+pub mod ck;
 pub mod commands;
 pub mod completion;
 pub mod config;
+pub mod filesystem;
 pub mod llm;
-pub mod ck;
 pub mod mux;
 pub mod setup;
 pub mod shell;
@@ -11,16 +13,14 @@ pub mod storage;
 pub mod terminal;
 pub mod utils;
 pub mod window;
-pub mod filesystem;
 
-use commands::register_all_commands;
 use setup::{
     ensure_main_window_visible, handle_startup_args, init_logging, init_plugin,
     initialize_app_states, setup_app_events, setup_deep_links,
 };
 use utils::i18n::I18nManager;
 
-use tauri::{Emitter, Manager};
+use tauri::{Builder, Emitter, Manager, Runtime};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -69,7 +69,7 @@ pub fn run() {
             }
         });
 
-    let app_result = register_all_commands(app_result);
+    let app_result = commands::register_all_commands(app_result);
 
     app_result
         .setup(|app| {

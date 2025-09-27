@@ -298,7 +298,11 @@ impl ConversationRepository {
     }
 
     /// 更新消息内容
-    pub async fn ai_conversation_update_message_content(&self, message_id: i64, content: &str) -> AppResult<()> {
+    pub async fn ai_conversation_update_message_content(
+        &self,
+        message_id: i64,
+        content: &str,
+    ) -> AppResult<()> {
         sqlx::query("UPDATE ai_messages SET content = ? WHERE id = ?")
             .bind(content)
             .bind(message_id)
@@ -309,7 +313,11 @@ impl ConversationRepository {
     }
 
     /// 更新消息步骤数据
-    pub async fn ai_conversation_update_message_steps(&self, message_id: i64, steps_json: &str) -> AppResult<()> {
+    pub async fn ai_conversation_update_message_steps(
+        &self,
+        message_id: i64,
+        steps_json: &str,
+    ) -> AppResult<()> {
         sqlx::query("UPDATE ai_messages SET steps_json = ? WHERE id = ?")
             .bind(steps_json)
             .bind(message_id)

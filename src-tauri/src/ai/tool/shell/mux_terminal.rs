@@ -225,7 +225,6 @@ pub async fn terminal_list(_state: State<'_, TerminalState>) -> TauriApiResult<V
     Ok(api_success!(pane_ids))
 }
 
-
 /// 获取终端缓冲区内容
 ///
 #[tauri::command]
@@ -338,7 +337,10 @@ pub async fn terminal_create_with_shell<R: Runtime>(
     _app: AppHandle<R>,
     _state: State<'_, TerminalState>,
 ) -> TauriApiResult<u32> {
-    debug!("使用指定shell创建终端: {:?}, 大小: {}x{}", shell_name, cols, rows);
+    debug!(
+        "使用指定shell创建终端: {:?}, 大小: {}x{}",
+        shell_name, cols, rows
+    );
 
     if let Err(_) = validate_terminal_size(rows, cols) {
         return Ok(api_error!("shell.terminal_size_invalid"));

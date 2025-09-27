@@ -130,7 +130,6 @@ impl TerminalMux {
         self.next_subscriber_id.fetch_add(1, Ordering::Relaxed) as usize
     }
 
-
     /// 创建新面板
     pub async fn create_pane(&self, size: PtySize) -> AppResult<PaneId> {
         let config = TerminalConfig::default();
@@ -272,7 +271,6 @@ impl TerminalMux {
         self.panes.read().map(|panes| panes.len()).unwrap_or(0)
     }
 
-
     /// 写入数据到指定面板
     ///
     /// - 使用结构化日志格式
@@ -319,7 +317,6 @@ impl TerminalMux {
         );
         Ok(())
     }
-
 
     /// 订阅事件通知
     pub fn subscribe<F>(&self, subscriber: F) -> usize
@@ -469,7 +466,6 @@ impl TerminalMux {
         })
     }
 
-
     /// 设置面板的Shell Integration
     pub fn setup_pane_integration(&self, pane_id: PaneId) -> AppResult<()> {
         self.shell_integration.enable_integration(pane_id);
@@ -571,7 +567,6 @@ impl TerminalMux {
     pub fn get_pane_command_history(&self, pane_id: PaneId) -> Vec<crate::shell::CommandInfo> {
         self.shell_integration.get_command_history(pane_id)
     }
-
 
     /// 清理所有资源
     pub fn shutdown(&self) -> AppResult<()> {

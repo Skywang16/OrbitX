@@ -1,4 +1,3 @@
-
 use crate::terminal::commands::TerminalContextState;
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
@@ -13,19 +12,27 @@ use tauri::State;
 use tokio::task::JoinHandle;
 use tracing::debug;
 
-fn default_index_dir(base: &Path) -> PathBuf { base.join(".oxi") }
+fn default_index_dir(base: &Path) -> PathBuf {
+    base.join(".oxi")
+}
 fn resolve_index_dir(base: &Path) -> PathBuf {
     let oxi = base.join(".oxi");
-    if oxi.exists() { return oxi; }
+    if oxi.exists() {
+        return oxi;
+    }
     base.join(".ck")
 }
 
 fn is_index_ready(search_path: &Path) -> bool {
     let idx_dir = resolve_index_dir(search_path);
-    if !idx_dir.exists() { return false; }
+    if !idx_dir.exists() {
+        return false;
+    }
 
     let building_lock = idx_dir.join("building.lock");
-    if building_lock.exists() { return false; }
+    if building_lock.exists() {
+        return false;
+    }
 
     let ready_marker = idx_dir.join("ready.marker");
     ready_marker.exists()
@@ -296,7 +303,11 @@ pub async fn ck_get_build_progress(
         fs::read_to_string(&progress_path_oxi)
             .ok()
             .and_then(|content| serde_json::from_str(&content).ok())
-            .or_else(|| fs::read_to_string(&progress_path_ck).ok().and_then(|c| serde_json::from_str(&c).ok()))
+            .or_else(|| {
+                fs::read_to_string(&progress_path_ck)
+                    .ok()
+                    .and_then(|c| serde_json::from_str(&c).ok())
+            })
             .unwrap_or_else(|| CkBuildProgress {
                 current_file: None,
                 files_completed: 0,
@@ -333,7 +344,11 @@ pub async fn ck_index_status(
 
     // 仅统计索引目录顶层文件大小，避免递归带来的性能影响
     let idx_dir = resolve_index_dir(&search_path);
-    let size_bytes = if idx_dir.exists() { index_dir_top_level_size(&idx_dir) } else { 0 };
+    let size_bytes = if idx_dir.exists() {
+        index_dir_top_level_size(&idx_dir)
+    } else {
+        0
+    };
     let size_str = format_bytes(size_bytes);
 
     Ok(api_success!(CkIndexStatusResult {
@@ -405,13 +420,13 @@ pub async fn ck_build_index(
         // Build index directly without running a semantic search
         let result = ck_index::smart_update_index_with_detailed_progress(
             &search_path,
-            false,                       // force_rebuild
-            None,                        // progress_callback (coarse)
-            detailed_cb_idx,             // detailed progress
-            true,                        // compute_embeddings
-            true,                        // respect_gitignore
+            false,           // force_rebuild
+            None,            // progress_callback (coarse)
+            detailed_cb_idx, // detailed progress
+            true,            // compute_embeddings
+            true,            // respect_gitignore
             &ck_core::get_default_exclude_patterns(),
-            None,                        // model
+            None, // model
         )
         .await;
 
@@ -527,7 +542,11 @@ pub async fn ck_delete_index(
     // 删除 .oxi 索引目录；若不存在则尝试删除旧的 .ck
     let idx_dir_oxi = search_path.join(".oxi");
     let idx_dir_ck = search_path.join(".ck");
-    let target = if idx_dir_oxi.exists() { &idx_dir_oxi } else { &idx_dir_ck };
+    let target = if idx_dir_oxi.exists() {
+        &idx_dir_oxi
+    } else {
+        &idx_dir_ck
+    };
     if target.exists() {
         match tokio::fs::remove_dir_all(target).await {
             Ok(_) => {

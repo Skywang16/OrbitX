@@ -7,7 +7,6 @@ use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success, validate_not_empty};
 use tauri::State;
 
-
 /// 获取压缩上下文
 #[tauri::command]
 pub async fn ai_conversation_get_compressed_context(
@@ -85,7 +84,6 @@ pub async fn ai_conversation_build_prompt_with_context(
     }
 }
 
-
 /// 获取上下文配置
 #[tauri::command]
 pub async fn get_context_config() -> TauriApiResult<crate::ai::enhanced_context::ContextConfig> {
@@ -101,7 +99,6 @@ pub async fn update_context_config(
 ) -> TauriApiResult<EmptyData> {
     Ok(api_success!())
 }
-
 
 /// 获取KV缓存统计
 #[tauri::command]

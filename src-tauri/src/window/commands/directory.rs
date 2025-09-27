@@ -69,13 +69,9 @@ pub async fn window_get_home_directory(
     let home_dir = if cfg!(windows) {
         env::var("USERPROFILE")
             .or_else(|_| env::var("HOME"))
-            .or_else(|_| {
-                env::current_dir().map(|p| p.to_string_lossy().to_string())
-            })
+            .or_else(|_| env::current_dir().map(|p| p.to_string_lossy().to_string()))
     } else {
-        env::var("HOME").or_else(|_| {
-            env::current_dir().map(|p| p.to_string_lossy().to_string())
-        })
+        env::var("HOME").or_else(|_| env::current_dir().map(|p| p.to_string_lossy().to_string()))
     }
     .context("获取家目录失败")
     .to_tauri()?;
@@ -107,7 +103,6 @@ pub async fn window_clear_directory_cache(
     debug!("目录缓存清除成功");
     Ok(api_success!())
 }
-
 
 // 规范化路径
 #[tauri::command]

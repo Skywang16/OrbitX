@@ -31,7 +31,6 @@ impl OpenAIProvider {
         }
     }
 
-
     fn build_body(&self, request: &LLMRequest) -> Value {
         let mut body = json!({
             "model": request.model,

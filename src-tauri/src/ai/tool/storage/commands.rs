@@ -207,13 +207,14 @@ pub async fn eko_ctx_upsert_state(
 pub async fn eko_ctx_append_event(
     task_id: String,
     event: String,
+    conversation_id: i64,
     node_id: Option<String>,
     state: State<'_, StorageCoordinatorState>,
 ) -> TauriApiResult<i64> {
     let eko_context = EkoContext {
         id: None,
         task_id: task_id.clone(),
-        conversation_id: 1, // TODO: 从当前会话获取
+        conversation_id,
         kind: crate::storage::repositories::tasks::EkoContextKind::Event,
         name: None,
         node_id,
@@ -240,12 +241,13 @@ pub async fn eko_ctx_snapshot_save(
     task_id: String,
     name: Option<String>,
     snapshot: String,
+    conversation_id: Option<i64>,
     state: State<'_, StorageCoordinatorState>,
 ) -> TauriApiResult<i64> {
     let eko_context = EkoContext {
         id: None,
         task_id: task_id.clone(),
-        conversation_id: 1, // TODO: 从当前会话获取
+        conversation_id: conversation_id.unwrap_or(1), // 默认会话ID为1
         kind: crate::storage::repositories::tasks::EkoContextKind::Snapshot,
         name,
         node_id: None,

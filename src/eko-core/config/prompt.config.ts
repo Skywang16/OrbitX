@@ -58,7 +58,6 @@ export const defaultPromptConfig: PromptConfig = {
       PromptComponent.TASK_CONTEXT,
       PromptComponent.TOOLS_DESCRIPTION,
       PromptComponent.TASK_NODES,
-      PromptComponent.HUMAN_INTERACTION,
       PromptComponent.CUSTOM_INSTRUCTIONS,
       PromptComponent.DATETIME,
     ],
@@ -91,13 +90,7 @@ export const defaultPromptConfig: PromptConfig = {
     } as Partial<Record<PromptComponent, string>>,
   },
 
-  enabledFeatures: [
-    'human_interaction',
-    'foreach_processing',
-    'watch_monitoring',
-    'dynamic_tools',
-    'context_awareness',
-  ],
+  enabledFeatures: ['foreach_processing', 'watch_monitoring', 'dynamic_tools', 'context_awareness'],
 
   componentConfig: {
     [PromptComponent.AGENT_ROLE]: {
@@ -116,16 +109,6 @@ export const defaultPromptConfig: PromptConfig = {
       enabled: true,
       priority: 4,
       dependencies: [PromptComponent.TOOLS_DESCRIPTION],
-    },
-    [PromptComponent.HUMAN_INTERACTION]: {
-      enabled: true,
-      priority: 5,
-      conditionalRules: [
-        {
-          condition: 'hasHumanTool',
-          action: 'include',
-        },
-      ],
     },
     [PromptComponent.TASK_CONTEXT]: {
       enabled: true,

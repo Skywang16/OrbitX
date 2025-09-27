@@ -328,7 +328,9 @@ pub async fn config_terminal_update_behavior(
 }
 /// 获取Shell信息
 #[tauri::command]
-pub async fn config_terminal_get_shell_info(_state: State<'_, ConfigManagerState>) -> TauriApiResult<String> {
+pub async fn config_terminal_get_shell_info(
+    _state: State<'_, ConfigManagerState>,
+) -> TauriApiResult<String> {
     debug!("开始获取Shell信息");
     Ok(api_success!("zsh".to_string()))
 }

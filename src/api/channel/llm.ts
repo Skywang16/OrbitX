@@ -1,6 +1,8 @@
 import { channelApi } from './index'
-import type { NativeLLMStreamChunk } from '@/eko-core/types/llm.types'
 import { invoke } from '@/utils/request'
+
+// Minimal stream chunk type to avoid eko-core dependency
+type LLMStreamChunk = { type: string; [key: string]: any }
 
 /**
  * LLM 专用 Channel API
@@ -9,13 +11,13 @@ class LLMChannelApi {
   /**
    * 创建 LLM 流式调用
    */
-  createStream(request: Record<string, unknown>): ReadableStream<NativeLLMStreamChunk> {
-    return channelApi.createStream<NativeLLMStreamChunk>(
+  createStream(request: Record<string, unknown>): ReadableStream<LLMStreamChunk> {
+    return channelApi.createStream<LLMStreamChunk>(
       'llm_call_stream',
       { request },
       {
         cancelCommand: 'llm_cancel_stream',
-        shouldClose: (chunk: NativeLLMStreamChunk) => {
+        shouldClose: (chunk: LLMStreamChunk) => {
           return chunk.type === 'finish' || chunk.type === 'error'
         },
       }

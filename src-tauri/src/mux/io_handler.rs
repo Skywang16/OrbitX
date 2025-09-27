@@ -244,7 +244,8 @@ impl IoHandler {
 
                     // 把上次遗留的未完成字节拼接到本次要发送的数据前面
                     if !pending_incomplete.is_empty() {
-                        let mut combined = Vec::with_capacity(pending_incomplete.len() + data_to_send.len());
+                        let mut combined =
+                            Vec::with_capacity(pending_incomplete.len() + data_to_send.len());
                         combined.extend_from_slice(&pending_incomplete);
                         combined.extend_from_slice(&data_to_send);
                         data_to_send = combined;
@@ -256,7 +257,9 @@ impl IoHandler {
                         Ok(s) => (s, data_to_send.len()),
                         Err(err) => {
                             let valid_up_to = err.valid_up_to();
-                            let prefix = unsafe { std::str::from_utf8_unchecked(&data_to_send[..valid_up_to]) };
+                            let prefix = unsafe {
+                                std::str::from_utf8_unchecked(&data_to_send[..valid_up_to])
+                            };
                             (prefix, valid_up_to)
                         }
                     };
@@ -293,7 +296,8 @@ impl IoHandler {
             if !batch_data.is_empty() || !pending_incomplete.is_empty() {
                 let mut data_to_send = std::mem::take(&mut batch_data);
                 if !pending_incomplete.is_empty() {
-                    let mut combined = Vec::with_capacity(pending_incomplete.len() + data_to_send.len());
+                    let mut combined =
+                        Vec::with_capacity(pending_incomplete.len() + data_to_send.len());
                     combined.extend_from_slice(&pending_incomplete);
                     combined.extend_from_slice(&data_to_send);
                     data_to_send = combined;
@@ -304,7 +308,8 @@ impl IoHandler {
                     Ok(s) => (s, data_to_send.len()),
                     Err(err) => {
                         let valid_up_to = err.valid_up_to();
-                        let prefix = unsafe { std::str::from_utf8_unchecked(&data_to_send[..valid_up_to]) };
+                        let prefix =
+                            unsafe { std::str::from_utf8_unchecked(&data_to_send[..valid_up_to]) };
                         (prefix, valid_up_to)
                     }
                 };

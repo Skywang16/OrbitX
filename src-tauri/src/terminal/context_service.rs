@@ -1,4 +1,3 @@
-
 use crate::mux::{PaneId, TerminalMux};
 use crate::shell::{ContextServiceIntegration, ShellIntegrationManager};
 use crate::terminal::{
@@ -583,7 +582,11 @@ mod tests {
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
         println!("实际错误消息: '{}'", error_msg);
-        assert!(error_msg.contains("面板不存在") || error_msg.contains("pane") || error_msg.contains("查询终端上下文失败"));
+        assert!(
+            error_msg.contains("面板不存在")
+                || error_msg.contains("pane")
+                || error_msg.contains("查询终端上下文失败")
+        );
     }
 
     #[tokio::test]

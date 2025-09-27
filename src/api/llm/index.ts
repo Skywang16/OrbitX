@@ -9,7 +9,10 @@
 
 import { invoke } from '@/utils/request'
 import { llmChannelApi } from '@/api/channel/llm'
-import type { NativeLLMRequest, NativeLLMResponse, NativeLLMStreamChunk } from '@/eko-core/types/llm.types'
+// Local minimal types to decouple from eko-core
+export type NativeLLMRequest = { [key: string]: any; abortSignal?: AbortSignal }
+export type NativeLLMResponse = any
+export type NativeLLMStreamChunk = { type: string; [key: string]: any }
 
 /**
  * LLM API 接口类

@@ -302,9 +302,10 @@ impl Pane for LocalPane {
     }
 
     fn get_size(&self) -> PtySize {
-        self.size.lock().map(|size| *size).unwrap_or_else(|_| {
-            PtySize::default()
-        })
+        self.size
+            .lock()
+            .map(|size| *size)
+            .unwrap_or_else(|_| PtySize::default())
     }
 }
 

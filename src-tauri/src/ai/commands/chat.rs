@@ -1,4 +1,3 @@
-
 use super::AIManagerState;
 use crate::ai::context::handle_truncate_conversation;
 use crate::ai::types::{Conversation, Message};
@@ -163,7 +162,11 @@ pub async fn ai_conversation_save_message(
 
     let message = Message::new(conversation_id, role, content);
 
-    match repositories.conversations().ai_conversation_save_message(&message).await {
+    match repositories
+        .conversations()
+        .ai_conversation_save_message(&message)
+        .await
+    {
         Ok(message_id) => Ok(api_success!(message_id)),
         Err(_) => Ok(api_error!("ai.save_message_failed")),
     }

@@ -8,10 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::pin::Pin;
 
-
 // 重新导出Repository中的类型
 pub use crate::storage::repositories::ai_models::{AIModelConfig, AIProvider, ModelType};
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -69,7 +67,6 @@ pub struct AIResponseMetadata {
     pub tokens_used: Option<u32>,
     pub response_time: Option<u64>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -166,7 +163,6 @@ impl Default for AIPerformanceSettings {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AIStats {
@@ -197,7 +193,6 @@ pub enum HealthStatus {
     Unhealthy,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheEntry<T> {
@@ -218,7 +213,6 @@ pub struct CacheStats {
     pub newest_entry: Option<DateTime<Utc>>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StreamChunk {
@@ -231,7 +225,6 @@ pub struct StreamChunk {
 pub type AIStreamResponse =
     Pin<Box<dyn Stream<Item = Result<StreamChunk, crate::utils::error::AppError>> + Send>>;
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdapterCapabilities {
@@ -243,7 +236,6 @@ pub struct AdapterCapabilities {
     pub max_batch_size: Option<usize>,
     pub supported_models: Vec<String>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -271,7 +263,6 @@ pub struct ModelInfo {
     pub context_length: Option<u32>,
     pub capabilities: Option<AdapterCapabilities>,
 }
-
 
 // 重新导出Repository中的会话和消息类型
 pub use crate::storage::repositories::conversations::{Conversation, Message};

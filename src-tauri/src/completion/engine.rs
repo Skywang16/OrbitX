@@ -276,4 +276,3 @@ impl Default for CompletionEngine {
         Self::new(CompletionEngineConfig::default()).expect("创建默认补全引擎失败")
     }
 }
-

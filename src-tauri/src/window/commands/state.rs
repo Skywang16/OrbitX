@@ -1,7 +1,6 @@
-
 use super::*;
-use crate::utils::{ApiResponse, TauriApiResult};
 use crate::api_error;
+use crate::utils::{ApiResponse, TauriApiResult};
 
 #[tauri::command]
 pub async fn window_manage_state<R: Runtime>(
@@ -114,7 +113,6 @@ async fn process_single_window_operation<R: Runtime>(
     }
 }
 
-
 // 处理获取窗口状态操作
 async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::Value, String> {
     debug!("处理获取窗口状态操作");
@@ -173,11 +171,7 @@ async fn handle_set_always_on_top<R: Runtime>(
 ) -> Result<serde_json::Value, String> {
     debug!("处理设置置顶状态操作");
 
-    let always_on_top = match request
-        .params
-        .as_ref()
-        .and_then(|p| p.always_on_top) 
-    {
+    let always_on_top = match request.params.as_ref().and_then(|p| p.always_on_top) {
         Some(value) => value,
         None => return Err("window.missing_always_on_top_param".to_string()),
     };

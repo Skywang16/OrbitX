@@ -353,7 +353,7 @@ Notes:
         return false
       }
     }
-    // 如果没有可用回调，则默认不批准，提示外层使用 human_interact 工具
+    // 如果没有可用回调，则默认不批准，由 UI 或上层逻辑决定后续处理方式
     return false
   }
 }
