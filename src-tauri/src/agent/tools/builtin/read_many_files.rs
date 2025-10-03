@@ -1,43 +1,33 @@
 use std::path::PathBuf;
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde::Deserialize;
 use tokio::fs;
 
+use super::file_utils::{ensure_absolute, is_probably_binary};
+use crate::agent::context::FileOperationRecord;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::state::context::TaskContext;
 use crate::agent::tools::{
     error::ToolExecutorResult, RunnableTool, ToolPermission, ToolResult, ToolResultContent,
 };
 
-const DEFAULT_MAX_BYTES: usize = 64 * 1024; // 64KB safeguard
+const DEFAULT_MAX_FILE_SIZE: usize = 1_048_576; // 1 MiB
+const MAX_LINES_PER_FILE: usize = 2000;
+const MAX_LINE_LENGTH: usize = 2000;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ReadManyFilesArgs {
     paths: Vec<String>,
-    #[serde(default = "default_max_bytes")]
-    max_bytes: usize,
-    #[serde(default)]
-    encoding: Option<String>,
+    #[serde(rename = "showLineNumbers", default)]
+    show_line_numbers: bool,
+    #[serde(rename = "maxFileSize", default = "default_max_file_size")]
+    max_file_size: usize,
 }
 
-fn default_max_bytes() -> usize {
-    DEFAULT_MAX_BYTES
-}
-
-#[derive(Debug, Serialize)]
-struct FileReadEntry {
-    path: String,
-    exists: bool,
-    is_binary: bool,
-    truncated: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    base64: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
+fn default_max_file_size() -> usize {
+    DEFAULT_MAX_FILE_SIZE
 }
 
 pub struct ReadManyFilesTool;
@@ -59,24 +49,24 @@ impl RunnableTool for ReadManyFilesTool {
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
-        json!({
+        serde_json::json!({
             "type": "object",
             "properties": {
                 "paths": {
                     "type": "array",
-                    "description": "Absolute or task-relative file paths",
+                    "description": "List of absolute file paths",
                     "items": { "type": "string" },
                     "minItems": 1
                 },
-                "maxBytes": {
+                "showLineNumbers": {
+                    "type": "boolean",
+                    "description": "Whether to show line numbers",
+                    "default": false
+                },
+                "maxFileSize": {
                     "type": "integer",
                     "minimum": 1024,
-                    "description": "Maximum bytes to read per file (defaults to 65536)"
-                },
-                "encoding": {
-                    "type": "string",
-                    "enum": ["utf8", "base64"],
-                    "description": "Force output encoding; utf8 (default) attempts UTF-8 decode with base64 fallback"
+                    "description": "Maximum file size in bytes (default 1048576)"
                 }
             },
             "required": ["paths"]
@@ -93,105 +83,202 @@ impl RunnableTool for ReadManyFilesTool {
 
     async fn run(
         &self,
-        _context: &TaskContext,
+        context: &TaskContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: ReadManyFilesArgs = serde_json::from_value(args)?;
-        let mut entries = Vec::new();
+        let tracker = context.file_tracker();
+
+        if args.paths.is_empty() {
+            return Ok(ToolResult {
+                content: vec![ToolResultContent::Error {
+                    message: "paths must be a non-empty array".to_string(),
+                    details: None,
+                }],
+                is_error: true,
+                execution_time_ms: None,
+                ext_info: None,
+            });
+        }
+
+        let mut summary_lines = Vec::new();
+        let mut ext_files = Vec::new();
+
+        summary_lines.push(format!(
+            "Batch file read results ({} files):\n",
+            args.paths.len()
+        ));
 
         for raw_path in args.paths {
-            let path = PathBuf::from(raw_path.clone());
-            let exists = fs::metadata(&path).await.is_ok();
-
-            if !exists {
-                entries.push(FileReadEntry {
-                    path: raw_path,
-                    exists: false,
-                    is_binary: false,
-                    truncated: false,
-                    content: None,
-                    base64: None,
-                    error: Some("File not found".to_string()),
+            let trimmed = raw_path.trim();
+            if trimmed.is_empty() {
+                return Ok(ToolResult {
+                    content: vec![ToolResultContent::Error {
+                        message: "All paths must be non-empty strings".to_string(),
+                        details: None,
+                    }],
+                    is_error: true,
+                    execution_time_ms: None,
+                    ext_info: None,
                 });
-                continue;
             }
 
-            match fs::read(&path).await {
-                Ok(bytes) => {
-                    let truncated = bytes.len() > args.max_bytes;
-                    let limited = if truncated {
-                        bytes[..args.max_bytes].to_vec()
-                    } else {
-                        bytes
-                    };
+            let path = PathBuf::from(trimmed);
+            if let Err(msg) = ensure_absolute(&path) {
+                return Ok(ToolResult {
+                    content: vec![ToolResultContent::Error {
+                        message: msg,
+                        details: Some(trimmed.to_string()),
+                    }],
+                    is_error: true,
+                    execution_time_ms: None,
+                    ext_info: None,
+                });
+            }
 
-                    let force_base64 = matches!(args.encoding.as_deref(), Some("base64"));
-
-                    if force_base64 {
-                        entries.push(FileReadEntry {
-                            path: raw_path,
-                            exists: true,
-                            is_binary: true,
-                            truncated,
-                            content: None,
-                            base64: Some(base64::encode(&limited)),
-                            error: None,
-                        });
+            match fs::metadata(&path).await {
+                Ok(meta) => {
+                    if meta.is_dir() {
+                        let line = format!("Failed {}: path is a directory\n", path.display());
+                        summary_lines.push(line.clone());
+                        ext_files.push(serde_json::json!({
+                            "path": path.display().to_string(),
+                            "success": false,
+                            "error": "Path is a directory"
+                        }));
                         continue;
                     }
 
-                    match String::from_utf8(limited.clone()) {
-                        Ok(text) => {
-                            entries.push(FileReadEntry {
-                                path: raw_path,
-                                exists: true,
-                                is_binary: false,
-                                truncated,
-                                content: Some(text),
-                                base64: if truncated {
-                                    Some(base64::encode(&limited))
-                                } else {
-                                    None
-                                },
-                                error: None,
-                            });
+                    if meta.len() as usize > args.max_file_size {
+                        let line = format!(
+                            "Failed {}: File too large ({} bytes > {} bytes)\n",
+                            path.display(),
+                            meta.len(),
+                            args.max_file_size
+                        );
+                        summary_lines.push(line.clone());
+                        ext_files.push(serde_json::json!({
+                            "path": path.display().to_string(),
+                            "success": false,
+                            "error": format!(
+                                "File too large ({} bytes > {} bytes)",
+                                meta.len(),
+                                args.max_file_size
+                            ),
+                            "size": meta.len()
+                        }));
+                        continue;
+                    }
+
+                    if is_probably_binary(&path) {
+                        let line =
+                            format!("Failed {}: file appears to be binary\n", path.display());
+                        summary_lines.push(line.clone());
+                        ext_files.push(serde_json::json!({
+                            "path": path.display().to_string(),
+                            "success": false,
+                            "error": "File appears to be binary"
+                        }));
+                        continue;
+                    }
+
+                    match fs::read_to_string(&path).await {
+                        Ok(raw_content) => {
+                            tracker
+                                .track_file_operation(FileOperationRecord::new(
+                                    path.as_path(),
+                                    FileRecordSource::ReadTool,
+                                ))
+                                .await?;
+
+                            let mut lines: Vec<String> =
+                                raw_content.split('\n').map(|s| s.to_string()).collect();
+                            let total_lines = lines.len();
+                            let mut was_truncated = false;
+
+                            if lines.len() > MAX_LINES_PER_FILE {
+                                lines.truncate(MAX_LINES_PER_FILE);
+                                was_truncated = true;
+                            }
+
+                            for line in &mut lines {
+                                if line.len() > MAX_LINE_LENGTH {
+                                    *line = format!("{}... [truncated]", &line[..MAX_LINE_LENGTH]);
+                                    was_truncated = true;
+                                }
+                            }
+
+                            if args.show_line_numbers {
+                                for (idx, line) in lines.iter_mut().enumerate() {
+                                    *line = format!("{:>4}  {}", idx + 1, line);
+                                }
+                            }
+
+                            let mut content = lines.join("\n");
+                            if was_truncated {
+                                content = format!(
+                                    "Important note: File content has been truncated.\nStatus: Showing first {} lines out of {} total lines.\nSuggestion: Use read_file tool with offset and limit parameters to read complete content.\n\n{}",
+                                    MAX_LINES_PER_FILE,
+                                    total_lines,
+                                    content
+                                );
+                            }
+
+                            summary_lines.push(format!(
+                                "Success {} ({} bytes, {} lines)\n{}\n\n",
+                                path.display(),
+                                meta.len(),
+                                total_lines,
+                                "─".repeat(50)
+                            ));
+                            summary_lines.push(content.clone());
+                            summary_lines.push(String::from("\n"));
+
+                            ext_files.push(serde_json::json!({
+                                "path": path.display().to_string(),
+                                "success": true,
+                                "size": meta.len(),
+                                "lines": total_lines,
+                                "truncated": was_truncated,
+                                "content": content
+                            }));
                         }
-                        Err(_) => {
-                            entries.push(FileReadEntry {
-                                path: raw_path,
-                                exists: true,
-                                is_binary: true,
-                                truncated,
-                                content: None,
-                                base64: Some(base64::encode(&limited)),
-                                error: None,
-                            });
+                        Err(err) => {
+                            let line = format!("Failed {}: {}\n", path.display(), err);
+                            summary_lines.push(line.clone());
+                            ext_files.push(serde_json::json!({
+                                "path": path.display().to_string(),
+                                "success": false,
+                                "error": err.to_string()
+                            }));
                         }
                     }
                 }
-                Err(err) => {
-                    entries.push(FileReadEntry {
-                        path: raw_path,
-                        exists: true,
-                        is_binary: false,
-                        truncated: false,
-                        content: None,
-                        base64: None,
-                        error: Some(format!("Failed to read file: {}", err)),
-                    });
+                Err(_) => {
+                    let line = format!("Failed {}: File not found\n", path.display());
+                    summary_lines.push(line.clone());
+                    ext_files.push(serde_json::json!({
+                        "path": path.display().to_string(),
+                        "success": false,
+                        "error": "File not found"
+                    }));
                 }
             }
         }
 
-        let had_error = entries.iter().all(|entry| entry.error.is_some());
+        let text_output = summary_lines.join("");
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Json {
-                data: json!({ "files": entries }),
+            content: vec![ToolResultContent::Text {
+                text: text_output.clone(),
             }],
-            is_error: had_error,
+            is_error: false,
             execution_time_ms: None,
-            metadata: None,
+            ext_info: Some(serde_json::json!({
+                "files": ext_files,
+                "showLineNumbers": args.show_line_numbers,
+                "maxFileSize": args.max_file_size,
+            })),
         })
     }
 }

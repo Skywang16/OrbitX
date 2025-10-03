@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import { v4 as uuidv4 } from 'uuid'
 import { TabType, type TabItem } from '@/types'
 import { useTerminalStore } from './Terminal'
 
 export const useTabManagerStore = defineStore('TabManager', () => {
   const tabs = ref<TabItem[]>([])
-  const activeTabId = ref<string | null>(null)
+  const activeTabId = ref<number | string | null>(null)
   const terminalStore = useTerminalStore()
 
   const activeTab = computed(() => tabs.value.find(tab => tab.id === activeTabId.value))
@@ -33,14 +34,14 @@ export const useTabManagerStore = defineStore('TabManager', () => {
           type: TabType.TERMINAL,
           closable: true,
           icon: '🖥️',
-          data: { backendId: terminal.backendId },
+          data: { paneId: terminal.id },
           shell: shellName,
           path: displayPath,
         }
       })
     )
 
-    if (terminalStore.activeTerminalId) {
+    if (typeof terminalStore.activeTerminalId === 'number') {
       activeTabId.value = terminalStore.activeTerminalId
     }
   }
@@ -112,7 +113,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
       return existing.id
     }
 
-    const id = `settings-${Date.now()}`
+    const id = `settings-${uuidv4()}`
     tabs.value.push({
       id,
       title: 'settings',
@@ -124,25 +125,25 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     return id
   }
 
-  const setActiveTab = (tabId: string) => {
+  const setActiveTab = (tabId: number | string) => {
     const tab = tabs.value.find(t => t.id === tabId)
     if (!tab) return
 
     activeTabId.value = tabId
 
-    if (tab.type === TabType.TERMINAL) {
-      terminalStore.setActiveTerminal(tabId)
+    if (tab.type === TabType.TERMINAL && typeof tab.id === 'number') {
+      terminalStore.setActiveTerminal(tab.id)
     }
   }
 
-  const closeTab = async (tabId: string) => {
+  const closeTab = async (tabId: number | string) => {
     const tabIndex = tabs.value.findIndex(tab => tab.id === tabId)
     if (tabIndex === -1) return
 
     const tab = tabs.value[tabIndex]
 
-    if (tab.type === TabType.TERMINAL) {
-      await terminalStore.closeTerminal(tabId)
+    if (tab.type === TabType.TERMINAL && typeof tab.id === 'number') {
+      await terminalStore.closeTerminal(tab.id)
       return
     }
 
@@ -159,7 +160,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
   /**
    * 关闭左侧全部标签页
    */
-  const closeLeftTabs = async (currentTabId: string) => {
+  const closeLeftTabs = async (currentTabId: number | string) => {
     const currentIndex = tabs.value.findIndex(tab => tab.id === currentTabId)
     if (currentIndex <= 0) return
 
@@ -175,7 +176,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
   /**
    * 关闭右侧全部标签页
    */
-  const closeRightTabs = async (currentTabId: string) => {
+  const closeRightTabs = async (currentTabId: number | string) => {
     const currentIndex = tabs.value.findIndex(tab => tab.id === currentTabId)
     if (currentIndex === -1 || currentIndex >= tabs.value.length - 1) return
 
@@ -191,7 +192,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
   /**
    * 关闭其他所有标签页
    */
-  const closeOtherTabs = async (currentTabId: string) => {
+  const closeOtherTabs = async (currentTabId: number | string) => {
     const idsToClose = tabs.value.filter(tab => tab.id !== currentTabId && tab.closable).map(t => t.id)
     for (const id of idsToClose) {
       await closeTab(id)

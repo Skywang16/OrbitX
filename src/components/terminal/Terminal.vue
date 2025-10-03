@@ -66,8 +66,7 @@
 
   // === 组件接口定义 ===
   interface Props {
-    terminalId: string // 终端唯一标识符
-    backendId: number | null // 后端进程ID
+    terminalId: number // 终端唯一标识符（与后端 pane_id 一致）
     isActive: boolean // 是否为当前活跃终端
   }
 
@@ -144,12 +143,10 @@
   // Shell Integration 设置
   const shellIntegration = useShellIntegration({
     terminalId: props.terminalId,
-    backendId: props.backendId,
     workingDirectory: terminalEnv.workingDirectory,
     onCwdUpdate: (cwd: string) => {
       terminalEnv.workingDirectory = cwd
     },
-    onTerminalCwdUpdate: terminalStore.updateTerminalCwd,
   })
 
   // === 核心功能函数 ===
@@ -573,15 +570,15 @@
       await shellIntegration.initShellIntegration(terminal.value)
 
       // 通过 Tauri Channel 订阅终端输出（二进制流）
-      if (props.backendId != null) {
+      if (props.terminalId != null) {
         try {
-          const paneId = props.backendId
+          const paneId = props.terminalId
           channelSub = terminalChannelApi.subscribeBinary(paneId, bytes => {
             // 最小化解码：用于 Shell 集成与 Store 分发
             const text = binaryDecoder.decode(bytes, { stream: true })
             if (text) {
               shellIntegration.processTerminalOutput(text)
-              terminalStore.dispatchOutputForBackendId(paneId, text)
+              terminalStore.dispatchOutputForPaneId(paneId, text)
             }
             // 高吞吐渲染路径：直接写入 UTF-8 字节
             handleTerminalOutputBinary(terminal.value, bytes)
@@ -601,8 +598,8 @@
     const remaining = binaryDecoder.decode()
     if (remaining) {
       shellIntegration.processTerminalOutput(remaining)
-      if (props.backendId != null) {
-        terminalStore.dispatchOutputForBackendId(props.backendId, remaining)
+      if (props.terminalId != null) {
+        terminalStore.dispatchOutputForPaneId(props.terminalId, remaining)
       }
     }
 
@@ -677,9 +674,9 @@
     { immediate: true }
   )
 
-  // Re-subscribe when backendId changes
+  // Re-subscribe when paneId changes
   watch(
-    () => props.backendId,
+    () => props.terminalId,
     newId => {
       // cleanup previous
       if (channelSub) {
@@ -695,8 +692,13 @@
       if (remaining) {
         shellIntegration.processTerminalOutput(remaining)
         if (typeof newId === 'number') {
-          terminalStore.dispatchOutputForBackendId(newId, remaining)
+          terminalStore.dispatchOutputForPaneId(newId, remaining)
         }
+      }
+      if (typeof newId === 'number') {
+        shellIntegration.updateTerminalId(newId)
+      } else {
+        shellIntegration.resetState()
       }
       // subscribe new
       if (newId != null) {
@@ -705,7 +707,7 @@
             const text = binaryDecoder.decode(bytes, { stream: true })
             if (text) {
               shellIntegration.processTerminalOutput(text)
-              terminalStore.dispatchOutputForBackendId(newId, text)
+              terminalStore.dispatchOutputForPaneId(newId, text)
             }
             handleTerminalOutputBinary(terminal.value, bytes)
           })

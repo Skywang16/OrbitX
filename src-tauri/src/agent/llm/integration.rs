@@ -3,8 +3,8 @@
  */
 
 use crate::agent::core::executor::TaskExecutor;
-use crate::agent::events::{TaskProgressPayload, ToolResultPayload, ToolUsePayload};
-use crate::agent::persistence::prelude::{ExecutionStepType, ToolCallStatus};
+use crate::agent::events::{TaskProgressPayload, ToolResultPayload};
+use crate::agent::persistence::ToolExecutionStatus;
 use crate::agent::state::context::{TaskContext, ToolCallResult};
 use crate::agent::state::error::TaskExecutorResult;
 use crate::llm::types::{LLMMessage, LLMRequest, LLMTool, LLMToolCall};
@@ -44,59 +44,80 @@ impl TaskExecutor {
         args: &Value,
         context: &TaskContext,
     ) -> TaskExecutorResult<Value> {
-        // 使用 ToolRegistry 执行工具
+        // 使用 ToolRegistry 执行工具（现在返回 ToolResult 而不是 Result）
         let tool_result = self
             .tool_registry
             .execute_tool(tool_name, context, args.clone())
-            .await?;
+            .await;
 
         // 将 ToolResult 转换为 JSON Value
         let result_json = if tool_result.is_error {
-            serde_json::json!({
-                "error": true,
-                "message": tool_result
-                    .content
-                    .first()
-                    .and_then(|c| match c {
-                        crate::agent::tools::ToolResultContent::Error { message, .. } => Some(message.clone()),
-                        crate::agent::tools::ToolResultContent::Text { text } => Some(text.clone()),
-                        _ => None,
-                    })
-                    .unwrap_or_else(|| "Unknown error".to_string())
-            })
+            let mut error_map = serde_json::Map::new();
+            let message = tool_result
+                .content
+                .first()
+                .and_then(|c| match c {
+                    crate::agent::tools::ToolResultContent::Error { message, .. } => {
+                        Some(message.clone())
+                    }
+                    crate::agent::tools::ToolResultContent::Text { text } => Some(text.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| "Unknown error".to_string());
+
+            error_map.insert("error".to_string(), serde_json::Value::Bool(true));
+            error_map.insert("message".to_string(), serde_json::Value::String(message));
+
+            if let Some(ext_info) = tool_result.ext_info.clone() {
+                error_map.insert("extInfo".to_string(), ext_info);
+            }
+
+            serde_json::Value::Object(error_map)
         } else {
-            // 将工具结果内容转为 JSON
-            let mut result = serde_json::json!({});
+            let mut result_map = serde_json::Map::new();
 
             for content in &tool_result.content {
                 match content {
                     crate::agent::tools::ToolResultContent::Text { text } => {
-                        result["text"] = serde_json::json!(text);
+                        result_map.insert("text".to_string(), serde_json::json!(text));
                     }
-                    crate::agent::tools::ToolResultContent::Json { data } => {
-                        result = data.clone();
-                    }
+                    crate::agent::tools::ToolResultContent::Json { data } => match data {
+                        serde_json::Value::Object(obj) => {
+                            for (key, value) in obj.iter() {
+                                result_map.insert(key.clone(), value.clone());
+                            }
+                        }
+                        other => {
+                            result_map.insert("data".to_string(), other.clone());
+                        }
+                    },
                     crate::agent::tools::ToolResultContent::CommandOutput {
                         stdout,
                         stderr,
                         exit_code,
                     } => {
-                        result["stdout"] = serde_json::json!(stdout);
-                        result["stderr"] = serde_json::json!(stderr);
-                        result["exit_code"] = serde_json::json!(exit_code);
+                        result_map.insert("stdout".to_string(), serde_json::json!(stdout));
+                        result_map.insert("stderr".to_string(), serde_json::json!(stderr));
+                        result_map.insert("exitCode".to_string(), serde_json::json!(exit_code));
                     }
                     crate::agent::tools::ToolResultContent::File { path } => {
-                        result["file"] = serde_json::json!(path);
+                        result_map.insert("file".to_string(), serde_json::json!(path));
                     }
                     crate::agent::tools::ToolResultContent::Image { base64, format } => {
-                        result["image_base64"] = serde_json::json!(base64);
-                        result["image_format"] = serde_json::json!(format);
+                        result_map.insert("image_base64".to_string(), serde_json::json!(base64));
+                        result_map.insert("image_format".to_string(), serde_json::json!(format));
                     }
-                    _ => {}
+                    crate::agent::tools::ToolResultContent::Error { message, .. } => {
+                        result_map.insert("error".to_string(), serde_json::json!(message));
+                    }
                 }
             }
 
-            result
+            if let Some(ext_info) = tool_result.ext_info.clone() {
+                result_map.insert("extInfo".to_string(), ext_info);
+            }
+
+            serde_json::Value::Object(result_map)
         };
 
         Ok(result_json)
@@ -113,19 +134,7 @@ impl TaskExecutor {
         let tool_name = tool_call.name.clone();
         let start_time = std::time::Instant::now();
 
-        // 1. 发送工具调用开始事件
-        context
-            .send_progress(TaskProgressPayload::ToolUse(ToolUsePayload {
-                task_id: context.task_id.clone(),
-                iteration,
-                tool_id: call_id.clone(),
-                tool_name: tool_name.clone(),
-                params: tool_call.arguments.clone(),
-                timestamp: Utc::now(),
-            }))
-            .await?;
-
-        // 2. 记录工具执行开始（使用ToolExecutionLogger, 内部会创建 Running 记录）
+        // 记录工具执行开始（使用ToolExecutionLogger, 内部会创建 Running 记录）
         let log_id = self
             .tool_logger
             .log_start(context, &call_id, &tool_name, &tool_call.arguments)
@@ -135,13 +144,13 @@ impl TaskExecutor {
                 format!("{}_{}", call_id, chrono::Utc::now().timestamp_millis())
             });
 
-        // 4. 执行工具调用（保持与旧实现一致的 JSON 结果）
+        // 执行工具调用（保持与既有 JSON 结果结构一致）
         let result = self
             .execute_tool_internal(&tool_name, &tool_call.arguments, context)
             .await;
         let execution_time = start_time.elapsed().as_millis() as u64;
 
-        // 5. 处理执行结果
+        // 处理执行结果
         let tool_result = match result {
             Ok(tool_output) => {
                 // 记录工具执行成功（使用ToolExecutionLogger）
@@ -155,7 +164,7 @@ impl TaskExecutor {
                             }],
                             is_error: false,
                             execution_time_ms: Some(execution_time),
-                            metadata: None,
+                            ext_info: None,
                         },
                         execution_time,
                     )
@@ -163,17 +172,6 @@ impl TaskExecutor {
                 {
                     warn!("Failed to log tool success: {}", e);
                 }
-
-                // 更新工具调用状态为完成
-                self.repositories
-                    .agent_tool_calls()
-                    .update_status(
-                        &call_id,
-                        ToolCallStatus::Completed,
-                        Some(tool_output.clone()),
-                        None,
-                    )
-                    .await?;
 
                 // 发送成功结果事件
                 context
@@ -205,17 +203,6 @@ impl TaskExecutor {
                 {
                     warn!("Failed to log tool failure: {}", e);
                 }
-
-                // 更新工具调用状态为错误
-                self.repositories
-                    .agent_tool_calls()
-                    .update_status(
-                        &call_id,
-                        ToolCallStatus::Error,
-                        None,
-                        Some(error.to_string()),
-                    )
-                    .await?;
 
                 // 发送错误结果事件
                 let error_result = serde_json::json!({
@@ -249,36 +236,43 @@ impl TaskExecutor {
             }
         };
 
-        // 6. 记录工具调用到执行日志
-        self.log_execution_step(
-            context,
-            iteration,
-            ExecutionStepType::ToolCall,
-            serde_json::json!({
-                "tool_call": {
-                    "id": call_id,
-                    "name": tool_name,
-                    "arguments": tool_call.arguments
-                }
-            }),
-        )
-        .await?;
+        // 6. 更新工具执行状态为已完成
+        let completed_at = Some(chrono::Utc::now());
+        let duration_ms = Some(tool_result.execution_time_ms as i64);
 
-        self.log_execution_step(
-            context,
-            iteration,
-            ExecutionStepType::ToolResult,
-            serde_json::json!({
-                "tool_result": {
-                    "call_id": call_id,
-                    "tool_name": tool_name,
-                    "result": tool_result.result,
-                    "is_error": tool_result.is_error,
-                    "execution_time_ms": tool_result.execution_time_ms
-                }
-            }),
-        )
-        .await?;
+        if tool_result.is_error {
+            // 从 result 中提取错误信息
+            let error_msg = tool_result
+                .result
+                .as_str()
+                .unwrap_or("Unknown error")
+                .to_string();
+
+            self.agent_persistence
+                .tool_executions()
+                .update_status(
+                    &call_id,
+                    ToolExecutionStatus::Error,
+                    None,
+                    Some(&error_msg),
+                    completed_at,
+                    duration_ms,
+                )
+                .await?;
+        } else {
+            let result_json = serde_json::to_string(&tool_result.result).unwrap_or_default();
+            self.agent_persistence
+                .tool_executions()
+                .update_status(
+                    &call_id,
+                    ToolExecutionStatus::Completed,
+                    Some(&result_json),
+                    None,
+                    completed_at,
+                    duration_ms,
+                )
+                .await?;
+        }
 
         // 7. 添加工具结果到上下文
         context.add_tool_result(tool_result.clone()).await;
@@ -288,7 +282,7 @@ impl TaskExecutor {
     }
 
     /// 获取默认模型ID
-    async fn get_default_model_id(&self) -> TaskExecutorResult<String> {
+    pub async fn get_default_model_id(&self) -> TaskExecutorResult<String> {
         // 优先从数据库中选择“已启用”的模型；找不到则退化到任意一个模型
         let models = self
             .repositories

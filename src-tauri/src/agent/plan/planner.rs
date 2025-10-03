@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
+use anyhow::{bail, Context};
 use tokio_stream::StreamExt;
 
 use crate::agent::common::xml::parse_task_detail;
 use crate::agent::core::context::TaskContext;
-use crate::agent::error::{AgentError, AgentResult};
+use crate::agent::error::AgentResult;
 use crate::agent::prompt::{build_plan_system_prompt, build_plan_user_prompt};
 use crate::agent::types::{Agent, Context as PromptContext, Task, TaskDetail};
 use crate::llm::service::LLMService;
@@ -84,24 +85,23 @@ impl Planner {
         let mut stream = llm_service
             .call_stream(request.clone())
             .await
-            .map_err(|e| AgentError::LLMServiceError(e.to_string()))?;
+            .context("failed to start LLM planning stream")?;
 
         let mut stream_text = String::new();
         while let Some(chunk) = stream.next().await {
-            if let Err(e) = self.context.check_aborted(true).await {
-                return Err(AgentError::TaskExecutionError(e.to_string()));
-            }
+            self.context
+                .check_aborted(true)
+                .await
+                .context("task planning aborted")?;
             match chunk {
                 Ok(LLMStreamChunk::Delta { content, .. }) => {
                     if let Some(text) = content {
                         stream_text.push_str(&text);
                     }
                 }
-                Ok(LLMStreamChunk::Error { error }) => {
-                    return Err(AgentError::LLMServiceError(error));
-                }
+                Ok(LLMStreamChunk::Error { error }) => bail!("LLM stream error: {error}"),
                 Ok(LLMStreamChunk::Finish { .. }) => break,
-                Err(e) => return Err(AgentError::LLMServiceError(e.to_string())),
+                Err(e) => bail!("LLM stream error: {e}"),
             }
         }
 
@@ -148,7 +148,7 @@ impl Planner {
             Vec::new(),
         )
         .await
-        .map_err(|e| AgentError::PromptBuildingError(e.to_string()))?;
+        .context("failed to build plan system prompt")?;
 
         let user_prompt = build_plan_user_prompt(task_prompt)?;
 
@@ -162,7 +162,7 @@ impl Planner {
             .ai_models()
             .find_all_with_decrypted_keys()
             .await
-            .map_err(|e| AgentError::DatabaseError(e.to_string()))?;
+            .context("failed to load LLM models")?;
 
         if let Some(first_enabled) = models.iter().find(|m| m.enabled) {
             return Ok(first_enabled.id.clone());
@@ -170,9 +170,7 @@ impl Planner {
         if let Some(any_model) = models.first() {
             return Ok(any_model.id.clone());
         }
-        Err(AgentError::ConfigurationError(
-            "No enabled LLM model available".into(),
-        ))
+        bail!("No enabled LLM model available")
     }
 }
 

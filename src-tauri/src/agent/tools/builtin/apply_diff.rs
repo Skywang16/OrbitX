@@ -8,12 +8,17 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 
+use crate::agent::context::FileOperationRecord;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::state::context::TaskContext;
 use crate::agent::tools::{
     error::ToolExecutorResult, RunnableTool, ToolPermission, ToolResult, ToolResultContent,
 };
+
+use super::file_utils::{ensure_absolute, is_probably_binary};
 
 #[derive(Debug, Deserialize, Clone)]
 struct DiffHunk {
@@ -40,6 +45,8 @@ struct ApplyDiffArgs {
     files: Vec<FileDiff>,
     #[serde(rename = "previewOnly", default)]
     preview_only: Option<bool>,
+    #[serde(rename = "requireApproval", default)]
+    require_approval: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -132,11 +139,12 @@ impl RunnableTool for ApplyDiffTool {
 
     async fn run(
         &self,
-        _context: &TaskContext,
+        context: &TaskContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: ApplyDiffArgs = serde_json::from_value(args)?;
         let preview_only = args.preview_only.unwrap_or(false);
+        let require_approval = args.require_approval.unwrap_or(false);
 
         let mut results: Vec<PerFileResult> = Vec::new();
 
@@ -149,20 +157,87 @@ impl RunnableTool for ApplyDiffTool {
                 )));
             }
 
-            let exists = fs::metadata(&path).await.ok().is_some();
-            let mut is_directory = false;
-            let mut is_binary = false;
+            let path_buf = PathBuf::from(&path);
+            if let Err(msg) = ensure_absolute(&path_buf) {
+                return Ok(tool_error_result(msg));
+            }
+
+            let path_ref = path_buf.as_path();
+            let metadata = fs::metadata(path_ref).await.ok();
+            let exists = metadata.is_some();
+            let is_directory = metadata.as_ref().map(|m| m.is_dir()).unwrap_or(false);
+            let is_binary = if exists && !is_directory {
+                is_probably_binary(path_ref)
+            } else {
+                false
+            };
             let mut original_content: Option<String> = None;
             let mut new_content: Option<String> = None;
             let mut hunks_result: Vec<HunkResult> = Vec::new();
 
             if exists {
-                if let Ok(meta) = fs::metadata(&path).await {
-                    is_directory = meta.is_dir();
+                if is_directory {
+                    results.push(PerFileResult {
+                        path: path.clone(),
+                        exists,
+                        is_directory,
+                        is_binary,
+                        original_content,
+                        new_content,
+                        hunks: Vec::new(),
+                        applied: false,
+                    });
+                    continue;
                 }
-            }
 
-            if !exists || is_directory {
+                if is_binary {
+                    results.push(PerFileResult {
+                        path: path.clone(),
+                        exists,
+                        is_directory,
+                        is_binary,
+                        original_content,
+                        new_content,
+                        hunks: Vec::new(),
+                        applied: false,
+                    });
+                    continue;
+                }
+
+                match fs::read_to_string(path_ref).await {
+                    Ok(content) => {
+                        context
+                            .file_tracker()
+                            .track_file_operation(FileOperationRecord::new(
+                                path_ref,
+                                FileRecordSource::ReadTool,
+                            ))
+                            .await?;
+                        original_content = Some(content);
+                    }
+                    Err(e) => {
+                        hunks_result.push(HunkResult {
+                            index: 0,
+                            success: false,
+                            reason: Some(format!("read error: {}", e)),
+                            applied_at_line: None,
+                            old_line_count: None,
+                            new_line_count: None,
+                        });
+                        results.push(PerFileResult {
+                            path: path.clone(),
+                            exists,
+                            is_directory,
+                            is_binary,
+                            original_content,
+                            new_content,
+                            hunks: hunks_result,
+                            applied: false,
+                        });
+                        continue;
+                    }
+                }
+            } else {
                 results.push(PerFileResult {
                     path: path.clone(),
                     exists,
@@ -176,31 +251,7 @@ impl RunnableTool for ApplyDiffTool {
                 continue;
             }
 
-            let content = match fs::read_to_string(&path).await {
-                Ok(c) => c,
-                Err(e) => {
-                    results.push(PerFileResult {
-                        path: path.clone(),
-                        exists,
-                        is_directory,
-                        is_binary,
-                        original_content,
-                        new_content,
-                        hunks: vec![HunkResult {
-                            index: 0,
-                            success: false,
-                            reason: Some(format!("read error: {}", e)),
-                            applied_at_line: None,
-                            old_line_count: None,
-                            new_line_count: None,
-                        }],
-                        applied: false,
-                    });
-                    continue;
-                }
-            };
-
-            is_binary = false;
+            let content = original_content.as_ref().unwrap().clone();
             let mut working_lines: Vec<String> =
                 content.split('\n').map(|s| s.to_string()).collect();
 
@@ -250,24 +301,8 @@ impl RunnableTool for ApplyDiffTool {
             }
 
             let applied_any = hunks_result.iter().any(|h| h.success);
-            original_content = Some(content);
             if applied_any {
                 new_content = Some(working_lines.join("\n"));
-            }
-
-            if applied_any && !preview_only {
-                if let Some(ref nc) = new_content {
-                    if let Err(e) = fs::write(&path, nc).await {
-                        hunks_result.push(HunkResult {
-                            index: file.hunks.len(),
-                            success: false,
-                            reason: Some(format!("write error: {}", e)),
-                            applied_at_line: None,
-                            old_line_count: None,
-                            new_line_count: None,
-                        });
-                    }
-                }
             }
 
             results.push(PerFileResult {
@@ -343,22 +378,83 @@ impl RunnableTool for ApplyDiffTool {
             .collect::<Vec<_>>()
             .join("\n");
 
+        if preview_only {
+            return Ok(ToolResult {
+                content: vec![ToolResultContent::Text {
+                    text: format!("apply_diff preview\n{}", preview_text),
+                }],
+                is_error: false,
+                execution_time_ms: None,
+                ext_info: Some(json!({
+                    "files": results,
+                    "totalApplied": total_applied,
+                    "totalFilesChanged": total_files_changed,
+                    "failures": any_failures,
+                    "previewOnly": true,
+                })),
+            });
+        }
+
+        if require_approval {
+            return Ok(ToolResult {
+                content: vec![ToolResultContent::Text {
+                    text: "Changes were rejected by the user.".to_string(),
+                }],
+                is_error: false,
+                execution_time_ms: None,
+                ext_info: Some(json!({
+                    "files": results,
+                    "totalApplied": total_applied,
+                    "totalFilesChanged": total_files_changed,
+                    "failures": any_failures,
+                    "previewOnly": false,
+                    "approved": false,
+                })),
+            });
+        }
+
+        for entry in results.iter_mut() {
+            if !entry.applied {
+                continue;
+            }
+            if let Some(new_content) = &entry.new_content {
+                if let Err(e) = fs::write(&entry.path, new_content).await {
+                    entry.hunks.push(HunkResult {
+                        index: entry.hunks.len(),
+                        success: false,
+                        reason: Some(format!("write error: {}", e)),
+                        applied_at_line: None,
+                        old_line_count: None,
+                        new_line_count: None,
+                    });
+                    any_failures = true;
+                    continue;
+                }
+
+                let path_ref = Path::new(&entry.path);
+                context
+                    .file_tracker()
+                    .track_file_operation(FileOperationRecord::new(
+                        path_ref,
+                        FileRecordSource::AgentEdited,
+                    ))
+                    .await?;
+            }
+        }
+
         Ok(ToolResult {
             content: vec![ToolResultContent::Text {
-                text: if preview_only {
-                    format!("apply_diff preview\n{}", preview_text)
-                } else {
-                    format!("apply_diff applied\n{}", preview_text)
-                },
+                text: format!("apply_diff applied\n{}", preview_text),
             }],
             is_error: false,
             execution_time_ms: None,
-            metadata: Some(json!({
+            ext_info: Some(json!({
                 "files": results,
                 "totalApplied": total_applied,
                 "totalFilesChanged": total_files_changed,
                 "failures": any_failures,
-                "previewOnly": preview_only,
+                "previewOnly": false,
+                "approved": !require_approval,
             })),
         })
     }
@@ -459,6 +555,6 @@ fn tool_error_result(msg: String) -> ToolResult {
         }],
         is_error: true,
         execution_time_ms: None,
-        metadata: None,
+        ext_info: None,
     }
 }

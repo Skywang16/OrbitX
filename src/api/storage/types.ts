@@ -4,7 +4,7 @@
 import { ConfigSection } from '@/types'
 import type { AppConfig } from '@/api/config/types'
 
-export type { SessionState, DataQuery, SaveOptions, ConfigSection } from '@/types'
+export type { SessionState, DataQuery, SaveOptions, ConfigSection, TerminalState, RuntimeTerminalState } from '@/types'
 
 /**
  * 存储操作结果
@@ -35,3 +35,5 @@ export interface ConfigSectionMap {
   [ConfigSection.Shortcuts]: ShortcutsSection
   [ConfigSection.Ai]: AiSection
 }
+
+// TerminalRuntimeState 已从 @/types 导出，无需重复定义

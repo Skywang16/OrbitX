@@ -1,5 +1,5 @@
 import type { BaseConfig } from '../core'
-import type { PersistedStep } from '../../api/ai/types'
+import type { UiStep } from '../../api/agent/types'
 
 export interface ToolExecution {
   name: string
@@ -166,12 +166,11 @@ export interface Message {
   conversationId: number
   role: 'user' | 'assistant' | 'system'
   createdAt: Date
-
-  steps?: PersistedStep[]
-  status?: 'pending' | 'streaming' | 'complete' | 'error'
+  steps?: UiStep[]
+  status?: 'streaming' | 'complete' | 'error'
   duration?: number
-
-  content?: string
+  // 双轨架构：user消息直接显示content，assistant消息只通过steps渲染
+  content?: string // 仅用于user消息
 }
 
 export type ChatStatus = 'idle' | 'loading' | 'streaming' | 'error'
@@ -198,53 +197,6 @@ export interface SendMessageRequest {
   modelId?: string
 }
 
-export interface TruncateAndResendRequest {
-  conversationId: number
-  truncateAfterMessageId: number
-  newContent: string
-  modelId?: string
-}
-
-export interface WebFetchRequest {
-  url: string
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
-  headers?: Record<string, string>
-  body?: string
-  timeout?: number
-}
-
-export interface WebFetchResponse {
-  status: number
-  status_text: string
-  headers: Record<string, string>
-  data: string
-  final_url: string
-  success: boolean
-  error?: string
-  response_time: number
-  content_type?: string
-  content_length?: number
-}
-
-export interface RawConversation {
-  id: number
-  title: string
-  messageCount: number
-  createdAt: string
-  updatedAt: string
-}
-
-export interface RawMessage {
-  id: number
-  conversationId: number
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  stepsJson?: string | null
-  status?: 'pending' | 'streaming' | 'complete' | 'error'
-  durationMs?: number | null
-  createdAt: string
-}
-
 export interface AIConfig extends BaseConfig {
   maxContextTokens: number
   modelName: string
@@ -256,57 +208,4 @@ export interface ContextStats {
   totalMessages: number
   summaryGenerated: boolean
   lastSummaryAt?: Date
-}
-
-export interface ChatSidebarConfig {
-  width: number
-  minWidth: number
-  maxWidth: number
-  defaultWidth: number
-  resizable: boolean
-  collapsible: boolean
-}
-
-export interface AgentTextMessage {
-  type: 'text'
-  content: string
-  timestamp: string
-}
-
-export interface AgentTaskMessage {
-  type: 'task'
-  stage: string
-  content: string
-  timestamp: string
-  task?: Record<string, unknown>
-  step?: Record<string, unknown>
-}
-
-export type AgentMessageData = AgentTextMessage | AgentTaskMessage
-
-export function createToolExecution(
-  name: string,
-  params: Record<string, unknown>,
-  status: 'running' | 'completed' | 'error' = 'running'
-): ToolExecution {
-  return {
-    name,
-    params,
-    status,
-    startTime: Date.now(),
-  }
-}
-
-export function getExecutionDuration(toolExecution: ToolExecution): number | null {
-  if (!toolExecution.endTime) return null
-  return toolExecution.endTime - toolExecution.startTime
-}
-
-export function formatExecutionDuration(toolExecution: ToolExecution): string {
-  const duration = getExecutionDuration(toolExecution)
-  if (duration === null) return 'Running...'
-
-  if (duration < 1000) return `${duration}ms`
-  if (duration < 60000) return `${(duration / 1000).toFixed(1)}s`
-  return `${(duration / 60000).toFixed(1)}min`
 }

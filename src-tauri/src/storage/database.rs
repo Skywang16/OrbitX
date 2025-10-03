@@ -42,6 +42,7 @@ impl Default for DatabaseOptions {
 }
 
 /// 加密管理器
+#[derive(Debug)]
 pub struct EncryptionManager {
     argon2: Argon2<'static>,
     master_key: Option<Key>,
@@ -135,6 +136,7 @@ impl EncryptionManager {
 }
 
 /// 数据库管理器
+#[derive(Debug)]
 pub struct DatabaseManager {
     db_pool: SqlitePool,
     paths: StoragePaths,

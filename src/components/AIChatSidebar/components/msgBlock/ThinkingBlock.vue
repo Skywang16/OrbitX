@@ -22,11 +22,10 @@
 
 <script setup lang="ts">
   import { ref } from 'vue'
-
-  import type { PersistedNonToolStep } from '@/api/ai/types'
+  import type { UiStep } from '@/api/agent/types'
 
   interface Props {
-    step: PersistedNonToolStep
+    step: UiStep
   }
 
   defineProps<Props>()

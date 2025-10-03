@@ -3,6 +3,7 @@ import { aiApi } from '@/api'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AIModelConfig, AISettings } from '@/types'
+import type { AIModelCreateInput, AIModelUpdateInput } from '@/api/ai/types'
 
 export const useAISettingsStore = defineStore('ai-settings', () => {
   const settings = ref<AISettings | null>(null)
@@ -90,7 +91,18 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
 
   const addModel = async (model: AIModelConfig) => {
     try {
-      await aiApi.addModel(model)
+      const payload: AIModelCreateInput = {
+        name: model.name,
+        provider: model.provider,
+        apiUrl: model.apiUrl,
+        apiKey: model.apiKey,
+        model: model.model,
+        modelType: model.modelType,
+        enabled: model.enabled,
+        options: model.options,
+      }
+
+      await aiApi.addModel(payload)
       await loadModels()
     } catch (error) {
       console.error('模型添加失败:', error)
@@ -105,7 +117,21 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
     }
 
     const updatedModel = { ...existingModel, ...updates }
-    await aiApi.updateModel(updatedModel)
+    const payload: AIModelUpdateInput = {
+      id: modelId,
+      changes: {
+        name: updatedModel.name,
+        provider: updatedModel.provider,
+        apiUrl: updatedModel.apiUrl,
+        apiKey: updatedModel.apiKey,
+        model: updatedModel.model,
+        modelType: updatedModel.modelType,
+        enabled: updatedModel.enabled,
+        options: updatedModel.options,
+      },
+    }
+
+    await aiApi.updateModel(payload)
     await loadModels()
   }
 

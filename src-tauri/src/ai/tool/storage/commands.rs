@@ -1,13 +1,10 @@
 /*!
- * 存储系统Tauri命令模块
+ * 存储系统 Tauri 命令模块
  *
- * 提供统一的存储API命令，基于新的Repository架构实现
- * 包含配置管理、会话状态、数据查询等功能
- *
- * NOTE: Task-related commands removed during refactor
+ * 仅保留通用配置与会话状态读写接口，
+ * 任务相关命令已在 Agent 持久层中实现。
  */
 
-use crate::storage::repositories::tasks::{EkoContext, UITask};
 use crate::storage::types::SessionState;
 use crate::storage::StorageCoordinator;
 use crate::utils::error::AppResult;
@@ -28,35 +25,32 @@ impl StorageCoordinatorState {
     pub async fn new(config_manager: Arc<crate::config::TomlConfigManager>) -> AppResult<Self> {
         use crate::storage::{StorageCoordinatorOptions, StoragePaths};
         use std::env;
-        use tracing::debug;
 
         let app_dir = if let Ok(dir) = env::var("OrbitX_DATA_DIR") {
-            debug!("使用环境变量指定的数据目录: {}", dir);
+            tracing::debug!("使用环境变量指定的数据目录: {}", dir);
             std::path::PathBuf::from(dir)
         } else {
-            // 使用默认的应用数据目录
             let data_dir = dirs::data_dir().ok_or_else(|| {
                 anyhow::anyhow!(
                     "无法获取系统应用数据目录，请检查系统配置或设置 OrbitX_DATA_DIR 环境变量"
                 )
             })?;
             let app_dir = data_dir.join("OrbitX");
-            debug!("使用默认应用数据目录: {}", app_dir.display());
+            tracing::debug!("使用默认应用数据目录: {}", app_dir.display());
             app_dir
         };
 
-        debug!("初始化存储路径，应用目录: {}", app_dir.display());
+        tracing::debug!("初始化存储路径，应用目录: {}", app_dir.display());
         let paths =
             StoragePaths::new(app_dir).with_context(|| "存储路径初始化失败，请检查目录权限")?;
 
-        let options = StorageCoordinatorOptions::default();
         let coordinator = Arc::new(
-            StorageCoordinator::new(paths, options, config_manager)
+            StorageCoordinator::new(paths, StorageCoordinatorOptions::default(), config_manager)
                 .await
                 .with_context(|| "存储协调器创建失败")?,
         );
 
-        debug!("存储协调器状态初始化成功");
+        tracing::debug!("存储协调器状态初始化成功");
         Ok(Self { coordinator })
     }
 }
@@ -158,304 +152,92 @@ pub async fn storage_load_session_state(
         }
     }
 }
-// ============================================================================
-// 双轨制任务系统 API - 按照 task-system-architecture-final.md 设计
-// ============================================================================
 
-// ---- 原始上下文轨 API ----
-
-/// 更新或插入任务状态到上下文轨
+/// 从后端获取所有终端的运行时状态（包括实时 CWD）
+/// 
+/// 设计说明：
+/// - 实时查询 ShellIntegration 获取当前 CWD
+/// - 不依赖持久化数据，确保数据准确性
+/// - 用于应用启动、会话恢复、前端同步等场景
 #[tauri::command]
-pub async fn eko_ctx_upsert_state(
-    task_id: String,
-    context: String,
-    conversation_id: Option<i64>,
-    node_id: Option<String>,
-    status: Option<String>,
+pub async fn storage_get_terminals_state(
     state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<i64> {
-    let eko_context = EkoContext {
-        id: None,
-        task_id: task_id.clone(),
-        conversation_id: conversation_id.unwrap_or(1), // 默认会话ID
-        kind: crate::storage::repositories::tasks::EkoContextKind::State,
-        name: None,
-        node_id,
-        status: status
-            .and_then(|s| crate::storage::repositories::tasks::EkoStatus::from_str(&s).ok()),
-        payload_json: context,
-        created_at: chrono::Utc::now(),
-    };
-
-    match state
-        .coordinator
-        .repositories()
-        .tasks()
-        .save_eko_context(&eko_context)
-        .await
-    {
-        Ok(id) => Ok(api_success!(id)),
-        Err(e) => {
-            error!("Eko状态保存失败: {}", e);
-            Ok(api_error!("eko_ctx.upsert_state_failed"))
-        }
+) -> TauriApiResult<Vec<crate::storage::types::TerminalRuntimeState>> {
+    use crate::mux::singleton::get_mux;
+    use crate::storage::types::TerminalRuntimeState;
+    
+    debug!("🔍 查询所有终端的实时运行状态");
+    
+    let mux = get_mux();
+    let pane_ids = mux.list_panes();
+    
+    let mut terminals = Vec::new();
+    for pane_id in pane_ids {
+        // 从 ShellIntegration 获取实时 CWD
+        let cwd = mux.shell_get_pane_cwd(pane_id).unwrap_or_else(|| {
+            // 回退：如果 Shell Integration 还未初始化，使用 home 目录
+            dirs::home_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| "~".to_string())
+        });
+        
+        let shell_state = mux.get_pane_shell_state(pane_id);
+        let shell_type = shell_state
+            .as_ref()
+            .and_then(|state| state.shell_type.as_ref().map(|t| format!("{:?}", t)));
+        
+        let title = cwd
+            .trim_end_matches('/')
+            .split('/')
+            .last()
+            .unwrap_or("~")
+            .to_string();
+        
+        terminals.push(TerminalRuntimeState {
+            id: pane_id.as_u32(),
+            title,
+            cwd,
+            active: false,
+            shell: shell_type,
+        });
     }
+    
+    debug!("✅ 查询到 {} 个终端，CWD 数据来源：ShellIntegration", terminals.len());
+    Ok(api_success!(terminals))
 }
 
-/// 追加事件到上下文轨
+/// 获取指定终端的当前工作目录
+/// 
+/// 设计说明：
+/// - 直接从 ShellIntegration 查询实时 CWD
+/// - 供 Agent 工具、前端组件等需要单个终端 CWD 的场景使用
 #[tauri::command]
-pub async fn eko_ctx_append_event(
-    task_id: String,
-    event: String,
-    conversation_id: i64,
-    node_id: Option<String>,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<i64> {
-    let eko_context = EkoContext {
-        id: None,
-        task_id: task_id.clone(),
-        conversation_id,
-        kind: crate::storage::repositories::tasks::EkoContextKind::Event,
-        name: None,
-        node_id,
-        status: None,
-        payload_json: event,
-        created_at: chrono::Utc::now(),
-    };
-
-    match state
-        .coordinator
-        .repositories()
-        .tasks()
-        .save_eko_context(&eko_context)
-        .await
-    {
-        Ok(id) => Ok(api_success!(id)),
-        Err(_) => Ok(api_error!("eko_ctx.append_event_failed")),
-    }
-}
-
-/// 保存快照到上下文轨
-#[tauri::command]
-pub async fn eko_ctx_snapshot_save(
-    task_id: String,
-    name: Option<String>,
-    snapshot: String,
-    conversation_id: Option<i64>,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<i64> {
-    let eko_context = EkoContext {
-        id: None,
-        task_id: task_id.clone(),
-        conversation_id: conversation_id.unwrap_or(1), // 默认会话ID为1
-        kind: crate::storage::repositories::tasks::EkoContextKind::Snapshot,
-        name,
-        node_id: None,
-        status: None,
-        payload_json: snapshot,
-        created_at: chrono::Utc::now(),
-    };
-
-    match state
-        .coordinator
-        .repositories()
-        .tasks()
-        .save_eko_context(&eko_context)
-        .await
-    {
-        Ok(id) => {
-            debug!("Eko快照保存成功，ID: {}", id);
-            Ok(api_success!(id))
-        }
-        Err(e) => {
-            error!("Eko快照保存失败: {}", e);
-            Ok(api_error!("eko_ctx.snapshot_save_failed"))
-        }
-    }
-}
-
-/// 获取任务的最新状态
-#[tauri::command]
-pub async fn eko_ctx_get_state(
-    task_id: String,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<Option<EkoContext>> {
-    match state
-        .coordinator
-        .repositories()
-        .tasks()
-        .get_latest_eko_state(&task_id)
-        .await
-    {
-        Ok(context) => {
-            debug!("Eko状态获取成功");
-            Ok(api_success!(context))
-        }
-        Err(e) => {
-            error!("Eko状态获取失败: {}", e);
-            Ok(api_error!("eko_ctx.get_state_failed"))
-        }
-    }
-}
-
-/// 重建任务执行上下文（用于恢复/重跑）
-#[tauri::command]
-pub async fn eko_ctx_rebuild(
-    task_id: String,
-    from_snapshot_name: Option<String>,
+pub async fn storage_get_terminal_cwd(
+    pane_id: u32,
     state: State<'_, StorageCoordinatorState>,
 ) -> TauriApiResult<String> {
-    match state
-        .coordinator
-        .repositories()
-        .tasks()
-        .rebuild_eko_context(&task_id, from_snapshot_name.as_deref())
-        .await
-    {
-        Ok(context) => {
-            debug!("Eko上下文重建成功");
-            Ok(api_success!(context))
-        }
-        Err(e) => {
-            error!("Eko上下文重建失败: {}", e);
-            Ok(api_error!("eko_ctx.rebuild_failed"))
-        }
+    use crate::mux::singleton::get_mux;
+    use crate::mux::PaneId;
+    
+    debug!("🔍 查询终端 {} 的当前工作目录", pane_id);
+    
+    let mux = get_mux();
+    let pane_id = PaneId::new(pane_id);
+    
+    // 检查 pane 是否存在
+    if !mux.pane_exists(pane_id) {
+        error!("❌ 终端 {} 不存在", pane_id.as_u32());
+        return Ok(api_error!("terminal.pane_not_found"));
     }
-}
-
-/// 构建Prompt（统一入口）
-#[tauri::command]
-pub async fn eko_ctx_build_prompt(
-    task_id: String,
-    user_input: String,
-    pane_id: Option<String>,
-    tag_context: Option<String>,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<String> {
-    match state
-        .coordinator
-        .repositories()
-        .tasks()
-        .build_prompt(
-            &task_id,
-            &user_input,
-            pane_id.as_deref(),
-            tag_context.as_deref(),
-        )
-        .await
-    {
-        Ok(prompt) => {
-            debug!("Prompt构建成功");
-            Ok(api_success!(prompt))
-        }
-        Err(e) => {
-            error!("Prompt构建失败: {}", e);
-            Ok(api_error!("eko_ctx.build_prompt_failed"))
-        }
-    }
-}
-
-// ---- UI 轨 API ----
-
-/// 创建或更新UI任务
-#[tauri::command]
-pub async fn ui_task_upsert(
-    record: UITask,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<i64> {
-    debug!("UI任务: 创建/更新 task_id={}", record.task_id);
-
-    match state
-        .coordinator
-        .repositories()
-        .tasks()
-        .upsert_ui_task(&record)
-        .await
-    {
-        Ok(ui_id) => {
-            debug!("UI任务操作成功，ID: {}", ui_id);
-            Ok(api_success!(ui_id))
-        }
-        Err(e) => {
-            error!("UI任务操作失败: {}", e);
-            Ok(api_error!("ui_task.upsert_failed"))
-        }
-    }
-}
-
-/// 批量创建或更新UI任务
-#[tauri::command]
-pub async fn ui_task_bulk_upsert(
-    records: Vec<UITask>,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<Vec<i64>> {
-    debug!("UI任务: 批量操作 {} 个任务", records.len());
-
-    let mut results = Vec::new();
-    for record in records {
-        match state
-            .coordinator
-            .repositories()
-            .tasks()
-            .upsert_ui_task(&record)
-            .await
-        {
-            Ok(ui_id) => results.push(ui_id),
-            Err(e) => {
-                error!("批量UI任务操作失败: {}", e);
-                return Ok(api_error!("ui_task.bulk_upsert_failed"));
-            }
-        }
-    }
-
-    debug!("批量UI任务操作成功");
-    Ok(api_success!(results))
-}
-
-/// 获取会话的UI任务列表
-#[tauri::command]
-pub async fn ui_task_list(
-    conversation_id: i64,
-    _filters: Option<String>,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<Vec<UITask>> {
-    match state
-        .coordinator
-        .repositories()
-        .tasks()
-        .get_ui_tasks(conversation_id)
-        .await
-    {
-        Ok(tasks) => Ok(api_success!(tasks)),
-        Err(e) => {
-            error!("UI任务列表获取失败: {}", e);
-            Ok(api_error!("ui_task.list_failed"))
-        }
-    }
-}
-
-/// 删除UI任务
-#[tauri::command]
-pub async fn ui_task_delete(
-    ui_id: i64,
-    state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<EmptyData> {
-    debug!("UI任务: 删除 ui_id={}", ui_id);
-
-    match state
-        .coordinator
-        .repositories()
-        .tasks()
-        .delete_ui_task(ui_id)
-        .await
-    {
-        Ok(()) => {
-            debug!("UI任务删除成功");
-            Ok(api_success!())
-        }
-        Err(e) => {
-            error!("UI任务删除失败: {}", e);
-            Ok(api_error!("ui_task.delete_failed"))
-        }
-    }
+    
+    // 从 ShellIntegration 获取实时 CWD
+    let cwd = mux.shell_get_pane_cwd(pane_id).unwrap_or_else(|| {
+        debug!("⚠️ 终端 {} 的 Shell Integration 尚未初始化，返回 home 目录", pane_id.as_u32());
+        dirs::home_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "~".to_string())
+    });
+    
+    debug!("✅ 终端 {} 的 CWD: {}", pane_id.as_u32(), cwd);
+    Ok(api_success!(cwd))
 }

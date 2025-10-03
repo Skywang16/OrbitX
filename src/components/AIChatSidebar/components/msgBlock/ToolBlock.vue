@@ -1,29 +1,29 @@
 <template>
-  <div class="tool-block" v-if="step?.toolExecution">
+  <div class="tool-block" v-if="step?.stepType === 'tool_use' || step?.stepType === 'tool_result'">
     <div
       class="tool-header"
       :class="{ expandable: isExpandable, 'non-expandable': !isExpandable }"
       @click="toggleExpanded"
     >
       <div class="tool-info">
-        <div class="tool-icon" v-html="getToolIcon(step.toolExecution.name)"></div>
-        <span class="tool-name">{{ step.toolExecution.name }}</span>
-        <span class="tool-param" v-if="getToolParam(step.toolExecution)">
-          {{ getToolParam(step.toolExecution) }}
+        <div class="tool-icon" v-html="getToolIcon(toolName)"></div>
+        <span class="tool-name">{{ toolName || 'Unknown Tool' }}</span>
+        <span class="tool-param" v-if="toolParam">
+          {{ toolParam }}
         </span>
       </div>
       <div
         class="status-dot"
         :class="{
-          running: step.toolExecution.status === 'running',
-          completed: step.toolExecution.status === 'completed',
-          error: step.toolExecution.status === 'error',
+          running: step.stepType === 'tool_use',
+          completed: step.stepType === 'tool_result' && !isError,
+          error: step.stepType === 'tool_result' && isError,
         }"
       ></div>
     </div>
 
-    <div v-if="isExpanded && step.toolExecution.result" class="tool-result" @click.stop>
-      <EditResult v-if="isEditResult()" :editData="getEditData(step.toolExecution.result)" />
+    <div v-if="isExpanded && hasResult" class="tool-result" @click.stop>
+      <EditResult v-if="isEditResult" :editData="editData" />
       <div v-else class="tool-result-content">{{ cleanToolResult }}</div>
     </div>
   </div>
@@ -42,8 +42,10 @@
 <script setup lang="ts">
   import { ref, computed } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import type { PersistedToolStep } from '@/api/ai/types'
+  import type { UiStep } from '@/api/agent/types'
   import EditResult from './components/EditResult.vue'
+  import stripAnsi from 'strip-ansi'
+
   interface EditResultData {
     file: string
     replacedCount: number
@@ -56,18 +58,76 @@
     old: string
     new: string
   }
-  import stripAnsi from 'strip-ansi'
 
   const { t } = useI18n()
 
   const props = defineProps<{
-    step: PersistedToolStep
+    step: UiStep
   }>()
 
   const isExpanded = ref(false)
 
+  // Extract tool information from step metadata
+  const toolName = computed(() => {
+    return (props.step.metadata?.toolName as string) || ''
+  })
+
+  const toolParams = computed(() => {
+    return (props.step.metadata?.params as Record<string, unknown>) || {}
+  })
+
+  const toolResult = computed(() => {
+    return props.step.metadata?.result || ''
+  })
+
+  const isError = computed(() => {
+    return Boolean(props.step.metadata?.isError)
+  })
+
+  const hasResult = computed(() => {
+    return props.step.stepType === 'tool_result' && (toolResult.value || props.step.content)
+  })
+
+  const isEditResult = computed(() => {
+    return toolName.value === 'edit_file'
+  })
+
+  const editData = computed(() => {
+    if (!isEditResult.value) {
+      return {
+        file: '',
+        replacedCount: 0,
+        useRegex: false,
+        ignoreCase: false,
+        startLine: null,
+        endLine: null,
+        previewOnly: false,
+        old: '',
+        new: '',
+      } as EditResultData
+    }
+    return (
+      (props.step.metadata?.extInfo as EditResultData) ||
+      ({
+        file: '',
+        replacedCount: 0,
+        useRegex: false,
+        ignoreCase: false,
+        startLine: null,
+        endLine: null,
+        previewOnly: false,
+        old: '',
+        new: '',
+      } as EditResultData)
+    )
+  })
+
   const isExpandable = computed(() => {
-    return props.step?.toolExecution?.name === 'edit_file'
+    return toolName.value === 'edit_file' || hasResult.value
+  })
+
+  const toolParam = computed(() => {
+    return getToolParam({ name: toolName.value, params: toolParams.value })
   })
 
   const toolIcons = {
@@ -217,18 +277,8 @@
     }
   }
 
-  const isEditResult = (): boolean => {
-    return props.step?.toolExecution?.name === 'edit_file'
-  }
-
-  const getEditData = (result: unknown): EditResultData => {
-    // The new edit-file tool returns result in extInfo
-    const toolResult = result as { extInfo?: EditResultData }
-    return toolResult?.extInfo || ({} as EditResultData)
-  }
-
   const cleanToolResult = computed(() => {
-    const result = props.step?.toolExecution?.result
+    const result = toolResult.value || props.step.content
     if (typeof result === 'string') {
       return stripAnsi(result)
     }
@@ -243,6 +293,7 @@
     border-radius: var(--border-radius);
     font-size: 13px;
     max-width: 100%;
+    margin-bottom: var(--spacing-xs, 4px);
   }
 
   .tool-header {

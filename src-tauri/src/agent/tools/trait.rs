@@ -45,9 +45,12 @@ pub enum ToolResultContent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolResult {
     pub content: Vec<ToolResultContent>,
+    #[serde(rename = "isError")]
     pub is_error: bool,
+    #[serde(rename = "executionTimeMs")]
     pub execution_time_ms: Option<u64>,
-    pub metadata: Option<Value>,
+    #[serde(rename = "extInfo")]
+    pub ext_info: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -4,11 +4,9 @@ import { terminalApi } from '@/api/terminal'
 import { useTerminalStore } from '@/stores/Terminal'
 
 export interface ShellIntegrationOptions {
-  terminalId: string
-  backendId: number | null
+  terminalId: number
   workingDirectory: string
   onCwdUpdate: (cwd: string) => void
-  onTerminalCwdUpdate: (terminalId: string, cwd: string) => void
   onCommandFinished?: (exitCode: number, isSuccess: boolean) => void
   onCommandStarted?: (commandId: string) => void
 }
@@ -19,6 +17,7 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
   let currentCommandId: string | null = null
   let isCommandActive: boolean = false
   let disposed = false
+  let paneId = options.terminalId
 
   const handleCommandStart = () => {
     currentCommandId = `cmd_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
@@ -28,7 +27,7 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
       options.onCommandStarted(currentCommandId)
     }
 
-    terminalStore.emitCommandEvent(options.terminalId, 'started', { commandId: currentCommandId })
+    terminalStore.emitCommandEvent(paneId, 'started', { commandId: currentCommandId })
   }
 
   const handleCommandFinished = (payload: string) => {
@@ -50,7 +49,7 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
         }
       }
 
-      terminalStore.emitCommandEvent(options.terminalId, 'finished', {
+      terminalStore.emitCommandEvent(paneId, 'finished', {
         commandId: currentCommandId,
         exitCode,
         isSuccess,
@@ -120,7 +119,6 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
             // Only update UI-level state, do not write back to backend
             // Backend is the single source of truth for CWD
             options.onCwdUpdate(newCwd)
-            options.onTerminalCwdUpdate(options.terminalId, newCwd)
           }
         } catch (error) {
           console.warn('CWD解析失败:', error, '原始数据:', fullData)
@@ -142,7 +140,6 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
             // Only update UI-level state, do not write back to backend
             // Backend is the single source of truth for CWD
             options.onCwdUpdate(decodedCwd)
-            options.onTerminalCwdUpdate(options.terminalId, decodedCwd)
           }
           break
         }
@@ -173,12 +170,12 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
   }
 
   const silentShellIntegration = async () => {
-    if (options.backendId != null) {
+    if (paneId != null) {
       // 在调用前确认面板仍然存在，避免快速删除后的竞态导致 500 错误
       try {
-        const exists = await terminalApi.terminalExists(options.backendId)
+        const exists = await terminalApi.terminalExists(paneId)
         if (!exists || disposed) return
-        await shellIntegrationApi.setupShellIntegration(options.backendId, true)
+        await shellIntegrationApi.setupShellIntegration(paneId, true)
       } catch (e) {
         console.error('Silent shell integration failed:', e)
       }
@@ -194,10 +191,15 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
     disposed = true
   }
 
+  const updateTerminalId = (newPaneId: number) => {
+    paneId = newPaneId
+  }
+
   return {
     processTerminalOutput,
     initShellIntegration,
     resetState,
     dispose,
+    updateTerminalId,
   }
 }

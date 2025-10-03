@@ -21,17 +21,17 @@ pub type ChainListener = Arc<dyn Fn(&Chain, &ChainEvent) + Send + Sync + 'static
 pub struct ToolChain {
     pub tool_name: String,
     pub tool_call_id: String,
-    pub request: LLMRequest,
+    pub request: Arc<LLMRequest>,
     pub params: Option<serde_json::Value>,
     pub tool_result: Option<ToolResult>,
 }
 
 impl ToolChain {
-    pub fn new(tool_call: &LLMToolCall, request: &LLMRequest) -> Self {
+    pub fn new(tool_call: &LLMToolCall, request: Arc<LLMRequest>) -> Self {
         Self {
             tool_name: tool_call.name.clone(),
             tool_call_id: tool_call.id.clone(),
-            request: request.clone(),
+            request,
             params: None,
             tool_result: None,
         }

@@ -28,7 +28,7 @@
   }
 
   const insertFilePathToCurrentTerminal = (filePath: string) => {
-    if (!terminalStore.activeTerminalId) return
+    if (typeof terminalStore.activeTerminalId !== 'number') return
 
     let processedPath = filePath
     if (filePath.includes(' ')) {

@@ -37,12 +37,27 @@ export interface WindowState {
   maximized: boolean
 }
 
+/**
+ * 终端持久化状态（存 MessagePack）
+ *
+ * 设计原则：
+ * - 只存恢复终端所需的最小信息
+ * - id 直接用后端 pane_id（数字）
+ * - 不存 cwd，启动时从后端 ShellIntegration 查询
+ */
 export interface TerminalState {
-  id: string
+  /** 终端ID（后端 pane_id） */
+  id: number
+  /** 终端标题 */
   title: string
-  cwd: string
+  /** 是否为活跃终端 */
   active: boolean
+  /** Shell 类型 */
   shell?: string
+}
+
+export interface RuntimeTerminalState extends TerminalState {
+  cwd: string
 }
 
 export interface UiState {
@@ -71,7 +86,7 @@ export interface AiState {
 export interface SessionState {
   version: number
   terminals: TerminalState[]
-  activeTabId?: string
+  activeTabId?: number | string
   ui: UiState
   ai: AiState
   timestamp: string

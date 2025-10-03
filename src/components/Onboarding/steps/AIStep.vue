@@ -99,6 +99,7 @@
 <script setup lang="ts">
   import { ref, reactive, computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import { v4 as uuidv4 } from 'uuid'
   import { XSelect } from '@/ui'
 
   import type { AIModelConfig } from '@/types'
@@ -259,7 +260,7 @@
     }
 
     const newModel: AIModelConfig = {
-      id: Date.now().toString(),
+      id: uuidv4(),
       name: configName,
       provider: formData.provider,
       apiUrl: getDefaultApiUrl(),

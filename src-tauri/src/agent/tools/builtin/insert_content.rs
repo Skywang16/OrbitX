@@ -5,26 +5,27 @@
 
 use async_trait::async_trait;
 use serde::Deserialize;
-use serde_json::json;
 use tokio::fs;
 
+use crate::agent::context::FileOperationRecord;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::state::context::TaskContext;
 use crate::agent::tools::{
     error::ToolExecutorResult, RunnableTool, ToolPermission, ToolResult, ToolResultContent,
 };
 
+use super::file_utils::{ensure_absolute, is_probably_binary};
+
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct InsertContentArgs {
     path: String,
+    line: i64,
     content: String,
-    #[serde(default)]
-    line: Option<usize>, // 1-based
-    #[serde(default)]
-    after: Option<String>,
-    #[serde(default)]
-    before: Option<String>,
-    #[serde(default, rename = "previewOnly")]
-    preview_only: Option<bool>,
+    #[serde(rename = "previewOnly", default)]
+    preview_only: bool,
+    #[serde(rename = "requireApproval", default)]
+    require_approval: bool,
 }
 
 pub struct InsertContentTool;
@@ -45,21 +46,20 @@ impl RunnableTool for InsertContentTool {
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
-        json!({
+        serde_json::json!({
             "type": "object",
             "properties": {
-                "path": { "type": "string" },
-                "content": { "type": "string" },
-                "line": { "type": "integer", "minimum": 1 },
-                "after": { "type": "string" },
-                "before": { "type": "string" },
-                "previewOnly": { "type": "boolean", "default": false }
+                "path": { "type": "string", "description": "Absolute file path" },
+                "line": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "1-based line number, or 0 to append to the end"
+                },
+                "content": { "type": "string", "description": "Content to insert" },
+                "previewOnly": { "type": "boolean", "default": false },
+                "requireApproval": { "type": "boolean", "default": false }
             },
-            "oneOf": [
-                { "required": ["path", "content", "line"] },
-                { "required": ["path", "content", "after"] },
-                { "required": ["path", "content", "before"] }
-            ]
+            "required": ["path", "line", "content"]
         })
     }
 
@@ -72,83 +72,193 @@ impl RunnableTool for InsertContentTool {
 
     async fn run(
         &self,
-        _context: &TaskContext,
+        context: &TaskContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: InsertContentArgs = serde_json::from_value(args)?;
-        let preview_only = args.preview_only.unwrap_or(false);
 
-        // stat
-        let meta = match fs::metadata(&args.path).await {
-            Ok(m) => m,
-            Err(e) => {
-                return Ok(ToolResult {
-                    content: vec![ToolResultContent::Error {
-                        message: format!("file not found: {}", e),
-                        details: Some(args.path),
-                    }],
-                    is_error: true,
-                    execution_time_ms: None,
-                    metadata: None,
-                });
-            }
-        };
-        if meta.is_dir() {
+        if args.path.trim().is_empty() {
             return Ok(ToolResult {
                 content: vec![ToolResultContent::Error {
-                    message: "path is a directory".to_string(),
-                    details: Some(args.path),
+                    message: "File path cannot be empty".to_string(),
+                    details: None,
                 }],
                 is_error: true,
                 execution_time_ms: None,
-                metadata: None,
+                ext_info: None,
             });
         }
 
-        let original = fs::read_to_string(&args.path).await?;
-        let mut lines: Vec<String> = original.split('\n').map(|s| s.to_string()).collect();
+        if args.line < 0 {
+            return Ok(ToolResult {
+                content: vec![ToolResultContent::Error {
+                    message: "Invalid line number. Must be >= 0".to_string(),
+                    details: None,
+                }],
+                is_error: true,
+                execution_time_ms: None,
+                ext_info: None,
+            });
+        }
 
-        // decide insertion index
-        let idx = if let Some(line_no) = args.line {
-            line_no.saturating_sub(1).min(lines.len())
-        } else if let Some(marker) = &args.after {
-            match lines.iter().position(|l| l.contains(marker)) {
-                Some(i) => (i + 1).min(lines.len()),
-                None => lines.len(),
+        let path = std::path::PathBuf::from(args.path.clone());
+        if let Err(msg) = ensure_absolute(&path) {
+            return Ok(ToolResult {
+                content: vec![ToolResultContent::Error {
+                    message: msg,
+                    details: Some(args.path.clone()),
+                }],
+                is_error: true,
+                execution_time_ms: None,
+                ext_info: None,
+            });
+        }
+
+        let mut file_created = false;
+        let mut original_content = String::new();
+
+        match fs::metadata(&path).await {
+            Ok(meta) => {
+                if meta.is_dir() {
+                    return Ok(ToolResult {
+                        content: vec![ToolResultContent::Error {
+                            message: format!(
+                                "Path {} is a directory, cannot insert content",
+                                path.display()
+                            ),
+                            details: Some(args.path.clone()),
+                        }],
+                        is_error: true,
+                        execution_time_ms: None,
+                        ext_info: None,
+                    });
+                }
+
+                if is_probably_binary(&path) {
+                    return Ok(ToolResult {
+                        content: vec![ToolResultContent::Error {
+                            message: format!(
+                                "File {} appears to be binary, text insertion not supported",
+                                path.display()
+                            ),
+                            details: Some(args.path.clone()),
+                        }],
+                        is_error: true,
+                        execution_time_ms: None,
+                        ext_info: None,
+                    });
+                }
+
+                original_content = fs::read_to_string(&path).await?;
             }
-        } else if let Some(marker) = &args.before {
-            match lines.iter().position(|l| l.contains(marker)) {
-                Some(i) => i,
-                None => lines.len(),
+            Err(_) => {
+                file_created = true;
+                if args.line > 1 {
+                    return Ok(ToolResult {
+                        content: vec![ToolResultContent::Error {
+                            message: format!(
+                                "Cannot insert content at line {} into a non-existent file. For new files, line must be 0 or 1",
+                                args.line
+                            ),
+                            details: None,
+                        }],
+                        is_error: true,
+                        execution_time_ms: None,
+                        ext_info: None,
+                    });
+                }
             }
+        }
+
+        let mut lines: Vec<String> = if original_content.is_empty() {
+            Vec::new()
         } else {
-            lines.len()
+            original_content
+                .split('\n')
+                .map(|s| s.to_string())
+                .collect()
         };
 
-        // insert maintaining line structure
-        let insert_lines: Vec<String> = args.content.split('\n').map(|s| s.to_string()).collect();
-        lines.splice(idx..idx, insert_lines.clone());
-        let new_content = lines.join("\n");
+        let insert_index = if args.line == 0 {
+            lines.len()
+        } else {
+            (args.line.saturating_sub(1) as usize).min(lines.len())
+        };
 
-        if !preview_only {
-            fs::write(&args.path, &new_content).await?;
+        let insert_lines: Vec<String> = args.content.split('\n').map(|s| s.to_string()).collect();
+        lines.splice(insert_index..insert_index, insert_lines.iter().cloned());
+        let updated_content = lines.join("\n");
+
+        let preview_text = format!(
+            "insert_content preview\nFile: {}\nCreated: {}\nInsert at line: {}\nInserted lines: {}",
+            path.display(),
+            file_created,
+            args.line,
+            insert_lines.len()
+        );
+
+        if args.preview_only {
+            return Ok(ToolResult {
+                content: vec![ToolResultContent::Text {
+                    text: preview_text.clone(),
+                }],
+                is_error: false,
+                execution_time_ms: None,
+                ext_info: Some(serde_json::json!({
+                    "file": path.display().to_string(),
+                    "created": file_created,
+                    "line": args.line,
+                    "insertedLinesCount": insert_lines.len(),
+                    "previewOnly": true,
+                })),
+            });
         }
+
+        if args.require_approval {
+            return Ok(ToolResult {
+                content: vec![ToolResultContent::Text {
+                    text: "Changes were rejected by the user.".to_string(),
+                }],
+                is_error: false,
+                execution_time_ms: None,
+                ext_info: Some(serde_json::json!({
+                    "file": path.display().to_string(),
+                    "created": file_created,
+                    "line": args.line,
+                    "insertedLinesCount": insert_lines.len(),
+                    "previewOnly": false,
+                    "approved": false,
+                })),
+            });
+        }
+
+        fs::write(&path, &updated_content).await?;
+        context
+            .file_tracker()
+            .track_file_operation(FileOperationRecord::new(
+                path.as_path(),
+                FileRecordSource::AgentEdited,
+            ))
+            .await?;
 
         Ok(ToolResult {
             content: vec![ToolResultContent::Text {
-                text: if preview_only {
-                    format!("insert_content preview at line {}", idx + 1)
-                } else {
-                    format!("insert_content applied at line {}", idx + 1)
-                },
+                text: format!(
+                    "insert_content applied\nFile: {}\nInsert at line: {}\nInserted lines: {}",
+                    path.display(),
+                    args.line,
+                    insert_lines.len()
+                ),
             }],
             is_error: false,
             execution_time_ms: None,
-            metadata: Some(json!({
-                "path": args.path,
-                "insertLine": idx + 1,
-                "by": if args.line.is_some() { "line" } else if args.after.is_some() { "after" } else if args.before.is_some() { "before" } else { "append" },
-                "previewOnly": preview_only
+            ext_info: Some(serde_json::json!({
+                "file": path.display().to_string(),
+                "created": file_created,
+                "line": args.line,
+                "insertedLinesCount": insert_lines.len(),
+                "previewOnly": false,
+                "approved": !args.require_approval,
             })),
         })
     }

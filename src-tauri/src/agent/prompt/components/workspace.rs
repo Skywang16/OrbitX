@@ -3,10 +3,12 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use anyhow::{anyhow, Context};
+
 use crate::agent::config::PromptComponent;
+use crate::agent::error::AgentResult;
 use crate::agent::prompt::components::types::{ComponentContext, ComponentDefinition};
 use crate::agent::prompt::template_engine::TemplateEngine;
-use crate::agent::{AgentError, AgentResult};
 
 pub fn definitions() -> Vec<Arc<dyn ComponentDefinition>> {
     vec![
@@ -71,14 +73,14 @@ impl ComponentDefinition for WorkspaceSnapshotComponent {
 
         let template = template_override
             .or_else(|| self.default_template())
-            .ok_or_else(|| AgentError::PromptBuildingError("missing template".into()))?;
+            .context("missing workspace snapshot template")?;
 
         let mut template_context = HashMap::new();
         template_context.insert("snapshot".to_string(), json!(snapshot));
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(AgentError::PromptBuildingError)?;
+            .map_err(|e| anyhow!("failed to render workspace snapshot template: {}", e))?;
 
         Ok(Some(result))
     }
@@ -123,17 +125,17 @@ impl ComponentDefinition for AdditionalContextComponent {
 
         let template = template_override
             .or_else(|| self.default_template())
-            .ok_or_else(|| AgentError::PromptBuildingError("missing template".into()))?;
+            .context("missing additional context template")?;
 
         let pretty = serde_json::to_string_pretty(&context.additional_context)
-            .map_err(|e| AgentError::PromptBuildingError(e.to_string()))?;
+            .context("failed to format additional context as JSON")?;
 
         let mut template_context = HashMap::new();
         template_context.insert("context".to_string(), json!(pretty));
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(AgentError::PromptBuildingError)?;
+            .map_err(|e| anyhow!("failed to render additional context template: {}", e))?;
 
         Ok(Some(result))
     }

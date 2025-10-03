@@ -1,12 +1,8 @@
-pub mod chat;
-pub mod context;
 pub mod model;
 
-pub use chat::*;
-pub use context::*;
 pub use model::*;
 
-use crate::ai::{AIService, ContextManager};
+use crate::ai::AIService;
 use crate::storage::cache::UnifiedCache;
 use crate::storage::repositories::RepositoryManager;
 use crate::terminal::TerminalContextService;
@@ -19,7 +15,6 @@ pub struct AIManagerState {
     pub repositories: Arc<RepositoryManager>,
     pub cache: Arc<UnifiedCache>,
     pub terminal_context_service: Arc<TerminalContextService>,
-    pub context_manager: Arc<ContextManager>,
 }
 
 impl AIManagerState {
@@ -29,14 +24,12 @@ impl AIManagerState {
         terminal_context_service: Arc<TerminalContextService>,
     ) -> Result<Self, String> {
         let ai_service = Arc::new(AIService::new(repositories.clone()));
-        let context_manager = Arc::new(crate::ai::create_context_manager());
 
         Ok(Self {
             ai_service,
             repositories,
             cache,
             terminal_context_service,
-            context_manager,
         })
     }
 
@@ -50,9 +43,5 @@ impl AIManagerState {
 
     pub fn get_terminal_context_service(&self) -> &Arc<TerminalContextService> {
         &self.terminal_context_service
-    }
-
-    pub fn get_context_manager(&self) -> &Arc<ContextManager> {
-        &self.context_manager
     }
 }

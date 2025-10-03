@@ -6,6 +6,8 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio::fs;
 
+use crate::agent::context::FileOperationRecord;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::state::context::TaskContext;
 use crate::agent::tools::{
     RunnableTool, ToolExecutorResult, ToolPermission, ToolResult, ToolResultContent,
@@ -107,7 +109,7 @@ impl RunnableTool for EditFileTool {
 
     async fn run(
         &self,
-        _context: &TaskContext,
+        context: &TaskContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let mut args: EditFileArgs = serde_json::from_value(args)?;
@@ -191,7 +193,15 @@ impl RunnableTool for EditFileTool {
             }
         };
 
-        let mut lines: Vec<String> = original_content
+        context
+            .file_tracker()
+            .track_file_operation(FileOperationRecord::new(
+                path.as_path(),
+                FileRecordSource::ReadTool,
+            ))
+            .await?;
+
+        let lines: Vec<String> = original_content
             .split('\n')
             .map(|s| s.to_string())
             .collect();
@@ -243,7 +253,7 @@ impl RunnableTool for EditFileTool {
                 content: vec![ToolResultContent::Text { text: message }],
                 is_error: false,
                 execution_time_ms: None,
-                metadata: Some(json!({
+                ext_info: Some(json!({
                     "file": path.display().to_string(),
                     "replacedCount": 0,
                     "useRegex": use_regex,
@@ -301,7 +311,7 @@ impl RunnableTool for EditFileTool {
                 content: vec![ToolResultContent::Text { text: message }],
                 is_error: false,
                 execution_time_ms: None,
-                metadata: Some(json!({
+                ext_info: Some(json!({
                     "file": path.display().to_string(),
                     "replacedCount": match_count,
                     "affectedLines": affected_lines,
@@ -324,6 +334,14 @@ impl RunnableTool for EditFileTool {
             )));
         }
 
+        context
+            .file_tracker()
+            .track_file_operation(FileOperationRecord::new(
+                path.as_path(),
+                FileRecordSource::AgentEdited,
+            ))
+            .await?;
+
         let message = format!(
             "File edited successfully: {}\nStatus: {} replacement(s) applied.",
             path.display(),
@@ -334,7 +352,7 @@ impl RunnableTool for EditFileTool {
             content: vec![ToolResultContent::Text { text: message }],
             is_error: false,
             execution_time_ms: None,
-            metadata: Some(json!({
+            ext_info: Some(json!({
                 "file": path.display().to_string(),
                 "replacedCount": match_count,
                 "affectedLines": affected_lines,
@@ -358,7 +376,7 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
         }],
         is_error: true,
         execution_time_ms: None,
-        metadata: None,
+        ext_info: None,
     }
 }
 
@@ -370,6 +388,6 @@ fn tool_error(message: impl Into<String>) -> ToolResult {
         }],
         is_error: true,
         execution_time_ms: None,
-        metadata: None,
+        ext_info: None,
     }
 }

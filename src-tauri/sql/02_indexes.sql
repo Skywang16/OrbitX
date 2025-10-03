@@ -1,11 +1,6 @@
 -- 数据库索引定义
 -- 创建所有表的索引以优化查询性能
 
--- AI会话系统索引
-CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON ai_conversations(updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_messages_conversation ON ai_messages(conversation_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_messages_role ON ai_messages(role);
-
 -- 命令历史索引
 CREATE INDEX IF NOT EXISTS idx_command_history_executed_at ON command_history(executed_at);
 CREATE INDEX IF NOT EXISTS idx_command_history_command ON command_history(command);
@@ -33,5 +28,4 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_operation ON audit_logs(operation);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_table_name ON audit_logs(table_name);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_success ON audit_logs(success);
-
 

@@ -136,7 +136,7 @@ export class ShellTool extends ModifiableTool {
     const terminalStore = useTerminalStore()
 
     // 找到对应的终端会话
-    const terminalSession = terminalStore.terminals.find(t => t.backendId === terminalId)
+    const terminalSession = terminalStore.terminals.find(t => t.id === terminalId)
     if (!terminalSession) {
       throw new ToolError('Cannot find corresponding terminal session')
     }
@@ -351,11 +351,11 @@ export class ShellTool extends ModifiableTool {
       const terminalStore = useTerminalStore()
       const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
 
-      if (!activeTerminal || !activeTerminal.backendId) {
+      if (!activeTerminal || typeof activeTerminal.id !== 'number') {
         throw new ToolError('No active terminal available (both backend and frontend queries failed)')
       }
 
-      return activeTerminal.backendId
+      return activeTerminal.id
     }
   }
 }

@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use tokio::fs;
 use tracing::{debug, warn};
 
+#[derive(Debug)]
 pub struct SqlScriptLoader {
     sql_dir: PathBuf,
 }

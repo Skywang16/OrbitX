@@ -10,12 +10,12 @@
 
   interface Props {
     tabs: TabItem[]
-    activeTabId: string | null
+    activeTabId: number | string | null
   }
 
   interface Emits {
-    (e: 'switch', id: string): void
-    (e: 'close', id: string): void
+    (e: 'switch', id: number | string): void
+    (e: 'close', id: number | string): void
   }
 
   const props = defineProps<Props>()
@@ -86,14 +86,14 @@
   }
 
   // 处理标签点击
-  const handleTabClick = (id: string) => {
+  const handleTabClick = (id: number | string) => {
     if (id !== props.activeTabId) {
       emit('switch', id)
     }
   }
 
   // 处理关闭按钮点击
-  const handleCloseClick = (event: MouseEvent, id: string) => {
+  const handleCloseClick = (event: MouseEvent, id: number | string) => {
     event.stopPropagation()
     emit('close', id)
   }
@@ -117,7 +117,7 @@
   })
 
   // 处理右键菜单
-  const handleTabContextMenu = async (event: MouseEvent, tabId: string) => {
+  const handleTabContextMenu = async (event: MouseEvent, tabId: number | string) => {
     event.preventDefault()
 
     const tab = props.tabs.find(t => t.id === tabId)
@@ -198,7 +198,7 @@
   }
 
   // 处理鼠标按下事件（中键关闭）
-  const handleMouseDown = (event: MouseEvent, id: string) => {
+  const handleMouseDown = (event: MouseEvent, id: number | string) => {
     if (event.button === 1) {
       const tab = props.tabs.find(t => t.id === id)
       if (tab && canShowCloseButton(tab)) {

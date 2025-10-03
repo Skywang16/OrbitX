@@ -4,7 +4,7 @@
  * 定义任务执行过程中的各种进度事件，用于实时状态同步
  */
 
-use crate::agent::persistence::prelude::AgentTaskStatus;
+use crate::agent::core::status::AgentTaskStatus;
 use crate::llm::types::LLMUsage;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

@@ -161,12 +161,21 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
         let storage_state = app.state::<StorageCoordinatorState>();
         let llm_state = app.state::<LLMManagerState>();
         let repositories = storage_state.coordinator.repositories();
+        let database_manager = storage_state.coordinator.database_manager();
+        let agent_persistence = std::sync::Arc::new(
+            crate::agent::persistence::AgentPersistence::new(Arc::clone(&database_manager)),
+        );
+        let ui_persistence = std::sync::Arc::new(crate::agent::ui::AgentUiPersistence::new(
+            Arc::clone(&database_manager),
+        ));
         let llm_registry = llm_state.registry.clone();
 
         tauri::async_runtime::block_on(async {
             let tool_registry = crate::agent::tools::create_tool_registry().await;
             let executor = std::sync::Arc::new(crate::agent::core::TaskExecutor::new(
                 repositories,
+                agent_persistence,
+                ui_persistence,
                 llm_registry,
                 tool_registry,
             ));

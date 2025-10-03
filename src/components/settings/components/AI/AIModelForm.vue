@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
+  import type { AIModelTestConnectionInput } from '@/api/ai/types'
 
   import { aiApi } from '@/api'
   import { reactive, ref, computed, onMounted, watch } from 'vue'
@@ -244,8 +245,7 @@
 
     isTesting.value = true
     try {
-      const testConfig: AIModelConfig = {
-        id: 'test-' + Date.now(),
+      const testConfig: AIModelTestConnectionInput = {
         name: formData.name || 'Test Model',
         provider: formData.provider,
         apiUrl: formData.apiUrl,

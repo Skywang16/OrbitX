@@ -6,8 +6,7 @@ use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[tauri::command]
-pub async fn fs_list_directory(path: String, recursive: bool) -> TauriApiResult<Vec<String>> {
+pub(crate) async fn fs_list_directory(path: String, recursive: bool) -> TauriApiResult<Vec<String>> {
     let root = PathBuf::from(&path);
     if !root.exists() {
         return Ok(api_error!("common.not_found"));
@@ -120,8 +119,7 @@ fn offset_to_line(offsets: &[usize], pos: usize) -> usize {
     }
 }
 
-#[tauri::command]
-pub async fn code_list_definition_names(path: String) -> TauriApiResult<Vec<CodeDefItem>> {
+pub(crate) async fn code_list_definition_names(path: String) -> TauriApiResult<Vec<CodeDefItem>> {
     use oxc_allocator::Allocator;
     use oxc_ast::ast::*;
     use oxc_parser::Parser;

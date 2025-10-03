@@ -396,45 +396,18 @@ export interface TaskListFilter {
   limit?: number
 }
 
-// ===== 错误处理类型 =====
-
-/**
- * Agent API 错误类
- */
-export class AgentApiError extends Error {
-  public readonly code: string
-  public readonly originalError?: unknown
-
-  constructor(code: string, message: string, originalError?: unknown) {
-    super(message)
-    this.name = 'AgentApiError'
-    this.code = code
-    this.originalError = originalError
-  }
-
-  /**
-   * 判断是否为特定类型的错误
-   */
-  is(code: string): boolean {
-    return this.code === code
-  }
-
-  /**
-   * 判断是否为可恢复的错误
-   */
-  isRecoverable(): boolean {
-    const recoverableCodes = ['pause_failed', 'resume_failed', 'list_failed', 'stream_error']
-    return recoverableCodes.includes(this.code)
-  }
-}
-
 // ===== 工具类型 =====
 
 /**
  * 事件类型守护函数
  */
-export const isTaskProgressEvent = (event: any): event is TaskProgressPayload => {
-  return event && typeof event === 'object' && 'type' in event && 'payload' in event
+export const isTaskProgressEvent = (event: unknown): event is TaskProgressPayload => {
+  if (!event || typeof event !== 'object') {
+    return false
+  }
+
+  const candidate = event as { type?: unknown; payload?: unknown }
+  return typeof candidate.type === 'string' && candidate.payload !== undefined
 }
 
 /**
@@ -455,9 +428,15 @@ export const getEventTaskId = (event: TaskProgressPayload): string => {
   if (event.type === 'ToolPreparing' || event.type === 'Error') {
     return '' // 这些事件没有taskId
   }
-  const maybePayload = (event as any).payload as Record<string, unknown> | undefined
-  if (maybePayload && typeof maybePayload === 'object' && 'taskId' in maybePayload) {
-    return String((maybePayload as any).taskId)
+  const payload = event.payload as Record<string, unknown>
+  if (payload && typeof payload === 'object' && 'taskId' in payload) {
+    const taskId = payload.taskId
+    if (typeof taskId === 'string') {
+      return taskId
+    }
+    if (typeof taskId === 'number') {
+      return String(taskId)
+    }
   }
   return ''
 }
@@ -467,4 +446,119 @@ export const getEventTaskId = (event: TaskProgressPayload): string => {
  */
 export const isErrorEvent = (event: TaskProgressPayload): boolean => {
   return event.type === 'TaskError' || event.type === 'Error'
+}
+
+// ===== 双轨架构新增类型 =====
+
+/**
+ * 会话上下文快照（核心轨）
+ */
+export interface ConversationContextSnapshot {
+  conversation: Conversation
+  summary?: ConversationSummary
+  activeTaskIds: string[]
+  executions: ExecutionSnapshot[]
+}
+
+/**
+ * 会话信息
+ */
+export interface Conversation {
+  id: number
+  title?: string
+  workspacePath?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 会话摘要
+ */
+export interface ConversationSummary {
+  conversationId: number
+  summaryContent: string
+  summaryTokens: number
+  messagesBeforeSummary: number
+  tokensSaved: number
+  compressionCost: number
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 执行快照
+ */
+export interface ExecutionSnapshot {
+  executionId: string
+  conversationId: number
+  userRequest: string
+  status: 'running' | 'completed' | 'error' | 'cancelled'
+  currentIteration: number
+  errorCount: number
+  maxIterations: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalCost: number
+  contextTokens: number
+  createdAt: string
+  updatedAt: string
+  startedAt?: string
+  completedAt?: string
+}
+
+/**
+ * UI 时间线快照（UI轨）
+ */
+export type UiStepType = 'thinking' | 'text' | 'tool_use' | 'tool_result' | 'error'
+
+export interface UiStep {
+  stepType: UiStepType
+  content: string
+  timestamp: number
+  metadata?: Record<string, unknown>
+}
+
+export interface UiMessage {
+  id: number
+  conversationId: number
+  role: 'user' | 'assistant'
+  content?: string
+  steps?: UiStep[]
+  status?: 'streaming' | 'complete' | 'error'
+  durationMs?: number
+  createdAt: number
+}
+
+export interface UiConversation {
+  id: number
+  title?: string
+  messageCount: number
+  createdAt: number
+  updatedAt: number
+}
+
+/**
+ * 文件上下文状态
+ */
+export interface FileContextStatus {
+  conversationId: number
+  activeFiles: FileContextEntry[]
+  staleFiles: FileContextEntry[]
+  totalActive: number
+  totalStale: number
+}
+
+/**
+ * 文件上下文条目
+ */
+export interface FileContextEntry {
+  id: number
+  conversationId: number
+  filePath: string
+  recordState: 'active' | 'stale'
+  recordSource: 'read_tool' | 'user_edited' | 'agent_edited' | 'file_mentioned'
+  agentReadTimestamp?: number
+  agentEditTimestamp?: number
+  userEditTimestamp?: number
+  createdAt: string
 }

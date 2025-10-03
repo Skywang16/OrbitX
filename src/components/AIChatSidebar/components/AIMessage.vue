@@ -3,12 +3,14 @@
   import { useI18n } from 'vue-i18n'
   import { marked } from 'marked'
   import type { Message } from '@/types'
-  import type { PersistedStep, PersistedNonToolStep, PersistedToolStep } from '@/api/ai/types'
-  import ThinkingBlock from './msgBlock/ThinkingBlock.vue'
-  import ToolBlock from './msgBlock/ToolBlock.vue'
+  import type { UiStep } from '@/api/agent/types'
   import { useAIChatStore } from '../store'
   import { formatTime } from '@/utils/dateFormatter'
+  import ThinkingBlock from './msgBlock/ThinkingBlock.vue'
+  import ToolBlock from './msgBlock/ToolBlock.vue'
+  import { useStepProcessor } from '@/composables/useStepProcessor'
   const { t } = useI18n()
+  const { processSteps } = useStepProcessor()
 
   interface Props {
     message: Message
@@ -19,9 +21,9 @@
 
   const sortedSteps = computed(() => {
     if (!props.message.steps) {
-      return [] as PersistedStep[]
+      return [] as UiStep[]
     }
-    return props.message.steps as PersistedStep[]
+    return processSteps(props.message.steps as UiStep[])
   })
 
   const formatDuration = (ms: number) => {
@@ -37,28 +39,30 @@
 
 <template>
   <div class="ai-message">
+    <!-- 双轨架构：只基于steps渲染 -->
     <template v-if="message.steps && message.steps.length > 0">
       <template v-for="(step, index) in sortedSteps" :key="`${step.timestamp}-${index}`">
-        <ThinkingBlock v-if="step.type === 'thinking'" :step="step as PersistedNonToolStep" class="step-block" />
+        <!-- 使用 ThinkingBlock 组件 -->
+        <ThinkingBlock v-if="step.stepType === 'thinking'" :step="step" />
 
-        <ToolBlock v-else-if="step.type === 'tool_use'" :step="step as PersistedToolStep" class="step-block" />
+        <!-- 使用 ToolBlock 组件 -->
+        <ToolBlock v-else-if="step.stepType === 'tool_use' || step.stepType === 'tool_result'" :step="step" />
 
-        <div v-else-if="step.type === 'text'" class="ai-message-text step-block">
+        <!-- 文本消息直接渲染 -->
+        <div v-else-if="step.stepType === 'text'" class="ai-message-text step-block">
           <div v-html="renderMarkdown(step.content)"></div>
         </div>
 
-        <div v-else-if="step.type === 'task_thought'" class="ai-message-text step-block">
-          <div v-html="renderMarkdown(step.content)"></div>
-        </div>
-
-        <div v-else-if="step.type === 'error'" class="error-output step-block">
+        <!-- 错误消息 -->
+        <div v-else-if="step.stepType === 'error'" class="error-output step-block">
           <div class="error-content">{{ step.content }}</div>
         </div>
 
+        <!-- 未知步骤类型 -->
         <div v-else class="unknown-step step-block">
           <div class="unknown-header">
             <span class="unknown-icon">❓</span>
-            <span class="unknown-label">未知步骤类型: {{ step.type }}</span>
+            <span class="unknown-label">未知步骤类型: {{ step.stepType }}</span>
           </div>
           <div class="unknown-content">{{ step.content }}</div>
         </div>
@@ -153,41 +157,50 @@
     margin-bottom: 0;
   }
 
-  .error-block {
-    padding: var(--spacing-sm);
+  .error-output {
     border: 1px solid var(--color-error);
-    border-left: 3px solid var(--color-error);
     border-radius: var(--border-radius);
-    background: var(--color-error);
-    opacity: 0.1;
+    background: var(--bg-300);
+  }
+
+  .error-content {
+    padding: var(--spacing-md);
+    font-family: var(--font-mono);
     font-size: var(--font-size-sm);
-  }
-
-  .error-message {
-    padding: var(--spacing-sm);
-    border-radius: var(--border-radius);
-    background: rgba(239, 68, 68, 0.05);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    font-size: var(--font-size-sm);
-  }
-
-  .error-icon {
-    font-size: var(--font-size-md);
-  }
-
-  .error-title {
-    font-size: var(--font-size-sm);
-  }
-
-  .error-content,
-  .error-details {
     color: var(--color-error);
-    margin-bottom: var(--spacing-xs);
   }
 
-  .error-details {
-    font-size: var(--font-size-xs);
-    opacity: 0.8;
+  .unknown-step {
+    border: 1px solid var(--border-200);
+    border-radius: var(--border-radius);
+    background: var(--bg-300);
+    opacity: 0.7;
+  }
+
+  .unknown-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-400);
+    border-bottom: 1px solid var(--border-200);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+  }
+
+  .unknown-icon {
+    font-size: var(--font-size-sm);
+  }
+
+  .unknown-label {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-400);
+  }
+
+  .unknown-content {
+    padding: var(--spacing-md);
+    font-size: var(--font-size-sm);
+    color: var(--text-400);
   }
 
   .ai-message-footer {
@@ -234,93 +247,5 @@
     50% {
       opacity: 0.5;
     }
-  }
-
-  .error-output {
-    border: 1px solid var(--color-error);
-    border-radius: var(--border-radius);
-    background: var(--bg-300);
-  }
-
-  .error-icon {
-    font-size: var(--font-size-sm);
-  }
-
-  .error-label {
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    color: var(--color-error);
-  }
-
-  .error-content {
-    padding: var(--spacing-md);
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-error);
-  }
-
-  .workflow-output {
-    border: 1px solid var(--color-primary);
-    border-radius: var(--border-radius);
-    background: var(--bg-300);
-  }
-
-  .workflow-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-    padding: var(--spacing-sm) var(--spacing-md);
-    background: rgba(var(--color-primary-rgb), 0.1);
-    border-bottom: 1px solid var(--color-primary);
-    border-radius: var(--border-radius) var(--border-radius) 0 0;
-  }
-
-  .workflow-icon {
-    font-size: var(--font-size-sm);
-  }
-
-  .workflow-label {
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    color: var(--color-primary);
-  }
-
-  .workflow-content {
-    padding: var(--spacing-md);
-    font-size: var(--font-size-sm);
-    color: var(--text-300);
-  }
-
-  .unknown-step {
-    border: 1px solid var(--border-200);
-    border-radius: var(--border-radius);
-    background: var(--bg-300);
-    opacity: 0.7;
-  }
-
-  .unknown-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-    padding: var(--spacing-sm) var(--spacing-md);
-    background: var(--bg-400);
-    border-bottom: 1px solid var(--border-200);
-    border-radius: var(--border-radius) var(--border-radius) 0 0;
-  }
-
-  .unknown-icon {
-    font-size: var(--font-size-sm);
-  }
-
-  .unknown-label {
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    color: var(--text-400);
-  }
-
-  .unknown-content {
-    padding: var(--spacing-md);
-    font-size: var(--font-size-sm);
-    color: var(--text-400);
   }
 </style>

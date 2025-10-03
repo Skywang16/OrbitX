@@ -143,21 +143,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::ai::commands::ai_models_update,
         crate::ai::commands::ai_models_remove,
         crate::ai::commands::ai_models_test_connection,
-        // AI 会话上下文管理命令
-        crate::ai::commands::ai_conversation_create,
-        crate::ai::commands::ai_conversation_get_all,
-        crate::ai::commands::ai_conversation_get,
-        crate::ai::commands::ai_conversation_update_title,
-        crate::ai::commands::ai_conversation_delete,
-        crate::ai::commands::ai_conversation_get_compressed_context,
-        // 统一使用eko_ctx_build_prompt替代ai_conversation_build_prompt_with_context
-        crate::ai::commands::ai_conversation_get_user_prefix_prompt,
-        crate::ai::commands::ai_conversation_set_user_prefix_prompt,
-        crate::ai::commands::ai_conversation_save_message,
-        crate::ai::commands::ai_conversation_update_message_content,
-        crate::ai::commands::ai_conversation_update_message_steps,
-        crate::ai::commands::ai_conversation_update_message_status,
-        crate::ai::commands::ai_conversation_truncate,
+        // 新Agent双轨上下文命令由 agent::core::commands 提供
         // LLM 调用命令
         crate::llm::commands::llm_call,
         crate::llm::commands::llm_call_stream,
@@ -173,35 +159,33 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::agent::core::commands::agent_resume_task,
         crate::agent::core::commands::agent_cancel_task,
         crate::agent::core::commands::agent_list_tasks,
+        crate::agent::core::commands::agent_get_file_context_status,
+        crate::agent::core::commands::agent_get_user_prefix_prompt,
+        crate::agent::core::commands::agent_set_user_prefix_prompt,
+        // 双轨架构命令
+        crate::agent::core::commands::agent_create_conversation,
+        crate::agent::core::commands::agent_delete_conversation,
+        crate::agent::core::commands::agent_update_conversation_title,
+        crate::agent::core::commands::agent_ui_get_conversations,
+        crate::agent::core::commands::agent_ui_get_messages,
+        // crate::agent::core::commands::agent_trigger_context_summary, // 暂时注释：类型问题待修复
         // 存储系统命令
         crate::ai::tool::storage::storage_get_config,
         crate::ai::tool::storage::storage_update_config,
         crate::ai::tool::storage::storage_save_session_state,
         crate::ai::tool::storage::storage_load_session_state,
-        // 双轨制任务系统命令
-        crate::ai::tool::storage::eko_ctx_upsert_state,
-        crate::ai::tool::storage::eko_ctx_append_event,
-        crate::ai::tool::storage::eko_ctx_snapshot_save,
-        crate::ai::tool::storage::eko_ctx_get_state,
-        crate::ai::tool::storage::eko_ctx_rebuild,
-        crate::ai::tool::storage::eko_ctx_build_prompt,
-        crate::ai::tool::storage::ui_task_upsert,
-        crate::ai::tool::storage::ui_task_bulk_upsert,
-        crate::ai::tool::storage::ui_task_list,
-        crate::ai::tool::storage::ui_task_delete,
+        crate::ai::tool::storage::storage_get_terminals_state,
+        crate::ai::tool::storage::storage_get_terminal_cwd,
+        // 双轨制任务老命令已废弃，由新的Agent UI持久化替代
         // 网络请求命令
         crate::ai::tool::network::network_web_fetch_headless,
         crate::ai::tool::network::network_simple_web_fetch,
-        // 代码搜索命令
-        crate::ck::commands::ck_search,
-        // 文件/代码定义命令
-        crate::filesystem::commands::fs_list_directory,
-        crate::filesystem::commands::code_list_definition_names,
-        // CK索引管理命令
+        // CK 索引与搜索命令（供前端 ckApi 使用）
         crate::ck::commands::ck_index_status,
         crate::ck::commands::ck_build_index,
-        crate::ck::commands::ck_delete_index,
         crate::ck::commands::ck_get_build_progress,
         crate::ck::commands::ck_cancel_build,
+        crate::ck::commands::ck_delete_index,
+        crate::ck::commands::ck_search,
     ])
 }

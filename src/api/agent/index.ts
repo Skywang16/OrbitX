@@ -2,20 +2,21 @@
  * Agent API - 后端Agent系统的前端接口封装
  *
  * 提供任务执行、状态管理、实时进度监听等功能
- * 按照设计文档 agent-backend-migration/design.md 实现
  */
 
 import { invoke } from '@/utils/request'
 import { agentChannelApi } from '@/api/channel/agent'
 import type {
   ExecuteTaskParams,
-  TaskProgressPayload,
-  TaskSummary,
-  TaskProgressStream,
-  TaskListFilter,
   TaskControlCommand,
+  TaskListFilter,
+  TaskProgressPayload,
+  TaskProgressStream,
+  TaskSummary,
+  UiConversation,
+  UiMessage,
 } from './types'
-import { AgentApiError } from './types'
+import type { Conversation as ChatConversation, Message } from '@/types'
 
 /**
  * Agent API 主类
@@ -25,22 +26,19 @@ import { AgentApiError } from './types'
 export class AgentApi {
   /**
    * 执行Agent任务
-   * @param params 任务执行参数
+   * @param userPrompt 用户输入
+   * @param conversationId 会话ID
    * @returns 返回任务进度流
    */
-  async executeTask(params: ExecuteTaskParams): Promise<TaskProgressStream> {
-    try {
-      console.warn('🔌 调用Agent Channel API executeTask:', params)
-
-      const stream = agentChannelApi.createTaskStream(params)
-
-      console.warn('🔌 Agent Channel流创建成功')
-
-      return this.createProgressStreamFromReadableStream(stream)
-    } catch (error) {
-      console.error('❌ Agent Channel调用失败:', error)
-      throw this.transformError(error, 'execute_task')
+  async executeTask(userPrompt: string, conversationId: number): Promise<TaskProgressStream> {
+    const params: ExecuteTaskParams = {
+      conversationId,
+      userPrompt,
     }
+
+    const stream = agentChannelApi.createTaskStream(params)
+
+    return this.createProgressStreamFromReadableStream(stream)
   }
 
   /**
@@ -48,11 +46,7 @@ export class AgentApi {
    * @param taskId 任务ID
    */
   async pauseTask(taskId: string): Promise<void> {
-    try {
-      await invoke('agent_pause_task', { taskId })
-    } catch (error) {
-      throw this.transformError(error, 'pause_task')
-    }
+    await invoke('agent_pause_task', { taskId })
   }
 
   /**
@@ -61,12 +55,9 @@ export class AgentApi {
    * @returns 返回任务进度流
    */
   async resumeTask(taskId: string): Promise<TaskProgressStream> {
-    try {
-      const stream = agentChannelApi.createResumeStream(taskId)
-      return this.createProgressStreamFromReadableStream(stream)
-    } catch (error) {
-      throw this.transformError(error, 'resume_task')
-    }
+    const stream = agentChannelApi.createResumeStream(taskId)
+
+    return this.createProgressStreamFromReadableStream(stream)
   }
 
   /**
@@ -75,11 +66,7 @@ export class AgentApi {
    * @param reason 取消原因
    */
   async cancelTask(taskId: string, reason?: string): Promise<void> {
-    try {
-      await invoke('agent_cancel_task', { taskId, reason })
-    } catch (error) {
-      throw this.transformError(error, 'cancel_task')
-    }
+    await invoke('agent_cancel_task', { taskId, reason })
   }
 
   /**
@@ -88,14 +75,60 @@ export class AgentApi {
    * @returns 任务摘要列表
    */
   async listTasks(filters?: TaskListFilter): Promise<TaskSummary[]> {
-    try {
-      return await invoke<TaskSummary[]>('agent_list_tasks', {
-        conversationId: filters?.conversationId,
-        statusFilter: filters?.status,
-      })
-    } catch (error) {
-      throw this.transformError(error, 'list_tasks')
+    return await invoke<TaskSummary[]>('agent_list_tasks', {
+      conversationId: filters?.conversationId,
+      statusFilter: filters?.status,
+    })
+  }
+
+  // === 双轨架构新增方法 ===
+
+  /**
+   * 创建新会话
+   * @param title 会话标题
+   * @param workspacePath 工作空间路径
+   * @returns 会话ID
+   */
+  async createConversation(title?: string, workspacePath?: string): Promise<number> {
+    return await invoke<number>('agent_create_conversation', { title, workspacePath })
+  }
+
+  /**
+   * 获取会话列表
+   * @param limit 限制数量
+   * @param offset 偏移量
+   * @returns 会话列表
+   */
+  async listConversations(): Promise<ChatConversation[]> {
+    const conversations = await invoke<UiConversation[]>('agent_ui_get_conversations')
+    return conversations.map(record => this.convertUiConversation(record))
+  }
+
+  /**
+   * 删除会话
+   * @param conversationId 会话ID
+   */
+  async deleteConversation(conversationId: number): Promise<void> {
+    await invoke('agent_delete_conversation', { conversationId })
+  }
+
+  /**
+   * 更新会话标题
+   * @param conversationId 会话ID
+   * @param title 新标题
+   */
+  async updateConversationTitle(conversationId: number, title: string): Promise<void> {
+    await invoke('agent_update_conversation_title', { conversationId, title })
+  }
+
+  /** 获取单个会话 */
+  async getConversation(conversationId: number): Promise<ChatConversation> {
+    const conversations = await this.listConversations()
+    const target = conversations.find(convo => convo.id === conversationId)
+    if (!target) {
+      throw new Error(`Conversation ${conversationId} not found`)
     }
+    return target
   }
 
   /**
@@ -108,10 +141,20 @@ export class AgentApi {
     const task = tasks.find(t => t.taskId === taskId)
 
     if (!task) {
-      throw new AgentApiError('task_not_found', `Task ${taskId} not found`)
+      throw new Error(`Task ${taskId} not found`)
     }
 
     return task
+  }
+
+  /**
+   * 获取会话消息（UI轨）
+   */
+  async getMessages(conversationId: number): Promise<Message[]> {
+    const uiMessages = await invoke<UiMessage[]>('agent_ui_get_messages', {
+      conversationId,
+    })
+    return uiMessages.map(record => this.convertUiMessage(record))
   }
 
   /**
@@ -129,10 +172,7 @@ export class AgentApi {
         break
       default: {
         const _exhaustiveCheck: never = command
-        throw new AgentApiError(
-          'invalid_command',
-          `Unsupported command: ${(_exhaustiveCheck as TaskControlCommand).type}`
-        )
+        throw new Error(`Unsupported command: ${(_exhaustiveCheck as TaskControlCommand).type}`)
       }
     }
   }
@@ -164,6 +204,13 @@ export class AgentApi {
             break
           }
 
+          // 打印Channel输出的内容
+          console.log('[Channel输出]', {
+            type: value.type,
+            payload: value.payload,
+            timestamp: new Date().toISOString(),
+          })
+
           if (callbacks.length === 0) {
             // 尚无订阅者，暂存事件
             pendingEvents.push(value)
@@ -180,10 +227,9 @@ export class AgentApi {
         }
       } catch (error) {
         if (!isClosed) {
-          const agentError = this.transformError(error, 'stream_error')
           errorCallbacks.forEach(callback => {
             try {
-              callback(agentError)
+              callback(error as Error)
             } catch (err) {
               console.error('[AgentApi] 错误回调错误:', err)
             }
@@ -216,7 +262,6 @@ export class AgentApi {
       closeCallbacks.length = 0
     }
 
-    // 立即开始读取流，防止 ReadableStream 上游缓冲溢出；若此时无订阅者，会先暂存到 pendingEvents
     startReading()
 
     // 创建流对象
@@ -266,70 +311,39 @@ export class AgentApi {
     return taskProgressStream
   }
 
-  /**
-   * 转换错误为AgentApiError
-   * @private
-   * @param error 原始错误
-   * @param operation 操作名称
-   * @returns AgentApiError
-   */
-  private transformError(error: unknown, operation: string): AgentApiError {
-    if (error instanceof AgentApiError) {
-      return error
+  private convertUiMessage(message: UiMessage): Message {
+    const toDate = (timestamp: number) => new Date(timestamp * 1000)
+    const base: Message = {
+      id: message.id,
+      conversationId: message.conversationId,
+      role: message.role,
+      createdAt: toDate(message.createdAt),
+      status: message.status ?? (message.role === 'assistant' ? 'streaming' : undefined),
+      duration: message.durationMs ?? undefined,
     }
 
-    let message = 'Unknown error'
-    let code = 'unknown_error'
-
-    if (typeof error === 'string') {
-      message = error
-    } else if (error instanceof Error) {
-      message = error.message
-
-      // 解析Tauri API错误
-      if (message.includes('agent.')) {
-        const parts = message.split('.')
-        if (parts.length >= 2) {
-          code = parts[1]
-          message = this.getErrorMessage(code)
-        }
-      }
-    } else if (typeof error === 'object' && error !== null) {
-      const errorObj = error as Record<string, unknown>
-
-      if (typeof errorObj.message === 'string') {
-        message = errorObj.message
-      }
-
-      if (typeof errorObj.code === 'string') {
-        code = errorObj.code
+    if (message.role === 'user') {
+      return {
+        ...base,
+        content: message.content,
       }
     }
 
-    return new AgentApiError(code, `${operation}: ${message}`, error)
+    return {
+      ...base,
+      steps: message.steps || [],
+    }
   }
 
-  /**
-   * 获取错误消息
-   * @private
-   * @param code 错误代码
-   * @returns 错误消息
-   */
-  private getErrorMessage(code: string): string {
-    const errorMessages: Record<string, string> = {
-      execute_failed: '任务执行失败',
-      pause_failed: '任务暂停失败',
-      resume_failed: '任务恢复失败',
-      cancel_failed: '任务取消失败',
-      list_failed: '任务列表获取失败',
-      task_not_found: '任务不存在',
-      invalid_params: '参数无效',
-      invalid_command: '命令无效',
-      stream_error: '进度流错误',
-      unknown_error: '未知错误',
+  private convertUiConversation(record: UiConversation): ChatConversation {
+    const toDate = (timestamp: number) => new Date(timestamp * 1000)
+    return {
+      id: record.id,
+      title: record.title ?? '',
+      messageCount: record.messageCount,
+      createdAt: toDate(record.createdAt),
+      updatedAt: toDate(record.updatedAt),
     }
-
-    return errorMessages[code] || `错误: ${code}`
   }
 }
 

@@ -9,7 +9,7 @@
   import MessageList from './components/MessageList.vue'
   import ChatInput from './components/ChatInput.vue'
   import ResizeHandle from './components/ResizeHandle.vue'
-  import TaskList from './components/TaskList.vue'
+  //  import TaskList from './components/TaskList.vue'
 
   const aiChatStore = useAIChatStore()
   const aiSettingsStore = useAISettingsStore()
@@ -177,7 +177,7 @@
           :chat-mode="aiChatStore.chatMode"
         />
 
-        <TaskList />
+        <!--  <TaskList /> -->
       </div>
 
       <ChatInput

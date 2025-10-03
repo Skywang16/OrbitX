@@ -133,7 +133,7 @@ async fn extract_content_from_span(file: &std::path::Path, span: &ck_core::Span)
 ///
 /// 搜索接口强制要求提供 `path` 参数。
 #[tauri::command]
-pub async fn ck_search(
+pub(crate) async fn ck_search(
     params: CkSearchParams,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<Vec<CkSearchResultItem>> {
@@ -287,7 +287,7 @@ fn update_build_progress(path: &str, progress: CkBuildProgress) {
 ///
 /// 根据提供的pane_id获取对应终端的路径进行查询。
 #[tauri::command]
-pub async fn ck_get_build_progress(
+pub(crate) async fn ck_get_build_progress(
     path: String,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<CkBuildProgress> {
@@ -326,7 +326,7 @@ pub async fn ck_get_build_progress(
 ///
 /// 此命令会根据提供的pane_id获取对应终端的路径进行检查。
 #[tauri::command]
-pub async fn ck_index_status(
+pub(crate) async fn ck_index_status(
     path: String,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<CkIndexStatusResult> {
@@ -362,7 +362,7 @@ pub async fn ck_index_status(
 ///
 /// 根据提供的pane_id获取对应终端的路径进行构建，并立即返回。
 #[tauri::command]
-pub async fn ck_build_index(
+pub(crate) async fn ck_build_index(
     path: String,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<()> {
@@ -491,7 +491,7 @@ pub async fn ck_build_index(
 ///
 /// 根据提供的pane_id获取对应终端的路径进行操作。
 #[tauri::command]
-pub async fn ck_cancel_build(
+pub(crate) async fn ck_cancel_build(
     path: String,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<()> {
@@ -527,7 +527,7 @@ pub async fn ck_cancel_build(
 ///
 /// 根据提供的pane_id获取对应终端的路径进行操作。
 #[tauri::command]
-pub async fn ck_delete_index(
+pub(crate) async fn ck_delete_index(
     path: String,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<()> {

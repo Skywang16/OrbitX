@@ -2,7 +2,7 @@ import { channelApi } from './index'
 import { invoke } from '@/utils/request'
 
 // Minimal stream chunk type to avoid eko-core dependency
-type LLMStreamChunk = { type: string; [key: string]: any }
+type LLMStreamChunk = { type: string; [key: string]: unknown }
 
 /**
  * LLM 专用 Channel API

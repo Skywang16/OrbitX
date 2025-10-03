@@ -8,28 +8,12 @@ pub mod ai_features;
 pub mod ai_models;
 pub mod audit_logs;
 pub mod command_history;
-pub mod conversations;
-pub mod tasks;
-
 // Agent后端迁移 - 新的Repository模块
-pub mod agent;
-pub mod agent_context_snapshots;
-pub mod agent_execution_log;
-pub mod agent_tool_calls;
-
 // 重新导出所有Repository
 pub use ai_features::AIFeaturesRepository;
 pub use ai_models::AIModelRepository;
 pub use audit_logs::AuditLogRepository;
 pub use command_history::CommandHistoryRepository;
-pub use conversations::ConversationRepository;
-pub use tasks::TaskRepository;
-
-// Agent后端迁移 - 新的Repository导出
-pub use agent::{AgentTask, AgentTaskRepository, AgentTaskStatus};
-pub use agent_context_snapshots::AgentContextSnapshotRepository;
-pub use agent_execution_log::AgentExecutionLogRepository;
-pub use agent_tool_calls::AgentToolCallRepository;
 
 use crate::storage::database::DatabaseManager;
 use crate::utils::error::AppResult;
@@ -64,13 +48,6 @@ pub struct RepositoryManager {
     ai_models: AIModelRepository,
     audit_logs: AuditLogRepository,
     command_history: CommandHistoryRepository,
-    conversations: ConversationRepository,
-    tasks: TaskRepository,
-    // Agent后端迁移 - 新的Repository字段
-    agent_tasks: AgentTaskRepository,
-    agent_execution_log: AgentExecutionLogRepository,
-    agent_tool_calls: AgentToolCallRepository,
-    agent_context_snapshots: AgentContextSnapshotRepository,
 }
 
 impl RepositoryManager {
@@ -81,13 +58,6 @@ impl RepositoryManager {
             ai_models: AIModelRepository::new(Arc::clone(&database)),
             audit_logs: AuditLogRepository::new(Arc::clone(&database)),
             command_history: CommandHistoryRepository::new(Arc::clone(&database)),
-            conversations: ConversationRepository::new(Arc::clone(&database)),
-            tasks: TaskRepository::new(Arc::clone(&database)),
-            // Agent后端迁移 - 新的Repository初始化
-            agent_tasks: AgentTaskRepository::new(Arc::clone(&database)),
-            agent_execution_log: AgentExecutionLogRepository::new(Arc::clone(&database)),
-            agent_tool_calls: AgentToolCallRepository::new(Arc::clone(&database)),
-            agent_context_snapshots: AgentContextSnapshotRepository::new(Arc::clone(&database)),
             database,
         }
     }
@@ -112,40 +82,14 @@ impl RepositoryManager {
         &self.command_history
     }
 
-    /// 获取会话Repository
-    pub fn conversations(&self) -> &ConversationRepository {
-        &self.conversations
-    }
-
-    /// 获取任务Repository
-    pub fn tasks(&self) -> &TaskRepository {
-        &self.tasks
-    }
-
     /// 获取数据库管理器
     pub fn database(&self) -> &DatabaseManager {
         &self.database
     }
 
-    // Agent后端迁移 - 新的Repository访问器
-    /// 获取Agent任务Repository
-    pub fn agent_tasks(&self) -> &AgentTaskRepository {
-        &self.agent_tasks
-    }
-
-    /// 获取Agent执行日志Repository
-    pub fn agent_execution_log(&self) -> &AgentExecutionLogRepository {
-        &self.agent_execution_log
-    }
-
-    /// 获取Agent工具调用Repository
-    pub fn agent_tool_calls(&self) -> &AgentToolCallRepository {
-        &self.agent_tool_calls
-    }
-
-    /// 获取Agent上下文快照Repository
-    pub fn agent_context_snapshots(&self) -> &AgentContextSnapshotRepository {
-        &self.agent_context_snapshots
+    /// 克隆底层数据库管理器指针，便于与新版持久层共享
+    pub fn database_arc(&self) -> Arc<DatabaseManager> {
+        Arc::clone(&self.database)
     }
 }
 

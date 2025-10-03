@@ -69,7 +69,7 @@ export class ShortcutsApi {
   async executeAction(
     action: ShortcutAction,
     keyCombination: string,
-    activeTerminalId?: string | null,
+    activeTerminalId?: number | null,
     metadata?: Record<string, unknown>
   ): Promise<unknown> {
     return await invoke('shortcuts_execute_action', {

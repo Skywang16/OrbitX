@@ -5,6 +5,8 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio::fs;
 
+use crate::agent::context::FileOperationRecord;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::state::context::TaskContext;
 use crate::agent::tools::{
     RunnableTool, ToolExecutorResult, ToolPermission, ToolResult, ToolResultContent,
@@ -64,7 +66,7 @@ impl RunnableTool for WriteToFileTool {
 
     async fn run(
         &self,
-        _context: &TaskContext,
+        context: &TaskContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: WriteToFileArgs = serde_json::from_value(args)?;
@@ -110,6 +112,14 @@ impl RunnableTool for WriteToFileTool {
             )));
         }
 
+        context
+            .file_tracker()
+            .track_file_operation(FileOperationRecord::new(
+                path.as_path(),
+                FileRecordSource::AgentEdited,
+            ))
+            .await?;
+
         let message = format!(
             "write_to_file applied\nFile: {}\nCreated: {}",
             path.display(),
@@ -120,7 +130,7 @@ impl RunnableTool for WriteToFileTool {
             content: vec![ToolResultContent::Text { text: message }],
             is_error: false,
             execution_time_ms: None,
-            metadata: Some(json!({
+            ext_info: Some(json!({
                 "file": path.display().to_string(),
                 "created": created,
             })),
@@ -136,7 +146,7 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
         }],
         is_error: true,
         execution_time_ms: None,
-        metadata: None,
+        ext_info: None,
     }
 }
 
@@ -148,6 +158,6 @@ fn tool_error(message: impl Into<String>) -> ToolResult {
         }],
         is_error: true,
         execution_time_ms: None,
-        metadata: None,
+        ext_info: None,
     }
 }

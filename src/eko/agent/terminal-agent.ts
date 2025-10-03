@@ -6,7 +6,7 @@
 import { Agent } from '@/eko-core'
 import type { TerminalAgentConfig } from '../types'
 import { getToolsForMode } from '../tools'
-import { terminalApi } from '@/api'
+import { storageApi, terminalApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'
 
 // Define mode types
@@ -207,11 +207,9 @@ AGENT MODE (Full Authority): Execute commands and complete tasks autonomously
         return null
       }
 
-      // 从前端 Terminal Store 获取 CWD
-      const terminalStore = useTerminalStore()
-      const terminal = terminalStore.terminals.find(t => t.backendId === targetTerminalId)
-      if (terminal?.cwd && terminal.cwd !== '~') {
-        return terminal.cwd
+      const cwd = await storageApi.getTerminalCwd(targetTerminalId)
+      if (cwd && cwd.trim().length > 0) {
+        return cwd
       }
 
       console.warn(`Agent: 无法从终端 ${targetTerminalId} 获取工作目录`)
@@ -350,15 +348,14 @@ AGENT MODE (Full Authority): Execute commands and complete tasks autonomously
       const terminalStore = useTerminalStore()
 
       // Use Terminal Store's createAgentTerminal method
-      const agentTerminalSessionId = await terminalStore.createAgentTerminal(this.config.name)
+      const agentTerminalPaneId = await terminalStore.createAgentTerminal(this.config.name)
 
-      // Get corresponding backend terminal ID
-      const agentSession = terminalStore.terminals.find(t => t.id === agentTerminalSessionId)
-      if (!agentSession || !agentSession.backendId) {
-        throw new Error('Unable to get Agent terminal backend ID')
+      const agentSession = terminalStore.terminals.find(t => t.id === agentTerminalPaneId)
+      if (!agentSession) {
+        throw new Error('Unable to create Agent terminal session')
       }
 
-      TerminalAgent.sharedAgentTerminalId = agentSession.backendId
+      TerminalAgent.sharedAgentTerminalId = agentSession.id
 
       // Set terminal identifier and welcome message
       await this.initializeAgentTerminal(TerminalAgent.sharedAgentTerminalId)
@@ -391,7 +388,7 @@ AGENT MODE (Full Authority): Execute commands and complete tasks autonomously
       const terminalStore = useTerminalStore()
 
       // 找到对应的会话并激活（静默）
-      const agentSession = terminalStore.terminals.find(t => t.backendId === terminalId)
+      const agentSession = terminalStore.terminals.find(t => t.id === terminalId)
       if (agentSession) {
         terminalStore.setActiveTerminal(agentSession.id)
       }
@@ -409,7 +406,7 @@ AGENT MODE (Full Authority): Execute commands and complete tasks autonomously
         // 通过Terminal Store关闭终端
         const terminalStore = useTerminalStore()
         // 找到对应的会话并关闭
-        const agentSession = terminalStore.terminals.find(t => t.backendId === TerminalAgent.sharedAgentTerminalId)
+        const agentSession = terminalStore.terminals.find(t => t.id === TerminalAgent.sharedAgentTerminalId)
         if (agentSession) {
           await terminalStore.closeTerminal(agentSession.id)
         } else {
@@ -434,7 +431,7 @@ AGENT MODE (Full Authority): Execute commands and complete tasks autonomously
 
     try {
       const terminalStore = useTerminalStore()
-      return terminalStore.terminals.find(t => t.backendId === TerminalAgent.sharedAgentTerminalId) || null
+      return terminalStore.terminals.find(t => t.id === TerminalAgent.sharedAgentTerminalId) || null
     } catch (error) {
       return null
     }

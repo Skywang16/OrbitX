@@ -96,6 +96,12 @@ pub async fn terminal_create<R: Runtime>(
 
     match result {
         Ok((pane_id, working_dir)) => {
+            // 立即同步初始 CWD 到 ShellIntegration，避免冷启动空窗期
+            if let Some(initial_cwd) = &working_dir {
+                mux.shell_update_pane_cwd(pane_id, initial_cwd.clone());
+                debug!("初始化 ShellIntegration CWD: pane_id={}, cwd={}", pane_id.as_u32(), initial_cwd);
+            }
+
             let dir_info = working_dir
                 .map(|dir| format!(", 初始目录: {}", dir))
                 .unwrap_or_default();

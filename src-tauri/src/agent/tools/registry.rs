@@ -5,11 +5,12 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use super::error::{ToolExecutorError, ToolExecutorResult};
-use super::r#trait::{RunnableTool, ToolPermission, ToolResult, ToolSchema};
+use super::r#trait::{RunnableTool, ToolPermission, ToolResult, ToolResultContent, ToolSchema};
 use crate::agent::state::context::TaskContext;
 
 /// 工具注册表
@@ -130,51 +131,135 @@ impl ToolRegistry {
         None
     }
 
+    /// 执行工具 - 完全同步前端逻辑（带超时控制和统一错误处理）
+    /// 对应前端 ModifiableTool.execute()
     pub async fn execute_tool(
         &self,
         tool_name: &str,
         context: &TaskContext,
         args: serde_json::Value,
-    ) -> ToolExecutorResult<ToolResult> {
+    ) -> ToolResult {
         let start = std::time::Instant::now();
-        let tool = self
-            .get_tool(tool_name)
-            .await
-            .ok_or_else(|| ToolExecutorError::ToolNotFound(tool_name.to_string()))?;
 
-        // 权限检查
+        // 使用 120 秒超时（对应前端的 120000ms）
+        let timeout_result = tokio::time::timeout(
+            Duration::from_secs(120),
+            self.execute_tool_impl(tool_name, context, args, start),
+        )
+        .await;
+
+        match timeout_result {
+            Ok(result) => result,
+            Err(_) => {
+                let elapsed = start.elapsed().as_millis() as u64;
+                self.update_stats(tool_name, false, elapsed).await;
+                error!("工具 {} 执行超时", tool_name);
+
+                ToolResult {
+                    content: vec![super::r#trait::ToolResultContent::Error {
+                        message: format!("工具 {} 执行超时 (120秒)", tool_name),
+                        details: None,
+                    }],
+                    is_error: true,
+                    execution_time_ms: Some(elapsed),
+                    ext_info: None,
+                }
+            }
+        }
+    }
+
+    /// 工具执行的内部实现
+    async fn execute_tool_impl(
+        &self,
+        tool_name: &str,
+        context: &TaskContext,
+        args: serde_json::Value,
+        start: std::time::Instant,
+    ) -> ToolResult {
+        // 1. 获取工具
+        let tool = match self.get_tool(tool_name).await {
+            Some(t) => t,
+            None => {
+                return self
+                    .make_error_result(tool_name, format!("工具未找到: {}", tool_name), start)
+                    .await;
+            }
+        };
+
+        // 2. 权限检查
         let granted = self.granted_permissions.read().await;
         if !tool.check_permissions(&granted) {
-            return Err(ToolExecutorError::PermissionDenied {
-                tool_name: tool_name.to_string(),
-                required_permission: format!("{:?}", tool.required_permissions()),
-            }
-            .into());
+            return self
+                .make_error_result(
+                    tool_name,
+                    format!(
+                        "权限不足: {} 需要权限 {:?}",
+                        tool_name,
+                        tool.required_permissions()
+                    ),
+                    start,
+                )
+                .await;
         }
 
-        // 验证参数 & before hook
-        tool.validate_arguments(&args)?;
-        tool.before_run(context, &args).await?;
+        // 3. 验证参数
+        if let Err(e) = tool.validate_arguments(&args) {
+            return self
+                .make_error_result(tool_name, format!("参数验证失败: {}", e), start)
+                .await;
+        }
 
+        // 4. 执行前钩子
+        if let Err(e) = tool.before_run(context, &args).await {
+            return self
+                .make_error_result(tool_name, format!("前置钩子失败: {}", e), start)
+                .await;
+        }
+
+        // 5. 执行工具
         let result = match tool.run(context, args).await {
             Ok(mut r) => {
                 let elapsed = start.elapsed().as_millis() as u64;
                 r.execution_time_ms = Some(elapsed);
                 self.update_stats(tool_name, true, elapsed).await;
-                Ok(r)
+
+                // 6. 执行后钩子
+                if let Err(e) = tool.after_run(context, &r).await {
+                    warn!("工具 {} 的 after_run 钩子失败: {}", tool_name, e);
+                }
+
+                r
             }
             Err(e) => {
-                let elapsed = start.elapsed().as_millis() as u64;
-                self.update_stats(tool_name, false, elapsed).await;
-                error!("工具 {} 执行失败: {}", tool_name, e);
-                Err(e)
+                return self
+                    .make_error_result(tool_name, e.to_string(), start)
+                    .await;
             }
         };
 
-        if let Ok(ref res) = result {
-            tool.after_run(context, res).await?;
-        }
         result
+    }
+
+    /// 创建错误结果（统一错误处理）
+    async fn make_error_result(
+        &self,
+        tool_name: &str,
+        error_message: String,
+        start: std::time::Instant,
+    ) -> ToolResult {
+        let elapsed = start.elapsed().as_millis() as u64;
+        self.update_stats(tool_name, false, elapsed).await;
+        error!("工具 {} 执行失败: {}", tool_name, error_message);
+
+        ToolResult {
+            content: vec![ToolResultContent::Error {
+                message: error_message,
+                details: None,
+            }],
+            is_error: true,
+            execution_time_ms: Some(elapsed),
+            ext_info: None,
+        }
     }
 
     async fn update_stats(&self, tool_name: &str, success: bool, execution_time_ms: u64) {

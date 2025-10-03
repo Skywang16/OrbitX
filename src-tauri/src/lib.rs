@@ -20,7 +20,7 @@ use setup::{
 };
 use utils::i18n::I18nManager;
 
-use tauri::{Builder, Emitter, Manager, Runtime};
+use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

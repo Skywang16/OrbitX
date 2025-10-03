@@ -20,8 +20,6 @@ pub struct AIContext {
     pub current_command: Option<String>,
     pub last_output: Option<String>,
     pub system_info: Option<SystemInfo>,
-    // 新增：会话上下文管理系统字段
-    pub chat_history: Option<Vec<Message>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -265,7 +263,6 @@ pub struct ModelInfo {
 }
 
 // 重新导出Repository中的会话和消息类型
-pub use crate::storage::repositories::conversations::{Conversation, Message};
 /// AI配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

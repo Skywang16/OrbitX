@@ -24,7 +24,7 @@ export interface TerminalSelectionTag extends BaseTag {
 
 export interface TerminalTabTag extends BaseTag {
   type: TagType.TERMINAL_TAB
-  terminalId: string
+  terminalId: number
   shell: string
   cwd: string
   displayPath: string
@@ -41,7 +41,7 @@ export interface TagContextInfo {
   hasTerminalTab: boolean
   hasTerminalSelection: boolean
   terminalTabInfo?: {
-    terminalId: string
+    terminalId: number
     shell: string
     cwd: string
   }

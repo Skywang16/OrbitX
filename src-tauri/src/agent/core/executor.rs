@@ -9,19 +9,22 @@
  * - 并发任务管理
  */
 
+use crate::agent::common::xml::build_agent_xml_from_planned;
 use crate::agent::config::TaskExecutionConfig;
+use crate::agent::context::{ConversationSummarizer, SummaryResult};
 use crate::agent::core::chain::ToolChain;
+use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::events::{
     FinishPayload, TaskCancelledPayload, TaskCompletedPayload, TaskCreatedPayload,
     TaskErrorPayload, TaskPausedPayload, TaskProgressPayload, TaskResumedPayload,
     TaskStartedPayload, TextPayload, ThinkingPayload, ToolUsePayload,
 };
-use crate::agent::plan::{Planner, TreePlanner};
-use crate::agent::common::xml::build_agent_xml_from_planned;
 use crate::agent::memory::compress_messages;
-use crate::agent::persistence::prelude::{
-    AgentExecutionLog, AgentTask, AgentTaskStatus, ExecutionStepType, Repository, RepositoryManager,
+use crate::agent::persistence::{
+    AgentExecution, AgentPersistence, Conversation, ConversationSummary, ExecutionEvent,
+    ExecutionEventType, ExecutionMessage, FileContextEntry, ToolExecution,
 };
+use crate::agent::plan::{Planner, TreePlanner};
 use crate::agent::prompt::{build_agent_system_prompt, build_agent_user_prompt};
 use crate::agent::react::types::FinishReason;
 use crate::agent::state::context::{LLMResponseParsed, TaskContext, ToolCallResult};
@@ -30,13 +33,17 @@ use crate::agent::tools::{
     logger::ToolExecutionLogger, ToolRegistry, ToolResult as ToolOutcome, ToolResultContent,
 };
 use crate::agent::types::{Agent, Context as AgentContext, Task, ToolSchema};
+use crate::agent::ui::AgentUiPersistence;
 use crate::llm::registry::LLMRegistry;
+use crate::llm::{LLMMessage, LLMMessageContent};
+use crate::storage::repositories::RepositoryManager;
 use chrono::Utc;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tauri::ipc::Channel;
 use tokio::sync::RwLock;
+use tokio::task::yield_now;
 use tokio_stream::StreamExt;
 use tracing::{debug, error, info};
 use uuid::Uuid;
@@ -63,7 +70,24 @@ pub struct ExecuteTaskTreeParams {
     pub config_overrides: Option<serde_json::Value>,
 }
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
+
+static THINKING_TAG_RE: OnceLock<Regex> = OnceLock::new();
+
+fn sanitize_thinking_text(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    THINKING_TAG_RE
+        .get_or_init(|| Regex::new(r"(?is)</?thinking[^>]*>?").expect("valid thinking tag regex"))
+        .replace_all(trimmed, "")
+        .trim()
+        .to_string()
+}
 
 /// 将流式文本拆分为 (thinking, visible, has_open_thinking)
 /// - thinking: 已闭合的 <thinking>...</thinking> 内容 + 最后一个未闭合的 <thinking> 部分
@@ -136,10 +160,49 @@ pub struct TaskSummary {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
+const CONTEXT_EXECUTION_LIMIT: usize = 5;
+const CONTEXT_MESSAGE_LIMIT: usize = 50;
+const CONTEXT_TOOL_LIMIT: usize = 20;
+const CONTEXT_EVENT_LIMIT: usize = 100;
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionSnapshot {
+    pub execution: AgentExecution,
+    pub messages: Vec<ExecutionMessage>,
+    pub tool_calls: Vec<ToolExecution>,
+    pub events: Vec<ExecutionEvent>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationContextSnapshot {
+    pub conversation: Conversation,
+    pub summary: Option<ConversationSummary>,
+    pub active_task_ids: Vec<String>,
+    pub executions: Vec<ExecutionSnapshot>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileContextStatus {
+    pub conversation_id: i64,
+    pub active_files: Vec<FileContextEntry>,
+    pub stale_files: Vec<FileContextEntry>,
+    pub total_active: usize,
+    pub total_stale: usize,
+}
+
 /// TaskExecutor核心结构体
 pub struct TaskExecutor {
     /// 数据存储管理器
     pub(crate) repositories: Arc<RepositoryManager>,
+
+    /// Agent 持久化层
+    pub(crate) agent_persistence: Arc<AgentPersistence>,
+
+    /// UI 回调持久化层
+    pub(crate) ui_persistence: Arc<AgentUiPersistence>,
 
     /// LLM服务注册表
     pub(crate) llm_registry: Arc<LLMRegistry>,
@@ -153,6 +216,9 @@ pub struct TaskExecutor {
     /// 活动任务映射（task_id -> TaskContext）
     pub(crate) active_tasks: Arc<RwLock<HashMap<String, Arc<TaskContext>>>>,
 
+    /// 会话级上下文缓存（conversation_id -> TaskContext）
+    conversation_contexts: Arc<RwLock<HashMap<i64, Arc<TaskContext>>>>,
+
     /// 默认执行配置
     pub(crate) default_config: TaskExecutionConfig,
 }
@@ -161,17 +227,26 @@ impl TaskExecutor {
     /// 创建新的TaskExecutor
     pub fn new(
         repositories: Arc<RepositoryManager>,
+        agent_persistence: Arc<AgentPersistence>,
+        ui_persistence: Arc<AgentUiPersistence>,
         llm_registry: Arc<LLMRegistry>,
         tool_registry: Arc<ToolRegistry>,
     ) -> Self {
-        let tool_logger = Arc::new(ToolExecutionLogger::new(repositories.clone(), true));
+        let tool_logger = Arc::new(ToolExecutionLogger::new(
+            repositories.clone(),
+            agent_persistence.clone(),
+            true,
+        ));
 
         Self {
             repositories,
+            agent_persistence,
+            ui_persistence,
             llm_registry,
             tool_registry,
             tool_logger,
             active_tasks: Arc::new(RwLock::new(HashMap::new())),
+            conversation_contexts: Arc::new(RwLock::new(HashMap::new())),
             default_config: TaskExecutionConfig::default(),
         }
     }
@@ -182,77 +257,70 @@ impl TaskExecutor {
         params: ExecuteTaskParams,
         progress_channel: Channel<TaskProgressPayload>,
     ) -> TaskExecutorResult<()> {
-        // 1. 创建或恢复任务上下文
-        let task_context = if let Some(restore_task_id) = params.restore_task_id {
-            // 恢复已有任务
-            self.restore_task_context(restore_task_id, Some(progress_channel))
-                .await?
-        } else {
-            // 创建新任务
-            self.create_task_context(params, Some(progress_channel))
-                .await?
-        };
-
-        let task_id = task_context.task_id.clone();
-        let context = Arc::new(task_context);
-
-        // 将任务标记为运行中
-        context.set_status(AgentTaskStatus::Running).await?;
-
-        // 2. 添加到活动任务列表
-        {
-            let mut active_tasks = self.active_tasks.write().await;
-            active_tasks.insert(task_id.clone(), context.clone());
+        if let Some(restore_task_id) = params.restore_task_id.clone() {
+            let context = Arc::new(self.restore_task_context(restore_task_id, None).await?);
+            self.register_conversation_context(context.clone()).await;
+            return self
+                .continue_with_context(context, params.user_prompt.clone(), Some(progress_channel))
+                .await;
         }
 
-        // 3. 发送任务开始事件
+        if let Some(existing) = self.conversation_context(params.conversation_id).await {
+            if self
+                .active_tasks
+                .read()
+                .await
+                .contains_key(&existing.task_id)
+            {
+                return Err(TaskExecutorError::InternalError(format!(
+                    "会话 {} 仍有任务在执行，无法同时启动新任务",
+                    params.conversation_id
+                ))
+                .into());
+            }
+
+            return self
+                .continue_with_context(existing, params.user_prompt.clone(), Some(progress_channel))
+                .await;
+        }
+
+        if let Some(restored) = self
+            .try_restore_latest_context(params.conversation_id)
+            .await?
+        {
+            self.register_conversation_context(restored.clone()).await;
+            return self
+                .continue_with_context(restored, params.user_prompt.clone(), Some(progress_channel))
+                .await;
+        }
+
+        let context = Arc::new(
+            self.create_task_context(params, Some(progress_channel))
+                .await?,
+        );
+        self.register_conversation_context(context.clone()).await;
+
+        self.agent_persistence
+            .agent_executions()
+            .mark_started(&context.task_id)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        context.set_status(AgentTaskStatus::Running).await?;
+
+        {
+            let mut active_tasks = self.active_tasks.write().await;
+            active_tasks.insert(context.task_id.clone(), context.clone());
+        }
+
         context
             .send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
-                task_id: task_id.clone(),
+                task_id: context.task_id.clone(),
                 iteration: context.current_iteration().await,
             }))
             .await?;
 
-        // 4. 在后台执行ReAct循环
-        let executor = self.clone();
-        tokio::spawn(async move {
-            let result = executor.run_react_loop(context.clone()).await;
-
-            // 5. 处理执行结果
-            match result {
-                Ok(_) => {
-                    // 任务成功完成
-                    if let Err(e) = context.set_status(AgentTaskStatus::Completed).await {
-                        error!("Failed to update task status to completed: {}", e);
-                    }
-
-                    if let Err(e) = context
-                        .send_progress(TaskProgressPayload::TaskCompleted(TaskCompletedPayload {
-                            task_id: task_id.clone(),
-                            final_iteration: context.current_iteration().await,
-                            completion_reason: "Task completed successfully".to_string(),
-                            timestamp: Utc::now(),
-                        }))
-                        .await
-                    {
-                        error!("Failed to send task completed event: {}", e);
-                    }
-                }
-                Err(e) => {
-                    // 任务执行出错
-                    executor
-                        .handle_task_error(&task_id, e, context.clone())
-                        .await;
-                }
-            }
-
-            // 6. 从活动任务列表中移除
-            {
-                let mut active_tasks = executor.active_tasks.write().await;
-                active_tasks.remove(&task_id);
-            }
-        });
-
+        self.spawn_react_execution(context);
         Ok(())
     }
 
@@ -302,7 +370,11 @@ impl TaskExecutor {
             let tool_schemas_full = self.tool_registry.get_tool_schemas().await;
             let simple_tool_schemas: Vec<ToolSchema> = tool_schemas_full
                 .into_iter()
-                .map(|s| ToolSchema { name: s.name, description: s.description, parameters: s.parameters })
+                .map(|s| ToolSchema {
+                    name: s.name,
+                    description: s.description,
+                    parameters: s.parameters,
+                })
                 .collect();
 
             let mut prev_summary: Option<String> = None;
@@ -328,7 +400,8 @@ impl TaskExecutor {
 
                 // 3.2) 将父节点的 planned 结构转为 agent xml，覆盖到 prompts 中
                 if let Ok(agent_xml) = build_agent_xml_from_planned(&parent) {
-                    let tool_names: Vec<String> = simple_tool_schemas.iter().map(|t| t.name.clone()).collect();
+                    let tool_names: Vec<String> =
+                        simple_tool_schemas.iter().map(|t| t.name.clone()).collect();
                     let agent_info = Agent {
                         name: "OrbitX Agent".to_string(),
                         description: "An AI coding assistant for OrbitX".to_string(),
@@ -346,9 +419,10 @@ impl TaskExecutor {
                     };
 
                     let mut prompt_ctx = AgentContext::default();
-                    prompt_ctx
-                        .additional_context
-                        .insert("taskPrompt".to_string(), serde_json::Value::String(parent_prompt.clone()));
+                    prompt_ctx.additional_context.insert(
+                        "taskPrompt".to_string(),
+                        serde_json::Value::String(parent_prompt.clone()),
+                    );
 
                     let system_prompt = build_agent_system_prompt(
                         agent_info.clone(),
@@ -358,7 +432,9 @@ impl TaskExecutor {
                         None,
                     )
                     .await
-                    .map_err(|e| TaskExecutorError::InternalError(format!("构建系统提示词失败: {}", e)))?;
+                    .map_err(|e| {
+                        TaskExecutorError::InternalError(format!("构建系统提示词失败: {}", e))
+                    })?;
 
                     let user_prompt = build_agent_user_prompt(
                         agent_info,
@@ -367,9 +443,14 @@ impl TaskExecutor {
                         simple_tool_schemas.clone(),
                     )
                     .await
-                    .map_err(|e| TaskExecutorError::InternalError(format!("构建用户提示词失败: {}", e)))?;
+                    .map_err(|e| {
+                        TaskExecutorError::InternalError(format!("构建用户提示词失败: {}", e))
+                    })?;
 
-                    parent_ctx.set_initial_prompts(system_prompt, user_prompt).await?;
+                    parent_ctx.reset_message_state().await?;
+                    parent_ctx
+                        .set_initial_prompts(system_prompt, user_prompt)
+                        .await?;
                 }
 
                 // 3.2.1) 如该父节点存在二级子任务，注入引导消息，要求按顺序串行完成这些子任务
@@ -381,10 +462,7 @@ impl TaskExecutor {
                                 .name
                                 .as_deref()
                                 .unwrap_or(child.description.as_deref().unwrap_or("Subtask"));
-                            let desc = child
-                                .description
-                                .as_deref()
-                                .unwrap_or("");
+                            let desc = child.description.as_deref().unwrap_or("");
                             buf.push_str(&format!("{}. {}\n{}\n\n", i + 1, name, desc));
                         }
                         parent_ctx.push_system_message(buf).await;
@@ -403,9 +481,7 @@ impl TaskExecutor {
                     let mut active = self.active_tasks.write().await;
                     active.insert(parent_ctx.task_id.clone(), parent_ctx.clone());
                 }
-                parent_ctx
-                    .set_status(AgentTaskStatus::Running)
-                    .await?;
+                parent_ctx.set_status(AgentTaskStatus::Running).await?;
                 parent_ctx
                     .send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
                         task_id: parent_ctx.task_id.clone(),
@@ -419,10 +495,7 @@ impl TaskExecutor {
                         .await;
                 } else {
                     // 标记完成
-                    parent_ctx
-                        .set_status(AgentTaskStatus::Completed)
-                        .await
-                        .ok();
+                    parent_ctx.set_status(AgentTaskStatus::Completed).await.ok();
                     parent_ctx
                         .send_progress(TaskProgressPayload::TaskCompleted(TaskCompletedPayload {
                             task_id: parent_ctx.task_id.clone(),
@@ -463,6 +536,7 @@ impl TaskExecutor {
         let active_tasks = self.active_tasks.read().await;
         if let Some(context) = active_tasks.get(task_id) {
             context.set_status(AgentTaskStatus::Paused).await?;
+            context.set_pause(true, false);
 
             context
                 .send_progress(TaskProgressPayload::TaskPaused(TaskPausedPayload {
@@ -511,9 +585,12 @@ impl TaskExecutor {
 
         // 更新状态为运行中
         task_context.set_status(AgentTaskStatus::Running).await?;
+        task_context.set_pause(false, false);
 
         let task_id = task_context.task_id.clone();
         let context = Arc::new(task_context);
+
+        self.register_conversation_context(context.clone()).await;
 
         // 添加到活动任务列表
         {
@@ -531,29 +608,7 @@ impl TaskExecutor {
             .await?;
 
         // 继续执行ReAct循环
-        let executor = self.clone();
-        tokio::spawn(async move {
-            let result = executor.run_react_loop(context.clone()).await;
-
-            match result {
-                Ok(_) => {
-                    if let Err(e) = context.set_status(AgentTaskStatus::Completed).await {
-                        error!("Failed to update task status: {}", e);
-                    }
-                }
-                Err(e) => {
-                    executor
-                        .handle_task_error(&task_id, e, context.clone())
-                        .await;
-                }
-            }
-
-            // 从活动任务列表中移除
-            {
-                let mut active_tasks = executor.active_tasks.write().await;
-                active_tasks.remove(&task_id);
-            }
-        });
+        self.spawn_react_execution(context);
 
         Ok(())
     }
@@ -566,6 +621,8 @@ impl TaskExecutor {
     ) -> TaskExecutorResult<()> {
         let active_tasks = self.active_tasks.read().await;
         if let Some(context) = active_tasks.get(task_id) {
+            context.set_pause(false, true);
+            context.abort();
             context.set_status(AgentTaskStatus::Cancelled).await?;
 
             context
@@ -575,6 +632,11 @@ impl TaskExecutor {
                     timestamp: Utc::now(),
                 }))
                 .await?;
+
+            // 移除活动任务，避免后续重复操作冲突
+            drop(active_tasks);
+            let mut active_tasks = self.active_tasks.write().await;
+            active_tasks.remove(task_id);
         } else {
             return Err(TaskExecutorError::TaskNotFound(task_id.to_string()).into());
         }
@@ -588,35 +650,399 @@ impl TaskExecutor {
         conversation_id: Option<i64>,
         status_filter: Option<String>,
     ) -> TaskExecutorResult<Vec<TaskSummary>> {
-        let tasks = if let Some(conv_id) = conversation_id {
-            self.repositories
-                .agent_tasks()
-                .find_by_conversation_id(conv_id)
-                .await?
+        let executions = if let Some(conv_id) = conversation_id {
+            self.agent_persistence
+                .agent_executions()
+                .list_recent_by_conversation(conv_id, 50)
+                .await
+                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?
         } else {
-            self.repositories.agent_tasks().find_all().await?
+            self.agent_persistence
+                .agent_executions()
+                .list_recent(50)
+                .await
+                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?
         };
 
         let mut summaries = Vec::new();
-        for task in tasks {
-            if let Some(status) = &status_filter {
-                if task.status.as_str() != status {
+        for execution in executions {
+            let status = AgentTaskStatus::from(execution.status.clone());
+            if let Some(filter) = &status_filter {
+                if status.as_str() != filter {
                     continue;
                 }
             }
 
             summaries.push(TaskSummary {
-                task_id: task.task_id,
-                conversation_id: task.conversation_id,
-                status: task.status.as_str().to_string(),
-                current_iteration: task.current_iteration,
-                error_count: task.error_count,
-                created_at: task.created_at,
-                updated_at: task.updated_at,
+                task_id: execution.execution_id,
+                conversation_id: execution.conversation_id,
+                status: status.as_str().to_string(),
+                current_iteration: execution.current_iteration as u32,
+                error_count: execution.error_count as u32,
+                created_at: execution.created_at,
+                updated_at: execution.updated_at,
             });
         }
 
         Ok(summaries)
+    }
+
+    pub async fn fetch_conversation_context(
+        &self,
+        conversation_id: i64,
+    ) -> TaskExecutorResult<ConversationContextSnapshot> {
+        let conversation = self
+            .agent_persistence
+            .conversations()
+            .get(conversation_id)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?
+            .ok_or_else(|| {
+                TaskExecutorError::InternalError(format!(
+                    "Conversation {} not found",
+                    conversation_id
+                ))
+            })?;
+
+        let summary = self
+            .agent_persistence
+            .conversation_summaries()
+            .get(conversation_id)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        let mut active_task_ids = {
+            let guard = self.active_tasks.read().await;
+            guard
+                .iter()
+                .filter_map(|(task_id, ctx)| {
+                    (ctx.conversation_id == conversation_id).then(|| task_id.clone())
+                })
+                .collect::<Vec<_>>()
+        };
+        active_task_ids.sort();
+
+        let executions = self
+            .agent_persistence
+            .agent_executions()
+            .list_recent_by_conversation(conversation_id, CONTEXT_EXECUTION_LIMIT as i64)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        let mut snapshots = Vec::new();
+        for execution in executions {
+            let messages = self
+                .agent_persistence
+                .execution_messages()
+                .list_by_execution(&execution.execution_id)
+                .await
+                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            let tool_calls = self
+                .agent_persistence
+                .tool_executions()
+                .list_by_execution(&execution.execution_id)
+                .await
+                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            let events = self
+                .agent_persistence
+                .execution_events()
+                .list_by_execution(&execution.execution_id)
+                .await
+                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+            snapshots.push(ExecutionSnapshot {
+                execution,
+                messages: tail_vec(messages, CONTEXT_MESSAGE_LIMIT),
+                tool_calls: tail_vec(tool_calls, CONTEXT_TOOL_LIMIT),
+                events: tail_vec(events, CONTEXT_EVENT_LIMIT),
+            });
+        }
+
+        Ok(ConversationContextSnapshot {
+            conversation,
+            summary,
+            active_task_ids,
+            executions: snapshots,
+        })
+    }
+
+    pub async fn fetch_file_context_status(
+        &self,
+        conversation_id: i64,
+    ) -> TaskExecutorResult<FileContextStatus> {
+        let active_files = self
+            .agent_persistence
+            .file_context()
+            .get_active_files(conversation_id)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+        let stale_files = self
+            .agent_persistence
+            .file_context()
+            .get_stale_files(conversation_id)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        Ok(FileContextStatus {
+            conversation_id,
+            total_active: active_files.len(),
+            total_stale: stale_files.len(),
+            active_files,
+            stale_files,
+        })
+    }
+
+    async fn register_conversation_context(&self, context: Arc<TaskContext>) {
+        let mut guard = self.conversation_contexts.write().await;
+        guard.insert(context.conversation_id, context);
+    }
+
+    async fn conversation_context(&self, conversation_id: i64) -> Option<Arc<TaskContext>> {
+        let guard = self.conversation_contexts.read().await;
+        guard.get(&conversation_id).cloned()
+    }
+
+    async fn build_task_prompts(
+        &self,
+        conversation_id: i64,
+        task_id: String,
+        user_prompt: &str,
+    ) -> TaskExecutorResult<(String, String)> {
+        let tool_schemas_full = self.tool_registry.get_tool_schemas().await;
+        let simple_tool_schemas: Vec<ToolSchema> = tool_schemas_full
+            .into_iter()
+            .map(|s| ToolSchema {
+                name: s.name,
+                description: s.description,
+                parameters: s.parameters,
+            })
+            .collect();
+
+        let tool_names: Vec<String> = simple_tool_schemas.iter().map(|t| t.name.clone()).collect();
+        let agent_info = Agent {
+            name: "OrbitX Agent".to_string(),
+            description: "An AI coding assistant for OrbitX".to_string(),
+            capabilities: vec![],
+            tools: tool_names,
+        };
+
+        let task_for_prompt = Task {
+            id: task_id,
+            conversation_id,
+            user_prompt: user_prompt.to_string(),
+            xml: None,
+            status: crate::agent::types::TaskStatus::Created,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let mut prompt_ctx = AgentContext::default();
+        prompt_ctx.additional_context.insert(
+            "taskPrompt".to_string(),
+            serde_json::Value::String(user_prompt.to_string()),
+        );
+
+        let system_prompt = build_agent_system_prompt(
+            agent_info.clone(),
+            Some(task_for_prompt.clone()),
+            Some(prompt_ctx.clone()),
+            simple_tool_schemas.clone(),
+            None,
+        )
+        .await
+        .map_err(|e| TaskExecutorError::InternalError(format!("构建系统提示词失败: {}", e)))?;
+
+        let user_prompt_built = build_agent_user_prompt(
+            agent_info,
+            Some(task_for_prompt),
+            Some(prompt_ctx),
+            simple_tool_schemas,
+        )
+        .await
+        .map_err(|e| TaskExecutorError::InternalError(format!("构建用户提示词失败: {}", e)))?;
+
+        Ok((system_prompt, user_prompt_built))
+    }
+
+    async fn try_restore_latest_context(
+        &self,
+        conversation_id: i64,
+    ) -> TaskExecutorResult<Option<Arc<TaskContext>>> {
+        let executions = self
+            .agent_persistence
+            .agent_executions()
+            .list_recent_by_conversation(conversation_id, 1)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        let Some(execution) = executions.into_iter().next() else {
+            return Ok(None);
+        };
+
+        let context = TaskContext::restore(
+            execution.execution_id,
+            None,
+            self.repositories.clone(),
+            self.agent_persistence.clone(),
+            self.ui_persistence.clone(),
+        )
+        .await?;
+        context.restore_ui_track().await?;
+        Ok(Some(Arc::new(context)))
+    }
+
+    async fn continue_with_context(
+        &self,
+        context: Arc<TaskContext>,
+        user_prompt_raw: String,
+        progress_channel: Option<Channel<TaskProgressPayload>>,
+    ) -> TaskExecutorResult<()> {
+        self.register_conversation_context(context.clone()).await;
+
+        if let Some(channel) = progress_channel {
+            context.set_progress_channel(Some(channel)).await;
+        }
+
+        let (_system_prompt, user_prompt) = self
+            .build_task_prompts(
+                context.conversation_id,
+                context.task_id.clone(),
+                &user_prompt_raw,
+            )
+            .await?;
+
+        context.begin_followup_turn(&user_prompt_raw).await?;
+        context.push_user_message(user_prompt.clone()).await;
+
+        context
+            .agent_persistence()
+            .conversations()
+            .touch(context.conversation_id)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        context.set_status(AgentTaskStatus::Running).await?;
+
+        {
+            let mut active = self.active_tasks.write().await;
+            active.insert(context.task_id.clone(), context.clone());
+        }
+
+        context
+            .send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
+                task_id: context.task_id.clone(),
+                iteration: context.current_iteration().await,
+            }))
+            .await?;
+
+        self.spawn_react_execution(context);
+        Ok(())
+    }
+
+    fn spawn_react_execution(&self, context: Arc<TaskContext>) {
+        let executor = self.clone();
+        tokio::spawn(async move {
+            let task_id = context.task_id.clone();
+            let result = executor.run_react_loop(context.clone()).await;
+
+            match result {
+                Ok(_) => {
+                    if let Err(e) = context.set_status(AgentTaskStatus::Completed).await {
+                        error!("Failed to update task status to completed: {}", e);
+                    }
+
+                    if let Err(e) = context
+                        .send_progress(TaskProgressPayload::TaskCompleted(TaskCompletedPayload {
+                            task_id: task_id.clone(),
+                            final_iteration: context.current_iteration().await,
+                            completion_reason: "Task completed successfully".to_string(),
+                            timestamp: Utc::now(),
+                        }))
+                        .await
+                    {
+                        error!("Failed to send task completed event: {}", e);
+                    }
+                }
+                Err(e) => {
+                    executor
+                        .handle_task_error(&task_id, e, context.clone())
+                        .await;
+                }
+            }
+
+            {
+                let mut active = executor.active_tasks.write().await;
+                active.remove(&task_id);
+            }
+        });
+    }
+
+    pub async fn trigger_conversation_summary(
+        &self,
+        conversation_id: i64,
+        model_override: Option<String>,
+    ) -> TaskExecutorResult<Option<SummaryResult>> {
+        let mut executions = self
+            .agent_persistence
+            .agent_executions()
+            .list_recent_by_conversation(conversation_id, 1)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        let Some(latest_execution) = executions.pop() else {
+            return Ok(None);
+        };
+
+        let messages = self
+            .agent_persistence
+            .execution_messages()
+            .list_by_execution(&latest_execution.execution_id)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        if messages.is_empty() {
+            return Ok(None);
+        }
+
+        let llm_messages = convert_execution_messages(&messages);
+        let summarizer = ConversationSummarizer::new(
+            conversation_id,
+            self.agent_persistence.clone(),
+            self.repositories.clone(),
+            self.llm_registry.clone(),
+        );
+
+        let model_id = match model_override {
+            Some(model) => model,
+            None => self.get_default_model_id().await?,
+        };
+
+        let result = summarizer
+            .summarize_now(&model_id, &llm_messages)
+            .await
+            .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?;
+
+        self.agent_persistence
+            .agent_executions()
+            .set_has_context(&latest_execution.execution_id, true)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        self.agent_persistence
+            .conversations()
+            .touch(conversation_id)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        Ok(Some(result))
+    }
+
+    pub fn agent_persistence(&self) -> Arc<AgentPersistence> {
+        Arc::clone(&self.agent_persistence)
+    }
+
+    pub fn ui_persistence(&self) -> Arc<AgentUiPersistence> {
+        Arc::clone(&self.ui_persistence)
     }
 
     /// ReAct循环执行（核心逻辑）
@@ -642,10 +1068,50 @@ impl TaskExecutor {
             debug!("Task {} iteration {}", context.task_id, iteration);
 
             // 2. 构建LLM请求
-            let raw_messages = context.get_messages().await;
-            let messages = compress_messages(raw_messages, 200_000);
+            let model_id = self.get_default_model_id().await?;
+
+            let summarizer = ConversationSummarizer::new(
+                context.conversation_id,
+                self.agent_persistence.clone(),
+                self.repositories.clone(),
+                self.llm_registry.clone(),
+            );
+
+            let mut raw_messages = Vec::new();
+            context.copy_messages_into(&mut raw_messages).await;
+            if let Some(summary) = summarizer
+                .summarize_if_needed(&model_id, &raw_messages)
+                .await?
+            {
+                context.apply_conversation_summary(&summary.summary).await?;
+                context.copy_messages_into(&mut raw_messages).await;
+
+                let summary_payload = serde_json::json!({
+                    "summary": summary.summary,
+                    "tokens_saved": summary.tokens_saved,
+                    "prev_tokens": summary.prev_context_tokens,
+                });
+
+                let _ = self
+                    .agent_persistence
+                    .execution_events()
+                    .record_event(
+                        &context.task_id,
+                        ExecutionEventType::Text,
+                        &serde_json::to_string(&summary_payload)
+                            .unwrap_or_else(|_| "{}".to_string()),
+                        context.current_iteration().await as i64,
+                    )
+                    .await;
+            }
+
+            let augmented_messages = self
+                .inject_file_context(context.as_ref(), raw_messages)
+                .await?;
+
+            let messages = compress_messages(augmented_messages, 200_000);
             let llm_request = self.build_llm_request(messages).await?;
-            let llm_request_snapshot = llm_request.clone();
+            let llm_request_snapshot = Arc::new(llm_request.clone());
 
             // 3. 流式调用LLM，并增量推送文本
             let llm_service = crate::llm::service::LLMService::new(context.repositories().clone());
@@ -664,6 +1130,7 @@ impl TaskExecutor {
             let mut saw_thinking_tag = false;
             let mut last_thinking_sent = String::new();
             let mut last_visible_sent = String::new();
+            let mut last_visible_length = 0;
             let mut announced_tool_ids: HashSet<String> = HashSet::new();
             let mut thinking_stream_id: Option<String> = None;
             let mut text_stream_id: Option<String> = None;
@@ -685,18 +1152,20 @@ impl TaskExecutor {
 
                                 let (thinking, visible, has_open_thinking) =
                                     split_thinking_sections(&stream_text);
-                                let thinking_trim = thinking.trim().to_string();
+                                let thinking_trim = sanitize_thinking_text(&thinking);
                                 let can_send_visible = !visible.is_empty()
                                     && !visible.contains("<thinking")
                                     && !has_open_thinking
                                     && visible.trim().len() > 0;
 
                                 if saw_thinking_tag {
-                                    if !thinking_trim.is_empty()
-                                        && thinking_trim != last_thinking_sent
-                                    {
-                                        let thinking_to_send = thinking_trim.clone();
-                                        last_thinking_sent = thinking_to_send.clone();
+                                    if thinking_trim.len() < last_thinking_sent.len() {
+                                        last_thinking_sent = thinking_trim.clone();
+                                    }
+                                    if thinking_trim.len() > last_thinking_sent.len() {
+                                        let thinking_to_send =
+                                            thinking_trim[last_thinking_sent.len()..].to_string();
+                                        last_thinking_sent = thinking_trim.clone();
                                         if thinking_stream_id.is_none() {
                                             thinking_stream_id = Some(Uuid::new_v4().to_string());
                                         }
@@ -728,11 +1197,12 @@ impl TaskExecutor {
                                         }
                                     }
                                     if can_send_visible
-                                        && visible != last_visible_sent
+                                        && visible.len() > last_visible_length
                                         && !last_thinking_sent.trim().is_empty()
+                                        && !has_open_thinking
                                     {
-                                        let visible_to_send = visible.clone();
-                                        last_visible_sent = visible_to_send.clone();
+                                        let visible_delta = &visible[last_visible_length..];
+                                        last_visible_length = visible.len();
                                         if text_stream_id.is_none() {
                                             text_stream_id = Some(Uuid::new_v4().to_string());
                                         }
@@ -740,21 +1210,22 @@ impl TaskExecutor {
                                             .send_progress(TaskProgressPayload::Text(TextPayload {
                                                 task_id: context.task_id.clone(),
                                                 iteration,
-                                                text: visible_to_send,
+                                                text: visible_delta.to_string(),
                                                 stream_id: text_stream_id.clone().unwrap(),
                                                 stream_done: false,
                                                 timestamp: Utc::now(),
                                             }))
                                             .await?;
+                                        last_visible_sent.push_str(visible_delta);
                                         {
                                             let state_handle = context.state_manager();
                                             let mut state = state_handle.write().await;
                                             state.reset_idle_rounds();
                                         }
                                     }
-                                } else if can_send_visible && visible != last_visible_sent {
-                                    let visible_to_send = visible.clone();
-                                    last_visible_sent = visible_to_send.clone();
+                                } else if can_send_visible && visible.len() > last_visible_length {
+                                    let visible_delta = &visible[last_visible_length..];
+                                    last_visible_length = visible.len();
                                     if text_stream_id.is_none() {
                                         text_stream_id = Some(Uuid::new_v4().to_string());
                                     }
@@ -762,12 +1233,13 @@ impl TaskExecutor {
                                         .send_progress(TaskProgressPayload::Text(TextPayload {
                                             task_id: context.task_id.clone(),
                                             iteration,
-                                            text: visible_to_send,
+                                            text: visible_delta.to_string(),
                                             stream_id: text_stream_id.clone().unwrap(),
                                             stream_done: false,
                                             timestamp: Utc::now(),
                                         }))
                                         .await?;
+                                    last_visible_sent.push_str(visible_delta);
                                     {
                                         let state_handle = context.state_manager();
                                         let mut state = state_handle.write().await;
@@ -775,6 +1247,8 @@ impl TaskExecutor {
                                     }
                                 }
                             }
+
+                            // eko 行为：不要在 delta 阶段关闭思考/文本流；仅通告 tool_use
 
                             if let Some(calls) = tool_calls {
                                 for call in calls {
@@ -805,8 +1279,10 @@ impl TaskExecutor {
                                     {
                                         let chain_handle = context.chain();
                                         let mut chain = chain_handle.write().await;
-                                        let mut entry =
-                                            ToolChain::new(&call, &llm_request_snapshot);
+                                        let mut entry = ToolChain::new(
+                                            &call,
+                                            Arc::clone(&llm_request_snapshot),
+                                        );
                                         entry.update_params(call.arguments.clone());
                                         chain.push(entry);
                                     }
@@ -823,22 +1299,40 @@ impl TaskExecutor {
                             finish_reason,
                             usage,
                         } => {
+                            let (final_thinking_text_now, final_visible_text_now, _) =
+                                split_thinking_sections(&stream_text);
+                            let final_thinking_trimmed_now =
+                                sanitize_thinking_text(&final_thinking_text_now);
                             if let Some(reason_enum) = map_finish_reason(&finish_reason) {
                                 finish_reason_enum = Some(reason_enum);
                             }
                             if finish_reason == "tool_calls" || !pending_tool_calls.is_empty() {
                                 finished_with_tool_calls = true;
                             }
+                            // 确保存在 stream_id（即使此前未发送过增量）
+                            if thinking_stream_id.is_none()
+                                && (!final_thinking_trimmed_now.is_empty()
+                                    || !last_thinking_sent.is_empty())
+                            {
+                                thinking_stream_id = Some(Uuid::new_v4().to_string());
+                            }
+                            if text_stream_id.is_none() && !final_visible_text_now.trim().is_empty()
+                            {
+                                text_stream_id = Some(Uuid::new_v4().to_string());
+                            }
                             // 关闭进行中的 thinking / text 流
                             if let Some(tsid) = thinking_stream_id.clone() {
-                                if !last_thinking_sent.trim().is_empty() {
+                                if final_thinking_trimmed_now.len() > last_thinking_sent.len() {
+                                    let delta = final_thinking_trimmed_now
+                                        [last_thinking_sent.len()..]
+                                        .to_string();
                                     context
                                         .send_progress(TaskProgressPayload::Thinking(
                                             ThinkingPayload {
                                                 task_id: context.task_id.clone(),
                                                 iteration,
-                                                thought: last_thinking_sent.clone(),
-                                                stream_id: tsid,
+                                                thought: delta,
+                                                stream_id: tsid.clone(),
                                                 stream_done: true,
                                                 timestamp: Utc::now(),
                                             },
@@ -847,20 +1341,27 @@ impl TaskExecutor {
                                 }
                             }
                             if let Some(xsid) = text_stream_id.clone() {
-                                if !last_visible_sent.trim().is_empty() {
+                                if final_visible_text_now.len() > last_visible_sent.len() {
+                                    let delta = final_visible_text_now[last_visible_sent.len()..]
+                                        .to_string();
                                     context
                                         .send_progress(TaskProgressPayload::Text(TextPayload {
                                             task_id: context.task_id.clone(),
                                             iteration,
-                                            text: last_visible_sent.clone(),
-                                            stream_id: xsid,
+                                            text: delta.clone(),
+                                            stream_id: xsid.clone(),
                                             stream_done: true,
                                             timestamp: Utc::now(),
                                         }))
                                         .await?;
+                                    last_visible_sent.push_str(&delta);
                                 }
                             }
+                            // 让前端优先接收关闭事件，随后再发送 Finish
+                            yield_now().await;
                             // 发送 Finish 事件
+                            let usage_snapshot = usage.clone();
+
                             context
                                 .send_progress(TaskProgressPayload::Finish(FinishPayload {
                                     task_id: context.task_id.clone(),
@@ -870,6 +1371,22 @@ impl TaskExecutor {
                                     timestamp: Utc::now(),
                                 }))
                                 .await?;
+
+                            if let Some(stats) = usage_snapshot {
+                                self.agent_persistence
+                                    .agent_executions()
+                                    .update_token_usage(
+                                        &context.task_id,
+                                        stats.prompt_tokens as i64,
+                                        stats.completion_tokens as i64,
+                                        stats.total_tokens as i64,
+                                        0.0,
+                                    )
+                                    .await
+                                    .map_err(|e| {
+                                        TaskExecutorError::StatePersistenceFailed(e.to_string())
+                                    })?;
+                            }
                             break;
                         }
                         crate::llm::types::LLMStreamChunk::Error { error } => {
@@ -892,12 +1409,12 @@ impl TaskExecutor {
 
             let (final_thinking_text, final_visible_text, _) =
                 split_thinking_sections(&stream_text);
-            let final_thinking_trimmed = final_thinking_text.trim().to_string();
+            let final_thinking_trimmed = sanitize_thinking_text(&final_thinking_text);
             let final_visible_trimmed = final_visible_text.trim().to_string();
 
             if finished_with_tool_calls {
                 // 执行工具调用并继续下一轮迭代
-                for tool_call in pending_tool_calls.clone() {
+                for tool_call in pending_tool_calls.iter() {
                     let result = self
                         .execute_tool_call(&context, iteration, tool_call.clone())
                         .await?;
@@ -1001,100 +1518,62 @@ impl TaskExecutor {
         params: ExecuteTaskParams,
         progress_channel: Option<Channel<TaskProgressPayload>>,
     ) -> TaskExecutorResult<TaskContext> {
-        // 应用配置覆盖
         let mut config = self.default_config.clone();
         if let Some(overrides) = params.config_overrides {
             self.apply_config_overrides(&mut config, overrides)?;
         }
 
-        // 创建新任务
-        let mut task = AgentTask::new(params.conversation_id, params.user_prompt)
-            .with_max_iterations(config.max_iterations);
+        let user_prompt_raw = params.user_prompt.clone();
 
-        if let Some(config_json) = serde_json::to_string(&config).ok() {
-            task = task.with_config(serde_json::from_str(&config_json)?);
-        }
+        let task_prompt_id = Uuid::new_v4().to_string();
+        let (system_prompt, user_prompt) = self
+            .build_task_prompts(params.conversation_id, task_prompt_id, &params.user_prompt)
+            .await?;
 
-        // 保存到数据库
-        let task_id = self.repositories.agent_tasks().create(&task).await?;
-        task.task_id = task_id.clone();
+        let config_json = serde_json::to_string(&config).ok();
+        self.agent_persistence
+            .conversations()
+            .ensure_with_id(params.conversation_id, None, None)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
-        // 发送任务创建事件
+        let execution = self
+            .agent_persistence
+            .agent_executions()
+            .create(
+                params.conversation_id,
+                &params.user_prompt,
+                &system_prompt,
+                config_json.as_deref(),
+                false,
+                config.max_iterations as i64,
+            )
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        let context = TaskContext::new(
+            execution,
+            config,
+            progress_channel.clone(),
+            self.repositories.clone(),
+            self.agent_persistence.clone(),
+            self.ui_persistence.clone(),
+        )
+        .await?;
+
+        context
+            .set_initial_prompts(system_prompt.clone(), user_prompt.clone())
+            .await?;
+
+        context.initialize_ui_track(&user_prompt_raw).await?;
+
         if let Some(channel) = &progress_channel {
             channel.send(TaskProgressPayload::TaskCreated(TaskCreatedPayload {
-                task_id: task_id.clone(),
-                conversation_id: task.conversation_id,
-                user_prompt: task.user_prompt.clone(),
+                task_id: context.task_id.clone(),
+                conversation_id: context.conversation_id,
+                user_prompt,
             }))?;
         }
-
-        // 创建任务上下文
-        let context =
-            TaskContext::new(task, config, progress_channel, self.repositories.clone()).await?;
-
-        // 使用提示词构建器生成组件化的 system 与 user 提示词，并覆盖默认初始消息
-        // 1) 收集工具信息并转换为简化的 ToolSchema 列表
-        let tool_schemas_full = self.tool_registry.get_tool_schemas().await;
-        let simple_tool_schemas: Vec<ToolSchema> = tool_schemas_full
-            .into_iter()
-            .map(|s| ToolSchema {
-                name: s.name,
-                description: s.description,
-                parameters: s.parameters,
-            })
-            .collect();
-
-        // 2) 构造 Agent / Task / Context（用于 Prompt 组件）
-        let tool_names: Vec<String> = simple_tool_schemas.iter().map(|t| t.name.clone()).collect();
-        let agent_info = Agent {
-            name: "OrbitX Agent".to_string(),
-            description: "An AI coding assistant for OrbitX".to_string(),
-            capabilities: vec![],
-            tools: tool_names,
-        };
-
-        // 将存储层 AgentTask 映射为提示词模块的 Task 结构
-        let task_for_prompt = Task {
-            id: context.task_id.clone(),
-            conversation_id: context.conversation_id,
-            user_prompt: context.user_prompt.clone(),
-            xml: None,
-            status: crate::agent::types::TaskStatus::Created,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        };
-
-        // 3) 构建 system / user 提示词
-        let mut prompt_ctx = AgentContext::default();
-        prompt_ctx.additional_context.insert(
-            "taskPrompt".to_string(),
-            serde_json::Value::String(context.user_prompt.clone()),
-        );
-        let prompt_ctx = Some(prompt_ctx);
-
-        let system_prompt = build_agent_system_prompt(
-            agent_info.clone(),
-            Some(task_for_prompt.clone()),
-            prompt_ctx.clone(),
-            simple_tool_schemas.clone(),
-            None,
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("构建系统提示词失败: {}", e))?;
-
-        let user_prompt = build_agent_user_prompt(
-            agent_info,
-            Some(task_for_prompt),
-            prompt_ctx,
-            simple_tool_schemas.clone(),
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("构建用户提示词失败: {}", e))?;
-
-        // 4) 覆盖初始化的两条消息
-        context
-            .set_initial_prompts(system_prompt, user_prompt)
-            .await?;
 
         Ok(context)
     }
@@ -1105,7 +1584,17 @@ impl TaskExecutor {
         task_id: String,
         progress_channel: Option<Channel<TaskProgressPayload>>,
     ) -> TaskExecutorResult<TaskContext> {
-        TaskContext::restore(task_id, progress_channel, self.repositories.clone()).await
+        let context = TaskContext::restore(
+            task_id,
+            progress_channel,
+            self.repositories.clone(),
+            self.agent_persistence.clone(),
+            self.ui_persistence.clone(),
+        )
+        .await?;
+
+        context.restore_ui_track().await?;
+        Ok(context)
     }
 
     /// 处理任务错误
@@ -1138,19 +1627,26 @@ impl TaskExecutor {
         }
 
         // 记录错误到执行日志
-        if let Err(e) = self
-            .log_execution_step(
-                &context,
-                context.current_iteration().await,
-                ExecutionStepType::Error,
-                serde_json::json!({
-                    "error": error.to_string(),
-                    "error_type": "TaskExecutorError",
-                    "is_recoverable": false
-                }),
+        let error_payload = serde_json::json!({
+            "error": error.to_string(),
+            "error_type": "TaskExecutorError",
+            "is_recoverable": false
+        });
+
+        let event_data = serde_json::to_string(&error_payload).unwrap_or_else(|_| "{}".to_string());
+
+        let result = self
+            .agent_persistence
+            .execution_events()
+            .record_event(
+                &context.task_id,
+                ExecutionEventType::Error,
+                &event_data,
+                context.current_iteration().await as i64,
             )
-            .await
-        {
+            .await;
+
+        if let Err(e) = result {
             error!("Failed to log error to execution log: {}", e);
         }
     }
@@ -1173,18 +1669,105 @@ impl TaskExecutor {
         Ok(())
     }
 
-    /// 记录执行步骤到日志
-    pub(crate) async fn log_execution_step(
+    async fn inject_file_context(
         &self,
         context: &TaskContext,
-        iteration: u32,
-        step_type: ExecutionStepType,
-        content: serde_json::Value,
-    ) -> TaskExecutorResult<()> {
-        let log = AgentExecutionLog::new(context.task_id.clone(), iteration, step_type, content);
+        mut base_messages: Vec<LLMMessage>,
+    ) -> TaskExecutorResult<Vec<LLMMessage>> {
+        if let Some(file_msg) = self.build_file_context_message(context).await? {
+            if base_messages.is_empty() {
+                base_messages.push(file_msg);
+            } else {
+                base_messages.insert(1, file_msg);
+            }
+        }
+        Ok(base_messages)
+    }
 
-        self.repositories.agent_execution_log().create(&log).await?;
-        Ok(())
+    async fn build_file_context_message(
+        &self,
+        context: &TaskContext,
+    ) -> TaskExecutorResult<Option<LLMMessage>> {
+        let tracker = context.file_tracker();
+        let active_files = tracker
+            .get_active_files()
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+        let stale_files = tracker
+            .get_stale_files()
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        if active_files.is_empty() && stale_files.is_empty() {
+            return Ok(None);
+        }
+
+        let mut body = String::from("Workspace file status snapshot:\n");
+
+        if !active_files.is_empty() {
+            body.push_str("Active files in context:\n");
+            for entry in &active_files {
+                body.push_str(&format!(
+                    "- {} (source: {}, agent_read: {}, agent_edit: {}, user_edit: {})\n",
+                    entry.file_path,
+                    entry.record_source.as_str(),
+                    entry
+                        .agent_read_timestamp
+                        .map(|dt| dt.to_rfc3339())
+                        .unwrap_or_else(|| "-".into()),
+                    entry
+                        .agent_edit_timestamp
+                        .map(|dt| dt.to_rfc3339())
+                        .unwrap_or_else(|| "-".into()),
+                    entry
+                        .user_edit_timestamp
+                        .map(|dt| dt.to_rfc3339())
+                        .unwrap_or_else(|| "-".into())
+                ));
+            }
+        }
+
+        if !stale_files.is_empty() {
+            body.push_str("Files marked as stale (re-read before using):\n");
+            for entry in &stale_files {
+                body.push_str(&format!(
+                    "- {} (source: {}, agent_read: {}, user_edit: {})\n",
+                    entry.file_path,
+                    entry.record_source.as_str(),
+                    entry
+                        .agent_read_timestamp
+                        .map(|dt| dt.to_rfc3339())
+                        .unwrap_or_else(|| "-".into()),
+                    entry
+                        .user_edit_timestamp
+                        .map(|dt| dt.to_rfc3339())
+                        .unwrap_or_else(|| "-".into())
+                ));
+            }
+        }
+
+        Ok(Some(LLMMessage {
+            role: "system".to_string(),
+            content: LLMMessageContent::Text(body),
+        }))
+    }
+
+    // === 双轨架构新增方法 ===
+
+    /// 创建新会话
+    pub async fn create_conversation(
+        &self,
+        title: Option<String>,
+        workspace_path: Option<String>,
+    ) -> TaskExecutorResult<i64> {
+        let conversation = self
+            .agent_persistence
+            .conversations()
+            .create(title.as_deref(), workspace_path.as_deref())
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        Ok(conversation.id)
     }
 }
 
@@ -1220,8 +1803,37 @@ fn tool_call_result_to_outcome(result: &ToolCallResult) -> ToolOutcome {
         content: vec![content],
         is_error: result.is_error,
         execution_time_ms: Some(result.execution_time_ms),
-        metadata: None,
+        ext_info: None,
     }
+}
+
+fn tail_vec<T: Clone>(items: Vec<T>, limit: usize) -> Vec<T> {
+    if limit == 0 || items.len() <= limit {
+        items
+    } else {
+        items[items.len() - limit..].to_vec()
+    }
+}
+
+fn convert_execution_messages(messages: &[ExecutionMessage]) -> Vec<LLMMessage> {
+    messages
+        .iter()
+        .map(|msg| LLMMessage {
+            role: msg.role.as_str().to_string(),
+            content: LLMMessageContent::Text(msg.content.clone()),
+        })
+        .collect()
+}
+
+fn extract_last_assistant_text(messages: &[LLMMessage]) -> Option<String> {
+    messages
+        .iter()
+        .rev()
+        .find(|msg| msg.role == "assistant")
+        .and_then(|msg| match &msg.content {
+            LLMMessageContent::Text(text) => Some(text.clone()),
+            _ => None,
+        })
 }
 
 // 为了支持克隆，我们需要实现Clone trait
@@ -1229,10 +1841,13 @@ impl Clone for TaskExecutor {
     fn clone(&self) -> Self {
         Self {
             repositories: Arc::clone(&self.repositories),
+            agent_persistence: Arc::clone(&self.agent_persistence),
+            ui_persistence: Arc::clone(&self.ui_persistence),
             llm_registry: Arc::clone(&self.llm_registry),
             tool_registry: Arc::clone(&self.tool_registry),
             tool_logger: Arc::clone(&self.tool_logger),
             active_tasks: Arc::clone(&self.active_tasks),
+            conversation_contexts: Arc::clone(&self.conversation_contexts),
             default_config: self.default_config.clone(),
         }
     }

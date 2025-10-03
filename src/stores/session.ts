@@ -84,7 +84,7 @@ export const useSessionStore = defineStore('session', () => {
     saveSessionState().catch(() => {})
   }
 
-  const removeTerminal = (terminalId: string): void => {
+  const removeTerminal = (terminalId: number): void => {
     const index = sessionState.value.terminals.findIndex(t => t.id === terminalId)
     if (index !== -1) {
       sessionState.value.terminals.splice(index, 1)
@@ -97,7 +97,7 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  const activateTerminal = (terminalId: string): void => {
+  const activateTerminal = (terminalId: number): void => {
     sessionState.value.terminals.forEach(t => {
       t.active = t.id === terminalId
     })
@@ -105,8 +105,8 @@ export const useSessionStore = defineStore('session', () => {
     saveSessionState().catch(() => {})
   }
 
-  const setActiveTabId = (tabId: string | null | undefined): void => {
-    sessionState.value.activeTabId = tabId || undefined
+  const setActiveTabId = (tabId: number | string | null | undefined): void => {
+    sessionState.value.activeTabId = tabId ?? undefined
     saveSessionState().catch(() => {})
   }
 
