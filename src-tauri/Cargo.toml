@@ -167,14 +167,6 @@ name = "singleton_tests"
 path = "tests/unit/singleton_tests.rs"
 
 [[test]]
-name = "io_optimization_test"
-path = "tests/mux/io_optimization_test.rs"
-
-
-
-
-
-[[test]]
 name = "messagepack_tests"
 path = "tests/storage/messagepack_tests.rs"
 

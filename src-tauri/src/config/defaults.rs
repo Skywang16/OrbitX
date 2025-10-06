@@ -47,7 +47,7 @@ pub fn create_default_terminal_config() -> TerminalConfig {
 fn create_default_shell_config() -> ShellConfig {
     ShellConfig {
         default_shell: if cfg!(windows) {
-            "powershell.exe".to_string()
+            "bash.exe".to_string()
         } else {
             "zsh".to_string()
         },
@@ -208,11 +208,7 @@ mod tests {
         assert_eq!(config.terminal.scrollback, 1000);
         assert_eq!(
             config.terminal.shell.default_shell,
-            if cfg!(windows) {
-                "powershell.exe"
-            } else {
-                "zsh"
-            }
+            if cfg!(windows) { "bash.exe" } else { "zsh" }
         );
         assert!(config.terminal.behavior.close_on_exit);
         assert!(!config.terminal.behavior.confirm_close);

@@ -335,8 +335,12 @@ async fn test_checksum_validation() {
     // 验证错误信息包含校验和或反序列化相关内容
     let error_message = deserialize_result.unwrap_err().to_string();
     assert!(
-        error_message.contains("校验") || error_message.contains("checksum") || error_message.contains("Invalid") || error_message.to_lowercase().contains("corrupt"),
-        "错误信息应该提到校验和验证失败或数据损坏，实际错误: {}", error_message
+        error_message.contains("校验")
+            || error_message.contains("checksum")
+            || error_message.contains("Invalid")
+            || error_message.to_lowercase().contains("corrupt"),
+        "错误信息应该提到校验和验证失败或数据损坏，实际错误: {}",
+        error_message
     );
 }
 

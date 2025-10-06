@@ -238,24 +238,26 @@ impl TerminalContextService {
     async fn load_from_cache(&self, pane_id: PaneId) -> AppResult<Option<TerminalContext>> {
         let cache_key = Self::cache_key(pane_id);
         match self.cache.snapshot(&cache_key).await {
-            Some(snapshot) => match serde_json::from_value::<TerminalCachePayload>(snapshot.value.clone()) {
-                Ok(payload) => {
-                    self.cache_hits.fetch_add(1, Ordering::Relaxed);
-                    self.adjust_cache_ttl(&cache_key, &payload, &snapshot).await;
-                    Ok(Some(payload.context))
+            Some(snapshot) => {
+                match serde_json::from_value::<TerminalCachePayload>(snapshot.value.clone()) {
+                    Ok(payload) => {
+                        self.cache_hits.fetch_add(1, Ordering::Relaxed);
+                        self.adjust_cache_ttl(&cache_key, &payload, &snapshot).await;
+                        Ok(Some(payload.context))
+                    }
+                    Err(error) => {
+                        warn!(
+                            pane = pane_id.as_u32(),
+                            error = %error,
+                            "terminal.cache.deserialize_failed"
+                        );
+                        self.cache.remove(&cache_key).await;
+                        self.cache_evictions.fetch_add(1, Ordering::Relaxed);
+                        self.cache_misses.fetch_add(1, Ordering::Relaxed);
+                        Ok(None)
+                    }
                 }
-                Err(error) => {
-                    warn!(
-                        pane = pane_id.as_u32(),
-                        error = %error,
-                        "terminal.cache.deserialize_failed"
-                    );
-                    self.cache.remove(&cache_key).await;
-                    self.cache_evictions.fetch_add(1, Ordering::Relaxed);
-                    self.cache_misses.fetch_add(1, Ordering::Relaxed);
-                    Ok(None)
-                }
-            },
+            }
             None => {
                 self.cache_misses.fetch_add(1, Ordering::Relaxed);
                 Ok(None)
@@ -416,10 +418,7 @@ impl TerminalContextService {
             crate::shell::ShellType::Bash => ShellType::Bash,
             crate::shell::ShellType::Zsh => ShellType::Zsh,
             crate::shell::ShellType::Fish => ShellType::Fish,
-            crate::shell::ShellType::PowerShell => ShellType::PowerShell,
-            crate::shell::ShellType::Cmd => ShellType::Cmd,
-            crate::shell::ShellType::Nushell => ShellType::Other("Nushell".to_string()),
-            crate::shell::ShellType::Unknown(name) => ShellType::Other(name),
+            crate::shell::ShellType::Other(name) => ShellType::Other(name),
         }
     }
 

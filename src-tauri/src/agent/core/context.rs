@@ -1283,7 +1283,6 @@ pub struct ToolCallResult {
     pub execution_time_ms: u64,
 }
 
-
 fn fallback_cwd() -> String {
     std::env::current_dir()
         .map(|path| path.to_string_lossy().to_string())

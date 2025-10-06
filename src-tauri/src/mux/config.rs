@@ -30,10 +30,6 @@ pub struct BufferConfig {
     pub keep_size: usize,
     /// 最大截断尝试次数
     pub max_truncation_attempts: usize,
-    /// 批处理大小
-    pub batch_size: usize,
-    /// 刷新间隔（毫秒）
-    pub flush_interval_ms: u64,
 }
 
 /// Shell系统配置
@@ -113,8 +109,6 @@ impl Default for BufferConfig {
             max_size: 50_000,
             keep_size: 25_000,
             max_truncation_attempts: 1000,
-            batch_size: 512,
-            flush_interval_ms: 10,
         }
     }
 }
@@ -137,14 +131,13 @@ impl Default for DefaultShellPaths {
                 "/bin/bash".to_string(),
                 "/usr/bin/fish".to_string(),
                 "/opt/homebrew/bin/fish".to_string(),
-                "/bin/sh".to_string(),
                 "/usr/local/bin/zsh".to_string(),
                 "/usr/local/bin/bash".to_string(),
+                "/usr/local/bin/fish".to_string(),
             ],
             windows: vec![
                 "C:\\Program Files\\Git\\bin\\bash.exe".to_string(),
-                "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe".to_string(),
-                "C:\\Windows\\System32\\cmd.exe".to_string(),
+                "C:\\Program Files\\Git\\usr\\bin\\bash.exe".to_string(),
             ],
         }
     }

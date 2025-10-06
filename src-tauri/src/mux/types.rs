@@ -100,9 +100,6 @@ impl PaneInfo {
 #[serde(rename_all = "camelCase")]
 pub struct TerminalConfig {
     pub shell_config: ShellConfig,
-    pub buffer_size: usize,
-    pub batch_size: usize,
-    pub flush_interval_ms: u64,
 }
 
 impl TerminalConfig {
@@ -118,9 +115,6 @@ impl Default for TerminalConfig {
     fn default() -> Self {
         Self {
             shell_config: ShellConfig::default(),
-            buffer_size: 1024 * 10, // 10KB
-            batch_size: 512,
-            flush_interval_ms: 10,
         }
     }
 }
@@ -421,9 +415,9 @@ impl ShellManager {
             for path_dir in path_env.split(path_separator) {
                 // 根据平台选择要搜索的shell
                 let shell_names = if cfg!(windows) {
-                    &["bash.exe", "powershell.exe", "cmd.exe", "pwsh.exe"][..]
+                    &["bash.exe", "zsh.exe", "fish.exe"][..]
                 } else {
-                    &["zsh", "bash", "fish", "tcsh", "csh"][..]
+                    &["zsh", "bash", "fish"][..]
                 };
 
                 for shell_name in shell_names {
@@ -446,11 +440,6 @@ impl ShellManager {
                             "zsh" => "Zsh",
                             "bash" => "Bash",
                             "fish" => "Fish",
-                            "tcsh" => "Tcsh",
-                            "csh" => "Csh",
-                            "powershell" => "PowerShell",
-                            "pwsh" => "PowerShell Core",
-                            "cmd" => "Command Prompt",
                             _ => shell_name,
                         };
                         shells.push(ShellInfo::new(base_name, &shell_path, display_name));
@@ -476,11 +465,12 @@ impl ShellManager {
             let windows_shells = [
                 ("bash", "C:\\Program Files\\Git\\bin\\bash.exe", "Git Bash"),
                 (
-                    "powershell",
-                    "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-                    "PowerShell",
+                    "bash",
+                    "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
+                    "Git Bash",
                 ),
-                ("cmd", "C:\\Windows\\System32\\cmd.exe", "Command Prompt"),
+                ("zsh", "C:\\Program Files\\Git\\usr\\bin\\zsh.exe", "Zsh"),
+                ("fish", "C:\\Program Files\\Git\\usr\\bin\\fish.exe", "Fish"),
             ];
 
             for (name, path, display_name) in &windows_shells {
@@ -536,10 +526,6 @@ impl ShellManager {
             "bash" => "Bash",
             "fish" => "Fish",
             "sh" => "sh",
-            "tcsh" => "Tcsh",
-            "csh" => "Csh",
-            "powershell" => "PowerShell",
-            "cmd" => "Command Prompt",
             _ => "Unknown Shell",
         }
     }

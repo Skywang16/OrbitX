@@ -60,8 +60,6 @@ pub enum ShellType {
     Bash,
     Zsh,
     Fish,
-    PowerShell,
-    Cmd,
     Other(String),
 }
 
@@ -72,8 +70,6 @@ impl ShellType {
             "bash" => ShellType::Bash,
             "zsh" => ShellType::Zsh,
             "fish" => ShellType::Fish,
-            "powershell" | "pwsh" => ShellType::PowerShell,
-            "cmd" | "cmd.exe" => ShellType::Cmd,
             _ => ShellType::Other(s.to_string()),
         }
     }
@@ -84,18 +80,13 @@ impl ShellType {
             ShellType::Bash => "Bash",
             ShellType::Zsh => "Zsh",
             ShellType::Fish => "Fish",
-            ShellType::PowerShell => "PowerShell",
-            ShellType::Cmd => "Command Prompt",
             ShellType::Other(name) => name,
         }
     }
 
     /// 检查是否支持Shell集成
     pub fn supports_integration(&self) -> bool {
-        matches!(
-            self,
-            ShellType::Bash | ShellType::Zsh | ShellType::Fish | ShellType::PowerShell
-        )
+        matches!(self, ShellType::Bash | ShellType::Zsh | ShellType::Fish)
     }
 
     /// 获取Shell的默认提示符
@@ -103,8 +94,6 @@ impl ShellType {
         match self {
             ShellType::Bash | ShellType::Zsh => "$ ",
             ShellType::Fish => "❯ ",
-            ShellType::PowerShell => "PS> ",
-            ShellType::Cmd => "> ",
             ShellType::Other(_) => "$ ",
         }
     }
@@ -424,8 +413,14 @@ mod tests {
         assert_eq!(ShellType::from_str("bash"), ShellType::Bash);
         assert_eq!(ShellType::from_str("zsh"), ShellType::Zsh);
         assert_eq!(ShellType::from_str("fish"), ShellType::Fish);
-        assert_eq!(ShellType::from_str("powershell"), ShellType::PowerShell);
-        assert_eq!(ShellType::from_str("cmd"), ShellType::Cmd);
+        assert_eq!(
+            ShellType::from_str("powershell"),
+            ShellType::Other("powershell".to_string())
+        );
+        assert_eq!(
+            ShellType::from_str("cmd"),
+            ShellType::Other("cmd".to_string())
+        );
         assert_eq!(
             ShellType::from_str("unknown"),
             ShellType::Other("unknown".to_string())

@@ -1,7 +1,3 @@
-//! Shell Integration Script Generator
-//!
-//! 为不同shell生成集成脚本，用于注入OSC序列和回调
-
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -9,20 +5,15 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
-/// Shell类型
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ShellType {
     Bash,
     Zsh,
     Fish,
-    PowerShell,
-    Cmd,
-    Nushell,
-    Unknown(String),
+    Other(String),
 }
 
 impl ShellType {
-    /// 从shell程序路径检测shell类型
     pub fn from_program(program: &str) -> Self {
         let program_name = std::path::Path::new(program)
             .file_name()
@@ -34,42 +25,29 @@ impl ShellType {
             "bash" => Self::Bash,
             "zsh" => Self::Zsh,
             "fish" => Self::Fish,
-            "powershell" | "pwsh" | "powershell.exe" | "pwsh.exe" => Self::PowerShell,
-            "cmd" | "cmd.exe" => Self::Cmd,
-            "nu" | "nushell" => Self::Nushell,
-            _ => Self::Unknown(program_name),
+            name => Self::Other(name.to_string()),
         }
     }
 
-    /// 获取shell的友好名称
     pub fn display_name(&self) -> &str {
         match self {
             Self::Bash => "Bash",
             Self::Zsh => "Zsh",
             Self::Fish => "Fish",
-            Self::PowerShell => "PowerShell",
-            Self::Cmd => "Command Prompt",
-            Self::Nushell => "Nushell",
-            Self::Unknown(name) => name,
+            Self::Other(name) => name,
         }
     }
 
-    /// 检查是否支持Shell Integration
     pub fn supports_integration(&self) -> bool {
-        matches!(self, Self::Bash | Self::Zsh | Self::Fish | Self::PowerShell)
+        matches!(self, Self::Bash | Self::Zsh | Self::Fish)
     }
 }
 
-/// Shell Integration配置
 #[derive(Debug, Clone)]
 pub struct ShellIntegrationConfig {
-    /// 是否启用命令跟踪
     pub enable_command_tracking: bool,
-    /// 是否启用CWD同步
     pub enable_cwd_sync: bool,
-    /// 是否启用窗口标题更新
     pub enable_title_updates: bool,
-    /// 自定义环境变量
     pub custom_env_vars: HashMap<String, String>,
 }
 
@@ -84,34 +62,31 @@ impl Default for ShellIntegrationConfig {
     }
 }
 
-/// Shell脚本生成器
 pub struct ShellScriptGenerator {
     config: ShellIntegrationConfig,
 }
 
 impl ShellScriptGenerator {
-    /// 创建新的脚本生成器
     pub fn new(config: ShellIntegrationConfig) -> Self {
         Self { config }
     }
 
-    /// 生成给定shell类型的集成脚本
     pub fn generate_integration_script(&self, shell_type: &ShellType) -> Result<String> {
         let script = match shell_type {
             ShellType::Bash => bash::generate_script(&self.config),
             ShellType::Zsh => zsh::generate_script(&self.config),
             ShellType::Fish => fish::generate_script(&self.config),
-            ShellType::PowerShell => powershell::generate_script(&self.config),
-            _ => {
-                return Ok(String::new());
-            }
+            ShellType::Other(_) => String::new(),
         };
 
         Ok(script)
     }
 
-    /// 检查shell配置文件中是否已存在集成代码
     pub fn is_integration_already_setup(&self, shell_type: &ShellType) -> Result<bool> {
+        if !shell_type.supports_integration() {
+            return Ok(false);
+        }
+
         let config_path = self.get_shell_config_path(shell_type)?;
 
         if !config_path.exists() {
@@ -124,22 +99,21 @@ impl ShellScriptGenerator {
         file.read_to_string(&mut content)
             .with_context(|| format!("Failed to read shell config file: {:?}", config_path))?;
 
-        let marker = match shell_type {
-            ShellType::Bash | ShellType::Zsh => "# OrbitX Integration Start",
-            ShellType::Fish => "# OrbitX Integration Start",
-            ShellType::PowerShell => "# OrbitX Integration Start",
-            _ => return Ok(false),
-        };
-
-        Ok(content.contains(marker))
+        Ok(content.contains("# OrbitX Integration Start"))
     }
 
-    /// 安装集成脚本到shell配置文件
     pub fn install_integration(&self, shell_type: &ShellType) -> Result<()> {
+        if !shell_type.supports_integration() {
+            return Ok(());
+        }
+
         let script_content = self.generate_integration_script(shell_type)?;
+        if script_content.is_empty() {
+            return Ok(());
+        }
+
         let config_path = self.get_shell_config_path(shell_type)?;
 
-        // 确保配置目录存在
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)
                 .with_context(|| format!("Failed to create config directory: {:?}", parent))?;
@@ -149,7 +123,6 @@ impl ShellScriptGenerator {
             return Ok(());
         }
 
-        // 追加集成脚本到配置文件
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -164,29 +137,28 @@ impl ShellScriptGenerator {
         Ok(())
     }
 
-    /// 从shell配置文件中卸载集成脚本
     pub fn uninstall_integration(&self, shell_type: &ShellType) -> Result<()> {
+        if !shell_type.supports_integration() {
+            return Ok(());
+        }
+
         let config_path = self.get_shell_config_path(shell_type)?;
 
         if !config_path.exists() {
             return Ok(());
         }
 
-        // 读取现有配置文件内容
         let content = fs::read_to_string(&config_path)
             .with_context(|| format!("Failed to read shell config file: {:?}", config_path))?;
 
-        // 移除集成代码块
-        let cleaned_content = self.remove_integration_block(&content, shell_type);
+        let cleaned_content = self.remove_integration_block(&content);
 
-        // 写回清理后的内容
         fs::write(&config_path, cleaned_content)
             .with_context(|| format!("Failed to write cleaned config file: {:?}", config_path))?;
 
         Ok(())
     }
 
-    /// 获取shell配置文件路径
     fn get_shell_config_path(&self, shell_type: &ShellType) -> Result<PathBuf> {
         let home =
             dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
@@ -195,29 +167,17 @@ impl ShellScriptGenerator {
             ShellType::Bash => ".bashrc",
             ShellType::Zsh => ".zshrc",
             ShellType::Fish => ".config/fish/config.fish",
-            ShellType::PowerShell => {
-                if cfg!(windows) {
-                    "Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
-                } else {
-                    ".config/powershell/Microsoft.PowerShell_profile.ps1"
-                }
+            ShellType::Other(name) => {
+                return Err(anyhow::anyhow!("Unsupported shell type: {}", name));
             }
-            _ => return Err(anyhow::anyhow!("Unsupported shell type: {:?}", shell_type)),
         };
 
         Ok(home.join(config_file))
     }
 
-    /// 从内容中移除集成代码块
-    fn remove_integration_block(&self, content: &str, shell_type: &ShellType) -> String {
-        let (start_marker, end_marker) = match shell_type {
-            ShellType::Bash | ShellType::Zsh => {
-                ("# OrbitX Integration Start", "# OrbitX Integration End")
-            }
-            ShellType::Fish => ("# OrbitX Integration Start", "# OrbitX Integration End"),
-            ShellType::PowerShell => ("# OrbitX Integration Start", "# OrbitX Integration End"),
-            _ => return content.to_string(),
-        };
+    fn remove_integration_block(&self, content: &str) -> String {
+        let start_marker = "# OrbitX Integration Start";
+        let end_marker = "# OrbitX Integration End";
 
         let lines: Vec<&str> = content.lines().collect();
         let mut result_lines = Vec::new();
@@ -242,19 +202,16 @@ impl ShellScriptGenerator {
         result_lines.join("\n")
     }
 
-    /// 获取集成脚本安装状态
     pub fn get_integration_status(&self, shell_type: &ShellType) -> Result<bool> {
         self.is_integration_already_setup(shell_type)
     }
 
-    /// 生成Shell环境变量
     pub fn generate_env_vars(
         &self,
         _shell_type: &ShellType,
     ) -> std::collections::HashMap<String, String> {
         let mut env_vars = std::collections::HashMap::new();
 
-        // 添加基本的OrbitX环境变量
         env_vars.insert("ORBITX_SHELL_INTEGRATION".to_string(), "1".to_string());
 
         if self.config.enable_command_tracking {
@@ -269,7 +226,6 @@ impl ShellScriptGenerator {
             env_vars.insert("ORBITX_TITLE_UPDATES".to_string(), "1".to_string());
         }
 
-        // 添加自定义环境变量
         for (key, value) in &self.config.custom_env_vars {
             env_vars.insert(key.clone(), value.clone());
         }
@@ -284,16 +240,12 @@ impl Default for ShellScriptGenerator {
     }
 }
 
-// 导出技术实现模块
 pub mod bash;
 pub mod fish;
-pub mod powershell;
 pub mod zsh;
 
-// 重新导出主要类型，保持向后兼容
 pub use bash::generate_script as generate_bash_script;
 pub use fish::generate_script as generate_fish_script;
-pub use powershell::generate_script as generate_powershell_script;
 pub use zsh::generate_script as generate_zsh_script;
 
 #[cfg(test)]
@@ -310,8 +262,14 @@ mod tests {
             ShellType::Zsh
         );
         assert_eq!(ShellType::from_program("fish"), ShellType::Fish);
-        assert_eq!(ShellType::from_program("powershell"), ShellType::PowerShell);
-        assert_eq!(ShellType::from_program("pwsh"), ShellType::PowerShell);
+        assert_eq!(
+            ShellType::from_program("/opt/homebrew/bin/fish"),
+            ShellType::Fish
+        );
+        assert_eq!(
+            ShellType::from_program("pwsh"),
+            ShellType::Other("pwsh".to_string())
+        );
     }
 
     #[test]
@@ -319,9 +277,10 @@ mod tests {
         assert_eq!(ShellType::Bash.display_name(), "Bash");
         assert_eq!(ShellType::Zsh.display_name(), "Zsh");
         assert_eq!(ShellType::Fish.display_name(), "Fish");
-        assert_eq!(ShellType::PowerShell.display_name(), "PowerShell");
-        assert_eq!(ShellType::Cmd.display_name(), "Command Prompt");
-        assert_eq!(ShellType::Nushell.display_name(), "Nushell");
+        assert_eq!(
+            ShellType::Other("nushell".to_string()).display_name(),
+            "nushell"
+        );
     }
 
     #[test]
@@ -329,18 +288,16 @@ mod tests {
         assert!(ShellType::Bash.supports_integration());
         assert!(ShellType::Zsh.supports_integration());
         assert!(ShellType::Fish.supports_integration());
-        assert!(ShellType::PowerShell.supports_integration());
-        assert!(!ShellType::Cmd.supports_integration());
-        assert!(!ShellType::Nushell.supports_integration());
-        assert!(!ShellType::Unknown("custom".to_string()).supports_integration());
+        assert!(!ShellType::Other("sh".to_string()).supports_integration());
     }
 
     #[test]
-    fn test_shell_script_generator_creation() {
-        let generator = ShellScriptGenerator::default();
-        assert!(generator.config.enable_command_tracking);
-        assert!(generator.config.enable_cwd_sync);
-        assert!(generator.config.enable_title_updates);
-        assert!(generator.config.custom_env_vars.is_empty());
+    fn test_other_shell_serialization() {
+        let value = ShellType::Other("sh".to_string());
+        let json = serde_json::to_string(&value).unwrap();
+        assert!(json.contains("sh"));
+
+        let deserialized: ShellType = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, value);
     }
 }

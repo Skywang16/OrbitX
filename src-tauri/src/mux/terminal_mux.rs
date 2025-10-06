@@ -11,9 +11,7 @@ use std::thread;
 use std::time::Duration;
 use tracing::{debug, error, instrument, trace, warn};
 
-use crate::mux::{
-    IoHandler, IoThreadPoolStats, LocalPane, MuxNotification, Pane, PaneId, PtySize, TerminalConfig,
-};
+use crate::mux::{IoHandler, LocalPane, MuxNotification, Pane, PaneId, PtySize, TerminalConfig};
 use crate::shell::ShellIntegrationManager;
 use crate::utils::error::AppResult;
 
@@ -114,11 +112,6 @@ impl TerminalMux {
         Ok(status)
     }
 
-    /// 获取I/O处理统计信息
-    pub fn get_io_stats(&self) -> Option<IoThreadPoolStats> {
-        self.io_handler.get_stats()
-    }
-
     /// 生成下一个唯一的面板ID
     fn next_pane_id(&self) -> PaneId {
         let id = self.next_pane_id.fetch_add(1, Ordering::Relaxed);
@@ -177,7 +170,8 @@ impl TerminalMux {
 
         // 设置面板的Shell类型到shell_integration
         let shell_type = crate::shell::ShellType::from_program(&config.shell_config.program);
-        self.shell_integration.set_pane_shell_type(pane_id, shell_type.clone());
+        self.shell_integration
+            .set_pane_shell_type(pane_id, shell_type.clone());
         debug!(
             "设置面板Shell类型: pane_id={:?}, shell_type={:?}",
             pane_id,
@@ -501,10 +495,7 @@ impl TerminalMux {
                     .get_pane_shell_state(pane_id)
                     .and_then(|state| state.shell_type)
                     .unwrap_or_else(|| {
-                        warn!(
-                            "面板 {:?} 没有设置Shell类型，使用默认Bash",
-                            pane_id
-                        );
+                        warn!("面板 {:?} 没有设置Shell类型，使用默认Bash", pane_id);
                         ShellType::Bash
                     });
 

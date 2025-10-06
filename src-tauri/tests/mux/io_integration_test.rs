@@ -10,7 +10,8 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use terminal_lib::mux::{MuxNotification, PtySize, TerminalMux};
+    use terminal_lib::mux::{IoHandler, MuxNotification, PtySize, TerminalMux};
+    use terminal_lib::shell::integration::ShellIntegrationManager;
 
     #[tokio::test]
     async fn test_complete_io_workflow() {
@@ -123,31 +124,12 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_processing_configuration() {
-        // 测试不同的批处理配置
+    fn test_buffer_size_configuration() {
         let (sender, _receiver) = unbounded();
+        let shell_mgr = std::sync::Arc::new(ShellIntegrationManager::new().unwrap());
+        let handler = IoHandler::with_buffer_size(sender, shell_mgr, 16 * 1024);
 
-        let config = terminal_lib::mux::IoConfig {
-            buffer_size: 8192,
-            batch_size: 512,
-            flush_interval_ms: 8,
-        };
-
-        // IoHandler 需要一个 ShellIntegrationManager 实例
-        let shell_mgr = std::sync::Arc::new(
-            terminal_lib::shell::integration::ShellIntegrationManager::new().unwrap(),
-        );
-        let handler = terminal_lib::mux::IoHandler::with_config_and_mode(
-            sender,
-            config.clone(),
-            terminal_lib::mux::IoMode::ThreadPool,
-            shell_mgr,
-        );
-
-        // 验证配置被正确应用
-        assert_eq!(handler.config().buffer_size, 8192);
-        assert_eq!(handler.config().batch_size, 512);
-        assert_eq!(handler.config().flush_interval_ms, 8);
+        assert_eq!(handler.buffer_size(), 16 * 1024);
     }
 
     #[tokio::test]
