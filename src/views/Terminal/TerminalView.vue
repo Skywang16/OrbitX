@@ -7,7 +7,7 @@
   import { windowApi } from '@/api'
   import { listen, UnlistenFn } from '@tauri-apps/api/event'
   import { getCurrentWebview } from '@tauri-apps/api/webview'
-  import { onBeforeUnmount, onMounted, watch } from 'vue'
+  import { onBeforeUnmount, onMounted } from 'vue'
   import AIChatSidebar from '@/components/AIChatSidebar/index.vue'
 
   const terminalStore = useTerminalStore()
@@ -37,14 +37,6 @@
 
     terminalStore.writeToTerminal(terminalStore.activeTerminalId, processedPath)
   }
-
-  watch(
-    () => terminalStore.terminals,
-    () => {
-      tabManagerStore.syncTerminalTabs()
-    },
-    { deep: true }
-  )
 
   onMounted(async () => {
     const handleAppIconFileDrop = (event: { payload: string }) => {

@@ -154,23 +154,23 @@ pub async fn storage_load_session_state(
 }
 
 /// 从后端获取所有终端的运行时状态（包括实时 CWD）
-/// 
+///
 /// 设计说明：
 /// - 实时查询 ShellIntegration 获取当前 CWD
 /// - 不依赖持久化数据，确保数据准确性
 /// - 用于应用启动、会话恢复、前端同步等场景
 #[tauri::command]
 pub async fn storage_get_terminals_state(
-    state: State<'_, StorageCoordinatorState>,
+    _state: State<'_, StorageCoordinatorState>,
 ) -> TauriApiResult<Vec<crate::storage::types::TerminalRuntimeState>> {
     use crate::mux::singleton::get_mux;
     use crate::storage::types::TerminalRuntimeState;
-    
+
     debug!("🔍 查询所有终端的实时运行状态");
-    
+
     let mux = get_mux();
     let pane_ids = mux.list_panes();
-    
+
     let mut terminals = Vec::new();
     for pane_id in pane_ids {
         // 从 ShellIntegration 获取实时 CWD
@@ -180,19 +180,19 @@ pub async fn storage_get_terminals_state(
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|| "~".to_string())
         });
-        
+
         let shell_state = mux.get_pane_shell_state(pane_id);
         let shell_type = shell_state
             .as_ref()
             .and_then(|state| state.shell_type.as_ref().map(|t| format!("{:?}", t)));
-        
+
         let title = cwd
             .trim_end_matches('/')
             .split('/')
             .last()
             .unwrap_or("~")
             .to_string();
-        
+
         terminals.push(TerminalRuntimeState {
             id: pane_id.as_u32(),
             title,
@@ -201,43 +201,49 @@ pub async fn storage_get_terminals_state(
             shell: shell_type,
         });
     }
-    
-    debug!("✅ 查询到 {} 个终端，CWD 数据来源：ShellIntegration", terminals.len());
+
+    debug!(
+        "✅ 查询到 {} 个终端，CWD 数据来源：ShellIntegration",
+        terminals.len()
+    );
     Ok(api_success!(terminals))
 }
 
 /// 获取指定终端的当前工作目录
-/// 
+///
 /// 设计说明：
 /// - 直接从 ShellIntegration 查询实时 CWD
 /// - 供 Agent 工具、前端组件等需要单个终端 CWD 的场景使用
 #[tauri::command]
 pub async fn storage_get_terminal_cwd(
     pane_id: u32,
-    state: State<'_, StorageCoordinatorState>,
+    _state: State<'_, StorageCoordinatorState>,
 ) -> TauriApiResult<String> {
     use crate::mux::singleton::get_mux;
     use crate::mux::PaneId;
-    
+
     debug!("🔍 查询终端 {} 的当前工作目录", pane_id);
-    
+
     let mux = get_mux();
     let pane_id = PaneId::new(pane_id);
-    
+
     // 检查 pane 是否存在
     if !mux.pane_exists(pane_id) {
         error!("❌ 终端 {} 不存在", pane_id.as_u32());
         return Ok(api_error!("terminal.pane_not_found"));
     }
-    
+
     // 从 ShellIntegration 获取实时 CWD
     let cwd = mux.shell_get_pane_cwd(pane_id).unwrap_or_else(|| {
-        debug!("⚠️ 终端 {} 的 Shell Integration 尚未初始化，返回 home 目录", pane_id.as_u32());
+        debug!(
+            "⚠️ 终端 {} 的 Shell Integration 尚未初始化，返回 home 目录",
+            pane_id.as_u32()
+        );
         dirs::home_dir()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| "~".to_string())
     });
-    
+
     debug!("✅ 终端 {} 的 CWD: {}", pane_id.as_u32(), cwd);
     Ok(api_success!(cwd))
 }

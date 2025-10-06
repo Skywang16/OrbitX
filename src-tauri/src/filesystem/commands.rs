@@ -6,7 +6,10 @@ use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub(crate) async fn fs_list_directory(path: String, recursive: bool) -> TauriApiResult<Vec<String>> {
+pub(crate) async fn fs_list_directory(
+    path: String,
+    recursive: bool,
+) -> TauriApiResult<Vec<String>> {
     let root = PathBuf::from(&path);
     if !root.exists() {
         return Ok(api_error!("common.not_found"));

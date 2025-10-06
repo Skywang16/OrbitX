@@ -6,9 +6,10 @@ use serde_json::json;
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 
-use crate::agent::state::context::TaskContext;
+use crate::agent::core::context::TaskContext;
 use crate::agent::tools::{
-    RunnableTool, ToolExecutorResult, ToolPermission, ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolExecutorResult, ToolMetadata, ToolPermission, ToolPriority,
+    ToolResult, ToolResultContent,
 };
 
 const COMMAND_TIMEOUT_MS: u64 = 120_000;
@@ -64,7 +65,7 @@ impl ShellTool {
         Ok(())
     }
 
-    async fn execute(command: &str) -> Result<(String, String, i32), String> {
+    async fn execute(command: &str, cwd: &str) -> Result<(String, String, i32), String> {
         let mut cmd = if cfg!(target_os = "windows") {
             let mut c = Command::new("cmd");
             c.arg("/C").arg(command);
@@ -75,6 +76,10 @@ impl ShellTool {
             c.arg("-lc").arg(command);
             c
         };
+
+        if !cwd.trim().is_empty() {
+            cmd.current_dir(cwd);
+        }
 
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -118,17 +123,20 @@ impl RunnableTool for ShellTool {
         })
     }
 
+    fn metadata(&self) -> ToolMetadata {
+        ToolMetadata::new(ToolCategory::Execution, ToolPriority::Standard)
+            .with_confirmation()
+            .with_timeout(Duration::from_millis(COMMAND_TIMEOUT_MS))
+            .with_tags(vec!["shell".into(), "command".into()])
+    }
+
     fn required_permissions(&self) -> Vec<ToolPermission> {
         vec![ToolPermission::SystemCommand]
     }
 
-    fn tags(&self) -> Vec<String> {
-        vec!["shell".into(), "command".into(), "system".into()]
-    }
-
     async fn run(
         &self,
-        _context: &TaskContext,
+        context: &TaskContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: ShellArgs = serde_json::from_value(args)?;
@@ -147,7 +155,7 @@ impl RunnableTool for ShellTool {
             });
         }
 
-        match ShellTool::execute(&args.command).await {
+        match ShellTool::execute(&args.command, &context.cwd).await {
             Ok((stdout, stderr, exit_code)) => Ok(ToolResult {
                 content: vec![ToolResultContent::CommandOutput {
                     stdout: stdout.clone(),

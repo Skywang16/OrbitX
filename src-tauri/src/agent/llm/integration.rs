@@ -2,10 +2,10 @@
  * LLM集成模块 - TaskExecutor的LLM调用逻辑（已从 task_executor/llm_integration.rs 平移）
  */
 
+use crate::agent::core::context::{TaskContext, ToolCallResult};
 use crate::agent::core::executor::TaskExecutor;
 use crate::agent::events::{TaskProgressPayload, ToolResultPayload};
 use crate::agent::persistence::ToolExecutionStatus;
-use crate::agent::state::context::{TaskContext, ToolCallResult};
 use crate::agent::state::error::TaskExecutorResult;
 use crate::llm::types::{LLMMessage, LLMRequest, LLMTool, LLMToolCall};
 use chrono::Utc;
@@ -46,7 +46,7 @@ impl TaskExecutor {
     ) -> TaskExecutorResult<Value> {
         // 使用 ToolRegistry 执行工具（现在返回 ToolResult 而不是 Result）
         let tool_result = self
-            .tool_registry
+            .tool_registry()
             .execute_tool(tool_name, context, args.clone())
             .await;
 
@@ -135,8 +135,8 @@ impl TaskExecutor {
         let start_time = std::time::Instant::now();
 
         // 记录工具执行开始（使用ToolExecutionLogger, 内部会创建 Running 记录）
-        let log_id = self
-            .tool_logger
+        let logger = self.tool_logger();
+        let log_id = logger
             .log_start(context, &call_id, &tool_name, &tool_call.arguments)
             .await
             .unwrap_or_else(|e| {
@@ -154,8 +154,7 @@ impl TaskExecutor {
         let tool_result = match result {
             Ok(tool_output) => {
                 // 记录工具执行成功（使用ToolExecutionLogger）
-                if let Err(e) = self
-                    .tool_logger
+                if let Err(e) = logger
                     .log_success(
                         &log_id,
                         &crate::agent::tools::ToolResult {
@@ -196,8 +195,7 @@ impl TaskExecutor {
             }
             Err(error) => {
                 // 记录工具执行失败（使用ToolExecutionLogger）
-                if let Err(e) = self
-                    .tool_logger
+                if let Err(e) = logger
                     .log_failure(&log_id, &error.to_string(), execution_time)
                     .await
                 {
@@ -248,7 +246,7 @@ impl TaskExecutor {
                 .unwrap_or("Unknown error")
                 .to_string();
 
-            self.agent_persistence
+            self.agent_persistence()
                 .tool_executions()
                 .update_status(
                     &call_id,
@@ -261,7 +259,7 @@ impl TaskExecutor {
                 .await?;
         } else {
             let result_json = serde_json::to_string(&tool_result.result).unwrap_or_default();
-            self.agent_persistence
+            self.agent_persistence()
                 .tool_executions()
                 .update_status(
                     &call_id,
@@ -276,7 +274,6 @@ impl TaskExecutor {
 
         // 7. 添加工具结果到上下文
         context.add_tool_result(tool_result.clone()).await;
-        context.save_context_snapshot().await?;
 
         Ok(tool_result)
     }
@@ -285,7 +282,7 @@ impl TaskExecutor {
     pub async fn get_default_model_id(&self) -> TaskExecutorResult<String> {
         // 优先从数据库中选择“已启用”的模型；找不到则退化到任意一个模型
         let models = self
-            .repositories
+            .repositories()
             .ai_models()
             .find_all_with_decrypted_keys()
             .await
@@ -307,7 +304,7 @@ impl TaskExecutor {
     /// 构建工具定义
     async fn build_tool_definitions(&self) -> TaskExecutorResult<Vec<LLMTool>> {
         // 从工具注册表获取可用工具并转换为LLM工具定义
-        let tool_schemas = self.tool_registry.get_tool_schemas().await;
+        let tool_schemas = self.tool_registry().get_tool_schemas().await;
 
         let tools: Vec<LLMTool> = tool_schemas
             .into_iter()

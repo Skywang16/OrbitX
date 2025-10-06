@@ -117,11 +117,14 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
         );
         // 使用全局单例，避免与事件系统订阅的Mux不一致
         let global_mux = crate::mux::singleton::get_mux();
+        let storage_state = app.state::<StorageCoordinatorState>();
+        let cache = storage_state.coordinator.cache();
         // 启用与 ShellIntegration 的上下文服务集成（回调、缓存失效、事件转发）
         let context_service = TerminalContextService::new_with_integration(
             registry.clone(),
             shell_integration,
             global_mux,
+            cache,
         );
 
         TerminalContextState::new(registry, context_service.clone())
@@ -160,6 +163,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
     let task_executor_state = {
         let storage_state = app.state::<StorageCoordinatorState>();
         let llm_state = app.state::<LLMManagerState>();
+        let terminal_context_state = app.state::<TerminalContextState>();
         let repositories = storage_state.coordinator.repositories();
         let database_manager = storage_state.coordinator.database_manager();
         let agent_persistence = std::sync::Arc::new(
@@ -169,6 +173,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
             Arc::clone(&database_manager),
         ));
         let llm_registry = llm_state.registry.clone();
+        let terminal_context_service = terminal_context_state.context_service().clone();
 
         tauri::async_runtime::block_on(async {
             let tool_registry = crate::agent::tools::create_tool_registry().await;
@@ -178,6 +183,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
                 ui_persistence,
                 llm_registry,
                 tool_registry,
+                terminal_context_service.clone(),
             ));
             Ok::<crate::agent::core::commands::TaskExecutorState, anyhow::Error>(
                 crate::agent::core::commands::TaskExecutorState::new(executor),

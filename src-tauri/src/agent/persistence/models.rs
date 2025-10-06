@@ -252,6 +252,7 @@ pub enum MessageRole {
     System,
     User,
     Assistant,
+    Tool,
 }
 
 impl MessageRole {
@@ -260,6 +261,7 @@ impl MessageRole {
             Self::System => "system",
             Self::User => "user",
             Self::Assistant => "assistant",
+            Self::Tool => "tool",
         }
     }
 }
@@ -272,6 +274,7 @@ impl FromStr for MessageRole {
             "system" => Ok(Self::System),
             "user" => Ok(Self::User),
             "assistant" => Ok(Self::Assistant),
+            "tool" => Ok(Self::Tool),
             other => Err(anyhow!("未知的消息角色: {}", other)),
         }
     }

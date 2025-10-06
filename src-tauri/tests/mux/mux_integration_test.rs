@@ -233,6 +233,8 @@ fn test_notification_system() {
     use terminal_lib::mux::MuxNotification;
 
     let mux = get_mux();
+
+    let test_pane_id = terminal_lib::mux::PaneId::from(42424242u32);
     let received_notifications = Arc::new(Mutex::new(Vec::new()));
     let received_clone = Arc::clone(&received_notifications);
 
@@ -242,17 +244,13 @@ fn test_notification_system() {
         true // 继续订阅
     });
 
-    // 发送一些通知
-    mux.notify(MuxNotification::PaneAdded(terminal_lib::mux::PaneId::from(
-        1,
-    )));
+    // 发送仅属于本测试的通知（使用唯一 PaneId）
+    mux.notify(MuxNotification::PaneAdded(test_pane_id));
     mux.notify(MuxNotification::PaneOutput {
-        pane_id: terminal_lib::mux::PaneId::from(1),
+        pane_id: test_pane_id,
         data: b"test output".to_vec().into(),
     });
-    mux.notify(MuxNotification::PaneRemoved(
-        terminal_lib::mux::PaneId::from(1),
-    ));
+    mux.notify(MuxNotification::PaneRemoved(test_pane_id));
 
     // 处理跨线程通知（如果有的话）
     mux.process_notifications();
@@ -260,30 +258,36 @@ fn test_notification_system() {
     // 给通知处理一些时间
     std::thread::sleep(std::time::Duration::from_millis(10));
 
-    // 验证通知被接收
-    let notifications = received_notifications.lock().unwrap();
-    assert_eq!(notifications.len(), 3);
+    // 验证仅统计本测试发出的通知，忽略全局背景产生的其它通知
+    let my_notifications: Vec<MuxNotification> = {
+        let all = received_notifications.lock().unwrap().clone();
+        all.into_iter()
+            .filter(|n| match n {
+                MuxNotification::PaneAdded(id) => *id == test_pane_id,
+                MuxNotification::PaneRemoved(id) => *id == test_pane_id,
+                MuxNotification::PaneResized { pane_id, .. } => *pane_id == test_pane_id,
+                MuxNotification::PaneExited { pane_id, .. } => *pane_id == test_pane_id,
+                MuxNotification::PaneCwdChanged { pane_id, .. } => *pane_id == test_pane_id,
+                MuxNotification::PaneOutput { pane_id, data } => {
+                    *pane_id == test_pane_id && data.as_ref() == b"test output"
+                }
+            })
+            .collect()
+    };
 
-    // 验证通知类型
-    match &notifications[0] {
-        MuxNotification::PaneAdded(pane_id) => {
-            assert_eq!(pane_id.as_u32(), 1);
-        }
-        _ => panic!("期望 PaneAdded 通知"),
-    }
+    // 预期仅有我们发出的三种通知
+    assert_eq!(my_notifications.len(), 3);
 
-    match &notifications[1] {
-        MuxNotification::PaneOutput { pane_id, data } => {
-            assert_eq!(pane_id.as_u32(), 1);
-            assert_eq!(data.as_ref(), b"test output");
-        }
-        _ => panic!("期望 PaneOutput 通知"),
-    }
+    // 验证三种通知类型均存在
+    let has_added = my_notifications
+        .iter()
+        .any(|n| matches!(n, MuxNotification::PaneAdded(id) if *id == test_pane_id));
+    let has_output = my_notifications.iter().any(|n| matches!(n, MuxNotification::PaneOutput { pane_id, data } if *pane_id == test_pane_id && data.as_ref() == b"test output"));
+    let has_removed = my_notifications
+        .iter()
+        .any(|n| matches!(n, MuxNotification::PaneRemoved(id) if *id == test_pane_id));
 
-    match &notifications[2] {
-        MuxNotification::PaneRemoved(pane_id) => {
-            assert_eq!(pane_id.as_u32(), 1);
-        }
-        _ => panic!("期望 PaneRemoved 通知"),
-    }
+    assert!(has_added, "应收到 PaneAdded 通知");
+    assert!(has_output, "应收到 PaneOutput 通知");
+    assert!(has_removed, "应收到 PaneRemoved 通知");
 }

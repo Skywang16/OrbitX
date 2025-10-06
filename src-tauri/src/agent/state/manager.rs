@@ -1,8 +1,9 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use tokio::sync::RwLock;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TaskStatus {
     Init,
     Running,
@@ -87,121 +88,170 @@ impl StateEventEmitter {
     }
 }
 
-#[derive(Clone)]
 pub struct StateManager {
-    state: TaskState,
+    state: Arc<RwLock<TaskState>>,
     emitter: StateEventEmitter,
 }
 
 impl StateManager {
     pub fn new(initial_state: TaskState, emitter: StateEventEmitter) -> Self {
         Self {
-            state: initial_state,
+            state: Arc::new(RwLock::new(initial_state)),
             emitter,
         }
     }
 
-    pub fn state(&self) -> TaskState {
-        self.state.clone()
+    pub async fn snapshot(&self) -> TaskState {
+        self.state.read().await.clone()
     }
 
-    pub fn update_task_status(&mut self, status: TaskStatus, reason: Option<String>) {
-        let old_status = self.state.task_status.clone();
-        self.state.task_status = status;
-        self.state.last_status_change = Utc::now().timestamp_millis();
-        self.state.status_change_reason = reason.clone();
-        self.emitter.emit(TaskStateEvent {
-            event_type: "task_status_changed".into(),
-            payload: serde_json::json!({
-                "taskId": self.state.task_id,
-                "oldStatus": old_status,
-                "newStatus": self.state.task_status,
-                "reason": reason,
-                "timestamp": self.state.last_status_change,
-            }),
-        });
+    pub async fn task_status(&self) -> TaskStatus {
+        self.state.read().await.task_status
     }
 
-    pub fn set_pause_status(&mut self, paused: bool, reason: Option<String>) {
-        let old_paused = self.state.paused;
-        self.state.paused = paused;
-        self.state.pause_reason = reason.clone();
-        self.emitter.emit(TaskStateEvent {
-            event_type: "pause_status_changed".into(),
-            payload: serde_json::json!({
-                "taskId": self.state.task_id,
-                "oldPaused": old_paused,
-                "newPaused": paused,
-                "reason": reason,
-                "timestamp": Utc::now().timestamp_millis(),
-            }),
-        });
+    pub async fn update_task_status(&self, status: TaskStatus, reason: Option<String>) {
+        let timestamp = Utc::now().timestamp_millis();
+        let event = {
+            let mut state = self.state.write().await;
+            let old_status = state.task_status;
+            let task_id = state.task_id.clone();
+            state.task_status = status;
+            state.last_status_change = timestamp;
+            state.status_change_reason = reason.clone();
+            TaskStateEvent {
+                event_type: "task_status_changed".into(),
+                payload: serde_json::json!({
+                    "taskId": task_id,
+                    "oldStatus": old_status,
+                    "newStatus": state.task_status,
+                    "reason": reason,
+                    "timestamp": timestamp,
+                }),
+            }
+        };
+        self.emitter.emit(event);
     }
 
-    pub fn increment_error_count(&mut self) {
-        self.state.consecutive_errors = self.state.consecutive_errors.saturating_add(1);
-        self.emitter.emit(TaskStateEvent {
-            event_type: "error_count_changed".into(),
-            payload: serde_json::json!({
-                "taskId": self.state.task_id,
-                "count": self.state.consecutive_errors,
-                "timestamp": Utc::now().timestamp_millis(),
-            }),
-        });
+    pub async fn set_pause_status(&self, paused: bool, reason: Option<String>) {
+        let timestamp = Utc::now().timestamp_millis();
+        let event = {
+            let mut state = self.state.write().await;
+            let old_paused = state.paused;
+            let task_id = state.task_id.clone();
+            state.paused = paused;
+            state.pause_reason = reason.clone();
+            TaskStateEvent {
+                event_type: "pause_status_changed".into(),
+                payload: serde_json::json!({
+                    "taskId": task_id,
+                    "oldPaused": old_paused,
+                    "newPaused": paused,
+                    "reason": reason,
+                    "timestamp": timestamp,
+                }),
+            }
+        };
+        self.emitter.emit(event);
     }
 
-    pub fn reset_error_count(&mut self) {
-        self.state.consecutive_errors = 0;
-        self.emitter.emit(TaskStateEvent {
-            event_type: "error_count_changed".into(),
-            payload: serde_json::json!({
-                "taskId": self.state.task_id,
-                "count": 0,
-                "timestamp": Utc::now().timestamp_millis(),
-            }),
-        });
+    pub async fn increment_error_count(&self) {
+        let timestamp = Utc::now().timestamp_millis();
+        let event = {
+            let mut state = self.state.write().await;
+            state.consecutive_errors = state.consecutive_errors.saturating_add(1);
+            let task_id = state.task_id.clone();
+            let count = state.consecutive_errors;
+            TaskStateEvent {
+                event_type: "error_count_changed".into(),
+                payload: serde_json::json!({
+                    "taskId": task_id,
+                    "count": count,
+                    "timestamp": timestamp,
+                }),
+            }
+        };
+        self.emitter.emit(event);
     }
 
-    pub fn increment_iteration(&mut self) {
-        self.state.iterations = self.state.iterations.saturating_add(1);
-        self.emitter.emit(TaskStateEvent {
-            event_type: "iteration_changed".into(),
-            payload: serde_json::json!({
-                "taskId": self.state.task_id,
-                "iterations": self.state.iterations,
-                "timestamp": Utc::now().timestamp_millis(),
-            }),
-        });
+    pub async fn reset_error_count(&self) {
+        let timestamp = Utc::now().timestamp_millis();
+        let event = {
+            let mut state = self.state.write().await;
+            state.consecutive_errors = 0;
+            let task_id = state.task_id.clone();
+            TaskStateEvent {
+                event_type: "error_count_changed".into(),
+                payload: serde_json::json!({
+                    "taskId": task_id,
+                    "count": 0,
+                    "timestamp": timestamp,
+                }),
+            }
+        };
+        self.emitter.emit(event);
     }
 
-    pub fn mark_idle_round(&mut self) {
-        self.state.idle_rounds = self.state.idle_rounds.saturating_add(1);
-        self.emitter.emit(TaskStateEvent {
-            event_type: "idle_round_changed".into(),
-            payload: serde_json::json!({
-                "taskId": self.state.task_id,
-                "idleRounds": self.state.idle_rounds,
-                "timestamp": Utc::now().timestamp_millis(),
-            }),
-        });
+    pub async fn increment_iteration(&self) {
+        let timestamp = Utc::now().timestamp_millis();
+        let event = {
+            let mut state = self.state.write().await;
+            state.iterations = state.iterations.saturating_add(1);
+            let task_id = state.task_id.clone();
+            let iterations = state.iterations;
+            TaskStateEvent {
+                event_type: "iteration_changed".into(),
+                payload: serde_json::json!({
+                    "taskId": task_id,
+                    "iterations": iterations,
+                    "timestamp": timestamp,
+                }),
+            }
+        };
+        self.emitter.emit(event);
     }
 
-    pub fn reset_idle_rounds(&mut self) {
-        self.state.idle_rounds = 0;
-        self.emitter.emit(TaskStateEvent {
-            event_type: "idle_round_changed".into(),
-            payload: serde_json::json!({
-                "taskId": self.state.task_id,
-                "idleRounds": 0,
-                "timestamp": Utc::now().timestamp_millis(),
-            }),
-        });
+    pub async fn mark_idle_round(&self) {
+        let timestamp = Utc::now().timestamp_millis();
+        let event = {
+            let mut state = self.state.write().await;
+            state.idle_rounds = state.idle_rounds.saturating_add(1);
+            let task_id = state.task_id.clone();
+            let idle_rounds = state.idle_rounds;
+            TaskStateEvent {
+                event_type: "idle_round_changed".into(),
+                payload: serde_json::json!({
+                    "taskId": task_id,
+                    "idleRounds": idle_rounds,
+                    "timestamp": timestamp,
+                }),
+            }
+        };
+        self.emitter.emit(event);
     }
 
-    pub fn should_halt(&self) -> bool {
-        self.state.consecutive_errors >= self.state.max_consecutive_errors
-            || self.state.iterations >= self.state.max_iterations
-            || self.state.idle_rounds >= self.state.max_idle_rounds
+    pub async fn reset_idle_rounds(&self) {
+        let timestamp = Utc::now().timestamp_millis();
+        let event = {
+            let mut state = self.state.write().await;
+            state.idle_rounds = 0;
+            let task_id = state.task_id.clone();
+            TaskStateEvent {
+                event_type: "idle_round_changed".into(),
+                payload: serde_json::json!({
+                    "taskId": task_id,
+                    "idleRounds": 0,
+                    "timestamp": timestamp,
+                }),
+            }
+        };
+        self.emitter.emit(event);
+    }
+
+    pub async fn should_halt(&self) -> bool {
+        let state = self.state.read().await;
+        state.consecutive_errors >= state.max_consecutive_errors
+            || state.iterations >= state.max_iterations
+            || state.idle_rounds >= state.max_idle_rounds
     }
 
     pub fn emitter(&self) -> &StateEventEmitter {

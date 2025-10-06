@@ -1,15 +1,14 @@
-use std::path::PathBuf;
-
 use async_trait::async_trait;
 use serde::Deserialize;
 use tokio::fs;
 
 use super::file_utils::{ensure_absolute, is_probably_binary};
 use crate::agent::context::FileOperationRecord;
+use crate::agent::core::context::TaskContext;
 use crate::agent::persistence::FileRecordSource;
-use crate::agent::state::context::TaskContext;
 use crate::agent::tools::{
-    error::ToolExecutorResult, RunnableTool, ToolPermission, ToolResult, ToolResultContent,
+    error::ToolExecutorResult, RunnableTool, ToolCategory, ToolMetadata, ToolPermission,
+    ToolPriority, ToolResult, ToolResultContent,
 };
 
 const DEFAULT_MAX_FILE_SIZE: usize = 1_048_576; // 1 MiB
@@ -73,12 +72,13 @@ impl RunnableTool for ReadManyFilesTool {
         })
     }
 
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::FileSystem]
+    fn metadata(&self) -> ToolMetadata {
+        ToolMetadata::new(ToolCategory::FileRead, ToolPriority::Expensive)
+            .with_tags(vec!["filesystem".into(), "batch".into()])
     }
 
-    fn tags(&self) -> Vec<String> {
-        vec!["file".to_string(), "read".to_string()]
+    fn required_permissions(&self) -> Vec<ToolPermission> {
+        vec![ToolPermission::FileSystem]
     }
 
     async fn run(
@@ -123,18 +123,20 @@ impl RunnableTool for ReadManyFilesTool {
                 });
             }
 
-            let path = PathBuf::from(trimmed);
-            if let Err(msg) = ensure_absolute(&path) {
-                return Ok(ToolResult {
-                    content: vec![ToolResultContent::Error {
-                        message: msg,
-                        details: Some(trimmed.to_string()),
-                    }],
-                    is_error: true,
-                    execution_time_ms: None,
-                    ext_info: None,
-                });
-            }
+            let path = match ensure_absolute(trimmed, &context.cwd) {
+                Ok(resolved) => resolved,
+                Err(err) => {
+                    return Ok(ToolResult {
+                        content: vec![ToolResultContent::Error {
+                            message: err.to_string(),
+                            details: Some(trimmed.to_string()),
+                        }],
+                        is_error: true,
+                        execution_time_ms: None,
+                        ext_info: None,
+                    })
+                }
+            };
 
             match fs::metadata(&path).await {
                 Ok(meta) => {

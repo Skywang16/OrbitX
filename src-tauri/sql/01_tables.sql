@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS agent_executions (
 CREATE TABLE IF NOT EXISTS execution_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     execution_id TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('system', 'user', 'assistant')),
+    role TEXT NOT NULL CHECK (role IN ('system', 'user', 'assistant', 'tool')),
     content TEXT NOT NULL,
     tokens INTEGER NOT NULL DEFAULT 0,
     is_summary INTEGER NOT NULL DEFAULT 0,

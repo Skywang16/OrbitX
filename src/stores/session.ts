@@ -3,6 +3,7 @@ import { ref, computed, readonly } from 'vue'
 import { type SessionState, type TerminalState, type UiState, type AiState } from '@/types/domain/storage'
 import { createDefaultSessionState } from '@/types/utils/helpers'
 import { storageApi } from '@/api/storage'
+import { debounce } from 'lodash-es'
 
 /**
  * 精简版会话状态管理Store
@@ -73,41 +74,20 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  // 统一使用防抖保存，避免频繁保存
+  const debouncedSave = debounce(() => {
+    saveSessionState().catch(() => {})
+  }, 100)
+
   const updateTerminals = (terminals: TerminalState[]): void => {
     sessionState.value.terminals = terminals
-    saveSessionState().catch(() => {})
-  }
-
-  const addTerminal = (terminal: TerminalState): void => {
-    sessionState.value.terminals.forEach(t => (t.active = false))
-    sessionState.value.terminals.push(terminal)
-    saveSessionState().catch(() => {})
-  }
-
-  const removeTerminal = (terminalId: number): void => {
-    const index = sessionState.value.terminals.findIndex(t => t.id === terminalId)
-    if (index !== -1) {
-      sessionState.value.terminals.splice(index, 1)
-
-      if (!sessionState.value.terminals.some(t => t.active) && sessionState.value.terminals.length > 0) {
-        sessionState.value.terminals[0].active = true
-      }
-
-      saveSessionState().catch(() => {})
-    }
-  }
-
-  const activateTerminal = (terminalId: number): void => {
-    sessionState.value.terminals.forEach(t => {
-      t.active = t.id === terminalId
-    })
-    sessionState.value.activeTabId = terminalId
-    saveSessionState().catch(() => {})
+    debouncedSave()
   }
 
   const setActiveTabId = (tabId: number | string | null | undefined): void => {
     sessionState.value.activeTabId = tabId ?? undefined
-    saveSessionState().catch(() => {})
+    // 这里使用防抖保存，减少频繁切换tab时的保存次数
+    debouncedSave()
   }
 
   const updateUiState = (updates: Partial<UiState>): void => {
@@ -115,7 +95,7 @@ export const useSessionStore = defineStore('session', () => {
       ...sessionState.value.ui,
       ...updates,
     }
-    saveSessionState().catch(() => {})
+    debouncedSave()
   }
 
   const updateAiState = (updates: Partial<AiState>): void => {
@@ -123,7 +103,7 @@ export const useSessionStore = defineStore('session', () => {
       ...sessionState.value.ai,
       ...updates,
     }
-    saveSessionState().catch(() => {})
+    debouncedSave()
   }
 
   const clearError = (): void => {
@@ -164,9 +144,6 @@ export const useSessionStore = defineStore('session', () => {
 
     // 状态更新方法
     updateTerminals,
-    addTerminal,
-    removeTerminal,
-    activateTerminal,
     setActiveTabId,
     updateUiState,
     updateAiState,

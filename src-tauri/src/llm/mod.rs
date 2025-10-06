@@ -6,6 +6,8 @@ pub mod types;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod integration_tests;
 
 pub use commands::*;
 pub use providers::*;

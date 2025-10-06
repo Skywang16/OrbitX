@@ -1,5 +1,4 @@
 use std::cmp::min;
-use std::path::PathBuf;
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -7,10 +6,11 @@ use serde_json::json;
 use tokio::fs;
 
 use crate::agent::context::FileOperationRecord;
+use crate::agent::core::context::TaskContext;
 use crate::agent::persistence::FileRecordSource;
-use crate::agent::state::context::TaskContext;
 use crate::agent::tools::{
-    RunnableTool, ToolExecutorResult, ToolPermission, ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolExecutorResult, ToolMetadata, ToolPermission, ToolPriority,
+    ToolResult, ToolResultContent,
 };
 
 use super::file_utils::{ensure_absolute, is_probably_binary};
@@ -67,12 +67,13 @@ impl RunnableTool for ReadFileTool {
         })
     }
 
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::FileSystem]
+    fn metadata(&self) -> ToolMetadata {
+        ToolMetadata::new(ToolCategory::FileRead, ToolPriority::Standard)
+            .with_tags(vec!["filesystem".into(), "read".into()])
     }
 
-    fn tags(&self) -> Vec<String> {
-        vec!["file".into(), "read".into(), "content".into()]
+    fn required_permissions(&self) -> Vec<ToolPermission> {
+        vec![ToolPermission::FileSystem]
     }
 
     async fn run(
@@ -81,11 +82,10 @@ impl RunnableTool for ReadFileTool {
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: ReadFileArgs = serde_json::from_value(args)?;
-        let path = PathBuf::from(&args.path);
-
-        if let Err(msg) = ensure_absolute(&path) {
-            return Ok(validation_error(msg));
-        }
+        let path = match ensure_absolute(&args.path, &context.cwd) {
+            Ok(resolved) => resolved,
+            Err(err) => return Ok(validation_error(err.to_string())),
+        };
 
         let metadata = match fs::metadata(&path).await {
             Ok(meta) => meta,

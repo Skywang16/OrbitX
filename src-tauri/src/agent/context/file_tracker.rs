@@ -1,17 +1,13 @@
+use chrono::{DateTime, Utc};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
-
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use tokio::sync::RwLock;
 
 use crate::agent::persistence::{
     AgentPersistence, FileContextEntry, FileRecordSource, FileRecordState,
 };
 use crate::utils::error::AppResult;
-
-const DEFAULT_RETENTION_DAYS: i64 = 14;
 
 #[derive(Debug, Clone)]
 pub struct FileOperationRecord<'a> {
@@ -49,32 +45,21 @@ pub struct FileContextTracker {
     workspace_root: Option<PathBuf>,
     recently_modified: RwLock<HashSet<String>>, // user edits that require refresh
     recently_agent_edits: RwLock<HashSet<String>>, // agent changes to suppress stale warnings
-    retention: Duration,
 }
 
 impl FileContextTracker {
     pub fn new(persistence: Arc<AgentPersistence>, conversation_id: i64) -> Self {
-        let retention = ChronoDuration::days(DEFAULT_RETENTION_DAYS)
-            .to_std()
-            .unwrap_or_else(|_| Duration::from_secs(14 * 24 * 60 * 60));
-
         Self {
             persistence,
             conversation_id,
             workspace_root: None,
             recently_modified: RwLock::new(HashSet::new()),
             recently_agent_edits: RwLock::new(HashSet::new()),
-            retention,
         }
     }
 
     pub fn with_workspace_root(mut self, root: impl Into<PathBuf>) -> Self {
         self.workspace_root = Some(root.into());
-        self
-    }
-
-    pub fn with_retention(mut self, retention: Duration) -> Self {
-        self.retention = retention;
         self
     }
 
@@ -183,18 +168,6 @@ impl FileContextTracker {
         self.track_file_operation(record).await
     }
 
-    pub async fn cleanup_old_entries(&self) -> AppResult<u64> {
-        let repo = self.persistence.file_context();
-        let cutoff_delta = ChronoDuration::from_std(self.retention)
-            .unwrap_or_else(|_| ChronoDuration::days(DEFAULT_RETENTION_DAYS));
-        let cutoff = Utc::now()
-            .checked_sub_signed(cutoff_delta)
-            .unwrap_or_else(Utc::now);
-
-        repo.delete_stale_entries_before(self.conversation_id, cutoff)
-            .await
-    }
-
     pub async fn take_recently_modified(&self) -> Vec<String> {
         let mut guard = self.recently_modified.write().await;
         guard.drain().collect()
@@ -203,13 +176,6 @@ impl FileContextTracker {
     pub async fn take_recent_agent_edits(&self) -> Vec<String> {
         let mut guard = self.recently_agent_edits.write().await;
         guard.drain().collect()
-    }
-
-    fn derive_state(&self, source: &FileRecordSource) -> FileRecordState {
-        match source {
-            FileRecordSource::UserEdited => FileRecordState::Stale,
-            _ => FileRecordState::Active,
-        }
     }
 
     fn normalized_path(&self, path: &Path) -> String {

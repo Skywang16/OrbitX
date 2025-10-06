@@ -3,18 +3,17 @@
  *
  * 测试Repository模式、数据库管理器和查询构建器的集成功能
  */
-
 use chrono::Utc;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio;
 
+use terminal_lib::agent::persistence::AgentPersistence;
 use terminal_lib::storage::{
     database::{DatabaseManager, DatabaseOptions},
     paths::StoragePathsBuilder,
     query::{QueryCondition, SafeQueryBuilder},
-    repositories::ai_models::{AIModelConfig, AIProvider},
-    repositories::conversations::Conversation,
+    repositories::ai_models::{AIModelConfig, AIProvider, ModelType},
     repositories::{Repository, RepositoryManager},
 };
 
@@ -34,14 +33,10 @@ async fn create_test_database_manager() -> (DatabaseManager, TempDir) {
     // 初始化数据库
     manager.initialize().await.expect("初始化数据库失败");
 
-    // 设置主密钥用于加密
-    {
-        let encryption_manager = manager.encryption_manager();
-        let mut enc_mgr = encryption_manager.write().await;
-        enc_mgr
-            .set_master_password("test-password-123")
-            .expect("设置主密钥失败");
-    }
+    manager
+        .set_master_password("test-password-123")
+        .await
+        .expect("设置主密钥失败");
 
     (manager, temp_dir)
 }
@@ -62,6 +57,7 @@ fn create_test_ai_model() -> AIModelConfig {
         api_url: "https://api.openai.com/v1".to_string(),
         api_key: "test-api-key-12345".to_string(),
         model: "gpt-4".to_string(),
+        model_type: ModelType::Chat,
         enabled: true,
         options: None,
         created_at: Utc::now(),
@@ -146,29 +142,22 @@ async fn test_ai_model_crud_operations() {
 
 #[tokio::test]
 async fn test_conversations_repository() {
-    let (repositories, _temp_dir) = create_test_repositories().await;
+    let (database_manager, _temp_dir) = create_test_database_manager().await;
+    let persistence = AgentPersistence::new(Arc::new(database_manager));
 
-    // 创建测试会话
-    let conversation = Conversation {
-        id: None,
-        title: "Test Conversation".to_string(),
-        message_count: 0,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-    };
-
-    // 测试保存会话
-    let conversation_id = repositories
+    // 测试创建会话
+    let conversation = persistence
         .conversations()
-        .save(&conversation)
+        .create(Some("Test Conversation"), None)
         .await
-        .expect("保存会话失败");
-    assert!(conversation_id > 0, "保存会话应该返回有效ID");
+        .expect("创建会话失败");
+    assert!(conversation.id > 0, "创建会话应该返回有效ID");
+    assert_eq!(conversation.title, Some("Test Conversation".to_string()));
 
     // 测试查找会话
-    let found_conversation = repositories
+    let found_conversation = persistence
         .conversations()
-        .find_by_id(conversation_id)
+        .get(conversation.id)
         .await
         .expect("查找会话失败");
     assert!(found_conversation.is_some(), "应该找到会话");
@@ -202,7 +191,6 @@ async fn test_repository_manager() {
 
     // 测试各个Repository是否可以正常访问
     let _ai_models_repo = repositories.ai_models();
-    let _conversations_repo = repositories.conversations();
     let _command_history_repo = repositories.command_history();
     let _audit_logs_repo = repositories.audit_logs();
 

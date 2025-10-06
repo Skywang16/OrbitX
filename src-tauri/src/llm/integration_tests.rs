@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod integration_tests {
-    use super::super::{provider::*, types::*};
+    use crate::llm::*;
     use std::env;
     use tokio_stream::StreamExt;
 
@@ -19,7 +19,7 @@ mod integration_tests {
             options: None,
         };
 
-        let provider = OpenAIProvider::new(&config).expect("Failed to create provider");
+        let provider = OpenAIProvider::new(config.clone());
 
         let request = LLMRequest {
             model: "gpt-3.5-turbo".to_string(),
@@ -53,7 +53,7 @@ mod integration_tests {
             options: None,
         };
 
-        let provider = OpenAIProvider::new(&config).expect("Failed to create provider");
+        let provider = OpenAIProvider::new(config.clone());
 
         let request = LLMRequest {
             model: "gpt-3.5-turbo".to_string(),
@@ -103,7 +103,7 @@ mod integration_tests {
             options: None,
         };
 
-        let provider = AnthropicProvider::new(&config).expect("Failed to create provider");
+        let provider = AnthropicProvider::new(config.clone());
 
         let request = LLMRequest {
             model: "claude-3-haiku-20240307".to_string(),
@@ -143,7 +143,7 @@ mod integration_tests {
             options: None,
         };
 
-        let provider = AnthropicProvider::new(&config).expect("Failed to create provider");
+        let provider = AnthropicProvider::new(config.clone());
 
         let request = LLMRequest {
             model: "claude-3-haiku-20240307".to_string(),
@@ -283,7 +283,7 @@ mod integration_tests {
             options: None,
         };
 
-        let provider = OpenAIProvider::new(&config).expect("Failed to create provider");
+        let provider = OpenAIProvider::new(config.clone());
 
         let request = LLMRequest {
             model: "gpt-3.5-turbo".to_string(),

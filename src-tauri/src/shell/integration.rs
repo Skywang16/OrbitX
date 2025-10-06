@@ -1,10 +1,7 @@
-//! Shell Integration - 完整的Shell集成管理系统
-//!
-//! 支持命令生命周期跟踪、CWD同步、窗口标题更新等功能
-
 use anyhow::Result;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, Weak};
+use dashmap::DashMap;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{RwLock, Weak};
 use std::time::{Duration, Instant, SystemTime};
 
 use super::osc_parser::{
@@ -13,31 +10,21 @@ use super::osc_parser::{
 use super::script_generator::{ShellIntegrationConfig, ShellScriptGenerator, ShellType};
 use crate::mux::PaneId;
 
-/// 命令执行信息
 #[derive(Debug, Clone)]
 pub struct CommandInfo {
-    /// 命令ID（递增）
     pub id: u64,
-    /// 命令开始时间
     pub start_time: Instant,
-    /// 命令开始墙钟时间
     pub start_time_wallclock: SystemTime,
-    /// 命令结束时间
     pub end_time: Option<Instant>,
-    /// 命令结束墙钟时间
     pub end_time_wallclock: Option<SystemTime>,
-    /// 退出码
     pub exit_code: Option<i32>,
-    /// 命令状态
     pub status: CommandStatus,
-    /// 命令行文本（如果可用）
     pub command_line: Option<String>,
-    /// 执行目录
     pub working_directory: Option<String>,
 }
 
 impl CommandInfo {
-    fn new(id: u64) -> Self {
+    fn new(id: u64, cwd: Option<String>) -> Self {
         Self {
             id,
             start_time: Instant::now(),
@@ -45,13 +32,12 @@ impl CommandInfo {
             end_time: None,
             end_time_wallclock: None,
             exit_code: None,
-            status: CommandStatus::Ready,
+            status: CommandStatus::Running,
             command_line: None,
-            working_directory: None,
+            working_directory: cwd,
         }
     }
 
-    /// 获取命令执行时长
     pub fn duration(&self) -> Duration {
         match self.end_time {
             Some(end) => end.duration_since(self.start_time),
@@ -59,39 +45,31 @@ impl CommandInfo {
         }
     }
 
-    /// 检查命令是否完成
     pub fn is_finished(&self) -> bool {
         matches!(self.status, CommandStatus::Finished { .. })
     }
 }
 
-/// 面板Shell状态
 #[derive(Debug, Clone)]
 pub struct PaneShellState {
     pub integration_state: ShellIntegrationState,
     pub shell_type: Option<ShellType>,
-    /// 当前工作目录
     pub current_working_directory: Option<String>,
-    /// 当前命令信息
     pub current_command: Option<CommandInfo>,
-    /// 历史命令（最近20个）
-    pub command_history: Vec<CommandInfo>,
-    /// 下一个命令ID
+    pub command_history: VecDeque<CommandInfo>,
     pub next_command_id: u64,
-    /// 窗口标题
     pub window_title: Option<String>,
-    /// 最后活动时间
     pub last_activity: SystemTime,
 }
 
-impl Default for PaneShellState {
-    fn default() -> Self {
+impl PaneShellState {
+    fn new() -> Self {
         Self {
             integration_state: ShellIntegrationState::Disabled,
             shell_type: None,
             current_working_directory: None,
             current_command: None,
-            command_history: Vec::new(),
+            command_history: VecDeque::new(),
             next_command_id: 1,
             window_title: None,
             last_activity: SystemTime::now(),
@@ -99,561 +77,503 @@ impl Default for PaneShellState {
     }
 }
 
-impl PaneShellState {
-    /// 开始新命令
-    fn start_command(&mut self) -> u64 {
-        let command_id = self.next_command_id;
-        self.next_command_id += 1;
-
-        let mut command = CommandInfo::new(command_id);
-        command.status = CommandStatus::Running;
-        command.working_directory = self.current_working_directory.clone();
-
-        self.current_command = Some(command);
-        self.last_activity = SystemTime::now();
-
-        command_id
-    }
-
-    /// 结束当前命令
-    fn finish_command(&mut self, exit_code: Option<i32>) {
-        if let Some(mut command) = self.current_command.take() {
-            command.end_time = Some(Instant::now());
-            command.end_time_wallclock = Some(SystemTime::now());
-            command.exit_code = exit_code;
-            command.status = CommandStatus::Finished { exit_code };
-
-            // 添加到历史记录，保持最近20个
-            self.command_history.push(command);
-            if self.command_history.len() > 20 {
-                self.command_history.remove(0);
-            }
-        }
-
-        self.last_activity = SystemTime::now();
-    }
-
-    /// 更新CWD
-    fn update_cwd(&mut self, new_cwd: String) {
-        self.current_working_directory = Some(new_cwd);
-        self.last_activity = SystemTime::now();
-    }
-
-    /// 获取当前命令执行时长
-    pub fn current_command_duration(&self) -> Option<Duration> {
-        self.current_command.as_ref().map(|cmd| cmd.duration())
-    }
-}
-
-// 前向声明，避免循环依赖
 pub trait ContextServiceIntegration: Send + Sync {
     fn invalidate_cache(&self, pane_id: PaneId);
     fn send_cwd_changed_event(&self, pane_id: PaneId, old_cwd: Option<String>, new_cwd: String);
     fn send_shell_integration_changed_event(&self, pane_id: PaneId, enabled: bool);
 }
 
-/// Shell 集成管理器
+struct CallbackRegistry {
+    cwd: RwLock<Vec<Box<dyn Fn(PaneId, &str) + Send + Sync>>>,
+    command: RwLock<Vec<Box<dyn Fn(PaneId, &CommandInfo) + Send + Sync>>>,
+    title: RwLock<Vec<Box<dyn Fn(PaneId, &str) + Send + Sync>>>,
+}
+
+impl CallbackRegistry {
+    fn new() -> Self {
+        Self {
+            cwd: RwLock::new(Vec::new()),
+            command: RwLock::new(Vec::new()),
+            title: RwLock::new(Vec::new()),
+        }
+    }
+
+    fn on_cwd<F>(&self, cb: F)
+    where
+        F: Fn(PaneId, &str) + Send + Sync + 'static,
+    {
+        self.cwd.write().unwrap().push(Box::new(cb));
+    }
+
+    fn on_command<F>(&self, cb: F)
+    where
+        F: Fn(PaneId, &CommandInfo) + Send + Sync + 'static,
+    {
+        self.command.write().unwrap().push(Box::new(cb));
+    }
+
+    fn on_title<F>(&self, cb: F)
+    where
+        F: Fn(PaneId, &str) + Send + Sync + 'static,
+    {
+        self.title.write().unwrap().push(Box::new(cb));
+    }
+
+    fn emit_cwd(&self, pane_id: PaneId, cwd: &str) {
+        for cb in self.cwd.read().unwrap().iter() {
+            cb(pane_id, cwd);
+        }
+    }
+
+    fn emit_command(&self, pane_id: PaneId, command: &CommandInfo) {
+        for cb in self.command.read().unwrap().iter() {
+            cb(pane_id, command);
+        }
+    }
+
+    fn emit_title(&self, pane_id: PaneId, title: &str) {
+        for cb in self.title.read().unwrap().iter() {
+            cb(pane_id, title);
+        }
+    }
+}
+
 pub struct ShellIntegrationManager {
-    /// 面板状态映射
-    pane_states: Arc<Mutex<HashMap<PaneId, PaneShellState>>>,
-    /// OSC序列解析器
+    states: DashMap<PaneId, PaneShellState>,
     parser: OscParser,
-    /// 脚本生成器
     script_generator: ShellScriptGenerator,
-    /// CWD变化回调
-    cwd_callbacks: Arc<Mutex<Vec<Box<dyn Fn(PaneId, &str) + Send + Sync>>>>,
-    /// 命令状态变化回调
-    command_callbacks: Arc<Mutex<Vec<Box<dyn Fn(PaneId, &CommandInfo) + Send + Sync>>>>,
-    /// 窗口标题变化回调
-    title_callbacks: Arc<Mutex<Vec<Box<dyn Fn(PaneId, &str) + Send + Sync>>>>,
-    /// 上下文服务集成（弱引用避免循环依赖）
-    context_service: Arc<Mutex<Option<Weak<dyn ContextServiceIntegration>>>>,
+    callbacks: CallbackRegistry,
+    history_limit: usize,
+    context_service: RwLock<Option<Weak<dyn ContextServiceIntegration>>>,
 }
 
 impl ShellIntegrationManager {
-    /// 创建新的Shell Integration管理器
     pub fn new() -> Result<Self> {
-        let config = ShellIntegrationConfig::default();
-        Self::new_with_config(config)
+        Self::new_with_config(ShellIntegrationConfig::default())
     }
 
-    /// 使用指定配置创建Shell Integration管理器
     pub fn new_with_config(config: ShellIntegrationConfig) -> Result<Self> {
         Ok(Self {
-            pane_states: Arc::new(Mutex::new(HashMap::new())),
+            states: DashMap::new(),
             parser: OscParser::new()?,
             script_generator: ShellScriptGenerator::new(config),
-            cwd_callbacks: Arc::new(Mutex::new(Vec::new())),
-            command_callbacks: Arc::new(Mutex::new(Vec::new())),
-            title_callbacks: Arc::new(Mutex::new(Vec::new())),
-            context_service: Arc::new(Mutex::new(None)),
+            callbacks: CallbackRegistry::new(),
+            history_limit: 128,
+            context_service: RwLock::new(None),
         })
     }
 
-    /// 设置上下文服务集成
-    ///
-    /// # Arguments
-    /// * `context_service` - 上下文服务的弱引用
     pub fn set_context_service_integration(
         &self,
         context_service: Weak<dyn ContextServiceIntegration>,
     ) {
-        if let Ok(mut service) = self.context_service.lock() {
-            *service = Some(context_service);
-            tracing::debug!("上下文服务集成已设置");
-        }
+        *self.context_service.write().unwrap() = Some(context_service);
     }
 
-    /// 移除上下文服务集成
     pub fn remove_context_service_integration(&self) {
-        if let Ok(mut service) = self.context_service.lock() {
-            *service = None;
-            tracing::debug!("上下文服务集成已移除");
-        }
+        *self.context_service.write().unwrap() = None;
     }
 
-    /// 注册CWD变化回调
     pub fn register_cwd_callback<F>(&self, callback: F)
     where
         F: Fn(PaneId, &str) + Send + Sync + 'static,
     {
-        if let Ok(mut callbacks) = self.cwd_callbacks.lock() {
-            callbacks.push(Box::new(callback));
-        }
+        self.callbacks.on_cwd(callback);
     }
 
-    /// 注册命令状态变化回调
     pub fn register_command_callback<F>(&self, callback: F)
     where
         F: Fn(PaneId, &CommandInfo) + Send + Sync + 'static,
     {
-        if let Ok(mut callbacks) = self.command_callbacks.lock() {
-            callbacks.push(Box::new(callback));
-        }
+        self.callbacks.on_command(callback);
     }
 
-    /// 注册窗口标题变化回调
     pub fn register_title_callback<F>(&self, callback: F)
     where
         F: Fn(PaneId, &str) + Send + Sync + 'static,
     {
-        if let Ok(mut callbacks) = self.title_callbacks.lock() {
-            callbacks.push(Box::new(callback));
-        }
+        self.callbacks.on_title(callback);
     }
 
-    /// 处理终端输出，解析OSC序列并更新状态
     pub fn process_output(&self, pane_id: PaneId, data: &str) {
-        let sequences = self.parser.parse(data);
-
-        for sequence in sequences {
+        for sequence in self.parser.parse(data) {
             match sequence {
-                OscSequence::CurrentWorkingDirectory { path } => {
-                    self.update_cwd(pane_id, path);
-                }
-                OscSequence::WindowsTerminalCwd { path } => {
-                    self.update_cwd(pane_id, path);
-                }
+                OscSequence::CurrentWorkingDirectory { path } => self.apply_cwd(pane_id, path),
+                OscSequence::WindowsTerminalCwd { path } => self.apply_cwd(pane_id, path),
                 OscSequence::ShellIntegration { marker, data } => {
-                    self.handle_shell_integration(pane_id, marker, data);
+                    self.apply_shell_integration(pane_id, marker, data)
                 }
-                OscSequence::WindowTitle { title, .. } => {
-                    self.update_window_title(pane_id, title);
-                }
-                OscSequence::Unknown { .. } => {
-                    // 忽略未知OSC序列
-                }
+                OscSequence::WindowTitle { title, .. } => self.apply_title(pane_id, title),
+                OscSequence::Unknown { .. } => {}
             }
         }
     }
 
-    /// 从文本中移除OSC序列，返回清理后的文本
     pub fn strip_osc_sequences(&self, data: &str) -> String {
         self.parser.strip_osc_sequences(data)
     }
 
-    /// 处理 Shell Integration（OSC 133） 序列 - 修复并完善命令状态跟踪
-    fn handle_shell_integration(
-        &self,
-        pane_id: PaneId,
-        marker: IntegrationMarker,
-        data: Option<String>,
-    ) {
-        if let Ok(mut states) = self.pane_states.lock() {
-            let state = states.entry(pane_id).or_default();
-            state.integration_state = ShellIntegrationState::Enabled;
-
-            match marker {
-                IntegrationMarker::PromptStart => {
-                    // A: 提示符开始 - 准备接收新命令
-                    if state.current_command.is_some() {
-                        state.finish_command(None);
-                    }
-                    // 不在这里创建新命令，等到CommandStart时再创建
-                }
-                IntegrationMarker::CommandStart => {
-                    // B: 命令开始 - 用户开始输入命令
-                    let command_id = state.start_command();
-                    tracing::debug!("Command started: {} for pane {}", command_id, pane_id);
-
-                    // 通知上下文服务缓存失效（命令状态变化）
-                    self.notify_context_service_cache_invalidation(pane_id);
-                }
-                IntegrationMarker::CommandExecuted => {
-                    // C: 命令执行开始 - 命令已提交执行
-                    if let Some(command) = &mut state.current_command {
-                        command.status = CommandStatus::Running;
-                        tracing::debug!("Command executing: {} for pane {}", command.id, pane_id);
-                        self.trigger_command_callbacks(pane_id, command);
-
-                        // 通知上下文服务缓存失效（命令状态变化）
-                        self.notify_context_service_cache_invalidation(pane_id);
-                    }
-                }
-                IntegrationMarker::CommandFinished { exit_code } => {
-                    // D: 命令执行完成
-                    tracing::debug!(
-                        "Command finished with exit code: {:?} for pane {}",
-                        exit_code,
-                        pane_id
-                    );
-                    state.finish_command(exit_code);
-
-                    if let Some(last_command) = state.command_history.last() {
-                        self.trigger_command_callbacks(pane_id, last_command);
-                    }
-
-                    // 通知上下文服务缓存失效（命令完成）
-                    self.notify_context_service_cache_invalidation(pane_id);
-                }
-                IntegrationMarker::CommandCancelled => {
-                    // 命令被取消
-                    tracing::debug!("Command cancelled for pane {}", pane_id);
-                    state.finish_command(Some(130)); // SIGINT退出码
-
-                    // 通知上下文服务缓存失效（命令取消）
-                    self.notify_context_service_cache_invalidation(pane_id);
-                }
-                IntegrationMarker::Property { key, value } => {
-                    // P: 属性更新
-                    tracing::debug!("Property update: {}={} for pane {}", key, value, pane_id);
-                    // 可以在这里处理特定属性，如CWD等
-                    if key == "Cwd" {
-                        state.update_cwd(value.clone());
-                        self.trigger_cwd_callbacks(pane_id, &value);
-                    }
-                }
-                _ => {
-                    // 其他标记
-                    tracing::debug!(
-                        "Unhandled shell integration marker: {:?} with data: {:?}",
-                        marker,
-                        data
-                    );
-                }
-            }
-        }
-    }
-
-    /// 更新面板的CWD并触发回调
-    fn update_cwd(&self, pane_id: PaneId, new_cwd: String) {
-        let old_cwd = if let Ok(mut states) = self.pane_states.lock() {
-            let state = states.entry(pane_id).or_default();
-            let old = state.current_working_directory.clone();
-            state.update_cwd(new_cwd.clone());
-            old
-        } else {
-            return;
-        };
-
-        // 只有CWD真的变化了才触发回调和事件
-        if old_cwd.as_ref() != Some(&new_cwd) {
-            // 触发传统回调
-            self.trigger_cwd_callbacks(pane_id, &new_cwd);
-
-            // 通知上下文服务缓存失效和发送事件
-            self.notify_context_service_cwd_changed(pane_id, old_cwd, new_cwd);
-        }
-    }
-
-    /// 更新窗口标题
-    fn update_window_title(&self, pane_id: PaneId, title: String) {
-        if let Ok(mut states) = self.pane_states.lock() {
-            let state = states.entry(pane_id).or_default();
-            let old_title = state.window_title.clone();
-            state.window_title = Some(title.clone());
-            state.last_activity = SystemTime::now();
-
-            if old_title.as_ref() != Some(&title) {
-                self.trigger_title_callbacks(pane_id, &title);
-
-                // 通知上下文服务缓存失效（窗口标题变化）
-                self.notify_context_service_cache_invalidation(pane_id);
-            }
-        }
-    }
-
-    /// 触发CWD变化回调
-    fn trigger_cwd_callbacks(&self, pane_id: PaneId, new_cwd: &str) {
-        if let Ok(callbacks) = self.cwd_callbacks.lock() {
-            for callback in callbacks.iter() {
-                callback(pane_id, new_cwd);
-            }
-        }
-    }
-
-    /// 触发命令状态变化回调
-    fn trigger_command_callbacks(&self, pane_id: PaneId, command: &CommandInfo) {
-        if let Ok(callbacks) = self.command_callbacks.lock() {
-            for callback in callbacks.iter() {
-                callback(pane_id, command);
-            }
-        }
-    }
-
-    /// 触发窗口标题变化回调
-    fn trigger_title_callbacks(&self, pane_id: PaneId, title: &str) {
-        if let Ok(callbacks) = self.title_callbacks.lock() {
-            for callback in callbacks.iter() {
-                callback(pane_id, title);
-            }
-        }
-    }
-
-    /// 获取面板的当前工作目录
     pub fn get_current_working_directory(&self, pane_id: PaneId) -> Option<String> {
-        self.pane_states
-            .lock()
-            .ok()?
-            .get(&pane_id)?
-            .current_working_directory
-            .clone()
+        self.states
+            .get(&pane_id)
+            .and_then(|state| state.current_working_directory.clone())
     }
 
-    /// 手动更新面板的当前工作目录
     pub fn update_current_working_directory(&self, pane_id: PaneId, cwd: String) {
-        self.update_cwd(pane_id, cwd);
+        self.apply_cwd(pane_id, cwd);
     }
 
-    /// 检查面板是否有Shell Integration状态
     pub fn get_pane_state(&self, pane_id: PaneId) -> Option<()> {
-        self.pane_states.lock().ok()?.get(&pane_id).map(|_| ())
+        self.states.get(&pane_id).map(|_| ())
     }
 
-    /// 获取面板的完整状态
     pub fn get_pane_shell_state(&self, pane_id: PaneId) -> Option<PaneShellState> {
-        self.pane_states.lock().ok()?.get(&pane_id).cloned()
+        self.states.get(&pane_id).map(|state| state.clone())
     }
 
-    /// 设置面板的Shell类型
     pub fn set_pane_shell_type(&self, pane_id: PaneId, shell_type: ShellType) {
-        if let Ok(mut states) = self.pane_states.lock() {
-            let state = states.entry(pane_id).or_default();
-            let old_shell_type = state.shell_type.clone();
-            state.shell_type = Some(shell_type.clone());
-
-            if old_shell_type.as_ref() != Some(&shell_type) {
-                drop(states); // 释放锁
-                self.notify_context_service_cache_invalidation(pane_id);
+        let changed = {
+            let mut state = self
+                .states
+                .entry(pane_id)
+                .or_insert_with(PaneShellState::new);
+            let previous = state.value().shell_type.clone();
+            if previous.as_ref() != Some(&shell_type) {
+                state.value_mut().shell_type = Some(shell_type.clone());
+                true
+            } else {
+                false
             }
+        };
+        if changed {
+            self.notify_context_service_cache_invalidation(pane_id);
         }
     }
 
-    /// 生成Shell集成脚本
     pub fn generate_shell_script(&self, shell_type: &ShellType) -> Result<String> {
         self.script_generator
             .generate_integration_script(shell_type)
     }
 
-    /// 生成Shell环境变量
     pub fn generate_shell_env_vars(&self, shell_type: &ShellType) -> HashMap<String, String> {
         self.script_generator.generate_env_vars(shell_type)
     }
 
-    /// 启用Shell Integration
     pub fn enable_integration(&self, pane_id: PaneId) {
-        let was_enabled = self.is_integration_enabled(pane_id);
-
-        if let Ok(mut states) = self.pane_states.lock() {
-            let state = states.entry(pane_id).or_default();
-            state.integration_state = ShellIntegrationState::Enabled;
-        }
-
-        if !was_enabled {
+        let changed = {
+            let mut state = self
+                .states
+                .entry(pane_id)
+                .or_insert_with(PaneShellState::new);
+            if !matches!(
+                state.value().integration_state,
+                ShellIntegrationState::Enabled
+            ) {
+                state.value_mut().integration_state = ShellIntegrationState::Enabled;
+                true
+            } else {
+                false
+            }
+        };
+        if changed {
             self.notify_context_service_integration_changed(pane_id, true);
         }
     }
 
-    /// 禁用Shell Integration
     pub fn disable_integration(&self, pane_id: PaneId) {
-        let was_enabled = self.is_integration_enabled(pane_id);
-
-        if let Ok(mut states) = self.pane_states.lock() {
-            let state = states.entry(pane_id).or_default();
-            state.integration_state = ShellIntegrationState::Disabled;
-        }
-
-        if was_enabled {
+        let changed = {
+            let mut state = self
+                .states
+                .entry(pane_id)
+                .or_insert_with(PaneShellState::new);
+            if !matches!(
+                state.value().integration_state,
+                ShellIntegrationState::Disabled
+            ) {
+                state.value_mut().integration_state = ShellIntegrationState::Disabled;
+                state.value_mut().current_command = None;
+                true
+            } else {
+                false
+            }
+        };
+        if changed {
             self.notify_context_service_integration_changed(pane_id, false);
         }
     }
 
-    /// 检查面板是否启用了Shell Integration
     pub fn is_integration_enabled(&self, pane_id: PaneId) -> bool {
-        if let Ok(states) = self.pane_states.lock() {
-            if let Some(state) = states.get(&pane_id) {
-                return state.integration_state == ShellIntegrationState::Enabled;
-            }
-        }
-        false
+        self.states
+            .get(&pane_id)
+            .map(|state| matches!(state.integration_state, ShellIntegrationState::Enabled))
+            .unwrap_or(false)
     }
 
-    /// 获取面板的当前命令信息
     pub fn get_current_command(&self, pane_id: PaneId) -> Option<CommandInfo> {
-        self.pane_states
-            .lock()
-            .ok()?
-            .get(&pane_id)?
-            .current_command
-            .clone()
+        self.states
+            .get(&pane_id)
+            .and_then(|state| state.current_command.clone())
     }
 
-    /// 获取面板的命令历史
     pub fn get_command_history(&self, pane_id: PaneId) -> Vec<CommandInfo> {
-        if let Ok(states) = self.pane_states.lock() {
-            if let Some(state) = states.get(&pane_id) {
-                return state.command_history.clone();
-            }
-        }
-        Vec::new()
+        self.states
+            .get(&pane_id)
+            .map(|state| state.command_history.iter().cloned().collect())
+            .unwrap_or_default()
     }
 
-    /// 获取面板的Shell Integration状态
     pub fn get_integration_state(&self, pane_id: PaneId) -> ShellIntegrationState {
-        if let Ok(states) = self.pane_states.lock() {
-            if let Some(state) = states.get(&pane_id) {
-                return state.integration_state.clone();
-            }
-        }
-        ShellIntegrationState::Disabled
+        self.states
+            .get(&pane_id)
+            .map(|state| state.integration_state.clone())
+            .unwrap_or(ShellIntegrationState::Disabled)
     }
 
-    /// 获取面板的命令统计信息
     pub fn get_command_stats(&self, pane_id: PaneId) -> Option<(usize, usize, usize)> {
-        if let Ok(states) = self.pane_states.lock() {
-            if let Some(state) = states.get(&pane_id) {
-                let total = state.command_history.len();
-                let successful = state
-                    .command_history
-                    .iter()
-                    .filter(|cmd| {
-                        matches!(cmd.status, CommandStatus::Finished { exit_code: Some(0) })
-                    })
-                    .count();
-                let failed = state.command_history.iter()
-                    .filter(|cmd| matches!(cmd.status, CommandStatus::Finished { exit_code: Some(code) } if code != 0))
-                    .count();
-                return Some((total, successful, failed));
-            }
-        }
-        None
+        self.states.get(&pane_id).map(|state| {
+            let history_total = state.command_history.len();
+            let running = state
+                .current_command
+                .as_ref()
+                .filter(|cmd| !cmd.is_finished())
+                .map(|_| 1)
+                .unwrap_or(0);
+            let finished = history_total;
+            (history_total, running, finished)
+        })
     }
 
-    /// 清理面板状态
     pub fn cleanup_pane(&self, pane_id: PaneId) {
-        if let Ok(mut states) = self.pane_states.lock() {
-            states.remove(&pane_id);
-        }
-
-        // 通知上下文服务清理缓存
-        self.notify_context_service_cache_invalidation(pane_id);
+        self.states.remove(&pane_id);
     }
 
-    /// 获取面板状态的快照（优化性能）
-    ///
-    /// 返回面板状态的克隆，避免长时间持有锁
     pub fn get_pane_state_snapshot(&self, pane_id: PaneId) -> Option<PaneShellState> {
-        if let Ok(states) = self.pane_states.lock() {
-            states.get(&pane_id).cloned()
-        } else {
-            None
-        }
+        self.get_pane_shell_state(pane_id)
     }
 
-    /// 批量获取多个面板的状态快照（优化性能）
     pub fn get_multiple_pane_states(&self, pane_ids: &[PaneId]) -> HashMap<PaneId, PaneShellState> {
-        let mut result = HashMap::new();
-
-        if let Ok(states) = self.pane_states.lock() {
-            for &pane_id in pane_ids {
-                if let Some(state) = states.get(&pane_id) {
-                    result.insert(pane_id, state.clone());
-                }
-            }
-        }
-
-        result
+        pane_ids
+            .iter()
+            .filter_map(|id| self.states.get(id).map(|state| (*id, state.clone())))
+            .collect()
     }
 
-    /// 获取所有活跃面板的ID列表
     pub fn get_active_pane_ids(&self) -> Vec<PaneId> {
-        if let Ok(states) = self.pane_states.lock() {
-            states.keys().copied().collect()
-        } else {
-            Vec::new()
+        self.states.iter().map(|entry| *entry.key()).collect()
+    }
+
+    fn apply_cwd(&self, pane_id: PaneId, new_path: String) {
+        let change = {
+            let mut entry = self
+                .states
+                .entry(pane_id)
+                .or_insert_with(PaneShellState::new);
+            let state = entry.value_mut();
+            if state.current_working_directory.as_ref() == Some(&new_path) {
+                None
+            } else {
+                let old = state.current_working_directory.clone();
+                state.current_working_directory = Some(new_path.clone());
+                state.last_activity = SystemTime::now();
+                if let Some(cmd) = &mut state.current_command {
+                    cmd.working_directory = Some(new_path.clone());
+                }
+                Some((old, new_path))
+            }
+        };
+
+        if let Some((old, new_value)) = change {
+            self.callbacks.emit_cwd(pane_id, &new_value);
+            self.notify_context_service_cwd_changed(pane_id, old, new_value);
         }
     }
 
-    // 私有方法：上下文服务集成
+    fn apply_title(&self, pane_id: PaneId, title: String) {
+        let changed = {
+            let mut entry = self
+                .states
+                .entry(pane_id)
+                .or_insert_with(PaneShellState::new);
+            let state = entry.value_mut();
+            if state.window_title.as_ref() == Some(&title) {
+                None
+            } else {
+                state.window_title = Some(title.clone());
+                state.last_activity = SystemTime::now();
+                Some(title)
+            }
+        };
 
-    /// 通知上下文服务缓存失效
-    fn notify_context_service_cache_invalidation(&self, pane_id: PaneId) {
-        if let Ok(service_ref) = self.context_service.lock() {
-            if let Some(weak_service) = service_ref.as_ref() {
-                if let Some(service) = weak_service.upgrade() {
-                    service.invalidate_cache(pane_id);
-                    tracing::debug!("已通知上下文服务缓存失效: pane_id={:?}", pane_id);
+        if let Some(title) = changed {
+            self.callbacks.emit_title(pane_id, &title);
+            self.notify_context_service_cache_invalidation(pane_id);
+        }
+    }
+
+    fn apply_shell_integration(
+        &self,
+        pane_id: PaneId,
+        marker: IntegrationMarker,
+        data: Option<String>,
+    ) {
+        let mut command_events = Vec::new();
+        {
+            let mut entry = self
+                .states
+                .entry(pane_id)
+                .or_insert_with(PaneShellState::new);
+            let state = entry.value_mut();
+            state.integration_state = ShellIntegrationState::Enabled;
+            state.last_activity = SystemTime::now();
+
+            match marker {
+                IntegrationMarker::PromptStart => {
+                    if let Some(cmd) = state.current_command.take() {
+                        let mut finished = cmd;
+                        finished.end_time = Some(Instant::now());
+                        finished.end_time_wallclock = Some(SystemTime::now());
+                        finished.status = CommandStatus::Finished { exit_code: None };
+                        state.command_history.push_back(finished.clone());
+                        if state.command_history.len() > self.history_limit {
+                            state.command_history.pop_front();
+                        }
+                        command_events.push(finished);
+                    }
+                }
+                IntegrationMarker::CommandStart => {
+                    let mut command = CommandInfo::new(
+                        state.next_command_id,
+                        state.current_working_directory.clone(),
+                    );
+                    if let Some(ref line) = data {
+                        if !line.is_empty() {
+                            command.command_line = Some(line.clone());
+                        }
+                    }
+                    state.next_command_id += 1;
+                    state.current_command = Some(command.clone());
+                    command_events.push(command);
+                    self.notify_context_service_cache_invalidation(pane_id);
+                }
+                IntegrationMarker::CommandExecuted => {
+                    if let Some(cmd) = &mut state.current_command {
+                        cmd.status = CommandStatus::Running;
+                        if cmd.command_line.is_none() {
+                            if let Some(ref line) = data {
+                                if !line.is_empty() {
+                                    cmd.command_line = Some(line.clone());
+                                }
+                            }
+                        }
+                        command_events.push(cmd.clone());
+                    }
+                }
+                IntegrationMarker::CommandFinished { exit_code } => {
+                    if let Some(mut cmd) = state.current_command.take() {
+                        cmd.end_time = Some(Instant::now());
+                        cmd.end_time_wallclock = Some(SystemTime::now());
+                        cmd.exit_code = exit_code;
+                        cmd.status = CommandStatus::Finished { exit_code };
+                        state.command_history.push_back(cmd.clone());
+                        if state.command_history.len() > self.history_limit {
+                            state.command_history.pop_front();
+                        }
+                        command_events.push(cmd);
+                        self.notify_context_service_cache_invalidation(pane_id);
+                    }
+                }
+                IntegrationMarker::CommandContinuation => {
+                    if let (Some(cmd), Some(ref fragment)) = (&mut state.current_command, &data) {
+                        let entry = cmd.command_line.get_or_insert_with(String::new);
+                        if !entry.is_empty() {
+                            entry.push(' ');
+                        }
+                        entry.push_str(fragment);
+                        command_events.push(cmd.clone());
+                    }
+                }
+                IntegrationMarker::RightPrompt => {}
+                IntegrationMarker::CommandInvalid => {
+                    if let Some(mut cmd) = state.current_command.take() {
+                        cmd.end_time = Some(Instant::now());
+                        cmd.end_time_wallclock = Some(SystemTime::now());
+                        cmd.status = CommandStatus::Finished { exit_code: None };
+                        state.command_history.push_back(cmd.clone());
+                        if state.command_history.len() > self.history_limit {
+                            state.command_history.pop_front();
+                        }
+                        command_events.push(cmd);
+                    }
+                }
+                IntegrationMarker::CommandCancelled => {
+                    if let Some(mut cmd) = state.current_command.take() {
+                        cmd.end_time = Some(Instant::now());
+                        cmd.end_time_wallclock = Some(SystemTime::now());
+                        cmd.exit_code = Some(130);
+                        cmd.status = CommandStatus::Finished {
+                            exit_code: Some(130),
+                        };
+                        state.command_history.push_back(cmd.clone());
+                        if state.command_history.len() > self.history_limit {
+                            state.command_history.pop_front();
+                        }
+                        command_events.push(cmd);
+                        self.notify_context_service_cache_invalidation(pane_id);
+                    }
+                }
+                IntegrationMarker::Property { key, value } => {
+                    if key.eq_ignore_ascii_case("cwd") {
+                        self.apply_cwd(pane_id, value);
+                    }
                 }
             }
         }
+
+        for event in command_events {
+            self.callbacks.emit_command(pane_id, &event);
+        }
     }
 
-    /// 通知上下文服务CWD变化事件
+    fn notify_context_service_cache_invalidation(&self, pane_id: PaneId) {
+        if let Some(service) = self
+            .context_service
+            .read()
+            .unwrap()
+            .as_ref()
+            .and_then(|w| w.upgrade())
+        {
+            service.invalidate_cache(pane_id);
+        }
+    }
+
     fn notify_context_service_cwd_changed(
         &self,
         pane_id: PaneId,
         old_cwd: Option<String>,
         new_cwd: String,
     ) {
-        if let Ok(service_ref) = self.context_service.lock() {
-            if let Some(weak_service) = service_ref.as_ref() {
-                if let Some(service) = weak_service.upgrade() {
-                    // 先失效缓存
-                    service.invalidate_cache(pane_id);
-                    // 再发送事件
-                    service.send_cwd_changed_event(pane_id, old_cwd, new_cwd);
-                    tracing::debug!("已通知上下文服务CWD变化: pane_id={:?}", pane_id);
-                }
-            }
+        if let Some(service) = self
+            .context_service
+            .read()
+            .unwrap()
+            .as_ref()
+            .and_then(|w| w.upgrade())
+        {
+            service.invalidate_cache(pane_id);
+            service.send_cwd_changed_event(pane_id, old_cwd, new_cwd);
         }
     }
 
-    /// 通知上下文服务Shell集成状态变化事件
     fn notify_context_service_integration_changed(&self, pane_id: PaneId, enabled: bool) {
-        if let Ok(service_ref) = self.context_service.lock() {
-            if let Some(weak_service) = service_ref.as_ref() {
-                if let Some(service) = weak_service.upgrade() {
-                    // 先失效缓存
-                    service.invalidate_cache(pane_id);
-                    // 再发送事件
-                    service.send_shell_integration_changed_event(pane_id, enabled);
-                    tracing::debug!(
-                        "已通知上下文服务Shell集成状态变化: pane_id={:?}, enabled={}",
-                        pane_id,
-                        enabled
-                    );
-                }
-            }
+        if let Some(service) = self
+            .context_service
+            .read()
+            .unwrap()
+            .as_ref()
+            .and_then(|w| w.upgrade())
+        {
+            service.invalidate_cache(pane_id);
+            service.send_shell_integration_changed_event(pane_id, enabled);
         }
     }
 }
@@ -669,148 +589,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_shell_integration_manager() {
+    fn tracks_command_lifecycle() {
         let manager = ShellIntegrationManager::new().unwrap();
         let pane_id = PaneId::new(1);
+        manager.process_output(pane_id, "\u{1b}]133;A\u{7}");
+        manager.process_output(pane_id, "\u{1b}]133;B\u{7}");
+        manager.process_output(pane_id, "\u{1b}]133;C\u{7}");
+        manager.process_output(pane_id, "\u{1b}]133;D;0\u{7}");
 
-        // 测试CWD更新
-        manager.update_current_working_directory(pane_id, "/home/user".to_string());
+        let history = manager.get_command_history(pane_id);
+        assert_eq!(history.len(), 1);
+        assert!(history[0].is_finished());
+    }
+
+    #[test]
+    fn updates_cwd() {
+        let manager = ShellIntegrationManager::new().unwrap();
+        let pane_id = PaneId::new(2);
+        manager.process_output(pane_id, "\u{1b}]7;file://localhost/tmp\u{7}");
         assert_eq!(
             manager.get_current_working_directory(pane_id),
-            Some("/home/user".to_string())
+            Some("/tmp".to_string())
         );
-
-        // 测试Shell类型设置
-        manager.set_pane_shell_type(pane_id, ShellType::Bash);
-        let state = manager.get_pane_shell_state(pane_id).unwrap();
-        assert_eq!(state.shell_type, Some(ShellType::Bash));
-    }
-
-    #[test]
-    fn test_osc_133_sequences() {
-        let manager = ShellIntegrationManager::new().unwrap();
-        let pane_id = PaneId::new(1);
-
-        // 测试OSC 133序列解析
-        let test_data = "\x1b]133;A\x07\x1b]133;B\x07\x1b]133;C\x07\x1b]133;D;0\x07";
-        manager.process_output(pane_id, test_data);
-
-        // 验证命令历史
-        let history = manager.get_command_history(pane_id);
-        assert!(
-            !history.is_empty(),
-            "Should have command history after processing OSC 133 sequences"
-        );
-
-        // 验证Integration状态
-        let state = manager.get_integration_state(pane_id);
-        assert_eq!(state, ShellIntegrationState::Enabled);
-    }
-
-    #[test]
-    fn test_command_lifecycle() {
-        let manager = ShellIntegrationManager::new().unwrap();
-        let pane_id = PaneId::new(1);
-
-        // 模拟 Shell Integration 命令序列 - 修复：使用OSC 133
-        manager.process_output(pane_id, "\x1b]133;A\x07"); // 提示符开始
-        manager.process_output(pane_id, "\x1b]133;B\x07"); // 命令开始
-        manager.process_output(pane_id, "\x1b]133;C\x07"); // 命令执行
-        manager.process_output(pane_id, "\x1b]133;D;0\x07"); // 命令完成
-
-        let state = manager.get_pane_shell_state(pane_id).unwrap();
-        assert!(state.integration_state == ShellIntegrationState::Enabled);
-        assert_eq!(state.command_history.len(), 1);
-        assert_eq!(state.command_history[0].exit_code, Some(0));
-    }
-
-    #[test]
-    fn test_script_generation() {
-        let manager = ShellIntegrationManager::new().unwrap();
-
-        let bash_script = manager.generate_shell_script(&ShellType::Bash).unwrap();
-        assert!(bash_script.contains("ORBITX_SHELL_INTEGRATION"));
-        // 验证使用了正确的OSC 133序列
-        assert!(
-            bash_script.contains("133") || bash_script.contains("6969"),
-            "Bash script should use OSC sequences"
-        );
-
-        let zsh_script = manager.generate_shell_script(&ShellType::Zsh).unwrap();
-        assert!(
-            zsh_script.contains("133") || zsh_script.contains("6969"),
-            "Zsh script should use OSC sequences"
-        );
-
-        let env_vars = manager.generate_shell_env_vars(&ShellType::Bash);
-        assert!(env_vars.contains_key("ORBITX_SHELL_INTEGRATION"));
-    }
-
-    #[test]
-    fn test_context_service_integration() {
-        let manager = ShellIntegrationManager::new().unwrap();
-        let pane_id = PaneId::new(1);
-
-        // 测试性能优化方法
-        let snapshot = manager.get_pane_state_snapshot(pane_id);
-        assert!(snapshot.is_none()); // 初始状态应该为空
-
-        manager.set_pane_shell_type(pane_id, ShellType::Bash);
-        manager.update_current_working_directory(pane_id, "/test/path".to_string());
-
-        // 测试快照获取
-        let snapshot = manager.get_pane_state_snapshot(pane_id);
-        assert!(snapshot.is_some());
-        let state = snapshot.unwrap();
-        assert_eq!(state.shell_type, Some(ShellType::Bash));
-        assert_eq!(
-            state.current_working_directory,
-            Some("/test/path".to_string())
-        );
-
-        // 测试批量获取
-        let pane_ids = vec![pane_id];
-        let states = manager.get_multiple_pane_states(&pane_ids);
-        assert_eq!(states.len(), 1);
-        assert!(states.contains_key(&pane_id));
-
-        // 测试活跃面板ID列表
-        let active_panes = manager.get_active_pane_ids();
-        assert!(active_panes.contains(&pane_id));
-    }
-
-    #[test]
-    fn test_integration_state_changes() {
-        let manager = ShellIntegrationManager::new().unwrap();
-        let pane_id = PaneId::new(1);
-
-        // 初始状态应该是禁用的
-        assert!(!manager.is_integration_enabled(pane_id));
-
-        // 启用集成
-        manager.enable_integration(pane_id);
-        assert!(manager.is_integration_enabled(pane_id));
-
-        // 禁用集成
-        manager.disable_integration(pane_id);
-        assert!(!manager.is_integration_enabled(pane_id));
-    }
-
-    #[test]
-    fn test_cleanup_pane() {
-        let manager = ShellIntegrationManager::new().unwrap();
-        let pane_id = PaneId::new(1);
-
-        manager.set_pane_shell_type(pane_id, ShellType::Bash);
-        manager.update_current_working_directory(pane_id, "/test/path".to_string());
-
-        // 验证状态存在
-        assert!(manager.get_pane_state_snapshot(pane_id).is_some());
-
-        // 清理面板
-        manager.cleanup_pane(pane_id);
-
-        // 验证状态已被清理
-        assert!(manager.get_pane_state_snapshot(pane_id).is_none());
     }
 }

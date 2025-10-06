@@ -72,7 +72,7 @@ impl Default for WindowState {
 }
 
 /// 终端状态 - 最优版本
-/// 
+///
 /// 设计原则：
 /// - id 直接使用后端 pane_id，前后端统一标识
 /// - cwd 不持久化，由后端实时查询 ShellIntegration

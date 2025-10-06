@@ -118,9 +118,17 @@ pub async fn completion_init_engine(
 /// 清理缓存命令
 #[tauri::command]
 pub async fn completion_clear_cache(
-    _state: State<'_, CompletionState>,
+    state: State<'_, CompletionState>,
 ) -> TauriApiResult<EmptyData> {
-    Ok(api_success!())
+    let engine = match state.get_engine().await {
+        Ok(engine) => engine,
+        Err(_) => return Ok(api_error!("completion.engine_not_initialized")),
+    };
+
+    match engine.clear_cached_results().await {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("completion.clear_cache_failed")),
+    }
 }
 
 /// 获取统计信息命令

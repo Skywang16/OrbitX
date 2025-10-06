@@ -4,8 +4,7 @@ import { useSessionStore } from '@/stores/session'
 import type { RuntimeTerminalState, TerminalState } from '@/types'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
-import { computed, ref, watch, nextTick } from 'vue'
-import { debounce } from 'lodash-es'
+import { computed, ref, nextTick } from 'vue'
 
 declare global {
   interface Window {
@@ -97,30 +96,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
   const MAX_CONCURRENT_OPERATIONS = 2
 
   const sessionStore = useSessionStore()
-
-  // 保存持久化：使用轻量防抖合并短时间内的多次更新，避免保存风暴
-  const debouncedPersist = debounce(() => {
-    sessionStore.saveSessionState().catch(() => {})
-  }, 80)
-
-  const saveTerminalState = async () => {
-    syncToSessionStore()
-    await sessionStore.saveSessionState()
-  }
-
-  const immediateSync = () => {
-    // 仅同步到 SessionStore，由具体的调用方（如 create/close/setActive）控制何时保存，避免重复/竞态保存
-    syncToSessionStore()
-    debouncedPersist()
-  }
-
-  watch(
-    [terminals, activeTerminalId],
-    () => {
-      immediateSync()
-    },
-    { deep: true }
-  )
 
   const activeTerminal = computed(() => terminals.value.find(t => t.id === activeTerminalId.value))
   const currentWorkingDirectory = computed(() => activeTerminal.value?.cwd || null)
@@ -304,7 +279,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       terminals.value.push(terminal)
       await setActiveTerminal(paneId)
 
-      immediateSync()
+      // setActiveTerminal已经会调用syncToSessionStore和保存，不需要再次调用
 
       return paneId
     })
@@ -323,7 +298,12 @@ export const useTerminalStore = defineStore('Terminal', () => {
       await terminalApi.closeTerminal(id)
 
       await cleanupTerminalState(id)
-      immediateSync()
+      // cleanupTerminalState内部可能会调用setActiveTerminal，它已经会保存状态
+      // 如果没有其他终端了，手动同步并保存
+      if (terminals.value.length === 0) {
+        syncToSessionStore()
+        sessionStore.setActiveTabId(null)
+      }
     })
   }
 
@@ -357,8 +337,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
     await terminalContextApi.setActivePaneId(id)
 
+    // 统一在最后同步并保存一次，避免多次调用
+    // sessionStore.setActiveTabId内部会调用saveSessionState，所以这里只需要同步状态即可
+    syncToSessionStore()
     sessionStore.setActiveTabId(id)
-    immediateSync()
   }
 
   const writeToTerminal = async (id: number, data: string) => {
@@ -484,7 +466,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       terminals.value.push(terminal)
       await new Promise(resolve => setTimeout(resolve, 100))
       await setActiveTerminal(paneId)
-      await saveTerminalState()
+      // setActiveTerminal已经会同步并保存状态
       return paneId
     })
   }
@@ -525,7 +507,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       }
       terminals.value.push(terminal)
       await setActiveTerminal(paneId)
-      await saveTerminalState()
+      // setActiveTerminal已经会同步并保存状态
 
       return paneId
     })

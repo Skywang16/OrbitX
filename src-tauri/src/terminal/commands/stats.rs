@@ -30,7 +30,7 @@ pub async fn terminal_context_get_cache_stats(
 ) -> TauriApiResult<crate::terminal::CacheStats> {
     debug!("获取上下文缓存统计信息");
 
-    let stats = state.context_service.get_cache_stats();
+    let stats = state.context_service.get_cache_stats().await;
 
     debug!(
         "上下文缓存统计: 总条目={}, 命中率={:.2}%",

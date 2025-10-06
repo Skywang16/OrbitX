@@ -12,9 +12,10 @@ use std::net::IpAddr;
 use std::time::Duration;
 use url::Url;
 
-use crate::agent::state::context::TaskContext;
+use crate::agent::core::context::TaskContext;
 use crate::agent::tools::{
-    error::ToolExecutorResult, RunnableTool, ToolPermission, ToolResult, ToolResultContent,
+    error::ToolExecutorResult, BackoffStrategy, RateLimitConfig, RunnableTool, ToolCategory,
+    ToolMetadata, ToolPermission, ToolPriority, ToolResult, ToolResultContent,
 };
 
 #[derive(Debug, Deserialize)]
@@ -73,16 +74,22 @@ impl RunnableTool for WebFetchTool {
         })
     }
 
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::Network]
+    fn metadata(&self) -> ToolMetadata {
+        ToolMetadata::new(ToolCategory::Network, ToolPriority::Expensive)
+            .with_rate_limit(RateLimitConfig {
+                max_calls: 10,
+                window_secs: 60,
+                backoff: BackoffStrategy::Exponential {
+                    base_ms: 1000,
+                    max_ms: 30_000,
+                },
+            })
+            .with_timeout(Duration::from_secs(60))
+            .with_tags(vec!["network".into(), "http".into()])
     }
 
-    fn tags(&self) -> Vec<String> {
-        vec![
-            "network".to_string(),
-            "http".to_string(),
-            "fetch".to_string(),
-        ]
+    fn required_permissions(&self) -> Vec<ToolPermission> {
+        vec![ToolPermission::Network]
     }
 
     async fn run(

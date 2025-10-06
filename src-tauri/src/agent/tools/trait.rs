@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::error::ToolExecutorResult;
-use crate::agent::state::context::TaskContext;
+use super::metadata::ToolMetadata;
+use crate::agent::core::context::TaskContext;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolSchema {
@@ -67,11 +68,15 @@ pub trait RunnableTool: Send + Sync {
     fn description(&self) -> &str;
     fn parameters_schema(&self) -> Value;
 
+    fn metadata(&self) -> ToolMetadata {
+        ToolMetadata::default()
+    }
+
     fn required_permissions(&self) -> Vec<ToolPermission> {
         vec![ToolPermission::ReadOnly]
     }
     fn tags(&self) -> Vec<String> {
-        vec![]
+        self.metadata().tags
     }
 
     /// Optional validation based on parameters_schema; default: no-op

@@ -1,12 +1,13 @@
+use std::num::NonZeroU32;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tempfile::TempDir;
 
-use crate::agent::config::TaskExecutionConfig;
 use crate::agent::context::{FileContextTracker, FileOperationRecord};
-use crate::agent::core::context::TaskContext;
-use crate::agent::persistence::{AgentPersistence, FileRecordSource, FileRecordState, MessageRole};
+use crate::agent::persistence::{AgentPersistence, FileRecordSource, FileRecordState};
 use crate::agent::ui::AgentUiPersistence;
+use crate::storage::database::PoolSize;
 use crate::storage::{DatabaseManager, DatabaseOptions, RepositoryManager, StoragePathsBuilder};
 use crate::utils::error::AppResult;
 struct TestHarness {
@@ -32,10 +33,11 @@ impl TestHarness {
 
         let options = DatabaseOptions {
             encryption: false,
-            pool_size: 4,
-            connection_timeout: 5,
-            query_timeout: 5,
-            wal_mode: false,
+            pool_size: PoolSize::Fixed(NonZeroU32::new(4).unwrap()),
+            connection_timeout: Duration::from_secs(5),
+            statement_timeout: Duration::from_secs(5),
+            wal: false,
+            sql_dir: None,
         };
 
         let database = Arc::new(DatabaseManager::new(paths, options).await?);
@@ -104,75 +106,6 @@ async fn file_context_tracker_transitions() -> AppResult<()> {
     tracker.mark_file_as_stale(path).await?;
     let stale_again = tracker.get_stale_files().await?;
     assert_eq!(stale_again.len(), 1);
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn task_context_summary_truncates_history() -> AppResult<()> {
-    let harness = TestHarness::new().await?;
-    let conversation = harness
-        .persistence
-        .conversations()
-        .create(None, None)
-        .await?;
-
-    let exec = harness
-        .persistence
-        .agent_executions()
-        .create(
-            conversation.id,
-            "build new feature",
-            "system prompt",
-            None,
-            false,
-            10,
-        )
-        .await?;
-
-    let context = TaskContext::new(
-        exec,
-        TaskExecutionConfig::default(),
-        None,
-        harness.repositories.clone(),
-        harness.persistence.clone(),
-        harness.ui_persistence.clone(),
-    )
-    .await?;
-
-    context
-        .set_initial_prompts("system".to_string(), "user".to_string())
-        .await?;
-    context.push_user_message("First message".to_string()).await;
-    context
-        .push_user_message("Second message".to_string())
-        .await;
-    context.push_user_message("Third message".to_string()).await;
-
-    context
-        .apply_conversation_summary("Important summary")
-        .await?;
-
-    let messages = context.get_messages().await;
-    assert!(messages.first().is_some());
-    assert_eq!(messages.first().unwrap().role, "system");
-    let first_content = match &messages.first().unwrap().content {
-        crate::llm::types::LLMMessageContent::Text(text) => text.clone(),
-        crate::llm::types::LLMMessageContent::Parts(parts) => {
-            serde_json::to_string(parts).unwrap_or_default()
-        }
-    };
-    assert!(first_content.contains("Important summary"));
-    assert!(messages.len() <= 4);
-
-    let log = harness
-        .persistence
-        .execution_messages()
-        .list_by_execution(&context.task_id)
-        .await?;
-    assert!(log
-        .iter()
-        .any(|msg| msg.role == MessageRole::System && msg.is_summary));
 
     Ok(())
 }

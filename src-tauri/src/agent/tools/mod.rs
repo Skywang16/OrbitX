@@ -4,24 +4,25 @@
 pub mod builtin;
 pub mod error;
 pub mod logger;
+pub mod metadata;
 pub mod registry;
 pub mod r#trait;
 
 // Re-exports for external use
 pub use error::{ErrorSeverity, ToolExecutorError, ToolExecutorResult};
 pub use logger::ToolExecutionLogger;
+pub use metadata::{BackoffStrategy, RateLimitConfig, ToolCategory, ToolMetadata, ToolPriority};
 pub use r#trait::{RunnableTool, ToolPermission, ToolResult, ToolResultContent, ToolSchema};
 pub use registry::{ToolExecutionStats, ToolRegistry};
 
 // Builtin tool type re-exports
 pub use builtin::{
-    ApplyDiffTool, EditFileTool, InsertContentTool, ListCodeDefinitionNamesTool, ListFilesTool,
-    OrbitSearchTool, ReadFileTool, ReadManyFilesTool, ShellTool, WebFetchTool, WriteToFileTool,
+    ListCodeDefinitionNamesTool, ListFilesTool, OrbitSearchTool, ReadFileTool, ReadManyFilesTool,
+    ShellTool, UnifiedEditTool, WebFetchTool, WriteFileTool,
 };
 
 use std::sync::Arc;
 
-/// 创建并初始化工具注册表（目前注册前端迁移中的工具骨架）
 pub async fn create_tool_registry() -> Arc<ToolRegistry> {
     let registry = Arc::new(ToolRegistry::new());
     register_builtin_tools(&registry).await;
@@ -32,16 +33,8 @@ async fn register_builtin_tools(registry: &ToolRegistry) {
     use std::sync::Arc;
     use tracing::info;
 
-    info!("注册 Agent 工具骨架（迁移中）");
+    info!("注册 Agent 工具集");
 
-    registry
-        .register("apply_diff", Arc::new(ApplyDiffTool::new()))
-        .await
-        .ok();
-    registry
-        .register("insert_content", Arc::new(InsertContentTool::new()))
-        .await
-        .ok();
     registry
         .register("read_many_files", Arc::new(ReadManyFilesTool::new()))
         .await
@@ -51,17 +44,16 @@ async fn register_builtin_tools(registry: &ToolRegistry) {
         .await
         .ok();
 
-    // 文件类工具骨架
     registry
         .register("read_file", Arc::new(ReadFileTool::new()))
         .await
         .ok();
     registry
-        .register("write_to_file", Arc::new(WriteToFileTool::new()))
+        .register("write_file", Arc::new(WriteFileTool::new()))
         .await
         .ok();
     registry
-        .register("edit_file", Arc::new(EditFileTool::new()))
+        .register("edit_file", Arc::new(UnifiedEditTool::new()))
         .await
         .ok();
     registry
@@ -76,7 +68,6 @@ async fn register_builtin_tools(registry: &ToolRegistry) {
         .await
         .ok();
 
-    // 其它工具骨架
     registry
         .register("shell", Arc::new(ShellTool::new()))
         .await

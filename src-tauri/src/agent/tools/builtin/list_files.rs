@@ -1,15 +1,13 @@
-use std::env;
-use std::path::{Path, PathBuf};
-
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::json;
 
 use crate::agent::context::FileOperationRecord;
+use crate::agent::core::context::TaskContext;
 use crate::agent::persistence::FileRecordSource;
-use crate::agent::state::context::TaskContext;
 use crate::agent::tools::{
-    RunnableTool, ToolExecutorResult, ToolPermission, ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolExecutorResult, ToolMetadata, ToolPermission, ToolPriority,
+    ToolResult, ToolResultContent,
 };
 use crate::filesystem::commands::fs_list_directory;
 
@@ -51,12 +49,13 @@ impl RunnableTool for ListFilesTool {
         })
     }
 
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::FileSystem]
+    fn metadata(&self) -> ToolMetadata {
+        ToolMetadata::new(ToolCategory::FileSystem, ToolPriority::Standard)
+            .with_tags(vec!["filesystem".into(), "list".into()])
     }
 
-    fn tags(&self) -> Vec<String> {
-        vec!["file".into(), "list".into(), "directory".into()]
+    fn required_permissions(&self) -> Vec<ToolPermission> {
+        vec![ToolPermission::FileSystem]
     }
 
     async fn run(
@@ -70,14 +69,10 @@ impl RunnableTool for ListFilesTool {
             return Ok(validation_error("Directory path cannot be empty"));
         }
 
-        let path = match resolve_to_absolute(trimmed) {
-            Ok(p) => p,
-            Err(result) => return Ok(result),
+        let path = match ensure_absolute(trimmed, &context.cwd) {
+            Ok(resolved) => resolved,
+            Err(err) => return Ok(validation_error(err.to_string())),
         };
-
-        if let Err(msg) = ensure_absolute(&path) {
-            return Ok(validation_error(msg));
-        }
 
         let recursive = args.recursive.unwrap_or(false);
         let request_path = path.to_string_lossy().to_string();
@@ -161,33 +156,4 @@ fn tool_error(message: impl Into<String>) -> ToolResult {
         execution_time_ms: None,
         ext_info: None,
     }
-}
-
-fn resolve_to_absolute(raw: &str) -> Result<PathBuf, ToolResult> {
-    let candidate = PathBuf::from(raw);
-    if candidate.is_absolute() {
-        return Ok(normalize_path(&candidate));
-    }
-
-    match env::current_dir() {
-        Ok(cwd) => Ok(normalize_path(&cwd.join(candidate))),
-        Err(_) => Err(validation_error(format!(
-            "Cannot resolve relative path '{}'. Please provide an absolute path or set an active terminal with a working directory.",
-            raw
-        ))),
-    }
-}
-
-fn normalize_path(path: &Path) -> PathBuf {
-    let mut normalized = PathBuf::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                normalized.pop();
-            }
-            other => normalized.push(other),
-        }
-    }
-    normalized
 }

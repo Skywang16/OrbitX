@@ -37,6 +37,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 portable-pty = "0.8"
 crossbeam-channel = "0.5"
 bytes = { version = "1", features = ["serde"] }
+dashmap = "6.0"
 
 
 # 补全功能相关依赖
@@ -117,6 +118,7 @@ ignore = "0.4"
 # 文件监控系统依赖
 notify = "6.1"
 debounce = "0.2"
+diffy = "0.3"
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -180,15 +182,6 @@ path = "tests/storage/messagepack_tests.rs"
 name = "storage_repository_tests"
 path = "tests/storage_repository_tests.rs"
 
-[[test]]
-name = "llm_unit_tests"
-path = "src/llm/tests.rs"
-
-[[test]]
-name = "llm_integration_tests"
-path = "src/llm/integration_tests.rs"
-
-
 
 # 桌面平台特定依赖
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
@@ -212,4 +205,3 @@ lto = true
 codegen-units = 1
 # 去除panic信息以减少大小
 panic = "abort"
-

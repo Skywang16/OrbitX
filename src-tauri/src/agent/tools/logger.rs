@@ -10,8 +10,8 @@ use serde_json::Value as JsonValue;
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
+use crate::agent::core::context::TaskContext;
 use crate::agent::persistence::{AgentPersistence, ToolExecutionStatus};
-use crate::agent::state::context::TaskContext;
 use crate::agent::tools::ToolResult;
 use crate::storage::repositories::RepositoryManager;
 

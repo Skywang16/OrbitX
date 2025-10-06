@@ -38,18 +38,18 @@ impl Planner {
 
     pub async fn replan(&self, task_prompt: &str, save_history: bool) -> AgentResult<TaskDetail> {
         let mut messages = Vec::new();
-        {
-            let chain = self.context.chain();
-            let chain_guard = chain.read().await;
-            if let Some(prev_request) = &chain_guard.plan_request {
-                messages.extend(prev_request.messages.clone());
-            }
-            if let Some(prev_result) = &chain_guard.plan_result {
-                messages.push(LLMMessage {
-                    role: "assistant".to_string(),
-                    content: LLMMessageContent::Text(prev_result.clone()),
-                });
-            }
+        let (prev_request, prev_result) = self
+            .context
+            .with_chain(|chain| (chain.plan_request.clone(), chain.plan_result.clone()))
+            .await;
+        if let Some(prev_request) = prev_request {
+            messages.extend(prev_request.messages.clone());
+        }
+        if let Some(prev_result) = prev_result {
+            messages.push(LLMMessage {
+                role: "assistant".to_string(),
+                content: LLMMessageContent::Text(prev_result),
+            });
         }
 
         if messages.is_empty() {
@@ -109,11 +109,16 @@ impl Planner {
         let task_detail = parse_task_detail(&self.context.task_id, &xml_text, false)?;
 
         if save_history {
-            let chain = self.context.chain();
-            let mut guard = chain.write().await;
-            guard.plan_request = Some(request);
-            guard.plan_result = Some(stream_text.clone());
-            guard.set_task_prompt(task_prompt.to_string());
+            let request_snapshot = request.clone();
+            let result_snapshot = stream_text.clone();
+            let prompt_snapshot = task_prompt.to_string();
+            self.context
+                .with_chain_mut(move |chain| {
+                    chain.plan_request = Some(request_snapshot);
+                    chain.plan_result = Some(result_snapshot);
+                    chain.set_task_prompt(prompt_snapshot);
+                })
+                .await;
         }
 
         self.context

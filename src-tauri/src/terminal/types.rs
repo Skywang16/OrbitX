@@ -317,77 +317,6 @@ impl TerminalContext {
 }
 
 /// 缓存的上下文信息
-#[derive(Debug, Clone)]
-pub struct CachedContext {
-    pub context: TerminalContext,
-    pub cached_at: std::time::Instant,
-    pub ttl: std::time::Duration,
-}
-
-impl CachedContext {
-    /// 创建新的缓存上下文
-    pub fn new(context: TerminalContext, ttl: std::time::Duration) -> Self {
-        Self {
-            context,
-            cached_at: std::time::Instant::now(),
-            ttl,
-        }
-    }
-
-    /// 检查缓存是否已过期
-    pub fn is_expired(&self) -> bool {
-        self.cached_at.elapsed() > self.ttl
-    }
-
-    /// 获取剩余TTL
-    pub fn remaining_ttl(&self) -> std::time::Duration {
-        self.ttl.saturating_sub(self.cached_at.elapsed())
-    }
-}
-
-/// 缓存统计信息
-#[derive(Debug, Clone, Default, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CacheStats {
-    pub total_entries: usize,
-    pub hit_count: u64,
-    pub miss_count: u64,
-    pub eviction_count: u64,
-    pub hit_rate: f64,
-}
-
-impl CacheStats {
-    /// 更新命中率
-    pub fn update_hit_rate(&mut self) {
-        let total_requests = self.hit_count + self.miss_count;
-        if total_requests > 0 {
-            self.hit_rate = self.hit_count as f64 / total_requests as f64;
-        } else {
-            self.hit_rate = 0.0;
-        }
-    }
-
-    /// 记录缓存命中
-    pub fn record_hit(&mut self) {
-        self.hit_count += 1;
-        self.update_hit_rate();
-    }
-
-    /// 记录缓存未命中
-    pub fn record_miss(&mut self) {
-        self.miss_count += 1;
-        self.update_hit_rate();
-    }
-
-    /// 记录缓存淘汰
-    pub fn record_eviction(&mut self) {
-        self.eviction_count += 1;
-        if self.total_entries > 0 {
-            self.total_entries -= 1;
-        }
-    }
-}
-
 /// 上下文查询选项
 #[derive(Debug, Clone, Default)]
 pub struct ContextQueryOptions {
@@ -501,30 +430,6 @@ mod tests {
             ShellType::from_str("unknown"),
             ShellType::Other("unknown".to_string())
         );
-    }
-
-    #[test]
-    fn test_cached_context() {
-        let pane_id = PaneId::new(1);
-        let context = TerminalContext::new(pane_id);
-        let ttl = std::time::Duration::from_secs(60);
-        let cached = CachedContext::new(context, ttl);
-
-        assert!(!cached.is_expired());
-        assert!(cached.remaining_ttl() <= ttl);
-    }
-
-    #[test]
-    fn test_cache_stats() {
-        let mut stats = CacheStats::default();
-
-        stats.record_hit();
-        stats.record_miss();
-        stats.record_hit();
-
-        assert_eq!(stats.hit_count, 2);
-        assert_eq!(stats.miss_count, 1);
-        assert_eq!(stats.hit_rate, 2.0 / 3.0);
     }
 
     #[test]

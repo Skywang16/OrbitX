@@ -175,6 +175,15 @@ impl TerminalMux {
             );
         }
 
+        // 设置面板的Shell类型到shell_integration
+        let shell_type = crate::shell::ShellType::from_program(&config.shell_config.program);
+        self.shell_integration.set_pane_shell_type(pane_id, shell_type.clone());
+        debug!(
+            "设置面板Shell类型: pane_id={:?}, shell_type={:?}",
+            pane_id,
+            shell_type.display_name()
+        );
+
         // 启动I/O处理线程
         debug!("启动I/O处理线程: pane_id={:?}", pane_id);
         self.io_handler
@@ -483,12 +492,27 @@ impl TerminalMux {
         // 启用Shell Integration
         self.shell_integration.enable_integration(pane_id);
 
-        // 检测Shell类型
+        // 从shell_integration获取已设置的Shell类型
         if let Ok(panes) = self.panes.read() {
             if let Some(_pane) = panes.get(&pane_id) {
-                let shell_type = ShellType::Bash;
-                self.shell_integration
-                    .set_pane_shell_type(pane_id, shell_type.clone());
+                // 从shell_integration中获取真实的shell类型
+                let shell_type = self
+                    .shell_integration
+                    .get_pane_shell_state(pane_id)
+                    .and_then(|state| state.shell_type)
+                    .unwrap_or_else(|| {
+                        warn!(
+                            "面板 {:?} 没有设置Shell类型，使用默认Bash",
+                            pane_id
+                        );
+                        ShellType::Bash
+                    });
+
+                debug!(
+                    "面板 {:?} 使用Shell类型: {}",
+                    pane_id,
+                    shell_type.display_name()
+                );
 
                 if !silent {
                     // 非静默模式：生成完整脚本

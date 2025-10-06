@@ -2,31 +2,31 @@
 
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
+use crate::storage::cache::UnifiedCache;
 use crate::utils::error::AppResult;
 use anyhow::Context;
 use async_trait::async_trait;
-
 use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::process::Command as AsyncCommand;
 
 /// Git补全提供者
 pub struct GitCompletionProvider {
     /// 使用统一缓存
-    cache: crate::storage::cache::UnifiedCache,
+    cache: Arc<UnifiedCache>,
 }
 
 impl GitCompletionProvider {
     /// 创建新的Git补全提供者
-    pub fn new() -> Self {
-        Self {
-            cache: crate::storage::cache::UnifiedCache::new(),
-        }
+    pub fn new(cache: Arc<UnifiedCache>) -> Self {
+        Self { cache }
     }
 
     /// 检查是否在git仓库中
     async fn is_git_repository(&self, working_directory: &Path) -> AppResult<bool> {
         let path_str = working_directory.to_string_lossy().to_string();
-        let cache_key = format!("git_repo:{}", path_str);
+        let cache_key = format!("completion/git/repo:{}", path_str);
 
         if let Some(cached_result) = self.cache.get(&cache_key).await {
             if let Some(is_repo) = cached_result.as_bool() {
@@ -47,7 +47,11 @@ impl GitCompletionProvider {
         // 缓存结果
         let _ = self
             .cache
-            .set(&cache_key, serde_json::Value::Bool(is_repo))
+            .set_with_ttl(
+                &cache_key,
+                serde_json::Value::Bool(is_repo),
+                Duration::from_secs(300),
+            )
             .await;
 
         Ok(is_repo)
@@ -270,6 +274,6 @@ impl CompletionProvider for GitCompletionProvider {
 
 impl Default for GitCompletionProvider {
     fn default() -> Self {
-        Self::new()
+        Self::new(Arc::new(UnifiedCache::new()))
     }
 }

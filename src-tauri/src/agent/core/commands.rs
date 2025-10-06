@@ -148,22 +148,6 @@ pub async fn agent_pause_task(
     }
 }
 
-/// 恢复任务
-#[tauri::command]
-pub async fn agent_resume_task(
-    state: State<'_, TaskExecutorState>,
-    task_id: String,
-    channel: Channel<TaskProgressPayload>,
-) -> TauriApiResult<EmptyData> {
-    match state.executor.resume_task(&task_id, channel).await {
-        Ok(_) => Ok(api_success!()),
-        Err(e) => {
-            tracing::error!("恢复任务失败: {}", e);
-            Ok(api_error!("agent.resume_failed"))
-        }
-    }
-}
-
 /// 取消任务
 #[tauri::command]
 pub async fn agent_cancel_task(
@@ -222,7 +206,7 @@ pub async fn agent_get_file_context_status(
 pub async fn agent_get_user_prefix_prompt(
     state: State<'_, TaskExecutorState>,
 ) -> TauriApiResult<Option<String>> {
-    let repositories = Arc::clone(&state.executor.repositories);
+    let repositories = state.executor.repositories();
     match repositories.ai_models().get_user_prefix_prompt().await {
         Ok(prompt) => Ok(api_success!(prompt)),
         Err(e) => {
@@ -237,7 +221,7 @@ pub async fn agent_set_user_prefix_prompt(
     prompt: Option<String>,
     state: State<'_, TaskExecutorState>,
 ) -> TauriApiResult<EmptyData> {
-    let repositories = Arc::clone(&state.executor.repositories);
+    let repositories = state.executor.repositories();
     match repositories
         .ai_models()
         .set_user_prefix_prompt(prompt)

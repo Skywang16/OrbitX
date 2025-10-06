@@ -10,6 +10,7 @@
 use std::sync::Arc;
 use terminal_lib::mux::{PaneId, TerminalMux};
 use terminal_lib::shell::ShellIntegrationManager;
+use terminal_lib::storage::cache::UnifiedCache;
 use terminal_lib::terminal::{
     commands::TerminalContextState, ActiveTerminalContextRegistry, TerminalContextService,
 };
@@ -19,10 +20,12 @@ fn create_test_context_state() -> TerminalContextState {
     let registry = Arc::new(ActiveTerminalContextRegistry::new());
     let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
     let terminal_mux = Arc::new(TerminalMux::new());
+    let cache = Arc::new(UnifiedCache::new());
     let context_service = Arc::new(TerminalContextService::new(
         registry.clone(),
         shell_integration,
         terminal_mux,
+        cache,
     ));
 
     TerminalContextState::new(registry, context_service)
@@ -36,7 +39,7 @@ async fn test_terminal_context_state_creation() {
     assert_eq!(state.registry().terminal_context_get_active_pane(), None);
 
     // 验证缓存统计初始状态
-    let cache_stats = state.context_service().get_cache_stats();
+    let cache_stats = state.context_service().get_cache_stats().await;
     assert_eq!(cache_stats.total_entries, 0);
     assert_eq!(cache_stats.hit_count, 0);
     assert_eq!(cache_stats.miss_count, 0);
@@ -126,17 +129,20 @@ async fn test_context_cache_operations() {
     let pane_id = PaneId::new(321);
 
     // 初始缓存状态
-    let stats = state.context_service().get_cache_stats();
+    let stats = state.context_service().get_cache_stats().await;
     assert_eq!(stats.total_entries, 0);
 
     // 测试缓存失效操作
-    state.context_service().invalidate_cache(pane_id);
+    state
+        .context_service()
+        .invalidate_cache_entry(pane_id)
+        .await;
 
     // 测试清除所有缓存
-    state.context_service().clear_all_cache();
+    state.context_service().clear_all_cache().await;
 
     // 验证缓存统计
-    let stats = state.context_service().get_cache_stats();
+    let stats = state.context_service().get_cache_stats().await;
     assert_eq!(stats.total_entries, 0);
 }
 
@@ -272,8 +278,11 @@ async fn test_complete_workflow_integration() {
     assert_eq!(context.current_working_directory, Some("~".to_string()));
 
     // 4. 缓存操作
-    state.context_service().invalidate_cache(pane_id);
-    let stats = state.context_service().get_cache_stats();
+    state
+        .context_service()
+        .invalidate_cache_entry(pane_id)
+        .await;
+    let stats = state.context_service().get_cache_stats().await;
     assert_eq!(stats.total_entries, 0);
 
     // 5. 清除活跃终端
@@ -332,10 +341,12 @@ async fn test_state_access_methods() {
     let registry = Arc::new(ActiveTerminalContextRegistry::new());
     let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
     let terminal_mux = Arc::new(TerminalMux::new());
+    let cache = Arc::new(UnifiedCache::new());
     let context_service = Arc::new(TerminalContextService::new(
         registry.clone(),
         shell_integration,
         terminal_mux,
+        cache,
     ));
 
     let state = TerminalContextState::new(registry.clone(), context_service.clone());

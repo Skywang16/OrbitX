@@ -336,7 +336,6 @@ impl ConversationSummarizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::llm::types::LLMMessagePart;
 
     #[test]
     fn split_messages_handles_short_history() {

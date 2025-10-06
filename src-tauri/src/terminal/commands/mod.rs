@@ -72,6 +72,7 @@ mod tests {
     use super::*;
     use crate::mux::TerminalMux;
     use crate::shell::ShellIntegrationManager;
+    use crate::storage::cache::UnifiedCache;
     use std::sync::Arc;
 
     /// 创建测试用的终端上下文状态
@@ -79,10 +80,12 @@ mod tests {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
         let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
         let terminal_mux = Arc::new(TerminalMux::new());
+        let cache = Arc::new(UnifiedCache::new());
         let context_service = Arc::new(TerminalContextService::new(
             registry.clone(),
             shell_integration,
             terminal_mux,
+            cache,
         ));
 
         TerminalContextState::new(registry, context_service)
@@ -93,10 +96,12 @@ mod tests {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
         let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
         let terminal_mux = Arc::new(TerminalMux::new());
+        let cache = Arc::new(UnifiedCache::new());
         let context_service = Arc::new(TerminalContextService::new(
             registry.clone(),
             shell_integration,
             terminal_mux,
+            cache,
         ));
 
         let state = TerminalContextState::new(registry.clone(), context_service.clone());

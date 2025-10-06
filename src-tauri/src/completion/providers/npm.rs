@@ -2,12 +2,14 @@
 
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
+use crate::storage::cache::UnifiedCache;
 use crate::utils::error::AppResult;
 use anyhow::Context;
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs;
 
@@ -54,22 +56,19 @@ pub struct NpmCompletionProvider {
     /// HTTP客户端
     client: reqwest::Client,
     /// 使用统一缓存
-    cache: crate::storage::cache::UnifiedCache,
+    cache: Arc<UnifiedCache>,
 }
 
 impl NpmCompletionProvider {
     /// 创建新的NPM补全提供者
-    pub fn new() -> Self {
+    pub fn new(cache: Arc<UnifiedCache>) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(3))
             .user_agent("OrbitX/1.0")
             .build()
             .unwrap_or_default();
 
-        Self {
-            client,
-            cache: crate::storage::cache::UnifiedCache::new(),
-        }
+        Self { client, cache }
     }
 
     /// 解析npm命令
@@ -240,7 +239,7 @@ impl NpmCompletionProvider {
             return Ok(vec![]);
         }
 
-        let cache_key = format!("npm_search:{}", query);
+        let cache_key = format!("completion/npm/search:{}", query);
         if let Some(cached_result) = self.cache.get(&cache_key).await {
             if let Ok(items) = serde_json::from_value::<Vec<CompletionItem>>(cached_result) {
                 return Ok(items);
@@ -286,7 +285,10 @@ impl NpmCompletionProvider {
 
         // 缓存结果
         if let Ok(cache_value) = serde_json::to_value(&completions) {
-            let _ = self.cache.set(&cache_key, cache_value).await;
+            let _ = self
+                .cache
+                .set_with_ttl(&cache_key, cache_value, Duration::from_secs(60))
+                .await;
         }
 
         Ok(completions)
@@ -357,6 +359,6 @@ impl CompletionProvider for NpmCompletionProvider {
 
 impl Default for NpmCompletionProvider {
     fn default() -> Self {
-        Self::new()
+        Self::new(Arc::new(UnifiedCache::new()))
     }
 }

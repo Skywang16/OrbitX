@@ -224,7 +224,14 @@
         // ignore
       }
 
-      trackDisposable(terminal.value.onResize(({ rows, cols }) => emit('resize', rows, cols))) // 大小变化
+      // 只有激活的终端才发送resize事件，避免非激活终端触发API调用
+      trackDisposable(
+        terminal.value.onResize(({ rows, cols }) => {
+          if (props.isActive) {
+            emit('resize', rows, cols)
+          }
+        })
+      )
 
       trackDisposable(
         terminal.value.onData(data => {

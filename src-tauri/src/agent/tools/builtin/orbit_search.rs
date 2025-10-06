@@ -1,4 +1,3 @@
-use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -9,11 +8,13 @@ use serde::Serialize;
 use serde_json::json;
 use tokio::fs;
 
+use super::file_utils::{ensure_absolute, normalize_path};
 use crate::agent::context::FileOperationRecord;
+use crate::agent::core::context::TaskContext;
 use crate::agent::persistence::FileRecordSource;
-use crate::agent::state::context::TaskContext;
 use crate::agent::tools::{
-    RunnableTool, ToolExecutorResult, ToolPermission, ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolExecutorResult, ToolMetadata, ToolPermission, ToolPriority,
+    ToolResult, ToolResultContent,
 };
 
 const DEFAULT_MAX_RESULTS: usize = 10;
@@ -86,12 +87,13 @@ impl RunnableTool for OrbitSearchTool {
         })
     }
 
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::FileSystem]
+    fn metadata(&self) -> ToolMetadata {
+        ToolMetadata::new(ToolCategory::CodeAnalysis, ToolPriority::Expensive)
+            .with_tags(vec!["search".into(), "code".into()])
     }
 
-    fn tags(&self) -> Vec<String> {
-        vec!["search".into(), "code".into(), "semantic".into()]
+    fn required_permissions(&self) -> Vec<ToolPermission> {
+        vec![ToolPermission::FileSystem]
     }
 
     async fn run(
@@ -129,7 +131,7 @@ impl RunnableTool for OrbitSearchTool {
             }
         };
 
-        let search_path = match resolve_to_absolute(args.path.as_deref()) {
+        let search_path = match resolve_to_absolute(args.path.as_deref(), &context.cwd) {
             Ok(path) => path,
             Err(result) => return Ok(result),
         };
@@ -321,44 +323,27 @@ fn truncate_snippet(snippet: &str) -> String {
     format!("{}...", &snippet[..SNIPPET_MAX_LEN])
 }
 
-fn resolve_to_absolute(path: Option<&str>) -> Result<PathBuf, ToolResult> {
-    match path {
-        Some(raw) => {
-            let trimmed = raw.trim();
-            if trimmed.is_empty() {
-                return Err(validation_error("Path cannot be empty"));
-            }
-            let candidate = PathBuf::from(trimmed);
-            if candidate.is_absolute() {
-                Ok(normalize_path(&candidate))
-            } else {
-                match env::current_dir() {
-                    Ok(cwd) => Ok(normalize_path(&cwd.join(candidate))),
-                    Err(_) => Err(validation_error(format!(
-                        "Cannot resolve relative path '{}'. Please provide an absolute path or set an active terminal with a working directory.",
-                        trimmed
-                    ))),
-                }
-            }
+fn resolve_to_absolute(path: Option<&str>, cwd: &str) -> Result<PathBuf, ToolResult> {
+    if let Some(raw) = path {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Err(validation_error("Path cannot be empty"));
         }
-        None => env::current_dir()
-            .map(|cwd| normalize_path(&cwd))
-            .map_err(|_| tool_error("Failed to determine current working directory")),
-    }
-}
 
-fn normalize_path(path: &Path) -> PathBuf {
-    let mut normalized = PathBuf::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                normalized.pop();
-            }
-            other => normalized.push(other),
+        ensure_absolute(trimmed, cwd).map_err(|err| validation_error(err.to_string()))
+    } else {
+        let base = cwd.trim();
+        if base.is_empty() {
+            return Err(tool_error("Working directory is not available"));
         }
+
+        let path = Path::new(base);
+        if !path.is_absolute() {
+            return Err(tool_error("Working directory must be an absolute path"));
+        }
+
+        Ok(normalize_path(path))
     }
-    normalized
 }
 
 fn resolve_index_dir(base: &Path) -> PathBuf {
