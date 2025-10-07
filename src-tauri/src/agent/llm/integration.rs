@@ -96,9 +96,20 @@ impl TaskExecutor {
                         stderr,
                         exit_code,
                     } => {
-                        result_map.insert("stdout".to_string(), serde_json::json!(stdout));
-                        result_map.insert("stderr".to_string(), serde_json::json!(stderr));
-                        result_map.insert("exitCode".to_string(), serde_json::json!(exit_code));
+                        // 成功：只返回输出；失败：只返回错误
+                        if *exit_code == 0 && stderr.is_empty() {
+                            result_map.insert("output".to_string(), serde_json::json!(stdout));
+                        } else {
+                            // 失败时优先返回stderr，如果没有则返回stdout
+                            let error_msg = if !stderr.is_empty() {
+                                stderr
+                            } else if !stdout.is_empty() {
+                                stdout
+                            } else {
+                                &format!("Command failed with exit code {}", exit_code)
+                            };
+                            result_map.insert("error".to_string(), serde_json::json!(error_msg));
+                        }
                     }
                     crate::agent::tools::ToolResultContent::File { path } => {
                         result_map.insert("file".to_string(), serde_json::json!(path));
@@ -111,10 +122,6 @@ impl TaskExecutor {
                         result_map.insert("error".to_string(), serde_json::json!(message));
                     }
                 }
-            }
-
-            if let Some(ext_info) = tool_result.ext_info.clone() {
-                result_map.insert("extInfo".to_string(), ext_info);
             }
 
             serde_json::Value::Object(result_map)
