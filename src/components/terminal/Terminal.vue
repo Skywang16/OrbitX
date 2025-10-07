@@ -1,9 +1,11 @@
 <template>
   <div class="terminal-wrapper">
+    <TerminalLoading v-if="isLoading" />
+
     <div
       ref="terminalRef"
       class="terminal-container"
-      :class="{ 'terminal-active': isActive }"
+      :class="{ 'terminal-active': isActive, 'terminal-loading': isLoading }"
       @click="focusTerminal"
       @dragover="handleDragOver"
       @dragleave="handleDragLeave"
@@ -53,14 +55,13 @@
   import { useTerminalOutput } from '@/composables/useTerminalOutput'
   import { TERMINAL_CONFIG } from '@/constants/terminal'
   import { useTerminalStore } from '@/stores/Terminal'
-  import { terminalInitialBuffer } from '@/stores/terminalInitialBuffer'
   import { createMessage } from '@/ui'
   import { convertThemeToXTerm, createDefaultXTermTheme } from '@/utils/themeConverter'
   import { terminalChannelApi } from '@/api/channel/terminal'
-  import { terminalApi } from '@/api/terminal'
 
   import type { ITheme } from '@xterm/xterm'
   import TerminalCompletion from './TerminalCompletion.vue'
+  import TerminalLoading from './TerminalLoading.vue'
   import SearchBox from '@/components/SearchBox.vue'
 
   // XTerm.js 样式
@@ -100,20 +101,11 @@
   let resizeObserver: ResizeObserver | null = null
 
   const MAX_INITIAL_FIT_RETRIES = 20
-  const MAX_SNAPSHOT_CHARS = 512 * 1024
 
   let isXtermReady = false
-  let initialBinaryQueue: Uint8Array[] = []
   let subscribedPaneId: number | null = null
-  // VSCode-like hydration gating
-  let isHydrating = false
-  const PROMPT_SUPPRESS_MS = 600
-  const promptSuppressUntil = new Map<number, number>()
   let lastEmittedResize: { rows: number; cols: number } | null = null
   let fitRetryCount = 0
-  let hasRestoredHistory = false
-
-  const paneSnapshots = new Map<number, string>()
 
   const logTerminalEvent = (...args: unknown[]) => {
     if (import.meta.env.DEV) {
@@ -126,6 +118,13 @@
   let channelSub: { unsubscribe: () => Promise<void> } | null = null
   let keyListener: { dispose: () => void } | null = null
 
+  // Loading 状态管理
+  // 如果有 terminalId，初始状态就显示 loading
+  const isLoading = ref(typeof props.terminalId === 'number')
+  let loadingTimer: number | null = null
+  let hasReceivedData = false
+  const LOADING_TIMEOUT = 5000 // 5秒超时
+
   // 统一的事件资源管理
   const disposers: Array<() => void> = []
   const addDomListener = (target: EventTarget, type: string, handler: EventListenerOrEventListenerObject) => {
@@ -136,73 +135,6 @@
     if (d && typeof d.dispose === 'function') {
       disposers.push(() => d.dispose())
     }
-  }
-
-  const applyHistoryContent = (content: string) => {
-    logTerminalEvent('applyHistoryContent:start', {
-      length: content?.length ?? 0,
-      hasTerminal: Boolean(terminal.value),
-    })
-    if (!terminal.value) {
-      return
-    }
-
-    if (!content) {
-      logTerminalEvent('applyHistoryContent:skip-empty')
-      resizeTerminal()
-      return
-    }
-
-    try {
-      terminal.value.clear()
-    } catch {
-      // ignore
-    }
-
-    const normalized = content.replace(/\r?\n/g, '\r\n')
-    terminal.value.write(normalized)
-    if (terminal.value.rows > 0) {
-      terminal.value.refresh(0, terminal.value.rows - 1)
-    }
-    terminal.value.scrollToBottom()
-    resizeTerminal()
-    logTerminalEvent('applyHistoryContent:done', {
-      rows: terminal.value.rows,
-      cols: terminal.value.cols,
-    })
-  }
-
-  const updatePaneSnapshot = (paneId: number, text: string, mode: 'append' | 'replace' = 'append') => {
-    logTerminalEvent('updatePaneSnapshot', {
-      paneId,
-      mode,
-      incomingLength: text?.length ?? 0,
-    })
-    if (mode === 'replace') {
-      if (!text) {
-        paneSnapshots.set(paneId, '')
-        return
-      }
-
-      const trimmed = text.length > MAX_SNAPSHOT_CHARS ? text.slice(text.length - MAX_SNAPSHOT_CHARS) : text
-      paneSnapshots.set(paneId, trimmed)
-      return
-    }
-
-    if (!text) {
-      return
-    }
-
-    const existing = paneSnapshots.get(paneId) ?? ''
-    let combined = existing + text
-    if (combined.length > MAX_SNAPSHOT_CHARS) {
-      combined = combined.slice(combined.length - MAX_SNAPSHOT_CHARS)
-    }
-    paneSnapshots.set(paneId, combined)
-    logTerminalEvent('updatePaneSnapshot:stored', {
-      paneId,
-      length: combined.length,
-    })
   }
 
   const commitResize = () => {
@@ -226,96 +158,47 @@
   }
 
   const processBinaryChunk = (paneId: number, bytes: Uint8Array) => {
-    if (paneId !== props.terminalId) {
-      return
+    if (paneId !== props.terminalId || !terminal.value) return
+
+    // 首次收到数据时停止 loading
+    if (!hasReceivedData && bytes.length > 0) {
+      hasReceivedData = true
+      stopLoading()
     }
 
+    // 直接写入 xterm
+    handleTerminalOutputBinary(terminal.value, bytes)
+
+    // 可选：扩展功能（shell integration, 状态分发）
     const text = binaryDecoder.decode(bytes, { stream: true })
     if (text) {
-      const stripped = stripAnsi(text).trimEnd()
-      const hasNewline = /\r|\n/.test(stripped)
-
-      // Drop prompt-only chunk within suppress window (right after hydration when history already has a prompt)
-      const now = Date.now()
-      const until = promptSuppressUntil.get(paneId) ?? 0
-      if (now < until && !hasNewline && isPromptLike(stripped)) {
-        logTerminalEvent('processBinaryChunk:skip-prompt-in-window', { paneId, prompt: stripped.slice(0, 50) })
-        return
-      }
-
-      // Extra guard: if chunk equals the last non-empty line and looks like prompt, skip
-      if (!hasNewline && isPromptLike(stripped)) {
-        const lastLine = getLastNonEmptyLine(paneSnapshots.get(paneId) ?? '')
-        const lastStripped = stripAnsi(lastLine).trimEnd()
-        if (lastStripped && lastStripped === stripped) {
-          logTerminalEvent('processBinaryChunk:skip-duplicate-prompt', { paneId, prompt: stripped.slice(0, 50) })
-          return
-        }
-      }
-
       shellIntegration.processTerminalOutput(text)
       terminalStore.dispatchOutputForPaneId(paneId, text)
-      updatePaneSnapshot(paneId, text)
-      logTerminalEvent('processBinaryChunk', {
-        paneId,
-        byteLength: bytes.length,
-        decodedLength: text.length,
-      })
-    }
-
-    if (terminal.value) {
-      handleTerminalOutputBinary(terminal.value, bytes)
     }
   }
 
-  const flushQueuedBinaryChunks = () => {
-    logTerminalEvent('flushQueuedBinaryChunks:start', {
-      isXtermReady,
-      hasTerminal: Boolean(terminal.value),
-      queued: initialBinaryQueue.length,
-      subscribedPaneId,
-      currentPaneId: props.terminalId,
-      hasRestoredHistory,
-    })
-    if (!isXtermReady || !terminal.value || subscribedPaneId !== props.terminalId) {
-      if (subscribedPaneId !== props.terminalId) {
-        initialBinaryQueue = []
-      }
-      return
+  const startLoading = () => {
+    isLoading.value = true
+    hasReceivedData = false
+
+    // 清除之前的超时计时器
+    if (loadingTimer) {
+      clearTimeout(loadingTimer)
     }
 
-    // Only flush if we haven't restored history, or local queue has data (VSCode pattern)
-    if (hasRestoredHistory && initialBinaryQueue.length === 0) {
-      logTerminalEvent('flushQueuedBinaryChunks:skip-already-hydrated')
-      return
-    }
+    // 设置超时自动停止 loading
+    loadingTimer = window.setTimeout(() => {
+      stopLoading()
+    }, LOADING_TIMEOUT)
+  }
 
-    // Prefer draining the global VSCode-like initial buffer to avoid duplicates
-    const globalChunks =
-      typeof props.terminalId === 'number' ? terminalInitialBuffer.takeAndClear(props.terminalId) : []
-    let processedCount = 0
-    if (globalChunks.length > 0) {
-      // Clear local queue to avoid replaying the same chunks twice
-      initialBinaryQueue = []
-      for (const chunk of globalChunks) {
-        processBinaryChunk(props.terminalId, chunk)
-        processedCount += 1
-      }
-    } else if (initialBinaryQueue.length > 0) {
-      const chunks = initialBinaryQueue
-      initialBinaryQueue = []
-      for (const chunk of chunks) {
-        processBinaryChunk(props.terminalId, chunk)
-        processedCount += 1
-      }
-    } else {
-      return
-    }
+  const stopLoading = () => {
+    isLoading.value = false
 
-    resizeTerminal()
-    logTerminalEvent('flushQueuedBinaryChunks:done', {
-      processed: processedCount,
-    })
+    if (loadingTimer) {
+      clearTimeout(loadingTimer)
+      loadingTimer = null
+    }
   }
 
   const disposeChannelSubscription = () => {
@@ -335,193 +218,34 @@
 
     if (paneId == null) {
       subscribedPaneId = null
-      initialBinaryQueue = []
+      stopLoading()
       return
     }
 
     subscribedPaneId = paneId
-    initialBinaryQueue = []
+
+    // 如果还没有开始 loading（例如从其他 pane 切换过来），则开始
+    if (!isLoading.value) {
+      startLoading()
+    }
 
     try {
+      // 更新 shell integration
+      shellIntegration.updateTerminalId(paneId)
+    } catch (error) {
+      console.warn('Failed to update shell integration terminal id:', error)
+    }
+
+    try {
+      // 🔑 订阅后自动接收 replay + 实时数据（后端已实现）
       channelSub = terminalChannelApi.subscribeBinary(paneId, bytes => {
-        if (subscribedPaneId !== paneId) {
-          return
-        }
-
-        // During hydration or when xterm isn't ready, buffer bytes and return
-        if (isHydrating || !terminal.value || !isXtermReady) {
-          initialBinaryQueue.push(bytes)
-          // Also store in a global buffer with TTL, emulating VSCode's _initialDataEvents
-          try {
-            terminalInitialBuffer.append(paneId, bytes)
-          } catch (e) {
-            // ignore append errors
-          }
-          logTerminalEvent('subscribeBinary:buffering', {
-            paneId,
-            byteLength: bytes.length,
-            queueSize: initialBinaryQueue.length,
-            isHydrating,
-            isXtermReady,
-            hasTerminal: Boolean(terminal.value),
-          })
-          return
-        }
-
+        if (subscribedPaneId !== paneId) return
         processBinaryChunk(paneId, bytes)
       })
     } catch (e) {
       console.warn('Failed to subscribe terminal channel:', e)
-    }
-  }
-
-  // === ANSI & Prompt Utils (for deduplication) ===
-  // eslint-disable-next-line no-control-regex
-  const ANSI_RE = /\x1B\[[0-9;?]*[ -/]*[@-~]|\x1B\][^\x07]*(?:\x07|\x1B\\)|\x1B\(\)[0-2AB]|[\x00-\x08\x0B-\x1F\x7F]/g
-  const stripAnsi = (s: string) => s.replace(ANSI_RE, '')
-  const isPromptLike = (line: string) => {
-    const p = stripAnsi(line).trimEnd()
-    if (!p) return false
-    const endsWithPromptChar = /(?:^|\s)[%$#>]\s?$/.test(p) || /➜\s?$/.test(p)
-    const hasContext = /@/.test(p) || /\b~\b/.test(p) || /\//.test(p)
-    return endsWithPromptChar && hasContext
-  }
-  const getLastNonEmptyLine = (text: string) => {
-    const ls = text.split(/\r?\n/)
-    for (let i = ls.length - 1; i >= 0; i--) {
-      if (ls[i].trim() !== '') return ls[i]
-    }
-    return ''
-  }
-
-  const sanitizeHistory = (data: string) => {
-    const lines = data.split(/\r?\n/)
-
-    // 1) 去除尾部空白行
-    let lastIndex = lines.length - 1
-    while (lastIndex >= 0 && lines[lastIndex].trim() === '') {
-      lastIndex -= 1
-    }
-
-    if (lastIndex < 0) {
-      return ''
-    }
-
-    // 2) 去除尾部重复行（不少主题会回显最后一行多次）
-    const lastLine0 = lines[lastIndex]
-    let cursor = lastIndex - 1
-    while (cursor >= 0 && lines[cursor] === lastLine0) {
-      lines.splice(cursor, 1)
-      cursor -= 1
-      lastIndex -= 1
-    }
-
-    // 3) 组装并保持原始结尾换行行为（不强制加换行，不移除提示符）
-    const sanitized = lines.slice(0, Math.max(0, lastIndex + 1)).join('\r\n')
-    const keepNewline = /\r?\n$/.test(data)
-    return keepNewline ? `${sanitized}\r\n` : sanitized
-  }
-
-  const restoreTerminalBuffer = async (paneId: number, force = false) => {
-    logTerminalEvent('restoreTerminalBuffer:start', {
-      paneId,
-      hasRestoredHistory,
-      hasTerminal: Boolean(terminal.value),
-    })
-    if (hasRestoredHistory && !force) {
-      return
-    }
-
-    if (!terminal.value) {
-      return
-    }
-
-    try {
-      isHydrating = true
-      // 1) 拉取后端历史
-      const rawContent = await terminalApi.getTerminalBuffer(paneId)
-      const history = rawContent ? sanitizeHistory(rawContent) : ''
-      logTerminalEvent('restoreTerminalBuffer:history', {
-        paneId,
-        length: history.length,
-      })
-
-      // 2) 取出 xterm 未 ready 期间的预缓存（二进制）并清空
-      const preChunks = terminalInitialBuffer.takeAndClear(paneId)
-      const preText = (() => {
-        if (!preChunks.length) return ''
-        // 独立解码器，避免污染主解码器状态
-        const total = preChunks.reduce((s, b) => s + b.length, 0)
-        const buf = new Uint8Array(total)
-        let off = 0
-        for (const c of preChunks) {
-          buf.set(c, off)
-          off += c.length
-        }
-        return new TextDecoder('utf-8', { fatal: false }).decode(buf)
-      })()
-      logTerminalEvent('restoreTerminalBuffer:preText', { bytes: preChunks.length, length: preText.length })
-
-      // 3) 智能去重：只有当 preText 包含新提示符时，才删除历史末尾的旧提示符
-      let historyDedup = history
-      const lastLineOfHistory = getLastNonEmptyLine(history)
-      const isHistoryEndsWithPrompt = lastLineOfHistory && isPromptLike(lastLineOfHistory)
-
-      // 检查 preText 是否以提示符开头
-      const firstLineOfPre = preText ? preText.split(/\r?\n/)[0] : ''
-      const isPreStartsWithPrompt = firstLineOfPre && isPromptLike(firstLineOfPre)
-
-      // 只有当两边都有提示符时才去重（删除历史末尾的旧提示符，保留 preText 的新提示符）
-      if (isHistoryEndsWithPrompt && isPreStartsWithPrompt) {
-        const lines = history.split(/\r?\n/)
-        let lastIdx = lines.length - 1
-        while (lastIdx >= 0 && lines[lastIdx].trim() === '') {
-          lastIdx -= 1
-        }
-        if (lastIdx >= 0) {
-          lines.splice(lastIdx, 1)
-        }
-        const historyEndsWithNewline = /\r?\n$/.test(history)
-        historyDedup = lines.join('\r\n') + (historyEndsWithNewline ? '\r\n' : '')
-        logTerminalEvent('restoreTerminalBuffer:dedup-both-have-prompt', {
-          historyPrompt: stripAnsi(lastLineOfHistory).slice(0, 50),
-          prePrompt: stripAnsi(firstLineOfPre).slice(0, 50),
-        })
-      } else if (isHistoryEndsWithPrompt && !isPreStartsWithPrompt) {
-        // 历史有提示符但 preText 没有（或为空），保留历史的提示符
-        logTerminalEvent('restoreTerminalBuffer:keep-history-prompt', {
-          hasPreText: preText.length > 0,
-        })
-      }
-
-      // 确保历史末尾有换行，避免preText粘连
-      if (historyDedup && preText && !/\r?\n$/.test(historyDedup)) {
-        historyDedup += '\r\n'
-      }
-
-      const combined = historyDedup + preText
-      applyHistoryContent(combined)
-      updatePaneSnapshot(paneId, combined, 'replace')
-      // 清空本地队列，避免刚才合并过的字节再次 flush
-      initialBinaryQueue = []
-
-      // If combined ends with a prompt, suppress the very next prompt-only chunk within a short window
-      const lastLine = getLastNonEmptyLine(combined)
-      if (lastLine && isPromptLike(lastLine)) {
-        promptSuppressUntil.set(paneId, Date.now() + PROMPT_SUPPRESS_MS)
-      } else {
-        promptSuppressUntil.delete(paneId)
-      }
-    } catch (error) {
-      console.warn('Failed to restore terminal buffer:', error)
-    } finally {
-      isHydrating = false
-      hasRestoredHistory = true
-      resizeTerminal()
-      flushQueuedBinaryChunks()
-      logTerminalEvent('restoreTerminalBuffer:done', {
-        snapshotLength: paneSnapshots.get(paneId)?.length ?? 0,
-      })
+      // 订阅失败时停止 loading
+      stopLoading()
     }
   }
 
@@ -1000,8 +724,13 @@
   onMounted(() => {
     nextTick(async () => {
       logTerminalEvent('onMounted:init')
+
+      // 如果有 terminalId，立即开始 loading 并设置超时
+      if (typeof props.terminalId === 'number') {
+        startLoading()
+      }
+
       await initPlatformInfo()
-      subscribeToPane(typeof props.terminalId === 'number' ? props.terminalId : null)
       await initXterm()
 
       const tmeta = terminalStore.terminals.find(t => t.id === props.terminalId)
@@ -1025,25 +754,11 @@
 
       addDomListener(document, 'open-terminal-search', handleOpenTerminalSearchEvent)
 
-      if (typeof props.terminalId === 'number') {
-        const cachedSnapshot = paneSnapshots.get(props.terminalId)
-        if (cachedSnapshot) {
-          applyHistoryContent(sanitizeHistory(cachedSnapshot))
-        }
-      }
-
       await shellIntegration.initShellIntegration(terminal.value)
       await nextTick()
 
       if (typeof props.terminalId === 'number') {
-        hasRestoredHistory = false
-        try {
-          await restoreTerminalBuffer(props.terminalId)
-        } finally {
-          flushQueuedBinaryChunks()
-        }
-      } else {
-        flushQueuedBinaryChunks()
+        subscribeToPane(props.terminalId)
       }
     })
   })
@@ -1053,13 +768,15 @@
     hasDisposed = true
     logTerminalEvent('onBeforeUnmount')
 
+    // 清理 loading 相关资源
+    stopLoading()
+
     // 刷新解码器尾部残留，避免丢字符
     const remaining = binaryDecoder.decode()
     if (remaining) {
       shellIntegration.processTerminalOutput(remaining)
       if (props.terminalId != null) {
         terminalStore.dispatchOutputForPaneId(props.terminalId, remaining)
-        updatePaneSnapshot(props.terminalId, remaining)
       }
     }
 
@@ -1086,19 +803,8 @@
     // 取消 Tauri Channel 订阅，避免后端通道残留
     disposeChannelSubscription()
     subscribedPaneId = null
-    initialBinaryQueue = []
     isXtermReady = false
     fitRetryCount = 0
-    hasRestoredHistory = false
-    if (props.terminalId != null) {
-      paneSnapshots.delete(props.terminalId)
-      try {
-        terminalInitialBuffer.clear(props.terminalId)
-      } catch {
-        // ignore
-      }
-    }
-
     if (keyListener) {
       try {
         keyListener.dispose()
@@ -1133,29 +839,8 @@
       if (isActive) {
         logTerminalEvent('watch:isActive->true')
         nextTick(() => {
-          const snapshot = typeof props.terminalId === 'number' ? paneSnapshots.get(props.terminalId) : undefined
-          if (!hasRestoredHistory) {
-            if (snapshot) {
-              logTerminalEvent('watch:isActive->true:applySnapshotOnce', { length: snapshot.length })
-              applyHistoryContent(sanitizeHistory(snapshot))
-            } else if (typeof props.terminalId === 'number') {
-              // 快照为空时，强制尝试一次历史恢复，确保能立即显示提示符/历史
-              logTerminalEvent('watch:isActive->true:forceRestore')
-              void (async () => {
-                try {
-                  await restoreTerminalBuffer(props.terminalId, true)
-                } finally {
-                  flushQueuedBinaryChunks()
-                }
-              })()
-            }
-          }
           focusTerminal()
           resizeTerminal()
-          // 只在未恢复过时或没有内容时 flush，一般切回无需重复 flush
-          if (!hasRestoredHistory) {
-            flushQueuedBinaryChunks()
-          }
         })
       } else {
         logTerminalEvent('watch:isActive->false')
@@ -1164,60 +849,25 @@
     { immediate: true }
   )
 
-  // Re-subscribe when paneId changes
   watch(
     () => props.terminalId,
-    (newId, oldId) => {
-      logTerminalEvent('watch:terminalId', { newId, oldId })
-      disposeChannelSubscription()
+    newId => {
+      logTerminalEvent('watch:terminalId', { newId })
 
-      const remaining = binaryDecoder.decode()
-      if (remaining) {
-        shellIntegration.processTerminalOutput(remaining)
-        if (typeof oldId === 'number') {
-          terminalStore.dispatchOutputForPaneId(oldId, remaining)
-          updatePaneSnapshot(oldId, remaining)
-        }
+      if (!isXtermReady) {
+        // xterm 未就绪，等待 onMounted 中的订阅
+        return
       }
 
       if (typeof newId === 'number') {
-        shellIntegration.updateTerminalId(newId)
-        subscribedPaneId = newId
-        initialBinaryQueue = []
         subscribeToPane(newId)
-        const cachedSnapshot = paneSnapshots.get(newId)
-        if (cachedSnapshot) {
-          applyHistoryContent(sanitizeHistory(cachedSnapshot))
-        }
-        hasRestoredHistory = false
-        if (isXtermReady) {
-          void (async () => {
-            try {
-              await nextTick()
-              await restoreTerminalBuffer(newId)
-            } finally {
-              flushQueuedBinaryChunks()
-            }
-          })()
-        }
       } else {
-        subscribedPaneId = null
-        initialBinaryQueue = []
+        subscribeToPane(null)
         shellIntegration.resetState()
-        hasRestoredHistory = false
       }
 
       lastEmittedResize = null
       fitRetryCount = 0
-
-      // Clear global initial buffer for the old pane to avoid leaks and duplicates
-      if (typeof oldId === 'number') {
-        try {
-          terminalInitialBuffer.clear(oldId)
-        } catch {
-          // ignore
-        }
-      }
     }
   )
 
@@ -1258,5 +908,9 @@
     text-decoration: underline !important;
     text-decoration-style: dotted !important;
     text-decoration-color: var(--text-400) !important;
+  }
+
+  .terminal-container.terminal-loading {
+    opacity: 0;
   }
 </style>

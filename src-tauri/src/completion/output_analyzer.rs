@@ -22,6 +22,7 @@ static GLOBAL_OUTPUT_ANALYZER: OnceLock<Arc<OutputAnalyzer>> = OnceLock::new();
 struct PaneBufferEntry {
     content: String,
     last_access: Instant,
+    created_at: Instant,
 }
 
 impl PaneBufferEntry {
@@ -29,6 +30,7 @@ impl PaneBufferEntry {
         Self {
             content: String::new(),
             last_access: Instant::now(),
+            created_at: Instant::now(),
         }
     }
 
@@ -38,6 +40,10 @@ impl PaneBufferEntry {
 
     fn is_stale(&self, max_age: Duration) -> bool {
         self.last_access.elapsed() > max_age
+    }
+
+    fn is_too_new(&self) -> bool {
+        self.created_at.elapsed() < Duration::from_secs(2)
     }
 }
 
@@ -386,6 +392,16 @@ impl OutputAnalyzer {
         } else {
             Ok(String::new())
         }
+    }
+
+    /// 检查指定面板的缓冲区是否太新（刚创建 <2秒）
+    pub fn is_pane_buffer_too_new(&self, pane_id: u32) -> bool {
+        if let Ok(buffer) = self.get_buffer_lock() {
+            if let Some(entry) = buffer.get(&pane_id) {
+                return entry.is_too_new();
+            }
+        }
+        false
     }
 
     /// 设置指定面板的缓冲区内容

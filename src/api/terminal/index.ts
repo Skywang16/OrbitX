@@ -76,16 +76,6 @@ export class TerminalApi {
     return await invoke<boolean>('terminal_validate_shell_path', { path })
   }
 
-  // ===== 缓冲区操作 =====
-
-  async getTerminalBuffer(paneId: number): Promise<string> {
-    return await invoke<string>('terminal_get_buffer', { paneId })
-  }
-
-  async setTerminalBuffer(paneId: number, content: string): Promise<void> {
-    await invoke<void>('terminal_set_buffer', { paneId, content })
-  }
-
   // ===== 工具方法 =====
 
   async terminalExists(paneId: number): Promise<boolean> {

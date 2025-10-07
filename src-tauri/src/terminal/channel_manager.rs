@@ -4,6 +4,8 @@ use tauri::ipc::Channel;
 use tracing::debug;
 
 use super::types::TerminalChannelMessage;
+use super::replay;
+use crate::completion::output_analyzer::OutputAnalyzer;
 
 const MAX_PENDING_CHUNKS: usize = 64;
 const MAX_PENDING_BYTES: usize = 64 * 1024;
@@ -50,6 +52,23 @@ impl TerminalChannelManager {
             map.insert(pane_id, channel);
         }
 
+        // 检查缓冲区是否太新（<2秒），如果是则跳过 replay（避免新建终端重复输出）
+        if OutputAnalyzer::global().is_pane_buffer_too_new(pane_id) {
+            debug!(pane_id, "TerminalChannelManager skipped replay (buffer too new)");
+        } else if let Ok(replay_result) = replay::build_replay(pane_id) {
+            if let Ok(map) = self.channels.read() {
+                if let Some(ch) = map.get(&pane_id) {
+                    for event in replay_result.events {
+                        let _ = ch.send(TerminalChannelMessage::Data {
+                            pane_id,
+                            data: event.data.into_bytes(),
+                        });
+                    }
+                    debug!(pane_id, "TerminalChannelManager sent replay on register");
+                }
+            }
+        }
+
         let buffered = {
             if let Ok(mut pending) = self.pending.write() {
                 pending.remove(&pane_id).map(PendingQueue::drain)
@@ -71,7 +90,7 @@ impl TerminalChannelManager {
                     }
                     debug!(
                         pane_id,
-                        replayed, "TerminalChannelManager replayed buffered chunks on register"
+                        replayed, "TerminalChannelManager sent buffered chunks after replay"
                     );
                 }
             }

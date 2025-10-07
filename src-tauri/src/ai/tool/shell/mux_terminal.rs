@@ -235,52 +235,6 @@ pub async fn terminal_list(_state: State<'_, TerminalState>) -> TauriApiResult<V
     Ok(api_success!(pane_ids))
 }
 
-/// 获取终端缓冲区内容
-///
-#[tauri::command]
-pub async fn terminal_get_buffer(pane_id: u32) -> TauriApiResult<String> {
-    debug!("开始获取终端缓冲区内容: ID={}", pane_id);
-
-    use crate::completion::output_analyzer::OutputAnalyzer;
-
-    match OutputAnalyzer::global().get_pane_buffer(pane_id) {
-        Ok(content) => {
-            debug!(
-                "获取终端缓冲区成功: ID={}, 内容长度={}",
-                pane_id,
-                content.len()
-            );
-            Ok(api_success!(content))
-        }
-        Err(e) => {
-            let error_msg = format!("获取终端缓冲区失败: ID={}, 错误: {}", pane_id, e);
-            error!("{}", error_msg);
-            Ok(api_error!("shell.get_buffer_failed"))
-        }
-    }
-}
-
-/// 设置终端缓冲区内容
-///
-#[tauri::command]
-pub async fn terminal_set_buffer(pane_id: u32, content: String) -> TauriApiResult<EmptyData> {
-    debug!(
-        "开始设置终端缓冲区内容: ID={}, 内容长度={}",
-        pane_id,
-        content.len()
-    );
-
-    use crate::completion::output_analyzer::OutputAnalyzer;
-
-    match OutputAnalyzer::global().set_pane_buffer(pane_id, content) {
-        Ok(_) => {
-            debug!("设置终端缓冲区成功: ID={}", pane_id);
-            Ok(api_success!())
-        }
-        Err(_) => Ok(api_error!("shell.set_buffer_failed")),
-    }
-}
-
 /// 获取系统可用的shell列表
 ///
 #[tauri::command]

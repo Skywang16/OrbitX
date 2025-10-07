@@ -15,6 +15,16 @@ export interface TerminalWriteOptions {
   data: string
 }
 
+export interface ReplayEvent {
+  data: string
+  cols: number
+  rows: number
+}
+
+export interface ProcessReplayEvent {
+  events: ReplayEvent[]
+}
+
 export interface TerminalResizeOptions {
   paneId: number
   rows: number

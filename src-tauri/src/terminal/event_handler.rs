@@ -50,13 +50,11 @@ impl<R: Runtime> TerminalEventHandler<R> {
         let app_handle = self.app_handle.clone();
         let mux_subscriber: SubscriberCallback = Box::new(move |notification| match notification {
             MuxNotification::PaneOutput { pane_id, data } => {
-                // 1) 通过 ChannelManager 直接推送字节流给前端（用于高性能渲染）
                 let state =
                     app_handle.state::<crate::terminal::channel_state::TerminalChannelState>();
                 state.manager.send_data(pane_id.as_u32(), data.as_ref());
 
-                // 2) 同步喂给 OutputAnalyzer，供 terminal_get_buffer 历史回放使用
-                //    使用 UTF-8 宽容解码，避免因不合法字节导致崩溃
+                // 同步喂给 OutputAnalyzer，供历史缓存使用
                 let text = String::from_utf8_lossy(data);
                 if let Err(e) = OutputAnalyzer::global().analyze_output(pane_id.as_u32(), &text) {
                     warn!(

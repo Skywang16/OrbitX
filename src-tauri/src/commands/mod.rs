@@ -61,8 +61,6 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::ai::tool::shell::terminal_get_shell_stats,
         crate::ai::tool::shell::terminal_initialize_shell_manager,
         crate::ai::tool::shell::terminal_validate_shell_manager,
-        crate::ai::tool::shell::terminal_get_buffer,
-        crate::ai::tool::shell::terminal_set_buffer,
         // 终端上下文管理命令
         crate::terminal::commands::pane::terminal_context_set_active_pane,
         crate::terminal::commands::pane::terminal_context_get_active_pane,

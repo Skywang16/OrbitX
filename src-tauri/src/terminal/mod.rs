@@ -6,6 +6,7 @@ pub mod commands;
 pub mod context_registry;
 pub mod context_service;
 pub mod event_handler;
+pub mod replay;
 #[cfg(test)]
 pub mod integration_test;
 pub mod types;
