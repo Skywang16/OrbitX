@@ -478,7 +478,7 @@ impl Repository<CommandHistoryEntry> for CommandHistoryRepository {
     }
 
     async fn update(&self, _entity: &CommandHistoryEntry) -> AppResult<()> {
-        Err(anyhow!("命令历史记录不支持更新操作"))
+        Err(anyhow!("Command history does not support update operations"))
     }
 
     async fn delete(&self, id: i64) -> AppResult<()> {
@@ -488,7 +488,7 @@ impl Repository<CommandHistoryEntry> for CommandHistoryRepository {
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(anyhow!("命令历史记录不存在: {}", id));
+            return Err(anyhow!("Command history entry does not exist: {}", id));
         }
 
         Ok(())

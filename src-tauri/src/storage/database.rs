@@ -172,7 +172,7 @@ impl DatabaseManager {
 
     pub async fn set_master_password(&self, password: &str) -> AppResult<()> {
         if !self.options.encryption {
-            return Err(anyhow!("未启用加密"));
+            return Err(anyhow!("Encryption not enabled"));
         }
         self.key_vault.set_from_password(password).await?;
         info!("主密钥已更新");
@@ -181,7 +181,7 @@ impl DatabaseManager {
 
     pub async fn encrypt_data(&self, data: &str) -> AppResult<Vec<u8>> {
         if !self.options.encryption {
-            return Err(anyhow!("未启用加密"));
+            return Err(anyhow!("Encryption not enabled"));
         }
         let key_bytes = self.key_vault.master_key().await?;
         let cipher = ChaCha20Poly1305::new(Key::from_slice(&key_bytes));
@@ -199,10 +199,10 @@ impl DatabaseManager {
 
     pub async fn decrypt_data(&self, encrypted: &[u8]) -> AppResult<String> {
         if !self.options.encryption {
-            return Err(anyhow!("未启用加密"));
+            return Err(anyhow!("Encryption not enabled"));
         }
         if encrypted.len() <= NONCE_LEN {
-            return Err(anyhow!("加密数据格式错误"));
+            return Err(anyhow!("Invalid encrypted data format"));
         }
         let key_bytes = self.key_vault.master_key().await?;
         let cipher = ChaCha20Poly1305::new(Key::from_slice(&key_bytes));
@@ -309,7 +309,7 @@ impl KeyVault {
             .ok_or_else(|| anyhow!("密钥派生失败: 空哈希"))?;
         let hash_bytes = hash.as_bytes();
         if hash_bytes.len() < 32 {
-            return Err(anyhow!("密钥长度不足"));
+            return Err(anyhow!("Insufficient key length"));
         }
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&hash_bytes[..32]);
@@ -337,9 +337,9 @@ impl KeyVault {
         }
         let decoded = BASE64
             .decode(encoded)
-            .map_err(|e| anyhow!("解析密钥失败: {}", e))?;
+            .map_err(|e| anyhow!("Failed to parse key: {}", e))?;
         if decoded.len() != 32 {
-            return Err(anyhow!("密钥长度无效"));
+            return Err(anyhow!("Invalid key length"));
         }
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&decoded);

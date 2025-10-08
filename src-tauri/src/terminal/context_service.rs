@@ -136,7 +136,7 @@ impl TerminalContextService {
 
         let context = timeout(self.query_timeout, self.query_context_internal(pane_id))
             .await
-            .map_err(|_| anyhow!("查询终端上下文超时"))??;
+            .map_err(|_| anyhow!("Terminal context query timeout"))??;
 
         self.store_in_cache(pane_id, &context).await;
         self.send_context_updated_event(pane_id, &context);
@@ -366,7 +366,7 @@ impl TerminalContextService {
 
     async fn query_context_internal(&self, pane_id: PaneId) -> AppResult<TerminalContext> {
         if !self.terminal_mux.pane_exists(pane_id) {
-            return Err(anyhow!("面板不存在: {}", pane_id));
+            return Err(anyhow!("Pane does not exist: {}", pane_id));
         }
 
         let mut context = TerminalContext::new(pane_id);

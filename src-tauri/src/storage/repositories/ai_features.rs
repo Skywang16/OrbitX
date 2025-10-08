@@ -53,7 +53,7 @@ impl AIFeatureConfig {
         config: &T,
     ) -> AppResult<Self> {
         let config_json =
-            serde_json::to_string(config).map_err(|e| anyhow!("序列化配置失败: {}", e))?;
+            serde_json::to_string(config).map_err(|e| anyhow!("Failed to serialize config: {}", e))?;
 
         Ok(Self::new(feature_name, enabled, Some(config_json)))
     }
@@ -63,7 +63,7 @@ impl AIFeatureConfig {
         match &self.config_json {
             Some(json) => {
                 let config =
-                    serde_json::from_str(json).map_err(|e| anyhow!("解析配置JSON失败: {}", e))?;
+                    serde_json::from_str(json).map_err(|e| anyhow!("Failed to parse config JSON: {}", e))?;
                 Ok(Some(config))
             }
             None => Ok(None),
@@ -80,13 +80,13 @@ impl RowMapper<AIFeatureConfig> for AIFeatureConfig {
             created_at: {
                 let timestamp: String = row.try_get("created_at")?;
                 DateTime::parse_from_rfc3339(&timestamp)
-                    .map_err(|e| anyhow!("解析创建时间失败: {}", e))?
+                    .map_err(|e| anyhow!("Failed to parse created_at timestamp: {}", e))?
                     .with_timezone(&Utc)
             },
             updated_at: {
                 let timestamp: String = row.try_get("updated_at")?;
                 DateTime::parse_from_rfc3339(&timestamp)
-                    .map_err(|e| anyhow!("解析更新时间失败: {}", e))?
+                    .map_err(|e| anyhow!("Failed to parse updated_at timestamp: {}", e))?
                     .with_timezone(&Utc)
             },
         })
@@ -131,7 +131,7 @@ impl AIFeaturesRepository {
                 Value::String(s) => query_builder.bind(s),
                 Value::Bool(b) => query_builder.bind(b),
                 Value::Null => query_builder.bind(None::<String>),
-                _ => return Err(anyhow!("不支持的参数类型")),
+                _ => return Err(anyhow!("Unsupported parameter type")),
             };
         }
 
@@ -190,7 +190,7 @@ impl AIFeaturesRepository {
                 Value::String(s) => query_builder.bind(s),
                 Value::Bool(b) => query_builder.bind(b),
                 Value::Null => query_builder.bind(None::<String>),
-                _ => return Err(anyhow!("不支持的参数类型")),
+                _ => return Err(anyhow!("Unsupported parameter type")),
             };
         }
 
@@ -210,7 +210,7 @@ impl AIFeaturesRepository {
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(anyhow!("功能配置不存在: {}", feature_name));
+            return Err(anyhow!("Feature config does not exist: {}", feature_name));
         }
 
         debug!("AI功能配置删除成功: {}", feature_name);
@@ -240,7 +240,7 @@ impl AIFeaturesRepository {
                 Value::String(s) => query_builder.bind(s),
                 Value::Bool(b) => query_builder.bind(b),
                 Value::Null => query_builder.bind(None::<String>),
-                _ => return Err(anyhow!("不支持的参数类型")),
+                _ => return Err(anyhow!("Unsupported parameter type")),
             };
         }
 

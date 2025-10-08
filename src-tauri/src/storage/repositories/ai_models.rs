@@ -376,7 +376,7 @@ impl AIModelRepository {
 impl Repository<AIModelConfig> for AIModelRepository {
     async fn find_by_id(&self, _id: i64) -> AppResult<Option<AIModelConfig>> {
         // AI模型使用字符串ID，这个方法不适用
-        Err(anyhow!("AI模型使用字符串ID，请使用find_by_string_id"))
+        Err(anyhow!("AI models use string IDs, please use find_by_string_id"))
     }
 
     async fn find_all(&self) -> AppResult<Vec<AIModelConfig>> {
@@ -393,7 +393,7 @@ impl Repository<AIModelConfig> for AIModelRepository {
     }
 
     async fn delete(&self, _id: i64) -> AppResult<()> {
-        Err(anyhow!("AI模型使用字符串ID，请使用delete_by_string_id"))
+        Err(anyhow!("AI models use string IDs, please use delete_by_string_id"))
     }
 }
 
@@ -419,7 +419,7 @@ impl AIModelRepository {
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(anyhow!("模型ID不存在: {}", id));
+            return Err(anyhow!("Model ID does not exist: {}", id));
         }
 
         debug!("AI模型删除成功: {}", id);

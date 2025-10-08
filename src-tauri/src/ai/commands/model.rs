@@ -24,7 +24,7 @@ pub async fn ai_models_get(state: State<'_, AIManagerState>) -> TauriApiResult<V
         }
         Err(error) => {
             warn!(error = %error, "加载AI模型配置失败");
-            Ok(api_error!("ai.get_models_failed", "error" => error.to_string()))
+            Ok(api_error!("ai.get_models_failed"))
         }
     }
 }
@@ -43,7 +43,7 @@ pub async fn ai_models_add(
         }
         Err(error) => {
             warn!(error = %error, "添加AI模型失败");
-            Ok(api_error!("ai.add_model_failed", "error" => error.to_string()))
+            Ok(api_error!("ai.add_model_failed"))
         }
     }
 }
@@ -60,7 +60,7 @@ pub async fn ai_models_remove(
         Ok(_) => Ok(api_success!()),
         Err(error) => {
             warn!(error = %error, model_id = %model_id, "删除AI模型失败");
-            Ok(api_error!("ai.remove_model_failed", "error" => error.to_string()))
+            Ok(api_error!("ai.remove_model_failed"))
         }
     }
 }
@@ -78,7 +78,7 @@ pub async fn ai_models_update(
         Ok(_) => Ok(api_success!()),
         Err(error) => {
             warn!(error = %error, model_id = %model_id, "更新AI模型失败");
-            Ok(api_error!("ai.update_model_failed", "error" => error.to_string()))
+            Ok(api_error!("ai.update_model_failed"))
         }
     }
 }

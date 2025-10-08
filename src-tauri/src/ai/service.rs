@@ -284,8 +284,8 @@ impl AIService {
         provider
             .call(request)
             .await
-            .map(|_| "连接成功".to_string())
-            .map_err(|e| anyhow!("Gemini API 错误: {}", e))
+            .map(|_| "Connection successful".to_string())
+            .map_err(|e| anyhow!("Gemini API error: {}", e))
     }
 
     fn resolve_timeout(&self, model: &AIModelConfig) -> Duration {

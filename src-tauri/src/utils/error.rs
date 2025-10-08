@@ -64,7 +64,7 @@ pub struct Validator;
 impl Validator {
     pub fn validate_id(id: i64, name: &str) -> Result<(), String> {
         if id <= 0 {
-            Err(format!("无效的{}: {}", name, id))
+            Err(format!("Invalid {}: {}", name, id))
         } else {
             Ok(())
         }
@@ -72,7 +72,7 @@ impl Validator {
 
     pub fn validate_not_empty(value: &str, name: &str) -> Result<(), String> {
         if value.trim().is_empty() {
-            Err(format!("{}不能为空", name))
+            Err(format!("{} cannot be empty", name))
         } else {
             Ok(())
         }
@@ -80,12 +80,12 @@ impl Validator {
 }
 
 pub fn serialize_to_json<T: serde::Serialize>(value: &T, context: &str) -> Result<String, String> {
-    serde_json::to_string(value).map_err(|e| format!("{}序列化失败: {}", context, e))
+    serde_json::to_string(value).map_err(|e| format!("{} serialization failed: {}", context, e))
 }
 
 pub fn serialize_to_value<T: serde::Serialize>(
     value: &T,
     context: &str,
 ) -> Result<serde_json::Value, String> {
-    serde_json::to_value(value).map_err(|e| format!("{}序列化失败: {}", context, e))
+    serde_json::to_value(value).map_err(|e| format!("{} serialization failed: {}", context, e))
 }

@@ -32,11 +32,11 @@ impl CompletionState {
         let engine_state = self
             .engine
             .lock()
-            .map_err(|_| "获取引擎状态锁失败".to_string())?;
+            .map_err(|_| "Failed to acquire engine state lock".to_string())?;
 
         match engine_state.as_ref() {
             Some(_) => Ok(()),
-            None => Err(anyhow!("[配置错误] 补全引擎未初始化")).to_tauri(),
+            None => Err(anyhow!("Completion engine not initialized")).to_tauri(),
         }
     }
 
@@ -45,11 +45,11 @@ impl CompletionState {
         let engine_state = self
             .engine
             .lock()
-            .map_err(|_| "获取引擎状态锁失败".to_string())?;
+            .map_err(|_| "Failed to acquire engine state lock".to_string())?;
 
         match engine_state.as_ref() {
             Some(engine) => Ok(Arc::clone(engine)),
-            None => Err(anyhow!("[配置错误] 补全引擎未初始化")).to_tauri(),
+            None => Err(anyhow!("Completion engine not initialized")).to_tauri(),
         }
     }
 
@@ -58,7 +58,7 @@ impl CompletionState {
         let mut engine_state = self
             .engine
             .lock()
-            .map_err(|_| "获取引擎状态锁失败".to_string())?;
+            .map_err(|_| "Failed to acquire engine state lock".to_string())?;
 
         *engine_state = Some(engine);
         Ok(())

@@ -54,19 +54,19 @@ impl MessagePackManager {
             let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
             state
                 .serialize(&mut Serializer::new(&mut encoder))
-                .map_err(|e| anyhow!("MessagePack序列化失败: {}", e))?;
-            let compressed = encoder.finish().map_err(|e| anyhow!("压缩失败: {}", e))?;
+                .map_err(|e| anyhow!("MessagePack serialization failed: {}", e))?;
+            let compressed = encoder.finish().map_err(|e| anyhow!("Compression failed: {}", e))?;
             (compressed, FLAG_COMPRESSED)
         } else {
             let mut buf = Vec::new();
             state
                 .serialize(&mut Serializer::new(&mut buf))
-                .map_err(|e| anyhow!("MessagePack序列化失败: {}", e))?;
+                .map_err(|e| anyhow!("MessagePack serialization failed: {}", e))?;
             (buf, 0)
         };
 
         if payload.len() > self.options.max_file_size {
-            return Err(anyhow!("序列化数据过大: {} bytes", payload.len()));
+            return Err(anyhow!("Serialized data too large: {} bytes", payload.len()));
         }
 
         let mut header = [0u8; HEADER_LEN];
@@ -95,21 +95,21 @@ impl MessagePackManager {
 
     pub fn deserialize_state(&self, data: &[u8]) -> AppResult<SessionState> {
         if data.len() < HEADER_LEN {
-            return Err(anyhow!("状态文件头无效"));
+            return Err(anyhow!("Invalid state file header"));
         }
 
         let header = &data[..HEADER_LEN];
         if &header[..4] != MAGIC {
-            return Err(anyhow!("状态文件魔数错误"));
+            return Err(anyhow!("Invalid state file magic number"));
         }
         if header[4] != VERSION {
-            return Err(anyhow!("状态文件版本不支持"));
+            return Err(anyhow!("Unsupported state file version"));
         }
 
         let flags = header[5];
         let payload_len = u64::from_le_bytes(header[6..14].try_into().unwrap()) as usize;
         if HEADER_LEN + payload_len != data.len() {
-            return Err(anyhow!("状态文件长度不一致"));
+            return Err(anyhow!("State file length mismatch"));
         }
 
         let payload = &data[HEADER_LEN..];
@@ -119,7 +119,7 @@ impl MessagePackManager {
             hasher.update(payload);
             let digest = hasher.finalize();
             if digest.as_slice() != &header[14..46] {
-                return Err(anyhow!("状态文件校验失败"));
+                return Err(anyhow!("State file checksum failed"));
             }
         }
 
@@ -128,14 +128,14 @@ impl MessagePackManager {
             let mut buf = Vec::new();
             decoder
                 .read_to_end(&mut buf)
-                .map_err(|e| anyhow!("状态解压失败: {}", e))?;
+                .map_err(|e| anyhow!("Failed to decompress state: {}", e))?;
             buf
         } else {
             payload.to_vec()
         };
 
         let mut deserializer = Deserializer::new(&decoded[..]);
-        SessionState::deserialize(&mut deserializer).map_err(|e| anyhow!("状态反序列化失败: {}", e))
+        SessionState::deserialize(&mut deserializer).map_err(|e| anyhow!("State deserialization failed: {}", e))
     }
 
     pub async fn save_state(&self, state: &SessionState) -> AppResult<()> {
@@ -160,7 +160,7 @@ impl MessagePackManager {
 
         let data = async_fs::read(&state_file)
             .await
-            .with_context(|| format!("读取状态文件失败: {}", state_file.display()))?;
+            .with_context(|| format!("Failed to read state file: {}", state_file.display()))?;
 
         match self.deserialize_state(&data) {
             Ok(state) => Ok(Some(state)),
@@ -175,12 +175,12 @@ impl MessagePackManager {
         let backup_dir = self.get_backup_directory();
         async_fs::create_dir_all(&backup_dir)
             .await
-            .with_context(|| format!("创建备份目录失败: {}", backup_dir.display()))?;
+            .with_context(|| format!("Failed to create backup directory: {}", backup_dir.display()))?;
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
         let backup_file = backup_dir.join(format!("session_state_{}.msgpack.bak", timestamp));
         async_fs::copy(source_file, &backup_file)
             .await
-            .with_context(|| format!("创建备份失败: {}", backup_file.display()))?;
+            .with_context(|| format!("Failed to create backup: {}", backup_file.display()))?;
         Ok(backup_file)
     }
 
@@ -193,12 +193,12 @@ impl MessagePackManager {
         let mut backups = Vec::new();
         let mut entries = async_fs::read_dir(&backup_dir)
             .await
-            .with_context(|| format!("读取备份目录失败: {}", backup_dir.display()))?;
+            .with_context(|| format!("Failed to read backup directory: {}", backup_dir.display()))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .with_context(|| format!("遍历备份目录失败: {}", backup_dir.display()))?
+            .with_context(|| format!("Failed to iterate backup directory: {}", backup_dir.display()))?
         {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("bak") {
@@ -229,7 +229,7 @@ impl MessagePackManager {
         let tmp = target.with_extension("tmp");
         async_fs::write(&tmp, data)
             .await
-            .with_context(|| format!("写入临时文件失败: {}", tmp.display()))?;
+            .with_context(|| format!("Failed to write temp file: {}", tmp.display()))?;
         async_fs::rename(&tmp, target).await.map_err(|err| {
             let _ = std::fs::remove_file(&tmp);
             anyhow!(
@@ -251,12 +251,12 @@ impl MessagePackManager {
         let mut backups = Vec::new();
         let mut entries = async_fs::read_dir(&backup_dir)
             .await
-            .with_context(|| format!("读取备份目录失败: {}", backup_dir.display()))?;
+            .with_context(|| format!("Failed to read backup directory: {}", backup_dir.display()))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .with_context(|| format!("遍历备份目录失败: {}", backup_dir.display()))?
+            .with_context(|| format!("Failed to iterate backup directory: {}", backup_dir.display()))?
         {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("bak") {
@@ -283,7 +283,7 @@ impl MessagePackManager {
     async fn ensure_state_directory(&self) -> AppResult<()> {
         async_fs::create_dir_all(&self.paths.state_dir)
             .await
-            .with_context(|| format!("创建状态目录失败: {}", self.paths.state_dir.display()))
+            .with_context(|| format!("Failed to create state directory: {}", self.paths.state_dir.display()))
     }
 
     fn get_state_file_path(&self) -> PathBuf {
@@ -313,11 +313,11 @@ impl MessagePackManager {
         if backup_dir.exists() {
             let mut entries = async_fs::read_dir(&backup_dir)
                 .await
-                .with_context(|| format!("读取备份目录失败: {}", backup_dir.display()))?;
+                .with_context(|| format!("Failed to read backup directory: {}", backup_dir.display()))?;
             while let Some(entry) = entries
                 .next_entry()
                 .await
-                .with_context(|| format!("遍历备份目录失败: {}", backup_dir.display()))?
+                .with_context(|| format!("Failed to iterate backup directory: {}", backup_dir.display()))?
             {
                 if entry.path().extension().and_then(|s| s.to_str()) == Some("bak") {
                     backup_count += 1;

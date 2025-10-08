@@ -1,8 +1,10 @@
 // 目录和路径操作相关命令
 
 use super::*;
+use anyhow::Context;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
+use tracing::{debug, warn};
 
 // 获取当前目录
 #[tauri::command]
@@ -72,9 +74,14 @@ pub async fn window_get_home_directory(
             .or_else(|_| env::current_dir().map(|p| p.to_string_lossy().to_string()))
     } else {
         env::var("HOME").or_else(|_| env::current_dir().map(|p| p.to_string_lossy().to_string()))
-    }
-    .context("获取家目录失败")
-    .to_tauri()?;
+    };
+
+    let home_dir = match home_dir.context("获取家目录失败").to_tauri() {
+        Ok(dir) => dir,
+        Err(_) => {
+            return Ok(api_error!("window.get_home_directory_failed"));
+        }
+    };
 
     debug!("系统家目录: {}", home_dir);
 
@@ -109,16 +116,16 @@ pub async fn window_clear_directory_cache(
 pub async fn window_normalize_path(path: String) -> TauriApiResult<String> {
     debug!("开始规范化路径: {}", path);
 
-    if path.is_empty() {
-        return Err("输入验证错误: 路径不能为空".to_string());
+    if path.trim().is_empty() {
+        return Ok(api_error!("common.path_empty"));
     }
 
-    let normalized = Path::new(&path)
-        .canonicalize()
-        .with_context(|| format!("路径规范化失败: {}", path))
-        .to_tauri()?
-        .to_string_lossy()
-        .to_string();
+    let normalized = match Path::new(&path).canonicalize() {
+        Ok(p) => p.to_string_lossy().to_string(),
+        Err(_) => {
+            return Ok(api_error!("window.normalize_path_failed"));
+        }
+    };
 
     debug!("路径规范化成功: {} -> {}", path, normalized);
     Ok(api_success!(normalized))
@@ -130,13 +137,13 @@ pub async fn window_join_paths(paths: Vec<String>) -> TauriApiResult<String> {
     debug!("开始连接路径: {:?}", paths);
 
     if paths.is_empty() {
-        return Err("输入验证错误: 路径列表不能为空".to_string());
+        return Ok(api_error!("window.path_list_empty"));
     }
 
     let mut result = PathBuf::new();
     for path in &paths {
-        if path.is_empty() {
-            return Err("输入验证错误: 路径组件不能为空".to_string());
+        if path.trim().is_empty() {
+            return Ok(api_error!("window.path_component_empty"));
         }
         result.push(path);
     }
@@ -151,8 +158,8 @@ pub async fn window_join_paths(paths: Vec<String>) -> TauriApiResult<String> {
 pub async fn window_path_exists(path: String) -> TauriApiResult<bool> {
     debug!("开始检查路径是否存在: {}", path);
 
-    if path.is_empty() {
-        return Err("输入验证错误: 路径不能为空".to_string());
+    if path.trim().is_empty() {
+        return Ok(api_error!("common.path_empty"));
     }
 
     let exists = Path::new(&path).exists();

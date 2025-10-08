@@ -72,7 +72,7 @@ impl ActiveTerminalContextRegistry {
             let mut active_pane = self
                 .global_active_pane
                 .write()
-                .map_err(|e| anyhow!("获取写锁失败: {}", e))?;
+                .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
             let old_id = *active_pane;
 
@@ -125,7 +125,7 @@ impl ActiveTerminalContextRegistry {
             let mut active_pane = self
                 .global_active_pane
                 .write()
-                .map_err(|e| anyhow!("获取写锁失败: {}", e))?;
+                .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
             let old_id = *active_pane;
             *active_pane = None;
@@ -181,7 +181,7 @@ impl ActiveTerminalContextRegistry {
             let mut window_panes = self
                 .window_active_panes
                 .write()
-                .map_err(|e| anyhow!("获取窗口活跃终端写锁失败: {}", e))?;
+                .map_err(|e| anyhow!("Failed to acquire window active pane write lock: {}", e))?;
 
             window_panes.insert(window_id, pane_id)
         };
@@ -231,7 +231,7 @@ impl ActiveTerminalContextRegistry {
             let mut window_panes = self
                 .window_active_panes
                 .write()
-                .map_err(|e| anyhow!("获取窗口活跃终端写锁失败: {}", e))?;
+                .map_err(|e| anyhow!("Failed to acquire window active pane write lock: {}", e))?;
 
             window_panes.remove(&window_id)
         };
@@ -272,7 +272,7 @@ impl ActiveTerminalContextRegistry {
     pub fn send_event(&self, event: TerminalContextEvent) -> AppResult<usize> {
         self.event_sender
             .send(event)
-            .map_err(|e| anyhow!("发送事件失败: {}", e))
+            .map_err(|e| anyhow!("Failed to send event: {}", e))
     }
 
     /// 获取注册表统计信息

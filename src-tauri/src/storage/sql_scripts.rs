@@ -21,7 +21,7 @@ impl SqlScriptCatalog {
     pub async fn load(dir: impl AsRef<Path>) -> AppResult<Self> {
         let dir = dir.as_ref();
         if !dir.exists() {
-            return Err(anyhow!("SQL目录不存在: {}", dir.display()));
+            return Err(anyhow!("SQL directory does not exist: {}", dir.display()));
         }
 
         let mut entries = fs::read_dir(dir)
@@ -185,7 +185,7 @@ fn parse_order(filename: &str) -> AppResult<u32> {
         .take_while(|c| c.is_ascii_digit())
         .collect();
     if digits.is_empty() {
-        return Err(anyhow!("无法解析文件顺序: {}", filename));
+        return Err(anyhow!("Failed to parse file order: {}", filename));
     }
     digits
         .parse::<u32>()

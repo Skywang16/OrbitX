@@ -7,7 +7,11 @@
     "invalid_role": "Invalid role",
     "title_empty": "Title cannot be empty",
     "content_empty": "Content cannot be empty",
-    "path_empty": "Path cannot be empty"
+    "path_empty": "Path cannot be empty",
+    "invalid_path": "Invalid path",
+    "success": "Operation succeeded",
+    "operation_failed": "Operation failed",
+    "system_error": "System error"
   },
   "ai": {
     "conversation_not_found": "Conversation not found",
@@ -22,6 +26,7 @@
     "add_model_failed": "Failed to add model",
     "remove_model_failed": "Failed to remove model",
     "update_model_failed": "Failed to update model",
+    "get_models_failed": "Failed to load model configuration",
     "test_connection_error": "Connection test failed: {error}",
     "api_url_empty": "API URL cannot be empty",
     "api_key_empty": "API Key cannot be empty",
@@ -35,11 +40,39 @@
     "get_failed": "Failed to get completion suggestions",
     "init_failed": "Failed to initialize completion engine",
     "engine_not_initialized": "Completion engine not initialized",
-    "stats_failed": "Failed to get completion statistics"
+    "stats_failed": "Failed to get completion statistics",
+    "clear_cache_failed": "Failed to clear completion cache"
   },
   "config": {
     "get_failed": "Failed to get configuration",
-    "save_failed": "Failed to save configuration"
+    "save_failed": "Failed to save configuration",
+    "update_failed": "Failed to update configuration",
+    "validate_failed": "Failed to validate configuration",
+    "reset_failed": "Failed to reset configuration",
+    "get_folder_path_failed": "Failed to get configuration folder",
+    "open_folder_failed": "Failed to open configuration folder"
+  },
+  "agent": {
+    "cancel_failed": "Failed to cancel task",
+    "context": {
+      "file_status_failed": "Failed to get file context status",
+      "summary_failed": "Failed to generate conversation summary"
+    },
+    "conversation": {
+      "create_failed": "Failed to create conversation",
+      "delete_failed": "Failed to delete conversation",
+      "prefix_prompt_failed": "Failed to get prefix prompt",
+      "set_prefix_prompt_failed": "Failed to set prefix prompt",
+      "update_failed": "Failed to update conversation"
+    },
+    "execute_failed": "Failed to execute task",
+    "execute_tree_failed": "Failed to execute task tree",
+    "list_failed": "Failed to list tasks",
+    "pause_failed": "Failed to pause task",
+    "ui": {
+      "conversations_failed": "Failed to load conversations",
+      "messages_failed": "Failed to load messages"
+    }
   },
   "llm": {
     "call_failed": "LLM call failed",
@@ -77,14 +110,41 @@
     "get_buffer_failed": "Failed to get buffer",
     "operation_failed": "Operation failed"
   },
+  "shortcuts": {
+    "get_failed": "Failed to get shortcuts configuration",
+    "update_failed": "Failed to update shortcuts configuration",
+    "validate_failed": "Failed to validate shortcuts configuration",
+    "detect_conflicts_failed": "Failed to detect shortcut conflicts",
+    "add_failed": "Failed to add shortcut",
+    "remove_failed": "Failed to remove shortcut",
+    "reset_failed": "Failed to reset shortcuts",
+    "search_failed": "Failed to search shortcuts",
+    "get_stats_failed": "Failed to get shortcut statistics",
+    "export_failed": "Failed to export shortcuts",
+    "import_failed": "Failed to import shortcuts",
+    "import_parse_failed": "Failed to parse shortcuts import file"
+  },
   "terminal": {
     "get_context_failed": "Failed to get terminal context",
     "get_active_context_failed": "Failed to get active terminal context",
     "set_active_pane_failed": "Failed to set active pane",
-    "clear_active_pane_failed": "Failed to clear active pane"
+    "clear_active_pane_failed": "Failed to clear active pane",
+    "pane_not_found": "Terminal pane not found"
   },
   "window": {
     "get_current_directory_failed": "Failed to get current directory",
+    "get_home_directory_failed": "Failed to get home directory",
+    "get_instance_failed": "Failed to get window instance",
+    "get_platform_info_failed": "Failed to get platform information",
+    "get_window_id_failed": "Failed to get window identifier",
+    "get_state_failed": "Failed to get window state",
+    "missing_always_on_top_param": "Missing always-on-top parameter",
+    "set_always_on_top_failed": "Failed to set always-on-top state",
+    "toggle_always_on_top_failed": "Failed to toggle always-on-top state",
+    "reset_state_failed": "Failed to reset window state",
+    "normalize_path_failed": "Failed to normalize path",
+    "path_list_empty": "Path list cannot be empty",
+    "path_component_empty": "Path component cannot be empty",
     "set_opacity_failed": "Failed to set window opacity",
     "opacity_out_of_range": "Opacity value must be between 0.0-1.0"
   },
@@ -101,6 +161,9 @@
     "update_config_failed": "Failed to update configuration",
     "save_session_failed": "Failed to save session state",
     "load_session_failed": "Failed to load session state"
+  },
+  "error": {
+    "with_param": "{name} encountered an error"
   },
   "eko_ctx": {
     "upsert_state_failed": "Failed to update Eko state",

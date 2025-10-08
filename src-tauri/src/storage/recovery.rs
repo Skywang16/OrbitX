@@ -210,7 +210,7 @@ impl RecoveryManager {
         };
 
         if !backup_path.exists() {
-            return Err(anyhow!("备份文件不存在: {}", backup_path.display()));
+            return Err(anyhow!("Backup file does not exist: {}", backup_path.display()));
         }
 
         // 复制备份文件到目标位置

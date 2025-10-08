@@ -38,10 +38,10 @@ pub fn init_logging() {
 
     match result {
         Ok(_) => {
-            println!("日志系统初始化成功");
+            println!("Log system initialized successfully");
         }
         Err(e) => {
-            eprintln!("日志系统初始化失败: {}", e);
+            eprintln!("Log system initialization failed: {}", e);
             std::process::exit(1);
         }
     }
@@ -50,17 +50,17 @@ pub fn init_logging() {
 /// 初始化所有应用状态管理器
 pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::Result<()> {
     let terminal_state =
-        TerminalState::new().map_err(|e| anyhow::anyhow!("终端状态初始化失败: {}", e))?;
+        TerminalState::new().map_err(|e| anyhow::anyhow!("Terminal state initialization failed: {}", e))?;
     app.manage(terminal_state);
 
     let paths = crate::config::paths::ConfigPaths::new()
-        .map_err(|e| anyhow::anyhow!("配置路径创建失败: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Config path creation failed: {}", e))?;
     app.manage(paths);
 
     let config_state = tauri::async_runtime::block_on(async {
         ConfigManagerState::new()
             .await
-            .map_err(|e| anyhow::anyhow!("配置管理器状态初始化失败: {}", e))
+            .map_err(|e| anyhow::anyhow!("Config manager state initialization failed: {}", e))
     })?;
     app.manage(config_state);
 
@@ -69,7 +69,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
         tauri::async_runtime::block_on(async {
             ShortcutManagerState::new(&config_state)
                 .await
-                .map_err(|e| anyhow::anyhow!("快捷键管理器状态初始化失败: {}", e))
+                .map_err(|e| anyhow::anyhow!("Shortcut manager state initialization failed: {}", e))
         })?
     };
     app.manage(shortcut_state);
@@ -83,7 +83,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
         tauri::async_runtime::block_on(async {
             StorageCoordinatorState::new(config_manager)
                 .await
-                .map_err(|e| anyhow::anyhow!("存储协调器状态初始化失败: {}", e))
+                .map_err(|e| anyhow::anyhow!("Storage coordinator state initialization failed: {}", e))
         })?
     };
     app.manage(storage_state);
@@ -113,7 +113,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
         let shell_integration = Arc::new(
             ShellIntegrationManager::new()
-                .map_err(|e| anyhow::anyhow!("Shell集成管理器初始化失败: {}", e))?,
+                .map_err(|e| anyhow::anyhow!("Shell integration manager initialization failed: {}", e))?,
         );
         // 使用全局单例，避免与事件系统订阅的Mux不一致
         let global_mux = crate::mux::singleton::get_mux();
@@ -139,13 +139,13 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
         let terminal_context_service = terminal_context_state.context_service().clone();
 
         let ai_state = AIManagerState::new(repositories, cache, terminal_context_service)
-            .map_err(|e| anyhow::anyhow!("AI管理器状态初始化失败: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("AI manager state initialization failed: {}", e))?;
 
         tauri::async_runtime::block_on(async {
             ai_state
                 .initialize()
                 .await
-                .map_err(|e| anyhow::anyhow!("AI服务初始化失败: {}", e))
+                .map_err(|e| anyhow::anyhow!("AI service initialization failed: {}", e))
         })?;
 
         ai_state
@@ -193,7 +193,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
     app.manage(task_executor_state);
 
     let window_state =
-        WindowState::new().map_err(|e| anyhow::anyhow!("窗口状态初始化失败: {}", e))?;
+        WindowState::new().map_err(|e| anyhow::anyhow!("Window state initialization failed: {}", e))?;
     app.manage(window_state);
 
     let terminal_mux = crate::mux::singleton::get_mux();
@@ -219,7 +219,7 @@ pub fn setup_app_events<R: tauri::Runtime>(app: &tauri::App<R>) {
         window.on_window_event(|event| {
             if let WindowEvent::CloseRequested { .. } = event {
                 if let Err(e) = crate::mux::singleton::shutdown_mux() {
-                    warn!("关闭 TerminalMux 失败: {}", e);
+                    warn!("Failed to shutdown TerminalMux: {}", e);
                 } else {
                 }
             }
@@ -249,7 +249,7 @@ pub fn setup_deep_links<R: tauri::Runtime>(app: &tauri::App<R>) {
                             }
                         }
                         Err(e) => {
-                            warn!("无法解析文件路径: {:?}, 错误: {:?}", url, e);
+                            warn!("Failed to parse file path: {:?}, error: {:?}", url, e);
 
                             // 降级处理：手动解码URL路径
                             let file_path = url.path();
@@ -351,7 +351,7 @@ fn start_system_theme_listener<R: tauri::Runtime>(app_handle: tauri::AppHandle<R
             let handle = Arc::clone(&handle);
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = handle_system_theme_change(&*handle, is_dark).await {
-                    warn!("处理系统主题变化失败: {}", e);
+                    warn!("Failed to handle system theme change: {}", e);
                 } else {
                     // 系统主题已更新（静默）
                 }
@@ -395,7 +395,7 @@ async fn get_theme_files_from_resources<R: tauri::Runtime>(
         app_handle
             .path()
             .resolve("themes", BaseDirectory::Resource)
-            .map_err(|_| "无法解析资源路径")?
+            .map_err(|_| "Failed to resolve resource path")?
     };
     match std::fs::read_dir(&themes_resource_path) {
         Ok(entries) => {
@@ -514,15 +514,15 @@ async fn copy_default_config_from_resources<R: tauri::Runtime>(
                     // 成功复制默认配置文件（静默）
                 }
                 Err(e) => {
-                    warn!("写入默认配置文件失败: {}", e);
+                    warn!("Failed to write default config file: {}", e);
                 }
             },
             Err(e) => {
-                warn!("读取资源配置文件失败: {}", e);
+                warn!("Failed to read resource config file: {}", e);
             }
         },
         Err(e) => {
-            warn!("解析配置文件资源路径失败: {}", e);
+            warn!("Failed to resolve config file resource path: {}", e);
         }
     }
 
@@ -538,12 +538,12 @@ pub fn init_plugin<R: tauri::Runtime>(name: &'static str) -> tauri::plugin::Taur
             tauri::async_runtime::spawn(async move {
                 // 复制默认配置文件
                 if let Err(e) = copy_default_config_from_resources(&app_handle).await {
-                    eprintln!("复制默认配置文件失败: {}", e);
+                    eprintln!("Failed to copy default config file: {}", e);
                 }
 
                 // 复制主题文件
                 if let Err(e) = copy_themes_from_resources(&app_handle).await {
-                    eprintln!("复制主题文件失败: {}", e);
+                    eprintln!("Failed to copy theme files: {}", e);
                 }
             });
             Ok(())

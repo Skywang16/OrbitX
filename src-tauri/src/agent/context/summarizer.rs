@@ -149,10 +149,10 @@ impl ConversationSummarizer {
         let response = llm_service
             .call(request.clone())
             .await
-            .map_err(|e| anyhow!("调用LLM生成摘要失败: {}", e))?;
+            .map_err(|e| anyhow!("Failed to call LLM for summary generation: {}", e))?;
 
         if response.content.trim().is_empty() {
-            return Err(anyhow!("LLM摘要为空"));
+            return Err(anyhow!("LLM summary is empty"));
         }
 
         let summary_tokens = response

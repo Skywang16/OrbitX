@@ -296,7 +296,7 @@ impl TaskExecutor {
             let active_tasks = self.active_tasks();
             if active_tasks.read().await.contains_key(&existing.task_id) {
                 return Err(TaskExecutorError::InternalError(format!(
-                    "会话 {} 仍有任务在执行，无法同时启动新任务",
+                    "Conversation {} still has active task, cannot start new task",
                     params.conversation_id
                 ))
                 .into());
@@ -357,7 +357,7 @@ impl TaskExecutor {
 
         let planner = Planner::new(root_ctx.clone());
         if let Err(e) = planner.plan(&params.user_prompt, true).await {
-            return Err(TaskExecutorError::InternalError(format!("Plan 失败: {}", e)).into());
+            return Err(TaskExecutorError::InternalError(format!("Plan failed: {}", e)).into());
         }
 
         let planned_tree = if params.generate_tree {
@@ -365,8 +365,8 @@ impl TaskExecutor {
             match tree_planner.plan_tree(&params.user_prompt).await {
                 Ok(tree) => Some(tree),
                 Err(e) => {
-                    // 若树规划失败，退化为单任务执行
-                    tracing::warn!("Tree 规划失败，退化为单任务: {}", e);
+                    // If tree planning fails, fallback to single task execution
+                    tracing::warn!("Tree planning failed, fallback to single task: {}", e);
                     None
                 }
             }
@@ -445,7 +445,7 @@ impl TaskExecutor {
                     )
                     .await
                     .map_err(|e| {
-                        TaskExecutorError::InternalError(format!("构建系统提示词失败: {}", e))
+                        TaskExecutorError::InternalError(format!("Failed to build system prompt: {}", e))
                     })?;
 
                     let user_prompt = build_agent_user_prompt(
@@ -456,7 +456,7 @@ impl TaskExecutor {
                     )
                     .await
                     .map_err(|e| {
-                        TaskExecutorError::InternalError(format!("构建用户提示词失败: {}", e))
+                        TaskExecutorError::InternalError(format!("Failed to build user prompt: {}", e))
                     })?;
 
                     parent_ctx.reset_message_state().await?;
@@ -840,7 +840,7 @@ impl TaskExecutor {
             None,
         )
         .await
-        .map_err(|e| TaskExecutorError::InternalError(format!("构建系统提示词失败: {}", e)))?;
+        .map_err(|e| TaskExecutorError::InternalError(format!("Failed to build system prompt: {}", e)))?;
 
         let user_prompt_built = build_agent_user_prompt(
             agent_info,
@@ -849,7 +849,7 @@ impl TaskExecutor {
             simple_tool_schemas,
         )
         .await
-        .map_err(|e| TaskExecutorError::InternalError(format!("构建用户提示词失败: {}", e)))?;
+        .map_err(|e| TaskExecutorError::InternalError(format!("Failed to build user prompt: {}", e)))?;
 
         Ok((system_prompt, user_prompt_built))
     }
@@ -1136,7 +1136,7 @@ impl TaskExecutor {
             let mut stream = llm_service
                 .call_stream(llm_request, cancel_token)
                 .await
-                .map_err(|e| TaskExecutorError::InternalError(format!("LLM流式调用失败: {}", e)))?;
+                .map_err(|e| TaskExecutorError::InternalError(format!("LLM stream call failed: {}", e)))?;
 
             let mut final_answer_acc = String::new();
             let mut pending_tool_calls: Vec<crate::llm::types::LLMToolCall> = Vec::new();

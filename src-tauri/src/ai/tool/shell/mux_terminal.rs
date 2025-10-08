@@ -20,14 +20,7 @@ use crate::{api_error, api_success};
 /// 参数验证辅助函数
 fn validate_terminal_size(rows: u16, cols: u16) -> AppResult<()> {
     if rows == 0 || cols == 0 {
-        return Err(anyhow!("终端尺寸不能为0 (当前: {}x{})", cols, rows));
-    }
-    Ok(())
-}
-
-fn validate_non_empty_string(value: &str, field_name: &str) -> AppResult<()> {
-    if value.trim().is_empty() {
-        return Err(anyhow!("{}不能为空", field_name));
+        return Err(anyhow!("Terminal size cannot be 0 (current: {}x{})", cols, rows));
     }
     Ok(())
 }
@@ -280,9 +273,9 @@ pub async fn terminal_get_default_shell() -> TauriApiResult<ShellInfo> {
 ///
 #[tauri::command]
 pub async fn terminal_validate_shell_path(path: String) -> TauriApiResult<bool> {
-    validate_non_empty_string(&path, "Shell路径")
-        .context("Shell路径验证失败")
-        .to_tauri()?;
+    if path.trim().is_empty() {
+        return Ok(api_error!("shell.command_empty"));
+    }
 
     let is_valid = ShellManager::validate_shell(&path);
 

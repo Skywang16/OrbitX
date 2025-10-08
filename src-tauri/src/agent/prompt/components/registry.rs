@@ -72,7 +72,7 @@ impl PromptComponentRegistry {
             visiting: &mut HashSet<PromptComponent>,
         ) -> Result<(), String> {
             if visiting.contains(&id) {
-                return Err(format!("检测到循环依赖: {:?}", id));
+                return Err(format!("Circular dependency detected: {:?}", id));
             }
             if visited.contains(&id) {
                 return Ok(());

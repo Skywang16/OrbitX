@@ -57,26 +57,26 @@ impl FileSystemManager {
 
     /// 同步读取文件内容
     pub fn read_file_sync(&self, path: &Path) -> AppResult<Vec<u8>> {
-        fs::read(path).with_context(|| format!("读取文件失败: {}", path.display()))
+        fs::read(path).with_context(|| format!("Failed to read file: {}", path.display()))
     }
 
     /// 异步读取文件内容
     pub async fn read_file(&self, path: &Path) -> AppResult<Vec<u8>> {
         tokio_fs::read(path)
             .await
-            .with_context(|| format!("读取文件失败: {}", path.display()))
+            .with_context(|| format!("Failed to read file: {}", path.display()))
     }
 
     /// 同步读取文件内容为字符串
     pub fn read_file_to_string_sync(&self, path: &Path) -> AppResult<String> {
-        fs::read_to_string(path).with_context(|| format!("读取文件失败: {}", path.display()))
+        fs::read_to_string(path).with_context(|| format!("Failed to read file: {}", path.display()))
     }
 
     /// 异步读取文件内容为字符串
     pub async fn read_file_to_string(&self, path: &Path) -> AppResult<String> {
         tokio_fs::read_to_string(path)
             .await
-            .with_context(|| format!("读取文件失败: {}", path.display()))
+            .with_context(|| format!("Failed to read file: {}", path.display()))
     }
 
     /// 同步写入文件内容
@@ -114,19 +114,19 @@ impl FileSystemManager {
         // 确保父目录存在
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
-                .with_context(|| format!("创建父目录失败: {}", parent.display()))?;
+                .with_context(|| format!("Failed to create parent directory: {}", parent.display()))?;
         }
 
         // 写入临时文件
         fs::write(&temp_path, content)
-            .with_context(|| format!("写入临时文件失败: {}", temp_path.display()))?;
+            .with_context(|| format!("Failed to write temp file: {}", temp_path.display()))?;
 
         #[cfg(unix)]
         if let Some(permissions) = self.options.file_permissions {
             use std::os::unix::fs::PermissionsExt;
             let perms = fs::Permissions::from_mode(permissions);
             fs::set_permissions(&temp_path, perms)
-                .with_context(|| format!("设置文件权限失败: {}", temp_path.display()))?;
+                .with_context(|| format!("Failed to set file permissions: {}", temp_path.display()))?;
         }
 
         if self.options.backup_enabled && path.exists() {
@@ -137,7 +137,7 @@ impl FileSystemManager {
         fs::rename(&temp_path, path).map_err(|e| {
             // 清理临时文件
             let _ = fs::remove_file(&temp_path);
-            anyhow!("原子移动失败: {}", e)
+            anyhow!("Failed to atomically move file: {}", e)
         })?;
 
         Ok(())
@@ -151,13 +151,13 @@ impl FileSystemManager {
         if let Some(parent) = path.parent() {
             tokio_fs::create_dir_all(parent)
                 .await
-                .with_context(|| format!("创建父目录失败: {}", parent.display()))?;
+                .with_context(|| format!("Failed to create parent directory: {}", parent.display()))?;
         }
 
         // 写入临时文件
         tokio_fs::write(&temp_path, content)
             .await
-            .with_context(|| format!("写入临时文件失败: {}", temp_path.display()))?;
+            .with_context(|| format!("Failed to write temp file: {}", temp_path.display()))?;
 
         #[cfg(unix)]
         if let Some(permissions) = self.options.file_permissions {
@@ -165,7 +165,7 @@ impl FileSystemManager {
             let perms = fs::Permissions::from_mode(permissions);
             tokio_fs::set_permissions(&temp_path, perms)
                 .await
-                .map_err(|e| anyhow!("设置文件权限失败: {}", e))?;
+                .map_err(|e| anyhow!("Failed to set file permissions: {}", e))?
         }
 
         if self.options.backup_enabled && tokio_fs::try_exists(path).await.unwrap_or(false) {
@@ -176,7 +176,7 @@ impl FileSystemManager {
         tokio_fs::rename(&temp_path, path).await.map_err(|e| {
             // 清理临时文件
             let _ = std::fs::remove_file(&temp_path);
-            anyhow!("原子移动失败: {}", e)
+            anyhow!("Failed to atomically move file: {}", e)
         })?;
 
         Ok(())
@@ -186,7 +186,7 @@ impl FileSystemManager {
     fn direct_write_sync(&self, path: &Path, content: &[u8]) -> AppResult<()> {
         // 确保父目录存在
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| anyhow!("创建父目录失败: {}", e))?;
+            fs::create_dir_all(parent).map_err(|e| anyhow!("Failed to create parent directory: {}", e))?
         }
 
         if self.options.backup_enabled && path.exists() {
@@ -194,13 +194,13 @@ impl FileSystemManager {
         }
 
         // 直接写入
-        fs::write(path, content).with_context(|| format!("写入文件失败: {}", path.display()))?;
+        fs::write(path, content).with_context(|| format!("Failed to write file: {}", path.display()))?;
 
         #[cfg(unix)]
         if let Some(permissions) = self.options.file_permissions {
             use std::os::unix::fs::PermissionsExt;
             let perms = fs::Permissions::from_mode(permissions);
-            fs::set_permissions(path, perms).map_err(|e| anyhow!("设置文件权限失败: {}", e))?;
+            fs::set_permissions(path, perms).map_err(|e| anyhow!("Failed to set file permissions: {}", e))?
         }
 
         Ok(())
@@ -212,7 +212,7 @@ impl FileSystemManager {
         if let Some(parent) = path.parent() {
             tokio_fs::create_dir_all(parent)
                 .await
-                .map_err(|e| anyhow!("创建父目录失败: {}", e))?;
+                .map_err(|e| anyhow!("Failed to create parent directory: {}", e))?
         }
 
         if self.options.backup_enabled && tokio_fs::try_exists(path).await.unwrap_or(false) {
@@ -222,7 +222,7 @@ impl FileSystemManager {
         // 直接写入
         tokio_fs::write(path, content)
             .await
-            .with_context(|| format!("写入文件失败: {}", path.display()))?;
+            .with_context(|| format!("Failed to write file: {}", path.display()))?;
 
         #[cfg(unix)]
         if let Some(permissions) = self.options.file_permissions {
@@ -230,7 +230,7 @@ impl FileSystemManager {
             let perms = fs::Permissions::from_mode(permissions);
             tokio_fs::set_permissions(path, perms)
                 .await
-                .map_err(|e| anyhow!("设置文件权限失败: {}", e))?;
+                .map_err(|e| anyhow!("Failed to set file permissions: {}", e))?
         }
 
         Ok(())
@@ -242,7 +242,7 @@ impl FileSystemManager {
 
         fs::copy(path, &backup_path).with_context(|| {
             format!(
-                "创建备份失败: {} -> {}",
+                "Failed to create backup: {} -> {}",
                 path.display(),
                 backup_path.display()
             )
@@ -261,7 +261,7 @@ impl FileSystemManager {
 
         tokio_fs::copy(path, &backup_path).await.with_context(|| {
             format!(
-                "创建备份失败: {} -> {}",
+                "Failed to create backup: {} -> {}",
                 path.display(),
                 backup_path.display()
             )
@@ -361,7 +361,7 @@ impl FileSystemManager {
         if self.exists(path).await {
             tokio_fs::remove_file(path)
                 .await
-                .map_err(|e| anyhow!("删除文件失败: {}", e))?;
+                .map_err(|e| anyhow!("Failed to delete file: {}", e))?
             // 文件删除成功
         }
         Ok(())
@@ -370,7 +370,7 @@ impl FileSystemManager {
     /// 删除文件（同步）
     pub fn remove_file_sync(&self, path: &Path) -> AppResult<()> {
         if self.exists_sync(path) {
-            fs::remove_file(path).map_err(|e| anyhow!("删除文件失败: {}", e))?;
+            fs::remove_file(path).map_err(|e| anyhow!("Failed to delete file: {}", e))?
             // 文件删除成功
         }
         Ok(())

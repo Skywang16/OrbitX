@@ -243,7 +243,7 @@ impl Repository<AuditLogEntry> for AuditLogRepository {
     }
 
     async fn update(&self, _entity: &AuditLogEntry) -> AppResult<()> {
-        Err(anyhow!("审计日志不支持更新操作"))
+        Err(anyhow!("Audit logs do not support update operations"))
     }
 
     async fn delete(&self, id: i64) -> AppResult<()> {
@@ -253,7 +253,7 @@ impl Repository<AuditLogEntry> for AuditLogRepository {
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(anyhow!("审计日志不存在: {}", id));
+            return Err(anyhow!("Audit log does not exist: {}", id));
         }
 
         Ok(())

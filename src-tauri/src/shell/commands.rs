@@ -46,7 +46,7 @@ fn parse_command_line(command: &str) -> Result<Vec<String>, String> {
     }
 
     if in_single_quote || in_double_quote {
-        return Err("引号不匹配".to_string());
+        return Err("Quotes mismatch".to_string());
     }
 
     Ok(parts)

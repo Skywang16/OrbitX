@@ -41,7 +41,7 @@ impl ProcessReplayEvent {
 pub fn build_replay(pane_id: u32) -> anyhow::Result<ProcessReplayEvent> {
     let text = OutputAnalyzer::global()
         .get_pane_buffer(pane_id)
-        .map_err(|err| anyhow::anyhow!("读取终端缓冲失败: {err}"))?;
+        .map_err(|err| anyhow::anyhow!("Failed to read terminal buffer: {err}"))?;
 
     let mux = get_mux();
     let size = mux

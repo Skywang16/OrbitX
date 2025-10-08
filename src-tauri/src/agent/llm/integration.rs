@@ -293,7 +293,7 @@ impl TaskExecutor {
             .ai_models()
             .find_all_with_decrypted_keys()
             .await
-            .map_err(|e| anyhow::anyhow!("获取可用模型失败: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to get available models: {}", e))?;
 
         if let Some(first_enabled) = models.iter().find(|m| m.enabled) {
             return Ok(first_enabled.id.clone());

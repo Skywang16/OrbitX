@@ -1,5 +1,5 @@
 use super::*;
-use crate::api_error;
+use crate::{api_error, t};
 use crate::utils::{ApiResponse, TauriApiResult};
 
 #[tauri::command]
@@ -17,10 +17,14 @@ pub async fn window_manage_state<R: Runtime>(
     let mut results = Vec::new();
     let mut overall_success = true;
 
-    let window_id = state
+    let window_id = match state
         .with_config_manager(|config| Ok(config.get_default_window_id().to_string()))
         .await
-        .to_tauri()?;
+        .to_tauri()
+    {
+        Ok(id) => id,
+        Err(_) => return Ok(api_error!("window.get_window_id_failed")),
+    };
 
     debug!("使用窗口ID: {}", window_id);
 
@@ -120,7 +124,8 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
     let always_on_top = state
         .with_state_manager(|manager| Ok(manager.get_always_on_top()))
         .await
-        .to_tauri()?;
+        .to_tauri()
+        .map_err(|_| t!("window.get_state_failed"))?;
 
     let current_directory = if let Some(cached_dir) = state.cache.get("current_dir").await {
         cached_dir.as_str().unwrap_or("/").to_string()
@@ -141,7 +146,9 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
     let platform_info = state
         .with_config_manager(|config| Ok(config.window_get_platform_info().cloned()))
         .await
-        .to_tauri()?
+        .to_tauri()
+        .ok()
+        .flatten()
         .unwrap_or_else(|| PlatformInfo {
             platform: std::env::consts::OS.to_string(),
             arch: std::env::consts::ARCH.to_string(),
@@ -161,6 +168,7 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
     };
 
     serialize_to_value(&complete_state, "窗口状态")
+        .map_err(|_| t!("window.get_state_failed"))
 }
 
 // 处理设置置顶状态操作
@@ -173,23 +181,30 @@ async fn handle_set_always_on_top<R: Runtime>(
 
     let always_on_top = match request.params.as_ref().and_then(|p| p.always_on_top) {
         Some(value) => value,
-        None => return Err("window.missing_always_on_top_param".to_string()),
+        None => return Err(t!("window.missing_always_on_top_param")),
     };
 
-    window
+    if let Err(_) = window
         .set_always_on_top(always_on_top)
         .context("设置窗口置顶失败")
-        .to_tauri()?;
+        .to_tauri()
+    {
+        return Err(t!("window.set_always_on_top_failed"));
+    }
 
-    state
+    if let Err(_) = state
         .with_state_manager_mut(|manager| {
             manager.set_always_on_top(always_on_top);
             Ok(())
         })
         .await
-        .to_tauri()?;
+        .to_tauri()
+    {
+        return Err(t!("window.set_always_on_top_failed"));
+    }
 
     serialize_to_value(&always_on_top, "置顶状态")
+        .map_err(|_| t!("window.set_always_on_top_failed"))
 }
 
 // 处理切换置顶状态操作
@@ -202,14 +217,19 @@ async fn handle_toggle_always_on_top<R: Runtime>(
     let new_state = state
         .with_state_manager_mut(|manager| Ok(manager.toggle_always_on_top()))
         .await
-        .to_tauri()?;
+        .to_tauri()
+        .map_err(|_| t!("window.toggle_always_on_top_failed"))?;
 
-    window
+    if let Err(_) = window
         .set_always_on_top(new_state)
         .context("设置窗口置顶失败")
-        .to_tauri()?;
+        .to_tauri()
+    {
+        return Err(t!("window.toggle_always_on_top_failed"));
+    }
 
     serialize_to_value(&new_state, "切换状态")
+        .map_err(|_| t!("window.toggle_always_on_top_failed"))
 }
 
 // 处理重置窗口状态操作
@@ -219,21 +239,28 @@ async fn handle_reset_state<R: Runtime>(
 ) -> Result<serde_json::Value, String> {
     debug!("处理重置窗口状态操作");
 
-    state
+    if let Err(_) = state
         .with_state_manager_mut(|manager| {
             manager.reset();
             Ok(())
         })
         .await
-        .to_tauri()?;
+        .to_tauri()
+    {
+        return Err(t!("window.reset_state_failed"));
+    }
 
-    window
+    if let Err(_) = window
         .set_always_on_top(false)
         .context("重置窗口置顶失败")
-        .to_tauri()?;
+        .to_tauri()
+    {
+        return Err(t!("window.reset_state_failed"));
+    }
 
     let _ = state.cache.remove("current_dir").await;
     let _ = state.cache.remove("home_dir").await;
 
     serialize_to_value(&true, "重置结果")
+        .map_err(|_| t!("window.reset_state_failed"))
 }
