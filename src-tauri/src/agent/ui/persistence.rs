@@ -133,12 +133,8 @@ impl AgentUiPersistence {
         Ok(result.last_insert_rowid())
     }
 
-    pub async fn upsert_assistant_message(
-        &self,
-        conversation_id: i64,
-        steps: &[UiStep],
-        status: &str,
-    ) -> AppResult<i64> {
+    /// Create a fresh assistant message row for a new turn, returns the message id.
+    pub async fn create_assistant_message(&self, conversation_id: i64, status: &str) -> AppResult<i64> {
         self.ensure_conversation(conversation_id, None).await?;
 
         let normalized_status = match status {
@@ -146,116 +142,83 @@ impl AgentUiPersistence {
             other => return Err(anyhow!("invalid assistant message status: {}", other)),
         };
 
-        let steps_json = serde_json::to_string(steps)?;
         let ts = now_timestamp();
+        let result = sqlx::query(
+            "INSERT INTO agent_ui_messages (conversation_id, role, content, steps_json, status, duration_ms, created_at)
+             VALUES (?, 'assistant', NULL, '[]', ?, NULL, ?)",
+        )
+        .bind(conversation_id)
+        .bind(normalized_status)
+        .bind(ts)
+        .execute(self.pool())
+        .await?;
+
+        // Touch conversation without preview at creation time
+        self.touch_conversation(conversation_id, ts, None).await?;
+
+        Ok(result.last_insert_rowid())
+    }
+
+    /// Update an existing assistant message by id with new steps and status.
+    pub async fn update_assistant_message(
+        &self,
+        message_id: i64,
+        steps: &[UiStep],
+        status: &str,
+    ) -> AppResult<()> {
+        let normalized_status = match status {
+            "streaming" | "complete" | "error" => status,
+            other => return Err(anyhow!("invalid assistant message status: {}", other)),
+        };
+
+        // Serialize steps and compute content preview from the latest non-empty text step
+        let steps_json = serde_json::to_string(steps)?;
         let content_preview = steps
             .iter()
             .rev()
             .find(|step| step.step_type == "text" && !step.content.trim().is_empty())
             .map(|step| step.content.clone());
 
+        let ts = now_timestamp();
+
         let mut tx = self.pool().begin().await?;
 
-        let existing = sqlx::query(
-            "SELECT id, status, duration_ms, created_at
-             FROM agent_ui_messages
-             WHERE conversation_id = ? AND role = 'assistant'
-             ORDER BY created_at DESC, id DESC
-             LIMIT 1",
+        // Fetch existing row info for duration calculation and conversation id
+        let row = sqlx::query(
+            "SELECT conversation_id, created_at, duration_ms FROM agent_ui_messages WHERE id = ?",
         )
-        .bind(conversation_id)
-        .fetch_optional(&mut *tx)
+        .bind(message_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| anyhow!("assistant message not found: {}", e))?;
+
+        let conversation_id: i64 = row.try_get("conversation_id")?;
+        let created_at: i64 = row.try_get("created_at")?;
+        let mut duration_ms: Option<i64> = row.try_get("duration_ms").ok();
+
+        if (normalized_status == "complete" || normalized_status == "error") && duration_ms.is_none() {
+            duration_ms = Some(ts.saturating_sub(created_at));
+        }
+
+        sqlx::query(
+            "UPDATE agent_ui_messages
+             SET steps_json = ?, status = ?, duration_ms = ?, content = ?
+             WHERE id = ?",
+        )
+        .bind(&steps_json)
+        .bind(normalized_status)
+        .bind(duration_ms)
+        .bind(content_preview.as_deref())
+        .bind(message_id)
+        .execute(&mut *tx)
         .await?;
-
-        let message_id: i64 = match existing {
-            Some(row) => {
-                let existing_status = row.try_get::<Option<String>, _>("status")?;
-                let mut existing_duration = row.try_get::<Option<i64>, _>("duration_ms")?;
-                let id: i64 = row.try_get("id")?;
-                let created_at: i64 = row.try_get("created_at")?;
-
-                match existing_status.as_deref() {
-                    Some("streaming") | Some("complete") => {
-                        if (normalized_status == "complete" || normalized_status == "error")
-                            && existing_duration.is_none()
-                        {
-                            existing_duration = Some(ts.saturating_sub(created_at));
-                        }
-
-                        sqlx::query(
-                            "UPDATE agent_ui_messages
-                             SET steps_json = ?, status = ?, duration_ms = ?, content = ?
-                             WHERE id = ?",
-                        )
-                        .bind(&steps_json)
-                        .bind(normalized_status)
-                        .bind(existing_duration)
-                        .bind(content_preview.as_deref())
-                        .bind(id)
-                        .execute(&mut *tx)
-                        .await?;
-
-                        id
-                    }
-                    Some("error") => {
-                        let result = sqlx::query(
-                            "INSERT INTO agent_ui_messages (conversation_id, role, content, steps_json, status, duration_ms, created_at)
-                             VALUES (?, 'assistant', ?, ?, ?, NULL, ?)",
-                        )
-                        .bind(conversation_id)
-                        .bind(content_preview.as_deref())
-                        .bind(&steps_json)
-                        .bind(normalized_status)
-                        .bind(ts)
-                        .execute(&mut *tx)
-                        .await?;
-
-                        result.last_insert_rowid()
-                    }
-                    _ => {
-                        if existing_duration.is_none() {
-                            existing_duration = Some(ts.saturating_sub(created_at));
-                        }
-
-                        sqlx::query(
-                            "UPDATE agent_ui_messages
-                             SET steps_json = ?, status = ?, duration_ms = ?, content = ?
-                             WHERE id = ?",
-                        )
-                        .bind(&steps_json)
-                        .bind(normalized_status)
-                        .bind(existing_duration)
-                        .bind(content_preview.as_deref())
-                        .bind(id)
-                        .execute(&mut *tx)
-                        .await?;
-
-                        id
-                    }
-                }
-            }
-            None => {
-                let result = sqlx::query(
-                    "INSERT INTO agent_ui_messages (conversation_id, role, content, steps_json, status, duration_ms, created_at)
-                     VALUES (?, 'assistant', ?, ?, ?, NULL, ?)",
-                )
-                .bind(conversation_id)
-                .bind(content_preview.as_deref())
-                .bind(&steps_json)
-                .bind(normalized_status)
-                .bind(ts)
-                .execute(&mut *tx)
-                .await?;
-
-                result.last_insert_rowid()
-            }
-        };
 
         tx.commit().await?;
 
+        // Update conversation timestamp/count only; do not override title with assistant content
         self.touch_conversation(conversation_id, ts, None).await?;
 
-        Ok(message_id)
+        Ok(())
     }
 
     pub async fn get_latest_assistant_message(
@@ -317,6 +280,7 @@ impl AgentUiPersistence {
         .await?;
         Ok(())
     }
+
 }
 
 fn build_conversation_preview(content: &str) -> Option<String> {
@@ -324,23 +288,22 @@ fn build_conversation_preview(content: &str) -> Option<String> {
     if trimmed.is_empty() {
         return None;
     }
-
+    // 折叠多余空白，提取前 N 个可见字符
     let collapsed = trimmed.split_whitespace().collect::<Vec<_>>().join(" ");
     if collapsed.is_empty() {
         return None;
     }
-
+    const MAX_LEN: usize = 30;
     let mut preview = String::new();
     let mut count = 0;
     for ch in collapsed.chars() {
-        if count >= 120 {
+        if count >= MAX_LEN {
             preview.push_str("...");
             return Some(preview);
         }
         preview.push(ch);
         count += 1;
     }
-
     Some(preview)
 }
 

@@ -11,14 +11,6 @@ use crate::storage::repositories::RepositoryManager;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 
-#[tauri::command]
-pub async fn llm_cancel_stream(state: State<'_, LLMManagerState>) -> TauriApiResult<EmptyData> {
-    match state.service.cancel_stream().await {
-        Ok(_) => Ok(api_success!()),
-        Err(_) => Ok(api_error!("llm.cancel_failed")),
-    }
-}
-
 pub struct LLMManagerState {
     pub service: Arc<LLMService>,
     pub registry: Arc<LLMRegistry>,
@@ -51,7 +43,9 @@ pub async fn llm_call_stream(
 ) -> TauriApiResult<EmptyData> {
     tracing::debug!("Starting stream call for model: {}", request.model);
 
-    let mut stream = match state.service.call_stream(request).await {
+    use tokio_util::sync::CancellationToken;
+    let token = CancellationToken::new();
+    let mut stream = match state.service.call_stream(request, token).await {
         Ok(stream) => stream,
         Err(_) => return Ok(api_error!("llm.stream_failed")),
     };

@@ -6,6 +6,7 @@ import { computed, ref, watch } from 'vue'
 import type { ChatMode } from '@/types'
 import type { Conversation, Message } from '@/types'
 import type { TaskProgressPayload } from '@/api/agent/types'
+import { getEventTaskId } from '@/api/agent/types'
 
 export const useAIChatStore = defineStore('ai-chat', () => {
   const sessionStore = useSessionStore()
@@ -23,6 +24,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   // 当前任务状态
   const cancelFunction = ref<(() => void) | null>(null)
+  const currentTaskId = ref<string | null>(null)
+  const cancelRequested = ref(false)
 
   // 计算属性
   const canSendMessage = computed(() => {
@@ -61,39 +64,29 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
 
   const createConversation = async (title?: string): Promise<void> => {
-    try {
-      stopCurrentConversation()
+    stopCurrentConversation()
 
-      const existingEmptyConversation = findEmptyConversation()
-      if (existingEmptyConversation) {
-        currentConversationId.value = existingEmptyConversation.id
-        messageList.value = []
-        return
-      }
-
-      isLoading.value = true
-      const conversationId = await agentApi.createConversation(title)
-      const newConversation = await agentApi.getConversation(conversationId)
-      conversations.value.unshift(newConversation)
-      currentConversationId.value = newConversation.id
+    const existingEmptyConversation = findEmptyConversation()
+    if (existingEmptyConversation) {
+      currentConversationId.value = existingEmptyConversation.id
       messageList.value = []
-    } catch (err) {
-      error.value = '创建会话失败'
-    } finally {
-      isLoading.value = false
+      return
     }
+
+    isLoading.value = true
+    const conversationId = await agentApi.createConversation(title)
+    const newConversation = await agentApi.getConversation(conversationId)
+    conversations.value.unshift(newConversation)
+    currentConversationId.value = newConversation.id
+    messageList.value = []
+    isLoading.value = false
   }
 
   const loadConversation = async (conversationId: number): Promise<void> => {
-    try {
-      isLoading.value = true
-      currentConversationId.value = conversationId
-      messageList.value = await agentApi.getMessages(conversationId)
-    } catch (err) {
-      error.value = '加载会话失败'
-    } finally {
-      isLoading.value = false
-    }
+    isLoading.value = true
+    currentConversationId.value = conversationId
+    messageList.value = await agentApi.getMessages(conversationId)
+    isLoading.value = false
   }
 
   const switchToConversation = async (conversationId: number): Promise<void> => {
@@ -103,30 +96,33 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
 
   const deleteConversation = async (conversationId: number): Promise<void> => {
-    try {
-      await agentApi.deleteConversation(conversationId)
-      conversations.value = conversations.value.filter(c => c.id !== conversationId)
+    await agentApi.deleteConversation(conversationId)
+    conversations.value = conversations.value.filter(c => c.id !== conversationId)
 
-      if (currentConversationId.value === conversationId) {
-        currentConversationId.value = null
-        messageList.value = []
-      }
-    } catch (err) {
-      error.value = '删除会话失败'
+    if (currentConversationId.value === conversationId) {
+      currentConversationId.value = null
+      messageList.value = []
     }
   }
 
   const refreshConversations = async (): Promise<void> => {
-    try {
-      conversations.value = await agentApi.listConversations()
-    } catch (err) {
-      error.value = '刷新会话列表失败'
-    }
+    conversations.value = await agentApi.listConversations()
   }
 
   const handleAgentEvent = (event: TaskProgressPayload) => {
-    const currentMessage = messageList.value[messageList.value.length - 1]
-    if (!currentMessage || currentMessage.role !== 'assistant') return
+    // 选择目标消息：优先最后一个处于 streaming 状态的助手消息
+    const findTargetAssistantMessage = (): Message | null => {
+      for (let i = messageList.value.length - 1; i >= 0; i--) {
+        const m = messageList.value[i]
+        if (m.role === 'assistant' && (m.status === 'streaming' || !m.status)) {
+          return m
+        }
+      }
+      return null
+    }
+
+    const currentMessage = findTargetAssistantMessage()
+    if (!currentMessage) return
 
     if (!currentMessage.steps) currentMessage.steps = []
 
@@ -243,6 +239,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       case 'Finish':
         break
 
+      case 'TaskCancelled':
+        currentMessage.status = 'error'
+        isLoading.value = false
+        break
+
       case 'TaskError':
         currentMessage.steps.push({
           stepType: 'error',
@@ -268,55 +269,57 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       throw new Error('无法创建会话')
     }
 
-    try {
-      isLoading.value = true
-      error.value = null
+    isLoading.value = true
+    error.value = null
 
-      // 调用Agent API执行任务（后端会创建消息）
-      const stream = await agentApi.executeTask(content, currentConversationId.value)
+    const stream = await agentApi.executeTask(content, currentConversationId.value)
 
-      if (!stream) throw new Error('无法创建任务流')
+    if (!stream) throw new Error('无法创建任务流')
 
-      // 等待TaskCreated事件，然后获取后端创建的消息
-      let messagesLoaded = false
-      stream.onProgress(async event => {
-        // 在收到TaskCreated事件时，从后端获取最新消息
-        if (event.type === 'TaskCreated' && !messagesLoaded) {
-          messagesLoaded = true
-          try {
-            // 获取后端创建的消息（包含真实的ID和时间戳）
-            const messages = await agentApi.getMessages(currentConversationId.value!)
-            messageList.value = messages
-          } catch (err) {
-            console.error('获取消息失败:', err)
-          }
-        }
-        // 处理其他进度事件
-        handleAgentEvent(event)
-      })
-
-      stream.onError((error: Error) => {
-        console.error('Agent任务错误:', error)
-        const currentMessage = messageList.value[messageList.value.length - 1]
-        if (currentMessage && currentMessage.role === 'assistant') {
-          currentMessage.status = 'error'
-        }
-        isLoading.value = false
-      })
-
-      stream.onClose(() => {
-        cancelFunction.value = null
-      })
-
-      // 保存取消函数
-      cancelFunction.value = () => {
-        stream.close()
-        isLoading.value = false
+    let messagesLoaded = false
+    let cancelSent = false
+    stream.onProgress(async event => {
+      const taskId = getEventTaskId(event)
+      if (taskId && !currentTaskId.value) currentTaskId.value = taskId
+      if (!cancelSent && cancelRequested.value && currentTaskId.value) {
+        await agentApi.cancelTask(currentTaskId.value)
+        cancelSent = true
       }
-    } catch (err) {
-      error.value = '发送消息失败'
+
+      if (!messagesLoaded && event.type === 'TaskStarted') {
+        const messages = await agentApi.getMessages(currentConversationId.value!)
+        messageList.value = messages
+        messagesLoaded = true
+        return
+      }
+
+      if (!messagesLoaded) return
+
+      handleAgentEvent(event)
+    })
+
+    stream.onError((error: Error) => {
+      console.error('Agent任务错误:', error)
+      const currentMessage = messageList.value[messageList.value.length - 1]
+      if (currentMessage && currentMessage.role === 'assistant') {
+        currentMessage.status = 'error'
+      }
       isLoading.value = false
-      throw err
+    })
+
+    stream.onClose(() => {
+      cancelFunction.value = null
+      currentTaskId.value = null
+      cancelRequested.value = false
+    })
+
+    cancelFunction.value = () => {
+      cancelRequested.value = true
+      if (currentTaskId.value) {
+        void agentApi.cancelTask(currentTaskId.value)
+      }
+      stream.close()
+      isLoading.value = false
     }
   }
 
@@ -372,11 +375,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     restoreFromSessionState()
 
     if (currentConversationId.value) {
-      try {
-        await switchToConversation(currentConversationId.value)
-      } catch {
-        currentConversationId.value = null
-      }
+      await switchToConversation(currentConversationId.value)
     }
 
     await refreshConversations()

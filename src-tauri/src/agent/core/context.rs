@@ -35,7 +35,6 @@ use crate::agent::ui::{AgentUiPersistence, UiStep};
 use crate::llm::types::{LLMMessage, LLMMessageContent, LLMMessagePart, LLMToolCall};
 use crate::storage::repositories::RepositoryManager;
 
-/// Generate a context node identifier identical to the frontend implementation.
 pub fn generate_node_id(task_id: &str, phase: &str, node_index: Option<usize>) -> String {
     if let Some(index) = node_index {
         format!("{}_node_{}", task_id, index)
@@ -70,7 +69,6 @@ struct UiState {
     steps: Vec<UiStep>,
 }
 
-/// Runtime execution context for a single agent task (mirrors eko-core semantics).
 pub struct TaskContext {
     pub task_id: String,
     pub conversation_id: i64,
@@ -564,14 +562,12 @@ impl TaskContext {
         self.planning.read().await.planned_tree.clone()
     }
 
-    /// Attach parent/root task ids (mirrors frontend Context::attachParent).
     pub async fn attach_parent(&self, parent_task_id: String, root_task_id: Option<String>) {
         let mut planning = self.planning.write().await;
         planning.parent_task_id = Some(parent_task_id.clone());
         planning.root_task_id = Some(root_task_id.unwrap_or(parent_task_id));
     }
 
-    /// Track child task ids (mirrors frontend Context::addChild).
     pub async fn add_child(&self, child_task_id: String) {
         let mut planning = self.planning.write().await;
         if !planning.children.contains(&child_task_id) {
@@ -589,7 +585,6 @@ impl TaskContext {
         planning.current_node_id = node_id;
     }
 
-    /// Check for task abort or pause status (mirrors frontend semantics).
     pub async fn check_aborted(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
         if self.cancellation.is_cancelled() {
             return Err(TaskExecutorError::TaskInterrupted.into());
@@ -623,7 +618,6 @@ impl TaskContext {
         }
     }
 
-    /// Request a pause state identical to the frontend behaviour.
     pub fn set_pause(&self, paused: bool, abort_current_step: bool) {
         let new_status = if paused {
             if abort_current_step {
@@ -772,6 +766,7 @@ impl TaskContext {
             role: "user".to_string(),
             content: LLMMessageContent::Text(text.clone()),
         });
+        drop(state);
         let _ = self.append_message(MessageRole::User, &text, false).await;
     }
 
@@ -832,11 +827,11 @@ impl TaskContext {
     }
 
     pub async fn initialize_ui_track(&self, user_prompt: &str) -> TaskExecutorResult<()> {
+
         self.ui_persistence()
             .ensure_conversation(self.conversation_id, None)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
         self.ui_persistence()
             .create_user_message(self.conversation_id, user_prompt)
             .await
@@ -844,7 +839,7 @@ impl TaskContext {
 
         let assistant_message_id = self
             .ui_persistence()
-            .upsert_assistant_message(self.conversation_id, &[], "streaming")
+            .create_assistant_message(self.conversation_id, "streaming")
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
         {
@@ -861,19 +856,18 @@ impl TaskContext {
     }
 
     pub async fn begin_followup_turn(&self, user_prompt: &str) -> TaskExecutorResult<()> {
+
         self.ui_persistence()
             .ensure_conversation(self.conversation_id, None)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
         self.ui_persistence()
             .create_user_message(self.conversation_id, user_prompt)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
         let assistant_message_id = self
             .ui_persistence()
-            .upsert_assistant_message(self.conversation_id, &[], "streaming")
+            .create_assistant_message(self.conversation_id, "streaming")
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
         {
@@ -1112,15 +1106,21 @@ impl TaskContext {
     }
 
     async fn persist_ui_steps(&self, steps: &[UiStep], status: &str) -> TaskExecutorResult<()> {
-        let message_id = self
-            .ui_persistence()
-            .upsert_assistant_message(self.conversation_id, steps, status)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+        let current_id = {
+            let state = self.execution.read().await;
+            state.ui_assistant_message_id
+        };
 
-        {
-            let mut state = self.execution.write().await;
-            state.ui_assistant_message_id = Some(message_id);
+        if let Some(message_id) = current_id {
+            self.ui_persistence()
+                .update_assistant_message(message_id, steps, status)
+                .await
+                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+        } else {
+            return Err(TaskExecutorError::StatePersistenceFailed(
+                "assistant message id not set before persisting UI steps".to_string(),
+            )
+            .into());
         }
 
         Ok(())

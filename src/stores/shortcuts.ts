@@ -96,14 +96,9 @@ export const useShortcutStore = defineStore('shortcuts', () => {
       throw new Error('没有可验证的配置')
     }
 
-    try {
-      const result = await shortcutsApi.validateConfig(config.value)
-      lastValidation.value = result
-      return result
-    } catch (err) {
-      error.value = `验证快捷键配置失败: ${err}`
-      throw err
-    }
+    const result = await shortcutsApi.validateConfig(config.value)
+    lastValidation.value = result
+    return result
   }
 
   /**
@@ -114,14 +109,9 @@ export const useShortcutStore = defineStore('shortcuts', () => {
       throw new Error('没有可检测的配置')
     }
 
-    try {
-      const result = await shortcutsApi.detectConflicts(config.value)
-      lastConflictDetection.value = result
-      return result
-    } catch (err) {
-      error.value = `检测快捷键冲突失败: ${err}`
-      throw err
-    }
+    const result = await shortcutsApi.detectConflicts(config.value)
+    lastConflictDetection.value = result
+    return result
   }
 
   /**

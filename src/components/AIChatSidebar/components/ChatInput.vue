@@ -195,18 +195,13 @@
   }
 
   const checkCkIndexStatus = async () => {
-    try {
-      const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
-      if (!activeTerminal || !activeTerminal.cwd) {
-        indexStatus.value = { isReady: false, path: '' }
-        return
-      }
-      const status = await ckApi.getIndexStatus({ path: activeTerminal.cwd })
-      indexStatus.value = status
-    } catch (error) {
-      console.error('[Error] 获取CK索引状态失败:', error)
+    const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
+    if (!activeTerminal || !activeTerminal.cwd) {
       indexStatus.value = { isReady: false, path: '' }
+      return
     }
+    const status = await ckApi.getIndexStatus({ path: activeTerminal.cwd })
+    indexStatus.value = status
   }
 
   watch(activeTerminalCwd, cwd => {
@@ -224,79 +219,62 @@
     }
     progressHasData.value = false
     progressTimer = window.setInterval(async () => {
-      try {
-        const progress = await ckApi.getBuildProgress({ path: targetPath })
-        if (progress.totalFiles > 0) {
-          const totalFiles = Math.max(progress.totalFiles, 1)
-          const filesCompleted = Math.min(progress.filesCompleted, totalFiles)
-          const perFile = 100 / totalFiles
-          let pct = filesCompleted * perFile
+      const progress = await ckApi.getBuildProgress({ path: targetPath })
+      if (progress.totalFiles > 0) {
+        const totalFiles = Math.max(progress.totalFiles, 1)
+        const filesCompleted = Math.min(progress.filesCompleted, totalFiles)
+        const perFile = 100 / totalFiles
+        let pct = filesCompleted * perFile
 
-          if (progress.totalChunks && progress.totalChunks > 0) {
-            const chunkDone = Math.min(progress.currentFileChunks ?? 0, progress.totalChunks)
-            pct += (chunkDone / progress.totalChunks) * perFile
-          }
-
-          const nextPct = Math.min(progress.isComplete ? 100 : 99, Math.max(0, pct))
-          if (!progressHasData.value) {
-            progressHasData.value = true
-            buildProgress.value = nextPct
-          } else {
-            buildProgress.value = Math.max(buildProgress.value, nextPct)
-          }
+        if (progress.totalChunks && progress.totalChunks > 0) {
+          const chunkDone = Math.min(progress.currentFileChunks ?? 0, progress.totalChunks)
+          pct += (chunkDone / progress.totalChunks) * perFile
         }
 
-        if (progress.isComplete) {
-          if (progressTimer) {
-            clearInterval(progressTimer)
-            progressTimer = undefined
-          }
-          buildProgress.value = 100
-          setTimeout(() => {
-            isBuilding.value = false
-            buildProgress.value = 0
-          }, 500)
-          await checkCkIndexStatus()
+        const nextPct = Math.min(progress.isComplete ? 100 : 99, Math.max(0, pct))
+        if (!progressHasData.value) {
+          progressHasData.value = true
+          buildProgress.value = nextPct
+        } else {
+          buildProgress.value = Math.max(buildProgress.value, nextPct)
         }
-      } catch (error) {
-        console.warn('获取构建进度失败:', error)
-        if (progressHasData.value && buildProgress.value < 95) {
-          buildProgress.value = Math.min(95, buildProgress.value + (Math.random() * 3 + 0.5))
+      }
+
+      if (progress.isComplete) {
+        if (progressTimer) {
+          clearInterval(progressTimer)
+          progressTimer = undefined
         }
+        buildProgress.value = 100
+        setTimeout(() => {
+          isBuilding.value = false
+          buildProgress.value = 0
+        }, 500)
+        await checkCkIndexStatus()
       }
     }, 600)
   }
 
   const buildCkIndex = async () => {
-    try {
-      const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
-      if (!activeTerminal || !activeTerminal.cwd) return
-      const targetPath = activeTerminal.cwd
+    const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
+    if (!activeTerminal || !activeTerminal.cwd) return
+    const targetPath = activeTerminal.cwd
 
-      showIndexModal.value = false
+    showIndexModal.value = false
 
-      isBuilding.value = true
-      buildProgress.value = 0
+    isBuilding.value = true
+    buildProgress.value = 0
 
-      await ckApi.buildIndex({ path: targetPath })
+    await ckApi.buildIndex({ path: targetPath })
 
-      startProgressPolling(targetPath)
-    } catch (error) {
-      console.error('构建CK索引失败:', error)
-      isBuilding.value = false
-      buildProgress.value = 0
-    }
+    startProgressPolling(targetPath)
   }
 
   const deleteCkIndex = async () => {
-    try {
-      const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
-      if (!activeTerminal || !activeTerminal.cwd) return
-      await ckApi.deleteIndex({ path: activeTerminal.cwd })
-      await checkCkIndexStatus()
-    } catch (error) {
-      console.error('删除CK索引失败:', error)
-    }
+    const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
+    if (!activeTerminal || !activeTerminal.cwd) return
+    await ckApi.deleteIndex({ path: activeTerminal.cwd })
+    await checkCkIndexStatus()
   }
 
   const getButtonTitle = () => {

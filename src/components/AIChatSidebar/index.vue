@@ -33,11 +33,7 @@
     const message = messageInput.value.trim()
     messageInput.value = ''
 
-    try {
-      await aiChatStore.sendMessage(message)
-    } catch (error) {
-      // Error handling is done by the store
-    }
+    await aiChatStore.sendMessage(message)
   }
 
   const selectSession = (sessionId: number) => {
@@ -49,11 +45,7 @@
   }
 
   const refreshSessions = async () => {
-    try {
-      await aiChatStore.refreshConversations()
-    } catch {
-      // Refresh failures are non-critical
-    }
+    await aiChatStore.refreshConversations()
   }
 
   const createNewSession = () => {

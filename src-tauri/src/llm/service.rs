@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
 use tokio_util::sync::CancellationToken;
 
@@ -15,15 +14,11 @@ use anyhow::{Context, Result};
 
 pub struct LLMService {
     repositories: Arc<RepositoryManager>,
-    active_stream_cancel: Arc<Mutex<Option<CancellationToken>>>,
 }
 
 impl LLMService {
     pub fn new(repositories: Arc<RepositoryManager>) -> Self {
-        Self {
-            repositories,
-            active_stream_cancel: Arc::new(Mutex::new(None)),
-        }
+        Self { repositories }
     }
 
     async fn get_provider_config(&self, model_id: &str) -> Result<LLMProviderConfig> {
@@ -98,24 +93,22 @@ impl LLMService {
         result
     }
 
-    /// 流式调用
+    /// 流式调用（携带外部取消令牌）
     pub async fn call_stream(
         &self,
         request: LLMRequest,
+        token: CancellationToken,
     ) -> Result<impl tokio_stream::Stream<Item = Result<LLMStreamChunk>>> {
         self.validate_request(&request)?;
         let original_model_id = request.model.clone();
         let config = self.get_provider_config(&request.model).await?;
         let provider = ProviderFactory::create_provider(config.clone())?;
 
-        let token = CancellationToken::new();
-        *self.active_stream_cancel.lock().await = Some(token.clone());
-
         let mut actual_request = request.clone();
         actual_request.model = config.model.clone();
 
         tracing::debug!(
-            "Making streaming LLM call with model: {} (config: {})",
+            "Making streaming LLM call with model: {} (config: {}), with external cancel token",
             actual_request.model,
             original_model_id
         );
@@ -149,15 +142,6 @@ impl LLMService {
         });
 
         Ok(stream_with_cancel)
-    }
-
-    /// 取消当前的流式调用
-    pub async fn cancel_stream(&self) -> Result<()> {
-        if let Some(token) = self.active_stream_cancel.lock().await.take() {
-            token.cancel();
-            tracing::debug!("Stream cancellation requested.");
-        }
-        Ok(())
     }
 
     /// Embedding调用

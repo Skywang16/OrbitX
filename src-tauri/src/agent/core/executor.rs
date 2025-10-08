@@ -345,7 +345,6 @@ impl TaskExecutor {
         params: ExecuteTaskTreeParams,
         progress_channel: Channel<TaskProgressPayload>,
     ) -> TaskExecutorResult<()> {
-        // 0) 先创建一个用于规划的根上下文
         let root_params = ExecuteTaskParams {
             conversation_id: params.conversation_id,
             user_prompt: params.user_prompt.clone(),
@@ -356,13 +355,11 @@ impl TaskExecutor {
                 .await?,
         );
 
-        // 1) 先进行单次 plan，保存 TaskDetail（用于 UI）
         let planner = Planner::new(root_ctx.clone());
         if let Err(e) = planner.plan(&params.user_prompt, true).await {
             return Err(TaskExecutorError::InternalError(format!("Plan 失败: {}", e)).into());
         }
 
-        // 2) 视情况执行树规划
         let planned_tree = if params.generate_tree {
             let tree_planner = TreePlanner::new(root_ctx.clone());
             match tree_planner.plan_tree(&params.user_prompt).await {
@@ -377,7 +374,6 @@ impl TaskExecutor {
             None
         };
 
-        // 3) 按父节点串行执行
         if let Some(tree) = planned_tree {
             // 取 Level-1 父任务组
             let parents = tree.subtasks.unwrap_or_default();
@@ -394,7 +390,6 @@ impl TaskExecutor {
             let mut prev_summary: Option<String> = None;
 
             for (idx, parent) in parents.into_iter().enumerate() {
-                // 3.1) 为父节点创建独立上下文
                 let parent_prompt = parent
                     .description
                     .clone()
@@ -415,7 +410,6 @@ impl TaskExecutor {
                     .await?,
                 );
 
-                // 3.2) 将父节点的 planned 结构转为 agent xml，覆盖到 prompts 中
                 if let Ok(agent_xml) = build_agent_xml_from_planned(&parent) {
                     let tool_names: Vec<String> =
                         simple_tool_schemas.iter().map(|t| t.name.clone()).collect();
@@ -471,7 +465,6 @@ impl TaskExecutor {
                         .await?;
                 }
 
-                // 3.2.1) 如该父节点存在二级子任务，注入引导消息，要求按顺序串行完成这些子任务
                 if let Some(children) = &parent.subtasks {
                     if !children.is_empty() {
                         let mut buf = String::from("Planned subtasks for this phase (execute sequentially, reuse the same context):\n");
@@ -487,14 +480,12 @@ impl TaskExecutor {
                     }
                 }
 
-                // 3.3) 若有上一阶段总结，注入到上下文作为系统消息
                 if let Some(summary) = prev_summary.take() {
                     parent_ctx
                         .push_system_message(format!("Previous phase summary:\n{}", summary))
                         .await;
                 }
 
-                // 3.4) 注册为活动任务并发送开始事件
                 {
                     let active_tasks = self.active_tasks();
                     let mut active = active_tasks.write().await;
@@ -508,7 +499,6 @@ impl TaskExecutor {
                     }))
                     .await?;
 
-                // 3.5) 串行执行该父节点的 ReAct 循环
                 if let Err(e) = self.run_react_loop(parent_ctx.clone()).await {
                     self.handle_task_error(&parent_ctx.task_id, e, parent_ctx.clone())
                         .await;
@@ -525,13 +515,11 @@ impl TaskExecutor {
                         .await
                         .ok();
 
-                    // 3.6) 提取该父节点的最终可见回答作为阶段总结
                     prev_summary = parent_ctx
                         .with_messages(|messages| extract_last_assistant_text(messages))
                         .await;
                 }
 
-                // 3.7) 从活动任务中移除
                 {
                     let active_tasks = self.active_tasks();
                     let mut active = active_tasks.write().await;
@@ -1041,14 +1029,12 @@ impl TaskExecutor {
                 runtime.start_iteration()
             };
 
-            // 1. 递增迭代次数
             let iteration = context.increment_iteration().await?;
             context.state_manager().reset_idle_rounds().await;
             debug!("Task {} iteration {}", context.task_id, iteration);
 
             let iter_ctx = context.begin_iteration(iteration).await;
 
-            // 2. 构建LLM请求
             let model_id = self.get_default_model_id().await?;
 
             let summarizer = ConversationSummarizer::new(
@@ -1144,10 +1130,11 @@ impl TaskExecutor {
             let llm_request = self.build_llm_request(messages).await?;
             let llm_request_snapshot = Arc::new(llm_request.clone());
 
-            // 3. 流式调用LLM，并增量推送文本
+            // 流式调用LLM
             let llm_service = crate::llm::service::LLMService::new(context.repositories().clone());
+            let cancel_token = context.register_step_token();
             let mut stream = llm_service
-                .call_stream(llm_request)
+                .call_stream(llm_request, cancel_token)
                 .await
                 .map_err(|e| TaskExecutorError::InternalError(format!("LLM流式调用失败: {}", e)))?;
 
@@ -1156,7 +1143,6 @@ impl TaskExecutor {
             let mut finished_with_tool_calls = false;
             let mut finish_reason_enum: Option<FinishReason> = None;
 
-            // EKO 风格的思考/可见文本拆分与流式推送
             let mut stream_text = String::new();
             let mut saw_thinking_tag = false;
             let mut last_thinking_sent = String::new();
@@ -1167,6 +1153,9 @@ impl TaskExecutor {
             let mut text_stream_id: Option<String> = None;
 
             while let Some(item) = stream.next().await {
+                if context.check_aborted(true).await.is_err() {
+                    break;
+                }
                 match item {
                     Ok(chunk) => match chunk {
                         crate::llm::types::LLMStreamChunk::Delta {
@@ -1270,12 +1259,10 @@ impl TaskExecutor {
                                 }
                             }
 
-                            // eko 行为：不要在 delta 阶段关闭思考/文本流；仅通告 tool_use
 
                             if let Some(calls) = tool_calls {
                                 for call in calls {
                                     iter_ctx.add_tool_call(call.clone()).await;
-                                    // 去重后立刻通告工具调用（EKO 风格的 tool_use）
                                     if announced_tool_ids.insert(call.id.clone()) {
                                         context
                                             .send_progress(TaskProgressPayload::ToolUse(
@@ -1328,7 +1315,6 @@ impl TaskExecutor {
                             if finish_reason == "tool_calls" || !pending_tool_calls.is_empty() {
                                 finished_with_tool_calls = true;
                             }
-                            // 确保存在 stream_id（即使此前未发送过增量）
                             if thinking_stream_id.is_none()
                                 && (!final_thinking_trimmed_now.is_empty()
                                     || !last_thinking_sent.is_empty())
@@ -1339,7 +1325,6 @@ impl TaskExecutor {
                             {
                                 text_stream_id = Some(Uuid::new_v4().to_string());
                             }
-                            // 关闭进行中的 thinking / text 流
                             if let Some(tsid) = thinking_stream_id.clone() {
                                 if final_thinking_trimmed_now.len() > last_thinking_sent.len() {
                                     let delta = final_thinking_trimmed_now
@@ -1378,9 +1363,7 @@ impl TaskExecutor {
                                     iter_ctx.append_output(&delta).await;
                                 }
                             }
-                            // 让前端优先接收关闭事件，随后再发送 Finish
                             yield_now().await;
-                            // 发送 Finish 事件
                             let usage_snapshot = usage.clone();
 
                             context
@@ -1486,7 +1469,6 @@ impl TaskExecutor {
                 continue;
             }
             // 没有工具调用时，本轮对话已完成（Text 流和 Finish 已发送）
-
             if final_visible_trimmed.is_empty() {
                 {
                     let runtime_handle = context.react_runtime();
@@ -1696,7 +1678,6 @@ impl TaskExecutor {
             error!("Failed to update task status to error: {}", e);
         }
 
-        // 发送错误事件
         if let Err(e) = context
             .send_progress(TaskProgressPayload::TaskError(TaskErrorPayload {
                 task_id: task_id.to_string(),

@@ -82,8 +82,9 @@ impl Planner {
         };
 
         let llm_service = LLMService::new(self.context.repositories());
+        let token = self.context.register_step_token();
         let mut stream = llm_service
-            .call_stream(request.clone())
+            .call_stream(request.clone(), token)
             .await
             .context("failed to start LLM planning stream")?;
 
