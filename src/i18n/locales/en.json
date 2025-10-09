@@ -275,5 +275,11 @@
     "refresh": "Refresh",
     "delete": "Delete",
     "cancel_build": "Cancel Build"
+  },
+  "workspace": {
+    "parent_directory": "Parent Directory",
+    "no_folders": "No folders in current directory",
+    "read_dir_error": "Failed to read directory",
+    "current_directory": "Current Directory"
   }
 }

@@ -5,10 +5,10 @@
   import { useAISettingsStore } from '@/components/settings/components/AI'
   import { useSessionStore } from '@/stores/session'
 
-  import ChatHeader from './components/ChatHeader.vue'
-  import MessageList from './components/MessageList.vue'
-  import ChatInput from './components/ChatInput.vue'
-  import ResizeHandle from './components/ResizeHandle.vue'
+  import ChatHeader from './components/layout/ChatHeader.vue'
+  import MessageList from './components/messages/MessageList.vue'
+  import ChatInput from './components/input/ChatInput.vue'
+  import ResizeHandle from './components/layout/ResizeHandle.vue'
   //  import TaskList from './components/TaskList.vue'
 
   const aiChatStore = useAIChatStore()

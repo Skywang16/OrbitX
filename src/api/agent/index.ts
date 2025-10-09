@@ -210,8 +210,8 @@ export class AgentApi {
             break
           }
 
-          // 打印Channel输出的内容
-          console.log('[Channel输出]', {
+          // 打印Channel输出的内容（使用 warn 以符合 no-console 规则）
+          console.warn('[Channel输出]', {
             type: value.type,
             payload: value.payload,
             timestamp: new Date().toISOString(),

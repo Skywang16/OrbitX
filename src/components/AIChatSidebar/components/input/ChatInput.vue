@@ -6,10 +6,11 @@
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
-  import TerminalSelectionTag from './TerminalSelectionTag.vue'
-  import TerminalTabTag from './TerminalTabTag.vue'
+  import TerminalSelectionTag from '../tags/TerminalSelectionTag.vue'
+  import TerminalTabTag from '../tags/TerminalTabTag.vue'
   import InputPopover from '@/components/ui/InputPopover.vue'
-  import CkIndexContent from './CkIndexContent.vue'
+  import CkIndexContent from '../ckIndex/CkIndexContent.vue'
+  import FolderPicker from '../tags/FolderPicker.vue'
   import CircularProgress from '@/components/ui/CircularProgress.vue'
   import { ckApi } from '@/api'
 
@@ -202,10 +203,15 @@
   let progressTimer: number | undefined
 
   const showIndexModal = ref(false)
+  const showNavigatorModal = ref(false)
 
   const handleCkIndexClick = async () => {
     await checkCkIndexStatus()
     showIndexModal.value = true
+  }
+
+  const handleOpenNavigator = () => {
+    showNavigatorModal.value = true
   }
 
   const checkCkIndexStatus = async () => {
@@ -312,6 +318,44 @@
     }
   }
 
+  const getSelectionDisplayText = () => {
+    const info = terminalSelection.selectionInfo.value
+    const activeTab = tabManagerStore.activeTab
+
+    if (!activeTab || activeTab.type !== TabType.TERMINAL) {
+      return info || t('session.selected_content')
+    }
+
+    // 获取路径显示
+    let currentTabPath = 'terminal'
+    if (activeTab.path && activeTab.path !== '~') {
+      currentTabPath = activeTab.path
+    } else {
+      const terminal = terminalStore.terminals.find(t => t.id === activeTab.id)
+      if (terminal?.cwd) {
+        const parts = terminal.cwd
+          .replace(/\/$/, '')
+          .split(/[/\\]/)
+          .filter(p => p.length > 0)
+        if (parts.length === 0) {
+          currentTabPath = '~'
+        } else {
+          const lastPart = parts[parts.length - 1]
+          currentTabPath = lastPart.length > 15 ? lastPart.substring(0, 12) + '...' : lastPart
+        }
+      }
+    }
+
+    // 组合显示文本
+    if (info) {
+      const parts = info.split(' ')
+      if (parts.length > 1) {
+        return `${currentTabPath} ${parts.slice(1).join(' ')}`
+      }
+    }
+    return `${currentTabPath} ${t('session.selected_content')}`
+  }
+
   const handleInsertSelectedText = () => {
     const selectedText = terminalSelection.getSelectedText()
     if (!selectedText.trim()) return
@@ -379,12 +423,13 @@
       :shell="terminalSelection.currentTerminalTab.value?.shell"
       :cwd="terminalSelection.currentTerminalTab.value?.cwd"
       :display-path="terminalSelection.currentTerminalTab.value?.displayPath"
+      @open-navigator="handleOpenNavigator"
     />
 
     <TerminalSelectionTag
       :visible="terminalSelection.hasSelection.value"
       :selected-text="terminalSelection.selectedText.value"
-      :selection-info="terminalSelection.selectionInfo.value"
+      :display-text="getSelectionDisplayText()"
       @clear="terminalSelection.clearSelection"
       @insert="handleInsertSelectedText"
     />
@@ -479,7 +524,7 @@
       </div>
     </div>
 
-    <InputPopover :visible="showIndexModal" :target-ref="inputTextarea" @update:visible="showIndexModal = $event">
+    <InputPopover :visible="showIndexModal" @update:visible="showIndexModal = $event">
       <CkIndexContent
         :index-status="{ hasIndex: indexStatus.isReady, path: indexStatus.path, size: indexStatus.size }"
         :is-building="isBuilding"
@@ -490,11 +535,21 @@
         @cancel="cancelCkIndex"
       />
     </InputPopover>
+
+    <InputPopover :visible="showNavigatorModal" @update:visible="showNavigatorModal = $event">
+      <FolderPicker
+        v-if="terminalSelection.currentTerminalTab.value?.terminalId && terminalSelection.currentTerminalTab.value?.cwd"
+        :current-path="terminalSelection.currentTerminalTab.value.cwd"
+        :terminal-id="terminalSelection.currentTerminalTab.value.terminalId"
+        @close="showNavigatorModal = false"
+      />
+    </InputPopover>
   </div>
 </template>
 
 <style scoped>
   .chat-input {
+    position: relative;
     padding: 10px;
     margin: auto;
     width: 90%;

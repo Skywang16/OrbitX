@@ -1,6 +1,5 @@
 <template>
   <div class="empty-state">
-    <div class="empty-icon">📋</div>
     <div class="empty-text">No active tasks</div>
     <div class="empty-subtitle">Tasks will appear here when AI starts working</div>
   </div>

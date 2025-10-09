@@ -125,7 +125,7 @@
 
   // 从后端注册表生成可用供应商列表
   const availableProviders = computed(() => {
-    const providers = providerOptions.value.map((provider) => ({
+    const providers = providerOptions.value.map(provider => ({
       id: provider.value,
       name: provider.label,
     }))
@@ -396,7 +396,6 @@
     color: var(--text-200);
     margin: 0 0 4px 0;
   }
-
 
   .ai-config-dropdown {
     padding: 0 20px 24px 20px;

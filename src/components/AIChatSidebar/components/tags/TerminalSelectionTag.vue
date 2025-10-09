@@ -1,71 +1,26 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { useTabManagerStore } from '@/stores/TabManager'
-  import { useTerminalStore } from '@/stores/Terminal'
-  import { TabType } from '@/types'
 
   interface Props {
     selectedText?: string
-    selectionInfo?: string
+    displayText?: string
     visible?: boolean
+  }
+
+  interface Emits {
+    (e: 'clear'): void
+    (e: 'insert'): void
   }
 
   const props = withDefaults(defineProps<Props>(), {
     selectedText: '',
-    selectionInfo: '',
+    displayText: '',
     visible: false,
   })
 
-  const emit = defineEmits<{
-    clear: []
-    insert: []
-  }>()
-
-  const tabManagerStore = useTabManagerStore()
-  const terminalStore = useTerminalStore()
+  const emit = defineEmits<Emits>()
   const { t } = useI18n()
-
-  // 获取当前活跃tab的路径信息
-  const currentTabPath = computed(() => {
-    const activeTab = tabManagerStore.activeTab
-    if (!activeTab || activeTab.type !== TabType.TERMINAL) {
-      return 'terminal'
-    }
-
-    // 优先使用tab中的path信息
-    if (activeTab.path && activeTab.path !== '~') {
-      return activeTab.path
-    }
-
-    // 如果tab没有path信息，从terminal store获取
-    const terminal = terminalStore.terminals.find(t => t.id === activeTab.id)
-    if (terminal?.cwd) {
-      // 使用简化的路径显示逻辑
-      const parts = terminal.cwd
-        .replace(/\/$/, '')
-        .split(/[/\\]/)
-        .filter(p => p.length > 0)
-      if (parts.length === 0) return '~'
-
-      const lastPart = parts[parts.length - 1]
-      return lastPart.length > 15 ? lastPart.substring(0, 12) + '...' : lastPart
-    }
-
-    return 'terminal'
-  })
-
-  // 简化显示文本逻辑 - 优先显示路径信息
-  const displayText = computed(() => {
-    if (props.selectionInfo) {
-      // 如果有选择信息，显示 "路径 行号:行号" 格式
-      const parts = props.selectionInfo.split(' ')
-      if (parts.length > 1) {
-        return `${currentTabPath.value} ${parts.slice(1).join(' ')}`
-      }
-    }
-    return `${currentTabPath.value} ${t('session.selected_content')}`
-  })
 </script>
 
 <template>
@@ -78,8 +33,8 @@
           <line x1="12" y1="17" x2="12" y2="21" />
         </svg>
       </div>
-      <span class="tag-text" @click="emit('insert')" :title="`${t('session.click_to_insert')}: ${displayText}`">
-        {{ displayText }}
+      <span class="tag-text" @click="emit('insert')" :title="`${t('session.click_to_insert')}: ${props.displayText}`">
+        {{ props.displayText }}
       </span>
       <button class="tag-close" @click="emit('clear')" :title="t('session.clear_selection')">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

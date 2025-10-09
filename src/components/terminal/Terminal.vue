@@ -62,7 +62,7 @@
   import type { ITheme } from '@xterm/xterm'
   import TerminalCompletion from './TerminalCompletion.vue'
   import TerminalLoading from './TerminalLoading.vue'
-  import SearchBox from '@/components/SearchBox.vue'
+  import SearchBox from '@/components/common/SearchBox.vue'
 
   // XTerm.js 样式
   import '@xterm/xterm/css/xterm.css'

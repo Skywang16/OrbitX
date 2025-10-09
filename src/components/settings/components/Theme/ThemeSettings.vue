@@ -302,15 +302,15 @@
             </div>
           </div>
           <div class="settings-item-control">
-          <input
-            v-model.number="opacity"
-            type="range"
-            min="0.05"
-            max="1"
-            step="0.01"
-            class="settings-slider"
-            @input="handleOpacityChange"
-          />
+            <input
+              v-model.number="opacity"
+              type="range"
+              min="0.05"
+              max="1"
+              step="0.01"
+              class="settings-slider"
+              @input="handleOpacityChange"
+            />
             <span class="settings-value">{{ Math.round(opacity * 100) }}%</span>
           </div>
         </div>

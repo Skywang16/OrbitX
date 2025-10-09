@@ -4,30 +4,27 @@
 
   interface Props {
     terminalId?: number
-    shell?: string
     cwd?: string
     displayPath?: string
     visible?: boolean
   }
 
+  interface Emits {
+    (e: 'open-navigator'): void
+  }
+
   const props = withDefaults(defineProps<Props>(), {
     terminalId: undefined,
-    shell: '',
     cwd: '',
     displayPath: '',
     visible: false,
   })
 
+  const emit = defineEmits<Emits>()
   const { t } = useI18n()
 
-  // 计算显示文本
+  // 计算显示文本 - 只显示工作目录
   const displayText = computed(() => {
-    if (props.shell && props.displayPath) {
-      return `${props.shell} - ${props.displayPath}`
-    }
-    if (props.shell) {
-      return props.shell
-    }
     if (props.displayPath) {
       return props.displayPath
     }
@@ -36,25 +33,25 @@
 
   // 计算工具提示
   const tooltipText = computed(() => {
-    const parts = []
-    if (props.shell) {
-      parts.push(`Shell: ${props.shell}`)
-    }
     if (props.cwd) {
-      parts.push(`Path: ${props.cwd}`)
+      return `${t('workspace.current_directory')}: ${props.cwd}`
     }
-    return parts.join('\n') || t('session.current_terminal')
+    return t('session.current_terminal')
   })
+
+  const handleTagClick = () => {
+    if (props.terminalId && props.cwd) {
+      emit('open-navigator')
+    }
+  }
 </script>
 
 <template>
   <div v-if="visible" class="terminal-tab-tag">
-    <div class="tag-content">
+    <div class="tag-content" @click="handleTagClick">
       <div class="tag-icon">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-          <line x1="8" y1="21" x2="16" y2="21" />
-          <line x1="12" y1="17" x2="12" y2="21" />
+          <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
         </svg>
       </div>
       <span class="tag-text" :title="tooltipText">
@@ -80,15 +77,20 @@
     font-size: 12px;
     color: var(--text-300);
     max-width: 100%;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .tag-content:hover {
+    background-color: var(--bg-400);
+    border-color: var(--border-300);
+    color: var(--text-200);
   }
 
   .tag-icon {
     display: flex;
     align-items: center;
     flex-shrink: 0;
-  }
-
-  .tag-icon {
     color: var(--color-primary);
   }
 

@@ -4,10 +4,10 @@
   import { marked } from 'marked'
   import type { Message } from '@/types'
   import type { UiStep } from '@/api/agent/types'
-  import { useAIChatStore } from '../store'
+  import { useAIChatStore } from '../../store'
   import { formatTime } from '@/utils/dateFormatter'
-  import ThinkingBlock from './msgBlock/ThinkingBlock.vue'
-  import ToolBlock from './msgBlock/ToolBlock.vue'
+  import ThinkingBlock from './blocks/ThinkingBlock.vue'
+  import ToolBlock from './blocks/ToolBlock.vue'
   import { useStepProcessor } from '@/composables/useStepProcessor'
   const { t } = useI18n()
   const { processSteps } = useStepProcessor()
