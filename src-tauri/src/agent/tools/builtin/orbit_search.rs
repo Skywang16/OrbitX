@@ -15,7 +15,7 @@ use crate::agent::persistence::FileRecordSource;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
-    ToolResult, ToolResultContent,
+    ToolResult, ToolResultContent, ToolDescriptionContext,
 };
 
 const DEFAULT_MAX_RESULTS: usize = 10;
@@ -58,6 +58,17 @@ impl RunnableTool for OrbitSearchTool {
 
     fn description(&self) -> &str {
         "Search for code snippets in the current project using semantic or hybrid matching."
+    }
+    
+    fn description_with_context(&self, context: &ToolDescriptionContext) -> Option<String> {
+        let path = Path::new(&context.cwd);
+        let has_index = is_index_ready(path);
+        
+        if has_index {
+            Some("Search for code snippets in the current project. Supports three modes: 'semantic' (AI-powered understanding of code semantics, recommended), 'hybrid' (combines semantic and keyword matching), and 'regex' (pattern-based search). The project index is ready - use semantic or hybrid mode for best results.".to_string())
+        } else {
+            Some("Search for code snippets in the current project. Currently, only 'regex' mode (pattern-based search) is available because no index has been built yet. To use 'semantic' and 'hybrid' intelligent search modes, please build the index first using the CK index button in the interface.".to_string())
+        }
     }
 
     fn parameters_schema(&self) -> serde_json::Value {

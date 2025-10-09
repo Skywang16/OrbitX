@@ -7,7 +7,7 @@ use crate::agent::core::executor::TaskExecutor;
 use crate::agent::events::{TaskProgressPayload, ToolResultPayload};
 use crate::agent::persistence::ToolExecutionStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
-use crate::agent::tools::ToolRegistry;
+use crate::agent::tools::{ToolDescriptionContext, ToolRegistry};
 use crate::llm::types::{LLMMessage, LLMRequest, LLMTool, LLMToolCall};
 use chrono::Utc;
 use serde_json::Value;
@@ -19,12 +19,13 @@ impl TaskExecutor {
         &self,
         messages: Vec<LLMMessage>,
         tool_registry: &ToolRegistry,
+        cwd: &str,
     ) -> TaskExecutorResult<LLMRequest> {
         // 获取默认模型配置
         let model_id = self.get_default_model_id().await?;
 
         // 构建工具定义
-        let tools = self.build_tool_definitions(tool_registry).await?;
+        let tools = self.build_tool_definitions(tool_registry, cwd).await?;
 
         Ok(LLMRequest {
             model: model_id,
@@ -312,9 +313,11 @@ impl TaskExecutor {
     }
 
     /// 构建工具定义
-    async fn build_tool_definitions(&self, tool_registry: &ToolRegistry) -> TaskExecutorResult<Vec<LLMTool>> {
+    async fn build_tool_definitions(&self, tool_registry: &ToolRegistry, cwd: &str) -> TaskExecutorResult<Vec<LLMTool>> {
         // 从工具注册表获取可用工具并转换为LLM工具定义
-        let tool_schemas = tool_registry.get_tool_schemas().await;
+        let tool_schemas = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
+            cwd: cwd.to_string(),
+        });
 
         let tools: Vec<LLMTool> = tool_schemas
             .into_iter()

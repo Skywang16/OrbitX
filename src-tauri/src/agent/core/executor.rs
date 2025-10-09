@@ -34,7 +34,7 @@ use crate::agent::react::types::FinishReason;
 use crate::agent::state::iteration::IterationSnapshot;
 use crate::agent::state::session::CompressedMemory;
 use crate::agent::tools::{
-    logger::ToolExecutionLogger, ToolRegistry, ToolResult as ToolOutcome, ToolResultContent,
+    logger::ToolExecutionLogger, ToolDescriptionContext, ToolRegistry, ToolResult as ToolOutcome, ToolResultContent,
 };
 use crate::agent::types::{Agent, Context as AgentContext, Task, ToolSchema};
 use crate::agent::ui::AgentUiPersistence;
@@ -382,7 +382,9 @@ impl TaskExecutor {
         if let Some(tree) = planned_tree {
             let parents = tree.subtasks.unwrap_or_default();
             let tool_registry = root_ctx.tool_registry();
-            let tool_schemas_full = tool_registry.get_tool_schemas().await;
+            let tool_schemas_full = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
+                cwd: root_ctx.cwd.clone(),
+            });
             let simple_tool_schemas: Vec<ToolSchema> = tool_schemas_full
                 .into_iter()
                 .map(|s| ToolSchema {
@@ -818,7 +820,10 @@ impl TaskExecutor {
         working_directory: Option<&str>,
         tool_registry: &ToolRegistry,
     ) -> TaskExecutorResult<(String, String)> {
-        let tool_schemas_full = tool_registry.get_tool_schemas().await;
+        let cwd = working_directory.unwrap_or("/");
+        let tool_schemas_full = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
+            cwd: cwd.to_string(),
+        });
         let simple_tool_schemas: Vec<ToolSchema> = tool_schemas_full
             .into_iter()
             .map(|s| ToolSchema {
@@ -1172,7 +1177,7 @@ impl TaskExecutor {
 
             let messages = compaction_result.messages();
             let tool_registry = context.tool_registry();
-            let llm_request = self.build_llm_request(messages, &tool_registry).await?;
+            let llm_request = self.build_llm_request(messages, &tool_registry, &context.cwd).await?;
             let llm_request_snapshot = Arc::new(llm_request.clone());
 
             // 流式调用LLM

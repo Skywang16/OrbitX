@@ -9,7 +9,7 @@ pub mod r#trait;
 // Re-exports for external use
 pub use logger::ToolExecutionLogger;
 pub use metadata::{BackoffStrategy, RateLimitConfig, ToolCategory, ToolMetadata, ToolPriority};
-pub use r#trait::{RunnableTool, ToolPermission, ToolResult, ToolResultContent, ToolSchema};
+pub use r#trait::{RunnableTool, ToolDescriptionContext, ToolPermission, ToolResult, ToolResultContent, ToolSchema};
 pub use registry::{get_permissions_for_mode, ToolExecutionStats, ToolRegistry};
 
 // Builtin tool type re-exports

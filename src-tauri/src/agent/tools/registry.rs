@@ -6,7 +6,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use super::metadata::{RateLimitConfig, ToolCategory, ToolMetadata};
-use super::r#trait::{RunnableTool, ToolPermission, ToolResult, ToolResultContent, ToolSchema};
+use super::r#trait::{RunnableTool, ToolPermission, ToolResult, ToolResultContent, ToolSchema, ToolDescriptionContext};
 use crate::agent::core::context::TaskContext;
 
 /// 根据 chat_mode 获取授予的权限集合
@@ -421,6 +421,25 @@ impl ToolRegistry {
         self.tools
             .iter()
             .map(|entry| entry.value().schema())
+            .collect()
+    }
+
+    /// Get tool schemas with context-aware descriptions
+    pub fn get_tool_schemas_with_context(&self, context: &ToolDescriptionContext) -> Vec<ToolSchema> {
+        self.tools
+            .iter()
+            .map(|entry| {
+                let tool = entry.value();
+                let description = tool
+                    .description_with_context(context)
+                    .unwrap_or_else(|| tool.description().to_string());
+                
+                ToolSchema {
+                    name: tool.name().to_string(),
+                    description,
+                    parameters: tool.parameters_schema(),
+                }
+            })
             .collect()
     }
 
