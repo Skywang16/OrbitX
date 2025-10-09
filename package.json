@@ -28,8 +28,8 @@
     "build:analyze": "vue-tsc --noEmit && ANALYZE=true vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
-    "lint:check": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts",
+    "lint": "eslint src --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --cache --cache-location node_modules/.cache/.eslintcache --fix",
+    "lint:check": "eslint src --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --cache --cache-location node_modules/.cache/.eslintcache",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

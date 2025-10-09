@@ -162,15 +162,12 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         ));
         let llm_registry = llm_state.registry.clone();
         let terminal_context_service = terminal_context_state.context_service().clone();
-        let tool_registry =
-            tauri::async_runtime::block_on(crate::agent::tools::create_tool_registry());
 
         let executor = Arc::new(crate::agent::core::TaskExecutor::new(
             Arc::clone(&repositories),
             Arc::clone(&agent_persistence),
             Arc::clone(&ui_persistence),
             Arc::clone(&llm_registry),
-            tool_registry,
             Arc::clone(&terminal_context_service),
         ));
 

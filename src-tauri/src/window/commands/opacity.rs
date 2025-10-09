@@ -3,6 +3,15 @@
 use super::*;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
+use serde::Serialize;
+use tauri::Emitter;
+
+// 透明度变化事件的 payload
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpacityChangedPayload {
+    pub opacity: f64,
+}
 
 // 设置窗口透明度
 #[tauri::command]
@@ -12,10 +21,12 @@ pub async fn window_set_opacity<R: Runtime>(
     state: State<'_, WindowState>,
     config_state: State<'_, crate::config::ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
-    if !(0.0..=1.0).contains(&opacity) {
+    // 1. 验证输入范围
+    if !(0.05..=1.0).contains(&opacity) {
         return Ok(api_error!("window.opacity_out_of_range"));
     }
 
+    // 2. 获取窗口实例
     let window_id = match state
         .with_config_manager(|config| Ok(config.get_default_window_id().to_string()))
         .await
@@ -29,15 +40,7 @@ pub async fn window_set_opacity<R: Runtime>(
         None => return Ok(api_error!("window.get_instance_failed")),
     };
 
-    let script = format!("document.documentElement.style.opacity = '{}';", opacity);
-
-    match window.eval(&script) {
-        Ok(_) => (),
-        Err(_) => {
-            return Ok(api_error!("window.set_opacity_failed"));
-        }
-    }
-
+    // 3. 持久化配置
     match config_state
         .toml_manager
         .config_update(|config| {
@@ -49,6 +52,15 @@ pub async fn window_set_opacity<R: Runtime>(
         Ok(_) => (),
         Err(_) => {
             return Ok(api_error!("config.save_failed"));
+        }
+    }
+
+    // 4. 发送事件通知前端
+    let payload = OpacityChangedPayload { opacity };
+    match window.emit("opacity-changed", payload) {
+        Ok(_) => (),
+        Err(_) => {
+            return Ok(api_error!("window.emit_event_failed"));
         }
     }
 

@@ -1,17 +1,4 @@
-// Helpers to resolve index directory location
-fn default_index_dir(base: &Path) -> PathBuf {
-    base.join(".oxi")
-}
-
-fn resolve_index_dir(base: &Path) -> PathBuf {
-    let oxi = base.join(".oxi");
-    if oxi.exists() {
-        return oxi;
-    }
-    base.join(".ck")
-}
 use anyhow::Result;
-use ck_ann::AnnIndex;
 use ck_core::{CkError, SearchMode, SearchOptions, SearchResult, Span};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;
@@ -33,23 +20,123 @@ pub type SearchProgressCallback = Box<dyn Fn(&str) + Send + Sync>;
 pub type IndexingProgressCallback = Box<dyn Fn(&str) + Send + Sync>;
 pub type DetailedIndexingProgressCallback = Box<dyn Fn(ck_index::EmbeddingProgress) + Send + Sync>;
 
-/// Extract content from a file using a span
-async fn extract_content_from_span(file_path: &Path, span: &ck_core::Span) -> Result<String> {
-    let content = tokio::fs::read_to_string(file_path).await?;
-    let lines: Vec<&str> = content.lines().collect();
+/// Resolve the actual file path to read content from
+/// For PDFs: returns cache path and validates it exists
+/// For regular files: returns original path
+fn resolve_content_path(file_path: &Path, repo_root: &Path) -> Result<PathBuf> {
+    if ck_core::pdf::is_pdf_file(file_path) {
+        // PDFs: Read from cached extracted text
+        let cache_path = ck_core::pdf::get_content_cache_path(repo_root, file_path);
+        if !cache_path.exists() {
+            return Err(anyhow::anyhow!(
+                "PDF not preprocessed. Run 'ck --index' first."
+            ));
+        }
+        Ok(cache_path)
+    } else {
+        // Regular files: Read from original source
+        Ok(file_path.to_path_buf())
+    }
+}
 
-    if span.line_start == 0 || span.line_start > lines.len() {
+/// Read content from file for search result extraction
+/// Regular files: read directly from source
+/// PDFs: read from preprocessed cache
+fn read_file_content(file_path: &Path, repo_root: &Path) -> Result<String> {
+    let content_path = resolve_content_path(file_path, repo_root)?;
+    Ok(fs::read_to_string(content_path)?)
+}
+
+/// Extract content from a file using a span (streaming version)
+async fn extract_content_from_span(file_path: &Path, span: &ck_core::Span) -> Result<String> {
+    // Find repo root to locate cache
+    let repo_root = find_nearest_index_root(file_path)
+        .unwrap_or_else(|| file_path.parent().unwrap_or(file_path).to_path_buf());
+
+    // Use centralized path resolution
+    let content_path = resolve_content_path(file_path, &repo_root)?;
+
+    // Stream only the needed lines
+    extract_lines_from_file(&content_path, span.line_start, span.line_end)
+}
+
+/// Stream-read specific lines from a file without loading the entire content
+fn extract_lines_from_file(file_path: &Path, line_start: usize, line_end: usize) -> Result<String> {
+    use std::io::{BufRead, BufReader};
+
+    if line_start == 0 {
         return Ok(String::new());
     }
 
-    let start_idx = span.line_start - 1; // Convert to 0-based
-    let end_idx = (span.line_end - 1).min(lines.len().saturating_sub(1));
+    let file = fs::File::open(file_path)?;
+    let reader = BufReader::new(file);
+    let mut result = Vec::new();
 
-    if start_idx <= end_idx {
-        Ok(lines[start_idx..=end_idx].join("\n"))
-    } else {
-        Ok(lines[start_idx].to_string())
+    // Convert to 0-based indexing
+    let start_idx = line_start.saturating_sub(1);
+    let end_idx = line_end.saturating_sub(1);
+
+    for (current_line, line_result) in reader.lines().enumerate() {
+        if current_line > end_idx {
+            break; // Stop reading once we've passed the needed lines
+        }
+
+        let line = line_result?;
+
+        if current_line >= start_idx {
+            result.push(line);
+        }
     }
+
+    // Handle case where requested lines exceed file length
+    if result.is_empty() && line_start > 0 {
+        return Ok(String::new());
+    }
+
+    Ok(result.join("\n"))
+}
+
+/// Split content into lines while preserving the exact number of trailing newline bytes per line.
+/// Handles Unix (\n), Windows (\r\n) and old Mac (\r) line endings.
+fn split_lines_with_endings(content: &str) -> (Vec<String>, Vec<usize>) {
+    let mut lines = Vec::new();
+    let mut endings = Vec::new();
+
+    let bytes = content.as_bytes();
+    let mut start = 0usize;
+    let mut i = 0usize;
+
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\n' => {
+                lines.push(content[start..i].to_string());
+                endings.push(1);
+                i += 1;
+                start = i;
+            }
+            b'\r' => {
+                lines.push(content[start..i].to_string());
+                if i + 1 < bytes.len() && bytes[i + 1] == b'\n' {
+                    endings.push(2);
+                    i += 2;
+                } else {
+                    endings.push(1);
+                    i += 1;
+                }
+                start = i;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    if start < bytes.len() {
+        lines.push(content[start..].to_string());
+        endings.push(0);
+    }
+
+    (lines, endings)
 }
 
 fn find_nearest_index_root(path: &Path) -> Option<StdPathBuf> {
@@ -67,6 +154,138 @@ fn find_nearest_index_root(path: &Path) -> Option<StdPathBuf> {
             None => return None,
         }
     }
+}
+
+// Prefer .oxi for new writes; for reads, fallback to legacy .ck when .oxi doesn't exist
+fn index_dir_for_read(base: &Path) -> PathBuf {
+    let oxi = base.join(".oxi");
+    if oxi.exists() { oxi } else { base.join(".ck") }
+}
+
+fn index_dir_for_write(base: &Path) -> PathBuf {
+    base.join(".oxi")
+}
+
+#[derive(Clone, Debug)]
+pub struct ResolvedModel {
+    pub canonical_name: String,
+    pub alias: String,
+    pub dimensions: usize,
+}
+
+fn find_model_entry<'a>(
+    registry: &'a ck_models::ModelRegistry,
+    key: &str,
+) -> Option<(String, &'a ck_models::ModelConfig)> {
+    if let Some(config) = registry.get_model(key) {
+        return Some((key.to_string(), config));
+    }
+
+    registry
+        .models
+        .iter()
+        .find(|(_, config)| config.name == key)
+        .map(|(alias, config)| (alias.clone(), config))
+}
+
+pub(crate) fn resolve_model_from_root(
+    index_root: &Path,
+    cli_model: Option<&str>,
+) -> Result<ResolvedModel> {
+    use ck_models::ModelRegistry;
+
+    let registry = ModelRegistry::default();
+    let index_dir = index_dir_for_read(index_root);
+    let manifest_path = index_dir.join("manifest.json");
+
+    if manifest_path.exists() {
+        let data = std::fs::read(&manifest_path)?;
+        let manifest: ck_index::IndexManifest = serde_json::from_slice(&data)?;
+
+        if let Some(existing_model) = manifest.embedding_model {
+            let (alias, config_opt) = find_model_entry(&registry, &existing_model)
+                .map(|(alias, config)| (alias, Some(config)))
+                .unwrap_or_else(|| (existing_model.clone(), None));
+
+            let dims = manifest
+                .embedding_dimensions
+                .or_else(|| config_opt.map(|c| c.dimensions))
+                .unwrap_or(384);
+
+            if let Some(requested) = cli_model {
+                let (_, requested_config) =
+                    find_model_entry(&registry, requested).ok_or_else(|| {
+                        CkError::Embedding(format!(
+                            "Unknown model '{}'. Available models: {}",
+                            requested,
+                            registry
+                                .models
+                                .keys()
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ))
+                    })?;
+
+                if requested_config.name != existing_model {
+                    let suggested_alias = alias.clone();
+                    return Err(CkError::Embedding(format!(
+                        "Index was built with embedding model '{}' (alias '{}'), but '--model {}' was requested. To switch models run `ck --clean .` then `ck --index --model {}`. To keep using this index rerun your command with '--model {}'.",
+                        existing_model,
+                        suggested_alias,
+                        requested,
+                        requested,
+                        suggested_alias
+                    ))
+                    .into());
+                }
+            }
+
+            return Ok(ResolvedModel {
+                canonical_name: existing_model,
+                alias,
+                dimensions: dims,
+            });
+        }
+    }
+
+    let (alias, config) = if let Some(requested) = cli_model {
+        find_model_entry(&registry, requested).ok_or_else(|| {
+            CkError::Embedding(format!(
+                "Unknown model '{}'. Available models: {}",
+                requested,
+                registry
+                    .models
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        })?
+    } else {
+        let alias = registry.default_model.clone();
+        let config = registry.get_default_model().ok_or_else(|| {
+            CkError::Embedding("No default embedding model configured".to_string())
+        })?;
+        (alias, config)
+    };
+
+    Ok(ResolvedModel {
+        canonical_name: config.name.clone(),
+        alias,
+        dimensions: config.dimensions,
+    })
+}
+
+pub fn resolve_model_for_path(path: &Path, cli_model: Option<&str>) -> Result<ResolvedModel> {
+    let index_root = find_nearest_index_root(path).unwrap_or_else(|| {
+        if path.is_file() {
+            path.parent().unwrap_or(path).to_path_buf()
+        } else {
+            path.to_path_buf()
+        }
+    });
+    resolve_model_from_root(&index_root, cli_model)
 }
 
 pub async fn search(options: &SearchOptions) -> Result<Vec<SearchResult>> {
@@ -120,6 +339,9 @@ pub async fn search_enhanced_with_indexing_progress(
             need_embeddings,
             indexing_progress_callback,
             detailed_indexing_progress_callback,
+            options.respect_gitignore,
+            &options.exclude_patterns,
+            options.embedding_model.as_deref(),
         )
         .await?;
     }
@@ -222,18 +444,49 @@ fn search_file(
     file_path: &Path,
     options: &SearchOptions,
 ) -> Result<Vec<SearchResult>> {
-    let content = fs::read_to_string(file_path)?;
-    let lines: Vec<&str> = content.lines().collect();
-    let mut results = Vec::new();
+    // Find repo root to locate cache
+    let repo_root = find_nearest_index_root(file_path)
+        .unwrap_or_else(|| file_path.parent().unwrap_or(file_path).to_path_buf());
 
-    // If full_section is enabled, try to parse the file and find code sections
-    let code_sections = if options.full_section {
-        extract_code_sections(file_path, &content)
+    // For full_section mode, we need the entire content for parsing
+    // For context previews, we need all lines for surrounding context
+    // So we'll load content when needed, but optimize for the common case
+    if options.full_section || options.context_lines > 0 {
+        // Load full content when we need section parsing or context
+        let content = read_file_content(file_path, &repo_root)?;
+        let (lines, line_ending_lengths) = split_lines_with_endings(&content);
+
+        // If full_section is enabled, try to parse the file and find code sections
+        let code_sections = if options.full_section {
+            extract_code_sections(file_path, &content)
+        } else {
+            None
+        };
+
+        search_file_in_memory(
+            regex,
+            file_path,
+            options,
+            &lines,
+            &code_sections,
+            &line_ending_lengths,
+        )
     } else {
-        None
-    };
+        // Streaming search (simple case)
+        search_file_streaming(regex, file_path, &repo_root, options)
+    }
+}
 
-    // Track byte offset as we iterate through lines
+/// In-memory search for cases requiring context or code sections
+fn search_file_in_memory(
+    regex: &Regex,
+    file_path: &Path,
+    options: &SearchOptions,
+    lines: &[String],
+    code_sections: &Option<Vec<(usize, usize, String)>>,
+    line_ending_lengths: &[usize],
+) -> Result<Vec<SearchResult>> {
+    let mut results = Vec::new();
     let mut byte_offset = 0;
 
     for (line_idx, line) in lines.iter().enumerate() {
@@ -245,18 +498,18 @@ fn search_file(
             // Empty pattern matches the whole line once (grep compatibility)
             let preview = if options.full_section {
                 // Try to find the containing code section
-                if let Some(ref sections) = code_sections {
+                if let Some(sections) = code_sections {
                     if let Some(section) = find_containing_section(sections, line_idx) {
                         section.clone()
                     } else {
                         // Fall back to context lines if no section found
-                        get_context_preview(&lines, line_idx, options)
+                        get_context_preview(lines, line_idx, options)
                     }
                 } else {
-                    get_context_preview(&lines, line_idx, options)
+                    get_context_preview(lines, line_idx, options)
                 }
             } else {
-                get_context_preview(&lines, line_idx, options)
+                get_context_preview(lines, line_idx, options)
             };
 
             results.push(SearchResult {
@@ -279,18 +532,18 @@ fn search_file(
             for mat in regex.find_iter(line) {
                 let preview = if options.full_section {
                     // Try to find the containing code section
-                    if let Some(ref sections) = code_sections {
+                    if let Some(sections) = code_sections {
                         if let Some(section) = find_containing_section(sections, line_idx) {
                             section.clone()
                         } else {
                             // Fall back to context lines if no section found
-                            get_context_preview(&lines, line_idx, options)
+                            get_context_preview(lines, line_idx, options)
                         }
                     } else {
-                        get_context_preview(&lines, line_idx, options)
+                        get_context_preview(lines, line_idx, options)
                     }
                 } else {
-                    get_context_preview(&lines, line_idx, options)
+                    get_context_preview(lines, line_idx, options)
                 };
 
                 results.push(SearchResult {
@@ -311,18 +564,160 @@ fn search_file(
             }
         }
 
-        // Update byte offset for next line (add line length + newline character)
+        // Update byte offset for next line (add line length + actual line ending length)
         byte_offset += line.len();
-        if line_idx < lines.len() - 1 {
-            byte_offset += 1; // Add 1 for the newline character
+        byte_offset += line_ending_lengths.get(line_idx).copied().unwrap_or(0);
+    }
+
+    Ok(results)
+}
+
+/// Streaming search for simple cases without context or code sections
+fn search_file_streaming(
+    regex: &Regex,
+    file_path: &Path,
+    repo_root: &Path,
+    _options: &SearchOptions,
+) -> Result<Vec<SearchResult>> {
+    use std::io::{BufRead, BufReader};
+
+    let content_path = resolve_content_path(file_path, repo_root)?;
+    let file = std::fs::File::open(&content_path)?;
+    let mut reader = BufReader::new(file);
+
+    let mut results = Vec::new();
+    let mut line = String::new();
+    let mut byte_offset = 0usize;
+    let mut line_number = 1usize;
+
+    loop {
+        line.clear();
+        let bytes_read = reader.read_line(&mut line)?;
+        if bytes_read == 0 {
+            break;
+        }
+
+        // Determine the length of the trailing line ending (if any) and
+        // normalise the line buffer so it no longer contains newline bytes.
+        let mut newline_len = 0usize;
+        if line.ends_with("\r\n") {
+            line.pop(); // remove \n
+            line.pop(); // remove \r
+            newline_len = 2;
+        } else if line.ends_with(['\n', '\r']) {
+            line.pop();
+            newline_len = 1;
+        }
+
+        // Old Mac-style files may use bare carriage returns as separators.
+        // When the trimmed line still contains '\r' characters, treat them as
+        // record separators so the byte offsets remain accurate.
+        let treat_cr_as_newline = line.contains('\r');
+
+        if treat_cr_as_newline {
+            let bytes = line.as_bytes();
+            let mut segment_start = 0usize;
+            while segment_start <= bytes.len() {
+                match bytes[segment_start..].iter().position(|&b| b == b'\r') {
+                    Some(rel_idx) => {
+                        let idx = segment_start + rel_idx;
+                        let segment_bytes = &bytes[segment_start..idx];
+                        let segment_str = std::str::from_utf8(segment_bytes)?;
+                        process_streaming_line(
+                            regex,
+                            file_path,
+                            segment_str,
+                            line_number,
+                            byte_offset,
+                            &mut results,
+                        );
+                        byte_offset += segment_bytes.len() + 1; // account for \r
+                        line_number += 1;
+                        segment_start = idx + 1;
+                    }
+                    None => {
+                        let segment_bytes = &bytes[segment_start..];
+                        let segment_str = std::str::from_utf8(segment_bytes)?;
+                        process_streaming_line(
+                            regex,
+                            file_path,
+                            segment_str,
+                            line_number,
+                            byte_offset,
+                            &mut results,
+                        );
+                        byte_offset += segment_bytes.len();
+                        line_number += 1;
+                        break;
+                    }
+                }
+            }
+            byte_offset += newline_len;
+        } else {
+            let line_str = line.as_str();
+            process_streaming_line(
+                regex,
+                file_path,
+                line_str,
+                line_number,
+                byte_offset,
+                &mut results,
+            );
+            byte_offset += line_str.len() + newline_len;
+            line_number += 1;
         }
     }
 
     Ok(results)
 }
 
+fn process_streaming_line(
+    regex: &Regex,
+    file_path: &Path,
+    line: &str,
+    line_number: usize,
+    byte_offset: usize,
+    results: &mut Vec<SearchResult>,
+) {
+    if regex.as_str().is_empty() {
+        results.push(SearchResult {
+            file: file_path.to_path_buf(),
+            span: Span {
+                byte_start: byte_offset,
+                byte_end: byte_offset + line.len(),
+                line_start: line_number,
+                line_end: line_number,
+            },
+            score: 1.0,
+            preview: line.to_string(),
+            lang: ck_core::Language::from_path(file_path),
+            symbol: None,
+            chunk_hash: None,
+            index_epoch: None,
+        });
+    } else {
+        for mat in regex.find_iter(line) {
+            results.push(SearchResult {
+                file: file_path.to_path_buf(),
+                span: Span {
+                    byte_start: byte_offset + mat.start(),
+                    byte_end: byte_offset + mat.end(),
+                    line_start: line_number,
+                    line_end: line_number,
+                },
+                score: 1.0,
+                preview: line.to_string(),
+                lang: ck_core::Language::from_path(file_path),
+                symbol: None,
+                chunk_hash: None,
+                index_epoch: None,
+            });
+        }
+    }
+}
+
 async fn lexical_search(options: &SearchOptions) -> Result<Vec<SearchResult>> {
-    // Handle both files and directories and reuse nearest existing .ck index up the tree
+    // Handle both files and directories and reuse nearest existing .oxi/.ck index up the tree
     let index_root = find_nearest_index_root(&options.path).unwrap_or_else(|| {
         if options.path.is_file() {
             options.path.parent().unwrap_or(&options.path).to_path_buf()
@@ -331,7 +726,7 @@ async fn lexical_search(options: &SearchOptions) -> Result<Vec<SearchResult>> {
         }
     });
 
-    let index_dir = resolve_index_dir(&index_root);
+    let index_dir = index_dir_for_read(&index_root);
     if !index_dir.exists() {
         return Err(CkError::Index("No index found. Run 'ck index' first.".to_string()).into());
     }
@@ -444,7 +839,7 @@ async fn build_tantivy_index(options: &SearchOptions) -> Result<Vec<SearchResult
         &options.path
     };
 
-    let index_dir = default_index_dir(index_root);
+    let index_dir = index_dir_for_write(index_root);
     let tantivy_index_path = index_dir.join("tantivy_index");
 
     fs::create_dir_all(&tantivy_index_path)?;
@@ -477,7 +872,8 @@ async fn build_tantivy_index(options: &SearchOptions) -> Result<Vec<SearchResult
         .commit()
         .map_err(|e| CkError::Index(format!("Failed to commit index: {}", e)))?;
 
-    // After building, search again with the same options (use the path we just built)
+    // After building, search again with the same options
+    let tantivy_index_path = index_dir_for_read(index_root).join("tantivy_index");
     let mut schema_builder = Schema::builder();
     let content_field = schema_builder.add_text_field("content", TEXT | STORED);
     let path_field = schema_builder.add_text_field("path", TEXT | STORED);
@@ -566,328 +962,6 @@ async fn build_tantivy_index(options: &SearchOptions) -> Result<Vec<SearchResult
                 result.score = normalized_score;
                 results.push(result);
             }
-        }
-    }
-
-    Ok(results)
-}
-
-#[allow(dead_code)]
-async fn semantic_search(options: &SearchOptions) -> Result<Vec<SearchResult>> {
-    semantic_search_with_progress(options, None).await
-}
-
-async fn semantic_search_with_progress(
-    options: &SearchOptions,
-    progress_callback: Option<SearchProgressCallback>,
-) -> Result<Vec<SearchResult>> {
-    // Handle both files and directories and reuse nearest existing .ck index up the tree
-    let index_root = find_nearest_index_root(&options.path).unwrap_or_else(|| {
-        if options.path.is_file() {
-            options.path.parent().unwrap_or(&options.path).to_path_buf()
-        } else {
-            options.path.clone()
-        }
-    });
-
-    let index_dir = resolve_index_dir(&index_root);
-    if !index_dir.exists() {
-        return Err(CkError::Index("No index found. Run 'ck index' first.".to_string()).into());
-    }
-
-    let ann_index_path = index_dir.join("ann_index.bin");
-    let embeddings_path = index_dir.join("embeddings.json");
-
-    if !ann_index_path.exists() || !embeddings_path.exists() {
-        return build_semantic_index_with_progress(options, progress_callback).await;
-    }
-
-    // Load the ANN index
-    let ann_index = ck_ann::SimpleIndex::load(&ann_index_path)?;
-
-    // Load file metadata
-    let embeddings_data = fs::read_to_string(&embeddings_path)?;
-    let file_embeddings: Vec<(PathBuf, String)> = serde_json::from_str(&embeddings_data)?;
-
-    // Create embedder and embed the query
-    if let Some(ref callback) = progress_callback {
-        callback("Loading embedding model...");
-    }
-
-    let mut embedder = if let Some(ref callback) = progress_callback {
-        let _cb = callback.as_ref();
-        let model_cb = Box::new(|msg: &str| {
-            // Note: We can't directly use the callback here due to lifetime issues
-            // For now, we'll just use eprintln! until we can restructure this better
-            eprintln!("Model: {}", msg);
-        }) as ck_embed::ModelDownloadCallback;
-        ck_embed::create_embedder_with_progress(Some("BAAI/bge-small-en-v1.5"), Some(model_cb))?
-    } else {
-        ck_embed::create_embedder(Some("BAAI/bge-small-en-v1.5"))?
-    };
-    let query_embeddings = embedder.embed(std::slice::from_ref(&options.query))?;
-
-    if query_embeddings.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let query_embedding = &query_embeddings[0];
-
-    // Search using ANN
-    let top_k = options.top_k.unwrap_or(10);
-    let similar_docs = ann_index.search(query_embedding, top_k);
-
-    let mut results = Vec::new();
-
-    // Check if we're searching a specific file vs. a directory
-    let filter_by_file = options.path.is_file();
-    let target_file = if filter_by_file {
-        Some(
-            options
-                .path
-                .canonicalize()
-                .unwrap_or_else(|_| options.path.clone()),
-        )
-    } else {
-        None
-    };
-
-    for (doc_id, similarity) in similar_docs {
-        // Apply threshold filtering
-        if let Some(threshold) = options.threshold
-            && similarity < threshold
-        {
-            continue;
-        }
-
-        if let Some((file_path, content)) = file_embeddings.get(doc_id as usize) {
-            // Filter by target file if specified
-            if let Some(target) = &target_file {
-                let canonical_result = file_path
-                    .canonicalize()
-                    .unwrap_or_else(|_| file_path.clone());
-                if canonical_result != *target {
-                    continue; // Skip this result if it doesn't match the target file
-                }
-            }
-
-            // If full_section is enabled and this is a code section, return the full content
-            let preview = if options.full_section {
-                content.clone()
-            } else {
-                content.lines().take(3).collect::<Vec<_>>().join("\n")
-            };
-
-            results.push(SearchResult {
-                file: file_path.clone(),
-                span: Span {
-                    byte_start: 0,
-                    byte_end: content.len(),
-                    line_start: 1,
-                    line_end: content.lines().count(),
-                },
-                score: similarity,
-                preview,
-                lang: ck_core::Language::from_path(file_path),
-                symbol: None,
-                chunk_hash: None,
-                index_epoch: None,
-            });
-        }
-    }
-
-    Ok(results)
-}
-
-#[allow(dead_code)]
-async fn build_semantic_index(options: &SearchOptions) -> Result<Vec<SearchResult>> {
-    build_semantic_index_with_progress(options, None).await
-}
-
-async fn build_semantic_index_with_progress(
-    options: &SearchOptions,
-    progress_callback: Option<SearchProgressCallback>,
-) -> Result<Vec<SearchResult>> {
-    // Handle both files and directories by finding the appropriate directory for indexing
-    let index_root = if options.path.is_file() {
-        options.path.parent().unwrap_or(&options.path)
-    } else {
-        &options.path
-    };
-
-    let index_dir = default_index_dir(index_root);
-    let ann_index_path = index_dir.join("ann_index.bin");
-    let embeddings_path = index_dir.join("embeddings.json");
-
-    fs::create_dir_all(&index_dir)?;
-
-    if let Some(ref callback) = progress_callback {
-        callback("Building semantic index (no index found)...");
-    }
-
-    // Always print this important message, even in quiet mode for indexing operations
-    eprintln!("Building semantic index (no existing index found)...");
-
-    // Collect files and their content
-    let files = collect_files(index_root, true, &options.exclude_patterns)?;
-
-    if let Some(ref callback) = progress_callback {
-        callback(&format!("Found {} files to index", files.len()));
-    }
-    eprintln!("Found {} files to embed and index", files.len());
-
-    let mut file_embeddings = Vec::new();
-    let mut embeddings = Vec::new();
-
-    // Create embedder with progress callback
-    if let Some(ref callback) = progress_callback {
-        callback("Loading embedding model...");
-    }
-
-    let model_callback = if progress_callback.is_some() {
-        Some(Box::new(|msg: &str| {
-            eprintln!("Model: {}", msg);
-        }) as ck_embed::ModelDownloadCallback)
-    } else {
-        None
-    };
-
-    let mut embedder =
-        ck_embed::create_embedder_with_progress(Some("BAAI/bge-small-en-v1.5"), model_callback)?;
-
-    if let Some(ref callback) = progress_callback {
-        callback("Generating embeddings for code chunks...");
-    }
-
-    for (file_idx, file_path) in files.iter().enumerate() {
-        if let Ok(content) = fs::read_to_string(file_path) {
-            if let Some(ref callback) = progress_callback {
-                let file_name = file_path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| file_path.to_string_lossy().to_string());
-                callback(&format!(
-                    "Processing {}/{}: {}",
-                    file_idx + 1,
-                    files.len(),
-                    file_name
-                ));
-            }
-
-            // Chunk the content for better embeddings
-            let chunks = ck_chunk::chunk_text(&content, ck_core::Language::from_path(file_path))?;
-
-            for chunk in chunks {
-                let chunk_embeddings = embedder.embed(std::slice::from_ref(&chunk.text))?;
-                if !chunk_embeddings.is_empty() {
-                    embeddings.push(chunk_embeddings[0].clone());
-                    file_embeddings.push((file_path.clone(), chunk.text));
-                }
-            }
-        }
-    }
-
-    if let Some(ref callback) = progress_callback {
-        callback(&format!(
-            "Built {} embeddings, creating search index...",
-            embeddings.len()
-        ));
-    }
-    eprintln!(
-        "Generated {} embeddings, building search index...",
-        embeddings.len()
-    );
-
-    // Build ANN index
-    let index = ck_ann::SimpleIndex::build(&embeddings)?;
-    index.save(&ann_index_path)?;
-
-    // Save file embeddings metadata
-    let embeddings_json = serde_json::to_string(&file_embeddings)?;
-    fs::write(&embeddings_path, embeddings_json)?;
-
-    if let Some(ref callback) = progress_callback {
-        callback("Semantic index built successfully, running search...");
-    }
-    eprintln!("Semantic index built successfully!");
-
-    // After building, search again - inline to avoid recursion
-    let ann_index = ck_ann::SimpleIndex::load(&ann_index_path)?;
-
-    // Load file metadata
-    let embeddings_data = fs::read_to_string(&embeddings_path)?;
-    let file_embeddings: Vec<(PathBuf, String)> = serde_json::from_str(&embeddings_data)?;
-
-    // Create embedder and embed the query
-    let mut embedder = ck_embed::create_embedder(Some("BAAI/bge-small-en-v1.5"))?;
-    let query_embeddings = embedder.embed(std::slice::from_ref(&options.query))?;
-
-    if query_embeddings.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let query_embedding = &query_embeddings[0];
-
-    // Search using ANN
-    let top_k = options.top_k.unwrap_or(10);
-    let similar_docs = ann_index.search(query_embedding, top_k);
-
-    let mut results = Vec::new();
-
-    // Check if we're searching a specific file vs. a directory
-    let filter_by_file = options.path.is_file();
-    let target_file = if filter_by_file {
-        Some(
-            options
-                .path
-                .canonicalize()
-                .unwrap_or_else(|_| options.path.clone()),
-        )
-    } else {
-        None
-    };
-
-    for (doc_id, similarity) in similar_docs {
-        // Apply threshold filtering
-        if let Some(threshold) = options.threshold
-            && similarity < threshold
-        {
-            continue;
-        }
-
-        if let Some((file_path, content)) = file_embeddings.get(doc_id as usize) {
-            // Filter by target file if specified
-            if let Some(target) = &target_file {
-                let canonical_result = file_path
-                    .canonicalize()
-                    .unwrap_or_else(|_| file_path.clone());
-                if canonical_result != *target {
-                    continue; // Skip this result if it doesn't match the target file
-                }
-            }
-
-            // If full_section is enabled and this is a code section, return the full content
-            let preview = if options.full_section {
-                content.clone()
-            } else {
-                content.lines().take(3).collect::<Vec<_>>().join("\n")
-            };
-
-            results.push(SearchResult {
-                file: file_path.clone(),
-                span: Span {
-                    byte_start: 0,
-                    byte_end: content.len(),
-                    line_start: 1,
-                    line_end: content.lines().count(),
-                },
-                score: similarity,
-                preview,
-                lang: ck_core::Language::from_path(file_path),
-                symbol: None,
-                chunk_hash: None,
-                index_epoch: None,
-            });
         }
     }
 
@@ -1054,12 +1128,16 @@ fn collect_files(
     Ok(files)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn ensure_index_updated_with_progress(
     path: &Path,
     force_reindex: bool,
     need_embeddings: bool,
     progress_callback: Option<ck_index::ProgressCallback>,
     detailed_progress_callback: Option<ck_index::DetailedProgressCallback>,
+    respect_gitignore: bool,
+    exclude_patterns: &[String],
+    model_override: Option<&str>,
 ) -> Result<()> {
     // Handle both files and directories and reuse nearest existing .ck index up the tree
     let index_root_buf = find_nearest_index_root(path).unwrap_or_else(|| {
@@ -1075,13 +1153,13 @@ async fn ensure_index_updated_with_progress(
     if force_reindex {
         let stats = ck_index::smart_update_index_with_detailed_progress(
             index_root,
-            false,
+            true,
             progress_callback,
             detailed_progress_callback,
             need_embeddings,
-            true,
-            &[],  // Empty exclude patterns for internal engine use
-            None, // model - use existing from index
+            respect_gitignore,
+            exclude_patterns, // Use search-specific exclude patterns
+            model_override,
         )
         .await?;
         if stats.files_indexed > 0 || stats.orphaned_files_removed > 0 {
@@ -1101,9 +1179,9 @@ async fn ensure_index_updated_with_progress(
         progress_callback,
         detailed_progress_callback,
         need_embeddings,
-        true,
-        &[],
-        None, // model - use existing from index
+        respect_gitignore,
+        exclude_patterns,
+        model_override,
     )
     .await?;
     if stats.files_indexed > 0 || stats.orphaned_files_removed > 0 {
@@ -1117,7 +1195,7 @@ async fn ensure_index_updated_with_progress(
     Ok(())
 }
 
-fn get_context_preview(lines: &[&str], line_idx: usize, options: &SearchOptions) -> String {
+fn get_context_preview(lines: &[String], line_idx: usize, options: &SearchOptions) -> String {
     let before = options.before_context_lines.max(options.context_lines);
     let after = options.after_context_lines.max(options.context_lines);
 
@@ -1197,6 +1275,69 @@ mod tests {
             paths.push(path);
         }
         paths
+    }
+
+    #[test]
+    fn test_extract_lines_from_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test_lines.txt");
+
+        // Create a multi-line test file
+        let content =
+            "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10";
+        fs::write(&test_file, content).unwrap();
+
+        // Test extracting lines 3-5 (1-based indexing)
+        let result = extract_lines_from_file(&test_file, 3, 5).unwrap();
+        assert_eq!(result, "Line 3\nLine 4\nLine 5");
+
+        // Test extracting a single line
+        let result = extract_lines_from_file(&test_file, 7, 7).unwrap();
+        assert_eq!(result, "Line 7");
+
+        // Test extracting from line 8 to end
+        let result = extract_lines_from_file(&test_file, 8, 100).unwrap();
+        assert_eq!(result, "Line 8\nLine 9\nLine 10");
+
+        // Test line_start == 0 (should return empty)
+        let result = extract_lines_from_file(&test_file, 0, 5).unwrap();
+        assert_eq!(result, "");
+
+        // Test line_start > file length (should return empty)
+        let result = extract_lines_from_file(&test_file, 20, 25).unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[tokio::test]
+    async fn test_extract_content_from_span() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("code.rs");
+
+        // Create a multi-line code file
+        let content = "fn first() {\n    println!(\"First\");\n}\n\nfn second() {\n    println!(\"Second\");\n}\n\nfn third() {\n    println!(\"Third\");\n}";
+        fs::write(&test_file, content).unwrap();
+
+        // Test extracting the second function (lines 5-7)
+        let span = ck_core::Span {
+            byte_start: 0, // Not used in line extraction
+            byte_end: 0,   // Not used in line extraction
+            line_start: 5,
+            line_end: 7,
+        };
+
+        let result = extract_content_from_span(&test_file, &span).await.unwrap();
+        assert_eq!(result, "fn second() {\n    println!(\"Second\");\n}");
+
+        // Test extracting a single line
+        let span = ck_core::Span {
+            byte_start: 0,
+            byte_end: 0,
+            line_start: 2,
+            line_end: 2,
+        };
+
+        let result = extract_content_from_span(&test_file, &span).await.unwrap();
+        assert_eq!(result, "    println!(\"First\");");
     }
 
     #[test]
@@ -1425,5 +1566,99 @@ mod tests {
 
         let results = search(&options).await.unwrap();
         assert!(!results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_regex_search_mixed_line_endings() {
+        // Regression test for byte offset issues with different line endings
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create test file with mixed line endings (Windows \r\n and Unix \n)
+        let test_file = temp_dir.path().join("mixed_endings.txt");
+        let content = "line1\r\nline2\nline3\r\npattern here\nline5\r\n";
+        std::fs::write(&test_file, content).unwrap();
+
+        let options = SearchOptions {
+            mode: SearchMode::Regex,
+            query: "pattern".to_string(),
+            path: test_file.clone(),
+            recursive: false,
+            ..Default::default()
+        };
+
+        let results = search(&options).await.unwrap();
+        assert_eq!(results.len(), 1);
+
+        let result = &results[0];
+        // Verify byte offsets are correct - should point to start of "pattern"
+        let original_content = std::fs::read_to_string(&test_file).unwrap();
+        let pattern_start = original_content.find("pattern").unwrap();
+
+        assert_eq!(result.span.byte_start, pattern_start);
+        assert_eq!(result.span.line_start, 4); // Fourth line
+    }
+
+    #[tokio::test]
+    async fn test_regex_search_windows_line_endings() {
+        // Regression test specifically for Windows \r\n line endings
+        let temp_dir = TempDir::new().unwrap();
+
+        let test_file = temp_dir.path().join("windows_endings.txt");
+        let content = "first line\r\nsecond line\r\nmatch this\r\nfourth line\r\n";
+        std::fs::write(&test_file, content).unwrap();
+
+        let options = SearchOptions {
+            mode: SearchMode::Regex,
+            query: "match".to_string(),
+            path: test_file.clone(),
+            recursive: false,
+            ..Default::default()
+        };
+
+        let results = search(&options).await.unwrap();
+        assert_eq!(results.len(), 1);
+
+        let result = &results[0];
+
+        // Verify the match is on line 3
+        assert_eq!(result.span.line_start, 3);
+
+        // Verify byte offset accounts for \r\n endings
+        // first line\r\n = 12 bytes, second line\r\n = 13 bytes, total = 25 bytes before "match"
+        let expected_byte_start = 25; // Position of "match" in the content
+        assert_eq!(result.span.byte_start, expected_byte_start);
+    }
+
+    #[test]
+    fn test_split_lines_with_endings_helper() {
+        // Unix line endings
+        let unix_content = "line1\nline2\nline3\n";
+        let (unix_lines, unix_endings) = split_lines_with_endings(unix_content);
+        assert_eq!(unix_lines, vec!["line1", "line2", "line3"]);
+        assert_eq!(unix_endings, vec![1, 1, 1]);
+
+        // Windows line endings
+        let windows_content = "line1\r\nline2\r\nline3\r\n";
+        let (windows_lines, windows_endings) = split_lines_with_endings(windows_content);
+        assert_eq!(windows_lines, vec!["line1", "line2", "line3"]);
+        assert_eq!(windows_endings, vec![2, 2, 2]);
+
+        // Old Mac line endings
+        let mac_content = "line1\rline2\rline3\r";
+        let (mac_lines, mac_endings) = split_lines_with_endings(mac_content);
+        assert_eq!(mac_lines, vec!["line1", "line2", "line3"]);
+        assert_eq!(mac_endings, vec![1, 1, 1]);
+
+        // Mixed endings
+        let mixed_content = "line1\nline2\r\nline3\r";
+        let (mixed_lines, mixed_endings) = split_lines_with_endings(mixed_content);
+        assert_eq!(mixed_lines, vec!["line1", "line2", "line3"]);
+        assert_eq!(mixed_endings, vec![1, 2, 1]);
+
+        // No line endings
+        let no_endings = "single line";
+        let (no_lines, no_endings_vec) = split_lines_with_endings(no_endings);
+        assert_eq!(no_lines, vec!["single line"]);
+        assert_eq!(no_endings_vec, vec![0]);
     }
 }

@@ -75,6 +75,7 @@
   border-radius: var(--border-radius);
   margin-bottom: 12px;
   transition: all 0.2s ease;
+  color: var(--text-200);
 }
 
 .settings-card {
@@ -129,6 +130,7 @@
   min-width: 0;
   flex: 0 0 35%;
   max-width: 35%;
+  color: var(--text-200);
 }
 
 .settings-label {

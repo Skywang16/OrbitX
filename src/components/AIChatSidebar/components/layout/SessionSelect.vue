@@ -91,6 +91,7 @@
     font-size: clamp(10px, 3.5vw, 14px);
     border-radius: var(--border-radius-sm);
     transition: all 0.2s ease;
+    color: var(--text-200);
   }
 
   .session-select :deep(.x-select__input:hover) {
@@ -125,16 +126,19 @@
   .session-select :deep(.x-select__option) {
     padding: 0.5em 0.8em;
     min-height: 2.2em;
+    color: var(--text-200);
   }
 
   .session-select :deep(.x-select__option-label) {
     font-size: clamp(10px, 3.2vw, 13px);
     font-weight: 500;
+    color: inherit;
   }
 
   .session-select :deep(.x-select__option-description) {
     font-size: clamp(8px, 2.8vw, 11px);
     margin-top: 0.1em;
     opacity: 0.7;
+    color: var(--text-400);
   }
 </style>

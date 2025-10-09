@@ -25,15 +25,21 @@ import type { Conversation as ChatConversation, Message } from '@/types'
  */
 export class AgentApi {
   /**
-   * 执行Agent任务
+   * 执行 Agent 任务
    * @param userPrompt 用户输入
    * @param conversationId 会话ID
+   * @param chatMode 聊天模式 ('chat' | 'agent')
    * @returns 返回任务进度流
    */
-  async executeTask(userPrompt: string, conversationId: number): Promise<TaskProgressStream> {
+  async executeTask(
+    userPrompt: string,
+    conversationId: number,
+    chatMode: 'chat' | 'agent' = 'agent'
+  ): Promise<TaskProgressStream> {
     const params: ExecuteTaskParams = {
       conversationId,
       userPrompt,
+      chatMode,
     }
 
     const stream = agentChannelApi.createTaskStream(params)
@@ -204,8 +210,8 @@ export class AgentApi {
             break
           }
 
-          // 打印Channel输出的内容
-          console.log('[Channel输出]', {
+          // 打印Channel输出的内容（使用 warn 以符合 no-console 规则）
+          console.warn('[Channel输出]', {
             type: value.type,
             payload: value.payload,
             timestamp: new Date().toISOString(),

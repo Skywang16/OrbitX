@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.5"
+version = "0.5.3"
 edition = "2024"
 authors = ["Mike Renwick"]
 license = "MIT OR Apache-2.0"
@@ -36,14 +36,15 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rayon = "1.8"
 walkdir = "2.4"
 tantivy = "0.24"
-tree-sitter = "0.22"
-tree-sitter-python = "0.21"
-tree-sitter-typescript = "0.21"
-tree-sitter-haskell = "0.21"
-tree-sitter-rust = "0.21"
-tree-sitter-ruby = "0.21"
-tree-sitter-go = "0.21"
-tree-sitter-c-sharp = "0.21"
+tree-sitter = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-typescript = "0.23"
+tree-sitter-haskell = "0.23"
+tree-sitter-rust = "0.24"
+tree-sitter-ruby = "0.23"
+tree-sitter-go = "0.25"
+tree-sitter-c-sharp = "0.23"
+tree-sitter-zig = "1.1"
 fastembed = { version = "5.1", default-features = false, features = ["hf-hub-rustls-tls", "ort-download-binaries"] }
 openssl = { version = "0.10" }
 tempfile = "3.8"
@@ -51,3 +52,7 @@ glob = "0.3"
 globset = "0.4"
 ignore = "0.4"
 ctrlc = "3.4"
+pdf-extract = "0.9"
+uuid = { version = "1.8", features = ["v4", "serde"] }
+base64 = "0.22"
+sha2 = "0.10"

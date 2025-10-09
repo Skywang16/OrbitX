@@ -17,6 +17,7 @@ use crate::agent::core::chain::ToolChain;
 use crate::agent::core::context::{LLMResponseParsed, TaskContext, ToolCallResult};
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::AgentError;
+use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::events::{
     FinishPayload, TaskCancelledPayload, TaskCompletedPayload, TaskCreatedPayload,
     TaskErrorPayload, TaskPausedPayload, TaskProgressPayload, TaskStartedPayload, TextPayload,
@@ -30,11 +31,10 @@ use crate::agent::persistence::{
 use crate::agent::plan::{Planner, TreePlanner};
 use crate::agent::prompt::{build_agent_system_prompt, build_agent_user_prompt};
 use crate::agent::react::types::FinishReason;
-use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::state::iteration::IterationSnapshot;
 use crate::agent::state::session::CompressedMemory;
 use crate::agent::tools::{
-    logger::ToolExecutionLogger, ToolRegistry, ToolResult as ToolOutcome, ToolResultContent,
+    logger::ToolExecutionLogger, ToolDescriptionContext, ToolRegistry, ToolResult as ToolOutcome, ToolResultContent,
 };
 use crate::agent::types::{Agent, Context as AgentContext, Task, ToolSchema};
 use crate::agent::ui::AgentUiPersistence;
@@ -59,6 +59,7 @@ use uuid::Uuid;
 pub struct ExecuteTaskParams {
     pub conversation_id: i64,
     pub user_prompt: String,
+    pub chat_mode: String,
     pub config_overrides: Option<serde_json::Value>,
 }
 
@@ -68,6 +69,7 @@ pub struct ExecuteTaskParams {
 pub struct ExecuteTaskTreeParams {
     pub conversation_id: i64,
     pub user_prompt: String,
+    pub chat_mode: String,
     /// 若为 false，则仅进行单次 plan 与执行（不生成任务树）
     #[serde(default = "default_true")]
     pub generate_tree: bool,
@@ -203,7 +205,6 @@ struct TaskExecutorInner {
     agent_persistence: Arc<AgentPersistence>,
     ui_persistence: Arc<AgentUiPersistence>,
     llm_registry: Arc<LLMRegistry>,
-    tool_registry: Arc<ToolRegistry>,
     tool_logger: Arc<ToolExecutionLogger>,
     context_builder_cache: Arc<RwLock<HashMap<i64, Arc<ContextBuilder>>>>,
     active_tasks: Arc<RwLock<HashMap<String, Arc<TaskContext>>>>,
@@ -221,7 +222,6 @@ impl TaskExecutor {
         agent_persistence: Arc<AgentPersistence>,
         ui_persistence: Arc<AgentUiPersistence>,
         llm_registry: Arc<LLMRegistry>,
-        tool_registry: Arc<ToolRegistry>,
         terminal_context_service: Arc<TerminalContextService>,
     ) -> Self {
         let tool_logger = Arc::new(ToolExecutionLogger::new(
@@ -235,7 +235,6 @@ impl TaskExecutor {
             agent_persistence,
             ui_persistence,
             llm_registry,
-            tool_registry,
             tool_logger,
             context_builder_cache: Arc::new(RwLock::new(HashMap::new())),
             active_tasks: Arc::new(RwLock::new(HashMap::new())),
@@ -257,10 +256,6 @@ impl TaskExecutor {
 
     pub(crate) fn llm_registry(&self) -> Arc<LLMRegistry> {
         Arc::clone(&self.inner().llm_registry)
-    }
-
-    pub(crate) fn tool_registry(&self) -> Arc<ToolRegistry> {
-        Arc::clone(&self.inner().tool_registry)
     }
 
     pub(crate) fn tool_logger(&self) -> Arc<ToolExecutionLogger> {
@@ -294,13 +289,21 @@ impl TaskExecutor {
         progress_channel: Channel<TaskProgressPayload>,
     ) -> TaskExecutorResult<()> {
         if let Some(existing) = self.conversation_context(params.conversation_id).await {
-            let active_tasks = self.active_tasks();
-            if active_tasks.read().await.contains_key(&existing.task_id) {
-                return Err(TaskExecutorError::InternalError(format!(
-                    "Conversation {} still has active task, cannot start new task",
-                    params.conversation_id
-                ))
-                .into());
+            // 检查任务是否真的在运行，而不是仅仅检查是否在 active_tasks 中
+            // 因为中断/错误/完成的任务可能还在异步清理中
+            let status = existing.status().await;
+            let is_actually_running =
+                matches!(status, AgentTaskStatus::Running | AgentTaskStatus::Paused);
+
+            if is_actually_running {
+                let active_tasks = self.active_tasks();
+                if active_tasks.read().await.contains_key(&existing.task_id) {
+                    return Err(TaskExecutorError::InternalError(format!(
+                        "Conversation {} still has active task, cannot start new task",
+                        params.conversation_id
+                    ))
+                    .into());
+                }
             }
 
             return self
@@ -349,6 +352,7 @@ impl TaskExecutor {
         let root_params = ExecuteTaskParams {
             conversation_id: params.conversation_id,
             user_prompt: params.user_prompt.clone(),
+            chat_mode: params.chat_mode.clone(),
             config_overrides: params.config_overrides.clone(),
         };
         let root_ctx = Arc::new(
@@ -376,9 +380,11 @@ impl TaskExecutor {
         };
 
         if let Some(tree) = planned_tree {
-            // 取 Level-1 父任务组
             let parents = tree.subtasks.unwrap_or_default();
-            let tool_schemas_full = self.tool_registry().get_tool_schemas().await;
+            let tool_registry = root_ctx.tool_registry();
+            let tool_schemas_full = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
+                cwd: root_ctx.cwd.clone(),
+            });
             let simple_tool_schemas: Vec<ToolSchema> = tool_schemas_full
                 .into_iter()
                 .map(|s| ToolSchema {
@@ -400,6 +406,7 @@ impl TaskExecutor {
                 let parent_params = ExecuteTaskParams {
                     conversation_id: root_ctx.conversation_id,
                     user_prompt: parent_prompt.clone(),
+                    chat_mode: params.chat_mode.clone(),
                     config_overrides: None,
                 };
                 let parent_ctx = Arc::new(
@@ -455,7 +462,10 @@ impl TaskExecutor {
                     )
                     .await
                     .map_err(|e| {
-                        TaskExecutorError::InternalError(format!("Failed to build system prompt: {}", e))
+                        TaskExecutorError::InternalError(format!(
+                            "Failed to build system prompt: {}",
+                            e
+                        ))
                     })?;
 
                     let user_prompt = build_agent_user_prompt(
@@ -466,7 +476,10 @@ impl TaskExecutor {
                     )
                     .await
                     .map_err(|e| {
-                        TaskExecutorError::InternalError(format!("Failed to build user prompt: {}", e))
+                        TaskExecutorError::InternalError(format!(
+                            "Failed to build user prompt: {}",
+                            e
+                        ))
                     })?;
 
                     parent_ctx.reset_message_state().await?;
@@ -542,6 +555,7 @@ impl TaskExecutor {
             let params_single = ExecuteTaskParams {
                 conversation_id: root_ctx.conversation_id,
                 user_prompt: params.user_prompt,
+                chat_mode: params.chat_mode,
                 config_overrides: None,
             };
             self.execute_task(params_single, progress_channel).await?;
@@ -804,8 +818,12 @@ impl TaskExecutor {
         task_id: String,
         user_prompt: &str,
         working_directory: Option<&str>,
+        tool_registry: &ToolRegistry,
     ) -> TaskExecutorResult<(String, String)> {
-        let tool_schemas_full = self.tool_registry().get_tool_schemas().await;
+        let cwd = working_directory.unwrap_or("/");
+        let tool_schemas_full = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
+            cwd: cwd.to_string(),
+        });
         let simple_tool_schemas: Vec<ToolSchema> = tool_schemas_full
             .into_iter()
             .map(|s| ToolSchema {
@@ -859,7 +877,9 @@ impl TaskExecutor {
             user_prefix_prompt,
         )
         .await
-        .map_err(|e| TaskExecutorError::InternalError(format!("Failed to build system prompt: {}", e)))?;
+        .map_err(|e| {
+            TaskExecutorError::InternalError(format!("Failed to build system prompt: {}", e))
+        })?;
 
         let user_prompt_built = build_agent_user_prompt(
             agent_info,
@@ -868,7 +888,9 @@ impl TaskExecutor {
             simple_tool_schemas,
         )
         .await
-        .map_err(|e| TaskExecutorError::InternalError(format!("Failed to build user prompt: {}", e)))?;
+        .map_err(|e| {
+            TaskExecutorError::InternalError(format!("Failed to build user prompt: {}", e))
+        })?;
 
         Ok((system_prompt, user_prompt_built))
     }
@@ -885,12 +907,17 @@ impl TaskExecutor {
             context.set_progress_channel(Some(channel)).await;
         }
 
+        // 重置 cancellation token，清除之前中断留下的 cancelled 状态
+        context.reset_cancellation().await;
+
+        let tool_registry = context.tool_registry();
         let (_system_prompt, user_prompt) = self
             .build_task_prompts(
                 context.conversation_id,
                 context.task_id.clone(),
                 &user_prompt_raw,
                 Some(&context.cwd),
+                &tool_registry,
             )
             .await?;
 
@@ -954,6 +981,9 @@ impl TaskExecutor {
                         .await;
                 }
             }
+
+            // 显式关闭 progress channel，确保前端收到 stream 结束信号
+            context.set_progress_channel(None).await;
 
             {
                 let handle = executor.active_tasks();
@@ -1146,7 +1176,8 @@ impl TaskExecutor {
             }
 
             let messages = compaction_result.messages();
-            let llm_request = self.build_llm_request(messages).await?;
+            let tool_registry = context.tool_registry();
+            let llm_request = self.build_llm_request(messages, &tool_registry, &context.cwd).await?;
             let llm_request_snapshot = Arc::new(llm_request.clone());
 
             // 流式调用LLM
@@ -1155,7 +1186,9 @@ impl TaskExecutor {
             let mut stream = llm_service
                 .call_stream(llm_request, cancel_token)
                 .await
-                .map_err(|e| TaskExecutorError::InternalError(format!("LLM stream call failed: {}", e)))?;
+                .map_err(|e| {
+                    TaskExecutorError::InternalError(format!("LLM stream call failed: {}", e))
+                })?;
 
             let mut final_answer_acc = String::new();
             let mut pending_tool_calls: Vec<crate::llm::types::LLMToolCall> = Vec::new();
@@ -1278,7 +1311,6 @@ impl TaskExecutor {
                                 }
                             }
 
-
                             if let Some(calls) = tool_calls {
                                 for call in calls {
                                     iter_ctx.add_tool_call(call.clone()).await;
@@ -1345,42 +1377,49 @@ impl TaskExecutor {
                                 text_stream_id = Some(Uuid::new_v4().to_string());
                             }
                             if let Some(tsid) = thinking_stream_id.clone() {
-                                if final_thinking_trimmed_now.len() > last_thinking_sent.len() {
-                                    let delta = final_thinking_trimmed_now
-                                        [last_thinking_sent.len()..]
-                                        .to_string();
-                                    context
-                                        .send_progress(TaskProgressPayload::Thinking(
-                                            ThinkingPayload {
-                                                task_id: context.task_id.clone(),
-                                                iteration,
-                                                thought: delta.clone(),
-                                                stream_id: tsid.clone(),
-                                                stream_done: true,
-                                                timestamp: Utc::now(),
-                                            },
-                                        ))
-                                        .await?;
-                                    iter_ctx.append_thinking(&delta).await;
-                                }
-                            }
-                            if let Some(xsid) = text_stream_id.clone() {
-                                if final_visible_text_now.len() > last_visible_sent.len() {
-                                    let delta = final_visible_text_now[last_visible_sent.len()..]
-                                        .to_string();
-                                    context
-                                        .send_progress(TaskProgressPayload::Text(TextPayload {
+                                // 计算剩余内容
+                                let delta = if final_thinking_trimmed_now.len() > last_thinking_sent.len() {
+                                    let d = final_thinking_trimmed_now[last_thinking_sent.len()..].to_string();
+                                    iter_ctx.append_thinking(&d).await;
+                                    d
+                                } else {
+                                    String::new() // 没有剩余内容，发送空字符串
+                                };
+                                // 无论是否有剩余内容，总是发送streamDone=true标记流结束
+                                context
+                                    .send_progress(TaskProgressPayload::Thinking(
+                                        ThinkingPayload {
                                             task_id: context.task_id.clone(),
                                             iteration,
-                                            text: delta.clone(),
-                                            stream_id: xsid.clone(),
+                                            thought: delta,
+                                            stream_id: tsid.clone(),
                                             stream_done: true,
                                             timestamp: Utc::now(),
-                                        }))
-                                        .await?;
-                                    last_visible_sent.push_str(&delta);
-                                    iter_ctx.append_output(&delta).await;
-                                }
+                                        },
+                                    ))
+                                    .await?;
+                            }
+                            if let Some(xsid) = text_stream_id.clone() {
+                                // 计算剩余内容
+                                let delta = if final_visible_text_now.len() > last_visible_sent.len() {
+                                    let d = final_visible_text_now[last_visible_sent.len()..].to_string();
+                                    last_visible_sent.push_str(&d);
+                                    iter_ctx.append_output(&d).await;
+                                    d
+                                } else {
+                                    String::new() // 没有剩余内容，发送空字符串
+                                };
+                                // 无论是否有剩余内容，总是发送streamDone=true标记流结束
+                                context
+                                    .send_progress(TaskProgressPayload::Text(TextPayload {
+                                        task_id: context.task_id.clone(),
+                                        iteration,
+                                        text: delta,
+                                        stream_id: xsid.clone(),
+                                        stream_done: true,
+                                        timestamp: Utc::now(),
+                                    }))
+                                    .await?;
                             }
                             yield_now().await;
                             let usage_snapshot = usage.clone();
@@ -1625,6 +1664,8 @@ impl TaskExecutor {
             None => self.resolve_task_cwd().await,
         };
 
+        let tool_registry = crate::agent::tools::create_tool_registry(&params.chat_mode).await;
+
         let task_prompt_id = Uuid::new_v4().to_string();
         let (system_prompt, user_prompt) = self
             .build_task_prompts(
@@ -1632,6 +1673,7 @@ impl TaskExecutor {
                 task_prompt_id,
                 &params.user_prompt,
                 Some(&cwd),
+                &tool_registry,
             )
             .await?;
 
@@ -1659,6 +1701,7 @@ impl TaskExecutor {
             execution,
             config,
             cwd.clone(),
+            tool_registry,
             progress_channel.clone(),
             self.repositories(),
             persistence.clone(),

@@ -10,6 +10,12 @@ use crate::agent::error::ToolExecutorResult;
 use super::metadata::ToolMetadata;
 use crate::agent::core::context::TaskContext;
 
+/// Context for dynamic tool description generation
+#[derive(Debug, Clone)]
+pub struct ToolDescriptionContext {
+    pub cwd: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolSchema {
     pub name: String,
@@ -67,6 +73,12 @@ pub trait RunnableTool: Send + Sync {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
     fn parameters_schema(&self) -> Value;
+    
+    /// Optional dynamic description based on context
+    /// Returns None to use the static description()
+    fn description_with_context(&self, _context: &ToolDescriptionContext) -> Option<String> {
+        None
+    }
 
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::default()

@@ -4,8 +4,8 @@
   import { computed, onMounted, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import AIModelForm from './AIModelForm.vue'
-  import { useAISettingsStore } from './store'
-  import SettingsCard from '../../SettingsCard.vue'
+  import { useAISettingsStore } from '../store'
+  import SettingsCard from '../../../SettingsCard.vue'
 
   const { t } = useI18n()
 

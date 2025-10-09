@@ -11,6 +11,7 @@ class AgentChannelApi {
   createTaskStream(params: {
     conversationId: number
     userPrompt: string
+    chatMode: 'chat' | 'agent'
     configOverrides?: Record<string, unknown>
     restoreTaskId?: string
   }): ReadableStream<TaskProgressPayload> {

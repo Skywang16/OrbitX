@@ -8,42 +8,6 @@ const cloneStep = (step: UiStep): UiStep => {
 }
 
 /**
- * 增量合并步骤
- */
-export const mergeIncrementalStep = (steps: UiStep[], newStep: UiStep): UiStep[] => {
-  const streamId = newStep.metadata?.streamId as string | undefined
-  const isStreamStep = Boolean(streamId && ['text', 'thinking'].includes(newStep.stepType))
-
-  if (!isStreamStep) {
-    steps.push(cloneStep(newStep))
-    return steps
-  }
-
-  const existingIndex = steps.findIndex(
-    step => step.stepType === newStep.stepType && step.metadata?.streamId === streamId
-  )
-
-  if (existingIndex >= 0) {
-    const existingStep = steps[existingIndex]
-    const mergedMetadata = {
-      ...(existingStep.metadata ?? {}),
-      ...(newStep.metadata ?? {}),
-    }
-
-    steps[existingIndex] = {
-      ...existingStep,
-      content: `${existingStep.content ?? ''}${newStep.content ?? ''}`,
-      timestamp: newStep.timestamp,
-      metadata: mergedMetadata,
-    }
-  } else {
-    steps.push(cloneStep(newStep))
-  }
-
-  return steps
-}
-
-/**
  * 合并工具步骤
  */
 export const mergeToolSteps = (steps: UiStep[]): UiStep[] => {
@@ -76,15 +40,12 @@ export const mergeToolSteps = (steps: UiStep[]): UiStep[] => {
 }
 
 /**
- * 批量合并步骤
+ * 批量处理步骤
+ *
+ * 只合并工具步骤，流式步骤已由后端合并
  */
 export const mergeBatchSteps = (steps: UiStep[]): UiStep[] => {
-  const toolMerged = mergeToolSteps(steps)
-  const result: UiStep[] = []
-  for (const step of toolMerged) {
-    mergeIncrementalStep(result, step)
-  }
-  return result
+  return mergeToolSteps(steps)
 }
 
 /**

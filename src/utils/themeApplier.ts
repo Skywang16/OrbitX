@@ -1,8 +1,11 @@
 import type { Theme, ThemeType } from '@/types'
+import { applyOpacityToColor, getCurrentOpacity } from './colorUtils'
+
+let cachedTheme: Theme | null = null
 
 export const applyThemeToUI = (theme: Theme): void => {
+  cachedTheme = theme
   updateDataThemeAttribute(theme)
-
   updateCSSVariables(theme)
 }
 
@@ -32,14 +35,16 @@ const updateCSSVariables = (theme: Theme): void => {
 
   clearAllOldVariables(style)
 
+  const opacity = getCurrentOpacity()
+
   if (theme.ui) {
-    style.setProperty('--bg-100', theme.ui.bg_100)
-    style.setProperty('--bg-200', theme.ui.bg_200)
-    style.setProperty('--bg-300', theme.ui.bg_300)
-    style.setProperty('--bg-400', theme.ui.bg_400)
-    style.setProperty('--bg-500', theme.ui.bg_500)
-    style.setProperty('--bg-600', theme.ui.bg_600)
-    style.setProperty('--bg-700', theme.ui.bg_700)
+    style.setProperty('--bg-100', applyOpacityToColor(theme.ui.bg_100, opacity))
+    style.setProperty('--bg-200', applyOpacityToColor(theme.ui.bg_200, opacity))
+    style.setProperty('--bg-300', applyOpacityToColor(theme.ui.bg_300, opacity))
+    style.setProperty('--bg-400', applyOpacityToColor(theme.ui.bg_400, opacity))
+    style.setProperty('--bg-500', applyOpacityToColor(theme.ui.bg_500, opacity))
+    style.setProperty('--bg-600', applyOpacityToColor(theme.ui.bg_600, opacity))
+    style.setProperty('--bg-700', applyOpacityToColor(theme.ui.bg_700, opacity))
 
     style.setProperty('--border-200', theme.ui.border_200)
     style.setProperty('--border-300', theme.ui.border_300)
@@ -113,6 +118,18 @@ const clearAllOldVariables = (style: CSSStyleDeclaration) => {
   oldVariables.forEach(variable => {
     style.removeProperty(variable)
   })
+}
+
+/**
+ * 应用背景透明度
+ * 当透明度变化时,重新应用主题 CSS 变量
+ */
+export const applyBackgroundOpacity = (opacity: number): void => {
+  if (!cachedTheme || !cachedTheme.ui) {
+    return
+  }
+  // 重新应用 CSS 变量,getCurrentOpacity() 会读取最新的透明度值
+  updateCSSVariables(cachedTheme)
 }
 
 export const resetCSSVariables = (): void => {

@@ -274,6 +274,13 @@
     "build_index_tooltip_disabled": "请选择非初始目录后再构建",
     "build_index_tooltip_enabled": "构建索引",
     "refresh": "刷新",
-    "delete": "删除"
+    "delete": "删除",
+    "cancel_build": "取消索引"
+  },
+  "workspace": {
+    "parent_directory": "上级目录",
+    "no_folders": "当前目录无子文件夹",
+    "read_dir_error": "读取目录失败",
+    "current_directory": "当前目录"
   }
 }

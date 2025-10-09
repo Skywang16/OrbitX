@@ -220,6 +220,8 @@
         @mousedown="handleMouseDown($event, tab.id)"
         @click="handleTabClick(tab.id)"
         @contextmenu="handleTabContextMenu($event, tab.id)"
+        @dblclick.stop
+        @mouseup.stop
       >
         <div class="tab-content" :title="getTabTooltip(tab)">
           <template v-if="tab.type === TabType.TERMINAL && tab.shell && tab.path">
@@ -260,6 +262,8 @@
         :title="t('ui.new_terminal_tip')"
         @click="handleAddClick"
         @contextmenu="handleAddContextMenu"
+        @dblclick.stop
+        @mouseup.stop
       >
         <svg
           width="16"
@@ -283,6 +287,8 @@
       :title="t('ui.new_terminal_tip')"
       @click="handleAddClick"
       @contextmenu="handleAddContextMenu"
+      @dblclick.stop
+      @mouseup.stop
     >
       <svg
         width="16"
@@ -310,7 +316,6 @@
     padding-left: var(--spacing-sm);
     gap: var(--spacing-xs);
     position: relative;
-    background: var(--bg-200);
   }
 
   .tab-bar {
@@ -481,7 +486,7 @@
     transform: translateY(-50%);
     height: 10px;
     width: 1px;
-    background-color: var(--text-500);
+    background-color: rgba(255, 255, 255, 0.2);
   }
 
   .path-info {
@@ -497,7 +502,7 @@
   }
 
   .close-btn {
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: center;
     width: 16px;
@@ -505,24 +510,19 @@
     padding: 0;
     border: none;
     background: none;
-    color: var(--text-400);
     border-radius: var(--border-radius-sm);
     transition: all 0.2s ease;
     cursor: pointer;
     flex-shrink: 0;
-    margin-left: 4px;
-    opacity: 0;
   }
 
   .tab:hover .close-btn {
-    opacity: 1;
-    color: var(--text-300);
+    display: block;
+    color: var(--text-500);
   }
-
   .close-btn:hover {
-    color: var(--text-200);
+    color: var(--text-200) !important;
   }
-
   .add-tab-btn {
     display: flex;
     align-items: center;

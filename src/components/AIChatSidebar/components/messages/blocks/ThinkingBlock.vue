@@ -21,17 +21,28 @@
 </template>
 
 <script setup lang="ts">
-  import { ref } from 'vue'
+  import { ref, watch } from 'vue'
   import type { UiStep } from '@/api/agent/types'
 
   interface Props {
     step: UiStep
+    isStreaming: boolean // 消息是否正在流式输出
   }
 
-  defineProps<Props>()
+  const props = defineProps<Props>()
 
-  const isExpanded = ref(false)
+  // 展开状态：根据消息流状态自动控制
+  const isExpanded = ref(props.isStreaming)
 
+  // 监听isStreaming变化，自动更新展开状态
+  watch(
+    () => props.isStreaming,
+    isStreaming => {
+      isExpanded.value = isStreaming
+    }
+  )
+
+  // 用户可以手动切换（但下次isStreaming变化会被覆盖）
   const toggleExpanded = () => {
     isExpanded.value = !isExpanded.value
   }

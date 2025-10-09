@@ -571,6 +571,7 @@
     box-sizing: border-box;
     font-size: var(--font-size-sm);
     font-family: var(--font-family);
+    color: var(--text-200);
   }
 
   .x-select__option:hover,
@@ -601,6 +602,7 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    color: var(--text-300);
   }
 
   .x-select__option-icon svg {
@@ -619,6 +621,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 12px;
+    color: inherit;
   }
 
   .x-select__option-description {

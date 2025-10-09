@@ -4,10 +4,10 @@
   import { marked } from 'marked'
   import type { Message } from '@/types'
   import type { UiStep } from '@/api/agent/types'
-  import { useAIChatStore } from '../store'
+  import { useAIChatStore } from '../../store'
   import { formatTime } from '@/utils/dateFormatter'
-  import ThinkingBlock from './msgBlock/ThinkingBlock.vue'
-  import ToolBlock from './msgBlock/ToolBlock.vue'
+  import ThinkingBlock from './blocks/ThinkingBlock.vue'
+  import ToolBlock from './blocks/ToolBlock.vue'
   import { useStepProcessor } from '@/composables/useStepProcessor'
   const { t } = useI18n()
   const { processSteps } = useStepProcessor()
@@ -41,9 +41,13 @@
   <div class="ai-message">
     <!-- 双轨架构：只基于steps渲染 -->
     <template v-if="message.steps && message.steps.length > 0">
-      <template v-for="(step, index) in sortedSteps" :key="`${step.timestamp}-${index}`">
+      <template v-for="(step, index) in sortedSteps" :key="step.metadata?.stepId || `fallback-${index}`">
         <!-- 使用 ThinkingBlock 组件 -->
-        <ThinkingBlock v-if="step.stepType === 'thinking'" :step="step" />
+        <ThinkingBlock
+          v-if="step.stepType === 'thinking'"
+          :step="step"
+          :is-streaming="message.status === 'streaming' || !message.status"
+        />
 
         <!-- 使用 ToolBlock 组件 -->
         <ToolBlock v-else-if="step.stepType === 'tool_use' || step.stepType === 'tool_result'" :step="step" />

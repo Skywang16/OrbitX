@@ -2,8 +2,8 @@
   import { useI18n } from 'vue-i18n'
 
   import { useAISettingsStore } from './store'
-  import AIFeatureSettings from './AIFeatureSettings.vue'
-  import AIModelConfig from './AIModelConfig.vue'
+  import AIFeatureSettings from './components/AIFeatureSettings.vue'
+  import AIModelConfig from './components/AIModelConfig.vue'
 
   const aiSettingsStore = useAISettingsStore()
   const { t } = useI18n()

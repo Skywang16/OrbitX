@@ -7,6 +7,7 @@ use regex::RegexBuilder;
 use std::path::{Path, PathBuf};
 
 mod progress;
+
 use progress::StatusReporter;
 
 #[derive(Parser)]
@@ -24,8 +25,7 @@ QUICK START EXAMPLES:
     ck -n "import" lib.py              # Show line numbers
 
   Semantic search (finds conceptually similar code):
-    ck --index .                       # First, create search index
-    ck --sem "error handling" src/     # Find error handling patterns (top 10, threshold ≥0.6)
+    ck --sem "error handling" src/     # Builds/updates the index automatically (top 10, threshold ≥0.6)
     ck --sem "database connection"     # Find DB-related code  
     ck --sem --limit 5 "authentication"    # Limit to top 5 results
     ck --sem --threshold 0.8 "auth"   # Higher precision filtering
@@ -45,7 +45,9 @@ QUICK START EXAMPLES:
     ck --status-verbose .              # Detailed index statistics
     ck --clean-orphans .               # Clean up orphaned files
     ck --clean .                       # Remove entire index
+    ck --switch-model nomic-v1.5       # Clean + rebuild with a different embedding model
     ck --add file.rs                   # Add single file to index
+    ck --index .                       # Optional: pre-build before CI runs
 
   JSON output for tools/scripts:
     ck --json --sem "bug fix" src/    # Traditional JSON (single array)
@@ -63,18 +65,18 @@ QUICK START EXAMPLES:
     ck -w "test" .                    # Match whole words only
     ck -F "log.Error()" .             # Fixed string (no regex)
 
-  Model and embedding options:
     ck --index --model nomic-v1.5      # Index with higher-quality model (8k context)
     ck --index --model jina-code       # Index with code-specialized model
-    ck --sem "auth" --rerank           # Enable reranking for better relevance  
+    ck --sem "auth" --rerank           # Enable reranking for better relevance
     ck --sem "login" --rerank-model bge # Use specific reranking model
 
-SEARCH MODES:
+  FILTERING & OUTPUT:
   --regex   : Classic grep behavior (default, no index needed)
-  --lex     : BM25 lexical search (requires index)  
-  --sem     : Semantic/embedding search (requires index, defaults: top 10, threshold ≥0.6)
-  --hybrid  : Combines regex and semantic (requires index)
+  --lex     : BM25 lexical search (auto-indexed before it runs)  
+  --sem     : Semantic/embedding search (auto-indexed, defaults: top 10, threshold ≥0.6)
+  --hybrid  : Combines regex and semantic (shares the auto-indexing path)
 
+  RESULT FILTERING:
 RESULT FILTERING:
   --topk, --limit N : Limit to top N results (default: 10 for semantic search)
   --threshold SCORE : Filter by minimum score (default: 0.6 for semantic search)
@@ -229,6 +231,9 @@ struct Cli {
     #[arg(long = "no-ignore", help = "Don't respect .gitignore files")]
     no_ignore: bool,
 
+    #[arg(long = "no-ckignore", help = "Don't respect .ckignore file")]
+    no_ckignore: bool,
+
     #[arg(
         long = "full-section",
         help = "Return complete code sections (functions/classes) instead of just matching lines. Uses tree-sitter to identify semantic boundaries. Supported: Python, JavaScript, TypeScript, Haskell, Rust, Ruby"
@@ -254,6 +259,30 @@ struct Cli {
 
     #[arg(long = "clean-orphans", help = "Clean only orphaned index files")]
     clean_orphans: bool,
+
+    #[arg(
+        long = "switch-model",
+        value_name = "NAME",
+        help = "Clean the existing index and rebuild it using the specified embedding model",
+        conflicts_with_all = [
+            "index",
+            "clean",
+            "clean_orphans",
+            "status",
+            "status_verbose",
+            "add",
+            "inspect"
+        ],
+        conflicts_with = "model"
+    )]
+    switch_model: Option<String>,
+
+    #[arg(
+        long = "force",
+        help = "Force rebuilding when used with --switch-model",
+        requires = "switch_model"
+    )]
+    force: bool,
 
     #[arg(long = "add", help = "Add a single file to the index")]
     add: bool,
@@ -353,6 +382,307 @@ fn should_exclude_path(path: &Path, exclude_patterns: &[String]) -> bool {
         }
     }
     false
+}
+
+fn build_exclude_patterns(cli: &Cli, repo_root: Option<&Path>) -> Vec<String> {
+    let mut patterns = Vec::new();
+
+    // Build exclusion patterns that will be merged with .gitignore (if respected)
+    // Note: These patterns are ADDITIVE with .gitignore, not replacements
+    // Final exclusions = .gitignore + .ckignore + command-line + defaults
+    //
+    // Priority order within these additional patterns:
+    // .ckignore > command-line excludes > defaults
+
+    // 1. Load .ckignore patterns (highest priority among additional patterns)
+    if !cli.no_ckignore
+        && let Some(root) = repo_root
+        && let Ok(ckignore_patterns) = ck_core::read_ckignore_patterns(root)
+        && !ckignore_patterns.is_empty()
+    {
+        patterns.extend(ckignore_patterns);
+    }
+
+    // 2. Add command-line exclude patterns
+    patterns.extend(cli.exclude.clone());
+
+    // 3. Add defaults (lowest priority)
+    if !cli.no_default_excludes {
+        patterns.extend(ck_core::get_default_exclude_patterns());
+    }
+
+    patterns
+}
+
+fn resolve_model_selection(
+    registry: &ck_models::ModelRegistry,
+    requested: Option<&str>,
+) -> Result<(String, ck_models::ModelConfig)> {
+    match requested {
+        Some(name) => {
+            if let Some(config) = registry.get_model(name) {
+                return Ok((name.to_string(), config.clone()));
+            }
+
+            if let Some((alias, config)) = registry
+                .models
+                .iter()
+                .find(|(_, config)| config.name == name)
+            {
+                return Ok((alias.clone(), config.clone()));
+            }
+
+            anyhow::bail!(
+                "Unknown model '{}'. Available models: {}",
+                name,
+                registry
+                    .models
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        None => {
+            let alias = registry.default_model.clone();
+            let config = registry
+                .get_default_model()
+                .ok_or_else(|| anyhow::anyhow!("No default model configured"))?
+                .clone();
+            Ok((alias, config))
+        }
+    }
+}
+
+async fn run_index_workflow(
+    status: &StatusReporter,
+    path: &Path,
+    cli: &Cli,
+    model_alias: &str,
+    model_config: &ck_models::ModelConfig,
+    heading: &str,
+    clean_first: bool,
+) -> Result<()> {
+    status.section_header(heading);
+    status.info(&format!("Scanning files in {}", path.display()));
+
+    if model_alias == model_config.name {
+        status.info(&format!(
+            "🤖 Model: {} ({} dims)",
+            model_config.name, model_config.dimensions
+        ));
+    } else {
+        status.info(&format!(
+            "🤖 Model: {} (alias '{}', {} dims)",
+            model_config.name, model_alias, model_config.dimensions
+        ));
+    }
+
+    let max_tokens = ck_chunk::TokenEstimator::get_model_limit(model_config.name.as_str());
+    let (chunk_tokens, overlap_tokens) =
+        ck_chunk::get_model_chunk_config(Some(model_config.name.as_str()));
+
+    status.info(&format!("📏 FastEmbed Config: {} token limit", max_tokens));
+    status.info(&format!(
+        "📄 Chunk Config: {} tokens target, {} token overlap (~20%)",
+        chunk_tokens, overlap_tokens
+    ));
+
+    // Create .ckignore file if it doesn't exist
+    if !cli.no_ckignore
+        && let Ok(created) = ck_core::create_ckignore_if_missing(path)
+        && created
+    {
+        status.info("📄 Created .ckignore with default patterns");
+    }
+
+    let exclude_patterns = build_exclude_patterns(cli, Some(path));
+
+    if clean_first {
+        let has_oxi = path.join(".oxi").exists();
+        let has_ck = path.join(".ck").exists();
+        if has_oxi || has_ck {
+            let spinner = status.create_spinner("Removing existing index...");
+            ck_index::clean_index(path)?;
+            status.finish_progress(spinner, "Old index removed");
+        } else {
+            status.info("No existing index detected; creating a fresh one");
+        }
+    }
+
+    let start_time = std::time::Instant::now();
+
+    let (
+        mut file_progress_bar,
+        mut overall_progress_bar,
+        progress_callback,
+        detailed_progress_callback,
+    ) = if !cli.quiet {
+        use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+
+        let multi_progress = MultiProgress::new();
+
+        let overall_pb = multi_progress.add(ProgressBar::new(0));
+        overall_pb
+            .set_style(
+                ProgressStyle::default_bar()
+                    .template(
+                        "📂 Embedding Files: [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}"
+                    )
+                    .unwrap()
+                    .progress_chars("━━╸ "),
+            );
+
+        let file_pb = multi_progress.add(ProgressBar::new(0));
+        file_pb
+            .set_style(
+                ProgressStyle::default_bar()
+                    .template(
+                        "📄 Embedding Chunks: [{elapsed_precise}] [{bar:40.green/yellow}] {pos}/{len} ({percent}%) {msg}"
+                    )
+                    .unwrap()
+                    .progress_chars("━━╸ "),
+            );
+
+        let overall_pb_clone = overall_pb.clone();
+        let overall_pb_clone2 = overall_pb.clone();
+        let file_pb_clone2 = file_pb.clone();
+
+        let progress_callback = Some(Box::new(move |file_name: &str| {
+            let short_name = file_name.split('/').next_back().unwrap_or(file_name);
+            overall_pb_clone.set_message(format!("Processing {}", short_name));
+            overall_pb_clone.inc(1);
+        }) as ck_index::ProgressCallback);
+
+        let detailed_progress_callback =
+            Some(Box::new(move |progress: ck_index::EmbeddingProgress| {
+                if overall_pb_clone2.length().unwrap_or(0) != progress.total_files as u64 {
+                    overall_pb_clone2.set_length(progress.total_files as u64);
+                }
+                overall_pb_clone2.set_position(progress.file_index as u64);
+
+                if file_pb_clone2.length().unwrap_or(0) != progress.total_chunks as u64 {
+                    file_pb_clone2.set_length(progress.total_chunks as u64);
+                    file_pb_clone2.reset();
+                }
+                file_pb_clone2.set_position(progress.chunk_index as u64);
+
+                let short_name = progress
+                    .file_name
+                    .split('/')
+                    .next_back()
+                    .unwrap_or(&progress.file_name);
+                file_pb_clone2.set_message(format!(
+                    "{} (chunk {}/{}, {}B)",
+                    short_name,
+                    progress.chunk_index + 1,
+                    progress.total_chunks,
+                    progress.chunk_size
+                ));
+            }) as ck_index::DetailedProgressCallback);
+
+        (
+            Some(file_pb),
+            Some(overall_pb),
+            progress_callback,
+            detailed_progress_callback,
+        )
+    } else {
+        (None, None, None, None)
+    };
+
+    let index_future = ck_index::smart_update_index_with_detailed_progress(
+        path,
+        false,
+        progress_callback,
+        detailed_progress_callback,
+        true,
+        !cli.no_ignore,
+        &exclude_patterns,
+        Some(model_alias),
+    );
+    tokio::pin!(index_future);
+
+    let stats = match tokio::select! {
+        res = &mut index_future => res,
+        _ = tokio::signal::ctrl_c() => {
+            ck_index::request_interrupt();
+            if let Some(pb) = file_progress_bar.take() {
+                pb.finish_and_clear();
+            }
+            if let Some(pb) = overall_progress_bar.take() {
+                pb.finish_with_message("⏹ Indexing interrupted");
+            }
+            status.warn("Indexing interrupted by user");
+            match (&mut index_future).await {
+                Ok(_) => return Ok(()),
+                Err(err) => {
+                    if err.to_string() == ck_index::INDEX_INTERRUPTED_MSG {
+                        return Ok(());
+                    }
+                    return Err(err);
+                }
+            }
+        }
+    } {
+        Ok(stats) => stats,
+        Err(err) => {
+            if let Some(pb) = file_progress_bar.take() {
+                pb.finish_and_clear();
+            }
+            if let Some(pb) = overall_progress_bar.take() {
+                pb.finish_and_clear();
+            }
+            return Err(err);
+        }
+    };
+
+    let elapsed = start_time.elapsed();
+    let files_per_sec = if elapsed.as_secs_f64() > 0.0 {
+        stats.files_indexed as f64 / elapsed.as_secs_f64()
+    } else {
+        stats.files_indexed as f64
+    };
+
+    if let Some(file_pb) = file_progress_bar.take() {
+        file_pb.finish_with_message("✅ All chunks processed");
+    }
+    if let Some(overall_pb) = overall_progress_bar.take() {
+        overall_pb.finish_with_message(format!(
+            "✅ Index built in {:.2}s ({:.1} files/sec)",
+            elapsed.as_secs_f64(),
+            files_per_sec
+        ));
+    }
+
+    status.success(&format!("🚀 Indexed {} files", stats.files_indexed));
+    if stats.files_added > 0 {
+        status.info(&format!("  ➕ {} new files added", stats.files_added));
+    }
+    if stats.files_modified > 0 {
+        status.info(&format!("  🔄 {} files updated", stats.files_modified));
+    }
+    if stats.files_up_to_date > 0 {
+        status.info(&format!(
+            "  ✅ {} files already current",
+            stats.files_up_to_date
+        ));
+    }
+    if stats.orphaned_files_removed > 0 {
+        status.info(&format!(
+            "  🧹 {} orphaned entries cleaned",
+            stats.orphaned_files_removed
+        ));
+    }
+
+    if clean_first {
+        status.info(&format!(
+            "  🔁 Active embedding model: {} (alias '{}', {} dims)",
+            model_config.name, model_alias, model_config.dimensions
+        ));
+    }
+
+    Ok(())
 }
 
 async fn inspect_file_metadata(file_path: &PathBuf, status: &StatusReporter) -> Result<()> {
@@ -489,6 +819,14 @@ async fn main() {
 }
 
 async fn run_main() -> Result<()> {
+    let cli = Cli::parse();
+
+    // Run CLI mode
+    run_cli_mode(cli).await
+}
+
+async fn run_cli_mode(cli: Cli) -> Result<()> {
+    // Regular CLI mode logging
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
@@ -496,178 +834,93 @@ async fn run_main() -> Result<()> {
         )
         .init();
 
-    let cli = Cli::parse();
     let status = StatusReporter::new(cli.quiet);
 
     // Handle command flags first (these take precedence over search)
-    if cli.index {
-        // Handle --index flag
+    if let Some(model_name) = cli.switch_model.as_deref() {
         let path = cli
             .files
             .first()
             .cloned()
             .unwrap_or_else(|| PathBuf::from("."));
 
-        status.section_header("Indexing Repository");
-        status.info(&format!("Scanning files in {}", path.display()));
+        let registry = ck_models::ModelRegistry::default();
+        let (model_alias, model_config) = resolve_model_selection(&registry, Some(model_name))?;
 
-        // Show indexing configuration information
-        let model_name = cli.model.as_deref().unwrap_or("nomic-embed-text-v1.5"); // Default model
-        status.info(&format!("🤖 Model: {}", model_name));
+        if !cli.force {
+            let manifest_path_oxi = path.join(".oxi").join("manifest.json");
+            let manifest_path = if manifest_path_oxi.exists() {
+                manifest_path_oxi
+            } else {
+                path.join(".ck").join("manifest.json")
+            };
+            if manifest_path.exists()
+                && let Ok(data) = std::fs::read(&manifest_path)
+                && let Ok(manifest) = serde_json::from_slice::<ck_index::IndexManifest>(&data)
+                && let Some(existing_model) = manifest.embedding_model.clone()
+                && let Ok((existing_alias, existing_config)) =
+                    resolve_model_selection(&registry, Some(existing_model.as_str()))
+                && existing_config.name == model_config.name
+            {
+                status.section_header("Switching Embedding Model");
+                let dims = manifest
+                    .embedding_dimensions
+                    .unwrap_or(existing_config.dimensions);
 
-        // Show model-specific limits and chunk config
-        let (max_tokens, chunk_tokens, overlap_tokens) = match model_name {
-            "BAAI/bge-small-en-v1.5" | "sentence-transformers/all-MiniLM-L6-v2" => (512, 400, 80),
-            "nomic-embed-text-v1" | "nomic-embed-text-v1.5" | "jina-embeddings-v2-base-code" => {
-                (8192, 1024, 200)
-            }
-            "BAAI/bge-base-en-v1.5" | "BAAI/bge-large-en-v1.5" => (512, 400, 80),
-            _ => (8192, 1024, 200), // Default to nomic config
-        };
-
-        status.info(&format!("📏 FastEmbed Config: {} token limit", max_tokens));
-        status.info(&format!(
-            "📄 Chunk Config: {} tokens target, {} token overlap (~20%)",
-            chunk_tokens, overlap_tokens
-        ));
-
-        // Build exclusion patterns
-        let mut exclude_patterns = Vec::new();
-        if !cli.no_default_excludes {
-            exclude_patterns.extend(ck_core::get_default_exclude_patterns());
-        }
-        exclude_patterns.extend(cli.exclude.clone());
-
-        let start_time = std::time::Instant::now();
-
-        // Create enhanced progress system with multiple progress bars
-        let (
-            file_progress_bar,
-            overall_progress_bar,
-            progress_callback,
-            detailed_progress_callback,
-        ) = if !cli.quiet {
-            use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-
-            let multi_progress = MultiProgress::new();
-
-            // Overall progress bar (files)
-            let overall_pb = multi_progress.add(ProgressBar::new(0));
-            overall_pb.set_style(ProgressStyle::default_bar()
-                .template("📂 Embedding Files: [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}")
-                .unwrap()
-                .progress_chars("━━╸ "));
-
-            // Current file progress bar (chunks)
-            let file_pb = multi_progress.add(ProgressBar::new(0));
-            file_pb.set_style(ProgressStyle::default_bar()
-                .template("📄 Embedding Chunks: [{elapsed_precise}] [{bar:40.green/yellow}] {pos}/{len} ({percent}%) {msg}")
-                .unwrap()
-                .progress_chars("━━╸ "));
-
-            // MultiProgress is automatically managed
-
-            let overall_pb_clone = overall_pb.clone();
-            let _file_pb_clone = file_pb.clone();
-            let overall_pb_clone2 = overall_pb.clone();
-            let file_pb_clone2 = file_pb.clone();
-
-            // Basic progress callback for file-level updates
-            let progress_callback = Some(Box::new(move |file_name: &str| {
-                let short_name = file_name.split('/').next_back().unwrap_or(file_name);
-                overall_pb_clone.set_message(format!("Processing {}", short_name));
-                overall_pb_clone.inc(1);
-            }) as ck_index::ProgressCallback);
-
-            // Detailed progress callback for chunk-level updates
-            let detailed_progress_callback =
-                Some(Box::new(move |progress: ck_index::EmbeddingProgress| {
-                    // Update overall progress bar
-                    if overall_pb_clone2.length().unwrap_or(0) != progress.total_files as u64 {
-                        overall_pb_clone2.set_length(progress.total_files as u64);
-                    }
-                    overall_pb_clone2.set_position(progress.file_index as u64);
-
-                    // Update file progress bar
-                    if file_pb_clone2.length().unwrap_or(0) != progress.total_chunks as u64 {
-                        file_pb_clone2.set_length(progress.total_chunks as u64);
-                        file_pb_clone2.reset();
-                    }
-                    file_pb_clone2.set_position(progress.chunk_index as u64);
-
-                    let short_name = progress
-                        .file_name
-                        .split('/')
-                        .next_back()
-                        .unwrap_or(&progress.file_name);
-                    file_pb_clone2.set_message(format!(
-                        "{} (chunk {}/{}, {}B)",
-                        short_name,
-                        progress.chunk_index + 1,
-                        progress.total_chunks,
-                        progress.chunk_size
+                if existing_alias == existing_config.name {
+                    status.info(&format!(
+                        "Index already uses {} ({} dims)",
+                        existing_config.name, dims
                     ));
-                }) as ck_index::DetailedProgressCallback);
+                } else {
+                    status.info(&format!(
+                        "Index already uses {} (alias '{}', {} dims)",
+                        existing_config.name, existing_alias, dims
+                    ));
+                }
 
-            (
-                Some(file_pb),
-                Some(overall_pb),
-                progress_callback,
-                detailed_progress_callback,
-            )
-        } else {
-            (None, None, None, None)
-        };
+                status.success("No rebuild required; index already on requested model");
+                status.info(&format!(
+                    "Use '--switch-model {} --force' to rebuild anyway",
+                    model_name
+                ));
+                return Ok(());
+            }
+        }
 
-        let stats = ck_index::smart_update_index_with_detailed_progress(
+        run_index_workflow(
+            &status,
             &path,
-            false,
-            progress_callback,
-            detailed_progress_callback,
+            &cli,
+            model_alias.as_str(),
+            &model_config,
+            "Switching Embedding Model",
             true,
-            !cli.no_ignore,
-            &exclude_patterns,
-            cli.model.as_deref(), // Pass the model selection from CLI
         )
         .await?;
-        let elapsed = start_time.elapsed();
-        let files_per_sec = if elapsed.as_secs() > 0 {
-            stats.files_indexed as f64 / elapsed.as_secs() as f64
-        } else {
-            stats.files_indexed as f64
-        };
+        return Ok(());
+    }
 
-        // Finish progress bars
-        if let Some(file_pb) = file_progress_bar {
-            file_pb.finish_with_message("✅ All chunks processed");
-        }
-        if let Some(overall_pb) = overall_progress_bar {
-            overall_pb.finish_with_message(format!(
-                "✅ Index built in {:.2}s ({:.1} files/sec)",
-                elapsed.as_secs_f64(),
-                files_per_sec
-            ));
-        }
+    if cli.index {
+        let path = cli
+            .files
+            .first()
+            .cloned()
+            .unwrap_or_else(|| PathBuf::from("."));
 
-        status.success(&format!("🚀 Indexed {} files", stats.files_indexed));
-        if stats.files_added > 0 {
-            status.info(&format!("  ➕ {} new files added", stats.files_added));
-        }
-        if stats.files_modified > 0 {
-            status.info(&format!("  🔄 {} files updated", stats.files_modified));
-        }
-        if stats.files_up_to_date > 0 {
-            status.info(&format!(
-                "  ✅ {} files already current",
-                stats.files_up_to_date
-            ));
-        }
-        if stats.orphaned_files_removed > 0 {
-            status.info(&format!(
-                "  🧹 {} orphaned entries cleaned",
-                stats.orphaned_files_removed
-            ));
-        }
+        let registry = ck_models::ModelRegistry::default();
+        let (model_alias, model_config) = resolve_model_selection(&registry, cli.model.as_deref())?;
+
+        run_index_workflow(
+            &status,
+            &path,
+            &cli,
+            model_alias.as_str(),
+            &model_config,
+            "Indexing Repository",
+            false,
+        )
+        .await?;
         return Ok(());
     }
 
@@ -684,12 +937,8 @@ async fn run_main() -> Result<()> {
             status.section_header("Cleaning Orphaned Files");
             status.info(&format!("Scanning for orphans in {}", clean_path.display()));
 
-            // Build exclusion patterns
-            let mut exclude_patterns = Vec::new();
-            if !cli.no_default_excludes {
-                exclude_patterns.extend(ck_core::get_default_exclude_patterns());
-            }
-            exclude_patterns.extend(cli.exclude.clone());
+            // Build exclusion patterns using unified builder
+            let exclude_patterns = build_exclude_patterns(&cli, Some(&clean_path));
 
             let cleanup_spinner = status.create_spinner("Removing orphaned entries...");
             let cleanup_stats =
@@ -777,6 +1026,44 @@ async fn run_main() -> Result<()> {
             status.info(&format!("  Total chunks: {}", stats.total_chunks));
             status.info(&format!("  Embedded chunks: {}", stats.embedded_chunks));
 
+            let manifest_path_oxi = status_path.join(".oxi").join("manifest.json");
+            let manifest_path = if manifest_path_oxi.exists() {
+                manifest_path_oxi
+            } else {
+                status_path.join(".ck").join("manifest.json")
+            };
+            if let Ok(data) = std::fs::read(&manifest_path)
+                && let Ok(manifest) = serde_json::from_slice::<ck_index::IndexManifest>(&data)
+                && let Some(model_name) = manifest.embedding_model
+            {
+                let registry = ck_models::ModelRegistry::default();
+                let alias = registry
+                    .models
+                    .iter()
+                    .find(|(_, config)| config.name == model_name)
+                    .map(|(alias, _)| alias.clone())
+                    .unwrap_or_else(|| model_name.clone());
+                let dims = manifest
+                    .embedding_dimensions
+                    .or_else(|| {
+                        registry
+                            .models
+                            .iter()
+                            .find(|(_, config)| config.name == model_name)
+                            .map(|(_, config)| config.dimensions)
+                    })
+                    .unwrap_or(0);
+
+                if alias == model_name {
+                    status.info(&format!("  Model: {} ({} dims)", model_name, dims));
+                } else {
+                    status.info(&format!(
+                        "  Model: {} (alias '{}', {} dims)",
+                        model_name, alias, dims
+                    ));
+                }
+            }
+
             if verbose {
                 let size_mb = stats.total_size_bytes as f64 / (1024.0 * 1024.0);
                 let index_size_mb = stats.index_size_bytes as f64 / (1024.0 * 1024.0);
@@ -849,8 +1136,23 @@ async fn run_main() -> Result<()> {
     if let Some(ref pattern) = cli.pattern {
         let reindex = cli.reindex;
 
+        // Determine repo root for .ckignore loading
+        let repo_root_path = cli
+            .files
+            .first()
+            .map(|p| {
+                if p.is_dir() {
+                    p.clone()
+                } else {
+                    p.parent().unwrap_or(p).to_path_buf()
+                }
+            })
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        let repo_root = Some(repo_root_path.as_path());
+
         // Build options to get exclusion patterns
-        let temp_options = build_options(&cli, reindex);
+        let temp_options = build_options(&cli, reindex, repo_root);
 
         let files = if cli.files.is_empty() {
             vec![PathBuf::from(".")]
@@ -870,7 +1172,7 @@ async fn run_main() -> Result<()> {
         let mut closest_overall: Option<ck_core::SearchResult> = None;
 
         for file_path in files {
-            let mut options = build_options(&cli, reindex);
+            let mut options = build_options(&cli, reindex, repo_root);
             options.show_filenames = show_filenames;
             let summary = run_search(pattern.clone(), file_path, options, &status).await?;
             if summary.had_matches {
@@ -896,7 +1198,7 @@ async fn run_main() -> Result<()> {
                 let file_text = format!("{}:", closest.file.display());
 
                 // Get the pattern as a string
-                let options = build_options(&cli, false);
+                let options = build_options(&cli, false, repo_root);
                 let highlighted_preview = highlight_matches(&closest.preview, pattern, &options);
 
                 // Print in red with same format as regular results, with header
@@ -921,7 +1223,7 @@ async fn run_main() -> Result<()> {
     Ok(())
 }
 
-fn build_options(cli: &Cli, reindex: bool) -> SearchOptions {
+fn build_options(cli: &Cli, reindex: bool, repo_root: Option<&Path>) -> SearchOptions {
     let mode = if cli.semantic {
         SearchMode::Semantic
     } else if cli.lexical {
@@ -936,16 +1238,8 @@ fn build_options(cli: &Cli, reindex: bool) -> SearchOptions {
     let before_context = cli.before_context.unwrap_or(context);
     let after_context = cli.after_context.unwrap_or(context);
 
-    // Build exclusion patterns (as provided; glob semantics applied in ck-search)
-    let mut exclude_patterns = Vec::new();
-
-    // Add default exclusions unless disabled
-    if !cli.no_default_excludes {
-        exclude_patterns.extend(ck_core::get_default_exclude_patterns());
-    }
-
-    // Add user-specified exclusions
-    exclude_patterns.extend(cli.exclude.clone());
+    // Use the unified pattern builder
+    let exclude_patterns = build_exclude_patterns(cli, repo_root);
 
     // Set intelligent defaults for semantic search
     let default_topk = match mode {
@@ -985,6 +1279,7 @@ fn build_options(cli: &Cli, reindex: bool) -> SearchOptions {
         // Enhanced embedding options (search-time only)
         rerank: cli.rerank,
         rerank_model: cli.rerank_model.clone(),
+        embedding_model: cli.model.clone(),
     }
 }
 
@@ -1027,8 +1322,10 @@ fn highlight_regex_matches(text: &str, pattern: &str, options: &SearchOptions) -
             })
             .to_string()
         }
-        Err(_) => {
-            // If regex is invalid, return original text
+        Err(e) => {
+            // Surface regex compilation error to user
+            eprintln!("Warning: Invalid regex pattern '{}': {}", pattern, e);
+            // Return original text without highlighting
             text.to_string()
         }
     }
@@ -1198,7 +1495,10 @@ async fn run_search(
     }
 
     // Show search parameters for semantic mode
-    if matches!(options.mode, ck_core::SearchMode::Semantic) {
+    if matches!(
+        options.mode,
+        ck_core::SearchMode::Semantic | ck_core::SearchMode::Hybrid
+    ) {
         let topk_info = options
             .top_k
             .map_or("unlimited".to_string(), |k| k.to_string());
@@ -1210,19 +1510,25 @@ async fn run_search(
             topk_info, threshold_info
         );
 
-        // Show indexing configuration for semantic search
-        let model_name = "nomic-embed-text-v1.5"; // Default model for semantic search
-        eprintln!("🤖 Model: {}", model_name);
+        let resolved_model =
+            ck_engine::resolve_model_for_path(&options.path, options.embedding_model.as_deref())?;
 
-        // Show model-specific limits and chunk config
-        let (max_tokens, chunk_tokens, overlap_tokens) = match model_name {
-            "BAAI/bge-small-en-v1.5" | "sentence-transformers/all-MiniLM-L6-v2" => (512, 400, 80),
-            "nomic-embed-text-v1" | "nomic-embed-text-v1.5" | "jina-embeddings-v2-base-code" => {
-                (8192, 1024, 200)
-            }
-            "BAAI/bge-base-en-v1.5" | "BAAI/bge-large-en-v1.5" => (512, 400, 80),
-            _ => (8192, 1024, 200), // Default to nomic config
-        };
+        if resolved_model.alias == resolved_model.canonical_name {
+            eprintln!(
+                "🤖 Model: {} ({} dims)",
+                resolved_model.canonical_name, resolved_model.dimensions
+            );
+        } else {
+            eprintln!(
+                "🤖 Model: {} (alias '{}', {} dims)",
+                resolved_model.canonical_name, resolved_model.alias, resolved_model.dimensions
+            );
+        }
+
+        let max_tokens =
+            ck_chunk::TokenEstimator::get_model_limit(resolved_model.canonical_name.as_str());
+        let (chunk_tokens, overlap_tokens) =
+            ck_chunk::get_model_chunk_config(Some(resolved_model.canonical_name.as_str()));
 
         eprintln!("📏 FastEmbed Config: {} token limit", max_tokens);
         eprintln!(
@@ -1427,4 +1733,86 @@ async fn run_search(
         had_matches: has_matches,
         closest_below_threshold: search_results.closest_below_threshold,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_highlight_regex_matches_with_valid_pattern() {
+        let options = SearchOptions {
+            mode: SearchMode::Regex,
+            case_insensitive: false,
+            fixed_string: false,
+            whole_word: false,
+            ..Default::default()
+        };
+
+        let text = "hello world test";
+        let pattern = "world";
+        let result = highlight_regex_matches(text, pattern, &options);
+
+        // Should contain the text (exact highlighting might differ based on styling)
+        assert!(result.contains("world"));
+    }
+
+    #[test]
+    fn test_highlight_regex_matches_with_invalid_pattern() {
+        let options = SearchOptions {
+            mode: SearchMode::Regex,
+            case_insensitive: false,
+            fixed_string: false,
+            whole_word: false,
+            ..Default::default()
+        };
+
+        let text = "hello world test";
+        let pattern = "[invalid"; // Invalid regex pattern
+
+        // Capture stderr to check for warning
+        let original_text = highlight_regex_matches(text, pattern, &options);
+
+        // Should return original text when regex is invalid
+        assert_eq!(original_text, text);
+
+        // Note: We can't easily capture stderr in unit tests without more complex setup,
+        // but the integration test covers the stderr warning behavior
+    }
+
+    #[test]
+    fn test_highlight_regex_matches_with_fixed_string() {
+        let options = SearchOptions {
+            mode: SearchMode::Regex,
+            case_insensitive: false,
+            fixed_string: true, // This should escape the pattern
+            whole_word: false,
+            ..Default::default()
+        };
+
+        let text = "hello [world] test";
+        let pattern = "[world]"; // Special chars that would be invalid regex
+        let result = highlight_regex_matches(text, pattern, &options);
+
+        // Should work fine because fixed_string escapes the pattern
+        assert!(result.contains("[world]"));
+    }
+
+    #[test]
+    fn test_highlight_regex_matches_with_whole_word() {
+        let options = SearchOptions {
+            mode: SearchMode::Regex,
+            case_insensitive: false,
+            fixed_string: false,
+            whole_word: true, // This should escape the pattern and add word boundaries
+            ..Default::default()
+        };
+
+        let text = "hello [world] test";
+        let pattern = "[world]"; // Special chars that would be invalid regex
+        let result = highlight_regex_matches(text, pattern, &options);
+
+        // Should work fine because whole_word escapes the pattern
+        assert!(result.contains("[world]"));
+    }
 }

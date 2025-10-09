@@ -1,15 +1,16 @@
 use anyhow::Result;
-use ck_core::{FileMetadata, Span, compute_file_hash, get_sidecar_path};
+use ck_core::{FileMetadata, Language, Span, compute_file_hash, get_sidecar_path};
 use ignore::{WalkBuilder, overrides::OverrideBuilder};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
+use tempfile::NamedTempFile;
 use walkdir::WalkDir;
 
 pub type ProgressCallback = Box<dyn Fn(&str) + Send + Sync>;
@@ -70,37 +71,10 @@ pub type EnhancedProgressCallback = Box<dyn Fn(IndexingProgress) + Send + Sync>;
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 static HANDLER_INIT: Once = Once::new();
 
-/// Return the default index directory for writing new indexes (always `.oxi`).
-fn default_index_dir(base: &Path) -> PathBuf {
-    base.join(".oxi")
-}
+pub const INDEX_INTERRUPTED_MSG: &str = "Indexing interrupted by user";
 
-/// Resolve the effective index directory for reading: prefer `.oxi`, otherwise `.ck`.
-fn resolve_index_dir(base: &Path) -> PathBuf {
-    let oxi = base.join(".oxi");
-    if oxi.exists() {
-        return oxi;
-    }
-    base.join(".ck")
-}
-
-/// Build the sidecar path for a given target index directory. If target dir is `.ck`,
-/// use legacy `.ck` sidecar extension; otherwise use `.oxi` (new default).
-fn sidecar_path_for_dir(repo_root: &Path, file_path: &Path, index_dir: &Path) -> PathBuf {
-    let relative = file_path.strip_prefix(repo_root).unwrap_or(file_path);
-    let mut sidecar = index_dir.to_path_buf();
-    sidecar.push(relative);
-    let use_ck = index_dir
-        .file_name()
-        .and_then(|n| n.to_str())
-        .map(|n| n == ".ck")
-        .unwrap_or(false);
-    let ext = relative
-        .extension()
-        .map(|e| format!("{}.{}", e.to_string_lossy(), if use_ck { "ck" } else { "oxi" }))
-        .unwrap_or_else(|| (if use_ck { "ck" } else { "oxi" }).to_string());
-    sidecar.set_extension(ext);
-    sidecar
+pub fn request_interrupt() {
+    INTERRUPTED.store(true, Ordering::SeqCst);
 }
 
 /// Build override patterns for excluding files during directory traversal
@@ -111,13 +85,11 @@ fn build_overrides(
     let mut builder = OverrideBuilder::new(base_path);
 
     for pattern in exclude_patterns {
-        // Convert to exclude pattern (add ! prefix if not present)
-        let exclude_pattern = if pattern.starts_with('!') {
-            pattern.clone()
+        if pattern.starts_with('!') {
+            builder.add(pattern)?;
         } else {
-            format!("!{}", pattern)
-        };
-        builder.add(&exclude_pattern)?;
+            builder.add(&format!("!{}", pattern))?;
+        }
     }
 
     Ok(builder.build()?)
@@ -166,33 +138,57 @@ impl Default for IndexManifest {
     }
 }
 
+/// Common filtering logic for directory traversal entries
+fn should_include_file(entry: &ignore::DirEntry, index_dir: &Path) -> bool {
+    let path = entry.path();
+    entry.file_type().is_some_and(|ft| ft.is_file())
+        && is_text_file(path)
+        && !path.starts_with(index_dir)
+}
+
+/// Apply common filtering to a WalkBuilder iterator
+fn filter_and_collect_files(walker: ignore::Walk, index_dir: &Path) -> Vec<PathBuf> {
+    walker
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| should_include_file(entry, index_dir))
+        .map(|entry| entry.path().to_path_buf())
+        .collect()
+}
+
+/// Resolve index directory for reading (prefers .oxi, falls back to .ck)
+fn index_dir_for_read(base: &Path) -> PathBuf {
+    let oxi = base.join(".oxi");
+    if oxi.exists() {
+        oxi
+    } else {
+        base.join(".ck")
+    }
+}
+
+/// Resolve index directory for writing (always use .oxi)
+fn index_dir_for_write(base: &Path) -> PathBuf {
+    base.join(".oxi")
+}
+
 pub fn collect_files(
     path: &Path,
     respect_gitignore: bool,
     exclude_patterns: &[String],
 ) -> Result<Vec<PathBuf>> {
-    let index_dir_ck = path.join(".ck");
-    let index_dir_oxi = path.join(".oxi");
-    let overrides = build_overrides(path, exclude_patterns)?;
+    // For filtering, derive index dir for read to exclude whichever exists
+    let index_dir = index_dir_for_read(path);
 
     if respect_gitignore {
-        Ok(WalkBuilder::new(path)
+        let overrides = build_overrides(path, exclude_patterns)?;
+        let walker = WalkBuilder::new(path)
             .git_ignore(true)
             .git_global(true)
             .git_exclude(true)
             .hidden(true)
             .overrides(overrides)
-            .build()
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| {
-                let path = entry.path();
-                entry.file_type().is_some_and(|ft| ft.is_file())
-                    && is_text_file(path)
-                    && !path.starts_with(&index_dir_ck)
-                    && !path.starts_with(&index_dir_oxi)
-            })
-            .map(|entry| entry.path().to_path_buf())
-            .collect())
+            .build();
+
+        Ok(filter_and_collect_files(walker, &index_dir))
     } else {
         // Use WalkBuilder without gitignore support, but still apply overrides
         use ck_core::get_default_exclude_patterns;
@@ -203,21 +199,13 @@ pub fn collect_files(
         all_patterns.extend(exclude_patterns.iter().cloned());
         let combined_overrides = build_overrides(path, &all_patterns)?;
 
-        Ok(WalkBuilder::new(path)
+        let walker = WalkBuilder::new(path)
             .git_ignore(false)
             .hidden(true)
             .overrides(combined_overrides)
-            .build()
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| {
-                let path = entry.path();
-                entry.file_type().is_some_and(|ft| ft.is_file())
-                    && is_text_file(path)
-                    && !path.starts_with(&index_dir_ck)
-                    && !path.starts_with(&index_dir_oxi)
-            })
-            .map(|entry| entry.path().to_path_buf())
-            .collect())
+            .build();
+
+        Ok(filter_and_collect_files(walker, &index_dir))
     }
 }
 
@@ -242,11 +230,12 @@ pub async fn index_directory(
         "index_directory called with compute_embeddings={}",
         compute_embeddings
     );
-    let index_dir = default_index_dir(path);
+    let index_dir = index_dir_for_write(path);
     fs::create_dir_all(&index_dir)?;
 
     let manifest_path = index_dir.join("manifest.json");
     let mut manifest = load_or_create_manifest(&manifest_path)?;
+    normalize_manifest_paths(&mut manifest, path);
 
     // Handle model configuration for embeddings
     let resolved_model = if compute_embeddings {
@@ -296,11 +285,12 @@ pub async fn index_directory(
             match index_single_file(file_path, path, Some(&mut embedder)) {
                 Ok(entry) => {
                     // Write sidecar immediately
-                    let sidecar_path = sidecar_path_for_dir(path, file_path, &index_dir);
+                    let sidecar_path = get_sidecar_path(path, file_path);
                     save_index_entry(&sidecar_path, &entry)?;
 
                     // Update and save manifest immediately
-                    manifest.files.insert(file_path.clone(), entry.metadata);
+                    let manifest_key = entry.metadata.path.clone();
+                    manifest.files.insert(manifest_key, entry.metadata);
                     manifest.updated = SystemTime::now()
                         .duration_since(SystemTime::UNIX_EPOCH)
                         .unwrap()
@@ -357,11 +347,12 @@ pub async fn index_directory(
         // Main thread: stream results as they arrive
         while let Ok((file_path, entry)) = rx.recv() {
             // Write sidecar immediately
-            let sidecar_path = sidecar_path_for_dir(path, &file_path, &index_dir);
+            let sidecar_path = get_sidecar_path(path, &file_path);
             save_index_entry(&sidecar_path, &entry)?;
 
             // Update and save manifest immediately
-            manifest.files.insert(file_path, entry.metadata);
+            let manifest_key = entry.metadata.path.clone();
+            manifest.files.insert(manifest_key, entry.metadata);
             manifest.updated = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
@@ -390,7 +381,7 @@ pub async fn index_directory(
 
 pub async fn index_file(file_path: &Path, compute_embeddings: bool) -> Result<()> {
     let repo_root = find_repo_root(file_path)?;
-    let index_dir = default_index_dir(&repo_root);
+    let index_dir = index_dir_for_write(&repo_root);
     fs::create_dir_all(&index_dir)?;
 
     let manifest_path = index_dir.join("manifest.json");
@@ -404,12 +395,11 @@ pub async fn index_file(file_path: &Path, compute_embeddings: bool) -> Result<()
     } else {
         index_single_file(file_path, &repo_root, None)?
     };
-    let sidecar_path = sidecar_path_for_dir(&repo_root, file_path, &index_dir);
+    let sidecar_path = get_sidecar_path(&repo_root, file_path);
 
     save_index_entry(&sidecar_path, &entry)?;
-    manifest
-        .files
-        .insert(file_path.to_path_buf(), entry.metadata);
+    let manifest_key = entry.metadata.path.clone();
+    manifest.files.insert(manifest_key, entry.metadata);
     manifest.updated = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
@@ -426,8 +416,10 @@ pub async fn update_index(
     respect_gitignore: bool,
     exclude_patterns: &[String],
 ) -> Result<()> {
-    let index_dir = resolve_index_dir(path);
-    if !index_dir.exists() {
+    let has_oxi = path.join(".oxi").exists();
+    let has_ck = path.join(".ck").exists();
+    let index_dir = if has_oxi { path.join(".oxi") } else { path.join(".ck") };
+    if !(has_oxi || has_ck) {
         return index_directory(
             path,
             compute_embeddings,
@@ -450,7 +442,10 @@ pub async fn update_index(
         files
             .iter()
             .filter_map(|file_path| {
-                let needs_update = match manifest.files.get(file_path) {
+                let manifest_key =
+                    path_utils::to_manifest_path(&path_utils::to_standard_path(file_path, path));
+
+                let needs_update = match manifest.files.get(&manifest_key) {
                     Some(metadata) => match compute_file_hash(file_path) {
                         Ok(hash) => hash != metadata.hash,
                         Err(_) => false,
@@ -485,7 +480,10 @@ pub async fn update_index(
         files
             .par_iter()
             .filter_map(|file_path| {
-                let needs_update = match manifest.files.get(file_path) {
+                let manifest_key =
+                    path_utils::to_manifest_path(&path_utils::to_standard_path(file_path, path));
+
+                let needs_update = match manifest.files.get(&manifest_key) {
                     Some(metadata) => match compute_file_hash(file_path) {
                         Ok(hash) => hash != metadata.hash,
                         Err(_) => false,
@@ -519,9 +517,10 @@ pub async fn update_index(
     };
 
     for (file_path, entry) in updates {
-        let sidecar_path = sidecar_path_for_dir(path, &file_path, &index_dir);
+        let sidecar_path = get_sidecar_path(path, &file_path);
         save_index_entry(&sidecar_path, &entry)?;
-        manifest.files.insert(file_path, entry.metadata);
+        let manifest_key = entry.metadata.path.clone();
+        manifest.files.insert(manifest_key, entry.metadata);
     }
 
     if !manifest.files.is_empty() {
@@ -536,10 +535,13 @@ pub async fn update_index(
 }
 
 pub fn clean_index(path: &Path) -> Result<()> {
-    for dir in [path.join(".oxi"), path.join(".ck")] {
-        if dir.exists() {
-            fs::remove_dir_all(&dir)?;
-        }
+    let index_dir_oxi = path.join(".oxi");
+    let index_dir_ck = path.join(".ck");
+    if index_dir_oxi.exists() {
+        fs::remove_dir_all(&index_dir_oxi)?;
+    }
+    if index_dir_ck.exists() {
+        fs::remove_dir_all(&index_dir_ck)?;
     }
     Ok(())
 }
@@ -549,71 +551,25 @@ pub fn cleanup_index(
     respect_gitignore: bool,
     exclude_patterns: &[String],
 ) -> Result<CleanupStats> {
-    let index_dir = resolve_index_dir(path);
+    let index_dir = index_dir_for_read(path);
     if !index_dir.exists() {
         return Ok(CleanupStats::default());
     }
 
     let manifest_path = index_dir.join("manifest.json");
     let mut manifest = load_or_create_manifest(&manifest_path)?;
+    normalize_manifest_paths(&mut manifest, path);
 
-    // Find all current files in the repository
-    let current_files = collect_files_as_hashset(path, respect_gitignore, exclude_patterns)?;
+    // Use the new unified cleanup validation
+    let stats = cleanup_validation::validate_and_cleanup_index(
+        path,
+        &index_dir,
+        &mut manifest,
+        respect_gitignore,
+        exclude_patterns,
+    )?;
 
-    let mut stats = CleanupStats::default();
-
-    // Remove orphaned manifest entries (files that no longer exist)
-    let orphaned_files: Vec<PathBuf> = manifest
-        .files
-        .keys()
-        .filter(|&file_path| !current_files.contains(file_path))
-        .cloned()
-        .collect();
-
-    for file_path in &orphaned_files {
-        manifest.files.remove(file_path);
-
-        // Also remove the sidecar file
-        let sidecar_path = get_sidecar_path(path, file_path);
-        if sidecar_path.exists() {
-            fs::remove_file(&sidecar_path)?;
-            stats.orphaned_sidecars_removed += 1;
-        }
-
-        stats.orphaned_entries_removed += 1;
-    }
-
-    // Find and remove orphaned sidecar files
-    if index_dir.exists() {
-        // Determine expected sidecar extension from index_dir
-        let expected_ext = if index_dir
-            .file_name()
-            .and_then(|n| n.to_str())
-            .map(|n| n == ".oxi")
-            .unwrap_or(false)
-        {
-            "oxi"
-        } else {
-            "ck"
-        };
-
-        for entry in WalkDir::new(&index_dir) {
-            let entry = entry?;
-            if entry.file_type().is_file() {
-                let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some(expected_ext) {
-                    // Try to reconstruct the original file path
-                    if let Some(original_path) = sidecar_to_original_path(path, &index_dir, path)
-                        && !current_files.contains(&original_path)
-                        && !manifest.files.contains_key(&original_path)
-                    {
-                        fs::remove_file(path)?;
-                        stats.orphaned_sidecars_removed += 1;
-                    }
-                }
-            }
-        }
-    }
+    // Content cache cleanup is now handled by the unified cleanup validation
 
     // Remove empty directories in .ck
     remove_empty_dirs(&index_dir)?;
@@ -631,13 +587,14 @@ pub fn cleanup_index(
 }
 
 pub fn get_index_stats(path: &Path) -> Result<IndexStats> {
-    let index_dir = resolve_index_dir(path);
+    let index_dir = index_dir_for_read(path);
     if !index_dir.exists() {
         return Ok(IndexStats::default());
     }
 
     let manifest_path = index_dir.join("manifest.json");
-    let manifest = load_or_create_manifest(&manifest_path)?;
+    let mut manifest = load_or_create_manifest(&manifest_path)?;
+    normalize_manifest_paths(&mut manifest, path);
 
     let mut stats = IndexStats {
         total_files: manifest.files.len(),
@@ -648,20 +605,22 @@ pub fn get_index_stats(path: &Path) -> Result<IndexStats> {
 
     // Calculate total chunks and size
     for file_path in manifest.files.keys() {
-        let sidecar_path = sidecar_path_for_dir(path, file_path, &index_dir);
-        if sidecar_path.exists() {
-            if let Ok(entry) = load_index_entry(&sidecar_path) {
-                stats.total_chunks += entry.chunks.len();
-                stats.total_size_bytes += entry.metadata.size;
+        let standard_path = path_utils::from_manifest_path(file_path);
+        let sidecar_path =
+            path_utils::get_sidecar_path_for_standard_path(&index_dir, &standard_path);
+        if sidecar_path.exists()
+            && let Ok(entry) = load_index_entry(&sidecar_path)
+        {
+            stats.total_chunks += entry.chunks.len();
+            stats.total_size_bytes += entry.metadata.size;
 
-                // Count embedded chunks
-                let embedded = entry
-                    .chunks
-                    .iter()
-                    .filter(|c| c.embedding.is_some())
-                    .count();
-                stats.embedded_chunks += embedded;
-            }
+            // Count embedded chunks
+            let embedded = entry
+                .chunks
+                .iter()
+                .filter(|c| c.embedding.is_some())
+                .count();
+            stats.embedded_chunks += embedded;
         }
     }
 
@@ -734,11 +693,7 @@ pub async fn smart_update_index_with_detailed_progress(
     exclude_patterns: &[String],
     model: Option<&str>,
 ) -> Result<UpdateStats> {
-    // Prefer existing .oxi/.ck for reading; if none exists, write to .oxi
-    let mut index_dir = resolve_index_dir(path);
-    if !index_dir.exists() {
-        index_dir = default_index_dir(path);
-    }
+    let index_dir = index_dir_for_write(path);
     let mut stats = UpdateStats::default();
 
     // Set up interrupt handler (only once per process)
@@ -767,15 +722,18 @@ pub async fn smart_update_index_with_detailed_progress(
         return Ok(stats);
     }
 
-    // Skip cleanup during regular updates to avoid removing valid sidecar files
-    // Cleanup should only be done explicitly via --clean-orphans
-    // let cleanup_stats = cleanup_index(path)?;
-    // stats.orphaned_files_removed = cleanup_stats.orphaned_entries_removed;
+    // Find repo root for path normalization
+    let repo_root = find_repo_root(path)?;
+
+    // Skip cleanup during incremental updates to avoid removing valid entries
+    // that may be outside the current search scope or have path normalization issues
+    // Cleanup should be done explicitly with --clean-orphans when needed
 
     // Then perform incremental update
     fs::create_dir_all(&index_dir)?;
     let manifest_path = index_dir.join("manifest.json");
     let mut manifest = load_or_create_manifest(&manifest_path)?;
+    normalize_manifest_paths(&mut manifest, &repo_root);
 
     // Handle model configuration for embeddings
     let (resolved_model, _model_dimensions) = if compute_embeddings {
@@ -835,6 +793,8 @@ pub async fn smart_update_index_with_detailed_progress(
         (None, None)
     };
 
+    // For incremental updates, only process files in the search scope
+    // The cleanup phase already handled removing orphaned files from the entire repo
     let current_files = collect_files(path, respect_gitignore, exclude_patterns)?;
 
     // First pass: determine which files need updating and collect stats
@@ -848,7 +808,10 @@ pub async fn smart_update_index_with_detailed_progress(
             return Ok(stats);
         }
 
-        if let Some(metadata) = manifest.files.get(&file_path) {
+        let manifest_key =
+            path_utils::to_manifest_path(&path_utils::to_standard_path(&file_path, &repo_root));
+
+        if let Some(metadata) = manifest.files.get(&manifest_key) {
             let fs_meta = match fs::metadata(&file_path) {
                 Ok(m) => m,
                 Err(_) => {
@@ -887,13 +850,16 @@ pub async fn smart_update_index_with_detailed_progress(
                 files_to_update.push(file_path);
             } else {
                 stats.files_up_to_date += 1;
+                // Convert to standardized path for manifest storage
+                let standard_path = path_utils::to_standard_path(&file_path, &repo_root);
+                let manifest_path = path_utils::to_manifest_path(&standard_path);
                 let new_metadata = FileMetadata {
-                    path: file_path.clone(),
+                    path: manifest_path.clone(),
                     hash,
                     last_modified: fs_last_modified,
                     size: fs_size,
                 };
-                manifest.files.insert(file_path, new_metadata);
+                manifest.files.insert(manifest_path, new_metadata);
                 manifest_changed = true;
             }
         } else {
@@ -940,12 +906,13 @@ pub async fn smart_update_index_with_detailed_progress(
 
             match result {
                 Ok(entry) => {
-                    // Write sidecar immediately to the selected index_dir
-                    let sidecar_path = sidecar_path_for_dir(path, file_path, &index_dir);
+                    // Write sidecar immediately
+                    let sidecar_path = get_sidecar_path(path, file_path);
                     save_index_entry(&sidecar_path, &entry)?;
 
                     // Update and save manifest immediately
-                    manifest.files.insert(file_path.clone(), entry.metadata);
+                    let manifest_key = entry.metadata.path.clone();
+                    manifest.files.insert(manifest_key, entry.metadata);
                     manifest.updated = SystemTime::now()
                         .duration_since(SystemTime::UNIX_EPOCH)
                         .unwrap()
@@ -1037,12 +1004,13 @@ pub async fn smart_update_index_with_detailed_progress(
                 callback(&file_name.to_string_lossy());
             }
 
-            // Write sidecar immediately to the selected index_dir
-            let sidecar_path = sidecar_path_for_dir(path, &file_path, &index_dir);
+            // Write sidecar immediately
+            let sidecar_path = get_sidecar_path(path, &file_path);
             save_index_entry(&sidecar_path, &entry)?;
 
             // Update and save manifest immediately
-            manifest.files.insert(file_path, entry.metadata);
+            let manifest_key = entry.metadata.path.clone();
+            manifest.files.insert(manifest_key, entry.metadata);
             manifest.updated = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
@@ -1076,15 +1044,15 @@ pub async fn smart_update_index_with_detailed_progress(
 
 fn index_single_file(
     file_path: &Path,
-    _repo_root: &Path,
+    repo_root: &Path,
     embedder: Option<&mut Box<dyn ck_embed::Embedder>>,
 ) -> Result<IndexEntry> {
-    index_single_file_with_progress(file_path, _repo_root, embedder, None, 0, 1)
+    index_single_file_with_progress(file_path, repo_root, embedder, None, 0, 1)
 }
 
 fn index_single_file_with_progress(
     file_path: &Path,
-    _repo_root: &Path,
+    repo_root: &Path,
     embedder: Option<&mut Box<dyn ck_embed::Embedder>>,
     detailed_progress: Option<&DetailedProgressCallback>,
     file_index: usize,
@@ -1095,12 +1063,19 @@ fn index_single_file_with_progress(
         return Err(anyhow::anyhow!("Binary file, skipping"));
     }
 
-    let content = fs::read_to_string(file_path)?;
+    // Preprocess file (extracts PDFs to cache, returns path to readable content)
+    let content_path = preprocess_file(file_path, repo_root)?;
+    let content = fs::read_to_string(&content_path)?;
+
+    // Always use the ORIGINAL file for hash and metadata
     let hash = compute_file_hash(file_path)?;
     let metadata = fs::metadata(file_path)?;
 
+    let standard_path = path_utils::to_standard_path(file_path, repo_root);
+    let manifest_path = path_utils::to_manifest_path(&standard_path);
+
     let file_metadata = FileMetadata {
-        path: file_path.to_path_buf(),
+        path: manifest_path,
         hash,
         last_modified: metadata
             .modified()?
@@ -1110,9 +1085,14 @@ fn index_single_file_with_progress(
     };
 
     // Detect language for tree-sitter parsing
-    let lang = ck_core::Language::from_path(file_path);
+    let lang = if ck_core::pdf::is_pdf_file(file_path) {
+        Some(Language::Pdf)
+    } else {
+        ck_core::Language::from_path(file_path)
+    };
 
-    let chunks = ck_chunk::chunk_text(&content, lang)?;
+    let model_name = embedder.as_ref().map(|e| e.model_name());
+    let chunks = ck_chunk::chunk_text_with_model(&content, lang, model_name)?;
 
     let chunk_entries: Vec<ChunkEntry> = if let Some(embedder) = embedder {
         let total_chunks = chunks.len();
@@ -1132,6 +1112,9 @@ fn index_single_file_with_progress(
 
             let mut chunk_entries = Vec::new();
             for (chunk_index, chunk) in chunks.into_iter().enumerate() {
+                if INTERRUPTED.load(Ordering::SeqCst) {
+                    return Err(anyhow::anyhow!(INDEX_INTERRUPTED_MSG));
+                }
                 // Report progress before processing chunk
                 callback(EmbeddingProgress {
                     file_name: file_name.clone(),
@@ -1144,7 +1127,13 @@ fn index_single_file_with_progress(
 
                 // Embed single chunk
                 let embeddings = embedder.embed(std::slice::from_ref(&chunk.text))?;
-                let embedding = embeddings.into_iter().next().unwrap();
+                let embedding = embeddings.into_iter().next().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Embedder returned empty results for chunk {} in file {:?}. This may indicate an issue with the embedding model or chunk content.",
+                        chunk_index,
+                        file_path
+                    )
+                })?;
 
                 let chunk_type_str = match chunk.chunk_type {
                     ck_chunk::ChunkType::Function => Some("function".to_string()),
@@ -1170,6 +1159,16 @@ fn index_single_file_with_progress(
                 file_path
             );
             let embeddings = embedder.embed(&chunk_texts)?;
+
+            // Validate that embedder returned the expected number of embeddings
+            if embeddings.len() != chunks.len() {
+                return Err(anyhow::anyhow!(
+                    "Embedder returned {} embeddings for {} chunks in file {:?}. Expected equal counts.",
+                    embeddings.len(),
+                    chunks.len(),
+                    file_path
+                ));
+            }
 
             chunks
                 .into_iter()
@@ -1226,22 +1225,54 @@ fn load_or_create_manifest(path: &Path) -> Result<IndexManifest> {
     }
 }
 
+fn normalize_manifest_paths(manifest: &mut IndexManifest, repo_root: &Path) {
+    let original_entries = std::mem::take(&mut manifest.files);
+    let mut normalized = HashMap::with_capacity(original_entries.len());
+
+    for (key, mut metadata) in original_entries {
+        let standard_key = if key.is_absolute() {
+            path_utils::to_standard_path(&key, repo_root)
+        } else {
+            path_utils::from_manifest_path(&key)
+        };
+        let manifest_key = path_utils::to_manifest_path(&standard_key);
+
+        let metadata_standard = if metadata.path.is_absolute() {
+            path_utils::to_standard_path(&metadata.path, repo_root)
+        } else {
+            path_utils::from_manifest_path(&metadata.path)
+        };
+        metadata.path = path_utils::to_manifest_path(&metadata_standard);
+
+        normalized.insert(manifest_key, metadata);
+    }
+
+    manifest.files = normalized;
+}
+
 fn save_manifest(path: &Path, manifest: &IndexManifest) -> Result<()> {
     let data = serde_json::to_vec_pretty(manifest)?;
-    let tmp_path = path.with_extension("tmp");
-    fs::write(&tmp_path, data)?;
-    fs::rename(tmp_path, path)?;
-    Ok(())
+    atomic_write(path, &data)
 }
 
 fn save_index_entry(path: &Path, entry: &IndexEntry) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
     let data = bincode::serialize(entry)?;
-    let tmp_path = path.with_extension("tmp");
-    fs::write(&tmp_path, data)?;
-    fs::rename(tmp_path, path)?;
+    atomic_write(path, &data)
+}
+
+fn atomic_write(path: &Path, data: &[u8]) -> Result<()> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+
+    let mut tmp = NamedTempFile::new_in(parent)?;
+    tmp.write_all(data)?;
+    tmp.as_file().sync_all()?;
+
+    if path.exists() {
+        fs::remove_file(path)?;
+    }
+
+    tmp.persist(path)?;
     Ok(())
 }
 
@@ -1258,7 +1289,10 @@ fn find_repo_root(path: &Path) -> Result<PathBuf> {
     };
 
     loop {
-        if current.join(".oxi").exists() || current.join(".ck").exists() || current.join(".git").exists() {
+        if current.join(".oxi").exists()
+            || current.join(".ck").exists()
+            || current.join(".git").exists()
+        {
             return Ok(current.to_path_buf());
         }
 
@@ -1269,7 +1303,61 @@ fn find_repo_root(path: &Path) -> Result<PathBuf> {
     }
 }
 
+/// Check if content needs re-extraction
+fn should_reextract(source_path: &Path, cache_path: &Path) -> Result<bool> {
+    if !cache_path.exists() {
+        return Ok(true);
+    }
+
+    let source_modified = fs::metadata(source_path)?.modified()?;
+    let cache_modified = fs::metadata(cache_path)?.modified()?;
+
+    Ok(source_modified > cache_modified)
+}
+
+/// Extract text content from a PDF file
+fn extract_pdf_text(path: &Path) -> Result<String> {
+    pdf_extract::extract_text(path)
+        .map_err(|e| anyhow::anyhow!("Failed to extract text from PDF {}: {}", path.display(), e))
+}
+
+/// Preprocess a file if needed, returning path to readable content
+/// For regular files: returns the original path (no preprocessing)
+/// For PDFs: extracts text to cache, returns cache path
+fn preprocess_file(file_path: &Path, repo_root: &Path) -> Result<PathBuf> {
+    if ck_core::pdf::is_pdf_file(file_path) {
+        let cache_path = ck_core::pdf::get_content_cache_path(repo_root, file_path);
+
+        // Check if re-extraction needed
+        if should_reextract(file_path, &cache_path)? {
+            tracing::debug!(
+                "Extracting PDF content from {:?} to {:?}",
+                file_path,
+                cache_path
+            );
+            let extracted_text = extract_pdf_text(file_path)?;
+
+            // Ensure cache directory exists
+            if let Some(parent) = cache_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+
+            // Write extracted text
+            fs::write(&cache_path, extracted_text)?;
+        }
+
+        Ok(cache_path) // Return path to extracted text
+    } else {
+        Ok(file_path.to_path_buf()) // Return original path for regular files
+    }
+}
+
 fn is_text_file(path: &Path) -> bool {
+    // PDFs are considered indexable even though they're binary
+    if ck_core::pdf::is_pdf_file(path) {
+        return true;
+    }
+
     // Use NUL byte heuristic like ripgrep - read first 8KB and check for NUL bytes
     const BUFFER_SIZE: usize = 8192;
 
@@ -1293,6 +1381,7 @@ fn is_text_file(path: &Path) -> bool {
     }
 }
 
+#[cfg(test)]
 fn sidecar_to_original_path(
     sidecar_path: &Path,
     index_dir: &Path,
@@ -1301,20 +1390,10 @@ fn sidecar_to_original_path(
     let relative_path = sidecar_path.strip_prefix(index_dir).ok()?;
     let original_path = relative_path.with_extension("");
 
-    // Strip only the expected extension based on index_dir name
-    let expected_ext = if index_dir
-        .file_name()
-        .and_then(|n| n.to_str())
-        .map(|n| n == ".oxi")
-        .unwrap_or(false)
-    {
-        ".oxi"
-    } else {
-        ".ck"
-    };
+    // Handle the .oxi or .ck extension removal at end of filename
     if let Some(name) = original_path.file_name() {
         let name_str = name.to_string_lossy();
-        if let Some(original_name) = name_str.strip_suffix(expected_ext) {
+        if let Some(original_name) = name_str.strip_suffix(".oxi").or_else(|| name_str.strip_suffix(".ck")) {
             let mut result = original_path.clone();
             result.set_file_name(original_name);
             return Some(result);
@@ -1376,6 +1455,162 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
+
+    /// Test embedder that can return empty results to test error handling
+    struct EmptyResultsEmbedder;
+
+    impl ck_embed::Embedder for EmptyResultsEmbedder {
+        fn id(&self) -> &'static str {
+            "empty-results-test"
+        }
+
+        fn dim(&self) -> usize {
+            384
+        }
+
+        fn model_name(&self) -> &str {
+            "test-empty-results"
+        }
+
+        fn embed(&mut self, _texts: &[String]) -> Result<Vec<Vec<f32>>> {
+            // Always return empty vector to trigger the panic scenario
+            Ok(Vec::new())
+        }
+    }
+
+    /// Test embedder that returns mismatched count of embeddings
+    struct MismatchedCountEmbedder;
+
+    impl ck_embed::Embedder for MismatchedCountEmbedder {
+        fn id(&self) -> &'static str {
+            "mismatched-count-test"
+        }
+
+        fn dim(&self) -> usize {
+            384
+        }
+
+        fn model_name(&self) -> &str {
+            "test-mismatched-count"
+        }
+
+        fn embed(&mut self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+            // Always return one less embedding than requested
+            if texts.is_empty() {
+                Ok(Vec::new())
+            } else {
+                Ok(vec![vec![0.0; self.dim()]; texts.len() - 1])
+            }
+        }
+    }
+
+    #[test]
+    fn test_index_single_file_handles_empty_embedding_results() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_path = temp_dir.path();
+
+        // Create a simple test file
+        let test_file = test_path.join("test.txt");
+        fs::write(&test_file, "hello world").unwrap();
+
+        // Create an embedder that returns empty results
+        let mut empty_embedder: Box<dyn ck_embed::Embedder> = Box::new(EmptyResultsEmbedder);
+
+        // This should return an error, not panic
+        let result = index_single_file(&test_file, test_path, Some(&mut empty_embedder));
+
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        // The empty embedder triggers the count mismatch error (0 embeddings for 1 chunk)
+        assert!(error_msg.contains("Embedder returned 0 embeddings for 1 chunks"));
+        assert!(error_msg.contains("Expected equal counts"));
+        assert!(error_msg.contains("test.txt"));
+    }
+
+    #[test]
+    fn test_index_single_file_with_progress_handles_empty_embedding_results() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_path = temp_dir.path();
+
+        // Create a simple test file
+        let test_file = test_path.join("test.txt");
+        fs::write(&test_file, "hello world").unwrap();
+
+        // Create an embedder that returns empty results
+        let mut empty_embedder: Box<dyn ck_embed::Embedder> = Box::new(EmptyResultsEmbedder);
+
+        // Use the detailed progress callback to trigger the single-chunk processing path
+        let dummy_callback: DetailedProgressCallback = Box::new(|_progress: EmbeddingProgress| {});
+        let result = index_single_file_with_progress(
+            &test_file,
+            test_path,
+            Some(&mut empty_embedder),
+            Some(&dummy_callback),
+            0,
+            1,
+        );
+
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        // This should hit the single-chunk path and get the specific error
+        assert!(error_msg.contains("Embedder returned empty results"));
+        assert!(error_msg.contains("chunk 0"));
+        assert!(error_msg.contains("test.txt"));
+    }
+
+    #[test]
+    fn test_index_single_file_handles_mismatched_embedding_count() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_path = temp_dir.path();
+
+        // Create a test file with multiple chunks (use some code content)
+        let test_file = test_path.join("test.rs");
+        fs::write(
+            &test_file,
+            "fn main() {\n    println!(\"hello\");\n}\n\nfn other() {\n    println!(\"world\");\n}",
+        )
+        .unwrap();
+
+        // Create an embedder that returns mismatched count
+        let mut mismatched_embedder: Box<dyn ck_embed::Embedder> =
+            Box::new(MismatchedCountEmbedder);
+
+        // This should return an error, not silently mismatch
+        let result = index_single_file(&test_file, test_path, Some(&mut mismatched_embedder));
+
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("Embedder returned"));
+        assert!(error_msg.contains("embeddings for"));
+        assert!(error_msg.contains("chunks"));
+        assert!(error_msg.contains("Expected equal counts"));
+    }
+
+    #[test]
+    fn test_index_single_file_with_valid_embedder_still_works() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_path = temp_dir.path();
+
+        // Create a simple test file
+        let test_file = test_path.join("test.txt");
+        fs::write(&test_file, "hello world").unwrap();
+
+        // Create a dummy embedder that returns proper results
+        let dummy_embedder = ck_embed::DummyEmbedder::new();
+        let mut boxed_embedder: Box<dyn ck_embed::Embedder> = Box::new(dummy_embedder);
+
+        // This should work fine
+        let result = index_single_file(&test_file, test_path, Some(&mut boxed_embedder));
+
+        assert!(result.is_ok());
+        let entry = result.unwrap();
+        assert!(!entry.chunks.is_empty());
+        // Verify that embeddings are present
+        for chunk in &entry.chunks {
+            assert!(chunk.embedding.is_some());
+            assert_eq!(chunk.embedding.as_ref().unwrap().len(), 384); // DummyEmbedder dimension
+        }
+    }
 
     #[tokio::test]
     async fn test_smart_update_index() {
@@ -1486,12 +1721,12 @@ mod tests {
         let index_dir = temp_dir.path().join(".ck");
 
         // Test normal file
-        let sidecar = index_dir.join("test.txt.oxi");
+        let sidecar = index_dir.join("test.txt.ck");
         let original = sidecar_to_original_path(&sidecar, &index_dir, temp_dir.path());
         assert_eq!(original, Some(PathBuf::from("test.txt")));
 
         // Test nested file
-        let nested_sidecar = index_dir.join("src").join("main.rs.oxi");
+        let nested_sidecar = index_dir.join("src").join("main.rs.ck");
         let nested_original =
             sidecar_to_original_path(&nested_sidecar, &index_dir, temp_dir.path());
         assert_eq!(nested_original, Some(PathBuf::from("src/main.rs")));
@@ -1561,5 +1796,187 @@ mod tests {
         assert!(!nested_dir.exists());
         assert!(!test_path.join("level1").join("level2").exists());
         assert!(!test_path.join("level1").exists());
+    }
+}
+
+// ============================================================================
+// Cleanup Validation Module
+// ============================================================================
+
+/// Comprehensive cleanup and validation for the index
+mod cleanup_validation {
+    use super::*;
+    // IndexManifest is defined in this module
+
+    /// Validates and cleans up the index to ensure consistency
+    pub fn validate_and_cleanup_index(
+        repo_root: &Path,
+        index_dir: &Path,
+        manifest: &mut IndexManifest,
+        respect_gitignore: bool,
+        exclude_patterns: &[String],
+    ) -> Result<CleanupStats> {
+        let mut stats = CleanupStats::default();
+
+        // Step 1: Get all files that actually exist in the repository
+        let existing_files =
+            collect_files_as_hashset(repo_root, respect_gitignore, exclude_patterns)?;
+        let standard_existing_files: HashSet<PathBuf> = existing_files
+            .into_iter()
+            .map(|path| path_utils::to_standard_path(&path, repo_root))
+            .collect();
+
+        // Step 2: Validate manifest entries
+        let manifest_entries: Vec<PathBuf> =
+            manifest.files.keys().map(|k| k.to_path_buf()).collect();
+        for manifest_path in manifest_entries {
+            let standard_path = path_utils::from_manifest_path(&manifest_path);
+
+            // Check if file exists in reality
+            if !standard_existing_files.contains(&standard_path) {
+                remove_manifest_entry(manifest, &manifest_path, repo_root, index_dir, &mut stats)?;
+                continue;
+            }
+
+            // Check if sidecar file exists
+            let sidecar_path =
+                path_utils::get_sidecar_path_for_standard_path(index_dir, &standard_path);
+            if !sidecar_path.exists() {
+                remove_manifest_entry(manifest, &manifest_path, repo_root, index_dir, &mut stats)?;
+                continue;
+            }
+        }
+
+        // Step 3: Clean up orphaned sidecar files
+        cleanup_orphaned_sidecars(index_dir, &standard_existing_files, manifest, &mut stats)?;
+
+        Ok(stats)
+    }
+
+    /// Remove a manifest entry and its associated files
+    fn remove_manifest_entry(
+        manifest: &mut IndexManifest,
+        manifest_path: &Path,
+        repo_root: &Path,
+        index_dir: &Path,
+        stats: &mut CleanupStats,
+    ) -> Result<()> {
+        manifest.files.remove(manifest_path);
+
+        // Remove sidecar file
+        let standard_path = path_utils::from_manifest_path(manifest_path);
+        let sidecar_path =
+            path_utils::get_sidecar_path_for_standard_path(index_dir, &standard_path);
+        if sidecar_path.exists() {
+            fs::remove_file(&sidecar_path)?;
+            stats.orphaned_sidecars_removed += 1;
+        }
+
+        // Remove content cache for PDFs
+        if ck_core::pdf::is_pdf_file(&standard_path) {
+            let absolute_path = repo_root.join(&standard_path);
+            let cache_path = ck_core::pdf::get_content_cache_path(repo_root, &absolute_path);
+            if cache_path.exists() {
+                fs::remove_file(&cache_path)?;
+                tracing::debug!("Removed orphaned content cache: {:?}", cache_path);
+            }
+        }
+
+        stats.orphaned_entries_removed += 1;
+        tracing::warn!("Removed manifest entry: {:?}", manifest_path);
+        Ok(())
+    }
+
+    /// Clean up sidecar files that don't have corresponding manifest entries
+    fn cleanup_orphaned_sidecars(
+        index_dir: &Path,
+        standard_existing_files: &HashSet<PathBuf>,
+        manifest: &IndexManifest,
+        stats: &mut CleanupStats,
+    ) -> Result<()> {
+        if !index_dir.exists() {
+            return Ok(());
+        }
+
+        for entry in WalkDir::new(index_dir) {
+            let entry = entry?;
+            if entry.file_type().is_file() {
+                let sidecar_path = entry.path();
+                if sidecar_path.extension().and_then(|s| s.to_str()) == Some("ck")
+                    && let Some(standard_path) =
+                        path_utils::sidecar_to_standard_path(sidecar_path, index_dir)
+                {
+                    let manifest_path = path_utils::to_manifest_path(&standard_path);
+
+                    // Remove if file doesn't exist in reality or isn't in manifest
+                    if !standard_existing_files.contains(&standard_path)
+                        || !manifest.files.contains_key(&manifest_path)
+                    {
+                        fs::remove_file(sidecar_path)?;
+                        stats.orphaned_sidecars_removed += 1;
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// ============================================================================
+// Path Utilities Module
+// ============================================================================
+
+/// Standardized path format for the indexing system.
+/// All paths are stored as relative paths from the repository root without "./" prefix.
+/// Example: "examples/code/api_client.js" instead of "./examples/code/api_client.js"
+mod path_utils {
+    use super::*;
+
+    /// Convert an absolute path to a standardized relative path from repo root
+    pub fn to_standard_path(absolute_path: &Path, repo_root: &Path) -> PathBuf {
+        if let Ok(relative) = absolute_path.strip_prefix(repo_root) {
+            relative.to_path_buf()
+        } else {
+            absolute_path.to_path_buf()
+        }
+    }
+
+    /// Convert a standardized path to a manifest path (with "./" prefix for compatibility)
+    pub fn to_manifest_path(standard_path: &Path) -> PathBuf {
+        PathBuf::from(".").join(standard_path)
+    }
+
+    /// Convert a manifest path (with "./" prefix) to a standardized path
+    pub fn from_manifest_path(manifest_path: &Path) -> PathBuf {
+        if let Ok(relative) = manifest_path.strip_prefix(".") {
+            relative.to_path_buf()
+        } else {
+            manifest_path.to_path_buf()
+        }
+    }
+
+    /// Get the sidecar path for a standardized file path
+    pub fn get_sidecar_path_for_standard_path(index_dir: &Path, standard_path: &Path) -> PathBuf {
+        let sidecar_name = format!("{}.ck", standard_path.display());
+        index_dir.join(sidecar_name)
+    }
+
+    /// Convert a sidecar path back to a standardized original path
+    pub fn sidecar_to_standard_path(sidecar_path: &Path, index_dir: &Path) -> Option<PathBuf> {
+        let relative_path = sidecar_path.strip_prefix(index_dir).ok()?;
+        let original_path = relative_path.with_extension("");
+
+        // Handle the .ck extension removal
+        if let Some(name) = original_path.file_name() {
+            let name_str = name.to_string_lossy();
+            if let Some(original_name) = name_str.strip_suffix(".ck") {
+                let mut result = original_path.clone();
+                result.set_file_name(original_name);
+                return Some(result);
+            }
+        }
+
+        Some(original_path)
     }
 }

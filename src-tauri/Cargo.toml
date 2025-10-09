@@ -108,11 +108,11 @@ glob = "0.3"
 tauri-plugin-window-state = "2.4.0"
 tauri-plugin-autostart = "2.5.0"
 eventsource-stream = "0.2.3"
-ck-core = { path = "../ck-main/ck-core", version = "0.4.5" }
-ck-index = { path = "../ck-main/ck-index", version = "0.4.5" }
-ck-engine = { path = "../ck-main/ck-engine", version = "0.4.5" }
-ck-embed = { path = "../ck-main/ck-embed", version = "0.4.5" }
-ck-ann = { path = "../ck-main/ck-ann", version = "0.4.5" }
+ck-core = { path = "../ck-main/ck-core", version = "0.5.3" }
+ck-index = { path = "../ck-main/ck-index", version = "0.5.3" }
+ck-engine = { path = "../ck-main/ck-engine", version = "0.5.3" }
+ck-embed = { path = "../ck-main/ck-embed", version = "0.5.3" }
+ck-ann = { path = "../ck-main/ck-ann", version = "0.5.3" }
 ignore = "0.4"
 
 # 文件监控系统依赖

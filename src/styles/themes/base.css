@@ -31,6 +31,19 @@
   --window-opacity: 1;
 }
 
+/* 全局默认颜色 - 确保所有文本元素在透明状态下正确显示 */
+body,
+input,
+textarea,
+select,
+button,
+span,
+div,
+p,
+label {
+  color: var(--text-200);
+}
+
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;

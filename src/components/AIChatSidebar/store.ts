@@ -136,25 +136,37 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       payload: { streamId: string; streamDone: boolean; iteration: number; timestamp: string },
       delta: string
     ) => {
-      if (!delta) return
+      // 允许空内容但streamDone=true的事件（结束标记）
+      if (!delta && !payload.streamDone) return
 
       const timestamp = getTimestamp(payload.timestamp)
       const steps = currentMessage.steps!
-      const lastStep = steps.length > 0 ? steps[steps.length - 1] : null
-      const isMatchingLastStep = lastStep && lastStep.stepType === stepType
 
-      if (isMatchingLastStep) {
-        lastStep.content += delta
-        lastStep.timestamp = timestamp
-        lastStep.metadata = {
+      // 必须同时匹配stepType和streamId，避免多个流混乱
+      const matchingStep = steps.find(
+        step => step.stepType === stepType && step.metadata?.streamId === payload.streamId
+      )
+
+      if (matchingStep) {
+        // 更新现有step
+        if (delta) {
+          matchingStep.content += delta
+        }
+        matchingStep.timestamp = timestamp
+        // 使用Object.assign保持metadata对象引用，确保Vue响应式
+        if (!matchingStep.metadata) {
+          matchingStep.metadata = {}
+        }
+        Object.assign(matchingStep.metadata, {
           streamId: payload.streamId,
           streamDone: payload.streamDone,
           iteration: payload.iteration,
-        }
+        })
         if (stepType === 'text') {
-          currentMessage.content = lastStep.content
+          currentMessage.content = matchingStep.content
         }
       } else {
+        // 创建新step
         const newStep = {
           stepType,
           content: delta,
@@ -272,7 +284,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     isLoading.value = true
     error.value = null
 
-    const stream = await agentApi.executeTask(content, currentConversationId.value)
+    const stream = await agentApi.executeTask(content, currentConversationId.value, chatMode.value)
 
     if (!stream) throw new Error('无法创建任务流')
 
@@ -311,6 +323,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       cancelFunction.value = null
       currentTaskId.value = null
       cancelRequested.value = false
+      isLoading.value = false
     })
 
     cancelFunction.value = () => {

@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n'
   import { aiApi } from '@/api'
   import { debounce } from 'lodash-es'
-  import SettingsCard from '../../SettingsCard.vue'
+  import SettingsCard from '../../../SettingsCard.vue'
 
   const { t } = useI18n()
 

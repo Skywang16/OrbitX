@@ -14,15 +14,21 @@
       path: string
       size?: string
     }
+    isBuilding?: boolean
+    buildProgress?: number
   }
 
   interface Emits {
     (e: 'build'): void
     (e: 'delete'): void
     (e: 'refresh'): void
+    (e: 'cancel'): void
   }
 
-  const props = defineProps<Props>()
+  const props = withDefaults(defineProps<Props>(), {
+    isBuilding: false,
+    buildProgress: 0,
+  })
   const emit = defineEmits<Emits>()
 
   const handleBuild = () => {
@@ -35,6 +41,10 @@
 
   const handleRefresh = () => {
     emit('refresh')
+  }
+
+  const handleCancel = () => {
+    emit('cancel')
   }
 
   const statusText = computed(() => {
@@ -137,7 +147,10 @@
           <div class="workspace-label">{{ t('ck.current_workspace') }}</div>
           <div class="workspace-path">{{ displayPath }}</div>
         </div>
+
+        <!-- 未构建状态：显示构建按钮 -->
         <x-button
+          v-if="!isBuilding"
           variant="primary"
           :disabled="!canBuild"
           :title="!canBuild ? t('ck.build_index_tooltip_disabled') : t('ck.build_index_tooltip_enabled')"
@@ -145,6 +158,21 @@
         >
           {{ t('ck.build_index_button') }}
         </x-button>
+
+        <!-- 构建中状态：显示横向进度条 + 取消按钮 -->
+        <div v-else class="building-section">
+          <div class="progress-container">
+            <div class="progress-bar-wrapper">
+              <div class="progress-bar">
+                <div class="progress-fill" :style="{ width: buildProgress + '%' }"></div>
+              </div>
+              <span class="progress-text">{{ Math.round(buildProgress) }}%</span>
+            </div>
+          </div>
+          <x-button size="small" variant="secondary" @click="handleCancel">
+            {{ t('ck.cancel_build') }}
+          </x-button>
+        </div>
       </div>
 
       <div v-if="indexStatus.hasIndex" class="indexed-section">
@@ -350,5 +378,48 @@
     background: var(--color-danger);
     color: white;
     border-color: var(--color-danger);
+  }
+
+  .building-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  .progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+
+  .progress-bar-wrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+
+  .progress-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-300);
+    border-radius: var(--border-radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border-200);
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--color-primary);
+    transition: width 0.3s ease;
+    border-radius: var(--border-radius-sm);
+  }
+
+  .progress-text {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-200);
+    min-width: 45px;
+    text-align: right;
+    font-family: var(--font-family-mono);
   }
 </style>

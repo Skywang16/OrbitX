@@ -231,7 +231,9 @@ impl OpenAIProvider {
                 .map(|tc| {
                     let id = tc["id"]
                         .as_str()
-                        .ok_or(OpenAiError::MissingField { field: "tool_calls[].id" })?
+                        .ok_or(OpenAiError::MissingField {
+                            field: "tool_calls[].id",
+                        })?
                         .to_string();
                     let function = &tc["function"];
                     let name = function["name"]
@@ -281,9 +283,20 @@ impl OpenAIProvider {
     /// 处理 API 错误响应
     fn handle_error_response(&self, status: StatusCode, body: &str) -> OpenAiError {
         if let Ok(error_json) = serde_json::from_str::<Value>(body) {
-            if let Some(error_obj) = error_json["error"].as_object() {
-                let error_type = error_obj["type"].as_str().unwrap_or("unknown");
-                let error_message = error_obj["message"].as_str().unwrap_or("Unknown error");
+            if let Some(error_obj) = error_json.get("error").and_then(|v| v.as_object()) {
+                // 兼容不同的 OpenAI 兼容 API：
+                // - 标准 OpenAI: 使用 "type" 字段
+                // - ModelScope 等: 使用 "code" 字段
+                let error_type = error_obj
+                    .get("type")
+                    .or_else(|| error_obj.get("code"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+
+                let error_message = error_obj
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown error");
 
                 let message = match error_type {
                     "insufficient_quota" => format!("Quota exceeded: {}", error_message),
@@ -297,7 +310,7 @@ impl OpenAIProvider {
         }
         OpenAiError::Api {
             status,
-            message: format!("Unexpected response: {}", body),
+            message: format!("意外的响应: {}", body),
         }
     }
 
@@ -457,7 +470,9 @@ impl OpenAIProvider {
         for (i, item) in data_array.iter().enumerate() {
             let embedding_vec = item["embedding"]
                 .as_array()
-                .ok_or(OpenAiError::EmbeddingField { field: "data[].embedding" })?
+                .ok_or(OpenAiError::EmbeddingField {
+                    field: "data[].embedding",
+                })?
                 .iter()
                 .map(|v| v.as_f64().unwrap_or(0.0) as f32)
                 .collect::<Vec<f32>>();
@@ -524,7 +539,8 @@ impl LLMProvider for OpenAIProvider {
     async fn call_stream(
         &self,
         mut request: LLMRequest,
-    ) -> LlmProviderResult<Pin<Box<dyn Stream<Item = LlmProviderResult<LLMStreamChunk>> + Send>>> {
+    ) -> LlmProviderResult<Pin<Box<dyn Stream<Item = LlmProviderResult<LLMStreamChunk>> + Send>>>
+    {
         request.stream = true;
         let url = self.get_endpoint();
         let headers = self.get_headers();
