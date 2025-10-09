@@ -61,12 +61,11 @@ const initializeServices = async () => {
 const initializeOpacity = async () => {
   try {
     const config = await configApi.getConfig()
-
-    if (config.appearance.opacity !== undefined) {
-      await windowApi.setWindowOpacity(config.appearance.opacity)
-    }
+    const opacity = config.appearance.opacity !== undefined ? config.appearance.opacity : 1.0
+    document.documentElement.style.setProperty('--bg-opacity', opacity.toString())
   } catch (error) {
     console.warn('初始化透明度失败:', error)
+    document.documentElement.style.setProperty('--bg-opacity', '1.0')
   }
 }
 

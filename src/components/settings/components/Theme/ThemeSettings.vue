@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n'
   import { useThemeStore } from '@/stores/theme'
   import { windowApi } from '@/api/window'
+  import { setWindowOpacity, getWindowOpacity } from '@/api/window/opacity'
   import { configApi } from '@/api/config'
   import { XSelect } from '@/ui'
   import type { SelectOption } from '@/ui'
@@ -139,7 +140,7 @@
     }
 
     opacityTimeout = setTimeout(async () => {
-      await windowApi.setWindowOpacity(opacity.value)
+      await setWindowOpacity(opacity.value)
       await saveOpacityToConfig()
     }, 100)
   }
@@ -162,7 +163,7 @@
       if (config.appearance.opacity !== undefined) {
         opacity.value = config.appearance.opacity
       } else {
-        const currentOpacity = await windowApi.getWindowOpacity()
+        const currentOpacity = await getWindowOpacity()
         opacity.value = currentOpacity
       }
     } catch (error) {
@@ -301,15 +302,15 @@
             </div>
           </div>
           <div class="settings-item-control">
-            <input
-              v-model.number="opacity"
-              type="range"
-              min="0.1"
-              max="1.0"
-              step="0.01"
-              class="settings-slider"
-              @input="handleOpacityChange"
-            />
+          <input
+            v-model.number="opacity"
+            type="range"
+            min="0.05"
+            max="1"
+            step="0.01"
+            class="settings-slider"
+            @input="handleOpacityChange"
+          />
             <span class="settings-value">{{ Math.round(opacity * 100) }}%</span>
           </div>
         </div>

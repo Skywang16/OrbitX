@@ -1,36 +1,6 @@
 import type { Theme } from '@/types'
 
 /**
- * 获取应用的主背景颜色
- * 从CSS变量中读取当前应用的背景颜色
- *
- * @returns 应用背景颜色字符串，如果无法获取则返回null
- */
-const getAppBackgroundColor = (): string | null => {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return null
-  }
-
-  const rootElement = document.documentElement
-  const computedStyle = window.getComputedStyle(rootElement)
-
-  const backgroundColor = computedStyle.getPropertyValue('--bg-200').trim()
-
-  if (backgroundColor && backgroundColor !== '') {
-    return backgroundColor
-  }
-
-  const bodyStyle = window.getComputedStyle(document.body)
-  const bodyBackground = bodyStyle.backgroundColor
-
-  if (bodyBackground && bodyBackground !== 'rgba(0, 0, 0, 0)' && bodyBackground !== 'transparent') {
-    return bodyBackground
-  }
-
-  return null
-}
-
-/**
  * XTerm.js 主题接口
  * 基于 XTerm.js 官方文档定义
  */
@@ -94,11 +64,10 @@ export interface XTermTheme {
  * @returns XTerm.js 主题对象
  */
 export const convertThemeToXTerm = (theme: Theme): XTermTheme => {
-  const appBackground = getAppBackgroundColor()
-
   return {
     foreground: theme.ui.text_200,
-    background: appBackground || theme.ui.bg_100,
+
+    background: 'transparent',
     cursor: theme.ui.text_100,
     selectionBackground: theme.ui.selection,
 
@@ -129,11 +98,9 @@ export const convertThemeToXTerm = (theme: Theme): XTermTheme => {
  * @returns 默认的 XTerm.js 主题对象
  */
 export const createDefaultXTermTheme = (): XTermTheme => {
-  const appBackground = getAppBackgroundColor() || '#1e1e1e'
-
   return {
     foreground: '#f0f0f0',
-    background: appBackground,
+    background: 'transparent',
     cursor: '#ffffff',
     selectionBackground: '#3391ff',
 

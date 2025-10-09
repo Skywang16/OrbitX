@@ -316,7 +316,6 @@
     padding-left: var(--spacing-sm);
     gap: var(--spacing-xs);
     position: relative;
-    background: var(--bg-200);
   }
 
   .tab-bar {
@@ -487,7 +486,7 @@
     transform: translateY(-50%);
     height: 10px;
     width: 1px;
-    background-color: var(--text-500);
+    background-color: rgba(255, 255, 255, 0.2);
   }
 
   .path-info {

@@ -2,6 +2,7 @@ import { useTabManagerStore } from '@/stores/TabManager'
 import { useTerminalStore } from '@/stores/Terminal'
 
 import { windowApi } from '@/api/window'
+import { setWindowOpacity, getWindowOpacity } from '@/api/window/opacity'
 import { useAIChatStore } from '@/components/AIChatSidebar'
 import { useWindowStore } from '@/stores/Window'
 
@@ -115,16 +116,16 @@ export class ShortcutActionsService {
   }
 
   async increaseOpacity(): Promise<boolean> {
-    const currentOpacity = await windowApi.getWindowOpacity()
+    const currentOpacity = await getWindowOpacity()
     const newOpacity = Math.min(currentOpacity + 0.05, 1.0)
-    await windowApi.setWindowOpacity(newOpacity)
+    await setWindowOpacity(newOpacity)
     return true
   }
 
   async decreaseOpacity(): Promise<boolean> {
-    const currentOpacity = await windowApi.getWindowOpacity()
-    const newOpacity = Math.max(currentOpacity - 0.05, 0.1)
-    await windowApi.setWindowOpacity(newOpacity)
+    const currentOpacity = await getWindowOpacity()
+    const newOpacity = Math.max(currentOpacity - 0.05, 0.05)
+    await setWindowOpacity(newOpacity)
     return true
   }
 

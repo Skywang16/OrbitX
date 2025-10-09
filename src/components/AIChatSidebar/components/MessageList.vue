@@ -144,7 +144,7 @@
 
   .empty-hint {
     font-size: var(--font-size-sm);
-    opacity: 0.7;
+    color: var(--text-200);
   }
 
   .message-container {

@@ -558,6 +558,23 @@
   }
 
   /**
+   * 处理透明度变化事件
+   * 当窗口透明度改变时刷新终端显示
+   */
+  const handleOpacityChange = () => {
+    if (!terminal.value) return
+
+    try {
+      // 刷新终端显示以确保透明度正确应用
+      if (terminal.value.rows > 0) {
+        terminal.value.refresh(0, terminal.value.rows - 1)
+      }
+    } catch (error) {
+      console.warn('Failed to refresh terminal on opacity change:', error)
+    }
+  }
+
+  /**
    * 聚焦终端
    * 使终端获得焦点，允许用户输入
    */
@@ -754,6 +771,8 @@
 
       addDomListener(document, 'open-terminal-search', handleOpenTerminalSearchEvent)
 
+      addDomListener(window, 'opacity-changed', handleOpacityChange)
+
       await shellIntegration.initShellIntegration(terminal.value)
       await nextTick()
 
@@ -884,12 +903,15 @@
     height: 100%;
     width: 100%;
     padding: 10px 10px 0 10px;
+    /* 透明背景 */
+    background: transparent;
   }
 
   .terminal-container {
     height: 100%;
     width: 100%;
-    background: var(--bg-100);
+    /* 完全透明，继承窗口统一背景 */
+    background: transparent;
     overflow: hidden;
   }
 
@@ -902,6 +924,7 @@
     /* 优化滚动性能 */
     overscroll-behavior: contain;
     scroll-behavior: auto;
+    background-color: transparent !important;
   }
 
   :global(.xterm-link-layer a) {

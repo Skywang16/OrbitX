@@ -11,7 +11,7 @@ export const TERMINAL_CONFIG: TerminalConfig = {
     '"JetBrainsMono Nerd Font", "FiraCode Nerd Font", "Fira Code", "JetBrains Mono", Menlo, Monaco, "SF Mono", "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", "Source Han Sans CN", "WenQuanYi Micro Hei", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Courier New", monospace',
   fontSize: 14,
   allowProposedApi: true,
-  allowTransparency: false,
+  allowTransparency: true,
   cursorBlink: true,
   theme: {
     background: '#1e1e1e',

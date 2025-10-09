@@ -2,10 +2,14 @@
   import TerminalView from '@/views/Terminal/TerminalView.vue'
   import { OnboardingView } from '@/components/Onboarding'
   import { useShortcutListener } from '@/shortcuts'
+  import { useWindowOpacity } from '@/composables/useWindowOpacity'
   import { createStorage } from '@/utils/storage'
   import { onMounted, ref } from 'vue'
 
   const { reloadConfig } = useShortcutListener()
+
+  // 初始化透明度管理
+  useWindowOpacity()
 
   // 首次启动状态管理
   const onboardingStorage = createStorage<boolean>('orbitx-onboarding-completed')
