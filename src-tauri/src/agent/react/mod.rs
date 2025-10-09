@@ -10,7 +10,6 @@ pub use types::*;
 use regex::Regex;
 
 /// Parse the agent's thinking segment from a raw LLM text response.
-/// This mirrors the front-end eko parser semantics by supporting multiple patterns.
 pub fn parse_thinking(text: &str) -> Option<String> {
     let patterns = [
         r"(?s)<thinking>(.*?)</thinking>",
