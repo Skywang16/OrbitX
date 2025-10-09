@@ -4,7 +4,8 @@ use std::path::Path;
 use walkdir::WalkDir;
 
 use super::{
-    SearchProgressCallback, extract_content_from_span, find_nearest_index_root, resolve_index_dir,
+    SearchProgressCallback, extract_content_from_span, find_nearest_index_root,
+    resolve_model_from_root,
 };
 
 /// New semantic search implementation using span-based storage
@@ -25,29 +26,14 @@ pub async fn semantic_search_v3_with_progress(
         }
     });
 
-    let mut index_dir = resolve_index_dir(&index_root);
-    tracing::debug!(
-        "semantic_v3: resolved index_root={}, initial index_dir={}, exists={}",
-        index_root.display(),
-        index_dir.display(),
-        index_dir.exists()
-    );
+    // Prefer .oxi, fallback to .ck
+    let index_dir_oxi = index_root.join(".oxi");
+    let index_dir = if index_dir_oxi.exists() { index_dir_oxi } else { index_root.join(".ck") };
     if !index_dir.exists() {
-        // Fallback: prefer new default .oxi if present
-        let fallback = index_root.join(".oxi");
-        if fallback.exists() {
-            index_dir = fallback;
-            tracing::debug!(
-                "semantic_v3: fallback to .oxi index_dir={}, exists={}",
-                index_dir.display(),
-                index_dir.exists()
-            );
-        } else {
         return Err(CkError::Index(
-            "No index found. Run 'ck --index' first with embeddings.".to_string(),
+            "Index creation failed. Please try running 'ck --index' explicitly.".to_string(),
         )
         .into());
-        }
     }
 
     if let Some(ref callback) = progress_callback {
@@ -57,23 +43,12 @@ pub async fn semantic_search_v3_with_progress(
     // Collect all sidecar files and their embeddings
     let mut file_chunks: Vec<(std::path::PathBuf, ck_index::ChunkEntry)> = Vec::new();
 
-    // Determine expected sidecar extension from index dir
-    let expected_ext = if index_dir
-        .file_name()
-        .and_then(|n| n.to_str())
-        .map(|n| n == ".oxi")
-        .unwrap_or(false)
-    {
-        "oxi"
-    } else {
-        "ck"
-    };
-
     for entry in WalkDir::new(&index_dir) {
         let entry = entry?;
         if entry.file_type().is_file() {
             let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some(expected_ext) {
+            let ext = path.extension().and_then(|s| s.to_str());
+            if ext == Some("oxi") || ext == Some("ck") {
                 // Load the sidecar file
                 if let Ok(index_entry) = ck_index::load_index_entry(path) {
                     let original_file = reconstruct_original_path(path, &index_dir, &index_root);
@@ -108,17 +83,15 @@ pub async fn semantic_search_v3_with_progress(
         callback("Loading embedding model...");
     }
 
-    // Read the model configuration from the index manifest
-    let manifest_path = index_dir.join("manifest.json");
-    let resolved_model = if manifest_path.exists() {
-        let manifest_data = std::fs::read(&manifest_path)?;
-        let manifest: ck_index::IndexManifest = serde_json::from_slice(&manifest_data)?;
-        manifest.embedding_model.clone()
-    } else {
-        None // Use default model for old indexes
-    };
+    let resolved_model = resolve_model_from_root(&index_root, options.embedding_model.as_deref())?;
+    if let Some(ref callback) = progress_callback {
+        callback(&format!(
+            "Using embedding model {} ({} dims)",
+            resolved_model.alias, resolved_model.dimensions
+        ));
+    }
 
-    let mut embedder = ck_embed::create_embedder(resolved_model.as_deref())?;
+    let mut embedder = ck_embed::create_embedder(Some(resolved_model.canonical_name.as_str()))?;
     let query_embeddings = embedder.embed(std::slice::from_ref(&options.query))?;
 
     if query_embeddings.is_empty() {
@@ -185,13 +158,26 @@ pub async fn semantic_search_v3_with_progress(
             continue;
         }
 
-        // Extract content from the file using the span
+        // Extract content from the file using the span, skip if file doesn't exist
         let content = if options.full_section {
-            extract_content_from_span(file_path, &chunk.span).await?
+            match extract_content_from_span(file_path, &chunk.span).await {
+                Ok(content) => content,
+                Err(_) => {
+                    // Skip files that no longer exist (stale index entries)
+                    continue;
+                }
+            }
         } else {
-            let full_content = extract_content_from_span(file_path, &chunk.span).await?;
-            // Take first 3 lines for preview
-            full_content.lines().take(3).collect::<Vec<_>>().join("\n")
+            match extract_content_from_span(file_path, &chunk.span).await {
+                Ok(full_content) => {
+                    // Take first 3 lines for preview
+                    full_content.lines().take(3).collect::<Vec<_>>().join("\n")
+                }
+                Err(_) => {
+                    // Skip files that no longer exist (stale index entries)
+                    continue;
+                }
+            }
         };
 
         let search_result = SearchResult {
@@ -235,14 +221,23 @@ pub async fn semantic_search_v3_with_progress(
 
                 match reranker.rerank(&options.query, &documents) {
                     Ok(rerank_results) => {
+                        // Create a map from document text to indices for handling duplicates
+                        let mut doc_to_indices: std::collections::HashMap<String, Vec<usize>> =
+                            std::collections::HashMap::new();
+                        for (i, result) in results.iter().enumerate() {
+                            doc_to_indices
+                                .entry(result.preview.clone())
+                                .or_default()
+                                .push(i);
+                        }
+
                         // Update results with reranked scores
                         // The reranker returns results in reranked order, so we match by document text
                         for rerank_result in rerank_results.iter() {
-                            if let Some(result) = results
-                                .iter_mut()
-                                .find(|r| r.preview == rerank_result.document)
+                            if let Some(indices) = doc_to_indices.get_mut(&rerank_result.document)
+                                && let Some(idx) = indices.pop()
                             {
-                                result.score = rerank_result.score;
+                                results[idx].score = rerank_result.score;
                             }
                         }
 
@@ -284,20 +279,13 @@ fn reconstruct_original_path(
     let relative_path = sidecar_path.strip_prefix(index_dir).ok()?;
     let mut original_path = relative_path.with_extension("");
 
-    // Determine expected extension from index dir and strip only that
-    let expected_ext = if index_dir
-        .file_name()
-        .and_then(|n| n.to_str())
-        .map(|n| n == ".oxi")
-        .unwrap_or(false)
-    {
-        ".oxi"
-    } else {
-        ".ck"
-    };
+    // Handle the .oxi or .ck suffix present in the filename
     if let Some(name) = original_path.file_name() {
         let name_str = name.to_string_lossy();
-        if let Some(original_name) = name_str.strip_suffix(expected_ext) {
+        if let Some(original_name) = name_str
+            .strip_suffix(".oxi")
+            .or_else(|| name_str.strip_suffix(".ck"))
+        {
             let mut new_path = original_path.clone();
             new_path.set_file_name(original_name);
             original_path = new_path;

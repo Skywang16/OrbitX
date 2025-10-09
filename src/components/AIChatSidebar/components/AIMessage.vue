@@ -41,7 +41,7 @@
   <div class="ai-message">
     <!-- 双轨架构：只基于steps渲染 -->
     <template v-if="message.steps && message.steps.length > 0">
-      <template v-for="(step, index) in sortedSteps" :key="`${step.timestamp}-${index}`">
+      <template v-for="(step, index) in sortedSteps" :key="step.metadata?.stepId || `fallback-${index}`">
         <!-- 使用 ThinkingBlock 组件 -->
         <ThinkingBlock v-if="step.stepType === 'thinking'" :step="step" />
 

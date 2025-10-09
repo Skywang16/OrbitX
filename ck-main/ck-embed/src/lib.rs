@@ -12,6 +12,7 @@ pub use tokenizer::TokenEstimator;
 pub trait Embedder: Send + Sync {
     fn id(&self) -> &'static str;
     fn dim(&self) -> usize;
+    fn model_name(&self) -> &str;
     fn embed(&mut self, texts: &[String]) -> Result<Vec<Vec<f32>>>;
 }
 
@@ -37,16 +38,16 @@ pub fn create_embedder_with_progress(
 
     #[cfg(not(feature = "fastembed"))]
     {
-        let _ = model; // Suppress unused variable warning
         if let Some(callback) = progress_callback {
             callback("Using dummy embedder (no model download required)");
         }
-        Ok(Box::new(DummyEmbedder::new()))
+        Ok(Box::new(DummyEmbedder::new_with_model(model)))
     }
 }
 
 pub struct DummyEmbedder {
     dim: usize,
+    model_name: String,
 }
 
 impl Default for DummyEmbedder {
@@ -57,7 +58,17 @@ impl Default for DummyEmbedder {
 
 impl DummyEmbedder {
     pub fn new() -> Self {
-        Self { dim: 384 } // Match default BGE model
+        Self {
+            dim: 384, // Match default BGE model
+            model_name: "dummy".to_string(),
+        }
+    }
+
+    pub fn new_with_model(model_name: &str) -> Self {
+        Self {
+            dim: 384, // Match default BGE model
+            model_name: model_name.to_string(),
+        }
     }
 }
 
@@ -70,6 +81,10 @@ impl Embedder for DummyEmbedder {
         self.dim
     }
 
+    fn model_name(&self) -> &str {
+        &self.model_name
+    }
+
     fn embed(&mut self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         Ok(texts.iter().map(|_| vec![0.0; self.dim]).collect())
     }
@@ -79,6 +94,7 @@ impl Embedder for DummyEmbedder {
 pub struct FastEmbedder {
     model: fastembed::TextEmbedding,
     dim: usize,
+    model_name: String,
 }
 
 #[cfg(feature = "fastembed")]
@@ -178,6 +194,7 @@ impl FastEmbedder {
         Ok(Self {
             model: embedding,
             dim,
+            model_name: model_name.to_string(),
         })
     }
 
@@ -212,6 +229,10 @@ impl Embedder for FastEmbedder {
 
     fn dim(&self) -> usize {
         self.dim
+    }
+
+    fn model_name(&self) -> &str {
+        &self.model_name
     }
 
     fn embed(&mut self, texts: &[String]) -> Result<Vec<Vec<f32>>> {

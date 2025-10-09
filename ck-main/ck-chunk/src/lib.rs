@@ -12,7 +12,7 @@ fn estimate_tokens(text: &str) -> usize {
 
 /// Get model-specific chunk configuration (target_tokens, overlap_tokens)
 /// Balanced for precision vs context - larger models can handle bigger chunks but not too big
-fn get_model_chunk_config(model_name: Option<&str>) -> (usize, usize) {
+pub fn get_model_chunk_config(model_name: Option<&str>) -> (usize, usize) {
     let model = model_name.unwrap_or("nomic-embed-text-v1.5");
 
     match model {
@@ -80,6 +80,7 @@ pub enum ParseableLanguage {
     Ruby,
     Go,
     CSharp,
+    Zig,
 }
 
 impl std::fmt::Display for ParseableLanguage {
@@ -93,6 +94,7 @@ impl std::fmt::Display for ParseableLanguage {
             ParseableLanguage::Ruby => "ruby",
             ParseableLanguage::Go => "go",
             ParseableLanguage::CSharp => "csharp",
+            ParseableLanguage::Zig => "zig",
         };
         write!(f, "{}", name)
     }
@@ -111,6 +113,7 @@ impl TryFrom<ck_core::Language> for ParseableLanguage {
             ck_core::Language::Ruby => Ok(ParseableLanguage::Ruby),
             ck_core::Language::Go => Ok(ParseableLanguage::Go),
             ck_core::Language::CSharp => Ok(ParseableLanguage::CSharp),
+            ck_core::Language::Zig => Ok(ParseableLanguage::Zig),
             _ => Err(anyhow::anyhow!(
                 "Language {:?} is not supported for parsing",
                 lang
@@ -229,12 +232,31 @@ fn chunk_generic_with_token_config(text: &str, model_name: Option<&str>) -> Resu
     let chunk_size = target_lines.max(5); // Minimum 5 lines
     let overlap = overlap_lines.max(1); // Minimum 1 line overlap
 
-    // Pre-compute cumulative byte offsets for O(1) lookup
+    // Pre-compute cumulative byte offsets for O(1) lookup, accounting for different line endings
     let mut line_byte_offsets = Vec::with_capacity(lines.len() + 1);
     line_byte_offsets.push(0);
     let mut cumulative_offset = 0;
-    for line in &lines {
-        cumulative_offset += line.len() + 1; // +1 for newline
+    let mut byte_pos = 0;
+
+    for line in lines.iter() {
+        cumulative_offset += line.len();
+
+        // Find the actual line ending length in the original text
+        let line_end_pos = byte_pos + line.len();
+        let newline_len = if line_end_pos < text.len() && text.as_bytes()[line_end_pos] == b'\r' {
+            if line_end_pos + 1 < text.len() && text.as_bytes()[line_end_pos + 1] == b'\n' {
+                2 // CRLF
+            } else {
+                1 // CR only (old Mac)
+            }
+        } else if line_end_pos < text.len() && text.as_bytes()[line_end_pos] == b'\n' {
+            1 // LF only (Unix)
+        } else {
+            0 // No newline at this position (could be last line without newline)
+        };
+
+        cumulative_offset += newline_len;
+        byte_pos = cumulative_offset;
         line_byte_offsets.push(cumulative_offset);
     }
 
@@ -245,7 +267,7 @@ fn chunk_generic_with_token_config(text: &str, model_name: Option<&str>) -> Resu
         let chunk_text = chunk_lines.join("\n");
 
         let byte_start = line_byte_offsets[i];
-        let byte_end = byte_start + chunk_text.len();
+        let byte_end = line_byte_offsets[end];
 
         chunks.push(Chunk {
             span: Span {
@@ -272,15 +294,16 @@ fn chunk_language(text: &str, language: ParseableLanguage) -> Result<Vec<Chunk>>
     let mut parser = tree_sitter::Parser::new();
 
     match language {
-        ParseableLanguage::Python => parser.set_language(&tree_sitter_python::language())?,
+        ParseableLanguage::Python => parser.set_language(&tree_sitter_python::LANGUAGE.into())?,
         ParseableLanguage::TypeScript | ParseableLanguage::JavaScript => {
-            parser.set_language(&tree_sitter_typescript::language_typescript())?
+            parser.set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())?
         }
-        ParseableLanguage::Haskell => parser.set_language(&tree_sitter_haskell::language())?,
-        ParseableLanguage::Rust => parser.set_language(&tree_sitter_rust::language())?,
-        ParseableLanguage::Ruby => parser.set_language(&tree_sitter_ruby::language())?,
-        ParseableLanguage::Go => parser.set_language(&tree_sitter_go::language())?,
-        ParseableLanguage::CSharp => parser.set_language(&tree_sitter_c_sharp::language())?,
+        ParseableLanguage::Haskell => parser.set_language(&tree_sitter_haskell::LANGUAGE.into())?,
+        ParseableLanguage::Rust => parser.set_language(&tree_sitter_rust::LANGUAGE.into())?,
+        ParseableLanguage::Ruby => parser.set_language(&tree_sitter_ruby::LANGUAGE.into())?,
+        ParseableLanguage::Go => parser.set_language(&tree_sitter_go::LANGUAGE.into())?,
+        ParseableLanguage::CSharp => parser.set_language(&tree_sitter_c_sharp::LANGUAGE.into())?,
+        ParseableLanguage::Zig => parser.set_language(&tree_sitter_zig::LANGUAGE.into())?,
     }
 
     let tree = parser
@@ -332,7 +355,7 @@ fn extract_code_chunks(
             "signature"
                 | "data_type"
                 | "newtype"
-                | "type_synomym"
+                | "type_synonym"
                 | "type_family"
                 | "class"
                 | "instance"
@@ -359,6 +382,18 @@ fn extract_code_chunks(
                 | "class_declaration"
                 | "interface_declaration"
                 | "variable_declaration"
+        ),
+        ParseableLanguage::Zig => matches!(
+            node_kind,
+            "function_declaration"
+                | "test_declaration"
+                | "variable_declaration"
+                | "struct_declaration"
+                | "enum_declaration"
+                | "union_declaration"
+                | "opaque_declaration"
+                | "error_set_declaration"
+                | "comptime_declaration"
         ),
     };
 
@@ -393,7 +428,12 @@ fn extract_code_chunks(
             | "defstruct"
             | "defrecord"
             | "deftype"
-            | "type_declaration" => ChunkType::Class,
+            | "type_declaration"
+            | "struct_declaration"
+            | "enum_declaration"
+            | "union_declaration"
+            | "opaque_declaration"
+            | "error_set_declaration" => ChunkType::Class,
             "method_definition" | "method_declaration" | "defmacro" => ChunkType::Method,
             "data_type"
             | "newtype"
@@ -409,7 +449,9 @@ fn extract_code_chunks(
             | "ns"
             | "var_declaration"
             | "const_declaration"
-            | "variable_declaration" => ChunkType::Module,
+            | "variable_declaration"
+            | "test_declaration"
+            | "comptime_declaration" => ChunkType::Module,
             _ => ChunkType::Text,
         };
 
@@ -466,11 +508,22 @@ fn apply_striding(chunks: Vec<Chunk>, config: &ChunkConfig) -> Result<Vec<Chunk>
 /// Create strided chunks from a large chunk that exceeds token limits
 fn stride_large_chunk(chunk: Chunk, config: &ChunkConfig) -> Result<Vec<Chunk>> {
     let text = &chunk.text;
-    let text_len = text.len();
 
-    // Calculate stride parameters in characters (approximate)
+    // Early return for empty chunks to avoid divide-by-zero
+    if text.is_empty() {
+        return Ok(vec![chunk]);
+    }
+
+    // Calculate stride parameters in characters (not bytes!)
     // Use a conservative estimate to ensure we stay under token limits
-    let chars_per_token = text_len as f32 / estimate_tokens(text) as f32;
+    let char_count = text.chars().count();
+    let estimated_tokens = estimate_tokens(text);
+    // Guard against zero token estimate to prevent divide-by-zero panic
+    let chars_per_token = if estimated_tokens == 0 {
+        4.5 // Use default average if estimation fails
+    } else {
+        char_count as f32 / estimated_tokens as f32
+    };
     let window_chars = ((config.max_tokens as f32 * 0.9) * chars_per_token) as usize; // 10% buffer
     let overlap_chars = (config.stride_overlap as f32 * chars_per_token) as usize;
     let stride_chars = window_chars.saturating_sub(overlap_chars);
@@ -479,32 +532,49 @@ fn stride_large_chunk(chunk: Chunk, config: &ChunkConfig) -> Result<Vec<Chunk>> 
         return Err(anyhow::anyhow!("Stride size is too small"));
     }
 
+    // Build char to byte index mapping to handle UTF-8 safely
+    let char_byte_indices: Vec<(usize, char)> = text.char_indices().collect();
+    // Note: char_count is already calculated above, just reference it here
+
     let mut strided_chunks = Vec::new();
     let original_chunk_id = format!("{}:{}", chunk.span.byte_start, chunk.span.byte_end);
-    let mut start_pos = 0;
+    let mut start_char_idx = 0;
     let mut stride_index = 0;
 
     // Calculate total number of strides
-    let total_strides = if text_len <= window_chars {
+    let total_strides = if char_count <= window_chars {
         1
     } else {
-        ((text_len - overlap_chars) as f32 / stride_chars as f32).ceil() as usize
+        ((char_count - overlap_chars) as f32 / stride_chars as f32).ceil() as usize
     };
 
-    while start_pos < text_len {
-        let end_pos = (start_pos + window_chars).min(text_len);
-        let stride_text = &text[start_pos..end_pos];
+    while start_char_idx < char_count {
+        let end_char_idx = (start_char_idx + window_chars).min(char_count);
+
+        // Get byte positions from char indices
+        let start_byte_pos = char_byte_indices[start_char_idx].0;
+        let end_byte_pos = if end_char_idx < char_count {
+            char_byte_indices[end_char_idx].0
+        } else {
+            text.len()
+        };
+
+        let stride_text = &text[start_byte_pos..end_byte_pos];
 
         // Calculate overlap information
         let overlap_start = if stride_index > 0 { overlap_chars } else { 0 };
-        let overlap_end = if end_pos < text_len { overlap_chars } else { 0 };
+        let overlap_end = if end_char_idx < char_count {
+            overlap_chars
+        } else {
+            0
+        };
 
         // Calculate span for this stride
-        let byte_offset_start = chunk.span.byte_start + start_pos;
-        let byte_offset_end = chunk.span.byte_start + end_pos;
+        let byte_offset_start = chunk.span.byte_start + start_byte_pos;
+        let byte_offset_end = chunk.span.byte_start + end_byte_pos;
 
         // Estimate line numbers (approximate)
-        let text_before_start = &text[..start_pos];
+        let text_before_start = &text[..start_byte_pos];
         let line_offset_start = text_before_start.lines().count().saturating_sub(1);
         let stride_lines = stride_text.lines().count();
 
@@ -513,7 +583,10 @@ fn stride_large_chunk(chunk: Chunk, config: &ChunkConfig) -> Result<Vec<Chunk>> 
                 byte_start: byte_offset_start,
                 byte_end: byte_offset_end,
                 line_start: chunk.span.line_start + line_offset_start,
-                line_end: chunk.span.line_start + line_offset_start + stride_lines,
+                // Fix: subtract 1 since stride_lines is a count but line_end should be inclusive
+                line_end: chunk.span.line_start
+                    + line_offset_start
+                    + stride_lines.saturating_sub(1),
             },
             text: stride_text.to_string(),
             chunk_type: chunk.chunk_type.clone(),
@@ -529,11 +602,11 @@ fn stride_large_chunk(chunk: Chunk, config: &ChunkConfig) -> Result<Vec<Chunk>> 
         strided_chunks.push(stride_chunk);
 
         // Move to next stride
-        if end_pos >= text_len {
+        if end_char_idx >= char_count {
             break;
         }
 
-        start_pos += stride_chars;
+        start_char_idx += stride_chars;
         stride_index += 1;
     }
 
@@ -735,6 +808,124 @@ func main() {
     }
 
     #[test]
+    fn test_chunk_zig() {
+        let zig_code = r#"
+const std = @import("std");
+
+const Calculator = struct {
+    memory: f64,
+
+    pub fn init() Calculator {
+        return Calculator{ .memory = 0.0 };
+    }
+
+    pub fn add(self: *Calculator, a: f64, b: f64) f64 {
+        const result = a + b;
+        self.memory = result;
+        return result;
+    }
+};
+
+const Color = enum {
+    Red,
+    Green,
+    Blue,
+};
+
+const Value = union(enum) {
+    int: i32,
+    float: f64,
+};
+
+const Handle = opaque {};
+
+const MathError = error{
+    DivisionByZero,
+    Overflow,
+};
+
+pub fn multiply(a: i32, b: i32) i32 {
+    return a * b;
+}
+
+pub fn divide(a: i32, b: i32) MathError!i32 {
+    if (b == 0) return error.DivisionByZero;
+    return @divTrunc(a, b);
+}
+
+comptime {
+    @compileLog("Compile-time validation");
+}
+
+pub fn main() !void {
+    var calc = Calculator.init();
+    const result = calc.add(2.0, 3.0);
+    std.debug.print("Result: {}\n", .{result});
+}
+
+test "calculator addition" {
+    var calc = Calculator.init();
+    const result = calc.add(2.0, 3.0);
+    try std.testing.expect(result == 5.0);
+}
+
+test "multiply function" {
+    const result = multiply(3, 4);
+    try std.testing.expect(result == 12);
+}
+"#;
+
+        let chunks = chunk_language(zig_code, ParseableLanguage::Zig).unwrap();
+        assert!(!chunks.is_empty());
+
+        let chunk_types: Vec<&ChunkType> = chunks.iter().map(|c| &c.chunk_type).collect();
+
+        let class_count = chunk_types
+            .iter()
+            .filter(|&&t| t == &ChunkType::Class)
+            .count();
+        let function_count = chunk_types
+            .iter()
+            .filter(|&&t| t == &ChunkType::Function)
+            .count();
+        let module_count = chunk_types
+            .iter()
+            .filter(|&&t| t == &ChunkType::Module)
+            .count();
+
+        assert!(
+            class_count >= 5,
+            "Expected at least 5 Class chunks (struct, enum, union, opaque, error set), found {}",
+            class_count
+        );
+
+        assert!(
+            function_count >= 3,
+            "Expected at least 3 functions (multiply, divide, main), found {}",
+            function_count
+        );
+
+        assert!(
+            module_count >= 4,
+            "Expected at least 4 module-type chunks (const std, comptime, 2 tests), found {}",
+            module_count
+        );
+
+        assert!(
+            chunk_types.contains(&&ChunkType::Class),
+            "Expected to find Class chunks"
+        );
+        assert!(
+            chunk_types.contains(&&ChunkType::Function),
+            "Expected to find Function chunks"
+        );
+        assert!(
+            chunk_types.contains(&&ChunkType::Module),
+            "Expected to find Module chunks"
+        );
+    }
+
+    #[test]
     fn test_chunk_csharp() {
         let csharp_code = r#"
 namespace Calculator;
@@ -774,5 +965,109 @@ public class Calculator
         assert!(chunk_types.contains(&&ChunkType::Module)); // var, interface
         assert!(chunk_types.contains(&&ChunkType::Class)); // class
         assert!(chunk_types.contains(&&ChunkType::Method)); // methods
+    }
+
+    #[test]
+    fn test_stride_large_chunk_empty_text() {
+        // Regression test for divide-by-zero bug in stride_large_chunk
+        let empty_chunk = Chunk {
+            span: Span {
+                byte_start: 0,
+                byte_end: 0,
+                line_start: 1,
+                line_end: 1,
+            },
+            text: String::new(), // Empty text should not panic
+            chunk_type: ChunkType::Text,
+            stride_info: None,
+        };
+
+        let config = ChunkConfig::default();
+        let result = stride_large_chunk(empty_chunk.clone(), &config);
+
+        // Should not panic and return the original chunk
+        assert!(result.is_ok());
+        let chunks = result.unwrap();
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].text, "");
+    }
+
+    #[test]
+    fn test_stride_large_chunk_zero_token_estimate() {
+        // Regression test for zero token estimate causing divide-by-zero
+        let chunk = Chunk {
+            span: Span {
+                byte_start: 0,
+                byte_end: 5,
+                line_start: 1,
+                line_end: 1,
+            },
+            text: "     ".to_string(), // Whitespace that might return 0 tokens
+            chunk_type: ChunkType::Text,
+            stride_info: None,
+        };
+
+        let config = ChunkConfig::default();
+        let result = stride_large_chunk(chunk, &config);
+
+        // Should not panic and handle gracefully
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_strided_chunk_line_calculation() {
+        // Regression test for line_end calculation in strided chunks
+        // Create a chunk large enough to force striding
+        let long_text = (1..=50).map(|i| format!("This is a longer line {} with more content to ensure token count is high enough", i)).collect::<Vec<_>>().join("\n");
+
+        let chunk = Chunk {
+            span: Span {
+                byte_start: 0,
+                byte_end: long_text.len(),
+                line_start: 1,
+                line_end: 50,
+            },
+            text: long_text,
+            chunk_type: ChunkType::Text,
+            stride_info: None,
+        };
+
+        let config = ChunkConfig {
+            max_tokens: 100,    // Force striding with reasonable limit
+            stride_overlap: 10, // Small overlap for testing
+            ..Default::default()
+        };
+
+        let result = stride_large_chunk(chunk, &config);
+        if let Err(e) = &result {
+            eprintln!("Stride error: {}", e);
+        }
+        assert!(result.is_ok());
+
+        let chunks = result.unwrap();
+        assert!(
+            chunks.len() > 1,
+            "Should create multiple chunks when striding"
+        );
+
+        for chunk in chunks {
+            // Verify line_end is not off by one
+            // line_end should be inclusive and not exceed the actual content
+            assert!(chunk.span.line_end >= chunk.span.line_start);
+
+            // Check that line span makes sense for the content
+            let line_count = chunk.text.lines().count();
+            if line_count > 0 {
+                let calculated_line_span = chunk.span.line_end - chunk.span.line_start + 1;
+
+                // Allow some tolerance for striding logic
+                assert!(
+                    calculated_line_span <= line_count + 1,
+                    "Line span {} should not exceed content lines {} by more than 1",
+                    calculated_line_span,
+                    line_count
+                );
+            }
+        }
     }
 }

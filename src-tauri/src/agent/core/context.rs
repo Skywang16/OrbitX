@@ -17,19 +17,20 @@ use crate::agent::config::{AgentConfig, TaskExecutionConfig};
 use crate::agent::context::FileContextTracker;
 use crate::agent::core::chain::Chain;
 use crate::agent::core::status::AgentTaskStatus;
+use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::events::TaskProgressPayload;
 use crate::agent::persistence::{
     now_timestamp, AgentExecution, AgentPersistence, ExecutionStatus, MessageRole,
 };
 use crate::agent::react::runtime::ReactRuntime;
 use crate::agent::react::types::ReactRuntimeConfig;
-use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::state::iteration::{IterationContext, IterationSnapshot};
 use crate::agent::state::manager::{
     StateEventEmitter, StateManager, TaskState, TaskStatus, TaskThresholds,
 };
 use crate::agent::state::session::SessionContext;
 use crate::agent::tokenizer::count_text_tokens;
+use crate::agent::tools::ToolRegistry;
 use crate::agent::types::{PlannedTask, TaskDetail};
 use crate::agent::ui::{AgentUiPersistence, UiStep};
 use crate::llm::types::{LLMMessage, LLMMessageContent, LLMMessagePart, LLMToolCall};
@@ -77,13 +78,14 @@ pub struct TaskContext {
 
     config: TaskExecutionConfig,
     session: Arc<SessionContext>,
+    tool_registry: Arc<ToolRegistry>,
     progress_channel: Arc<RwLock<Option<Channel<TaskProgressPayload>>>>,
     ui_state: Arc<Mutex<UiState>>,
 
     execution: Arc<RwLock<ExecutionState>>,
     planning: Arc<RwLock<PlanningState>>,
 
-    cancellation: CancellationToken,
+    cancellation: Arc<RwLock<CancellationToken>>,
     step_tokens: Arc<StdMutex<Vec<CancellationToken>>>,
     pause_status: Arc<AtomicU8>, // 0: running, 1: paused, 2: pause & abort current step
 
@@ -113,6 +115,10 @@ impl TaskContext {
             max_iterations: agent_config.max_react_num,
             max_idle_rounds: agent_config.max_react_idle_rounds,
         };
+
+        let dummy_registry = Arc::new(ToolRegistry::new(
+            crate::agent::tools::get_permissions_for_mode("agent"),
+        ));
 
         let dummy_execution = AgentExecution {
             id: -1,
@@ -199,11 +205,12 @@ impl TaskContext {
             cwd,
             config,
             session,
+            tool_registry: dummy_registry,
             progress_channel: Arc::new(RwLock::new(None)),
             ui_state: Arc::new(Mutex::new(UiState::default())),
             execution: Arc::new(RwLock::new(execution_state)),
             planning: Arc::new(RwLock::new(planning_state)),
-            cancellation: CancellationToken::new(),
+            cancellation: Arc::new(RwLock::new(CancellationToken::new())),
             step_tokens: Arc::new(StdMutex::new(Vec::new())),
             pause_status: Arc::new(AtomicU8::new(0)),
             react_runtime: Arc::new(RwLock::new(ReactRuntime::new(runtime_config))),
@@ -217,6 +224,7 @@ impl TaskContext {
         execution: AgentExecution,
         config: TaskExecutionConfig,
         cwd: String,
+        tool_registry: Arc<ToolRegistry>,
         progress_channel: Option<Channel<TaskProgressPayload>>,
         repositories: Arc<RepositoryManager>,
         agent_persistence: Arc<AgentPersistence>,
@@ -293,11 +301,12 @@ impl TaskContext {
             cwd,
             config,
             session,
+            tool_registry,
             progress_channel: Arc::new(RwLock::new(progress_channel)),
             ui_state: Arc::new(Mutex::new(UiState::default())),
             execution: Arc::new(RwLock::new(execution_state)),
             planning: Arc::new(RwLock::new(planning_state)),
-            cancellation: CancellationToken::new(),
+            cancellation: Arc::new(RwLock::new(CancellationToken::new())),
             step_tokens: Arc::new(StdMutex::new(Vec::new())),
             pause_status: Arc::new(AtomicU8::new(0)),
             react_runtime: Arc::new(RwLock::new(ReactRuntime::new(runtime_config))),
@@ -356,6 +365,10 @@ impl TaskContext {
 
     pub fn ui_persistence(&self) -> Arc<AgentUiPersistence> {
         self.session.ui_persistence()
+    }
+
+    pub fn tool_registry(&self) -> Arc<ToolRegistry> {
+        Arc::clone(&self.tool_registry)
     }
 
     /// Current status of the task.
@@ -586,15 +599,21 @@ impl TaskContext {
     }
 
     pub async fn check_aborted(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
-        if self.cancellation.is_cancelled() {
-            return Err(TaskExecutorError::TaskInterrupted.into());
+        {
+            let cancellation = self.cancellation.read().await;
+            if cancellation.is_cancelled() {
+                return Err(TaskExecutorError::TaskInterrupted.into());
+            }
         }
         if no_check_pause {
             return Ok(());
         }
         loop {
-            if self.cancellation.is_cancelled() {
-                return Err(TaskExecutorError::TaskInterrupted.into());
+            {
+                let cancellation = self.cancellation.read().await;
+                if cancellation.is_cancelled() {
+                    return Err(TaskExecutorError::TaskInterrupted.into());
+                }
             }
             let status = self.pause_status.load(Ordering::SeqCst);
             if status == 0 {
@@ -611,10 +630,22 @@ impl TaskContext {
 
     /// Abort the entire task execution.
     pub fn abort(&self) {
-        self.cancellation.cancel();
+        if let Ok(cancellation) = self.cancellation.try_read() {
+            cancellation.cancel();
+        }
         self.abort_current_steps();
         if let Ok(mut runtime) = self.react_runtime.try_write() {
             runtime.mark_abort();
+        }
+    }
+
+    /// 重置 cancellation token（用于中断后继续对话）
+    pub async fn reset_cancellation(&self) {
+        let mut cancellation = self.cancellation.write().await;
+        *cancellation = CancellationToken::new();
+        // 同时清空之前的 step tokens
+        if let Ok(mut tokens) = self.step_tokens.lock() {
+            tokens.clear();
         }
     }
 
@@ -636,7 +667,11 @@ impl TaskContext {
 
     /// Register a new cancellation token for an inner step (e.g., LLM call).
     pub fn register_step_token(&self) -> CancellationToken {
-        let token = self.cancellation.child_token();
+        let token = if let Ok(cancellation) = self.cancellation.try_read() {
+            cancellation.child_token()
+        } else {
+            CancellationToken::new()
+        };
         if let Ok(mut tokens) = self.step_tokens.lock() {
             tokens.push(token.clone());
         }
@@ -827,7 +862,6 @@ impl TaskContext {
     }
 
     pub async fn initialize_ui_track(&self, user_prompt: &str) -> TaskExecutorResult<()> {
-
         self.ui_persistence()
             .ensure_conversation(self.conversation_id, None)
             .await
@@ -856,7 +890,6 @@ impl TaskContext {
     }
 
     pub async fn begin_followup_turn(&self, user_prompt: &str) -> TaskExecutorResult<()> {
-
         self.ui_persistence()
             .ensure_conversation(self.conversation_id, None)
             .await
@@ -921,19 +954,7 @@ impl TaskContext {
                     "emit"
                 );
             }
-            TaskProgressPayload::Text(p) => {
-                info!(
-                    target: "task::event",
-                    seq,
-                    task_id = %self.task_id,
-                    event = "Text",
-                    iteration = p.iteration,
-                    stream_id = %p.stream_id,
-                    stream_done = p.stream_done,
-                    len = p.text.len(),
-                    ts = %p.timestamp,
-                    "emit"
-                );
+            TaskProgressPayload::Text(_p) => {
             }
             TaskProgressPayload::ToolUse(p) => {
                 info!(

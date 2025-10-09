@@ -273,6 +273,7 @@ fn build_search_options(
         full_section: false,
         rerank: false,
         rerank_model: None,
+        embedding_model: None,
     }
 }
 

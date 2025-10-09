@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -6,8 +6,8 @@ pub trait AnnIndex: Send + Sync {
     fn build(vectors: &[Vec<f32>]) -> Result<Self>
     where
         Self: Sized;
-    fn search(&self, query: &[f32], topk: usize) -> Vec<(u32, f32)>;
-    fn add(&mut self, id: u32, vector: &[f32]);
+    fn search(&self, query: &[f32], topk: usize) -> Result<Vec<(u32, f32)>>;
+    fn add(&mut self, id: u32, vector: &[f32]) -> Result<()>;
     fn save(&self, path: &Path) -> Result<()>;
     fn load(path: &Path) -> Result<Self>
     where
@@ -57,6 +57,21 @@ impl AnnIndex for SimpleIndex {
         }
 
         let dim = vectors[0].len();
+        if dim == 0 {
+            bail!(
+                "Embedding vectors are empty. The embedding model returned 0 values per vector. Re-run the command with a supported embedding model or rebuild the index."
+            );
+        }
+
+        for (i, vector) in vectors.iter().enumerate() {
+            if vector.len() != dim {
+                bail!(
+                    "Embedding size mismatch while building index: expected {dim} values but vector #{i} has {}. This usually means different embedding models were mixed. Clean the index (`ck --clean .`) and rebuild with a single model, or rerun your command using the same `--model` you originally indexed with.",
+                    vector.len()
+                );
+            }
+        }
+
         let ids: Vec<u32> = (0..vectors.len() as u32).collect();
 
         Ok(Self {
@@ -66,7 +81,21 @@ impl AnnIndex for SimpleIndex {
         })
     }
 
-    fn search(&self, query: &[f32], topk: usize) -> Vec<(u32, f32)> {
+    fn search(&self, query: &[f32], topk: usize) -> Result<Vec<(u32, f32)>> {
+        if self.dim == 0 {
+            bail!(
+                "The ANN index is empty. Reindex the repository before running semantic search (`ck --index`)."
+            );
+        }
+
+        if query.len() != self.dim {
+            bail!(
+                "Embedding size mismatch during search: this index stores vectors with {expected} values, but the query provided {actual}. This happens when different embedding models are mixed. Re-run the command with the original model or clean the index (`ck --clean .`) and rebuild with a single model.",
+                expected = self.dim,
+                actual = query.len()
+            );
+        }
+
         let mut similarities: Vec<_> = self
             .vectors
             .iter()
@@ -79,16 +108,25 @@ impl AnnIndex for SimpleIndex {
 
         similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         similarities.truncate(topk);
-        similarities
+        Ok(similarities)
     }
 
-    fn add(&mut self, id: u32, vector: &[f32]) {
+    fn add(&mut self, id: u32, vector: &[f32]) -> Result<()> {
         if self.dim == 0 {
             self.dim = vector.len();
         }
 
+        if vector.len() != self.dim {
+            bail!(
+                "Embedding size mismatch while updating index: expected {} values but received {}. To switch models, clean the index (`ck --clean .`) and rebuild with the new model. Otherwise rerun your command using the original `--model`.",
+                self.dim,
+                vector.len()
+            );
+        }
+
         self.vectors.push(vector.to_vec());
         self.ids.push(id);
+        Ok(())
     }
 
     fn save(&self, path: &Path) -> Result<()> {
@@ -193,7 +231,7 @@ mod tests {
 
         // Query closest to first vector
         let query = vec![0.9, 0.1, 0.0];
-        let results = index.search(&query, 2);
+        let results = index.search(&query, 2).unwrap();
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].0, 0); // First result should be vector 0
@@ -206,8 +244,8 @@ mod tests {
         let index = SimpleIndex::build(&vectors).unwrap();
 
         let query = vec![1.0, 0.0];
-        let results = index.search(&query, 5);
-        assert_eq!(results.len(), 0);
+        let err = index.search(&query, 5).unwrap_err();
+        assert!(err.to_string().contains("The ANN index is empty"));
     }
 
     #[test]
@@ -223,7 +261,7 @@ mod tests {
         let index = SimpleIndex::build(&vectors).unwrap();
 
         let query = vec![1.0, 0.0];
-        let results = index.search(&query, 3);
+        let results = index.search(&query, 3).unwrap();
 
         assert_eq!(results.len(), 3);
         // Results should be sorted by similarity (descending)
@@ -236,13 +274,13 @@ mod tests {
     fn test_add() {
         let mut index = SimpleIndex::new().unwrap();
 
-        index.add(100, &[1.0, 2.0, 3.0]);
+        index.add(100, &[1.0, 2.0, 3.0]).unwrap();
         assert_eq!(index.vectors.len(), 1);
         assert_eq!(index.ids.len(), 1);
         assert_eq!(index.ids[0], 100);
         assert_eq!(index.dim, 3);
 
-        index.add(200, &[4.0, 5.0, 6.0]);
+        index.add(200, &[4.0, 5.0, 6.0]).unwrap();
         assert_eq!(index.vectors.len(), 2);
         assert_eq!(index.ids.len(), 2);
         assert_eq!(index.ids[1], 200);
@@ -267,8 +305,8 @@ mod tests {
 
         // Test that loaded index works the same
         let query = vec![1.0, 2.0, 3.0];
-        let original_results = index.search(&query, 2);
-        let loaded_results = loaded_index.search(&query, 2);
+        let original_results = index.search(&query, 2).unwrap();
+        let loaded_results = loaded_index.search(&query, 2).unwrap();
 
         assert_eq!(original_results.len(), loaded_results.len());
         for (orig, loaded) in original_results.iter().zip(&loaded_results) {
@@ -287,7 +325,7 @@ mod tests {
         let index = SimpleIndex::build(&vectors).unwrap();
 
         let query = vec![1.0, 0.0];
-        let results = index.search(&query, 1);
+        let results = index.search(&query, 1).unwrap();
         assert!(!results.is_empty());
     }
 
@@ -305,14 +343,49 @@ mod tests {
 
         // Test search through trait
         let query = vec![1.0, 0.0, 0.0];
-        let results = index.search(&query, 1);
+        let results = index.search(&query, 1).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, 0);
 
         // Test add through trait
-        index.add(99, &[0.0, 0.0, 1.0]);
-        let results = index.search(&[0.0, 0.0, 1.0], 1);
+        index.add(99, &[0.0, 0.0, 1.0]).unwrap();
+        let results = index.search(&[0.0, 0.0, 1.0], 1).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, 99);
+    }
+
+    #[test]
+    fn test_build_rejects_mismatched_dimensions() {
+        let vectors = vec![vec![1.0, 0.0], vec![0.0, 1.0, 0.0]];
+        let err = match SimpleIndex::build(&vectors) {
+            Ok(_) => panic!("Expected build to fail for mismatched dimensions"),
+            Err(err) => err,
+        };
+        assert!(
+            err.to_string()
+                .contains("Embedding size mismatch while building index")
+        );
+    }
+
+    #[test]
+    fn test_add_rejects_mismatched_dimensions() {
+        let mut index = SimpleIndex::new().unwrap();
+        index.add(1, &[0.1, 0.2]).unwrap();
+        let err = index.add(2, &[0.1, 0.2, 0.3]).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Embedding size mismatch while updating index")
+        );
+    }
+
+    #[test]
+    fn test_search_rejects_mismatched_query() {
+        let vectors = vec![vec![1.0, 0.0, 0.0]];
+        let index = SimpleIndex::build(&vectors).unwrap();
+        let err = index.search(&[1.0, 0.0], 1).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Embedding size mismatch during search")
+        );
     }
 }

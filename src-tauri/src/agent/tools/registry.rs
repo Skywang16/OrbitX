@@ -9,6 +9,23 @@ use super::metadata::{RateLimitConfig, ToolCategory, ToolMetadata};
 use super::r#trait::{RunnableTool, ToolPermission, ToolResult, ToolResultContent, ToolSchema};
 use crate::agent::core::context::TaskContext;
 
+/// 根据 chat_mode 获取授予的权限集合
+pub fn get_permissions_for_mode(mode: &str) -> Vec<ToolPermission> {
+    match mode {
+        "chat" => vec![
+            ToolPermission::ReadOnly,
+            ToolPermission::Network,
+        ],
+        _ => vec![
+            // Agent 模式:全权限（包含 "agent" 和任何其他值）
+            ToolPermission::ReadOnly,
+            ToolPermission::FileSystem,
+            ToolPermission::SystemCommand,
+            ToolPermission::Network,
+        ],
+    }
+}
+
 struct RateLimiter {
     calls: Vec<Instant>,
     config: RateLimitConfig,
@@ -62,19 +79,15 @@ pub struct ToolExecutionStats {
 }
 
 impl ToolRegistry {
-    pub fn new() -> Self {
+    /// 唯一的构造函数 - 显式传递权限
+    pub fn new(granted: Vec<ToolPermission>) -> Self {
         Self {
             tools: Arc::new(DashMap::new()),
             metadata_index: Arc::new(DashMap::new()),
             category_index: Arc::new(DashMap::new()),
             rate_limiters: Arc::new(DashMap::new()),
             aliases: Arc::new(DashMap::new()),
-            granted_permissions: Arc::new(vec![
-                ToolPermission::ReadOnly,
-                ToolPermission::FileSystem,
-                ToolPermission::SystemCommand,
-                ToolPermission::Network,
-            ]),
+            granted_permissions: Arc::new(granted),
             execution_stats: Arc::new(DashMap::new()),
         }
     }
@@ -83,19 +96,50 @@ impl ToolRegistry {
         &self,
         name: &str,
         tool: Arc<dyn RunnableTool>,
+        is_chat_mode: bool,  // 新增参数
     ) -> ToolExecutorResult<()> {
         let key = name.to_string();
         let granted = self.granted_permissions.as_ref();
-
-        if !tool.check_permissions(granted) {
-            warn!(
-                "工具 {} 缺少所需权限 {:?}",
-                name,
-                tool.required_permissions()
-            );
-        }
-
         let metadata = tool.metadata();
+
+        // === Chat 模式工具过滤逻辑 ===
+        if is_chat_mode {
+            // 黑名单:禁止 FileWrite 和 Execution 类别
+            match metadata.category {
+                ToolCategory::FileWrite | ToolCategory::Execution => {
+                    info!(
+                        "工具 {} 在 Chat 模式下被过滤（category={}）",
+                        name,
+                        metadata.category.as_str()
+                    );
+                    return Ok(()); // 静默跳过,不注册
+                }
+                // 白名单:允许只读类工具
+                ToolCategory::FileRead | ToolCategory::CodeAnalysis | ToolCategory::FileSystem => {
+                    // 直接允许,无需权限检查
+                }
+                // 其他类别:检查权限
+                _ => {
+                    if !tool.check_permissions(granted) {
+                        warn!(
+                            "工具 {} 缺少所需权限 {:?}",
+                            name,
+                            tool.required_permissions()
+                        );
+                        return Ok(());
+                    }
+                }
+            }
+        } else {
+            // Agent 模式:检查权限（现有逻辑）
+            if !tool.check_permissions(granted) {
+                warn!(
+                    "工具 {} 缺少所需权限 {:?}",
+                    name,
+                    tool.required_permissions()
+                );
+            }
+        }
 
         match self.tools.entry(key.clone()) {
             Entry::Occupied(_) => {
@@ -412,6 +456,6 @@ impl ToolRegistry {
 
 impl Default for ToolRegistry {
     fn default() -> Self {
-        Self::new()
+        Self::new(vec![])
     }
 }

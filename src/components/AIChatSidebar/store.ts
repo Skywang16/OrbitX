@@ -272,7 +272,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     isLoading.value = true
     error.value = null
 
-    const stream = await agentApi.executeTask(content, currentConversationId.value)
+    const stream = await agentApi.executeTask(content, currentConversationId.value, chatMode.value)
 
     if (!stream) throw new Error('无法创建任务流')
 
@@ -311,6 +311,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       cancelFunction.value = null
       currentTaskId.value = null
       cancelRequested.value = false
+      isLoading.value = false
     })
 
     cancelFunction.value = () => {

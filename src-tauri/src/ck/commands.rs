@@ -158,7 +158,10 @@ pub(crate) async fn ck_search(
         ck_core::SearchMode::Regex | ck_core::SearchMode::Lexical
     ) && !is_index_ready(&search_path)
     {
-        debug!("Index not ready; cannot run semantic/hybrid search: {:?}", search_path);
+        debug!(
+            "Index not ready; cannot run semantic/hybrid search: {:?}",
+            search_path
+        );
         return Ok(api_error!("ck.index_not_found"));
     }
 
@@ -189,6 +192,7 @@ pub(crate) async fn ck_search(
         full_section: params.full_section.unwrap_or(false),
         rerank: false,
         rerank_model: None,
+        embedding_model: None,
     };
 
     let raw_results = match ck_engine::search(&options).await {
