@@ -1,5 +1,6 @@
 // 统一存储系统模块
 
+pub mod error;
 pub mod cache;
 pub mod coordinator;
 pub mod messagepack;
@@ -21,9 +22,12 @@ pub use paths::{StoragePaths, StoragePathsBuilder};
 pub use query::{QueryCondition, QueryOrder, SafeQueryBuilder};
 pub use repositories::*;
 pub use types::{SessionState, StorageLayer};
-
-pub use crate::utils::error::{AppError, AppResult};
-
+pub use error::{
+    CacheError, CacheResult, DatabaseError, DatabaseResult, MessagePackError, MessagePackResult,
+    QueryBuilderError, QueryResult, RepositoryError, RepositoryResult, SqlScriptError,
+    SqlScriptResult, StorageCoordinatorError, StorageCoordinatorResult, StorageError,
+    StoragePathsError, StoragePathsResult, StorageRecoveryError, StorageRecoveryResult, StorageResult,
+};
 // 存储系统版本
 pub const STORAGE_VERSION: &str = "1.0.0";
 

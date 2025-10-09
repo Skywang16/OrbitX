@@ -39,7 +39,7 @@ pub async fn terminal_context_invalidate_cache(
     }
 
     let pane_id = PaneId::new(pane_id);
-    state.context_service.invalidate_cache(pane_id);
+    state.context_service.invalidate_cache_entry(pane_id).await;
 
     debug!("成功使上下文缓存失效: pane_id={:?}", pane_id);
     Ok(api_success!())
@@ -62,7 +62,7 @@ pub async fn terminal_context_clear_all_cache(
 ) -> TauriApiResult<EmptyData> {
     debug!("清除所有上下文缓存");
 
-    state.context_service.clear_all_cache();
+    state.context_service.clear_all_cache().await;
 
     debug!("成功清除所有上下文缓存");
     Ok(api_success!())
@@ -79,13 +79,13 @@ mod tests {
         let pane_id = PaneId::new(123);
 
         // 测试缓存失效操作
-        state.context_service.invalidate_cache(pane_id);
+        state.context_service.invalidate_cache_entry(pane_id).await;
 
         // 测试清除所有缓存
-        state.context_service.clear_all_cache();
+        state.context_service.clear_all_cache().await;
 
         // 测试获取缓存统计
-        let stats = state.context_service.get_cache_stats();
+        let stats = state.context_service.get_cache_stats().await;
         assert_eq!(stats.total_entries, 0); // 初始状态应该没有缓存条目
     }
 }

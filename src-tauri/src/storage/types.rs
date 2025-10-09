@@ -71,19 +71,32 @@ impl Default for WindowState {
     }
 }
 
-/// 终端状态 - 精简版
+/// 终端状态 - 最优版本
+///
+/// 设计原则：
+/// - id 直接使用后端 pane_id，前后端统一标识
+/// - cwd 不持久化，由后端实时查询 ShellIntegration
+/// - 仅保存必要的恢复信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalState {
-    /// 终端ID
-    pub id: String,
-    /// 终端标题
+    /// 终端ID（即后端 pane_id）
+    pub id: u32,
+    /// 终端标题（用户自定义或从 cwd 生成）
     pub title: String,
-    /// 工作目录
-    pub cwd: String,
-    /// 是否激活
+    /// 是否为活跃终端
     pub active: bool,
     /// Shell类型（可选）
+    pub shell: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalRuntimeState {
+    pub id: u32,
+    pub title: String,
+    pub cwd: String,
+    pub active: bool,
     pub shell: Option<String>,
 }
 

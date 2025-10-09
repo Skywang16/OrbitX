@@ -11,14 +11,13 @@ import { invoke } from '@/utils/request'
 import { ConfigSection } from '@/types'
 import type {
   SessionState,
-  DataQuery,
-  SaveOptions,
   AppSection,
   AppearanceSection,
   TerminalSection,
   ShortcutsSection,
   AiSection,
   ConfigSectionMap,
+  RuntimeTerminalState,
 } from './types'
 
 /**
@@ -43,16 +42,6 @@ export class StorageApi {
 
   async loadSessionState(): Promise<SessionState | null> {
     return await invoke<SessionState | null>('storage_load_session_state')
-  }
-
-  // ===== 数据操作 =====
-
-  async queryData<T>(query: DataQuery): Promise<T[]> {
-    return await invoke<T[]>('storage_query_data', { query })
-  }
-
-  async saveData(data: Record<string, unknown> | Array<unknown> | string, options: SaveOptions): Promise<void> {
-    await invoke<void>('storage_save_data', { data, options })
   }
 
   // ===== 便捷方法 =====
@@ -95,6 +84,29 @@ export class StorageApi {
 
   async updateAiConfig(data: AiSection): Promise<void> {
     return this.updateConfig(ConfigSection.Ai, data)
+  }
+
+  // ===== 终端状态管理（新增：后端唯一数据源） =====
+
+  /**
+   * 获取所有终端的运行时状态（包含实时 CWD）
+   *
+   * 设计说明：
+   * - 直接从后端 ShellIntegration 查询实时 CWD
+   * - 不依赖前端缓存，确保数据准确性
+   * - 用于应用启动、会话恢复、前端同步等场景
+   */
+  async getTerminalsState(): Promise<RuntimeTerminalState[]> {
+    return await invoke<RuntimeTerminalState[]>('storage_get_terminals_state')
+  }
+
+  /**
+   * 获取指定终端的当前工作目录
+   *
+   * @param paneId 后端 pane ID
+   */
+  async getTerminalCwd(paneId: number): Promise<string> {
+    return await invoke<string>('storage_get_terminal_cwd', { paneId })
   }
 }
 

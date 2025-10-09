@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n'
 
   interface Props {
-    terminalId?: string
+    terminalId?: number
     shell?: string
     cwd?: string
     displayPath?: string
@@ -11,7 +11,7 @@
   }
 
   const props = withDefaults(defineProps<Props>(), {
-    terminalId: '',
+    terminalId: undefined,
     shell: '',
     cwd: '',
     displayPath: '',

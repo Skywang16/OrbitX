@@ -7,7 +7,6 @@
       v-show="tab.id === tabManagerStore.activeTabId"
       :key="tab.id"
       :terminal-id="tab.id"
-      :backend-id="terminalStore.terminals.find(t => t.id === tab.id)?.backendId || null"
       :is-active="tab.id === tabManagerStore.activeTabId"
       @input="handleInput"
       @resize="handleResize"
@@ -33,11 +32,15 @@
   const terminalStore = useTerminalStore()
 
   const handleInput = (data: string) => {
-    if (tabManagerStore.activeTabId) terminalStore.writeToTerminal(tabManagerStore.activeTabId, data)
+    if (typeof tabManagerStore.activeTabId === 'number') {
+      terminalStore.writeToTerminal(tabManagerStore.activeTabId, data)
+    }
   }
 
   const handleResize = (rows: number, cols: number) => {
-    if (tabManagerStore.activeTabId) terminalStore.resizeTerminal(tabManagerStore.activeTabId, rows, cols)
+    if (typeof tabManagerStore.activeTabId === 'number') {
+      terminalStore.resizeTerminal(tabManagerStore.activeTabId, rows, cols)
+    }
   }
 </script>
 

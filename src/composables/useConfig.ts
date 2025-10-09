@@ -5,22 +5,8 @@
  */
 
 import { computed, readonly, ref } from 'vue'
-import { formatLocaleDateTime } from '@/utils/dateFormatter'
 import { configApi } from '@/api'
-import { type AppConfig, type ConfigFileInfo } from '@/api/config'
-import { useI18n } from 'vue-i18n'
-
-/**
- * 格式化时间戳
- */
-const formatTimestamp = (timestamp?: string): string => {
-  if (!timestamp) return useI18n().t('config.unknown_time')
-  try {
-    return formatLocaleDateTime(timestamp)
-  } catch {
-    return useI18n().t('config.invalid_time')
-  }
-}
+import { type AppConfig } from '@/api/config'
 
 /**
  * 配置加载状态
@@ -29,15 +15,6 @@ export interface ConfigLoadingState {
   loading: boolean
   error: string | null
   lastUpdated: Date | null
-}
-
-/**
- * 配置文件状态
- */
-export interface ConfigFileState {
-  info: ConfigFileInfo | null
-  loading: boolean
-  error: string | null
 }
 
 /**
@@ -114,13 +91,6 @@ export const useConfig = () => {
     })
   }
 
-  // 验证配置
-  const validateConfigData = async () => {
-    return withLoading(async () => {
-      await configApi.validateConfig()
-    })
-  }
-
   // 重置为默认值
   const resetToDefaults = async () => {
     return withLoading(async () => {
@@ -153,80 +123,11 @@ export const useConfig = () => {
     updateConfig: updateConfigData,
     updateConfigSection,
     saveConfig: saveConfigData,
-    validateConfig: validateConfigData,
     resetToDefaults,
     clearError,
   }
 }
 
-/**
- * 配置文件管理组合函数
- */
-export const useConfigFile = () => {
-  const fileState = ref<ConfigFileState>({
-    info: null,
-    loading: false,
-    error: null,
-  })
-
-  const filePath = ref<string>('')
-
-  const fileExists = computed(() => fileState.value.info?.exists ?? false)
-  const fileModifiedAt = computed(() => formatTimestamp(fileState.value.info?.lastModified?.toString()))
-
-  // 获取配置文件路径
-  const getFilePath = async () => {
-    const path = await configApi.getFilePath()
-    filePath.value = path
-    return path
-  }
-
-  // 获取配置文件信息
-  const getFileInfo = async () => {
-    fileState.value.loading = true
-    fileState.value.error = null
-    try {
-      const info = await configApi.getFileInfo()
-      fileState.value.info = info
-      return info
-    } finally {
-      fileState.value.loading = false
-    }
-  }
-
-  // 打开配置文件
-  const openFile = async () => {
-    await configApi.openFile()
-  }
-
-  // 清除文件错误
-  const clearFileError = () => {
-    fileState.value.error = null
-  }
-
-  // 初始化方法（需要手动调用）
-  const initialize = () => {
-    getFilePath()
-    getFileInfo()
-  }
-
-  return {
-    fileState: readonly(fileState),
-    filePath: readonly(filePath),
-
-    fileExists,
-    fileModifiedAt,
-
-    // 方法
-    initialize,
-    getFilePath,
-    getFileInfo,
-    openFile,
-    clearFileError,
-  }
-}
-
 export default {
   useConfig,
-  useConfigFile,
 }

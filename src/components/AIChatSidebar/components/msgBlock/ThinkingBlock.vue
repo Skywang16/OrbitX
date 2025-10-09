@@ -22,11 +22,10 @@
 
 <script setup lang="ts">
   import { ref } from 'vue'
-
-  import type { AIOutputStep } from '@/types'
+  import type { UiStep } from '@/api/agent/types'
 
   interface Props {
-    step: AIOutputStep
+    step: UiStep
   }
 
   defineProps<Props>()

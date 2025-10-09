@@ -1,12 +1,11 @@
-//! 补全功能命令
+//! Completion command handlers for Tauri
 
 use crate::ai::tool::storage::StorageCoordinatorState;
 use crate::completion::engine::{CompletionEngine, CompletionEngineConfig};
 use crate::completion::types::{CompletionContext, CompletionResponse};
-use crate::utils::error::{TauriResult, ToTauriResult};
+use crate::completion::error::{CompletionStateError, CompletionStateResult};
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
-use anyhow::anyhow;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::State;
@@ -28,37 +27,37 @@ impl CompletionState {
         }
     }
 
-    pub async fn validate(&self) -> TauriResult<()> {
+    pub async fn validate(&self) -> CompletionStateResult<()> {
         let engine_state = self
             .engine
             .lock()
-            .map_err(|_| "获取引擎状态锁失败".to_string())?;
+            .map_err(|_| CompletionStateError::LockPoisoned)?;
 
         match engine_state.as_ref() {
             Some(_) => Ok(()),
-            None => Err(anyhow!("[配置错误] 补全引擎未初始化")).to_tauri(),
+            None => Err(CompletionStateError::NotInitialized),
         }
     }
 
     /// 获取引擎实例
-    pub async fn get_engine(&self) -> TauriResult<Arc<CompletionEngine>> {
+    pub async fn get_engine(&self) -> CompletionStateResult<Arc<CompletionEngine>> {
         let engine_state = self
             .engine
             .lock()
-            .map_err(|_| "获取引擎状态锁失败".to_string())?;
+            .map_err(|_| CompletionStateError::LockPoisoned)?;
 
         match engine_state.as_ref() {
             Some(engine) => Ok(Arc::clone(engine)),
-            None => Err(anyhow!("[配置错误] 补全引擎未初始化")).to_tauri(),
+            None => Err(CompletionStateError::NotInitialized),
         }
     }
 
     /// 设置引擎实例
-    pub async fn set_engine(&self, engine: Arc<CompletionEngine>) -> TauriResult<()> {
+    pub async fn set_engine(&self, engine: Arc<CompletionEngine>) -> CompletionStateResult<()> {
         let mut engine_state = self
             .engine
             .lock()
-            .map_err(|_| "获取引擎状态锁失败".to_string())?;
+            .map_err(|_| CompletionStateError::LockPoisoned)?;
 
         *engine_state = Some(engine);
         Ok(())
@@ -118,9 +117,17 @@ pub async fn completion_init_engine(
 /// 清理缓存命令
 #[tauri::command]
 pub async fn completion_clear_cache(
-    _state: State<'_, CompletionState>,
+    state: State<'_, CompletionState>,
 ) -> TauriApiResult<EmptyData> {
-    Ok(api_success!())
+    let engine = match state.get_engine().await {
+        Ok(engine) => engine,
+        Err(_) => return Ok(api_error!("completion.engine_not_initialized")),
+    };
+
+    match engine.clear_cached_results().await {
+        Ok(_) => Ok(api_success!()),
+        Err(_) => Ok(api_error!("completion.clear_cache_failed")),
+    }
 }
 
 /// 获取统计信息命令

@@ -10,6 +10,7 @@
 use std::sync::Arc;
 use terminal_lib::mux::{PaneId, TerminalMux};
 use terminal_lib::shell::ShellIntegrationManager;
+use terminal_lib::storage::cache::UnifiedCache;
 use terminal_lib::terminal::{
     commands::TerminalContextState, ActiveTerminalContextRegistry, TerminalContextService,
 };
@@ -17,12 +18,14 @@ use terminal_lib::terminal::{
 /// 创建测试用的终端上下文状态
 fn create_test_context_state() -> TerminalContextState {
     let registry = Arc::new(ActiveTerminalContextRegistry::new());
-    let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
+    let shell_integration = Arc::new(ShellIntegrationManager::new());
     let terminal_mux = Arc::new(TerminalMux::new());
+    let cache = Arc::new(UnifiedCache::new());
     let context_service = Arc::new(TerminalContextService::new(
         registry.clone(),
         shell_integration,
         terminal_mux,
+        cache,
     ));
 
     TerminalContextState::new(registry, context_service)
@@ -36,7 +39,7 @@ async fn test_terminal_context_state_creation() {
     assert_eq!(state.registry().terminal_context_get_active_pane(), None);
 
     // 验证缓存统计初始状态
-    let cache_stats = state.context_service().get_cache_stats();
+    let cache_stats = state.context_service().get_cache_stats().await;
     assert_eq!(cache_stats.total_entries, 0);
     assert_eq!(cache_stats.hit_count, 0);
     assert_eq!(cache_stats.miss_count, 0);
@@ -56,7 +59,10 @@ async fn test_active_pane_management_integration() {
     assert!(result.is_ok(), "设置活跃终端应该成功");
 
     // 验证活跃终端状态
-    assert_eq!(state.registry().terminal_context_get_active_pane(), Some(pane_id));
+    assert_eq!(
+        state.registry().terminal_context_get_active_pane(),
+        Some(pane_id)
+    );
     assert!(state.registry().terminal_context_is_pane_active(pane_id));
 
     // 验证其他面板不是活跃的
@@ -97,7 +103,10 @@ async fn test_terminal_context_service_integration() {
     assert!(!context.shell_integration_enabled);
 
     // 设置活跃终端后测试
-    state.registry().terminal_context_set_active_pane(pane_id).unwrap();
+    state
+        .registry()
+        .terminal_context_set_active_pane(pane_id)
+        .unwrap();
 
     // 测试获取活跃终端上下文（面板不存在于mux中，应该失败）
     let result = state.context_service().get_active_context().await;
@@ -120,17 +129,20 @@ async fn test_context_cache_operations() {
     let pane_id = PaneId::new(321);
 
     // 初始缓存状态
-    let stats = state.context_service().get_cache_stats();
+    let stats = state.context_service().get_cache_stats().await;
     assert_eq!(stats.total_entries, 0);
 
     // 测试缓存失效操作
-    state.context_service().invalidate_cache(pane_id);
+    state
+        .context_service()
+        .invalidate_cache_entry(pane_id)
+        .await;
 
     // 测试清除所有缓存
-    state.context_service().clear_all_cache();
+    state.context_service().clear_all_cache().await;
 
     // 验证缓存统计
-    let stats = state.context_service().get_cache_stats();
+    let stats = state.context_service().get_cache_stats().await;
     assert_eq!(stats.total_entries, 0);
 }
 
@@ -145,7 +157,10 @@ async fn test_registry_statistics() {
     assert_eq!(stats.window_active_pane_count, 0);
 
     // 设置活跃终端后的统计
-    state.registry().terminal_context_set_active_pane(pane_id).unwrap();
+    state
+        .registry()
+        .terminal_context_set_active_pane(pane_id)
+        .unwrap();
 
     let stats = state.registry().get_stats();
     assert_eq!(stats.global_active_pane, Some(pane_id));
@@ -163,10 +178,14 @@ async fn test_concurrent_active_pane_operations() {
         let state_clone = Arc::clone(&state);
         let handle = tokio::spawn(async move {
             // 每个任务都尝试设置自己的面板为活跃
-            let set_result = state_clone.registry().terminal_context_set_active_pane(pane_id);
+            let set_result = state_clone
+                .registry()
+                .terminal_context_set_active_pane(pane_id);
 
             // 检查是否成功设置
-            let is_active = state_clone.registry().terminal_context_is_pane_active(pane_id);
+            let is_active = state_clone
+                .registry()
+                .terminal_context_is_pane_active(pane_id);
 
             // 尝试获取上下文
             let context_result = state_clone
@@ -240,8 +259,14 @@ async fn test_complete_workflow_integration() {
     assert!(!state.registry().terminal_context_is_pane_active(pane_id));
 
     // 2. 设置活跃终端
-    state.registry().terminal_context_set_active_pane(pane_id).unwrap();
-    assert_eq!(state.registry().terminal_context_get_active_pane(), Some(pane_id));
+    state
+        .registry()
+        .terminal_context_set_active_pane(pane_id)
+        .unwrap();
+    assert_eq!(
+        state.registry().terminal_context_get_active_pane(),
+        Some(pane_id)
+    );
     assert!(state.registry().terminal_context_is_pane_active(pane_id));
 
     // 3. 获取终端上下文（使用回退逻辑）
@@ -253,12 +278,18 @@ async fn test_complete_workflow_integration() {
     assert_eq!(context.current_working_directory, Some("~".to_string()));
 
     // 4. 缓存操作
-    state.context_service().invalidate_cache(pane_id);
-    let stats = state.context_service().get_cache_stats();
+    state
+        .context_service()
+        .invalidate_cache_entry(pane_id)
+        .await;
+    let stats = state.context_service().get_cache_stats().await;
     assert_eq!(stats.total_entries, 0);
 
     // 5. 清除活跃终端
-    state.registry().terminal_context_clear_active_pane().unwrap();
+    state
+        .registry()
+        .terminal_context_clear_active_pane()
+        .unwrap();
     assert_eq!(state.registry().terminal_context_get_active_pane(), None);
     assert!(!state.registry().terminal_context_is_pane_active(pane_id));
 
@@ -280,7 +311,10 @@ async fn test_event_system_integration() {
     let mut event_receiver = state.registry().subscribe_events();
 
     // 设置活跃终端应该触发事件
-    state.registry().terminal_context_set_active_pane(pane_id).unwrap();
+    state
+        .registry()
+        .terminal_context_set_active_pane(pane_id)
+        .unwrap();
 
     // 尝试接收事件（使用超时避免测试挂起）
     let event_result =
@@ -305,12 +339,14 @@ async fn test_event_system_integration() {
 #[tokio::test]
 async fn test_state_access_methods() {
     let registry = Arc::new(ActiveTerminalContextRegistry::new());
-    let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
+    let shell_integration = Arc::new(ShellIntegrationManager::new());
     let terminal_mux = Arc::new(TerminalMux::new());
+    let cache = Arc::new(UnifiedCache::new());
     let context_service = Arc::new(TerminalContextService::new(
         registry.clone(),
         shell_integration,
         terminal_mux,
+        cache,
     ));
 
     let state = TerminalContextState::new(registry.clone(), context_service.clone());

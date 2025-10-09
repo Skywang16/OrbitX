@@ -1,4 +1,3 @@
-
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
 use std::path::PathBuf;
@@ -17,7 +16,7 @@ pub async fn file_handle_open(path: String) -> TauriApiResult<String> {
             match path_buf.parent() {
                 Some(parent) => parent,
                 None => {
-                    warn!("文件没有父目录: {}", path);
+                    warn!("File has no parent directory: {}", path);
                     &path_buf
                 }
             }
@@ -28,7 +27,7 @@ pub async fn file_handle_open(path: String) -> TauriApiResult<String> {
         let dir_str = dir.to_string_lossy().to_string();
         Ok(api_success!(dir_str))
     } else {
-        warn!("路径不存在: {}", path);
+        warn!("Path does not exist: {}", path);
         Ok(api_error!("common.not_found"))
     }
 }
@@ -62,8 +61,6 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::ai::tool::shell::terminal_get_shell_stats,
         crate::ai::tool::shell::terminal_initialize_shell_manager,
         crate::ai::tool::shell::terminal_validate_shell_manager,
-        crate::ai::tool::shell::terminal_get_buffer,
-        crate::ai::tool::shell::terminal_set_buffer,
         // 终端上下文管理命令
         crate::terminal::commands::pane::terminal_context_set_active_pane,
         crate::terminal::commands::pane::terminal_context_get_active_pane,
@@ -135,30 +132,16 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::config::shortcuts::shortcuts_get_action_metadata,
         crate::config::shortcuts::shortcuts_validate_key_combination,
         // 语言设置命令
-        crate::utils::language_commands::language_set_app_language,
-        crate::utils::language_commands::language_get_app_language,
-        crate::utils::language_commands::language_get_supported_languages,
+        crate::utils::i18n::commands::language_set_app_language,
+        crate::utils::i18n::commands::language_get_app_language,
+        crate::utils::i18n::commands::language_get_supported_languages,
         // AI 模型管理命令
         crate::ai::commands::ai_models_get,
         crate::ai::commands::ai_models_add,
         crate::ai::commands::ai_models_update,
         crate::ai::commands::ai_models_remove,
         crate::ai::commands::ai_models_test_connection,
-        // AI 会话上下文管理命令
-        crate::ai::commands::ai_conversation_create,
-        crate::ai::commands::ai_conversation_get_all,
-        crate::ai::commands::ai_conversation_get,
-        crate::ai::commands::ai_conversation_update_title,
-        crate::ai::commands::ai_conversation_delete,
-        crate::ai::commands::ai_conversation_get_compressed_context,
-        crate::ai::commands::ai_conversation_build_prompt_with_context,
-        crate::ai::commands::ai_conversation_get_user_prefix_prompt,
-        crate::ai::commands::ai_conversation_set_user_prefix_prompt,
-        crate::ai::commands::ai_conversation_save_message,
-        crate::ai::commands::ai_conversation_update_message_content,
-        crate::ai::commands::ai_conversation_update_message_steps,
-        crate::ai::commands::ai_conversation_update_message_status,
-        crate::ai::commands::ai_conversation_truncate,
+        // 新Agent双轨上下文命令由 agent::core::commands 提供
         // LLM 调用命令
         crate::llm::commands::llm_call,
         crate::llm::commands::llm_call_stream,
@@ -168,21 +151,38 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::llm::commands::llm_get_provider_models,
         crate::llm::commands::llm_get_model_info,
         crate::llm::commands::llm_check_model_feature,
+        // Agent 执行器命令（注册以供前端调用）
+        crate::agent::core::commands::agent_execute_task,
+        crate::agent::core::commands::agent_pause_task,
+        crate::agent::core::commands::agent_cancel_task,
+        crate::agent::core::commands::agent_list_tasks,
+        crate::agent::core::commands::agent_get_file_context_status,
+        crate::agent::core::commands::agent_get_user_prefix_prompt,
+        crate::agent::core::commands::agent_set_user_prefix_prompt,
+        // 双轨架构命令
+        crate::agent::core::commands::agent_create_conversation,
+        crate::agent::core::commands::agent_delete_conversation,
+        crate::agent::core::commands::agent_update_conversation_title,
+        crate::agent::core::commands::agent_ui_get_conversations,
+        crate::agent::core::commands::agent_ui_get_messages,
+        // crate::agent::core::commands::agent_trigger_context_summary, // 暂时注释：类型问题待修复
         // 存储系统命令
         crate::ai::tool::storage::storage_get_config,
         crate::ai::tool::storage::storage_update_config,
         crate::ai::tool::storage::storage_save_session_state,
         crate::ai::tool::storage::storage_load_session_state,
+        crate::ai::tool::storage::storage_get_terminals_state,
+        crate::ai::tool::storage::storage_get_terminal_cwd,
+        // 双轨制任务老命令已废弃，由新的Agent UI持久化替代
         // 网络请求命令
         crate::ai::tool::network::network_web_fetch_headless,
         crate::ai::tool::network::network_simple_web_fetch,
-        // 代码搜索命令
-        crate::ck::commands::ck_search,
-        // CK索引管理命令
+        // CK 索引与搜索命令（供前端 ckApi 使用）
         crate::ck::commands::ck_index_status,
         crate::ck::commands::ck_build_index,
-        crate::ck::commands::ck_delete_index,
         crate::ck::commands::ck_get_build_progress,
         crate::ck::commands::ck_cancel_build,
+        crate::ck::commands::ck_delete_index,
+        crate::ck::commands::ck_search,
     ])
 }

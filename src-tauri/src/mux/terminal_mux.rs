@@ -2,7 +2,6 @@
 //!
 //! 提供统一的终端会话管理、事件通知和PTY I/O处理
 
-use anyhow::{anyhow, bail, Context};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -12,10 +11,16 @@ use std::time::Duration;
 use tracing::{debug, error, instrument, trace, warn};
 
 use crate::mux::{
-    IoHandler, IoThreadPoolStats, LocalPane, MuxNotification, Pane, PaneId, PtySize, TerminalConfig,
+    error::{TerminalMuxError, TerminalMuxResult},
+    IoHandler,
+    LocalPane,
+    MuxNotification,
+    Pane,
+    PaneId,
+    PtySize,
+    TerminalConfig,
 };
 use crate::shell::ShellIntegrationManager;
-use crate::utils::error::AppResult;
 
 pub type SubscriberCallback = Box<dyn Fn(&MuxNotification) -> bool + Send + Sync>;
 
@@ -67,8 +72,7 @@ impl TerminalMux {
         let (notification_sender, notification_receiver) = unbounded();
         debug!("创建通知通道成功");
 
-        let shell_integration =
-            Arc::new(ShellIntegrationManager::new().expect("创建Shell Integration管理器失败"));
+        let shell_integration = Arc::new(ShellIntegrationManager::new());
         let io_handler = IoHandler::new(notification_sender.clone(), shell_integration.clone());
 
         let notification_sender_clone = notification_sender.clone();
@@ -95,12 +99,15 @@ impl TerminalMux {
     }
 
     /// 获取状态统计信息
-    pub fn get_status(&self) -> AppResult<TerminalMuxStatus> {
-        let panes = self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
+    pub fn get_status(&self) -> TerminalMuxResult<TerminalMuxStatus> {
+        let panes = self
+            .panes
+            .read()
+            .map_err(|err| TerminalMuxError::from_read_poison("panes", err))?;
         let subscribers = self
             .subscribers
             .read()
-            .map_err(|_| anyhow!("无法获取订阅者读锁"))?;
+            .map_err(|err| TerminalMuxError::from_read_poison("subscribers", err))?;
 
         let status = TerminalMuxStatus {
             pane_count: panes.len(),
@@ -114,11 +121,6 @@ impl TerminalMux {
         Ok(status)
     }
 
-    /// 获取I/O处理统计信息
-    pub fn get_io_stats(&self) -> Option<IoThreadPoolStats> {
-        self.io_handler.get_stats()
-    }
-
     /// 生成下一个唯一的面板ID
     fn next_pane_id(&self) -> PaneId {
         let id = self.next_pane_id.fetch_add(1, Ordering::Relaxed);
@@ -130,9 +132,8 @@ impl TerminalMux {
         self.next_subscriber_id.fetch_add(1, Ordering::Relaxed) as usize
     }
 
-
     /// 创建新面板
-    pub async fn create_pane(&self, size: PtySize) -> AppResult<PaneId> {
+    pub async fn create_pane(&self, size: PtySize) -> TerminalMuxResult<PaneId> {
         let config = TerminalConfig::default();
         self.create_pane_with_config(size, &config).await
     }
@@ -146,26 +147,23 @@ impl TerminalMux {
         &self,
         size: PtySize,
         config: &TerminalConfig,
-    ) -> AppResult<PaneId> {
+    ) -> TerminalMuxResult<PaneId> {
         let pane_id = self.next_pane_id();
 
         debug!("创建LocalPane实例: pane_id={:?}", pane_id);
-        let pane = Arc::new(
-            LocalPane::new_with_config(pane_id, size, config)
-                .with_context(|| format!("创建LocalPane失败: pane_id={:?}", pane_id))?,
-        );
+        let pane = Arc::new(LocalPane::new_with_config(pane_id, size, config)?);
 
         // 添加到面板映射
         debug!("添加面板到映射: pane_id={:?}", pane_id);
         {
-            let mut panes = self.panes.write().map_err(|_| {
-                error!("无法获取面板写锁: pane_id={:?}", pane_id);
-                anyhow!("无法获取面板写锁")
-            })?;
+            let mut panes = self
+                .panes
+                .write()
+                .map_err(|err| TerminalMuxError::from_write_poison("panes", err))?;
 
             if panes.contains_key(&pane_id) {
                 error!("面板ID已存在: pane_id={:?}", pane_id);
-                bail!("面板 {:?} 已存在", pane_id);
+                return Err(TerminalMuxError::PaneExists { pane_id });
             }
 
             panes.insert(pane_id, pane.clone());
@@ -176,11 +174,19 @@ impl TerminalMux {
             );
         }
 
+        // 设置面板的Shell类型到shell_integration
+        let shell_type = crate::shell::ShellType::from_program(&config.shell_config.program);
+        self.shell_integration
+            .set_pane_shell_type(pane_id, shell_type.clone());
+        debug!(
+            "设置面板Shell类型: pane_id={:?}, shell_type={:?}",
+            pane_id,
+            shell_type.display_name()
+        );
+
         // 启动I/O处理线程
         debug!("启动I/O处理线程: pane_id={:?}", pane_id);
-        self.io_handler
-            .spawn_io_threads(pane.clone())
-            .with_context(|| format!("启动I/O线程失败: pane_id={:?}", pane_id))?;
+        self.io_handler.spawn_io_threads(pane.clone())?;
 
         // 发送面板添加通知
         debug!("发送面板添加通知: pane_id={:?}", pane_id);
@@ -216,18 +222,18 @@ impl TerminalMux {
     /// - 使用结构化日志格式
     /// - 包含性能指标
     #[instrument(skip(self), fields(pane_id = ?pane_id))]
-    pub fn remove_pane(&self, pane_id: PaneId) -> AppResult<()> {
+    pub fn remove_pane(&self, pane_id: PaneId) -> TerminalMuxResult<()> {
         let pane = {
             debug!("获取面板写锁: pane_id={:?}", pane_id);
             let mut panes = self
                 .panes
                 .write()
-                .map_err(|_| anyhow!("无法获取面板写锁"))?;
+                .map_err(|err| TerminalMuxError::from_write_poison("panes", err))?;
 
             debug!("从映射中移除面板: pane_id={:?}", pane_id);
             let pane = panes.remove(&pane_id).ok_or_else(|| {
                 error!("面板不存在: pane_id={:?}", pane_id);
-                anyhow!("面板 {:?} 不存在", pane_id)
+                TerminalMuxError::PaneNotFound { pane_id }
             })?;
 
             debug!(
@@ -272,20 +278,18 @@ impl TerminalMux {
         self.panes.read().map(|panes| panes.len()).unwrap_or(0)
     }
 
-
     /// 写入数据到指定面板
     ///
     /// - 使用结构化日志格式
     /// - 包含性能指标
     #[instrument(skip(self, data), fields(pane_id = ?pane_id, data_len = data.len()))]
-    pub fn write_to_pane(&self, pane_id: PaneId, data: &[u8]) -> AppResult<()> {
+    pub fn write_to_pane(&self, pane_id: PaneId, data: &[u8]) -> TerminalMuxResult<()> {
         let pane = self.get_pane(pane_id).ok_or_else(|| {
             error!("面板不存在: pane_id={:?}", pane_id);
-            anyhow!("面板 {:?} 不存在", pane_id)
+            TerminalMuxError::PaneNotFound { pane_id }
         })?;
 
-        pane.write(data)
-            .with_context(|| format!("写入数据失败: pane_id={:?}", pane_id))?;
+        pane.write(data)?;
 
         debug!(
             "写入数据成功: pane_id={:?}, data_len={}",
@@ -300,14 +304,13 @@ impl TerminalMux {
     /// - 使用结构化日志格式
     /// - 包含性能指标
     #[instrument(skip(self), fields(pane_id = ?pane_id, size = ?size))]
-    pub fn resize_pane(&self, pane_id: PaneId, size: PtySize) -> AppResult<()> {
+    pub fn resize_pane(&self, pane_id: PaneId, size: PtySize) -> TerminalMuxResult<()> {
         let pane = self.get_pane(pane_id).ok_or_else(|| {
             error!("面板不存在: pane_id={:?}", pane_id);
-            anyhow!("面板 {:?} 不存在", pane_id)
+            TerminalMuxError::PaneNotFound { pane_id }
         })?;
 
-        pane.resize(size)
-            .with_context(|| format!("调整面板大小失败: pane_id={:?}", pane_id))?;
+        pane.resize(size)?;
 
         // 发送大小调整通知
         debug!("发送面板大小调整通知: pane_id={:?}", pane_id);
@@ -319,7 +322,6 @@ impl TerminalMux {
         );
         Ok(())
     }
-
 
     /// 订阅事件通知
     pub fn subscribe<F>(&self, subscriber: F) -> usize
@@ -469,9 +471,8 @@ impl TerminalMux {
         })
     }
 
-
     /// 设置面板的Shell Integration
-    pub fn setup_pane_integration(&self, pane_id: PaneId) -> AppResult<()> {
+    pub fn setup_pane_integration(&self, pane_id: PaneId) -> TerminalMuxResult<()> {
         self.shell_integration.enable_integration(pane_id);
         Ok(())
     }
@@ -481,28 +482,43 @@ impl TerminalMux {
         &self,
         pane_id: PaneId,
         silent: bool,
-    ) -> AppResult<()> {
+    ) -> TerminalMuxResult<()> {
         use crate::shell::ShellType;
 
         // 启用Shell Integration
         self.shell_integration.enable_integration(pane_id);
 
-        // 检测Shell类型
-        if let Ok(panes) = self.panes.read() {
-            if let Some(_pane) = panes.get(&pane_id) {
-                let shell_type = ShellType::Bash;
-                self.shell_integration
-                    .set_pane_shell_type(pane_id, shell_type.clone());
+        // 从shell_integration获取已设置的Shell类型
+        let panes = self
+            .panes
+            .read()
+            .map_err(|err| TerminalMuxError::from_read_poison("panes", err))?;
 
-                if !silent {
-                    // 非静默模式：生成完整脚本
-                    if let Ok(script) = self.shell_integration.generate_shell_script(&shell_type) {
-                        self.write_to_pane(pane_id, script.as_bytes())?;
-                    }
-                }
-            } else {
-                return Err(anyhow::Error::msg(format!("面板 {} 不存在", pane_id)));
-            }
+        if panes.get(&pane_id).is_none() {
+            return Err(TerminalMuxError::PaneNotFound { pane_id });
+        }
+
+        let shell_type = self
+            .shell_integration
+            .get_pane_shell_state(pane_id)
+            .and_then(|state| state.shell_type)
+            .unwrap_or_else(|| {
+                warn!("面板 {:?} 没有设置Shell类型，使用默认Bash", pane_id);
+                ShellType::Bash
+            });
+
+        debug!(
+            "面板 {:?} 使用Shell类型: {}",
+            pane_id,
+            shell_type.display_name()
+        );
+
+        if !silent {
+            let script = self
+                .shell_integration
+                .generate_shell_script(&shell_type)
+                .map_err(|err| TerminalMuxError::Internal(format!("Shell integration error: {}", err)))?;
+            self.write_to_pane(pane_id, script.as_bytes())?;
         }
 
         Ok(())
@@ -540,8 +556,10 @@ impl TerminalMux {
     pub fn generate_shell_integration_script(
         &self,
         shell_type: &crate::shell::ShellType,
-    ) -> anyhow::Result<String> {
-        self.shell_integration.generate_shell_script(shell_type)
+    ) -> TerminalMuxResult<String> {
+        self.shell_integration
+            .generate_shell_script(shell_type)
+            .map_err(|err| TerminalMuxError::Internal(format!("Shell integration error: {}", err)))
     }
 
     /// 生成Shell环境变量
@@ -572,9 +590,8 @@ impl TerminalMux {
         self.shell_integration.get_command_history(pane_id)
     }
 
-
     /// 清理所有资源
-    pub fn shutdown(&self) -> AppResult<()> {
+    pub fn shutdown(&self) -> TerminalMuxResult<()> {
         let shutdown_start = std::time::Instant::now();
 
         // 标记为关闭状态，使通知处理线程能尽快退出
@@ -586,7 +603,10 @@ impl TerminalMux {
 
         // 立即标记所有面板为死亡状态，加速关闭过程
         {
-            let panes = self.panes.read().map_err(|_| anyhow!("无法获取面板读锁"))?;
+            let panes = self
+                .panes
+                .read()
+                .map_err(|err| TerminalMuxError::from_read_poison("panes", err))?;
             for (_pane_id, pane) in panes.iter() {
                 pane.mark_dead();
             }

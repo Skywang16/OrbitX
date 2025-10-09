@@ -5,7 +5,6 @@
  * This module now focuses solely on terminal command implementations.
  */
 
-use anyhow::{anyhow, Context};
 use tauri::{AppHandle, Runtime, State};
 use tracing::{debug, error, warn};
 
@@ -13,23 +12,12 @@ use crate::mux::{
     get_mux, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager, ShellManagerStats,
     TerminalConfig,
 };
-use crate::utils::error::{AppResult, ToTauriResult};
 use crate::utils::{ApiResponse, EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 
 /// 参数验证辅助函数
-fn validate_terminal_size(rows: u16, cols: u16) -> AppResult<()> {
-    if rows == 0 || cols == 0 {
-        return Err(anyhow!("终端尺寸不能为0 (当前: {}x{})", cols, rows));
-    }
-    Ok(())
-}
-
-fn validate_non_empty_string(value: &str, field_name: &str) -> AppResult<()> {
-    if value.trim().is_empty() {
-        return Err(anyhow!("{}不能为空", field_name));
-    }
-    Ok(())
+fn terminal_size_valid(rows: u16, cols: u16) -> bool {
+    rows > 0 && cols > 0
 }
 
 /// 终端状态管理
@@ -74,7 +62,7 @@ pub async fn terminal_create<R: Runtime>(
     debug!("创建终端会话: {}x{}, 初始目录: {:?}", cols, rows, cwd);
     debug!("当前Mux状态 - 面板数量: {}", get_mux().pane_count());
 
-    if let Err(_) = validate_terminal_size(rows, cols) {
+    if !terminal_size_valid(rows, cols) {
         return Ok(api_error!("shell.terminal_size_invalid"));
     }
 
@@ -96,6 +84,16 @@ pub async fn terminal_create<R: Runtime>(
 
     match result {
         Ok((pane_id, working_dir)) => {
+            // 立即同步初始 CWD 到 ShellIntegration，避免冷启动空窗期
+            if let Some(initial_cwd) = &working_dir {
+                mux.shell_update_pane_cwd(pane_id, initial_cwd.clone());
+                debug!(
+                    "初始化 ShellIntegration CWD: pane_id={}, cwd={}",
+                    pane_id.as_u32(),
+                    initial_cwd
+                );
+            }
+
             let dir_info = working_dir
                 .map(|dir| format!(", 初始目录: {}", dir))
                 .unwrap_or_default();
@@ -154,7 +152,7 @@ pub async fn terminal_resize(
 ) -> TauriApiResult<EmptyData> {
     debug!("调整终端大小: ID={}, 大小={}x{}", pane_id, cols, rows);
 
-    if let Err(_) = validate_terminal_size(rows, cols) {
+    if !terminal_size_valid(rows, cols) {
         return Ok(api_error!("shell.terminal_size_invalid"));
     }
 
@@ -197,15 +195,17 @@ pub async fn terminal_close(
             );
             Ok(api_success!())
         }
-        Err(e) => {
-            let error_str = e.to_string();
-            if error_str.contains("not found") || error_str.contains("不存在") {
-                // 面板不存在，认为操作成功
-                warn!("尝试关闭不存在的面板: ID={}, 可能已被其他操作关闭", pane_id);
-                Ok(api_success!())
-            } else {
-                // 其他错误，返回失败
-                Ok(api_error!("shell.close_terminal_failed"))
+        Err(err) => {
+            match err {
+                crate::mux::error::TerminalMuxError::PaneNotFound { .. } => {
+                    // 面板不存在，认为操作成功
+                    warn!("尝试关闭不存在的面板: ID={}, 可能已被其他操作关闭", pane_id);
+                    Ok(api_success!())
+                }
+                _ => {
+                    // 其他错误，返回失败
+                    Ok(api_error!("shell.close_terminal_failed"))
+                }
             }
         }
     }
@@ -214,7 +214,7 @@ pub async fn terminal_close(
 /// 获取终端列表
 ///
 #[tauri::command]
-pub async fn terminal_list(_state: State<'_, TerminalState>) -> TauriApiResult<Vec<u32>> {
+pub async fn terminal_list() -> TauriApiResult<Vec<u32>> {
     debug!("获取终端列表");
 
     let mux = get_mux();
@@ -223,53 +223,6 @@ pub async fn terminal_list(_state: State<'_, TerminalState>) -> TauriApiResult<V
     debug!("获取终端列表成功: count={}", pane_ids.len());
     debug!("当前终端列表: {:?}", pane_ids);
     Ok(api_success!(pane_ids))
-}
-
-
-/// 获取终端缓冲区内容
-///
-#[tauri::command]
-pub async fn terminal_get_buffer(pane_id: u32) -> TauriApiResult<String> {
-    debug!("开始获取终端缓冲区内容: ID={}", pane_id);
-
-    use crate::completion::output_analyzer::OutputAnalyzer;
-
-    match OutputAnalyzer::global().get_pane_buffer(pane_id) {
-        Ok(content) => {
-            debug!(
-                "获取终端缓冲区成功: ID={}, 内容长度={}",
-                pane_id,
-                content.len()
-            );
-            Ok(api_success!(content))
-        }
-        Err(e) => {
-            let error_msg = format!("获取终端缓冲区失败: ID={}, 错误: {}", pane_id, e);
-            error!("{}", error_msg);
-            Ok(api_error!("shell.get_buffer_failed"))
-        }
-    }
-}
-
-/// 设置终端缓冲区内容
-///
-#[tauri::command]
-pub async fn terminal_set_buffer(pane_id: u32, content: String) -> TauriApiResult<EmptyData> {
-    debug!(
-        "开始设置终端缓冲区内容: ID={}, 内容长度={}",
-        pane_id,
-        content.len()
-    );
-
-    use crate::completion::output_analyzer::OutputAnalyzer;
-
-    match OutputAnalyzer::global().set_pane_buffer(pane_id, content) {
-        Ok(_) => {
-            debug!("设置终端缓冲区成功: ID={}", pane_id);
-            Ok(api_success!())
-        }
-        Err(_) => Ok(api_error!("shell.set_buffer_failed")),
-    }
 }
 
 /// 获取系统可用的shell列表
@@ -317,9 +270,9 @@ pub async fn terminal_get_default_shell() -> TauriApiResult<ShellInfo> {
 ///
 #[tauri::command]
 pub async fn terminal_validate_shell_path(path: String) -> TauriApiResult<bool> {
-    validate_non_empty_string(&path, "Shell路径")
-        .context("Shell路径验证失败")
-        .to_tauri()?;
+    if path.trim().is_empty() {
+        return Ok(api_error!("shell.command_empty"));
+    }
 
     let is_valid = ShellManager::validate_shell(&path);
 
@@ -338,9 +291,12 @@ pub async fn terminal_create_with_shell<R: Runtime>(
     _app: AppHandle<R>,
     _state: State<'_, TerminalState>,
 ) -> TauriApiResult<u32> {
-    debug!("使用指定shell创建终端: {:?}, 大小: {}x{}", shell_name, cols, rows);
+    debug!(
+        "使用指定shell创建终端: {:?}, 大小: {}x{}",
+        shell_name, cols, rows
+    );
 
-    if let Err(_) = validate_terminal_size(rows, cols) {
+    if rows == 0 || cols == 0 {
         return Ok(api_error!("shell.terminal_size_invalid"));
     }
 

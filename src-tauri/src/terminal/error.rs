@@ -1,0 +1,161 @@
+use std::sync::PoisonError;
+
+use thiserror::Error;
+use tokio::sync::oneshot;
+
+use crate::mux::error::MuxError;
+use crate::storage::error::CacheError;
+
+pub type TerminalResult<T> = Result<T, TerminalError>;
+pub type ContextRegistryResult<T> = Result<T, ContextRegistryError>;
+pub type ContextServiceResult<T> = Result<T, ContextServiceError>;
+pub type EventHandlerResult<T> = Result<T, EventHandlerError>;
+pub type ReplayResult<T> = Result<T, ReplayError>;
+pub type TerminalValidationResult<T> = Result<T, TerminalValidationError>;
+
+#[derive(Debug, Error)]
+pub enum TerminalError {
+    #[error(transparent)]
+    ContextRegistry(#[from] ContextRegistryError),
+    #[error(transparent)]
+    ContextService(#[from] ContextServiceError),
+    #[error(transparent)]
+    EventHandler(#[from] EventHandlerError),
+    #[error(transparent)]
+    Replay(#[from] ReplayError),
+    #[error(transparent)]
+    Validation(#[from] TerminalValidationError),
+    #[error("Terminal internal error: {0}")]
+    Internal(String),
+}
+
+#[derive(Debug, Error)]
+pub enum ContextRegistryError {
+    #[error("Failed to acquire read lock for {context}: {source}")]
+    ReadLockPoisoned {
+        context: &'static str,
+        #[source]
+        source: PoisonError<()>,
+    },
+    #[error("Failed to acquire write lock for {context}: {source}")]
+    WriteLockPoisoned {
+        context: &'static str,
+        #[source]
+        source: PoisonError<()>,
+    },
+    #[error("Failed to send context event: {0}")]
+    EventSend(String),
+}
+
+#[derive(Debug, Error)]
+pub enum ContextServiceError {
+    #[error("No active terminal pane")]
+    NoActivePane,
+    #[error("Pane does not exist: {pane_id}")]
+    PaneNotFound { pane_id: u32 },
+    #[error("Active terminal does not expose a working directory")]
+    WorkingDirectoryMissing,
+    #[error("Active terminal does not expose a shell type")]
+    ShellTypeMissing,
+    #[error("Cache error: {0}")]
+    Cache(#[from] CacheError),
+    #[error("Mux error: {0}")]
+    Mux(#[from] MuxError),
+    #[error("Terminal context query timeout")]
+    QueryTimeout,
+    #[error("Context request channel was dropped")]
+    RequestChannelClosed,
+    #[error("Context service internal error: {0}")]
+    Internal(String),
+}
+
+impl From<oneshot::error::RecvError> for ContextServiceError {
+    fn from(_: oneshot::error::RecvError) -> Self {
+        ContextServiceError::RequestChannelClosed
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum EventHandlerError {
+    #[error("Terminal event handler already started")]
+    AlreadyStarted,
+    #[error("Failed to emit Tauri event: {0}")]
+    Emit(#[from] tauri::Error),
+    #[error("Mux error: {0}")]
+    Mux(#[from] MuxError),
+    #[error("Event handler internal error: {0}")]
+    Internal(String),
+}
+
+#[derive(Debug, Error)]
+pub enum ReplayError {
+    #[error("Output analyzer error: {reason}")]
+    OutputAnalyzer { reason: String },
+    #[error("Mux error: {0}")]
+    Mux(#[from] MuxError),
+}
+
+#[derive(Debug, Error)]
+pub enum TerminalValidationError {
+    #[error("Invalid pane id")]
+    InvalidPaneId,
+    #[error("Invalid command history entry at index {index}: {reason}")]
+    InvalidHistoryEntry { index: usize, reason: String },
+    #[error("Invalid current command: {reason}")]
+    InvalidCurrentCommand { reason: String },
+}
+
+#[derive(Debug, Error)]
+pub enum ContextEventChannelError {
+    #[error("Failed to subscribe to context events: {0}")]
+    Subscribe(String),
+    #[error("Context event channel was closed")]
+    Closed,
+}
+
+impl From<tokio::sync::broadcast::error::RecvError> for ContextEventChannelError {
+    fn from(err: tokio::sync::broadcast::error::RecvError) -> Self {
+        match err {
+            tokio::sync::broadcast::error::RecvError::Closed => {
+                ContextEventChannelError::Closed
+            }
+            other => ContextEventChannelError::Subscribe(other.to_string()),
+        }
+    }
+}
+
+impl From<ContextEventChannelError> for ContextRegistryError {
+    fn from(err: ContextEventChannelError) -> Self {
+        ContextRegistryError::EventSend(err.to_string())
+    }
+}
+
+impl ContextRegistryError {
+    pub fn from_read_poison<T>(context: &'static str, _err: PoisonError<T>) -> Self {
+        ContextRegistryError::ReadLockPoisoned {
+            context,
+            source: PoisonError::new(()),
+        }
+    }
+
+    pub fn from_write_poison<T>(context: &'static str, _err: PoisonError<T>) -> Self {
+        ContextRegistryError::WriteLockPoisoned {
+            context,
+            source: PoisonError::new(()),
+        }
+    }
+}
+
+impl From<ContextRegistryError> for ContextServiceError {
+    fn from(value: ContextRegistryError) -> Self {
+        ContextServiceError::Internal(value.to_string())
+    }
+}
+
+impl From<TerminalValidationError> for ContextServiceError {
+    fn from(value: TerminalValidationError) -> Self {
+        ContextServiceError::Internal(value.to_string())
+    }
+}
+
+// From implementations are automatically generated by thiserror's #[from] attribute

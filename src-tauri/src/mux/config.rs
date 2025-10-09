@@ -1,4 +1,4 @@
-//! 终端系统配置管理
+//! Terminal multiplexer configuration management
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -6,93 +6,91 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
-/// 终端系统配置
+use crate::mux::error::{MuxConfigError, MuxConfigResult};
+
+/// Terminal runtime configuration persisted on disk
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalSystemConfig {
-    /// 缓冲区配置
+    /// Buffer configuration
     pub buffer: BufferConfig,
-    /// Shell配置
+    /// Shell configuration
     pub shell: ShellSystemConfig,
-    /// 性能配置
+    /// Performance tuning configuration
     pub performance: PerformanceConfig,
-    /// 清理配置
+    /// Cleanup configuration
     pub cleanup: CleanupConfig,
 }
 
-/// 缓冲区配置
+/// Buffer configuration parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BufferConfig {
-    /// 最大缓冲区大小（字节）
+    /// Maximum buffer size in bytes
     pub max_size: usize,
-    /// 保留缓冲区大小（字节）
+    /// Preferred buffer size to keep in memory in bytes
     pub keep_size: usize,
-    /// 最大截断尝试次数
+    /// Maximum truncation attempts before giving up
     pub max_truncation_attempts: usize,
-    /// 批处理大小
-    pub batch_size: usize,
-    /// 刷新间隔（毫秒）
-    pub flush_interval_ms: u64,
 }
 
-/// Shell系统配置
+/// Shell integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShellSystemConfig {
-    /// 缓存TTL（秒）
+    /// Cache TTL in seconds
     pub cache_ttl_seconds: u64,
-    /// 最大缓存年龄（秒）
+    /// Maximum cache age in seconds
     pub max_cache_age_seconds: u64,
-    /// 默认shell路径（按平台）
+    /// Default shell search paths grouped by platform
     pub default_paths: DefaultShellPaths,
 }
 
-/// 默认Shell路径配置
+/// Default shell path list per platform
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DefaultShellPaths {
-    /// Unix系统的默认shell路径
+    /// Default shell executable list on Unix-like systems
     pub unix: Vec<String>,
-    /// Windows系统的默认shell路径
+    /// Default shell executable list on Windows systems
     pub windows: Vec<String>,
 }
 
-/// 性能配置
+/// Performance configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PerformanceConfig {
-    /// 工作线程数
+    /// Worker thread count
     pub worker_threads: Option<usize>,
-    /// 最大并发连接数
+    /// Maximum concurrent connections
     pub max_concurrent_connections: usize,
-    /// 超时配置（毫秒）
+    /// Timeout configuration in milliseconds
     pub timeouts: TimeoutConfig,
 }
 
-/// 超时配置
+/// Timeout settings for terminal I/O
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeoutConfig {
-    /// 命令执行超时
+    /// Command execution timeout
     pub command_execution_ms: u64,
-    /// 连接超时
+    /// Connection timeout
     pub connection_ms: u64,
-    /// 读取超时
+    /// Read timeout
     pub read_ms: u64,
-    /// 写入超时
+    /// Write timeout
     pub write_ms: u64,
 }
 
-/// 清理配置
+/// Background cleanup configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupConfig {
-    /// 清理间隔（秒）
+    /// Cleanup interval in seconds
     pub interval_seconds: u64,
-    /// 过期阈值（秒）
+    /// Stale threshold in seconds
     pub stale_threshold_seconds: u64,
-    /// 是否启用自动清理
+    /// Whether automatic cleanup is enabled
     pub auto_cleanup_enabled: bool,
 }
 
@@ -113,8 +111,6 @@ impl Default for BufferConfig {
             max_size: 50_000,
             keep_size: 25_000,
             max_truncation_attempts: 1000,
-            batch_size: 512,
-            flush_interval_ms: 10,
         }
     }
 }
@@ -122,8 +118,8 @@ impl Default for BufferConfig {
 impl Default for ShellSystemConfig {
     fn default() -> Self {
         Self {
-            cache_ttl_seconds: 300,      // 5分钟
-            max_cache_age_seconds: 3600, // 1小时
+            cache_ttl_seconds: 300,      // 5 minutes
+            max_cache_age_seconds: 3600, // 1 hour
             default_paths: DefaultShellPaths::default(),
         }
     }
@@ -137,14 +133,13 @@ impl Default for DefaultShellPaths {
                 "/bin/bash".to_string(),
                 "/usr/bin/fish".to_string(),
                 "/opt/homebrew/bin/fish".to_string(),
-                "/bin/sh".to_string(),
                 "/usr/local/bin/zsh".to_string(),
                 "/usr/local/bin/bash".to_string(),
+                "/usr/local/bin/fish".to_string(),
             ],
             windows: vec![
                 "C:\\Program Files\\Git\\bin\\bash.exe".to_string(),
-                "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe".to_string(),
-                "C:\\Windows\\System32\\cmd.exe".to_string(),
+                "C:\\Program Files\\Git\\usr\\bin\\bash.exe".to_string(),
             ],
         }
     }
@@ -153,7 +148,7 @@ impl Default for DefaultShellPaths {
 impl Default for PerformanceConfig {
     fn default() -> Self {
         Self {
-            worker_threads: None, // 使用系统默认
+            worker_threads: None, // use system default
             max_concurrent_connections: 100,
             timeouts: TimeoutConfig::default(),
         }
@@ -163,10 +158,10 @@ impl Default for PerformanceConfig {
 impl Default for TimeoutConfig {
     fn default() -> Self {
         Self {
-            command_execution_ms: 30_000, // 30秒
-            connection_ms: 5_000,         // 5秒
-            read_ms: 10_000,              // 10秒
-            write_ms: 5_000,              // 5秒
+            command_execution_ms: 30_000, // 30 seconds
+            connection_ms: 5_000,         // 5 seconds
+            read_ms: 10_000,              // 10 seconds
+            write_ms: 5_000,              // 5 seconds
         }
     }
 }
@@ -174,177 +169,207 @@ impl Default for TimeoutConfig {
 impl Default for CleanupConfig {
     fn default() -> Self {
         Self {
-            interval_seconds: 300,         // 5分钟
-            stale_threshold_seconds: 1800, // 30分钟
+            interval_seconds: 300,         // 5 minutes
+            stale_threshold_seconds: 1800, // 30 minutes
             auto_cleanup_enabled: true,
         }
     }
 }
 
 impl TerminalSystemConfig {
-    /// 从文件加载配置
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+    /// Load configuration from a file
+    pub fn from_file<P: AsRef<Path>>(path: P) -> MuxConfigResult<Self> {
         let path = path.as_ref();
-        debug!("从文件加载配置: {:?}", path);
+        debug!("Loading terminal mux config from {}", path.display());
 
-        let content = std::fs::read_to_string(path)?;
-        let config: Self = toml::from_str(&content)?;
+        let content = std::fs::read_to_string(path).map_err(|err| MuxConfigError::ReadFile {
+            path: path.display().to_string(),
+            source: err,
+        })?;
+        let config: Self = toml::from_str(&content).map_err(|err| MuxConfigError::Parse {
+            path: path.display().to_string(),
+            source: err,
+        })?;
 
-        info!("配置加载成功: {:?}", path);
+        info!("Loaded terminal mux config from {}", path.display());
         Ok(config)
     }
 
-    /// 保存配置到文件
-    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<dyn std::error::Error>> {
+    /// Persist configuration to a file
+    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> MuxConfigResult<()> {
         let path = path.as_ref();
-        debug!("保存配置到文件: {:?}", path);
+        debug!("Persisting terminal mux config to {}", path.display());
 
-        let content = toml::to_string_pretty(self)?;
+        let content = toml::to_string_pretty(self).map_err(|err| {
+            MuxConfigError::Serialize(format!("Failed to serialize mux config: {err}"))
+        })?;
 
-        // 确保目录存在
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+            std::fs::create_dir_all(parent).map_err(|err| MuxConfigError::WriteFile {
+                path: parent.display().to_string(),
+                source: err,
+            })?;
         }
 
-        std::fs::write(path, content)?;
-        info!("配置保存成功: {:?}", path);
+        std::fs::write(path, content).map_err(|err| MuxConfigError::WriteFile {
+            path: path.display().to_string(),
+            source: err,
+        })?;
+        info!("Saved terminal mux config to {}", path.display());
         Ok(())
     }
 
-    /// 从环境变量覆盖配置
+    /// Apply environment variable overrides
     pub fn override_from_env(&mut self) {
-        debug!("从环境变量覆盖配置");
+        debug!("Updating terminal mux config from environment variables");
 
-        // 缓冲区配置
         if let Ok(val) = std::env::var("TERMINAL_BUFFER_MAX_SIZE") {
             if let Ok(size) = val.parse::<usize>() {
                 self.buffer.max_size = size;
-                debug!("从环境变量设置 buffer.max_size = {}", size);
+                debug!("Applied env override: buffer.max_size = {}", size);
             }
         }
 
         if let Ok(val) = std::env::var("TERMINAL_BUFFER_KEEP_SIZE") {
             if let Ok(size) = val.parse::<usize>() {
                 self.buffer.keep_size = size;
-                debug!("从环境变量设置 buffer.keep_size = {}", size);
+                debug!("Applied env override: buffer.keep_size = {}", size);
             }
         }
 
-        // Shell配置
+        // Shell configuration overrides
         if let Ok(val) = std::env::var("TERMINAL_SHELL_CACHE_TTL") {
             if let Ok(ttl) = val.parse::<u64>() {
                 self.shell.cache_ttl_seconds = ttl;
-                debug!("从环境变量设置 shell.cache_ttl_seconds = {}", ttl);
+                debug!("Applied env override: shell.cache_ttl_seconds = {}", ttl);
             }
         }
 
-        // 清理配置
+        // Cleanup configuration overrides
         if let Ok(val) = std::env::var("TERMINAL_CLEANUP_INTERVAL") {
             if let Ok(interval) = val.parse::<u64>() {
                 self.cleanup.interval_seconds = interval;
-                debug!("从环境变量设置 cleanup.interval_seconds = {}", interval);
+                debug!("Applied env override: cleanup.interval_seconds = {}", interval);
             }
         }
 
         if let Ok(val) = std::env::var("TERMINAL_AUTO_CLEANUP") {
             if let Ok(enabled) = val.parse::<bool>() {
                 self.cleanup.auto_cleanup_enabled = enabled;
-                debug!("从环境变量设置 cleanup.auto_cleanup_enabled = {}", enabled);
+                debug!(
+                    "Applied env override: cleanup.auto_cleanup_enabled = {}",
+                    enabled
+                );
             }
         }
     }
 
-    /// 验证配置的有效性
-    pub fn validate(&self) -> Result<(), String> {
-        // 验证缓冲区配置
+    /// Validate configuration invariants
+    pub fn validate(&self) -> MuxConfigResult<()> {
+        // Validate buffer configuration
         if self.buffer.max_size == 0 {
-            return Err("buffer.max_size 不能为0".to_string());
+            return Err(MuxConfigError::Validation {
+                reason: "buffer.max_size must be greater than zero".to_string(),
+            });
         }
 
         if self.buffer.keep_size >= self.buffer.max_size {
-            return Err("buffer.keep_size 必须小于 buffer.max_size".to_string());
+            return Err(MuxConfigError::Validation {
+                reason: "buffer.keep_size must be smaller than buffer.max_size".to_string(),
+            });
         }
 
         if self.buffer.max_truncation_attempts == 0 {
-            return Err("buffer.max_truncation_attempts 不能为0".to_string());
+            return Err(MuxConfigError::Validation {
+                reason: "buffer.max_truncation_attempts must be greater than zero".to_string(),
+            });
         }
 
-        // 验证Shell配置
+        // Validate shell configuration
         if self.shell.cache_ttl_seconds == 0 {
-            return Err("shell.cache_ttl_seconds 不能为0".to_string());
+            return Err(MuxConfigError::Validation {
+                reason: "shell.cache_ttl_seconds must be greater than zero".to_string(),
+            });
         }
 
-        // 验证性能配置
+        // Validate performance configuration
         if self.performance.max_concurrent_connections == 0 {
-            return Err("performance.max_concurrent_connections 不能为0".to_string());
+            return Err(MuxConfigError::Validation {
+                reason: "performance.max_concurrent_connections must be greater than zero"
+                    .to_string(),
+            });
         }
 
-        // 验证清理配置
+        // Validate cleanup configuration
         if self.cleanup.interval_seconds == 0 {
-            return Err("cleanup.interval_seconds 不能为0".to_string());
+            return Err(MuxConfigError::Validation {
+                reason: "cleanup.interval_seconds must be greater than zero".to_string(),
+            });
         }
 
         if self.cleanup.stale_threshold_seconds == 0 {
-            return Err("cleanup.stale_threshold_seconds 不能为0".to_string());
+            return Err(MuxConfigError::Validation {
+                reason: "cleanup.stale_threshold_seconds must be greater than zero".to_string(),
+            });
         }
 
-        debug!("配置验证通过");
+        debug!("Terminal mux config validated successfully");
         Ok(())
     }
 
-    /// 获取缓冲区清理间隔
+    /// Cleanup interval helper
     pub fn cleanup_interval(&self) -> Duration {
         Duration::from_secs(self.cleanup.interval_seconds)
     }
 
-    /// 获取过期阈值
+    /// Stale threshold helper
     pub fn stale_threshold(&self) -> Duration {
         Duration::from_secs(self.cleanup.stale_threshold_seconds)
     }
 
-    /// 获取Shell缓存TTL
+    /// Shell cache TTL helper
     pub fn shell_cache_ttl(&self) -> Duration {
         Duration::from_secs(self.shell.cache_ttl_seconds)
     }
 
-    /// 获取Shell最大缓存年龄
+    /// Shell cache maximum age helper
     pub fn shell_max_cache_age(&self) -> Duration {
         Duration::from_secs(self.shell.max_cache_age_seconds)
     }
 }
 
-/// 全局配置管理器
+/// Global configuration storage
 static GLOBAL_CONFIG: OnceLock<Arc<Mutex<TerminalSystemConfig>>> = OnceLock::new();
 
-/// 配置管理器
+/// Configuration manager facade
 pub struct ConfigManager;
 
 impl ConfigManager {
-    /// 初始化全局配置
-    pub fn init() -> Result<(), Box<dyn std::error::Error>> {
+    /// Initialise global configuration
+    pub fn init() -> MuxConfigResult<()> {
         let config = Self::load_config()?;
         GLOBAL_CONFIG
             .set(Arc::new(Mutex::new(config)))
-            .map_err(|_| "配置管理器已经初始化")?;
-        info!("配置管理器初始化成功");
+            .map_err(|_| MuxConfigError::Internal("Config manager already initialized".into()))?;
+        info!("Terminal mux config manager initialised");
         Ok(())
     }
 
-    /// 获取全局配置
+    /// Acquire the shared configuration handle
     pub fn get() -> Arc<Mutex<TerminalSystemConfig>> {
         GLOBAL_CONFIG
             .get_or_init(|| {
-                warn!("配置管理器未初始化，使用默认配置");
+                warn!("Terminal mux config manager was not initialised; falling back to defaults");
                 Arc::new(Mutex::new(TerminalSystemConfig::default()))
             })
             .clone()
     }
 
-    /// 加载配置（按优先级：文件 -> 环境变量 -> 默认值）
-    fn load_config() -> Result<TerminalSystemConfig, Box<dyn std::error::Error>> {
+    /// Load a configuration snapshot (file -> environment -> defaults)
+    fn load_config() -> MuxConfigResult<TerminalSystemConfig> {
         let mut config = TerminalSystemConfig::default();
 
-        // 尝试从配置文件加载
+        // Attempt to load configuration from predefined files
         let config_paths = [
             "terminal-config.toml",
             "config/terminal.toml",
@@ -357,44 +382,48 @@ impl ConfigManager {
                 match TerminalSystemConfig::from_file(path) {
                     Ok(file_config) => {
                         config = file_config;
-                        info!("从文件加载配置: {}", path);
+                        info!("Loaded terminal mux config from file {path}");
                         break;
                     }
                     Err(e) => {
-                        warn!("加载配置文件失败 {}: {}", path, e);
+                        warn!("Failed to load terminal mux config from {}: {}", path, e);
                     }
                 }
             }
         }
 
-        // 从环境变量覆盖
+        // Apply environment overrides
         config.override_from_env();
 
-        // 验证配置
+        // Validate the resulting configuration
         config.validate()?;
 
         Ok(config)
     }
 
-    /// 重新加载配置
-    pub fn reload() -> Result<(), Box<dyn std::error::Error>> {
+    /// Reload the in-memory configuration
+    pub fn reload() -> MuxConfigResult<()> {
         let new_config = Self::load_config()?;
         let config_guard = Self::get();
-        let mut config = config_guard.lock().map_err(|_| "获取配置锁失败")?;
+        let mut config = config_guard
+            .lock()
+            .map_err(|_| MuxConfigError::Internal("Failed to acquire config lock".into()))?;
         *config = new_config;
-        info!("配置重新加载成功");
+        info!("Reloaded terminal mux config");
         Ok(())
     }
 
-    /// 保存当前配置到文件
-    pub fn save_to_file<P: AsRef<Path>>(path: P) -> Result<(), Box<dyn std::error::Error>> {
+    /// Persist the current configuration state to disk
+    pub fn save_to_file<P: AsRef<Path>>(path: P) -> MuxConfigResult<()> {
         let config_guard = Self::get();
-        let config = config_guard.lock().map_err(|_| "获取配置锁失败")?;
+        let config = config_guard
+            .lock()
+            .map_err(|_| MuxConfigError::Internal("Failed to acquire config lock".into()))?;
         config.save_to_file(path)?;
         Ok(())
     }
 
-    /// 获取配置的只读副本
+    /// Return a snapshot of the configuration
     pub fn config_get() -> TerminalSystemConfig {
         let config_guard = Self::get();
         let config = config_guard
@@ -403,18 +432,20 @@ impl ConfigManager {
         config.clone()
     }
 
-    /// 更新配置
-    pub fn config_update<F>(updater: F) -> Result<(), Box<dyn std::error::Error>>
+    /// Mutate the configuration under a lock
+    pub fn config_update<F>(updater: F) -> MuxConfigResult<()>
     where
         F: FnOnce(&mut TerminalSystemConfig),
     {
         let config_guard = Self::get();
-        let mut config = config_guard.lock().map_err(|_| "获取配置锁失败")?;
+        let mut config = config_guard
+            .lock()
+            .map_err(|_| MuxConfigError::Internal("Failed to acquire config lock".into()))?;
 
         updater(&mut config);
         config.validate()?;
 
-        info!("配置更新成功");
+        info!("Terminal mux config updated");
         Ok(())
     }
 }

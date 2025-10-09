@@ -150,11 +150,11 @@ mod tests {
             provider_type: LLMProviderType::OpenAI,
             api_key: "test-key".to_string(),
             api_url: Some("https://api.openai.com/v1".to_string()),
-            model: "gpt-4".to_string(),
+            model: "gpt-5".to_string(),
             options: Some(std::collections::HashMap::new()),
         };
 
-        assert_eq!(config.model, "gpt-4");
+        assert_eq!(config.model, "gpt-5");
         assert_eq!(config.api_key, "test-key");
         assert!(config.api_url.is_some());
     }

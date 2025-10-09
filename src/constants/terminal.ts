@@ -17,7 +17,7 @@ export const TERMINAL_CONFIG: TerminalConfig = {
     background: '#1e1e1e',
     foreground: '#f0f0f0',
   },
-  scrollback: 2000,
+  scrollback: 1000, // 减少滚动缓冲区，提升性能
 
   // Required configuration objects
   shell: {
@@ -53,8 +53,8 @@ export const TERMINAL_CONFIG: TerminalConfig = {
   wordSeparator: ' ()[]{}\'",;', // 为中文优化的词分隔符
 
   // 滚动和缓冲区优化
-  scrollSensitivity: 3, // 提高滚动灵敏度，改善用户体验
-  fastScrollSensitivity: 5, // 快速滚动灵敏度
+  scrollSensitivity: 1, // 降低滚动灵敏度，减少事件频率
+  fastScrollSensitivity: 3, // 降低快速滚动灵敏度
   smoothScrollDuration: 0, // 禁用平滑滚动，减少渲染开销
 
   // 其他性能优化

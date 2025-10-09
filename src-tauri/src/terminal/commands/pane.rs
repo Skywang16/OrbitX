@@ -1,4 +1,3 @@
-
 use super::TerminalContextState;
 use crate::mux::PaneId;
 use crate::utils::{EmptyData, TauriApiResult};
@@ -102,7 +101,9 @@ mod tests {
         let result = state.registry.terminal_context_get_active_pane();
         assert_eq!(result, None);
 
-        let result = state.registry.terminal_context_set_active_pane(PaneId::new(pane_id));
+        let result = state
+            .registry
+            .terminal_context_set_active_pane(PaneId::new(pane_id));
         assert!(result.is_ok());
 
         let result = state.registry.terminal_context_get_active_pane();
@@ -116,10 +117,14 @@ mod tests {
         let state = create_test_state();
         let valid_pane_id = PaneId::new(123);
 
-        let result = state.registry.terminal_context_set_active_pane(valid_pane_id);
+        let result = state
+            .registry
+            .terminal_context_set_active_pane(valid_pane_id);
         assert!(result.is_ok());
 
-        let is_active = state.registry.terminal_context_is_pane_active(valid_pane_id);
+        let is_active = state
+            .registry
+            .terminal_context_is_pane_active(valid_pane_id);
         assert!(is_active);
     }
 
@@ -131,7 +136,10 @@ mod tests {
         let is_active = state.registry.terminal_context_is_pane_active(pane_id);
         assert!(!is_active);
 
-        state.registry.terminal_context_set_active_pane(pane_id).unwrap();
+        state
+            .registry
+            .terminal_context_set_active_pane(pane_id)
+            .unwrap();
         let is_active = state.registry.terminal_context_is_pane_active(pane_id);
         assert!(is_active);
 
@@ -145,8 +153,14 @@ mod tests {
         let state = create_test_state();
         let pane_id = PaneId::new(123);
 
-        state.registry.terminal_context_set_active_pane(pane_id).unwrap();
-        assert_eq!(state.registry.terminal_context_get_active_pane(), Some(pane_id));
+        state
+            .registry
+            .terminal_context_set_active_pane(pane_id)
+            .unwrap();
+        assert_eq!(
+            state.registry.terminal_context_get_active_pane(),
+            Some(pane_id)
+        );
 
         let result = state.registry.terminal_context_clear_active_pane();
         assert!(result.is_ok());

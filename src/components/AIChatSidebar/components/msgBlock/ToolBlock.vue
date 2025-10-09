@@ -1,29 +1,29 @@
 <template>
-  <div class="tool-block" v-if="step?.toolExecution">
+  <div class="tool-block" v-if="step?.stepType === 'tool_use' || step?.stepType === 'tool_result'">
     <div
       class="tool-header"
       :class="{ expandable: isExpandable, 'non-expandable': !isExpandable }"
       @click="toggleExpanded"
     >
       <div class="tool-info">
-        <div class="tool-icon" v-html="getToolIcon(step.toolExecution.name)"></div>
-        <span class="tool-name">{{ step.toolExecution.name }}</span>
-        <span class="tool-param" v-if="getToolParam(step.toolExecution)">
-          {{ getToolParam(step.toolExecution) }}
+        <div class="tool-icon" v-html="getToolIcon(toolName)"></div>
+        <span class="tool-name">{{ toolName || 'Unknown Tool' }}</span>
+        <span class="tool-param" v-if="toolParam">
+          {{ toolParam }}
         </span>
       </div>
       <div
         class="status-dot"
         :class="{
-          running: step.toolExecution.status === 'running',
-          completed: step.toolExecution.status === 'completed',
-          error: step.toolExecution.status === 'error',
+          running: step.stepType === 'tool_use',
+          completed: step.stepType === 'tool_result' && !isError,
+          error: step.stepType === 'tool_result' && isError,
         }"
       ></div>
     </div>
 
-    <div v-if="isExpanded && step.toolExecution.result" class="tool-result" @click.stop>
-      <EditResult v-if="isEditResult()" :editData="getEditData(step.toolExecution.result)" />
+    <div v-if="isExpanded && hasResult" class="tool-result" @click.stop>
+      <EditResult v-if="isEditResult" :editData="editData" />
       <div v-else class="tool-result-content">{{ cleanToolResult }}</div>
     </div>
   </div>
@@ -42,22 +42,92 @@
 <script setup lang="ts">
   import { ref, computed } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import type { AIOutputStep } from '@/types'
-  import type { ToolExecution } from '@/types'
+  import type { UiStep } from '@/api/agent/types'
   import EditResult from './components/EditResult.vue'
-  import type { SimpleEditResult } from '@/eko/tools/toolList/edit-file'
   import stripAnsi from 'strip-ansi'
+
+  interface EditResultData {
+    file: string
+    replacedCount: number
+    affectedLines?: number[]
+    useRegex: boolean
+    ignoreCase: boolean
+    startLine: number | null
+    endLine: number | null
+    previewOnly: boolean
+    old: string
+    new: string
+  }
 
   const { t } = useI18n()
 
   const props = defineProps<{
-    step: AIOutputStep & { toolExecution?: ToolExecution }
+    step: UiStep
   }>()
 
   const isExpanded = ref(false)
 
+  // Extract tool information from step metadata
+  const toolName = computed(() => {
+    return (props.step.metadata?.toolName as string) || ''
+  })
+
+  const toolParams = computed(() => {
+    return (props.step.metadata?.params as Record<string, unknown>) || {}
+  })
+
+  const toolResult = computed(() => {
+    return props.step.metadata?.result || ''
+  })
+
+  const isError = computed(() => {
+    return Boolean(props.step.metadata?.isError)
+  })
+
+  const hasResult = computed(() => {
+    return props.step.stepType === 'tool_result' && (toolResult.value || props.step.content)
+  })
+
+  const isEditResult = computed(() => {
+    return toolName.value === 'edit_file'
+  })
+
+  const editData = computed(() => {
+    if (!isEditResult.value) {
+      return {
+        file: '',
+        replacedCount: 0,
+        useRegex: false,
+        ignoreCase: false,
+        startLine: null,
+        endLine: null,
+        previewOnly: false,
+        old: '',
+        new: '',
+      } as EditResultData
+    }
+    return (
+      (props.step.metadata?.extInfo as EditResultData) ||
+      ({
+        file: '',
+        replacedCount: 0,
+        useRegex: false,
+        ignoreCase: false,
+        startLine: null,
+        endLine: null,
+        previewOnly: false,
+        old: '',
+        new: '',
+      } as EditResultData)
+    )
+  })
+
   const isExpandable = computed(() => {
-    return props.step?.toolExecution?.name === 'edit_file'
+    return toolName.value === 'edit_file' || hasResult.value
+  })
+
+  const toolParam = computed(() => {
+    return getToolParam({ name: toolName.value, params: toolParams.value })
   })
 
   const toolIcons = {
@@ -75,15 +145,7 @@
       <path d="M9 11H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M2 6H4V18H2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`,
-    read_directory: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M22 19C22 19.5304 21.7893 20.0391 21.4142 20.4142C21.0391 20.7893 20.5304 21 20 21H4C3.46957 21 2.96086 20.7893 2.58579 20.4142C2.21071 20.0391 2 19.5304 2 19V5C2 4.46957 2.21071 3.96086 2.58579 3.58579C2.96086 3.21071 3.46957 3 4 3H9L11 6H20C20.5304 6 21.0391 6.21071 21.4142 6.58579C21.7893 6.96086 22 7.46957 22 8V19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`,
-    create_file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.89 22 5.99 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M12 18V12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M9 15H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`,
+
     edit_file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M18.5 2.50023C18.8978 2.1024 19.4374 1.87891 20 1.87891C20.5626 1.87891 21.1022 2.1024 21.5 2.50023C21.8978 2.89805 22.1213 3.43762 22.1213 4.00023C22.1213 4.56284 21.8978 5.1024 21.5 5.50023L12 15.0002L8 16.0002L9 12.0002L18.5 2.50023Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -107,6 +169,35 @@
       <path d="M8 11H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       <path d="M11 8V14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>`,
+    apply_diff: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.89 22 5.99 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8 13H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8 17H12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M16 17L18 15L16 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`,
+    list_files: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3 7V5C3 3.89543 3.89543 3 5 3H9L11 5H19C20.1046 5 21 5.89543 21 7V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M3 7H21V17C21 18.1046 20.1046 19 19 19H5C3.89543 19 3 18.1046 3 17V7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M7 11H17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M7 15H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>`,
+    list_code_definition_names: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 18L22 12L16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8 6L2 12L8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M12 4L10 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`,
+    insert_content: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.89 22 5.99 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M9 15H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M12 12V18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`,
+    write_to_file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.89 22 5.99 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M10 12L12 14L16 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`,
 
     unknown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
@@ -119,27 +210,37 @@
     return toolIcons[toolName as keyof typeof toolIcons] || toolIcons.unknown
   }
 
-  const getToolParam = (toolExecution: ToolExecution) => {
+  type AnyToolExecution = { name: string; params?: Record<string, unknown> }
+  const getToolParam = (toolExecution: AnyToolExecution) => {
     const { name, params } = toolExecution
 
     switch (name) {
       case 'edit_file':
       case 'read_file':
-      case 'create_file':
-      case 'read_directory':
-        return formatPath(params.path as string)
+      case 'write_to_file':
+      case 'insert_content':
+        return formatPath((params?.path as string) || '')
 
       case 'read_many_files':
-        return `${(params.paths as string[])?.length || 0} files`
+        return `${(params?.paths as string[])?.length || 0} files`
 
       case 'web_fetch':
-        return formatUrl(params.url as string)
+        return formatUrl((params?.url as string) || '')
 
       case 'orbit_search':
-        return formatText(params.query as string)
+        return formatText((params?.query as string) || '')
 
       case 'shell':
-        return formatText(params.command as string)
+        return formatText((params?.command as string) || '')
+
+      case 'list_files':
+        return formatPath((params?.path as string) || '')
+
+      case 'list_code_definition_names':
+        return formatPath((params?.path as string) || '')
+
+      case 'apply_diff':
+        return `${(params?.files as { path: string; hunks: unknown[] }[])?.length || 0} files`
 
       default:
         return ''
@@ -176,16 +277,8 @@
     }
   }
 
-  const isEditResult = (): boolean => {
-    return props.step?.toolExecution?.name === 'edit_file'
-  }
-
-  const getEditData = (result: unknown): SimpleEditResult => {
-    return (result as { content?: { data?: SimpleEditResult }[] })?.content?.[0]?.data || ({} as SimpleEditResult)
-  }
-
   const cleanToolResult = computed(() => {
-    const result = props.step?.toolExecution?.result
+    const result = toolResult.value || props.step.content
     if (typeof result === 'string') {
       return stripAnsi(result)
     }
@@ -200,6 +293,7 @@
     border-radius: var(--border-radius);
     font-size: 13px;
     max-width: 100%;
+    margin-bottom: var(--spacing-xs, 4px);
   }
 
   .tool-header {

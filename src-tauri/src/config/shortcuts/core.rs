@@ -10,11 +10,10 @@
 use super::actions::ActionRegistry;
 use super::types::*;
 use crate::config::{
+    error::{ShortcutsError, ShortcutsResult},
     types::{ShortcutBinding, ShortcutsConfig},
     TomlConfigManager,
 };
-use crate::utils::error::AppResult;
-use anyhow::bail;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -28,8 +27,8 @@ pub struct ShortcutManager {
 }
 
 impl ShortcutManager {
-    pub async fn new(config_manager: Arc<TomlConfigManager>) -> AppResult<Self> {
-        debug!("创建快捷键管理器");
+    pub async fn new(config_manager: Arc<TomlConfigManager>) -> ShortcutsResult<Self> {
+        debug!("Initializing shortcut manager");
 
         let action_registry = Arc::new(RwLock::new(ActionRegistry::new()));
 
@@ -43,12 +42,12 @@ impl ShortcutManager {
 
         manager.reload_config().await?;
 
-        info!("快捷键管理器创建成功");
+        info!("Shortcut manager initialized");
         Ok(manager)
     }
 
-    pub async fn config_get(&self) -> AppResult<ShortcutsConfig> {
-        debug!("获取快捷键配置");
+    pub async fn config_get(&self) -> ShortcutsResult<ShortcutsConfig> {
+        debug!("Fetching shortcuts configuration");
 
         {
             let cached = self.cached_config.read().await;
@@ -59,8 +58,8 @@ impl ShortcutManager {
         self.reload_config().await
     }
 
-    pub async fn config_update(&self, new_config: ShortcutsConfig) -> AppResult<()> {
-        debug!("更新快捷键配置");
+    pub async fn config_update(&self, new_config: ShortcutsConfig) -> ShortcutsResult<()> {
+        debug!("Updating shortcuts configuration");
 
         let validation_result = self.config_validate(&new_config).await?;
         if !validation_result.is_valid {
@@ -69,12 +68,19 @@ impl ShortcutManager {
                 .iter()
                 .map(|e| e.message.clone())
                 .collect();
-            bail!("快捷键配置验证失败: {}", error_messages.join(", "));
+            let reason = format!(
+                "Shortcut configuration validation failed: {}",
+                error_messages.join(", ")
+            );
+            return Err(ShortcutsError::Validation { reason });
         }
 
         let conflict_result = self.detect_conflicts(&new_config).await?;
         if conflict_result.has_conflicts {
-            warn!("发现 {} 个快捷键冲突", conflict_result.conflicts.len());
+            warn!(
+                "Detected {} shortcut conflicts",
+                conflict_result.conflicts.len()
+            );
         }
 
         self.config_manager
@@ -91,41 +97,43 @@ impl ShortcutManager {
 
         self.clear_cache().await;
 
-        info!("快捷键配置更新成功");
+        info!("Shortcuts configuration updated");
         Ok(())
     }
 
-    pub async fn shortcuts_add(&self, binding: ShortcutBinding) -> AppResult<()> {
-        debug!("添加快捷键: {:?}", binding);
+    pub async fn shortcuts_add(&self, binding: ShortcutBinding) -> ShortcutsResult<()> {
+        debug!("Adding shortcut {:?}", binding);
 
         let mut config = self.config_get().await?;
 
         let key_combo = KeyCombination::from_binding(&binding);
         if self.has_conflict_in_config(&config, &key_combo).await {
-            bail!("快捷键 {} 已存在冲突", key_combo.to_string());
+            let detail = format!("Shortcut {} already conflicts", key_combo.to_string());
+            return Err(ShortcutsError::Conflict { detail });
         }
 
         self.validate_single_binding(&binding).await?;
         config.push(binding);
         self.config_update(config).await?;
 
-        info!("快捷键添加成功");
+        info!("Shortcut added");
         Ok(())
     }
 
-    pub async fn shortcuts_remove(&self, index: usize) -> AppResult<ShortcutBinding> {
-        debug!("删除快捷键: 索引 {}", index);
+    pub async fn shortcuts_remove(&self, index: usize) -> ShortcutsResult<ShortcutBinding> {
+        debug!("Removing shortcut at index {}", index);
 
         let mut config = self.config_get().await?;
 
         if index >= config.len() {
-            bail!("快捷键索引超出范围: {}", index);
+            let reason = format!("Shortcut index out of bounds: {}", index);
+            return Err(ShortcutsError::Validation { reason });
         }
 
         let removed_binding = config.remove(index);
         self.config_update(config).await?;
 
-        info!("快捷键删除成功");
+        info!("Shortcut removed");
         Ok(removed_binding)
     }
 
@@ -133,35 +141,42 @@ impl ShortcutManager {
         &self,
         index: usize,
         new_binding: ShortcutBinding,
-    ) -> AppResult<()> {
-        debug!("更新快捷键: 索引 {}, 新绑定 {:?}", index, new_binding);
+    ) -> ShortcutsResult<()> {
+        debug!(
+            "Updating shortcut at index {} with binding {:?}",
+            index, new_binding
+        );
 
         let mut config = self.config_get().await?;
         self.validate_single_binding(&new_binding).await?;
 
         if index >= config.len() {
-            bail!("快捷键索引超出范围: {}", index);
+            let reason = format!("Shortcut index out of bounds: {}", index);
+            return Err(ShortcutsError::Validation { reason });
         }
 
         config[index] = new_binding;
         self.config_update(config).await?;
 
-        info!("快捷键更新成功");
+        info!("Shortcut updated");
         Ok(())
     }
 
-    pub async fn reset_to_defaults(&self) -> AppResult<()> {
-        debug!("重置快捷键配置到默认值");
+    pub async fn reset_to_defaults(&self) -> ShortcutsResult<()> {
+        debug!("Resetting shortcuts to defaults");
 
         let default_config = crate::config::defaults::create_default_shortcuts_config();
         self.config_update(default_config).await?;
 
-        info!("快捷键配置重置成功");
+        info!("Shortcuts configuration reset");
         Ok(())
     }
 
-    pub async fn config_validate(&self, config: &ShortcutsConfig) -> AppResult<ValidationResult> {
-        debug!("验证快捷键配置");
+    pub async fn config_validate(
+        &self,
+        config: &ShortcutsConfig,
+    ) -> ShortcutsResult<ValidationResult> {
+        debug!("Validating shortcuts configuration");
 
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
@@ -170,7 +185,7 @@ impl ShortcutManager {
             if let Err(e) = self.validate_single_binding(binding).await {
                 errors.push(ValidationError {
                     error_type: ValidationErrorType::InvalidAction,
-                    message: format!("第{}个快捷键无效: {}", index + 1, e),
+                    message: format!("Shortcut {} is invalid: {}", index + 1, e),
                     key_combination: Some(KeyCombination::from_binding(binding)),
                 });
             }
@@ -180,7 +195,7 @@ impl ShortcutManager {
             if !registry.is_action_registered(&action_name).await {
                 warnings.push(ValidationWarning {
                     warning_type: ValidationWarningType::UnregisteredAction,
-                    message: format!("动作 '{}' 未注册", action_name),
+                    message: format!("Action '{}' is not registered", action_name),
                     key_combination: Some(KeyCombination::from_binding(binding)),
                 });
             }
@@ -200,8 +215,11 @@ impl ShortcutManager {
         Ok(result)
     }
 
-    pub async fn detect_conflicts(&self, config: &ShortcutsConfig) -> AppResult<ConflictResult> {
-        debug!("检测快捷键冲突");
+    pub async fn detect_conflicts(
+        &self,
+        config: &ShortcutsConfig,
+    ) -> ShortcutsResult<ConflictResult> {
+        debug!("Detecting shortcut conflicts");
 
         let mut key_map: HashMap<String, Vec<ConflictingBinding>> = HashMap::new();
 
@@ -255,8 +273,8 @@ impl ShortcutManager {
         Ok(result)
     }
 
-    pub async fn get_statistics(&self) -> AppResult<ShortcutStatistics> {
-        debug!("获取快捷键统计信息");
+    pub async fn get_statistics(&self) -> ShortcutsResult<ShortcutStatistics> {
+        debug!("Collecting shortcut statistics");
 
         let config = self.config_get().await?;
         let total_count = config.len();
@@ -285,8 +303,11 @@ impl ShortcutManager {
         })
     }
 
-    pub async fn shortcuts_search(&self, options: SearchOptions) -> AppResult<SearchResult> {
-        debug!("搜索快捷键: {:?}", options);
+    pub async fn shortcuts_search(
+        &self,
+        options: SearchOptions,
+    ) -> ShortcutsResult<SearchResult> {
+        debug!("Searching shortcuts with options {:?}", options);
 
         let config = self.config_get().await?;
         let mut matches = Vec::new();
@@ -375,7 +396,7 @@ impl ShortcutManager {
         action: &crate::config::types::ShortcutAction,
         context: &ActionContext,
     ) -> OperationResult<serde_json::Value> {
-        debug!("执行快捷键动作");
+        debug!("Executing shortcut action");
 
         let registry = self.action_registry.read().await;
         registry.execute_action(action, context).await
@@ -387,7 +408,7 @@ impl ShortcutManager {
 
     // 私有方法
 
-    async fn reload_config(&self) -> AppResult<ShortcutsConfig> {
+    async fn reload_config(&self) -> ShortcutsResult<ShortcutsConfig> {
         let config = self.config_manager.config_get().await?;
         let shortcuts_config = config.shortcuts;
 
@@ -399,21 +420,27 @@ impl ShortcutManager {
         Ok(shortcuts_config)
     }
 
-    async fn validate_single_binding(&self, binding: &ShortcutBinding) -> AppResult<()> {
-        if binding.key.is_empty() {
-            bail!("按键不能为空");
+    async fn validate_single_binding(&self, binding: &ShortcutBinding) -> ShortcutsResult<()> {
+        if binding.key.trim().is_empty() {
+            return Err(ShortcutsError::Validation {
+                reason: "Shortcut key cannot be empty".to_string(),
+            });
         }
 
         let valid_modifiers = ["ctrl", "alt", "shift", "cmd", "meta", "super"];
         for modifier in &binding.modifiers {
             if !valid_modifiers.contains(&modifier.to_lowercase().as_str()) {
-                bail!("无效的修饰键: {}", modifier);
+                return Err(ShortcutsError::Validation {
+                    reason: format!("Unsupported modifier: {}", modifier),
+                });
             }
         }
 
         let action_name = self.extract_action_name(&binding.action);
         if action_name.is_empty() {
-            bail!("动作不能为空");
+            return Err(ShortcutsError::Validation {
+                reason: "Action name cannot be empty".to_string(),
+            });
         }
 
         Ok(())

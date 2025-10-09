@@ -8,6 +8,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
+import { invoke as appInvoke } from '@/utils/request'
 
 /**
  * 文件系统 API 接口类
@@ -28,10 +29,13 @@ export class FilesystemApi {
   }
 
   /**
-   * 获取文件或目录元数据
+   * 获取文件或目录元数据（使用 Tauri fs 插件的 stat 接口）
    */
-  async getMetadata(path: string): Promise<{ isDir?: boolean; size?: number }> {
-    return await invoke<{ isDir?: boolean; size?: number }>('plugin:fs|metadata', { path })
+  async getMetadata(path: string): Promise<{ isDir?: boolean; size?: number; isFile?: boolean; isSymlink?: boolean }> {
+    // tauri-plugin-fs v2 使用 'stat'，权限对应 capabilities 中的 "fs:allow-stat"
+    return await invoke<{ isDir?: boolean; size?: number; isFile?: boolean; isSymlink?: boolean }>('plugin:fs|stat', {
+      path,
+    })
   }
 
   /**
@@ -69,6 +73,13 @@ export class FilesystemApi {
         isSymlink: boolean
       }>
     >('plugin:fs|read_dir', { path })
+  }
+
+  /**
+   * 列出目录（后端命令，完整 .gitignore 语义，递归可选）
+   */
+  async listDirectory(path: string, recursive: boolean = false): Promise<string[]> {
+    return await appInvoke<string[]>('fs_list_directory', { path, recursive })
   }
 }
 

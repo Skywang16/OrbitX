@@ -28,11 +28,11 @@ export async function initLocale() {
   try {
     // 优先从后端语言管理器获取（与后端 i18n 保持一致）
     let savedLocale: string | undefined
-    try {
-      savedLocale = await invoke<string>('language_get_app_language')
-    } catch (error) {
+    const appLanguage = await invoke<string>('language_get_app_language').catch(error => {
       console.warn('Failed to get app language:', error)
-    }
+      return undefined
+    })
+    savedLocale = appLanguage
 
     if (!savedLocale) {
       const appConfig = await storageApi.getAppConfig()
@@ -53,18 +53,16 @@ export async function initLocale() {
     i18n.global.locale.value = locale as 'zh-CN' | 'en-US'
 
     // 监听后端语言变化事件，保持回显同步
-    try {
-      await listen<string>('language-changed', event => {
-        const next = event.payload
-        if (next === 'zh-CN' || next === 'en-US') {
-          i18n.global.locale.value = next
-          const sessionStore = useSessionStore()
-          sessionStore.updateUiState({ language: next })
-        }
-      })
-    } catch (error) {
+    await listen<string>('language-changed', event => {
+      const next = event.payload
+      if (next === 'zh-CN' || next === 'en-US') {
+        i18n.global.locale.value = next
+        const sessionStore = useSessionStore()
+        sessionStore.updateUiState({ language: next })
+      }
+    }).catch(error => {
       console.warn('Failed to setup language listener:', error)
-    }
+    })
   } catch (error) {
     console.warn('Failed to load locale from storage, using default:', error)
     // 使用浏览器语言作为回退
@@ -92,11 +90,9 @@ export async function setLocale(locale: string) {
     i18n.global.locale.value = locale as 'zh-CN' | 'en-US'
 
     // 通知后端语言管理器（写配置并广播事件）
-    try {
-      await invoke<void>('language_set_app_language', { language: locale })
-    } catch (error) {
+    await invoke<void>('language_set_app_language', { language: locale }).catch(error => {
       console.warn('Failed to set app language:', error)
-    }
+    })
 
     // 立即保存会话状态
     const sessionStore = useSessionStore()

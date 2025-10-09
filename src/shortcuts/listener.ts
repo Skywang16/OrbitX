@@ -9,12 +9,14 @@ import { shortcutsApi } from '@/api/shortcuts'
 import type { ShortcutsConfig, ShortcutBinding } from '@/types'
 import { shortcutActionsService } from './actions'
 import { formatKeyCombo, isShortcutMatch, extractActionName } from './utils'
+import { useTerminalStore } from '@/stores/Terminal'
 
 export function useShortcutListener() {
   const isListening = ref(false)
   const config = ref<ShortcutsConfig | null>(null)
   let keydownHandler: ((event: KeyboardEvent) => void) | null = null
   let wheelHandler: ((event: WheelEvent) => void) | null = null
+  const terminalStore = useTerminalStore()
 
   const initializeListener = async () => {
     config.value = await shortcutsApi.getConfig()
@@ -162,8 +164,8 @@ export function useShortcutListener() {
     return frontendResult
   }
 
-  const getCurrentTerminalId = (): string | null => {
-    return null
+  const getCurrentTerminalId = (): number | null => {
+    return typeof terminalStore.activeTerminalId === 'number' ? terminalStore.activeTerminalId : null
   }
 
   const reloadConfig = async () => {

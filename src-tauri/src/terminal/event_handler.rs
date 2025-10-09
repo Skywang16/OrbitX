@@ -8,7 +8,8 @@ use tracing::{debug, error, warn};
 
 use crate::mux::{MuxNotification, SubscriberCallback, TerminalMux};
 use crate::terminal::types::TerminalContextEvent;
-use crate::utils::error::AppResult;
+use crate::terminal::error::{EventHandlerError, EventHandlerResult};
+use crate::completion::output_analyzer::OutputAnalyzer;
 
 /// 统一的终端事件处理器
 ///
@@ -40,23 +41,34 @@ impl<R: Runtime> TerminalEventHandler<R> {
         &mut self,
         mux: &Arc<TerminalMux>,
         context_event_receiver: broadcast::Receiver<TerminalContextEvent>,
-    ) -> AppResult<()> {
+    ) -> EventHandlerResult<()> {
         if self.mux_subscriber_id.is_some() {
-            anyhow::bail!("事件处理器已经启动");
+            return Err(EventHandlerError::AlreadyStarted);
         }
 
         // 订阅 TerminalMux 事件（对 PaneOutput 采用缓冲节流，其它事件即时发送）
         let app_handle = self.app_handle.clone();
         let mux_subscriber: SubscriberCallback = Box::new(move |notification| match notification {
             MuxNotification::PaneOutput { pane_id, data } => {
-                // 使用 ChannelManager 直接发送字节流，避免在后端进行任何字符串解码
-                let state = app_handle.state::<crate::terminal::channel_state::TerminalChannelState>();
+                let state =
+                    app_handle.state::<crate::terminal::channel_state::TerminalChannelState>();
                 state.manager.send_data(pane_id.as_u32(), data.as_ref());
+
+                // 同步喂给 OutputAnalyzer，供历史缓存使用
+                let text = String::from_utf8_lossy(data);
+                if let Err(e) = OutputAnalyzer::global().analyze_output(pane_id.as_u32(), &text) {
+                    warn!(
+                        "OutputAnalyzer analyze_output failed: pane_id={}, err={}",
+                        pane_id.as_u32(),
+                        e
+                    );
+                }
                 true
             }
             MuxNotification::PaneRemoved(pane_id) => {
                 // 通知 Channel 已关闭
-                let state = app_handle.state::<crate::terminal::channel_state::TerminalChannelState>();
+                let state =
+                    app_handle.state::<crate::terminal::channel_state::TerminalChannelState>();
                 state.manager.close(pane_id.as_u32());
                 let (event_name, payload) = Self::mux_notification_to_tauri_event(notification);
                 if let Err(e) = app_handle.emit(event_name, payload.clone()) {
@@ -92,7 +104,7 @@ impl<R: Runtime> TerminalEventHandler<R> {
     }
 
     /// 停止事件处理器
-    pub fn stop(&mut self, mux: &Arc<TerminalMux>) -> AppResult<()> {
+    pub fn stop(&mut self, mux: &Arc<TerminalMux>) -> EventHandlerResult<()> {
         if let Some(subscriber_id) = self.mux_subscriber_id.take() {
             if mux.unsubscribe(subscriber_id) {
                 debug!("终端事件处理器已停止，Mux订阅者ID: {}", subscriber_id);
@@ -243,7 +255,7 @@ pub fn create_terminal_event_handler<R: Runtime>(
     app_handle: AppHandle<R>,
     mux: &Arc<TerminalMux>,
     context_event_receiver: broadcast::Receiver<TerminalContextEvent>,
-) -> AppResult<TerminalEventHandler<R>> {
+) -> EventHandlerResult<TerminalEventHandler<R>> {
     let mut handler = TerminalEventHandler::new(app_handle);
     handler.start(mux, context_event_receiver)?;
     Ok(handler)

@@ -1,13 +1,46 @@
-use crate::ai::types::AIModelConfig;
+use crate::ai::error::{AIServiceError, AIServiceResult};
+use crate::ai::types::{AIModelConfig, AIProvider, ModelType};
 use crate::storage::repositories::{Repository, RepositoryManager};
-use crate::utils::error::AppResult;
-use anyhow::anyhow;
-use serde_json::json;
+use chrono::Utc;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
+use reqwest::{Client, StatusCode};
+use serde::Deserialize;
+use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::{debug, info, warn};
 
+#[derive(Clone)]
 pub struct AIService {
     repositories: Arc<RepositoryManager>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AIModelUpdatePayload {
+    name: Option<String>,
+    provider: Option<AIProvider>,
+    api_url: Option<String>,
+    api_key: Option<String>,
+    model: Option<String>,
+    model_type: Option<ModelType>,
+    enabled: Option<bool>,
+    options: Option<Value>,
+}
+
+struct ProviderHttpRequest {
+    provider_label: &'static str,
+    url: String,
+    headers: HeaderMap,
+    payload: Value,
+    timeout: Duration,
+    tolerated: &'static [StatusCode],
+}
+
+enum ConnectionProbe {
+    Http(ProviderHttpRequest),
+    Gemini,
 }
 
 impl AIService {
@@ -15,283 +48,265 @@ impl AIService {
         Self { repositories }
     }
 
-    pub async fn initialize(&self) -> AppResult<()> {
+    pub async fn initialize(&self) -> AIServiceResult<()> {
         Ok(())
     }
 
-    pub async fn get_models(&self) -> Vec<AIModelConfig> {
+    pub async fn get_models(&self) -> AIServiceResult<Vec<AIModelConfig>> {
         self.repositories
             .ai_models()
             .find_all()
             .await
-            .unwrap_or_default()
+            .map_err(|err| AIServiceError::Repository {
+                operation: "ai_models.find_all",
+                source: err,
+            })
     }
 
-    pub async fn add_model(&self, config: AIModelConfig) -> AppResult<()> {
+    pub async fn add_model(&self, config: AIModelConfig) -> AIServiceResult<()> {
         self.repositories
             .ai_models()
             .save(&config)
             .await
             .map(|_| ())
+            .map_err(|err| AIServiceError::Repository {
+                operation: "ai_models.save",
+                source: err,
+            })
     }
 
-    pub async fn remove_model(&self, model_id: &str) -> AppResult<()> {
+    pub async fn remove_model(&self, model_id: &str) -> AIServiceResult<()> {
         self.repositories
             .ai_models()
             .delete_by_string_id(model_id)
             .await
+            .map_err(|err| AIServiceError::Repository {
+                operation: "ai_models.delete_by_string_id",
+                source: err,
+            })
     }
 
-    pub async fn update_model(&self, model_id: &str, updates: serde_json::Value) -> AppResult<()> {
-        let existing = self
-            .repositories
-            .ai_models()
-            .find_by_string_id(model_id)
-            .await?
-            .ok_or_else(|| anyhow!("模型不存在: {}", model_id))?;
+    pub async fn update_model(&self, model_id: &str, updates: Value) -> AIServiceResult<()> {
+        let update_payload: AIModelUpdatePayload =
+            serde_json::from_value(updates).map_err(AIServiceError::InvalidUpdatePayload)?;
 
-        let mut config_value = serde_json::to_value(&existing)?;
-        if let serde_json::Value::Object(ref mut config_obj) = config_value {
-            if let serde_json::Value::Object(updates_obj) = updates {
-                for (key, value) in updates_obj {
-                    config_obj.insert(key, value);
-                }
-            }
+        let repo = self.repositories.ai_models();
+        let mut existing = repo
+            .find_by_string_id(model_id)
+            .await
+            .map_err(|err| AIServiceError::Repository {
+                operation: "ai_models.find_by_string_id",
+                source: err,
+            })?
+            .ok_or_else(|| AIServiceError::ModelNotFound {
+                model_id: model_id.to_string(),
+            })?;
+
+        if let Some(name) = update_payload.name.and_then(trimmed) {
+            existing.name = name;
+        }
+        if let Some(provider) = update_payload.provider {
+            existing.provider = provider;
+        }
+        if let Some(url) = update_payload.api_url.and_then(trimmed) {
+            existing.api_url = url;
+        }
+        if let Some(api_key) = update_payload.api_key {
+            existing.api_key = api_key;
+        }
+        if let Some(model) = update_payload.model.and_then(trimmed) {
+            existing.model = model;
+        }
+        if let Some(model_type) = update_payload.model_type {
+            existing.model_type = model_type;
+        }
+        if let Some(enabled) = update_payload.enabled {
+            existing.enabled = enabled;
+        }
+        if let Some(options) = update_payload.options {
+            existing.options = Some(options);
         }
 
-        let final_config: AIModelConfig = serde_json::from_value(config_value)?;
-        self.repositories.ai_models().update(&final_config).await
+        existing.updated_at = Utc::now();
+
+        repo.update(&existing)
+            .await
+            .map_err(|err| AIServiceError::Repository {
+                operation: "ai_models.update",
+                source: err,
+            })
     }
 
-    pub async fn test_connection(&self, model_id: &str) -> AppResult<String> {
+    pub async fn test_connection(&self, model_id: &str) -> AIServiceResult<String> {
         let model = self
             .repositories
             .ai_models()
             .find_by_string_id(model_id)
-            .await?
-            .ok_or_else(|| anyhow!("模型不存在: {}", model_id))?;
+            .await
+            .map_err(|err| AIServiceError::Repository {
+                operation: "ai_models.find_by_string_id",
+                source: err,
+            })?
+            .ok_or_else(|| AIServiceError::ModelNotFound {
+                model_id: model_id.to_string(),
+            })?;
 
         self.test_connection_with_config(&model).await
     }
 
-    pub async fn test_connection_with_config(&self, model: &AIModelConfig) -> AppResult<String> {
+    pub async fn test_connection_with_config(
+        &self,
+        model: &AIModelConfig,
+    ) -> AIServiceResult<String> {
+        let probe = self.build_probe(model)?;
+
+        match probe {
+            ConnectionProbe::Http(request) => self.execute_http_probe(request).await,
+            ConnectionProbe::Gemini => self.execute_gemini_probe(model).await,
+        }
+    }
+
+    fn build_probe(&self, model: &AIModelConfig) -> AIServiceResult<ConnectionProbe> {
+        let timeout = self.resolve_timeout(model);
+
         match model.provider {
-            crate::storage::repositories::ai_models::AIProvider::OpenAI => {
-                self.test_openai_connection(model).await
+            AIProvider::OpenAI => {
+                let url = join_url(model.api_url.trim(), "v1/chat/completions");
+                let headers =
+                    header_map(&[("authorization", format!("Bearer {}", model.api_key))])?;
+                let payload = basic_chat_payload(&model.model);
+                Ok(ConnectionProbe::Http(ProviderHttpRequest {
+                    provider_label: "OpenAI",
+                    url,
+                    headers,
+                    payload,
+                    timeout,
+                    tolerated: &TOLERATED_STANDARD_CODES,
+                }))
             }
-            crate::storage::repositories::ai_models::AIProvider::Claude => {
-                self.test_claude_connection(model).await
+            AIProvider::Claude => {
+                let url = join_url(model.api_url.trim(), "v1/messages");
+                let headers = header_map(&[
+                    ("x-api-key", model.api_key.clone()),
+                    ("anthropic-version", "2023-06-01".to_string()),
+                ])?;
+                let payload = json!({
+                    "model": model.model,
+                    "max_tokens": 1,
+                    "messages": [{"role": "user", "content": "Hello"}]
+                });
+                Ok(ConnectionProbe::Http(ProviderHttpRequest {
+                    provider_label: "Claude",
+                    url,
+                    headers,
+                    payload,
+                    timeout,
+                    tolerated: &TOLERATED_STANDARD_CODES,
+                }))
             }
-            crate::storage::repositories::ai_models::AIProvider::Gemini => {
-                self.test_gemini_connection(model).await
+            AIProvider::Qwen => {
+                let url = join_url(model.api_url.trim(), "v1/chat/completions");
+                let headers =
+                    header_map(&[("authorization", format!("Bearer {}", model.api_key))])?;
+                let payload = basic_chat_payload(&model.model);
+                Ok(ConnectionProbe::Http(ProviderHttpRequest {
+                    provider_label: "Qwen",
+                    url,
+                    headers,
+                    payload,
+                    timeout,
+                    tolerated: &TOLERATED_STANDARD_CODES,
+                }))
             }
-            crate::storage::repositories::ai_models::AIProvider::Qwen => {
-                self.test_qwen_connection(model).await
+            AIProvider::Custom => {
+                let url = join_url(model.api_url.trim(), "v1/chat/completions");
+                let headers =
+                    header_map(&[("authorization", format!("Bearer {}", model.api_key))])?;
+                let payload = basic_chat_payload(&model.model);
+                Ok(ConnectionProbe::Http(ProviderHttpRequest {
+                    provider_label: "自定义",
+                    url,
+                    headers,
+                    payload,
+                    timeout,
+                    tolerated: &TOLERATED_CUSTOM_CODES,
+                }))
             }
-            crate::storage::repositories::ai_models::AIProvider::Custom => {
-                self.test_custom_connection(model).await
-            }
+            AIProvider::Gemini => Ok(ConnectionProbe::Gemini),
         }
     }
 
-    async fn test_openai_connection(&self, model: &AIModelConfig) -> AppResult<String> {
-        let chat_url = format!("{}/chat/completions", model.api_url.trim_end_matches('/'));
-        let client = reqwest::Client::new();
+    async fn execute_http_probe(
+        &self,
+        request: ProviderHttpRequest,
+    ) -> AIServiceResult<String> {
+        let client = Client::builder()
+            .timeout(request.timeout)
+            .build()
+            .map_err(AIServiceError::HttpClient)?;
 
-        // 发送一个实际的LLM请求来测试连接和模型可用性
-        let test_payload = json!({
-            "model": model.model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Hello"
-                }
-            ],
-            "max_tokens": 1,
-            "temperature": 0
-        });
+        let mut headers = request.headers.clone();
+        headers
+            .entry(CONTENT_TYPE)
+            .or_insert(HeaderValue::from_static("application/json"));
 
-        let response = match client
-            .post(&chat_url)
-            .header("Authorization", format!("Bearer {}", model.api_key))
-            .header("Content-Type", "application/json")
-            .json(&test_payload)
-            .timeout(Duration::from_secs(15))
+        debug!("开始{}连接测试: {}", request.provider_label, request.url);
+
+        let response = client
+            .post(&request.url)
+            .headers(headers)
+            .json(&request.payload)
             .send()
             .await
-        {
-            Ok(response) => response,
-            Err(e) => return Ok(format!("连接失败: {}", e)),
-        };
+            .map_err(|err| AIServiceError::ProviderRequest {
+                provider: request.provider_label,
+                source: err,
+            })?;
 
         let status = response.status();
-
-        // 对于OpenAI API，我们认为以下情况为成功：
-        // - 200: 正常响应
-        // - 400: Bad Request (通常表示API可用但请求参数有问题)
-        // - 401: Unauthorized (API Key问题，但API端点可用)
-        // - 429: Rate limit (API可用但达到限制)
-        let is_success = status.is_success()
-            || status == reqwest::StatusCode::BAD_REQUEST
-            || status == reqwest::StatusCode::UNAUTHORIZED
-            || status == reqwest::StatusCode::TOO_MANY_REQUESTS;
-
-        if is_success {
-            Ok("连接成功".to_string())
+        if status.is_success() || request.tolerated.iter().any(|code| *code == status) {
+            info!("{} connection test successful, status code {}", request.provider_label, status);
+            Ok("Connection successful".to_string())
         } else {
-            // 抛出详细的错误信息
             let error_text = response
                 .text()
                 .await
-                .unwrap_or_else(|_| "无法读取响应内容".to_string());
-            let error_msg = format!("OpenAI API 错误: {} - {}", status, error_text);
-            tracing::warn!("{}", error_msg);
-            Err(anyhow::anyhow!(error_msg))
+                .unwrap_or_else(|_| "(failed to read response body)".to_string());
+            let error_msg = format!(
+                "{} API error: {} - {}",
+                request.provider_label, status, error_text
+            );
+            warn!("{}", error_msg);
+            Err(AIServiceError::ProviderApi {
+                provider: request.provider_label,
+                status,
+                message: error_msg,
+            })
         }
     }
 
-    async fn test_claude_connection(&self, model: &AIModelConfig) -> AppResult<String> {
-        let url = format!("{}/v1/messages", model.api_url.trim_end_matches('/'));
-        let client = reqwest::Client::new();
-
-        let test_payload = json!({
-            "model": model.model,
-            "max_tokens": 1,
-            "messages": [{"role": "user", "content": "Hello"}]
-        });
-
-        let response = match client
-            .post(&url)
-            .header("x-api-key", &model.api_key)
-            .header("anthropic-version", "2023-06-01")
-            .header("Content-Type", "application/json")
-            .json(&test_payload)
-            .timeout(Duration::from_secs(15))
-            .send()
-            .await
-        {
-            Ok(response) => response,
-            Err(e) => return Ok(format!("连接失败: {}", e)),
-        };
-
-        let status = response.status();
-
-        // 对于Claude API，我们认为以下情况为成功：
-        // - 200: 正常响应
-        // - 400: Bad Request (通常表示API可用但请求参数有问题)
-        // - 401: Unauthorized (API Key问题，但API端点可用)
-        // - 429: Rate limit (API可用但达到限制)
-        let is_success = status.is_success()
-            || status == reqwest::StatusCode::BAD_REQUEST
-            || status == reqwest::StatusCode::UNAUTHORIZED
-            || status == reqwest::StatusCode::TOO_MANY_REQUESTS;
-
-        if is_success {
-            Ok("连接成功".to_string())
-        } else {
-            // 抛出详细的错误信息
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "无法读取响应内容".to_string());
-            let error_msg = format!("Claude API 错误: {} - {}", status, error_text);
-            tracing::warn!("{}", error_msg);
-            Err(anyhow::anyhow!(error_msg))
-        }
-    }
-
-    async fn test_custom_connection(&self, model: &AIModelConfig) -> AppResult<String> {
-        let client = reqwest::Client::new();
-
-        // 尝试发送一个实际的LLM请求来测试连接和模型可用性
-        let chat_url = if model.api_url.ends_with("/v1") {
-            format!("{}/chat/completions", model.api_url)
-        } else if model.api_url.ends_with("/") {
-            format!("{}v1/chat/completions", model.api_url)
-        } else {
-            format!("{}/v1/chat/completions", model.api_url)
-        };
-
-        let test_payload = json!({
-            "model": model.model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Hello"
-                }
-            ],
-            "max_tokens": 1,
-            "temperature": 0
-        });
-
-        let response = match client
-            .post(&chat_url)
-            .header("Authorization", format!("Bearer {}", model.api_key))
-            .header("Content-Type", "application/json")
-            .json(&test_payload)
-            .timeout(Duration::from_secs(15))
-            .send()
-            .await
-        {
-            Ok(response) => response,
-            Err(e) => return Ok(format!("连接失败: {}", e)),
-        };
-
-        let status = response.status();
-
-        // 对于LLM测试，我们认为以下情况为成功：
-        // - 200: 正常响应
-        // - 400: Bad Request (通常表示API可用但请求参数有问题)
-        // - 401: Unauthorized (API Key问题，但API端点可用)
-        // - 422: Unprocessable Entity (模型参数问题，但API可用)
-        let is_success = status.is_success()
-            || status == reqwest::StatusCode::BAD_REQUEST
-            || status == reqwest::StatusCode::UNAUTHORIZED
-            || status == reqwest::StatusCode::UNPROCESSABLE_ENTITY;
-
-        if is_success {
-            Ok("连接成功".to_string())
-        } else {
-            // 抛出详细的错误信息
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "无法读取响应内容".to_string());
-            let error_msg = format!("自定义 API 错误: {} - {}", status, error_text);
-            tracing::warn!("{}", error_msg);
-            Err(anyhow::anyhow!(error_msg))
-        }
-    }
-
-    async fn test_gemini_connection(&self, model: &AIModelConfig) -> AppResult<String> {
+    async fn execute_gemini_probe(&self, model: &AIModelConfig) -> AIServiceResult<String> {
         use crate::llm::providers::base::LLMProvider;
         use crate::llm::providers::gemini::GeminiProvider;
         use crate::llm::types::{
             LLMMessage, LLMMessageContent, LLMProviderConfig, LLMProviderType, LLMRequest,
         };
 
-        // 直接使用 GeminiProvider 进行测试，确保一致性
+        let provider_options = match model.options.clone() {
+            Some(Value::Object(map)) => Some(map.into_iter().collect::<HashMap<_, _>>()),
+            _ => None,
+        };
+
         let config = LLMProviderConfig {
             provider_type: LLMProviderType::Gemini,
-            api_url: if model.api_url.trim().is_empty() {
-                None
-            } else {
-                Some(model.api_url.clone())
-            },
+            api_url: trimmed(model.api_url.clone()),
             api_key: model.api_key.clone(),
             model: model.model.clone(),
-            options: None,
+            options: provider_options,
         };
 
         let provider = GeminiProvider::new(config);
-
-        tracing::debug!(
-            "开始Gemini连接测试，模型: {}, API URL: '{}'",
-            model.model,
-            model.api_url
-        );
-
-        let test_request = LLMRequest {
+        let request = LLMRequest {
             model: model.model.clone(),
             messages: vec![LLMMessage {
                 role: "user".to_string(),
@@ -304,77 +319,77 @@ impl AIService {
             tool_choice: None,
         };
 
-        tracing::debug!("发送Gemini测试请求...");
-        match provider.call(test_request).await {
-            Ok(response) => {
-                tracing::debug!("Gemini连接测试成功，响应: {:?}", response);
-                Ok("连接成功".to_string())
-            }
-            Err(e) => {
-                let error_msg = format!("Gemini API 错误: {}", e);
-                tracing::error!("Gemini连接测试失败，错误: {}", e);
-                tracing::error!("错误详情: {:?}", e);
-                Err(anyhow::anyhow!(error_msg))
-            }
-        }
+        provider
+            .call(request)
+            .await
+            .map(|_| "Connection successful".to_string())
+            .map_err(|e| AIServiceError::GeminiApi(e.to_string()))
     }
 
-    async fn test_qwen_connection(&self, model: &AIModelConfig) -> AppResult<String> {
-        let chat_url = format!(
-            "{}/v1/chat/completions",
-            model.api_url.trim_end_matches('/')
-        );
-        let client = reqwest::Client::new();
-
-        // 发送一个实际的LLM请求来测试连接和模型可用性
-        let test_payload = json!({
-            "model": model.model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Hello"
-                }
-            ],
-            "max_tokens": 1,
-            "temperature": 0
-        });
-
-        let response = match client
-            .post(&chat_url)
-            .header("Authorization", format!("Bearer {}", model.api_key))
-            .header("Content-Type", "application/json")
-            .json(&test_payload)
-            .timeout(Duration::from_secs(15))
-            .send()
-            .await
-        {
-            Ok(response) => response,
-            Err(e) => return Ok(format!("连接失败: {}", e)),
-        };
-
-        let status = response.status();
-
-        // 对于Qwen API，我们认为以下情况为成功：
-        // - 200: 正常响应
-        // - 400: Bad Request (通常表示API可用但请求参数有问题)
-        // - 401: Unauthorized (API Key问题，但API端点可用)
-        // - 429: Rate limit (API可用但达到限制)
-        let is_success = status.is_success()
-            || status == reqwest::StatusCode::BAD_REQUEST
-            || status == reqwest::StatusCode::UNAUTHORIZED
-            || status == reqwest::StatusCode::TOO_MANY_REQUESTS;
-
-        if is_success {
-            Ok("连接成功".to_string())
-        } else {
-            // 抛出详细的错误信息
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "无法读取响应内容".to_string());
-            let error_msg = format!("Qwen API 错误: {} - {}", status, error_text);
-            tracing::warn!("{}", error_msg);
-            Err(anyhow::anyhow!(error_msg))
-        }
+    fn resolve_timeout(&self, model: &AIModelConfig) -> Duration {
+        model
+            .options
+            .as_ref()
+            .and_then(|opts| opts.get("timeoutSeconds"))
+            .and_then(Value::as_u64)
+            .map(|secs| secs.clamp(1, 60))
+            .map(Duration::from_secs)
+            .unwrap_or_else(|| Duration::from_secs(12))
     }
 }
+
+fn header_map(entries: &[(&'static str, String)]) -> AIServiceResult<HeaderMap> {
+    let mut headers = HeaderMap::new();
+    for (name, value) in entries {
+        let header_name = HeaderName::from_static(name);
+        let header_value =
+            HeaderValue::from_str(value.trim()).map_err(|err| AIServiceError::InvalidHeaderValue {
+                name,
+                source: err,
+            })?;
+        headers.insert(header_name, header_value);
+    }
+    Ok(headers)
+}
+
+fn trimmed<S: Into<String>>(value: S) -> Option<String> {
+    let s = value.into().trim().to_string();
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
+fn basic_chat_payload(model: &str) -> Value {
+    json!({
+        "model": model,
+        "messages": [{"role": "user", "content": "Hello"}],
+        "max_tokens": 1,
+        "temperature": 0,
+    })
+}
+
+fn join_url(base: &str, suffix: &str) -> String {
+    let base = base.trim_end_matches('/');
+    let suffix = suffix.trim_start_matches('/');
+
+    if base.ends_with("/v1") && suffix.starts_with("v1/") {
+        format!("{}/{}", base, &suffix[3..])
+    } else {
+        format!("{}/{}", base, suffix)
+    }
+}
+
+const TOLERATED_STANDARD_CODES: &[StatusCode] = &[
+    StatusCode::BAD_REQUEST,
+    StatusCode::UNAUTHORIZED,
+    StatusCode::TOO_MANY_REQUESTS,
+];
+
+const TOLERATED_CUSTOM_CODES: &[StatusCode] = &[
+    StatusCode::BAD_REQUEST,
+    StatusCode::UNAUTHORIZED,
+    StatusCode::TOO_MANY_REQUESTS,
+    StatusCode::UNPROCESSABLE_ENTITY,
+];

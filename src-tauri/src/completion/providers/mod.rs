@@ -17,7 +17,7 @@ pub use npm::*;
 pub use system_commands::*;
 
 use crate::completion::types::{CompletionContext, CompletionItem};
-use crate::utils::error::AppResult;
+use crate::completion::error::CompletionProviderResult;
 use async_trait::async_trait;
 
 /// 补全提供者trait
@@ -33,7 +33,7 @@ pub trait CompletionProvider: Send + Sync {
     async fn provide_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>>;
+    ) -> CompletionProviderResult<Vec<CompletionItem>>;
 
     /// 获取提供者优先级（数字越大优先级越高）
     fn priority(&self) -> i32 {

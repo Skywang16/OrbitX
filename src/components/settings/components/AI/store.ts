@@ -3,6 +3,7 @@ import { aiApi } from '@/api'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AIModelConfig, AISettings } from '@/types'
+import type { AIModelCreateInput, AIModelUpdateInput } from '@/api/ai/types'
 
 export const useAISettingsStore = defineStore('ai-settings', () => {
   const settings = ref<AISettings | null>(null)
@@ -32,34 +33,28 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
   })
 
   const loadModels = async () => {
-    try {
-      isLoading.value = true
-      const models = await aiApi.getModels()
+    isLoading.value = true
+    const models = await aiApi.getModels()
 
-      if (!settings.value) {
-        settings.value = {
-          models,
-          features: {
-            chat: { enabled: true, maxHistoryLength: 1000, autoSaveHistory: true, contextWindowSize: 4000 },
-          },
-          performance: {
-            requestTimeout: 30,
-            maxConcurrentRequests: 5,
-            cacheEnabled: true,
-            cacheTtl: 3600,
-          },
-        } as AISettings
-      } else {
-        settings.value.models = models
-      }
-
-      dataVersion.value++
-    } catch (err) {
-      error.value = 'Failed to load models'
-      throw err
-    } finally {
-      isLoading.value = false
+    if (!settings.value) {
+      settings.value = {
+        models,
+        features: {
+          chat: { enabled: true, maxHistoryLength: 1000, autoSaveHistory: true, contextWindowSize: 4000 },
+        },
+        performance: {
+          requestTimeout: 30,
+          maxConcurrentRequests: 5,
+          cacheEnabled: true,
+          cacheTtl: 3600,
+        },
+      } as AISettings
+    } else {
+      settings.value.models = models
     }
+
+    dataVersion.value++
+    isLoading.value = false
   }
 
   const loadSettings = async (forceRefresh = false) => {
@@ -77,25 +72,25 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
     isLoading.value = true
     error.value = null
 
-    try {
-      const updatedSettings = { ...settings.value, ...newSettings }
-      settings.value = updatedSettings
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : '更新AI设置失败'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
+    const updatedSettings = { ...settings.value, ...newSettings }
+    settings.value = updatedSettings
+    isLoading.value = false
   }
 
   const addModel = async (model: AIModelConfig) => {
-    try {
-      await aiApi.addModel(model)
-      await loadModels()
-    } catch (error) {
-      console.error('模型添加失败:', error)
-      throw error
+    const payload: AIModelCreateInput = {
+      name: model.name,
+      provider: model.provider,
+      apiUrl: model.apiUrl,
+      apiKey: model.apiKey,
+      model: model.model,
+      modelType: model.modelType,
+      enabled: model.enabled,
+      options: model.options,
     }
+
+    await aiApi.addModel(payload)
+    await loadModels()
   }
 
   const updateModel = async (modelId: string, updates: Partial<AIModelConfig>) => {
@@ -105,7 +100,21 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
     }
 
     const updatedModel = { ...existingModel, ...updates }
-    await aiApi.updateModel(updatedModel)
+    const payload: AIModelUpdateInput = {
+      id: modelId,
+      changes: {
+        name: updatedModel.name,
+        provider: updatedModel.provider,
+        apiUrl: updatedModel.apiUrl,
+        apiKey: updatedModel.apiKey,
+        model: updatedModel.model,
+        modelType: updatedModel.modelType,
+        enabled: updatedModel.enabled,
+        options: updatedModel.options,
+      },
+    }
+
+    await aiApi.updateModel(payload)
     await loadModels()
   }
 

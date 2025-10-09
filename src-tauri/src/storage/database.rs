@@ -1,541 +1,489 @@
-
+use crate::storage::error::{DatabaseError, DatabaseResult};
 use crate::storage::paths::StoragePaths;
-use crate::storage::sql_scripts::SqlScriptLoader;
+use crate::storage::sql_scripts::{SqlScript, SqlScriptCatalog};
 use crate::storage::DATABASE_FILE_NAME;
-use crate::utils::error::AppResult;
-use anyhow::{anyhow, Context};
 use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
+use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
-use chacha20poly1305::{
-    aead::{Aead, AeadCore, KeyInit, OsRng as ChaChaOsRng},
-    ChaCha20Poly1305, Key, Nonce,
+use chacha20poly1305::aead::{Aead, KeyInit};
+use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
+use rand::rngs::OsRng;
+use rand::RngCore;
+use sqlx::sqlite::{
+    SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
 };
-use sqlx::{
-    sqlite::{
-        SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
-    },
-    ConnectOptions, Executor,
-};
+use sqlx::{ConnectOptions, Executor};
+use std::fmt;
+use std::num::NonZeroU32;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
+
+const KEY_FILE_NAME: &str = "master.key";
+const KEY_FILE_VERSION: &str = "v1";
+const NONCE_LEN: usize = 12;
+
+#[derive(Debug, Clone)]
+pub enum PoolSize {
+    Fixed(NonZeroU32),
+    Adaptive { min: NonZeroU32, max: NonZeroU32 },
+}
+
+impl PoolSize {
+    fn resolve(&self) -> (NonZeroU32, NonZeroU32) {
+        match self {
+            PoolSize::Fixed(size) => (*size, *size),
+            PoolSize::Adaptive { min, max } => {
+                let cpu = std::thread::available_parallelism()
+                    .map(|n| n.get() as u32)
+                    .unwrap_or(4);
+                let suggested = (cpu * 2).clamp(min.get(), max.get());
+                (*min, NonZeroU32::new(suggested).unwrap())
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct DatabaseOptions {
     pub encryption: bool,
-    pub pool_size: u32,
-    pub connection_timeout: u64,
-    pub query_timeout: u64,
-    pub wal_mode: bool,
+    pub pool_size: PoolSize,
+    pub connection_timeout: Duration,
+    pub statement_timeout: Duration,
+    pub wal: bool,
+    pub sql_dir: Option<PathBuf>,
 }
 
 impl Default for DatabaseOptions {
     fn default() -> Self {
         Self {
             encryption: true,
-            pool_size: 10,
-            connection_timeout: 30,
-            query_timeout: 30,
-            wal_mode: true,
+            pool_size: PoolSize::Adaptive {
+                min: NonZeroU32::new(4).unwrap(),
+                max: NonZeroU32::new(32).unwrap(),
+            },
+            connection_timeout: Duration::from_secs(10),
+            statement_timeout: Duration::from_secs(30),
+            wal: true,
+            sql_dir: None,
         }
     }
 }
 
-/// 加密管理器
-pub struct EncryptionManager {
-    argon2: Argon2<'static>,
-    master_key: Option<Key>,
-}
-
-impl Default for EncryptionManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl EncryptionManager {
-    pub fn new() -> Self {
-        Self {
-            argon2: Argon2::default(),
-            master_key: None,
-        }
-    }
-
-    /// 设置主密钥（从用户密码派生）
-    pub fn set_master_password(&mut self, password: &str) -> AppResult<()> {
-        // 使用确定性的盐来确保派生密钥在同一台机器上稳定
-        // 注意：salt 本身不需要保密，但应具有足够熵。这里用密码和固定标签派生。
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        hasher.update(b"OrbitX-Argon2-Deterministic-Salt-v1");
-        hasher.update(password.as_bytes());
-        let digest = hasher.finalize();
-        let salt_bytes = &digest[..16];
-        let salt = SaltString::encode_b64(salt_bytes).map_err(|e| anyhow!("生成盐失败: {}", e))?;
-
-        let password_hash = self
-            .argon2
-            .hash_password(password.as_bytes(), &salt)
-            .map_err(|e| anyhow!("密钥派生失败: {}", e))?;
-
-        let hash = password_hash
-            .hash
-            .ok_or_else(|| anyhow!("密钥派生失败: 无效的哈希输出"))?;
-        let key_bytes = hash.as_bytes();
-        if key_bytes.len() < 32 {
-            return Err(anyhow!("密钥长度不足"));
-        }
-
-        self.master_key = Some(*Key::from_slice(&key_bytes[..32]));
-        Ok(())
-    }
-
-    /// 加密敏感数据
-    pub fn encrypt_data(&self, data: &str) -> AppResult<Vec<u8>> {
-        let key = self
-            .master_key
-            .as_ref()
-            .ok_or_else(|| anyhow!("未设置主密钥"))?;
-
-        let cipher = ChaCha20Poly1305::new(key);
-        let nonce = ChaCha20Poly1305::generate_nonce(&mut ChaChaOsRng);
-
-        let ciphertext = cipher
-            .encrypt(&nonce, data.as_bytes())
-            .map_err(|e| anyhow!("加密失败: {}", e))?;
-
-        let mut result = Vec::new();
-        result.extend_from_slice(&nonce);
-        result.extend_from_slice(&ciphertext);
-
-        Ok(result)
-    }
-
-    /// 解密敏感数据
-    pub fn decrypt_data(&self, encrypted_data: &[u8]) -> AppResult<String> {
-        let key = self
-            .master_key
-            .as_ref()
-            .ok_or_else(|| anyhow!("未设置主密钥"))?;
-
-        if encrypted_data.len() < 12 {
-            return Err(anyhow!("加密数据格式错误"));
-        }
-
-        let (nonce_bytes, ciphertext) = encrypted_data.split_at(12);
-        let nonce = Nonce::from_slice(nonce_bytes);
-
-        let cipher = ChaCha20Poly1305::new(key);
-        let plaintext = cipher
-            .decrypt(nonce, ciphertext)
-            .map_err(|e| anyhow!("解密失败: {}", e))?;
-
-        String::from_utf8(plaintext).map_err(|e| anyhow!("解密数据格式错误: {}", e))
-    }
-}
-
-/// 数据库管理器
 pub struct DatabaseManager {
-    db_pool: SqlitePool,
+    pool: SqlitePool,
     paths: StoragePaths,
-    encryption_manager: Arc<RwLock<EncryptionManager>>,
-    sql_script_loader: SqlScriptLoader,
+    options: DatabaseOptions,
+    scripts: Arc<[SqlScript]>,
+    key_vault: Arc<KeyVault>,
+}
+
+impl fmt::Debug for DatabaseManager {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DatabaseManager")
+            .field("paths", &self.paths)
+            .field("options", &self.options)
+            .field("script_count", &self.scripts.len())
+            .finish()
+    }
 }
 
 impl DatabaseManager {
-    /// 创建新的数据库管理器
-    pub async fn new(paths: StoragePaths, options: DatabaseOptions) -> AppResult<Self> {
+    pub async fn new(paths: StoragePaths, options: DatabaseOptions) -> DatabaseResult<Self> {
         let db_path = paths.data_dir.join(DATABASE_FILE_NAME);
-
-        // 确保数据目录存在
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .with_context(|| format!("创建数据目录失败: {}", parent.display()))?;
+                .map_err(|err| DatabaseError::io(
+                    format!("create database directory {}", parent.display()),
+                    err,
+                ))?;
         }
 
-        // 配置SQLite连接选项
+        let (min_conn, max_conn) = options.pool_size.resolve();
+
         let connect_options = SqliteConnectOptions::new()
             .filename(&db_path)
             .create_if_missing(true)
-            .journal_mode(if options.wal_mode {
+            .journal_mode(if options.wal {
                 SqliteJournalMode::Wal
             } else {
                 SqliteJournalMode::Delete
             })
             .synchronous(SqliteSynchronous::Normal)
-            .busy_timeout(Duration::from_secs(options.connection_timeout))
+            .busy_timeout(options.statement_timeout)
             .disable_statement_logging();
 
-        let db_pool = SqlitePoolOptions::new()
-            .max_connections(options.pool_size)
-            .acquire_timeout(Duration::from_secs(options.connection_timeout))
+        let pool = SqlitePoolOptions::new()
+            .min_connections(min_conn.get())
+            .max_connections(max_conn.get())
+            .acquire_timeout(options.connection_timeout)
+            .idle_timeout(Some(Duration::from_secs(30)))
+            .max_lifetime(Some(Duration::from_secs(60 * 15)))
             .connect_with(connect_options)
             .await
-            .with_context(|| format!("数据库连接失败: {}", db_path.display()))?;
+            .map_err(|err| {
+                DatabaseError::internal(format!(
+                    "Failed to connect SQLite: {} ({err})",
+                    db_path.display()
+                ))
+            })?;
 
-        let sql_dir = if cfg!(debug_assertions) {
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sql")
-        } else {
-            let exe_path =
-                std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let sql_dir = resolve_sql_dir(&options);
+        let scripts = SqlScriptCatalog::load(sql_dir)
+            .await
+            .map_err(DatabaseError::from)?
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .into();
 
-            if let Some(contents_dir) = exe_path
-                .ancestors()
-                .find(|p| p.file_name() == Some(std::ffi::OsStr::new("Contents")))
-            {
-                contents_dir.join("Resources").join("sql")
-            } else {
-                exe_path
-                    .parent()
-                    .unwrap_or_else(|| std::path::Path::new("."))
-                    .join("sql")
-            }
-        };
-        let sql_script_loader = SqlScriptLoader::new(sql_dir);
+        let key_vault = Arc::new(KeyVault::new(paths.config_dir.join(KEY_FILE_NAME)));
 
-        let manager = Self {
-            db_pool,
+        Ok(Self {
+            pool,
             paths,
-            encryption_manager: Arc::new(RwLock::new(EncryptionManager::new())),
-            sql_script_loader,
-        };
-
-        Ok(manager)
+            options,
+            scripts,
+            key_vault,
+        })
     }
 
-    /// 初始化数据库
-    pub async fn initialize(&self) -> AppResult<()> {
-        info!("初始化SQLite数据库");
+    pub async fn initialize(&self) -> DatabaseResult<()> {
+        if self.options.encryption {
+            self.key_vault.master_key().await?;
+        }
 
-        self.set_default_master_key().await?;
+        self.pool
+            .execute("PRAGMA foreign_keys = ON")
+            .await
+            .map_err(|err| DatabaseError::internal(format!("Failed to enable foreign_keys pragma: {err}")))?;
 
-        // 执行SQL脚本
+        if self.options.encryption {
+            self.pool
+                .execute("PRAGMA secure_delete = ON")
+                .await
+                .map_err(|err| DatabaseError::internal(format!("Failed to enable secure_delete pragma: {err}")))?;
+        }
+
         self.execute_sql_scripts().await?;
-
-        // 插入默认数据
         self.insert_default_data().await?;
-
-        info!("数据库初始化完成");
         Ok(())
     }
 
-    /// 获取数据库连接池
     pub fn pool(&self) -> &SqlitePool {
-        &self.db_pool
+        &self.pool
     }
 
-    /// 获取加密管理器
-    pub fn encryption_manager(&self) -> Arc<RwLock<EncryptionManager>> {
-        self.encryption_manager.clone()
-    }
-
-    /// 设置主密钥
-    pub async fn set_master_password(&self, password: &str) -> AppResult<()> {
-        let mut encryption_manager = self.encryption_manager.write().await;
-        encryption_manager.set_master_password(password)?;
-        info!("主密钥设置成功");
+    pub async fn set_master_password(&self, password: &str) -> DatabaseResult<()> {
+        if !self.options.encryption {
+            return Err(DatabaseError::EncryptionNotEnabled);
+        }
+        self.key_vault.set_from_password(password).await?;
+        info!("主密钥已更新");
         Ok(())
     }
 
-    /// 设置默认主密钥
-    async fn set_default_master_key(&self) -> AppResult<()> {
-        let mut encryption_manager = self.encryption_manager.write().await;
+    pub async fn encrypt_data(&self, data: &str) -> DatabaseResult<Vec<u8>> {
+        if !self.options.encryption {
+            return Err(DatabaseError::EncryptionNotEnabled);
+        }
+        let key_bytes = self.key_vault.master_key().await?;
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(&key_bytes));
+        let mut nonce_bytes = [0u8; NONCE_LEN];
+        OsRng.fill_bytes(&mut nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let ciphertext = cipher
+            .encrypt(nonce, data.as_bytes())
+            .map_err(DatabaseError::from)?;
+        let mut result = Vec::with_capacity(NONCE_LEN + ciphertext.len());
+        result.extend_from_slice(&nonce_bytes);
+        result.extend_from_slice(&ciphertext);
+        Ok(result)
+    }
 
-        if encryption_manager.master_key.is_some() {
-            debug!("主密钥已设置，跳过默认密钥设置");
+    pub async fn decrypt_data(&self, encrypted: &[u8]) -> DatabaseResult<String> {
+        if !self.options.encryption {
+            return Err(DatabaseError::EncryptionNotEnabled);
+        }
+        if encrypted.len() <= NONCE_LEN {
+            return Err(DatabaseError::InvalidEncryptedData);
+        }
+        let key_bytes = self.key_vault.master_key().await?;
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(&key_bytes));
+        let (nonce_bytes, payload) = encrypted.split_at(NONCE_LEN);
+        let nonce = Nonce::from_slice(nonce_bytes);
+        let plaintext = cipher
+            .decrypt(nonce, payload)
+            .map_err(DatabaseError::from)?;
+        String::from_utf8(plaintext).map_err(DatabaseError::from)
+    }
+
+    async fn execute_sql_scripts(&self) -> DatabaseResult<()> {
+        if self.scripts.is_empty() {
+            debug!("SQL脚本目录为空，跳过初始化");
             return Ok(());
         }
 
-        let master_password = self.get_secure_master_key().await?;
-        encryption_manager.set_master_password(&master_password)?;
+        for script in self.scripts.iter() {
+            debug!("执行SQL脚本: {}", script.name);
+            for statement in script.statements.iter() {
+                if statement.trim().is_empty() {
+                    continue;
+                }
+                sqlx::query(statement)
+                    .execute(&self.pool)
+                    .await
+                    .map_err(|err| {
+                        DatabaseError::internal(format!(
+                            "Failed to execute SQL statement `{}`: {err}",
+                            statement
+                        ))
+                    })?;
+            }
+        }
 
-        info!("主密钥设置完成");
         Ok(())
     }
 
-    /// 获取安全的主密钥
-    async fn get_secure_master_key(&self) -> AppResult<String> {
-        match self.get_key_from_config_file().await {
-            Ok(Some(key)) => {
-                debug!("从配置文件获取主密钥");
-                return Ok(key);
-            }
-            Ok(None) => {
-                debug!("配置文件中未找到主密钥");
-            }
-            Err(e) => {
-                warn!("从配置文件读取主密钥失败: {}，将生成新的主密钥", e);
-            }
+    async fn insert_default_data(&self) -> DatabaseResult<()> {
+        let features = [
+            ("chat", true, r#"{"max_history":100,"auto_save":true}"#),
+            ("explanation", true, r#"{"auto_explain":false}"#),
+            ("command_search", true, r#"{"max_results":50}"#),
+        ];
+
+        for (feature_name, enabled, config_json) in features {
+            sqlx::query(
+                r#"
+                INSERT OR IGNORE INTO ai_features (feature_name, enabled, config_json)
+                VALUES (?, ?, ?)
+                "#,
+            )
+            .bind(feature_name)
+            .bind(enabled)
+            .bind(config_json)
+            .execute(&self.pool)
+            .await
+            .map_err(|err| {
+                DatabaseError::internal(format!(
+                    "Failed to insert default AI config `{}`: {err}",
+                    feature_name
+                ))
+            })?;
         }
 
-        let new_key = self.generate_deterministic_master_key().await?;
-        info!("生成用户机器密钥并保存到配置文件");
-        Ok(new_key)
+        Ok(())
+    }
+}
+
+struct KeyVault {
+    path: PathBuf,
+    cache: RwLock<Option<[u8; 32]>>,
+    argon2: Argon2<'static>,
+}
+
+impl KeyVault {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            cache: RwLock::new(None),
+            argon2: Argon2::default(),
+        }
     }
 
-    /// 从配置文件获取密钥
-    async fn get_key_from_config_file(&self) -> AppResult<Option<String>> {
-        let config_dir = self.paths.config_dir.clone();
-        let key_file_path = config_dir.join(".master_key");
+    async fn master_key(&self) -> DatabaseResult<[u8; 32]> {
+        if let Some(bytes) = *self.cache.read().await {
+            return Ok(bytes);
+        }
 
-        if !key_file_path.exists() {
+        let mut write_guard = self.cache.write().await;
+        if let Some(bytes) = *write_guard {
+            return Ok(bytes);
+        }
+
+        let bytes = if let Some(bytes) = self.load_from_disk().await? {
+            bytes
+        } else {
+            self.generate_random().await?
+        };
+
+        *write_guard = Some(bytes);
+        Ok(bytes)
+    }
+
+    async fn set_from_password(&self, password: &str) -> DatabaseResult<[u8; 32]> {
+        let salt = SaltString::generate(&mut OsRng);
+        let password_hash = self
+            .argon2
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(DatabaseError::from)?;
+
+        let hash = password_hash
+            .hash
+            .ok_or_else(|| DatabaseError::internal("Key derivation produced an empty hash"))?;
+        let hash_bytes = hash.as_bytes();
+        if hash_bytes.len() < 32 {
+            return Err(DatabaseError::InsufficientKeyLength);
+        }
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(&hash_bytes[..32]);
+        self.persist(bytes).await?;
+        *self.cache.write().await = Some(bytes);
+        Ok(bytes)
+    }
+
+    async fn load_from_disk(&self) -> DatabaseResult<Option<[u8; 32]>> {
+        if !self.path.exists() {
             return Ok(None);
         }
-
-        match tokio::fs::read_to_string(&key_file_path).await {
-            Ok(content) => {
-                let key = content.trim().to_string();
-                if key.len() >= 16 {
-                    Ok(Some(key))
-                } else {
-                    warn!("配置文件中的密钥长度不足");
-                    Ok(None)
-                }
-            }
-            Err(e) => {
-                warn!("读取密钥配置文件失败: {}", e);
-                Ok(None)
-            }
+        let raw = tokio::fs::read_to_string(&self.path)
+            .await
+            .map_err(|err| {
+                DatabaseError::io(
+                    format!("read key file {}", self.path.display()),
+                    err,
+                )
+            })?;
+        let mut lines = raw.lines();
+        let first = lines.next().unwrap_or_default();
+        let encoded = if first == KEY_FILE_VERSION {
+            lines.next().unwrap_or_default()
+        } else {
+            first
+        };
+        if encoded.is_empty() {
+            return Ok(None);
         }
+        let decoded = BASE64
+            .decode(encoded)
+            .map_err(DatabaseError::from)?;
+        if decoded.len() != 32 {
+            return Err(DatabaseError::InvalidKeyLength);
+        }
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(&decoded);
+        Ok(Some(bytes))
     }
 
-    /// 生成基于机器标识的安全主密钥
-    async fn generate_deterministic_master_key(&self) -> AppResult<String> {
-        use sha2::{Digest, Sha256};
+    async fn generate_random(&self) -> DatabaseResult<[u8; 32]> {
+        let mut bytes = [0u8; 32];
+        OsRng.fill_bytes(&mut bytes);
+        self.persist(bytes).await?;
+        Ok(bytes)
+    }
 
-        let username = std::env::var("USER")
-            .or_else(|_| std::env::var("USERNAME"))
-            .unwrap_or_else(|_| "unknown_user".to_string());
-
-        let hostname = std::env::var("HOSTNAME")
-            .or_else(|_| std::env::var("COMPUTERNAME"))
-            .unwrap_or_else(|_| {
-                std::process::Command::new("hostname")
-                    .output()
-                    .ok()
-                    .and_then(|output| String::from_utf8(output.stdout).ok())
-                    .map(|s| s.trim().to_string())
-                    .unwrap_or_else(|| "unknown_host".to_string())
-            });
-
-        let home_dir = dirs::home_dir()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|| "unknown_home".to_string());
-
-        // 移除随机数据，确保密钥生成是确定性的
-        // 这样同一台机器每次生成的密钥都相同
-        let mut hasher = Sha256::default();
-        hasher.update(b"OrbitX-Terminal-App-v1.0");
-        hasher.update(username.as_bytes());
-        hasher.update(hostname.as_bytes());
-        hasher.update(home_dir.as_bytes());
-        hasher.update(b"encryption-key-salt-deterministic");
-
-        let hash = hasher.finalize();
-        let key = base64::engine::general_purpose::STANDARD.encode(hash);
-
-        // 保存到配置文件
-        let config_dir = &self.paths.config_dir;
-        tokio::fs::create_dir_all(config_dir)
+    async fn persist(&self, bytes: [u8; 32]) -> DatabaseResult<()> {
+        if let Some(parent) = self.path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|err| {
+                    DatabaseError::io(
+                        format!("create key directory {}", parent.display()),
+                        err,
+                    )
+                })?;
+        }
+        let encoded = BASE64.encode(bytes);
+        let payload = format!("{}\n{}\n", KEY_FILE_VERSION, encoded);
+        let tmp_path = self.path.with_extension("tmp");
+        tokio::fs::write(&tmp_path, payload.as_bytes())
             .await
-            .with_context(|| format!("创建配置目录失败: {}", config_dir.display()))?;
-
-        let key_file_path = config_dir.join(".master_key");
-        tokio::fs::write(&key_file_path, &key)
+            .map_err(|err| {
+                DatabaseError::io(
+                    format!("write key temp file {}", tmp_path.display()),
+                    err,
+                )
+            })?;
+        tokio::fs::rename(&tmp_path, &self.path)
             .await
-            .with_context(|| format!("保存主密钥文件失败: {}", key_file_path.display()))?;
+            .map_err(|err| {
+                DatabaseError::io(
+                    format!("replace key file {}", self.path.display()),
+                    err,
+                )
+            })?;
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = tokio::fs::metadata(&key_file_path).await?.permissions();
-            perms.set_mode(0o600);
-            tokio::fs::set_permissions(&key_file_path, perms).await?;
-        }
-
-        info!("机器标识密钥已生成并保存到: {}", key_file_path.display());
-        debug!("基于用户: {}, 主机: {}", username, hostname);
-        Ok(key)
-    }
-
-    /// 执行SQL脚本
-    async fn execute_sql_scripts(&self) -> AppResult<()> {
-        info!("开始执行SQL脚本");
-
-        let scripts = self
-            .sql_script_loader
-            .load_all_scripts()
-            .await
-            .context("加载SQL脚本文件失败")?;
-
-        if scripts.is_empty() {
-            return Err(anyhow!("没有找到任何SQL脚本文件"));
-        }
-
-        info!("找到 {} 个SQL脚本文件", scripts.len());
-
-        for script in scripts {
-            info!("执行SQL脚本: {} (顺序 {})", script.name, script.order);
-
-            for (i, statement) in script.statements.iter().enumerate() {
-                if !statement.is_empty() {
-                    sqlx::query(statement)
-                        .execute(&self.db_pool)
-                        .await
-                        .map_err(|e| {
-                            anyhow!(
-                                "SQL语句执行失败 {}/{} ({}): {} - SQL: {}",
-                                i + 1,
-                                script.statements.len(),
-                                script.name,
-                                e,
-                                statement
-                            )
-                        })?;
-                }
-            }
-
-            info!("SQL脚本 {} 执行完成", script.name);
-        }
-
-        info!("所有SQL脚本执行完成");
-        Ok(())
-    }
-
-    /// 插入默认数据
-    async fn insert_default_data(&self) -> AppResult<()> {
-        let features = vec![
-            ("chat", true, r#"{"max_history": 100, "auto_save": true}"#),
-            ("explanation", true, r#"{"auto_explain": false}"#),
-            ("command_search", true, r#"{"max_results": 50}"#),
-        ];
-
-        for (feature_name, enabled, config_json) in features {
-            let sql = r#"
-                INSERT OR IGNORE INTO ai_features (feature_name, enabled, config_json)
-                VALUES (?, ?, ?)
-            "#;
-
-            self.db_pool
-                .execute(
-                    sqlx::query(sql)
-                        .bind(feature_name)
-                        .bind(enabled)
-                        .bind(config_json),
-                )
+            let mut perms = tokio::fs::metadata(&self.path)
                 .await
-                .map_err(|e| anyhow!("插入默认AI功能配置失败: {}", e))?;
+                .map_err(|err| DatabaseError::io("read key file metadata", err))?
+                .permissions();
+            perms.set_mode(0o600);
+            tokio::fs::set_permissions(&self.path, perms)
+                .await
+                .map_err(|err| DatabaseError::io("set key file permissions", err))?;
         }
 
         Ok(())
+    }
+}
+
+fn resolve_sql_dir(options: &DatabaseOptions) -> PathBuf {
+    if let Some(custom) = &options.sql_dir {
+        return custom.clone();
+    }
+
+    if cfg!(debug_assertions) {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sql")
+    } else {
+        let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
+        if let Some(contents) = exe
+            .ancestors()
+            .find(|p| p.file_name() == Some(std::ffi::OsStr::new("Contents")))
+        {
+            contents.join("Resources/sql")
+        } else {
+            exe.parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("sql")
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
-    #[test]
-    fn test_encryption_manager_creation() {
-        let manager = EncryptionManager::new();
-        assert!(manager.master_key.is_none());
+    #[tokio::test]
+    async fn key_vault_generates_and_persists() {
+        let temp_dir = TempDir::new().unwrap();
+        let vault = KeyVault::new(temp_dir.path().join(KEY_FILE_NAME));
+        let key1 = vault.master_key().await.unwrap();
+        let key2 = vault.master_key().await.unwrap();
+        assert_eq!(key1, key2);
     }
 
-    #[test]
-    fn test_set_master_password_deterministic_salt() {
-        let mut manager1 = EncryptionManager::new();
-        let mut manager2 = EncryptionManager::new();
-
-        // 使用相同密码设置主密钥
-        let password = "test_password_123";
-        let result1 = manager1.set_master_password(password);
-        let result2 = manager2.set_master_password(password);
-
-        // 两次操作都应该成功
-        assert!(result1.is_ok());
-        assert!(result2.is_ok());
-
-        // 两个管理器都应该有主密钥
-        assert!(manager1.master_key.is_some());
-        assert!(manager2.master_key.is_some());
-
-        // 由于使用确定性的盐，同一密码应产生相同的密钥（确保跨重启可解密）
-        let key1 = manager1.master_key.unwrap();
-        let key2 = manager2.master_key.unwrap();
-        assert_eq!(key1, key2, "确定性盐应产生相同的密钥");
+    #[tokio::test]
+    async fn key_vault_accepts_password() {
+        let temp_dir = TempDir::new().unwrap();
+        let vault = KeyVault::new(temp_dir.path().join(KEY_FILE_NAME));
+        let key1 = vault.set_from_password("secret").await.unwrap();
+        let key2 = vault.master_key().await.unwrap();
+        assert_eq!(key1, key2);
     }
 
-    #[test]
-    fn test_encrypt_decrypt_roundtrip() {
-        let mut manager = EncryptionManager::new();
-        let password = "test_password_123";
-        manager
-            .set_master_password(password)
-            .expect("设置主密钥失败");
+    #[tokio::test]
+    async fn encryption_roundtrip() {
+        let temp_dir = TempDir::new().unwrap();
+        let paths = crate::storage::paths::StoragePathsBuilder::new()
+            .app_dir(temp_dir.path().to_path_buf())
+            .build()
+            .unwrap();
+        paths.ensure_directories().unwrap();
 
-        let test_data = "这是需要加密的敏感数据";
+        let manager = DatabaseManager::new(paths.clone(), DatabaseOptions::default())
+            .await
+            .unwrap();
+        manager.initialize().await.unwrap();
 
-        // 加密数据
-        let encrypted = manager.encrypt_data(test_data).expect("加密失败");
-        assert!(!encrypted.is_empty());
-
-        // 解密数据
-        let decrypted = manager.decrypt_data(&encrypted).expect("解密失败");
-        assert_eq!(decrypted, test_data);
-    }
-
-    #[test]
-    fn test_encrypt_without_master_key_fails() {
-        let manager = EncryptionManager::new();
-        let test_data = "测试数据";
-
-        let result = manager.encrypt_data(test_data);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("未设置主密钥"));
-    }
-
-    #[test]
-    fn test_decrypt_without_master_key_fails() {
-        let manager = EncryptionManager::new();
-        let test_data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
-
-        let result = manager.decrypt_data(&test_data);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("未设置主密钥"));
-    }
-
-    #[test]
-    fn test_decrypt_invalid_data_fails() {
-        let mut manager = EncryptionManager::new();
-        manager.set_master_password("test").expect("设置主密钥失败");
-
-        // 测试数据太短
-        let invalid_data = vec![1, 2, 3];
-        let result = manager.decrypt_data(&invalid_data);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("加密数据格式错误"));
-    }
-
-    #[test]
-    fn test_multiple_encryptions_produce_different_ciphertexts() {
-        let mut manager = EncryptionManager::new();
-        manager.set_master_password("test").expect("设置主密钥失败");
-
-        let test_data = "相同的明文数据";
-
-        // 多次加密相同数据
-        let encrypted1 = manager.encrypt_data(test_data).expect("第一次加密失败");
-        let encrypted2 = manager.encrypt_data(test_data).expect("第二次加密失败");
-
-        // 由于使用不同的随机 nonce，密文应该不同
-        assert_ne!(encrypted1, encrypted2, "相同明文的多次加密应该产生不同密文");
-
-        // 但解密结果应该相同
-        let decrypted1 = manager.decrypt_data(&encrypted1).expect("第一次解密失败");
-        let decrypted2 = manager.decrypt_data(&encrypted2).expect("第二次解密失败");
-        assert_eq!(decrypted1, test_data);
-        assert_eq!(decrypted2, test_data);
+        let encrypted = manager.encrypt_data("hello world").await.unwrap();
+        let decrypted = manager.decrypt_data(&encrypted).await.unwrap();
+        assert_eq!(decrypted, "hello world");
     }
 }

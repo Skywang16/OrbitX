@@ -1,7 +1,6 @@
 //! 智能实体提取器
 
-use crate::utils::error::AppResult;
-use anyhow::anyhow;
+use crate::completion::error::{SmartExtractorError, SmartExtractorResult};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -272,7 +271,7 @@ impl SmartExtractor {
         &self,
         command: &str,
         output: &str,
-    ) -> AppResult<Vec<ExtractionResult>> {
+    ) -> SmartExtractorResult<Vec<ExtractionResult>> {
         let mut results = Vec::new();
 
         // 找到适用的规则
@@ -347,12 +346,13 @@ impl SmartExtractor {
         pattern: &EntityPattern,
         output: &str,
         rule: &ExtractionRule,
-    ) -> AppResult<Option<Vec<ExtractionResult>>> {
+    ) -> SmartExtractorResult<Option<Vec<ExtractionResult>>> {
         let pattern_key = format!("{}_{}", rule.name, pattern.entity_type);
-        let regex = self
-            .patterns
-            .get(&pattern_key)
-            .ok_or_else(|| anyhow!("未找到编译的正则表达式: {}", pattern_key))?;
+        let regex = self.patterns.get(&pattern_key).ok_or_else(|| {
+            SmartExtractorError::MissingCompiledPattern {
+                pattern_key: pattern_key.clone(),
+            }
+        })?;
 
         let mut results = Vec::new();
         let capture_group = pattern.capture_group.unwrap_or(1);
@@ -367,7 +367,7 @@ impl SmartExtractor {
                     }
                 }
 
-                let confidence = self.calculate_confidence(pattern, &value, output);
+                let confidence = self.calculate_confidence(pattern, &value);
 
                 if confidence >= pattern.min_confidence {
                     results.push(ExtractionResult {
@@ -408,7 +408,7 @@ impl SmartExtractor {
     }
 
     /// 计算置信度
-    fn calculate_confidence(&self, pattern: &EntityPattern, value: &str, _output: &str) -> f64 {
+    fn calculate_confidence(&self, pattern: &EntityPattern, value: &str) -> f64 {
         let mut confidence = pattern.min_confidence;
 
         // 根据实体类型调整置信度
@@ -444,7 +444,7 @@ impl SmartExtractor {
     fn deduplicate_results(
         &self,
         mut results: Vec<ExtractionResult>,
-    ) -> AppResult<Vec<ExtractionResult>> {
+    ) -> SmartExtractorResult<Vec<ExtractionResult>> {
         let mut seen = std::collections::HashSet::new();
         results.retain(|result| {
             let key = format!("{}:{}", result.entity_type, result.value);
@@ -455,21 +455,24 @@ impl SmartExtractor {
     }
 
     /// 添加自定义规则
-    pub fn add_rule(&mut self, rule: ExtractionRule) -> AppResult<()> {
+    pub fn add_rule(&mut self, rule: ExtractionRule) -> SmartExtractorResult<()> {
         self.rules.push(rule);
         self.compile_patterns();
         Ok(())
     }
 
     /// 从配置文件加载规则
-    pub fn load_rules_from_config(&mut self, config_path: &str) -> AppResult<()> {
+    pub fn load_rules_from_config(&mut self, config_path: &str) -> SmartExtractorResult<()> {
         use std::fs;
 
-        let config_content =
-            fs::read_to_string(config_path).map_err(|e| anyhow!("读取配置文件失败: {}", e))?;
+        let config_content = fs::read_to_string(config_path).map_err(|e| {
+            SmartExtractorError::ConfigRead {
+                path: config_path.to_string(),
+                source: e,
+            }
+        })?;
 
-        let config: serde_json::Value = serde_json::from_str(&config_content)
-            .map_err(|e| anyhow!("解析配置文件失败: {}", e))?;
+        let config: serde_json::Value = serde_json::from_str(&config_content)?;
 
         if let Some(rules_array) = config.get("rules").and_then(|r| r.as_array()) {
             for rule_value in rules_array {
@@ -483,7 +486,7 @@ impl SmartExtractor {
     }
 
     /// 导出当前规则到配置文件
-    pub fn export_rules_to_config(&self, config_path: &str) -> AppResult<()> {
+    pub fn export_rules_to_config(&self, config_path: &str) -> SmartExtractorResult<()> {
         use std::fs;
 
         let config = serde_json::json!({
@@ -496,16 +499,20 @@ impl SmartExtractor {
             }
         });
 
-        let config_content =
-            serde_json::to_string_pretty(&config).map_err(|e| anyhow!("序列化配置失败: {}", e))?;
+        let config_content = serde_json::to_string_pretty(&config)?;
 
-        fs::write(config_path, config_content).map_err(|e| anyhow!("写入配置文件失败: {}", e))?;
+        fs::write(config_path, config_content).map_err(|e| {
+            SmartExtractorError::ConfigWrite {
+                path: config_path.to_string(),
+                source: e,
+            }
+        })?;
 
         Ok(())
     }
 
     /// 重新加载规则（热更新）
-    pub fn reload_rules(&mut self, config_path: &str) -> AppResult<()> {
+    pub fn reload_rules(&mut self, config_path: &str) -> SmartExtractorResult<()> {
         // 清空现有规则
         self.rules.clear();
         self.patterns.clear();

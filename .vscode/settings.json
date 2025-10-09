@@ -42,5 +42,6 @@
   "vue.complete.casing.props": "camel",
   "[rust]": {
     "editor.defaultFormatter": "rust-lang.rust-analyzer"
-  }
+  },
+  "kiroAgent.configureMCP": "Disabled"
 }

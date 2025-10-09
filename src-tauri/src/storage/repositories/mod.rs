@@ -8,17 +8,15 @@ pub mod ai_features;
 pub mod ai_models;
 pub mod audit_logs;
 pub mod command_history;
-pub mod conversations;
-
+// Agent后端迁移 - 新的Repository模块
 // 重新导出所有Repository
 pub use ai_features::AIFeaturesRepository;
 pub use ai_models::AIModelRepository;
 pub use audit_logs::AuditLogRepository;
 pub use command_history::CommandHistoryRepository;
-pub use conversations::ConversationRepository;
 
 use crate::storage::database::DatabaseManager;
-use crate::utils::error::AppResult;
+use crate::storage::error::RepositoryResult;
 use base64::Engine;
 use serde_json::Value;
 use sqlx::Row;
@@ -28,19 +26,19 @@ use std::sync::Arc;
 #[async_trait::async_trait]
 pub trait Repository<T> {
     /// 根据ID查找实体
-    async fn find_by_id(&self, id: i64) -> AppResult<Option<T>>;
+    async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<T>>;
 
     /// 查找所有实体
-    async fn find_all(&self) -> AppResult<Vec<T>>;
+    async fn find_all(&self) -> RepositoryResult<Vec<T>>;
 
     /// 保存实体
-    async fn save(&self, entity: &T) -> AppResult<i64>;
+    async fn save(&self, entity: &T) -> RepositoryResult<i64>;
 
     /// 更新实体
-    async fn update(&self, entity: &T) -> AppResult<()>;
+    async fn update(&self, entity: &T) -> RepositoryResult<()>;
 
     /// 删除实体
-    async fn delete(&self, id: i64) -> AppResult<()>;
+    async fn delete(&self, id: i64) -> RepositoryResult<()>;
 }
 
 /// Repository管理器
@@ -50,7 +48,6 @@ pub struct RepositoryManager {
     ai_models: AIModelRepository,
     audit_logs: AuditLogRepository,
     command_history: CommandHistoryRepository,
-    conversations: ConversationRepository,
 }
 
 impl RepositoryManager {
@@ -61,7 +58,6 @@ impl RepositoryManager {
             ai_models: AIModelRepository::new(Arc::clone(&database)),
             audit_logs: AuditLogRepository::new(Arc::clone(&database)),
             command_history: CommandHistoryRepository::new(Arc::clone(&database)),
-            conversations: ConversationRepository::new(Arc::clone(&database)),
             database,
         }
     }
@@ -86,28 +82,27 @@ impl RepositoryManager {
         &self.command_history
     }
 
-    /// 获取会话Repository
-    pub fn conversations(&self) -> &ConversationRepository {
-        &self.conversations
-    }
-
-
     /// 获取数据库管理器
     pub fn database(&self) -> &DatabaseManager {
         &self.database
+    }
+
+    /// 克隆底层数据库管理器指针，便于与新版持久层共享
+    pub fn database_arc(&self) -> Arc<DatabaseManager> {
+        Arc::clone(&self.database)
     }
 }
 
 /// 通用的行转换工具
 pub trait RowMapper<T> {
-    fn from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<T>;
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> RepositoryResult<T>;
 }
 
 /// 通用的值提取工具
 pub fn extract_value_from_row(
     row: &sqlx::sqlite::SqliteRow,
     column_index: usize,
-) -> AppResult<Value> {
+) -> RepositoryResult<Value> {
     use sqlx::{Column, TypeInfo};
 
     let column = &row.columns()[column_index];

@@ -7,11 +7,10 @@
 
 use super::manager::ThemeManager;
 use super::types::{Theme, ThemeConfig};
+use crate::config::error::{ThemeConfigError, ThemeConfigResult};
 use crate::config::paths::ConfigPaths;
 use crate::config::theme::ThemeManagerOptions;
 use crate::storage::cache::UnifiedCache;
-use crate::utils::error::AppResult;
-use anyhow::anyhow;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -27,7 +26,7 @@ impl ThemeService {
         paths: ConfigPaths,
         options: ThemeManagerOptions,
         cache: Arc<UnifiedCache>,
-    ) -> AppResult<Self> {
+    ) -> ThemeConfigResult<Self> {
         let theme_manager = Arc::new(ThemeManager::new(paths, options, cache.clone()).await?);
         Ok(Self { theme_manager })
     }
@@ -75,7 +74,7 @@ impl ThemeService {
         &self,
         theme_config: &ThemeConfig,
         is_system_dark: Option<bool>,
-    ) -> AppResult<Theme> {
+    ) -> ThemeConfigResult<Theme> {
         let theme_name = self.get_current_theme_name(theme_config, is_system_dark);
 
         match self.theme_manager.load_theme(&theme_name).await {
@@ -97,13 +96,9 @@ impl ThemeService {
                     .load_theme(fallback_theme)
                     .await
                     .map_err(|fallback_err| {
-                        anyhow!(
-                            "主题加载失败: {} ({}), 后备主题也加载失败: {} ({})",
-                            theme_name,
-                            e,
-                            fallback_theme,
-                            fallback_err
-                        )
+                        ThemeConfigError::Internal(format!(
+                            "Failed to load theme {theme_name} ({e}), fallback {fallback_theme} failed: {fallback_err}"
+                        ))
                     })
             }
         }
@@ -119,7 +114,7 @@ impl ThemeService {
     pub async fn validate_theme_config(
         &self,
         theme_config: &ThemeConfig,
-    ) -> AppResult<Vec<String>> {
+    ) -> ThemeConfigResult<Vec<String>> {
         let mut missing_themes = Vec::new();
 
         if self
@@ -157,7 +152,7 @@ impl ThemeService {
     }
 
     /// 获取所有可用主题列表
-    pub async fn list_available_themes(&self) -> AppResult<Vec<String>> {
+    pub async fn list_available_themes(&self) -> ThemeConfigResult<Vec<String>> {
         let themes = self.theme_manager.list_themes().await?;
         let theme_names: Vec<String> = themes.into_iter().map(|t| t.name).collect();
         Ok(theme_names)

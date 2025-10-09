@@ -1,10 +1,11 @@
 //! TOML配置读取器
 
-use crate::{
-    config::{defaults::create_default_config, paths::ConfigPaths, types::AppConfig},
-    utils::error::AppResult,
+use crate::config::error::{TomlConfigError, TomlConfigResult};
+use crate::config::{
+    defaults::create_default_config,
+    paths::ConfigPaths,
+    types::AppConfig,
 };
-use anyhow::{anyhow, Context};
 use std::path::PathBuf;
 use tokio::fs;
 use tracing::{debug, info, warn};
@@ -18,8 +19,8 @@ pub struct TomlConfigReader {
 
 impl TomlConfigReader {
     /// 创建新的配置读取器
-    pub fn new() -> AppResult<Self> {
-        let paths = ConfigPaths::new()?;
+    pub fn new() -> TomlConfigResult<Self> {
+        let paths = ConfigPaths::new().map_err(|e| TomlConfigError::Internal(e.to_string()))?;
         let config_path = paths.config_file();
 
         Ok(Self { config_path, paths })
@@ -27,26 +28,25 @@ impl TomlConfigReader {
 
     /// 创建指定配置路径的配置读取器（主要用于测试）
     #[cfg(test)]
-    pub fn new_with_config_path(config_path: PathBuf) -> AppResult<Self> {
+    pub fn new_with_config_path(config_path: PathBuf) -> TomlConfigResult<Self> {
         // 为测试创建一个虚拟的 ConfigPaths
-        let temp_dir = config_path
-            .parent()
-            .ok_or_else(|| anyhow::anyhow!("配置文件路径无效"))?;
-        let paths = ConfigPaths::with_app_data_dir(temp_dir)?;
+        let temp_dir = config_path.parent().ok_or(TomlConfigError::InvalidPath)?;
+        let paths = ConfigPaths::with_app_data_dir(temp_dir)
+            .map_err(|e| TomlConfigError::Internal(e.to_string()))?;
 
         Ok(Self { config_path, paths })
     }
 
     /// 从文件系统加载TOML配置
     /// 如果文件不存在则尝试从资源文件复制，最后创建默认配置
-    pub async fn load_config(&self) -> AppResult<AppConfig> {
-        debug!("开始加载TOML配置: {:?}", self.config_path);
+    pub async fn load_config(&self) -> TomlConfigResult<AppConfig> {
+        debug!("开始加载 TOML 配置: {:?}", self.config_path);
 
         if self.config_path.exists() {
             // 读取现有配置文件
             let content = fs::read_to_string(&self.config_path)
                 .await
-                .with_context(|| format!("无法读取配置文件: {}", self.config_path.display()))?;
+                .map_err(TomlConfigError::Io)?;
 
             // 解析TOML内容
             match self.parse_toml_content(&content) {
@@ -55,21 +55,20 @@ impl TomlConfigReader {
                     Ok(parsed_config)
                 }
                 Err(e) => {
-                    warn!("配置文件解析失败: {}, 使用默认配置", e);
+                    warn!("解析配置文件失败: {}", e);
                     Err(e)
                 }
             }
         } else {
-            info!("配置文件不存在，尝试复制打包的配置文件");
-
+            info!("未找到配置文件，尝试复制内置配置");
             // 尝试从资源文件复制配置
             match self.copy_bundled_config().await {
                 Ok(config) => {
-                    info!("成功复制打包的配置文件");
+                    info!("已复制内置配置");
                     Ok(config)
                 }
                 Err(_) => {
-                    info!("未找到打包的配置文件，返回默认配置");
+                    info!("未找到内置配置，将返回默认配置");
                     Ok(create_default_config())
                 }
             }
@@ -77,9 +76,8 @@ impl TomlConfigReader {
     }
 
     /// 解析TOML内容为配置结构
-    pub fn parse_toml_content(&self, content: &str) -> AppResult<AppConfig> {
-        toml::from_str::<AppConfig>(content)
-            .with_context(|| format!("TOML配置解析失败 (文件: {})", self.config_path.display()))
+    pub fn parse_toml_content(&self, content: &str) -> TomlConfigResult<AppConfig> {
+        Ok(toml::from_str::<AppConfig>(content)?)
     }
 
     /// 获取配置文件路径
@@ -88,7 +86,7 @@ impl TomlConfigReader {
     }
 
     /// 复制打包的配置文件
-    async fn copy_bundled_config(&self) -> AppResult<AppConfig> {
+    async fn copy_bundled_config(&self) -> TomlConfigResult<AppConfig> {
         // 尝试从应用资源中获取配置文件
         let bundled_config_path = self.get_bundled_config_path()?;
 
@@ -96,26 +94,26 @@ impl TomlConfigReader {
             // 复制文件到用户配置目录
             fs::copy(&bundled_config_path, &self.config_path)
                 .await
-                .with_context(|| "复制打包配置文件失败")?;
+                .map_err(TomlConfigError::Io)?;
 
             // 读取并解析复制的配置文件
             let content = fs::read_to_string(&self.config_path)
                 .await
-                .with_context(|| "读取复制的配置文件失败")?;
+                .map_err(TomlConfigError::Io)?;
 
             self.parse_toml_content(&content)
         } else {
-            Err(anyhow!("未找到打包的配置文件"))
+            Err(TomlConfigError::BundledConfigMissing)
         }
     }
 
     /// 获取打包配置文件路径
-    fn get_bundled_config_path(&self) -> AppResult<PathBuf> {
+    fn get_bundled_config_path(&self) -> TomlConfigResult<PathBuf> {
         // 在 Tauri 中，资源文件通常位于应用包中
         let exe_dir = std::env::current_exe()
-            .with_context(|| "无法获取可执行文件路径")?
+            .map_err(TomlConfigError::Io)?
             .parent()
-            .ok_or_else(|| anyhow!("无法获取可执行文件目录"))?
+            .ok_or(TomlConfigError::InvalidPath)?
             .to_path_buf();
 
         // 在不同平台上，资源文件的位置可能不同
@@ -125,7 +123,7 @@ impl TomlConfigReader {
             let app_bundle = exe_dir
                 .parent()
                 .and_then(|p| p.parent())
-                .ok_or_else(|| anyhow!("无法找到 macOS 应用包路径"))?;
+                .ok_or(TomlConfigError::InvalidPath)?;
             Ok(app_bundle.join("Resources").join("config.toml"))
         }
 

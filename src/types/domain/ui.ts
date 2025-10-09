@@ -12,13 +12,13 @@ export enum TabType {
 }
 
 export interface TabItem {
-  id: string
+  id: number | string
   title?: string
   type: TabType
   closable?: boolean
   shell?: string
   path?: string
-  data?: { section?: string; backendId?: number | null; [key: string]: unknown }
+  data?: { section?: string; paneId?: number | null; [key: string]: unknown }
 }
 
 // ===== 应用设置类型 =====

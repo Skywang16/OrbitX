@@ -4,8 +4,7 @@
  * 提供类型安全的SQL查询构建功能，避免SQL注入风险
  */
 
-use crate::utils::error::AppResult;
-use anyhow::anyhow;
+use crate::storage::error::{QueryBuilderError, QueryResult};
 use serde_json::Value;
 
 use std::collections::HashMap;
@@ -41,7 +40,7 @@ impl QueryCondition {
             _ => QueryCondition::Eq(field.to_string(), Value::Null),
         }
     }
-    
+
     /// 创建等于条件
     pub fn eq(field: &str, value: Value) -> Self {
         QueryCondition::Eq(field.to_string(), value)
@@ -118,12 +117,12 @@ impl SafeQueryBuilder {
     }
 
     /// 构建SELECT查询
-    pub fn build_select_all(self) -> AppResult<(String, Vec<Value>)> {
+    pub fn build_select_all(self) -> QueryResult<(String, Vec<Value>)> {
         self.build()
     }
 
     /// 构建查询
-    pub fn build(self) -> AppResult<(String, Vec<Value>)> {
+    pub fn build(self) -> QueryResult<(String, Vec<Value>)> {
         let mut query = format!(
             "SELECT {} FROM {}",
             self.select_fields.join(", "),
@@ -176,7 +175,7 @@ impl SafeQueryBuilder {
     }
 
     /// 构建条件SQL
-    fn build_conditions(&self, conditions: &[QueryCondition]) -> AppResult<(String, Vec<Value>)> {
+    fn build_conditions(&self, conditions: &[QueryCondition]) -> QueryResult<(String, Vec<Value>)> {
         if conditions.is_empty() {
             return Ok((String::new(), Vec::new()));
         }
@@ -197,7 +196,7 @@ impl SafeQueryBuilder {
     fn build_single_condition(
         &self,
         condition: &QueryCondition,
-    ) -> AppResult<(String, Vec<Value>)> {
+    ) -> QueryResult<(String, Vec<Value>)> {
         match condition {
             QueryCondition::Eq(field, value) => Ok((format!("{} = ?", field), vec![value.clone()])),
             QueryCondition::Ne(field, value) => {
@@ -293,9 +292,9 @@ impl InsertBuilder {
         self
     }
 
-    pub fn build(self) -> AppResult<(String, Vec<Value>)> {
+    pub fn build(self) -> QueryResult<(String, Vec<Value>)> {
         if self.fields.is_empty() {
-            return Err(anyhow!("No fields specified for insert"));
+            return Err(QueryBuilderError::InsertFieldsEmpty);
         }
 
         let fields: Vec<String> = self.fields.keys().cloned().collect();
@@ -349,9 +348,9 @@ impl UpdateBuilder {
         self
     }
 
-    pub fn build(self) -> AppResult<(String, Vec<Value>)> {
+    pub fn build(self) -> QueryResult<(String, Vec<Value>)> {
         if self.fields.is_empty() {
-            return Err(anyhow!("No fields specified for update"));
+            return Err(QueryBuilderError::UpdateFieldsEmpty);
         }
 
         let set_clauses: Vec<String> = self.fields.keys().map(|f| format!("{} = ?", f)).collect();

@@ -7,6 +7,7 @@
 use super::core::ShortcutManager;
 use super::types::*;
 use crate::config::commands::ConfigManagerState;
+use crate::config::error::ShortcutsResult;
 use crate::config::types::{ShortcutBinding, ShortcutsConfig};
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
@@ -22,7 +23,7 @@ pub struct ShortcutManagerState {
 }
 
 impl ShortcutManagerState {
-    pub async fn new(config_state: &ConfigManagerState) -> crate::utils::error::AppResult<Self> {
+    pub async fn new(config_state: &ConfigManagerState) -> ShortcutsResult<Self> {
         let manager = ShortcutManager::new(Arc::clone(&config_state.toml_manager)).await?;
         Ok(Self {
             manager: Arc::new(Mutex::new(manager)),
@@ -312,7 +313,9 @@ pub async fn shortcuts_get_action_metadata(
     let manager = state.manager.lock().await;
     let registry = manager.get_action_registry().await;
     let registry_guard = registry.read().await;
-    let metadata = registry_guard.shortcuts_get_action_metadata(&action_name).await;
+    let metadata = registry_guard
+        .shortcuts_get_action_metadata(&action_name)
+        .await;
 
     Ok(api_success!(metadata))
 }

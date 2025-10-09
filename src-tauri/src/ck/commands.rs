@@ -1,4 +1,3 @@
-
 use crate::terminal::commands::TerminalContextState;
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
@@ -13,19 +12,27 @@ use tauri::State;
 use tokio::task::JoinHandle;
 use tracing::debug;
 
-fn default_index_dir(base: &Path) -> PathBuf { base.join(".oxi") }
+fn default_index_dir(base: &Path) -> PathBuf {
+    base.join(".oxi")
+}
 fn resolve_index_dir(base: &Path) -> PathBuf {
     let oxi = base.join(".oxi");
-    if oxi.exists() { return oxi; }
+    if oxi.exists() {
+        return oxi;
+    }
     base.join(".ck")
 }
 
 fn is_index_ready(search_path: &Path) -> bool {
     let idx_dir = resolve_index_dir(search_path);
-    if !idx_dir.exists() { return false; }
+    if !idx_dir.exists() {
+        return false;
+    }
 
     let building_lock = idx_dir.join("building.lock");
-    if building_lock.exists() { return false; }
+    if building_lock.exists() {
+        return false;
+    }
 
     let ready_marker = idx_dir.join("ready.marker");
     ready_marker.exists()
@@ -126,11 +133,11 @@ async fn extract_content_from_span(file: &std::path::Path, span: &ck_core::Span)
 ///
 /// 搜索接口强制要求提供 `path` 参数。
 #[tauri::command]
-pub async fn ck_search(
+pub(crate) async fn ck_search(
     params: CkSearchParams,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<Vec<CkSearchResultItem>> {
-    debug!("代码搜索: query={}, path={}", params.query, params.path);
+    debug!("Code search: query={}, path={}", params.query, params.path);
 
     if params.query.trim().len() < 3 {
         return Ok(api_error!("ck.invalid_query"));
@@ -151,7 +158,7 @@ pub async fn ck_search(
         ck_core::SearchMode::Regex | ck_core::SearchMode::Lexical
     ) && !is_index_ready(&search_path)
     {
-        debug!("索引未就绪，无法执行语义/混合搜索: {:?}", search_path);
+        debug!("Index not ready; cannot run semantic/hybrid search: {:?}", search_path);
         return Ok(api_error!("ck.index_not_found"));
     }
 
@@ -280,7 +287,7 @@ fn update_build_progress(path: &str, progress: CkBuildProgress) {
 ///
 /// 根据提供的pane_id获取对应终端的路径进行查询。
 #[tauri::command]
-pub async fn ck_get_build_progress(
+pub(crate) async fn ck_get_build_progress(
     path: String,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<CkBuildProgress> {
@@ -296,7 +303,11 @@ pub async fn ck_get_build_progress(
         fs::read_to_string(&progress_path_oxi)
             .ok()
             .and_then(|content| serde_json::from_str(&content).ok())
-            .or_else(|| fs::read_to_string(&progress_path_ck).ok().and_then(|c| serde_json::from_str(&c).ok()))
+            .or_else(|| {
+                fs::read_to_string(&progress_path_ck)
+                    .ok()
+                    .and_then(|c| serde_json::from_str(&c).ok())
+            })
             .unwrap_or_else(|| CkBuildProgress {
                 current_file: None,
                 files_completed: 0,
@@ -315,11 +326,11 @@ pub async fn ck_get_build_progress(
 ///
 /// 此命令会根据提供的pane_id获取对应终端的路径进行检查。
 #[tauri::command]
-pub async fn ck_index_status(
+pub(crate) async fn ck_index_status(
     path: String,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<CkIndexStatusResult> {
-    debug!("🔍 开始获取CK索引状态，路径: {}", path);
+    debug!("Start getting CK index status, path: {}", path);
 
     let search_path = PathBuf::from(path);
 
@@ -327,13 +338,17 @@ pub async fn ck_index_status(
     let path_str = search_path.display().to_string();
 
     debug!(
-        "📊 索引状态检查结果: path={}, is_ready={}",
+        "Index status checked: path={}, is_ready={}",
         path_str, is_ready
     );
 
     // 仅统计索引目录顶层文件大小，避免递归带来的性能影响
     let idx_dir = resolve_index_dir(&search_path);
-    let size_bytes = if idx_dir.exists() { index_dir_top_level_size(&idx_dir) } else { 0 };
+    let size_bytes = if idx_dir.exists() {
+        index_dir_top_level_size(&idx_dir)
+    } else {
+        0
+    };
     let size_str = format_bytes(size_bytes);
 
     Ok(api_success!(CkIndexStatusResult {
@@ -347,7 +362,7 @@ pub async fn ck_index_status(
 ///
 /// 根据提供的pane_id获取对应终端的路径进行构建，并立即返回。
 #[tauri::command]
-pub async fn ck_build_index(
+pub(crate) async fn ck_build_index(
     path: String,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<()> {
@@ -356,7 +371,7 @@ pub async fn ck_build_index(
 
     if let Some(existing_task) = get_tasks_store().lock().unwrap().remove(path_key.as_ref()) {
         existing_task.abort();
-        debug!("取消了正在进行的构建任务: {}", path_key);
+        debug!("Canceled ongoing build task: {}", path_key);
     }
 
     update_build_progress(
@@ -405,19 +420,19 @@ pub async fn ck_build_index(
         // Build index directly without running a semantic search
         let result = ck_index::smart_update_index_with_detailed_progress(
             &search_path,
-            false,                       // force_rebuild
-            None,                        // progress_callback (coarse)
-            detailed_cb_idx,             // detailed progress
-            true,                        // compute_embeddings
-            true,                        // respect_gitignore
+            false,           // force_rebuild
+            None,            // progress_callback (coarse)
+            detailed_cb_idx, // detailed progress
+            true,            // compute_embeddings
+            true,            // respect_gitignore
             &ck_core::get_default_exclude_patterns(),
-            None,                        // model
+            None, // model
         )
         .await;
 
         match result {
             Ok(_stats) => {
-                debug!("✅ 索引构建成功: {}", path_key);
+                debug!("Index build succeeded: {}", path_key);
                 update_build_progress(
                     &path_key,
                     CkBuildProgress {
@@ -436,14 +451,14 @@ pub async fn ck_build_index(
                     let _ = fs::write(&ready_marker, b"ready");
                 } else {
                     debug!(
-                        "⚠️ 构建后未检测到索引目录或 manifest: dir={}, manifest={}",
+                        "Manifest or index dir not detected after build: dir={}, manifest={}",
                         idx_dir.display(),
                         idx_dir.join("manifest.json").display()
                     );
                 }
             }
             Err(e) => {
-                debug!("❌ 索引构建失败: {}, Error: {}", path_key, e);
+                debug!("Index build failed: {}, error: {}", path_key, e);
                 update_build_progress(
                     &path_key,
                     CkBuildProgress {
@@ -461,7 +476,7 @@ pub async fn ck_build_index(
 
         let _ = fs::remove_file(&building_lock);
         get_tasks_store().lock().unwrap().remove(path_key.as_ref());
-        debug!("构建任务结束，已清理: {}", path_key);
+        debug!("Build task finished and cleaned up: {}", path_key);
     });
 
     get_tasks_store()
@@ -476,7 +491,7 @@ pub async fn ck_build_index(
 ///
 /// 根据提供的pane_id获取对应终端的路径进行操作。
 #[tauri::command]
-pub async fn ck_cancel_build(
+pub(crate) async fn ck_cancel_build(
     path: String,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<()> {
@@ -485,7 +500,7 @@ pub async fn ck_cancel_build(
 
     if let Some(task) = get_tasks_store().lock().unwrap().remove(path_key.as_str()) {
         task.abort();
-        debug!("请求中止构建任务: {}", path_key);
+        debug!("Requested to abort build task: {}", path_key);
 
         update_build_progress(
             &path_key,
@@ -512,7 +527,7 @@ pub async fn ck_cancel_build(
 ///
 /// 根据提供的pane_id获取对应终端的路径进行操作。
 #[tauri::command]
-pub async fn ck_delete_index(
+pub(crate) async fn ck_delete_index(
     path: String,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<()> {
@@ -521,22 +536,26 @@ pub async fn ck_delete_index(
     let path_key = search_path.display().to_string();
     if let Some(task) = get_tasks_store().lock().unwrap().remove(path_key.as_str()) {
         task.abort();
-        debug!("删除索引前，取消了正在进行的构建任务: {}", &path_key);
+        debug!("Canceled ongoing build task before deletion: {}", &path_key);
     }
 
     // 删除 .oxi 索引目录；若不存在则尝试删除旧的 .ck
     let idx_dir_oxi = search_path.join(".oxi");
     let idx_dir_ck = search_path.join(".ck");
-    let target = if idx_dir_oxi.exists() { &idx_dir_oxi } else { &idx_dir_ck };
+    let target = if idx_dir_oxi.exists() {
+        &idx_dir_oxi
+    } else {
+        &idx_dir_ck
+    };
     if target.exists() {
         match tokio::fs::remove_dir_all(target).await {
             Ok(_) => {
                 get_progress_store().lock().unwrap().remove(&path_key);
-                debug!("✅ 成功删除CK索引: {}", path_key);
+                debug!("Successfully deleted CK index: {}", path_key);
                 Ok(api_success!(()))
             }
             Err(e) => {
-                debug!("❌ 删除CK索引失败: {}, Error: {}", path_key, e);
+                debug!("Failed to delete CK index: {}, error: {}", path_key, e);
                 Ok(api_error!("ck.delete_failed"))
             }
         }

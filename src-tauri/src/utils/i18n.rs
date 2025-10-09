@@ -1,3 +1,4 @@
+pub mod commands;
 
 use crate::utils::language::{Language, LanguageManager};
 use serde_json::Value;
@@ -25,13 +26,13 @@ impl I18nManager {
         let lang_code = language.to_string();
         let json_content = Self::load_language_file(&lang_code)?;
         let messages: HashMap<String, Value> = serde_json::from_str(&json_content)
-            .map_err(|e| format!("解析语言文件失败 {}: {}", lang_code, e))?;
+            .map_err(|e| format!("Failed to parse language file {}: {}", lang_code, e))?;
 
         if let Ok(mut i18n_messages) = I18N_MESSAGES.write() {
             i18n_messages.insert(lang_code, messages);
             Ok(())
         } else {
-            Err("无法写入国际化消息存储".to_string())
+            Err("Failed to write to i18n message store".to_string())
         }
     }
 
@@ -45,7 +46,7 @@ impl I18nManager {
         match lang_code {
             "zh-CN" => Ok(include_str!("i18n/zh-CN.json").to_string()),
             "en-US" => Ok(include_str!("i18n/en-US.json").to_string()),
-            _ => Err(format!("不支持的语言: {}", lang_code)),
+            _ => Err(format!("Unsupported language: {}", lang_code)),
         }
     }
 
@@ -136,7 +137,7 @@ impl I18nManager {
     pub fn add_message(lang_code: &str, key: &str, value: &str) -> Result<(), String> {
         let mut i18n_messages = I18N_MESSAGES
             .write()
-            .map_err(|_| "无法获取国际化消息存储写锁")?;
+            .map_err(|_| "Failed to acquire i18n message store write lock")?;
 
         let messages = i18n_messages
             .entry(lang_code.to_string())

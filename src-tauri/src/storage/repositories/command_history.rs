@@ -6,9 +6,8 @@
 
 use super::{Ordering, Pagination, Repository, RowMapper};
 use crate::storage::database::DatabaseManager;
+use crate::storage::error::{RepositoryError, RepositoryResult};
 use crate::storage::query::{InsertBuilder, QueryCondition, SafeQueryBuilder};
-use crate::utils::error::AppResult;
-use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -54,7 +53,7 @@ impl CommandHistoryEntry {
 }
 
 impl RowMapper<CommandHistoryEntry> for CommandHistoryEntry {
-    fn from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<Self> {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> RepositoryResult<Self> {
         Ok(Self {
             id: Some(row.try_get("id")?),
             command: row.try_get("command")?,
@@ -129,7 +128,7 @@ impl CommandHistoryRepository {
     }
 
     /// 根据查询条件查找命令历史
-    pub async fn find_by_query(&self, query: &HistoryQuery) -> AppResult<Vec<CommandHistoryEntry>> {
+    pub async fn find_by_query(&self, query: &HistoryQuery) -> RepositoryResult<Vec<CommandHistoryEntry>> {
         let mut builder = SafeQueryBuilder::new("command_history").select(&[
             "id",
             "command",
@@ -206,10 +205,14 @@ impl CommandHistoryRepository {
                     if let Some(i) = n.as_i64() {
                         query_builder.bind(i)
                     } else {
-                        return Err(anyhow!("Unsupported number type"));
+                        return Err(RepositoryError::UnsupportedNumberType);
                     }
                 }
-                _ => return Err(anyhow!("Unsupported parameter type")),
+                _ => {
+                    return Err(RepositoryError::unsupported_parameter(
+                        "command_history parameter",
+                    ))
+                }
             };
         }
 
@@ -226,7 +229,7 @@ impl CommandHistoryRepository {
     pub async fn full_text_search(
         &self,
         search_query: &str,
-    ) -> AppResult<Vec<CommandSearchResult>> {
+    ) -> RepositoryResult<Vec<CommandSearchResult>> {
         let sql = r#"
             SELECT ch.id, ch.command, ch.working_directory, ch.output, ch.executed_at,
                    snippet(command_search, 0, '<mark>', '</mark>', '...', 32) as command_snippet,
@@ -262,7 +265,7 @@ impl CommandHistoryRepository {
     }
 
     /// 获取使用统计
-    pub async fn get_usage_statistics(&self) -> AppResult<UsageStats> {
+    pub async fn get_usage_statistics(&self) -> RepositoryResult<UsageStats> {
         // 总命令数
         let total_commands: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM command_history")
             .fetch_one(self.database.pool())
@@ -316,7 +319,7 @@ impl CommandHistoryRepository {
     }
 
     /// 批量保存命令历史
-    pub async fn batch_save(&self, entries: &[CommandHistoryEntry]) -> AppResult<()> {
+    pub async fn batch_save(&self, entries: &[CommandHistoryEntry]) -> RepositoryResult<()> {
         if entries.is_empty() {
             return Ok(());
         }
@@ -349,7 +352,7 @@ impl CommandHistoryRepository {
     }
 
     /// 更新命令使用统计
-    pub async fn update_usage_stats(&self, entry: &CommandHistoryEntry) -> AppResult<()> {
+    pub async fn update_usage_stats(&self, entry: &CommandHistoryEntry) -> RepositoryResult<()> {
         let command_hash = format!("{:x}", md5::compute(&entry.command));
 
         let sql = r#"
@@ -376,7 +379,7 @@ impl CommandHistoryRepository {
 
 #[async_trait::async_trait]
 impl Repository<CommandHistoryEntry> for CommandHistoryRepository {
-    async fn find_by_id(&self, id: i64) -> AppResult<Option<CommandHistoryEntry>> {
+    async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<CommandHistoryEntry>> {
         let (sql, _params) = SafeQueryBuilder::new("command_history")
             .where_condition(QueryCondition::Eq(
                 "id".to_string(),
@@ -395,12 +398,12 @@ impl Repository<CommandHistoryEntry> for CommandHistoryRepository {
         }
     }
 
-    async fn find_all(&self) -> AppResult<Vec<CommandHistoryEntry>> {
+    async fn find_all(&self) -> RepositoryResult<Vec<CommandHistoryEntry>> {
         let query = HistoryQuery::default();
         self.find_by_query(&query).await
     }
 
-    async fn save(&self, entity: &CommandHistoryEntry) -> AppResult<i64> {
+    async fn save(&self, entity: &CommandHistoryEntry) -> RepositoryResult<i64> {
         let (sql, params) = InsertBuilder::new("command_history")
             .set("command", Value::String(entity.command.clone()))
             .set(
@@ -458,14 +461,18 @@ impl Repository<CommandHistoryEntry> for CommandHistoryRepository {
                 Value::Number(n) => {
                     if let Some(i) = n.as_i64() {
                         query_builder.bind(i)
-                    } else if let Some(i) = n.as_i64() {
-                        query_builder.bind(i)
+                    } else if let Some(f) = n.as_f64() {
+                        query_builder.bind(f)
                     } else {
-                        return Err(anyhow!("Unsupported number type"));
+                        return Err(RepositoryError::UnsupportedNumberType);
                     }
                 }
                 Value::Null => query_builder.bind(None::<String>),
-                _ => return Err(anyhow!("Unsupported parameter type")),
+                _ => {
+                    return Err(RepositoryError::unsupported_parameter(
+                        "command_history parameter",
+                    ))
+                }
             };
         }
 
@@ -477,18 +484,20 @@ impl Repository<CommandHistoryEntry> for CommandHistoryRepository {
         Ok(result.last_insert_rowid())
     }
 
-    async fn update(&self, _entity: &CommandHistoryEntry) -> AppResult<()> {
-        Err(anyhow!("命令历史记录不支持更新操作"))
+    async fn update(&self, _entity: &CommandHistoryEntry) -> RepositoryResult<()> {
+        Err(RepositoryError::CommandHistoryUpdateNotSupported)
     }
 
-    async fn delete(&self, id: i64) -> AppResult<()> {
+    async fn delete(&self, id: i64) -> RepositoryResult<()> {
         let result = sqlx::query("DELETE FROM command_history WHERE id = ?")
             .bind(id)
             .execute(self.database.pool())
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(anyhow!("命令历史记录不存在: {}", id));
+            return Err(RepositoryError::CommandHistoryNotFound {
+                id: id.to_string(),
+            });
         }
 
         Ok(())

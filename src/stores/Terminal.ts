@@ -1,11 +1,10 @@
-import { shellApi, terminalApi, terminalContextApi } from '@/api'
+import { shellApi, storageApi, terminalApi, terminalContextApi } from '@/api'
 import type { ShellInfo } from '@/api'
 import { useSessionStore } from '@/stores/session'
-import type { TerminalState } from '@/types/domain/storage'
+import type { RuntimeTerminalState, TerminalState } from '@/types'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
-import { computed, ref, watch, nextTick } from 'vue'
-import { debounce } from 'lodash-es'
+import { computed, ref, nextTick } from 'vue'
 
 declare global {
   interface Window {
@@ -32,19 +31,9 @@ interface ShellManagerState {
   error: string | null
 }
 
-export interface RuntimeTerminalState {
-  id: string
-  title: string
-  cwd: string
-  active: boolean
-  shell?: string
-  backendId: number | null
-  shellInfo?: ShellInfo
-}
-
 export const useTerminalStore = defineStore('Terminal', () => {
   const terminals = ref<RuntimeTerminalState[]>([])
-  const activeTerminalId = ref<string | null>(null)
+  const activeTerminalId = ref<number | null>(null)
 
   const shellManager = ref<ShellManagerState>({
     availableShells: [],
@@ -52,9 +41,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
     error: null,
   })
 
-  const _listeners = ref<Map<string, ListenerEntry[]>>(new Map())
+  const _listeners = ref<Map<number, ListenerEntry[]>>(new Map())
 
-  const _resizeCallbacks = ref<Map<string, ResizeCallback>>(new Map())
+  const _resizeCallbacks = ref<Map<number, ResizeCallback>>(new Map())
   let _globalResizeListener: (() => void) | null = null
 
   type CommandEventType = 'started' | 'finished'
@@ -67,7 +56,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     isSuccess: boolean
   }
   type CommandEventPayload = CommandEventStartedPayload | CommandEventFinishedPayload
-  type CommandEventCallback = (terminalId: string, event: CommandEventType, data?: CommandEventPayload) => void
+  type CommandEventCallback = (terminalId: number, event: CommandEventType, data?: CommandEventPayload) => void
   const _commandEventListeners = ref<CommandEventCallback[]>([])
 
   const subscribeToCommandEvents = (callback: CommandEventCallback) => {
@@ -85,7 +74,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     finished: CommandEventFinishedPayload
   }
   function emitCommandEvent<E extends CommandEventType>(
-    terminalId: string,
+    terminalId: number,
     event: E,
     data: CommandEventPayloadMap[E]
   ): void {
@@ -101,53 +90,15 @@ export const useTerminalStore = defineStore('Terminal', () => {
   let _globalListenersUnlisten: UnlistenFn[] = []
   let _isListenerSetup = false
 
-  let nextId = 0
-
   const _pendingOperations = ref<Set<string>>(new Set())
   const _operationQueue = ref<Array<() => Promise<void>>>([])
   let _isProcessingQueue = false
   const MAX_CONCURRENT_OPERATIONS = 2
 
-  const _performanceStats = ref({
-    totalTerminalsCreated: 0,
-    totalTerminalsClosed: 0,
-    averageCreationTime: 0,
-    maxConcurrentTerminals: 0,
-    creationTimes: [] as number[],
-  })
-
   const sessionStore = useSessionStore()
-
-  // 保存持久化：使用轻量防抖合并短时间内的多次更新，避免保存风暴
-  const debouncedPersist = debounce(() => {
-    sessionStore.saveSessionState().catch(() => {})
-  }, 80)
-
-  const saveTerminalState = async () => {
-    syncToSessionStore()
-    await sessionStore.saveSessionState()
-  }
-
-  const immediateSync = () => {
-    // 仅同步到 SessionStore，由具体的调用方（如 create/close/setActive）控制何时保存，避免重复/竞态保存
-    syncToSessionStore()
-    debouncedPersist()
-  }
-
-  watch(
-    [terminals, activeTerminalId],
-    () => {
-      immediateSync()
-    },
-    { deep: true }
-  )
 
   const activeTerminal = computed(() => terminals.value.find(t => t.id === activeTerminalId.value))
   const currentWorkingDirectory = computed(() => activeTerminal.value?.cwd || null)
-
-  const generateId = (): string => {
-    return `terminal-${nextId++}`
-  }
 
   const queueOperation = async <T>(operation: () => Promise<T>): Promise<T> => {
     return new Promise(resolve => {
@@ -188,50 +139,15 @@ export const useTerminalStore = defineStore('Terminal', () => {
     _isProcessingQueue = false
   }
 
-  const recordPerformanceMetric = (type: 'create' | 'close', duration?: number) => {
-    const stats = _performanceStats.value
-
-    if (type === 'create') {
-      stats.totalTerminalsCreated++
-      if (duration) {
-        stats.creationTimes.push(duration)
-        if (stats.creationTimes.length > 100) {
-          stats.creationTimes.shift()
-        }
-        stats.averageCreationTime = stats.creationTimes.reduce((a, b) => a + b, 0) / stats.creationTimes.length
-      }
-    } else if (type === 'close') {
-      stats.totalTerminalsClosed++
-    }
-
-    const currentCount = terminals.value.length
-    if (currentCount > stats.maxConcurrentTerminals) {
-      stats.maxConcurrentTerminals = currentCount
-    }
-  }
-
   const setupGlobalListeners = async () => {
-    listen<{ pane_id: number; cwd: string }>('pane_cwd_changed', event => {
-      const { pane_id, cwd } = event.payload
-      if (pane_id && cwd) {
-        const terminal = terminals.value.find(t => t.backendId === pane_id)
-        if (terminal) {
-          terminal.cwd = cwd
-        }
-      }
-    })
     if (_isListenerSetup) return
-
-    const findTerminalByBackendId = (backendId: number): RuntimeTerminalState | undefined => {
-      return terminals.value.find(t => t.backendId === backendId)
-    }
 
     const unlistenExit = await listen<{
       paneId: number
       exitCode: number | null
     }>('terminal_exit', event => {
       try {
-        const terminal = findTerminalByBackendId(event.payload.paneId)
+        const terminal = terminals.value.find(t => t.id === event.payload.paneId)
         if (terminal) {
           const listeners = _listeners.value.get(terminal.id) || []
           listeners.forEach(listener => listener.callbacks.onExit(event.payload.exitCode))
@@ -248,7 +164,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       cwd: string
     }>('pane_cwd_changed', event => {
       try {
-        const terminal = findTerminalByBackendId(event.payload.paneId)
+        const terminal = terminals.value.find(t => t.id === event.payload.paneId)
         if (terminal) {
           terminal.cwd = event.payload.cwd
           updateTerminalTitle(terminal, event.payload.cwd)
@@ -268,7 +184,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     _isListenerSetup = false
   }
 
-  const registerTerminalCallbacks = (id: string, callbacks: TerminalEventListeners) => {
+  const registerTerminalCallbacks = (id: number, callbacks: TerminalEventListeners) => {
     const listeners = _listeners.value.get(id) || []
     const entry: ListenerEntry = {
       id: `${id}-${Date.now()}`,
@@ -278,7 +194,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     _listeners.value.set(id, listeners)
   }
 
-  const unregisterTerminalCallbacks = (id: string, callbacks?: TerminalEventListeners) => {
+  const unregisterTerminalCallbacks = (id: number, callbacks?: TerminalEventListeners) => {
     if (!callbacks) {
       _listeners.value.delete(id)
     } else {
@@ -293,10 +209,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
   }
 
   // 由 Channel 订阅直接分发输出给已注册回调
-  const dispatchOutputForBackendId = (backendId: number, data: string) => {
-    const terminal = terminals.value.find(t => t.backendId === backendId)
-    if (!terminal) return
-    const listeners = _listeners.value.get(terminal.id) || []
+  const dispatchOutputForPaneId = (paneId: number, data: string) => {
+    const listeners = _listeners.value.get(paneId) || []
     listeners.forEach(listener => {
       try {
         listener.callbacks.onOutput(data)
@@ -306,7 +220,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     })
   }
 
-  const registerResizeCallback = (terminalId: string, callback: ResizeCallback) => {
+  const registerResizeCallback = (terminalId: number, callback: ResizeCallback) => {
     _resizeCallbacks.value.set(terminalId, callback)
 
     if (_resizeCallbacks.value.size === 1 && !_globalResizeListener) {
@@ -322,7 +236,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  const unregisterResizeCallback = (terminalId: string) => {
+  const unregisterResizeCallback = (terminalId: number) => {
     _resizeCallbacks.value.delete(terminalId)
 
     if (_resizeCallbacks.value.size === 0 && _globalResizeListener) {
@@ -331,12 +245,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  const createTerminal = async (initialDirectory?: string): Promise<string> => {
+  const createTerminal = async (initialDirectory?: string): Promise<number> => {
     return queueOperation(async () => {
-      const id = generateId()
-      const startTime = Date.now()
-
-      const backendId = await terminalApi.createTerminal({
+      const paneId = await terminalApi.createTerminal({
         rows: 24,
         cols: 80,
         cwd: initialDirectory,
@@ -344,29 +255,37 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       const defaultShell = await shellApi.getDefaultShell()
 
-      const terminal: RuntimeTerminalState = {
-        id,
-        title: defaultShell.name,
-        cwd: initialDirectory || '~',
-        active: false,
-        shell: defaultShell.name,
-        backendId,
-        shellInfo: defaultShell as ShellInfo,
+      let resolvedCwd = initialDirectory || null
+      try {
+        resolvedCwd = await storageApi.getTerminalCwd(paneId)
+      } catch (error) {
+        console.warn('获取终端工作目录失败，使用回退目录:', error)
       }
 
+      const terminal: RuntimeTerminalState = {
+        id: paneId,
+        title: defaultShell.name,
+        cwd: resolvedCwd || initialDirectory || '~',
+        active: false,
+        shell: defaultShell.name,
+      }
+
+      updateTerminalTitle(terminal, terminal.cwd)
+
+      const existingIndex = terminals.value.findIndex(t => t.id === paneId)
+      if (existingIndex !== -1) {
+        terminals.value.splice(existingIndex, 1)
+      }
       terminals.value.push(terminal)
-      await setActiveTerminal(id)
+      await setActiveTerminal(paneId)
 
-      immediateSync()
+      // setActiveTerminal已经会调用syncToSessionStore和保存，不需要再次调用
 
-      const duration = Date.now() - startTime
-      recordPerformanceMetric('create', duration)
-
-      return id
+      return paneId
     })
   }
 
-  const closeTerminal = async (id: string) => {
+  const closeTerminal = async (id: number) => {
     return queueOperation(async () => {
       const terminal = terminals.value.find(t => t.id === id)
       if (!terminal) {
@@ -374,28 +293,21 @@ export const useTerminalStore = defineStore('Terminal', () => {
         return
       }
 
-      if (terminal.backendId === null) {
-        await cleanupTerminalState(id)
-        // 依赖 watch + 轻量防抖合并保存，避免重复保存
-        immediateSync()
-        return
-      }
-
       unregisterTerminalCallbacks(id)
 
-      const backendId = terminal.backendId
-      terminal.backendId = null
-
-      await terminalApi.closeTerminal(backendId)
+      await terminalApi.closeTerminal(id)
 
       await cleanupTerminalState(id)
-      // 依赖 watch + 轻量防抖合并保存，避免重复保存
-      immediateSync()
-      recordPerformanceMetric('close')
+      // cleanupTerminalState内部可能会调用setActiveTerminal，它已经会保存状态
+      // 如果没有其他终端了，手动同步并保存
+      if (terminals.value.length === 0) {
+        syncToSessionStore()
+        sessionStore.setActiveTabId(null)
+      }
     })
   }
 
-  const cleanupTerminalState = async (id: string) => {
+  const cleanupTerminalState = async (id: number) => {
     const index = terminals.value.findIndex(t => t.id === id)
     if (index !== -1) {
       terminals.value.splice(index, 1)
@@ -410,7 +322,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  const setActiveTerminal = async (id: string) => {
+  const setActiveTerminal = async (id: number) => {
     const targetTerminal = terminals.value.find(t => t.id === id)
     if (!targetTerminal) {
       console.warn(`尝试激活不存在的终端: ${id}`)
@@ -419,53 +331,40 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
     activeTerminalId.value = id
 
-    if (targetTerminal.backendId !== null) {
-      await terminalContextApi.setActivePaneId(targetTerminal.backendId)
-    }
+    terminals.value.forEach(terminal => {
+      terminal.active = terminal.id === id
+    })
 
+    await terminalContextApi.setActivePaneId(id)
+
+    // 统一在最后同步并保存一次，避免多次调用
+    // sessionStore.setActiveTabId内部会调用saveSessionState，所以这里只需要同步状态即可
+    syncToSessionStore()
     sessionStore.setActiveTabId(id)
-    immediateSync()
   }
 
-  const writeToTerminal = async (id: string, data: string) => {
+  const writeToTerminal = async (id: number, data: string) => {
     const terminal = terminals.value.find(t => t.id === id)
-    if (!terminal || terminal.backendId === null) {
-      console.error(`无法写入终端 '${id}': 未找到或无后端ID。`)
+    if (!terminal) {
+      console.error(`无法写入终端 '${id}': 未找到。`)
       return
     }
 
-    await terminalApi.writeToTerminal({ paneId: terminal.backendId, data })
+    await terminalApi.writeToTerminal({ paneId: terminal.id, data })
   }
 
-  const resizeTerminal = async (id: string, rows: number, cols: number) => {
+  const resizeTerminal = async (id: number, rows: number, cols: number) => {
     const terminalSession = terminals.value.find(t => t.id === id)
-    if (!terminalSession || terminalSession.backendId === null) {
-      console.error(`无法调整终端 '${id}' 大小: 未找到或无后端ID。`)
+    if (!terminalSession) {
+      console.error(`无法调整终端 '${id}' 大小: 未找到。`)
       return
     }
 
     await terminalApi.resizeTerminal({
-      paneId: terminalSession.backendId,
+      paneId: terminalSession.id,
       rows,
       cols,
     })
-  }
-
-  const updateTerminalCwd = (id: string, cwd: string) => {
-    const terminal = terminals.value.find(t => t.id === id)
-    if (!terminal) {
-      console.warn(`终端 ${id} 不存在，无法更新CWD`)
-      return
-    }
-
-    if (terminal.cwd === cwd) {
-      return
-    }
-
-    terminal.cwd = cwd
-
-    updateTerminalTitle(terminal, cwd)
-    immediateSync()
   }
 
   const updateTerminalTitle = (terminal: RuntimeTerminalState, cwd: string) => {
@@ -525,13 +424,13 @@ export const useTerminalStore = defineStore('Terminal', () => {
     shellManager.value.isLoading = false
   }
 
-  const createAgentTerminal = async (agentName: string = 'AI Agent', initialDirectory?: string): Promise<string> => {
+  const createAgentTerminal = async (agentName: string = 'AI Agent', initialDirectory?: string): Promise<number> => {
     return queueOperation(async () => {
-      const id = generateId()
       const agentTerminalTitle = agentName
 
-      // 检查是否已存在Agent专属终端（精确匹配Agent名称）
-      const existingAgentTerminal = terminals.value.find(terminal => terminal.title === agentName)
+      const existingAgentTerminal = terminals.value.find(
+        terminal => terminal.shell === 'agent' && terminal.title === agentName
+      )
 
       if (existingAgentTerminal) {
         await setActiveTerminal(existingAgentTerminal.id)
@@ -539,32 +438,41 @@ export const useTerminalStore = defineStore('Terminal', () => {
         return existingAgentTerminal.id
       }
 
-      const backendId = await terminalApi.createTerminal({
+      const paneId = await terminalApi.createTerminal({
         rows: 24,
         cols: 80,
         cwd: initialDirectory,
       })
 
-      const terminal: RuntimeTerminalState = {
-        id,
-        title: agentTerminalTitle,
-        cwd: initialDirectory || '~',
-        active: false,
-        shell: 'agent',
-        backendId,
+      let resolvedCwd = initialDirectory || null
+      try {
+        resolvedCwd = await storageApi.getTerminalCwd(paneId)
+      } catch (error) {
+        console.warn('获取Agent终端工作目录失败，使用回退目录:', error)
       }
 
+      const terminal: RuntimeTerminalState = {
+        id: paneId,
+        title: agentTerminalTitle,
+        cwd: resolvedCwd || initialDirectory || '~',
+        active: false,
+        shell: 'agent',
+      }
+
+      const existingIndex = terminals.value.findIndex(t => t.id === paneId)
+      if (existingIndex !== -1) {
+        terminals.value.splice(existingIndex, 1)
+      }
       terminals.value.push(terminal)
       await new Promise(resolve => setTimeout(resolve, 100))
-      await setActiveTerminal(id)
-      await saveTerminalState()
-      return id
+      await setActiveTerminal(paneId)
+      // setActiveTerminal已经会同步并保存状态
+      return paneId
     })
   }
 
-  const createTerminalWithShell = async (shellName: string): Promise<string> => {
+  const createTerminalWithShell = async (shellName: string): Promise<number> => {
     return queueOperation(async () => {
-      const id = generateId()
       const title = shellName
 
       const shellInfo = shellManager.value.availableShells.find(s => s.name === shellName)
@@ -572,27 +480,36 @@ export const useTerminalStore = defineStore('Terminal', () => {
         throw new Error(`未找到shell: ${shellName}`)
       }
 
-      const backendId = await terminalApi.createTerminalWithShell({
+      const paneId = await terminalApi.createTerminalWithShell({
         shellName,
         rows: 24,
         cols: 80,
       })
 
-      const terminal: RuntimeTerminalState = {
-        id,
-        title,
-        cwd: shellInfo.path || '~',
-        active: false,
-        shell: shellInfo.name,
-        backendId,
-        shellInfo,
+      let resolvedCwd = shellInfo.path || null
+      try {
+        resolvedCwd = await storageApi.getTerminalCwd(paneId)
+      } catch (error) {
+        console.warn(`获取Shell(${shellName})终端工作目录失败，使用默认路径:`, error)
       }
 
-      terminals.value.push(terminal)
-      await setActiveTerminal(id)
-      await saveTerminalState()
+      const terminal: RuntimeTerminalState = {
+        id: paneId,
+        title,
+        cwd: resolvedCwd || shellInfo.path || '~',
+        active: false,
+        shell: shellInfo.name,
+      }
 
-      return id
+      const existingIndex = terminals.value.findIndex(t => t.id === paneId)
+      if (existingIndex !== -1) {
+        terminals.value.splice(existingIndex, 1)
+      }
+      terminals.value.push(terminal)
+      await setActiveTerminal(paneId)
+      // setActiveTerminal已经会同步并保存状态
+
+      return paneId
     })
   }
 
@@ -604,9 +521,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
     const terminalStates: TerminalState[] = terminals.value.map(terminal => ({
       id: terminal.id,
       title: terminal.title,
-      cwd: terminal.cwd,
       active: terminal.id === activeTerminalId.value,
-      shell: terminal.shellInfo?.name,
+      shell: terminal.shell,
     }))
 
     sessionStore.updateTerminals(terminalStates)
@@ -618,49 +534,81 @@ export const useTerminalStore = defineStore('Terminal', () => {
       await sessionStore.initialize()
     }
 
-    const terminalStates = sessionStore.terminals
+    const savedTerminals = sessionStore.terminals || []
+    let runtimeTerminals: RuntimeTerminalState[] = []
 
-    if (!terminalStates || terminalStates.length === 0) {
-      return false
+    try {
+      runtimeTerminals = await storageApi.getTerminalsState()
+    } catch (error) {
+      console.error('加载终端运行时状态失败:', error)
     }
 
-    terminals.value = []
+    const runtimeMap = new Map<number, RuntimeTerminalState>()
+    runtimeTerminals.forEach(runtime => {
+      runtimeMap.set(runtime.id, runtime)
+    })
+
+    const restored: RuntimeTerminalState[] = []
+
+    for (const saved of savedTerminals) {
+      const runtime = runtimeMap.get(saved.id)
+      if (!runtime) {
+        continue
+      }
+
+      restored.push({
+        ...runtime,
+        title: saved.title || runtime.title,
+      })
+
+      runtimeMap.delete(saved.id)
+    }
+
+    for (const runtime of runtimeMap.values()) {
+      restored.push(runtime)
+    }
+
+    terminals.value = restored
     activeTerminalId.value = null
 
-    let shouldActivateTerminalId: string | null = null
-
-    for (const terminalState of terminalStates) {
-      const id = await createTerminal(terminalState.cwd)
-
-      const terminal = terminals.value.find(t => t.id === id)
-      if (terminal) {
-        terminal.title = terminalState.title
+    const normalizePaneId = (value: unknown): number | null => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value
       }
-
-      if (terminalState.active && shouldActivateTerminalId === null) {
-        shouldActivateTerminalId = id
+      if (typeof value === 'string' && value.trim().length > 0) {
+        const parsed = Number.parseInt(value, 10)
+        return Number.isNaN(parsed) ? null : parsed
       }
+      return null
     }
 
-    const savedActiveTabId = sessionStore.sessionState.activeTabId
-    let terminalToActivate: string | null = null
+    const savedActiveFromSession = normalizePaneId(sessionStore.sessionState.activeTabId)
+    const savedActiveTerminalId = normalizePaneId(savedTerminals.find(t => t.active)?.id)
+    const runtimeActiveTerminal = terminals.value.find(t => t.active)
 
-    if (savedActiveTabId && terminals.value.find(t => t.id === savedActiveTabId)) {
-      terminalToActivate = savedActiveTabId
-    } else if (shouldActivateTerminalId) {
-      terminalToActivate = shouldActivateTerminalId
+    let targetActiveId: number | null = null
+
+    if (savedActiveFromSession && terminals.value.some(t => t.id === savedActiveFromSession)) {
+      targetActiveId = savedActiveFromSession
+    } else if (savedActiveTerminalId && terminals.value.some(t => t.id === savedActiveTerminalId)) {
+      targetActiveId = savedActiveTerminalId
+    } else if (runtimeActiveTerminal) {
+      targetActiveId = runtimeActiveTerminal.id
     } else if (terminals.value.length > 0) {
-      terminalToActivate = terminals.value[0].id
+      targetActiveId = terminals.value[0].id
     }
 
-    if (terminalToActivate) {
-      await setActiveTerminal(terminalToActivate)
+    if (targetActiveId != null) {
+      await setActiveTerminal(targetActiveId)
+      return true
     }
 
     if (terminals.value.length === 0) {
       await createTerminal()
+      return true
     }
-    return true
+
+    return terminals.value.length > 0
   }
 
   const saveSessionState = async () => {
@@ -684,7 +632,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     teardownGlobalListeners,
     registerTerminalCallbacks,
     unregisterTerminalCallbacks,
-    dispatchOutputForBackendId,
+    dispatchOutputForPaneId,
     registerResizeCallback,
     unregisterResizeCallback,
     createTerminal,
@@ -693,7 +641,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     setActiveTerminal,
     writeToTerminal,
     resizeTerminal,
-    updateTerminalCwd,
     createTerminalWithShell,
     initializeShellManager,
     syncToSessionStore,

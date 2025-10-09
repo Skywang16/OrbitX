@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue'
+  import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useAIChatStore } from './store'
   import { useAISettingsStore } from '@/components/settings/components/AI'
@@ -9,7 +9,7 @@
   import MessageList from './components/MessageList.vue'
   import ChatInput from './components/ChatInput.vue'
   import ResizeHandle from './components/ResizeHandle.vue'
-  import TaskList from './components/TaskList.vue'
+  //  import TaskList from './components/TaskList.vue'
 
   const aiChatStore = useAIChatStore()
   const aiSettingsStore = useAISettingsStore()
@@ -33,11 +33,7 @@
     const message = messageInput.value.trim()
     messageInput.value = ''
 
-    try {
-      await aiChatStore.sendMessage(message)
-    } catch (error) {
-      // Error handling is done by the store
-    }
+    await aiChatStore.sendMessage(message)
   }
 
   const selectSession = (sessionId: number) => {
@@ -49,11 +45,7 @@
   }
 
   const refreshSessions = async () => {
-    try {
-      await aiChatStore.refreshConversations()
-    } catch {
-      // Refresh failures are non-critical
-    }
+    await aiChatStore.refreshConversations()
   }
 
   const createNewSession = () => {
@@ -62,8 +54,6 @@
 
   const handleSwitchMode = async (mode: 'chat' | 'agent') => {
     aiChatStore.chatMode = mode
-    await aiChatStore.initializeEko()
-    await aiChatStore.ekoInstance?.setMode(mode)
   }
 
   // 拖拽调整功能
@@ -81,11 +71,6 @@
 
     const handleMouseUp = () => {
       isDragging.value = false
-
-      // 如果宽度太小，退出聊天模式
-      if (aiChatStore.sidebarWidth <= 120) {
-        aiChatStore.isVisible = false
-      }
 
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
@@ -119,9 +104,6 @@
   const handleModelChange = async (modelId: string | null) => {
     selectedModelId.value = modelId
     sessionStore.updateAiState({ selectedModelId: modelId })
-
-    // 更新EKO实例的模型配置
-    await aiChatStore.updateSelectedModel(modelId)
   }
 
   const stopMessage = () => {
@@ -147,10 +129,15 @@
 
     await handleModelChange(selectedModelId.value)
   })
+
+  // 在组件卸载前保存状态
+  onBeforeUnmount(() => {
+    // Task state is now managed by TaskManager, no need to save manually
+  })
 </script>
 
 <template>
-  <div class="ai-chat-sidebar" :style="{ width: aiChatStore.sidebarWidth + 'px' }">
+  <div class="ai-chat-sidebar">
     <ResizeHandle
       :is-dragging="isDragging"
       :is-hovering="isHovering"
@@ -170,13 +157,15 @@
         @delete-session="deleteSession"
         @refresh-sessions="refreshSessions"
       />
-      <MessageList
-        :messages="aiChatStore.messageList"
-        :is-loading="aiChatStore.isLoading"
-        :chat-mode="aiChatStore.chatMode"
-      />
+      <div class="messages-and-tasks">
+        <MessageList
+          :messages="aiChatStore.messageList"
+          :is-loading="aiChatStore.isLoading"
+          :chat-mode="aiChatStore.chatMode"
+        />
 
-      <TaskList :task-nodes="aiChatStore.currentTaskNodes" :task-id="aiChatStore.currentTaskId || ''" />
+        <!--  <TaskList /> -->
+      </div>
 
       <ChatInput
         ref="chatInputRef"
@@ -199,12 +188,13 @@
 <style scoped>
   .ai-chat-sidebar {
     position: relative;
+    width: 100%;
     height: 100%;
     background: var(--bg-50);
     border-left: 1px solid var(--border-200);
     display: flex;
     flex-direction: column;
-    min-width: 100px;
+    min-width: 10vw;
   }
 
   .ai-chat-content {
@@ -212,6 +202,13 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    overflow: hidden;
+  }
+
+  .messages-and-tasks {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
   }
 </style>

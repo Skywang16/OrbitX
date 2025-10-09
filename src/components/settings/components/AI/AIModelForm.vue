@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import type { AIModelConfig } from '@/types'
+  import type { AIModelTestConnectionInput } from '@/api/ai/types'
 
   import { aiApi } from '@/api'
   import { reactive, ref, computed, onMounted, watch } from 'vue'
@@ -117,15 +118,20 @@
   // 监听配置模式变化
   const handleConfigModeChange = (mode: 'preset' | 'custom') => {
     configMode.value = mode
-    if (mode === 'preset') {
-      selectedPreset.value = ''
-      formData.apiUrl = ''
-      formData.model = ''
-      // provider 将在选择预设时由 handlePresetChange 设置
-    } else {
-      selectedPreset.value = ''
-      formData.name = ''
-      // 自定义模式下，provider 固定为 custom
+
+    // 清空所有表单数据
+    selectedPreset.value = ''
+    formData.name = ''
+    formData.apiUrl = ''
+    formData.apiKey = ''
+    formData.model = ''
+    formData.options.maxTokens = 4096
+    formData.options.temperature = 0.7
+    formData.options.timeout = 300000
+    errors.value = {}
+
+    // 设置对应模式的 provider
+    if (mode === 'custom') {
       formData.provider = 'custom'
     }
   }
@@ -244,8 +250,7 @@
 
     isTesting.value = true
     try {
-      const testConfig: AIModelConfig = {
-        id: 'test-' + Date.now(),
+      const testConfig: AIModelTestConnectionInput = {
         name: formData.name || 'Test Model',
         provider: formData.provider,
         apiUrl: formData.apiUrl,
@@ -408,6 +413,20 @@
           <div v-if="errors.apiKey" class="error-message">{{ errors.apiKey }}</div>
         </div>
       </div>
+
+      <div v-if="!isPresetMode" class="form-row">
+        <div class="form-group full-width">
+          <label class="form-label">{{ t('ai_model.max_tokens') }}</label>
+          <input
+            v-model.number="formData.options.maxTokens"
+            type="number"
+            class="form-input"
+            :placeholder="t('ai_model.max_tokens_placeholder')"
+            min="1"
+            max="100000"
+          />
+        </div>
+      </div>
     </form>
   </x-modal>
 </template>
@@ -545,7 +564,6 @@
   }
 
   .error-message::before {
-    content: '⚠';
     font-size: 12px;
     flex-shrink: 0;
   }

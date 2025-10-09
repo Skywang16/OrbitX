@@ -2,11 +2,10 @@
 //!
 //! 提供统一的终端会话管理、事件通知和PTY I/O处理
 
-pub mod batch_processor;
+pub mod error;
 pub mod config;
 
 pub mod io_handler;
-pub mod io_thread_pool;
 pub mod pane;
 pub mod performance_monitor;
 pub mod singleton;
@@ -14,11 +13,13 @@ pub mod singleton;
 pub mod terminal_mux;
 pub mod types;
 
-pub use batch_processor::*;
 pub use config::*;
 
+pub use error::{
+    IoHandlerError, IoHandlerResult, MuxError, MuxResult, PaneError, PaneResult, TerminalMuxError,
+    TerminalMuxResult,
+};
 pub use io_handler::*;
-pub use io_thread_pool::*;
 pub use pane::*;
 pub use performance_monitor::*;
 pub use singleton::*;

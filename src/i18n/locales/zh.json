@@ -65,15 +65,15 @@
       "options": {
         "dark": {
           "name": "深色主题",
-          "description": "适合低光环境使用的深色界面"
+          "description": "适合在低光环境下使用，减少眼睛疲劳"
         },
         "light": {
-          "name": "浅色主题", 
-          "description": "明亮清晰的浅色界面"
+          "name": "浅色主题",
+          "description": "明亮清晰的界面，适合日间使用"
         },
         "auto": {
           "name": "跟随系统",
-          "description": "根据系统设置自动切换主题"
+          "description": "自动根据系统设置切换主题"
         }
       }
     },
@@ -121,17 +121,17 @@
     "api_url_placeholder": "https://api.openai.com/v1",
     "api_key": "API Key",
     "api_key_placeholder": "输入您的 API Key",
+    "max_tokens": "最大 Token 数",
+    "max_tokens_placeholder": "4096",
     "test_connection": "测试连接",
     "testing": "测试中...",
-    "add_model": "添加模型",
     "loading": "加载中...",
     "edit": "编辑",
     "delete": "删除",
     "delete_confirm": "确定删除模型？",
+    "delete_description": "删除后无法恢复，请确认操作",
     "delete_confirm_text": "确认",
     "cancel": "取消",
-    "save": "保存",
-    "add": "添加",
     "add_new_model": "添加新模型",
     "add_model_description": "配置AI模型和向量模型连接信息",
     "no_models": "暂无模型配置",
@@ -173,24 +173,24 @@
     "reset_shortcuts": "重置快捷键",
     "reset_description": "将所有快捷键恢复为默认设置",
     "actions": {
+      "new_tab": "新建标签页",
+      "toggle_ai_sidebar": "开启/关闭AI侧边栏",
       "copy_to_clipboard": "复制到剪贴板",
       "paste_from_clipboard": "从剪贴板粘贴",
       "terminal_search": "终端搜索",
       "open_settings": "打开设置",
-      "new_tab": "新建标签页",
       "close_tab": "关闭标签页",
+      "clear_terminal": "清空终端",
       "switch_to_tab_1": "切换到标签页 1",
       "switch_to_tab_2": "切换到标签页 2",
       "switch_to_tab_3": "切换到标签页 3",
       "switch_to_tab_4": "切换到标签页 4",
       "switch_to_tab_5": "切换到标签页 5",
       "switch_to_last_tab": "切换到最后标签页",
-      "clear_terminal": "清空终端",
       "accept_completion": "接受补全",
       "increase_font_size": "增大字体",
       "decrease_font_size": "减小字体",
-      "toggle_ai_sidebar": "开启/关闭AI侧边栏",
-      "toggle_window_pin": "钉住/取消钉住窗口"
+      "toggle_window_pin": "切换窗口置顶"
     }
   },
   "language": {
@@ -213,7 +213,7 @@
   },
   "ai_feature": {
     "user_system_prompt": "用户前置提示词",
-    "prompt_placeholder": "在这里输入你的前置提示词，例如：请用中文回答所有问题..."
+    "prompt_placeholder": "在这里输入你的前置提示词"
   },
   "ai_model_form": {
     "api_url": "API地址",
@@ -259,10 +259,7 @@
   "cache": {
     "directory_cleared": "目录缓存已清除"
   },
-  "config": {
-    "unknown_time": "未知",
-    "invalid_time": "无效时间"
-  },
+  "config": {},
   "ck": {
     "index_ready": "已构建向量索引",
     "index_not_ready": "语义索引未就绪",
@@ -277,7 +274,6 @@
     "build_index_tooltip_disabled": "请选择非初始目录后再构建",
     "build_index_tooltip_enabled": "构建索引",
     "refresh": "刷新",
-    "delete": "删除",
-    "loading_size": "计算中..."
+    "delete": "删除"
   }
 }

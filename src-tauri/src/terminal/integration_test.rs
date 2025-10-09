@@ -11,9 +11,7 @@ mod tests {
     use tokio::time::timeout;
 
     use crate::mux::PaneId;
-    use crate::terminal::{
-        ActiveTerminalContextRegistry, TerminalContextEvent, TerminalContextService,
-    };
+    use crate::terminal::{ActiveTerminalContextRegistry, TerminalContextEvent};
 
     #[tokio::test]
     async fn test_event_integration_flow() {
@@ -46,7 +44,6 @@ mod tests {
     #[tokio::test]
     async fn test_context_service_event_integration() {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
-        let _context_service = TerminalContextService::default();
 
         // 订阅事件
         let mut event_receiver = registry.subscribe_events();

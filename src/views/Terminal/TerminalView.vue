@@ -7,7 +7,7 @@
   import { windowApi } from '@/api'
   import { listen, UnlistenFn } from '@tauri-apps/api/event'
   import { getCurrentWebview } from '@tauri-apps/api/webview'
-  import { onBeforeUnmount, onMounted, watch } from 'vue'
+  import { onBeforeUnmount, onMounted } from 'vue'
   import AIChatSidebar from '@/components/AIChatSidebar/index.vue'
 
   const terminalStore = useTerminalStore()
@@ -28,7 +28,7 @@
   }
 
   const insertFilePathToCurrentTerminal = (filePath: string) => {
-    if (!terminalStore.activeTerminalId) return
+    if (typeof terminalStore.activeTerminalId !== 'number') return
 
     let processedPath = filePath
     if (filePath.includes(' ')) {
@@ -37,14 +37,6 @@
 
     terminalStore.writeToTerminal(terminalStore.activeTerminalId, processedPath)
   }
-
-  watch(
-    () => terminalStore.terminals,
-    () => {
-      tabManagerStore.syncTerminalTabs()
-    },
-    { deep: true }
-  )
 
   onMounted(async () => {
     const handleAppIconFileDrop = (event: { payload: string }) => {
@@ -106,7 +98,11 @@
     <div class="main-content">
       <ContentRenderer />
 
-      <div v-if="aiChatStore.isVisible" class="sidebar-wrapper" :style="{ width: `${aiChatStore.sidebarWidth}px` }">
+      <div
+        v-if="aiChatStore.isVisible"
+        class="sidebar-wrapper"
+        :style="{ '--sidebar-width': `${aiChatStore.sidebarWidth}px` }"
+      >
         <AIChatSidebar />
       </div>
     </div>
@@ -129,7 +125,10 @@
   }
 
   .sidebar-wrapper {
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    flex-basis: var(--sidebar-width);
+    max-width: 70vw;
+    min-width: 10vw;
     min-height: 0;
     overflow: hidden;
   }

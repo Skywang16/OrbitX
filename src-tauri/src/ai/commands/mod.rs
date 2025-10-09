@@ -1,17 +1,11 @@
-pub mod chat;
-pub mod context;
 pub mod model;
 
-pub use chat::*;
-pub use context::*;
 pub use model::*;
 
-use crate::ai::{AIService, ContextManager};
+use crate::ai::AIService;
 use crate::storage::cache::UnifiedCache;
 use crate::storage::repositories::RepositoryManager;
 use crate::terminal::TerminalContextService;
-use crate::utils::error::ToTauriResult;
-
 use std::sync::Arc;
 
 pub struct AIManagerState {
@@ -19,7 +13,6 @@ pub struct AIManagerState {
     pub repositories: Arc<RepositoryManager>,
     pub cache: Arc<UnifiedCache>,
     pub terminal_context_service: Arc<TerminalContextService>,
-    pub context_manager: Arc<ContextManager>,
 }
 
 impl AIManagerState {
@@ -29,19 +22,20 @@ impl AIManagerState {
         terminal_context_service: Arc<TerminalContextService>,
     ) -> Result<Self, String> {
         let ai_service = Arc::new(AIService::new(repositories.clone()));
-        let context_manager = Arc::new(crate::ai::create_context_manager());
 
         Ok(Self {
             ai_service,
             repositories,
             cache,
             terminal_context_service,
-            context_manager,
         })
     }
 
     pub async fn initialize(&self) -> Result<(), String> {
-        self.ai_service.initialize().await.to_tauri()
+        self.ai_service
+            .initialize()
+            .await
+            .map_err(|err| err.to_string())
     }
 
     pub fn repositories(&self) -> &Arc<RepositoryManager> {
@@ -50,9 +44,5 @@ impl AIManagerState {
 
     pub fn get_terminal_context_service(&self) -> &Arc<TerminalContextService> {
         &self.terminal_context_service
-    }
-
-    pub fn get_context_manager(&self) -> &Arc<ContextManager> {
-        &self.context_manager
     }
 }

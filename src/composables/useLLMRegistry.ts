@@ -57,26 +57,6 @@ export function useLLMRegistry() {
     return options
   }
 
-  // 根据模型ID获取模型信息
-  const getModelInfo = async (modelId: string) => {
-    try {
-      return await llmRegistryApi.getModelInfo(modelId)
-    } catch (err) {
-      console.error('获取模型信息失败:', err)
-      return null
-    }
-  }
-
-  // 检查模型是否支持某个功能
-  const checkModelFeature = async (modelId: string, feature: string) => {
-    try {
-      return await llmRegistryApi.checkModelFeature(modelId, feature)
-    } catch (err) {
-      console.error('检查模型功能失败:', err)
-      return false
-    }
-  }
-
   // 根据供应商类型获取供应商信息
   const getProviderInfo = (providerType: string): ProviderInfo | null => {
     return providers.value.find(p => p.providerType.toLowerCase() === providerType.toLowerCase()) || null
@@ -99,33 +79,6 @@ export function useLLMRegistry() {
     }
   }
 
-  // 验证模型ID是否存在
-  const validateModelId = (modelId: string): boolean => {
-    return providers.value.some(provider => provider.models.some(model => model.id === modelId))
-  }
-
-  // 获取模型的最大上下文长度
-  const getModelMaxContext = (modelId: string): number | null => {
-    for (const provider of providers.value) {
-      const model = provider.models.find(m => m.id === modelId)
-      if (model) {
-        return model.capabilities.maxContextTokens
-      }
-    }
-    return null
-  }
-
-  // 检查模型是否为推理模型
-  const isReasoningModel = (modelId: string): boolean => {
-    for (const provider of providers.value) {
-      const model = provider.models.find(m => m.id === modelId)
-      if (model) {
-        return model.capabilities.isReasoningModel
-      }
-    }
-    return false
-  }
-
   // 自动加载数据
   onMounted(() => {
     loadProviders()
@@ -143,11 +96,6 @@ export function useLLMRegistry() {
     getModelOptions,
     getChatModelOptions,
     getEmbeddingModelOptions,
-    getModelInfo,
-    checkModelFeature,
     getProviderInfo,
-    validateModelId,
-    getModelMaxContext,
-    isReasoningModel,
   }
 }

@@ -4,8 +4,8 @@
  * 提供统一的配置文件路径管理，支持跨平台路径解析和目录创建。
  */
 
-use crate::utils::error::AppResult;
-use anyhow::{anyhow, bail, Context};
+use crate::config::error::{ConfigPathsError, ConfigPathsResult};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 /// 配置路径管理器
@@ -43,7 +43,7 @@ impl ConfigPaths {
     /// # 错误
     ///
     /// 如果无法确定用户目录或创建必要的目录，将返回错误。
-    pub fn new() -> AppResult<Self> {
+    pub fn new() -> ConfigPathsResult<Self> {
         let app_data_dir = Self::get_app_data_dir()?;
         Self::with_app_data_dir(app_data_dir)
     }
@@ -57,7 +57,7 @@ impl ConfigPaths {
     /// # 错误
     ///
     /// 如果无法创建必要的目录，将返回错误。
-    pub fn with_app_data_dir<P: AsRef<Path>>(app_data_dir: P) -> AppResult<Self> {
+    pub fn with_app_data_dir<P: AsRef<Path>>(app_data_dir: P) -> ConfigPathsResult<Self> {
         let app_data_dir = app_data_dir.as_ref().to_path_buf();
 
         let config_dir = app_data_dir.join(crate::config::CONFIG_DIR_NAME);
@@ -89,19 +89,21 @@ impl ConfigPaths {
     /// - Windows: `%APPDATA%\OrbitX`
     /// - macOS: `~/Library/Application Support/OrbitX`
     /// - Linux: `~/.config/orbitx`
-    fn get_app_data_dir() -> AppResult<PathBuf> {
+    fn get_app_data_dir() -> ConfigPathsResult<PathBuf> {
         let app_name = "OrbitX";
 
         #[cfg(target_os = "windows")]
         {
             use std::env;
-            let appdata = env::var("APPDATA").with_context(|| "无法获取 APPDATA 环境变量")?;
+            let appdata = env::var("APPDATA")
+                .map_err(|_| ConfigPathsError::ConfigDirectoryUnavailable)?;
             Ok(PathBuf::from(appdata).join(app_name))
         }
 
         #[cfg(target_os = "macos")]
         {
-            let home = dirs::home_dir().ok_or_else(|| anyhow!("无法获取用户主目录"))?;
+            let home = dirs::home_dir()
+                .ok_or(ConfigPathsError::HomeDirectoryUnavailable)?;
             Ok(home
                 .join("Library")
                 .join("Application Support")
@@ -110,13 +112,15 @@ impl ConfigPaths {
 
         #[cfg(target_os = "linux")]
         {
-            let config_dir = dirs::config_dir().ok_or_else(|| anyhow!("无法获取配置目录"))?;
+            let config_dir = dirs::config_dir()
+                .ok_or(ConfigPathsError::ConfigDirectoryUnavailable)?;
             Ok(config_dir.join("orbitx"))
         }
 
         #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
         {
-            let home = dirs::home_dir().ok_or_else(|| anyhow!("无法获取用户主目录"))?;
+            let home = dirs::home_dir()
+                .ok_or(ConfigPathsError::HomeDirectoryUnavailable)?;
             Ok(home.join(".orbitx"))
         }
     }
@@ -126,7 +130,7 @@ impl ConfigPaths {
     /// 返回项目根目录下的 config/themes 目录路径
 
     /// 确保所有必要的目录存在
-    fn ensure_directories_exist(&self) -> AppResult<()> {
+    fn ensure_directories_exist(&self) -> ConfigPathsResult<()> {
         let directories = [
             &self.app_data_dir,
             &self.config_dir,
@@ -139,8 +143,9 @@ impl ConfigPaths {
 
         for dir in &directories {
             if !dir.exists() {
-                std::fs::create_dir_all(dir)
-                    .with_context(|| format!("无法创建目录: {}", dir.display()))?;
+                fs::create_dir_all(dir).map_err(|e| {
+                    ConfigPathsError::directory_create(dir.to_path_buf(), e)
+                })?;
             }
         }
 
@@ -236,19 +241,21 @@ impl ConfigPaths {
     /// # 返回
     ///
     /// 如果路径安全，返回 `Ok(())`，否则返回错误。
-    pub fn validate_path<P: AsRef<Path>>(&self, path: P) -> AppResult<()> {
+    pub fn validate_path<P: AsRef<Path>>(&self, path: P) -> ConfigPathsResult<()> {
         let path = path.as_ref();
-        let canonical_path = path
-            .canonicalize()
-            .with_context(|| format!("无法规范化路径: {}", path.display()))?;
+        let canonical_path = fs::canonicalize(path).map_err(|e| {
+            ConfigPathsError::directory_access(path.to_path_buf(), e)
+        })?;
 
-        let canonical_app_dir = self
-            .app_data_dir
-            .canonicalize()
-            .with_context(|| format!("无法规范化应用目录: {}", self.app_data_dir.display()))?;
+        let canonical_app_dir = fs::canonicalize(&self.app_data_dir).map_err(|e| {
+            ConfigPathsError::directory_access(self.app_data_dir.clone(), e)
+        })?;
 
         if !canonical_path.starts_with(&canonical_app_dir) {
-            bail!("路径不在允许的目录范围内: {}", path.display());
+            return Err(ConfigPathsError::validation(format!(
+                "路径不在允许的目录范围内: {}",
+                path.display()
+            )));
         }
 
         Ok(())
@@ -265,68 +272,79 @@ impl ConfigPaths {
     }
 
     /// 获取文件大小
-    pub fn file_size<P: AsRef<Path>>(&self, path: P) -> AppResult<u64> {
-        let metadata = std::fs::metadata(path.as_ref())
-            .with_context(|| format!("无法获取文件元数据: {}", path.as_ref().display()))?;
+    pub fn file_size<P: AsRef<Path>>(&self, path: P) -> ConfigPathsResult<u64> {
+        let metadata = fs::metadata(path.as_ref()).map_err(|e| {
+            ConfigPathsError::directory_access(path.as_ref().to_path_buf(), e)
+        })?;
 
         Ok(metadata.len())
     }
 
     /// 获取文件修改时间
-    pub fn file_modified_time<P: AsRef<Path>>(&self, path: P) -> AppResult<std::time::SystemTime> {
-        let metadata = std::fs::metadata(path.as_ref())
-            .with_context(|| format!("无法获取文件元数据: {}", path.as_ref().display()))?;
+    pub fn file_modified_time<P: AsRef<Path>>(
+        &self,
+        path: P,
+    ) -> ConfigPathsResult<std::time::SystemTime> {
+        let metadata = fs::metadata(path.as_ref()).map_err(|e| {
+            ConfigPathsError::directory_access(path.as_ref().to_path_buf(), e)
+        })?;
 
-        metadata
-            .modified()
-            .with_context(|| format!("无法获取文件修改时间: {}", path.as_ref().display()))
+        metadata.modified().map_err(|e| {
+            ConfigPathsError::directory_access(path.as_ref().to_path_buf(), e)
+        })
     }
 
     /// 创建目录
-    pub fn create_dir<P: AsRef<Path>>(&self, path: P) -> AppResult<()> {
+    pub fn create_dir<P: AsRef<Path>>(&self, path: P) -> ConfigPathsResult<()> {
         let path = path.as_ref();
 
         // 验证路径安全性
         self.validate_path(path)?;
 
-        std::fs::create_dir_all(path)
-            .with_context(|| format!("无法创建目录: {}", path.display()))?;
+        fs::create_dir_all(path)
+            .map_err(|e| ConfigPathsError::directory_create(path.to_path_buf(), e))?;
 
         Ok(())
     }
 
     /// 删除文件
-    pub fn remove_file<P: AsRef<Path>>(&self, path: P) -> AppResult<()> {
+    pub fn remove_file<P: AsRef<Path>>(&self, path: P) -> ConfigPathsResult<()> {
         let path = path.as_ref();
 
         // 验证路径安全性
         self.validate_path(path)?;
 
         if path.exists() {
-            std::fs::remove_file(path)
-                .with_context(|| format!("无法删除文件: {}", path.display()))?;
+            fs::remove_file(path).map_err(|e| {
+                ConfigPathsError::directory_access(path.to_path_buf(), e)
+            })?;
         }
 
         Ok(())
     }
 
     /// 删除目录
-    pub fn remove_dir<P: AsRef<Path>>(&self, path: P) -> AppResult<()> {
+    pub fn remove_dir<P: AsRef<Path>>(&self, path: P) -> ConfigPathsResult<()> {
         let path = path.as_ref();
 
         // 验证路径安全性
         self.validate_path(path)?;
 
         if path.exists() {
-            std::fs::remove_dir_all(path)
-                .with_context(|| format!("无法删除目录: {}", path.display()))?;
+            fs::remove_dir_all(path).map_err(|e| {
+                ConfigPathsError::directory_access(path.to_path_buf(), e)
+            })?;
         }
 
         Ok(())
     }
 
     /// 复制文件
-    pub fn copy_file<P: AsRef<Path>, Q: AsRef<Path>>(&self, from: P, to: Q) -> AppResult<()> {
+    pub fn copy_file<P: AsRef<Path>, Q: AsRef<Path>>(
+        &self,
+        from: P,
+        to: Q,
+    ) -> ConfigPathsResult<()> {
         let from = from.as_ref();
         let to = to.as_ref();
 
@@ -339,14 +357,19 @@ impl ConfigPaths {
             self.create_dir(parent)?;
         }
 
-        std::fs::copy(from, to)
-            .with_context(|| format!("无法复制文件: {} -> {}", from.display(), to.display()))?;
+        fs::copy(from, to).map_err(|e| {
+            ConfigPathsError::directory_access(to.to_path_buf(), e)
+        })?;
 
         Ok(())
     }
 
     /// 移动文件
-    pub fn move_file<P: AsRef<Path>, Q: AsRef<Path>>(&self, from: P, to: Q) -> AppResult<()> {
+    pub fn move_file<P: AsRef<Path>, Q: AsRef<Path>>(
+        &self,
+        from: P,
+        to: Q,
+    ) -> ConfigPathsResult<()> {
         let from = from.as_ref();
         let to = to.as_ref();
 
@@ -359,8 +382,9 @@ impl ConfigPaths {
             self.create_dir(parent)?;
         }
 
-        std::fs::rename(from, to)
-            .with_context(|| format!("无法移动文件: {} -> {}", from.display(), to.display()))?;
+        fs::rename(from, to).map_err(|e| {
+            ConfigPathsError::directory_access(to.to_path_buf(), e)
+        })?;
 
         Ok(())
     }
@@ -368,15 +392,18 @@ impl ConfigPaths {
     // 便捷方法
 
     /// 列出主题目录中的所有主题文件
-    pub fn list_theme_files(&self) -> AppResult<Vec<PathBuf>> {
+    pub fn list_theme_files(&self) -> ConfigPathsResult<Vec<PathBuf>> {
         let mut theme_files = Vec::new();
 
         if self.themes_dir.exists() {
-            let entries = std::fs::read_dir(&self.themes_dir)
-                .with_context(|| format!("无法读取主题目录: {}", self.themes_dir.display()))?;
+            let entries = fs::read_dir(&self.themes_dir).map_err(|e| {
+                ConfigPathsError::directory_access(self.themes_dir.clone(), e)
+            })?;
 
             for entry in entries {
-                let entry = entry.with_context(|| "无法读取主题目录项")?;
+                let entry = entry.map_err(|e| {
+                    ConfigPathsError::directory_access(self.themes_dir.clone(), e)
+                })?;
 
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("toml") {
@@ -389,15 +416,18 @@ impl ConfigPaths {
     }
 
     /// 列出备份目录中的所有备份文件
-    pub fn list_backup_files(&self) -> AppResult<Vec<PathBuf>> {
+    pub fn list_backup_files(&self) -> ConfigPathsResult<Vec<PathBuf>> {
         let mut backup_files = Vec::new();
 
         if self.backups_dir.exists() {
-            let entries = std::fs::read_dir(&self.backups_dir)
-                .with_context(|| format!("无法读取备份目录: {}", self.backups_dir.display()))?;
+            let entries = fs::read_dir(&self.backups_dir).map_err(|e| {
+                ConfigPathsError::directory_access(self.backups_dir.clone(), e)
+            })?;
 
             for entry in entries {
-                let entry = entry.with_context(|| "无法读取备份目录项")?;
+                let entry = entry.map_err(|e| {
+                    ConfigPathsError::directory_access(self.backups_dir.clone(), e)
+                })?;
 
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("toml") {
@@ -417,7 +447,7 @@ impl ConfigPaths {
     }
 
     /// 清理旧的备份文件
-    pub fn cleanup_old_backups(&self, keep_count: usize) -> AppResult<()> {
+    pub fn cleanup_old_backups(&self, keep_count: usize) -> ConfigPathsResult<()> {
         let backup_files = self.list_backup_files()?;
 
         if backup_files.len() > keep_count {
@@ -430,16 +460,17 @@ impl ConfigPaths {
     }
 
     /// 获取目录大小
-    pub fn dir_size<P: AsRef<Path>>(&self, path: P) -> AppResult<u64> {
+    pub fn dir_size<P: AsRef<Path>>(&self, path: P) -> ConfigPathsResult<u64> {
         let path = path.as_ref();
         let mut total_size = 0;
 
         if path.is_dir() {
-            let entries = std::fs::read_dir(path)
-                .with_context(|| format!("无法读取目录: {}", path.display()))?;
+            let entries = fs::read_dir(path)
+                .map_err(|e| ConfigPathsError::directory_access(path.to_path_buf(), e))?;
 
             for entry in entries {
-                let entry = entry.with_context(|| "无法读取目录项")?;
+                let entry = entry
+                    .map_err(|e| ConfigPathsError::directory_access(path.to_path_buf(), e))?;
 
                 let entry_path = entry.path();
                 if entry_path.is_file() {

@@ -1,26 +1,28 @@
 use async_trait::async_trait;
 use eventsource_stream::Eventsource;
 use futures::StreamExt;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::pin::Pin;
 use tokio_stream::Stream;
 
 use crate::llm::{
+    error::{AnthropicError, LlmProviderError, LlmProviderResult},
     providers::base::LLMProvider,
     types::{
         LLMMessage, LLMMessageContent, LLMMessagePart, LLMProviderConfig, LLMRequest, LLMResponse,
         LLMStreamChunk, LLMTool, LLMToolCall, LLMUsage,
     },
 };
-use anyhow::{anyhow, Context, Result};
 
 /// Anthropic提供者
 pub struct AnthropicProvider {
     client: Client,
     config: LLMProviderConfig,
 }
+
+type AnthropicResult<T> = Result<T, AnthropicError>;
 
 impl AnthropicProvider {
     pub fn new(config: LLMProviderConfig) -> Self {
@@ -29,7 +31,6 @@ impl AnthropicProvider {
             config,
         }
     }
-
 
     fn get_endpoint(&self) -> String {
         let base = self
@@ -150,7 +151,7 @@ impl AnthropicProvider {
             .collect()
     }
 
-    fn parse_response(&self, response_json: &Value) -> Result<LLMResponse> {
+    fn parse_response(&self, response_json: &Value) -> AnthropicResult<LLMResponse> {
         let mut content_text = String::new();
         let mut tool_calls = Vec::new();
 
@@ -210,24 +211,30 @@ impl AnthropicProvider {
         })
     }
 
-    fn handle_error_response(&self, status: u16, body: &str) -> anyhow::Error {
+    fn handle_error_response(&self, status: StatusCode, body: &str) -> AnthropicError {
         if let Ok(error_json) = serde_json::from_str::<Value>(body) {
             if let Some(error_obj) = error_json["error"].as_object() {
                 let error_type = error_obj["type"].as_str().unwrap_or("unknown_error");
                 let error_message = error_obj["message"].as_str().unwrap_or("Unknown error");
-                return anyhow!("Anthropic API error [{}]: {}", error_type, error_message);
+                return AnthropicError::Api {
+                    status,
+                    message: format!("{}: {}", error_type, error_message),
+                };
             }
         }
-        anyhow!("Anthropic API error {}: {}", status, body)
+        AnthropicError::Api {
+            status,
+            message: format!("Unexpected response: {}", body),
+        }
     }
 
     /// 解析content_block_start事件，处理工具调用
-    fn parse_content_block_start(event_json: &Value) -> Option<Result<LLMStreamChunk>> {
+    fn parse_content_block_start(
+        event_json: &Value,
+    ) -> Option<LlmProviderResult<LLMStreamChunk>> {
         let content_block = &event_json["content_block"];
 
         if content_block["type"] == "tool_use" {
-            println!("🔧 Debug: Found tool_use in content_block_start");
-
             // 提取工具调用信息
             let id = content_block["id"].as_str().unwrap_or("").to_string();
             let name = content_block["name"].as_str().unwrap_or("").to_string();
@@ -238,11 +245,6 @@ impl AnthropicProvider {
                     name,
                     arguments: serde_json::json!({}),
                 };
-
-                println!(
-                    "🔧 Debug: Creating Anthropic tool call - id: {}, name: {}",
-                    tool_call.id, tool_call.name
-                );
 
                 Some(Ok(LLMStreamChunk::Delta {
                     content: None,
@@ -256,7 +258,7 @@ impl AnthropicProvider {
         }
     }
 
-    fn parse_stream_chunk(data: &str) -> Option<Result<LLMStreamChunk>> {
+    fn parse_stream_chunk(data: &str) -> Option<LlmProviderResult<LLMStreamChunk>> {
         let event_json: Value = match serde_json::from_str(data) {
             Ok(json) => json,
             Err(_) => return None,
@@ -279,19 +281,13 @@ impl AnthropicProvider {
                 }
             }
             "content_block_start" => Self::parse_content_block_start(&event_json),
-            "content_block_stop" => {
-                None
-            }
+            "content_block_stop" => None,
             "message_stop" => {
                 let stop_reason = event_json["stop_reason"].as_str().unwrap_or("stop");
                 let finish_reason = match stop_reason {
                     "tool_use" => "tool_calls".to_string(),
                     other => other.to_string(),
                 };
-                println!(
-                    "🔧 Debug: Anthropic message_stop with reason: {} -> {}",
-                    stop_reason, finish_reason
-                );
                 Some(Ok(LLMStreamChunk::Finish {
                     finish_reason,
                     usage: None,
@@ -302,7 +298,9 @@ impl AnthropicProvider {
                     .as_str()
                     .unwrap_or("Unknown stream error")
                     .to_string();
-                Some(Err(anyhow!("Anthropic streaming error: {}", error_message)))
+                Some(Err(LlmProviderError::Anthropic(AnthropicError::Stream {
+                    message: error_message,
+                })))
             }
             _ => None,
         }
@@ -311,7 +309,7 @@ impl AnthropicProvider {
 
 #[async_trait]
 impl LLMProvider for AnthropicProvider {
-    async fn call(&self, request: LLMRequest) -> Result<LLMResponse> {
+    async fn call(&self, request: LLMRequest) -> LlmProviderResult<LLMResponse> {
         let url = self.get_endpoint();
         let headers = self.get_headers();
         let body = self.build_body(&request);
@@ -321,22 +319,30 @@ impl LLMProvider for AnthropicProvider {
             req_builder = req_builder.header(&key, &value);
         }
 
-        let response = req_builder.send().await.context("发送HTTP请求失败")?;
+        let response = req_builder
+            .send()
+            .await
+            .map_err(|source| LlmProviderError::Anthropic(AnthropicError::Http { source }))?;
 
         let status = response.status();
         if !status.is_success() {
             let text = response.text().await.unwrap_or_default();
-            return Err(self.handle_error_response(status.as_u16(), &text));
+            let error = self.handle_error_response(status, &text);
+            return Err(LlmProviderError::from(error));
         }
 
-        let response_json: Value = response.json().await.context("解析JSON响应失败")?;
+        let response_json: Value = response
+            .json()
+            .await
+            .map_err(|source| LlmProviderError::Anthropic(AnthropicError::Http { source }))?;
         self.parse_response(&response_json)
+            .map_err(LlmProviderError::from)
     }
 
     async fn call_stream(
         &self,
         mut request: LLMRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<LLMStreamChunk>> + Send>>> {
+    ) -> LlmProviderResult<Pin<Box<dyn Stream<Item = LlmProviderResult<LLMStreamChunk>> + Send>>> {
         request.stream = true;
         let url = self.get_endpoint();
         let headers = self.get_headers();
@@ -347,12 +353,16 @@ impl LLMProvider for AnthropicProvider {
             req_builder = req_builder.header(&key, &value);
         }
 
-        let response = req_builder.send().await.context("发送HTTP请求失败")?;
+        let response = req_builder
+            .send()
+            .await
+            .map_err(|source| LlmProviderError::Anthropic(AnthropicError::Http { source }))?;
 
         let status = response.status();
         if !status.is_success() {
             let text = response.text().await.unwrap_or_default();
-            return Err(self.handle_error_response(status.as_u16(), &text));
+            let error = self.handle_error_response(status, &text);
+            return Err(LlmProviderError::from(error));
         }
 
         let stream = response
@@ -360,10 +370,10 @@ impl LLMProvider for AnthropicProvider {
             .eventsource()
             .filter_map(|event_result| {
                 futures::future::ready(match event_result {
-                    Ok(event) => {
-                        Self::parse_stream_chunk(&event.data)
-                    }
-                    Err(e) => Some(Err(anyhow!("网络错误: {}", e))),
+                    Ok(event) => Self::parse_stream_chunk(&event.data),
+                    Err(e) => Some(Err(LlmProviderError::Anthropic(AnthropicError::Stream {
+                        message: format!("Network error: {}", e),
+                    }))),
                 })
             });
 

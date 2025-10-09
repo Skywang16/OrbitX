@@ -21,9 +21,6 @@
             <div class="ai-info">
               <div class="ai-name">{{ provider.name }}</div>
             </div>
-            <div class="ai-badge" v-if="provider.recommended">
-              {{ t('onboarding.ai.recommended') }}
-            </div>
           </div>
 
           <Transition name="dropdown" appear>
@@ -88,6 +85,18 @@
                 />
                 <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
               </div>
+
+              <div v-if="selectedProvider === 'custom'" class="form-group">
+                <label class="form-label">{{ t('ai_model.max_tokens') }}</label>
+                <input
+                  v-model.number="formData.options.maxTokens"
+                  type="number"
+                  class="form-input"
+                  :placeholder="t('ai_model.max_tokens_placeholder')"
+                  min="1"
+                  max="100000"
+                />
+              </div>
             </div>
           </Transition>
         </div>
@@ -99,6 +108,7 @@
 <script setup lang="ts">
   import { ref, reactive, computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import { v4 as uuidv4 } from 'uuid'
   import { XSelect } from '@/ui'
 
   import type { AIModelConfig } from '@/types'
@@ -115,17 +125,15 @@
 
   // 从后端注册表生成可用供应商列表
   const availableProviders = computed(() => {
-    const providers = providerOptions.value.map((provider, index) => ({
+    const providers = providerOptions.value.map((provider) => ({
       id: provider.value,
       name: provider.label,
-      recommended: index === 0, // 第一个供应商设为推荐
     }))
 
     // 添加自定义选项
     providers.push({
       id: 'custom',
       name: t('onboarding.ai.models.custom.name'),
-      recommended: false,
     })
 
     return providers
@@ -259,7 +267,7 @@
     }
 
     const newModel: AIModelConfig = {
-      id: Date.now().toString(),
+      id: uuidv4(),
       name: configName,
       provider: formData.provider,
       apiUrl: getDefaultApiUrl(),
@@ -389,16 +397,6 @@
     margin: 0 0 4px 0;
   }
 
-  .ai-badge {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-primary);
-    background: var(--color-primary-alpha);
-    padding: 4px 8px;
-    border-radius: var(--border-radius);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
 
   .ai-config-dropdown {
     padding: 0 20px 24px 20px;
@@ -469,6 +467,13 @@
     font-size: 12px;
     color: var(--color-danger, #ef4444);
     margin-top: 4px;
+  }
+
+  .form-description {
+    font-size: 12px;
+    color: var(--text-400);
+    margin-top: 4px;
+    line-height: 1.4;
   }
 
   .form-group :deep(.x-select) {

@@ -6,6 +6,7 @@
  */
 
 export { aiApi } from './ai'
+export { agentApi } from './agent'
 export { ckApi } from './ck'
 export { completionApi } from './completion'
 export { configApi } from './config'
@@ -18,14 +19,17 @@ export { shortcutsApi } from './shortcuts'
 export { storageApi } from './storage'
 export { terminalApi } from './terminal'
 export { terminalContextApi } from './terminal-context'
+export { codeApi } from './code'
 export { windowApi } from './window'
 
 export type * from './ai/types'
+export type * from './agent/types'
 export type * from './ck/types'
 export type * from './completion/types'
 export type * from './shortcuts/types'
 export type * from './storage/types'
 export type * from './terminal-context/types'
+export type { CodeDefinition } from './code'
 
 // 从config导出但排除与terminal重复的类型
 export type { AppConfig, ConfigFileInfo } from './config/types'
@@ -35,6 +39,7 @@ export type { ShellInfo, BackgroundCommandResult } from './shell/types'
 export type * from './terminal/types'
 
 export type { CkApi, CkSearchParams, CkIndexStatus } from './ck'
+export type { AgentApi } from './agent'
 export type { FilesystemApi } from './filesystem'
 export type { LLMApi } from './llm'
 export type { LLMRegistryApi } from './llm-registry'

@@ -1,9 +1,8 @@
 //! 文件系统补全提供者
 
+use crate::completion::error::{CompletionProviderError, CompletionProviderResult};
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
-use crate::utils::error::AppResult;
-use anyhow::Context;
 use async_trait::async_trait;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use std::path::{Path, PathBuf};
@@ -53,16 +52,33 @@ impl FilesystemProvider {
     }
 
     /// 获取目录下的文件和子目录
-    async fn get_directory_entries(&self, dir_path: &Path) -> AppResult<Vec<CompletionItem>> {
+    async fn get_directory_entries(
+        &self,
+        dir_path: &Path,
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         if !dir_path.exists() || !dir_path.is_dir() {
             return Ok(items);
         }
 
-        let mut entries = fs::read_dir(dir_path).await.context("读取目录失败")?;
+        let mut entries = fs::read_dir(dir_path)
+            .await
+            .map_err(|e| CompletionProviderError::io(
+                "read directory",
+                format!("({})", dir_path.display()),
+                e,
+            ))?;
 
-        while let Some(entry) = entries.next_entry().await.context("读取目录项失败")? {
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| CompletionProviderError::io(
+                "read directory entry",
+                format!("({})", dir_path.display()),
+                e,
+            ))?
+        {
             let path = entry.path();
             let file_name = match path.file_name() {
                 Some(name) => name.to_string_lossy().to_string(),
@@ -74,7 +90,14 @@ impl FilesystemProvider {
                 continue;
             }
 
-            let metadata = entry.metadata().await.context("获取文件元数据失败")?;
+            let metadata = entry
+                .metadata()
+                .await
+                .map_err(|e| CompletionProviderError::io(
+                    "read metadata",
+                    format!("({})", path.display()),
+                    e,
+                ))?;
 
             let completion_type = if metadata.is_dir() {
                 CompletionType::Directory
@@ -108,7 +131,7 @@ impl FilesystemProvider {
         &self,
         search_dir: &Path,
         pattern: &str,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         for entry in WalkDir::new(search_dir)
@@ -199,7 +222,7 @@ impl CompletionProvider for FilesystemProvider {
     async fn provide_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let current_word = &context.current_word;
 
         if current_word.is_empty() {

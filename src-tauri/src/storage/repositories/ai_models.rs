@@ -6,9 +6,8 @@
 
 use super::{Repository, RowMapper};
 use crate::storage::database::DatabaseManager;
+use crate::storage::error::{RepositoryError, RepositoryResult};
 use crate::storage::query::{InsertBuilder, SafeQueryBuilder};
-use crate::utils::error::AppResult;
-use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
@@ -53,7 +52,7 @@ impl std::fmt::Display for AIProvider {
 }
 
 impl std::str::FromStr for AIProvider {
-    type Err = anyhow::Error;
+    type Err = RepositoryError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
@@ -62,7 +61,9 @@ impl std::str::FromStr for AIProvider {
             "gemini" => Ok(AIProvider::Gemini),
             "qwen" => Ok(AIProvider::Qwen),
             "custom" => Ok(AIProvider::Custom),
-            _ => Err(anyhow!("Unknown AI provider: {}", s)),
+            _ => Err(RepositoryError::Validation {
+                reason: format!("Unknown AI provider: {}", s),
+            }),
         }
     }
 }
@@ -85,13 +86,15 @@ impl std::fmt::Display for ModelType {
 }
 
 impl std::str::FromStr for ModelType {
-    type Err = anyhow::Error;
+    type Err = RepositoryError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "chat" => Ok(ModelType::Chat),
             "embedding" => Ok(ModelType::Embedding),
-            _ => Err(anyhow!("Unknown model type: {}", s)),
+            _ => Err(RepositoryError::Validation {
+                reason: format!("Unknown model type: {}", s),
+            }),
         }
     }
 }
@@ -173,7 +176,7 @@ impl AIModelConfig {
 }
 
 impl RowMapper<AIModelConfig> for AIModelConfig {
-    fn from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<Self> {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> RepositoryResult<Self> {
         let provider_str: String = row.try_get("provider")?;
         let provider = provider_str.parse()?;
 
@@ -215,7 +218,7 @@ impl AIModelRepository {
         }
     }
 
-    pub async fn find_all_with_decrypted_keys(&self) -> AppResult<Vec<AIModelConfig>> {
+    pub async fn find_all_with_decrypted_keys(&self) -> RepositoryResult<Vec<AIModelConfig>> {
         let (query, params) = SafeQueryBuilder::new("ai_models")
             .select(&[
                 "id",
@@ -245,12 +248,16 @@ impl AIModelRepository {
                     } else if let Some(f) = n.as_f64() {
                         query_builder.bind(f)
                     } else {
-                        return Err(anyhow!("Unsupported number type"));
+                        return Err(RepositoryError::UnsupportedNumberType);
                     }
                 }
                 Value::Bool(b) => query_builder.bind(b),
                 Value::Null => query_builder.bind(None::<String>),
-                _ => return Err(anyhow!("Unsupported parameter type")),
+                _ => {
+                    return Err(RepositoryError::unsupported_parameter(
+                        "ai_models parameter",
+                    ))
+                }
             };
         }
 
@@ -305,7 +312,7 @@ impl AIModelRepository {
         Ok(models)
     }
 
-    pub async fn save_with_encryption(&self, model: &AIModelConfig) -> AppResult<i64> {
+    pub async fn save_with_encryption(&self, model: &AIModelConfig) -> RepositoryResult<i64> {
         debug!("保存AI模型: {}", model.name);
 
         let existing_marker: Option<String> =
@@ -318,11 +325,18 @@ impl AIModelRepository {
 
         // 将API密钥保存到系统密钥链
         let keychain_marker = if !model.api_key.is_empty() {
-            let entry = Entry::new("orbitx.ai_models", &model.id)
-                .map_err(|e| anyhow!("创建系统密钥链条目失败: {}", e))?;
-            entry
-                .set_password(&model.api_key)
-                .map_err(|e| anyhow!("保存API密钥到系统密钥链失败: {}", e))?;
+            let entry = Entry::new("orbitx.ai_models", &model.id).map_err(|e| {
+                RepositoryError::internal(format!(
+                    "Failed to create keychain entry for model {}: {}",
+                    model.id, e
+                ))
+            })?;
+            entry.set_password(&model.api_key).map_err(|e| {
+                RepositoryError::internal(format!(
+                    "Failed to store API key in keychain for model {}: {}",
+                    model.id, e
+                ))
+            })?;
             Some(format!("keychain:{}", model.id))
         } else {
             // 未提供新 key，沿用原标记（可能为 None）
@@ -361,7 +375,11 @@ impl AIModelRepository {
                 Value::String(s) => query_builder.bind(s),
                 Value::Bool(b) => query_builder.bind(b),
                 Value::Null => query_builder.bind(None::<String>),
-                _ => return Err(anyhow!("Unsupported parameter type")),
+                _ => {
+                    return Err(RepositoryError::unsupported_parameter(
+                        "ai_models parameter",
+                    ))
+                }
             };
         }
 
@@ -374,36 +392,40 @@ impl AIModelRepository {
 
 #[async_trait::async_trait]
 impl Repository<AIModelConfig> for AIModelRepository {
-    async fn find_by_id(&self, _id: i64) -> AppResult<Option<AIModelConfig>> {
+    async fn find_by_id(&self, _id: i64) -> RepositoryResult<Option<AIModelConfig>> {
         // AI模型使用字符串ID，这个方法不适用
-        Err(anyhow!("AI模型使用字符串ID，请使用find_by_string_id"))
+        Err(RepositoryError::AiModelRequiresStringId {
+            recommended: "find_by_string_id",
+        })
     }
 
-    async fn find_all(&self) -> AppResult<Vec<AIModelConfig>> {
+    async fn find_all(&self) -> RepositoryResult<Vec<AIModelConfig>> {
         self.find_all_with_decrypted_keys().await
     }
 
-    async fn save(&self, entity: &AIModelConfig) -> AppResult<i64> {
+    async fn save(&self, entity: &AIModelConfig) -> RepositoryResult<i64> {
         self.save_with_encryption(entity).await
     }
 
-    async fn update(&self, entity: &AIModelConfig) -> AppResult<()> {
+    async fn update(&self, entity: &AIModelConfig) -> RepositoryResult<()> {
         self.save_with_encryption(entity).await?;
         Ok(())
     }
 
-    async fn delete(&self, _id: i64) -> AppResult<()> {
-        Err(anyhow!("AI模型使用字符串ID，请使用delete_by_string_id"))
+    async fn delete(&self, _id: i64) -> RepositoryResult<()> {
+        Err(RepositoryError::AiModelRequiresStringId {
+            recommended: "delete_by_string_id",
+        })
     }
 }
 
 impl AIModelRepository {
-    pub async fn find_by_string_id(&self, id: &str) -> AppResult<Option<AIModelConfig>> {
+    pub async fn find_by_string_id(&self, id: &str) -> RepositoryResult<Option<AIModelConfig>> {
         let models = self.find_all_with_decrypted_keys().await?;
         Ok(models.into_iter().find(|m| m.id == id))
     }
 
-    pub async fn delete_by_string_id(&self, id: &str) -> AppResult<()> {
+    pub async fn delete_by_string_id(&self, id: &str) -> RepositoryResult<()> {
         // 从系统密钥链删除对应条目
         if let Ok(entry) = Entry::new("orbitx.ai_models", id) {
             if let Err(e) = entry.delete_password() {
@@ -419,14 +441,16 @@ impl AIModelRepository {
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(anyhow!("模型ID不存在: {}", id));
+            return Err(RepositoryError::AiModelNotFound {
+                id: id.to_string(),
+            });
         }
 
         debug!("AI模型删除成功: {}", id);
         Ok(())
     }
 
-    pub async fn ai_conversation_get_user_prefix_prompt(&self) -> AppResult<Option<String>> {
+    pub async fn get_user_prefix_prompt(&self) -> RepositoryResult<Option<String>> {
         debug!("从内存缓存获取用户前置提示词");
 
         let prompt = self.user_prefix_prompt.read().await.clone();
@@ -437,7 +461,7 @@ impl AIModelRepository {
         Ok(prompt)
     }
 
-    pub async fn ai_conversation_set_user_prefix_prompt(&self, prompt: Option<String>) -> AppResult<()> {
+    pub async fn set_user_prefix_prompt(&self, prompt: Option<String>) -> RepositoryResult<()> {
         debug!("设置用户前置提示词: {:?}", prompt.as_ref().map(|p| p.len()));
 
         *self.user_prefix_prompt.write().await = prompt;

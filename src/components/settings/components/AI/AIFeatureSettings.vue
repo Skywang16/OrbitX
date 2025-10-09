@@ -54,7 +54,7 @@
         </div>
       </div>
 
-      <div style="padding: 0 20px 20px 20px">
+      <div style="padding: 20px">
         <textarea
           v-model="userPrefixPrompt"
           class="settings-textarea"

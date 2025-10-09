@@ -5,8 +5,7 @@
  * 支持跨平台路径处理和路径验证
  */
 
-use crate::utils::error::AppResult;
-use anyhow::{anyhow, Context};
+use crate::storage::error::{StoragePathsError, StoragePathsResult};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -30,7 +29,7 @@ pub struct StoragePaths {
 
 impl StoragePaths {
     /// 创建新的路径管理器
-    pub fn new(app_dir: PathBuf) -> AppResult<Self> {
+    pub fn new(app_dir: PathBuf) -> StoragePathsResult<Self> {
         let config_dir = app_dir.join(super::CONFIG_DIR_NAME);
         let state_dir = app_dir.join(super::STATE_DIR_NAME);
         let data_dir = app_dir.join(super::DATA_DIR_NAME);
@@ -80,7 +79,7 @@ impl StoragePaths {
     }
 
     /// 确保所有目录存在
-    pub fn ensure_directories(&self) -> AppResult<()> {
+    pub fn ensure_directories(&self) -> StoragePathsResult<()> {
         let directories = [
             &self.app_dir,
             &self.config_dir,
@@ -92,8 +91,9 @@ impl StoragePaths {
 
         for dir in &directories {
             if !dir.exists() {
-                fs::create_dir_all(dir)
-                    .with_context(|| format!("创建目录失败: {}", dir.display()))?;
+                fs::create_dir_all(dir).map_err(|e| {
+                    StoragePathsError::directory_create(dir.to_path_buf(), e)
+                })?;
                 // 目录创建成功
             }
         }
@@ -102,17 +102,16 @@ impl StoragePaths {
     }
 
     /// 验证路径的有效性
-    pub fn validate(&self) -> AppResult<()> {
+    pub fn validate(&self) -> StoragePathsResult<()> {
         if !self.app_dir.exists() {
             fs::create_dir_all(&self.app_dir)
-                .with_context(|| format!("无法创建应用目录: {}", self.app_dir.display()))?;
+                .map_err(|e| StoragePathsError::directory_create(self.app_dir.clone(), e))?;
         }
 
         if let Err(e) = fs::metadata(&self.app_dir) {
-            return Err(anyhow!(
-                "无法访问应用目录: {} - {}",
-                self.app_dir.display(),
-                e
+            return Err(StoragePathsError::directory_access(
+                self.app_dir.clone(),
+                e,
             ));
         }
 
@@ -120,7 +119,7 @@ impl StoragePaths {
     }
 
     /// 获取目录大小（字节）
-    pub fn get_directory_size(&self, dir: &Path) -> AppResult<u64> {
+    pub fn get_directory_size(&self, dir: &Path) -> StoragePathsResult<u64> {
         if !dir.exists() {
             return Ok(0);
         }
@@ -143,7 +142,7 @@ impl StoragePaths {
         }
 
         visit_dir(dir, &mut total_size)
-            .with_context(|| format!("计算目录大小失败: {}", dir.display()))?;
+            .map_err(|e| StoragePathsError::directory_size(dir.to_path_buf(), e))?;
 
         Ok(total_size)
     }
@@ -187,10 +186,10 @@ impl StoragePathsBuilder {
         self
     }
 
-    pub fn build(self) -> AppResult<StoragePaths> {
-        let app_dir = self
-            .app_dir
-            .ok_or_else(|| anyhow!("应用目录未设置".to_string()))?;
+    pub fn build(self) -> StoragePathsResult<StoragePaths> {
+        let Some(app_dir) = self.app_dir else {
+            return Err(StoragePathsError::AppDirectoryMissing);
+        };
 
         let config_dir = self
             .custom_config_dir

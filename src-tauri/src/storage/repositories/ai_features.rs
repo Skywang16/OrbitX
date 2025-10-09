@@ -7,9 +7,8 @@
 
 use super::{Repository, RowMapper};
 use crate::storage::database::DatabaseManager;
+use crate::storage::error::{RepositoryError, RepositoryResult};
 use crate::storage::query::{InsertBuilder, QueryCondition, SafeQueryBuilder};
-use crate::utils::error::AppResult;
-use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -51,19 +50,17 @@ impl AIFeatureConfig {
         feature_name: String,
         enabled: bool,
         config: &T,
-    ) -> AppResult<Self> {
-        let config_json =
-            serde_json::to_string(config).map_err(|e| anyhow!("序列化配置失败: {}", e))?;
+    ) -> RepositoryResult<Self> {
+        let config_json = serde_json::to_string(config)?;
 
         Ok(Self::new(feature_name, enabled, Some(config_json)))
     }
 
     /// 解析配置JSON为指定类型
-    pub fn parse_config<T: for<'de> Deserialize<'de>>(&self) -> AppResult<Option<T>> {
+    pub fn parse_config<T: for<'de> Deserialize<'de>>(&self) -> RepositoryResult<Option<T>> {
         match &self.config_json {
             Some(json) => {
-                let config =
-                    serde_json::from_str(json).map_err(|e| anyhow!("解析配置JSON失败: {}", e))?;
+                let config = serde_json::from_str(json)?;
                 Ok(Some(config))
             }
             None => Ok(None),
@@ -72,7 +69,7 @@ impl AIFeatureConfig {
 }
 
 impl RowMapper<AIFeatureConfig> for AIFeatureConfig {
-    fn from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<Self> {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> RepositoryResult<Self> {
         Ok(Self {
             feature_name: row.try_get("feature_name")?,
             enabled: row.try_get("enabled")?,
@@ -80,13 +77,19 @@ impl RowMapper<AIFeatureConfig> for AIFeatureConfig {
             created_at: {
                 let timestamp: String = row.try_get("created_at")?;
                 DateTime::parse_from_rfc3339(&timestamp)
-                    .map_err(|e| anyhow!("解析创建时间失败: {}", e))?
+                    .map_err(|e| RepositoryError::internal(format!(
+                        "Failed to parse created_at timestamp: {}",
+                        e
+                    )))?
                     .with_timezone(&Utc)
             },
             updated_at: {
                 let timestamp: String = row.try_get("updated_at")?;
                 DateTime::parse_from_rfc3339(&timestamp)
-                    .map_err(|e| anyhow!("解析更新时间失败: {}", e))?
+                    .map_err(|e| RepositoryError::internal(format!(
+                        "Failed to parse updated_at timestamp: {}",
+                        e
+                    )))?
                     .with_timezone(&Utc)
             },
         })
@@ -108,7 +111,7 @@ impl AIFeaturesRepository {
     pub async fn find_by_feature_name(
         &self,
         feature_name: &str,
-    ) -> AppResult<Option<AIFeatureConfig>> {
+    ) -> RepositoryResult<Option<AIFeatureConfig>> {
         debug!("查找AI功能配置: {}", feature_name);
 
         let (query, params) = SafeQueryBuilder::new("ai_features")
@@ -131,7 +134,11 @@ impl AIFeaturesRepository {
                 Value::String(s) => query_builder.bind(s),
                 Value::Bool(b) => query_builder.bind(b),
                 Value::Null => query_builder.bind(None::<String>),
-                _ => return Err(anyhow!("不支持的参数类型")),
+                _ => {
+                    return Err(RepositoryError::unsupported_parameter(
+                        "ai_features parameter",
+                    ))
+                }
             };
         }
 
@@ -151,7 +158,7 @@ impl AIFeaturesRepository {
     }
 
     /// 保存或更新功能配置
-    pub async fn save_or_update(&self, config: &AIFeatureConfig) -> AppResult<()> {
+    pub async fn save_or_update(&self, config: &AIFeatureConfig) -> RepositoryResult<()> {
         debug!("保存AI功能配置: {}", config.feature_name);
 
         let updated_config = AIFeatureConfig {
@@ -190,7 +197,11 @@ impl AIFeaturesRepository {
                 Value::String(s) => query_builder.bind(s),
                 Value::Bool(b) => query_builder.bind(b),
                 Value::Null => query_builder.bind(None::<String>),
-                _ => return Err(anyhow!("不支持的参数类型")),
+                _ => {
+                    return Err(RepositoryError::unsupported_parameter(
+                        "ai_features parameter",
+                    ))
+                }
             };
         }
 
@@ -201,7 +212,7 @@ impl AIFeaturesRepository {
     }
 
     /// 删除功能配置
-    pub async fn delete_by_feature_name(&self, feature_name: &str) -> AppResult<()> {
+    pub async fn delete_by_feature_name(&self, feature_name: &str) -> RepositoryResult<()> {
         debug!("删除AI功能配置: {}", feature_name);
 
         let result = sqlx::query("DELETE FROM ai_features WHERE feature_name = ?")
@@ -210,7 +221,9 @@ impl AIFeaturesRepository {
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(anyhow!("功能配置不存在: {}", feature_name));
+            return Err(RepositoryError::AiFeatureNotFound {
+                name: feature_name.to_string(),
+            });
         }
 
         debug!("AI功能配置删除成功: {}", feature_name);
@@ -218,7 +231,7 @@ impl AIFeaturesRepository {
     }
 
     /// 获取所有功能配置
-    pub async fn find_all_features(&self) -> AppResult<Vec<AIFeatureConfig>> {
+    pub async fn find_all_features(&self) -> RepositoryResult<Vec<AIFeatureConfig>> {
         debug!("获取所有AI功能配置");
 
         let (query, params) = SafeQueryBuilder::new("ai_features")
@@ -240,7 +253,11 @@ impl AIFeaturesRepository {
                 Value::String(s) => query_builder.bind(s),
                 Value::Bool(b) => query_builder.bind(b),
                 Value::Null => query_builder.bind(None::<String>),
-                _ => return Err(anyhow!("不支持的参数类型")),
+                _ => {
+                    return Err(RepositoryError::unsupported_parameter(
+                        "ai_features parameter",
+                    ))
+                }
             };
         }
 
@@ -259,28 +276,28 @@ impl AIFeaturesRepository {
 
 #[async_trait::async_trait]
 impl Repository<AIFeatureConfig> for AIFeaturesRepository {
-    async fn find_by_id(&self, _id: i64) -> AppResult<Option<AIFeatureConfig>> {
-        Err(anyhow!(
-            "AI功能配置使用功能名称作为主键，请使用find_by_feature_name"
-        ))
+    async fn find_by_id(&self, _id: i64) -> RepositoryResult<Option<AIFeatureConfig>> {
+        Err(RepositoryError::AiFeatureRequiresStringId {
+            recommended: "find_by_feature_name",
+        })
     }
 
-    async fn find_all(&self) -> AppResult<Vec<AIFeatureConfig>> {
+    async fn find_all(&self) -> RepositoryResult<Vec<AIFeatureConfig>> {
         self.find_all_features().await
     }
 
-    async fn save(&self, entity: &AIFeatureConfig) -> AppResult<i64> {
+    async fn save(&self, entity: &AIFeatureConfig) -> RepositoryResult<i64> {
         self.save_or_update(entity).await?;
         Ok(0) // AI功能配置不使用数字ID
     }
 
-    async fn update(&self, entity: &AIFeatureConfig) -> AppResult<()> {
+    async fn update(&self, entity: &AIFeatureConfig) -> RepositoryResult<()> {
         self.save_or_update(entity).await
     }
 
-    async fn delete(&self, _id: i64) -> AppResult<()> {
-        Err(anyhow!(
-            "AI功能配置使用功能名称作为主键，请使用delete_by_feature_name"
-        ))
+    async fn delete(&self, _id: i64) -> RepositoryResult<()> {
+        Err(RepositoryError::AiFeatureRequiresStringId {
+            recommended: "delete_by_feature_name",
+        })
     }
 }

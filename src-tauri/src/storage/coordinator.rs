@@ -1,14 +1,11 @@
-
 use crate::config::TomlConfigManager;
 use crate::storage::cache::UnifiedCache;
 use crate::storage::database::{DatabaseManager, DatabaseOptions};
+use crate::storage::error::{StorageCoordinatorError, StorageCoordinatorResult};
 use crate::storage::messagepack::{MessagePackManager, MessagePackOptions};
 use crate::storage::paths::StoragePaths;
 use crate::storage::repositories::RepositoryManager;
 use crate::storage::types::SessionState;
-
-use crate::utils::error::AppResult;
-use anyhow::Context;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::debug;
@@ -43,11 +40,11 @@ impl StorageCoordinator {
         paths: StoragePaths,
         options: StorageCoordinatorOptions,
         config_manager: Arc<TomlConfigManager>,
-    ) -> AppResult<Self> {
+    ) -> StorageCoordinatorResult<Self> {
         debug!("初始化简化的存储协调器");
 
         // 确保所有目录存在
-        paths.ensure_directories().context("创建存储目录失败")?;
+        paths.ensure_directories()?;
 
         // 先解构options避免partial move
         let StorageCoordinatorOptions {
@@ -58,19 +55,28 @@ impl StorageCoordinator {
         let messagepack_manager = Arc::new(
             MessagePackManager::new(paths.clone(), messagepack_options)
                 .await
-                .context("初始化MessagePack管理器失败")?,
+                .map_err(|e| StorageCoordinatorError::Internal(format!(
+                    "Failed to initialize MessagePack manager: {}",
+                    e
+                )))?,
         );
 
         let database_manager = Arc::new(
             DatabaseManager::new(paths.clone(), database_options)
                 .await
-                .context("初始化数据库管理器失败")?,
+                .map_err(|e| StorageCoordinatorError::Internal(format!(
+                    "Failed to initialize database manager: {}",
+                    e
+                )))?,
         );
 
         database_manager
             .initialize()
             .await
-            .context("初始化数据库失败")?;
+            .map_err(|e| StorageCoordinatorError::Internal(format!(
+                "Failed to initialize database: {}",
+                e
+            )))?;
 
         let repository_manager = Arc::new(RepositoryManager::new(Arc::clone(&database_manager)));
 
@@ -91,7 +97,7 @@ impl StorageCoordinator {
         Ok(coordinator)
     }
 
-    pub async fn config_get(&self, section: &str) -> AppResult<Value> {
+    pub async fn config_get(&self, section: &str) -> StorageCoordinatorResult<Value> {
         debug!("获取配置节: {}", section);
 
         // 从配置管理器获取配置（使用缓存）
@@ -99,7 +105,10 @@ impl StorageCoordinator {
             .config_manager
             .config_get()
             .await
-            .context("获取配置失败")?;
+            .map_err(|e| StorageCoordinatorError::Internal(format!(
+                "Failed to load configuration: {}",
+                e
+            )))?;
 
         // 提取指定节的配置
         let section_value = match section {
@@ -118,7 +127,7 @@ impl StorageCoordinator {
         Ok(section_value)
     }
 
-    pub async fn config_update(&self, section: &str, data: Value) -> AppResult<()> {
+    pub async fn config_update(&self, section: &str, data: Value) -> StorageCoordinatorResult<()> {
         debug!("更新配置节: {}", section);
 
         // 使用配置管理器的 config_update 闭包模式，确保原子性操作
@@ -130,19 +139,28 @@ impl StorageCoordinator {
                 Ok(())
             })
             .await
-            .context("更新配置节失败")?;
+            .map_err(|e| StorageCoordinatorError::Internal(format!(
+                "Failed to update configuration section: {}",
+                e
+            )))?;
 
         Ok(())
     }
 
-    pub async fn save_session_state(&self, state: &SessionState) -> AppResult<()> {
+    pub async fn save_session_state(&self, state: &SessionState) -> StorageCoordinatorResult<()> {
         debug!("保存会话状态");
-        self.messagepack_manager.save_state(state).await
+        self.messagepack_manager
+            .save_state(state)
+            .await
+            .map_err(StorageCoordinatorError::from)
     }
 
-    pub async fn load_session_state(&self) -> AppResult<Option<SessionState>> {
+    pub async fn load_session_state(&self) -> StorageCoordinatorResult<Option<SessionState>> {
         debug!("加载会话状态");
-        self.messagepack_manager.load_state().await
+        self.messagepack_manager
+            .load_state()
+            .await
+            .map_err(StorageCoordinatorError::from)
     }
 
     pub fn paths(&self) -> &StoragePaths {

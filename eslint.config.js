@@ -18,8 +18,6 @@ export default [
       'vite.config.ts',
       'eslint.config.js',
       'ck-main/examples/**',
-      'src/eko-core/llm/verify-stream-optimization.ts',
-      'src/eko-core/llm/performance-monitor.ts',
     ],
   },
   {

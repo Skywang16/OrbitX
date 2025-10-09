@@ -30,13 +30,13 @@ tauri-plugin-process = "2.3.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "io-util", "net", "fs", "time", "macros", "process"] }
-anyhow = "1.0"
 thiserror = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 portable-pty = "0.8"
 crossbeam-channel = "0.5"
 bytes = { version = "1", features = ["serde"] }
+dashmap = "6.0"
 
 
 # 补全功能相关依赖
@@ -49,6 +49,7 @@ async-trait = "0.1"
 urlencoding = "2.1"
 url = "2.5"
 percent-encoding = "2.3"
+once_cell = "1.19"
 
 # AI集成功能相关依赖
 chrono = { version = "0.4", features = ["serde"] }
@@ -82,6 +83,8 @@ async-openai = "0.29"
 scraper = "0.20"
 html2text = "0.12"
 
+xmltree = "0.10"
+
 # SQLite 数据库支持
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json", "migrate"] }
 
@@ -110,10 +113,12 @@ ck-index = { path = "../ck-main/ck-index", version = "0.4.5" }
 ck-engine = { path = "../ck-main/ck-engine", version = "0.4.5" }
 ck-embed = { path = "../ck-main/ck-embed", version = "0.4.5" }
 ck-ann = { path = "../ck-main/ck-ann", version = "0.4.5" }
+ignore = "0.4"
 
 # 文件监控系统依赖
 notify = "6.1"
 debounce = "0.2"
+diffy = "0.3"
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -162,29 +167,12 @@ name = "singleton_tests"
 path = "tests/unit/singleton_tests.rs"
 
 [[test]]
-name = "io_optimization_test"
-path = "tests/mux/io_optimization_test.rs"
-
-
-
-
-
-[[test]]
 name = "messagepack_tests"
 path = "tests/storage/messagepack_tests.rs"
 
 [[test]]
 name = "storage_repository_tests"
 path = "tests/storage_repository_tests.rs"
-
-[[test]]
-name = "llm_unit_tests"
-path = "src/llm/tests.rs"
-
-[[test]]
-name = "llm_integration_tests"
-path = "src/llm/integration_tests.rs"
-
 
 
 # 桌面平台特定依赖
@@ -209,6 +197,3 @@ lto = true
 codegen-units = 1
 # 去除panic信息以减少大小
 panic = "abort"
-
-
-

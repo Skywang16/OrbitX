@@ -1,7 +1,7 @@
 // 终端上下文相关类型定义
 
 use crate::mux::PaneId;
-use anyhow::{anyhow, Result};
+use crate::terminal::error::{TerminalValidationError, TerminalValidationResult};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
@@ -60,8 +60,6 @@ pub enum ShellType {
     Bash,
     Zsh,
     Fish,
-    PowerShell,
-    Cmd,
     Other(String),
 }
 
@@ -72,8 +70,6 @@ impl ShellType {
             "bash" => ShellType::Bash,
             "zsh" => ShellType::Zsh,
             "fish" => ShellType::Fish,
-            "powershell" | "pwsh" => ShellType::PowerShell,
-            "cmd" | "cmd.exe" => ShellType::Cmd,
             _ => ShellType::Other(s.to_string()),
         }
     }
@@ -84,18 +80,13 @@ impl ShellType {
             ShellType::Bash => "Bash",
             ShellType::Zsh => "Zsh",
             ShellType::Fish => "Fish",
-            ShellType::PowerShell => "PowerShell",
-            ShellType::Cmd => "Command Prompt",
             ShellType::Other(name) => name,
         }
     }
 
     /// 检查是否支持Shell集成
     pub fn supports_integration(&self) -> bool {
-        matches!(
-            self,
-            ShellType::Bash | ShellType::Zsh | ShellType::Fish | ShellType::PowerShell
-        )
+        matches!(self, ShellType::Bash | ShellType::Zsh | ShellType::Fish)
     }
 
     /// 获取Shell的默认提示符
@@ -103,8 +94,6 @@ impl ShellType {
         match self {
             ShellType::Bash | ShellType::Zsh => "$ ",
             ShellType::Fish => "❯ ",
-            ShellType::PowerShell => "PS> ",
-            ShellType::Cmd => "> ",
             ShellType::Other(_) => "$ ",
         }
     }
@@ -156,19 +145,19 @@ impl CommandInfo {
     /// 验证命令信息的有效性
     pub fn validate(&self) -> Result<(), String> {
         if self.command.trim().is_empty() {
-            return Err("命令不能为空".to_string());
+            return Err("Command cannot be empty".to_string());
         }
 
         // 验证时间逻辑
         if let Some(end_time) = self.end_time {
             if end_time < self.start_time {
-                return Err("结束时间不能早于开始时间".to_string());
+                return Err("End time cannot be earlier than start time".to_string());
             }
         }
 
         // 验证退出码逻辑
         if self.end_time.is_none() && self.exit_code.is_some() {
-            return Err("未完成的命令不应该有退出码".to_string());
+            return Err("Unfinished command should not have exit code".to_string());
         }
 
         Ok(())
@@ -226,23 +215,26 @@ impl TerminalContext {
     }
 
     /// 验证终端上下文的完整性
-    pub fn validate(&self) -> Result<()> {
+    pub fn validate(&self) -> TerminalValidationResult<()> {
         // 验证面板ID是否有效
         if self.pane_id.as_u32() == 0 {
-            return Err(anyhow!("无效的面板ID"));
+            return Err(TerminalValidationError::InvalidPaneId);
         }
 
         // 验证命令历史记录的完整性
         for (index, command) in self.command_history.iter().enumerate() {
             if let Err(e) = command.validate() {
-                return Err(anyhow!("命令历史记录第{}项无效: {}", index, e));
+                return Err(TerminalValidationError::InvalidHistoryEntry {
+                    index,
+                    reason: e,
+                });
             }
         }
 
         // 验证当前命令的完整性
         if let Some(ref command) = self.current_command {
             if let Err(e) = command.validate() {
-                return Err(anyhow!("当前命令无效: {}", e));
+                return Err(TerminalValidationError::InvalidCurrentCommand { reason: e });
             }
         }
 
@@ -317,77 +309,6 @@ impl TerminalContext {
 }
 
 /// 缓存的上下文信息
-#[derive(Debug, Clone)]
-pub struct CachedContext {
-    pub context: TerminalContext,
-    pub cached_at: std::time::Instant,
-    pub ttl: std::time::Duration,
-}
-
-impl CachedContext {
-    /// 创建新的缓存上下文
-    pub fn new(context: TerminalContext, ttl: std::time::Duration) -> Self {
-        Self {
-            context,
-            cached_at: std::time::Instant::now(),
-            ttl,
-        }
-    }
-
-    /// 检查缓存是否已过期
-    pub fn is_expired(&self) -> bool {
-        self.cached_at.elapsed() > self.ttl
-    }
-
-    /// 获取剩余TTL
-    pub fn remaining_ttl(&self) -> std::time::Duration {
-        self.ttl.saturating_sub(self.cached_at.elapsed())
-    }
-}
-
-/// 缓存统计信息
-#[derive(Debug, Clone, Default, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CacheStats {
-    pub total_entries: usize,
-    pub hit_count: u64,
-    pub miss_count: u64,
-    pub eviction_count: u64,
-    pub hit_rate: f64,
-}
-
-impl CacheStats {
-    /// 更新命中率
-    pub fn update_hit_rate(&mut self) {
-        let total_requests = self.hit_count + self.miss_count;
-        if total_requests > 0 {
-            self.hit_rate = self.hit_count as f64 / total_requests as f64;
-        } else {
-            self.hit_rate = 0.0;
-        }
-    }
-
-    /// 记录缓存命中
-    pub fn record_hit(&mut self) {
-        self.hit_count += 1;
-        self.update_hit_rate();
-    }
-
-    /// 记录缓存未命中
-    pub fn record_miss(&mut self) {
-        self.miss_count += 1;
-        self.update_hit_rate();
-    }
-
-    /// 记录缓存淘汰
-    pub fn record_eviction(&mut self) {
-        self.eviction_count += 1;
-        if self.total_entries > 0 {
-            self.total_entries -= 1;
-        }
-    }
-}
-
 /// 上下文查询选项
 #[derive(Debug, Clone, Default)]
 pub struct ContextQueryOptions {
@@ -495,36 +416,18 @@ mod tests {
         assert_eq!(ShellType::from_str("bash"), ShellType::Bash);
         assert_eq!(ShellType::from_str("zsh"), ShellType::Zsh);
         assert_eq!(ShellType::from_str("fish"), ShellType::Fish);
-        assert_eq!(ShellType::from_str("powershell"), ShellType::PowerShell);
-        assert_eq!(ShellType::from_str("cmd"), ShellType::Cmd);
+        assert_eq!(
+            ShellType::from_str("powershell"),
+            ShellType::Other("powershell".to_string())
+        );
+        assert_eq!(
+            ShellType::from_str("cmd"),
+            ShellType::Other("cmd".to_string())
+        );
         assert_eq!(
             ShellType::from_str("unknown"),
             ShellType::Other("unknown".to_string())
         );
-    }
-
-    #[test]
-    fn test_cached_context() {
-        let pane_id = PaneId::new(1);
-        let context = TerminalContext::new(pane_id);
-        let ttl = std::time::Duration::from_secs(60);
-        let cached = CachedContext::new(context, ttl);
-
-        assert!(!cached.is_expired());
-        assert!(cached.remaining_ttl() <= ttl);
-    }
-
-    #[test]
-    fn test_cache_stats() {
-        let mut stats = CacheStats::default();
-
-        stats.record_hit();
-        stats.record_miss();
-        stats.record_hit();
-
-        assert_eq!(stats.hit_count, 2);
-        assert_eq!(stats.miss_count, 1);
-        assert_eq!(stats.hit_rate, 2.0 / 3.0);
     }
 
     #[test]

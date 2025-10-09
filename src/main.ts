@@ -9,8 +9,6 @@ import { useSessionStore } from '@/stores/session'
 
 import { useTerminalStore } from '@/stores/Terminal'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { saveWindowState, StateFlags } from '@tauri-apps/plugin-window-state'
-import { debounce } from 'lodash-es'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import App from './App.vue'
@@ -57,7 +55,7 @@ const initializeServices = async () => {
   await completionApi.initEngine()
 
   const aiChatStore = useAIChatStore()
-  await aiChatStore.initializeEko()
+  await aiChatStore.initialize()
 }
 
 const initializeOpacity = async () => {
@@ -117,8 +115,6 @@ disableContextMenuInProduction()
 
 const handleAppClose = async () => {
   try {
-    await saveWindowState(StateFlags.ALL)
-
     const terminalStore = useTerminalStore()
     await terminalStore.saveSessionState()
 
@@ -131,51 +127,18 @@ const handleAppClose = async () => {
 
 const setupWindowCloseListener = async () => {
   try {
-    // 使用lodash防抖保存窗口状态
-    const debouncedSavePosition = debounce(async () => {
-      try {
-        await saveWindowState(StateFlags.POSITION)
-      } catch (error) {
-        console.warn('保存窗口位置失败:', error)
-      }
-    }, 300)
+    const currentWindow = getCurrentWindow()
+    const unlistenClose = await currentWindow.onCloseRequested(async event => {
+      event.preventDefault()
 
-    const debouncedSaveSize = debounce(async () => {
-      try {
-        await saveWindowState(StateFlags.SIZE)
-      } catch (error) {
-        console.warn('保存窗口大小失败:', error)
-      }
-    }, 300)
+      await handleAppClose()
 
-    // 监听窗口事件
-    const [unlistenClose, unlistenMoved, unlistenResized] = await Promise.all([
-      getCurrentWindow().onCloseRequested(async event => {
-        event.preventDefault()
-
-        // 取消防抖并立即保存
-        debouncedSavePosition.cancel()
-        debouncedSaveSize.cancel()
-
-        try {
-          await handleAppClose()
-        } catch (error) {
-          console.error('保存失败:', error)
-        }
-
-        unlistenClose()
-        await getCurrentWindow().close()
-      }),
-      getCurrentWindow().onMoved(debouncedSavePosition),
-      getCurrentWindow().onResized(debouncedSaveSize),
-    ])
+      unlistenClose()
+      await currentWindow.close()
+    })
 
     return () => {
-      debouncedSavePosition.cancel()
-      debouncedSaveSize.cancel()
       unlistenClose()
-      unlistenMoved()
-      unlistenResized()
     }
   } catch (error) {
     console.error('设置窗口事件监听失败:', error)
