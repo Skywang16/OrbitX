@@ -98,7 +98,11 @@
     <div class="main-content">
       <ContentRenderer />
 
-      <div v-if="aiChatStore.isVisible" class="sidebar-wrapper" :style="{ width: `${aiChatStore.sidebarWidth}px` }">
+      <div
+        v-if="aiChatStore.isVisible"
+        class="sidebar-wrapper"
+        :style="{ '--sidebar-width': `${aiChatStore.sidebarWidth}px` }"
+      >
         <AIChatSidebar />
       </div>
     </div>
@@ -121,7 +125,10 @@
   }
 
   .sidebar-wrapper {
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    flex-basis: var(--sidebar-width);
+    max-width: 70vw;
+    min-width: 10vw;
     min-height: 0;
     overflow: hidden;
   }

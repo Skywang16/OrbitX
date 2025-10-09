@@ -61,7 +61,21 @@
     },
     "theme": {
       "title": "选择您的主题",
-      "description": "选择符合您风格的主题"
+      "description": "选择符合您风格的主题",
+      "options": {
+        "dark": {
+          "name": "深色主题",
+          "description": "适合在低光环境下使用，减少眼睛疲劳"
+        },
+        "light": {
+          "name": "浅色主题",
+          "description": "明亮清晰的界面，适合日间使用"
+        },
+        "auto": {
+          "name": "跟随系统",
+          "description": "自动根据系统设置切换主题"
+        }
+      }
     },
     "ai": {
       "title": "AI助手设置",
@@ -158,7 +172,23 @@
     "reset_description": "将所有快捷键恢复为默认设置",
     "actions": {
       "new_tab": "新建标签页",
-      "toggle_ai_sidebar": "开启/关闭AI侧边栏"
+      "toggle_ai_sidebar": "开启/关闭AI侧边栏",
+      "copy_to_clipboard": "复制到剪贴板",
+      "paste_from_clipboard": "从剪贴板粘贴",
+      "terminal_search": "终端搜索",
+      "open_settings": "打开设置",
+      "close_tab": "关闭标签页",
+      "clear_terminal": "清空终端",
+      "switch_to_tab_1": "切换到标签页 1",
+      "switch_to_tab_2": "切换到标签页 2",
+      "switch_to_tab_3": "切换到标签页 3",
+      "switch_to_tab_4": "切换到标签页 4",
+      "switch_to_tab_5": "切换到标签页 5",
+      "switch_to_last_tab": "切换到最后标签页",
+      "accept_completion": "接受补全",
+      "increase_font_size": "增大字体",
+      "decrease_font_size": "减小字体",
+      "toggle_window_pin": "切换窗口置顶"
     }
   },
   "language": {
@@ -181,7 +211,7 @@
   },
   "ai_feature": {
     "user_system_prompt": "用户前置提示词",
-    "prompt_placeholder": "在这里输入你的前置提示词，例如：请用中文回答所有问题..."
+    "prompt_placeholder": "在这里输入你的前置提示词"
   },
   "ai_model_form": {
     "api_url": "API地址",

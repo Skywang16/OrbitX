@@ -333,23 +333,4 @@
       transform: rotate(360deg);
     }
   }
-
-  @media (max-width: 480px) {
-    .shortcut-display {
-      gap: 1px;
-    }
-
-    .shortcut-modifier,
-    .shortcut-key {
-      padding: 1px 3px;
-      font-size: 9px;
-    }
-  }
-
-  @media (max-width: 320px) {
-    .settings-warning {
-      padding: 6px 8px;
-      font-size: 10px;
-    }
-  }
 </style>

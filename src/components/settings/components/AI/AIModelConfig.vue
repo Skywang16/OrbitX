@@ -100,9 +100,9 @@
               <div class="model-info">
                 <div class="settings-label">
                   {{ model.name }}
-                  <span class="model-type-tag chat">
+                  <!--  <span class="model-type-tag chat">
                     {{ t('ai_model.chat') }}
-                  </span>
+                  </span> -->
                 </div>
                 <div class="settings-description">{{ model.provider }}</div>
               </div>

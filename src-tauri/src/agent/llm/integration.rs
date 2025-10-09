@@ -28,7 +28,7 @@ impl TaskExecutor {
             model: model_id,
             messages,
             temperature: Some(0.7),
-            max_tokens: Some(4096),
+            max_tokens: None, // 不限制输出长度，让模型根据context自己决定
             tools: if tools.is_empty() { None } else { Some(tools) },
             tool_choice: None,
             stream: false,

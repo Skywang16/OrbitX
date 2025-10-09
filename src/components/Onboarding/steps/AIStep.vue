@@ -21,9 +21,6 @@
             <div class="ai-info">
               <div class="ai-name">{{ provider.name }}</div>
             </div>
-            <div class="ai-badge" v-if="provider.recommended">
-              {{ t('onboarding.ai.recommended') }}
-            </div>
           </div>
 
           <Transition name="dropdown" appear>
@@ -116,17 +113,15 @@
 
   // 从后端注册表生成可用供应商列表
   const availableProviders = computed(() => {
-    const providers = providerOptions.value.map((provider, index) => ({
+    const providers = providerOptions.value.map((provider) => ({
       id: provider.value,
       name: provider.label,
-      recommended: index === 0, // 第一个供应商设为推荐
     }))
 
     // 添加自定义选项
     providers.push({
       id: 'custom',
       name: t('onboarding.ai.models.custom.name'),
-      recommended: false,
     })
 
     return providers
@@ -390,16 +385,6 @@
     margin: 0 0 4px 0;
   }
 
-  .ai-badge {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-primary);
-    background: var(--color-primary-alpha);
-    padding: 4px 8px;
-    border-radius: var(--border-radius);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
 
   .ai-config-dropdown {
     padding: 0 20px 24px 20px;

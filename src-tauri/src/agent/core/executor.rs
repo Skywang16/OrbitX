@@ -437,12 +437,21 @@ impl TaskExecutor {
                         serde_json::Value::String(parent_prompt.clone()),
                     );
 
+                    // 获取用户前置提示词
+                    let user_prefix_prompt = self
+                        .repositories()
+                        .ai_models()
+                        .get_user_prefix_prompt()
+                        .await
+                        .ok()
+                        .flatten();
+
                     let system_prompt = build_agent_system_prompt(
                         agent_info.clone(),
                         Some(task_for_prompt.clone()),
                         Some(prompt_ctx.clone()),
                         simple_tool_schemas.clone(),
-                        None,
+                        user_prefix_prompt,
                     )
                     .await
                     .map_err(|e| {
@@ -833,12 +842,21 @@ impl TaskExecutor {
             serde_json::Value::String(user_prompt.to_string()),
         );
 
+        // 获取用户前置提示词
+        let user_prefix_prompt = self
+            .repositories()
+            .ai_models()
+            .get_user_prefix_prompt()
+            .await
+            .ok()
+            .flatten();
+
         let system_prompt = build_agent_system_prompt(
             agent_info.clone(),
             Some(task_for_prompt.clone()),
             Some(prompt_ctx.clone()),
             simple_tool_schemas.clone(),
-            None,
+            user_prefix_prompt,
         )
         .await
         .map_err(|e| TaskExecutorError::InternalError(format!("Failed to build system prompt: {}", e)))?;

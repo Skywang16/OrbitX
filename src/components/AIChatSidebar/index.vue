@@ -72,11 +72,6 @@
     const handleMouseUp = () => {
       isDragging.value = false
 
-      // 如果宽度太小，退出聊天模式
-      if (aiChatStore.sidebarWidth <= 120) {
-        aiChatStore.isVisible = false
-      }
-
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
@@ -142,7 +137,7 @@
 </script>
 
 <template>
-  <div class="ai-chat-sidebar" :style="{ width: aiChatStore.sidebarWidth + 'px' }">
+  <div class="ai-chat-sidebar">
     <ResizeHandle
       :is-dragging="isDragging"
       :is-hovering="isHovering"
@@ -193,12 +188,13 @@
 <style scoped>
   .ai-chat-sidebar {
     position: relative;
+    width: 100%;
     height: 100%;
     background: var(--bg-50);
     border-left: 1px solid var(--border-200);
     display: flex;
     flex-direction: column;
-    min-width: 100px;
+    min-width: 10vw;
   }
 
   .ai-chat-content {

@@ -164,56 +164,37 @@
     // 创建新的请求控制器
     currentRequest = new AbortController()
 
-    try {
-      isLoading.value = true
+    isLoading.value = true
 
-      const request: CompletionRequest = {
-        input,
-        cursorPosition: input.length,
-        workingDirectory: props.workingDirectory,
-        maxResults: 10,
-      }
+    const request: CompletionRequest = {
+      input,
+      cursorPosition: input.length,
+      workingDirectory: props.workingDirectory,
+      maxResults: 10,
+    }
 
-      let response: CompletionResponse
+    // 尝试调用后端API，失败则使用本地补全
+    const response = await completionApi.getCompletions(request).catch(() => {
+      return getLocalCompletions(input)
+    })
 
-      try {
-        // 尝试调用后端API
-        response = await completionApi.getCompletions(request)
-      } catch (error: unknown) {
-        // 如果是取消错误，直接返回
-        if (error instanceof Error && error.message === 'Request was aborted') return
+    completionItems.value = response.items
+    emit('completion-ready', response.items)
 
-        // 使用本地补全作为后备方案
-        response = getLocalCompletions(input)
-      }
-
-      completionItems.value = response.items
-      emit('completion-ready', response.items)
-
-      // 设置第一个匹配项作为内联补全
-      if (response.items.length > 0) {
-        const firstItem = response.items[0]
-        if (firstItem.text.toLowerCase().startsWith(input.toLowerCase())) {
-          currentSuggestion.value = firstItem.text
-        } else {
-          currentSuggestion.value = ''
-        }
+    // 设置第一个匹配项作为内联补全
+    if (response.items.length > 0) {
+      const firstItem = response.items[0]
+      if (firstItem.text.toLowerCase().startsWith(input.toLowerCase())) {
+        currentSuggestion.value = firstItem.text
       } else {
         currentSuggestion.value = ''
       }
-
-      emit('suggestion-change', currentSuggestion.value)
-    } catch (error) {
-      // 重置状态
+    } else {
       currentSuggestion.value = ''
-      completionItems.value = []
-      emit('completion-ready', [])
-      emit('suggestion-change', '')
-      // 可以考虑向用户显示错误提示，但这里选择静默处理
-      // 因为补全失败不应该中断用户的正常操作
-    } finally {
-      isLoading.value = false
     }
+
+    emit('suggestion-change', currentSuggestion.value)
+    isLoading.value = false
   }
 
   // 使用lodash防抖的补全函数

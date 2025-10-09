@@ -324,23 +324,4 @@
     flex-direction: column;
     gap: var(--settings-spacing-compact);
   }
-
-  @media (max-width: 480px) {
-    .settings-item input[type='range'] {
-      width: 100%;
-      margin-bottom: 8px;
-    }
-
-    .settings-item-control {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 8px;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .settings-item input[type='range'] {
-      width: 100%;
-    }
-  }
 </style>

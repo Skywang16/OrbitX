@@ -112,10 +112,4 @@
     background: var(--bg-200);
     border-top: 1px solid var(--border-200);
   }
-
-  @media (max-width: 480px) {
-    .settings-sidebar-footer {
-      padding: var(--spacing-sm);
-    }
-  }
 </style>

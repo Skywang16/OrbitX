@@ -131,11 +131,7 @@ const setupWindowCloseListener = async () => {
     const unlistenClose = await currentWindow.onCloseRequested(async event => {
       event.preventDefault()
 
-      try {
-        await handleAppClose()
-      } catch (error) {
-        console.error('保存失败:', error)
-      }
+      await handleAppClose()
 
       unlistenClose()
       await currentWindow.close()
