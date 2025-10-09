@@ -12,8 +12,9 @@ use super::file_utils::{ensure_absolute, normalize_path};
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
 use crate::agent::persistence::FileRecordSource;
+use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolExecutorResult, ToolMetadata, ToolPermission, ToolPriority,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
     ToolResult, ToolResultContent,
 };
 

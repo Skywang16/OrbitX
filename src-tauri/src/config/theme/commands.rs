@@ -7,11 +7,10 @@
 
 use super::service::{SystemThemeDetector, ThemeService};
 use super::types::{Theme, ThemeConfig};
+use crate::config::error::{ConfigCommandError, ConfigCommandResult};
 use crate::config::TomlConfigManager;
-use crate::utils::error::AppResult;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
-use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
@@ -229,13 +228,16 @@ pub async fn theme_get_available(
 pub async fn handle_system_theme_change<R: tauri::Runtime>(
     app_handle: &AppHandle<R>,
     is_dark: bool,
-) -> AppResult<()> {
+) -> ConfigCommandResult<()> {
     debug!("系统主题变化: {}", if is_dark { "深色" } else { "浅色" });
 
     let config_manager = app_handle.state::<Arc<TomlConfigManager>>();
     let theme_service = app_handle.state::<Arc<ThemeService>>();
 
-    let config = config_manager.config_get().await?;
+    let config = config_manager
+        .config_get()
+        .await
+        .map_err(|err| ConfigCommandError::Internal(err.to_string()))?;
 
     // 只有在跟随系统主题时才处理
     if config.appearance.theme_config.follow_system {
@@ -247,7 +249,7 @@ pub async fn handle_system_theme_change<R: tauri::Runtime>(
         // 通知前端主题已更改
         app_handle
             .emit("theme-changed", &current_theme_name)
-            .context("发送主题变化事件失败")?;
+            .map_err(|err| ConfigCommandError::Internal(err.to_string()))?;
     }
 
     Ok(())

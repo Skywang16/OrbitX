@@ -5,9 +5,8 @@
  */
 
 use crate::mux::PaneId;
+use crate::terminal::error::{ContextRegistryError, ContextRegistryResult};
 use crate::terminal::types::TerminalContextEvent;
-use crate::utils::error::AppResult;
-use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -67,12 +66,17 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(())` - 设置成功
     /// * `Err(ContextError)` - 设置失败
-    pub fn terminal_context_set_active_pane(&self, pane_id: PaneId) -> AppResult<()> {
+    pub fn terminal_context_set_active_pane(
+        &self,
+        pane_id: PaneId,
+    ) -> ContextRegistryResult<()> {
         let old_pane_id = {
             let mut active_pane = self
                 .global_active_pane
                 .write()
-                .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
+                .map_err(|err| {
+                    ContextRegistryError::from_write_poison("global_active_pane", err)
+                })?;
 
             let old_id = *active_pane;
 
@@ -120,12 +124,14 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(())` - 清除成功
     /// * `Err(ContextError)` - 清除失败
-    pub fn terminal_context_clear_active_pane(&self) -> AppResult<()> {
+    pub fn terminal_context_clear_active_pane(&self) -> ContextRegistryResult<()> {
         let old_pane_id = {
             let mut active_pane = self
                 .global_active_pane
                 .write()
-                .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
+                .map_err(|err| {
+                    ContextRegistryError::from_write_poison("global_active_pane", err)
+                })?;
 
             let old_id = *active_pane;
             *active_pane = None;
@@ -176,12 +182,18 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(())` - 设置成功
     /// * `Err(ContextError)` - 设置失败
-    pub fn set_window_active_pane(&self, window_id: WindowId, pane_id: PaneId) -> AppResult<()> {
+    pub fn set_window_active_pane(
+        &self,
+        window_id: WindowId,
+        pane_id: PaneId,
+    ) -> ContextRegistryResult<()> {
         let old_pane_id = {
             let mut window_panes = self
                 .window_active_panes
                 .write()
-                .map_err(|e| anyhow!("Failed to acquire window active pane write lock: {}", e))?;
+                .map_err(|err| {
+                    ContextRegistryError::from_write_poison("window_active_panes", err)
+                })?;
 
             window_panes.insert(window_id, pane_id)
         };
@@ -226,12 +238,17 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(Option<PaneId>)` - 移除成功，返回之前的活跃面板ID
     /// * `Err(ContextError)` - 移除失败
-    pub fn remove_window_active_pane(&self, window_id: WindowId) -> AppResult<Option<PaneId>> {
+    pub fn remove_window_active_pane(
+        &self,
+        window_id: WindowId,
+    ) -> ContextRegistryResult<Option<PaneId>> {
         let removed_pane = {
             let mut window_panes = self
                 .window_active_panes
                 .write()
-                .map_err(|e| anyhow!("Failed to acquire window active pane write lock: {}", e))?;
+                .map_err(|err| {
+                    ContextRegistryError::from_write_poison("window_active_panes", err)
+                })?;
 
             window_panes.remove(&window_id)
         };
@@ -269,10 +286,10 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(usize)` - 成功发送，返回接收者数量
     /// * `Err(ContextError)` - 发送失败
-    pub fn send_event(&self, event: TerminalContextEvent) -> AppResult<usize> {
+    pub fn send_event(&self, event: TerminalContextEvent) -> ContextRegistryResult<usize> {
         self.event_sender
             .send(event)
-            .map_err(|e| anyhow!("Failed to send event: {}", e))
+            .map_err(|err| ContextRegistryError::EventSend(err.to_string()))
     }
 
     /// 获取注册表统计信息

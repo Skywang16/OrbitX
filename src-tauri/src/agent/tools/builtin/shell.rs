@@ -7,8 +7,9 @@ use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 
 use crate::agent::core::context::TaskContext;
+use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolExecutorResult, ToolMetadata, ToolPermission, ToolPriority,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
     ToolResult, ToolResultContent,
 };
 

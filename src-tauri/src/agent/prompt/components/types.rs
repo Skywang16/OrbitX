@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::agent::config::PromptComponent;
-use crate::agent::{Agent, AgentResult, Context, Task, ToolSchema};
+use crate::agent::error::AgentResult;
+use crate::agent::{Agent, Context, Task, ToolSchema};
 
 /// Component assembly context shared across builders.
 #[derive(Debug, Clone)]

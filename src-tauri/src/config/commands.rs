@@ -1,6 +1,5 @@
+use crate::config::error::ConfigResult;
 use crate::config::{defaults::create_default_config, types::AppConfig, TomlConfigManager};
-
-use crate::utils::error::AppResult;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use std::sync::Arc;
@@ -15,7 +14,7 @@ pub struct ConfigManagerState {
 }
 
 impl ConfigManagerState {
-    pub async fn new() -> AppResult<Self> {
+    pub async fn new() -> ConfigResult<Self> {
         let toml_manager = Arc::new(TomlConfigManager::new().await?);
         toml_manager.load_config().await?;
 
@@ -93,7 +92,7 @@ pub async fn config_reset_to_defaults(
 }
 
 #[tauri::command]
-pub async fn config_get_file_path(_state: State<'_, ConfigManagerState>) -> TauriApiResult<String> {
+pub async fn config_get_file_path() -> TauriApiResult<String> {
     Ok(api_success!("config/config.toml".to_string()))
 }
 
@@ -104,9 +103,7 @@ pub struct ConfigFileInfo {
 }
 
 #[tauri::command]
-pub async fn config_get_file_info(
-    _state: State<'_, ConfigManagerState>,
-) -> TauriApiResult<ConfigFileInfo> {
+pub async fn config_get_file_info() -> TauriApiResult<ConfigFileInfo> {
     Ok(api_success!(ConfigFileInfo {
         path: "config/config.toml".to_string(),
         exists: true,
@@ -114,18 +111,13 @@ pub async fn config_get_file_info(
 }
 
 #[tauri::command]
-pub async fn config_open_file<R: tauri::Runtime>(
-    _app: tauri::AppHandle<R>,
-    _state: State<'_, ConfigManagerState>,
-) -> TauriApiResult<EmptyData> {
+pub async fn config_open_file() -> TauriApiResult<EmptyData> {
     debug!("打开配置文件功能需要重新实现");
     Ok(api_success!())
 }
 
 #[tauri::command]
-pub async fn config_subscribe_events(
-    _state: State<'_, ConfigManagerState>,
-) -> TauriApiResult<EmptyData> {
+pub async fn config_subscribe_events() -> TauriApiResult<EmptyData> {
     debug!("订阅配置事件");
     Ok(api_success!())
 }

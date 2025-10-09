@@ -1,7 +1,5 @@
 // 工具模块
 
-pub mod error;
-
 pub mod api_response;
 
 pub mod language;

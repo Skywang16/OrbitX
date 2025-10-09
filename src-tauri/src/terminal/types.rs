@@ -1,7 +1,7 @@
 // 终端上下文相关类型定义
 
 use crate::mux::PaneId;
-use anyhow::{anyhow, Result};
+use crate::terminal::error::{TerminalValidationError, TerminalValidationResult};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
@@ -145,19 +145,19 @@ impl CommandInfo {
     /// 验证命令信息的有效性
     pub fn validate(&self) -> Result<(), String> {
         if self.command.trim().is_empty() {
-            return Err("命令不能为空".to_string());
+            return Err("Command cannot be empty".to_string());
         }
 
         // 验证时间逻辑
         if let Some(end_time) = self.end_time {
             if end_time < self.start_time {
-                return Err("结束时间不能早于开始时间".to_string());
+                return Err("End time cannot be earlier than start time".to_string());
             }
         }
 
         // 验证退出码逻辑
         if self.end_time.is_none() && self.exit_code.is_some() {
-            return Err("未完成的命令不应该有退出码".to_string());
+            return Err("Unfinished command should not have exit code".to_string());
         }
 
         Ok(())
@@ -215,23 +215,26 @@ impl TerminalContext {
     }
 
     /// 验证终端上下文的完整性
-    pub fn validate(&self) -> Result<()> {
+    pub fn validate(&self) -> TerminalValidationResult<()> {
         // 验证面板ID是否有效
         if self.pane_id.as_u32() == 0 {
-            return Err(anyhow!("无效的面板ID"));
+            return Err(TerminalValidationError::InvalidPaneId);
         }
 
         // 验证命令历史记录的完整性
         for (index, command) in self.command_history.iter().enumerate() {
             if let Err(e) = command.validate() {
-                return Err(anyhow!("命令历史记录第{}项无效: {}", index, e));
+                return Err(TerminalValidationError::InvalidHistoryEntry {
+                    index,
+                    reason: e,
+                });
             }
         }
 
         // 验证当前命令的完整性
         if let Some(ref command) = self.current_command {
             if let Err(e) = command.validate() {
-                return Err(anyhow!("当前命令无效: {}", e));
+                return Err(TerminalValidationError::InvalidCurrentCommand { reason: e });
             }
         }
 

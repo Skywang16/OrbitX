@@ -1,7 +1,7 @@
 use super::types::{AnsiColors, SyntaxHighlight, Theme, ThemeType, UIColors};
+use crate::config::error::{ThemeConfigError, ThemeConfigResult};
+use crate::config::paths::ConfigPaths;
 use crate::storage::cache::UnifiedCache;
-use crate::{config::paths::ConfigPaths, utils::error::AppResult};
-use anyhow::{anyhow, bail, Context};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -128,7 +128,7 @@ impl ThemeManager {
         paths: ConfigPaths,
         options: ThemeManagerOptions,
         cache: Arc<UnifiedCache>,
-    ) -> AppResult<Self> {
+    ) -> ThemeConfigResult<Self> {
         let manager = Self {
             paths,
             index: Arc::new(RwLock::new(None)),
@@ -149,12 +149,11 @@ impl ThemeManager {
     }
 
     /// 确保主题目录存在
-    async fn ensure_theme_directories(&self) -> AppResult<()> {
+    async fn ensure_theme_directories(&self) -> ThemeConfigResult<()> {
         let themes_dir = self.paths.themes_dir();
 
         if !themes_dir.exists() {
-            fs::create_dir_all(themes_dir)
-                .with_context(|| format!("Failed to create theme directory: {}", themes_dir.display()))?;
+            fs::create_dir_all(themes_dir).map_err(|e| ThemeConfigError::Io(e))?;
             info!("创建主题目录: {}", themes_dir.display());
         }
 
@@ -162,7 +161,7 @@ impl ThemeManager {
     }
 
     /// 加载主题索引
-    async fn load_theme_index(&self) -> AppResult<()> {
+    async fn load_theme_index(&self) -> ThemeConfigResult<()> {
         let index_path = self.paths.themes_dir().join("index.toml");
 
         let theme_index = if index_path.exists() {
@@ -173,10 +172,7 @@ impl ThemeManager {
 
         // 更新索引
         {
-            let mut index = self
-                .index
-                .write()
-                .map_err(|e| anyhow!("Failed to acquire index write lock: {}", e))?;
+            let mut index = self.index.write().map_err(ThemeConfigError::from_poison)?;
             *index = Some(theme_index);
         }
 
@@ -190,20 +186,29 @@ impl ThemeManager {
     }
 
     /// 从文件加载索引
-    async fn load_index_from_file(&self, index_path: &Path) -> AppResult<ThemeIndex> {
-        let content = tokio::fs::read_to_string(index_path)
-            .await
-            .with_context(|| format!("Failed to read theme index file: {}", index_path.display()))?;
+    async fn load_index_from_file(&self, index_path: &Path) -> ThemeConfigResult<ThemeIndex> {
+        let content = tokio::fs::read_to_string(index_path).await.map_err(|err| {
+            ThemeConfigError::Internal(format!(
+                "Failed to read theme index file {}: {}",
+                index_path.display(),
+                err
+            ))
+        })?;
 
-        let index: ThemeIndex = toml::from_str(&content)
-            .with_context(|| format!("Failed to parse theme index file: {}", index_path.display()))?;
+        let index: ThemeIndex = toml::from_str(&content).map_err(|err| {
+            ThemeConfigError::Internal(format!(
+                "Failed to parse theme index file {}: {}",
+                index_path.display(),
+                err
+            ))
+        })?;
 
         debug!("Theme index loaded successfully with {} themes", index.total_themes);
         Ok(index)
     }
 
     /// 创建默认索引
-    async fn create_default_index(&self) -> AppResult<ThemeIndex> {
+    async fn create_default_index(&self) -> ThemeConfigResult<ThemeIndex> {
         let index = ThemeIndex {
             version: "1.0.0".to_string(),
             last_updated: SystemTime::now(),
@@ -224,14 +229,22 @@ impl ThemeManager {
     }
 
     /// 保存索引到文件
-    async fn save_index_to_file(&self, index: &ThemeIndex) -> AppResult<()> {
+    async fn save_index_to_file(&self, index: &ThemeIndex) -> ThemeConfigResult<()> {
         let index_path = self.paths.themes_dir().join("index.toml");
 
-        let content = toml::to_string_pretty(index).with_context(|| "Failed to serialize theme index")?;
+        let content = toml::to_string_pretty(index).map_err(|err| {
+            ThemeConfigError::Internal(format!("Failed to serialize theme index: {}", err))
+        })?;
 
         tokio::fs::write(&index_path, content)
             .await
-            .with_context(|| format!("Failed to write theme index file: {}", index_path.display()))?;
+            .map_err(|err| {
+                ThemeConfigError::Internal(format!(
+                    "Failed to write theme index file {}: {}",
+                    index_path.display(),
+                    err
+                ))
+            })?;
 
         debug!("Theme index saved to: {}", index_path.display());
         Ok(())
@@ -244,7 +257,7 @@ impl ThemeManager {
     ///
     /// # Returns
     /// 返回主题数据
-    pub async fn load_theme(&self, theme_name: &str) -> AppResult<Theme> {
+    pub async fn load_theme(&self, theme_name: &str) -> ThemeConfigResult<Theme> {
         let cache_key = format!("theme:{}", theme_name);
 
         // 尝试从缓存获取
@@ -266,20 +279,24 @@ impl ThemeManager {
     }
 
     /// 从文件加载主题
-    async fn load_theme_from_file(&self, theme_name: &str) -> AppResult<Theme> {
+    async fn load_theme_from_file(&self, theme_name: &str) -> ThemeConfigResult<Theme> {
         let theme_path = self.get_theme_file_path(theme_name).await?;
 
-        let content = tokio::fs::read_to_string(&theme_path)
-            .await
-            .with_context(|| format!("Failed to read theme file: {}", theme_path.display()))?;
-
-        let theme_wrapper: ThemeFileWrapper = toml::from_str(&content).map_err(|e| {
-            anyhow!(
-                "Failed to parse theme file: {} \nTOML parse error: {} \nFile content:\n{}",
+        let content = tokio::fs::read_to_string(&theme_path).await.map_err(|err| {
+            ThemeConfigError::Internal(format!(
+                "Failed to read theme file {}: {}",
                 theme_path.display(),
-                e,
+                err
+            ))
+        })?;
+
+        let theme_wrapper: ThemeFileWrapper = toml::from_str(&content).map_err(|err| {
+            ThemeConfigError::Internal(format!(
+                "Failed to parse theme file {}: {}\n{}",
+                theme_path.display(),
+                err,
                 content
-            )
+            ))
         })?;
 
         let theme = theme_wrapper.theme;
@@ -287,7 +304,12 @@ impl ThemeManager {
         // 验证主题
         let validation_result = ThemeValidator::validate_theme(&theme);
         if !validation_result.is_valid {
-            bail!("Theme validation failed: {:?}", validation_result.errors);
+            return Err(ThemeConfigError::Validation {
+                reason: format!(
+                    "Theme validation failed: {:?}",
+                    validation_result.errors
+                ),
+            });
         }
 
         if !validation_result.warnings.is_empty() {
@@ -301,7 +323,7 @@ impl ThemeManager {
     }
 
     /// 获取主题文件路径
-    async fn get_theme_file_path(&self, theme_name: &str) -> AppResult<PathBuf> {
+    async fn get_theme_file_path(&self, theme_name: &str) -> ThemeConfigResult<PathBuf> {
         let themes_dir = self.paths.themes_dir();
 
         // 直接在 themes 目录下查找主题文件
@@ -310,21 +332,16 @@ impl ThemeManager {
             return Ok(theme_path);
         }
 
-        bail!(
-            "Theme file does not exist: {} (search path: {})",
-            theme_name,
-            themes_dir.display()
-        );
+        Err(ThemeConfigError::NotFound {
+            name: theme_name.to_string(),
+        })
     }
 
     /// 获取所有可用主题列表
-    pub async fn list_themes(&self) -> AppResult<Vec<ThemeIndexEntry>> {
+    pub async fn list_themes(&self) -> ThemeConfigResult<Vec<ThemeIndexEntry>> {
         // 首先尝试获取现有索引
         let themes = {
-            let index = self
-                .index
-                .read()
-                .map_err(|e| anyhow!("Failed to acquire index read lock: {}", e))?;
+            let index = self.index.read().map_err(ThemeConfigError::from_poison)?;
 
             if let Some(ref theme_index) = *index {
                 let mut themes = Vec::new();
@@ -347,10 +364,7 @@ impl ThemeManager {
             warn!("Theme index not initialized, attempting reload");
             self.load_theme_index().await?;
 
-            let index = self
-                .index
-                .read()
-                .map_err(|e| anyhow!("Failed to acquire index read lock: {}", e))?;
+            let index = self.index.read().map_err(ThemeConfigError::from_poison)?;
 
             if let Some(ref theme_index) = *index {
                 let mut themes = Vec::new();
@@ -358,7 +372,9 @@ impl ThemeManager {
                 themes.extend(theme_index.custom_themes.clone());
                 return Ok(themes);
             } else {
-                bail!("Theme index still not initialized after reload");
+                return Err(ThemeConfigError::Internal(
+                    "Theme index still not initialized after reload".to_string(),
+                ));
             }
         }
 
@@ -368,10 +384,7 @@ impl ThemeManager {
             warn!("Theme list empty, attempting to refresh index");
             self.refresh_index().await?;
 
-            let index = self
-                .index
-                .read()
-                .map_err(|e| anyhow!("Failed to acquire index read lock: {}", e))?;
+            let index = self.index.read().map_err(ThemeConfigError::from_poison)?;
 
             if let Some(ref theme_index) = *index {
                 let mut refreshed_themes = Vec::new();
@@ -386,21 +399,20 @@ impl ThemeManager {
     }
 
     /// 获取主题索引
-    pub async fn get_theme_index(&self) -> AppResult<ThemeIndex> {
-        let index = self
-            .index
-            .read()
-            .map_err(|e| anyhow!("Failed to acquire index read lock: {}", e))?;
+    pub async fn get_theme_index(&self) -> ThemeConfigResult<ThemeIndex> {
+        let index = self.index.read().map_err(ThemeConfigError::from_poison)?;
 
         if let Some(ref theme_index) = *index {
             Ok(theme_index.clone())
         } else {
-            bail!("Theme index not initialized");
+            Err(ThemeConfigError::Internal(
+                "Theme index not initialized".to_string(),
+            ))
         }
     }
 
     /// 刷新主题索引
-    pub async fn refresh_index(&self) -> AppResult<()> {
+    pub async fn refresh_index(&self) -> ThemeConfigResult<()> {
         info!("Starting theme index refresh");
 
         // 只扫描主题目录，不区分内置和自定义主题
@@ -441,10 +453,7 @@ impl ThemeManager {
 
         // 更新内存中的索引
         {
-            let mut index = self
-                .index
-                .write()
-                .map_err(|e| anyhow!("Failed to acquire index write lock: {}", e))?;
+            let mut index = self.index.write().map_err(ThemeConfigError::from_poison)?;
             *index = Some(new_index);
         }
 
@@ -462,21 +471,31 @@ impl ThemeManager {
         &self,
         dir: &Path,
         is_builtin: bool,
-    ) -> AppResult<Vec<ThemeIndexEntry>> {
+    ) -> ThemeConfigResult<Vec<ThemeIndexEntry>> {
         let mut themes = Vec::new();
 
         if !dir.exists() {
             return Ok(themes);
         }
 
-        let mut entries = tokio::fs::read_dir(dir)
-            .await
-            .with_context(|| format!("Failed to read directory: {}", dir.display()))?;
+        let mut entries = tokio::fs::read_dir(dir).await.map_err(|err| {
+            ThemeConfigError::Internal(format!(
+                "Failed to read directory {}: {}",
+                dir.display(),
+                err
+            ))
+        })?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .with_context(|| format!("Failed to read directory entry: {}", dir.display()))?
+            .map_err(|err| {
+                ThemeConfigError::Internal(format!(
+                    "Failed to read directory entry in {}: {}",
+                    dir.display(),
+                    err
+                ))
+            })?
         {
             let path = entry.path();
             if path.is_file() && path.extension().is_some_and(|ext| ext == "toml") {
@@ -508,20 +527,34 @@ impl ThemeManager {
         path: &Path,
         file_name: &str,
         is_builtin: bool,
-    ) -> AppResult<ThemeIndexEntry> {
-        let metadata = fs::metadata(path)
-            .with_context(|| format!("Failed to get file metadata: {}", path.display()))?;
+    ) -> ThemeConfigResult<ThemeIndexEntry> {
+        let metadata = fs::metadata(path).map_err(|err| {
+            ThemeConfigError::Internal(format!(
+                "Failed to get file metadata {}: {}",
+                path.display(),
+                err
+            ))
+        })?;
 
         let file_size = metadata.len();
         let last_modified = metadata.modified().ok();
 
         // 尝试读取主题文件以获取元数据
-        let content = tokio::fs::read_to_string(path)
-            .await
-            .with_context(|| format!("Failed to read theme file: {}", path.display()))?;
+        let content = tokio::fs::read_to_string(path).await.map_err(|err| {
+            ThemeConfigError::Internal(format!(
+                "Failed to read theme file {}: {}",
+                path.display(),
+                err
+            ))
+        })?;
 
-        let theme_wrapper: ThemeFileWrapper = toml::from_str(&content)
-            .map_err(|e| anyhow!("Failed to parse theme file: {} - {}", path.display(), e))?;
+        let theme_wrapper: ThemeFileWrapper = toml::from_str(&content).map_err(|err| {
+            ThemeConfigError::Internal(format!(
+                "Failed to parse theme file {}: {}",
+                path.display(),
+                err
+            ))
+        })?;
 
         let theme = theme_wrapper.theme;
 
@@ -538,18 +571,23 @@ impl ThemeManager {
     /// 创建内置主题文件
     ///
     /// 从打包的资源目录复制主题文件到用户配置目录
-    pub async fn create_builtin_themes(&self) -> AppResult<()> {
+    pub async fn create_builtin_themes(&self) -> ThemeConfigResult<()> {
         let themes_dir = self.paths.themes_dir();
 
         // 确保themes目录存在
         if !themes_dir.exists() {
-            fs::create_dir_all(themes_dir)
-                .with_context(|| format!("Failed to create theme directory: {}", themes_dir.display()))?;
+            fs::create_dir_all(themes_dir).map_err(|err| {
+                ThemeConfigError::Internal(format!(
+                    "Failed to create theme directory {}: {}",
+                    themes_dir.display(),
+                    err
+                ))
+            })?;
             info!("创建主题目录: {}", themes_dir.display());
         }
 
         // 尝试从资源目录复制主题文件
-        self.copy_themes_from_resources(themes_dir).await?;
+        self.copy_themes_from_resources().await?;
 
         self.ensure_default_themes_exist(themes_dir).await?;
 
@@ -567,19 +605,26 @@ impl ThemeManager {
 
     /// 扫描主题目录并加载现有主题文件
     #[allow(dead_code)]
-    async fn scan_and_load_existing_themes(&self, themes_dir: &Path) -> AppResult<()> {
+    async fn scan_and_load_existing_themes(&self, themes_dir: &Path) -> ThemeConfigResult<()> {
         if !themes_dir.exists() {
             self.create_default_theme_files(themes_dir).await?;
             return Ok(());
         }
 
         // 扫描现有的 TOML 主题文件
-        let entries = fs::read_dir(themes_dir)
-            .with_context(|| format!("Failed to read theme directory: {}", themes_dir.display()))?;
+        let entries = fs::read_dir(themes_dir).map_err(|err| {
+            ThemeConfigError::Internal(format!(
+                "Failed to read theme directory {}: {}",
+                themes_dir.display(),
+                err
+            ))
+        })?;
 
         let mut theme_count = 0;
         for entry in entries {
-            let entry = entry.with_context(|| "Failed to read directory entry")?;
+            let entry = entry.map_err(|err| {
+                ThemeConfigError::Internal(format!("Failed to read directory entry: {}", err))
+            })?;
             let path = entry.path();
 
             // 只处理 .toml 文件
@@ -612,27 +657,38 @@ impl ThemeManager {
 
     /// 验证主题文件格式
     #[allow(dead_code)]
-    async fn validate_theme_file(&self, path: &Path) -> AppResult<()> {
-        let content = tokio::fs::read_to_string(path)
-            .await
-            .with_context(|| format!("Failed to read theme file: {}", path.display()))?;
+    async fn validate_theme_file(&self, path: &Path) -> ThemeConfigResult<()> {
+        let content = tokio::fs::read_to_string(path).await.map_err(|err| {
+            ThemeConfigError::Internal(format!(
+                "Failed to read theme file {}: {}",
+                path.display(),
+                err
+            ))
+        })?;
 
-        let theme_wrapper: ThemeFileWrapper = toml::from_str(&content)
-            .with_context(|| format!("Failed to parse theme file: {}", path.display()))?;
+        let theme_wrapper: ThemeFileWrapper = toml::from_str(&content).map_err(|err| {
+            ThemeConfigError::Internal(format!(
+                "Failed to parse theme file {}: {}",
+                path.display(),
+                err
+            ))
+        })?;
 
         let theme = theme_wrapper.theme;
 
         // 验证主题
         let validation_result = ThemeValidator::validate_theme(&theme);
         if !validation_result.is_valid {
-            bail!("Theme validation failed: {:?}", validation_result.errors);
+            return Err(ThemeConfigError::Validation {
+                reason: format!("Theme validation failed: {:?}", validation_result.errors),
+            });
         }
 
         Ok(())
     }
 
     /// 创建默认主题文件
-    async fn create_default_theme_files(&self, themes_dir: &Path) -> AppResult<()> {
+    async fn create_default_theme_files(&self, themes_dir: &Path) -> ThemeConfigResult<()> {
         info!("Creating default theme files");
 
         let dark_theme_content = r##"[theme]
@@ -712,7 +768,13 @@ selection = "rgba(173, 214, 255, 0.3)"
         let dark_theme_path = themes_dir.join("dark.toml");
         tokio::fs::write(&dark_theme_path, dark_theme_content)
             .await
-            .with_context(|| format!("Failed to create default dark theme file: {}", dark_theme_path.display()))?;
+            .map_err(|err| {
+                ThemeConfigError::Internal(format!(
+                    "Failed to create default dark theme file {}: {}",
+                    dark_theme_path.display(),
+                    err
+                ))
+            })?;
 
         let light_theme_content = r##"[theme]
 name = "light"
@@ -789,20 +851,26 @@ selection = "rgba(3, 102, 214, 0.3)"
         let light_theme_path = themes_dir.join("light.toml");
         tokio::fs::write(&light_theme_path, light_theme_content)
             .await
-            .with_context(|| format!("Failed to create default light theme file: {}", light_theme_path.display()))?;
+            .map_err(|err| {
+                ThemeConfigError::Internal(format!(
+                    "Failed to create default light theme file {}: {}",
+                    light_theme_path.display(),
+                    err
+                ))
+            })?;
 
         info!("Default theme files created successfully");
         Ok(())
     }
 
     /// 从打包的资源目录复制主题文件
-    async fn copy_themes_from_resources(&self, _themes_dir: &Path) -> AppResult<()> {
+    async fn copy_themes_from_resources(&self) -> ThemeConfigResult<()> {
         // 实际的资源复制在应用初始化时通过 AppHandle 完成
         Ok(())
     }
 
     /// 确保默认主题存在
-    async fn ensure_default_themes_exist(&self, themes_dir: &Path) -> AppResult<()> {
+    async fn ensure_default_themes_exist(&self, themes_dir: &Path) -> ThemeConfigResult<()> {
         let dark_theme_path = themes_dir.join("dark.toml");
         let light_theme_path = themes_dir.join("light.toml");
 
@@ -889,7 +957,7 @@ impl ThemeValidator {
         Self::validate_syntax_highlight(&theme.syntax, errors, warnings);
 
         // 验证UI颜色
-        Self::validate_ui_colors(&theme.ui, errors, warnings);
+        Self::validate_ui_colors(&theme.ui, errors);
     }
 
     /// 验证 ANSI 颜色
@@ -943,7 +1011,7 @@ impl ThemeValidator {
     }
 
     /// 验证UI颜色 - 支持新的层次系统
-    fn validate_ui_colors(ui: &UIColors, errors: &mut Vec<String>, _warnings: &mut [String]) {
+    fn validate_ui_colors(ui: &UIColors, errors: &mut Vec<String>) {
         let ui_fields = [
             // 背景色层次
             ("bg_100", &ui.bg_100),

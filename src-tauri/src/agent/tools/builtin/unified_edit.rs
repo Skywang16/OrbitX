@@ -9,8 +9,9 @@ use tokio::fs;
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
 use crate::agent::persistence::FileRecordSource;
+use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolExecutorResult, ToolMetadata, ToolPermission, ToolPriority,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
     ToolResult, ToolResultContent,
 };
 
@@ -42,17 +43,17 @@ impl UnifiedEditTool {
         match fs::metadata(path).await {
             Ok(meta) => {
                 if meta.is_dir() {
-                    return Err(error_result(format!("路径 {} 是目录", path.display())));
+                    return Err(error_result(format!("Path {} is a directory", path.display())));
                 }
             }
             Err(_) => {
-                return Err(error_result(format!("文件不存在: {}", path.display())));
+                return Err(error_result(format!("File does not exist: {}", path.display())));
             }
         }
 
         if is_probably_binary(path) {
             return Err(error_result(format!(
-                "文件 {} 可能为二进制",
+                "File {} may be binary",
                 path.display()
             )));
         }
@@ -60,7 +61,7 @@ impl UnifiedEditTool {
         match fs::read_to_string(path).await {
             Ok(content) => Ok(content),
             Err(err) => Err(error_result(format!(
-                "读取文件 {} 失败: {}",
+                "Failed to read file {}: {}",
                 path.display(),
                 err
             ))),
@@ -70,7 +71,7 @@ impl UnifiedEditTool {
     async fn ensure_parent(path: &PathBuf) -> Result<(), ToolResult> {
         if let Some(parent) = path.parent() {
             if !parent.exists() {
-                return Err(error_result(format!("父目录不存在: {}", parent.display())));
+                return Err(error_result(format!("Parent directory does not exist: {}", parent.display())));
             }
         }
         Ok(())
@@ -131,13 +132,13 @@ impl RunnableTool for UnifiedEditTool {
                 };
 
                 if !original.contains(&old_text) {
-                    return Ok(error_result("未找到需要替换的文本"));
+                    return Ok(error_result("Text to replace not found"));
                 }
 
                 let updated = original.replace(&old_text, &new_text);
                 if let Err(err) = fs::write(&path, &updated).await {
                     return Ok(error_result(format!(
-                        "写入文件 {} 失败: {}",
+                        "Failed to write file {}: {}",
                         path.display(),
                         err
                     )));
@@ -161,7 +162,7 @@ impl RunnableTool for UnifiedEditTool {
 
                 if is_probably_binary(&path) {
                     return Ok(error_result(format!(
-                        "文件 {} 可能为二进制",
+                        "File {} may be binary",
                         path.display()
                     )));
                 }
@@ -169,11 +170,11 @@ impl RunnableTool for UnifiedEditTool {
                 let (mut lines, trailing_newline) = match fs::metadata(&path).await {
                     Ok(meta) => {
                         if meta.is_dir() {
-                            return Ok(error_result(format!("路径 {} 是目录", path.display())));
+                            return Ok(error_result(format!("Path {} is a directory", path.display())));
                         }
                         if is_probably_binary(&path) {
                             return Ok(error_result(format!(
-                                "文件 {} 可能为二进制",
+                                "File {} may be binary",
                                 path.display()
                             )));
                         }
@@ -203,7 +204,7 @@ impl RunnableTool for UnifiedEditTool {
 
                 if let Err(err) = fs::write(&path, &updated).await {
                     return Ok(error_result(format!(
-                        "写入文件 {} 失败: {}",
+                        "Failed to write file {}: {}",
                         path.display(),
                         err
                     )));
@@ -231,20 +232,20 @@ impl RunnableTool for UnifiedEditTool {
                 let patch = match Patch::from_str(&diff_content) {
                     Ok(patch) => patch,
                     Err(err) => {
-                        return Ok(error_result(format!("解析补丁失败: {}", err)));
+                        return Ok(error_result(format!("Failed to parse patch: {}", err)));
                     }
                 };
 
                 let updated = match apply(&original, &patch) {
                     Ok(result) => result,
                     Err(err) => {
-                        return Ok(error_result(format!("应用补丁失败: {}", err)));
+                        return Ok(error_result(format!("Failed to apply patch: {}", err)));
                     }
                 };
 
                 if let Err(err) = fs::write(&path, &updated).await {
                     return Ok(error_result(format!(
-                        "写入文件 {} 失败: {}",
+                        "Failed to write file {}: {}",
                         path.display(),
                         err
                     )));

@@ -3,10 +3,8 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
-
 use crate::agent::config::PromptComponent;
-use crate::agent::error::AgentResult;
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::prompt::components::types::{ComponentContext, ComponentDefinition};
 use crate::agent::prompt::template_engine::TemplateEngine;
 
@@ -53,7 +51,7 @@ impl ComponentDefinition for ToolsDescriptionComponent {
 
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing tools description template")?;
+            .ok_or_else(|| AgentError::Internal("missing tools description template".to_string()))?;
 
         let tools_list = context
             .tools
@@ -67,7 +65,7 @@ impl ComponentDefinition for ToolsDescriptionComponent {
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| anyhow!("failed to render tools description template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render tools description template: {}", e)))?;
         Ok(Some(result))
     }
 }

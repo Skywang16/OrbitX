@@ -1,7 +1,6 @@
+use crate::ai::error::{AIServiceError, AIServiceResult};
 use crate::ai::types::{AIModelConfig, AIProvider, ModelType};
 use crate::storage::repositories::{Repository, RepositoryManager};
-use crate::utils::error::AppResult;
-use anyhow::{anyhow, Context};
 use chrono::Utc;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 use reqwest::{Client, StatusCode};
@@ -49,44 +48,59 @@ impl AIService {
         Self { repositories }
     }
 
-    pub async fn initialize(&self) -> AppResult<()> {
+    pub async fn initialize(&self) -> AIServiceResult<()> {
         Ok(())
     }
 
-    pub async fn get_models(&self) -> AppResult<Vec<AIModelConfig>> {
+    pub async fn get_models(&self) -> AIServiceResult<Vec<AIModelConfig>> {
         self.repositories
             .ai_models()
             .find_all()
             .await
-            .context("加载AI模型配置失败")
+            .map_err(|err| AIServiceError::Repository {
+                operation: "ai_models.find_all",
+                source: err,
+            })
     }
 
-    pub async fn add_model(&self, config: AIModelConfig) -> AppResult<()> {
+    pub async fn add_model(&self, config: AIModelConfig) -> AIServiceResult<()> {
         self.repositories
             .ai_models()
             .save(&config)
             .await
             .map(|_| ())
-            .context("保存AI模型配置失败")
+            .map_err(|err| AIServiceError::Repository {
+                operation: "ai_models.save",
+                source: err,
+            })
     }
 
-    pub async fn remove_model(&self, model_id: &str) -> AppResult<()> {
+    pub async fn remove_model(&self, model_id: &str) -> AIServiceResult<()> {
         self.repositories
             .ai_models()
             .delete_by_string_id(model_id)
             .await
-            .with_context(|| format!("删除AI模型配置失败: {}", model_id))
+            .map_err(|err| AIServiceError::Repository {
+                operation: "ai_models.delete_by_string_id",
+                source: err,
+            })
     }
 
-    pub async fn update_model(&self, model_id: &str, updates: Value) -> AppResult<()> {
+    pub async fn update_model(&self, model_id: &str, updates: Value) -> AIServiceResult<()> {
         let update_payload: AIModelUpdatePayload =
-            serde_json::from_value(updates).context("解析AI模型更新请求失败")?;
+            serde_json::from_value(updates).map_err(AIServiceError::InvalidUpdatePayload)?;
 
         let repo = self.repositories.ai_models();
         let mut existing = repo
             .find_by_string_id(model_id)
-            .await?
-            .ok_or_else(|| anyhow!("模型不存在: {}", model_id))?;
+            .await
+            .map_err(|err| AIServiceError::Repository {
+                operation: "ai_models.find_by_string_id",
+                source: err,
+            })?
+            .ok_or_else(|| AIServiceError::ModelNotFound {
+                model_id: model_id.to_string(),
+            })?;
 
         if let Some(name) = update_payload.name.and_then(trimmed) {
             existing.name = name;
@@ -115,21 +129,35 @@ impl AIService {
 
         existing.updated_at = Utc::now();
 
-        repo.update(&existing).await.context("更新AI模型配置失败")
+        repo.update(&existing)
+            .await
+            .map_err(|err| AIServiceError::Repository {
+                operation: "ai_models.update",
+                source: err,
+            })
     }
 
-    pub async fn test_connection(&self, model_id: &str) -> AppResult<String> {
+    pub async fn test_connection(&self, model_id: &str) -> AIServiceResult<String> {
         let model = self
             .repositories
             .ai_models()
             .find_by_string_id(model_id)
-            .await?
-            .ok_or_else(|| anyhow!("模型不存在: {}", model_id))?;
+            .await
+            .map_err(|err| AIServiceError::Repository {
+                operation: "ai_models.find_by_string_id",
+                source: err,
+            })?
+            .ok_or_else(|| AIServiceError::ModelNotFound {
+                model_id: model_id.to_string(),
+            })?;
 
         self.test_connection_with_config(&model).await
     }
 
-    pub async fn test_connection_with_config(&self, model: &AIModelConfig) -> AppResult<String> {
+    pub async fn test_connection_with_config(
+        &self,
+        model: &AIModelConfig,
+    ) -> AIServiceResult<String> {
         let probe = self.build_probe(model)?;
 
         match probe {
@@ -138,7 +166,7 @@ impl AIService {
         }
     }
 
-    fn build_probe(&self, model: &AIModelConfig) -> AppResult<ConnectionProbe> {
+    fn build_probe(&self, model: &AIModelConfig) -> AIServiceResult<ConnectionProbe> {
         let timeout = self.resolve_timeout(model);
 
         match model.provider {
@@ -208,11 +236,14 @@ impl AIService {
         }
     }
 
-    async fn execute_http_probe(&self, request: ProviderHttpRequest) -> AppResult<String> {
+    async fn execute_http_probe(
+        &self,
+        request: ProviderHttpRequest,
+    ) -> AIServiceResult<String> {
         let client = Client::builder()
             .timeout(request.timeout)
             .build()
-            .context("创建HTTP客户端失败")?;
+            .map_err(AIServiceError::HttpClient)?;
 
         let mut headers = request.headers.clone();
         headers
@@ -227,27 +258,34 @@ impl AIService {
             .json(&request.payload)
             .send()
             .await
-            .with_context(|| format!("{} 请求发送失败", request.provider_label))?;
+            .map_err(|err| AIServiceError::ProviderRequest {
+                provider: request.provider_label,
+                source: err,
+            })?;
 
         let status = response.status();
         if status.is_success() || request.tolerated.iter().any(|code| *code == status) {
-            info!("{} 连接测试成功，状态码 {}", request.provider_label, status);
-            Ok("连接成功".to_string())
+            info!("{} connection test successful, status code {}", request.provider_label, status);
+            Ok("Connection successful".to_string())
         } else {
             let error_text = response
                 .text()
                 .await
-                .unwrap_or_else(|_| "(无法读取响应内容)".to_string());
+                .unwrap_or_else(|_| "(failed to read response body)".to_string());
             let error_msg = format!(
-                "{} API 错误: {} - {}",
+                "{} API error: {} - {}",
                 request.provider_label, status, error_text
             );
             warn!("{}", error_msg);
-            Err(anyhow!(error_msg))
+            Err(AIServiceError::ProviderApi {
+                provider: request.provider_label,
+                status,
+                message: error_msg,
+            })
         }
     }
 
-    async fn execute_gemini_probe(&self, model: &AIModelConfig) -> AppResult<String> {
+    async fn execute_gemini_probe(&self, model: &AIModelConfig) -> AIServiceResult<String> {
         use crate::llm::providers::base::LLMProvider;
         use crate::llm::providers::gemini::GeminiProvider;
         use crate::llm::types::{
@@ -285,7 +323,7 @@ impl AIService {
             .call(request)
             .await
             .map(|_| "Connection successful".to_string())
-            .map_err(|e| anyhow!("Gemini API error: {}", e))
+            .map_err(|e| AIServiceError::GeminiApi(e.to_string()))
     }
 
     fn resolve_timeout(&self, model: &AIModelConfig) -> Duration {
@@ -300,11 +338,16 @@ impl AIService {
     }
 }
 
-fn header_map(entries: &[(&'static str, String)]) -> AppResult<HeaderMap> {
+fn header_map(entries: &[(&'static str, String)]) -> AIServiceResult<HeaderMap> {
     let mut headers = HeaderMap::new();
     for (name, value) in entries {
         let header_name = HeaderName::from_static(name);
-        headers.insert(header_name, HeaderValue::from_str(value.trim())?);
+        let header_value =
+            HeaderValue::from_str(value.trim()).map_err(|err| AIServiceError::InvalidHeaderValue {
+                name,
+                source: err,
+            })?;
+        headers.insert(header_name, header_value);
     }
     Ok(headers)
 }

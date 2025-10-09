@@ -2,6 +2,13 @@ use super::*;
 use crate::{api_error, t};
 use crate::utils::{ApiResponse, TauriApiResult};
 
+fn serialize_to_value<T: serde::Serialize>(
+    value: &T,
+    context: &str,
+) -> Result<serde_json::Value, String> {
+    serde_json::to_value(value).map_err(|e| format!("{} serialization failed: {}", context, e))
+}
+
 #[tauri::command]
 pub async fn window_manage_state<R: Runtime>(
     request: WindowStateBatchRequest,
@@ -10,7 +17,7 @@ pub async fn window_manage_state<R: Runtime>(
 ) -> TauriApiResult<WindowStateBatchResponse> {
     let start_time = Instant::now();
     debug!(
-        "开始批量窗口状态管理: operations_count={}",
+        "Batch window state operations started: operations_count={}",
         request.operations.len()
     );
 
@@ -20,18 +27,17 @@ pub async fn window_manage_state<R: Runtime>(
     let window_id = match state
         .with_config_manager(|config| Ok(config.get_default_window_id().to_string()))
         .await
-        .to_tauri()
     {
         Ok(id) => id,
         Err(_) => return Ok(api_error!("window.get_window_id_failed")),
     };
 
-    debug!("使用窗口ID: {}", window_id);
+    debug!("Using window id: {}", window_id);
 
     let window = match app.get_webview_window(&window_id) {
         Some(window) => window,
         None => {
-            error!("无法获取窗口实例: {}", window_id);
+            error!("Failed to get window instance: {}", window_id);
             return Ok(api_error!("window.get_instance_failed"));
         }
     };
@@ -51,13 +57,13 @@ pub async fn window_manage_state<R: Runtime>(
 
     if overall_success {
         debug!(
-            "批量窗口状态管理成功: operations_count={}, 耗时: {}ms",
+            "Batch window state operations succeeded: operations_count={}, elapsed_ms={}",
             results.len(),
             processing_time
         );
     } else {
         warn!(
-            "批量窗口状态管理部分失败: operations_count={}, 耗时: {}ms",
+            "Batch window state operations partially failed: operations_count={}, elapsed_ms={}",
             results.len(),
             processing_time
         );
@@ -76,7 +82,7 @@ async fn process_single_window_operation<R: Runtime>(
     state: &State<'_, WindowState>,
 ) -> WindowStateOperationResult {
     let operation_start = Instant::now();
-    debug!("处理窗口操作: {:?}", request.operation);
+    debug!("Processing window operation: {:?}", request.operation);
 
     let result = match &request.operation {
         WindowStateOperation::GetState => handle_get_state(state).await,
@@ -92,7 +98,7 @@ async fn process_single_window_operation<R: Runtime>(
     match result {
         Ok(data) => {
             debug!(
-                "窗口操作成功: {:?}, 耗时: {}ms",
+                "Window operation succeeded: {:?}, elapsed_ms: {}",
                 request.operation, processing_time
             );
             WindowStateOperationResult {
@@ -104,7 +110,7 @@ async fn process_single_window_operation<R: Runtime>(
         }
         Err(error) => {
             error!(
-                "窗口操作失败: {:?}, 错误: {}, 耗时: {}ms",
+                "Window operation failed: {:?}, error: {}, elapsed_ms: {}",
                 request.operation, error, processing_time
             );
             WindowStateOperationResult {
@@ -119,12 +125,11 @@ async fn process_single_window_operation<R: Runtime>(
 
 // 处理获取窗口状态操作
 async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::Value, String> {
-    debug!("处理获取窗口状态操作");
+    debug!("Handling get window state operation");
 
     let always_on_top = state
         .with_state_manager(|manager| Ok(manager.get_always_on_top()))
         .await
-        .to_tauri()
         .map_err(|_| t!("window.get_state_failed"))?;
 
     let current_directory = if let Some(cached_dir) = state.cache.get("current_dir").await {
@@ -146,7 +151,6 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
     let platform_info = state
         .with_config_manager(|config| Ok(config.window_get_platform_info().cloned()))
         .await
-        .to_tauri()
         .ok()
         .flatten()
         .unwrap_or_else(|| PlatformInfo {
@@ -167,100 +171,87 @@ async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::
             .as_secs(),
     };
 
-    serialize_to_value(&complete_state, "窗口状态")
+    serialize_to_value(&complete_state, "window state payload")
         .map_err(|_| t!("window.get_state_failed"))
 }
 
-// 处理设置置顶状态操作
+// handle the "set always on top" operation
 async fn handle_set_always_on_top<R: Runtime>(
     request: &WindowStateOperationRequest,
     window: &tauri::WebviewWindow<R>,
     state: &State<'_, WindowState>,
 ) -> Result<serde_json::Value, String> {
-    debug!("处理设置置顶状态操作");
+    debug!("Handling window always-on-top assignment");
 
     let always_on_top = match request.params.as_ref().and_then(|p| p.always_on_top) {
         Some(value) => value,
         None => return Err(t!("window.missing_always_on_top_param")),
     };
 
-    if let Err(_) = window
-        .set_always_on_top(always_on_top)
-        .context("设置窗口置顶失败")
-        .to_tauri()
-    {
+    if window.set_always_on_top(always_on_top).is_err() {
         return Err(t!("window.set_always_on_top_failed"));
     }
 
-    if let Err(_) = state
+    if state
         .with_state_manager_mut(|manager| {
             manager.set_always_on_top(always_on_top);
             Ok(())
         })
         .await
-        .to_tauri()
+        .is_err()
     {
         return Err(t!("window.set_always_on_top_failed"));
     }
 
-    serialize_to_value(&always_on_top, "置顶状态")
+    serialize_to_value(&always_on_top, "always on top flag")
         .map_err(|_| t!("window.set_always_on_top_failed"))
 }
 
-// 处理切换置顶状态操作
+// handle toggle always-on-top
 async fn handle_toggle_always_on_top<R: Runtime>(
     window: &tauri::WebviewWindow<R>,
     state: &State<'_, WindowState>,
 ) -> Result<serde_json::Value, String> {
-    debug!("处理切换置顶状态操作");
+    debug!("Handling window always-on-top toggle");
 
     let new_state = state
         .with_state_manager_mut(|manager| Ok(manager.toggle_always_on_top()))
         .await
-        .to_tauri()
         .map_err(|_| t!("window.toggle_always_on_top_failed"))?;
 
-    if let Err(_) = window
-        .set_always_on_top(new_state)
-        .context("设置窗口置顶失败")
-        .to_tauri()
-    {
+    if window.set_always_on_top(new_state).is_err() {
         return Err(t!("window.toggle_always_on_top_failed"));
     }
 
-    serialize_to_value(&new_state, "切换状态")
+    serialize_to_value(&new_state, "toggle result")
         .map_err(|_| t!("window.toggle_always_on_top_failed"))
 }
 
-// 处理重置窗口状态操作
+// handle resetting window state
 async fn handle_reset_state<R: Runtime>(
     window: &tauri::WebviewWindow<R>,
     state: &State<'_, WindowState>,
 ) -> Result<serde_json::Value, String> {
-    debug!("处理重置窗口状态操作");
+    debug!("Handling window state reset");
 
-    if let Err(_) = state
+    if state
         .with_state_manager_mut(|manager| {
             manager.reset();
             Ok(())
         })
         .await
-        .to_tauri()
+        .is_err()
     {
         return Err(t!("window.reset_state_failed"));
     }
 
-    if let Err(_) = window
-        .set_always_on_top(false)
-        .context("重置窗口置顶失败")
-        .to_tauri()
-    {
+    if window.set_always_on_top(false).is_err() {
         return Err(t!("window.reset_state_failed"));
     }
 
     let _ = state.cache.remove("current_dir").await;
     let _ = state.cache.remove("home_dir").await;
 
-    serialize_to_value(&true, "重置结果")
+    serialize_to_value(&true, "reset result")
         .map_err(|_| t!("window.reset_state_failed"))
 }

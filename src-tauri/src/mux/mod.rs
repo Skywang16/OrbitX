@@ -2,6 +2,7 @@
 //!
 //! 提供统一的终端会话管理、事件通知和PTY I/O处理
 
+pub mod error;
 pub mod config;
 
 pub mod io_handler;
@@ -14,6 +15,10 @@ pub mod types;
 
 pub use config::*;
 
+pub use error::{
+    IoHandlerError, IoHandlerResult, MuxError, MuxResult, PaneError, PaneResult, TerminalMuxError,
+    TerminalMuxResult,
+};
 pub use io_handler::*;
 pub use pane::*;
 pub use performance_monitor::*;

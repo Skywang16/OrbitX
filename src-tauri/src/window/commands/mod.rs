@@ -1,4 +1,4 @@
-// 窗口功能的Tauri命令接口模块
+// Window command handlers exposed to Tauri
 
 pub mod directory;
 pub mod opacity;
@@ -10,8 +10,7 @@ pub use opacity::*;
 pub use platform::*;
 pub use state::*;
 
-use crate::utils::error::{serialize_to_value, AppResult, ToTauriResult};
-use anyhow::Context;
+use crate::window::WindowStateResult;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::{Path, PathBuf};
@@ -21,7 +20,7 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::Mutex;
 use tracing::{debug, error, warn};
 
-// 窗口状态管理
+// Window state management container
 pub struct WindowState {
     pub cache: crate::storage::cache::UnifiedCache,
     pub config_manager: Arc<Mutex<WindowConfigManager>>,
@@ -218,8 +217,8 @@ impl Default for WindowConfigManager {
 }
 
 impl WindowState {
-    pub fn new() -> AppResult<Self> {
-        debug!("开始初始化窗口状态");
+    pub fn new() -> WindowStateResult<Self> {
+        debug!("Initialising window state container");
 
         let config_manager = Arc::new(Mutex::new(WindowConfigManager::new()));
         let state_manager = Arc::new(Mutex::new(WindowStateManager::new()));
@@ -230,37 +229,37 @@ impl WindowState {
             state_manager,
         };
 
-        debug!("窗口状态初始化成功");
+        debug!("Window state initialised");
         Ok(state)
     }
 
-    pub async fn with_config_manager<F, R>(&self, f: F) -> AppResult<R>
+    pub async fn with_config_manager<F, R>(&self, f: F) -> WindowStateResult<R>
     where
-        F: FnOnce(&WindowConfigManager) -> AppResult<R>,
+        F: FnOnce(&WindowConfigManager) -> WindowStateResult<R>,
     {
         let config_manager = self.config_manager.lock().await;
         f(&*config_manager)
     }
 
-    pub async fn with_config_manager_mut<F, R>(&self, f: F) -> AppResult<R>
+    pub async fn with_config_manager_mut<F, R>(&self, f: F) -> WindowStateResult<R>
     where
-        F: FnOnce(&mut WindowConfigManager) -> AppResult<R>,
+        F: FnOnce(&mut WindowConfigManager) -> WindowStateResult<R>,
     {
         let mut config_manager = self.config_manager.lock().await;
         f(&mut *config_manager)
     }
 
-    pub async fn with_state_manager<F, R>(&self, f: F) -> AppResult<R>
+    pub async fn with_state_manager<F, R>(&self, f: F) -> WindowStateResult<R>
     where
-        F: FnOnce(&WindowStateManager) -> AppResult<R>,
+        F: FnOnce(&WindowStateManager) -> WindowStateResult<R>,
     {
         let state_manager = self.state_manager.lock().await;
         f(&*state_manager)
     }
 
-    pub async fn with_state_manager_mut<F, R>(&self, f: F) -> AppResult<R>
+    pub async fn with_state_manager_mut<F, R>(&self, f: F) -> WindowStateResult<R>
     where
-        F: FnOnce(&mut WindowStateManager) -> AppResult<R>,
+        F: FnOnce(&mut WindowStateManager) -> WindowStateResult<R>,
     {
         let mut state_manager = self.state_manager.lock().await;
         f(&mut *state_manager)

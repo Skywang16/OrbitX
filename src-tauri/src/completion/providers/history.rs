@@ -2,11 +2,10 @@
 //!
 //! 基于用户的命令历史提供补全建议
 
+use crate::completion::error::{CompletionProviderError, CompletionProviderResult};
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
 use crate::storage::cache::UnifiedCache;
-use crate::utils::error::AppResult;
-use anyhow::Context;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -95,7 +94,7 @@ impl HistoryProvider {
     }
 
     /// 从文件读取历史记录
-    async fn read_history(&self) -> AppResult<Vec<String>> {
+    async fn read_history(&self) -> CompletionProviderResult<Vec<String>> {
         let cache_key = "completion:history:commands";
 
         // 尝试从缓存获取
@@ -110,7 +109,11 @@ impl HistoryProvider {
             if history_file.exists() {
                 let content = fs::read_to_string(history_file)
                     .await
-                    .context("读取历史文件失败")?;
+                    .map_err(|e| CompletionProviderError::io(
+                        "read history file",
+                        format!("({})", history_file.display()),
+                        e,
+                    ))?;
                 let commands = self.parse_history_content(&content);
 
                 // 存入缓存
@@ -187,7 +190,10 @@ impl HistoryProvider {
     }
 
     /// 获取匹配的历史命令
-    async fn get_matching_commands(&self, pattern: &str) -> AppResult<Vec<CompletionItem>> {
+    async fn get_matching_commands(
+        &self,
+        pattern: &str,
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let commands = self.read_history().await?;
         let mut matches = Vec::new();
 
@@ -266,7 +272,7 @@ impl CompletionProvider for HistoryProvider {
     async fn provide_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         if context.current_word.is_empty() {
             return Ok(Vec::new());
         }

@@ -3,10 +3,8 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
-
 use crate::agent::config::PromptComponent;
-use crate::agent::error::AgentResult;
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::prompt::components::types::{ComponentContext, ComponentDefinition};
 use crate::agent::prompt::template_engine::TemplateEngine;
 
@@ -73,14 +71,14 @@ impl ComponentDefinition for WorkspaceSnapshotComponent {
 
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing workspace snapshot template")?;
+            .ok_or_else(|| AgentError::Internal("missing workspace snapshot template".to_string()))?;
 
         let mut template_context = HashMap::new();
         template_context.insert("snapshot".to_string(), json!(snapshot));
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| anyhow!("failed to render workspace snapshot template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render workspace snapshot template: {}", e)))?;
 
         Ok(Some(result))
     }
@@ -125,17 +123,16 @@ impl ComponentDefinition for AdditionalContextComponent {
 
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing additional context template")?;
+            .ok_or_else(|| AgentError::Internal("missing additional context template".to_string()))?;
 
-        let pretty = serde_json::to_string_pretty(&context.additional_context)
-            .context("failed to format additional context as JSON")?;
+        let pretty = serde_json::to_string_pretty(&context.additional_context)?;
 
         let mut template_context = HashMap::new();
         template_context.insert("context".to_string(), json!(pretty));
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| anyhow!("failed to render additional context template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render additional context template: {}", e)))?;
 
         Ok(Some(result))
     }

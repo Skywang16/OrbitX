@@ -4,9 +4,6 @@
     "not_found": "资源不存在",
     "invalid_id": "无效的ID",
     "empty_content": "内容不能为空",
-    "invalid_role": "无效的角色",
-    "title_empty": "标题不能为空",
-    "content_empty": "内容不能为空",
     "path_empty": "路径不能为空",
     "invalid_path": "路径无效",
     "success": "操作成功",
@@ -14,15 +11,6 @@
     "system_error": "系统错误"
   },
   "ai": {
-    "conversation_not_found": "会话不存在",
-    "create_conversation_failed": "创建会话失败",
-    "get_conversations_failed": "获取会话列表失败",
-    "get_conversation_failed": "获取会话详情失败",
-    "update_title_failed": "更新会话标题失败",
-    "delete_conversation_failed": "删除会话失败",
-    "truncate_conversation_failed": "截断会话失败",
-    "save_message_failed": "保存消息失败",
-    "update_message_failed": "更新消息失败",
     "add_model_failed": "添加模型失败",
     "remove_model_failed": "删除模型失败",
     "update_model_failed": "更新模型失败",
@@ -30,11 +18,7 @@
     "test_connection_error": "连接测试失败: {error}",
     "api_url_empty": "API URL不能为空",
     "api_key_empty": "API Key不能为空",
-    "model_name_empty": "模型名称不能为空",
-    "get_prefix_prompt_failed": "获取前置提示词失败",
-    "set_prefix_prompt_failed": "设置前置提示词失败",
-    "get_context_failed": "获取上下文失败",
-    "build_prompt_failed": "构建提示词失败"
+    "model_name_empty": "模型名称不能为空"
   },
   "completion": {
     "get_failed": "获取补全建议失败",
@@ -83,18 +67,7 @@
   "shell": {
     "pane_not_exist": "终端面板不存在",
     "setup_integration_failed": "设置Shell集成失败",
-    "get_cwd_failed": "获取工作目录失败",
-    "update_cwd_failed": "更新工作目录失败",
-    "get_shell_state_failed": "获取Shell状态失败",
-    "set_shell_type_failed": "设置Shell类型失败",
     "generate_script_failed": "生成集成脚本失败",
-    "generate_env_vars_failed": "生成环境变量失败",
-    "enable_integration_failed": "启用集成失败",
-    "disable_integration_failed": "禁用集成失败",
-    "get_current_command_failed": "获取当前命令失败",
-    "get_command_history_failed": "获取命令历史失败",
-    "detect_shell_type_failed": "检测Shell类型失败",
-    "check_support_failed": "检查集成支持失败",
     "execute_command_failed": "执行后台命令失败",
     "command_empty": "命令不能为空",
     "quotes_mismatch": "引号不匹配",
@@ -104,11 +77,9 @@
     "write_terminal_failed": "写入终端失败",
     "resize_terminal_failed": "调整终端大小失败",
     "close_terminal_failed": "关闭终端失败",
-    "set_buffer_failed": "设置缓冲区失败",
     "find_shell_failed": "查找shell失败",
     "shell_not_found": "未找到指定Shell",
-    "get_buffer_failed": "获取缓冲区失败",
-    "operation_failed": "操作失败"
+    "get_buffer_failed": "获取缓冲区失败"
   },
   "shortcuts": {
     "get_failed": "获取快捷键配置失败",
@@ -155,8 +126,6 @@
     "invalid_query": "搜索查询长度至少需要3个字符",
     "search_failed": "代码搜索失败",
     "index_not_found": "索引未就绪，请先构建索引或启用自动重建",
-    "build_failed": "索引构建失败",
-    "build_canceled": "索引构建已取消",
     "delete_failed": "删除索引失败"
   },
   "storage": {
@@ -164,19 +133,5 @@
     "update_config_failed": "更新配置失败",
     "save_session_failed": "保存会话状态失败",
     "load_session_failed": "加载会话状态失败"
-  },
-  "eko_ctx": {
-    "upsert_state_failed": "更新Eko状态失败",
-    "append_event_failed": "追加Eko事件失败",
-    "snapshot_save_failed": "保存Eko快照失败",
-    "get_state_failed": "获取Eko状态失败",
-    "rebuild_failed": "重建Eko上下文失败",
-    "build_prompt_failed": "构建Prompt失败"
-  },
-  "ui_task": {
-    "upsert_failed": "创建/更新UI任务失败",
-    "bulk_upsert_failed": "批量操作UI任务失败",
-    "list_failed": "获取UI任务列表失败",
-    "delete_failed": "删除UI任务失败"
   }
 }

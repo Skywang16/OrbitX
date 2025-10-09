@@ -1,4 +1,3 @@
-use anyhow::Result;
 use percent_encoding::percent_decode_str;
 use std::borrow::Cow;
 
@@ -61,8 +60,8 @@ pub enum WindowTitleType {
 pub struct OscParser;
 
 impl OscParser {
-    pub fn new() -> Result<Self> {
-        Ok(Self)
+    pub fn new() -> Self {
+        Self
     }
 
     pub fn parse(&self, data: &str) -> Vec<OscSequence> {

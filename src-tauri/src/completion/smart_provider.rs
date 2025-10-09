@@ -3,9 +3,9 @@
 use crate::completion::context_analyzer::{
     ArgType, CompletionContext, CompletionPosition, ContextAnalyzer,
 };
+use crate::completion::error::CompletionProviderResult;
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionItem, CompletionType};
-use crate::utils::error::AppResult;
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -34,7 +34,7 @@ impl SmartCompletionProvider {
     async fn provide_smart_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         match &context.position {
             CompletionPosition::Command => self.provide_command_completions(context).await,
             CompletionPosition::Option => self.provide_option_completions(context).await,
@@ -57,7 +57,7 @@ impl SmartCompletionProvider {
     async fn provide_command_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         // 优先从历史记录获取相关命令
@@ -88,7 +88,7 @@ impl SmartCompletionProvider {
     async fn provide_option_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         if let Some(token) = context.tokens.first() {
@@ -166,7 +166,7 @@ impl SmartCompletionProvider {
         &self,
         context: &CompletionContext,
         option: &str,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         // 根据选项类型提供补全
@@ -211,7 +211,7 @@ impl SmartCompletionProvider {
         &self,
         context: &CompletionContext,
         parent: &str,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         // 从命令知识库获取子命令
@@ -257,7 +257,7 @@ impl SmartCompletionProvider {
         context: &CompletionContext,
         command: &str,
         position: usize,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         // 根据命令的参数类型提供补全
@@ -336,7 +336,7 @@ impl SmartCompletionProvider {
     async fn provide_filepath_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         self.filesystem_provider
             .provide_completions(&self.convert_context(context))
             .await
@@ -346,7 +346,7 @@ impl SmartCompletionProvider {
     async fn provide_fallback_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         // 尝试所有提供者
@@ -501,7 +501,7 @@ impl CompletionProvider for SmartCompletionProvider {
     async fn provide_completions(
         &self,
         context: &crate::completion::types::CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         // 使用上下文分析器分析输入
         let smart_context = self
             .context_analyzer

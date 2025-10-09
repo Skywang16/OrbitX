@@ -1,26 +1,28 @@
 use async_trait::async_trait;
 use eventsource_stream::Eventsource;
 use futures::StreamExt;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::pin::Pin;
 use tokio_stream::Stream;
 
 use crate::llm::{
+    error::{GeminiError, LlmProviderError, LlmProviderResult},
     providers::base::LLMProvider,
     types::{
         LLMMessage, LLMMessageContent, LLMMessagePart, LLMProviderConfig, LLMRequest, LLMResponse,
         LLMStreamChunk, LLMTool, LLMToolCall, LLMUsage,
     },
 };
-use anyhow::{anyhow, Context, Result};
 
 /// Gemini提供者
 pub struct GeminiProvider {
     client: Client,
     config: LLMProviderConfig,
 }
+
+type GeminiResult<T> = Result<T, GeminiError>;
 
 impl GeminiProvider {
     pub fn new(config: LLMProviderConfig) -> Self {
@@ -155,11 +157,11 @@ impl GeminiProvider {
             .collect()
     }
 
-    fn parse_response(response_json: &Value) -> Result<LLMResponse> {
+    fn parse_response(response_json: &Value) -> GeminiResult<LLMResponse> {
         let candidate = response_json["candidates"]
             .as_array()
             .and_then(|arr| arr.first())
-            .ok_or_else(|| anyhow!("Missing 'candidates' in response"))?;
+            .ok_or(GeminiError::MissingField { field: "candidates" })?;
 
         let mut content_text = String::new();
         let mut tool_calls = Vec::new();
@@ -170,7 +172,6 @@ impl GeminiProvider {
                     content_text.push_str(text);
                 }
                 if let Some(fc) = part["functionCall"].as_object() {
-                    println!("🔧 Debug: Found functionCall in Gemini response");
                     if let (Some(name), Some(args)) = (fc["name"].as_str(), fc["args"].as_object())
                     {
                         let tool_call = LLMToolCall {
@@ -179,10 +180,6 @@ impl GeminiProvider {
                             name: name.to_string(),
                             arguments: json!(args),
                         };
-                        println!(
-                            "🔧 Debug: Creating Gemini tool call - id: {}, name: {}",
-                            tool_call.id, tool_call.name
-                        );
                         tool_calls.push(tool_call);
                     }
                 }
@@ -227,47 +224,50 @@ impl GeminiProvider {
         })
     }
 
-    fn handle_error_response(&self, status: u16, body: &str) -> anyhow::Error {
+    fn handle_error_response(&self, status: StatusCode, body: &str) -> GeminiError {
         if let Ok(error_json) = serde_json::from_str::<Value>(body) {
             if let Some(error_obj) = error_json["error"].as_object() {
                 let message = error_obj["message"]
                     .as_str()
-                    .unwrap_or("Unknown Gemini error");
-                return anyhow!(message.to_string());
+                    .unwrap_or("Unknown Gemini error")
+                    .to_string();
+                return GeminiError::Api {
+                    status,
+                    message,
+                };
             }
         }
-        anyhow!(format!("Gemini API error {}: {}", status, body))
+        GeminiError::Api {
+            status,
+            message: format!("Unexpected response: {}", body),
+        }
     }
 
-    fn parse_stream_chunk(data: &str) -> Result<LLMStreamChunk> {
+    fn parse_stream_chunk(data: &str) -> GeminiResult<LLMStreamChunk> {
         let json_data: Value = serde_json::from_str(data)
-            .map_err(|e| anyhow!(format!("Failed to parse stream data: {}", e)))?;
+            .map_err(|e| GeminiError::Stream { message: format!("JSON parse error: {}", e) })?;
 
-        // 流式响应是一个候选数组
-        if let Ok(response) = Self::parse_response(&json_data) {
-            let chunk = LLMStreamChunk::Delta {
-                content: Some(response.content),
-                tool_calls: response.tool_calls,
-            };
+        let response = Self::parse_response(&json_data)?;
 
-            if response.finish_reason != "unknown"
-                && response.finish_reason != "FINISH_REASON_UNSPECIFIED"
-            {
-                return Ok(LLMStreamChunk::Finish {
-                    finish_reason: response.finish_reason,
-                    usage: response.usage,
-                });
-            }
-            return Ok(chunk);
+        if response.finish_reason != "unknown"
+            && response.finish_reason != "FINISH_REASON_UNSPECIFIED"
+        {
+            return Ok(LLMStreamChunk::Finish {
+                finish_reason: response.finish_reason,
+                usage: response.usage,
+            });
         }
 
-        anyhow::bail!("Unknown stream format")
+        Ok(LLMStreamChunk::Delta {
+            content: Some(response.content),
+            tool_calls: response.tool_calls,
+        })
     }
 }
 
 #[async_trait]
 impl LLMProvider for GeminiProvider {
-    async fn call(&self, request: LLMRequest) -> Result<LLMResponse> {
+    async fn call(&self, request: LLMRequest) -> LlmProviderResult<LLMResponse> {
         let url = self.get_endpoint(&request);
         tracing::debug!("Gemini请求URL: {}", url);
         let headers = self.get_headers();
@@ -286,22 +286,27 @@ impl LLMProvider for GeminiProvider {
             .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
-            .context("发送HTTP请求失败")?;
+            .map_err(|source| LlmProviderError::Gemini(GeminiError::Http { source }))?;
 
         let status = response.status();
         if !status.is_success() {
             let text = response.text().await.unwrap_or_default();
-            return Err(self.handle_error_response(status.as_u16(), &text));
+            let error = self.handle_error_response(status, &text);
+            return Err(LlmProviderError::from(error));
         }
 
-        let response_json: Value = response.json().await.context("解析JSON响应失败")?;
+        let response_json: Value = response
+            .json()
+            .await
+            .map_err(|source| LlmProviderError::Gemini(GeminiError::Http { source }))?;
         Self::parse_response(&response_json)
+            .map_err(LlmProviderError::from)
     }
 
     async fn call_stream(
         &self,
         mut request: LLMRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<LLMStreamChunk>> + Send>>> {
+    ) -> LlmProviderResult<Pin<Box<dyn Stream<Item = LlmProviderResult<LLMStreamChunk>> + Send>>> {
         request.stream = true;
         let url = self.get_endpoint(&request);
         let headers = self.get_headers();
@@ -316,11 +321,12 @@ impl LLMProvider for GeminiProvider {
             .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
-            .context("发送HTTP请求失败")?;
+            .map_err(|source| LlmProviderError::Gemini(GeminiError::Http { source }))?;
         let status = response.status();
         if !status.is_success() {
             let text = response.text().await.unwrap_or_default();
-            return Err(self.handle_error_response(status.as_u16(), &text));
+            let error = self.handle_error_response(status, &text);
+            return Err(LlmProviderError::from(error));
         }
 
         let stream = response
@@ -333,10 +339,15 @@ impl LLMProvider for GeminiProvider {
                         if event.data.trim().is_empty() {
                             None
                         } else {
-                            Some(Self::parse_stream_chunk(&event.data))
+                            Some(
+                                Self::parse_stream_chunk(&event.data)
+                                    .map_err(LlmProviderError::from),
+                            )
                         }
                     }
-                    Err(e) => Some(Err(anyhow!("网络错误: {}", e.to_string()))),
+                    Err(e) => Some(Err(LlmProviderError::Gemini(GeminiError::Stream {
+                        message: format!("Network error: {}", e),
+                    }))),
                 })
             });
 

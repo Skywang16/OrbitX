@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 use crate::agent::persistence::{
     AgentPersistence, FileContextEntry, FileRecordSource, FileRecordState,
 };
-use crate::utils::error::AppResult;
+use crate::agent::error::AgentResult;
 
 #[derive(Debug, Clone)]
 pub struct FileOperationRecord<'a> {
@@ -66,7 +66,7 @@ impl FileContextTracker {
     pub async fn track_file_operation(
         &self,
         record: FileOperationRecord<'_>,
-    ) -> AppResult<FileContextEntry> {
+    ) -> AgentResult<FileContextEntry> {
         let normalized_path = self.normalized_path(record.path);
         let repo = self.persistence.file_context();
         let existing = repo
@@ -148,21 +148,21 @@ impl FileContextTracker {
         Ok(entry)
     }
 
-    pub async fn get_active_files(&self) -> AppResult<Vec<FileContextEntry>> {
+    pub async fn get_active_files(&self) -> AgentResult<Vec<FileContextEntry>> {
         self.persistence
             .file_context()
             .get_active_files(self.conversation_id)
             .await
     }
 
-    pub async fn get_stale_files(&self) -> AppResult<Vec<FileContextEntry>> {
+    pub async fn get_stale_files(&self) -> AgentResult<Vec<FileContextEntry>> {
         self.persistence
             .file_context()
             .get_stale_files(self.conversation_id)
             .await
     }
 
-    pub async fn mark_file_as_stale(&self, path: impl AsRef<Path>) -> AppResult<FileContextEntry> {
+    pub async fn mark_file_as_stale(&self, path: impl AsRef<Path>) -> AgentResult<FileContextEntry> {
         let record = FileOperationRecord::new(path.as_ref(), FileRecordSource::UserEdited)
             .with_state(FileRecordState::Stale);
         self.track_file_operation(record).await

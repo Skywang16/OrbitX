@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::storage::database::DatabaseManager;
+use crate::agent::error::AgentResult;
 
 use super::repositories::{
     AgentExecutionRepository, ConversationRepository, ConversationSummaryRepository,
@@ -71,7 +72,7 @@ impl AgentPersistence {
     pub async fn ensure_conversation_exists(
         &self,
         conversation_id: i64,
-    ) -> crate::utils::error::AppResult<()> {
+    ) -> AgentResult<()> {
         if !self.conversations.exists(conversation_id).await? {
             let now = super::util::now_timestamp();
             self.conversations

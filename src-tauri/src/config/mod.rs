@@ -1,5 +1,6 @@
 // 配置系统模块
 
+pub mod error;
 pub mod commands;
 pub mod defaults;
 pub mod paths;
@@ -37,6 +38,12 @@ pub use theme::{
 };
 pub use toml::{ConfigEvent, TomlConfigManager};
 pub use types::*;
+pub use error::{
+    ConfigCommandError, ConfigCommandResult, ConfigError, ConfigPathsError, ConfigPathsResult,
+    ConfigResult, ShortcutsActionError, ShortcutsActionResult, ShortcutsError, ShortcutsResult,
+    ThemeConfigError, ThemeConfigResult, TerminalConfigError, TerminalConfigResult,
+    TomlConfigError, TomlConfigResult,
+};
 
 /// 配置系统版本
 pub const CONFIG_VERSION: &str = "1.0.0";

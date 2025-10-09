@@ -1,9 +1,12 @@
 use crate::{
-    mux::{MuxNotification, Pane, PaneId},
+    mux::{
+        error::{IoHandlerError, IoHandlerResult},
+        MuxNotification,
+        Pane,
+        PaneId,
+    },
     shell::ShellIntegrationManager,
-    utils::error::AppResult,
 };
-use anyhow::Context;
 use bytes::Bytes;
 use crossbeam_channel::Sender;
 use std::{
@@ -47,21 +50,23 @@ impl IoHandler {
         self.buffer_size
     }
 
-    pub fn spawn_io_threads(&self, pane: Arc<dyn Pane>) -> AppResult<()> {
+    pub fn spawn_io_threads(&self, pane: Arc<dyn Pane>) -> IoHandlerResult<()> {
         let pane_id = pane.pane_id();
         let reader = pane
             .reader()
-            .with_context(|| format!("无法获取面板 {:?} 的读取器", pane_id))?;
+            .map_err(|err| IoHandlerError::PaneReader {
+                reason: format!("Failed to acquire reader for {:?}: {err}", pane_id),
+            })?;
 
         self.spawn_reader_thread(pane_id, reader);
         Ok(())
     }
 
-    pub fn stop_pane_io(&self, _pane_id: PaneId) -> AppResult<()> {
+    pub fn stop_pane_io(&self, _pane_id: PaneId) -> IoHandlerResult<()> {
         Ok(())
     }
 
-    pub fn shutdown(&self) -> AppResult<()> {
+    pub fn shutdown(&self) -> IoHandlerResult<()> {
         Ok(())
     }
 

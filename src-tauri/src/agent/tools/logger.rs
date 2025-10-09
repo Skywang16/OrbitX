@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tracing::{debug, error, info};
 
 use crate::agent::core::context::TaskContext;
+use crate::agent::error::AgentResult;
 use crate::agent::persistence::{AgentPersistence, ToolExecutionStatus};
 use crate::agent::tools::ToolResult;
 use crate::storage::repositories::RepositoryManager;
@@ -42,7 +43,7 @@ impl ToolExecutionLogger {
         call_id: &str,
         tool_name: &str,
         arguments: &JsonValue,
-    ) -> anyhow::Result<String> {
+    ) -> AgentResult<String> {
         let args_str = serde_json::to_string(arguments)?;
         self.persistence
             .tool_executions()
@@ -75,7 +76,7 @@ impl ToolExecutionLogger {
         log_id: &str,
         result: &ToolResult,
         duration_ms: u64,
-    ) -> anyhow::Result<()> {
+    ) -> AgentResult<()> {
         let result_json = serde_json::to_string(result)?;
         self.persistence
             .tool_executions()
@@ -101,7 +102,7 @@ impl ToolExecutionLogger {
         log_id: &str,
         error_message: &str,
         duration_ms: u64,
-    ) -> anyhow::Result<()> {
+    ) -> AgentResult<()> {
         self.persistence
             .tool_executions()
             .update_status(
@@ -124,7 +125,7 @@ impl ToolExecutionLogger {
     }
 
     /// 记录工具执行取消
-    pub async fn log_cancelled(&self, log_id: &str) -> anyhow::Result<()> {
+    pub async fn log_cancelled(&self, log_id: &str) -> AgentResult<()> {
         self.persistence
             .tool_executions()
             .update_status(

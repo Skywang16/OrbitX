@@ -1,10 +1,9 @@
 use std::str::FromStr;
 
-use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::utils::error::AppResult;
+use crate::agent::error::{AgentError, AgentResult};
 
 use super::{opt_timestamp_to_datetime, timestamp_to_datetime};
 use sqlx::Row;
@@ -61,13 +60,13 @@ impl FileRecordState {
 }
 
 impl FromStr for FileRecordState {
-    type Err = anyhow::Error;
+    type Err = AgentError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "active" => Ok(Self::Active),
             "stale" => Ok(Self::Stale),
-            other => Err(anyhow!("未知的文件状态: {}", other)),
+            other => Err(AgentError::Parse(format!("Unknown file state: {}", other))),
         }
     }
 }
@@ -92,7 +91,7 @@ impl FileRecordSource {
 }
 
 impl FromStr for FileRecordSource {
-    type Err = anyhow::Error;
+    type Err = AgentError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -100,7 +99,7 @@ impl FromStr for FileRecordSource {
             "user_edited" => Ok(Self::UserEdited),
             "agent_edited" => Ok(Self::AgentEdited),
             "file_mentioned" => Ok(Self::FileMentioned),
-            other => Err(anyhow!("未知的文件来源: {}", other)),
+            other => Err(AgentError::Parse(format!("Unknown file source: {}", other))),
         }
     }
 }
@@ -164,7 +163,7 @@ impl ExecutionStatus {
 }
 
 impl FromStr for ExecutionStatus {
-    type Err = anyhow::Error;
+    type Err = AgentError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -172,7 +171,7 @@ impl FromStr for ExecutionStatus {
             "completed" => Ok(Self::Completed),
             "error" => Ok(Self::Error),
             "cancelled" => Ok(Self::Cancelled),
-            other => Err(anyhow!("未知的执行状态: {}", other)),
+            other => Err(AgentError::Parse(format!("Unknown execution status: {}", other))),
         }
     }
 }
@@ -267,7 +266,7 @@ impl MessageRole {
 }
 
 impl FromStr for MessageRole {
-    type Err = anyhow::Error;
+    type Err = AgentError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -275,7 +274,7 @@ impl FromStr for MessageRole {
             "user" => Ok(Self::User),
             "assistant" => Ok(Self::Assistant),
             "tool" => Ok(Self::Tool),
-            other => Err(anyhow!("未知的消息角色: {}", other)),
+            other => Err(AgentError::Parse(format!("Unknown message role: {}", other))),
         }
     }
 }
@@ -339,7 +338,7 @@ impl ToolExecutionStatus {
 }
 
 impl FromStr for ToolExecutionStatus {
-    type Err = anyhow::Error;
+    type Err = AgentError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -347,7 +346,7 @@ impl FromStr for ToolExecutionStatus {
             "running" => Ok(Self::Running),
             "completed" => Ok(Self::Completed),
             "error" => Ok(Self::Error),
-            other => Err(anyhow!("未知的工具执行状态: {}", other)),
+            other => Err(AgentError::Parse(format!("Unknown tool execution status: {}", other))),
         }
     }
 }
@@ -431,7 +430,7 @@ impl ExecutionEventType {
 }
 
 impl FromStr for ExecutionEventType {
-    type Err = anyhow::Error;
+    type Err = AgentError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -441,7 +440,7 @@ impl FromStr for ExecutionEventType {
             "tool_result" => Ok(Self::ToolResult),
             "error" => Ok(Self::Error),
             "finish" => Ok(Self::Finish),
-            other => Err(anyhow!("未知的事件类型: {}", other)),
+            other => Err(AgentError::Parse(format!("Unknown event type: {}", other))),
         }
     }
 }
@@ -502,7 +501,7 @@ impl TokenUsageStats {
 }
 
 /// Helper constructors to materialise domain objects from raw database rows.
-pub(crate) fn build_conversation(row: &sqlx::sqlite::SqliteRow) -> AppResult<Conversation> {
+pub(crate) fn build_conversation(row: &sqlx::sqlite::SqliteRow) -> AgentResult<Conversation> {
     Ok(Conversation {
         id: row.try_get("id")?,
         title: row.try_get("title")?,
@@ -514,7 +513,7 @@ pub(crate) fn build_conversation(row: &sqlx::sqlite::SqliteRow) -> AppResult<Con
 
 pub(crate) fn build_conversation_summary(
     row: &sqlx::sqlite::SqliteRow,
-) -> AppResult<ConversationSummary> {
+) -> AgentResult<ConversationSummary> {
     Ok(ConversationSummary {
         conversation_id: row.try_get("conversation_id")?,
         summary_content: row.try_get("summary_content")?,
@@ -529,7 +528,7 @@ pub(crate) fn build_conversation_summary(
 
 pub(crate) fn build_file_context_entry(
     row: &sqlx::sqlite::SqliteRow,
-) -> AppResult<FileContextEntry> {
+) -> AgentResult<FileContextEntry> {
     Ok(FileContextEntry::new(
         row.try_get("id")?,
         row.try_get("conversation_id")?,
@@ -543,7 +542,7 @@ pub(crate) fn build_file_context_entry(
     ))
 }
 
-pub(crate) fn build_agent_execution(row: &sqlx::sqlite::SqliteRow) -> AppResult<AgentExecution> {
+pub(crate) fn build_agent_execution(row: &sqlx::sqlite::SqliteRow) -> AgentResult<AgentExecution> {
     Ok(AgentExecution::new(
         row.try_get("id")?,
         row.try_get("execution_id")?,
@@ -569,7 +568,7 @@ pub(crate) fn build_agent_execution(row: &sqlx::sqlite::SqliteRow) -> AppResult<
 
 pub(crate) fn build_execution_message(
     row: &sqlx::sqlite::SqliteRow,
-) -> AppResult<ExecutionMessage> {
+) -> AgentResult<ExecutionMessage> {
     Ok(ExecutionMessage::new(
         row.try_get("id")?,
         row.try_get("execution_id")?,
@@ -583,7 +582,7 @@ pub(crate) fn build_execution_message(
     ))
 }
 
-pub(crate) fn build_tool_execution(row: &sqlx::sqlite::SqliteRow) -> AppResult<ToolExecution> {
+pub(crate) fn build_tool_execution(row: &sqlx::sqlite::SqliteRow) -> AgentResult<ToolExecution> {
     Ok(ToolExecution::new(
         row.try_get("id")?,
         row.try_get("execution_id")?,
@@ -602,7 +601,7 @@ pub(crate) fn build_tool_execution(row: &sqlx::sqlite::SqliteRow) -> AppResult<T
     ))
 }
 
-pub(crate) fn build_execution_event(row: &sqlx::sqlite::SqliteRow) -> AppResult<ExecutionEvent> {
+pub(crate) fn build_execution_event(row: &sqlx::sqlite::SqliteRow) -> AgentResult<ExecutionEvent> {
     Ok(ExecutionEvent::new(
         row.try_get("id")?,
         row.try_get("execution_id")?,

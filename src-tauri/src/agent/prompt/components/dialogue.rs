@@ -2,10 +2,8 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
-
 use crate::agent::config::PromptComponent;
-use crate::agent::error::AgentResult;
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::prompt::components::types::{ComponentContext, ComponentDefinition};
 use crate::agent::prompt::template_engine::TemplateEngine;
 
@@ -59,11 +57,11 @@ You excel at helping users with:
     ) -> AgentResult<Option<String>> {
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing dialogue capabilities template")?;
+            .ok_or_else(|| AgentError::Internal("missing dialogue capabilities template".to_string()))?;
 
         let result = TemplateEngine::new()
             .resolve(template, &HashMap::new())
-            .map_err(|e| anyhow!("failed to render dialogue capabilities template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render dialogue capabilities template: {}", e)))?;
         Ok(Some(result))
     }
 }
@@ -112,11 +110,11 @@ impl ComponentDefinition for DialogueGuidelinesComponent {
     ) -> AgentResult<Option<String>> {
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing dialogue guidelines template")?;
+            .ok_or_else(|| AgentError::Internal("missing dialogue guidelines template".to_string()))?;
 
         let result = TemplateEngine::new()
             .resolve(template, &HashMap::new())
-            .map_err(|e| anyhow!("failed to render dialogue guidelines template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render dialogue guidelines template: {}", e)))?;
         Ok(Some(result))
     }
 }

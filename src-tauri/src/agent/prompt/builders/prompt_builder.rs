@@ -2,14 +2,12 @@ use std::collections::HashMap;
 
 use serde_json::{json, Value};
 
-use anyhow::{anyhow, bail};
-
 use crate::agent::config::{PromptComponent, PromptVariant};
-use crate::agent::error::AgentResult;
 use crate::agent::prompt::components::{
     registry::PromptComponentRegistry, types::ComponentContext,
 };
 use crate::agent::prompt::template_engine::TemplateEngine;
+use crate::agent::error::{AgentError, AgentResult};
 
 /// Builder options mirroring eko-core PromptBuildOptions.
 #[derive(Debug, Clone)]
@@ -59,13 +57,16 @@ impl PromptBuilder {
         let components = options.components.clone();
         let errors = self.registry.validate_dependencies(&components);
         if !errors.is_empty() && !options.skip_missing {
-            bail!("Prompt component dependency errors: {}", errors.join(", "));
+            return Err(AgentError::Internal(format!(
+                "Prompt component dependency errors: {}",
+                errors.join(", ")
+            )));
         }
 
         let sorted = self
             .registry
             .sort_by_dependencies(&components)
-            .map_err(|e| anyhow!("Prompt component dependency cycle: {e}"))?;
+            .map_err(|e| AgentError::Internal(format!("Prompt component dependency cycle: {e}")))?;
 
         let mut rendered = HashMap::new();
         for component_id in sorted.iter() {
@@ -73,7 +74,10 @@ impl PromptBuilder {
                 if options.skip_missing {
                     continue;
                 }
-                bail!("组件不存在: {:?}", component_id);
+                return Err(AgentError::Internal(format!(
+                    "Component not found: {:?}",
+                    component_id
+                )));
             };
 
             let template_override = options
@@ -110,7 +114,7 @@ impl PromptBuilder {
 
         TemplateEngine::new()
             .resolve(&variant.template, &template_context)
-            .map_err(|e| anyhow!("Failed to render prompt variant: {e}"))
+            .map_err(|e| AgentError::TemplateRender(format!("Failed to render prompt variant: {e}")))
     }
 
     async fn build_components(
@@ -126,7 +130,7 @@ impl PromptBuilder {
         let sorted = self
             .registry
             .sort_by_dependencies(&components)
-            .map_err(|e| anyhow!("Prompt component dependency cycle: {e}"))?;
+            .map_err(|e| AgentError::Internal(format!("Prompt component dependency cycle: {e}")))?;
 
         let mut rendered = HashMap::new();
         for component_id in sorted.iter() {
@@ -134,7 +138,10 @@ impl PromptBuilder {
                 if options.skip_missing {
                     continue;
                 }
-                bail!("组件不存在: {:?}", component_id);
+                return Err(AgentError::Internal(format!(
+                    "Component not found: {:?}",
+                    component_id
+                )));
             };
 
             let template_override = options

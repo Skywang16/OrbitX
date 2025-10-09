@@ -1,5 +1,6 @@
 use crate::completion::output_analyzer::OutputAnalyzer;
 use crate::mux::{singleton::get_mux, PaneId, PtySize};
+use crate::terminal::error::{ReplayError, ReplayResult};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -38,10 +39,12 @@ impl ProcessReplayEvent {
     }
 }
 
-pub fn build_replay(pane_id: u32) -> anyhow::Result<ProcessReplayEvent> {
+pub fn build_replay(pane_id: u32) -> ReplayResult<ProcessReplayEvent> {
     let text = OutputAnalyzer::global()
         .get_pane_buffer(pane_id)
-        .map_err(|err| anyhow::anyhow!("Failed to read terminal buffer: {err}"))?;
+        .map_err(|err| ReplayError::OutputAnalyzer {
+            reason: err.to_string(),
+        })?;
 
     let mux = get_mux();
     let size = mux

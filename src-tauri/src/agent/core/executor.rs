@@ -16,6 +16,7 @@ use crate::agent::context::{ContextBuilder, ConversationSummarizer, SummaryResul
 use crate::agent::core::chain::ToolChain;
 use crate::agent::core::context::{LLMResponseParsed, TaskContext, ToolCallResult};
 use crate::agent::core::status::AgentTaskStatus;
+use crate::agent::error::AgentError;
 use crate::agent::events::{
     FinishPayload, TaskCancelledPayload, TaskCompletedPayload, TaskCreatedPayload,
     TaskErrorPayload, TaskPausedPayload, TaskProgressPayload, TaskStartedPayload, TextPayload,
@@ -29,7 +30,7 @@ use crate::agent::persistence::{
 use crate::agent::plan::{Planner, TreePlanner};
 use crate::agent::prompt::{build_agent_system_prompt, build_agent_user_prompt};
 use crate::agent::react::types::FinishReason;
-use crate::agent::state::error::{TaskExecutorError, TaskExecutorResult};
+use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::state::iteration::IterationSnapshot;
 use crate::agent::state::session::CompressedMemory;
 use crate::agent::tools::{
@@ -500,7 +501,7 @@ impl TaskExecutor {
                     .await?;
 
                 if let Err(e) = self.run_react_loop(parent_ctx.clone()).await {
-                    self.handle_task_error(&parent_ctx.task_id, e, parent_ctx.clone())
+                    self.handle_task_error(&parent_ctx.task_id, e.into(), parent_ctx.clone())
                         .await;
                 } else {
                     // 标记完成
@@ -931,7 +932,7 @@ impl TaskExecutor {
                 }
                 Err(e) => {
                     executor
-                        .handle_task_error(&task_id, e, context.clone())
+                        .handle_task_error(&task_id, e.into(), context.clone())
                         .await;
                 }
             }
@@ -1668,7 +1669,7 @@ impl TaskExecutor {
     pub(crate) async fn handle_task_error(
         &self,
         task_id: &str,
-        error: anyhow::Error,
+        error: AgentError,
         context: Arc<TaskContext>,
     ) {
         error!("Task {} error: {}", task_id, error);

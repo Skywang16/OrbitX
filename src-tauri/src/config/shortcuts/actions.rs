@@ -8,15 +8,16 @@
  */
 
 use super::types::{ActionContext, OperationResult, ShortcutEvent, ShortcutEventType};
+use crate::config::error::{ShortcutsActionError, ShortcutsActionResult, ShortcutsResult};
 use crate::config::types::ShortcutAction;
-use anyhow::Result as AnyResult;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, warn};
 
-pub type ActionHandler = Box<dyn Fn(&ActionContext) -> AnyResult<serde_json::Value> + Send + Sync>;
+pub type ActionHandler =
+    Box<dyn Fn(&ActionContext) -> ShortcutsActionResult<serde_json::Value> + Send + Sync>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionMetadata {
@@ -53,13 +54,28 @@ impl ActionRegistry {
         &mut self,
         metadata: ActionMetadata,
         handler: F,
-    ) -> AnyResult<()>
+    ) -> ShortcutsResult<()>
     where
-        F: Fn(&ActionContext) -> AnyResult<serde_json::Value> + Send + Sync + 'static,
+        F: Fn(&ActionContext) -> ShortcutsActionResult<serde_json::Value>
+            + Send
+            + Sync
+            + 'static,
     {
-        debug!("注册动作: {}", metadata.name);
+        debug!("Registering shortcut action: {}", metadata.name);
 
         let action_name = metadata.name.clone();
+
+        {
+            let handlers = self.handlers.read().await;
+            if handlers.contains_key(&action_name) {
+                return Err(
+                    ShortcutsActionError::AlreadyRegistered {
+                        action: action_name,
+                    }
+                    .into(),
+                );
+            }
+        }
 
         {
             let mut meta_map = self.metadata.write().await;
@@ -68,7 +84,7 @@ impl ActionRegistry {
 
         {
             let mut handler_map = self.handlers.write().await;
-            handler_map.insert(action_name.clone(), Box::new(handler));
+            handler_map.insert(action_name, Box::new(handler));
         }
         Ok(())
     }
@@ -79,7 +95,7 @@ impl ActionRegistry {
         context: &ActionContext,
     ) -> OperationResult<serde_json::Value> {
         let action_name = self.extract_action_name(action);
-        debug!("执行动作: {}", action_name);
+        debug!("Executing action: {}", action_name);
 
         self.emit_event(ShortcutEvent {
             event_type: ShortcutEventType::KeyPressed,
@@ -96,7 +112,7 @@ impl ActionRegistry {
         };
 
         if !handler_exists {
-            let error_msg = format!("未注册的动作: {}", action_name);
+            let error_msg = format!("Action not registered: {}", action_name);
             warn!("{}", error_msg);
 
             self.emit_event(ShortcutEvent {
@@ -116,10 +132,11 @@ impl ActionRegistry {
 
         let result = {
             let handlers = self.handlers.read().await;
-            if let Some(handler) = handlers.get(&action_name) {
-                handler(context)
-            } else {
-                Err(anyhow::anyhow!("动作处理器未找到"))
+            match handlers.get(&action_name) {
+                Some(handler) => handler(context),
+                None => Err(ShortcutsActionError::NotRegistered {
+                    action: action_name.clone(),
+                }),
             }
         };
 
@@ -136,8 +153,8 @@ impl ActionRegistry {
 
                 OperationResult::success(value)
             }
-            Err(e) => {
-                let error_msg = format!("动作执行失败: {}", e);
+            Err(err) => {
+                let error_msg = format!("Action execution failed: {}", err);
                 error!("{}", error_msg);
 
                 self.emit_event(ShortcutEvent {

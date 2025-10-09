@@ -4,9 +4,6 @@
     "not_found": "Resource not found",
     "invalid_id": "Invalid ID",
     "empty_content": "Content cannot be empty",
-    "invalid_role": "Invalid role",
-    "title_empty": "Title cannot be empty",
-    "content_empty": "Content cannot be empty",
     "path_empty": "Path cannot be empty",
     "invalid_path": "Invalid path",
     "success": "Operation succeeded",
@@ -14,15 +11,6 @@
     "system_error": "System error"
   },
   "ai": {
-    "conversation_not_found": "Conversation not found",
-    "create_conversation_failed": "Failed to create conversation",
-    "get_conversations_failed": "Failed to get conversation list",
-    "get_conversation_failed": "Failed to get conversation details",
-    "update_title_failed": "Failed to update conversation title",
-    "delete_conversation_failed": "Failed to delete conversation",
-    "truncate_conversation_failed": "Failed to truncate conversation",
-    "save_message_failed": "Failed to save message",
-    "update_message_failed": "Failed to update message",
     "add_model_failed": "Failed to add model",
     "remove_model_failed": "Failed to remove model",
     "update_model_failed": "Failed to update model",
@@ -30,11 +18,7 @@
     "test_connection_error": "Connection test failed: {error}",
     "api_url_empty": "API URL cannot be empty",
     "api_key_empty": "API Key cannot be empty",
-    "model_name_empty": "Model name cannot be empty",
-    "get_prefix_prompt_failed": "Failed to get prefix prompt",
-    "set_prefix_prompt_failed": "Failed to set prefix prompt",
-    "get_context_failed": "Failed to get context",
-    "build_prompt_failed": "Failed to build prompt"
+    "model_name_empty": "Model name cannot be empty"
   },
   "completion": {
     "get_failed": "Failed to get completion suggestions",
@@ -83,18 +67,7 @@
   "shell": {
     "pane_not_exist": "Terminal pane does not exist",
     "setup_integration_failed": "Failed to setup shell integration",
-    "get_cwd_failed": "Failed to get current working directory",
-    "update_cwd_failed": "Failed to update current working directory",
-    "get_shell_state_failed": "Failed to get shell state",
-    "set_shell_type_failed": "Failed to set shell type",
     "generate_script_failed": "Failed to generate integration script",
-    "generate_env_vars_failed": "Failed to generate environment variables",
-    "enable_integration_failed": "Failed to enable integration",
-    "disable_integration_failed": "Failed to disable integration",
-    "get_current_command_failed": "Failed to get current command",
-    "get_command_history_failed": "Failed to get command history",
-    "detect_shell_type_failed": "Failed to detect shell type",
-    "check_support_failed": "Failed to check integration support",
     "execute_command_failed": "Failed to execute background command",
     "command_empty": "Command cannot be empty",
     "quotes_mismatch": "Quotes mismatch",
@@ -104,11 +77,9 @@
     "write_terminal_failed": "Failed to write to terminal",
     "resize_terminal_failed": "Failed to resize terminal",
     "close_terminal_failed": "Failed to close terminal",
-    "set_buffer_failed": "Failed to set buffer",
     "find_shell_failed": "Failed to find shell",
     "shell_not_found": "Shell not found",
-    "get_buffer_failed": "Failed to get buffer",
-    "operation_failed": "Operation failed"
+    "get_buffer_failed": "Failed to get buffer"
   },
   "shortcuts": {
     "get_failed": "Failed to get shortcuts configuration",
@@ -152,8 +123,6 @@
     "invalid_query": "Search query must be at least 3 characters long",
     "search_failed": "Code search failed",
     "index_not_found": "Index not ready, please build index first or enable auto-rebuild",
-    "build_failed": "Index build failed",
-    "build_canceled": "Index build canceled",
     "delete_failed": "Failed to delete index"
   },
   "storage": {
@@ -164,19 +133,5 @@
   },
   "error": {
     "with_param": "{name} encountered an error"
-  },
-  "eko_ctx": {
-    "upsert_state_failed": "Failed to update Eko state",
-    "append_event_failed": "Failed to append Eko event",
-    "snapshot_save_failed": "Failed to save Eko snapshot",
-    "get_state_failed": "Failed to get Eko state",
-    "rebuild_failed": "Failed to rebuild Eko context",
-    "build_prompt_failed": "Failed to build prompt"
-  },
-  "ui_task": {
-    "upsert_failed": "Failed to create/update UI task",
-    "bulk_upsert_failed": "Failed to bulk operate UI tasks",
-    "list_failed": "Failed to get UI task list",
-    "delete_failed": "Failed to delete UI task"
   }
 }

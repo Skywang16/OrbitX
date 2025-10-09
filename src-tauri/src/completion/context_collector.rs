@@ -1,11 +1,10 @@
 //! 上下文收集器
 
+use crate::completion::error::{ContextCollectorError, ContextCollectorResult};
 use crate::completion::types::{
-    CommandExecutionContext, CommandOutput, OutputDataType, OutputEntity, 
-    ParsedOutputData, EntityType
+    CommandExecutionContext, CommandOutput, EntityType, OutputDataType, OutputEntity,
+    ParsedOutputData,
 };
-use crate::utils::error::AppResult;
-use anyhow::{anyhow, Context};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -21,10 +20,10 @@ pub struct ContextCollector {
 
 pub trait OutputParser {
     fn name(&self) -> &'static str;
-    
+
     fn can_parse(&self, command: &str) -> bool;
-    
-    fn parse(&self, command: &str, output: &str) -> AppResult<ParsedOutputData>;
+
+    fn parse(&self, command: &str, output: &str) -> ContextCollectorResult<ParsedOutputData>;
     
     fn priority(&self) -> i32 {
         0
@@ -71,7 +70,7 @@ impl ContextCollector {
         stderr: String,
         exit_code: Option<i32>,
         duration: Option<u64>,
-    ) -> AppResult<()> {
+    ) -> ContextCollectorResult<()> {
         let output = CommandOutput::new(stdout.clone(), stderr.clone());
         
         // 尝试解析输出
@@ -96,7 +95,7 @@ impl ContextCollector {
     }
     
     /// 解析命令输出
-    fn parse_output(&self, command: &str, output: &str) -> AppResult<ParsedOutputData> {
+    fn parse_output(&self, command: &str, output: &str) -> ContextCollectorResult<ParsedOutputData> {
         // 查找合适的解析器
         let mut suitable_parsers: Vec<_> = self.parsers
             .values()
@@ -116,10 +115,13 @@ impl ContextCollector {
     }
     
     /// 添加上下文到存储
-    fn add_context(&self, context: CommandExecutionContext) -> AppResult<()> {
-        let mut contexts = self.contexts
+    fn add_context(&self, context: CommandExecutionContext) -> ContextCollectorResult<()> {
+        let mut contexts = self
+            .contexts
             .write()
-            .map_err(|_| anyhow!("获取上下文写锁失败"))?;
+            .map_err(|_| ContextCollectorError::MutexPoisoned {
+                resource: "contexts",
+            })?;
             
         contexts.push(context);
         
@@ -132,19 +134,25 @@ impl ContextCollector {
     }
     
     /// 获取所有上下文
-    pub fn get_contexts(&self) -> AppResult<Vec<CommandExecutionContext>> {
-        let contexts = self.contexts
+    pub fn get_contexts(&self) -> ContextCollectorResult<Vec<CommandExecutionContext>> {
+        let contexts = self
+            .contexts
             .read()
-            .map_err(|_| anyhow!("获取上下文读锁失败"))?;
+            .map_err(|_| ContextCollectorError::MutexPoisoned {
+                resource: "contexts",
+            })?;
             
         Ok(contexts.clone())
     }
     
     /// 获取最近的上下文
-    pub fn get_recent_contexts(&self, count: usize) -> AppResult<Vec<CommandExecutionContext>> {
-        let contexts = self.contexts
+    pub fn get_recent_contexts(&self, count: usize) -> ContextCollectorResult<Vec<CommandExecutionContext>> {
+        let contexts = self
+            .contexts
             .read()
-            .map_err(|_| anyhow!("获取上下文读锁失败"))?;
+            .map_err(|_| ContextCollectorError::MutexPoisoned {
+                resource: "contexts",
+            })?;
             
         Ok(contexts
             .iter()
@@ -155,10 +163,16 @@ impl ContextCollector {
     }
     
     /// 根据命令搜索上下文
-    pub fn search_contexts_by_command(&self, command: &str) -> AppResult<Vec<CommandExecutionContext>> {
-        let contexts = self.contexts
+    pub fn search_contexts_by_command(
+        &self,
+        command: &str,
+    ) -> ContextCollectorResult<Vec<CommandExecutionContext>> {
+        let contexts = self
+            .contexts
             .read()
-            .map_err(|_| anyhow!("获取上下文读锁失败"))?;
+            .map_err(|_| ContextCollectorError::MutexPoisoned {
+                resource: "contexts",
+            })?;
             
         Ok(contexts
             .iter()
@@ -168,10 +182,13 @@ impl ContextCollector {
     }
     
     /// 清空上下文
-    pub fn clear_contexts(&self) -> AppResult<()> {
-        let mut contexts = self.contexts
+    pub fn clear_contexts(&self) -> ContextCollectorResult<()> {
+        let mut contexts = self
+            .contexts
             .write()
-            .map_err(|_| anyhow!("获取上下文写锁失败"))?;
+            .map_err(|_| ContextCollectorError::MutexPoisoned {
+                resource: "contexts",
+            })?;
             
         contexts.clear();
         Ok(())

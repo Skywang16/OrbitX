@@ -4,13 +4,14 @@
  * 提供无头 HTTP 请求功能，绕过浏览器的 CORS 限制
  */
 
-use anyhow::Result;
 use html2text::from_read;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use tauri::command;
+
+type WebFetchResult<T> = std::result::Result<T, String>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WebFetchRequest {
@@ -47,7 +48,7 @@ pub struct WebFetchResponse {
 #[command]
 pub async fn network_web_fetch_headless(
     request: WebFetchRequest,
-) -> Result<WebFetchResponse, String> {
+) -> WebFetchResult<WebFetchResponse> {
     tracing::debug!("🌐 [WebFetch] 开始无头请求: {}", request.url);
 
     let start_time = std::time::Instant::now();
@@ -213,7 +214,7 @@ pub async fn network_web_fetch_headless(
             };
 
             let final_data = if extract_content && extracted_text.is_some() {
-                create_content_summary(extracted_text.as_ref().unwrap(), &final_url)
+                create_content_summary(extracted_text.as_ref().unwrap())
             } else {
                 match request.response_format.as_deref().unwrap_or("text") {
                     "json" => {
@@ -278,7 +279,7 @@ pub async fn network_web_fetch_headless(
 
 /// 简化的网络请求命令（只需要 URL）
 #[command]
-pub async fn network_simple_web_fetch(url: String) -> Result<WebFetchResponse, String> {
+pub async fn network_simple_web_fetch(url: String) -> WebFetchResult<WebFetchResponse> {
     let request = WebFetchRequest {
         url,
         method: Some("GET".to_string()),
@@ -360,7 +361,7 @@ fn extract_content_from_html_improved(html: &str, max_length: usize) -> (String,
 }
 
 /// 智能内容摘要
-fn create_content_summary(content: &str, _url: &str) -> String {
+fn create_content_summary(content: &str) -> String {
     let lines: Vec<&str> = content.lines().collect();
     let total_lines = lines.len();
 

@@ -16,7 +16,7 @@ pub use audit_logs::AuditLogRepository;
 pub use command_history::CommandHistoryRepository;
 
 use crate::storage::database::DatabaseManager;
-use crate::utils::error::AppResult;
+use crate::storage::error::RepositoryResult;
 use base64::Engine;
 use serde_json::Value;
 use sqlx::Row;
@@ -26,19 +26,19 @@ use std::sync::Arc;
 #[async_trait::async_trait]
 pub trait Repository<T> {
     /// 根据ID查找实体
-    async fn find_by_id(&self, id: i64) -> AppResult<Option<T>>;
+    async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<T>>;
 
     /// 查找所有实体
-    async fn find_all(&self) -> AppResult<Vec<T>>;
+    async fn find_all(&self) -> RepositoryResult<Vec<T>>;
 
     /// 保存实体
-    async fn save(&self, entity: &T) -> AppResult<i64>;
+    async fn save(&self, entity: &T) -> RepositoryResult<i64>;
 
     /// 更新实体
-    async fn update(&self, entity: &T) -> AppResult<()>;
+    async fn update(&self, entity: &T) -> RepositoryResult<()>;
 
     /// 删除实体
-    async fn delete(&self, id: i64) -> AppResult<()>;
+    async fn delete(&self, id: i64) -> RepositoryResult<()>;
 }
 
 /// Repository管理器
@@ -95,14 +95,14 @@ impl RepositoryManager {
 
 /// 通用的行转换工具
 pub trait RowMapper<T> {
-    fn from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<T>;
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> RepositoryResult<T>;
 }
 
 /// 通用的值提取工具
 pub fn extract_value_from_row(
     row: &sqlx::sqlite::SqliteRow,
     column_index: usize,
-) -> AppResult<Value> {
+) -> RepositoryResult<Value> {
     use sqlx::{Column, TypeInfo};
 
     let column = &row.columns()[column_index];

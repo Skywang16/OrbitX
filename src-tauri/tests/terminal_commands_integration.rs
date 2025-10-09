@@ -18,7 +18,7 @@ use terminal_lib::terminal::{
 /// 创建测试用的终端上下文状态
 fn create_test_context_state() -> TerminalContextState {
     let registry = Arc::new(ActiveTerminalContextRegistry::new());
-    let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
+    let shell_integration = Arc::new(ShellIntegrationManager::new());
     let terminal_mux = Arc::new(TerminalMux::new());
     let cache = Arc::new(UnifiedCache::new());
     let context_service = Arc::new(TerminalContextService::new(
@@ -339,7 +339,7 @@ async fn test_event_system_integration() {
 #[tokio::test]
 async fn test_state_access_methods() {
     let registry = Arc::new(ActiveTerminalContextRegistry::new());
-    let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
+    let shell_integration = Arc::new(ShellIntegrationManager::new());
     let terminal_mux = Arc::new(TerminalMux::new());
     let cache = Arc::new(UnifiedCache::new());
     let context_service = Arc::new(TerminalContextService::new(

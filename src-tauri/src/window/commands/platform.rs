@@ -15,7 +15,6 @@ pub async fn window_get_platform_info(
     let platform_info = match state
         .with_config_manager(|config| Ok(config.window_get_platform_info().cloned()))
         .await
-        .to_tauri()
     {
         Ok(info) => info,
         Err(_) => {
@@ -40,13 +39,13 @@ pub async fn window_get_platform_info(
         is_mac: cfg!(target_os = "macos"),
     };
 
-    if let Err(_) = state
+    if state
         .with_config_manager_mut(|config| {
             config.set_platform_info(platform_info.clone());
             Ok(())
         })
         .await
-        .to_tauri()
+        .is_err()
     {
         return Ok(api_error!("window.get_platform_info_failed"));
     }

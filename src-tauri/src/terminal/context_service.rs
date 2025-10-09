@@ -2,11 +2,13 @@ use crate::mux::{PaneId, TerminalMux};
 use crate::shell::{ContextServiceIntegration, ShellIntegrationManager};
 use crate::storage::cache::{CacheEntrySnapshot, UnifiedCache};
 use crate::terminal::{
-    context_registry::ActiveTerminalContextRegistry, CommandInfo, ShellType, TerminalContext,
+    context_registry::ActiveTerminalContextRegistry,
+    error::{ContextServiceError, ContextServiceResult},
+    CommandInfo,
+    ShellType,
+    TerminalContext,
     TerminalContextEvent,
 };
-use crate::utils::error::AppResult;
-use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -119,24 +121,27 @@ impl TerminalContextService {
         service
     }
 
-    pub async fn get_active_context(&self) -> AppResult<TerminalContext> {
+    pub async fn get_active_context(&self) -> ContextServiceResult<TerminalContext> {
         let active_pane_id = self
             .registry
             .terminal_context_get_active_pane()
-            .ok_or(anyhow!("没有活跃的终端"))?;
+            .ok_or(ContextServiceError::NoActivePane)?;
 
         debug!("获取活跃终端上下文: pane_id={:?}", active_pane_id);
         self.get_context_by_pane(active_pane_id).await
     }
 
-    pub async fn get_context_by_pane(&self, pane_id: PaneId) -> AppResult<TerminalContext> {
+    pub async fn get_context_by_pane(
+        &self,
+        pane_id: PaneId,
+    ) -> ContextServiceResult<TerminalContext> {
         if let Some(cached) = self.load_from_cache(pane_id).await? {
             return Ok(cached);
         }
 
         let context = timeout(self.query_timeout, self.query_context_internal(pane_id))
             .await
-            .map_err(|_| anyhow!("Terminal context query timeout"))??;
+            .map_err(|_| ContextServiceError::QueryTimeout)??;
 
         self.store_in_cache(pane_id, &context).await;
         self.send_context_updated_event(pane_id, &context);
@@ -147,7 +152,7 @@ impl TerminalContextService {
     pub async fn get_context_with_fallback(
         &self,
         pane_id: Option<PaneId>,
-    ) -> AppResult<TerminalContext> {
+    ) -> ContextServiceResult<TerminalContext> {
         if let Some(pane_id) = pane_id {
             if let Ok(context) = self.get_context_by_pane(pane_id).await {
                 return Ok(context);
@@ -167,32 +172,31 @@ impl TerminalContextService {
         Ok(self.create_default_context())
     }
 
-    pub async fn get_active_cwd(&self) -> AppResult<String> {
+    pub async fn get_active_cwd(&self) -> ContextServiceResult<String> {
         let context = self.get_active_context().await?;
-        context
-            .current_working_directory
-            .ok_or_else(|| anyhow!("活跃终端没有工作目录"))
+        context.current_working_directory.ok_or(
+            ContextServiceError::WorkingDirectoryMissing,
+        )
     }
 
-    pub async fn shell_get_pane_cwd(&self, pane_id: PaneId) -> AppResult<String> {
+    pub async fn shell_get_pane_cwd(&self, pane_id: PaneId) -> ContextServiceResult<String> {
         let context = self.get_context_by_pane(pane_id).await?;
         context
             .current_working_directory
-            .ok_or_else(|| anyhow!("面板 {} 没有工作目录", pane_id))
+            .ok_or(ContextServiceError::WorkingDirectoryMissing)
     }
 
-    pub async fn get_active_shell_type(&self) -> AppResult<ShellType> {
+    pub async fn get_active_shell_type(&self) -> ContextServiceResult<ShellType> {
         let context = self.get_active_context().await?;
-        context
-            .shell_type
-            .ok_or_else(|| anyhow!("活跃终端没有Shell类型"))
+        context.shell_type.ok_or(ContextServiceError::ShellTypeMissing)
     }
 
-    pub async fn get_pane_shell_type(&self, pane_id: PaneId) -> AppResult<ShellType> {
+    pub async fn get_pane_shell_type(
+        &self,
+        pane_id: PaneId,
+    ) -> ContextServiceResult<ShellType> {
         let context = self.get_context_by_pane(pane_id).await?;
-        context
-            .shell_type
-            .ok_or_else(|| anyhow!("面板 {} 没有Shell类型", pane_id))
+        context.shell_type.ok_or(ContextServiceError::ShellTypeMissing)
     }
 
     pub async fn invalidate_cache_entry(&self, pane_id: PaneId) {
@@ -235,7 +239,10 @@ impl TerminalContextService {
         CacheStats::from_counters(total_entries, hits, misses, evictions)
     }
 
-    async fn load_from_cache(&self, pane_id: PaneId) -> AppResult<Option<TerminalContext>> {
+    async fn load_from_cache(
+        &self,
+        pane_id: PaneId,
+    ) -> ContextServiceResult<Option<TerminalContext>> {
         let cache_key = Self::cache_key(pane_id);
         match self.cache.snapshot(&cache_key).await {
             Some(snapshot) => {
@@ -265,7 +272,7 @@ impl TerminalContextService {
         }
     }
 
-    async fn load_any_cached_context(&self) -> AppResult<Option<TerminalContext>> {
+    async fn load_any_cached_context(&self) -> ContextServiceResult<Option<TerminalContext>> {
         let mut best: Option<(std::time::Instant, TerminalContext)> = None;
         let keys = self.cache.keys().await;
 
@@ -364,9 +371,14 @@ impl TerminalContextService {
         ttl
     }
 
-    async fn query_context_internal(&self, pane_id: PaneId) -> AppResult<TerminalContext> {
+    async fn query_context_internal(
+        &self,
+        pane_id: PaneId,
+    ) -> ContextServiceResult<TerminalContext> {
         if !self.terminal_mux.pane_exists(pane_id) {
-            return Err(anyhow!("Pane does not exist: {}", pane_id));
+            return Err(ContextServiceError::PaneNotFound {
+                pane_id: pane_id.as_u32(),
+            });
         }
 
         let mut context = TerminalContext::new(pane_id);
@@ -453,7 +465,7 @@ impl TerminalContextService {
         };
 
         if let Err(error) = self.registry.send_event(event) {
-            warn!("发送上下文更新事件失败: {}", error);
+            warn!("Failed to send context update event: {}", error);
         }
     }
 
@@ -513,7 +525,7 @@ mod tests {
     fn create_service() -> TerminalContextService {
         TerminalContextService::new(
             Arc::new(ActiveTerminalContextRegistry::new()),
-            Arc::new(ShellIntegrationManager::new().unwrap()),
+            Arc::new(ShellIntegrationManager::new()),
             Arc::new(TerminalMux::new()),
             Arc::new(UnifiedCache::new()),
         )

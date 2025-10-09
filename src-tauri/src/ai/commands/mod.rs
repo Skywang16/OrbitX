@@ -6,8 +6,6 @@ use crate::ai::AIService;
 use crate::storage::cache::UnifiedCache;
 use crate::storage::repositories::RepositoryManager;
 use crate::terminal::TerminalContextService;
-use crate::utils::error::ToTauriResult;
-
 use std::sync::Arc;
 
 pub struct AIManagerState {
@@ -34,7 +32,10 @@ impl AIManagerState {
     }
 
     pub async fn initialize(&self) -> Result<(), String> {
-        self.ai_service.initialize().await.to_tauri()
+        self.ai_service
+            .initialize()
+            .await
+            .map_err(|err| err.to_string())
     }
 
     pub fn repositories(&self) -> &Arc<RepositoryManager> {

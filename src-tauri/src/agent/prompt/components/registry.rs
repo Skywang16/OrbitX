@@ -119,13 +119,13 @@ impl PromptComponentRegistry {
                     for dep in def.dependencies() {
                         if !components.contains(dep) {
                             errors.push(format!(
-                                "组件 {:?} 依赖的组件 {:?} 未包含在列表中",
+                                "Component {:?} depends on {:?} which is missing from the selection",
                                 component, dep
                             ));
                         }
                     }
                 }
-                None => errors.push(format!("组件不存在: {:?}", component)),
+                None => errors.push(format!("Component does not exist: {:?}", component)),
             }
         }
         errors

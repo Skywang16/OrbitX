@@ -397,7 +397,7 @@ pub async fn shell_execute_background_command(
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
             debug!(
-                "后台命令执行完成: {} (退出码: {}, 耗时: {}ms)",
+                "Background command finished: {} (exit_code: {}, elapsed_ms: {})",
                 command, exit_code, execution_time
             );
 
@@ -411,7 +411,7 @@ pub async fn shell_execute_background_command(
             }))
         }
         Err(e) => {
-            error!("后台命令执行失败: {} - {}", command, e);
+            error!("Background command failed: {} - {}", command, e);
             Ok(api_error!("shell.execute_command_failed"))
         }
     }

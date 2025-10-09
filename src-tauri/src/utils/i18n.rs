@@ -26,7 +26,7 @@ impl I18nManager {
         let lang_code = language.to_string();
         let json_content = Self::load_language_file(&lang_code)?;
         let messages: HashMap<String, Value> = serde_json::from_str(&json_content)
-            .map_err(|e| format!("Failed to parse language file {}: {}", lang_code, e))?
+            .map_err(|e| format!("Failed to parse language file {}: {}", lang_code, e))?;
 
         if let Ok(mut i18n_messages) = I18N_MESSAGES.write() {
             i18n_messages.insert(lang_code, messages);
@@ -137,7 +137,7 @@ impl I18nManager {
     pub fn add_message(lang_code: &str, key: &str, value: &str) -> Result<(), String> {
         let mut i18n_messages = I18N_MESSAGES
             .write()
-            .map_err(|_| "Failed to acquire i18n message store write lock")?
+            .map_err(|_| "Failed to acquire i18n message store write lock")?;
 
         let messages = i18n_messages
             .entry(lang_code.to_string())

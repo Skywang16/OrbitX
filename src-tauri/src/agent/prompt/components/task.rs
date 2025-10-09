@@ -3,10 +3,8 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
-
 use crate::agent::config::PromptComponent;
-use crate::agent::error::AgentResult;
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::prompt::components::types::{ComponentContext, ComponentDefinition};
 use crate::agent::prompt::template_engine::TemplateEngine;
 
@@ -58,7 +56,7 @@ impl ComponentDefinition for TaskContextComponent {
 
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing task context template")?;
+            .ok_or_else(|| AgentError::Internal("missing task context template".to_string()))?;
 
         let additional_context = if context.additional_context.is_empty() {
             "".to_string()
@@ -77,7 +75,7 @@ impl ComponentDefinition for TaskContextComponent {
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| anyhow!("failed to render task context template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render task context template: {}", e)))?;
 
         Ok(Some(result))
     }

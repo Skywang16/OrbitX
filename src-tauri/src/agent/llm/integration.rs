@@ -6,7 +6,7 @@ use crate::agent::core::context::{TaskContext, ToolCallResult};
 use crate::agent::core::executor::TaskExecutor;
 use crate::agent::events::{TaskProgressPayload, ToolResultPayload};
 use crate::agent::persistence::ToolExecutionStatus;
-use crate::agent::state::error::TaskExecutorResult;
+use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::llm::types::{LLMMessage, LLMRequest, LLMTool, LLMToolCall};
 use chrono::Utc;
 use serde_json::Value;
@@ -293,7 +293,7 @@ impl TaskExecutor {
             .ai_models()
             .find_all_with_decrypted_keys()
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to get available models: {}", e))?;
+            .map_err(TaskExecutorError::from)?;
 
         if let Some(first_enabled) = models.iter().find(|m| m.enabled) {
             return Ok(first_enabled.id.clone());
@@ -303,8 +303,9 @@ impl TaskExecutor {
             return Ok(any_model.id.clone());
         }
 
-        Err(anyhow::anyhow!(
-            "未找到任何可用模型，请在 设置 -> 模型 中添加并启用至少一个模型"
+        Err(TaskExecutorError::InternalError(
+            "No available models found. Please add and enable at least one model in Settings -> Models."
+                .to_string(),
         ))
     }
 

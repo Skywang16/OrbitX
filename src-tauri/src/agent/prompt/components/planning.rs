@@ -2,10 +2,8 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
-
 use crate::agent::config::PromptComponent;
-use crate::agent::error::AgentResult;
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::prompt::components::types::{ComponentContext, ComponentDefinition};
 use crate::agent::prompt::template_engine::TemplateEngine;
 
@@ -58,11 +56,11 @@ impl ComponentDefinition for PlanningGuidelinesComponent {
     ) -> AgentResult<Option<String>> {
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing planning guidelines template")?;
+            .ok_or_else(|| AgentError::Internal("missing planning guidelines template".to_string()))?;
 
         let result = TemplateEngine::new()
             .resolve(template, &HashMap::new())
-            .map_err(|e| anyhow!("failed to render planning guidelines template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render planning guidelines template: {}", e)))?;
         Ok(Some(result))
     }
 }

@@ -19,7 +19,6 @@ pub async fn window_set_opacity<R: Runtime>(
     let window_id = match state
         .with_config_manager(|config| Ok(config.get_default_window_id().to_string()))
         .await
-        .to_tauri()
     {
         Ok(id) => id,
         Err(_) => return Ok(api_error!("window.get_window_id_failed")),
@@ -34,7 +33,7 @@ pub async fn window_set_opacity<R: Runtime>(
 
     match window.eval(&script) {
         Ok(_) => (),
-        Err(e) => {
+        Err(_) => {
             return Ok(api_error!("window.set_opacity_failed"));
         }
     }
@@ -48,7 +47,7 @@ pub async fn window_set_opacity<R: Runtime>(
         .await
     {
         Ok(_) => (),
-        Err(e) => {
+        Err(_) => {
             return Ok(api_error!("config.save_failed"));
         }
     }
@@ -67,6 +66,6 @@ pub async fn window_get_opacity(
 
             Ok(api_success!(opacity))
         }
-        Err(e) => Ok(api_error!("config.get_failed")),
+        Err(_) => Ok(api_error!("config.get_failed")),
     }
 }

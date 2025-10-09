@@ -1,10 +1,9 @@
 //! Git命令补全提供者
 
+use crate::completion::error::{CompletionProviderError, CompletionProviderResult};
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
 use crate::storage::cache::UnifiedCache;
-use crate::utils::error::AppResult;
-use anyhow::Context;
 use async_trait::async_trait;
 use std::path::Path;
 use std::sync::Arc;
@@ -24,7 +23,7 @@ impl GitCompletionProvider {
     }
 
     /// 检查是否在git仓库中
-    async fn is_git_repository(&self, working_directory: &Path) -> AppResult<bool> {
+    async fn is_git_repository(&self, working_directory: &Path) -> CompletionProviderResult<bool> {
         let path_str = working_directory.to_string_lossy().to_string();
         let cache_key = format!("completion/git/repo:{}", path_str);
 
@@ -40,7 +39,11 @@ impl GitCompletionProvider {
             .current_dir(working_directory)
             .output()
             .await
-            .with_context(|| "检查git仓库失败")?;
+            .map_err(|e| CompletionProviderError::io(
+                "git rev-parse",
+                format!("({})", working_directory.display()),
+                e,
+            ))?;
 
         let is_repo = output.status.success();
 
@@ -79,13 +82,17 @@ impl GitCompletionProvider {
         &self,
         working_directory: &Path,
         query: &str,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let output = AsyncCommand::new("git")
             .args(["branch", "--all", "--format=%(refname:short)"])
             .current_dir(working_directory)
             .output()
             .await
-            .with_context(|| "获取分支列表失败")?;
+            .map_err(|e| CompletionProviderError::io(
+                "git branch",
+                format!("({})", working_directory.display()),
+                e,
+            ))?;
 
         if !output.status.success() {
             return Ok(vec![]);
@@ -171,13 +178,17 @@ impl GitCompletionProvider {
         &self,
         working_directory: &Path,
         query: &str,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let output = AsyncCommand::new("git")
             .args(["status", "--porcelain"])
             .current_dir(working_directory)
             .output()
             .await
-            .with_context(|| "获取文件状态失败")?;
+            .map_err(|e| CompletionProviderError::io(
+                "git status",
+                format!("({})", working_directory.display()),
+                e,
+            ))?;
 
         if !output.status.success() {
             return Ok(vec![]);
@@ -234,7 +245,7 @@ impl CompletionProvider for GitCompletionProvider {
     async fn provide_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         if !self.is_git_repository(&context.working_directory).await? {
             return Ok(vec![]);
         }

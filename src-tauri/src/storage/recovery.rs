@@ -5,10 +5,9 @@
  * 提供统一的错误处理和日志记录机制
  */
 
+use crate::storage::error::{StorageRecoveryError, StorageRecoveryResult};
 use crate::storage::paths::StoragePaths;
 use crate::storage::types::StorageLayer;
-use crate::utils::error::AppResult;
-use anyhow::{anyhow, Context};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -22,11 +21,11 @@ pub enum RecoveryStrategy {
     /// 重试操作
     Retry { max_attempts: u32, delay: Duration },
     /// 使用备份
-    UseBackup { backup_path: PathBuf },
+    UseBackup,
     /// 重建数据
     Rebuild,
     /// 降级模式
-    Fallback { fallback_data: serde_json::Value },
+    Fallback,
     /// 跳过错误
     Skip,
 }
@@ -63,29 +62,15 @@ impl RecoveryManager {
         strategies.insert(
             StorageLayer::Config,
             vec![
-                RecoveryStrategy::UseBackup {
-                    backup_path: paths.backup_file("config.toml.bak"),
-                },
-                RecoveryStrategy::Fallback {
-                    fallback_data: serde_json::json!({
-                        "app": {
-                            "name": "OrbitX",
-                            "version": "1.0.0"
-                        }
-                    }),
-                },
+                RecoveryStrategy::UseBackup,
+                RecoveryStrategy::Fallback,
             ],
         );
 
         // 状态层恢复策略
         strategies.insert(
             StorageLayer::State,
-            vec![
-                RecoveryStrategy::UseBackup {
-                    backup_path: paths.backup_file("session_state.msgpack.bak"),
-                },
-                RecoveryStrategy::Rebuild,
-            ],
+            vec![RecoveryStrategy::UseBackup, RecoveryStrategy::Rebuild],
         );
 
         // 数据层恢复策略
@@ -96,9 +81,7 @@ impl RecoveryManager {
                     max_attempts: 3,
                     delay: Duration::from_secs(1),
                 },
-                RecoveryStrategy::UseBackup {
-                    backup_path: paths.backup_file("orbitx.db.bak"),
-                },
+                RecoveryStrategy::UseBackup,
                 RecoveryStrategy::Rebuild,
             ],
         );
@@ -110,14 +93,13 @@ impl RecoveryManager {
     pub async fn recover_layer(
         &self,
         layer: StorageLayer,
-        error: &anyhow::Error,
-    ) -> AppResult<RecoveryResult> {
+    ) -> StorageRecoveryResult<RecoveryResult> {
         info!("尝试恢复存储层: {:?}", layer);
         let start_time = std::time::Instant::now();
 
         if let Some(strategies) = self.strategies.get(&layer) {
             for strategy in strategies {
-                match self.apply_recovery_strategy(layer, strategy, error).await {
+                match self.apply_recovery_strategy(layer, strategy).await {
                     Ok(result) => {
                         info!(
                             "恢复成功，使用策略: {:?}, 耗时: {:?}",
@@ -147,7 +129,7 @@ impl RecoveryManager {
     }
 
     /// 创建备份
-    pub async fn create_backup(&self, layer: StorageLayer) -> AppResult<PathBuf> {
+    pub async fn create_backup(&self, layer: StorageLayer) -> StorageRecoveryResult<PathBuf> {
         debug!("创建备份: {:?}", layer);
 
         let (source_path, backup_path) = match layer {
@@ -168,21 +150,22 @@ impl RecoveryManager {
         if source_path.exists() {
             // 确保备份目录存在
             if let Some(parent) = backup_path.parent() {
-                fs::create_dir_all(parent)
-                    .await
-                    .with_context(|| format!("创建备份目录失败: {}", parent.display()))?;
+                fs::create_dir_all(parent).await.map_err(|e| {
+                    StorageRecoveryError::io(format!("创建备份目录 {}", parent.display()), e)
+                })?;
             }
 
             // 复制文件
-            fs::copy(&source_path, &backup_path)
-                .await
-                .with_context(|| {
+            fs::copy(&source_path, &backup_path).await.map_err(|e| {
+                StorageRecoveryError::io(
                     format!(
-                        "创建备份失败: {} -> {}",
+                        "创建备份失败 {} -> {}",
                         source_path.display(),
                         backup_path.display()
-                    )
-                })?;
+                    ),
+                    e,
+                )
+            })?;
 
             info!("备份创建成功: {:?} -> {:?}", source_path, backup_path);
         }
@@ -191,7 +174,7 @@ impl RecoveryManager {
     }
 
     /// 从备份恢复
-    pub async fn restore_from_backup(&self, layer: StorageLayer) -> AppResult<()> {
+    pub async fn restore_from_backup(&self, layer: StorageLayer) -> StorageRecoveryResult<()> {
         info!("从备份恢复: {:?}", layer);
 
         let (target_path, backup_path) = match layer {
@@ -210,19 +193,22 @@ impl RecoveryManager {
         };
 
         if !backup_path.exists() {
-            return Err(anyhow!("Backup file does not exist: {}", backup_path.display()));
+            return Err(StorageRecoveryError::BackupMissing {
+                path: backup_path.clone(),
+            });
         }
 
         // 复制备份文件到目标位置
-        fs::copy(&backup_path, &target_path)
-            .await
-            .with_context(|| {
+        fs::copy(&backup_path, &target_path).await.map_err(|e| {
+            StorageRecoveryError::io(
                 format!(
-                    "从备份恢复失败: {} -> {}",
+                    "从备份恢复失败 {} -> {}",
                     backup_path.display(),
                     target_path.display()
-                )
-            })?;
+                ),
+                e,
+            )
+        })?;
 
         info!("从备份恢复成功: {:?} <- {:?}", target_path, backup_path);
         Ok(())
@@ -233,8 +219,7 @@ impl RecoveryManager {
         &self,
         layer: StorageLayer,
         strategy: &RecoveryStrategy,
-        _error: &anyhow::Error,
-    ) -> AppResult<RecoveryResult> {
+    ) -> StorageRecoveryResult<RecoveryResult> {
         let start_time = std::time::Instant::now();
 
         match strategy {
@@ -252,7 +237,7 @@ impl RecoveryManager {
                     duration: start_time.elapsed(),
                 })
             }
-            RecoveryStrategy::UseBackup { backup_path: _ } => {
+            RecoveryStrategy::UseBackup => {
                 self.restore_from_backup(layer).await?;
                 Ok(RecoveryResult {
                     success: true,
@@ -272,7 +257,7 @@ impl RecoveryManager {
                     duration: start_time.elapsed(),
                 })
             }
-            RecoveryStrategy::Fallback { fallback_data: _ } => {
+            RecoveryStrategy::Fallback => {
                 // 使用降级数据
                 Ok(RecoveryResult {
                     success: true,

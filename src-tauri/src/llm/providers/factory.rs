@@ -1,17 +1,17 @@
 use crate::llm::{
+    error::LlmProviderResult,
     providers::{
         anthropic::AnthropicProvider, base::LLMProvider, gemini::GeminiProvider,
         openai::OpenAIProvider,
     },
     types::{LLMProviderConfig, LLMProviderType},
 };
-use anyhow::Result;
 
 /// LLM提供者工厂
 pub struct ProviderFactory;
 
 impl ProviderFactory {
-    pub fn create_provider(config: LLMProviderConfig) -> Result<Box<dyn LLMProvider>> {
+    pub fn create_provider(config: LLMProviderConfig) -> LlmProviderResult<Box<dyn LLMProvider>> {
         match config.provider_type {
             LLMProviderType::OpenAI | LLMProviderType::Custom | LLMProviderType::Qwen => {
                 let provider = OpenAIProvider::new(config);

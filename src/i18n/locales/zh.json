@@ -61,21 +61,7 @@
     },
     "theme": {
       "title": "选择您的主题",
-      "description": "选择符合您风格的主题",
-      "options": {
-        "dark": {
-          "name": "深色主题",
-          "description": "适合低光环境使用的深色界面"
-        },
-        "light": {
-          "name": "浅色主题", 
-          "description": "明亮清晰的浅色界面"
-        },
-        "auto": {
-          "name": "跟随系统",
-          "description": "根据系统设置自动切换主题"
-        }
-      }
+      "description": "选择符合您风格的主题"
     },
     "ai": {
       "title": "AI助手设置",
@@ -123,7 +109,6 @@
     "api_key_placeholder": "输入您的 API Key",
     "test_connection": "测试连接",
     "testing": "测试中...",
-    "add_model": "添加模型",
     "loading": "加载中...",
     "edit": "编辑",
     "delete": "删除",
@@ -131,8 +116,6 @@
     "delete_description": "删除后无法恢复，请确认操作",
     "delete_confirm_text": "确认",
     "cancel": "取消",
-    "save": "保存",
-    "add": "添加",
     "add_new_model": "添加新模型",
     "add_model_description": "配置AI模型和向量模型连接信息",
     "no_models": "暂无模型配置",
@@ -174,24 +157,8 @@
     "reset_shortcuts": "重置快捷键",
     "reset_description": "将所有快捷键恢复为默认设置",
     "actions": {
-      "copy_to_clipboard": "复制到剪贴板",
-      "paste_from_clipboard": "从剪贴板粘贴",
-      "terminal_search": "终端搜索",
-      "open_settings": "打开设置",
       "new_tab": "新建标签页",
-      "close_tab": "关闭标签页",
-      "switch_to_tab_1": "切换到标签页 1",
-      "switch_to_tab_2": "切换到标签页 2",
-      "switch_to_tab_3": "切换到标签页 3",
-      "switch_to_tab_4": "切换到标签页 4",
-      "switch_to_tab_5": "切换到标签页 5",
-      "switch_to_last_tab": "切换到最后标签页",
-      "clear_terminal": "清空终端",
-      "accept_completion": "接受补全",
-      "increase_font_size": "增大字体",
-      "decrease_font_size": "减小字体",
-      "toggle_ai_sidebar": "开启/关闭AI侧边栏",
-      "toggle_window_pin": "钉住/取消钉住窗口"
+      "toggle_ai_sidebar": "开启/关闭AI侧边栏"
     }
   },
   "language": {
@@ -260,10 +227,7 @@
   "cache": {
     "directory_cleared": "目录缓存已清除"
   },
-  "config": {
-    "unknown_time": "未知",
-    "invalid_time": "无效时间"
-  },
+  "config": {},
   "ck": {
     "index_ready": "已构建向量索引",
     "index_not_ready": "语义索引未就绪",
@@ -278,7 +242,6 @@
     "build_index_tooltip_disabled": "请选择非初始目录后再构建",
     "build_index_tooltip_enabled": "构建索引",
     "refresh": "刷新",
-    "delete": "删除",
-    "loading_size": "计算中..."
+    "delete": "删除"
   }
 }

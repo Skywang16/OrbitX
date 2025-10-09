@@ -1,13 +1,14 @@
 use async_trait::async_trait;
 use eventsource_stream::Eventsource;
 use futures::StreamExt;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::pin::Pin;
 use tokio_stream::Stream;
 
 use crate::llm::{
+    error::{LlmProviderError, LlmProviderResult, OpenAiError},
     providers::base::LLMProvider,
     types::{
         EmbeddingData, EmbeddingRequest, EmbeddingResponse, LLMMessage, LLMMessageContent,
@@ -15,13 +16,14 @@ use crate::llm::{
         LLMToolCall, LLMUsage,
     },
 };
-use anyhow::{anyhow, Context, Result};
 
 /// OpenAI提供者
 pub struct OpenAIProvider {
     client: Client,
     config: LLMProviderConfig,
 }
+
+type OpenAiResult<T> = Result<T, OpenAiError>;
 
 impl OpenAIProvider {
     pub fn new(config: LLMProviderConfig) -> Self {
@@ -194,11 +196,11 @@ impl OpenAIProvider {
     }
 
     /// 从提供商响应中解析 LLMResponse
-    fn parse_response(&self, response_json: &Value) -> Result<LLMResponse> {
+    fn parse_response(&self, response_json: &Value) -> OpenAiResult<LLMResponse> {
         let choice = response_json["choices"]
             .as_array()
             .and_then(|arr| arr.first())
-            .ok_or_else(|| anyhow!("响应中缺少choices字段"))?;
+            .ok_or(OpenAiError::MissingField { field: "choices" })?;
 
         let content = choice["message"]["content"]
             .as_str()
@@ -222,24 +224,26 @@ impl OpenAIProvider {
     }
 
     /// 从响应中提取工具调用
-    fn extract_tool_calls(&self, choice: &Value) -> Result<Option<Vec<LLMToolCall>>> {
+    fn extract_tool_calls(&self, choice: &Value) -> OpenAiResult<Option<Vec<LLMToolCall>>> {
         if let Some(tool_calls_json) = choice["message"]["tool_calls"].as_array() {
-            let extracted_calls: Result<Vec<LLMToolCall>> = tool_calls_json
+            let extracted_calls: OpenAiResult<Vec<LLMToolCall>> = tool_calls_json
                 .iter()
                 .map(|tc| {
                     let id = tc["id"]
                         .as_str()
-                        .ok_or_else(|| anyhow!("工具调用中缺少ID字段"))?
+                        .ok_or(OpenAiError::MissingField { field: "tool_calls[].id" })?
                         .to_string();
                     let function = &tc["function"];
                     let name = function["name"]
                         .as_str()
-                        .ok_or_else(|| anyhow!("工具调用函数中缺少name字段"))?
+                        .ok_or(OpenAiError::MissingField {
+                            field: "tool_calls[].function.name",
+                        })?
                         .to_string();
 
                     let arguments_str = function["arguments"].as_str().unwrap_or("{}");
                     let arguments: Value = serde_json::from_str(arguments_str)
-                        .map_err(|e| anyhow!("Failed to parse tool_call arguments: {}", e))?;
+                        .map_err(|source| OpenAiError::ToolCallArguments { source })?;
 
                     Ok(LLMToolCall {
                         id,
@@ -275,31 +279,30 @@ impl OpenAIProvider {
     }
 
     /// 处理 API 错误响应
-    fn handle_error_response(&self, status: u16, body: &str) -> anyhow::Error {
+    fn handle_error_response(&self, status: StatusCode, body: &str) -> OpenAiError {
         if let Ok(error_json) = serde_json::from_str::<Value>(body) {
             if let Some(error_obj) = error_json["error"].as_object() {
                 let error_type = error_obj["type"].as_str().unwrap_or("unknown");
                 let error_message = error_obj["message"].as_str().unwrap_or("Unknown error");
 
-                return match error_type {
-                    "insufficient_quota" => {
-                        anyhow!("OpenAI API 配额超出: {}", error_message)
-                    }
-                    "invalid_request_error" => {
-                        anyhow!("OpenAI API 请求错误: {}", error_message)
-                    }
-                    "authentication_error" => {
-                        anyhow!("OpenAI API 认证失败: {}", error_message)
-                    }
-                    _ => anyhow!("OpenAI API 错误: {}", error_message),
+                let message = match error_type {
+                    "insufficient_quota" => format!("Quota exceeded: {}", error_message),
+                    "invalid_request_error" => format!("Request error: {}", error_message),
+                    "authentication_error" => format!("Authentication failed: {}", error_message),
+                    _ => error_message.to_string(),
                 };
+
+                return OpenAiError::Api { status, message };
             }
         }
-        anyhow!("OpenAI API 响应错误 {}: {}", status, body)
+        OpenAiError::Api {
+            status,
+            message: format!("Unexpected response: {}", body),
+        }
     }
 
     /// 解析流式响应中的工具调用增量
-    fn parse_delta_tool_calls(delta: &Value) -> Result<Option<Vec<LLMToolCall>>> {
+    fn parse_delta_tool_calls(delta: &Value) -> OpenAiResult<Option<Vec<LLMToolCall>>> {
         if let Some(tool_calls_array) = delta["tool_calls"].as_array() {
             let mut parsed_calls = Vec::new();
 
@@ -354,7 +357,7 @@ impl OpenAIProvider {
     }
 
     /// 解析 SSE 流中的单个数据块 (关联函数，不依赖 self)
-    fn parse_stream_chunk(data: &str) -> Result<LLMStreamChunk> {
+    fn parse_stream_chunk(data: &str) -> OpenAiResult<LLMStreamChunk> {
         if data == "[DONE]" {
             return Ok(LLMStreamChunk::Finish {
                 finish_reason: "stop".to_string(),
@@ -364,16 +367,18 @@ impl OpenAIProvider {
 
         // 跳过空数据或无效数据
         if data.trim().is_empty() {
-            anyhow::bail!("流式数据为空");
+            return Err(OpenAiError::Stream {
+                message: "Empty stream payload".to_string(),
+            });
         }
 
         let json_data: Value =
-            serde_json::from_str(data).map_err(|e| anyhow!("解析流式数据失败: {}", e))?;
+            serde_json::from_str(data).map_err(|source| OpenAiError::Json { source })?;
 
         let choice = json_data["choices"]
             .as_array()
             .and_then(|arr| arr.first())
-            .ok_or_else(|| anyhow!("流式数据块中缺少choices字段"))?;
+            .ok_or(OpenAiError::MissingField { field: "choices" })?;
 
         if let Some(finish_reason) = choice["finish_reason"].as_str() {
             // 当finish_reason是"tool_calls"时，检查是否有工具调用需要处理
@@ -411,11 +416,15 @@ impl OpenAIProvider {
                 });
             } else {
                 // 跳过空的delta
-                anyhow::bail!("流式增量内容为空");
+                return Err(OpenAiError::Stream {
+                    message: "Empty delta chunk".to_string(),
+                });
             }
         }
 
-        anyhow::bail!("未知的流式数据块格式")
+        Err(OpenAiError::Stream {
+            message: "Unknown stream chunk format".to_string(),
+        })
     }
 
     // extract_usage 的静态版本
@@ -439,16 +448,16 @@ impl OpenAIProvider {
     }
 
     /// 解析embedding响应
-    fn parse_embedding_response(&self, response_json: &Value) -> Result<EmbeddingResponse> {
+    fn parse_embedding_response(&self, response_json: &Value) -> OpenAiResult<EmbeddingResponse> {
         let data_array = response_json["data"]
             .as_array()
-            .ok_or_else(|| anyhow!("embedding响应缺少data字段"))?;
+            .ok_or(OpenAiError::EmbeddingField { field: "data" })?;
 
         let mut embedding_data = Vec::new();
         for (i, item) in data_array.iter().enumerate() {
             let embedding_vec = item["embedding"]
                 .as_array()
-                .ok_or_else(|| anyhow!("embedding数据缺少embedding字段"))?
+                .ok_or(OpenAiError::EmbeddingField { field: "data[].embedding" })?
                 .iter()
                 .map(|v| v.as_f64().unwrap_or(0.0) as f32)
                 .collect::<Vec<f32>>();
@@ -478,7 +487,7 @@ impl OpenAIProvider {
 #[async_trait]
 impl LLMProvider for OpenAIProvider {
     /// 非流式调用
-    async fn call(&self, request: LLMRequest) -> Result<LLMResponse> {
+    async fn call(&self, request: LLMRequest) -> LlmProviderResult<LLMResponse> {
         let url = self.get_endpoint();
         let headers = self.get_headers();
         let body = self.build_body(&request);
@@ -488,7 +497,10 @@ impl LLMProvider for OpenAIProvider {
             req_builder = req_builder.header(&key, &value);
         }
 
-        let response = req_builder.send().await.context("发送HTTP请求失败")?;
+        let response = req_builder
+            .send()
+            .await
+            .map_err(|source| LlmProviderError::OpenAi(OpenAiError::Http { source }))?;
 
         let status = response.status();
         if !status.is_success() {
@@ -496,18 +508,23 @@ impl LLMProvider for OpenAIProvider {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(self.handle_error_response(status.as_u16(), &error_text));
+            let error = self.handle_error_response(status, &error_text);
+            return Err(LlmProviderError::from(error));
         }
 
-        let response_json: Value = response.json().await.context("解析JSON响应失败")?;
+        let response_json: Value = response
+            .json()
+            .await
+            .map_err(|source| LlmProviderError::OpenAi(OpenAiError::Http { source }))?;
         self.parse_response(&response_json)
+            .map_err(LlmProviderError::from)
     }
 
     /// 流式调用
     async fn call_stream(
         &self,
         mut request: LLMRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<LLMStreamChunk>> + Send>>> {
+    ) -> LlmProviderResult<Pin<Box<dyn Stream<Item = LlmProviderResult<LLMStreamChunk>> + Send>>> {
         request.stream = true;
         let url = self.get_endpoint();
         let headers = self.get_headers();
@@ -518,7 +535,10 @@ impl LLMProvider for OpenAIProvider {
             req_builder = req_builder.header(&key, &value);
         }
 
-        let response = req_builder.send().await.context("发送HTTP请求失败")?;
+        let response = req_builder
+            .send()
+            .await
+            .map_err(|source| LlmProviderError::OpenAi(OpenAiError::Http { source }))?;
 
         let status = response.status();
         if !status.is_success() {
@@ -526,7 +546,8 @@ impl LLMProvider for OpenAIProvider {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(self.handle_error_response(status.as_u16(), &error_text));
+            let error = self.handle_error_response(status, &error_text);
+            return Err(LlmProviderError::from(error));
         }
 
         let stream = response
@@ -541,7 +562,9 @@ impl LLMProvider for OpenAIProvider {
                             Err(_) => None, // 静默跳过解析错误（通常是空内容）
                         }
                     }
-                    Err(e) => Some(Err(anyhow!("网络错误: {}", e))),
+                    Err(e) => Some(Err(LlmProviderError::OpenAi(OpenAiError::Stream {
+                        message: format!("Network error: {e}"),
+                    }))),
                 })
             });
 
@@ -549,7 +572,10 @@ impl LLMProvider for OpenAIProvider {
     }
 
     /// Embedding调用实现
-    async fn create_embeddings(&self, request: EmbeddingRequest) -> Result<EmbeddingResponse> {
+    async fn create_embeddings(
+        &self,
+        request: EmbeddingRequest,
+    ) -> LlmProviderResult<EmbeddingResponse> {
         let url = self.get_embedding_endpoint();
         let headers = self.get_headers();
 
@@ -574,7 +600,10 @@ impl LLMProvider for OpenAIProvider {
 
         tracing::debug!("Making embedding API call to: {}", url);
 
-        let response = req_builder.send().await.context("发送embedding请求失败")?;
+        let response = req_builder
+            .send()
+            .await
+            .map_err(|source| LlmProviderError::OpenAi(OpenAiError::Http { source }))?;
 
         let status = response.status();
         if !status.is_success() {
@@ -582,10 +611,15 @@ impl LLMProvider for OpenAIProvider {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(self.handle_error_response(status.as_u16(), &error_text));
+            let error = self.handle_error_response(status, &error_text);
+            return Err(LlmProviderError::from(error));
         }
 
-        let response_json: Value = response.json().await.context("解析embedding响应失败")?;
+        let response_json: Value = response
+            .json()
+            .await
+            .map_err(|source| LlmProviderError::OpenAi(OpenAiError::Http { source }))?;
         self.parse_embedding_response(&response_json)
+            .map_err(LlmProviderError::from)
     }
 }

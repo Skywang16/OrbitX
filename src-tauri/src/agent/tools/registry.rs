@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use dashmap::{mapref::entry::Entry, DashMap};
 use tracing::{debug, error, info, warn};
 
-use super::error::{ToolExecutorError, ToolExecutorResult};
+use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use super::metadata::{RateLimitConfig, ToolCategory, ToolMetadata};
 use super::r#trait::{RunnableTool, ToolPermission, ToolResult, ToolResultContent, ToolSchema};
 use crate::agent::core::context::TaskContext;

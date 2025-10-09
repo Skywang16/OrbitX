@@ -16,7 +16,7 @@ pub async fn file_handle_open(path: String) -> TauriApiResult<String> {
             match path_buf.parent() {
                 Some(parent) => parent,
                 None => {
-                    warn!("文件没有父目录: {}", path);
+                    warn!("File has no parent directory: {}", path);
                     &path_buf
                 }
             }
@@ -27,7 +27,7 @@ pub async fn file_handle_open(path: String) -> TauriApiResult<String> {
         let dir_str = dir.to_string_lossy().to_string();
         Ok(api_success!(dir_str))
     } else {
-        warn!("路径不存在: {}", path);
+        warn!("Path does not exist: {}", path);
         Ok(api_error!("common.not_found"))
     }
 }

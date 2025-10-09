@@ -17,7 +17,7 @@ mod tests {
     #[tokio::test]
     async fn test_complete_integration_flow() {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
-        let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
+        let shell_integration = Arc::new(ShellIntegrationManager::new());
         let terminal_mux = Arc::new(TerminalMux::new());
 
         let context_service = TerminalContextService::new_with_integration(
@@ -60,7 +60,7 @@ mod tests {
     #[tokio::test]
     async fn test_shell_integration_events() {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
-        let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
+        let shell_integration = Arc::new(ShellIntegrationManager::new());
         let terminal_mux = Arc::new(TerminalMux::new());
 
         let _context_service = TerminalContextService::new_with_integration(
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_performance_optimizations() {
-        let manager = ShellIntegrationManager::new().unwrap();
+        let manager = ShellIntegrationManager::new();
         let pane_ids: Vec<PaneId> = (1..=10).map(PaneId::new).collect();
 
         for &pane_id in &pane_ids {

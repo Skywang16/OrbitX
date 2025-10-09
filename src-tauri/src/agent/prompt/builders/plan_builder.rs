@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use crate::agent::config::{PromptComponent, PromptConfig, PromptType};
 use crate::agent::prompt::builders::prompt_builder::{PromptBuildOptions, PromptBuilder};
 use crate::agent::prompt::components::types::ComponentContext;
-use crate::agent::{Agent, AgentResult, Context, Task, ToolSchema};
+use crate::agent::error::AgentResult;
+use crate::agent::{Agent, Context, Task, ToolSchema};
 
 pub struct PlanPromptBuilder {
     builder: PromptBuilder,

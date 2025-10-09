@@ -1,5 +1,9 @@
 //! 智能补全引擎
 
+use crate::completion::error::{
+    CompletionEngineResult,
+    CompletionProviderError,
+};
 use crate::completion::providers::{
     CompletionProvider, ContextAwareProviderWrapper, FilesystemProvider, GitCompletionProvider,
     HistoryProvider, NpmCompletionProvider, SystemCommandsProvider,
@@ -7,7 +11,6 @@ use crate::completion::providers::{
 use crate::completion::smart_provider::SmartCompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionResponse};
 use crate::storage::cache::UnifiedCache;
-use crate::utils::error::AppResult;
 use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -71,7 +74,7 @@ pub struct CompletionEngine {
 }
 
 impl CompletionEngine {
-    pub fn new(config: CompletionEngineConfig, cache: Arc<UnifiedCache>) -> AppResult<Self> {
+    pub fn new(config: CompletionEngineConfig, cache: Arc<UnifiedCache>) -> CompletionEngineResult<Self> {
         Ok(Self {
             providers: Vec::new(),
             config,
@@ -88,7 +91,7 @@ impl CompletionEngine {
     pub async fn with_default_providers(
         config: CompletionEngineConfig,
         cache: Arc<UnifiedCache>,
-    ) -> AppResult<Self> {
+    ) -> CompletionEngineResult<Self> {
         let mut engine = Self::new(config, Arc::clone(&cache))?;
 
         let filesystem_provider = Arc::new(FilesystemProvider::default());
@@ -124,7 +127,7 @@ impl CompletionEngine {
     pub async fn completion_get(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<CompletionResponse> {
+    ) -> CompletionEngineResult<CompletionResponse> {
         let start = Instant::now();
         let fingerprint = Self::context_fingerprint(context);
         let result_cache_key = Self::result_cache_key(&fingerprint);
@@ -204,14 +207,8 @@ impl CompletionEngine {
                         provider = name,
                         elapsed_ms = elapsed.as_millis(),
                         attempts = attempts,
-                        "completion.provider_timeout: 补全提供者超时"
+                        "completion.provider_timeout: provider timed out"
                     );
-                    provider_logs.push(format!(
-                        "{}(timeout, {}ms, {} attempts)",
-                        name,
-                        elapsed.as_millis(),
-                        attempts
-                    ));
                 }
                 ProviderStatus::Error(error) => {
                     warn!(
@@ -268,13 +265,13 @@ impl CompletionEngine {
         Ok(response)
     }
 
-    pub fn get_stats(&self) -> AppResult<EngineStats> {
+    pub fn get_stats(&self) -> CompletionEngineResult<EngineStats> {
         Ok(EngineStats {
             provider_count: self.providers.len(),
         })
     }
 
-    pub async fn clear_cached_results(&self) -> AppResult<()> {
+    pub async fn clear_cached_results(&self) -> CompletionEngineResult<()> {
         let keys = self.cache.keys().await;
         for key in keys {
             if key.starts_with("completion/") {
@@ -359,7 +356,7 @@ impl CompletionEngine {
                     };
                 }
                 Ok(Err(error)) => {
-                    last_status = ProviderStatus::Error(error.to_string());
+                    last_status = ProviderStatus::Error(error);
                 }
                 Err(_) => {
                     last_status = ProviderStatus::Timeout;
@@ -435,11 +432,11 @@ struct ProviderOutcome {
     attempts: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum ProviderStatus {
     Success,
     Timeout,
-    Error(String),
+    Error(CompletionProviderError),
 }
 
 #[derive(Debug)]

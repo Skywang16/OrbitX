@@ -1,14 +1,13 @@
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use tracing::warn;
 
 use crate::agent::persistence::{AgentPersistence, ConversationSummary};
+use crate::agent::error::{AgentError, AgentResult};
 use crate::llm::registry::LLMRegistry;
 use crate::llm::service::LLMService;
 use crate::llm::types::{LLMMessage, LLMMessageContent, LLMRequest, LLMResponse};
 use crate::storage::repositories::RepositoryManager;
-use crate::utils::error::AppResult;
 
 const COMPRESSION_THRESHOLD: f32 = 0.85;
 const SUMMARY_MAX_TOKENS: u32 = 512;
@@ -57,7 +56,7 @@ impl ConversationSummarizer {
         &self,
         model_id: &str,
         messages: &[LLMMessage],
-    ) -> AppResult<Option<SummaryResult>> {
+    ) -> AgentResult<Option<SummaryResult>> {
         if messages.is_empty() {
             return Ok(None);
         }
@@ -93,9 +92,11 @@ impl ConversationSummarizer {
         &self,
         model_id: &str,
         messages: &[LLMMessage],
-    ) -> AppResult<SummaryResult> {
+    ) -> AgentResult<SummaryResult> {
         if messages.is_empty() {
-            return Err(anyhow!("没有可用于摘要的历史消息"));
+            return Err(AgentError::Internal(
+                "No conversation history available for summarization".to_string(),
+            ));
         }
 
         let context_window = self.lookup_context_window(model_id);
@@ -127,10 +128,12 @@ impl ConversationSummarizer {
         messages: &[LLMMessage],
         _context_window: u32,
         current_tokens: u32,
-    ) -> AppResult<SummaryResult> {
+    ) -> AgentResult<SummaryResult> {
         let (summary_scope, recent_tail) = split_messages(messages, RECENT_MESSAGES_TO_KEEP);
         if summary_scope.is_empty() {
-            return Err(anyhow!("没有可用于摘要的历史消息"));
+            return Err(AgentError::Internal(
+                "No conversation history available for summarization".to_string(),
+            ));
         }
 
         let prompt_messages = self.build_summary_prompt(&summary_scope, &recent_tail);
@@ -149,10 +152,10 @@ impl ConversationSummarizer {
         let response = llm_service
             .call(request.clone())
             .await
-            .map_err(|e| anyhow!("Failed to call LLM for summary generation: {}", e))?;
+            .map_err(|e| AgentError::Internal(format!("Failed to call LLM for summary generation: {}", e)))?;
 
         if response.content.trim().is_empty() {
-            return Err(anyhow!("LLM summary is empty"));
+            return Err(AgentError::Internal("LLM summary is empty".to_string()));
         }
 
         let summary_tokens = response
@@ -255,7 +258,7 @@ Include key facts, open TODOs, and file references. Do not invent details.".to_s
         }
     }
 
-    async fn persist_summary(&self, result: &SummaryResult) -> AppResult<ConversationSummary> {
+    async fn persist_summary(&self, result: &SummaryResult) -> AgentResult<ConversationSummary> {
         let repo = self.persistence.conversation_summaries();
         repo.upsert(
             self.conversation_id,

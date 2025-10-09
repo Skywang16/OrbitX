@@ -1,8 +1,7 @@
+use crate::storage::error::{DatabaseError, DatabaseResult};
 use crate::storage::paths::StoragePaths;
 use crate::storage::sql_scripts::{SqlScript, SqlScriptCatalog};
 use crate::storage::DATABASE_FILE_NAME;
-use crate::utils::error::AppResult;
-use anyhow::{anyhow, Context};
 use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -92,12 +91,15 @@ impl fmt::Debug for DatabaseManager {
 }
 
 impl DatabaseManager {
-    pub async fn new(paths: StoragePaths, options: DatabaseOptions) -> AppResult<Self> {
+    pub async fn new(paths: StoragePaths, options: DatabaseOptions) -> DatabaseResult<Self> {
         let db_path = paths.data_dir.join(DATABASE_FILE_NAME);
         if let Some(parent) = db_path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .with_context(|| format!("创建数据库目录失败: {}", parent.display()))?;
+                .map_err(|err| DatabaseError::io(
+                    format!("create database directory {}", parent.display()),
+                    err,
+                ))?;
         }
 
         let (min_conn, max_conn) = options.pool_size.resolve();
@@ -122,12 +124,17 @@ impl DatabaseManager {
             .max_lifetime(Some(Duration::from_secs(60 * 15)))
             .connect_with(connect_options)
             .await
-            .with_context(|| format!("连接SQLite失败: {}", db_path.display()))?;
+            .map_err(|err| {
+                DatabaseError::internal(format!(
+                    "Failed to connect SQLite: {} ({err})",
+                    db_path.display()
+                ))
+            })?;
 
         let sql_dir = resolve_sql_dir(&options);
         let scripts = SqlScriptCatalog::load(sql_dir)
             .await
-            .context("加载SQL脚本失败")?
+            .map_err(DatabaseError::from)?
             .iter()
             .cloned()
             .collect::<Vec<_>>()
@@ -144,7 +151,7 @@ impl DatabaseManager {
         })
     }
 
-    pub async fn initialize(&self) -> AppResult<()> {
+    pub async fn initialize(&self) -> DatabaseResult<()> {
         if self.options.encryption {
             self.key_vault.master_key().await?;
         }
@@ -152,13 +159,13 @@ impl DatabaseManager {
         self.pool
             .execute("PRAGMA foreign_keys = ON")
             .await
-            .context("启用外键失败")?;
+            .map_err(|err| DatabaseError::internal(format!("Failed to enable foreign_keys pragma: {err}")))?;
 
         if self.options.encryption {
             self.pool
                 .execute("PRAGMA secure_delete = ON")
                 .await
-                .context("启用secure_delete失败")?;
+                .map_err(|err| DatabaseError::internal(format!("Failed to enable secure_delete pragma: {err}")))?;
         }
 
         self.execute_sql_scripts().await?;
@@ -170,18 +177,18 @@ impl DatabaseManager {
         &self.pool
     }
 
-    pub async fn set_master_password(&self, password: &str) -> AppResult<()> {
+    pub async fn set_master_password(&self, password: &str) -> DatabaseResult<()> {
         if !self.options.encryption {
-            return Err(anyhow!("Encryption not enabled"));
+            return Err(DatabaseError::EncryptionNotEnabled);
         }
         self.key_vault.set_from_password(password).await?;
         info!("主密钥已更新");
         Ok(())
     }
 
-    pub async fn encrypt_data(&self, data: &str) -> AppResult<Vec<u8>> {
+    pub async fn encrypt_data(&self, data: &str) -> DatabaseResult<Vec<u8>> {
         if !self.options.encryption {
-            return Err(anyhow!("Encryption not enabled"));
+            return Err(DatabaseError::EncryptionNotEnabled);
         }
         let key_bytes = self.key_vault.master_key().await?;
         let cipher = ChaCha20Poly1305::new(Key::from_slice(&key_bytes));
@@ -190,19 +197,19 @@ impl DatabaseManager {
         let nonce = Nonce::from_slice(&nonce_bytes);
         let ciphertext = cipher
             .encrypt(nonce, data.as_bytes())
-            .map_err(|e| anyhow!("加密失败: {}", e))?;
+            .map_err(DatabaseError::from)?;
         let mut result = Vec::with_capacity(NONCE_LEN + ciphertext.len());
         result.extend_from_slice(&nonce_bytes);
         result.extend_from_slice(&ciphertext);
         Ok(result)
     }
 
-    pub async fn decrypt_data(&self, encrypted: &[u8]) -> AppResult<String> {
+    pub async fn decrypt_data(&self, encrypted: &[u8]) -> DatabaseResult<String> {
         if !self.options.encryption {
-            return Err(anyhow!("Encryption not enabled"));
+            return Err(DatabaseError::EncryptionNotEnabled);
         }
         if encrypted.len() <= NONCE_LEN {
-            return Err(anyhow!("Invalid encrypted data format"));
+            return Err(DatabaseError::InvalidEncryptedData);
         }
         let key_bytes = self.key_vault.master_key().await?;
         let cipher = ChaCha20Poly1305::new(Key::from_slice(&key_bytes));
@@ -210,11 +217,11 @@ impl DatabaseManager {
         let nonce = Nonce::from_slice(nonce_bytes);
         let plaintext = cipher
             .decrypt(nonce, payload)
-            .map_err(|e| anyhow!("解密失败: {}", e))?;
-        String::from_utf8(plaintext).map_err(|e| anyhow!("解密数据不是UTF-8: {}", e))
+            .map_err(DatabaseError::from)?;
+        String::from_utf8(plaintext).map_err(DatabaseError::from)
     }
 
-    async fn execute_sql_scripts(&self) -> AppResult<()> {
+    async fn execute_sql_scripts(&self) -> DatabaseResult<()> {
         if self.scripts.is_empty() {
             debug!("SQL脚本目录为空，跳过初始化");
             return Ok(());
@@ -229,14 +236,19 @@ impl DatabaseManager {
                 sqlx::query(statement)
                     .execute(&self.pool)
                     .await
-                    .with_context(|| format!("执行SQL失败: {}", statement))?;
+                    .map_err(|err| {
+                        DatabaseError::internal(format!(
+                            "Failed to execute SQL statement `{}`: {err}",
+                            statement
+                        ))
+                    })?;
             }
         }
 
         Ok(())
     }
 
-    async fn insert_default_data(&self) -> AppResult<()> {
+    async fn insert_default_data(&self) -> DatabaseResult<()> {
         let features = [
             ("chat", true, r#"{"max_history":100,"auto_save":true}"#),
             ("explanation", true, r#"{"auto_explain":false}"#),
@@ -255,7 +267,12 @@ impl DatabaseManager {
             .bind(config_json)
             .execute(&self.pool)
             .await
-            .map_err(|e| anyhow!("插入默认AI配置失败: {}", e))?;
+            .map_err(|err| {
+                DatabaseError::internal(format!(
+                    "Failed to insert default AI config `{}`: {err}",
+                    feature_name
+                ))
+            })?;
         }
 
         Ok(())
@@ -277,7 +294,7 @@ impl KeyVault {
         }
     }
 
-    async fn master_key(&self) -> AppResult<[u8; 32]> {
+    async fn master_key(&self) -> DatabaseResult<[u8; 32]> {
         if let Some(bytes) = *self.cache.read().await {
             return Ok(bytes);
         }
@@ -297,19 +314,19 @@ impl KeyVault {
         Ok(bytes)
     }
 
-    async fn set_from_password(&self, password: &str) -> AppResult<[u8; 32]> {
+    async fn set_from_password(&self, password: &str) -> DatabaseResult<[u8; 32]> {
         let salt = SaltString::generate(&mut OsRng);
         let password_hash = self
             .argon2
             .hash_password(password.as_bytes(), &salt)
-            .map_err(|e| anyhow!("密钥派生失败: {}", e))?;
+            .map_err(DatabaseError::from)?;
 
         let hash = password_hash
             .hash
-            .ok_or_else(|| anyhow!("密钥派生失败: 空哈希"))?;
+            .ok_or_else(|| DatabaseError::internal("Key derivation produced an empty hash"))?;
         let hash_bytes = hash.as_bytes();
         if hash_bytes.len() < 32 {
-            return Err(anyhow!("Insufficient key length"));
+            return Err(DatabaseError::InsufficientKeyLength);
         }
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&hash_bytes[..32]);
@@ -318,13 +335,18 @@ impl KeyVault {
         Ok(bytes)
     }
 
-    async fn load_from_disk(&self) -> AppResult<Option<[u8; 32]>> {
+    async fn load_from_disk(&self) -> DatabaseResult<Option<[u8; 32]>> {
         if !self.path.exists() {
             return Ok(None);
         }
         let raw = tokio::fs::read_to_string(&self.path)
             .await
-            .with_context(|| format!("读取密钥文件失败: {}", self.path.display()))?;
+            .map_err(|err| {
+                DatabaseError::io(
+                    format!("read key file {}", self.path.display()),
+                    err,
+                )
+            })?;
         let mut lines = raw.lines();
         let first = lines.next().unwrap_or_default();
         let encoded = if first == KEY_FILE_VERSION {
@@ -337,44 +359,64 @@ impl KeyVault {
         }
         let decoded = BASE64
             .decode(encoded)
-            .map_err(|e| anyhow!("Failed to parse key: {}", e))?;
+            .map_err(DatabaseError::from)?;
         if decoded.len() != 32 {
-            return Err(anyhow!("Invalid key length"));
+            return Err(DatabaseError::InvalidKeyLength);
         }
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&decoded);
         Ok(Some(bytes))
     }
 
-    async fn generate_random(&self) -> AppResult<[u8; 32]> {
+    async fn generate_random(&self) -> DatabaseResult<[u8; 32]> {
         let mut bytes = [0u8; 32];
         OsRng.fill_bytes(&mut bytes);
         self.persist(bytes).await?;
         Ok(bytes)
     }
 
-    async fn persist(&self, bytes: [u8; 32]) -> AppResult<()> {
+    async fn persist(&self, bytes: [u8; 32]) -> DatabaseResult<()> {
         if let Some(parent) = self.path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .with_context(|| format!("创建密钥目录失败: {}", parent.display()))?;
+                .map_err(|err| {
+                    DatabaseError::io(
+                        format!("create key directory {}", parent.display()),
+                        err,
+                    )
+                })?;
         }
         let encoded = BASE64.encode(bytes);
         let payload = format!("{}\n{}\n", KEY_FILE_VERSION, encoded);
         let tmp_path = self.path.with_extension("tmp");
         tokio::fs::write(&tmp_path, payload.as_bytes())
             .await
-            .with_context(|| format!("写入密钥临时文件失败: {}", tmp_path.display()))?;
+            .map_err(|err| {
+                DatabaseError::io(
+                    format!("write key temp file {}", tmp_path.display()),
+                    err,
+                )
+            })?;
         tokio::fs::rename(&tmp_path, &self.path)
             .await
-            .with_context(|| format!("替换密钥文件失败: {}", self.path.display()))?;
+            .map_err(|err| {
+                DatabaseError::io(
+                    format!("replace key file {}", self.path.display()),
+                    err,
+                )
+            })?;
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = tokio::fs::metadata(&self.path).await?.permissions();
+            let mut perms = tokio::fs::metadata(&self.path)
+                .await
+                .map_err(|err| DatabaseError::io("read key file metadata", err))?
+                .permissions();
             perms.set_mode(0o600);
-            tokio::fs::set_permissions(&self.path, perms).await?;
+            tokio::fs::set_permissions(&self.path, perms)
+                .await
+                .map_err(|err| DatabaseError::io("set key file permissions", err))?;
         }
 
         Ok(())

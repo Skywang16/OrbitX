@@ -8,7 +8,7 @@ use tracing::{debug, error, warn};
 
 use crate::mux::{MuxNotification, SubscriberCallback, TerminalMux};
 use crate::terminal::types::TerminalContextEvent;
-use crate::utils::error::AppResult;
+use crate::terminal::error::{EventHandlerError, EventHandlerResult};
 use crate::completion::output_analyzer::OutputAnalyzer;
 
 /// 统一的终端事件处理器
@@ -41,9 +41,9 @@ impl<R: Runtime> TerminalEventHandler<R> {
         &mut self,
         mux: &Arc<TerminalMux>,
         context_event_receiver: broadcast::Receiver<TerminalContextEvent>,
-    ) -> AppResult<()> {
+    ) -> EventHandlerResult<()> {
         if self.mux_subscriber_id.is_some() {
-            anyhow::bail!("事件处理器已经启动");
+            return Err(EventHandlerError::AlreadyStarted);
         }
 
         // 订阅 TerminalMux 事件（对 PaneOutput 采用缓冲节流，其它事件即时发送）
@@ -104,7 +104,7 @@ impl<R: Runtime> TerminalEventHandler<R> {
     }
 
     /// 停止事件处理器
-    pub fn stop(&mut self, mux: &Arc<TerminalMux>) -> AppResult<()> {
+    pub fn stop(&mut self, mux: &Arc<TerminalMux>) -> EventHandlerResult<()> {
         if let Some(subscriber_id) = self.mux_subscriber_id.take() {
             if mux.unsubscribe(subscriber_id) {
                 debug!("终端事件处理器已停止，Mux订阅者ID: {}", subscriber_id);
@@ -255,7 +255,7 @@ pub fn create_terminal_event_handler<R: Runtime>(
     app_handle: AppHandle<R>,
     mux: &Arc<TerminalMux>,
     context_event_receiver: broadcast::Receiver<TerminalContextEvent>,
-) -> AppResult<TerminalEventHandler<R>> {
+) -> EventHandlerResult<TerminalEventHandler<R>> {
     let mut handler = TerminalEventHandler::new(app_handle);
     handler.start(mux, context_event_receiver)?;
     Ok(handler)

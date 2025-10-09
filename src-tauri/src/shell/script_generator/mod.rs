@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use super::error::{ShellScriptError, ShellScriptResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
@@ -71,7 +71,10 @@ impl ShellScriptGenerator {
         Self { config }
     }
 
-    pub fn generate_integration_script(&self, shell_type: &ShellType) -> Result<String> {
+    pub fn generate_integration_script(
+        &self,
+        shell_type: &ShellType,
+    ) -> ShellScriptResult<String> {
         let script = match shell_type {
             ShellType::Bash => bash::generate_script(&self.config),
             ShellType::Zsh => zsh::generate_script(&self.config),
@@ -82,7 +85,10 @@ impl ShellScriptGenerator {
         Ok(script)
     }
 
-    pub fn is_integration_already_setup(&self, shell_type: &ShellType) -> Result<bool> {
+    pub fn is_integration_already_setup(
+        &self,
+        shell_type: &ShellType,
+    ) -> ShellScriptResult<bool> {
         if !shell_type.supports_integration() {
             return Ok(false);
         }
@@ -94,15 +100,19 @@ impl ShellScriptGenerator {
         }
 
         let mut content = String::new();
-        let mut file = std::fs::File::open(&config_path)
-            .with_context(|| format!("Failed to open shell config file: {:?}", config_path))?;
-        file.read_to_string(&mut content)
-            .with_context(|| format!("Failed to read shell config file: {:?}", config_path))?;
+        let mut file = std::fs::File::open(&config_path).map_err(|err| ShellScriptError::Io {
+            operation: format!("open shell config {}", config_path.display()),
+            source: err,
+        })?;
+        file.read_to_string(&mut content).map_err(|err| ShellScriptError::Io {
+            operation: format!("read shell config {}", config_path.display()),
+            source: err,
+        })?;
 
         Ok(content.contains("# OrbitX Integration Start"))
     }
 
-    pub fn install_integration(&self, shell_type: &ShellType) -> Result<()> {
+    pub fn install_integration(&self, shell_type: &ShellType) -> ShellScriptResult<()> {
         if !shell_type.supports_integration() {
             return Ok(());
         }
@@ -115,8 +125,10 @@ impl ShellScriptGenerator {
         let config_path = self.get_shell_config_path(shell_type)?;
 
         if let Some(parent) = config_path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create config directory: {:?}", parent))?;
+            fs::create_dir_all(parent).map_err(|err| ShellScriptError::Io {
+                operation: format!("create config directory {}", parent.display()),
+                source: err,
+            })?;
         }
 
         if self.is_integration_already_setup(shell_type)? {
@@ -127,17 +139,20 @@ impl ShellScriptGenerator {
             .create(true)
             .append(true)
             .open(&config_path)
-            .with_context(|| {
-                format!("Failed to open config file for writing: {:?}", config_path)
+            .map_err(|err| ShellScriptError::Io {
+                operation: format!("open config file {}", config_path.display()),
+                source: err,
             })?;
 
-        writeln!(file, "\n{}", script_content)
-            .with_context(|| format!("Failed to write integration script to: {:?}", config_path))?;
+        writeln!(file, "\n{}", script_content).map_err(|err| ShellScriptError::Io {
+            operation: format!("write integration script {}", config_path.display()),
+            source: err,
+        })?;
 
         Ok(())
     }
 
-    pub fn uninstall_integration(&self, shell_type: &ShellType) -> Result<()> {
+    pub fn uninstall_integration(&self, shell_type: &ShellType) -> ShellScriptResult<()> {
         if !shell_type.supports_integration() {
             return Ok(());
         }
@@ -148,27 +163,30 @@ impl ShellScriptGenerator {
             return Ok(());
         }
 
-        let content = fs::read_to_string(&config_path)
-            .with_context(|| format!("Failed to read shell config file: {:?}", config_path))?;
+        let content = fs::read_to_string(&config_path).map_err(|err| ShellScriptError::Io {
+            operation: format!("read shell config {}", config_path.display()),
+            source: err,
+        })?;
 
         let cleaned_content = self.remove_integration_block(&content);
 
-        fs::write(&config_path, cleaned_content)
-            .with_context(|| format!("Failed to write cleaned config file: {:?}", config_path))?;
+        fs::write(&config_path, cleaned_content).map_err(|err| ShellScriptError::Io {
+            operation: format!("write cleaned config {}", config_path.display()),
+            source: err,
+        })?;
 
         Ok(())
     }
 
-    fn get_shell_config_path(&self, shell_type: &ShellType) -> Result<PathBuf> {
-        let home =
-            dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
+    fn get_shell_config_path(&self, shell_type: &ShellType) -> ShellScriptResult<PathBuf> {
+        let home = dirs::home_dir().ok_or(ShellScriptError::HomeDirectoryUnavailable)?;
 
         let config_file = match shell_type {
             ShellType::Bash => ".bashrc",
             ShellType::Zsh => ".zshrc",
             ShellType::Fish => ".config/fish/config.fish",
             ShellType::Other(name) => {
-                return Err(anyhow::anyhow!("Unsupported shell type: {}", name));
+                return Err(ShellScriptError::UnsupportedShell(name.clone()));
             }
         };
 
@@ -202,7 +220,7 @@ impl ShellScriptGenerator {
         result_lines.join("\n")
     }
 
-    pub fn get_integration_status(&self, shell_type: &ShellType) -> Result<bool> {
+    pub fn get_integration_status(&self, shell_type: &ShellType) -> ShellScriptResult<bool> {
         self.is_integration_already_setup(shell_type)
     }
 

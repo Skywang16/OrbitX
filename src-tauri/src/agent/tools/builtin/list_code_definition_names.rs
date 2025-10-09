@@ -3,8 +3,9 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::agent::core::context::TaskContext;
+use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolExecutorResult, ToolMetadata, ToolPermission, ToolPriority,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
     ToolResult, ToolResultContent,
 };
 use crate::filesystem::commands::{code_list_definition_names, CodeDefItem};

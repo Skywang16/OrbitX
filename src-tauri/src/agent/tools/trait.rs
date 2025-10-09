@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::error::ToolExecutorResult;
+use crate::agent::error::ToolExecutorResult;
 use super::metadata::ToolMetadata;
 use crate::agent::core::context::TaskContext;
 

@@ -2,14 +2,14 @@
 //!
 //! 基于命令执行历史和输出结果提供智能补全建议
 
+use crate::completion::error::{CompletionProviderError, CompletionProviderResult};
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
-use crate::utils::error::AppResult;
-use anyhow::anyhow;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::warn;
 
 /// 命令输出记录
 #[derive(Debug, Clone)]
@@ -49,7 +49,7 @@ impl ContextAwareProvider {
         command: String,
         output: String,
         working_directory: String,
-    ) -> AppResult<()> {
+    ) -> CompletionProviderResult<()> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -58,9 +58,13 @@ impl ContextAwareProvider {
         // 使用智能提取器提取实体
         use crate::completion::smart_extractor::SmartExtractor;
         let extractor = SmartExtractor::global();
-        let extraction_results = extractor
-            .extract_entities(&command, &output)
-            .unwrap_or_default();
+        let extraction_results = match extractor.extract_entities(&command, &output) {
+            Ok(results) => results,
+            Err(error) => {
+                warn!(error = %error, "completion.smart_extractor_failed");
+                Vec::new()
+            }
+        };
 
         // 转换为旧格式
         let mut extracted_entities = HashMap::new();
@@ -82,7 +86,9 @@ impl ContextAwareProvider {
         let mut history = self
             .command_history
             .write()
-            .map_err(|_| anyhow!("获取命令历史写锁失败"))?;
+            .map_err(|_| CompletionProviderError::MutexPoisoned {
+                resource: "command_history",
+            })?;
 
         history.push(record);
 
@@ -98,7 +104,7 @@ impl ContextAwareProvider {
     fn get_contextual_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         // 分析当前输入，确定需要什么类型的补全
@@ -107,7 +113,9 @@ impl ContextAwareProvider {
         let history = self
             .command_history
             .read()
-            .map_err(|_| anyhow!("获取命令历史读锁失败"))?;
+            .map_err(|_| CompletionProviderError::MutexPoisoned {
+                resource: "command_history",
+            })?;
 
         // 根据当前命令类型提供相应的补全
         match current_command.as_str() {
@@ -136,7 +144,7 @@ impl ContextAwareProvider {
     fn get_pid_completions(
         &self,
         history: &[CommandOutputRecord],
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         // 查找最近的进程相关命令输出
@@ -170,7 +178,7 @@ impl ContextAwareProvider {
     fn get_network_completions(
         &self,
         history: &[CommandOutputRecord],
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         for record in history.iter().rev().take(10) {
@@ -208,7 +216,7 @@ impl ContextAwareProvider {
     fn get_path_completions(
         &self,
         history: &[CommandOutputRecord],
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         for record in history.iter().rev().take(5) {
@@ -233,7 +241,7 @@ impl ContextAwareProvider {
         &self,
         history: &[CommandOutputRecord],
         command: &str,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
         // 基于命令类型提供基础补全
@@ -289,7 +297,7 @@ impl CompletionProvider for ContextAwareProvider {
     async fn provide_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         self.get_contextual_completions(context)
     }
 
@@ -337,7 +345,7 @@ impl CompletionProvider for ContextAwareProviderWrapper {
     async fn provide_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         // 克隆上下文以避免跨 await 边界的借用问题
         let context_clone = context.clone();
 

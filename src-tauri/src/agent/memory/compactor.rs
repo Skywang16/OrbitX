@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
 use serde_json;
 
 use crate::agent::config::CompactionConfig;
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::tokenizer::{count_message_tokens, count_text_tokens};
 use crate::llm::service::LLMService;
 use crate::llm::types::{LLMMessage, LLMMessageContent, LLMMessagePart, LLMRequest};
@@ -31,7 +31,7 @@ impl MessageCompactor {
         &self,
         messages: Vec<LLMMessage>,
         model_id: &str,
-    ) -> Result<CompactionResult> {
+    ) -> AgentResult<CompactionResult> {
         if messages.len() < self.config.trigger_threshold {
             return Ok(CompactionResult::NoCompaction(messages));
         }
@@ -43,7 +43,7 @@ impl MessageCompactor {
         &self,
         messages: Vec<LLMMessage>,
         model_id: &str,
-    ) -> Result<CompactionResult> {
+    ) -> AgentResult<CompactionResult> {
         if messages.len() <= self.config.keep_recent_count + 1 {
             return Ok(CompactionResult::NoCompaction(messages));
         }
@@ -97,7 +97,7 @@ impl MessageCompactor {
         (system_msg, middle, recent)
     }
 
-    async fn summarize_messages(&self, messages: &[LLMMessage], model_id: &str) -> Result<String> {
+    async fn summarize_messages(&self, messages: &[LLMMessage], model_id: &str) -> AgentResult<String> {
         let prompt = self.build_summary_prompt(messages);
         let request = LLMRequest {
             model: model_id.to_string(),
@@ -125,11 +125,11 @@ impl MessageCompactor {
             .llm_service
             .call(request)
             .await
-            .map_err(|e| anyhow!("LLM summarization failed: {}", e))?;
+            .map_err(|e| AgentError::Internal(format!("LLM summarization failed: {}", e)))?;
 
         let content = response.content.trim();
         if content.is_empty() {
-            return Err(anyhow!("Empty summary from LLM"));
+            return Err(AgentError::Internal("Empty summary from LLM".to_string()));
         }
 
         Ok(content.to_string())

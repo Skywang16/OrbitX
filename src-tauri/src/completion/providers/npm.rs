@@ -1,10 +1,9 @@
 //! NPM命令补全提供者
 
+use crate::completion::error::{CompletionProviderError, CompletionProviderResult};
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
 use crate::storage::cache::UnifiedCache;
-use crate::utils::error::AppResult;
-use anyhow::Context;
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -135,7 +134,7 @@ impl NpmCompletionProvider {
         &self,
         working_directory: &Path,
         query: &str,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let package_json_path = working_directory.join("package.json");
 
         if !package_json_path.exists() {
@@ -144,10 +143,13 @@ impl NpmCompletionProvider {
 
         let content = fs::read_to_string(&package_json_path)
             .await
-            .context("读取package.json失败")?;
+            .map_err(|e| CompletionProviderError::io(
+                "read package.json",
+                format!("({})", package_json_path.display()),
+                e,
+            ))?;
 
-        let package_json: PackageJson =
-            serde_json::from_str(&content).context("解析package.json失败")?;
+        let package_json: PackageJson = serde_json::from_str(&content)?;
 
         let mut completions = Vec::new();
 
@@ -182,7 +184,7 @@ impl NpmCompletionProvider {
         &self,
         working_directory: &Path,
         query: &str,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let package_json_path = working_directory.join("package.json");
 
         if !package_json_path.exists() {
@@ -191,10 +193,13 @@ impl NpmCompletionProvider {
 
         let content = fs::read_to_string(&package_json_path)
             .await
-            .context("读取package.json失败")?;
+            .map_err(|e| CompletionProviderError::io(
+                "read package.json",
+                format!("({})", package_json_path.display()),
+                e,
+            ))?;
 
-        let package_json: PackageJson =
-            serde_json::from_str(&content).context("解析package.json失败")?;
+        let package_json: PackageJson = serde_json::from_str(&content)?;
 
         let mut completions = Vec::new();
 
@@ -234,7 +239,10 @@ impl NpmCompletionProvider {
     }
 
     /// 获取包搜索补全
-    async fn get_package_search_completions(&self, query: &str) -> AppResult<Vec<CompletionItem>> {
+    async fn get_package_search_completions(
+        &self,
+        query: &str,
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         if query.len() < 3 {
             return Ok(vec![]);
         }
@@ -309,7 +317,7 @@ impl CompletionProvider for NpmCompletionProvider {
     async fn provide_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let (_command, subcommand, _args) = match self.parse_npm_command(context) {
             Some(parsed) => parsed,
             None => return Ok(vec![]),

@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
-use anyhow::{bail, Context};
 use tokio_stream::StreamExt;
 
 use crate::agent::common::xml::parse_task_detail;
 use crate::agent::core::context::TaskContext;
-use crate::agent::error::AgentResult;
 use crate::agent::prompt::{build_plan_system_prompt, build_plan_user_prompt};
+use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::types::{Agent, Context as PromptContext, Task, TaskDetail};
 use crate::llm::service::LLMService;
 use crate::llm::types::{LLMMessage, LLMMessageContent, LLMRequest, LLMStreamChunk};
@@ -20,7 +19,7 @@ impl Planner {
         Self { context }
     }
 
-    pub async fn plan(&self, task_prompt: &str, save_history: bool) -> AgentResult<TaskDetail> {
+    pub async fn plan(&self, task_prompt: &str, save_history: bool) -> TaskExecutorResult<TaskDetail> {
         let (system_prompt, user_prompt) = self.build_prompts(task_prompt).await?;
         let messages = vec![
             LLMMessage {
@@ -36,7 +35,7 @@ impl Planner {
         self.execute_plan(task_prompt, messages, save_history).await
     }
 
-    pub async fn replan(&self, task_prompt: &str, save_history: bool) -> AgentResult<TaskDetail> {
+    pub async fn replan(&self, task_prompt: &str, save_history: bool) -> TaskExecutorResult<TaskDetail> {
         let mut messages = Vec::new();
         let (prev_request, prev_result) = self
             .context
@@ -69,7 +68,7 @@ impl Planner {
         task_prompt: &str,
         messages: Vec<LLMMessage>,
         save_history: bool,
-    ) -> AgentResult<TaskDetail> {
+    ) -> TaskExecutorResult<TaskDetail> {
         let model_id = self.get_default_model_id().await?;
         let request = LLMRequest {
             model: model_id,
@@ -86,23 +85,30 @@ impl Planner {
         let mut stream = llm_service
             .call_stream(request.clone(), token)
             .await
-            .context("failed to start LLM planning stream")?;
+            .map_err(|e| TaskExecutorError::LLMCallFailed(format!("Failed to start LLM planning stream: {}", e)))?;
 
         let mut stream_text = String::new();
         while let Some(chunk) = stream.next().await {
             self.context
                 .check_aborted(true)
-                .await
-                .context("task planning aborted")?;
+                .await?;
             match chunk {
                 Ok(LLMStreamChunk::Delta { content, .. }) => {
                     if let Some(text) = content {
                         stream_text.push_str(&text);
                     }
                 }
-                Ok(LLMStreamChunk::Error { error }) => bail!("LLM stream error: {error}"),
+                Ok(LLMStreamChunk::Error { error }) => {
+                    return Err(TaskExecutorError::LLMCallFailed(format!(
+                        "LLM stream error: {error}"
+                    )))
+                }
                 Ok(LLMStreamChunk::Finish { .. }) => break,
-                Err(e) => bail!("LLM stream error: {e}"),
+                Err(e) => {
+                    return Err(TaskExecutorError::LLMCallFailed(format!(
+                        "LLM stream error: {e}"
+                    )))
+                }
             }
         }
 
@@ -129,7 +135,7 @@ impl Planner {
         Ok(task_detail)
     }
 
-    async fn build_prompts(&self, task_prompt: &str) -> AgentResult<(String, String)> {
+    async fn build_prompts(&self, task_prompt: &str) -> TaskExecutorResult<(String, String)> {
         let agent_info = Agent {
             name: "OrbitX Agent".to_string(),
             description: "An AI coding assistant for OrbitX".to_string(),
@@ -154,21 +160,22 @@ impl Planner {
             Vec::new(),
         )
         .await
-        .context("failed to build plan system prompt")?;
+        .map_err(|e| TaskExecutorError::InternalError(format!("Failed to build plan system prompt: {}", e)))?;
 
-        let user_prompt = build_plan_user_prompt(task_prompt)?;
+        let user_prompt = build_plan_user_prompt(task_prompt)
+            .map_err(|e| TaskExecutorError::InternalError(format!("Failed to build plan user prompt: {}", e)))?;
 
         Ok((system_prompt, user_prompt))
     }
 
-    async fn get_default_model_id(&self) -> AgentResult<String> {
+    async fn get_default_model_id(&self) -> TaskExecutorResult<String> {
         let models = self
             .context
             .repositories()
             .ai_models()
             .find_all_with_decrypted_keys()
             .await
-            .context("failed to load LLM models")?;
+            .map_err(|e| TaskExecutorError::DatabaseError(e.to_string()))?;
 
         if let Some(first_enabled) = models.iter().find(|m| m.enabled) {
             return Ok(first_enabled.id.clone());
@@ -176,7 +183,9 @@ impl Planner {
         if let Some(any_model) = models.first() {
             return Ok(any_model.id.clone());
         }
-        bail!("No enabled LLM model available")
+        Err(TaskExecutorError::LLMCallFailed(
+            "No enabled LLM model available".to_string(),
+        ))
     }
 }
 

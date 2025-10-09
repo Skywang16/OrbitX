@@ -5,8 +5,7 @@
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
-use crate::mux::TerminalMux;
-use crate::utils::error::AppResult;
+use crate::mux::{MuxError, MuxResult, TerminalMux};
 
 /// 全局TerminalMux单例实例
 static GLOBAL_MUX: OnceLock<Arc<TerminalMux>> = OnceLock::new();
@@ -53,10 +52,10 @@ pub fn init_mux() -> Arc<TerminalMux> {
 ///
 /// 注意：这个函数只能在应用关闭时调用一次
 /// 调用后，get_mux()仍然会返回已关闭的实例
-pub fn shutdown_mux() -> AppResult<()> {
+pub fn shutdown_mux() -> MuxResult<()> {
     if let Some(mux) = GLOBAL_MUX.get() {
         tracing::debug!("关闭全局TerminalMux实例");
-        let result = mux.shutdown();
+        let result = mux.shutdown().map_err(MuxError::from);
         // 尝试回收通知处理线程
         if let Some(slot) = NOTIFICATION_THREAD.get() {
             if let Ok(mut guard) = slot.lock() {

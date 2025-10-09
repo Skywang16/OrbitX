@@ -3,10 +3,8 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
-
 use crate::agent::config::PromptComponent;
-use crate::agent::error::AgentResult;
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::prompt::components::types::{ComponentContext, ComponentDefinition};
 use crate::agent::prompt::template_engine::TemplateEngine;
 
@@ -53,7 +51,7 @@ impl ComponentDefinition for SystemInfoComponent {
     ) -> AgentResult<Option<String>> {
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing system info template")?;
+            .ok_or_else(|| AgentError::Internal("missing system info template".to_string()))?;
 
         let working_directory = context
             .context
@@ -84,7 +82,7 @@ impl ComponentDefinition for SystemInfoComponent {
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| anyhow!("failed to render system info template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render system info template: {}", e)))?;
 
         Ok(Some(result))
     }
@@ -125,7 +123,7 @@ impl ComponentDefinition for DateTimeComponent {
     ) -> AgentResult<Option<String>> {
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing datetime template")?;
+            .ok_or_else(|| AgentError::Internal("missing datetime template".to_string()))?;
 
         let mut template_context = HashMap::new();
         template_context.insert(
@@ -137,7 +135,7 @@ impl ComponentDefinition for DateTimeComponent {
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| anyhow!("failed to render datetime template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render datetime template: {}", e)))?;
 
         Ok(Some(result))
     }
@@ -178,7 +176,7 @@ impl ComponentDefinition for PlatformComponent {
     ) -> AgentResult<Option<String>> {
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing platform template")?;
+            .ok_or_else(|| AgentError::Internal("missing platform template".to_string()))?;
 
         let platform = context
             .context
@@ -192,7 +190,7 @@ impl ComponentDefinition for PlatformComponent {
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| anyhow!("failed to render platform template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render platform template: {}", e)))?;
         Ok(Some(result))
     }
 }

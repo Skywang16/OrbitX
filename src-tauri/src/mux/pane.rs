@@ -1,23 +1,22 @@
 //! 面板接口和实现
 
-use anyhow::{anyhow, bail, Context};
 use std::io::{Read, Write};
 use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use crate::mux::error::{PaneError, PaneResult};
 use crate::mux::{PaneId, PtySize, TerminalConfig};
-use crate::utils::error::AppResult;
 use portable_pty::{CommandBuilder, MasterPty, PtySize as PortablePtySize, SlavePty};
 
 pub trait Pane: Send + Sync {
     fn pane_id(&self) -> PaneId;
 
-    fn write(&self, data: &[u8]) -> AppResult<()>;
+    fn write(&self, data: &[u8]) -> PaneResult<()>;
 
-    fn resize(&self, size: PtySize) -> AppResult<()>;
+    fn resize(&self, size: PtySize) -> PaneResult<()>;
 
-    fn reader(&self) -> AppResult<Box<dyn Read + Send>>;
+    fn reader(&self) -> PaneResult<Box<dyn Read + Send>>;
 
     fn is_dead(&self) -> bool;
 
@@ -36,7 +35,7 @@ pub struct LocalPane {
 }
 
 impl LocalPane {
-    pub fn new(pane_id: PaneId, size: PtySize) -> AppResult<Self> {
+    pub fn new(pane_id: PaneId, size: PtySize) -> PaneResult<Self> {
         Self::new_with_config(pane_id, size, &TerminalConfig::default())
     }
 
@@ -45,7 +44,7 @@ impl LocalPane {
         pane_id: PaneId,
         size: PtySize,
         config: &TerminalConfig,
-    ) -> AppResult<Self> {
+    ) -> PaneResult<Self> {
         tracing::info!(
             "创建本地面板: {:?}, 大小: {:?}, shell: {}",
             pane_id,
@@ -63,9 +62,9 @@ impl LocalPane {
             pixel_height: size.pixel_height,
         };
 
-        let pty_pair = pty_system
-            .openpty(pty_size)
-            .with_context(|| format!("创建PTY失败: pane_id={:?}", pane_id))?;
+        let pty_pair = pty_system.openpty(pty_size).map_err(|err| {
+            PaneError::Internal(format!("Failed to create PTY for {:?}: {err}", pane_id))
+        })?;
 
         let shell_args = &config.shell_config.args;
         tracing::debug!(
@@ -180,16 +179,17 @@ impl LocalPane {
             }
             Err(e) => {
                 tracing::error!("Shell进程启动失败: {:?}", e);
-                return Err(e.into());
+                return Err(PaneError::Spawn {
+                    reason: e.to_string(),
+                });
             }
         }
 
         tracing::debug!("子进程启动成功");
 
-        let writer = pty_pair
-            .master
-            .take_writer()
-            .with_context(|| format!("无法获取PTY写入器: pane_id={:?}", pane_id))?;
+        let writer = pty_pair.master.take_writer().map_err(|err| {
+            PaneError::Internal(format!("Failed to acquire PTY writer for {:?}: {err}", pane_id))
+        })?;
 
         let master = Arc::new(Mutex::new(pty_pair.master));
         let slave = Arc::new(Mutex::new(pty_pair.slave));
@@ -212,10 +212,10 @@ impl Pane for LocalPane {
         self.pane_id
     }
 
-    fn write(&self, data: &[u8]) -> AppResult<()> {
+    fn write(&self, data: &[u8]) -> PaneResult<()> {
         if self.is_dead() {
             tracing::debug!("尝试写入已死亡的面板: {:?}", self.pane_id);
-            bail!("面板已关闭");
+            return Err(PaneError::PaneDead);
         }
 
         tracing::debug!("面板 {:?} 写入 {} 字节数据", self.pane_id, data.len());
@@ -223,36 +223,36 @@ impl Pane for LocalPane {
         let mut writer = self
             .writer
             .lock()
-            .map_err(|_| anyhow!("获取writer锁失败"))?;
+            .map_err(|err| PaneError::from_poison("writer", err))?;
 
         // 使用Write trait写入数据
         use std::io::Write;
-        writer
-            .write_all(data)
-            .with_context(|| format!("面板 {:?} PTY写入失败", self.pane_id))?;
+        writer.write_all(data).map_err(|err| {
+            PaneError::Internal(format!("Pane {:?} PTY write failed: {err}", self.pane_id))
+        })?;
 
-        writer
-            .flush()
-            .with_context(|| format!("面板 {:?} PTY刷新失败", self.pane_id))?;
+        writer.flush().map_err(|err| {
+            PaneError::Internal(format!("Pane {:?} PTY flush failed: {err}", self.pane_id))
+        })?;
 
         tracing::trace!("面板 {:?} 写入完成", self.pane_id);
         Ok(())
     }
 
-    fn resize(&self, size: PtySize) -> AppResult<()> {
+    fn resize(&self, size: PtySize) -> PaneResult<()> {
         if self.is_dead() {
             tracing::debug!("尝试调整已死亡面板的大小: {:?}", self.pane_id);
-            bail!("面板已关闭");
+            return Err(PaneError::PaneDead);
         }
 
         tracing::info!("调整面板 {:?} 大小: {:?}", self.pane_id, size);
 
         // 更新内部尺寸记录
         {
-            let mut current_size = self.size.lock().map_err(|_| {
-                tracing::error!("面板 {:?} 无法获取大小锁", self.pane_id);
-                anyhow!("无法获取大小锁")
-            })?;
+            let mut current_size =
+                self.size
+                    .lock()
+                    .map_err(|err| PaneError::from_poison("size", err))?;
             *current_size = size;
         }
 
@@ -264,30 +264,37 @@ impl Pane for LocalPane {
             pixel_height: size.pixel_height,
         };
 
-        let master = self.master.lock().map_err(|_| {
-            tracing::error!("面板 {:?} 无法获取master锁", self.pane_id);
-            anyhow!("无法获取master锁")
-        })?;
+        let master = self
+            .master
+            .lock()
+            .map_err(|err| PaneError::from_poison("master", err))?;
 
         master
             .resize(pty_size)
-            .with_context(|| format!("面板 {:?} PTY调整大小失败", self.pane_id))?;
+            .map_err(|err| {
+                PaneError::Internal(format!(
+                    "Pane {:?} PTY resize failed: {err}",
+                    self.pane_id
+                ))
+            })?;
 
         tracing::debug!("面板 {:?} 大小调整完成", self.pane_id);
         Ok(())
     }
 
-    fn reader(&self) -> AppResult<Box<dyn Read + Send>> {
+    fn reader(&self) -> PaneResult<Box<dyn Read + Send>> {
         if self.is_dead() {
-            bail!("面板已关闭");
+            return Err(PaneError::PaneDead);
         }
 
         let master = self
             .master
             .lock()
-            .map_err(|_| anyhow!("无法获取master锁"))?;
+            .map_err(|err| PaneError::from_poison("master", err))?;
 
-        let reader = master.try_clone_reader().context("获取读取器失败")?;
+        let reader = master.try_clone_reader().map_err(|err| {
+            PaneError::Internal(format!("Failed to clone PTY reader: {err}"))
+        })?;
 
         Ok(reader)
     }
@@ -312,30 +319,35 @@ impl Pane for LocalPane {
 // 便利方法实现
 impl LocalPane {
     /// 写入字符串数据
-    pub fn write_str(&self, data: &str) -> AppResult<()> {
+    pub fn write_str(&self, data: &str) -> PaneResult<()> {
         self.write(data.as_bytes())
     }
 
     /// 写入带换行的字符串
-    pub fn write_line(&self, data: &str) -> AppResult<()> {
+    pub fn write_line(&self, data: &str) -> PaneResult<()> {
         let mut line = data.to_string();
         line.push('\n');
         self.write(line.as_bytes())
     }
 
     /// 发送控制字符
-    pub fn send_control(&self, ctrl_char: char) -> AppResult<()> {
+    pub fn send_control(&self, ctrl_char: char) -> PaneResult<()> {
         let ctrl_code = match ctrl_char {
             'c' => 0x03, // Ctrl+C
             'd' => 0x04, // Ctrl+D
             'z' => 0x1A, // Ctrl+Z
-            _ => bail!("不支持的控制字符: {}", ctrl_char),
+            _ => {
+                return Err(PaneError::Internal(format!(
+                    "Unsupported control character: {}",
+                    ctrl_char
+                )))
+            }
         };
         self.write(&[ctrl_code])
     }
 
     /// 发送特殊键序列
-    pub fn send_key(&self, key: &str) -> AppResult<()> {
+    pub fn send_key(&self, key: &str) -> PaneResult<()> {
         let sequence: &[u8] = match key {
             "Enter" => b"\r",
             "Tab" => b"\t",
@@ -351,7 +363,12 @@ impl LocalPane {
             "PageDown" => b"\x1b[6~",
             "Delete" => b"\x1b[3~",
             "Insert" => b"\x1b[2~",
-            _ => bail!("不支持的键: {}", key),
+            _ => {
+                return Err(PaneError::Internal(format!(
+                    "Unsupported key sequence: {}",
+                    key
+                )))
+            }
         };
         self.write(sequence)
     }

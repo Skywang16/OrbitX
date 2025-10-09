@@ -6,8 +6,9 @@ use super::file_utils::{ensure_absolute, is_probably_binary};
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
 use crate::agent::persistence::FileRecordSource;
+use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
-    error::ToolExecutorResult, RunnableTool, ToolCategory, ToolMetadata, ToolPermission,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission,
     ToolPriority, ToolResult, ToolResultContent,
 };
 

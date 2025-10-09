@@ -130,7 +130,7 @@ impl ContextBuilder {
         for iter in iterations.iter().rev().take(self.config.recent_file_window) {
             if let Some(action) = &iter.action {
                 if let Some(path) =
-                    self.extract_file_from_tool_args(&action.tool_name, &action.arguments)
+                    self.extract_file_from_tool_args(&action.arguments)
                 {
                     if seen.insert(path.clone()) {
                         ordered.push(path);
@@ -150,7 +150,7 @@ impl ContextBuilder {
         ordered
     }
 
-    fn extract_file_from_tool_args(&self, _tool_name: &str, args: &Value) -> Option<String> {
+    fn extract_file_from_tool_args(&self, args: &Value) -> Option<String> {
         for key in [
             "path",
             "file_path",

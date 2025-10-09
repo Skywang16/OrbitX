@@ -1,5 +1,6 @@
 // 终端上下文管理模块
 
+pub mod error;
 pub mod channel_manager;
 pub mod channel_state;
 pub mod commands;
@@ -17,4 +18,9 @@ pub use commands::TerminalContextState;
 pub use context_registry::ActiveTerminalContextRegistry;
 pub use context_service::{CacheStats, TerminalContextService};
 pub use event_handler::{create_terminal_event_handler, TerminalEventHandler};
+pub use error::{
+    ContextRegistryError, ContextRegistryResult, ContextServiceError, ContextServiceResult,
+    EventHandlerError, EventHandlerResult, ReplayError, ReplayResult, TerminalError,
+    TerminalResult, TerminalValidationError, TerminalValidationResult,
+};
 pub use types::*;

@@ -86,7 +86,7 @@ pub async fn terminal_context_get_active(
             );
             Ok(api_success!(context))
         }
-        Err(e) if e.to_string().contains("没有活跃的终端") => {
+        Err(e) if e.to_string().contains("No active terminal pane") => {
             // 没有活跃终端时，使用回退逻辑
             debug!("没有活跃终端，使用回退逻辑");
             match state.context_service.get_context_with_fallback(None).await {
@@ -134,7 +134,7 @@ mod tests {
 
         // 没有活跃终端时，get_active_context应该返回错误
         let result = state.context_service.get_active_context().await;
-        assert!(result.is_err() && result.unwrap_err().to_string().contains("没有活跃的终端"));
+        assert!(result.is_err() && result.unwrap_err().to_string().contains("No active terminal pane"));
 
         // 但是get_context_with_fallback应该返回默认上下文
         let result = state.context_service.get_context_with_fallback(None).await;
@@ -163,7 +163,7 @@ mod tests {
             assert!(
                 error_msg.contains("面板不存在")
                     || error_msg.contains("pane")
-                    || error_msg.contains("没有活跃")
+                    || error_msg.contains("active")
                     || error_msg.contains("查询终端上下文失败")
             );
         } else {

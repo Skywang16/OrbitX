@@ -27,7 +27,7 @@ pub async fn agent_delete_conversation(
     match persistence.conversations().delete(conversation_id).await {
         Ok(_) => Ok(api_success!()),
         Err(e) => {
-            tracing::error!("删除会话失败: {}", e);
+            tracing::error!("Failed to delete conversation: {}", e);
             Ok(api_error!("agent.conversation.delete_failed"))
         }
     }
@@ -52,12 +52,12 @@ pub async fn agent_update_conversation_title(
                 .update_conversation_title(conversation_id, &title)
                 .await
             {
-                tracing::warn!("更新UI会话标题失败: {}", err);
+                tracing::warn!("Failed to update UI conversation title: {}", err);
             }
             Ok(api_success!())
         }
         Err(e) => {
-            tracing::error!("更新会话标题失败: {}", e);
+            tracing::error!("Failed to update conversation title: {}", e);
             Ok(api_error!("agent.conversation.update_failed"))
         }
     }
@@ -70,7 +70,7 @@ pub async fn agent_ui_get_conversations(
     match state.executor.ui_persistence().list_conversations().await {
         Ok(conversations) => Ok(api_success!(conversations)),
         Err(e) => {
-            tracing::error!("获取UI会话列表失败: {}", e);
+            tracing::error!("Failed to list UI conversations: {}", e);
             Ok(api_error!("agent.ui.conversations_failed"))
         }
     }
@@ -89,7 +89,7 @@ pub async fn agent_ui_get_messages(
     {
         Ok(messages) => Ok(api_success!(messages)),
         Err(e) => {
-            tracing::error!("获取UI消息失败: {}", e);
+            tracing::error!("Failed to fetch UI messages: {}", e);
             Ok(api_error!("agent.ui.messages_failed"))
         }
     }
@@ -111,7 +111,7 @@ pub async fn agent_execute_task(
     match state.executor.execute_task(params, channel).await {
         Ok(_) => Ok(api_success!()),
         Err(e) => {
-            tracing::error!("执行Agent任务失败: {}", e);
+            tracing::error!("Failed to execute Agent task: {}", e);
             Ok(api_error!("agent.execute_failed"))
         }
     }
@@ -127,7 +127,7 @@ pub async fn agent_execute_task_tree(
     match state.executor.execute_task_tree(params, channel).await {
         Ok(_) => Ok(api_success!()),
         Err(e) => {
-            tracing::error!("执行Agent任务树失败: {}", e);
+            tracing::error!("Failed to execute Agent task tree: {}", e);
             Ok(api_error!("agent.execute_tree_failed"))
         }
     }
@@ -142,7 +142,7 @@ pub async fn agent_pause_task(
     match state.executor.pause_task(&task_id).await {
         Ok(_) => Ok(api_success!()),
         Err(e) => {
-            tracing::error!("暂停任务失败: {}", e);
+            tracing::error!("Failed to pause task: {}", e);
             Ok(api_error!("agent.pause_failed"))
         }
     }
@@ -158,7 +158,7 @@ pub async fn agent_cancel_task(
     match state.executor.cancel_task(&task_id, reason).await {
         Ok(_) => Ok(api_success!()),
         Err(e) => {
-            tracing::error!("取消任务失败: {}", e);
+            tracing::error!("Failed to cancel task: {}", e);
             Ok(api_error!("agent.cancel_failed"))
         }
     }
@@ -178,7 +178,7 @@ pub async fn agent_list_tasks(
     {
         Ok(tasks) => Ok(api_success!(tasks)),
         Err(e) => {
-            tracing::error!("列出任务失败: {}", e);
+            tracing::error!("Failed to list tasks: {}", e);
             Ok(api_error!("agent.list_failed"))
         }
     }
@@ -197,7 +197,7 @@ pub async fn agent_get_file_context_status(
     {
         Ok(status) => Ok(api_success!(status)),
         Err(e) => {
-            tracing::error!("获取文件上下文状态失败: {}", e);
+            tracing::error!("Failed to fetch file context status: {}", e);
             Ok(api_error!("agent.context.file_status_failed"))
         }
     }
@@ -210,7 +210,7 @@ pub async fn agent_get_user_prefix_prompt(
     match repositories.ai_models().get_user_prefix_prompt().await {
         Ok(prompt) => Ok(api_success!(prompt)),
         Err(e) => {
-            tracing::error!("获取前置提示词失败: {}", e);
+            tracing::error!("Failed to get prefix prompt: {}", e);
             Ok(api_error!("agent.conversation.prefix_prompt_failed"))
         }
     }
@@ -229,7 +229,7 @@ pub async fn agent_set_user_prefix_prompt(
     {
         Ok(_) => Ok(api_success!()),
         Err(e) => {
-            tracing::error!("设置前置提示词失败: {}", e);
+            tracing::error!("Failed to set prefix prompt: {}", e);
             Ok(api_error!("agent.conversation.set_prefix_prompt_failed"))
         }
     }
@@ -249,7 +249,7 @@ pub async fn agent_trigger_context_summary(
     {
         Ok(result) => Ok(api_success!(result)),
         Err(e) => {
-            tracing::error!("触发会话摘要失败: {}", e);
+            tracing::error!("Failed to trigger conversation summary: {}", e);
             Ok(api_error!("agent.context.summary_failed"))
         }
     }
@@ -276,12 +276,12 @@ pub async fn agent_create_conversation(
                 .ensure_conversation(conversation_id, title_clone.as_deref())
                 .await
             {
-                tracing::warn!("初始化UI会话 {} 失败: {}", conversation_id, err);
+                tracing::warn!("Failed to initialize UI conversation {}: {}", conversation_id, err);
             }
             Ok(api_success!(conversation_id))
         }
         Err(e) => {
-            tracing::error!("创建会话失败: {}", e);
+            tracing::error!("Failed to create conversation: {}", e);
             Ok(api_error!("agent.conversation.create_failed"))
         }
     }

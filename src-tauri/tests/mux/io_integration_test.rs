@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn test_buffer_size_configuration() {
         let (sender, _receiver) = unbounded();
-        let shell_mgr = std::sync::Arc::new(ShellIntegrationManager::new().unwrap());
+        let shell_mgr = std::sync::Arc::new(ShellIntegrationManager::new());
         let handler = IoHandler::with_buffer_size(sender, shell_mgr, 16 * 1024);
 
         assert_eq!(handler.buffer_size(), 16 * 1024);

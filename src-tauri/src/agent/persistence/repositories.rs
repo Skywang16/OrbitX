@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use sqlx::{self, sqlite::SqliteQueryResult, Row};
 use uuid::Uuid;
 
+use crate::agent::error::{AgentError, AgentResult};
 use crate::storage::database::DatabaseManager;
-use crate::utils::error::AppResult;
 
 use super::models::{
     build_agent_execution, build_conversation, build_conversation_summary, build_execution_event,
@@ -36,7 +35,7 @@ impl ConversationRepository {
         &self,
         title: Option<&str>,
         workspace_path: Option<&str>,
-    ) -> AppResult<Conversation> {
+    ) -> AgentResult<Conversation> {
         let ts = now_timestamp();
         let result: SqliteQueryResult = sqlx::query(
             "INSERT INTO conversations (title, workspace_path, created_at, updated_at)
@@ -52,7 +51,7 @@ impl ConversationRepository {
         let id = result.last_insert_rowid();
         self.get(id)
             .await?
-            .ok_or_else(|| anyhow!("无法获取新创建的会话记录: {}", id))
+            .ok_or_else(|| AgentError::Internal(format!("Failed to retrieve created conversation: {}", id)))
     }
 
     /// Ensure a conversation record with the specified id exists. If it does not,
@@ -63,9 +62,9 @@ impl ConversationRepository {
         id: i64,
         title: Option<&str>,
         workspace_path: Option<&str>,
-    ) -> AppResult<()> {
+    ) -> AgentResult<()> {
         if id <= 0 {
-            return Err(anyhow!("会话ID必须为正整数: {}", id));
+            return Err(AgentError::Internal(format!("Conversation ID must be positive: {}", id)));
         }
 
         if self.get(id).await?.is_some() {
@@ -88,7 +87,7 @@ impl ConversationRepository {
         Ok(())
     }
 
-    pub async fn get(&self, id: i64) -> AppResult<Option<Conversation>> {
+    pub async fn get(&self, id: i64) -> AgentResult<Option<Conversation>> {
         let row = sqlx::query(
             "SELECT id, title, workspace_path, created_at, updated_at
              FROM conversations WHERE id = ?",
@@ -101,7 +100,7 @@ impl ConversationRepository {
     }
 
     /// 检查conversation是否存在
-    pub async fn exists(&self, id: i64) -> AppResult<bool> {
+    pub async fn exists(&self, id: i64) -> AgentResult<bool> {
         let row = sqlx::query("SELECT 1 FROM conversations WHERE id = ?")
             .bind(id)
             .fetch_optional(self.pool())
@@ -116,11 +115,11 @@ impl ConversationRepository {
         title: Option<&str>,
         workspace_path: Option<&str>,
         _timestamp: i64,
-    ) -> AppResult<()> {
+    ) -> AgentResult<()> {
         self.ensure_with_id(id, title, workspace_path).await
     }
 
-    pub async fn list_recent(&self, limit: i64) -> AppResult<Vec<Conversation>> {
+    pub async fn list_recent(&self, limit: i64) -> AgentResult<Vec<Conversation>> {
         let rows = sqlx::query(
             "SELECT id, title, workspace_path, created_at, updated_at
              FROM conversations ORDER BY updated_at DESC LIMIT ?",
@@ -138,7 +137,7 @@ impl ConversationRepository {
         &self,
         limit: Option<i64>,
         offset: Option<i64>,
-    ) -> AppResult<Vec<Conversation>> {
+    ) -> AgentResult<Vec<Conversation>> {
         let limit = limit.unwrap_or(50).max(1);
         let offset = offset.unwrap_or(0).max(0);
         let rows = sqlx::query(
@@ -155,7 +154,7 @@ impl ConversationRepository {
             .collect()
     }
 
-    pub async fn touch(&self, id: i64) -> AppResult<()> {
+    pub async fn touch(&self, id: i64) -> AgentResult<()> {
         let ts = now_timestamp();
         sqlx::query("UPDATE conversations SET updated_at = ? WHERE id = ?")
             .bind(ts)
@@ -165,7 +164,7 @@ impl ConversationRepository {
         Ok(())
     }
 
-    pub async fn update_title(&self, id: i64, title: &str) -> AppResult<()> {
+    pub async fn update_title(&self, id: i64, title: &str) -> AgentResult<()> {
         let ts = now_timestamp();
         sqlx::query("UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?")
             .bind(title)
@@ -176,7 +175,7 @@ impl ConversationRepository {
         Ok(())
     }
 
-    pub async fn delete(&self, id: i64) -> AppResult<()> {
+    pub async fn delete(&self, id: i64) -> AgentResult<()> {
         sqlx::query("DELETE FROM conversations WHERE id = ?")
             .bind(id)
             .execute(self.pool())
@@ -208,7 +207,7 @@ impl ConversationSummaryRepository {
         messages_before_summary: i64,
         tokens_saved: i64,
         compression_cost: f64,
-    ) -> AppResult<ConversationSummary> {
+    ) -> AgentResult<ConversationSummary> {
         let ts = now_timestamp();
         sqlx::query(
             "INSERT INTO conversation_summaries (
@@ -236,10 +235,10 @@ impl ConversationSummaryRepository {
 
         self.get(conversation_id)
             .await?
-            .ok_or_else(|| anyhow!("未能获取会话摘要: {}", conversation_id))
+            .ok_or_else(|| AgentError::Internal(format!("Failed to retrieve conversation summary: {}", conversation_id)))
     }
 
-    pub async fn get(&self, conversation_id: i64) -> AppResult<Option<ConversationSummary>> {
+    pub async fn get(&self, conversation_id: i64) -> AgentResult<Option<ConversationSummary>> {
         let row = sqlx::query(
             "SELECT conversation_id, summary_content, summary_tokens,
                     messages_before_summary, tokens_saved, compression_cost,
@@ -253,7 +252,7 @@ impl ConversationSummaryRepository {
         row.map(|row| build_conversation_summary(&row)).transpose()
     }
 
-    pub async fn delete(&self, conversation_id: i64) -> AppResult<()> {
+    pub async fn delete(&self, conversation_id: i64) -> AgentResult<()> {
         sqlx::query("DELETE FROM conversation_summaries WHERE conversation_id = ?")
             .bind(conversation_id)
             .execute(self.pool())
@@ -287,7 +286,7 @@ impl FileContextRepository {
         agent_read_timestamp: Option<DateTime<Utc>>,
         agent_edit_timestamp: Option<DateTime<Utc>>,
         user_edit_timestamp: Option<DateTime<Utc>>,
-    ) -> AppResult<FileContextEntry> {
+    ) -> AgentResult<FileContextEntry> {
         let ts = now_timestamp();
         sqlx::query(
             "INSERT INTO file_context_entries (
@@ -314,14 +313,14 @@ impl FileContextRepository {
 
         self.find_by_path(conversation_id, file_path)
             .await?
-            .ok_or_else(|| anyhow!("未能获取文件上下文记录: {}", file_path))
+            .ok_or_else(|| AgentError::Internal(format!("Failed to retrieve file context entry: {}", file_path)))
     }
 
     pub async fn find_by_path(
         &self,
         conversation_id: i64,
         file_path: &str,
-    ) -> AppResult<Option<FileContextEntry>> {
+    ) -> AgentResult<Option<FileContextEntry>> {
         let row = sqlx::query(
             "SELECT id, conversation_id, file_path, record_state, record_source,
                     agent_read_timestamp, agent_edit_timestamp, user_edit_timestamp, created_at
@@ -335,12 +334,12 @@ impl FileContextRepository {
         row.map(|row| build_file_context_entry(&row)).transpose()
     }
 
-    pub async fn get_active_files(&self, conversation_id: i64) -> AppResult<Vec<FileContextEntry>> {
+    pub async fn get_active_files(&self, conversation_id: i64) -> AgentResult<Vec<FileContextEntry>> {
         self.list_by_state(conversation_id, FileRecordState::Active)
             .await
     }
 
-    pub async fn get_stale_files(&self, conversation_id: i64) -> AppResult<Vec<FileContextEntry>> {
+    pub async fn get_stale_files(&self, conversation_id: i64) -> AgentResult<Vec<FileContextEntry>> {
         self.list_by_state(conversation_id, FileRecordState::Stale)
             .await
     }
@@ -349,7 +348,7 @@ impl FileContextRepository {
         &self,
         conversation_id: i64,
         state: FileRecordState,
-    ) -> AppResult<Vec<FileContextEntry>> {
+    ) -> AgentResult<Vec<FileContextEntry>> {
         let rows = sqlx::query(
             "SELECT id, conversation_id, file_path, record_state, record_source,
                     agent_read_timestamp, agent_edit_timestamp, user_edit_timestamp, created_at
@@ -372,7 +371,7 @@ impl FileContextRepository {
         conversation_id: i64,
         file_path: &str,
         state: FileRecordState,
-    ) -> AppResult<()> {
+    ) -> AgentResult<()> {
         sqlx::query(
             "UPDATE file_context_entries SET record_state = ?, created_at = created_at
              WHERE conversation_id = ? AND file_path = ?",
@@ -389,7 +388,7 @@ impl FileContextRepository {
         &self,
         conversation_id: i64,
         cutoff: DateTime<Utc>,
-    ) -> AppResult<u64> {
+    ) -> AgentResult<u64> {
         let result = sqlx::query(
             "DELETE FROM file_context_entries
              WHERE conversation_id = ? AND record_state = 'stale' AND created_at < ?",
@@ -402,7 +401,7 @@ impl FileContextRepository {
         Ok(result.rows_affected())
     }
 
-    pub async fn delete_for_conversation(&self, conversation_id: i64) -> AppResult<()> {
+    pub async fn delete_for_conversation(&self, conversation_id: i64) -> AgentResult<()> {
         sqlx::query("DELETE FROM file_context_entries WHERE conversation_id = ?")
             .bind(conversation_id)
             .execute(self.pool())
@@ -435,7 +434,7 @@ impl AgentExecutionRepository {
         execution_config: Option<&str>,
         has_conversation_context: bool,
         max_iterations: i64,
-    ) -> AppResult<AgentExecution> {
+    ) -> AgentResult<AgentExecution> {
         let execution_id = Uuid::new_v4().to_string();
         let ts = now_timestamp();
         sqlx::query(
@@ -460,10 +459,10 @@ impl AgentExecutionRepository {
 
         self.get_by_execution_id(&execution_id)
             .await?
-            .ok_or_else(|| anyhow!("未能创建Agent执行记录"))
+            .ok_or_else(|| AgentError::Internal("Failed to create agent execution record".to_string()))
     }
 
-    pub async fn get(&self, id: i64) -> AppResult<Option<AgentExecution>> {
+    pub async fn get(&self, id: i64) -> AgentResult<Option<AgentExecution>> {
         let row = sqlx::query("SELECT * FROM agent_executions WHERE id = ?")
             .bind(id)
             .fetch_optional(self.pool())
@@ -475,7 +474,7 @@ impl AgentExecutionRepository {
     pub async fn get_by_execution_id(
         &self,
         execution_id: &str,
-    ) -> AppResult<Option<AgentExecution>> {
+    ) -> AgentResult<Option<AgentExecution>> {
         let row = sqlx::query("SELECT * FROM agent_executions WHERE execution_id = ?")
             .bind(execution_id)
             .fetch_optional(self.pool())
@@ -488,7 +487,7 @@ impl AgentExecutionRepository {
         &self,
         conversation_id: i64,
         limit: i64,
-    ) -> AppResult<Vec<AgentExecution>> {
+    ) -> AgentResult<Vec<AgentExecution>> {
         let rows = sqlx::query(
             "SELECT * FROM agent_executions WHERE conversation_id = ?
              ORDER BY created_at DESC LIMIT ?",
@@ -503,7 +502,7 @@ impl AgentExecutionRepository {
             .collect()
     }
 
-    pub async fn list_recent(&self, limit: i64) -> AppResult<Vec<AgentExecution>> {
+    pub async fn list_recent(&self, limit: i64) -> AgentResult<Vec<AgentExecution>> {
         let rows = sqlx::query("SELECT * FROM agent_executions ORDER BY created_at DESC LIMIT ?")
             .bind(limit)
             .fetch_all(self.pool())
@@ -514,7 +513,7 @@ impl AgentExecutionRepository {
             .collect()
     }
 
-    pub async fn mark_started(&self, execution_id: &str) -> AppResult<()> {
+    pub async fn mark_started(&self, execution_id: &str) -> AgentResult<()> {
         let ts = now_timestamp();
         sqlx::query(
             "UPDATE agent_executions SET started_at = ?, status = 'running', updated_at = ?
@@ -534,7 +533,7 @@ impl AgentExecutionRepository {
         status: ExecutionStatus,
         current_iteration: i64,
         error_count: i64,
-    ) -> AppResult<()> {
+    ) -> AgentResult<()> {
         let ts = now_timestamp();
         sqlx::query(
             "UPDATE agent_executions SET status = ?, current_iteration = ?, error_count = ?, updated_at = ?
@@ -550,7 +549,7 @@ impl AgentExecutionRepository {
         Ok(())
     }
 
-    pub async fn set_has_context(&self, execution_id: &str, has_context: bool) -> AppResult<()> {
+    pub async fn set_has_context(&self, execution_id: &str, has_context: bool) -> AgentResult<()> {
         let ts = now_timestamp();
         sqlx::query(
             "UPDATE agent_executions SET has_conversation_context = ?, updated_at = ?
@@ -568,7 +567,7 @@ impl AgentExecutionRepository {
         &self,
         execution_id: &str,
         execution_config: Option<&str>,
-    ) -> AppResult<()> {
+    ) -> AgentResult<()> {
         let ts = now_timestamp();
         sqlx::query("UPDATE agent_executions SET execution_config = ?, updated_at = ? WHERE execution_id = ?")
             .bind(execution_config)
@@ -583,7 +582,7 @@ impl AgentExecutionRepository {
         &self,
         execution_id: &str,
         status: ExecutionStatus,
-    ) -> AppResult<()> {
+    ) -> AgentResult<()> {
         let ts = now_timestamp();
         sqlx::query(
             "UPDATE agent_executions SET status = ?, completed_at = ?, updated_at = ?, current_iteration = current_iteration
@@ -605,7 +604,7 @@ impl AgentExecutionRepository {
         total_output_tokens: i64,
         context_tokens: i64,
         total_cost: f64,
-    ) -> AppResult<()> {
+    ) -> AgentResult<()> {
         let ts = now_timestamp();
         sqlx::query(
             "UPDATE agent_executions SET
@@ -627,7 +626,7 @@ impl AgentExecutionRepository {
         Ok(())
     }
 
-    pub async fn aggregate_token_usage(&self, conversation_id: i64) -> AppResult<TokenUsageStats> {
+    pub async fn aggregate_token_usage(&self, conversation_id: i64) -> AgentResult<TokenUsageStats> {
         let row = sqlx::query(
             "SELECT
                 COALESCE(SUM(total_input_tokens), 0) AS total_input_tokens,
@@ -648,7 +647,7 @@ impl AgentExecutionRepository {
         ))
     }
 
-    pub async fn delete_by_conversation(&self, conversation_id: i64) -> AppResult<()> {
+    pub async fn delete_by_conversation(&self, conversation_id: i64) -> AgentResult<()> {
         sqlx::query("DELETE FROM agent_executions WHERE conversation_id = ?")
             .bind(conversation_id)
             .execute(self.pool())
@@ -682,7 +681,7 @@ impl ExecutionMessageRepository {
         is_summary: bool,
         iteration: i64,
         sequence: i64,
-    ) -> AppResult<ExecutionMessage> {
+    ) -> AgentResult<ExecutionMessage> {
         let ts = now_timestamp();
         sqlx::query(
             "INSERT INTO execution_messages (
@@ -703,13 +702,13 @@ impl ExecutionMessageRepository {
 
         self.latest_for_execution(execution_id)
             .await?
-            .ok_or_else(|| anyhow!("未能插入执行消息"))
+            .ok_or_else(|| AgentError::Internal("Failed to insert execution message".to_string()))
     }
 
     pub async fn latest_for_execution(
         &self,
         execution_id: &str,
-    ) -> AppResult<Option<ExecutionMessage>> {
+    ) -> AgentResult<Option<ExecutionMessage>> {
         let row = sqlx::query(
             "SELECT * FROM execution_messages WHERE execution_id = ?
              ORDER BY created_at DESC, id DESC LIMIT 1",
@@ -721,7 +720,7 @@ impl ExecutionMessageRepository {
         row.map(|row| build_execution_message(&row)).transpose()
     }
 
-    pub async fn list_by_execution(&self, execution_id: &str) -> AppResult<Vec<ExecutionMessage>> {
+    pub async fn list_by_execution(&self, execution_id: &str) -> AgentResult<Vec<ExecutionMessage>> {
         let rows = sqlx::query(
             "SELECT * FROM execution_messages WHERE execution_id = ?
              ORDER BY iteration ASC, sequence ASC",
@@ -735,7 +734,7 @@ impl ExecutionMessageRepository {
             .collect()
     }
 
-    pub async fn delete_for_execution(&self, execution_id: &str) -> AppResult<()> {
+    pub async fn delete_for_execution(&self, execution_id: &str) -> AgentResult<()> {
         sqlx::query("DELETE FROM execution_messages WHERE execution_id = ?")
             .bind(execution_id)
             .execute(self.pool())
@@ -770,7 +769,7 @@ impl ToolExecutionRepository {
         files_read: &str,
         files_written: &str,
         directories_accessed: &str,
-    ) -> AppResult<ToolExecution> {
+    ) -> AgentResult<ToolExecution> {
         let ts = now_timestamp();
         sqlx::query(
             "INSERT INTO tool_executions (
@@ -792,7 +791,7 @@ impl ToolExecutionRepository {
 
         self.last_for_execution(execution_id)
             .await?
-            .ok_or_else(|| anyhow!("未能记录工具执行"))
+            .ok_or_else(|| AgentError::Internal("Failed to record tool execution".to_string()))
     }
 
     pub async fn update_status(
@@ -803,7 +802,7 @@ impl ToolExecutionRepository {
         error_message: Option<&str>,
         completed_at: Option<DateTime<Utc>>,
         duration_ms: Option<i64>,
-    ) -> AppResult<()> {
+    ) -> AgentResult<()> {
         sqlx::query(
             "UPDATE tool_executions SET
                 status = ?,
@@ -824,7 +823,7 @@ impl ToolExecutionRepository {
         Ok(())
     }
 
-    pub async fn last_for_execution(&self, execution_id: &str) -> AppResult<Option<ToolExecution>> {
+    pub async fn last_for_execution(&self, execution_id: &str) -> AgentResult<Option<ToolExecution>> {
         let row = sqlx::query(
             "SELECT * FROM tool_executions WHERE execution_id = ?
              ORDER BY started_at DESC, id DESC LIMIT 1",
@@ -836,7 +835,7 @@ impl ToolExecutionRepository {
         row.map(|row| build_tool_execution(&row)).transpose()
     }
 
-    pub async fn list_by_execution(&self, execution_id: &str) -> AppResult<Vec<ToolExecution>> {
+    pub async fn list_by_execution(&self, execution_id: &str) -> AgentResult<Vec<ToolExecution>> {
         let rows = sqlx::query(
             "SELECT * FROM tool_executions WHERE execution_id = ?
              ORDER BY started_at ASC",
@@ -850,7 +849,7 @@ impl ToolExecutionRepository {
             .collect()
     }
 
-    pub async fn delete_for_execution(&self, execution_id: &str) -> AppResult<()> {
+    pub async fn delete_for_execution(&self, execution_id: &str) -> AgentResult<()> {
         sqlx::query("DELETE FROM tool_executions WHERE execution_id = ?")
             .bind(execution_id)
             .execute(self.pool())
@@ -880,7 +879,7 @@ impl ExecutionEventRepository {
         event_type: ExecutionEventType,
         event_data: &str,
         iteration: i64,
-    ) -> AppResult<ExecutionEvent> {
+    ) -> AgentResult<ExecutionEvent> {
         let ts = now_timestamp();
         sqlx::query(
             "INSERT INTO execution_events (
@@ -897,10 +896,10 @@ impl ExecutionEventRepository {
 
         self.last_for_execution(execution_id)
             .await?
-            .ok_or_else(|| anyhow!("未能记录事件"))
+            .ok_or_else(|| AgentError::Internal("Failed to record event".to_string()))
     }
 
-    pub async fn list_by_execution(&self, execution_id: &str) -> AppResult<Vec<ExecutionEvent>> {
+    pub async fn list_by_execution(&self, execution_id: &str) -> AgentResult<Vec<ExecutionEvent>> {
         let rows = sqlx::query(
             "SELECT * FROM execution_events WHERE execution_id = ?
              ORDER BY iteration ASC, created_at ASC",
@@ -917,7 +916,7 @@ impl ExecutionEventRepository {
     pub async fn last_for_execution(
         &self,
         execution_id: &str,
-    ) -> AppResult<Option<ExecutionEvent>> {
+    ) -> AgentResult<Option<ExecutionEvent>> {
         let row = sqlx::query(
             "SELECT * FROM execution_events WHERE execution_id = ?
              ORDER BY created_at DESC, id DESC LIMIT 1",
@@ -929,7 +928,7 @@ impl ExecutionEventRepository {
         row.map(|row| build_execution_event(&row)).transpose()
     }
 
-    pub async fn delete_for_execution(&self, execution_id: &str) -> AppResult<()> {
+    pub async fn delete_for_execution(&self, execution_id: &str) -> AgentResult<()> {
         sqlx::query("DELETE FROM execution_events WHERE execution_id = ?")
             .bind(execution_id)
             .execute(self.pool())

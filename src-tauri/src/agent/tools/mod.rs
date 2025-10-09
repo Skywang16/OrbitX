@@ -2,14 +2,12 @@
 // Real implementation after migration
 
 pub mod builtin;
-pub mod error;
 pub mod logger;
 pub mod metadata;
 pub mod registry;
 pub mod r#trait;
 
 // Re-exports for external use
-pub use error::{ErrorSeverity, ToolExecutorError, ToolExecutorResult};
 pub use logger::ToolExecutionLogger;
 pub use metadata::{BackoffStrategy, RateLimitConfig, ToolCategory, ToolMetadata, ToolPriority};
 pub use r#trait::{RunnableTool, ToolPermission, ToolResult, ToolResultContent, ToolSchema};

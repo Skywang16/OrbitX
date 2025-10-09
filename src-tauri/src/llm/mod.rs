@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod error;
 pub mod providers;
 pub mod registry;
 pub mod service;
@@ -10,6 +11,7 @@ mod integration_tests;
 mod tests;
 
 pub use commands::*;
+pub use error::*;
 pub use providers::*;
 pub use registry::*;
 pub use service::*;

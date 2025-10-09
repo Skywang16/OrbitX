@@ -208,9 +208,7 @@ pub async fn config_terminal_reset_to_defaults(
 
 /// 检测系统可用的Shell
 #[tauri::command]
-pub async fn config_terminal_detect_system_shells(
-    _state: State<'_, ConfigManagerState>,
-) -> TauriApiResult<SystemShellsResult> {
+pub async fn config_terminal_detect_system_shells() -> TauriApiResult<SystemShellsResult> {
     debug!("开始检测系统可用的Shell");
 
     let mut available_shells = Vec::new();
@@ -328,19 +326,14 @@ pub async fn config_terminal_update_behavior(
 }
 /// 获取Shell信息
 #[tauri::command]
-pub async fn config_terminal_get_shell_info(
-    _state: State<'_, ConfigManagerState>,
-) -> TauriApiResult<String> {
+pub async fn config_terminal_get_shell_info() -> TauriApiResult<String> {
     debug!("开始获取Shell信息");
     Ok(api_success!("zsh".to_string()))
 }
 
 /// 验证终端Shell路径（存根实现）
 #[tauri::command]
-pub async fn config_terminal_validate_shell_path(
-    _path: String,
-    _state: State<'_, ConfigManagerState>,
-) -> TauriApiResult<bool> {
+pub async fn config_terminal_validate_shell_path() -> TauriApiResult<bool> {
     debug!("验证终端Shell路径");
     Ok(api_success!(true))
 }

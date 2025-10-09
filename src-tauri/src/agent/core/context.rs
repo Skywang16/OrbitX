@@ -23,7 +23,7 @@ use crate::agent::persistence::{
 };
 use crate::agent::react::runtime::ReactRuntime;
 use crate::agent::react::types::ReactRuntimeConfig;
-use crate::agent::state::error::{TaskExecutorError, TaskExecutorResult};
+use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::state::iteration::{IterationContext, IterationSnapshot};
 use crate::agent::state::manager::{
     StateEventEmitter, StateManager, TaskState, TaskStatus, TaskThresholds,
@@ -1041,7 +1041,7 @@ impl TaskContext {
             if let Some(channel) = guard.as_ref() {
                 channel
                     .send(payload.clone())
-                    .map_err(|e| TaskExecutorError::ChannelError(e.to_string()))?;
+                    .map_err(TaskExecutorError::ChannelError)?;
             }
         }
 

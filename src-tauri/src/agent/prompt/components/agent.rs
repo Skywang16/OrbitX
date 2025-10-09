@@ -3,10 +3,8 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
-
 use crate::agent::config::PromptComponent;
-use crate::agent::error::AgentResult;
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::prompt::components::types::{ComponentContext, ComponentDefinition};
 use crate::agent::prompt::template_engine::TemplateEngine;
 
@@ -74,14 +72,14 @@ CORE PRINCIPLES:
     ) -> AgentResult<Option<String>> {
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing agent role template")?;
+            .ok_or_else(|| AgentError::Internal("missing agent role template".to_string()))?;
 
         let mut template_context = HashMap::new();
         template_context.insert("name".to_string(), json!(context.agent.name));
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| anyhow!("failed to render agent role template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render agent role template: {}", e)))?;
 
         Ok(Some(result))
     }
@@ -126,7 +124,7 @@ impl ComponentDefinition for AgentDescriptionComponent {
 
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing agent description template")?;
+            .ok_or_else(|| AgentError::Internal("missing agent description template".to_string()))?;
 
         let mut template_context = HashMap::new();
         template_context.insert(
@@ -136,7 +134,7 @@ impl ComponentDefinition for AgentDescriptionComponent {
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| anyhow!("failed to render agent description template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render agent description template: {}", e)))?;
 
         Ok(Some(result))
     }
@@ -210,7 +208,7 @@ Each tool execution provides detailed output that informs subsequent actions. Yo
 
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing agent capabilities template")?;
+            .ok_or_else(|| AgentError::Internal("missing agent capabilities template".to_string()))?;
 
         let capabilities = context
             .tools
@@ -228,7 +226,7 @@ Each tool execution provides detailed output that informs subsequent actions. Yo
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| anyhow!("failed to render agent capabilities template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render agent capabilities template: {}", e)))?;
 
         Ok(Some(result))
     }
@@ -317,11 +315,11 @@ impl ComponentDefinition for AgentRulesComponent {
     ) -> AgentResult<Option<String>> {
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing agent rules template")?;
+            .ok_or_else(|| AgentError::Internal("missing agent rules template".to_string()))?;
 
         let result = TemplateEngine::new()
             .resolve(template, &HashMap::new())
-            .map_err(|e| anyhow!("failed to render agent rules template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render agent rules template: {}", e)))?;
         Ok(Some(result))
     }
 }
@@ -395,11 +393,11 @@ assistant: I will rely on the provided snapshot and avoid re-listing. I'll start
     ) -> AgentResult<Option<String>> {
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing work methodology template")?;
+            .ok_or_else(|| AgentError::Internal("missing work methodology template".to_string()))?;
 
         let result = TemplateEngine::new()
             .resolve(template, &HashMap::new())
-            .map_err(|e| anyhow!("failed to render work methodology template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render work methodology template: {}", e)))?;
         Ok(Some(result))
     }
 }
@@ -444,14 +442,14 @@ impl ComponentDefinition for CustomInstructionsComponent {
 
         let template = template_override
             .or_else(|| self.default_template())
-            .context("missing custom instructions template")?;
+            .ok_or_else(|| AgentError::Internal("missing custom instructions template".to_string()))?;
 
         let mut template_context = HashMap::new();
         template_context.insert("instructions".to_string(), json!(instructions));
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| anyhow!("failed to render custom instructions template: {}", e))?;
+            .map_err(|e| AgentError::TemplateRender(format!("failed to render custom instructions template: {}", e)))?;
 
         Ok(Some(result))
     }

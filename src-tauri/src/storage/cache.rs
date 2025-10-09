@@ -1,6 +1,6 @@
 //! 统一缓存系统
 
-use crate::utils::error::AppResult;
+use crate::storage::error::CacheResult;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -111,17 +111,17 @@ impl UnifiedCache {
     }
 
     /// 设置缓存值
-    pub async fn set(&self, key: &str, value: Value) -> AppResult<()> {
+    pub async fn set(&self, key: &str, value: Value) -> CacheResult<()> {
         self.set_with_policy(key, value, None).await
     }
 
     /// 设置带 TTL 的缓存值
-    pub async fn set_with_ttl(&self, key: &str, value: Value, ttl: Duration) -> AppResult<()> {
+    pub async fn set_with_ttl(&self, key: &str, value: Value, ttl: Duration) -> CacheResult<()> {
         self.set_with_policy(key, value, Some(ttl)).await
     }
 
     /// 序列化并存储任意值
-    pub async fn set_serialized<T>(&self, key: &str, value: &T) -> AppResult<()>
+    pub async fn set_serialized<T>(&self, key: &str, value: &T) -> CacheResult<()>
     where
         T: Serialize,
     {
@@ -135,7 +135,7 @@ impl UnifiedCache {
         key: &str,
         value: &T,
         ttl: Duration,
-    ) -> AppResult<()>
+    ) -> CacheResult<()>
     where
         T: Serialize,
     {
@@ -144,7 +144,7 @@ impl UnifiedCache {
     }
 
     /// 以指定类型读取缓存
-    pub async fn get_deserialized<T>(&self, key: &str) -> AppResult<Option<T>>
+    pub async fn get_deserialized<T>(&self, key: &str) -> CacheResult<Option<T>>
     where
         T: DeserializeOwned,
     {
@@ -159,7 +159,7 @@ impl UnifiedCache {
         key: &str,
         value: Value,
         ttl: Option<Duration>,
-    ) -> AppResult<()> {
+    ) -> CacheResult<()> {
         let mut data = self.data.write().await;
         data.insert(key.to_string(), CacheEntry::new(value, ttl));
         Ok(())
@@ -195,7 +195,7 @@ impl UnifiedCache {
     }
 
     /// 清空所有缓存
-    pub async fn clear(&self) -> AppResult<()> {
+    pub async fn clear(&self) -> CacheResult<()> {
         self.data.write().await.clear();
         Ok(())
     }
@@ -229,7 +229,7 @@ impl UnifiedCache {
     }
 
     /// 批量设置
-    pub async fn set_batch(&self, items: HashMap<String, Value>) -> AppResult<()> {
+    pub async fn set_batch(&self, items: HashMap<String, Value>) -> CacheResult<()> {
         let mut data = self.data.write().await;
         for (key, value) in items {
             data.insert(key, CacheEntry::new(value, None));

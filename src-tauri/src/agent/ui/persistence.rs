@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
 use sqlx::{sqlite::SqliteRow, Row};
 
 use crate::agent::persistence::now_timestamp;
 use crate::agent::ui::models::{UiConversation, UiMessage, UiStep};
+use crate::agent::error::{AgentError, AgentResult};
 use crate::storage::database::DatabaseManager;
-use crate::utils::error::AppResult;
 
 #[derive(Debug)]
 pub struct AgentUiPersistence {
@@ -27,13 +26,12 @@ impl AgentUiPersistence {
         &self,
         conversation_id: i64,
         title: Option<&str>,
-    ) -> AppResult<()> {
+    ) -> AgentResult<()> {
         let resolved_title = match title {
             Some(value) => Some(value.to_string()),
             None => self
                 .fetch_conversation_title(conversation_id)
-                .await
-                .context("fetching conversation title")?,
+                .await?,
         };
 
         let inserted_at = now_timestamp();
@@ -57,7 +55,7 @@ impl AgentUiPersistence {
         &self,
         conversation_id: i64,
         title: &str,
-    ) -> AppResult<()> {
+    ) -> AgentResult<()> {
         sqlx::query("UPDATE agent_ui_conversations SET title = ? WHERE id = ?")
             .bind(title)
             .bind(conversation_id)
@@ -66,7 +64,7 @@ impl AgentUiPersistence {
         Ok(())
     }
 
-    pub async fn list_conversations(&self) -> AppResult<Vec<UiConversation>> {
+    pub async fn list_conversations(&self) -> AgentResult<Vec<UiConversation>> {
         let rows = sqlx::query(
             "SELECT c.id AS conversation_id,
                     COALESCE(NULLIF(u.title, ''), NULLIF(c.title, '')) AS title,
@@ -100,7 +98,7 @@ impl AgentUiPersistence {
         Ok(conversations)
     }
 
-    pub async fn get_messages(&self, conversation_id: i64) -> AppResult<Vec<UiMessage>> {
+    pub async fn get_messages(&self, conversation_id: i64) -> AgentResult<Vec<UiMessage>> {
         let rows = sqlx::query(
             "SELECT id, conversation_id, role, content, steps_json, status, duration_ms, created_at
              FROM agent_ui_messages
@@ -114,7 +112,11 @@ impl AgentUiPersistence {
         rows.into_iter().map(build_ui_message).collect()
     }
 
-    pub async fn create_user_message(&self, conversation_id: i64, content: &str) -> AppResult<i64> {
+    pub async fn create_user_message(
+        &self,
+        conversation_id: i64,
+        content: &str,
+    ) -> AgentResult<i64> {
         self.ensure_conversation(conversation_id, None).await?;
         let ts = now_timestamp();
         let preview = build_conversation_preview(content);
@@ -134,12 +136,21 @@ impl AgentUiPersistence {
     }
 
     /// Create a fresh assistant message row for a new turn, returns the message id.
-    pub async fn create_assistant_message(&self, conversation_id: i64, status: &str) -> AppResult<i64> {
+    pub async fn create_assistant_message(
+        &self,
+        conversation_id: i64,
+        status: &str,
+    ) -> AgentResult<i64> {
         self.ensure_conversation(conversation_id, None).await?;
 
         let normalized_status = match status {
             "streaming" | "complete" | "error" => status,
-            other => return Err(anyhow!("invalid assistant message status: {}", other)),
+            other => {
+                return Err(AgentError::Internal(format!(
+                    "Invalid assistant message status: {}",
+                    other
+                )))
+            }
         };
 
         let ts = now_timestamp();
@@ -165,10 +176,15 @@ impl AgentUiPersistence {
         message_id: i64,
         steps: &[UiStep],
         status: &str,
-    ) -> AppResult<()> {
+    ) -> AgentResult<()> {
         let normalized_status = match status {
             "streaming" | "complete" | "error" => status,
-            other => return Err(anyhow!("invalid assistant message status: {}", other)),
+            other => {
+                return Err(AgentError::Internal(format!(
+                    "Invalid assistant message status: {}",
+                    other
+                )))
+            }
         };
 
         // Serialize steps and compute content preview from the latest non-empty text step
@@ -190,7 +206,7 @@ impl AgentUiPersistence {
         .bind(message_id)
         .fetch_one(&mut *tx)
         .await
-        .map_err(|e| anyhow!("assistant message not found: {}", e))?;
+        .map_err(|e| AgentError::Internal(format!("Assistant message not found: {}", e)))?;
 
         let conversation_id: i64 = row.try_get("conversation_id")?;
         let created_at: i64 = row.try_get("created_at")?;
@@ -224,7 +240,7 @@ impl AgentUiPersistence {
     pub async fn get_latest_assistant_message(
         &self,
         conversation_id: i64,
-    ) -> AppResult<Option<UiMessage>> {
+    ) -> AgentResult<Option<UiMessage>> {
         let row = sqlx::query(
             "SELECT id, conversation_id, role, content, steps_json, status, duration_ms, created_at
              FROM agent_ui_messages
@@ -242,7 +258,7 @@ impl AgentUiPersistence {
         }
     }
 
-    async fn fetch_conversation_title(&self, conversation_id: i64) -> AppResult<Option<String>> {
+    async fn fetch_conversation_title(&self, conversation_id: i64) -> AgentResult<Option<String>> {
         let title =
             sqlx::query_scalar::<_, Option<String>>("SELECT title FROM conversations WHERE id = ?")
                 .bind(conversation_id)
@@ -258,7 +274,7 @@ impl AgentUiPersistence {
         conversation_id: i64,
         timestamp: i64,
         preview: Option<String>,
-    ) -> AppResult<()> {
+    ) -> AgentResult<()> {
         let preview_ref = preview.as_deref();
         sqlx::query(
             "UPDATE agent_ui_conversations
@@ -307,7 +323,7 @@ fn build_conversation_preview(content: &str) -> Option<String> {
     Some(preview)
 }
 
-fn build_ui_message(row: SqliteRow) -> AppResult<UiMessage> {
+fn build_ui_message(row: SqliteRow) -> AgentResult<UiMessage> {
     let steps_json: Option<String> = row.try_get("steps_json")?;
     let steps = match steps_json {
         Some(raw) => {

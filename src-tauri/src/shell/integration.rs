@@ -1,4 +1,3 @@
-use anyhow::Result;
 use dashmap::DashMap;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{RwLock, Weak};
@@ -9,6 +8,7 @@ use super::osc_parser::{
 };
 use super::script_generator::{ShellIntegrationConfig, ShellScriptGenerator, ShellType};
 use crate::mux::PaneId;
+use crate::shell::error::ShellScriptResult;
 
 #[derive(Debug, Clone)]
 pub struct CommandInfo {
@@ -148,19 +148,19 @@ pub struct ShellIntegrationManager {
 }
 
 impl ShellIntegrationManager {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Self {
         Self::new_with_config(ShellIntegrationConfig::default())
     }
 
-    pub fn new_with_config(config: ShellIntegrationConfig) -> Result<Self> {
-        Ok(Self {
+    pub fn new_with_config(config: ShellIntegrationConfig) -> Self {
+        Self {
             states: DashMap::new(),
-            parser: OscParser::new()?,
+            parser: OscParser::new(),
             script_generator: ShellScriptGenerator::new(config),
             callbacks: CallbackRegistry::new(),
             history_limit: 128,
             context_service: RwLock::new(None),
-        })
+        }
     }
 
     pub fn set_context_service_integration(
@@ -250,7 +250,7 @@ impl ShellIntegrationManager {
         }
     }
 
-    pub fn generate_shell_script(&self, shell_type: &ShellType) -> Result<String> {
+    pub fn generate_shell_script(&self, shell_type: &ShellType) -> ShellScriptResult<String> {
         self.script_generator
             .generate_integration_script(shell_type)
     }
@@ -580,7 +580,7 @@ impl ShellIntegrationManager {
 
 impl Default for ShellIntegrationManager {
     fn default() -> Self {
-        Self::new().expect("Failed to create Shell Integration manager")
+        Self::new()
     }
 }
 
@@ -590,7 +590,7 @@ mod tests {
 
     #[test]
     fn tracks_command_lifecycle() {
-        let manager = ShellIntegrationManager::new().unwrap();
+        let manager = ShellIntegrationManager::new();
         let pane_id = PaneId::new(1);
         manager.process_output(pane_id, "\u{1b}]133;A\u{7}");
         manager.process_output(pane_id, "\u{1b}]133;B\u{7}");
@@ -604,7 +604,7 @@ mod tests {
 
     #[test]
     fn updates_cwd() {
-        let manager = ShellIntegrationManager::new().unwrap();
+        let manager = ShellIntegrationManager::new();
         let pane_id = PaneId::new(2);
         manager.process_output(pane_id, "\u{1b}]7;file://localhost/tmp\u{7}");
         assert_eq!(

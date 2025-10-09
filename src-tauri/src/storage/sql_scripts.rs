@@ -1,5 +1,4 @@
-use crate::utils::error::AppResult;
-use anyhow::{anyhow, Context};
+use crate::storage::error::{SqlScriptError, SqlScriptResult};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
@@ -18,21 +17,23 @@ pub struct SqlScriptCatalog {
 }
 
 impl SqlScriptCatalog {
-    pub async fn load(dir: impl AsRef<Path>) -> AppResult<Self> {
+    pub async fn load(dir: impl AsRef<Path>) -> SqlScriptResult<Self> {
         let dir = dir.as_ref();
         if !dir.exists() {
-            return Err(anyhow!("SQL directory does not exist: {}", dir.display()));
+            return Err(SqlScriptError::DirectoryMissing {
+                path: dir.to_path_buf(),
+            });
         }
 
         let mut entries = fs::read_dir(dir)
             .await
-            .with_context(|| format!("读取SQL目录失败: {}", dir.display()))?;
+            .map_err(|err| SqlScriptError::read_directory(dir.to_path_buf(), err))?;
 
         let mut scripts = Vec::new();
         while let Some(entry) = entries
             .next_entry()
             .await
-            .with_context(|| format!("遍历SQL目录失败: {}", dir.display()))?
+            .map_err(|err| SqlScriptError::walk_directory(dir.to_path_buf(), err))?
         {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) != Some("sql") {
@@ -42,11 +43,11 @@ impl SqlScriptCatalog {
             let file_name = path
                 .file_stem()
                 .and_then(|s| s.to_str())
-                .ok_or_else(|| anyhow!("无效SQL文件名: {}", path.display()))?;
+                .ok_or_else(|| SqlScriptError::InvalidFileName { path: path.clone() })?;
             let order = parse_order(file_name)?;
             let content = fs::read_to_string(&path)
                 .await
-                .with_context(|| format!("读取SQL文件失败: {}", path.display()))?;
+                .map_err(|err| SqlScriptError::read_file(path.clone(), err))?;
             let statements = parse_statements(&content)?;
             if statements.is_empty() {
                 continue;
@@ -83,7 +84,7 @@ impl SqlScriptCatalog {
     }
 }
 
-pub fn parse_statements(content: &str) -> AppResult<Vec<String>> {
+pub fn parse_statements(content: &str) -> SqlScriptResult<Vec<String>> {
     let mut statements = Vec::new();
     let mut current = String::new();
     let mut in_block_comment = false;
@@ -176,7 +177,7 @@ fn strip_line(line: &str, in_block_comment: &mut bool) -> Option<String> {
     }
 }
 
-fn parse_order(filename: &str) -> AppResult<u32> {
+fn parse_order(filename: &str) -> SqlScriptResult<u32> {
     let digits: String = filename
         .split(|c| c == '_' || c == '-')
         .next()
@@ -185,11 +186,16 @@ fn parse_order(filename: &str) -> AppResult<u32> {
         .take_while(|c| c.is_ascii_digit())
         .collect();
     if digits.is_empty() {
-        return Err(anyhow!("Failed to parse file order: {}", filename));
+        return Err(SqlScriptError::MissingOrder {
+            filename: filename.to_string(),
+        });
     }
     digits
         .parse::<u32>()
-        .with_context(|| format!("解析文件顺序失败: {}", filename))
+        .map_err(|err| SqlScriptError::ParseOrder {
+            filename: filename.to_string(),
+            source: err,
+        })
 }
 
 #[cfg(test)]

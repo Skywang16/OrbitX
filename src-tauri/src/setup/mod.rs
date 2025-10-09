@@ -1,5 +1,9 @@
 //! 应用程序初始化
 
+pub mod error;
+
+pub use error::{SetupError, SetupResult};
+
 use crate::ai::tool::shell::TerminalState;
 use crate::ai::tool::storage::StorageCoordinatorState;
 use crate::ai::AIManagerState;
@@ -48,28 +52,22 @@ pub fn init_logging() {
 }
 
 /// 初始化所有应用状态管理器
-pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::Result<()> {
+pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupResult<()> {
     let terminal_state =
-        TerminalState::new().map_err(|e| anyhow::anyhow!("Terminal state initialization failed: {}", e))?;
+        TerminalState::new().map_err(SetupError::TerminalState)?;
     app.manage(terminal_state);
 
-    let paths = crate::config::paths::ConfigPaths::new()
-        .map_err(|e| anyhow::anyhow!("Config path creation failed: {}", e))?;
+    let paths = crate::config::paths::ConfigPaths::new()?;
     app.manage(paths);
 
-    let config_state = tauri::async_runtime::block_on(async {
-        ConfigManagerState::new()
-            .await
-            .map_err(|e| anyhow::anyhow!("Config manager state initialization failed: {}", e))
-    })?;
+    let config_state =
+        tauri::async_runtime::block_on(async { ConfigManagerState::new().await })?;
     app.manage(config_state);
 
     let shortcut_state = {
         let config_state = app.state::<ConfigManagerState>();
         tauri::async_runtime::block_on(async {
-            ShortcutManagerState::new(&config_state)
-                .await
-                .map_err(|e| anyhow::anyhow!("Shortcut manager state initialization failed: {}", e))
+            ShortcutManagerState::new(&config_state).await
         })?
     };
     app.manage(shortcut_state);
@@ -81,9 +79,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
     let storage_state = {
         let config_manager = app.state::<ConfigManagerState>().toml_manager.clone();
         tauri::async_runtime::block_on(async {
-            StorageCoordinatorState::new(config_manager)
-                .await
-                .map_err(|e| anyhow::anyhow!("Storage coordinator state initialization failed: {}", e))
+            StorageCoordinatorState::new(config_manager).await
         })?
     };
     app.manage(storage_state);
@@ -93,16 +89,11 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
 
         let storage_state = app.state::<StorageCoordinatorState>();
         let cache = storage_state.coordinator.cache();
-
-        // 从状态中获取配置路径管理器
         let paths = app.state::<ConfigPaths>().inner().clone();
 
-        let theme_manager_options = ThemeManagerOptions::default();
-
-        let theme_service = ThemeService::new(paths, theme_manager_options, cache).await?;
-        Ok::<ThemeService, anyhow::Error>(theme_service)
+        ThemeService::new(paths, ThemeManagerOptions::default(), cache).await
     })?;
-    app.manage(std::sync::Arc::new(theme_service));
+    app.manage(Arc::new(theme_service));
 
     let completion_state = CompletionState::new();
     app.manage(completion_state);
@@ -111,10 +102,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
         use crate::shell::ShellIntegrationManager;
 
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
-        let shell_integration = Arc::new(
-            ShellIntegrationManager::new()
-                .map_err(|e| anyhow::anyhow!("Shell integration manager initialization failed: {}", e))?,
-        );
+        let shell_integration = Arc::new(ShellIntegrationManager::new());
         // 使用全局单例，避免与事件系统订阅的Mux不一致
         let global_mux = crate::mux::singleton::get_mux();
         let storage_state = app.state::<StorageCoordinatorState>();
@@ -138,17 +126,17 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
         let terminal_context_state = app.state::<TerminalContextState>();
         let terminal_context_service = terminal_context_state.context_service().clone();
 
-        let ai_state = AIManagerState::new(repositories, cache, terminal_context_service)
-            .map_err(|e| anyhow::anyhow!("AI manager state initialization failed: {}", e))?;
+        let state = AIManagerState::new(repositories, cache, terminal_context_service)
+            .map_err(SetupError::AIState)?;
 
         tauri::async_runtime::block_on(async {
-            ai_state
+            state
                 .initialize()
                 .await
-                .map_err(|e| anyhow::anyhow!("AI service initialization failed: {}", e))
+                .map_err(SetupError::AIInitialization)
         })?;
 
-        ai_state
+        state
     };
     app.manage(ai_state);
 
@@ -166,34 +154,31 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> anyhow::
         let terminal_context_state = app.state::<TerminalContextState>();
         let repositories = storage_state.coordinator.repositories();
         let database_manager = storage_state.coordinator.database_manager();
-        let agent_persistence = std::sync::Arc::new(
-            crate::agent::persistence::AgentPersistence::new(Arc::clone(&database_manager)),
-        );
-        let ui_persistence = std::sync::Arc::new(crate::agent::ui::AgentUiPersistence::new(
+        let agent_persistence = Arc::new(crate::agent::persistence::AgentPersistence::new(
+            Arc::clone(&database_manager),
+        ));
+        let ui_persistence = Arc::new(crate::agent::ui::AgentUiPersistence::new(
             Arc::clone(&database_manager),
         ));
         let llm_registry = llm_state.registry.clone();
         let terminal_context_service = terminal_context_state.context_service().clone();
+        let tool_registry =
+            tauri::async_runtime::block_on(crate::agent::tools::create_tool_registry());
 
-        tauri::async_runtime::block_on(async {
-            let tool_registry = crate::agent::tools::create_tool_registry().await;
-            let executor = std::sync::Arc::new(crate::agent::core::TaskExecutor::new(
-                repositories,
-                agent_persistence,
-                ui_persistence,
-                llm_registry,
-                tool_registry,
-                terminal_context_service.clone(),
-            ));
-            Ok::<crate::agent::core::commands::TaskExecutorState, anyhow::Error>(
-                crate::agent::core::commands::TaskExecutorState::new(executor),
-            )
-        })?
+        let executor = Arc::new(crate::agent::core::TaskExecutor::new(
+            Arc::clone(&repositories),
+            Arc::clone(&agent_persistence),
+            Arc::clone(&ui_persistence),
+            Arc::clone(&llm_registry),
+            tool_registry,
+            Arc::clone(&terminal_context_service),
+        ));
+
+        crate::agent::core::commands::TaskExecutorState::new(executor)
     };
     app.manage(task_executor_state);
 
-    let window_state =
-        WindowState::new().map_err(|e| anyhow::anyhow!("Window state initialization failed: {}", e))?;
+    let window_state = WindowState::new().map_err(SetupError::WindowState)?;
     app.manage(window_state);
 
     let terminal_mux = crate::mux::singleton::get_mux();

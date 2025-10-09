@@ -5,12 +5,11 @@
  * 任务相关命令已在 Agent 持久层中实现。
  */
 
+use crate::storage::error::StorageCoordinatorError;
 use crate::storage::types::SessionState;
 use crate::storage::StorageCoordinator;
-use crate::utils::error::AppResult;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
-use anyhow::Context;
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::State;
@@ -22,7 +21,9 @@ pub struct StorageCoordinatorState {
 }
 
 impl StorageCoordinatorState {
-    pub async fn new(config_manager: Arc<crate::config::TomlConfigManager>) -> AppResult<Self> {
+    pub async fn new(
+        config_manager: Arc<crate::config::TomlConfigManager>,
+    ) -> Result<Self, StorageCoordinatorError> {
         use crate::storage::{StorageCoordinatorOptions, StoragePaths};
         use std::env;
 
@@ -31,8 +32,9 @@ impl StorageCoordinatorState {
             std::path::PathBuf::from(dir)
         } else {
             let data_dir = dirs::data_dir().ok_or_else(|| {
-                anyhow::anyhow!(
+                StorageCoordinatorError::Internal(
                     "无法获取系统应用数据目录，请检查系统配置或设置 OrbitX_DATA_DIR 环境变量"
+                        .to_string(),
                 )
             })?;
             let app_dir = data_dir.join("OrbitX");
@@ -41,13 +43,11 @@ impl StorageCoordinatorState {
         };
 
         tracing::debug!("初始化存储路径，应用目录: {}", app_dir.display());
-        let paths =
-            StoragePaths::new(app_dir).with_context(|| "存储路径初始化失败，请检查目录权限")?;
+        let paths = StoragePaths::new(app_dir)?;
 
         let coordinator = Arc::new(
             StorageCoordinator::new(paths, StorageCoordinatorOptions::default(), config_manager)
-                .await
-                .with_context(|| "存储协调器创建失败")?,
+                .await?,
         );
 
         tracing::debug!("存储协调器状态初始化成功");
@@ -120,7 +120,7 @@ pub async fn storage_save_session_state(
             debug!("✅ 会话状态保存成功");
             Ok(api_success!())
         }
-        Err(_e) => {
+        Err(_) => {
             error!("❌ 会话状态保存失败");
             Ok(api_error!("storage.save_session_failed"))
         }
@@ -146,7 +146,7 @@ pub async fn storage_load_session_state(
             debug!("ℹ️ 没有找到保存的会话状态");
             Ok(api_success!(None))
         }
-        Err(_e) => {
+        Err(_) => {
             error!("❌ 会话状态加载失败");
             Ok(api_error!("storage.load_session_failed"))
         }

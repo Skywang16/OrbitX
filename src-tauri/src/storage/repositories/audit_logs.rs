@@ -6,9 +6,8 @@
 
 use super::{Repository, RowMapper};
 use crate::storage::database::DatabaseManager;
+use crate::storage::error::{RepositoryError, RepositoryResult};
 use crate::storage::query::{InsertBuilder, QueryCondition, SafeQueryBuilder};
-use crate::utils::error::AppResult;
-use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -54,7 +53,7 @@ impl AuditLogEntry {
 }
 
 impl RowMapper<AuditLogEntry> for AuditLogEntry {
-    fn from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<Self> {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> RepositoryResult<Self> {
         Ok(Self {
             id: Some(row.try_get("id")?),
             operation: row.try_get("operation")?,
@@ -89,7 +88,7 @@ impl AuditLogRepository {
         details: &str,
         success: bool,
         error_message: Option<&str>,
-    ) -> AppResult<i64> {
+    ) -> RepositoryResult<i64> {
         let entry = AuditLogEntry::new(
             operation.to_string(),
             table_name.to_string(),
@@ -109,7 +108,7 @@ impl AuditLogRepository {
         table_name: Option<&str>,
         operation: Option<&str>,
         limit: Option<i64>,
-    ) -> AppResult<Vec<AuditLogEntry>> {
+    ) -> RepositoryResult<Vec<AuditLogEntry>> {
         let mut builder = SafeQueryBuilder::new("audit_logs")
             .select(&[
                 "id",
@@ -154,10 +153,14 @@ impl AuditLogRepository {
                     if let Some(i) = n.as_i64() {
                         query_builder.bind(i)
                     } else {
-                        return Err(anyhow!("Unsupported number type"));
+                        return Err(RepositoryError::UnsupportedNumberType);
                     }
                 }
-                _ => return Err(anyhow!("Unsupported parameter type")),
+                _ => {
+                    return Err(RepositoryError::unsupported_parameter(
+                        "audit_logs parameter",
+                    ))
+                }
             };
         }
 
@@ -173,7 +176,7 @@ impl AuditLogRepository {
 
 #[async_trait::async_trait]
 impl Repository<AuditLogEntry> for AuditLogRepository {
-    async fn find_by_id(&self, id: i64) -> AppResult<Option<AuditLogEntry>> {
+    async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<AuditLogEntry>> {
         let (sql, _params) = SafeQueryBuilder::new("audit_logs")
             .where_condition(QueryCondition::Eq(
                 "id".to_string(),
@@ -192,11 +195,11 @@ impl Repository<AuditLogEntry> for AuditLogRepository {
         }
     }
 
-    async fn find_all(&self) -> AppResult<Vec<AuditLogEntry>> {
+    async fn find_all(&self) -> RepositoryResult<Vec<AuditLogEntry>> {
         self.find_logs(None, None, None).await
     }
 
-    async fn save(&self, entity: &AuditLogEntry) -> AppResult<i64> {
+    async fn save(&self, entity: &AuditLogEntry) -> RepositoryResult<i64> {
         let (sql, params) = InsertBuilder::new("audit_logs")
             .set("operation", Value::String(entity.operation.clone()))
             .set("table_name", Value::String(entity.table_name.clone()))
@@ -234,7 +237,11 @@ impl Repository<AuditLogEntry> for AuditLogRepository {
                 Value::String(s) => query_builder.bind(s),
                 Value::Bool(b) => query_builder.bind(b),
                 Value::Null => query_builder.bind(None::<String>),
-                _ => return Err(anyhow!("Unsupported parameter type")),
+                _ => {
+                    return Err(RepositoryError::unsupported_parameter(
+                        "audit_logs parameter",
+                    ))
+                }
             };
         }
 
@@ -242,18 +249,20 @@ impl Repository<AuditLogEntry> for AuditLogRepository {
         Ok(result.last_insert_rowid())
     }
 
-    async fn update(&self, _entity: &AuditLogEntry) -> AppResult<()> {
-        Err(anyhow!("Audit logs do not support update operations"))
+    async fn update(&self, _entity: &AuditLogEntry) -> RepositoryResult<()> {
+        Err(RepositoryError::AuditLogUpdateNotSupported)
     }
 
-    async fn delete(&self, id: i64) -> AppResult<()> {
+    async fn delete(&self, id: i64) -> RepositoryResult<()> {
         let result = sqlx::query("DELETE FROM audit_logs WHERE id = ?")
             .bind(id)
             .execute(self.database.pool())
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(anyhow!("Audit log does not exist: {}", id));
+            return Err(RepositoryError::AuditLogNotFound {
+                id: id.to_string(),
+            });
         }
 
         Ok(())

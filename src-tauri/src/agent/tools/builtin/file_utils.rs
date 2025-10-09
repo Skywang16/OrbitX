@@ -1,6 +1,6 @@
 use std::path::{Component, Path, PathBuf};
 
-use crate::agent::tools::error::ToolExecutorError;
+use crate::agent::error::ToolExecutorError;
 
 /// List of extensions treated as binary to mirror front-end safeguards.
 fn binary_extension(ext: &str) -> bool {

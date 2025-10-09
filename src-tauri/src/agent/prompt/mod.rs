@@ -11,8 +11,9 @@ use crate::agent::prompt::builders::{
     build_tree_plan_user_prompt as build_tree_plan_user_prompt_impl, PromptBuildOptions,
     PromptBuilder,
 };
+use crate::agent::error::AgentResult;
 use crate::agent::prompt::components::types::ComponentContext;
-use crate::agent::{Agent, AgentResult, Context, Task, ToolSchema};
+use crate::agent::{Agent, Context, Task, ToolSchema};
 
 pub mod builders;
 pub mod components;

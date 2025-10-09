@@ -1,8 +1,7 @@
+use crate::storage::error::{MessagePackError, MessagePackResult};
 use crate::storage::paths::StoragePaths;
 use crate::storage::types::SessionState;
 use crate::storage::SESSION_STATE_FILE_NAME;
-use crate::utils::error::AppResult;
-use anyhow::{anyhow, Context};
 use chrono::Utc;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rmp_serde::{Deserializer, Serializer};
@@ -43,30 +42,35 @@ pub struct MessagePackManager {
 }
 
 impl MessagePackManager {
-    pub async fn new(paths: StoragePaths, options: MessagePackOptions) -> AppResult<Self> {
+    pub async fn new(paths: StoragePaths, options: MessagePackOptions) -> MessagePackResult<Self> {
         let manager = Self { paths, options };
         manager.ensure_state_directory().await?;
         Ok(manager)
     }
 
-    pub fn serialize_state(&self, state: &SessionState) -> AppResult<Vec<u8>> {
+    pub fn serialize_state(&self, state: &SessionState) -> MessagePackResult<Vec<u8>> {
         let (payload, flags) = if self.options.compression {
             let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
             state
                 .serialize(&mut Serializer::new(&mut encoder))
-                .map_err(|e| anyhow!("MessagePack serialization failed: {}", e))?;
-            let compressed = encoder.finish().map_err(|e| anyhow!("Compression failed: {}", e))?;
+                .map_err(MessagePackError::from)?;
+            let compressed = encoder
+                .finish()
+                .map_err(|err| MessagePackError::io("compress state payload", err))?;
             (compressed, FLAG_COMPRESSED)
         } else {
             let mut buf = Vec::new();
             state
                 .serialize(&mut Serializer::new(&mut buf))
-                .map_err(|e| anyhow!("MessagePack serialization failed: {}", e))?;
+                .map_err(MessagePackError::from)?;
             (buf, 0)
         };
 
         if payload.len() > self.options.max_file_size {
-            return Err(anyhow!("Serialized data too large: {} bytes", payload.len()));
+            return Err(MessagePackError::PayloadTooLarge {
+                size: payload.len(),
+                max: self.options.max_file_size,
+            });
         }
 
         let mut header = [0u8; HEADER_LEN];
@@ -93,23 +97,23 @@ impl MessagePackManager {
         Ok(result)
     }
 
-    pub fn deserialize_state(&self, data: &[u8]) -> AppResult<SessionState> {
+    pub fn deserialize_state(&self, data: &[u8]) -> MessagePackResult<SessionState> {
         if data.len() < HEADER_LEN {
-            return Err(anyhow!("Invalid state file header"));
+            return Err(MessagePackError::InvalidHeader);
         }
 
         let header = &data[..HEADER_LEN];
         if &header[..4] != MAGIC {
-            return Err(anyhow!("Invalid state file magic number"));
+            return Err(MessagePackError::InvalidMagic);
         }
         if header[4] != VERSION {
-            return Err(anyhow!("Unsupported state file version"));
+            return Err(MessagePackError::UnsupportedVersion { version: header[4] });
         }
 
         let flags = header[5];
         let payload_len = u64::from_le_bytes(header[6..14].try_into().unwrap()) as usize;
         if HEADER_LEN + payload_len != data.len() {
-            return Err(anyhow!("State file length mismatch"));
+            return Err(MessagePackError::LengthMismatch);
         }
 
         let payload = &data[HEADER_LEN..];
@@ -119,7 +123,7 @@ impl MessagePackManager {
             hasher.update(payload);
             let digest = hasher.finalize();
             if digest.as_slice() != &header[14..46] {
-                return Err(anyhow!("State file checksum failed"));
+                return Err(MessagePackError::ChecksumFailed);
             }
         }
 
@@ -128,17 +132,18 @@ impl MessagePackManager {
             let mut buf = Vec::new();
             decoder
                 .read_to_end(&mut buf)
-                .map_err(|e| anyhow!("Failed to decompress state: {}", e))?;
+                .map_err(|e| MessagePackError::io("decompress state payload", e))?;
             buf
         } else {
             payload.to_vec()
         };
 
         let mut deserializer = Deserializer::new(&decoded[..]);
-        SessionState::deserialize(&mut deserializer).map_err(|e| anyhow!("State deserialization failed: {}", e))
+        SessionState::deserialize(&mut deserializer)
+            .map_err(|e| MessagePackError::internal(format!("State deserialization failed: {}", e)))
     }
 
-    pub async fn save_state(&self, state: &SessionState) -> AppResult<()> {
+    pub async fn save_state(&self, state: &SessionState) -> MessagePackResult<()> {
         self.ensure_state_directory().await?;
         let serialized = self.serialize_state(state)?;
         let state_file = self.get_state_file_path();
@@ -152,7 +157,7 @@ impl MessagePackManager {
         Ok(())
     }
 
-    pub async fn load_state(&self) -> AppResult<Option<SessionState>> {
+    pub async fn load_state(&self) -> MessagePackResult<Option<SessionState>> {
         let state_file = self.get_state_file_path();
         if !state_file.exists() {
             return Ok(None);
@@ -160,7 +165,7 @@ impl MessagePackManager {
 
         let data = async_fs::read(&state_file)
             .await
-            .with_context(|| format!("Failed to read state file: {}", state_file.display()))?;
+            .map_err(|e| MessagePackError::io(format!("read state file {}", state_file.display()), e))?;
 
         match self.deserialize_state(&data) {
             Ok(state) => Ok(Some(state)),
@@ -171,20 +176,20 @@ impl MessagePackManager {
         }
     }
 
-    pub async fn create_backup(&self, source_file: &Path) -> AppResult<PathBuf> {
+    pub async fn create_backup(&self, source_file: &Path) -> MessagePackResult<PathBuf> {
         let backup_dir = self.get_backup_directory();
         async_fs::create_dir_all(&backup_dir)
             .await
-            .with_context(|| format!("Failed to create backup directory: {}", backup_dir.display()))?;
+            .map_err(|e| MessagePackError::io(format!("create backup directory {}", backup_dir.display()), e))?;
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
         let backup_file = backup_dir.join(format!("session_state_{}.msgpack.bak", timestamp));
         async_fs::copy(source_file, &backup_file)
             .await
-            .with_context(|| format!("Failed to create backup: {}", backup_file.display()))?;
+            .map_err(|e| MessagePackError::io(format!("create backup file {}", backup_file.display()), e))?;
         Ok(backup_file)
     }
 
-    pub async fn restore_from_backup(&self) -> AppResult<Option<SessionState>> {
+    pub async fn restore_from_backup(&self) -> MessagePackResult<Option<SessionState>> {
         let backup_dir = self.get_backup_directory();
         if !backup_dir.exists() {
             return Ok(None);
@@ -193,12 +198,12 @@ impl MessagePackManager {
         let mut backups = Vec::new();
         let mut entries = async_fs::read_dir(&backup_dir)
             .await
-            .with_context(|| format!("Failed to read backup directory: {}", backup_dir.display()))?;
+            .map_err(|e| MessagePackError::io(format!("read backup directory {}", backup_dir.display()), e))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .with_context(|| format!("Failed to iterate backup directory: {}", backup_dir.display()))?
+            .map_err(|e| MessagePackError::io(format!("iterate backup directory {}", backup_dir.display()), e))?
         {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("bak") {
@@ -225,24 +230,22 @@ impl MessagePackManager {
         Ok(None)
     }
 
-    async fn atomic_write(&self, target: &Path, data: &[u8]) -> AppResult<()> {
+    async fn atomic_write(&self, target: &Path, data: &[u8]) -> MessagePackResult<()> {
         let tmp = target.with_extension("tmp");
         async_fs::write(&tmp, data)
             .await
-            .with_context(|| format!("Failed to write temp file: {}", tmp.display()))?;
-        async_fs::rename(&tmp, target).await.map_err(|err| {
+            .map_err(|e| MessagePackError::io(format!("write temp state file {}", tmp.display()), e))?;
+        if let Err(err) = async_fs::rename(&tmp, target).await {
             let _ = std::fs::remove_file(&tmp);
-            anyhow!(
-                "原子重命名失败: {} -> {}: {}",
-                tmp.display(),
-                target.display(),
-                err
-            )
-        })?;
+            return Err(MessagePackError::io(
+                format!("rename temp state file {} -> {}", tmp.display(), target.display()),
+                err,
+            ));
+        }
         Ok(())
     }
 
-    async fn cleanup_old_backups(&self) -> AppResult<()> {
+    async fn cleanup_old_backups(&self) -> MessagePackResult<()> {
         let backup_dir = self.get_backup_directory();
         if !backup_dir.exists() {
             return Ok(());
@@ -251,12 +254,12 @@ impl MessagePackManager {
         let mut backups = Vec::new();
         let mut entries = async_fs::read_dir(&backup_dir)
             .await
-            .with_context(|| format!("Failed to read backup directory: {}", backup_dir.display()))?;
+            .map_err(|e| MessagePackError::io(format!("read backup directory {}", backup_dir.display()), e))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .with_context(|| format!("Failed to iterate backup directory: {}", backup_dir.display()))?
+            .map_err(|e| MessagePackError::io(format!("iterate backup directory {}", backup_dir.display()), e))?
         {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("bak") {
@@ -280,10 +283,10 @@ impl MessagePackManager {
         Ok(())
     }
 
-    async fn ensure_state_directory(&self) -> AppResult<()> {
+    async fn ensure_state_directory(&self) -> MessagePackResult<()> {
         async_fs::create_dir_all(&self.paths.state_dir)
             .await
-            .with_context(|| format!("Failed to create state directory: {}", self.paths.state_dir.display()))
+            .map_err(|e| MessagePackError::io(format!("create state directory {}", self.paths.state_dir.display()), e))
     }
 
     fn get_state_file_path(&self) -> PathBuf {
@@ -294,7 +297,7 @@ impl MessagePackManager {
         self.paths.backups_dir.join("state")
     }
 
-    pub async fn get_state_stats(&self) -> AppResult<StateStats> {
+    pub async fn get_state_stats(&self) -> MessagePackResult<StateStats> {
         let state_file = self.get_state_file_path();
         let backup_dir = self.get_backup_directory();
 
@@ -313,11 +316,11 @@ impl MessagePackManager {
         if backup_dir.exists() {
             let mut entries = async_fs::read_dir(&backup_dir)
                 .await
-                .with_context(|| format!("Failed to read backup directory: {}", backup_dir.display()))?;
+                .map_err(|e| MessagePackError::io(format!("read backup directory {}", backup_dir.display()), e))?;
             while let Some(entry) = entries
                 .next_entry()
                 .await
-                .with_context(|| format!("Failed to iterate backup directory: {}", backup_dir.display()))?
+                .map_err(|e| MessagePackError::io(format!("iterate backup directory {}", backup_dir.display()), e))?
             {
                 if entry.path().extension().and_then(|s| s.to_str()) == Some("bak") {
                     backup_count += 1;

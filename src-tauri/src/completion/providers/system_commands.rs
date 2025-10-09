@@ -2,9 +2,9 @@
 //!
 //! 提供系统PATH中可执行命令的补全
 
+use crate::completion::error::CompletionProviderResult;
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
-use crate::utils::error::AppResult;
 use async_trait::async_trait;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use std::collections::HashSet;
@@ -35,7 +35,7 @@ impl SystemCommandsProvider {
     }
 
     /// 初始化命令列表（扫描PATH）
-    pub async fn initialize(&self) -> AppResult<()> {
+    pub async fn initialize(&self) -> CompletionProviderResult<()> {
         let mut initialized = self.initialized.write().await;
 
         if *initialized {
@@ -111,7 +111,10 @@ impl SystemCommandsProvider {
     }
 
     /// 获取匹配的命令 - 使用模糊匹配
-    async fn get_matching_commands(&self, pattern: &str) -> AppResult<Vec<CompletionItem>> {
+    async fn get_matching_commands(
+        &self,
+        pattern: &str,
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let commands = self.commands.read().await;
 
         let mut matches = Vec::new();
@@ -153,7 +156,7 @@ impl SystemCommandsProvider {
     }
 
     /// 手动添加命令（用于测试或特殊情况）
-    pub async fn add_command(&self, command: String) -> AppResult<()> {
+    pub async fn add_command(&self, command: String) -> CompletionProviderResult<()> {
         let mut commands = self.commands.write().await;
 
         commands.insert(command);
@@ -186,7 +189,7 @@ impl CompletionProvider for SystemCommandsProvider {
     async fn provide_completions(
         &self,
         context: &CompletionContext,
-    ) -> AppResult<Vec<CompletionItem>> {
+    ) -> CompletionProviderResult<Vec<CompletionItem>> {
         // 确保已初始化
         self.initialize().await?;
 

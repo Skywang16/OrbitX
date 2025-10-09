@@ -5,7 +5,6 @@
  * This module now focuses solely on terminal command implementations.
  */
 
-use anyhow::{anyhow, Context};
 use tauri::{AppHandle, Runtime, State};
 use tracing::{debug, error, warn};
 
@@ -13,16 +12,12 @@ use crate::mux::{
     get_mux, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager, ShellManagerStats,
     TerminalConfig,
 };
-use crate::utils::error::{AppResult, ToTauriResult};
 use crate::utils::{ApiResponse, EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 
 /// 参数验证辅助函数
-fn validate_terminal_size(rows: u16, cols: u16) -> AppResult<()> {
-    if rows == 0 || cols == 0 {
-        return Err(anyhow!("Terminal size cannot be 0 (current: {}x{})", cols, rows));
-    }
-    Ok(())
+fn terminal_size_valid(rows: u16, cols: u16) -> bool {
+    rows > 0 && cols > 0
 }
 
 /// 终端状态管理
@@ -67,7 +62,7 @@ pub async fn terminal_create<R: Runtime>(
     debug!("创建终端会话: {}x{}, 初始目录: {:?}", cols, rows, cwd);
     debug!("当前Mux状态 - 面板数量: {}", get_mux().pane_count());
 
-    if let Err(_) = validate_terminal_size(rows, cols) {
+    if !terminal_size_valid(rows, cols) {
         return Ok(api_error!("shell.terminal_size_invalid"));
     }
 
@@ -157,7 +152,7 @@ pub async fn terminal_resize(
 ) -> TauriApiResult<EmptyData> {
     debug!("调整终端大小: ID={}, 大小={}x{}", pane_id, cols, rows);
 
-    if let Err(_) = validate_terminal_size(rows, cols) {
+    if !terminal_size_valid(rows, cols) {
         return Ok(api_error!("shell.terminal_size_invalid"));
     }
 
@@ -200,15 +195,17 @@ pub async fn terminal_close(
             );
             Ok(api_success!())
         }
-        Err(e) => {
-            let error_str = e.to_string();
-            if error_str.contains("not found") || error_str.contains("不存在") {
-                // 面板不存在，认为操作成功
-                warn!("尝试关闭不存在的面板: ID={}, 可能已被其他操作关闭", pane_id);
-                Ok(api_success!())
-            } else {
-                // 其他错误，返回失败
-                Ok(api_error!("shell.close_terminal_failed"))
+        Err(err) => {
+            match err {
+                crate::mux::error::TerminalMuxError::PaneNotFound { .. } => {
+                    // 面板不存在，认为操作成功
+                    warn!("尝试关闭不存在的面板: ID={}, 可能已被其他操作关闭", pane_id);
+                    Ok(api_success!())
+                }
+                _ => {
+                    // 其他错误，返回失败
+                    Ok(api_error!("shell.close_terminal_failed"))
+                }
             }
         }
     }
@@ -217,7 +214,7 @@ pub async fn terminal_close(
 /// 获取终端列表
 ///
 #[tauri::command]
-pub async fn terminal_list(_state: State<'_, TerminalState>) -> TauriApiResult<Vec<u32>> {
+pub async fn terminal_list() -> TauriApiResult<Vec<u32>> {
     debug!("获取终端列表");
 
     let mux = get_mux();
@@ -299,7 +296,7 @@ pub async fn terminal_create_with_shell<R: Runtime>(
         shell_name, cols, rows
     );
 
-    if let Err(_) = validate_terminal_size(rows, cols) {
+    if rows == 0 || cols == 0 {
         return Ok(api_error!("shell.terminal_size_invalid"));
     }
 

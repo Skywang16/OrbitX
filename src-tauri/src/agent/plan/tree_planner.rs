@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
-use anyhow::{bail, Context};
 use tokio_stream::StreamExt;
 
 use crate::agent::common::xml::parse_task_tree;
 use crate::agent::core::context::TaskContext;
-use crate::agent::error::AgentResult;
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::prompt::{build_tree_plan_system_prompt, build_tree_plan_user_prompt};
 use crate::agent::types::PlannedTask;
 use crate::llm::service::LLMService;
@@ -51,23 +50,27 @@ impl TreePlanner {
         let mut stream = llm_service
             .call_stream(request, token)
             .await
-            .context("failed to start LLM planning stream")?;
+            .map_err(|e| AgentError::Internal(format!("Failed to start LLM planning stream: {}", e)))?;
 
         let mut stream_text = String::new();
         while let Some(chunk) = stream.next().await {
             self.context
                 .check_aborted(true)
                 .await
-                .context("task planning aborted")?;
+                .map_err(AgentError::from)?;
             match chunk {
                 Ok(LLMStreamChunk::Delta { content, .. }) => {
                     if let Some(text) = content {
                         stream_text.push_str(&text);
                     }
                 }
-                Ok(LLMStreamChunk::Error { error }) => bail!("LLM stream error: {error}"),
+                Ok(LLMStreamChunk::Error { error }) => {
+                    return Err(AgentError::Internal(format!("LLM stream error: {error}")));
+                }
                 Ok(LLMStreamChunk::Finish { .. }) => break,
-                Err(e) => bail!("LLM stream error: {e}"),
+                Err(e) => {
+                    return Err(AgentError::Internal(format!("LLM stream error: {e}")));
+                }
             }
         }
 
@@ -84,7 +87,7 @@ impl TreePlanner {
             .ai_models()
             .find_all_with_decrypted_keys()
             .await
-            .context("failed to load LLM models")?;
+            .map_err(|e| AgentError::Internal(format!("Failed to load LLM models: {}", e)))?;
 
         if let Some(first_enabled) = models.iter().find(|m| m.enabled) {
             return Ok(first_enabled.id.clone());
@@ -92,7 +95,9 @@ impl TreePlanner {
         if let Some(any_model) = models.first() {
             return Ok(any_model.id.clone());
         }
-        bail!("No enabled LLM model available")
+        Err(AgentError::Internal(
+            "No enabled LLM model available".to_string(),
+        ))
     }
 }
 

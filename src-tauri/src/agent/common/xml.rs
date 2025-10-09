@@ -1,8 +1,6 @@
 use std::io::Cursor;
 
-use anyhow::{bail, Context};
-
-use crate::agent::error::AgentResult;
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::types::{PlannedTask, PlannedTaskNode, TaskDetail, TaskDetailStatus, TaskNode};
 use xmltree::{Element, XMLNode};
 
@@ -17,11 +15,10 @@ fn ensure_root(xml: &str) -> String {
 
 pub fn parse_task_detail(task_id: &str, xml: &str, done: bool) -> AgentResult<TaskDetail> {
     let wrapped = ensure_root(xml);
-    let root =
-        Element::parse(Cursor::new(wrapped.as_bytes())).context("failed to parse task XML")?;
+    let root = Element::parse(Cursor::new(wrapped.as_bytes()))?;
 
     if root.name != "root" {
-        bail!("Task XML must have <root> element");
+        return Err(AgentError::XmlParse("Task XML must have <root> element".to_string()));
     }
 
     let name_text = root
@@ -45,9 +42,7 @@ pub fn parse_task_detail(task_id: &str, xml: &str, done: bool) -> AgentResult<Ta
         let nodes = collect_task_nodes(agent_el.get_child("nodes"));
 
         let mut buf = Vec::new();
-        agent_el
-            .write(Cursor::new(&mut buf))
-            .context("failed to serialize agent XML")?;
+        agent_el.write(Cursor::new(&mut buf))?;
         let agent_xml = String::from_utf8(buf).unwrap_or_default();
         (description, nodes, agent_xml)
     } else {
@@ -95,10 +90,9 @@ fn collect_task_nodes(nodes_el: Option<&Element>) -> Vec<TaskNode> {
 
 pub fn parse_task_tree(xml: &str) -> AgentResult<PlannedTask> {
     let wrapped = ensure_root(xml);
-    let root = Element::parse(Cursor::new(wrapped.as_bytes()))
-        .context("failed to parse planned task XML")?;
+    let root = Element::parse(Cursor::new(wrapped.as_bytes()))?;
     if root.name != "root" {
-        bail!("Tree XML must have <root> element");
+        return Err(AgentError::XmlParse("Tree XML must have <root> element".to_string()));
     }
 
     Ok(parse_planned_task(&root))
@@ -175,8 +169,6 @@ pub fn build_agent_xml_from_planned(planned: &PlannedTask) -> AgentResult<String
     }
 
     let mut buf = Vec::new();
-    agent_el
-        .write(Cursor::new(&mut buf))
-        .context("failed to serialize planned task into XML")?;
-    String::from_utf8(buf).context("agent XML is not valid UTF-8")
+    agent_el.write(Cursor::new(&mut buf))?;
+    String::from_utf8(buf).map_err(AgentError::Utf8)
 }

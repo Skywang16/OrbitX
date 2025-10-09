@@ -221,7 +221,7 @@ pub struct StreamChunk {
 
 /// 流式响应类型别名
 pub type AIStreamResponse =
-    Pin<Box<dyn Stream<Item = Result<StreamChunk, crate::utils::error::AppError>> + Send>>;
+    Pin<Box<dyn Stream<Item = Result<StreamChunk, crate::ai::error::AIServiceError>> + Send>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

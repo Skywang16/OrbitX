@@ -78,7 +78,7 @@ mod tests {
     /// 创建测试用的终端上下文状态
     pub(crate) fn create_test_state() -> TerminalContextState {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
-        let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
+        let shell_integration = Arc::new(ShellIntegrationManager::new());
         let terminal_mux = Arc::new(TerminalMux::new());
         let cache = Arc::new(UnifiedCache::new());
         let context_service = Arc::new(TerminalContextService::new(
@@ -94,7 +94,7 @@ mod tests {
     #[tokio::test]
     async fn test_state_creation_and_access() {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
-        let shell_integration = Arc::new(ShellIntegrationManager::new().unwrap());
+        let shell_integration = Arc::new(ShellIntegrationManager::new());
         let terminal_mux = Arc::new(TerminalMux::new());
         let cache = Arc::new(UnifiedCache::new());
         let context_service = Arc::new(TerminalContextService::new(
