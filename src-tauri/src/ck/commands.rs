@@ -4,7 +4,7 @@ use crate::{api_error, api_success};
 use ck_index::EmbeddingProgress;
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
