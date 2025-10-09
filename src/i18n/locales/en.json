@@ -272,8 +272,8 @@
     "current_workspace": "Current Workspace",
     "build_index_button": "Build Index",
     "build_index_tooltip_disabled": "Please select a non-initial directory before building",
-    "build_index_tooltip_enabled": "Build Index",
     "refresh": "Refresh",
-    "delete": "Delete"
+    "delete": "Delete",
+    "cancel_build": "Cancel Build"
   }
 }

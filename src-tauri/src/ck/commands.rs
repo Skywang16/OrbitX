@@ -4,7 +4,7 @@ use crate::{api_error, api_success};
 use ck_index::EmbeddingProgress;
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -497,36 +497,26 @@ pub(crate) async fn ck_build_index(
 #[tauri::command]
 pub(crate) async fn ck_cancel_build(
     path: String,
-    _terminal_state: State<'_, TerminalContextState>,
+    terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<()> {
-    let search_path = PathBuf::from(path);
+    let search_path = PathBuf::from(&path);
     let path_key = search_path.display().to_string();
 
-    if let Some(task) = get_tasks_store().lock().unwrap().remove(path_key.as_str()) {
+    // 调用 ck-index 的中断机制，让构建任务真正停止
+    ck_index::request_interrupt();
+    let task_opt = { get_tasks_store().lock().unwrap().remove(path_key.as_str()) };
+    if let Some(task) = task_opt {
         task.abort();
-        debug!("Requested to abort build task: {}", path_key);
-
-        update_build_progress(
-            &path_key,
-            CkBuildProgress {
-                current_file: None,
-                files_completed: 0,
-                total_files: 0,
-                current_file_chunks: None,
-                total_chunks: 0,
-                is_complete: true,
-                error: Some("canceled".into()),
-            },
-        );
-
-        let idx_dir = resolve_index_dir(&search_path);
-        let _ = fs::remove_file(idx_dir.join("building.lock"));
-        let _ = fs::remove_file(idx_dir.join("ready.marker"));
+        debug!("Aborted tokio task: {}", path_key);
     }
 
-    Ok(api_success!(()))
-}
+    // 从内存中清理进度状态
+    get_progress_store().lock().unwrap().remove(&path_key);
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
+    // 复用删除索引的逻辑，清理所有文件
+    ck_delete_index(path, terminal_state).await
+}
 /// 删除CK索引
 ///
 /// 根据提供的pane_id获取对应终端的路径进行操作。

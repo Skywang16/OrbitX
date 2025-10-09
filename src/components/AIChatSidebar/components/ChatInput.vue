@@ -48,6 +48,10 @@
       clearInterval(progressTimer)
       progressTimer = undefined
     }
+    if (compositionTimer) {
+      clearTimeout(compositionTimer)
+      compositionTimer = undefined
+    }
   })
 
   const emit = defineEmits<Emits>()
@@ -55,6 +59,7 @@
 
   const inputTextarea = ref<HTMLTextAreaElement>()
   const isComposing = ref(false)
+  let compositionTimer: number | undefined
 
   const terminalSelection = useTerminalSelection()
 
@@ -108,11 +113,20 @@
   }
 
   const handleCompositionStart = () => {
+    // 清理可能存在的延迟timer
+    if (compositionTimer) {
+      clearTimeout(compositionTimer)
+      compositionTimer = undefined
+    }
     isComposing.value = true
   }
 
   const handleCompositionEnd = () => {
-    isComposing.value = false
+    // 延迟重置状态，确保 keydown 事件能正确检查到 composition 状态
+    compositionTimer = window.setTimeout(() => {
+      isComposing.value = false
+      compositionTimer = undefined
+    }, 10)
   }
 
   const adjustTextareaHeight = () => {
@@ -260,14 +274,27 @@
     if (!activeTerminal || !activeTerminal.cwd) return
     const targetPath = activeTerminal.cwd
 
-    showIndexModal.value = false
-
     isBuilding.value = true
     buildProgress.value = 0
 
     await ckApi.buildIndex({ path: targetPath })
 
     startProgressPolling(targetPath)
+  }
+
+  const cancelCkIndex = async () => {
+    const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
+    if (!activeTerminal || !activeTerminal.cwd) return
+
+    await ckApi.cancelBuild({ path: activeTerminal.cwd })
+
+    isBuilding.value = false
+    buildProgress.value = 0
+
+    if (progressTimer) {
+      clearInterval(progressTimer)
+      progressTimer = undefined
+    }
   }
 
   const deleteCkIndex = async () => {
@@ -455,9 +482,12 @@
     <InputPopover :visible="showIndexModal" :target-ref="inputTextarea" @update:visible="showIndexModal = $event">
       <CkIndexContent
         :index-status="{ hasIndex: indexStatus.isReady, path: indexStatus.path, size: indexStatus.size }"
+        :is-building="isBuilding"
+        :build-progress="buildProgress"
         @build="buildCkIndex"
         @delete="deleteCkIndex"
         @refresh="checkCkIndexStatus"
+        @cancel="cancelCkIndex"
       />
     </InputPopover>
   </div>
