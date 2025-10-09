@@ -370,19 +370,26 @@
   }
 
   .status-dot {
-    width: 6px;
-    height: 6px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
     background: var(--color-success);
   }
 
   .status-dot.running {
-    background: var(--color-info);
-    animation: pulse 1.5s infinite;
+    background: transparent;
+    border: 2px solid var(--color-info);
+    border-top-color: transparent;
+    animation: spin 0.8s linear infinite;
   }
 
   .status-dot.error {
     background: var(--color-error);
+  }
+
+  .status-dot.completed {
+    width: 6px;
+    height: 6px;
   }
 
   .tool-result {
@@ -400,13 +407,12 @@
     line-height: 1.4;
   }
 
-  @keyframes pulse {
-    0%,
-    100% {
-      opacity: 1;
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
     }
-    50% {
-      opacity: 0.5;
+    100% {
+      transform: rotate(360deg);
     }
   }
 </style>

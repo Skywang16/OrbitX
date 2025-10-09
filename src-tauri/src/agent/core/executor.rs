@@ -292,8 +292,9 @@ impl TaskExecutor {
             // 检查任务是否真的在运行，而不是仅仅检查是否在 active_tasks 中
             // 因为中断/错误/完成的任务可能还在异步清理中
             let status = existing.status().await;
-            let is_actually_running = matches!(status, AgentTaskStatus::Running | AgentTaskStatus::Paused);
-            
+            let is_actually_running =
+                matches!(status, AgentTaskStatus::Running | AgentTaskStatus::Paused);
+
             if is_actually_running {
                 let active_tasks = self.active_tasks();
                 if active_tasks.read().await.contains_key(&existing.task_id) {
@@ -1371,42 +1372,49 @@ impl TaskExecutor {
                                 text_stream_id = Some(Uuid::new_v4().to_string());
                             }
                             if let Some(tsid) = thinking_stream_id.clone() {
-                                if final_thinking_trimmed_now.len() > last_thinking_sent.len() {
-                                    let delta = final_thinking_trimmed_now
-                                        [last_thinking_sent.len()..]
-                                        .to_string();
-                                    context
-                                        .send_progress(TaskProgressPayload::Thinking(
-                                            ThinkingPayload {
-                                                task_id: context.task_id.clone(),
-                                                iteration,
-                                                thought: delta.clone(),
-                                                stream_id: tsid.clone(),
-                                                stream_done: true,
-                                                timestamp: Utc::now(),
-                                            },
-                                        ))
-                                        .await?;
-                                    iter_ctx.append_thinking(&delta).await;
-                                }
-                            }
-                            if let Some(xsid) = text_stream_id.clone() {
-                                if final_visible_text_now.len() > last_visible_sent.len() {
-                                    let delta = final_visible_text_now[last_visible_sent.len()..]
-                                        .to_string();
-                                    context
-                                        .send_progress(TaskProgressPayload::Text(TextPayload {
+                                // 计算剩余内容
+                                let delta = if final_thinking_trimmed_now.len() > last_thinking_sent.len() {
+                                    let d = final_thinking_trimmed_now[last_thinking_sent.len()..].to_string();
+                                    iter_ctx.append_thinking(&d).await;
+                                    d
+                                } else {
+                                    String::new() // 没有剩余内容，发送空字符串
+                                };
+                                // 无论是否有剩余内容，总是发送streamDone=true标记流结束
+                                context
+                                    .send_progress(TaskProgressPayload::Thinking(
+                                        ThinkingPayload {
                                             task_id: context.task_id.clone(),
                                             iteration,
-                                            text: delta.clone(),
-                                            stream_id: xsid.clone(),
+                                            thought: delta,
+                                            stream_id: tsid.clone(),
                                             stream_done: true,
                                             timestamp: Utc::now(),
-                                        }))
-                                        .await?;
-                                    last_visible_sent.push_str(&delta);
-                                    iter_ctx.append_output(&delta).await;
-                                }
+                                        },
+                                    ))
+                                    .await?;
+                            }
+                            if let Some(xsid) = text_stream_id.clone() {
+                                // 计算剩余内容
+                                let delta = if final_visible_text_now.len() > last_visible_sent.len() {
+                                    let d = final_visible_text_now[last_visible_sent.len()..].to_string();
+                                    last_visible_sent.push_str(&d);
+                                    iter_ctx.append_output(&d).await;
+                                    d
+                                } else {
+                                    String::new() // 没有剩余内容，发送空字符串
+                                };
+                                // 无论是否有剩余内容，总是发送streamDone=true标记流结束
+                                context
+                                    .send_progress(TaskProgressPayload::Text(TextPayload {
+                                        task_id: context.task_id.clone(),
+                                        iteration,
+                                        text: delta,
+                                        stream_id: xsid.clone(),
+                                        stream_done: true,
+                                        timestamp: Utc::now(),
+                                    }))
+                                    .await?;
                             }
                             yield_now().await;
                             let usage_snapshot = usage.clone();

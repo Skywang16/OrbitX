@@ -43,7 +43,11 @@
     <template v-if="message.steps && message.steps.length > 0">
       <template v-for="(step, index) in sortedSteps" :key="step.metadata?.stepId || `fallback-${index}`">
         <!-- 使用 ThinkingBlock 组件 -->
-        <ThinkingBlock v-if="step.stepType === 'thinking'" :step="step" />
+        <ThinkingBlock
+          v-if="step.stepType === 'thinking'"
+          :step="step"
+          :is-streaming="message.status === 'streaming' || !message.status"
+        />
 
         <!-- 使用 ToolBlock 组件 -->
         <ToolBlock v-else-if="step.stepType === 'tool_use' || step.stepType === 'tool_result'" :step="step" />

@@ -1117,7 +1117,30 @@ impl TaskContext {
         let steps_snapshot = {
             let mut ui = self.ui_state.lock().await;
             if let Some(step) = maybe_step.take() {
-                ui.steps.push(step);
+                // 对thinking/text根据streamId合并，其他直接push
+                let stream_id = step.metadata.as_ref()
+                    .and_then(|m| m.get("streamId"))
+                    .and_then(|v| v.as_str());
+                
+                if let Some(sid) = stream_id {
+                    if let Some(existing) = ui.steps.iter_mut().find(|s| 
+                        s.step_type == step.step_type &&
+                        s.metadata.as_ref()
+                            .and_then(|m| m.get("streamId"))
+                            .and_then(|v| v.as_str()) == Some(sid)
+                    ) {
+                        // 合并：拼接内容+更新metadata
+                        existing.content.push_str(&step.content);
+                        existing.timestamp = step.timestamp;
+                        existing.metadata = step.metadata;
+                    } else {
+                        // 新流，push
+                        ui.steps.push(step);
+                    }
+                } else {
+                    // 无streamId，直接push
+                    ui.steps.push(step);
+                }
             }
             ui.steps.clone()
         };
