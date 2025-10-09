@@ -85,6 +85,18 @@
                 />
                 <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
               </div>
+
+              <div v-if="selectedProvider === 'custom'" class="form-group">
+                <label class="form-label">{{ t('ai_model.max_tokens') }}</label>
+                <input
+                  v-model.number="formData.options.maxTokens"
+                  type="number"
+                  class="form-input"
+                  :placeholder="t('ai_model.max_tokens_placeholder')"
+                  min="1"
+                  max="100000"
+                />
+              </div>
             </div>
           </Transition>
         </div>
@@ -455,6 +467,13 @@
     font-size: 12px;
     color: var(--color-danger, #ef4444);
     margin-top: 4px;
+  }
+
+  .form-description {
+    font-size: 12px;
+    color: var(--text-400);
+    margin-top: 4px;
+    line-height: 1.4;
   }
 
   .form-group :deep(.x-select) {

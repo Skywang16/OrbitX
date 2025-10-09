@@ -121,6 +121,8 @@
     "api_url_placeholder": "https://api.openai.com/v1",
     "api_key": "API Key",
     "api_key_placeholder": "输入您的 API Key",
+    "max_tokens": "最大 Token 数",
+    "max_tokens_placeholder": "4096",
     "test_connection": "测试连接",
     "testing": "测试中...",
     "loading": "加载中...",
