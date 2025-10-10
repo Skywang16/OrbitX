@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [0.5.3] - 2025-09-29
 
 ### Added
+
 - **`.ckignore` file support**: Automatic creation of `.ckignore` file with sensible defaults for persistent exclusion patterns
 - **Media file exclusions**: Images (png, jpg, gif, svg, etc.), videos (mp4, avi, mov, etc.), and audio files (mp3, wav, flac, etc.) excluded by default
 - **Config file exclusions**: JSON and YAML files excluded from indexing by default to reduce noise in search results
@@ -12,11 +13,13 @@ All notable changes to this project will be documented in this file.
 - **Persistent patterns**: Exclusion patterns persist across searches without needing command-line flags each time
 
 ### Fixed
+
 - **Exclusion pattern persistence** (issue #67): Patterns now persist in `.ckignore` instead of requiring `--exclude` flags on every search
 - **Media file indexing** (issue #66): Images, videos, and other binary files no longer indexed by default
 - **Config file noise** (issue #27): JSON/YAML config files excluded to focus search on actual code
 
 ### Technical
+
 - **Additive pattern merging**: `.gitignore` + `.ckignore` + CLI + defaults all merge together (not mutually exclusive)
 - **Auto-creation on first index**: `.ckignore` created automatically at repository root during first indexing
 - **Glob pattern syntax**: Uses same pattern syntax as `.gitignore` for familiarity
@@ -25,6 +28,7 @@ All notable changes to this project will be documented in this file.
 ## [0.4.7] - 2025-09-19
 
 ### Added
+
 - **Model switching command**: New `--switch-model` flag for seamless embedding model transitions with intelligent rebuild detection
 - **Force rebuild option**: `--force` flag for explicit index rebuilding when switching models
 - **Model resolution system**: Smart model management that respects existing index configurations and provides clear conflict guidance
@@ -32,12 +36,14 @@ All notable changes to this project will be documented in this file.
 - **Search model validation**: Prevents mixing embedding models during search operations with actionable error messages
 
 ### Fixed
+
 - **Windows atomic writes**: Fixed critical Windows compatibility issue where index files could become corrupted during writes
 - **Embedding dimension mismatches**: Comprehensive validation preventing crashes from mixed embedding models with clear user guidance
 - **Model consistency**: Enforced consistent embedding model usage across index lifecycle (build, search, update)
 - **Clippy compliance**: Resolved all compiler warnings to meet strict CI requirements
 
 ### Technical
+
 - **Atomic file operations**: Uses `tempfile::NamedTempFile` for cross-platform atomic writes with proper sync guarantees
 - **Model registry integration**: Centralized model management with alias support and dimension tracking
 - **Enhanced error messages**: User-friendly error messages with exact commands to resolve issues (e.g., "run `ck --clean .` then rebuild")

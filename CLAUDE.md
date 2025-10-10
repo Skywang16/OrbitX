@@ -181,6 +181,7 @@ The application uses SQLite with migrations in `src-tauri/sql/`. Key tables:
 ### Frontend Code Standards
 
 1. **No Dynamic Imports**: Never use `await import()` or dynamic imports. All imports must be static at the top of the file.
+
    ```typescript
    // ✅ Correct
    import { workspaceApi } from '@/api/workspace'
@@ -190,6 +191,7 @@ The application uses SQLite with migrations in `src-tauri/sql/`. Key tables:
    ```
 
 2. **No Try-Catch Around API Calls**: API layer already handles errors uniformly. Do not wrap API calls with try-catch.
+
    ```typescript
    // ✅ Correct
    workspaceApi.maintainWorkspaces()
