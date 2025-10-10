@@ -19,7 +19,7 @@ export function useNodeVersion(terminalId: () => number | undefined, cwd: () => 
 
   // 设置 Node 版本变化监听器
   const setupListener = async () => {
-    unlisten = await nodeApi.onVersionChanged((payload) => {
+    unlisten = await nodeApi.onVersionChanged(payload => {
       const currentPaneId = terminalId()
       if (payload.paneId === currentPaneId && state.value.isNodeProject) {
         state.value.currentVersion = payload.version || null
@@ -35,7 +35,7 @@ export function useNodeVersion(terminalId: () => number | undefined, cwd: () => 
     }
 
     const isNodeProject = await nodeApi.checkNodeProject(cwdPath)
-    
+
     if (isNodeProject) {
       const manager = await nodeApi.getVersionManager()
       state.value = {
@@ -61,11 +61,15 @@ export function useNodeVersion(terminalId: () => number | undefined, cwd: () => 
   }
 
   // 监听工作目录变化
-  watch(cwd, (newCwd) => {
-    if (newCwd) {
-      detectNodeProject(newCwd)
-    }
-  }, { immediate: true })
+  watch(
+    cwd,
+    newCwd => {
+      if (newCwd) {
+        detectNodeProject(newCwd)
+      }
+    },
+    { immediate: true }
+  )
 
   // 监听终端切换
   watch(terminalId, (newId, oldId) => {
