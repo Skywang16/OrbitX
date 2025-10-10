@@ -220,8 +220,6 @@
         @mousedown="handleMouseDown($event, tab.id)"
         @click="handleTabClick(tab.id)"
         @contextmenu="handleTabContextMenu($event, tab.id)"
-        @dblclick.stop
-        @mouseup.stop
       >
         <div class="tab-content" :title="getTabTooltip(tab)">
           <template v-if="tab.type === TabType.TERMINAL && tab.shell && tab.path">
@@ -262,8 +260,6 @@
         :title="t('ui.new_terminal_tip')"
         @click="handleAddClick"
         @contextmenu="handleAddContextMenu"
-        @dblclick.stop
-        @mouseup.stop
       >
         <svg
           width="16"
@@ -287,8 +283,6 @@
       :title="t('ui.new_terminal_tip')"
       @click="handleAddClick"
       @contextmenu="handleAddContextMenu"
-      @dblclick.stop
-      @mouseup.stop
     >
       <svg
         width="16"
