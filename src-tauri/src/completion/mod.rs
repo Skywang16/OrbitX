@@ -12,6 +12,7 @@ pub mod engine;
 pub mod error;
 pub mod output_analyzer;
 pub mod providers;
+pub mod scoring;
 pub mod smart_extractor;
 pub mod smart_provider;
 pub mod types;

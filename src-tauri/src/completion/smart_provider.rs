@@ -5,6 +5,7 @@ use crate::completion::context_analyzer::{
 };
 use crate::completion::error::CompletionProviderResult;
 use crate::completion::providers::CompletionProvider;
+use crate::completion::scoring::{BaseScorer, ScoreCalculator, ScoringContext};
 use crate::completion::types::{CompletionItem, CompletionType};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -393,7 +394,7 @@ impl SmartCompletionProvider {
         )
     }
 
-    /// 去重并评分
+    /// 去重并重新评分（使用统一评分系统）
     fn deduplicate_and_score(
         &self,
         items: Vec<CompletionItem>,
@@ -401,34 +402,30 @@ impl SmartCompletionProvider {
     ) -> Vec<CompletionItem> {
         let mut seen: std::collections::HashMap<String, CompletionItem> =
             std::collections::HashMap::new();
-        let mut deduplicated = Vec::new();
 
+        // 去重：保留每个文本的最高分项
         for item in items {
-            if let Some(existing) = seen.get(&item.text) {
-                // 保留分数更高的
-                if item.score > existing.score {
-                    seen.insert(item.text.clone(), item.clone());
-                }
-            } else {
-                seen.insert(item.text.clone(), item.clone());
-            }
+            seen.entry(item.text.clone())
+                .and_modify(|existing| {
+                    if item.score > existing.score {
+                        *existing = item.clone();
+                    }
+                })
+                .or_insert(item);
         }
 
-        for (_, item) in seen {
-            deduplicated.push(item);
-        }
+        let mut deduplicated: Vec<CompletionItem> = seen.into_values().collect();
 
-        // 重新计算分数，考虑前缀匹配
+        // 重新评分：使用统一评分系统
+        let scorer = BaseScorer;
         for item in &mut deduplicated {
-            if item.text.starts_with(current_word) {
-                item.score += 10.0; // 前缀匹配加分
+            let is_prefix_match = item.text.starts_with(current_word);
+            let context = ScoringContext::new(current_word, &item.text)
+                .with_prefix_match(is_prefix_match)
+                .with_source("smart");
 
-                // 完全匹配但不是完全相同的情况下再加分
-                if item.text.len() > current_word.len() {
-                    let match_ratio = current_word.len() as f64 / item.text.len() as f64;
-                    item.score += match_ratio * 20.0;
-                }
-            }
+            // 保留原有分数，只加上前缀匹配加分
+            item.score += scorer.calculate(&context);
         }
 
         // 按分数排序
