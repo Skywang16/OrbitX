@@ -164,8 +164,8 @@ export function useShortcutListener() {
     return frontendResult
   }
 
-  const getCurrentTerminalId = (): number | null => {
-    return typeof terminalStore.activeTerminalId === 'number' ? terminalStore.activeTerminalId : null
+  const getCurrentTerminalId = (): string | null => {
+    return typeof terminalStore.activeTerminalId === 'number' ? String(terminalStore.activeTerminalId) : null
   }
 
   const reloadConfig = async () => {

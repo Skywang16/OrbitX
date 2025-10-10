@@ -30,6 +30,7 @@ macro_rules! api_error {
 /// 用法：
 /// - `api_success!(data)` - 返回数据的成功响应
 /// - `api_success!()` - 无数据的成功响应
+/// - `api_success!(data, "success.message")` - 带消息的成功响应
 #[macro_export]
 macro_rules! api_success {
     () => {
@@ -38,6 +39,10 @@ macro_rules! api_success {
 
     ($data:expr) => {
         $crate::utils::ApiResponse::ok($data)
+    };
+
+    ($data:expr, $message_key:expr) => {
+        $crate::utils::ApiResponse::ok_with_message($data, $crate::t!($message_key))
     };
 }
 

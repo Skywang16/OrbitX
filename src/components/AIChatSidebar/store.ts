@@ -60,7 +60,10 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
 
   const findEmptyConversation = (): Conversation | null => {
-    return conversations.value.find(conv => conv.messageCount === 0) || null
+    if (currentConversationId.value && messageList.value.length === 0) {
+      return conversations.value.find(c => c.id === currentConversationId.value) || null
+    }
+    return null
   }
 
   const createConversation = async (title?: string): Promise<void> => {

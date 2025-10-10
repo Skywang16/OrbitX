@@ -38,7 +38,7 @@
   const displayValue = computed(() => {
     if (!props.currentSessionId) return t('chat.session_select')
     const session = props.sessions.find(s => s.id === props.currentSessionId)
-    return session?.title || t('session.current_session')
+    return session?.title || t('session.unnamed_session')
   })
 
   import { formatSessionTime } from '@/utils/dateFormatter'

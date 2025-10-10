@@ -29,10 +29,7 @@ export class AiApi {
   async updateModel({ id, changes }: AIModelUpdateInput): Promise<void> {
     await invoke<void>('ai_models_update', {
       modelId: id,
-      updates: {
-        ...changes,
-        updatedAt: new Date(),
-      },
+      updates: changes,
     })
   }
 
@@ -40,7 +37,7 @@ export class AiApi {
     await invoke<void>('ai_models_remove', { modelId })
   }
 
-  async testConnectionWithConfig(config: AIModelTestConnectionInput): Promise<string> {
+  async testConnectionWithConfig(config: AIModelTestConnectionInput): Promise<void> {
     const payload: AIModelConfig = {
       id: crypto.randomUUID(),
       name: config.name,
@@ -55,7 +52,7 @@ export class AiApi {
       updatedAt: new Date(),
     }
 
-    return await invoke<string>('ai_models_test_connection', { config: payload })
+    await invoke<void>('ai_models_test_connection', { config: payload })
   }
 
   async getUserPrefixPrompt(): Promise<string | null> {
