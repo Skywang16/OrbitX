@@ -5,6 +5,7 @@ use crate::completion::context_analyzer::{
 };
 use crate::completion::error::CompletionProviderResult;
 use crate::completion::metadata::CommandRegistry;
+use crate::completion::prediction::CommandPredictor;
 use crate::completion::providers::CompletionProvider;
 use crate::completion::scoring::{BaseScorer, ScoreCalculator, ScoringContext};
 use crate::completion::types::{CompletionItem, CompletionType};
@@ -17,6 +18,7 @@ pub struct SmartCompletionProvider {
     system_commands_provider: Arc<dyn CompletionProvider>,
     history_provider: Arc<dyn CompletionProvider>,
     context_aware_provider: Option<Arc<dyn CompletionProvider>>,
+    predictor: Option<CommandPredictor>,
 }
 
 impl SmartCompletionProvider {
@@ -25,12 +27,17 @@ impl SmartCompletionProvider {
         system_commands_provider: Arc<dyn CompletionProvider>,
         history_provider: Arc<dyn CompletionProvider>,
     ) -> Self {
+        // 获取当前工作目录，初始化预测器
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let predictor = Some(CommandPredictor::new(current_dir));
+        
         Self {
             context_analyzer: Arc::new(ContextAnalyzer::new()),
             filesystem_provider,
             system_commands_provider,
             history_provider,
             context_aware_provider: None,
+            predictor,
         }
     }
 
@@ -70,7 +77,27 @@ impl SmartCompletionProvider {
     ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
-        // 优先从历史记录获取相关命令
+        // 步骤1: 智能预测 - 根据上一条命令预测下一条
+        if let Some(ref predictor) = self.predictor {
+            use crate::completion::output_analyzer::OutputAnalyzer;
+            let analyzer = OutputAnalyzer::global();
+            if let Ok(provider) = analyzer.get_context_provider().lock() {
+                if let Some((last_cmd, last_output)) = provider.get_last_command() {
+                    let predictions = predictor.predict_next_commands(
+                        &last_cmd,
+                        Some(&last_output),
+                        &context.current_word,
+                    );
+                    
+                    // 转换为补全项，预测命令得分 90-95
+                    for pred in predictions {
+                        items.push(pred.to_completion_item());
+                    }
+                }
+            }
+        }
+
+        // 步骤2: 从历史记录获取相关命令
         if let Ok(history_items) = self
             .history_provider
             .provide_completions(&self.convert_context(context))
@@ -79,7 +106,7 @@ impl SmartCompletionProvider {
             items.extend(history_items);
         }
 
-        // 然后从系统命令获取
+        // 步骤3: 从系统命令获取
         if let Ok(system_items) = self
             .system_commands_provider
             .provide_completions(&self.convert_context(context))
@@ -88,7 +115,20 @@ impl SmartCompletionProvider {
             items.extend(system_items);
         }
 
-        // 去重并按分数排序
+        // 步骤4: 上下文加分 - 根据工作目录特征加分
+        if let Some(ref predictor) = self.predictor {
+            let context_boost = predictor.calculate_context_boost(&context.current_word);
+            if context_boost > 0.0 {
+                // 为匹配前缀的命令加分
+                for item in &mut items {
+                    if item.text.starts_with(&context.current_word) || context.current_word.is_empty() {
+                        item.score += context_boost;
+                    }
+                }
+            }
+        }
+
+        // 步骤5: 去重并按分数排序
         items = self.deduplicate_and_score(items, &context.current_word);
 
         Ok(items)

@@ -12,6 +12,7 @@ pub mod engine;
 pub mod error;
 pub mod metadata;
 pub mod output_analyzer;
+pub mod prediction;
 pub mod providers;
 pub mod scoring;
 pub mod smart_extractor;

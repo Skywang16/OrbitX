@@ -107,6 +107,16 @@ impl ContextAwareProvider {
         paths
     }
 
+    /// 获取最后一条命令及其输出（供预测器使用）
+    pub fn get_last_command(&self) -> Option<(String, String)> {
+        let history = match self.command_history.read() {
+            Ok(h) => h,
+            Err(_) => return None,
+        };
+
+        history.last().map(|record| (record.command.clone(), record.output.clone()))
+    }
+
     /// 记录命令输出
     pub fn record_command_output(
         &self,

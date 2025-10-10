@@ -1,5 +1,5 @@
+use crate::ai::tool::storage::StorageCoordinatorState;
 use crate::storage::repositories::RecentWorkspace;
-use crate::storage::StorageCoordinator;
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
 use std::path::PathBuf;
@@ -40,10 +40,11 @@ pub async fn file_handle_open(path: String) -> TauriApiResult<String> {
 #[tauri::command]
 pub async fn workspace_get_recent(
     limit: Option<i64>,
-    storage: State<'_, StorageCoordinator>,
+    storage: State<'_, StorageCoordinatorState>,
 ) -> Result<Vec<RecentWorkspace>, String> {
     let limit = limit.unwrap_or(10).min(50);
     storage
+        .coordinator
         .repositories()
         .recent_workspaces()
         .get_recent(limit)
@@ -54,9 +55,10 @@ pub async fn workspace_get_recent(
 #[tauri::command]
 pub async fn workspace_add_recent(
     path: String,
-    storage: State<'_, StorageCoordinator>,
+    storage: State<'_, StorageCoordinatorState>,
 ) -> Result<(), String> {
     storage
+        .coordinator
         .repositories()
         .recent_workspaces()
         .add_or_update(&path)
@@ -67,12 +69,27 @@ pub async fn workspace_add_recent(
 #[tauri::command]
 pub async fn workspace_remove_recent(
     path: String,
-    storage: State<'_, StorageCoordinator>,
+    storage: State<'_, StorageCoordinatorState>,
 ) -> Result<(), String> {
     storage
+        .coordinator
         .repositories()
         .recent_workspaces()
         .remove(&path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn workspace_maintain(
+    storage: State<'_, StorageCoordinatorState>,
+) -> Result<(u64, u64), String> {
+    // 清理 30 天未访问 + 限制最多 50 条
+    storage
+        .coordinator
+        .repositories()
+        .recent_workspaces()
+        .maintain(30, 50)
         .await
         .map_err(|e| e.to_string())
 }
@@ -85,6 +102,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         workspace_get_recent,
         workspace_add_recent,
         workspace_remove_recent,
+        workspace_maintain,
         // 窗口管理命令
         crate::window::commands::window_manage_state,
         crate::window::commands::window_get_current_directory,
