@@ -50,7 +50,7 @@
   <div v-if="visible" class="terminal-tab-tag">
     <div class="tag-content" @click="handleTagClick">
       <div class="tag-icon">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
         </svg>
       </div>
@@ -95,8 +95,8 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     color: var(--color-primary);
   }
 
