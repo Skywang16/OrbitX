@@ -215,10 +215,8 @@
 
     isSubmitting.value = true
     try {
-      // 最终提交前的兜底修正
       const submitData = { ...formData }
       if (isPresetMode.value) {
-        // 预设模式下，确保 provider = 选中的预设
         if (selectedPreset.value) {
           submitData.provider = selectedPreset.value as AIModelConfig['provider']
         }
@@ -260,10 +258,7 @@
         options: formData.options,
       }
 
-      const result = await aiApi.testConnectionWithConfig(testConfig)
-      createMessage.success(result)
-    } catch (error) {
-      console.error('连接测试失败:', error)
+      await aiApi.testConnectionWithConfig(testConfig)
     } finally {
       isTesting.value = false
     }

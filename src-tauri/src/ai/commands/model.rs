@@ -39,7 +39,7 @@ pub async fn ai_models_add(
         Ok(_) => {
             let mut sanitized = config.clone();
             sanitized.api_key.clear();
-            Ok(api_success!(sanitized))
+            Ok(api_success!(sanitized, "ai.add_model_success"))
         }
         Err(error) => {
             warn!(error = %error, "添加AI模型失败");
@@ -57,7 +57,7 @@ pub async fn ai_models_remove(
     validate_not_empty!(model_id, "common.invalid_params");
 
     match state.ai_service.remove_model(&model_id).await {
-        Ok(_) => Ok(api_success!()),
+        Ok(_) => Ok(api_success!(EmptyData::default(), "ai.remove_model_success")),
         Err(error) => {
             warn!(error = %error, model_id = %model_id, "删除AI模型失败");
             Ok(api_error!("ai.remove_model_failed"))
@@ -75,7 +75,7 @@ pub async fn ai_models_update(
     validate_not_empty!(model_id, "common.invalid_params");
 
     match state.ai_service.update_model(&model_id, updates).await {
-        Ok(_) => Ok(api_success!()),
+        Ok(_) => Ok(api_success!(EmptyData::default(), "ai.update_model_success")),
         Err(error) => {
             warn!(error = %error, model_id = %model_id, "更新AI模型失败");
             Ok(api_error!("ai.update_model_failed"))
@@ -88,7 +88,7 @@ pub async fn ai_models_update(
 pub async fn ai_models_test_connection(
     config: AIModelConfig,
     state: State<'_, AIManagerState>,
-) -> TauriApiResult<String> {
+) -> TauriApiResult<EmptyData> {
     if config.api_url.trim().is_empty() {
         return Ok(api_error!("ai.api_url_empty"));
     }
@@ -100,7 +100,7 @@ pub async fn ai_models_test_connection(
     }
 
     match state.ai_service.test_connection_with_config(&config).await {
-        Ok(result) => Ok(api_success!(result)),
+        Ok(_result) => Ok(api_success!(EmptyData::default(), "ai.test_connection_success")),
         Err(e) => Ok(api_error!("ai.test_connection_error", "error" => e.to_string())),
     }
 }

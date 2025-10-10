@@ -12,10 +12,14 @@
   },
   "ai": {
     "add_model_failed": "添加模型失败",
+    "add_model_success": "模型添加成功",
     "remove_model_failed": "删除模型失败",
+    "remove_model_success": "模型删除成功",
     "update_model_failed": "更新模型失败",
+    "update_model_success": "模型更新成功",
     "get_models_failed": "获取模型配置失败",
     "test_connection_error": "连接测试失败: {error}",
+    "test_connection_success": "连接测试成功",
     "api_url_empty": "API URL不能为空",
     "api_key_empty": "API Key不能为空",
     "model_name_empty": "模型名称不能为空"
