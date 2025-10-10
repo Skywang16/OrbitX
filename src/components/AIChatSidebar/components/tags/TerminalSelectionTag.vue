@@ -75,6 +75,8 @@
   }
 
   .tag-icon {
+    width: 12px;
+    height: 12px;
     color: var(--color-primary);
   }
 

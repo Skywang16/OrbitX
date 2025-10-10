@@ -93,7 +93,10 @@
   .tag-icon {
     display: flex;
     align-items: center;
+    justify-content: center;
     flex-shrink: 0;
+    width: 12px;
+    height: 12px;
     color: var(--color-primary);
   }
 
