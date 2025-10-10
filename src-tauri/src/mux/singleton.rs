@@ -17,27 +17,53 @@ static NOTIFICATION_THREAD: OnceLock<Mutex<Option<thread::JoinHandle<()>>>> = On
 ///
 /// 这个函数是线程安全的，第一次调用时会创建实例，
 /// 后续调用会返回同一个实例的引用
+///
+/// 注意：推荐在应用初始化时使用 init_mux_with_shell_integration 来
+/// 指定 ShellIntegrationManager，以确保回调正确注册
 pub fn get_mux() -> Arc<TerminalMux> {
     GLOBAL_MUX
         .get_or_init(|| {
-            tracing::debug!("初始化全局TerminalMux实例");
-            let mux = Arc::new(TerminalMux::new());
-
-            // 启动通知处理线程
-            let mux_clone = Arc::clone(&mux);
-            let notification_thread = mux_clone.start_notification_processor();
-            // 保存线程句柄，方便关停时 join
-            let slot = NOTIFICATION_THREAD.get_or_init(|| Mutex::new(None));
-            if let Ok(mut guard) = slot.lock() {
-                *guard = Some(notification_thread);
-            } else {
-                tracing::warn!("无法保存通知处理线程句柄（锁不可用）");
-            }
-            tracing::debug!("TerminalMux通知处理线程已启动");
-
-            mux
+            tracing::warn!("使用默认方式初始化全局TerminalMux，建议使用 init_mux_with_shell_integration");
+            init_mux_internal(None)
         })
         .clone()
+}
+
+/// 使用指定的 ShellIntegrationManager 初始化全局 TerminalMux
+///
+/// 这个函数应该在应用启动时调用一次，确保 Mux 使用正确的 ShellIntegrationManager
+/// 如果已经初始化过，这个函数会返回错误
+pub fn init_mux_with_shell_integration(
+    shell_integration: std::sync::Arc<crate::shell::ShellIntegrationManager>,
+) -> Result<Arc<TerminalMux>, &'static str> {
+    GLOBAL_MUX.set(init_mux_internal(Some(shell_integration))).map_err(|_| "TerminalMux已经初始化")?;
+    Ok(GLOBAL_MUX.get().unwrap().clone())
+}
+
+fn init_mux_internal(
+    shell_integration: Option<std::sync::Arc<crate::shell::ShellIntegrationManager>>,
+) -> Arc<TerminalMux> {
+    tracing::debug!("初始化全局TerminalMux实例");
+    let mux = if let Some(integration) = shell_integration {
+        tracing::info!("使用外部 ShellIntegrationManager 创建 TerminalMux");
+        Arc::new(TerminalMux::new_with_shell_integration(integration))
+    } else {
+        Arc::new(TerminalMux::new())
+    };
+
+    // 启动通知处理线程
+    let mux_clone = Arc::clone(&mux);
+    let notification_thread = mux_clone.start_notification_processor();
+    // 保存线程句柄，方便关停时 join
+    let slot = NOTIFICATION_THREAD.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = slot.lock() {
+        *guard = Some(notification_thread);
+    } else {
+        tracing::warn!("无法保存通知处理线程句柄（锁不可用）");
+    }
+    tracing::debug!("TerminalMux通知处理线程已启动");
+
+    mux
 }
 
 /// 初始化全局TerminalMux实例

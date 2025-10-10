@@ -80,6 +80,16 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::shell::commands::shell_setup_integration,
         crate::shell::commands::shell_check_integration_status,
         crate::shell::commands::shell_update_pane_cwd,
+        crate::shell::commands::get_pane_shell_state,
+        crate::shell::commands::set_pane_shell_type,
+        crate::shell::commands::generate_shell_integration_script,
+        crate::shell::commands::generate_shell_env_vars,
+        crate::shell::commands::enable_pane_integration,
+        crate::shell::commands::disable_pane_integration,
+        crate::shell::commands::get_pane_current_command,
+        crate::shell::commands::get_pane_command_history,
+        crate::shell::commands::detect_shell_type,
+        crate::shell::commands::check_shell_integration_support,
         // 补全功能命令
         crate::completion::commands::completion_init_engine,
         crate::completion::commands::completion_get,
@@ -184,5 +194,10 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::ck::commands::ck_cancel_build,
         crate::ck::commands::ck_delete_index,
         crate::ck::commands::ck_search,
+        // Node.js 版本管理命令
+        crate::node::commands::node_check_project,
+        crate::node::commands::node_get_version_manager,
+        crate::node::commands::node_list_versions,
+        crate::node::commands::node_get_switch_command,
     ])
 }

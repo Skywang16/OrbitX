@@ -48,6 +48,9 @@
 
 <style scoped>
   .terminal-selection-tag {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 8px;
     margin-bottom: 8px;
   }
 

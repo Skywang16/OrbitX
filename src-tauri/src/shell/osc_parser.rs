@@ -31,6 +31,10 @@ pub enum OscSequence {
         title_type: WindowTitleType,
         title: String,
     },
+    /// OrbitX 自定义协议: Node 版本同步
+    OrbitXNodeVersion {
+        version: String,
+    },
     Unknown {
         command: String,
         params: String,
@@ -121,6 +125,7 @@ impl OscParser {
                 title: rest.to_string(),
             }),
             "133" => parse_shell_integration(rest),
+            "1337" => parse_orbitx_custom(rest),
             _ => Some(OscSequence::Unknown {
                 command: cmd.to_string(),
                 params: rest.to_string(),
@@ -203,6 +208,20 @@ fn parse_shell_integration(data: &str) -> Option<OscSequence> {
         marker,
         data: payload,
     })
+}
+
+/// 解析 OrbitX 自定义协议
+fn parse_orbitx_custom(data: &str) -> Option<OscSequence> {
+    if let Some(version) = data.strip_prefix("OrbitXNodeVersion=") {
+        Some(OscSequence::OrbitXNodeVersion {
+            version: version.to_string(),
+        })
+    } else {
+        Some(OscSequence::Unknown {
+            command: "1337".to_string(),
+            params: data.to_string(),
+        })
+    }
 }
 
 fn parse_exit_code(data: &str) -> Option<i32> {

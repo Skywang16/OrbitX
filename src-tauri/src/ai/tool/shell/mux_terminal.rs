@@ -29,16 +29,15 @@ pub struct TerminalState {
 
 impl TerminalState {
     /// 初始化方法
+    /// 
+    /// 注意：不在此时验证 Mux，因为 Mux 需要在 setup 中才会被初始化
     pub fn new() -> Result<Self, String> {
         let state = Self { _placeholder: () };
-
-        // 验证状态完整性
-        state.validate()?;
-
         Ok(state)
     }
 
     /// 验证状态完整性
+    /// 只在调用时验证，不在初始化时验证
     pub fn validate(&self) -> TauriApiResult<EmptyData> {
         let mux = get_mux();
 

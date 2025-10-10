@@ -2,17 +2,20 @@
   import { computed, ref, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
+  import { useNodeVersion } from '@/composables/useNodeVersion'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
   import TerminalSelectionTag from '../tags/TerminalSelectionTag.vue'
   import TerminalTabTag from '../tags/TerminalTabTag.vue'
+  import NodeVersionTag from '../tags/NodeVersionTag.vue'
   import InputPopover from '@/components/ui/InputPopover.vue'
   import CkIndexContent from '../ckIndex/CkIndexContent.vue'
   import FolderPicker from '../tags/FolderPicker.vue'
+  import NodeVersionPicker from '../tags/NodeVersionPicker.vue'
   import CircularProgress from '@/components/ui/CircularProgress.vue'
-  import { ckApi } from '@/api'
+  import { ckApi, nodeApi } from '@/api'
 
   interface Props {
     modelValue: string
@@ -63,6 +66,10 @@
   let compositionTimer: number | undefined
 
   const terminalSelection = useTerminalSelection()
+  const nodeVersion = useNodeVersion(
+    () => terminalSelection.currentTerminalTab.value?.terminalId,
+    () => terminalSelection.currentTerminalTab.value?.cwd
+  )
 
   const tabManagerStore = useTabManagerStore()
   const terminalStore = useTerminalStore()
@@ -204,6 +211,19 @@
 
   const showIndexModal = ref(false)
   const showNavigatorModal = ref(false)
+  const showNodeVersionModal = ref(false)
+
+  // Node 版本切换处理
+  const handleNodeVersionSelect = async (version: string) => {
+    const terminalId = terminalSelection.currentTerminalTab.value?.terminalId
+    const manager = nodeVersion.state.value.manager
+    
+    if (!terminalId || !manager) return
+    
+    const command = await nodeApi.getSwitchCommand(manager, version)
+    await terminalStore.writeToTerminal(terminalId, command)
+    showNodeVersionModal.value = false
+  }
 
   const handleCkIndexClick = async () => {
     await checkCkIndexStatus()
@@ -426,6 +446,12 @@
       @open-navigator="handleOpenNavigator"
     />
 
+    <NodeVersionTag
+      :visible="nodeVersion.state.value.isNodeProject"
+      :version="nodeVersion.state.value.currentVersion"
+      @click="showNodeVersionModal = true"
+    />
+
     <TerminalSelectionTag
       :visible="terminalSelection.hasSelection.value"
       :selected-text="terminalSelection.selectedText.value"
@@ -542,6 +568,16 @@
         :current-path="terminalSelection.currentTerminalTab.value.cwd"
         :terminal-id="terminalSelection.currentTerminalTab.value.terminalId"
         @close="showNavigatorModal = false"
+      />
+    </InputPopover>
+
+    <InputPopover :visible="showNodeVersionModal" @update:visible="showNodeVersionModal = $event">
+      <NodeVersionPicker
+        v-if="nodeVersion.state.value.manager && nodeVersion.state.value.currentVersion"
+        :current-version="nodeVersion.state.value.currentVersion"
+        :manager="nodeVersion.state.value.manager"
+        :cwd="terminalSelection.currentTerminalTab.value?.cwd"
+        @select="handleNodeVersionSelect"
       />
     </InputPopover>
   </div>

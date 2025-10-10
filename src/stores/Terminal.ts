@@ -2,7 +2,7 @@ import { shellApi, storageApi, terminalApi, terminalContextApi } from '@/api'
 import type { ShellInfo } from '@/api'
 import { useSessionStore } from '@/stores/session'
 import type { RuntimeTerminalState, TerminalState } from '@/types'
-import { listen, UnlistenFn } from '@tauri-apps/api/event'
+import type { UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
 import { computed, ref, nextTick } from 'vue'
 
@@ -142,15 +142,12 @@ export const useTerminalStore = defineStore('Terminal', () => {
   const setupGlobalListeners = async () => {
     if (_isListenerSetup) return
 
-    const unlistenExit = await listen<{
-      paneId: number
-      exitCode: number | null
-    }>('terminal_exit', event => {
+    const unlistenExit = await terminalApi.onTerminalExit(payload => {
       try {
-        const terminal = terminals.value.find(t => t.id === event.payload.paneId)
+        const terminal = terminals.value.find(t => t.id === payload.paneId)
         if (terminal) {
           const listeners = _listeners.value.get(terminal.id) || []
-          listeners.forEach(listener => listener.callbacks.onExit(event.payload.exitCode))
+          listeners.forEach(listener => listener.callbacks.onExit(payload.exitCode))
 
           closeTerminal(terminal.id)
         }
@@ -159,15 +156,12 @@ export const useTerminalStore = defineStore('Terminal', () => {
       }
     })
 
-    const unlistenCwdChanged = await listen<{
-      paneId: number
-      cwd: string
-    }>('pane_cwd_changed', event => {
+    const unlistenCwdChanged = await terminalApi.onCwdChanged(payload => {
       try {
-        const terminal = terminals.value.find(t => t.id === event.payload.paneId)
+        const terminal = terminals.value.find(t => t.id === payload.paneId)
         if (terminal) {
-          terminal.cwd = event.payload.cwd
-          updateTerminalTitle(terminal, event.payload.cwd)
+          terminal.cwd = payload.cwd
+          updateTerminalTitle(terminal, payload.cwd)
         }
       } catch (error) {
         console.error('Error handling terminal CWD change event:', error)

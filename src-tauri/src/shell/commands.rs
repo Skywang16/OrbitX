@@ -105,6 +105,7 @@ pub struct FrontendPaneState {
     pub command_history: Vec<FrontendCommandInfo>,
     pub window_title: Option<String>,
     pub last_activity: u64,
+    pub node_version: Option<String>,
 }
 
 impl From<&PaneShellState> for FrontendPaneState {
@@ -138,6 +139,7 @@ impl From<&PaneShellState> for FrontendPaneState {
                 .collect(),
             window_title: state.window_title.clone(),
             last_activity,
+            node_version: state.node_version.clone(),
         }
     }
 }

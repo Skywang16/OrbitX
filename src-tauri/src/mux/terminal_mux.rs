@@ -69,10 +69,15 @@ impl TerminalMux {
     ///
     /// - 验证配置和依赖关系
     pub fn new() -> Self {
+        Self::new_with_shell_integration(Arc::new(ShellIntegrationManager::new()))
+    }
+    
+    /// 使用指定的 ShellIntegrationManager 创建 TerminalMux
+    /// 这允许共享同一个 ShellIntegrationManager 实例和其注册的回调
+    pub fn new_with_shell_integration(shell_integration: Arc<ShellIntegrationManager>) -> Self {
         let (notification_sender, notification_receiver) = unbounded();
         debug!("创建通知通道成功");
 
-        let shell_integration = Arc::new(ShellIntegrationManager::new());
         let io_handler = IoHandler::new(notification_sender.clone(), shell_integration.clone());
 
         let notification_sender_clone = notification_sender.clone();

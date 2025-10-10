@@ -5,6 +5,7 @@
 export enum TagType {
   TERMINAL_SELECTION = 'terminal_selection',
   TERMINAL_TAB = 'terminal_tab',
+  NODE_VERSION = 'node_version',
 }
 
 export interface BaseTag {
@@ -30,16 +31,25 @@ export interface TerminalTabTag extends BaseTag {
   displayPath: string
 }
 
-export type AIChatTag = TerminalSelectionTag | TerminalTabTag
+export interface NodeVersionTag extends BaseTag {
+  type: TagType.NODE_VERSION
+  version: string
+  manager: string
+  cwd: string
+}
+
+export type AIChatTag = TerminalSelectionTag | TerminalTabTag | NodeVersionTag
 
 export interface TagState {
   terminalSelection: TerminalSelectionTag | null
   terminalTab: TerminalTabTag | null
+  nodeVersion: NodeVersionTag | null
 }
 
 export interface TagContextInfo {
   hasTerminalTab: boolean
   hasTerminalSelection: boolean
+  hasNodeVersion: boolean
   terminalTabInfo?: {
     terminalId: number
     shell: string
@@ -51,5 +61,10 @@ export interface TagContextInfo {
     startLine?: number
     endLine?: number
     path?: string
+  }
+  nodeVersionInfo?: {
+    version: string
+    manager: string
+    cwd: string
   }
 }

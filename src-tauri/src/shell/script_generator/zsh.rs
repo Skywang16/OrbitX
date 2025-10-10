@@ -2,6 +2,24 @@
 
 use super::ShellIntegrationConfig;
 
+/// Node.js 版本检测脚本（与 bash.rs 中相同）
+const NODE_VERSION_DETECTION: &str = r#"
+__orbitx_last_node_version=""
+
+__orbitx_detect_node_version() {
+    if command -v node >/dev/null 2>&1; then
+        local current_version=$(node -v 2>/dev/null | tr -d '\n')
+        if [[ -n "$current_version" && "$current_version" != "$__orbitx_last_node_version" ]]; then
+            __orbitx_last_node_version="$current_version"
+            printf '\e]1337;OrbitXNodeVersion=%s\e\\' "$current_version"
+        fi
+    elif [[ -n "$__orbitx_last_node_version" ]]; then
+        __orbitx_last_node_version=""
+        printf '\e]1337;OrbitXNodeVersion=\e\\'
+    fi
+}
+"#;
+
 /// 生成 Zsh 集成脚本
 pub fn generate_script(config: &ShellIntegrationConfig) -> String {
     let mut script = String::new();
@@ -28,6 +46,9 @@ __orbitx_update_cwd() {
         );
     }
 
+    // 添加 Node 版本检测函数
+    script.push_str(NODE_VERSION_DETECTION);
+
     // 命令跟踪功能
     if config.enable_command_tracking {
         script.push_str(
@@ -42,11 +63,13 @@ __orbitx_precmd() {
     local exit_code=$?
     # D: 命令完成，包含退出码
     printf '\e]133;D;%d\e\\' "$exit_code"
-    __orbitx_update_cwd
+    __orbitx_update_cwd 2>/dev/null || true
     # A: 提示符开始
     printf '\e]133;A\e\\'
     # B: 命令开始（提示符结束，准备接收用户输入）
     printf '\e]133;B\e\\'
+    # 在 A/B 之后再上报 Node 版本，避免 UI 在 A 时清空
+    __orbitx_detect_node_version
 }
 
 # 保持原始PS1不变，不直接嵌入OSC序列
@@ -64,16 +87,31 @@ if [[ -z "${preexec_functions[(r)__orbitx_preexec]}" ]]; then
 fi
 "#,
         );
-    } else if config.enable_cwd_sync {
-        // 只启用CWD同步
+    } else {
+        // 没有命令跟踪，但仍然需要检测 Node 版本
         script.push_str(
             r#"
-# 仅CWD同步
+# Node 版本检测钩子
+__orbitx_node_version_precmd() {
+    __orbitx_detect_node_version
+}
+
+if [[ -z "${precmd_functions[(r)__orbitx_node_version_precmd]}" ]]; then
+    precmd_functions+=(__orbitx_node_version_precmd)
+fi
+"#,
+        );
+        
+        if config.enable_cwd_sync {
+            script.push_str(
+                r#"
+# CWD同步
 if [[ -z "${precmd_functions[(r)__orbitx_update_cwd]}" ]]; then
     precmd_functions+=(__orbitx_update_cwd)
 fi
 "#,
-        );
+            );
+        }
     }
 
     // 窗口标题更新
@@ -103,12 +141,20 @@ fi
     // 加载用户原始配置
     script.push_str(
         r#"
-# 加载用户原始配置
-[[ -f ~/.zshrc ]] && source ~/.zshrc 2>/dev/null || true
-
 # 初始化CWD和标题
 __orbitx_update_cwd 2>/dev/null || true
 [[ "$(type -w __orbitx_update_title 2>/dev/null)" == *"function"* ]] && __orbitx_update_title 2>/dev/null || true
+
+# 启动后检测 Node 版本（后台静默运行）
+{
+    for i in 1 2 3 4 5; do
+        __orbitx_detect_node_version 2>/dev/null
+        if [[ -n "$__orbitx_last_node_version" ]]; then
+            break
+        fi
+        sleep 0.2
+    done
+} &!
 "#,
     );
 

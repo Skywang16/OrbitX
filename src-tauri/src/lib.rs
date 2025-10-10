@@ -7,6 +7,7 @@ pub mod config;
 pub mod filesystem;
 pub mod llm;
 pub mod mux;
+pub mod node;
 pub mod setup;
 pub mod shell;
 pub mod storage;
