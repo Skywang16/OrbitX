@@ -217,9 +217,9 @@
   const handleNodeVersionSelect = async (version: string) => {
     const terminalId = terminalSelection.currentTerminalTab.value?.terminalId
     const manager = nodeVersion.state.value.manager
-    
+
     if (!terminalId || !manager) return
-    
+
     const command = await nodeApi.getSwitchCommand(manager, version)
     await terminalStore.writeToTerminal(terminalId, command)
     showNodeVersionModal.value = false
@@ -699,7 +699,7 @@
   }
 
   .model-selector {
-    width: 110px;
+    width: 160px;
     min-width: 80px;
     flex-shrink: 1;
   }
