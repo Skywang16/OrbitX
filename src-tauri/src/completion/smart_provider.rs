@@ -4,6 +4,7 @@ use crate::completion::context_analyzer::{
     ArgType, CompletionContext, CompletionPosition, ContextAnalyzer,
 };
 use crate::completion::error::CompletionProviderResult;
+use crate::completion::metadata::CommandRegistry;
 use crate::completion::providers::CompletionProvider;
 use crate::completion::scoring::{BaseScorer, ScoreCalculator, ScoringContext};
 use crate::completion::types::{CompletionItem, CompletionType};
@@ -170,8 +171,15 @@ impl SmartCompletionProvider {
     ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
+        // 获取命令名（用于查找元数据）
+        let command = context
+            .tokens
+            .first()
+            .map(|t| t.text.as_str())
+            .unwrap_or("");
+
         // 根据选项类型提供补全
-        if self.is_file_option(option) {
+        if self.is_file_option(command, option) {
             // 文件类型选项
             if let Ok(file_items) = self
                 .filesystem_provider
@@ -180,7 +188,7 @@ impl SmartCompletionProvider {
             {
                 items.extend(file_items);
             }
-        } else if self.is_directory_option(option) {
+        } else if self.is_directory_option(command, option) {
             // 目录类型选项
             if let Ok(dir_items) = self
                 .filesystem_provider
@@ -438,50 +446,22 @@ impl SmartCompletionProvider {
         deduplicated
     }
 
-    /// 检查是否是文件类型选项
-    fn is_file_option(&self, option: &str) -> bool {
-        matches!(
-            option,
-            "--file" | "--input" | "--output" | "--config" | "--script" | "-f" | "-i" | "-o" | "-c"
-        )
+    /// 检查是否是文件类型选项（使用命令注册表）
+    fn is_file_option(&self, command: &str, option: &str) -> bool {
+        let registry = CommandRegistry::global();
+        registry.is_file_option(command, option)
     }
 
-    /// 检查是否是目录类型选项
-    fn is_directory_option(&self, option: &str) -> bool {
-        matches!(
-            option,
-            "--directory" | "--dir" | "--path" | "--workdir" | "-d" | "-p"
-        )
+    /// 检查是否是目录类型选项（使用命令注册表）
+    fn is_directory_option(&self, command: &str, option: &str) -> bool {
+        let registry = CommandRegistry::global();
+        registry.is_directory_option(command, option)
     }
 
-    /// 检查命令是否通常接受文件参数
+    /// 检查命令是否通常接受文件参数（使用命令注册表）
     fn command_usually_takes_files(&self, command: &str) -> bool {
-        matches!(
-            command,
-            "cat"
-                | "less"
-                | "more"
-                | "head"
-                | "tail"
-                | "grep"
-                | "awk"
-                | "sed"
-                | "cp"
-                | "mv"
-                | "rm"
-                | "chmod"
-                | "chown"
-                | "file"
-                | "wc"
-                | "sort"
-                | "uniq"
-                | "cut"
-                | "tr"
-                | "vim"
-                | "nano"
-                | "emacs"
-                | "code"
-        )
+        let registry = CommandRegistry::global();
+        registry.accepts_files(command)
     }
 }
 

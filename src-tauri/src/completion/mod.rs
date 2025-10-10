@@ -10,6 +10,7 @@ pub mod commands;
 pub mod context_analyzer;
 pub mod engine;
 pub mod error;
+pub mod metadata;
 pub mod output_analyzer;
 pub mod providers;
 pub mod scoring;
