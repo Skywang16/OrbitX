@@ -35,6 +35,12 @@ pub struct ScoringContext {
 
     /// 补全来源（如 "history", "filesystem", "smart"）
     pub source: Option<String>,
+
+    /// 命令使用频率（用于 Frecency 算法）
+    pub frequency: Option<usize>,
+
+    /// 最后使用时间（秒级时间戳）
+    pub last_used_timestamp: Option<u64>,
 }
 
 impl ScoringContext {
@@ -50,6 +56,8 @@ impl ScoringContext {
             working_directory: None,
             in_git_repo: false,
             source: None,
+            frequency: None,
+            last_used_timestamp: None,
         }
     }
 
@@ -92,6 +100,18 @@ impl ScoringContext {
     /// 设置补全来源
     pub fn with_source(mut self, source: impl Into<String>) -> Self {
         self.source = Some(source.into());
+        self
+    }
+
+    /// 设置使用频率
+    pub fn with_frequency(mut self, frequency: usize) -> Self {
+        self.frequency = Some(frequency);
+        self
+    }
+
+    /// 设置最后使用时间戳
+    pub fn with_last_used_timestamp(mut self, timestamp: u64) -> Self {
+        self.last_used_timestamp = Some(timestamp);
         self
     }
 

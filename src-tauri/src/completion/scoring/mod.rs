@@ -45,7 +45,9 @@ pub mod scorers;
 
 pub use calculator::ScoreCalculator;
 pub use context::ScoringContext;
-pub use scorers::{BaseScorer, CompositeScorer, HistoryScorer, SmartProviderScorer};
+pub use scorers::{
+    BaseScorer, CompositeScorer, FrecencyScorer, HistoryScorer, SmartProviderScorer,
+};
 
 /// 评分常量 - 消除 magic numbers
 ///

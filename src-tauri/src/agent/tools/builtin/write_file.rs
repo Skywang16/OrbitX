@@ -5,11 +5,11 @@ use tokio::fs;
 
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
-use crate::agent::persistence::FileRecordSource;
 use crate::agent::error::ToolExecutorResult;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
-    ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
+    ToolResultContent,
 };
 
 use super::file_utils::{ensure_absolute, is_probably_binary};
@@ -107,9 +107,10 @@ impl RunnableTool for WriteFileTool {
             .await?;
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Success(
-                format!("write_file applied\nfile={}", path.display())
-            )],
+            content: vec![ToolResultContent::Success(format!(
+                "write_file applied\nfile={}",
+                path.display()
+            ))],
             is_error: false,
             execution_time_ms: None,
             ext_info: Some(json!({

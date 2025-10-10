@@ -60,4 +60,3 @@ pub async fn node_get_switch_command(manager: String, version: String) -> Result
 
     Ok(command)
 }
-

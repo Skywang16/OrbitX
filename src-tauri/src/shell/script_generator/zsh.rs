@@ -101,7 +101,7 @@ if [[ -z "${precmd_functions[(r)__orbitx_node_version_precmd]}" ]]; then
 fi
 "#,
         );
-        
+
         if config.enable_cwd_sync {
             script.push_str(
                 r#"

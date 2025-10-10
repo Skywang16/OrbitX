@@ -4,8 +4,8 @@ use tokio_stream::StreamExt;
 
 use crate::agent::common::xml::parse_task_detail;
 use crate::agent::core::context::TaskContext;
-use crate::agent::prompt::{build_plan_system_prompt, build_plan_user_prompt};
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
+use crate::agent::prompt::{build_plan_system_prompt, build_plan_user_prompt};
 use crate::agent::types::{Agent, Context as PromptContext, Task, TaskDetail};
 use crate::llm::service::LLMService;
 use crate::llm::types::{LLMMessage, LLMMessageContent, LLMRequest, LLMStreamChunk};
@@ -19,7 +19,11 @@ impl Planner {
         Self { context }
     }
 
-    pub async fn plan(&self, task_prompt: &str, save_history: bool) -> TaskExecutorResult<TaskDetail> {
+    pub async fn plan(
+        &self,
+        task_prompt: &str,
+        save_history: bool,
+    ) -> TaskExecutorResult<TaskDetail> {
         let (system_prompt, user_prompt) = self.build_prompts(task_prompt).await?;
         let messages = vec![
             LLMMessage {
@@ -35,7 +39,11 @@ impl Planner {
         self.execute_plan(task_prompt, messages, save_history).await
     }
 
-    pub async fn replan(&self, task_prompt: &str, save_history: bool) -> TaskExecutorResult<TaskDetail> {
+    pub async fn replan(
+        &self,
+        task_prompt: &str,
+        save_history: bool,
+    ) -> TaskExecutorResult<TaskDetail> {
         let mut messages = Vec::new();
         let (prev_request, prev_result) = self
             .context
@@ -85,13 +93,16 @@ impl Planner {
         let mut stream = llm_service
             .call_stream(request.clone(), token)
             .await
-            .map_err(|e| TaskExecutorError::LLMCallFailed(format!("Failed to start LLM planning stream: {}", e)))?;
+            .map_err(|e| {
+                TaskExecutorError::LLMCallFailed(format!(
+                    "Failed to start LLM planning stream: {}",
+                    e
+                ))
+            })?;
 
         let mut stream_text = String::new();
         while let Some(chunk) = stream.next().await {
-            self.context
-                .check_aborted(true)
-                .await?;
+            self.context.check_aborted(true).await?;
             match chunk {
                 Ok(LLMStreamChunk::Delta { content, .. }) => {
                     if let Some(text) = content {
@@ -160,10 +171,13 @@ impl Planner {
             Vec::new(),
         )
         .await
-        .map_err(|e| TaskExecutorError::InternalError(format!("Failed to build plan system prompt: {}", e)))?;
+        .map_err(|e| {
+            TaskExecutorError::InternalError(format!("Failed to build plan system prompt: {}", e))
+        })?;
 
-        let user_prompt = build_plan_user_prompt(task_prompt)
-            .map_err(|e| TaskExecutorError::InternalError(format!("Failed to build plan user prompt: {}", e)))?;
+        let user_prompt = build_plan_user_prompt(task_prompt).map_err(|e| {
+            TaskExecutorError::InternalError(format!("Failed to build plan user prompt: {}", e))
+        })?;
 
         Ok((system_prompt, user_prompt))
     }

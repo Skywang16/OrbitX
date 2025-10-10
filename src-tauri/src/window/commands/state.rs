@@ -1,6 +1,6 @@
 use super::*;
-use crate::{api_error, t};
 use crate::utils::{ApiResponse, TauriApiResult};
+use crate::{api_error, t};
 
 fn serialize_to_value<T: serde::Serialize>(
     value: &T,
@@ -252,6 +252,5 @@ async fn handle_reset_state<R: Runtime>(
     let _ = state.cache.remove("current_dir").await;
     let _ = state.cache.remove("home_dir").await;
 
-    serialize_to_value(&true, "reset result")
-        .map_err(|_| t!("window.reset_state_failed"))
+    serialize_to_value(&true, "reset result").map_err(|_| t!("window.reset_state_failed"))
 }

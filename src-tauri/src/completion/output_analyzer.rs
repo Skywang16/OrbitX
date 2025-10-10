@@ -4,9 +4,7 @@
  * 负责分析终端输出，提取有用的上下文信息用于智能补全
  */
 
-use crate::completion::error::{
-    OutputAnalyzerError, OutputAnalyzerResult,
-};
+use crate::completion::error::{OutputAnalyzerError, OutputAnalyzerResult};
 use crate::completion::providers::ContextAwareProvider;
 use crate::completion::smart_extractor::SmartExtractor;
 use crate::mux::ConfigManager;
@@ -219,12 +217,11 @@ impl OutputAnalyzer {
     fn maybe_cleanup_stale_buffers(&self) -> OutputAnalyzerResult<()> {
         let config = ConfigManager::config_get();
         let should_cleanup = {
-            let cleanup_guard = self
-                .last_global_cleanup
-                .lock()
-                .map_err(|_| OutputAnalyzerError::MutexPoisoned {
+            let cleanup_guard = self.last_global_cleanup.lock().map_err(|_| {
+                OutputAnalyzerError::MutexPoisoned {
                     resource: "last_global_cleanup",
-                })?;
+                }
+            })?;
             cleanup_guard.elapsed() > config.cleanup_interval()
         };
 
@@ -263,12 +260,11 @@ impl OutputAnalyzer {
 
         // 更新清理时间
         {
-            let mut cleanup_guard = self
-                .last_global_cleanup
-                .lock()
-                .map_err(|_| OutputAnalyzerError::MutexPoisoned {
+            let mut cleanup_guard = self.last_global_cleanup.lock().map_err(|_| {
+                OutputAnalyzerError::MutexPoisoned {
                     resource: "last_global_cleanup",
-                })?;
+                }
+            })?;
             *cleanup_guard = Instant::now();
         }
 

@@ -804,12 +804,12 @@ impl TaskContext {
         });
         let message_count_after = state.messages.len();
         drop(state);
-        
+
         info!(
             "[TaskContext] push_user_message: messages {} -> {}, preserving history",
             message_count_before, message_count_after
         );
-        
+
         let _ = self.append_message(MessageRole::User, &text, false).await;
     }
 
@@ -844,7 +844,7 @@ impl TaskContext {
     /// (current time, working directory, etc.) while keeping the conversation history intact.
     pub async fn update_system_prompt(&self, new_system_prompt: String) -> TaskExecutorResult<()> {
         let mut state = self.execution.write().await;
-        
+
         // Find and update the first system message
         if let Some(first_msg) = state.messages.first_mut() {
             if first_msg.role == "system" {
@@ -864,7 +864,7 @@ impl TaskContext {
                 "[TaskContext] update_system_prompt: No messages found, cannot update system prompt"
             );
         }
-        
+
         Ok(())
     }
 

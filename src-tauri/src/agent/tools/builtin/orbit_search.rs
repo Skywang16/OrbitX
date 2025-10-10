@@ -11,11 +11,11 @@ use tokio::fs;
 use super::file_utils::{ensure_absolute, normalize_path};
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
-use crate::agent::persistence::FileRecordSource;
 use crate::agent::error::ToolExecutorResult;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
-    ToolResult, ToolResultContent, ToolDescriptionContext,
+    RunnableTool, ToolCategory, ToolDescriptionContext, ToolMetadata, ToolPermission, ToolPriority,
+    ToolResult, ToolResultContent,
 };
 
 const DEFAULT_MAX_RESULTS: usize = 10;
@@ -59,11 +59,11 @@ impl RunnableTool for OrbitSearchTool {
     fn description(&self) -> &str {
         "Search for code snippets in the current project using semantic or hybrid matching."
     }
-    
+
     fn description_with_context(&self, context: &ToolDescriptionContext) -> Option<String> {
         let path = Path::new(&context.cwd);
         let has_index = is_index_ready(path);
-        
+
         if has_index {
             Some("Search for code snippets in the current project. Supports three modes: 'semantic' (AI-powered understanding of code semantics, recommended), 'hybrid' (combines semantic and keyword matching), and 'regex' (pattern-based search). The project index is ready - use semantic or hybrid mode for best results.".to_string())
         } else {
@@ -232,7 +232,10 @@ impl RunnableTool for OrbitSearchTool {
         let details = format_result_details(&entries);
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Success(format!("{}\n\n{}", summary, details))],
+            content: vec![ToolResultContent::Success(format!(
+                "{}\n\n{}",
+                summary, details
+            ))],
             is_error: false,
             execution_time_ms: Some(elapsed_ms),
             ext_info: Some(json!({

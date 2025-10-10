@@ -49,9 +49,9 @@ impl ConversationRepository {
         .await?;
 
         let id = result.last_insert_rowid();
-        self.get(id)
-            .await?
-            .ok_or_else(|| AgentError::Internal(format!("Failed to retrieve created conversation: {}", id)))
+        self.get(id).await?.ok_or_else(|| {
+            AgentError::Internal(format!("Failed to retrieve created conversation: {}", id))
+        })
     }
 
     /// Ensure a conversation record with the specified id exists. If it does not,
@@ -64,7 +64,10 @@ impl ConversationRepository {
         workspace_path: Option<&str>,
     ) -> AgentResult<()> {
         if id <= 0 {
-            return Err(AgentError::Internal(format!("Conversation ID must be positive: {}", id)));
+            return Err(AgentError::Internal(format!(
+                "Conversation ID must be positive: {}",
+                id
+            )));
         }
 
         if self.get(id).await?.is_some() {
@@ -233,9 +236,12 @@ impl ConversationSummaryRepository {
         .execute(self.pool())
         .await?;
 
-        self.get(conversation_id)
-            .await?
-            .ok_or_else(|| AgentError::Internal(format!("Failed to retrieve conversation summary: {}", conversation_id)))
+        self.get(conversation_id).await?.ok_or_else(|| {
+            AgentError::Internal(format!(
+                "Failed to retrieve conversation summary: {}",
+                conversation_id
+            ))
+        })
     }
 
     pub async fn get(&self, conversation_id: i64) -> AgentResult<Option<ConversationSummary>> {
@@ -313,7 +319,12 @@ impl FileContextRepository {
 
         self.find_by_path(conversation_id, file_path)
             .await?
-            .ok_or_else(|| AgentError::Internal(format!("Failed to retrieve file context entry: {}", file_path)))
+            .ok_or_else(|| {
+                AgentError::Internal(format!(
+                    "Failed to retrieve file context entry: {}",
+                    file_path
+                ))
+            })
     }
 
     pub async fn find_by_path(
@@ -334,12 +345,18 @@ impl FileContextRepository {
         row.map(|row| build_file_context_entry(&row)).transpose()
     }
 
-    pub async fn get_active_files(&self, conversation_id: i64) -> AgentResult<Vec<FileContextEntry>> {
+    pub async fn get_active_files(
+        &self,
+        conversation_id: i64,
+    ) -> AgentResult<Vec<FileContextEntry>> {
         self.list_by_state(conversation_id, FileRecordState::Active)
             .await
     }
 
-    pub async fn get_stale_files(&self, conversation_id: i64) -> AgentResult<Vec<FileContextEntry>> {
+    pub async fn get_stale_files(
+        &self,
+        conversation_id: i64,
+    ) -> AgentResult<Vec<FileContextEntry>> {
         self.list_by_state(conversation_id, FileRecordState::Stale)
             .await
     }
@@ -459,7 +476,9 @@ impl AgentExecutionRepository {
 
         self.get_by_execution_id(&execution_id)
             .await?
-            .ok_or_else(|| AgentError::Internal("Failed to create agent execution record".to_string()))
+            .ok_or_else(|| {
+                AgentError::Internal("Failed to create agent execution record".to_string())
+            })
     }
 
     pub async fn get(&self, id: i64) -> AgentResult<Option<AgentExecution>> {
@@ -626,7 +645,10 @@ impl AgentExecutionRepository {
         Ok(())
     }
 
-    pub async fn aggregate_token_usage(&self, conversation_id: i64) -> AgentResult<TokenUsageStats> {
+    pub async fn aggregate_token_usage(
+        &self,
+        conversation_id: i64,
+    ) -> AgentResult<TokenUsageStats> {
         let row = sqlx::query(
             "SELECT
                 COALESCE(SUM(total_input_tokens), 0) AS total_input_tokens,
@@ -720,7 +742,10 @@ impl ExecutionMessageRepository {
         row.map(|row| build_execution_message(&row)).transpose()
     }
 
-    pub async fn list_by_execution(&self, execution_id: &str) -> AgentResult<Vec<ExecutionMessage>> {
+    pub async fn list_by_execution(
+        &self,
+        execution_id: &str,
+    ) -> AgentResult<Vec<ExecutionMessage>> {
         let rows = sqlx::query(
             "SELECT * FROM execution_messages WHERE execution_id = ?
              ORDER BY iteration ASC, sequence ASC",
@@ -823,7 +848,10 @@ impl ToolExecutionRepository {
         Ok(())
     }
 
-    pub async fn last_for_execution(&self, execution_id: &str) -> AgentResult<Option<ToolExecution>> {
+    pub async fn last_for_execution(
+        &self,
+        execution_id: &str,
+    ) -> AgentResult<Option<ToolExecution>> {
         let row = sqlx::query(
             "SELECT * FROM tool_executions WHERE execution_id = ?
              ORDER BY started_at DESC, id DESC LIMIT 1",

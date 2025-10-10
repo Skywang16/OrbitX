@@ -249,7 +249,10 @@ impl TerminalSystemConfig {
         if let Ok(val) = std::env::var("TERMINAL_CLEANUP_INTERVAL") {
             if let Ok(interval) = val.parse::<u64>() {
                 self.cleanup.interval_seconds = interval;
-                debug!("Applied env override: cleanup.interval_seconds = {}", interval);
+                debug!(
+                    "Applied env override: cleanup.interval_seconds = {}",
+                    interval
+                );
             }
         }
 

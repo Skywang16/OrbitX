@@ -8,8 +8,8 @@ use super::{
 };
 use crate::config::error::{ConfigError, ConfigResult, TomlConfigError};
 use crate::config::{theme::ThemeConfig, types::AppConfig};
-use serde_json::Value;
 use serde::Serialize;
+use serde_json::Value;
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
@@ -303,8 +303,7 @@ impl TomlConfigManager {
                 }
             }
             "appearance.font" => {
-                let font_config: crate::config::types::FontConfig =
-                    serde_json::from_value(data)?;
+                let font_config: crate::config::types::FontConfig = serde_json::from_value(data)?;
                 config.appearance.font = font_config;
             }
             "appearance.font.size" => {

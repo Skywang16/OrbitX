@@ -48,10 +48,7 @@ pub enum OpenAiError {
         source: reqwest::Error,
     },
     #[error("OpenAI API error {status}: {message}")]
-    Api {
-        status: StatusCode,
-        message: String,
-    },
+    Api { status: StatusCode, message: String },
     #[error("OpenAI response missing field: {field}")]
     MissingField { field: &'static str },
     #[error("OpenAI tool call arguments parse failed")]
@@ -78,10 +75,7 @@ pub enum AnthropicError {
         source: reqwest::Error,
     },
     #[error("Anthropic API error {status}: {message}")]
-    Api {
-        status: StatusCode,
-        message: String,
-    },
+    Api { status: StatusCode, message: String },
     #[error("Anthropic JSON parse failed")]
     Json {
         #[source]
@@ -99,10 +93,7 @@ pub enum GeminiError {
         source: reqwest::Error,
     },
     #[error("Gemini API error {status}: {message}")]
-    Api {
-        status: StatusCode,
-        message: String,
-    },
+    Api { status: StatusCode, message: String },
     #[error("Gemini response missing field: {field}")]
     MissingField { field: &'static str },
     #[error("Gemini JSON parse failed")]

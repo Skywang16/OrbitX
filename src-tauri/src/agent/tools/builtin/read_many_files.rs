@@ -5,11 +5,11 @@ use tokio::fs;
 use super::file_utils::{ensure_absolute, is_probably_binary};
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
-use crate::agent::persistence::FileRecordSource;
 use crate::agent::error::ToolExecutorResult;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission,
-    ToolPriority, ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
+    ToolResultContent,
 };
 
 const DEFAULT_MAX_FILE_SIZE: usize = 1_048_576; // 1 MiB
@@ -94,7 +94,7 @@ impl RunnableTool for ReadManyFilesTool {
         if args.paths.is_empty() {
             return Ok(ToolResult {
                 content: vec![ToolResultContent::Error(
-                    "paths must be a non-empty array".to_string()
+                    "paths must be a non-empty array".to_string(),
                 )],
                 is_error: true,
                 execution_time_ms: None,
@@ -115,7 +115,7 @@ impl RunnableTool for ReadManyFilesTool {
             if trimmed.is_empty() {
                 return Ok(ToolResult {
                     content: vec![ToolResultContent::Error(
-                        "All paths must be non-empty strings".to_string()
+                        "All paths must be non-empty strings".to_string(),
                     )],
                     is_error: true,
                     execution_time_ms: None,

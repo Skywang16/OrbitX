@@ -23,7 +23,9 @@ static NOTIFICATION_THREAD: OnceLock<Mutex<Option<thread::JoinHandle<()>>>> = On
 pub fn get_mux() -> Arc<TerminalMux> {
     GLOBAL_MUX
         .get_or_init(|| {
-            tracing::warn!("使用默认方式初始化全局TerminalMux，建议使用 init_mux_with_shell_integration");
+            tracing::warn!(
+                "使用默认方式初始化全局TerminalMux，建议使用 init_mux_with_shell_integration"
+            );
             init_mux_internal(None)
         })
         .clone()
@@ -36,7 +38,9 @@ pub fn get_mux() -> Arc<TerminalMux> {
 pub fn init_mux_with_shell_integration(
     shell_integration: std::sync::Arc<crate::shell::ShellIntegrationManager>,
 ) -> Result<Arc<TerminalMux>, &'static str> {
-    GLOBAL_MUX.set(init_mux_internal(Some(shell_integration))).map_err(|_| "TerminalMux已经初始化")?;
+    GLOBAL_MUX
+        .set(init_mux_internal(Some(shell_integration)))
+        .map_err(|_| "TerminalMux已经初始化")?;
     Ok(GLOBAL_MUX.get().unwrap().clone())
 }
 

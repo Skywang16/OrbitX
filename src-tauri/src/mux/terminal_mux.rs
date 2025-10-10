@@ -12,13 +12,7 @@ use tracing::{debug, error, instrument, trace, warn};
 
 use crate::mux::{
     error::{TerminalMuxError, TerminalMuxResult},
-    IoHandler,
-    LocalPane,
-    MuxNotification,
-    Pane,
-    PaneId,
-    PtySize,
-    TerminalConfig,
+    IoHandler, LocalPane, MuxNotification, Pane, PaneId, PtySize, TerminalConfig,
 };
 use crate::shell::ShellIntegrationManager;
 
@@ -71,7 +65,7 @@ impl TerminalMux {
     pub fn new() -> Self {
         Self::new_with_shell_integration(Arc::new(ShellIntegrationManager::new()))
     }
-    
+
     /// 使用指定的 ShellIntegrationManager 创建 TerminalMux
     /// 这允许共享同一个 ShellIntegrationManager 实例和其注册的回调
     pub fn new_with_shell_integration(shell_integration: Arc<ShellIntegrationManager>) -> Self {
@@ -522,7 +516,9 @@ impl TerminalMux {
             let script = self
                 .shell_integration
                 .generate_shell_script(&shell_type)
-                .map_err(|err| TerminalMuxError::Internal(format!("Shell integration error: {}", err)))?;
+                .map_err(|err| {
+                    TerminalMuxError::Internal(format!("Shell integration error: {}", err))
+                })?;
             self.write_to_pane(pane_id, script.as_bytes())?;
         }
 

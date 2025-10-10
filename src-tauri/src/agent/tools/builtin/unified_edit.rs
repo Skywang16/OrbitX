@@ -8,11 +8,11 @@ use tokio::fs;
 
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
-use crate::agent::persistence::FileRecordSource;
 use crate::agent::error::ToolExecutorResult;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
-    ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
+    ToolResultContent,
 };
 
 use super::file_utils::{ensure_absolute, is_probably_binary};
@@ -43,11 +43,17 @@ impl UnifiedEditTool {
         match fs::metadata(path).await {
             Ok(meta) => {
                 if meta.is_dir() {
-                    return Err(error_result(format!("Path {} is a directory", path.display())));
+                    return Err(error_result(format!(
+                        "Path {} is a directory",
+                        path.display()
+                    )));
                 }
             }
             Err(_) => {
-                return Err(error_result(format!("File does not exist: {}", path.display())));
+                return Err(error_result(format!(
+                    "File does not exist: {}",
+                    path.display()
+                )));
             }
         }
 
@@ -71,7 +77,10 @@ impl UnifiedEditTool {
     async fn ensure_parent(path: &PathBuf) -> Result<(), ToolResult> {
         if let Some(parent) = path.parent() {
             if !parent.exists() {
-                return Err(error_result(format!("Parent directory does not exist: {}", parent.display())));
+                return Err(error_result(format!(
+                    "Parent directory does not exist: {}",
+                    parent.display()
+                )));
             }
         }
         Ok(())
@@ -171,7 +180,10 @@ impl RunnableTool for UnifiedEditTool {
                 let (mut lines, trailing_newline) = match fs::metadata(&path).await {
                     Ok(meta) => {
                         if meta.is_dir() {
-                            return Ok(error_result(format!("Path {} is a directory", path.display())));
+                            return Ok(error_result(format!(
+                                "Path {} is a directory",
+                                path.display()
+                            )));
                         }
                         if is_probably_binary(&path) {
                             return Ok(error_result(format!(

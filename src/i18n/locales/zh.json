@@ -282,5 +282,14 @@
     "no_folders": "当前目录无子文件夹",
     "read_dir_error": "读取目录失败",
     "current_directory": "当前目录"
+  },
+  "recent_workspaces": {
+    "title": "最近的工作区",
+    "time": {
+      "just_now": "刚刚",
+      "minutes_ago": "{n}分钟前",
+      "hours_ago": "{n}小时前",
+      "days_ago": "{n}天前"
+    }
   }
 }

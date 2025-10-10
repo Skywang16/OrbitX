@@ -1,9 +1,7 @@
 use crate::{
     mux::{
         error::{IoHandlerError, IoHandlerResult},
-        MuxNotification,
-        Pane,
-        PaneId,
+        MuxNotification, Pane, PaneId,
     },
     shell::ShellIntegrationManager,
 };
@@ -52,11 +50,9 @@ impl IoHandler {
 
     pub fn spawn_io_threads(&self, pane: Arc<dyn Pane>) -> IoHandlerResult<()> {
         let pane_id = pane.pane_id();
-        let reader = pane
-            .reader()
-            .map_err(|err| IoHandlerError::PaneReader {
-                reason: format!("Failed to acquire reader for {:?}: {err}", pane_id),
-            })?;
+        let reader = pane.reader().map_err(|err| IoHandlerError::PaneReader {
+            reason: format!("Failed to acquire reader for {:?}: {err}", pane_id),
+        })?;
 
         self.spawn_reader_thread(pane_id, reader);
         Ok(())

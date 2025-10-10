@@ -82,7 +82,9 @@ impl ComponentDefinition for SystemInfoComponent {
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| AgentError::TemplateRender(format!("failed to render system info template: {}", e)))?;
+            .map_err(|e| {
+                AgentError::TemplateRender(format!("failed to render system info template: {}", e))
+            })?;
 
         Ok(Some(result))
     }
@@ -135,7 +137,9 @@ impl ComponentDefinition for DateTimeComponent {
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| AgentError::TemplateRender(format!("failed to render datetime template: {}", e)))?;
+            .map_err(|e| {
+                AgentError::TemplateRender(format!("failed to render datetime template: {}", e))
+            })?;
 
         Ok(Some(result))
     }
@@ -190,7 +194,9 @@ impl ComponentDefinition for PlatformComponent {
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| AgentError::TemplateRender(format!("failed to render platform template: {}", e)))?;
+            .map_err(|e| {
+                AgentError::TemplateRender(format!("failed to render platform template: {}", e))
+            })?;
         Ok(Some(result))
     }
 }

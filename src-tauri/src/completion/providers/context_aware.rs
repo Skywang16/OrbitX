@@ -43,6 +43,70 @@ impl ContextAwareProvider {
         }
     }
 
+    /// 获取最近的 PID 列表（公共方法供外部使用）
+    pub fn get_recent_pids(&self) -> Vec<String> {
+        let history = match self.command_history.read() {
+            Ok(h) => h,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut pids = Vec::new();
+        for record in history.iter().rev().take(20) {
+            if let Some(record_pids) = record.extracted_entities.get("pid") {
+                pids.extend(record_pids.clone());
+            }
+        }
+
+        // 去重并限制数量
+        pids.sort();
+        pids.dedup();
+        pids.truncate(10);
+        pids
+    }
+
+    /// 获取最近的端口列表（公共方法供外部使用）
+    pub fn get_recent_ports(&self) -> Vec<String> {
+        let history = match self.command_history.read() {
+            Ok(h) => h,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut ports = Vec::new();
+        for record in history.iter().rev().take(20) {
+            if let Some(record_ports) = record.extracted_entities.get("port") {
+                ports.extend(record_ports.clone());
+            }
+        }
+
+        ports.sort();
+        ports.dedup();
+        ports.truncate(10);
+        ports
+    }
+
+    /// 获取最近访问的路径列表（公共方法供外部使用）
+    pub fn get_recent_paths(&self) -> Vec<String> {
+        let history = match self.command_history.read() {
+            Ok(h) => h,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut paths = Vec::new();
+        for record in history.iter().rev().take(20) {
+            if let Some(file_paths) = record.extracted_entities.get("file_path") {
+                paths.extend(file_paths.clone());
+            }
+            if let Some(dir_paths) = record.extracted_entities.get("directory_path") {
+                paths.extend(dir_paths.clone());
+            }
+        }
+
+        paths.sort();
+        paths.dedup();
+        paths.truncate(10);
+        paths
+    }
+
     /// 记录命令输出
     pub fn record_command_output(
         &self,
@@ -83,12 +147,12 @@ impl ContextAwareProvider {
             extracted_entities,
         };
 
-        let mut history = self
-            .command_history
-            .write()
-            .map_err(|_| CompletionProviderError::MutexPoisoned {
-                resource: "command_history",
-            })?;
+        let mut history =
+            self.command_history
+                .write()
+                .map_err(|_| CompletionProviderError::MutexPoisoned {
+                    resource: "command_history",
+                })?;
 
         history.push(record);
 
@@ -110,12 +174,12 @@ impl ContextAwareProvider {
         // 分析当前输入，确定需要什么类型的补全
         let current_command = context.current_word.clone();
 
-        let history = self
-            .command_history
-            .read()
-            .map_err(|_| CompletionProviderError::MutexPoisoned {
-                resource: "command_history",
-            })?;
+        let history =
+            self.command_history
+                .read()
+                .map_err(|_| CompletionProviderError::MutexPoisoned {
+                    resource: "command_history",
+                })?;
 
         // 根据当前命令类型提供相应的补全
         match current_command.as_str() {

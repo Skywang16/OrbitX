@@ -47,10 +47,9 @@ impl TreePlanner {
 
         let llm_service = LLMService::new(self.context.repositories());
         let token = self.context.register_step_token();
-        let mut stream = llm_service
-            .call_stream(request, token)
-            .await
-            .map_err(|e| AgentError::Internal(format!("Failed to start LLM planning stream: {}", e)))?;
+        let mut stream = llm_service.call_stream(request, token).await.map_err(|e| {
+            AgentError::Internal(format!("Failed to start LLM planning stream: {}", e))
+        })?;
 
         let mut stream_text = String::new();
         while let Some(chunk) = stream.next().await {

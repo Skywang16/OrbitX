@@ -260,9 +260,7 @@ impl Repository<AuditLogEntry> for AuditLogRepository {
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(RepositoryError::AuditLogNotFound {
-                id: id.to_string(),
-            });
+            return Err(RepositoryError::AuditLogNotFound { id: id.to_string() });
         }
 
         Ok(())

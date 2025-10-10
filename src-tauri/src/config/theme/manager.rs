@@ -203,7 +203,10 @@ impl ThemeManager {
             ))
         })?;
 
-        debug!("Theme index loaded successfully with {} themes", index.total_themes);
+        debug!(
+            "Theme index loaded successfully with {} themes",
+            index.total_themes
+        );
         Ok(index)
     }
 
@@ -282,13 +285,15 @@ impl ThemeManager {
     async fn load_theme_from_file(&self, theme_name: &str) -> ThemeConfigResult<Theme> {
         let theme_path = self.get_theme_file_path(theme_name).await?;
 
-        let content = tokio::fs::read_to_string(&theme_path).await.map_err(|err| {
-            ThemeConfigError::Internal(format!(
-                "Failed to read theme file {}: {}",
-                theme_path.display(),
-                err
-            ))
-        })?;
+        let content = tokio::fs::read_to_string(&theme_path)
+            .await
+            .map_err(|err| {
+                ThemeConfigError::Internal(format!(
+                    "Failed to read theme file {}: {}",
+                    theme_path.display(),
+                    err
+                ))
+            })?;
 
         let theme_wrapper: ThemeFileWrapper = toml::from_str(&content).map_err(|err| {
             ThemeConfigError::Internal(format!(
@@ -305,10 +310,7 @@ impl ThemeManager {
         let validation_result = ThemeValidator::validate_theme(&theme);
         if !validation_result.is_valid {
             return Err(ThemeConfigError::Validation {
-                reason: format!(
-                    "Theme validation failed: {:?}",
-                    validation_result.errors
-                ),
+                reason: format!("Theme validation failed: {:?}", validation_result.errors),
             });
         }
 
@@ -486,17 +488,13 @@ impl ThemeManager {
             ))
         })?;
 
-        while let Some(entry) = entries
-            .next_entry()
-            .await
-            .map_err(|err| {
-                ThemeConfigError::Internal(format!(
-                    "Failed to read directory entry in {}: {}",
-                    dir.display(),
-                    err
-                ))
-            })?
-        {
+        while let Some(entry) = entries.next_entry().await.map_err(|err| {
+            ThemeConfigError::Internal(format!(
+                "Failed to read directory entry in {}: {}",
+                dir.display(),
+                err
+            ))
+        })? {
             let path = entry.path();
             if path.is_file() && path.extension().is_some_and(|ext| ext == "toml") {
                 if let Some(file_name) = path.file_stem().and_then(|s| s.to_str()) {

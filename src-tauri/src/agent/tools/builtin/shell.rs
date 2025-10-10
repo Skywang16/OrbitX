@@ -9,8 +9,8 @@ use tokio::time::{timeout, Duration};
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
-    ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
+    ToolResultContent,
 };
 
 const COMMAND_TIMEOUT_MS: u64 = 120_000;
@@ -162,7 +162,7 @@ impl RunnableTool for ShellTool {
                 } else {
                     stdout.clone()
                 };
-                
+
                 Ok(ToolResult {
                     content: vec![ToolResultContent::Success(output)],
                     is_error: false,
@@ -177,7 +177,10 @@ impl RunnableTool for ShellTool {
                 })
             }
             Err(err) => Ok(ToolResult {
-                content: vec![ToolResultContent::Error(format!("Command execution failed: {}", err))],
+                content: vec![ToolResultContent::Error(format!(
+                    "Command execution failed: {}",
+                    err
+                ))],
                 is_error: true,
                 execution_time_ms: None,
                 ext_info: Some(json!({

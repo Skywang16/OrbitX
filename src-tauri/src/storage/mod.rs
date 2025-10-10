@@ -1,8 +1,8 @@
 // 统一存储系统模块
 
-pub mod error;
 pub mod cache;
 pub mod coordinator;
+pub mod error;
 pub mod messagepack;
 pub mod paths;
 pub mod recovery;
@@ -17,17 +17,18 @@ pub mod sql_scripts;
 pub use cache::UnifiedCache;
 pub use coordinator::{StorageCoordinator, StorageCoordinatorOptions};
 pub use database::{DatabaseManager, DatabaseOptions};
+pub use error::{
+    CacheError, CacheResult, DatabaseError, DatabaseResult, MessagePackError, MessagePackResult,
+    QueryBuilderError, QueryResult, RepositoryError, RepositoryResult, SqlScriptError,
+    SqlScriptResult, StorageCoordinatorError, StorageCoordinatorResult, StorageError,
+    StoragePathsError, StoragePathsResult, StorageRecoveryError, StorageRecoveryResult,
+    StorageResult,
+};
 pub use messagepack::{MessagePackManager, MessagePackOptions};
 pub use paths::{StoragePaths, StoragePathsBuilder};
 pub use query::{QueryCondition, QueryOrder, SafeQueryBuilder};
 pub use repositories::*;
 pub use types::{SessionState, StorageLayer};
-pub use error::{
-    CacheError, CacheResult, DatabaseError, DatabaseResult, MessagePackError, MessagePackResult,
-    QueryBuilderError, QueryResult, RepositoryError, RepositoryResult, SqlScriptError,
-    SqlScriptResult, StorageCoordinatorError, StorageCoordinatorResult, StorageError,
-    StoragePathsError, StoragePathsResult, StorageRecoveryError, StorageRecoveryResult, StorageResult,
-};
 // 存储系统版本
 pub const STORAGE_VERSION: &str = "1.0.0";
 

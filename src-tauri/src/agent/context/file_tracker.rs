@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::agent::error::AgentResult;
 use crate::agent::persistence::{
     AgentPersistence, FileContextEntry, FileRecordSource, FileRecordState,
 };
-use crate::agent::error::AgentResult;
 
 #[derive(Debug, Clone)]
 pub struct FileOperationRecord<'a> {
@@ -162,7 +162,10 @@ impl FileContextTracker {
             .await
     }
 
-    pub async fn mark_file_as_stale(&self, path: impl AsRef<Path>) -> AgentResult<FileContextEntry> {
+    pub async fn mark_file_as_stale(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> AgentResult<FileContextEntry> {
         let record = FileOperationRecord::new(path.as_ref(), FileRecordSource::UserEdited)
             .with_state(FileRecordState::Stale);
         self.track_file_operation(record).await

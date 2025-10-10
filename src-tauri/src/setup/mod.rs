@@ -53,22 +53,18 @@ pub fn init_logging() {
 
 /// 初始化所有应用状态管理器
 pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupResult<()> {
-    let terminal_state =
-        TerminalState::new().map_err(SetupError::TerminalState)?;
+    let terminal_state = TerminalState::new().map_err(SetupError::TerminalState)?;
     app.manage(terminal_state);
 
     let paths = crate::config::paths::ConfigPaths::new()?;
     app.manage(paths);
 
-    let config_state =
-        tauri::async_runtime::block_on(async { ConfigManagerState::new().await })?;
+    let config_state = tauri::async_runtime::block_on(async { ConfigManagerState::new().await })?;
     app.manage(config_state);
 
     let shortcut_state = {
         let config_state = app.state::<ConfigManagerState>();
-        tauri::async_runtime::block_on(async {
-            ShortcutManagerState::new(&config_state).await
-        })?
+        tauri::async_runtime::block_on(async { ShortcutManagerState::new(&config_state).await })?
     };
     app.manage(shortcut_state);
 
@@ -100,7 +96,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
 
     // 创建 Shell Integration 并注册 Node 版本回调
     let shell_integration = Arc::new(crate::shell::ShellIntegrationManager::new());
-    
+
     // 注册 Node 版本变化回调
     let app_handle = app.handle().clone();
     shell_integration.register_node_version_callback(move |pane_id, version| {
@@ -111,16 +107,17 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         });
         let _ = app_handle.emit("node_version_changed", payload);
     });
-    
+
     // 初始化全局 Mux
-    let global_mux = crate::mux::singleton::init_mux_with_shell_integration(shell_integration.clone())
-        .expect("初始化全局 TerminalMux 失败");
-    
+    let global_mux =
+        crate::mux::singleton::init_mux_with_shell_integration(shell_integration.clone())
+            .expect("初始化全局 TerminalMux 失败");
+
     let terminal_context_state = {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
         let storage_state = app.state::<StorageCoordinatorState>();
         let cache = storage_state.coordinator.cache();
-        
+
         // 启用与 ShellIntegration 的上下文服务集成（回调、缓存失效、事件转发）
         let context_service = TerminalContextService::new_with_integration(
             registry.clone(),
@@ -171,9 +168,9 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         let agent_persistence = Arc::new(crate::agent::persistence::AgentPersistence::new(
             Arc::clone(&database_manager),
         ));
-        let ui_persistence = Arc::new(crate::agent::ui::AgentUiPersistence::new(
-            Arc::clone(&database_manager),
-        ));
+        let ui_persistence = Arc::new(crate::agent::ui::AgentUiPersistence::new(Arc::clone(
+            &database_manager,
+        )));
         let llm_registry = llm_state.registry.clone();
         let terminal_context_service = terminal_context_state.context_service().clone();
 

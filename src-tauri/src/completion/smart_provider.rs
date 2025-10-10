@@ -16,6 +16,7 @@ pub struct SmartCompletionProvider {
     filesystem_provider: Arc<dyn CompletionProvider>,
     system_commands_provider: Arc<dyn CompletionProvider>,
     history_provider: Arc<dyn CompletionProvider>,
+    context_aware_provider: Option<Arc<dyn CompletionProvider>>,
 }
 
 impl SmartCompletionProvider {
@@ -29,7 +30,14 @@ impl SmartCompletionProvider {
             filesystem_provider,
             system_commands_provider,
             history_provider,
+            context_aware_provider: None,
         }
+    }
+
+    /// 设置上下文感知提供者（用于实体增强）
+    pub fn with_context_aware(mut self, provider: Arc<dyn CompletionProvider>) -> Self {
+        self.context_aware_provider = Some(provider);
+        self
     }
 
     /// 基于上下文智能提供补全
@@ -338,7 +346,77 @@ impl SmartCompletionProvider {
             }
         }
 
+        // 增强补全：从 OutputAnalyzer 提取的实体添加相关补全
+        items.extend(self.enhance_with_entities(command, context).await);
+
         Ok(items)
+    }
+
+    /// 使用 OutputAnalyzer 提取的实体增强补全
+    async fn enhance_with_entities(
+        &self,
+        command: &str,
+        _context: &CompletionContext,
+    ) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+
+        // 如果没有上下文提供者，跳过
+        if self.context_aware_provider.is_none() {
+            return items;
+        }
+
+        use crate::completion::output_analyzer::OutputAnalyzer;
+
+        let analyzer = OutputAnalyzer::global();
+        let provider_mutex = analyzer.get_context_provider();
+
+        match command {
+            "kill" | "killall" => {
+                // 为 kill 命令添加最近的 PID
+                if let Ok(provider) = provider_mutex.lock() {
+                    let pids = provider.get_recent_pids();
+                    for pid in pids {
+                        let item = CompletionItem::new(pid, CompletionType::Value)
+                            .with_score(85.0)
+                            .with_description("最近的进程ID".to_string())
+                            .with_source("context".to_string());
+                        items.push(item);
+                    }
+                }
+            }
+            "lsof" => {
+                // 为 lsof 命令添加最近的端口
+                if let Ok(provider) = provider_mutex.lock() {
+                    let ports = provider.get_recent_ports();
+                    for port in ports {
+                        let item = CompletionItem::new(port, CompletionType::Value)
+                            .with_score(85.0)
+                            .with_description("最近使用的端口".to_string())
+                            .with_source("context".to_string());
+                        items.push(item);
+                    }
+                }
+            }
+            "cd" => {
+                // 为 cd 命令添加最近访问的目录
+                if let Ok(provider) = provider_mutex.lock() {
+                    let paths = provider.get_recent_paths();
+                    for path in paths {
+                        // 只添加目录
+                        if std::path::Path::new(&path).is_dir() {
+                            let item = CompletionItem::new(path, CompletionType::Directory)
+                                .with_score(80.0)
+                                .with_description("最近访问的目录".to_string())
+                                .with_source("context".to_string());
+                            items.push(item);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        items
     }
 
     /// 提供文件路径补全

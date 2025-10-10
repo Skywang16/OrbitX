@@ -66,17 +66,11 @@ impl ActiveTerminalContextRegistry {
     /// # Returns
     /// * `Ok(())` - 设置成功
     /// * `Err(ContextError)` - 设置失败
-    pub fn terminal_context_set_active_pane(
-        &self,
-        pane_id: PaneId,
-    ) -> ContextRegistryResult<()> {
+    pub fn terminal_context_set_active_pane(&self, pane_id: PaneId) -> ContextRegistryResult<()> {
         let old_pane_id = {
-            let mut active_pane = self
-                .global_active_pane
-                .write()
-                .map_err(|err| {
-                    ContextRegistryError::from_write_poison("global_active_pane", err)
-                })?;
+            let mut active_pane = self.global_active_pane.write().map_err(|err| {
+                ContextRegistryError::from_write_poison("global_active_pane", err)
+            })?;
 
             let old_id = *active_pane;
 
@@ -126,12 +120,9 @@ impl ActiveTerminalContextRegistry {
     /// * `Err(ContextError)` - 清除失败
     pub fn terminal_context_clear_active_pane(&self) -> ContextRegistryResult<()> {
         let old_pane_id = {
-            let mut active_pane = self
-                .global_active_pane
-                .write()
-                .map_err(|err| {
-                    ContextRegistryError::from_write_poison("global_active_pane", err)
-                })?;
+            let mut active_pane = self.global_active_pane.write().map_err(|err| {
+                ContextRegistryError::from_write_poison("global_active_pane", err)
+            })?;
 
             let old_id = *active_pane;
             *active_pane = None;
@@ -188,12 +179,9 @@ impl ActiveTerminalContextRegistry {
         pane_id: PaneId,
     ) -> ContextRegistryResult<()> {
         let old_pane_id = {
-            let mut window_panes = self
-                .window_active_panes
-                .write()
-                .map_err(|err| {
-                    ContextRegistryError::from_write_poison("window_active_panes", err)
-                })?;
+            let mut window_panes = self.window_active_panes.write().map_err(|err| {
+                ContextRegistryError::from_write_poison("window_active_panes", err)
+            })?;
 
             window_panes.insert(window_id, pane_id)
         };
@@ -243,12 +231,9 @@ impl ActiveTerminalContextRegistry {
         window_id: WindowId,
     ) -> ContextRegistryResult<Option<PaneId>> {
         let removed_pane = {
-            let mut window_panes = self
-                .window_active_panes
-                .write()
-                .map_err(|err| {
-                    ContextRegistryError::from_write_poison("window_active_panes", err)
-                })?;
+            let mut window_panes = self.window_active_panes.write().map_err(|err| {
+                ContextRegistryError::from_write_poison("window_active_panes", err)
+            })?;
 
             window_panes.remove(&window_id)
         };

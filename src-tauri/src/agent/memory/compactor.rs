@@ -56,12 +56,12 @@ impl MessageCompactor {
 
         // Clear tool results from middle messages to save tokens
         let cleared_middle = self.clear_tool_results(&middle);
-        
+
         let original_tokens: u32 = middle
             .iter()
             .map(|msg| count_message_tokens(msg) as u32)
             .sum();
-        
+
         let cleared_tokens: u32 = cleared_middle
             .iter()
             .map(|msg| count_message_tokens(msg) as u32)
@@ -74,7 +74,10 @@ impl MessageCompactor {
         let final_middle = if tokens_saved < (original_tokens as f32 * 0.3) as u32 {
             // Keep only the more recent half of middle messages
             let keep_count = cleared_count / 2;
-            cleared_middle.into_iter().skip(cleared_count - keep_count).collect()
+            cleared_middle
+                .into_iter()
+                .skip(cleared_count - keep_count)
+                .collect()
         } else {
             cleared_middle
         };
@@ -153,7 +156,6 @@ impl MessageCompactor {
             })
             .collect()
     }
-
 }
 
 #[derive(Debug)]

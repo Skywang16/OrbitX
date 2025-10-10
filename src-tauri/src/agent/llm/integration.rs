@@ -4,9 +4,9 @@
 
 use crate::agent::core::context::{TaskContext, ToolCallResult};
 use crate::agent::core::executor::TaskExecutor;
+use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::events::{TaskProgressPayload, ToolResultPayload, ToolUsePayload};
 use crate::agent::persistence::ToolExecutionStatus;
-use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::tools::{ToolDescriptionContext, ToolRegistry};
 use crate::llm::types::{LLMMessage, LLMRequest, LLMTool, LLMToolCall};
 use chrono::Utc;
@@ -129,12 +129,14 @@ impl TaskExecutor {
                 // 将 JSON 对象转为字符串记录
                 let log_text = serde_json::to_string(&tool_output)
                     .unwrap_or_else(|_| "Tool execution succeeded".to_string());
-                
+
                 if let Err(e) = logger
                     .log_success(
                         &log_id,
                         &crate::agent::tools::ToolResult {
-                            content: vec![crate::agent::tools::ToolResultContent::Success(log_text)],
+                            content: vec![crate::agent::tools::ToolResultContent::Success(
+                                log_text,
+                            )],
                             is_error: false,
                             execution_time_ms: Some(execution_time),
                             ext_info: None,
@@ -277,7 +279,11 @@ impl TaskExecutor {
     }
 
     /// 构建工具定义
-    async fn build_tool_definitions(&self, tool_registry: &ToolRegistry, cwd: &str) -> TaskExecutorResult<Vec<LLMTool>> {
+    async fn build_tool_definitions(
+        &self,
+        tool_registry: &ToolRegistry,
+        cwd: &str,
+    ) -> TaskExecutorResult<Vec<LLMTool>> {
         // 从工具注册表获取可用工具并转换为LLM工具定义
         let tool_schemas = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
             cwd: cwd.to_string(),

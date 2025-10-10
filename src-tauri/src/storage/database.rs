@@ -94,12 +94,12 @@ impl DatabaseManager {
     pub async fn new(paths: StoragePaths, options: DatabaseOptions) -> DatabaseResult<Self> {
         let db_path = paths.data_dir.join(DATABASE_FILE_NAME);
         if let Some(parent) = db_path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|err| DatabaseError::io(
+            tokio::fs::create_dir_all(parent).await.map_err(|err| {
+                DatabaseError::io(
                     format!("create database directory {}", parent.display()),
                     err,
-                ))?;
+                )
+            })?;
         }
 
         let (min_conn, max_conn) = options.pool_size.resolve();
@@ -159,13 +159,17 @@ impl DatabaseManager {
         self.pool
             .execute("PRAGMA foreign_keys = ON")
             .await
-            .map_err(|err| DatabaseError::internal(format!("Failed to enable foreign_keys pragma: {err}")))?;
+            .map_err(|err| {
+                DatabaseError::internal(format!("Failed to enable foreign_keys pragma: {err}"))
+            })?;
 
         if self.options.encryption {
             self.pool
                 .execute("PRAGMA secure_delete = ON")
                 .await
-                .map_err(|err| DatabaseError::internal(format!("Failed to enable secure_delete pragma: {err}")))?;
+                .map_err(|err| {
+                    DatabaseError::internal(format!("Failed to enable secure_delete pragma: {err}"))
+                })?;
         }
 
         self.execute_sql_scripts().await?;
@@ -339,14 +343,9 @@ impl KeyVault {
         if !self.path.exists() {
             return Ok(None);
         }
-        let raw = tokio::fs::read_to_string(&self.path)
-            .await
-            .map_err(|err| {
-                DatabaseError::io(
-                    format!("read key file {}", self.path.display()),
-                    err,
-                )
-            })?;
+        let raw = tokio::fs::read_to_string(&self.path).await.map_err(|err| {
+            DatabaseError::io(format!("read key file {}", self.path.display()), err)
+        })?;
         let mut lines = raw.lines();
         let first = lines.next().unwrap_or_default();
         let encoded = if first == KEY_FILE_VERSION {
@@ -357,9 +356,7 @@ impl KeyVault {
         if encoded.is_empty() {
             return Ok(None);
         }
-        let decoded = BASE64
-            .decode(encoded)
-            .map_err(DatabaseError::from)?;
+        let decoded = BASE64.decode(encoded).map_err(DatabaseError::from)?;
         if decoded.len() != 32 {
             return Err(DatabaseError::InvalidKeyLength);
         }
@@ -377,14 +374,9 @@ impl KeyVault {
 
     async fn persist(&self, bytes: [u8; 32]) -> DatabaseResult<()> {
         if let Some(parent) = self.path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|err| {
-                    DatabaseError::io(
-                        format!("create key directory {}", parent.display()),
-                        err,
-                    )
-                })?;
+            tokio::fs::create_dir_all(parent).await.map_err(|err| {
+                DatabaseError::io(format!("create key directory {}", parent.display()), err)
+            })?;
         }
         let encoded = BASE64.encode(bytes);
         let payload = format!("{}\n{}\n", KEY_FILE_VERSION, encoded);
@@ -392,18 +384,12 @@ impl KeyVault {
         tokio::fs::write(&tmp_path, payload.as_bytes())
             .await
             .map_err(|err| {
-                DatabaseError::io(
-                    format!("write key temp file {}", tmp_path.display()),
-                    err,
-                )
+                DatabaseError::io(format!("write key temp file {}", tmp_path.display()), err)
             })?;
         tokio::fs::rename(&tmp_path, &self.path)
             .await
             .map_err(|err| {
-                DatabaseError::io(
-                    format!("replace key file {}", self.path.display()),
-                    err,
-                )
+                DatabaseError::io(format!("replace key file {}", self.path.display()), err)
             })?;
 
         #[cfg(unix)]

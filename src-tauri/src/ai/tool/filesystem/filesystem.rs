@@ -63,10 +63,12 @@ impl FileSystemManager {
 
     /// 异步读取文件内容
     pub async fn read_file(&self, path: &Path) -> FileSystemToolResult<Vec<u8>> {
-        tokio_fs::read(path).await.map_err(|err| FileSystemToolError::Io {
-            operation: format!("read file {}", path.display()),
-            source: err,
-        })
+        tokio_fs::read(path)
+            .await
+            .map_err(|err| FileSystemToolError::Io {
+                operation: format!("read file {}", path.display()),
+                source: err,
+            })
     }
 
     /// 同步读取文件内容为字符串
@@ -79,10 +81,12 @@ impl FileSystemManager {
 
     /// 异步读取文件内容为字符串
     pub async fn read_file_to_string(&self, path: &Path) -> FileSystemToolResult<String> {
-        tokio_fs::read_to_string(path).await.map_err(|err| FileSystemToolError::Io {
-            operation: format!("read file {}", path.display()),
-            source: err,
-        })
+        tokio_fs::read_to_string(path)
+            .await
+            .map_err(|err| FileSystemToolError::Io {
+                operation: format!("read file {}", path.display()),
+                source: err,
+            })
     }
 
     /// 同步写入文件内容
@@ -284,11 +288,7 @@ impl FileSystemManager {
         let backup_path = self.get_backup_path(path);
 
         fs::copy(path, &backup_path).map_err(|err| FileSystemToolError::Io {
-            operation: format!(
-                "copy file {} -> {}",
-                path.display(),
-                backup_path.display()
-            ),
+            operation: format!("copy file {} -> {}", path.display(), backup_path.display()),
             source: err,
         })?;
 
@@ -303,14 +303,12 @@ impl FileSystemManager {
     async fn create_backup(&self, path: &Path) -> FileSystemToolResult<PathBuf> {
         let backup_path = self.get_backup_path(path);
 
-        tokio_fs::copy(path, &backup_path).await.map_err(|err| FileSystemToolError::Io {
-            operation: format!(
-                "copy file {} -> {}",
-                path.display(),
-                backup_path.display()
-            ),
-            source: err,
-        })?;
+        tokio_fs::copy(path, &backup_path)
+            .await
+            .map_err(|err| FileSystemToolError::Io {
+                operation: format!("copy file {} -> {}", path.display(), backup_path.display()),
+                source: err,
+            })?;
 
         // 清理旧备份
         self.cleanup_old_backups(path).await?;

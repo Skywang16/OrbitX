@@ -110,14 +110,20 @@ impl TomlConfigValidator {
         // 验证字体大小
         if !(8.0..=72.0).contains(&font_config.size) {
             return Err(TomlConfigError::Validation {
-                reason: format!("Font size must be between 8.0 and 72.0, current: {}", font_config.size),
+                reason: format!(
+                    "Font size must be between 8.0 and 72.0, current: {}",
+                    font_config.size
+                ),
             });
         }
 
         // 验证行高
         if !(0.5..=3.0).contains(&font_config.line_height) {
             return Err(TomlConfigError::Validation {
-                reason: format!("Line height must be between 0.5 and 3.0, current: {}", font_config.line_height),
+                reason: format!(
+                    "Line height must be between 0.5 and 3.0, current: {}",
+                    font_config.line_height
+                ),
             });
         }
 

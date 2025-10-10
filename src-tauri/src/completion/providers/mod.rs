@@ -16,8 +16,8 @@ pub use history::*;
 pub use npm::*;
 pub use system_commands::*;
 
-use crate::completion::types::{CompletionContext, CompletionItem};
 use crate::completion::error::CompletionProviderResult;
+use crate::completion::types::{CompletionContext, CompletionItem};
 use async_trait::async_trait;
 
 /// 补全提供者trait

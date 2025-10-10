@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use tracing::warn;
 
-use crate::agent::persistence::{AgentPersistence, ConversationSummary};
 use crate::agent::error::{AgentError, AgentResult};
+use crate::agent::persistence::{AgentPersistence, ConversationSummary};
 use crate::llm::registry::LLMRegistry;
 use crate::llm::service::LLMService;
 use crate::llm::types::{LLMMessage, LLMMessageContent, LLMRequest, LLMResponse};
@@ -149,10 +149,9 @@ impl ConversationSummarizer {
 
         // LLMService 会在内部将 model 字段转换为 provider-specific 名称
         let llm_service = LLMService::new(self.repositories());
-        let response = llm_service
-            .call(request.clone())
-            .await
-            .map_err(|e| AgentError::Internal(format!("Failed to call LLM for summary generation: {}", e)))?;
+        let response = llm_service.call(request.clone()).await.map_err(|e| {
+            AgentError::Internal(format!("Failed to call LLM for summary generation: {}", e))
+        })?;
 
         if response.content.trim().is_empty() {
             return Err(AgentError::Internal("LLM summary is empty".to_string()));

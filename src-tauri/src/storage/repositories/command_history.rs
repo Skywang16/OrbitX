@@ -128,7 +128,10 @@ impl CommandHistoryRepository {
     }
 
     /// 根据查询条件查找命令历史
-    pub async fn find_by_query(&self, query: &HistoryQuery) -> RepositoryResult<Vec<CommandHistoryEntry>> {
+    pub async fn find_by_query(
+        &self,
+        query: &HistoryQuery,
+    ) -> RepositoryResult<Vec<CommandHistoryEntry>> {
         let mut builder = SafeQueryBuilder::new("command_history").select(&[
             "id",
             "command",
@@ -495,9 +498,7 @@ impl Repository<CommandHistoryEntry> for CommandHistoryRepository {
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(RepositoryError::CommandHistoryNotFound {
-                id: id.to_string(),
-            });
+            return Err(RepositoryError::CommandHistoryNotFound { id: id.to_string() });
         }
 
         Ok(())

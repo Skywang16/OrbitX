@@ -15,8 +15,8 @@ use url::Url;
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
-    BackoffStrategy, RateLimitConfig, RunnableTool, ToolCategory,
-    ToolMetadata, ToolPermission, ToolPriority, ToolResult, ToolResultContent,
+    BackoffStrategy, RateLimitConfig, RunnableTool, ToolCategory, ToolMetadata, ToolPermission,
+    ToolPriority, ToolResult, ToolResultContent,
 };
 
 #[derive(Debug, Deserialize)]
@@ -185,9 +185,7 @@ impl RunnableTool for WebFetchTool {
             Ok(r) => r,
             Err(e) => {
                 return Ok(ToolResult {
-                    content: vec![ToolResultContent::Error(
-                        format!("request failed: {}", e)
-                    )],
+                    content: vec![ToolResultContent::Error(format!("request failed: {}", e))],
                     is_error: true,
                     execution_time_ms: Some(started.elapsed().as_millis() as u64),
                     ext_info: None,

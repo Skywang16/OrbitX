@@ -1,4 +1,4 @@
-import { shellApi, storageApi, terminalApi, terminalContextApi } from '@/api'
+import { shellApi, storageApi, terminalApi, terminalContextApi, workspaceApi } from '@/api'
 import type { ShellInfo } from '@/api'
 import { useSessionStore } from '@/stores/session'
 import type { RuntimeTerminalState, TerminalState } from '@/types'
@@ -271,6 +271,16 @@ export const useTerminalStore = defineStore('Terminal', () => {
         terminals.value.splice(existingIndex, 1)
       }
       terminals.value.push(terminal)
+
+      // 记录工作区到最近列表
+      if (terminal.cwd && terminal.cwd !== '~') {
+        try {
+          await workspaceApi.addRecentWorkspace(terminal.cwd)
+        } catch (error) {
+          console.warn('Failed to record recent workspace:', error)
+        }
+      }
+
       await setActiveTerminal(paneId)
 
       // setActiveTerminal已经会调用syncToSessionStore和保存，不需要再次调用
@@ -500,6 +510,16 @@ export const useTerminalStore = defineStore('Terminal', () => {
         terminals.value.splice(existingIndex, 1)
       }
       terminals.value.push(terminal)
+
+      // 记录工作区到最近列表
+      if (terminal.cwd && terminal.cwd !== '~') {
+        try {
+          await workspaceApi.addRecentWorkspace(terminal.cwd)
+        } catch (error) {
+          console.warn('Failed to record recent workspace:', error)
+        }
+      }
+
       await setActiveTerminal(paneId)
       // setActiveTerminal已经会同步并保存状态
 

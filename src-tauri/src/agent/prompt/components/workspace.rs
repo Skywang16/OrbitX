@@ -71,14 +71,21 @@ impl ComponentDefinition for WorkspaceSnapshotComponent {
 
         let template = template_override
             .or_else(|| self.default_template())
-            .ok_or_else(|| AgentError::Internal("missing workspace snapshot template".to_string()))?;
+            .ok_or_else(|| {
+                AgentError::Internal("missing workspace snapshot template".to_string())
+            })?;
 
         let mut template_context = HashMap::new();
         template_context.insert("snapshot".to_string(), json!(snapshot));
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| AgentError::TemplateRender(format!("failed to render workspace snapshot template: {}", e)))?;
+            .map_err(|e| {
+                AgentError::TemplateRender(format!(
+                    "failed to render workspace snapshot template: {}",
+                    e
+                ))
+            })?;
 
         Ok(Some(result))
     }
@@ -123,7 +130,9 @@ impl ComponentDefinition for AdditionalContextComponent {
 
         let template = template_override
             .or_else(|| self.default_template())
-            .ok_or_else(|| AgentError::Internal("missing additional context template".to_string()))?;
+            .ok_or_else(|| {
+                AgentError::Internal("missing additional context template".to_string())
+            })?;
 
         let pretty = serde_json::to_string_pretty(&context.additional_context)?;
 
@@ -132,7 +141,12 @@ impl ComponentDefinition for AdditionalContextComponent {
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| AgentError::TemplateRender(format!("failed to render additional context template: {}", e)))?;
+            .map_err(|e| {
+                AgentError::TemplateRender(format!(
+                    "failed to render additional context template: {}",
+                    e
+                ))
+            })?;
 
         Ok(Some(result))
     }

@@ -303,10 +303,7 @@ impl ShortcutManager {
         })
     }
 
-    pub async fn shortcuts_search(
-        &self,
-        options: SearchOptions,
-    ) -> ShortcutsResult<SearchResult> {
+    pub async fn shortcuts_search(&self, options: SearchOptions) -> ShortcutsResult<SearchResult> {
         debug!("Searching shortcuts with options {:?}", options);
 
         let config = self.config_get().await?;

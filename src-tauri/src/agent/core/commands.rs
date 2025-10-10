@@ -276,7 +276,11 @@ pub async fn agent_create_conversation(
                 .ensure_conversation(conversation_id, title_clone.as_deref())
                 .await
             {
-                tracing::warn!("Failed to initialize UI conversation {}: {}", conversation_id, err);
+                tracing::warn!(
+                    "Failed to initialize UI conversation {}: {}",
+                    conversation_id,
+                    err
+                );
             }
             Ok(api_success!(conversation_id))
         }

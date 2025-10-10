@@ -1,6 +1,9 @@
+use crate::storage::repositories::RecentWorkspace;
+use crate::storage::StorageCoordinator;
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
 use std::path::PathBuf;
+use tauri::State;
 use tracing::warn;
 
 #[tauri::command]
@@ -32,8 +35,57 @@ pub async fn file_handle_open(path: String) -> TauriApiResult<String> {
     }
 }
 
+// ===== Workspace Commands =====
+
+#[tauri::command]
+pub async fn workspace_get_recent(
+    limit: Option<i64>,
+    storage: State<'_, StorageCoordinator>,
+) -> Result<Vec<RecentWorkspace>, String> {
+    let limit = limit.unwrap_or(10).min(50);
+    storage
+        .repositories()
+        .recent_workspaces()
+        .get_recent(limit)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn workspace_add_recent(
+    path: String,
+    storage: State<'_, StorageCoordinator>,
+) -> Result<(), String> {
+    storage
+        .repositories()
+        .recent_workspaces()
+        .add_or_update(&path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn workspace_remove_recent(
+    path: String,
+    storage: State<'_, StorageCoordinator>,
+) -> Result<(), String> {
+    storage
+        .repositories()
+        .recent_workspaces()
+        .remove(&path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.invoke_handler(tauri::generate_handler![
+        // 文件拖拽命令
+        file_handle_open,
+        // 工作区管理命令
+        workspace_get_recent,
+        workspace_add_recent,
+        workspace_remove_recent,
+        // 窗口管理命令
         crate::window::commands::window_manage_state,
         crate::window::commands::window_get_current_directory,
         crate::window::commands::window_get_home_directory,

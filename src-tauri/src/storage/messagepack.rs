@@ -163,9 +163,9 @@ impl MessagePackManager {
             return Ok(None);
         }
 
-        let data = async_fs::read(&state_file)
-            .await
-            .map_err(|e| MessagePackError::io(format!("read state file {}", state_file.display()), e))?;
+        let data = async_fs::read(&state_file).await.map_err(|e| {
+            MessagePackError::io(format!("read state file {}", state_file.display()), e)
+        })?;
 
         match self.deserialize_state(&data) {
             Ok(state) => Ok(Some(state)),
@@ -178,14 +178,19 @@ impl MessagePackManager {
 
     pub async fn create_backup(&self, source_file: &Path) -> MessagePackResult<PathBuf> {
         let backup_dir = self.get_backup_directory();
-        async_fs::create_dir_all(&backup_dir)
-            .await
-            .map_err(|e| MessagePackError::io(format!("create backup directory {}", backup_dir.display()), e))?;
+        async_fs::create_dir_all(&backup_dir).await.map_err(|e| {
+            MessagePackError::io(
+                format!("create backup directory {}", backup_dir.display()),
+                e,
+            )
+        })?;
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
         let backup_file = backup_dir.join(format!("session_state_{}.msgpack.bak", timestamp));
         async_fs::copy(source_file, &backup_file)
             .await
-            .map_err(|e| MessagePackError::io(format!("create backup file {}", backup_file.display()), e))?;
+            .map_err(|e| {
+                MessagePackError::io(format!("create backup file {}", backup_file.display()), e)
+            })?;
         Ok(backup_file)
     }
 
@@ -196,15 +201,16 @@ impl MessagePackManager {
         }
 
         let mut backups = Vec::new();
-        let mut entries = async_fs::read_dir(&backup_dir)
-            .await
-            .map_err(|e| MessagePackError::io(format!("read backup directory {}", backup_dir.display()), e))?;
+        let mut entries = async_fs::read_dir(&backup_dir).await.map_err(|e| {
+            MessagePackError::io(format!("read backup directory {}", backup_dir.display()), e)
+        })?;
 
-        while let Some(entry) = entries
-            .next_entry()
-            .await
-            .map_err(|e| MessagePackError::io(format!("iterate backup directory {}", backup_dir.display()), e))?
-        {
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            MessagePackError::io(
+                format!("iterate backup directory {}", backup_dir.display()),
+                e,
+            )
+        })? {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("bak") {
                 if let Ok(metadata) = entry.metadata().await {
@@ -232,13 +238,17 @@ impl MessagePackManager {
 
     async fn atomic_write(&self, target: &Path, data: &[u8]) -> MessagePackResult<()> {
         let tmp = target.with_extension("tmp");
-        async_fs::write(&tmp, data)
-            .await
-            .map_err(|e| MessagePackError::io(format!("write temp state file {}", tmp.display()), e))?;
+        async_fs::write(&tmp, data).await.map_err(|e| {
+            MessagePackError::io(format!("write temp state file {}", tmp.display()), e)
+        })?;
         if let Err(err) = async_fs::rename(&tmp, target).await {
             let _ = std::fs::remove_file(&tmp);
             return Err(MessagePackError::io(
-                format!("rename temp state file {} -> {}", tmp.display(), target.display()),
+                format!(
+                    "rename temp state file {} -> {}",
+                    tmp.display(),
+                    target.display()
+                ),
                 err,
             ));
         }
@@ -252,15 +262,16 @@ impl MessagePackManager {
         }
 
         let mut backups = Vec::new();
-        let mut entries = async_fs::read_dir(&backup_dir)
-            .await
-            .map_err(|e| MessagePackError::io(format!("read backup directory {}", backup_dir.display()), e))?;
+        let mut entries = async_fs::read_dir(&backup_dir).await.map_err(|e| {
+            MessagePackError::io(format!("read backup directory {}", backup_dir.display()), e)
+        })?;
 
-        while let Some(entry) = entries
-            .next_entry()
-            .await
-            .map_err(|e| MessagePackError::io(format!("iterate backup directory {}", backup_dir.display()), e))?
-        {
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            MessagePackError::io(
+                format!("iterate backup directory {}", backup_dir.display()),
+                e,
+            )
+        })? {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("bak") {
                 if let Ok(metadata) = entry.metadata().await {
@@ -286,7 +297,12 @@ impl MessagePackManager {
     async fn ensure_state_directory(&self) -> MessagePackResult<()> {
         async_fs::create_dir_all(&self.paths.state_dir)
             .await
-            .map_err(|e| MessagePackError::io(format!("create state directory {}", self.paths.state_dir.display()), e))
+            .map_err(|e| {
+                MessagePackError::io(
+                    format!("create state directory {}", self.paths.state_dir.display()),
+                    e,
+                )
+            })
     }
 
     fn get_state_file_path(&self) -> PathBuf {
@@ -314,14 +330,15 @@ impl MessagePackManager {
         let mut backup_size = 0;
 
         if backup_dir.exists() {
-            let mut entries = async_fs::read_dir(&backup_dir)
-                .await
-                .map_err(|e| MessagePackError::io(format!("read backup directory {}", backup_dir.display()), e))?;
-            while let Some(entry) = entries
-                .next_entry()
-                .await
-                .map_err(|e| MessagePackError::io(format!("iterate backup directory {}", backup_dir.display()), e))?
-            {
+            let mut entries = async_fs::read_dir(&backup_dir).await.map_err(|e| {
+                MessagePackError::io(format!("read backup directory {}", backup_dir.display()), e)
+            })?;
+            while let Some(entry) = entries.next_entry().await.map_err(|e| {
+                MessagePackError::io(
+                    format!("iterate backup directory {}", backup_dir.display()),
+                    e,
+                )
+            })? {
                 if entry.path().extension().and_then(|s| s.to_str()) == Some("bak") {
                     backup_count += 1;
                     if let Ok(metadata) = entry.metadata().await {

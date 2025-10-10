@@ -62,23 +62,17 @@ impl FilesystemProvider {
             return Ok(items);
         }
 
-        let mut entries = fs::read_dir(dir_path)
-            .await
-            .map_err(|e| CompletionProviderError::io(
-                "read directory",
-                format!("({})", dir_path.display()),
-                e,
-            ))?;
+        let mut entries = fs::read_dir(dir_path).await.map_err(|e| {
+            CompletionProviderError::io("read directory", format!("({})", dir_path.display()), e)
+        })?;
 
-        while let Some(entry) = entries
-            .next_entry()
-            .await
-            .map_err(|e| CompletionProviderError::io(
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            CompletionProviderError::io(
                 "read directory entry",
                 format!("({})", dir_path.display()),
                 e,
-            ))?
-        {
+            )
+        })? {
             let path = entry.path();
             let file_name = match path.file_name() {
                 Some(name) => name.to_string_lossy().to_string(),
@@ -90,14 +84,9 @@ impl FilesystemProvider {
                 continue;
             }
 
-            let metadata = entry
-                .metadata()
-                .await
-                .map_err(|e| CompletionProviderError::io(
-                    "read metadata",
-                    format!("({})", path.display()),
-                    e,
-                ))?;
+            let metadata = entry.metadata().await.map_err(|e| {
+                CompletionProviderError::io("read metadata", format!("({})", path.display()), e)
+            })?;
 
             let completion_type = if metadata.is_dir() {
                 CompletionType::Directory

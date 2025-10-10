@@ -8,12 +8,14 @@ pub mod ai_features;
 pub mod ai_models;
 pub mod audit_logs;
 pub mod command_history;
+pub mod recent_workspaces;
 // Agent后端迁移 - 新的Repository模块
 // 重新导出所有Repository
 pub use ai_features::AIFeaturesRepository;
 pub use ai_models::AIModelRepository;
 pub use audit_logs::AuditLogRepository;
 pub use command_history::CommandHistoryRepository;
+pub use recent_workspaces::{RecentWorkspace, RecentWorkspaceRepository};
 
 use crate::storage::database::DatabaseManager;
 use crate::storage::error::RepositoryResult;
@@ -48,6 +50,7 @@ pub struct RepositoryManager {
     ai_models: AIModelRepository,
     audit_logs: AuditLogRepository,
     command_history: CommandHistoryRepository,
+    recent_workspaces: RecentWorkspaceRepository,
 }
 
 impl RepositoryManager {
@@ -58,6 +61,7 @@ impl RepositoryManager {
             ai_models: AIModelRepository::new(Arc::clone(&database)),
             audit_logs: AuditLogRepository::new(Arc::clone(&database)),
             command_history: CommandHistoryRepository::new(Arc::clone(&database)),
+            recent_workspaces: RecentWorkspaceRepository::new(Arc::clone(&database)),
             database,
         }
     }
@@ -80,6 +84,11 @@ impl RepositoryManager {
     /// 获取命令历史Repository
     pub fn command_history(&self) -> &CommandHistoryRepository {
         &self.command_history
+    }
+
+    /// 获取最近工作区Repository
+    pub fn recent_workspaces(&self) -> &RecentWorkspaceRepository {
+        &self.recent_workspaces
     }
 
     /// 获取数据库管理器

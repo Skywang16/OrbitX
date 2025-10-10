@@ -444,13 +444,13 @@ impl ShellIntegrationManager {
                 .entry(pane_id)
                 .or_insert_with(PaneShellState::new);
             let state = entry.value_mut();
-            
+
             let normalized_version = if new_version.is_empty() {
                 None
             } else {
                 Some(new_version.clone())
             };
-            
+
             if state.node_version == normalized_version {
                 None
             } else {

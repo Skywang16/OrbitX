@@ -45,10 +45,7 @@ impl TestHarness {
                 .await
                 .expect("create database manager"),
         );
-        database
-            .initialize()
-            .await
-            .expect("initialize database");
+        database.initialize().await.expect("initialize database");
 
         let persistence = Arc::new(AgentPersistence::new(Arc::clone(&database)));
         let ui_persistence = Arc::new(AgentUiPersistence::new(Arc::clone(&database)));
@@ -107,10 +104,7 @@ async fn file_context_tracker_transitions() {
         .track_file_operation(FileOperationRecord::new(path, FileRecordSource::ReadTool))
         .await
         .expect("track read operation");
-    let active = tracker
-        .get_active_files()
-        .await
-        .expect("get active files");
+    let active = tracker.get_active_files().await.expect("get active files");
     assert_eq!(active.len(), 1);
     assert_eq!(active[0].record_state, FileRecordState::Active);
 
@@ -118,20 +112,11 @@ async fn file_context_tracker_transitions() {
         .track_file_operation(FileOperationRecord::new(path, FileRecordSource::UserEdited))
         .await
         .expect("track edit operation");
-    let stale = tracker
-        .get_stale_files()
-        .await
-        .expect("get stale files");
+    let stale = tracker.get_stale_files().await.expect("get stale files");
     assert_eq!(stale.len(), 1);
     assert_eq!(stale[0].record_state, FileRecordState::Stale);
 
-    tracker
-        .mark_file_as_stale(path)
-        .await
-        .expect("mark stale");
-    let stale_again = tracker
-        .get_stale_files()
-        .await
-        .expect("get stale again");
+    tracker.mark_file_as_stale(path).await.expect("mark stale");
+    let stale_again = tracker.get_stale_files().await.expect("get stale again");
     assert_eq!(stale_again.len(), 1);
 }

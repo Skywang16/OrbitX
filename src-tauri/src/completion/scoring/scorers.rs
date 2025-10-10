@@ -85,6 +85,77 @@ impl ScoreCalculator for SmartProviderScorer {
     }
 }
 
+/// Frecency 评分器
+///
+/// 结合频率 (Frequency) 和时近性 (Recency) 的评分算法
+///
+/// 参考 Mozilla Firefox 的 Frecency 算法
+pub struct FrecencyScorer;
+
+impl FrecencyScorer {
+    /// 计算时间衰减因子
+    ///
+    /// 使用指数衰减：越远的时间权重越低
+    fn time_decay_factor(seconds_ago: u64) -> f64 {
+        const HOUR: u64 = 3600;
+        const DAY: u64 = 86400;
+        const WEEK: u64 = 604800;
+        const MONTH: u64 = 2592000;
+
+        // 指数衰减：最近的权重最高
+        match seconds_ago {
+            0..HOUR => 1.0,     // 1小时内: 100%
+            HOUR..DAY => 0.9,   // 1天内: 90%
+            DAY..WEEK => 0.7,   // 1周内: 70%
+            WEEK..MONTH => 0.5, // 1月内: 50%
+            _ => 0.3,           // 更早: 30%
+        }
+    }
+
+    /// 计算频率因子
+    ///
+    /// 频率越高，分数越高，但增长速度递减（对数增长）
+    fn frequency_factor(frequency: usize) -> f64 {
+        // 使用对数函数，避免高频命令分数过高
+        if frequency == 0 {
+            0.0
+        } else {
+            (frequency as f64).ln() * 10.0 // ln(e) = 1 -> 10分, ln(100) ~= 4.6 -> 46分
+        }
+    }
+}
+
+impl ScoreCalculator for FrecencyScorer {
+    fn calculate(&self, context: &ScoringContext) -> f64 {
+        let mut score = 0.0;
+
+        // 频率评分
+        if let Some(frequency) = context.frequency {
+            score += Self::frequency_factor(frequency);
+        }
+
+        // 时近性评分
+        if let Some(last_used) = context.last_used_timestamp {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            let seconds_ago = now.saturating_sub(last_used);
+            let decay = Self::time_decay_factor(seconds_ago);
+
+            // 时近性加分：最近使用的命令得到更高分数
+            score += decay * HISTORY_WEIGHT;
+        }
+
+        clamp_score(score)
+    }
+
+    fn name(&self) -> &'static str {
+        "frecency"
+    }
+}
+
 /// 组合评分器
 ///
 /// 组合多个评分器的结果，支持可组合的评分策略
@@ -251,5 +322,65 @@ mod tests {
 
         let score = scorer.calculate(&ctx);
         assert!(score > 0.0, "自定义组合应该正常工作");
+    }
+
+    #[test]
+    fn test_frecency_scorer_frequency() {
+        let scorer = FrecencyScorer;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // 高频命令
+        let ctx_high = ScoringContext::new("git", "git status")
+            .with_frequency(100)
+            .with_last_used_timestamp(now);
+
+        // 低频命令
+        let ctx_low = ScoringContext::new("git", "git status")
+            .with_frequency(2)
+            .with_last_used_timestamp(now);
+
+        let score_high = scorer.calculate(&ctx_high);
+        let score_low = scorer.calculate(&ctx_low);
+
+        assert!(
+            score_high > score_low,
+            "高频命令应该得分更高: {} vs {}",
+            score_high,
+            score_low
+        );
+    }
+
+    #[test]
+    fn test_frecency_scorer_recency() {
+        let scorer = FrecencyScorer;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // 最近使用的命令
+        let ctx_recent = ScoringContext::new("git", "git status")
+            .with_frequency(10)
+            .with_last_used_timestamp(now);
+
+        // 1天前使用的命令
+        let ctx_old = ScoringContext::new("git", "git status")
+            .with_frequency(10)
+            .with_last_used_timestamp(now - 86400);
+
+        let score_recent = scorer.calculate(&ctx_recent);
+        let score_old = scorer.calculate(&ctx_old);
+
+        assert!(
+            score_recent > score_old,
+            "最近使用的命令应该得分更高: {} vs {}",
+            score_recent,
+            score_old
+        );
     }
 }

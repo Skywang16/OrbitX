@@ -36,7 +36,11 @@ impl TomlConfigWriter {
             fs::create_dir_all(parent).await.map_err(|e| {
                 TomlConfigError::Io(io::Error::new(
                     e.kind(),
-                    format!("Failed to create config directory: {} - {}", parent.display(), e),
+                    format!(
+                        "Failed to create config directory: {} - {}",
+                        parent.display(),
+                        e
+                    ),
                 ))
             })?;
         }
@@ -44,7 +48,11 @@ impl TomlConfigWriter {
     }
 
     /// 带重试机制的配置文件写入
-    async fn write_config_with_retry(&self, content: &str, max_retries: usize) -> TomlConfigResult<()> {
+    async fn write_config_with_retry(
+        &self,
+        content: &str,
+        max_retries: usize,
+    ) -> TomlConfigResult<()> {
         let mut last_error: Option<TomlConfigError> = None;
 
         for attempt in 1..=max_retries {
@@ -56,18 +64,24 @@ impl TomlConfigWriter {
                     return Ok(());
                 }
                 Err(e) => {
-                    warn!("配置文件写入失败 (尝试 {}/{}) : {}", attempt, max_retries, e);
+                    warn!(
+                        "配置文件写入失败 (尝试 {}/{}) : {}",
+                        attempt, max_retries, e
+                    );
                     last_error = Some(e);
 
                     if attempt < max_retries {
                         // 短暂等待后重试
-                        tokio::time::sleep(std::time::Duration::from_millis(100 * attempt as u64)).await;
+                        tokio::time::sleep(std::time::Duration::from_millis(100 * attempt as u64))
+                            .await;
                     }
                 }
             }
         }
 
-        Err(last_error.unwrap_or_else(|| TomlConfigError::Internal("Config file write failed, unknown error".to_string())))
+        Err(last_error.unwrap_or_else(|| {
+            TomlConfigError::Internal("Config file write failed, unknown error".to_string())
+        }))
     }
 
     /// 原子写入配置：优先直接写入，失败则采用临时文件 + 重命名策略
@@ -115,10 +129,10 @@ impl TomlConfigWriter {
 
                 // 写入临时文件
                 fs::write(&temp_path, content).await.map_err(|e| {
-                    TomlConfigError::Io(io::Error::new(e.kind(), format!(
-                        "Failed to write temp config file: {}",
-                        temp_path.display()
-                    )))
+                    TomlConfigError::Io(io::Error::new(
+                        e.kind(),
+                        format!("Failed to write temp config file: {}", temp_path.display()),
+                    ))
                 })?;
 
                 // 尝试重命名

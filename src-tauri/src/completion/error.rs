@@ -52,22 +52,37 @@ pub enum SmartExtractorError {
     #[error("Compiled regex missing for key {pattern_key}")]
     MissingCompiledPattern { pattern_key: String },
     #[error("Failed to read configuration {path}: {source}")]
-    ConfigRead { path: String, #[source] source: io::Error },
+    ConfigRead {
+        path: String,
+        #[source]
+        source: io::Error,
+    },
     #[error("Failed to write configuration {path}: {source}")]
-    ConfigWrite { path: String, #[source] source: io::Error },
+    ConfigWrite {
+        path: String,
+        #[source]
+        source: io::Error,
+    },
     #[error("Configuration serialization error: {0}")]
     Serde(#[from] serde_json::Error),
 }
 
 impl From<io::Error> for CompletionProviderError {
     fn from(error: io::Error) -> Self {
-        CompletionProviderError::Io { operation: "IO operation", context: String::new(), source: error }
+        CompletionProviderError::Io {
+            operation: "IO operation",
+            context: String::new(),
+            source: error,
+        }
     }
 }
 
 impl From<RegexError> for CompletionProviderError {
     fn from(error: RegexError) -> Self {
-        CompletionProviderError::RegexCompile { pattern: String::new(), source: error }
+        CompletionProviderError::RegexCompile {
+            pattern: String::new(),
+            source: error,
+        }
     }
 }
 

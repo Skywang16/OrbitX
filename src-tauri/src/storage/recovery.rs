@@ -61,10 +61,7 @@ impl RecoveryManager {
         // 配置层恢复策略
         strategies.insert(
             StorageLayer::Config,
-            vec![
-                RecoveryStrategy::UseBackup,
-                RecoveryStrategy::Fallback,
-            ],
+            vec![RecoveryStrategy::UseBackup, RecoveryStrategy::Fallback],
         );
 
         // 状态层恢复策略

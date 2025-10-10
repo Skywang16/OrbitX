@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use sqlx::{sqlite::SqliteRow, Row};
 
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::persistence::now_timestamp;
 use crate::agent::ui::models::{UiConversation, UiMessage, UiStep};
-use crate::agent::error::{AgentError, AgentResult};
 use crate::storage::database::DatabaseManager;
 
 #[derive(Debug)]
@@ -29,9 +29,7 @@ impl AgentUiPersistence {
     ) -> AgentResult<()> {
         let resolved_title = match title {
             Some(value) => Some(value.to_string()),
-            None => self
-                .fetch_conversation_title(conversation_id)
-                .await?,
+            None => self.fetch_conversation_title(conversation_id).await?,
         };
 
         let inserted_at = now_timestamp();
@@ -212,7 +210,9 @@ impl AgentUiPersistence {
         let created_at: i64 = row.try_get("created_at")?;
         let mut duration_ms: Option<i64> = row.try_get("duration_ms").ok();
 
-        if (normalized_status == "complete" || normalized_status == "error") && duration_ms.is_none() {
+        if (normalized_status == "complete" || normalized_status == "error")
+            && duration_ms.is_none()
+        {
             duration_ms = Some(ts.saturating_sub(created_at));
         }
 
@@ -296,7 +296,6 @@ impl AgentUiPersistence {
         .await?;
         Ok(())
     }
-
 }
 
 fn build_conversation_preview(content: &str) -> Option<String> {

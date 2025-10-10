@@ -161,7 +161,9 @@ impl GeminiProvider {
         let candidate = response_json["candidates"]
             .as_array()
             .and_then(|arr| arr.first())
-            .ok_or(GeminiError::MissingField { field: "candidates" })?;
+            .ok_or(GeminiError::MissingField {
+                field: "candidates",
+            })?;
 
         let mut content_text = String::new();
         let mut tool_calls = Vec::new();
@@ -231,10 +233,7 @@ impl GeminiProvider {
                     .as_str()
                     .unwrap_or("Unknown Gemini error")
                     .to_string();
-                return GeminiError::Api {
-                    status,
-                    message,
-                };
+                return GeminiError::Api { status, message };
             }
         }
         GeminiError::Api {
@@ -244,8 +243,9 @@ impl GeminiProvider {
     }
 
     fn parse_stream_chunk(data: &str) -> GeminiResult<LLMStreamChunk> {
-        let json_data: Value = serde_json::from_str(data)
-            .map_err(|e| GeminiError::Stream { message: format!("JSON parse error: {}", e) })?;
+        let json_data: Value = serde_json::from_str(data).map_err(|e| GeminiError::Stream {
+            message: format!("JSON parse error: {}", e),
+        })?;
 
         let response = Self::parse_response(&json_data)?;
 
@@ -299,14 +299,14 @@ impl LLMProvider for GeminiProvider {
             .json()
             .await
             .map_err(|source| LlmProviderError::Gemini(GeminiError::Http { source }))?;
-        Self::parse_response(&response_json)
-            .map_err(LlmProviderError::from)
+        Self::parse_response(&response_json).map_err(LlmProviderError::from)
     }
 
     async fn call_stream(
         &self,
         mut request: LLMRequest,
-    ) -> LlmProviderResult<Pin<Box<dyn Stream<Item = LlmProviderResult<LLMStreamChunk>> + Send>>> {
+    ) -> LlmProviderResult<Pin<Box<dyn Stream<Item = LlmProviderResult<LLMStreamChunk>> + Send>>>
+    {
         request.stream = true;
         let url = self.get_endpoint(&request);
         let headers = self.get_headers();

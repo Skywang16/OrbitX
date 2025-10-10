@@ -71,10 +71,7 @@ impl ShellScriptGenerator {
         Self { config }
     }
 
-    pub fn generate_integration_script(
-        &self,
-        shell_type: &ShellType,
-    ) -> ShellScriptResult<String> {
+    pub fn generate_integration_script(&self, shell_type: &ShellType) -> ShellScriptResult<String> {
         let script = match shell_type {
             ShellType::Bash => bash::generate_script(&self.config),
             ShellType::Zsh => zsh::generate_script(&self.config),
@@ -85,10 +82,7 @@ impl ShellScriptGenerator {
         Ok(script)
     }
 
-    pub fn is_integration_already_setup(
-        &self,
-        shell_type: &ShellType,
-    ) -> ShellScriptResult<bool> {
+    pub fn is_integration_already_setup(&self, shell_type: &ShellType) -> ShellScriptResult<bool> {
         if !shell_type.supports_integration() {
             return Ok(false);
         }
@@ -104,10 +98,11 @@ impl ShellScriptGenerator {
             operation: format!("open shell config {}", config_path.display()),
             source: err,
         })?;
-        file.read_to_string(&mut content).map_err(|err| ShellScriptError::Io {
-            operation: format!("read shell config {}", config_path.display()),
-            source: err,
-        })?;
+        file.read_to_string(&mut content)
+            .map_err(|err| ShellScriptError::Io {
+                operation: format!("read shell config {}", config_path.display()),
+                source: err,
+            })?;
 
         Ok(content.contains("# OrbitX Integration Start"))
     }

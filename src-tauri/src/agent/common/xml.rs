@@ -18,7 +18,9 @@ pub fn parse_task_detail(task_id: &str, xml: &str, done: bool) -> AgentResult<Ta
     let root = Element::parse(Cursor::new(wrapped.as_bytes()))?;
 
     if root.name != "root" {
-        return Err(AgentError::XmlParse("Task XML must have <root> element".to_string()));
+        return Err(AgentError::XmlParse(
+            "Task XML must have <root> element".to_string(),
+        ));
     }
 
     let name_text = root
@@ -92,7 +94,9 @@ pub fn parse_task_tree(xml: &str) -> AgentResult<PlannedTask> {
     let wrapped = ensure_root(xml);
     let root = Element::parse(Cursor::new(wrapped.as_bytes()))?;
     if root.name != "root" {
-        return Err(AgentError::XmlParse("Tree XML must have <root> element".to_string()));
+        return Err(AgentError::XmlParse(
+            "Tree XML must have <root> element".to_string(),
+        ));
     }
 
     Ok(parse_planned_task(&root))
