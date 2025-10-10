@@ -73,8 +73,7 @@ impl LLMService {
         self.validate_request(&request)?;
         let original_model_id = request.model.clone();
         let config = self.get_provider_config(&request.model).await?;
-        let provider =
-            ProviderFactory::create_provider(config.clone()).map_err(LlmError::from)?;
+        let provider = ProviderFactory::create_provider(config.clone()).map_err(LlmError::from)?;
 
         let mut actual_request = request.clone();
         actual_request.model = config.model.clone();
@@ -110,8 +109,7 @@ impl LLMService {
         self.validate_request(&request)?;
         let original_model_id = request.model.clone();
         let config = self.get_provider_config(&request.model).await?;
-        let provider =
-            ProviderFactory::create_provider(config.clone()).map_err(LlmError::from)?;
+        let provider = ProviderFactory::create_provider(config.clone()).map_err(LlmError::from)?;
 
         let mut actual_request = request.clone();
         actual_request.model = config.model.clone();
@@ -157,11 +155,13 @@ impl LLMService {
     }
 
     /// Embedding调用
-    pub async fn create_embeddings(&self, request: EmbeddingRequest) -> LlmResult<EmbeddingResponse> {
+    pub async fn create_embeddings(
+        &self,
+        request: EmbeddingRequest,
+    ) -> LlmResult<EmbeddingResponse> {
         let original_model_id = request.model.clone();
         let config = self.get_provider_config(&request.model).await?;
-        let provider =
-            ProviderFactory::create_provider(config.clone()).map_err(LlmError::from)?;
+        let provider = ProviderFactory::create_provider(config.clone()).map_err(LlmError::from)?;
 
         let mut actual_request = request.clone();
         actual_request.model = config.model.clone();

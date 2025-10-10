@@ -95,15 +95,14 @@ impl ConfigPaths {
         #[cfg(target_os = "windows")]
         {
             use std::env;
-            let appdata = env::var("APPDATA")
-                .map_err(|_| ConfigPathsError::ConfigDirectoryUnavailable)?;
+            let appdata =
+                env::var("APPDATA").map_err(|_| ConfigPathsError::ConfigDirectoryUnavailable)?;
             Ok(PathBuf::from(appdata).join(app_name))
         }
 
         #[cfg(target_os = "macos")]
         {
-            let home = dirs::home_dir()
-                .ok_or(ConfigPathsError::HomeDirectoryUnavailable)?;
+            let home = dirs::home_dir().ok_or(ConfigPathsError::HomeDirectoryUnavailable)?;
             Ok(home
                 .join("Library")
                 .join("Application Support")
@@ -112,15 +111,14 @@ impl ConfigPaths {
 
         #[cfg(target_os = "linux")]
         {
-            let config_dir = dirs::config_dir()
-                .ok_or(ConfigPathsError::ConfigDirectoryUnavailable)?;
+            let config_dir =
+                dirs::config_dir().ok_or(ConfigPathsError::ConfigDirectoryUnavailable)?;
             Ok(config_dir.join("orbitx"))
         }
 
         #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
         {
-            let home = dirs::home_dir()
-                .ok_or(ConfigPathsError::HomeDirectoryUnavailable)?;
+            let home = dirs::home_dir().ok_or(ConfigPathsError::HomeDirectoryUnavailable)?;
             Ok(home.join(".orbitx"))
         }
     }
@@ -143,9 +141,8 @@ impl ConfigPaths {
 
         for dir in &directories {
             if !dir.exists() {
-                fs::create_dir_all(dir).map_err(|e| {
-                    ConfigPathsError::directory_create(dir.to_path_buf(), e)
-                })?;
+                fs::create_dir_all(dir)
+                    .map_err(|e| ConfigPathsError::directory_create(dir.to_path_buf(), e))?;
             }
         }
 
@@ -243,13 +240,11 @@ impl ConfigPaths {
     /// 如果路径安全，返回 `Ok(())`，否则返回错误。
     pub fn validate_path<P: AsRef<Path>>(&self, path: P) -> ConfigPathsResult<()> {
         let path = path.as_ref();
-        let canonical_path = fs::canonicalize(path).map_err(|e| {
-            ConfigPathsError::directory_access(path.to_path_buf(), e)
-        })?;
+        let canonical_path = fs::canonicalize(path)
+            .map_err(|e| ConfigPathsError::directory_access(path.to_path_buf(), e))?;
 
-        let canonical_app_dir = fs::canonicalize(&self.app_data_dir).map_err(|e| {
-            ConfigPathsError::directory_access(self.app_data_dir.clone(), e)
-        })?;
+        let canonical_app_dir = fs::canonicalize(&self.app_data_dir)
+            .map_err(|e| ConfigPathsError::directory_access(self.app_data_dir.clone(), e))?;
 
         if !canonical_path.starts_with(&canonical_app_dir) {
             return Err(ConfigPathsError::validation(format!(
@@ -273,9 +268,8 @@ impl ConfigPaths {
 
     /// 获取文件大小
     pub fn file_size<P: AsRef<Path>>(&self, path: P) -> ConfigPathsResult<u64> {
-        let metadata = fs::metadata(path.as_ref()).map_err(|e| {
-            ConfigPathsError::directory_access(path.as_ref().to_path_buf(), e)
-        })?;
+        let metadata = fs::metadata(path.as_ref())
+            .map_err(|e| ConfigPathsError::directory_access(path.as_ref().to_path_buf(), e))?;
 
         Ok(metadata.len())
     }
@@ -285,13 +279,12 @@ impl ConfigPaths {
         &self,
         path: P,
     ) -> ConfigPathsResult<std::time::SystemTime> {
-        let metadata = fs::metadata(path.as_ref()).map_err(|e| {
-            ConfigPathsError::directory_access(path.as_ref().to_path_buf(), e)
-        })?;
+        let metadata = fs::metadata(path.as_ref())
+            .map_err(|e| ConfigPathsError::directory_access(path.as_ref().to_path_buf(), e))?;
 
-        metadata.modified().map_err(|e| {
-            ConfigPathsError::directory_access(path.as_ref().to_path_buf(), e)
-        })
+        metadata
+            .modified()
+            .map_err(|e| ConfigPathsError::directory_access(path.as_ref().to_path_buf(), e))
     }
 
     /// 创建目录
@@ -315,9 +308,8 @@ impl ConfigPaths {
         self.validate_path(path)?;
 
         if path.exists() {
-            fs::remove_file(path).map_err(|e| {
-                ConfigPathsError::directory_access(path.to_path_buf(), e)
-            })?;
+            fs::remove_file(path)
+                .map_err(|e| ConfigPathsError::directory_access(path.to_path_buf(), e))?;
         }
 
         Ok(())
@@ -331,9 +323,8 @@ impl ConfigPaths {
         self.validate_path(path)?;
 
         if path.exists() {
-            fs::remove_dir_all(path).map_err(|e| {
-                ConfigPathsError::directory_access(path.to_path_buf(), e)
-            })?;
+            fs::remove_dir_all(path)
+                .map_err(|e| ConfigPathsError::directory_access(path.to_path_buf(), e))?;
         }
 
         Ok(())
@@ -357,9 +348,7 @@ impl ConfigPaths {
             self.create_dir(parent)?;
         }
 
-        fs::copy(from, to).map_err(|e| {
-            ConfigPathsError::directory_access(to.to_path_buf(), e)
-        })?;
+        fs::copy(from, to).map_err(|e| ConfigPathsError::directory_access(to.to_path_buf(), e))?;
 
         Ok(())
     }
@@ -382,9 +371,8 @@ impl ConfigPaths {
             self.create_dir(parent)?;
         }
 
-        fs::rename(from, to).map_err(|e| {
-            ConfigPathsError::directory_access(to.to_path_buf(), e)
-        })?;
+        fs::rename(from, to)
+            .map_err(|e| ConfigPathsError::directory_access(to.to_path_buf(), e))?;
 
         Ok(())
     }
@@ -396,14 +384,12 @@ impl ConfigPaths {
         let mut theme_files = Vec::new();
 
         if self.themes_dir.exists() {
-            let entries = fs::read_dir(&self.themes_dir).map_err(|e| {
-                ConfigPathsError::directory_access(self.themes_dir.clone(), e)
-            })?;
+            let entries = fs::read_dir(&self.themes_dir)
+                .map_err(|e| ConfigPathsError::directory_access(self.themes_dir.clone(), e))?;
 
             for entry in entries {
-                let entry = entry.map_err(|e| {
-                    ConfigPathsError::directory_access(self.themes_dir.clone(), e)
-                })?;
+                let entry = entry
+                    .map_err(|e| ConfigPathsError::directory_access(self.themes_dir.clone(), e))?;
 
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("toml") {
@@ -420,14 +406,12 @@ impl ConfigPaths {
         let mut backup_files = Vec::new();
 
         if self.backups_dir.exists() {
-            let entries = fs::read_dir(&self.backups_dir).map_err(|e| {
-                ConfigPathsError::directory_access(self.backups_dir.clone(), e)
-            })?;
+            let entries = fs::read_dir(&self.backups_dir)
+                .map_err(|e| ConfigPathsError::directory_access(self.backups_dir.clone(), e))?;
 
             for entry in entries {
-                let entry = entry.map_err(|e| {
-                    ConfigPathsError::directory_access(self.backups_dir.clone(), e)
-                })?;
+                let entry = entry
+                    .map_err(|e| ConfigPathsError::directory_access(self.backups_dir.clone(), e))?;
 
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("toml") {
@@ -469,8 +453,8 @@ impl ConfigPaths {
                 .map_err(|e| ConfigPathsError::directory_access(path.to_path_buf(), e))?;
 
             for entry in entries {
-                let entry = entry
-                    .map_err(|e| ConfigPathsError::directory_access(path.to_path_buf(), e))?;
+                let entry =
+                    entry.map_err(|e| ConfigPathsError::directory_access(path.to_path_buf(), e))?;
 
                 let entry_path = entry.path();
                 if entry_path.is_file() {

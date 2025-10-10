@@ -5,11 +5,11 @@ use tokio::fs;
 
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
-use crate::agent::persistence::FileRecordSource;
 use crate::agent::error::ToolExecutorResult;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
-    ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
+    ToolResultContent,
 };
 
 use super::file_utils::{ensure_absolute, is_probably_binary};
@@ -53,6 +53,7 @@ impl RunnableTool for WriteFileTool {
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::FileWrite, ToolPriority::Standard)
             .with_tags(vec!["filesystem".into(), "write".into()])
+            .with_summary_key_arg("path")
     }
 
     fn required_permissions(&self) -> Vec<ToolPermission> {
@@ -106,9 +107,10 @@ impl RunnableTool for WriteFileTool {
             .await?;
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Text {
-                text: format!("write_file applied\nfile={}", path.display()),
-            }],
+            content: vec![ToolResultContent::Success(format!(
+                "write_file applied\nfile={}",
+                path.display()
+            ))],
             is_error: false,
             execution_time_ms: None,
             ext_info: Some(json!({
@@ -120,10 +122,7 @@ impl RunnableTool for WriteFileTool {
 
 fn error_result(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,

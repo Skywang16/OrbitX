@@ -7,11 +7,11 @@ use tokio::fs;
 
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
-use crate::agent::persistence::FileRecordSource;
 use crate::agent::error::ToolExecutorResult;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
-    ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
+    ToolResultContent,
 };
 
 use super::file_utils::{ensure_absolute, is_probably_binary};
@@ -71,6 +71,7 @@ impl RunnableTool for ReadFileTool {
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::FileRead, ToolPriority::Standard)
             .with_tags(vec!["filesystem".into(), "read".into()])
+            .with_summary_key_arg("path")
     }
 
     fn required_permissions(&self) -> Vec<ToolPermission> {
@@ -159,9 +160,8 @@ impl RunnableTool for ReadFileTool {
         let mut output_lines = Vec::new();
         let mut truncated_line_detected = false;
 
-        for (idx, line) in lines
+        for line in lines
             .iter()
-            .enumerate()
             .skip(start_line)
             .take(end_line.saturating_sub(start_line))
         {
@@ -178,8 +178,7 @@ impl RunnableTool for ReadFileTool {
                 truncated.push_str("... [truncated]");
                 truncated_line_detected = true;
             }
-            let display_number = idx + 1; // 1-based display
-            output_lines.push(format!("{:>4}  {}", display_number, truncated));
+            output_lines.push(truncated);
         }
 
         let result_text = output_lines.join("\n");
@@ -193,7 +192,7 @@ impl RunnableTool for ReadFileTool {
             .await?;
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Text { text: result_text }],
+            content: vec![ToolResultContent::Success(result_text)],
             is_error: false,
             execution_time_ms: None,
             ext_info: Some(json!({
@@ -212,10 +211,7 @@ impl RunnableTool for ReadFileTool {
 
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,
@@ -224,10 +220,7 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,

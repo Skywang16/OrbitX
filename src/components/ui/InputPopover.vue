@@ -7,7 +7,7 @@
     (e: 'update:visible', value: boolean): void
   }
 
-  const props = defineProps<Props>()
+  defineProps<Props>()
   const emit = defineEmits<Emits>()
 
   const handleClose = () => {

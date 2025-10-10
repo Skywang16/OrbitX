@@ -56,10 +56,7 @@ impl ActionRegistry {
         handler: F,
     ) -> ShortcutsResult<()>
     where
-        F: Fn(&ActionContext) -> ShortcutsActionResult<serde_json::Value>
-            + Send
-            + Sync
-            + 'static,
+        F: Fn(&ActionContext) -> ShortcutsActionResult<serde_json::Value> + Send + Sync + 'static,
     {
         debug!("Registering shortcut action: {}", metadata.name);
 
@@ -68,12 +65,10 @@ impl ActionRegistry {
         {
             let handlers = self.handlers.read().await;
             if handlers.contains_key(&action_name) {
-                return Err(
-                    ShortcutsActionError::AlreadyRegistered {
-                        action: action_name,
-                    }
-                    .into(),
-                );
+                return Err(ShortcutsActionError::AlreadyRegistered {
+                    action: action_name,
+                }
+                .into());
             }
         }
 

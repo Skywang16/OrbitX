@@ -12,10 +12,14 @@
   },
   "ai": {
     "add_model_failed": "添加模型失败",
+    "add_model_success": "模型添加成功",
     "remove_model_failed": "删除模型失败",
+    "remove_model_success": "模型删除成功",
     "update_model_failed": "更新模型失败",
+    "update_model_success": "模型更新成功",
     "get_models_failed": "获取模型配置失败",
     "test_connection_error": "连接测试失败: {error}",
+    "test_connection_success": "连接测试成功",
     "api_url_empty": "API URL不能为空",
     "api_key_empty": "API Key不能为空",
     "model_name_empty": "模型名称不能为空"
@@ -102,9 +106,6 @@
     "clear_active_pane_failed": "清除活跃面板失败",
     "pane_not_found": "终端面板不存在"
   },
-  "error": {
-    "with_param": "{name}发生错误"
-  },
   "window": {
     "get_current_directory_failed": "获取当前目录失败",
     "get_home_directory_failed": "获取家目录失败",
@@ -119,8 +120,8 @@
     "normalize_path_failed": "规范化路径失败",
     "path_list_empty": "路径列表不能为空",
     "path_component_empty": "路径组件不能为空",
-    "set_opacity_failed": "设置窗口透明度失败",
-    "opacity_out_of_range": "透明度值必须在0.0-1.0之间"
+    "opacity_out_of_range": "透明度值必须在0.0-1.0之间",
+    "emit_event_failed": "发送事件失败"
   },
   "ck": {
     "invalid_query": "搜索查询长度至少需要3个字符",

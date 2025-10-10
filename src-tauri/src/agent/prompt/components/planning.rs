@@ -56,11 +56,18 @@ impl ComponentDefinition for PlanningGuidelinesComponent {
     ) -> AgentResult<Option<String>> {
         let template = template_override
             .or_else(|| self.default_template())
-            .ok_or_else(|| AgentError::Internal("missing planning guidelines template".to_string()))?;
+            .ok_or_else(|| {
+                AgentError::Internal("missing planning guidelines template".to_string())
+            })?;
 
         let result = TemplateEngine::new()
             .resolve(template, &HashMap::new())
-            .map_err(|e| AgentError::TemplateRender(format!("failed to render planning guidelines template: {}", e)))?;
+            .map_err(|e| {
+                AgentError::TemplateRender(format!(
+                    "failed to render planning guidelines template: {}",
+                    e
+                ))
+            })?;
         Ok(Some(result))
     }
 }

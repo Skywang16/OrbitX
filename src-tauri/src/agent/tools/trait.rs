@@ -6,9 +6,9 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::agent::error::ToolExecutorResult;
 use super::metadata::ToolMetadata;
 use crate::agent::core::context::TaskContext;
+use crate::agent::error::ToolExecutorResult;
 
 /// Context for dynamic tool description generation
 #[derive(Debug, Clone)]
@@ -24,29 +24,10 @@ pub struct ToolSchema {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum ToolResultContent {
-    Text {
-        text: String,
-    },
-    Json {
-        data: Value,
-    },
-    CommandOutput {
-        stdout: String,
-        stderr: String,
-        exit_code: i32,
-    },
-    File {
-        path: String,
-    },
-    Image {
-        base64: String,
-        format: String,
-    },
-    Error {
-        message: String,
-        details: Option<String>,
-    },
+    Success(String),
+    Error(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,7 +54,7 @@ pub trait RunnableTool: Send + Sync {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
     fn parameters_schema(&self) -> Value;
-    
+
     /// Optional dynamic description based on context
     /// Returns None to use the static description()
     fn description_with_context(&self, _context: &ToolDescriptionContext) -> Option<String> {

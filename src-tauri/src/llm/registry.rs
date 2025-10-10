@@ -195,22 +195,20 @@ impl LLMRegistry {
                 default_api_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
                 documentation_url: Some("https://ai.google.dev/docs".to_string()),
                 requires_api_key: true,
-                models: vec![
-                    ModelInfo {
-                        id: "gemini-2.5-pro".to_string(),
-                        display_name: "Gemini 2.5 Pro".to_string(),
-                        model_type: ModelType::Chat,
-                        capabilities: ModelCapabilities {
-                            supports_tools: true,
-                            supports_vision: true,
-                            supports_streaming: true,
-                            is_reasoning_model: true,
-                            max_context_tokens: 1048576,
-                            temperature_range: Some((0.0, 2.0)),
-                        },
-                        deprecated: false,
+                models: vec![ModelInfo {
+                    id: "gemini-2.5-pro".to_string(),
+                    display_name: "Gemini 2.5 Pro".to_string(),
+                    model_type: ModelType::Chat,
+                    capabilities: ModelCapabilities {
+                        supports_tools: true,
+                        supports_vision: true,
+                        supports_streaming: true,
+                        is_reasoning_model: true,
+                        max_context_tokens: 1048576,
+                        temperature_range: Some((0.0, 2.0)),
                     },
-                ],
+                    deprecated: false,
+                }],
             },
         );
 
@@ -224,22 +222,20 @@ impl LLMRegistry {
                     "https://help.aliyun.com/document_detail/2712581.html".to_string(),
                 ),
                 requires_api_key: true,
-                models: vec![
-                    ModelInfo {
-                        id: "qwen3-coder-plus".to_string(),
-                        display_name: "Qwen3 Coder Plus".to_string(),
-                        model_type: ModelType::Chat,
-                        capabilities: ModelCapabilities {
-                            supports_tools: true,
-                            supports_vision: false,
-                            supports_streaming: true,
-                            is_reasoning_model: false,
-                            max_context_tokens: 128000,
-                            temperature_range: Some((0.0, 2.0)),
-                        },
-                        deprecated: false,
+                models: vec![ModelInfo {
+                    id: "qwen3-coder-plus".to_string(),
+                    display_name: "Qwen3 Coder Plus".to_string(),
+                    model_type: ModelType::Chat,
+                    capabilities: ModelCapabilities {
+                        supports_tools: true,
+                        supports_vision: false,
+                        supports_streaming: true,
+                        is_reasoning_model: false,
+                        max_context_tokens: 128000,
+                        temperature_range: Some((0.0, 2.0)),
                     },
-                ],
+                    deprecated: false,
+                }],
             },
         );
     }

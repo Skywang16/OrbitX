@@ -155,6 +155,34 @@
   }
 }
 
+/* 全局禁用文本选择，避免意外选中UI元素 */
+* {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 允许特定区域的文本选择 */
+/* AI聊天消息渲染区 */
+.message-list,
+.message-list * {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* AI输入框区域 */
+.message-input,
+.message-input * {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* 终端渲染区 */
+.terminal-container,
+.terminal-container * {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 @media print {
   .x-message,
   .x-modal {

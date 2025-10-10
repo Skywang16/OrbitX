@@ -1,37 +1,165 @@
 <template>
   <div class="empty-state">
-    <h1 class="title">OrbitX</h1>
-    <div class="shortcuts">
-      <div class="shortcut" @click="handleNewTabClick">
-        <span class="shortcut-desc">{{ t('shortcuts.actions.new_tab') }}</span>
-        <div class="keys">
-          <kbd>⌘</kbd>
-          <kbd>T</kbd>
-        </div>
+    <!-- Action Cards -->
+    <div class="action-cards">
+      <div class="action-card" @click="handleNewTabClick">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>{{ t('shortcuts.actions.new_tab') }}</span>
       </div>
-      <div class="shortcut" @click="handleToggleAISidebarClick">
-        <span class="shortcut-desc">{{ t('shortcuts.actions.toggle_ai_sidebar') }}</span>
-        <div class="keys">
-          <kbd>⌘</kbd>
-          <kbd>I</kbd>
+      <div class="action-card" @click="showCloneDialog = true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        <span>{{ t('shortcuts.actions.clone_repository') || '克隆仓库' }}</span>
+      </div>
+    </div>
+
+    <!-- Recent Workspaces Section -->
+    <div v-if="recentWorkspaces.length > 0" class="recent-section">
+      <h2 class="section-title">{{ t('recent_workspaces.title') }}</h2>
+      <div class="workspace-list">
+        <div
+          v-for="workspace in recentWorkspaces"
+          :key="workspace.id"
+          class="workspace-item"
+          @click="handleOpenWorkspace(workspace.path)"
+        >
+          <div class="workspace-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+            </svg>
+          </div>
+          <div class="workspace-info">
+            <div class="workspace-name">{{ getWorkspaceName(workspace.path) }}</div>
+            <div class="workspace-path">{{ workspace.path }}</div>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- Clone Repository Dialog (System XModal) -->
+    <XModal
+      :visible="showCloneDialog"
+      :title="t('shortcuts.actions.clone_repository')"
+      size="small"
+      :showFooter="true"
+      :noPadding="true"
+      @update:visible="showCloneDialog = $event"
+      @opened="handleCloneOpened"
+      @confirm="handleCloneConfirm(gitUrl)"
+      @cancel="showCloneDialog = false"
+    >
+      <div class="clone-dialog-body">
+        <SearchInput
+          v-model="gitUrl"
+          :placeholder="t('shortcuts.git_url_placeholder')"
+          :clearable="true"
+          :autofocus="true"
+          @search="val => ((gitUrl = val), (gitUrlError = ''))"
+          class="dialog-input"
+          :class="{ 'is-invalid': gitUrlError }"
+        />
+        <div v-if="gitUrlError" class="input-error">{{ gitUrlError }}</div>
+      </div>
+    </XModal>
   </div>
 </template>
 
 <script setup lang="ts">
+  import { ref, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { shortcutActionsService } from '@/shortcuts/actions'
+  import { workspaceApi, type RecentWorkspace } from '@/api/workspace'
+  import { useTerminalStore } from '@/stores/Terminal'
+  import XModal from '@/ui/components/Modal.vue'
+  import SearchInput from '@/ui/components/SearchInput.vue'
 
   const { t } = useI18n()
+  const terminalStore = useTerminalStore()
+  const recentWorkspaces = ref<RecentWorkspace[]>([])
+  const showCloneDialog = ref(false)
+  const gitUrl = ref('')
+  const gitUrlError = ref('')
+
+  onMounted(async () => {
+    try {
+      recentWorkspaces.value = await workspaceApi.getRecentWorkspaces(5)
+    } catch (error) {
+      console.error('Failed to load recent workspaces:', error)
+    }
+  })
+
+  const handleCloneOpened = () => {
+    gitUrl.value = ''
+    gitUrlError.value = ''
+  }
 
   const handleNewTabClick = async () => {
     await shortcutActionsService.newTab()
   }
 
-  const handleToggleAISidebarClick = () => {
-    shortcutActionsService.toggleAISidebar()
+  const isValidGitUrl = (url: string) => {
+    // 支持 SSH 和 HTTPS 两种常见形式
+    const ssh = /^(git@|ssh:\/\/git@)[\w.-]+:[\w.-]+\/[\w.-]+(\.git)?$/
+    const https = /^(https?:\/\/)[\w.-]+(:\d+)?\/[\w.-]+\/[\w.-]+(\.git)?(#[\w.-]+)?$/
+    return ssh.test(url) || https.test(url)
+  }
+
+  const handleCloneConfirm = async (url?: string) => {
+    const finalUrl = (url ?? gitUrl.value).trim()
+    if (!finalUrl) {
+      gitUrlError.value = '请输入 Git 仓库地址'
+      return
+    }
+    if (!isValidGitUrl(finalUrl)) {
+      gitUrlError.value = '无效的 Git 仓库地址，请输入有效的 HTTPS 或 SSH 地址'
+      return
+    }
+    gitUrlError.value = ''
+
+    try {
+      // 新建标签页
+      await shortcutActionsService.newTab()
+
+      // 等待终端准备好
+      setTimeout(() => {
+        const activeTerminal = terminalStore.activeTerminal
+        if (activeTerminal) {
+          // 执行 git clone 命令
+          terminalStore.writeToTerminal(activeTerminal.id, `git clone ${finalUrl}\n`)
+        }
+      }, 100)
+
+      // 关闭对话框
+      showCloneDialog.value = false
+      gitUrl.value = ''
+    } catch (error) {
+      console.error('Failed to clone repository:', error)
+    }
+  }
+
+  const handleOpenWorkspace = async (path: string) => {
+    try {
+      await shortcutActionsService.newTab()
+
+      setTimeout(() => {
+        const activeTerminal = terminalStore.activeTerminal
+        if (activeTerminal) {
+          terminalStore.writeToTerminal(activeTerminal.id, `cd "${path}"\n`)
+        }
+      }, 100)
+    } catch (error) {
+      console.error('Failed to open workspace:', error)
+    }
+  }
+
+  const getWorkspaceName = (path: string): string => {
+    const parts = path.split('/').filter(Boolean)
+    return parts[parts.length - 1] || path
   }
 </script>
 
@@ -43,77 +171,132 @@
     justify-content: center;
     height: 100%;
     background: var(--bg-200);
+    padding: var(--spacing-xl);
   }
 
-  .title {
-    font-size: 48px;
-    font-weight: 300;
-    color: var(--text-200);
-    margin: 0 0 48px 0;
-    letter-spacing: -0.02em;
+  .action-cards {
+    display: flex;
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
   }
 
-  .shortcuts {
+  .action-card {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    align-items: center;
-  }
-
-  .shortcut {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 24px;
-    padding: 12px 20px;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-md);
+    width: 140px;
     background: var(--bg-300);
     border: 1px solid var(--border-200);
     border-radius: var(--border-radius-lg);
-    transition: all 0.2s ease;
-    min-width: 200px;
     cursor: pointer;
+    transition: background-color 0.15s ease;
     user-select: none;
   }
 
-  .shortcut:hover {
+  .action-card:hover {
     background: var(--bg-400);
-    border-color: var(--border-300);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   }
 
-  .shortcut:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-
-  .keys {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-
-  kbd {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 24px;
-    height: 24px;
-    padding: 0 8px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-200);
-    background: var(--bg-500);
-    border: 1px solid var(--border-400);
-    border-radius: var(--border-radius);
-    box-shadow:
-      0 2px 4px rgba(0, 0, 0, 0.1),
-      0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-  }
-
-  .shortcut-desc {
-    font-size: 13px;
+  .action-card svg {
     color: var(--text-300);
+  }
+
+  .action-card span {
+    font-size: var(--font-size-md);
     font-weight: 500;
-    text-align: center;
+    color: var(--text-200);
+  }
+
+  .recent-section {
+    width: 100%;
+    max-width: 500px;
+  }
+
+  .section-title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-300);
+    margin: 0 0 var(--spacing-lg) 0;
+  }
+
+  .workspace-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .workspace-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-md);
+    margin: 0 calc(var(--spacing-md) * -1);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    user-select: none;
+    border-bottom: 1px solid var(--border-200);
+  }
+
+  .workspace-item:last-child {
+    border-bottom: none;
+  }
+
+  .workspace-item:hover {
+    background: var(--bg-300);
+  }
+
+  .workspace-icon {
+    flex-shrink: 0;
+    color: var(--text-400);
+  }
+
+  .workspace-info {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    gap: var(--spacing-lg);
+    min-width: 0;
+  }
+
+  .workspace-name {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-200);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workspace-path {
+    font-size: var(--font-size-xs);
+    color: var(--text-400);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-family-mono);
+  }
+
+  /* Clone dialog layout */
+  .clone-dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-md) var(--spacing-xl) var(--spacing-sm) var(--spacing-xl);
+    width: 100%;
+  }
+
+  :deep(.dialog-input) {
+    width: 100%;
+    margin: 0; /* ensure no extra bottom margin */
+  }
+
+  .input-error {
+    margin-top: var(--spacing-xs);
+    color: var(--color-error);
+    font-size: var(--font-size-xs);
+  }
+
+  :deep(.is-invalid) {
+    border-color: var(--color-error) !important;
   }
 </style>

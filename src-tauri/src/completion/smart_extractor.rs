@@ -465,12 +465,11 @@ impl SmartExtractor {
     pub fn load_rules_from_config(&mut self, config_path: &str) -> SmartExtractorResult<()> {
         use std::fs;
 
-        let config_content = fs::read_to_string(config_path).map_err(|e| {
-            SmartExtractorError::ConfigRead {
+        let config_content =
+            fs::read_to_string(config_path).map_err(|e| SmartExtractorError::ConfigRead {
                 path: config_path.to_string(),
                 source: e,
-            }
-        })?;
+            })?;
 
         let config: serde_json::Value = serde_json::from_str(&config_content)?;
 
@@ -501,11 +500,9 @@ impl SmartExtractor {
 
         let config_content = serde_json::to_string_pretty(&config)?;
 
-        fs::write(config_path, config_content).map_err(|e| {
-            SmartExtractorError::ConfigWrite {
-                path: config_path.to_string(),
-                source: e,
-            }
+        fs::write(config_path, config_content).map_err(|e| SmartExtractorError::ConfigWrite {
+            path: config_path.to_string(),
+            source: e,
         })?;
 
         Ok(())

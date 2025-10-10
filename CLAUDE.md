@@ -69,12 +69,10 @@ The frontend uses a modular architecture with clear separation of concerns:
   - `AIChatSidebar/`: AI assistant interface with message rendering, task management, and tool visualization
   - Terminal components for xterm.js integration
   - Theme and configuration management
-- **AI Core System** (`src/eko-core/`): Agent-based AI system with:
-  - Task tree planning and execution
-  - Tool registry and execution framework
-  - Memory management and context handling
-  - Event-driven architecture with state management
-- **API Layer** (`src/api/`): TypeScript interfaces for Tauri command invocations
+- **API Layer** (`src/api/`): Modular TypeScript interfaces for Tauri commands
+  - Each domain has its own module (terminal, ai, completion, workspace, etc.)
+  - Centralized in `src/api/index.ts` for re-exports
+  - Direct command invocations without intermediate layers
 
 ### Backend Architecture (Rust/Tauri)
 
@@ -90,6 +88,12 @@ The backend follows a Mux-centric architecture for terminal management:
   - `terminal/`: Terminal context and event handling
   - `ai/`: AI service integration with tool adaptors
   - `llm/`: LLM provider management and streaming
+  - `completion/`: Smart command completion system
+    - `providers/`: Multiple completion sources (history, filesystem, git, npm, system commands)
+    - `engine`: Core completion orchestration
+    - `scoring`: Unified scoring system with metadata-driven registry
+    - `prediction`: Context-aware command prediction with Frecency algorithm
+    - `output_analyzer`: Terminal output analysis for intelligent suggestions
   - `storage/`: SQLite-based persistence with repositories pattern
   - `shell/`: Shell integration commands
   - `config/`: Theme and configuration management
@@ -101,7 +105,7 @@ The backend follows a Mux-centric architecture for terminal management:
 1. **Frontend → Backend**: Vue components invoke Tauri commands through `@tauri-apps/api`
 2. **Terminal I/O**: Mux manages PTY sessions, handling input/output through dedicated I/O threads
 3. **Events**: Backend emits events via Tauri's event system, frontend subscribes and reacts
-4. **AI Processing**: Eko core orchestrates AI tasks with tool execution and state management
+4. **AI Processing**: Backend agent system orchestrates AI tasks with tool execution and state management
 
 ## Key Technical Details
 
@@ -118,12 +122,20 @@ The backend follows a Mux-centric architecture for terminal management:
 - Tool system for extending AI capabilities
 - Persistent conversation history in SQLite
 
+### Smart Completion System
+
+- **Providers Architecture**: Modular completion sources (history, filesystem, git, npm, system commands)
+- **Unified Scoring**: Metadata-driven command registry with weighted scoring
+- **Frecency Algorithm**: Frequency + Recency based ranking for command suggestions
+- **Context Detection**: Analyzes terminal output to provide context-aware completions
+- **Prediction Engine**: Learns command patterns and suggests next commands based on history
+
 ### Performance Optimizations
 
-- Lazy loading and code splitting in frontend
 - Rust async runtime (Tokio) for concurrent operations
 - Message batching for terminal output
 - LRU caching for file system operations
+- Thread-safe shared state with minimal locking contention
 
 ## Testing Guidelines
 
@@ -161,11 +173,41 @@ The application uses SQLite with migrations in `src-tauri/sql/`. Key tables:
 
 ## Important Conventions
 
-1. **Error Handling**: Use Result types in Rust, proper error boundaries in Vue
-2. **Logging**: Structured logging with `tracing` in Rust, custom Log class in frontend
-3. **State Management**: Pinia for frontend, Arc<RwLock> for backend shared state
-4. **Events**: Use Tauri's event system for frontend-backend communication
-5. **File Paths**: Always use absolute paths in Tauri commands
+### Frontend Code Standards
+
+1. **No Dynamic Imports**: Never use `await import()` or dynamic imports. All imports must be static at the top of the file.
+
+   ```typescript
+   // ✅ Correct
+   import { workspaceApi } from '@/api/workspace'
+
+   // ❌ Wrong
+   const { workspaceApi } = await import('@/api/workspace')
+   ```
+
+2. **No Try-Catch Around API Calls**: API layer already handles errors uniformly. Do not wrap API calls with try-catch.
+
+   ```typescript
+   // ✅ Correct
+   workspaceApi.maintainWorkspaces()
+
+   // ❌ Wrong
+   try {
+     await workspaceApi.maintainWorkspaces()
+   } catch (error) {
+     console.warn('Failed:', error)
+   }
+   ```
+
+3. **Error Handling**: Use proper error boundaries in Vue components when needed, but trust the API layer's error handling.
+
+### Backend Code Standards
+
+1. **Error Handling**: Always use `Result<T, E>` types, never panic in production code.
+2. **Logging**: Use structured logging with `tracing` crate (debug, info, warn, error levels).
+3. **State Management**: Shared state must use `Arc<RwLock<T>>` or `Arc<Mutex<T>>` with clear ownership.
+4. **Events**: Use Tauri's event system for frontend-backend communication, avoid polling.
+5. **File Paths**: All file paths in Tauri commands must be absolute paths, never relative.
 
 ## Development Workflow
 

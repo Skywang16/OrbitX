@@ -229,9 +229,7 @@ impl AnthropicProvider {
     }
 
     /// 解析content_block_start事件，处理工具调用
-    fn parse_content_block_start(
-        event_json: &Value,
-    ) -> Option<LlmProviderResult<LLMStreamChunk>> {
+    fn parse_content_block_start(event_json: &Value) -> Option<LlmProviderResult<LLMStreamChunk>> {
         let content_block = &event_json["content_block"];
 
         if content_block["type"] == "tool_use" {
@@ -342,7 +340,8 @@ impl LLMProvider for AnthropicProvider {
     async fn call_stream(
         &self,
         mut request: LLMRequest,
-    ) -> LlmProviderResult<Pin<Box<dyn Stream<Item = LlmProviderResult<LLMStreamChunk>> + Send>>> {
+    ) -> LlmProviderResult<Pin<Box<dyn Stream<Item = LlmProviderResult<LLMStreamChunk>> + Send>>>
+    {
         request.stream = true;
         let url = self.get_endpoint();
         let headers = self.get_headers();

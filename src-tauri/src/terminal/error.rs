@@ -116,9 +116,7 @@ pub enum ContextEventChannelError {
 impl From<tokio::sync::broadcast::error::RecvError> for ContextEventChannelError {
     fn from(err: tokio::sync::broadcast::error::RecvError) -> Self {
         match err {
-            tokio::sync::broadcast::error::RecvError::Closed => {
-                ContextEventChannelError::Closed
-            }
+            tokio::sync::broadcast::error::RecvError::Closed => ContextEventChannelError::Closed,
             other => ContextEventChannelError::Subscribe(other.to_string()),
         }
     }

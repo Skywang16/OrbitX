@@ -9,7 +9,9 @@ pub mod r#trait;
 // Re-exports for external use
 pub use logger::ToolExecutionLogger;
 pub use metadata::{BackoffStrategy, RateLimitConfig, ToolCategory, ToolMetadata, ToolPriority};
-pub use r#trait::{RunnableTool, ToolDescriptionContext, ToolPermission, ToolResult, ToolResultContent, ToolSchema};
+pub use r#trait::{
+    RunnableTool, ToolDescriptionContext, ToolPermission, ToolResult, ToolResultContent, ToolSchema,
+};
 pub use registry::{get_permissions_for_mode, ToolExecutionStats, ToolRegistry};
 
 // Builtin tool type re-exports
@@ -35,7 +37,11 @@ async fn register_builtin_tools(registry: &ToolRegistry, is_chat_mode: bool) {
     info!("注册 Agent 工具集 (chat_mode={})", is_chat_mode);
 
     registry
-        .register("read_many_files", Arc::new(ReadManyFilesTool::new()), is_chat_mode)
+        .register(
+            "read_many_files",
+            Arc::new(ReadManyFilesTool::new()),
+            is_chat_mode,
+        )
         .await
         .ok();
     registry
@@ -63,7 +69,7 @@ async fn register_builtin_tools(registry: &ToolRegistry, is_chat_mode: bool) {
         .register(
             "list_code_definition_names",
             Arc::new(ListCodeDefinitionNamesTool::new()),
-            is_chat_mode
+            is_chat_mode,
         )
         .await
         .ok();
@@ -73,7 +79,11 @@ async fn register_builtin_tools(registry: &ToolRegistry, is_chat_mode: bool) {
         .await
         .ok();
     registry
-        .register("orbit_search", Arc::new(OrbitSearchTool::new()), is_chat_mode)
+        .register(
+            "orbit_search",
+            Arc::new(OrbitSearchTool::new()),
+            is_chat_mode,
+        )
         .await
         .ok();
 }

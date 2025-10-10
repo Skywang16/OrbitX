@@ -3,10 +3,7 @@ use std::path::PathBuf;
 use argon2::password_hash::Error as PasswordHashError;
 use base64::DecodeError;
 use chacha20poly1305::aead::Error as AeadError;
-use rmp_serde::{
-    decode::Error as MessagePackDecodeError,
-    encode::Error as MessagePackEncodeError,
-};
+use rmp_serde::{decode::Error as MessagePackDecodeError, encode::Error as MessagePackEncodeError};
 use sqlx::Error as SqlxError;
 use thiserror::Error;
 
@@ -204,7 +201,10 @@ pub enum StorageRecoveryError {
     #[error("JSON serialization error: {0}")]
     Json(#[from] serde_json::Error),
     #[error("Recovery strategy {strategy} failed: {reason}")]
-    StrategyFailed { strategy: &'static str, reason: String },
+    StrategyFailed {
+        strategy: &'static str,
+        reason: String,
+    },
     #[error("Storage recovery internal error: {0}")]
     Internal(String),
 }
@@ -280,9 +280,7 @@ pub enum RepositoryError {
 
 impl RepositoryError {
     pub fn unsupported_parameter(name: impl Into<String>) -> Self {
-        RepositoryError::UnsupportedParameterType {
-            name: name.into(),
-        }
+        RepositoryError::UnsupportedParameterType { name: name.into() }
     }
 
     pub fn internal(message: impl Into<String>) -> Self {

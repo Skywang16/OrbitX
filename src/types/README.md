@@ -48,7 +48,7 @@ src/types/
    - 将 AI 相关类型合并到 `domain/ai.ts`
    - 统一 `Conversation` 和 `Message` 类型定义
 2. **消除循环引用**
-   - 重构 `@/eko/types` 和 AI 类型的依赖关系
+   - 重构类型依赖关系
    - 将共享类型提取到 `core` 层
 
 3. **简化API类型**

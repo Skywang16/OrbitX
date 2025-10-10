@@ -2,8 +2,8 @@
 
 use crate::ai::tool::storage::StorageCoordinatorState;
 use crate::completion::engine::{CompletionEngine, CompletionEngineConfig};
-use crate::completion::types::{CompletionContext, CompletionResponse};
 use crate::completion::error::{CompletionStateError, CompletionStateResult};
+use crate::completion::types::{CompletionContext, CompletionResponse};
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use std::path::PathBuf;

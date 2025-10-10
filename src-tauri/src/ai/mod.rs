@@ -4,7 +4,7 @@ pub mod service;
 pub mod tool;
 pub mod types;
 
-pub use error::*;
 pub use commands::*;
+pub use error::*;
 pub use service::*;
 pub use types::*;

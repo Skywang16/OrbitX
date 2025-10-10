@@ -75,7 +75,9 @@ impl ComponentDefinition for TaskContextComponent {
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| AgentError::TemplateRender(format!("failed to render task context template: {}", e)))?;
+            .map_err(|e| {
+                AgentError::TemplateRender(format!("failed to render task context template: {}", e))
+            })?;
 
         Ok(Some(result))
     }

@@ -55,28 +55,28 @@ impl StorageCoordinator {
         let messagepack_manager = Arc::new(
             MessagePackManager::new(paths.clone(), messagepack_options)
                 .await
-                .map_err(|e| StorageCoordinatorError::Internal(format!(
-                    "Failed to initialize MessagePack manager: {}",
-                    e
-                )))?,
+                .map_err(|e| {
+                    StorageCoordinatorError::Internal(format!(
+                        "Failed to initialize MessagePack manager: {}",
+                        e
+                    ))
+                })?,
         );
 
         let database_manager = Arc::new(
             DatabaseManager::new(paths.clone(), database_options)
                 .await
-                .map_err(|e| StorageCoordinatorError::Internal(format!(
-                    "Failed to initialize database manager: {}",
-                    e
-                )))?,
+                .map_err(|e| {
+                    StorageCoordinatorError::Internal(format!(
+                        "Failed to initialize database manager: {}",
+                        e
+                    ))
+                })?,
         );
 
-        database_manager
-            .initialize()
-            .await
-            .map_err(|e| StorageCoordinatorError::Internal(format!(
-                "Failed to initialize database: {}",
-                e
-            )))?;
+        database_manager.initialize().await.map_err(|e| {
+            StorageCoordinatorError::Internal(format!("Failed to initialize database: {}", e))
+        })?;
 
         let repository_manager = Arc::new(RepositoryManager::new(Arc::clone(&database_manager)));
 
@@ -101,14 +101,9 @@ impl StorageCoordinator {
         debug!("获取配置节: {}", section);
 
         // 从配置管理器获取配置（使用缓存）
-        let config = self
-            .config_manager
-            .config_get()
-            .await
-            .map_err(|e| StorageCoordinatorError::Internal(format!(
-                "Failed to load configuration: {}",
-                e
-            )))?;
+        let config = self.config_manager.config_get().await.map_err(|e| {
+            StorageCoordinatorError::Internal(format!("Failed to load configuration: {}", e))
+        })?;
 
         // 提取指定节的配置
         let section_value = match section {
@@ -139,10 +134,12 @@ impl StorageCoordinator {
                 Ok(())
             })
             .await
-            .map_err(|e| StorageCoordinatorError::Internal(format!(
-                "Failed to update configuration section: {}",
-                e
-            )))?;
+            .map_err(|e| {
+                StorageCoordinatorError::Internal(format!(
+                    "Failed to update configuration section: {}",
+                    e
+                ))
+            })?;
 
         Ok(())
     }

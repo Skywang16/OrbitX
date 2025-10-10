@@ -4,10 +4,7 @@ use crate::storage::cache::{CacheEntrySnapshot, UnifiedCache};
 use crate::terminal::{
     context_registry::ActiveTerminalContextRegistry,
     error::{ContextServiceError, ContextServiceResult},
-    CommandInfo,
-    ShellType,
-    TerminalContext,
-    TerminalContextEvent,
+    CommandInfo, ShellType, TerminalContext, TerminalContextEvent,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -174,9 +171,9 @@ impl TerminalContextService {
 
     pub async fn get_active_cwd(&self) -> ContextServiceResult<String> {
         let context = self.get_active_context().await?;
-        context.current_working_directory.ok_or(
-            ContextServiceError::WorkingDirectoryMissing,
-        )
+        context
+            .current_working_directory
+            .ok_or(ContextServiceError::WorkingDirectoryMissing)
     }
 
     pub async fn shell_get_pane_cwd(&self, pane_id: PaneId) -> ContextServiceResult<String> {
@@ -188,15 +185,16 @@ impl TerminalContextService {
 
     pub async fn get_active_shell_type(&self) -> ContextServiceResult<ShellType> {
         let context = self.get_active_context().await?;
-        context.shell_type.ok_or(ContextServiceError::ShellTypeMissing)
+        context
+            .shell_type
+            .ok_or(ContextServiceError::ShellTypeMissing)
     }
 
-    pub async fn get_pane_shell_type(
-        &self,
-        pane_id: PaneId,
-    ) -> ContextServiceResult<ShellType> {
+    pub async fn get_pane_shell_type(&self, pane_id: PaneId) -> ContextServiceResult<ShellType> {
         let context = self.get_context_by_pane(pane_id).await?;
-        context.shell_type.ok_or(ContextServiceError::ShellTypeMissing)
+        context
+            .shell_type
+            .ok_or(ContextServiceError::ShellTypeMissing)
     }
 
     pub async fn invalidate_cache_entry(&self, pane_id: PaneId) {

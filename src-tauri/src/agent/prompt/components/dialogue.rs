@@ -57,11 +57,18 @@ You excel at helping users with:
     ) -> AgentResult<Option<String>> {
         let template = template_override
             .or_else(|| self.default_template())
-            .ok_or_else(|| AgentError::Internal("missing dialogue capabilities template".to_string()))?;
+            .ok_or_else(|| {
+                AgentError::Internal("missing dialogue capabilities template".to_string())
+            })?;
 
         let result = TemplateEngine::new()
             .resolve(template, &HashMap::new())
-            .map_err(|e| AgentError::TemplateRender(format!("failed to render dialogue capabilities template: {}", e)))?;
+            .map_err(|e| {
+                AgentError::TemplateRender(format!(
+                    "failed to render dialogue capabilities template: {}",
+                    e
+                ))
+            })?;
         Ok(Some(result))
     }
 }
@@ -110,11 +117,18 @@ impl ComponentDefinition for DialogueGuidelinesComponent {
     ) -> AgentResult<Option<String>> {
         let template = template_override
             .or_else(|| self.default_template())
-            .ok_or_else(|| AgentError::Internal("missing dialogue guidelines template".to_string()))?;
+            .ok_or_else(|| {
+                AgentError::Internal("missing dialogue guidelines template".to_string())
+            })?;
 
         let result = TemplateEngine::new()
             .resolve(template, &HashMap::new())
-            .map_err(|e| AgentError::TemplateRender(format!("failed to render dialogue guidelines template: {}", e)))?;
+            .map_err(|e| {
+                AgentError::TemplateRender(format!(
+                    "failed to render dialogue guidelines template: {}",
+                    e
+                ))
+            })?;
         Ok(Some(result))
     }
 }

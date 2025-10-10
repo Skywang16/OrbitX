@@ -12,10 +12,14 @@
   },
   "ai": {
     "add_model_failed": "Failed to add model",
+    "add_model_success": "Model added successfully",
     "remove_model_failed": "Failed to remove model",
+    "remove_model_success": "Model removed successfully",
     "update_model_failed": "Failed to update model",
+    "update_model_success": "Model updated successfully",
     "get_models_failed": "Failed to load model configuration",
     "test_connection_error": "Connection test failed: {error}",
+    "test_connection_success": "Connection test successful",
     "api_url_empty": "API URL cannot be empty",
     "api_key_empty": "API Key cannot be empty",
     "model_name_empty": "Model name cannot be empty"
@@ -116,8 +120,8 @@
     "normalize_path_failed": "Failed to normalize path",
     "path_list_empty": "Path list cannot be empty",
     "path_component_empty": "Path component cannot be empty",
-    "set_opacity_failed": "Failed to set window opacity",
-    "opacity_out_of_range": "Opacity value must be between 0.0-1.0"
+    "opacity_out_of_range": "Opacity value must be between 0.0-1.0",
+    "emit_event_failed": "Failed to emit event"
   },
   "ck": {
     "invalid_query": "Search query must be at least 3 characters long",
@@ -130,8 +134,5 @@
     "update_config_failed": "Failed to update configuration",
     "save_session_failed": "Failed to save session state",
     "load_session_failed": "Failed to load session state"
-  },
-  "error": {
-    "with_param": "{name} encountered an error"
   }
 }

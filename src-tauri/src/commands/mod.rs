@@ -1,6 +1,9 @@
+use crate::ai::tool::storage::StorageCoordinatorState;
+use crate::storage::repositories::RecentWorkspace;
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
 use std::path::PathBuf;
+use tauri::State;
 use tracing::warn;
 
 #[tauri::command]
@@ -32,8 +35,75 @@ pub async fn file_handle_open(path: String) -> TauriApiResult<String> {
     }
 }
 
+// ===== Workspace Commands =====
+
+#[tauri::command]
+pub async fn workspace_get_recent(
+    limit: Option<i64>,
+    storage: State<'_, StorageCoordinatorState>,
+) -> Result<Vec<RecentWorkspace>, String> {
+    let limit = limit.unwrap_or(10).min(50);
+    storage
+        .coordinator
+        .repositories()
+        .recent_workspaces()
+        .get_recent(limit)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn workspace_add_recent(
+    path: String,
+    storage: State<'_, StorageCoordinatorState>,
+) -> Result<(), String> {
+    storage
+        .coordinator
+        .repositories()
+        .recent_workspaces()
+        .add_or_update(&path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn workspace_remove_recent(
+    path: String,
+    storage: State<'_, StorageCoordinatorState>,
+) -> Result<(), String> {
+    storage
+        .coordinator
+        .repositories()
+        .recent_workspaces()
+        .remove(&path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn workspace_maintain(
+    storage: State<'_, StorageCoordinatorState>,
+) -> Result<(u64, u64), String> {
+    // 清理 30 天未访问 + 限制最多 50 条
+    storage
+        .coordinator
+        .repositories()
+        .recent_workspaces()
+        .maintain(30, 50)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.invoke_handler(tauri::generate_handler![
+        // 文件拖拽命令
+        file_handle_open,
+        // 工作区管理命令
+        workspace_get_recent,
+        workspace_add_recent,
+        workspace_remove_recent,
+        workspace_maintain,
+        // 窗口管理命令
         crate::window::commands::window_manage_state,
         crate::window::commands::window_get_current_directory,
         crate::window::commands::window_get_home_directory,
@@ -80,6 +150,16 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::shell::commands::shell_setup_integration,
         crate::shell::commands::shell_check_integration_status,
         crate::shell::commands::shell_update_pane_cwd,
+        crate::shell::commands::get_pane_shell_state,
+        crate::shell::commands::set_pane_shell_type,
+        crate::shell::commands::generate_shell_integration_script,
+        crate::shell::commands::generate_shell_env_vars,
+        crate::shell::commands::enable_pane_integration,
+        crate::shell::commands::disable_pane_integration,
+        crate::shell::commands::get_pane_current_command,
+        crate::shell::commands::get_pane_command_history,
+        crate::shell::commands::detect_shell_type,
+        crate::shell::commands::check_shell_integration_support,
         // 补全功能命令
         crate::completion::commands::completion_init_engine,
         crate::completion::commands::completion_get,
@@ -184,5 +264,10 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::ck::commands::ck_cancel_build,
         crate::ck::commands::ck_delete_index,
         crate::ck::commands::ck_search,
+        // Node.js 版本管理命令
+        crate::node::commands::node_check_project,
+        crate::node::commands::node_get_version_manager,
+        crate::node::commands::node_list_versions,
+        crate::node::commands::node_get_switch_command,
     ])
 }

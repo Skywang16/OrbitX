@@ -3,8 +3,8 @@ use std::sync::RwLock;
 use tauri::ipc::Channel;
 use tracing::debug;
 
-use super::types::TerminalChannelMessage;
 use super::replay;
+use super::types::TerminalChannelMessage;
 use crate::completion::output_analyzer::OutputAnalyzer;
 
 const MAX_PENDING_CHUNKS: usize = 64;
@@ -54,7 +54,10 @@ impl TerminalChannelManager {
 
         // 检查缓冲区是否太新（<2秒），如果是则跳过 replay（避免新建终端重复输出）
         if OutputAnalyzer::global().is_pane_buffer_too_new(pane_id) {
-            debug!(pane_id, "TerminalChannelManager skipped replay (buffer too new)");
+            debug!(
+                pane_id,
+                "TerminalChannelManager skipped replay (buffer too new)"
+            );
         } else if let Ok(replay_result) = replay::build_replay(pane_id) {
             if let Ok(map) = self.channels.read() {
                 if let Some(ch) = map.get(&pane_id) {

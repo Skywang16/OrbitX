@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Prompt components align with eko-core definition.
+/// Prompt components definition.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[allow(clippy::enum_variant_names)]
 pub enum PromptComponent {

@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::io::Cursor;
 
 use crate::agent::config::{PromptComponent, PromptConfig, PromptType};
+use crate::agent::error::AgentResult;
 use crate::agent::prompt::builders::prompt_builder::{PromptBuildOptions, PromptBuilder};
 use crate::agent::prompt::components::types::ComponentContext;
-use crate::agent::error::AgentResult;
 use crate::agent::{Agent, Context, Task, ToolSchema};
 use xmltree::{Element, XMLNode};
 

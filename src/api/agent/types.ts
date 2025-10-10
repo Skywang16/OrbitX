@@ -136,7 +136,7 @@ export interface ThinkingEvent {
 }
 
 /**
- * 文本流事件（EKO风格：带streamId/streamDone）
+ * 文本流事件
  */
 export interface TextEvent {
   type: 'Text'
@@ -195,7 +195,7 @@ export interface FinalAnswerEvent {
 }
 
 /**
- * 结束事件（EKO风格）
+ * 结束事件
  */
 export interface FinishEvent {
   type: 'Finish'

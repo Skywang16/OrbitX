@@ -1,0 +1,131 @@
+/* Highlight.js 主题样式 - 映射到 OrbitX 主题变量 */
+
+.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: var(--spacing-sm);
+  background: var(--bg-500);
+  color: var(--text-200);
+  border-radius: var(--border-radius);
+}
+
+/* 注释 */
+.hljs-comment,
+.hljs-quote {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+/* 关键字 */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link {
+  color: var(--syntax-keyword);
+  font-weight: 600;
+}
+
+/* 字符串 */
+.hljs-string,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-template-tag,
+.hljs-template-variable {
+  color: var(--syntax-string);
+}
+
+/* 数字 */
+.hljs-number,
+.hljs-meta {
+  color: var(--syntax-number);
+}
+
+/* 函数名 */
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_,
+.hljs-function {
+  color: var(--syntax-function);
+}
+
+/* 变量 */
+.hljs-variable,
+.hljs-attr,
+.hljs-params,
+.hljs-property,
+.hljs-attribute {
+  color: var(--syntax-variable);
+}
+
+/* 类型 */
+.hljs-type,
+.hljs-built_in,
+.hljs-class .hljs-title,
+.hljs-title.class_.inherited__ {
+  color: var(--syntax-type);
+}
+
+/* 运算符 */
+.hljs-operator,
+.hljs-punctuation,
+.hljs-tag {
+  color: var(--syntax-operator);
+}
+
+/* 删除 */
+.hljs-deletion {
+  color: var(--color-error);
+  background-color: rgba(244, 71, 71, 0.1);
+}
+
+/* 添加 */
+.hljs-addition {
+  color: var(--color-success);
+  background-color: rgba(13, 188, 121, 0.1);
+}
+
+/* 强调 */
+.hljs-strong {
+  font-weight: 700;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+/* 正则表达式 */
+.hljs-regexp,
+.hljs-symbol {
+  color: var(--ansi-cyan);
+}
+
+/* 内置名称 */
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: var(--syntax-type);
+}
+
+/* Diff 语法 */
+.hljs-meta .hljs-keyword {
+  color: var(--syntax-keyword);
+}
+
+.hljs-meta .hljs-string {
+  color: var(--syntax-string);
+}
+
+/* 行号 */
+.hljs-ln-numbers {
+  text-align: right;
+  color: var(--text-500);
+  border-right: 1px solid var(--border-300);
+  vertical-align: top;
+  padding-right: var(--spacing-sm);
+  user-select: none;
+}
+
+.hljs-ln-code {
+  padding-left: var(--spacing-sm);
+}

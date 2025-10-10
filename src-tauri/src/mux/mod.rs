@@ -2,8 +2,8 @@
 //!
 //! 提供统一的终端会话管理、事件通知和PTY I/O处理
 
-pub mod error;
 pub mod config;
+pub mod error;
 
 pub mod io_handler;
 pub mod pane;

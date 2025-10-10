@@ -4,18 +4,17 @@ use std::time::{Duration, Instant};
 use dashmap::{mapref::entry::Entry, DashMap};
 use tracing::{debug, error, info, warn};
 
-use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use super::metadata::{RateLimitConfig, ToolCategory, ToolMetadata};
-use super::r#trait::{RunnableTool, ToolPermission, ToolResult, ToolResultContent, ToolSchema, ToolDescriptionContext};
+use super::r#trait::{
+    RunnableTool, ToolDescriptionContext, ToolPermission, ToolResult, ToolResultContent, ToolSchema,
+};
 use crate::agent::core::context::TaskContext;
+use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 
 /// 根据 chat_mode 获取授予的权限集合
 pub fn get_permissions_for_mode(mode: &str) -> Vec<ToolPermission> {
     match mode {
-        "chat" => vec![
-            ToolPermission::ReadOnly,
-            ToolPermission::Network,
-        ],
+        "chat" => vec![ToolPermission::ReadOnly, ToolPermission::Network],
         _ => vec![
             // Agent 模式:全权限（包含 "agent" 和任何其他值）
             ToolPermission::ReadOnly,
@@ -96,7 +95,7 @@ impl ToolRegistry {
         &self,
         name: &str,
         tool: Arc<dyn RunnableTool>,
-        is_chat_mode: bool,  // 新增参数
+        is_chat_mode: bool, // 新增参数
     ) -> ToolExecutorResult<()> {
         let key = name.to_string();
         let granted = self.granted_permissions.as_ref();
@@ -292,14 +291,12 @@ impl ToolRegistry {
                 error!("工具 {} 超时 {:?}", resolved, timeout);
 
                 ToolResult {
-                    content: vec![ToolResultContent::Error {
-                        message: format!("工具 {} 执行超时", resolved),
-                        details: Some(format!(
-                            "timeout={:?}, priority={}",
-                            timeout,
-                            metadata.priority.as_str()
-                        )),
-                    }],
+                    content: vec![ToolResultContent::Error(format!(
+                        "工具 {} 执行超时 (timeout={:?}, priority={})",
+                        resolved,
+                        timeout,
+                        metadata.priority.as_str()
+                    ))],
                     is_error: true,
                     execution_time_ms: Some(elapsed),
                     ext_info: None,
@@ -392,11 +389,14 @@ impl ToolRegistry {
         self.update_stats(tool_name, false, elapsed).await;
         error!("工具 {} 执行失败: {}", tool_name, error_message);
 
+        let full_message = if let Some(d) = details {
+            format!("{} ({})", error_message, d)
+        } else {
+            error_message
+        };
+
         ToolResult {
-            content: vec![ToolResultContent::Error {
-                message: error_message,
-                details,
-            }],
+            content: vec![ToolResultContent::Error(full_message)],
             is_error: true,
             execution_time_ms: Some(elapsed),
             ext_info: None,
@@ -425,7 +425,10 @@ impl ToolRegistry {
     }
 
     /// Get tool schemas with context-aware descriptions
-    pub fn get_tool_schemas_with_context(&self, context: &ToolDescriptionContext) -> Vec<ToolSchema> {
+    pub fn get_tool_schemas_with_context(
+        &self,
+        context: &ToolDescriptionContext,
+    ) -> Vec<ToolSchema> {
         self.tools
             .iter()
             .map(|entry| {
@@ -433,7 +436,7 @@ impl ToolRegistry {
                 let description = tool
                     .description_with_context(context)
                     .unwrap_or_else(|| tool.description().to_string());
-                
+
                 ToolSchema {
                     name: tool.name().to_string(),
                     description,

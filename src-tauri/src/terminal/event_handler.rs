@@ -6,10 +6,10 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::broadcast;
 use tracing::{debug, error, warn};
 
-use crate::mux::{MuxNotification, SubscriberCallback, TerminalMux};
-use crate::terminal::types::TerminalContextEvent;
-use crate::terminal::error::{EventHandlerError, EventHandlerResult};
 use crate::completion::output_analyzer::OutputAnalyzer;
+use crate::mux::{MuxNotification, SubscriberCallback, TerminalMux};
+use crate::terminal::error::{EventHandlerError, EventHandlerResult};
+use crate::terminal::types::TerminalContextEvent;
 
 /// 统一的终端事件处理器
 ///

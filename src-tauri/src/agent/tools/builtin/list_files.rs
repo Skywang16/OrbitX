@@ -4,11 +4,11 @@ use serde_json::json;
 
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
-use crate::agent::persistence::FileRecordSource;
 use crate::agent::error::ToolExecutorResult;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
-    ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
+    ToolResultContent,
 };
 use crate::filesystem::commands::fs_list_directory;
 
@@ -53,6 +53,7 @@ impl RunnableTool for ListFilesTool {
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::FileSystem, ToolPriority::Standard)
             .with_tags(vec!["filesystem".into(), "list".into()])
+            .with_summary_key_arg("path")
     }
 
     fn required_permissions(&self) -> Vec<ToolPermission> {
@@ -119,7 +120,7 @@ impl RunnableTool for ListFilesTool {
             .await?;
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Text { text }],
+            content: vec![ToolResultContent::Success(text)],
             is_error: false,
             execution_time_ms: None,
             ext_info: Some(json!({
@@ -137,10 +138,7 @@ impl RunnableTool for ListFilesTool {
 
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,
@@ -149,10 +147,7 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,

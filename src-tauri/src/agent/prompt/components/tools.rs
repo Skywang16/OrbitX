@@ -51,7 +51,9 @@ impl ComponentDefinition for ToolsDescriptionComponent {
 
         let template = template_override
             .or_else(|| self.default_template())
-            .ok_or_else(|| AgentError::Internal("missing tools description template".to_string()))?;
+            .ok_or_else(|| {
+                AgentError::Internal("missing tools description template".to_string())
+            })?;
 
         let tools_list = context
             .tools
@@ -65,7 +67,12 @@ impl ComponentDefinition for ToolsDescriptionComponent {
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
-            .map_err(|e| AgentError::TemplateRender(format!("failed to render tools description template: {}", e)))?;
+            .map_err(|e| {
+                AgentError::TemplateRender(format!(
+                    "failed to render tools description template: {}",
+                    e
+                ))
+            })?;
         Ok(Some(result))
     }
 }

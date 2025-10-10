@@ -2,6 +2,8 @@
   import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { marked } from 'marked'
+  import { markedHighlight } from 'marked-highlight'
+  import hljs from 'highlight.js'
   import type { Message } from '@/types'
   import type { UiStep } from '@/api/agent/types'
   import { useAIChatStore } from '../../store'
@@ -11,6 +13,16 @@
   import { useStepProcessor } from '@/composables/useStepProcessor'
   const { t } = useI18n()
   const { processSteps } = useStepProcessor()
+
+  marked.use(
+    markedHighlight({
+      langPrefix: 'hljs language-',
+      highlight(code, lang) {
+        const language = hljs.getLanguage(lang) ? lang : 'plaintext'
+        return hljs.highlight(code, { language }).value
+      },
+    })
+  )
 
   interface Props {
     message: Message
@@ -114,8 +126,26 @@
   .ai-message-text :deep(h1),
   .ai-message-text :deep(h2),
   .ai-message-text :deep(h3) {
-    margin: 0.5em 0;
+    margin: 0.8em 0 0.5em 0;
     font-weight: 600;
+    color: var(--text-100);
+    line-height: 1.3;
+  }
+
+  .ai-message-text :deep(h1) {
+    font-size: 1.5em;
+    border-bottom: 2px solid var(--border-300);
+    padding-bottom: 0.3em;
+  }
+
+  .ai-message-text :deep(h2) {
+    font-size: 1.3em;
+    border-bottom: 1px solid var(--border-200);
+    padding-bottom: 0.2em;
+  }
+
+  .ai-message-text :deep(h3) {
+    font-size: 1.15em;
   }
 
   .ai-message-text :deep(p) {
@@ -126,27 +156,106 @@
     background: var(--bg-500);
     padding: 0.2em 0.4em;
     border-radius: var(--border-radius-xs);
-    font-family: monospace;
+    font-family: var(--font-family-mono);
     font-size: 0.9em;
+    color: var(--syntax-string);
+    border: 1px solid var(--border-300);
   }
 
   .ai-message-text :deep(pre) {
     background: var(--bg-500);
-    padding: var(--spacing-sm);
+    padding: var(--spacing-md);
     border-radius: var(--border-radius);
     overflow-x: auto;
-    margin: 0.5em 0;
+    margin: 0.8em 0;
+    border: 1px solid var(--border-300);
+    box-shadow: var(--shadow-sm);
   }
 
   .ai-message-text :deep(pre code) {
     background: none;
     padding: 0;
+    border: none;
+    color: var(--text-200);
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
   }
 
   .ai-message-text :deep(ul),
   .ai-message-text :deep(ol) {
+    margin: 0.8em 0;
+    padding-left: 1.8em;
+  }
+
+  .ai-message-text :deep(li) {
+    margin: 0.3em 0;
+    line-height: 1.6;
+  }
+
+  .ai-message-text :deep(li::marker) {
+    color: var(--color-primary);
+  }
+
+  .ai-message-text :deep(a) {
+    color: var(--color-primary);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .ai-message-text :deep(a:hover) {
+    border-bottom-color: var(--color-primary);
+    filter: brightness(1.2);
+  }
+
+  .ai-message-text :deep(blockquote) {
+    margin: 0.8em 0;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-left: 3px solid var(--color-primary);
+    background: var(--bg-400);
+    border-radius: var(--border-radius-xs);
+    color: var(--text-300);
+  }
+
+  .ai-message-text :deep(blockquote p) {
+    margin: 0.3em 0;
+  }
+
+  .ai-message-text :deep(hr) {
+    margin: 1em 0;
+    border: none;
+    border-top: 2px solid var(--border-300);
+  }
+
+  .ai-message-text :deep(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.8em 0;
+    font-size: var(--font-size-sm);
+  }
+
+  .ai-message-text :deep(th),
+  .ai-message-text :deep(td) {
+    border: 1px solid var(--border-300);
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+  }
+
+  .ai-message-text :deep(th) {
+    background: var(--bg-500);
+    font-weight: 600;
+    color: var(--text-100);
+  }
+
+  .ai-message-text :deep(tr:hover) {
+    background: var(--bg-400);
+  }
+
+  .ai-message-text :deep(img) {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--border-radius);
     margin: 0.5em 0;
-    padding-left: 1.5em;
   }
 
   .ai-message-text :deep(strong) {

@@ -188,10 +188,10 @@ pub enum TaskProgressPayload {
     /// 任务开始执行
     TaskStarted(TaskStartedPayload),
 
-    /// Agent正在思考（EKO风格：带streamId/streamDone）
+    /// Agent正在思考
     Thinking(ThinkingPayload),
 
-    /// 开始调用工具（EKO风格：toolUse）
+    /// 开始调用工具
     ToolUse(ToolUsePayload),
 
     /// 工具调用结果
@@ -200,10 +200,10 @@ pub enum TaskProgressPayload {
     /// 最终答案
     FinalAnswer(FinalAnswerPayload),
 
-    /// 文本流（EKO风格：text，带streamId/streamDone）
+    /// 文本流
     Text(TextPayload),
 
-    /// 结束（EKO风格：finish，包含usage）
+    /// 结束事件（包含usage）
     Finish(FinishPayload),
 
     /// 任务暂停

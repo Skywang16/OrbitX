@@ -224,10 +224,7 @@ impl TerminalContext {
         // 验证命令历史记录的完整性
         for (index, command) in self.command_history.iter().enumerate() {
             if let Err(e) = command.validate() {
-                return Err(TerminalValidationError::InvalidHistoryEntry {
-                    index,
-                    reason: e,
-                });
+                return Err(TerminalValidationError::InvalidHistoryEntry { index, reason: e });
             }
         }
 

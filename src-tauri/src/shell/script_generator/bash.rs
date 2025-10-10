@@ -2,6 +2,25 @@
 
 use super::ShellIntegrationConfig;
 
+/// Node.js 版本检测脚本（兼容 Bash 和 Zsh）
+const NODE_VERSION_DETECTION: &str = r#"
+    # Node.js 版本检测
+    __orbitx_last_node_version=""
+
+    __orbitx_detect_node_version() {
+        if command -v node >/dev/null 2>&1; then
+            local current_version=$(node -v 2>/dev/null | tr -d '\n')
+            if [[ -n "$current_version" && "$current_version" != "$__orbitx_last_node_version" ]]; then
+                __orbitx_last_node_version="$current_version"
+                printf '\e]1337;OrbitXNodeVersion=%s\e\\' "$current_version"
+            fi
+        elif [[ -n "$__orbitx_last_node_version" ]]; then
+            __orbitx_last_node_version=""
+            printf '\e]1337;OrbitXNodeVersion=\e\\'
+        fi
+    }
+"#;
+
 /// 生成 Bash 集成脚本
 pub fn generate_script(config: &ShellIntegrationConfig) -> String {
     let mut script = String::new();
@@ -20,106 +39,58 @@ if [[ -z "$ORBITX_SHELL_INTEGRATION" ]]; then
 "#,
     );
 
-    // 只有启用命令跟踪时才添加相关函数
+    // 添加 Node 版本检测函数
+    script.push_str(NODE_VERSION_DETECTION);
+
+    // 只有启用命令跟踪时才添加相关函数（使用标准 OSC 133 标记）
     if config.enable_command_tracking {
         script.push_str(
             r#"
-    # OSC 序列函数
-    orbitx_osc() {
-        printf "\e]6969;%s\a" "$1" >/dev/tty
+    # Shell Integration 支持 - OSC 133 标记
+    __orbitx_preexec() {
+        # C: 命令执行开始（提示符结束）
+        printf '\e]133;C\e\\' >/dev/tty
     }
 
-    # 命令开始标记
-    orbitx_preexec() {
-        orbitx_osc "BeforeCommand;$(pwd);$1"
-    }
-
-    # 命令结束标记和CWD同步
-    orbitx_precmd() {
+    __orbitx_precmd() {
         local exit_code=$?
-        orbitx_osc "AfterCommand;$(pwd);$exit_code"
+        # D: 命令完成，包含退出码
+        printf '\e]133;D;%d\e\\' "$exit_code" >/dev/tty
+        # A: 提示符开始
+        printf '\e]133;A\e\\' >/dev/tty
+        # B: 命令开始（提示符结束，准备接收用户输入）
+        printf '\e]133;B\e\\' >/dev/tty
+        # 在 A/B 之后再上报 Node 版本，避免 UI 在 A 时清空
+        __orbitx_detect_node_version
     }
 "#,
         );
     }
 
-    // 添加命令跟踪功能
+    // 添加命令跟踪功能：通过 DEBUG trap 和 PROMPT_COMMAND（Bash 通用做法）
     if config.enable_command_tracking {
         script.push_str(
             r#"
-    # 设置 trap 来捕获命令执行
     if [[ -z "$ORBITX_PREEXEC_INSTALLED" ]]; then
         export ORBITX_PREEXEC_INSTALLED=1
-        
-        # 安装 preexec 和 precmd 钩子
-        preexec() {
-            orbitx_preexec "$1"
-        }
-        
-        precmd() {
-            orbitx_precmd
-        }
-        
-        # 如果没有 preexec/precmd 支持，使用替代方案
-        if ! command -v preexec >/dev/null 2>&1; then
-            # 使用 DEBUG trap 作为替代
-            trap 'orbitx_preexec "$BASH_COMMAND"' DEBUG
-        fi
-        
-        # 设置 PROMPT_COMMAND
+
+        # 使用 DEBUG trap 模拟 preexec
+        trap '__orbitx_preexec "$BASH_COMMAND"' DEBUG
+
+        # 在提示符渲染前运行 precmd
         if [[ -z "$PROMPT_COMMAND" ]]; then
-            PROMPT_COMMAND="orbitx_precmd"
+            PROMPT_COMMAND="__orbitx_precmd"
         else
-            PROMPT_COMMAND="$PROMPT_COMMAND; orbitx_precmd"
+            PROMPT_COMMAND="$PROMPT_COMMAND; __orbitx_precmd"
         fi
     fi
 "#,
         );
     }
 
-    // 添加 CWD 同步功能
-    if config.enable_cwd_sync {
-        script.push_str(
-            r#"
-    # CWD 变化监控
-    orbitx_cd() {
-        builtin cd "$@"
-        local result=$?
-        orbitx_osc "DirectoryChanged;$(pwd)"
-        return $result
-    }
-    
-    # 覆盖 cd 命令
-    alias cd='orbitx_cd'
-"#,
-        );
-    }
+    //（已移除 CWD 同步别名，依赖标准 OSC 7 由其他逻辑处理，如需可单独实现）
 
-    // 添加窗口标题更新功能
-    if config.enable_title_updates {
-        script.push_str(
-            r#"
-    # 窗口标题更新
-    orbitx_update_title() {
-        local title="$1"
-        if [[ -n "$title" ]]; then
-            printf "\e]0;%s\a" "$title" >/dev/tty
-        fi
-    }
-    
-    # 在 precmd 中更新标题
-    orbitx_precmd_with_title() {
-        orbitx_precmd
-        orbitx_update_title "$(basename "$(pwd)") - Bash"
-    }
-    
-    # 更新 PROMPT_COMMAND
-    if [[ "$PROMPT_COMMAND" == *"orbitx_precmd"* ]]; then
-        PROMPT_COMMAND="${PROMPT_COMMAND/orbitx_precmd/orbitx_precmd_with_title}"
-    fi
-"#,
-        );
-    }
+    //（已移除窗口标题更新以保持最小实现，如需可使用标准 OSC 2 单独实现）
 
     // 添加自定义环境变量
     if !config.custom_env_vars.is_empty() {
@@ -129,10 +100,24 @@ if [[ -z "$ORBITX_SHELL_INTEGRATION" ]]; then
         }
     }
 
+    // 如果没有启用命令跟踪，需要单独设置 Node 版本检测
+    if !config.enable_command_tracking {
+        script.push_str(
+            r#"
+    # Node 版本检测（无命令跟踪时）
+    if [[ -z "$PROMPT_COMMAND" ]]; then
+        PROMPT_COMMAND="__orbitx_detect_node_version"
+    else
+        PROMPT_COMMAND="$PROMPT_COMMAND; __orbitx_detect_node_version"
+    fi
+"#,
+        );
+    }
+
     script.push_str(
         r#"
-    # 初始化完成通知
-    orbitx_osc "ShellIntegrationReady;bash;$(pwd)"
+    # 初始化时立即检测 Node 版本
+    __orbitx_detect_node_version 2>/dev/null || true
 
 fi
 # OrbitX Integration End
@@ -155,7 +140,7 @@ mod tests {
         assert!(script.contains("# OrbitX Integration Start"));
         assert!(script.contains("# OrbitX Integration End"));
         assert!(script.contains("ORBITX_INTEGRATION_LOADED"));
-        assert!(script.contains("orbitx_osc"));
+        assert!(script.contains("__orbitx_detect_node_version"));
     }
 
     #[test]
@@ -166,9 +151,10 @@ mod tests {
         };
         let script = generate_script(&config);
 
-        assert!(script.contains("orbitx_preexec"));
+        assert!(script.contains("__orbitx_preexec"));
+        assert!(script.contains("__orbitx_precmd"));
         assert!(script.contains("PROMPT_COMMAND"));
-        assert!(script.contains("DEBUG trap"));
+        assert!(script.contains("trap '__orbitx_preexec"));
     }
 
     #[test]
@@ -178,10 +164,8 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-
-        assert!(script.contains("orbitx_cd"));
-        assert!(script.contains("alias cd="));
-        assert!(script.contains("DirectoryChanged"));
+        // 简化后不通过别名同步 CWD，仍应包含节点版本检测逻辑
+        assert!(script.contains("__orbitx_detect_node_version"));
     }
 
     #[test]
@@ -191,9 +175,8 @@ mod tests {
             ..Default::default()
         };
         let script = generate_script(&config);
-
-        assert!(script.contains("orbitx_update_title"));
-        assert!(script.contains("orbitx_precmd_with_title"));
+        // 简化后不更新窗口标题，仍应包含节点版本检测逻辑
+        assert!(script.contains("__orbitx_detect_node_version"));
     }
 
     #[test]

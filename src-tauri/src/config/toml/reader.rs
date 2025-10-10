@@ -1,11 +1,7 @@
 //! TOML配置读取器
 
 use crate::config::error::{TomlConfigError, TomlConfigResult};
-use crate::config::{
-    defaults::create_default_config,
-    paths::ConfigPaths,
-    types::AppConfig,
-};
+use crate::config::{defaults::create_default_config, paths::ConfigPaths, types::AppConfig};
 use std::path::PathBuf;
 use tokio::fs;
 use tracing::{debug, info, warn};

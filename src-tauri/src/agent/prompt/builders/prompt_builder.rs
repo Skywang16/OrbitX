@@ -3,13 +3,13 @@ use std::collections::HashMap;
 use serde_json::{json, Value};
 
 use crate::agent::config::{PromptComponent, PromptVariant};
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::prompt::components::{
     registry::PromptComponentRegistry, types::ComponentContext,
 };
 use crate::agent::prompt::template_engine::TemplateEngine;
-use crate::agent::error::{AgentError, AgentResult};
 
-/// Builder options mirroring eko-core PromptBuildOptions.
+/// Builder options for prompt building.
 #[derive(Debug, Clone)]
 pub struct PromptBuildOptions {
     pub components: Vec<PromptComponent>,
@@ -114,7 +114,9 @@ impl PromptBuilder {
 
         TemplateEngine::new()
             .resolve(&variant.template, &template_context)
-            .map_err(|e| AgentError::TemplateRender(format!("Failed to render prompt variant: {e}")))
+            .map_err(|e| {
+                AgentError::TemplateRender(format!("Failed to render prompt variant: {e}"))
+            })
     }
 
     async fn build_components(

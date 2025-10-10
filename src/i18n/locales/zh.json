@@ -6,7 +6,8 @@
     "add": "添加",
     "select_placeholder": "请选择",
     "no_data": "无数据",
-    "search_options": "搜索选项"
+    "search_options": "搜索选项",
+    "loading": "加载中..."
   },
   "settings": {
     "title": "设置",
@@ -80,7 +81,6 @@
     "ai": {
       "title": "AI助手设置",
       "description": "配置您的AI编程伴侣",
-      "recommended": "推荐",
       "api_key_placeholder": "请输入您的API密钥",
       "api_url_placeholder": "请输入API地址",
       "model_name": "模型名称",
@@ -153,7 +153,6 @@
     "clear_selection": "清除选择",
     "unnamed_session": "未命名会话",
     "messages": "条消息",
-    "current_session": "当前会话",
     "selected_content": "已选择内容",
     "click_to_insert": "点击插入到输入框",
     "current_terminal": "当前终端"
@@ -172,6 +171,7 @@
     "reset_confirm_message": "此操作将重置所有快捷键到默认配置，当前的自定义设置将会丢失。",
     "reset_shortcuts": "重置快捷键",
     "reset_description": "将所有快捷键恢复为默认设置",
+    "git_url_placeholder": "输入 Git 仓库地址...",
     "actions": {
       "new_tab": "新建标签页",
       "toggle_ai_sidebar": "开启/关闭AI侧边栏",
@@ -190,7 +190,8 @@
       "accept_completion": "接受补全",
       "increase_font_size": "增大字体",
       "decrease_font_size": "减小字体",
-      "toggle_window_pin": "切换窗口置顶"
+      "toggle_window_pin": "切换窗口置顶",
+      "clone_repository": "克隆仓库"
     }
   },
   "language": {
@@ -272,7 +273,7 @@
     "current_workspace": "当前工作区",
     "build_index_button": "构建索引",
     "build_index_tooltip_disabled": "请选择非初始目录后再构建",
-    "build_index_tooltip_enabled": "构建索引",
+    "build_index_tooltip_enabled": "点击构建索引",
     "refresh": "刷新",
     "delete": "删除",
     "cancel_build": "取消索引"
@@ -282,5 +283,12 @@
     "no_folders": "当前目录无子文件夹",
     "read_dir_error": "读取目录失败",
     "current_directory": "当前目录"
+  },
+  "recent_workspaces": {
+    "title": "最近的工作区"
+  },
+  "node": {
+    "click_to_switch": "点击切换版本",
+    "no_versions": "未找到已安装的Node.js版本"
   }
 }

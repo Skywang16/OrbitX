@@ -91,9 +91,8 @@ impl StoragePaths {
 
         for dir in &directories {
             if !dir.exists() {
-                fs::create_dir_all(dir).map_err(|e| {
-                    StoragePathsError::directory_create(dir.to_path_buf(), e)
-                })?;
+                fs::create_dir_all(dir)
+                    .map_err(|e| StoragePathsError::directory_create(dir.to_path_buf(), e))?;
                 // 目录创建成功
             }
         }
@@ -109,10 +108,7 @@ impl StoragePaths {
         }
 
         if let Err(e) = fs::metadata(&self.app_dir) {
-            return Err(StoragePathsError::directory_access(
-                self.app_dir.clone(),
-                e,
-            ));
+            return Err(StoragePathsError::directory_access(self.app_dir.clone(), e));
         }
 
         Ok(())

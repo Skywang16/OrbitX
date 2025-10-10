@@ -60,6 +60,7 @@ pub struct PaneShellState {
     pub next_command_id: u64,
     pub window_title: Option<String>,
     pub last_activity: SystemTime,
+    pub node_version: Option<String>,
 }
 
 impl PaneShellState {
@@ -73,6 +74,7 @@ impl PaneShellState {
             next_command_id: 1,
             window_title: None,
             last_activity: SystemTime::now(),
+            node_version: None,
         }
     }
 }
@@ -87,6 +89,7 @@ struct CallbackRegistry {
     cwd: RwLock<Vec<Box<dyn Fn(PaneId, &str) + Send + Sync>>>,
     command: RwLock<Vec<Box<dyn Fn(PaneId, &CommandInfo) + Send + Sync>>>,
     title: RwLock<Vec<Box<dyn Fn(PaneId, &str) + Send + Sync>>>,
+    node_version: RwLock<Vec<Box<dyn Fn(PaneId, &str) + Send + Sync>>>,
 }
 
 impl CallbackRegistry {
@@ -95,6 +98,7 @@ impl CallbackRegistry {
             cwd: RwLock::new(Vec::new()),
             command: RwLock::new(Vec::new()),
             title: RwLock::new(Vec::new()),
+            node_version: RwLock::new(Vec::new()),
         }
     }
 
@@ -134,6 +138,19 @@ impl CallbackRegistry {
     fn emit_title(&self, pane_id: PaneId, title: &str) {
         for cb in self.title.read().unwrap().iter() {
             cb(pane_id, title);
+        }
+    }
+
+    fn on_node_version<F>(&self, cb: F)
+    where
+        F: Fn(PaneId, &str) + Send + Sync + 'static,
+    {
+        self.node_version.write().unwrap().push(Box::new(cb));
+    }
+
+    fn emit_node_version(&self, pane_id: PaneId, version: &str) {
+        for cb in self.node_version.read().unwrap().iter() {
+            cb(pane_id, version);
         }
     }
 }
@@ -195,6 +212,13 @@ impl ShellIntegrationManager {
         self.callbacks.on_title(callback);
     }
 
+    pub fn register_node_version_callback<F>(&self, callback: F)
+    where
+        F: Fn(PaneId, &str) + Send + Sync + 'static,
+    {
+        self.callbacks.on_node_version(callback);
+    }
+
     pub fn process_output(&self, pane_id: PaneId, data: &str) {
         for sequence in self.parser.parse(data) {
             match sequence {
@@ -204,6 +228,9 @@ impl ShellIntegrationManager {
                     self.apply_shell_integration(pane_id, marker, data)
                 }
                 OscSequence::WindowTitle { title, .. } => self.apply_title(pane_id, title),
+                OscSequence::OrbitXNodeVersion { version } => {
+                    self.apply_node_version(pane_id, version)
+                }
                 OscSequence::Unknown { .. } => {}
             }
         }
@@ -407,6 +434,34 @@ impl ShellIntegrationManager {
         if let Some(title) = changed {
             self.callbacks.emit_title(pane_id, &title);
             self.notify_context_service_cache_invalidation(pane_id);
+        }
+    }
+
+    fn apply_node_version(&self, pane_id: PaneId, new_version: String) {
+        let changed = {
+            let mut entry = self
+                .states
+                .entry(pane_id)
+                .or_insert_with(PaneShellState::new);
+            let state = entry.value_mut();
+
+            let normalized_version = if new_version.is_empty() {
+                None
+            } else {
+                Some(new_version.clone())
+            };
+
+            if state.node_version == normalized_version {
+                None
+            } else {
+                state.node_version = normalized_version;
+                state.last_activity = SystemTime::now();
+                Some(new_version)
+            }
+        };
+
+        if let Some(version) = changed {
+            self.callbacks.emit_node_version(pane_id, &version);
         }
     }
 

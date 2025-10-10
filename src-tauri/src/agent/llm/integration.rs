@@ -4,9 +4,9 @@
 
 use crate::agent::core::context::{TaskContext, ToolCallResult};
 use crate::agent::core::executor::TaskExecutor;
-use crate::agent::events::{TaskProgressPayload, ToolResultPayload};
-use crate::agent::persistence::ToolExecutionStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
+use crate::agent::events::{TaskProgressPayload, ToolResultPayload, ToolUsePayload};
+use crate::agent::persistence::ToolExecutionStatus;
 use crate::agent::tools::{ToolDescriptionContext, ToolRegistry};
 use crate::llm::types::{LLMMessage, LLMRequest, LLMTool, LLMToolCall};
 use chrono::Utc;
@@ -53,81 +53,31 @@ impl TaskExecutor {
             .execute_tool(tool_name, context, args.clone())
             .await;
 
-        // 将 ToolResult 转换为 JSON Value
+        // 将 ToolResult 转换为统一的 JSON Value 格式: {"result": "..."} 或 {"error": "..."}
         let result_json = if tool_result.is_error {
-            let mut error_map = serde_json::Map::new();
-            let message = tool_result
+            // 错误情况: {"error": "错误信息"}
+            let error_msg = tool_result
                 .content
                 .first()
-                .and_then(|c| match c {
-                    crate::agent::tools::ToolResultContent::Error { message, .. } => {
-                        Some(message.clone())
-                    }
-                    crate::agent::tools::ToolResultContent::Text { text } => Some(text.clone()),
-                    _ => None,
+                .map(|c| match c {
+                    crate::agent::tools::ToolResultContent::Error(msg) => msg.clone(),
+                    crate::agent::tools::ToolResultContent::Success(msg) => msg.clone(),
                 })
                 .unwrap_or_else(|| "Unknown error".to_string());
 
-            error_map.insert("error".to_string(), serde_json::Value::Bool(true));
-            error_map.insert("message".to_string(), serde_json::Value::String(message));
-
-            if let Some(ext_info) = tool_result.ext_info.clone() {
-                error_map.insert("extInfo".to_string(), ext_info);
-            }
-
-            serde_json::Value::Object(error_map)
+            serde_json::json!({ "error": error_msg })
         } else {
-            let mut result_map = serde_json::Map::new();
+            // 成功情况: {"result": "结果内容"}
+            let result_text = tool_result
+                .content
+                .first()
+                .map(|c| match c {
+                    crate::agent::tools::ToolResultContent::Success(text) => text.clone(),
+                    crate::agent::tools::ToolResultContent::Error(msg) => msg.clone(),
+                })
+                .unwrap_or_else(|| "No result".to_string());
 
-            for content in &tool_result.content {
-                match content {
-                    crate::agent::tools::ToolResultContent::Text { text } => {
-                        result_map.insert("text".to_string(), serde_json::json!(text));
-                    }
-                    crate::agent::tools::ToolResultContent::Json { data } => match data {
-                        serde_json::Value::Object(obj) => {
-                            for (key, value) in obj.iter() {
-                                result_map.insert(key.clone(), value.clone());
-                            }
-                        }
-                        other => {
-                            result_map.insert("data".to_string(), other.clone());
-                        }
-                    },
-                    crate::agent::tools::ToolResultContent::CommandOutput {
-                        stdout,
-                        stderr,
-                        exit_code,
-                    } => {
-                        // 成功：只返回输出；失败：只返回错误
-                        if *exit_code == 0 && stderr.is_empty() {
-                            result_map.insert("output".to_string(), serde_json::json!(stdout));
-                        } else {
-                            // 失败时优先返回stderr，如果没有则返回stdout
-                            let error_msg = if !stderr.is_empty() {
-                                stderr
-                            } else if !stdout.is_empty() {
-                                stdout
-                            } else {
-                                &format!("Command failed with exit code {}", exit_code)
-                            };
-                            result_map.insert("error".to_string(), serde_json::json!(error_msg));
-                        }
-                    }
-                    crate::agent::tools::ToolResultContent::File { path } => {
-                        result_map.insert("file".to_string(), serde_json::json!(path));
-                    }
-                    crate::agent::tools::ToolResultContent::Image { base64, format } => {
-                        result_map.insert("image_base64".to_string(), serde_json::json!(base64));
-                        result_map.insert("image_format".to_string(), serde_json::json!(format));
-                    }
-                    crate::agent::tools::ToolResultContent::Error { message, .. } => {
-                        result_map.insert("error".to_string(), serde_json::json!(message));
-                    }
-                }
-            }
-
-            serde_json::Value::Object(result_map)
+            serde_json::json!({ "result": result_text })
         };
 
         Ok(result_json)
@@ -154,6 +104,18 @@ impl TaskExecutor {
                 format!("{}_{}", call_id, chrono::Utc::now().timestamp_millis())
             });
 
+        // 发送 ToolUse 事件 - 表示工具开始执行
+        context
+            .send_progress(TaskProgressPayload::ToolUse(ToolUsePayload {
+                task_id: context.task_id.clone(),
+                iteration,
+                tool_id: call_id.clone(),
+                tool_name: tool_name.clone(),
+                params: tool_call.arguments.clone(),
+                timestamp: Utc::now(),
+            }))
+            .await?;
+
         // 执行工具调用（保持与既有 JSON 结果结构一致）
         let result = self
             .execute_tool_internal(&tool_name, &tool_call.arguments, context)
@@ -164,13 +126,17 @@ impl TaskExecutor {
         let tool_result = match result {
             Ok(tool_output) => {
                 // 记录工具执行成功（使用ToolExecutionLogger）
+                // 将 JSON 对象转为字符串记录
+                let log_text = serde_json::to_string(&tool_output)
+                    .unwrap_or_else(|_| "Tool execution succeeded".to_string());
+
                 if let Err(e) = logger
                     .log_success(
                         &log_id,
                         &crate::agent::tools::ToolResult {
-                            content: vec![crate::agent::tools::ToolResultContent::Json {
-                                data: tool_output.clone(),
-                            }],
+                            content: vec![crate::agent::tools::ToolResultContent::Success(
+                                log_text,
+                            )],
                             is_error: false,
                             execution_time_ms: Some(execution_time),
                             ext_info: None,
@@ -313,7 +279,11 @@ impl TaskExecutor {
     }
 
     /// 构建工具定义
-    async fn build_tool_definitions(&self, tool_registry: &ToolRegistry, cwd: &str) -> TaskExecutorResult<Vec<LLMTool>> {
+    async fn build_tool_definitions(
+        &self,
+        tool_registry: &ToolRegistry,
+        cwd: &str,
+    ) -> TaskExecutorResult<Vec<LLMTool>> {
         // 从工具注册表获取可用工具并转换为LLM工具定义
         let tool_schemas = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
             cwd: cwd.to_string(),

@@ -10,20 +10,6 @@
 import { invoke } from '@/utils/request'
 
 /**
- * Shell Integration 状态
- */
-export interface ShellIntegrationStatus {
-  /** 是否启用 */
-  enabled: boolean
-  /** 当前工作目录 */
-  currentCwd: string | null
-  /** 终端面板ID */
-  paneId: number
-  /** 最后更新时间 */
-  lastUpdated?: Date
-}
-
-/**
  * Shell Integration API 接口类
  */
 export class ShellIntegrationApi {
@@ -46,37 +32,13 @@ export class ShellIntegrationApi {
     return await invoke<boolean>('shell_check_integration_status', { paneId })
   }
 
-  // ===== 工作目录管理 =====
-
-  // ===== 高级功能 =====
-
   /**
-   * 获取Shell Integration详细状态
-   * @param paneId 终端面板ID
+   * 获取面板的 Shell 状态快照（包含 node_version 等）
    */
-  async getShellIntegrationStatus(paneId: number): Promise<ShellIntegrationStatus> {
-    const isEnabled = await this.checkShellIntegrationStatus(paneId)
-    return {
-      enabled: isEnabled,
-      currentCwd: null,
-      paneId,
-    }
-  }
-
-  /**
-   * 重新初始化Shell Integration
-   * @param paneId 终端面板ID
-   */
-  async reinitializeShellIntegration(paneId: number): Promise<void> {
-    // 先尝试静默设置
-    await this.setupShellIntegration(paneId, true)
-
-    // 检查是否成功
-    const isEnabled = await this.checkShellIntegrationStatus(paneId)
-    if (!isEnabled) {
-      // 如果静默设置失败，尝试非静默设置
-      await this.setupShellIntegration(paneId, false)
-    }
+  async getPaneShellState<T = { node_version?: string | null } | null>(paneId: number): Promise<T> {
+    // 直接调用后端命令 get_pane_shell_state
+    // 返回 FrontendPaneState，可按需解构 node_version 字段
+    return await invoke<T>('get_pane_shell_state', { paneId })
   }
 }
 

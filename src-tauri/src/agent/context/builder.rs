@@ -8,7 +8,7 @@ use tracing::warn;
 use crate::agent::config::ContextBuilderConfig;
 use crate::agent::context::FileContextTracker;
 use crate::agent::react::types::ReactIteration;
-use crate::agent::tools::{ToolResult, ToolResultContent};
+use crate::agent::tools::ToolResult;
 use crate::llm::{LLMMessage, LLMMessageContent};
 
 pub struct ContextBuilder {
@@ -129,9 +129,7 @@ impl ContextBuilder {
         let mut ordered = Vec::new();
         for iter in iterations.iter().rev().take(self.config.recent_file_window) {
             if let Some(action) = &iter.action {
-                if let Some(path) =
-                    self.extract_file_from_tool_args(&action.arguments)
-                {
+                if let Some(path) = self.extract_file_from_tool_args(&action.arguments) {
                     if seen.insert(path.clone()) {
                         ordered.push(path);
                     }
@@ -186,11 +184,7 @@ impl ContextBuilder {
                 }
             }
         }
-        for item in &result.content {
-            if let ToolResultContent::File { path } = item {
-                return Some(path.clone());
-            }
-        }
+        // File 变体已被移除,现在文件路径都在 ext_info 中
         None
     }
 }

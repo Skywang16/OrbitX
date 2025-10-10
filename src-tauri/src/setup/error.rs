@@ -1,6 +1,4 @@
-use crate::config::error::{
-    ConfigError, ConfigPathsError, ShortcutsError, ThemeConfigError,
-};
+use crate::config::error::{ConfigError, ConfigPathsError, ShortcutsError, ThemeConfigError};
 use crate::storage::error::StorageCoordinatorError;
 use crate::window::error::WindowStateError;
 use thiserror::Error;

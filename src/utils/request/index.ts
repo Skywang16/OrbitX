@@ -177,6 +177,10 @@ export const invoke = async <T>(command: string, args?: Record<string, unknown>,
   const response = await api.invoke<ApiResponse<T>>(command, args, options)
 
   if (response.code === 200) {
+    // 如果后端返回了成功消息，显示它
+    if (response.message) {
+      createMessage.success(response.message)
+    }
     return response.data as T
   } else {
     // 统一错误提示 - 后端已完成国际化

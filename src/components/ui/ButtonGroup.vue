@@ -78,7 +78,7 @@
 </script>
 
 <template>
-  <div class="window-controls" data-tauri-drag-region="false" @dblclick.stop @mouseup.stop>
+  <div class="window-controls" data-tauri-drag-region="false">
     <div class="button-group">
       <button
         class="control-btn ai-chat-btn"

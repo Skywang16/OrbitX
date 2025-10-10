@@ -1,13 +1,11 @@
 //! 智能补全引擎
 
-use crate::completion::error::{
-    CompletionEngineResult,
-    CompletionProviderError,
-};
+use crate::completion::error::{CompletionEngineResult, CompletionProviderError};
 use crate::completion::providers::{
     CompletionProvider, ContextAwareProviderWrapper, FilesystemProvider, GitCompletionProvider,
     HistoryProvider, NpmCompletionProvider, SystemCommandsProvider,
 };
+use crate::completion::scoring::MIN_SCORE;
 use crate::completion::smart_provider::SmartCompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionResponse};
 use crate::storage::cache::UnifiedCache;
@@ -74,7 +72,10 @@ pub struct CompletionEngine {
 }
 
 impl CompletionEngine {
-    pub fn new(config: CompletionEngineConfig, cache: Arc<UnifiedCache>) -> CompletionEngineResult<Self> {
+    pub fn new(
+        config: CompletionEngineConfig,
+        cache: Arc<UnifiedCache>,
+    ) -> CompletionEngineResult<Self> {
         Ok(Self {
             providers: Vec::new(),
             config,
@@ -281,34 +282,48 @@ impl CompletionEngine {
         Ok(())
     }
 
+    /// 完成补全项处理：过滤、去重、排序
+    ///
+    /// 遵循 "好品味" 原则：每个函数只做一件事
     fn finalize_items(&self, items: Vec<CompletionItem>) -> Vec<CompletionItem> {
+        Self::sort_by_relevance(Self::deduplicate_by_text(Self::filter_by_score(items)))
+    }
+
+    /// 过滤低分项
+    fn filter_by_score(items: Vec<CompletionItem>) -> Vec<CompletionItem> {
+        items
+            .into_iter()
+            .filter(|item| item.score >= MIN_SCORE)
+            .collect()
+    }
+
+    /// 去重：保留每个文本的最高分项
+    fn deduplicate_by_text(items: Vec<CompletionItem>) -> Vec<CompletionItem> {
         let mut merged: HashMap<String, CompletionItem> = HashMap::new();
 
-        for item in items.into_iter() {
-            if item.score < self.config.score_floor {
-                continue;
-            }
-
-            match merged.get_mut(&item.text) {
-                Some(existing) => {
+        for item in items {
+            merged
+                .entry(item.text.clone())
+                .and_modify(|existing| {
                     if item.score > existing.score {
-                        *existing = item;
+                        *existing = item.clone();
                     }
-                }
-                None => {
-                    merged.insert(item.text.clone(), item);
-                }
-            }
+                })
+                .or_insert(item);
         }
 
-        let mut deduped: Vec<CompletionItem> = merged.into_values().collect();
-        deduped.sort_by(|a, b| {
+        merged.into_values().collect()
+    }
+
+    /// 按相关性排序
+    fn sort_by_relevance(mut items: Vec<CompletionItem>) -> Vec<CompletionItem> {
+        items.sort_by(|a, b| {
             b.score
                 .partial_cmp(&a.score)
                 .unwrap_or(Ordering::Equal)
                 .then_with(|| a.text.cmp(&b.text))
         });
-        deduped
+        items
     }
 
     async fn run_provider(

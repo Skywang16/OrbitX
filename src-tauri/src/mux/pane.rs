@@ -100,6 +100,11 @@ impl LocalPane {
 
         // 自动注入Shell Integration脚本（环境变量方式）
         let shell_type = crate::shell::ShellType::from_program(&config.shell_config.program);
+        tracing::info!(
+            "Shell type: {:?}, supports_integration: {}",
+            shell_type,
+            shell_type.supports_integration()
+        );
         if shell_type.supports_integration() {
             let script_generator = crate::shell::ShellScriptGenerator::default();
             if let Ok(integration_script) =
@@ -113,21 +118,43 @@ impl LocalPane {
                         // 为zsh创建临时配置目录
                         let temp_dir =
                             std::env::temp_dir().join(format!("orbitx-{}", process::id()));
+                        tracing::info!(
+                            "Attempting to create temp dir for Zsh integration: {:?}",
+                            temp_dir
+                        );
                         if let Err(e) = std::fs::create_dir_all(&temp_dir) {
-                            tracing::warn!("创建临时目录失败: {}", e);
+                            tracing::error!("创建临时目录失败: {}", e);
                         } else {
+                            tracing::info!("Temp dir created successfully: {:?}", temp_dir);
                             let temp_zshrc = temp_dir.join(".zshrc");
-                            if let Ok(mut file) = std::fs::File::create(&temp_zshrc) {
-                                use std::io::Write;
-                                let _ = writeln!(file, "# OrbitX Shell Integration");
-                                let _ = writeln!(file, "{}", integration_script);
-                                let _ = writeln!(file, "# Load user zshrc if exists");
-                                let _ = writeln!(file, "[[ -f ~/.zshrc ]] && source ~/.zshrc");
+                            match std::fs::File::create(&temp_zshrc) {
+                                Ok(mut file) => {
+                                    use std::io::Write;
+                                    let _ = writeln!(
+                                        file,
+                                        "# Load user zshrc FIRST (so nvm etc. loads)"
+                                    );
+                                    let _ = writeln!(file, "[[ -f ~/.zshrc ]] && source ~/.zshrc");
+                                    let _ = writeln!(file, "");
+                                    let _ = writeln!(
+                                        file,
+                                        "# OrbitX Shell Integration (after user env loaded)"
+                                    );
+                                    let _ = writeln!(file, "{}", integration_script);
+                                    tracing::info!(
+                                        "Shell Integration script written to {:?}",
+                                        temp_zshrc
+                                    );
 
-                                if let Some(original_zdotdir) = std::env::var_os("ZDOTDIR") {
-                                    cmd.env("ORBITX_ORIGINAL_ZDOTDIR", original_zdotdir);
+                                    if let Some(original_zdotdir) = std::env::var_os("ZDOTDIR") {
+                                        cmd.env("ORBITX_ORIGINAL_ZDOTDIR", original_zdotdir);
+                                    }
+                                    cmd.env("ZDOTDIR", &temp_dir);
+                                    tracing::info!("ZDOTDIR set to {:?}", temp_dir);
                                 }
-                                cmd.env("ZDOTDIR", temp_dir);
+                                Err(e) => {
+                                    tracing::error!("Failed to create temp .zshrc: {}", e);
+                                }
                             }
                         }
                     }
@@ -141,10 +168,15 @@ impl LocalPane {
                             let temp_bashrc = temp_dir.join(".bashrc");
                             if let Ok(mut file) = std::fs::File::create(&temp_bashrc) {
                                 use std::io::Write;
-                                let _ = writeln!(file, "# OrbitX Shell Integration");
-                                let _ = writeln!(file, "{}", integration_script);
-                                let _ = writeln!(file, "# Load user bashrc if exists");
+                                let _ =
+                                    writeln!(file, "# Load user bashrc FIRST (so nvm etc. loads)");
                                 let _ = writeln!(file, "[[ -f ~/.bashrc ]] && source ~/.bashrc");
+                                let _ = writeln!(file, "");
+                                let _ = writeln!(
+                                    file,
+                                    "# OrbitX Shell Integration (after user env loaded)"
+                                );
+                                let _ = writeln!(file, "{}", integration_script);
 
                                 cmd.env("BASH_ENV", temp_bashrc);
                             }
@@ -188,7 +220,10 @@ impl LocalPane {
         tracing::debug!("子进程启动成功");
 
         let writer = pty_pair.master.take_writer().map_err(|err| {
-            PaneError::Internal(format!("Failed to acquire PTY writer for {:?}: {err}", pane_id))
+            PaneError::Internal(format!(
+                "Failed to acquire PTY writer for {:?}: {err}",
+                pane_id
+            ))
         })?;
 
         let master = Arc::new(Mutex::new(pty_pair.master));
@@ -249,10 +284,10 @@ impl Pane for LocalPane {
 
         // 更新内部尺寸记录
         {
-            let mut current_size =
-                self.size
-                    .lock()
-                    .map_err(|err| PaneError::from_poison("size", err))?;
+            let mut current_size = self
+                .size
+                .lock()
+                .map_err(|err| PaneError::from_poison("size", err))?;
             *current_size = size;
         }
 
@@ -269,14 +304,9 @@ impl Pane for LocalPane {
             .lock()
             .map_err(|err| PaneError::from_poison("master", err))?;
 
-        master
-            .resize(pty_size)
-            .map_err(|err| {
-                PaneError::Internal(format!(
-                    "Pane {:?} PTY resize failed: {err}",
-                    self.pane_id
-                ))
-            })?;
+        master.resize(pty_size).map_err(|err| {
+            PaneError::Internal(format!("Pane {:?} PTY resize failed: {err}", self.pane_id))
+        })?;
 
         tracing::debug!("面板 {:?} 大小调整完成", self.pane_id);
         Ok(())
@@ -292,9 +322,9 @@ impl Pane for LocalPane {
             .lock()
             .map_err(|err| PaneError::from_poison("master", err))?;
 
-        let reader = master.try_clone_reader().map_err(|err| {
-            PaneError::Internal(format!("Failed to clone PTY reader: {err}"))
-        })?;
+        let reader = master
+            .try_clone_reader()
+            .map_err(|err| PaneError::Internal(format!("Failed to clone PTY reader: {err}")))?;
 
         Ok(reader)
     }

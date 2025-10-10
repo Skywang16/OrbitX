@@ -5,8 +5,8 @@ use serde_json::json;
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority,
-    ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
+    ToolResultContent,
 };
 use crate::filesystem::commands::{code_list_definition_names, CodeDefItem};
 
@@ -115,7 +115,7 @@ impl RunnableTool for ListCodeDefinitionNamesTool {
         }
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Text { text }],
+            content: vec![ToolResultContent::Success(text)],
             is_error: false,
             execution_time_ms: None,
             ext_info: Some(json!({
@@ -129,10 +129,7 @@ impl RunnableTool for ListCodeDefinitionNamesTool {
 
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,
@@ -141,10 +138,7 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,

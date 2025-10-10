@@ -171,7 +171,10 @@ impl FromStr for ExecutionStatus {
             "completed" => Ok(Self::Completed),
             "error" => Ok(Self::Error),
             "cancelled" => Ok(Self::Cancelled),
-            other => Err(AgentError::Parse(format!("Unknown execution status: {}", other))),
+            other => Err(AgentError::Parse(format!(
+                "Unknown execution status: {}",
+                other
+            ))),
         }
     }
 }
@@ -274,7 +277,10 @@ impl FromStr for MessageRole {
             "user" => Ok(Self::User),
             "assistant" => Ok(Self::Assistant),
             "tool" => Ok(Self::Tool),
-            other => Err(AgentError::Parse(format!("Unknown message role: {}", other))),
+            other => Err(AgentError::Parse(format!(
+                "Unknown message role: {}",
+                other
+            ))),
         }
     }
 }
@@ -346,7 +352,10 @@ impl FromStr for ToolExecutionStatus {
             "running" => Ok(Self::Running),
             "completed" => Ok(Self::Completed),
             "error" => Ok(Self::Error),
-            other => Err(AgentError::Parse(format!("Unknown tool execution status: {}", other))),
+            other => Err(AgentError::Parse(format!(
+                "Unknown tool execution status: {}",
+                other
+            ))),
         }
     }
 }

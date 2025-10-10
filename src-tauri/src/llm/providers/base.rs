@@ -2,10 +2,10 @@ use async_trait::async_trait;
 use std::pin::Pin;
 use tokio_stream::Stream;
 
+use crate::llm::error::{LlmProviderError, LlmProviderResult};
 use crate::llm::types::{
     EmbeddingRequest, EmbeddingResponse, LLMRequest, LLMResponse, LLMStreamChunk,
 };
-use crate::llm::error::{LlmProviderError, LlmProviderResult};
 
 /// LLM Provider 统一接口
 ///

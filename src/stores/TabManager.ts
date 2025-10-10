@@ -110,7 +110,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     const existing = tabs.value.find(tab => tab.type === TabType.SETTINGS)
     if (existing) {
       setActiveTab(existing.id)
-      return existing.id
+      return String(existing.id)
     }
 
     const id = `settings-${uuidv4()}`

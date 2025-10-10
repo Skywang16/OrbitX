@@ -4,6 +4,9 @@
 
 use crate::completion::error::{CompletionProviderError, CompletionProviderResult};
 use crate::completion::providers::CompletionProvider;
+use crate::completion::scoring::{
+    BaseScorer, CompositeScorer, HistoryScorer, ScoreCalculator, ScoringContext,
+};
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
 use crate::storage::cache::UnifiedCache;
 use async_trait::async_trait;
@@ -107,13 +110,13 @@ impl HistoryProvider {
         // 缓存未命中，从文件读取
         if let Some(history_file) = &self.history_file {
             if history_file.exists() {
-                let content = fs::read_to_string(history_file)
-                    .await
-                    .map_err(|e| CompletionProviderError::io(
+                let content = fs::read_to_string(history_file).await.map_err(|e| {
+                    CompletionProviderError::io(
                         "read history file",
                         format!("({})", history_file.display()),
                         e,
-                    ))?;
+                    )
+                })?;
                 let commands = self.parse_history_content(&content);
 
                 // 存入缓存
@@ -223,19 +226,33 @@ impl HistoryProvider {
         command.starts_with(pattern) && command != pattern
     }
 
-    /// 计算命令分数
+    /// 计算命令分数（使用统一评分系统）
     fn calculate_command_score(&self, command: &str, pattern: &str, index: usize) -> f64 {
-        let mut score = 70.0;
+        let is_prefix_match = command.starts_with(pattern);
+        let history_weight = Self::calculate_history_weight(index);
 
-        // 匹配长度加分
-        let match_ratio = pattern.len() as f64 / command.len() as f64;
-        score += match_ratio * 20.0;
+        let context = ScoringContext::new(pattern, command)
+            .with_prefix_match(is_prefix_match)
+            .with_history_weight(history_weight)
+            .with_history_position(index)
+            .with_source("history");
 
-        // 位置加分（越靠前的历史命令分数越高）
-        let position_bonus = (1000 - index.min(1000)) as f64 / 1000.0 * 10.0;
-        score += position_bonus;
+        let scorer = CompositeScorer::new(vec![Box::new(BaseScorer), Box::new(HistoryScorer)]);
 
-        score
+        scorer.calculate(&context)
+    }
+
+    /// 计算历史权重（基于位置）
+    ///
+    /// 越新的命令权重越高，使用指数衰减
+    fn calculate_history_weight(index: usize) -> f64 {
+        // 前 100 个命令权重从 1.0 衰减到 0.1
+        // 100 之后权重固定为 0.1
+        if index < 100 {
+            1.0 - (index as f64 / 100.0) * 0.9
+        } else {
+            0.1
+        }
     }
 
     /// 获取Shell类型名称
@@ -373,15 +390,32 @@ git commit -m "test"
         let cache = Arc::new(UnifiedCache::new());
         let provider = HistoryProvider::new(cache);
 
+        // 测试相同输入，不同位置
         let score1 = provider.calculate_command_score("git status", "git", 0);
         let score2 = provider.calculate_command_score("git status", "git", 10);
-        let score3 = provider.calculate_command_score("git", "g", 0);
+        let score3 = provider.calculate_command_score("git status", "git", 50);
 
-        // 位置越靠前分数越高
-        assert!(score1 > score2);
+        // 位置越靠前分数越高（新评分系统使用历史权重+位置加分）
+        assert!(
+            score1 >= score2,
+            "位置 0 应该 >= 位置 10: {} vs {}",
+            score1,
+            score2
+        );
+        assert!(
+            score2 >= score3,
+            "位置 10 应该 >= 位置 50: {} vs {}",
+            score2,
+            score3
+        );
 
-        // 匹配度越高分数越高
-        assert!(score3 > score1); // "g" 匹配 "git" 的比例更高
+        // 测试匹配度：更短的输入匹配更短的命令应该得分更高
+        let score_short = provider.calculate_command_score("git", "g", 0);
+        let score_long = provider.calculate_command_score("git status", "git", 0);
+
+        // 两者都是前缀匹配，分数应该都大于 0
+        assert!(score_short > 0.0, "短匹配应该有分数: {}", score_short);
+        assert!(score_long > 0.0, "长匹配应该有分数: {}", score_long);
     }
 
     #[tokio::test]

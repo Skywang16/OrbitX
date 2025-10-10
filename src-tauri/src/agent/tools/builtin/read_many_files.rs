@@ -5,11 +5,11 @@ use tokio::fs;
 use super::file_utils::{ensure_absolute, is_probably_binary};
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
-use crate::agent::persistence::FileRecordSource;
 use crate::agent::error::ToolExecutorResult;
+use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission,
-    ToolPriority, ToolResult, ToolResultContent,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
+    ToolResultContent,
 };
 
 const DEFAULT_MAX_FILE_SIZE: usize = 1_048_576; // 1 MiB
@@ -76,6 +76,7 @@ impl RunnableTool for ReadManyFilesTool {
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::FileRead, ToolPriority::Expensive)
             .with_tags(vec!["filesystem".into(), "batch".into()])
+            .with_summary_key_arg("paths")
     }
 
     fn required_permissions(&self) -> Vec<ToolPermission> {
@@ -92,10 +93,9 @@ impl RunnableTool for ReadManyFilesTool {
 
         if args.paths.is_empty() {
             return Ok(ToolResult {
-                content: vec![ToolResultContent::Error {
-                    message: "paths must be a non-empty array".to_string(),
-                    details: None,
-                }],
+                content: vec![ToolResultContent::Error(
+                    "paths must be a non-empty array".to_string(),
+                )],
                 is_error: true,
                 execution_time_ms: None,
                 ext_info: None,
@@ -114,10 +114,9 @@ impl RunnableTool for ReadManyFilesTool {
             let trimmed = raw_path.trim();
             if trimmed.is_empty() {
                 return Ok(ToolResult {
-                    content: vec![ToolResultContent::Error {
-                        message: "All paths must be non-empty strings".to_string(),
-                        details: None,
-                    }],
+                    content: vec![ToolResultContent::Error(
+                        "All paths must be non-empty strings".to_string(),
+                    )],
                     is_error: true,
                     execution_time_ms: None,
                     ext_info: None,
@@ -128,10 +127,7 @@ impl RunnableTool for ReadManyFilesTool {
                 Ok(resolved) => resolved,
                 Err(err) => {
                     return Ok(ToolResult {
-                        content: vec![ToolResultContent::Error {
-                            message: err.to_string(),
-                            details: Some(trimmed.to_string()),
-                        }],
+                        content: vec![ToolResultContent::Error(err.to_string())],
                         is_error: true,
                         execution_time_ms: None,
                         ext_info: None,
@@ -272,9 +268,7 @@ impl RunnableTool for ReadManyFilesTool {
         let text_output = summary_lines.join("");
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Text {
-                text: text_output.clone(),
-            }],
+            content: vec![ToolResultContent::Success(text_output.clone())],
             is_error: false,
             execution_time_ms: None,
             ext_info: Some(serde_json::json!({

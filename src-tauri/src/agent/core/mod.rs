@@ -1,5 +1,4 @@
 // Core orchestrator modules for Agent
-// Align with frontend eko-core structure (chain, context, executor, commands)
 
 pub mod chain;
 pub use chain::*;

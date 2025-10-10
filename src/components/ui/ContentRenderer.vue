@@ -6,7 +6,7 @@
       v-for="tab in tabManagerStore.tabs.filter(t => t.type === TabType.TERMINAL)"
       v-show="tab.id === tabManagerStore.activeTabId"
       :key="tab.id"
-      :terminal-id="tab.id"
+      :terminal-id="typeof tab.id === 'number' ? tab.id : parseInt(String(tab.id))"
       :is-active="tab.id === tabManagerStore.activeTabId"
       @input="handleInput"
       @resize="handleResize"

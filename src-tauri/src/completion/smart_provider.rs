@@ -4,7 +4,10 @@ use crate::completion::context_analyzer::{
     ArgType, CompletionContext, CompletionPosition, ContextAnalyzer,
 };
 use crate::completion::error::CompletionProviderResult;
+use crate::completion::metadata::CommandRegistry;
+use crate::completion::prediction::CommandPredictor;
 use crate::completion::providers::CompletionProvider;
+use crate::completion::scoring::{BaseScorer, ScoreCalculator, ScoringContext};
 use crate::completion::types::{CompletionItem, CompletionType};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -14,6 +17,8 @@ pub struct SmartCompletionProvider {
     filesystem_provider: Arc<dyn CompletionProvider>,
     system_commands_provider: Arc<dyn CompletionProvider>,
     history_provider: Arc<dyn CompletionProvider>,
+    context_aware_provider: Option<Arc<dyn CompletionProvider>>,
+    predictor: Option<CommandPredictor>,
 }
 
 impl SmartCompletionProvider {
@@ -22,12 +27,24 @@ impl SmartCompletionProvider {
         system_commands_provider: Arc<dyn CompletionProvider>,
         history_provider: Arc<dyn CompletionProvider>,
     ) -> Self {
+        // 获取当前工作目录，初始化预测器
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let predictor = Some(CommandPredictor::new(current_dir));
+        
         Self {
             context_analyzer: Arc::new(ContextAnalyzer::new()),
             filesystem_provider,
             system_commands_provider,
             history_provider,
+            context_aware_provider: None,
+            predictor,
         }
+    }
+
+    /// 设置上下文感知提供者（用于实体增强）
+    pub fn with_context_aware(mut self, provider: Arc<dyn CompletionProvider>) -> Self {
+        self.context_aware_provider = Some(provider);
+        self
     }
 
     /// 基于上下文智能提供补全
@@ -60,7 +77,27 @@ impl SmartCompletionProvider {
     ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
-        // 优先从历史记录获取相关命令
+        // 步骤1: 智能预测 - 根据上一条命令预测下一条
+        if let Some(ref predictor) = self.predictor {
+            use crate::completion::output_analyzer::OutputAnalyzer;
+            let analyzer = OutputAnalyzer::global();
+            if let Ok(provider) = analyzer.get_context_provider().lock() {
+                if let Some((last_cmd, last_output)) = provider.get_last_command() {
+                    let predictions = predictor.predict_next_commands(
+                        &last_cmd,
+                        Some(&last_output),
+                        &context.current_word,
+                    );
+                    
+                    // 转换为补全项，预测命令得分 90-95
+                    for pred in predictions {
+                        items.push(pred.to_completion_item());
+                    }
+                }
+            }
+        }
+
+        // 步骤2: 从历史记录获取相关命令
         if let Ok(history_items) = self
             .history_provider
             .provide_completions(&self.convert_context(context))
@@ -69,7 +106,7 @@ impl SmartCompletionProvider {
             items.extend(history_items);
         }
 
-        // 然后从系统命令获取
+        // 步骤3: 从系统命令获取
         if let Ok(system_items) = self
             .system_commands_provider
             .provide_completions(&self.convert_context(context))
@@ -78,7 +115,20 @@ impl SmartCompletionProvider {
             items.extend(system_items);
         }
 
-        // 去重并按分数排序
+        // 步骤4: 上下文加分 - 根据工作目录特征加分
+        if let Some(ref predictor) = self.predictor {
+            let context_boost = predictor.calculate_context_boost(&context.current_word);
+            if context_boost > 0.0 {
+                // 为匹配前缀的命令加分
+                for item in &mut items {
+                    if item.text.starts_with(&context.current_word) || context.current_word.is_empty() {
+                        item.score += context_boost;
+                    }
+                }
+            }
+        }
+
+        // 步骤5: 去重并按分数排序
         items = self.deduplicate_and_score(items, &context.current_word);
 
         Ok(items)
@@ -169,8 +219,15 @@ impl SmartCompletionProvider {
     ) -> CompletionProviderResult<Vec<CompletionItem>> {
         let mut items = Vec::new();
 
+        // 获取命令名（用于查找元数据）
+        let command = context
+            .tokens
+            .first()
+            .map(|t| t.text.as_str())
+            .unwrap_or("");
+
         // 根据选项类型提供补全
-        if self.is_file_option(option) {
+        if self.is_file_option(command, option) {
             // 文件类型选项
             if let Ok(file_items) = self
                 .filesystem_provider
@@ -179,7 +236,7 @@ impl SmartCompletionProvider {
             {
                 items.extend(file_items);
             }
-        } else if self.is_directory_option(option) {
+        } else if self.is_directory_option(command, option) {
             // 目录类型选项
             if let Ok(dir_items) = self
                 .filesystem_provider
@@ -329,7 +386,77 @@ impl SmartCompletionProvider {
             }
         }
 
+        // 增强补全：从 OutputAnalyzer 提取的实体添加相关补全
+        items.extend(self.enhance_with_entities(command, context).await);
+
         Ok(items)
+    }
+
+    /// 使用 OutputAnalyzer 提取的实体增强补全
+    async fn enhance_with_entities(
+        &self,
+        command: &str,
+        _context: &CompletionContext,
+    ) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+
+        // 如果没有上下文提供者，跳过
+        if self.context_aware_provider.is_none() {
+            return items;
+        }
+
+        use crate::completion::output_analyzer::OutputAnalyzer;
+
+        let analyzer = OutputAnalyzer::global();
+        let provider_mutex = analyzer.get_context_provider();
+
+        match command {
+            "kill" | "killall" => {
+                // 为 kill 命令添加最近的 PID
+                if let Ok(provider) = provider_mutex.lock() {
+                    let pids = provider.get_recent_pids();
+                    for pid in pids {
+                        let item = CompletionItem::new(pid, CompletionType::Value)
+                            .with_score(85.0)
+                            .with_description("最近的进程ID".to_string())
+                            .with_source("context".to_string());
+                        items.push(item);
+                    }
+                }
+            }
+            "lsof" => {
+                // 为 lsof 命令添加最近的端口
+                if let Ok(provider) = provider_mutex.lock() {
+                    let ports = provider.get_recent_ports();
+                    for port in ports {
+                        let item = CompletionItem::new(port, CompletionType::Value)
+                            .with_score(85.0)
+                            .with_description("最近使用的端口".to_string())
+                            .with_source("context".to_string());
+                        items.push(item);
+                    }
+                }
+            }
+            "cd" => {
+                // 为 cd 命令添加最近访问的目录
+                if let Ok(provider) = provider_mutex.lock() {
+                    let paths = provider.get_recent_paths();
+                    for path in paths {
+                        // 只添加目录
+                        if std::path::Path::new(&path).is_dir() {
+                            let item = CompletionItem::new(path, CompletionType::Directory)
+                                .with_score(80.0)
+                                .with_description("最近访问的目录".to_string())
+                                .with_source("context".to_string());
+                            items.push(item);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        items
     }
 
     /// 提供文件路径补全
@@ -393,7 +520,7 @@ impl SmartCompletionProvider {
         )
     }
 
-    /// 去重并评分
+    /// 去重并重新评分（使用统一评分系统）
     fn deduplicate_and_score(
         &self,
         items: Vec<CompletionItem>,
@@ -401,34 +528,30 @@ impl SmartCompletionProvider {
     ) -> Vec<CompletionItem> {
         let mut seen: std::collections::HashMap<String, CompletionItem> =
             std::collections::HashMap::new();
-        let mut deduplicated = Vec::new();
 
+        // 去重：保留每个文本的最高分项
         for item in items {
-            if let Some(existing) = seen.get(&item.text) {
-                // 保留分数更高的
-                if item.score > existing.score {
-                    seen.insert(item.text.clone(), item.clone());
-                }
-            } else {
-                seen.insert(item.text.clone(), item.clone());
-            }
+            seen.entry(item.text.clone())
+                .and_modify(|existing| {
+                    if item.score > existing.score {
+                        *existing = item.clone();
+                    }
+                })
+                .or_insert(item);
         }
 
-        for (_, item) in seen {
-            deduplicated.push(item);
-        }
+        let mut deduplicated: Vec<CompletionItem> = seen.into_values().collect();
 
-        // 重新计算分数，考虑前缀匹配
+        // 重新评分：使用统一评分系统
+        let scorer = BaseScorer;
         for item in &mut deduplicated {
-            if item.text.starts_with(current_word) {
-                item.score += 10.0; // 前缀匹配加分
+            let is_prefix_match = item.text.starts_with(current_word);
+            let context = ScoringContext::new(current_word, &item.text)
+                .with_prefix_match(is_prefix_match)
+                .with_source("smart");
 
-                // 完全匹配但不是完全相同的情况下再加分
-                if item.text.len() > current_word.len() {
-                    let match_ratio = current_word.len() as f64 / item.text.len() as f64;
-                    item.score += match_ratio * 20.0;
-                }
-            }
+            // 保留原有分数，只加上前缀匹配加分
+            item.score += scorer.calculate(&context);
         }
 
         // 按分数排序
@@ -441,50 +564,22 @@ impl SmartCompletionProvider {
         deduplicated
     }
 
-    /// 检查是否是文件类型选项
-    fn is_file_option(&self, option: &str) -> bool {
-        matches!(
-            option,
-            "--file" | "--input" | "--output" | "--config" | "--script" | "-f" | "-i" | "-o" | "-c"
-        )
+    /// 检查是否是文件类型选项（使用命令注册表）
+    fn is_file_option(&self, command: &str, option: &str) -> bool {
+        let registry = CommandRegistry::global();
+        registry.is_file_option(command, option)
     }
 
-    /// 检查是否是目录类型选项
-    fn is_directory_option(&self, option: &str) -> bool {
-        matches!(
-            option,
-            "--directory" | "--dir" | "--path" | "--workdir" | "-d" | "-p"
-        )
+    /// 检查是否是目录类型选项（使用命令注册表）
+    fn is_directory_option(&self, command: &str, option: &str) -> bool {
+        let registry = CommandRegistry::global();
+        registry.is_directory_option(command, option)
     }
 
-    /// 检查命令是否通常接受文件参数
+    /// 检查命令是否通常接受文件参数（使用命令注册表）
     fn command_usually_takes_files(&self, command: &str) -> bool {
-        matches!(
-            command,
-            "cat"
-                | "less"
-                | "more"
-                | "head"
-                | "tail"
-                | "grep"
-                | "awk"
-                | "sed"
-                | "cp"
-                | "mv"
-                | "rm"
-                | "chmod"
-                | "chown"
-                | "file"
-                | "wc"
-                | "sort"
-                | "uniq"
-                | "cut"
-                | "tr"
-                | "vim"
-                | "nano"
-                | "emacs"
-                | "code"
-        )
+        let registry = CommandRegistry::global();
+        registry.accepts_files(command)
     }
 }
 

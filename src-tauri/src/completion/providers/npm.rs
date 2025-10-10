@@ -141,13 +141,13 @@ impl NpmCompletionProvider {
             return Ok(vec![]);
         }
 
-        let content = fs::read_to_string(&package_json_path)
-            .await
-            .map_err(|e| CompletionProviderError::io(
+        let content = fs::read_to_string(&package_json_path).await.map_err(|e| {
+            CompletionProviderError::io(
                 "read package.json",
                 format!("({})", package_json_path.display()),
                 e,
-            ))?;
+            )
+        })?;
 
         let package_json: PackageJson = serde_json::from_str(&content)?;
 
@@ -191,13 +191,13 @@ impl NpmCompletionProvider {
             return Ok(vec![]);
         }
 
-        let content = fs::read_to_string(&package_json_path)
-            .await
-            .map_err(|e| CompletionProviderError::io(
+        let content = fs::read_to_string(&package_json_path).await.map_err(|e| {
+            CompletionProviderError::io(
                 "read package.json",
                 format!("({})", package_json_path.display()),
                 e,
-            ))?;
+            )
+        })?;
 
         let package_json: PackageJson = serde_json::from_str(&content)?;
 

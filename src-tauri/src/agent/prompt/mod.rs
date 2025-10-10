@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::agent::config::{PromptComponent, PromptConfig, PromptType};
+use crate::agent::error::AgentResult;
 use crate::agent::prompt::builders::{
     build_agent_system_prompt as build_agent_system_prompt_impl,
     build_agent_user_prompt as build_agent_user_prompt_impl,
@@ -11,7 +12,6 @@ use crate::agent::prompt::builders::{
     build_tree_plan_user_prompt as build_tree_plan_user_prompt_impl, PromptBuildOptions,
     PromptBuilder,
 };
-use crate::agent::error::AgentResult;
 use crate::agent::prompt::components::types::ComponentContext;
 use crate::agent::{Agent, Context, Task, ToolSchema};
 
@@ -118,7 +118,7 @@ fn scenario_template_overrides(
         .unwrap_or_default()
 }
 
-/// Convenience API aligned with eko-core builders.
+/// Convenience API for building prompts.
 pub async fn build_agent_system_prompt(
     agent: Agent,
     task: Option<Task>,

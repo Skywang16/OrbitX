@@ -441,9 +441,7 @@ impl AIModelRepository {
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(RepositoryError::AiModelNotFound {
-                id: id.to_string(),
-            });
+            return Err(RepositoryError::AiModelNotFound { id: id.to_string() });
         }
 
         debug!("AI模型删除成功: {}", id);

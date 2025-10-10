@@ -797,11 +797,19 @@ impl TaskContext {
     /// Append a user message to the conversation history (without resetting prompts).
     pub async fn push_user_message(&self, text: String) {
         let mut state = self.execution.write().await;
+        let message_count_before = state.messages.len();
         state.messages.push(LLMMessage {
             role: "user".to_string(),
             content: LLMMessageContent::Text(text.clone()),
         });
+        let message_count_after = state.messages.len();
         drop(state);
+
+        info!(
+            "[TaskContext] push_user_message: messages {} -> {}, preserving history",
+            message_count_before, message_count_after
+        );
+
         let _ = self.append_message(MessageRole::User, &text, false).await;
     }
 
@@ -829,6 +837,49 @@ impl TaskContext {
             content: LLMMessageContent::Text(text.clone()),
         });
         let _ = self.append_message(MessageRole::System, &text, false).await;
+    }
+
+    /// Update the system prompt (replace the first system message, preserve other history).
+    /// This is used when continuing a conversation to refresh environment information
+    /// (current time, working directory, etc.) while keeping the conversation history intact.
+    pub async fn update_system_prompt(&self, new_system_prompt: String) -> TaskExecutorResult<()> {
+        let mut state = self.execution.write().await;
+
+        // Find and update the first system message
+        if let Some(first_msg) = state.messages.first_mut() {
+            if first_msg.role == "system" {
+                info!(
+                    "[TaskContext] update_system_prompt: Updating system prompt for task {}",
+                    self.task_id
+                );
+                first_msg.content = LLMMessageContent::Text(new_system_prompt.clone());
+            } else {
+                warn!(
+                    "[TaskContext] update_system_prompt: First message is not a system message (role={}), cannot update",
+                    first_msg.role
+                );
+            }
+        } else {
+            warn!(
+                "[TaskContext] update_system_prompt: No messages found, cannot update system prompt"
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Restore messages from database (used when rebuilding TaskContext after app restart).
+    /// This is part of the bridge layer between persistence and runtime.
+    pub async fn restore_messages(&self, messages: Vec<LLMMessage>) -> TaskExecutorResult<()> {
+        let mut state = self.execution.write().await;
+        state.messages = messages;
+        state.runtime_status = AgentTaskStatus::Completed; // Restored context starts as completed
+        info!(
+            "[TaskContext] restore_messages: Restored {} messages for task {}",
+            state.messages.len(),
+            self.task_id
+        );
+        Ok(())
     }
 
     async fn append_message(
@@ -954,8 +1005,7 @@ impl TaskContext {
                     "emit"
                 );
             }
-            TaskProgressPayload::Text(_p) => {
-            }
+            TaskProgressPayload::Text(_p) => {}
             TaskProgressPayload::ToolUse(p) => {
                 info!(
                     target: "task::event",
@@ -1118,17 +1168,21 @@ impl TaskContext {
             let mut ui = self.ui_state.lock().await;
             if let Some(step) = maybe_step.take() {
                 // 对thinking/text根据streamId合并，其他直接push
-                let stream_id = step.metadata.as_ref()
+                let stream_id = step
+                    .metadata
+                    .as_ref()
                     .and_then(|m| m.get("streamId"))
                     .and_then(|v| v.as_str());
-                
+
                 if let Some(sid) = stream_id {
-                    if let Some(existing) = ui.steps.iter_mut().find(|s| 
-                        s.step_type == step.step_type &&
-                        s.metadata.as_ref()
-                            .and_then(|m| m.get("streamId"))
-                            .and_then(|v| v.as_str()) == Some(sid)
-                    ) {
+                    if let Some(existing) = ui.steps.iter_mut().find(|s| {
+                        s.step_type == step.step_type
+                            && s.metadata
+                                .as_ref()
+                                .and_then(|m| m.get("streamId"))
+                                .and_then(|v| v.as_str())
+                                == Some(sid)
+                    }) {
                         // 合并：拼接内容+更新metadata
                         existing.content.push_str(&step.content);
                         existing.timestamp = step.timestamp;

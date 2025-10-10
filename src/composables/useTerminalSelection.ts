@@ -109,6 +109,7 @@ export const useTerminalSelection = () => {
     return {
       terminalSelection: terminalSelectionTag,
       terminalTab: terminalTabTag,
+      nodeVersion: null, // Node version is managed separately by useNodeVersion
     }
   }
 
@@ -116,6 +117,7 @@ export const useTerminalSelection = () => {
     const result: TagContextInfo = {
       hasTerminalTab: hasTerminalTab.value,
       hasTerminalSelection: hasSelection.value,
+      hasNodeVersion: false, // Node version is managed separately by useNodeVersion
     }
 
     if (currentTerminalTab.value) {

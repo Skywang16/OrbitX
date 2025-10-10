@@ -8,6 +8,7 @@
  */
 
 import { invoke } from '@/utils/request'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
   CreateTerminalWithShellOptions,
   ShellInfo,
@@ -111,6 +112,22 @@ export class TerminalApi {
 
   async updateCursorConfig(cursorConfig: CursorConfig): Promise<void> {
     await invoke('config_terminal_update_cursor', { cursorConfig })
+  }
+
+  // ===== 事件监听 =====
+
+  /**
+   * 监听终端退出事件
+   */
+  async onTerminalExit(callback: (payload: { paneId: number; exitCode: number | null }) => void): Promise<UnlistenFn> {
+    return listen<{ paneId: number; exitCode: number | null }>('terminal_exit', event => callback(event.payload))
+  }
+
+  /**
+   * 监听 CWD 变化事件
+   */
+  async onCwdChanged(callback: (payload: { paneId: number; cwd: string }) => void): Promise<UnlistenFn> {
+    return listen<{ paneId: number; cwd: string }>('pane_cwd_changed', event => callback(event.payload))
   }
 }
 

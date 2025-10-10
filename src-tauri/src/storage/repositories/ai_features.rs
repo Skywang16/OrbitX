@@ -77,19 +77,23 @@ impl RowMapper<AIFeatureConfig> for AIFeatureConfig {
             created_at: {
                 let timestamp: String = row.try_get("created_at")?;
                 DateTime::parse_from_rfc3339(&timestamp)
-                    .map_err(|e| RepositoryError::internal(format!(
-                        "Failed to parse created_at timestamp: {}",
-                        e
-                    )))?
+                    .map_err(|e| {
+                        RepositoryError::internal(format!(
+                            "Failed to parse created_at timestamp: {}",
+                            e
+                        ))
+                    })?
                     .with_timezone(&Utc)
             },
             updated_at: {
                 let timestamp: String = row.try_get("updated_at")?;
                 DateTime::parse_from_rfc3339(&timestamp)
-                    .map_err(|e| RepositoryError::internal(format!(
-                        "Failed to parse updated_at timestamp: {}",
-                        e
-                    )))?
+                    .map_err(|e| {
+                        RepositoryError::internal(format!(
+                            "Failed to parse updated_at timestamp: {}",
+                            e
+                        ))
+                    })?
                     .with_timezone(&Utc)
             },
         })

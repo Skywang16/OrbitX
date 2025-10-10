@@ -39,11 +39,13 @@ impl GitCompletionProvider {
             .current_dir(working_directory)
             .output()
             .await
-            .map_err(|e| CompletionProviderError::io(
-                "git rev-parse",
-                format!("({})", working_directory.display()),
-                e,
-            ))?;
+            .map_err(|e| {
+                CompletionProviderError::io(
+                    "git rev-parse",
+                    format!("({})", working_directory.display()),
+                    e,
+                )
+            })?;
 
         let is_repo = output.status.success();
 
@@ -88,11 +90,13 @@ impl GitCompletionProvider {
             .current_dir(working_directory)
             .output()
             .await
-            .map_err(|e| CompletionProviderError::io(
-                "git branch",
-                format!("({})", working_directory.display()),
-                e,
-            ))?;
+            .map_err(|e| {
+                CompletionProviderError::io(
+                    "git branch",
+                    format!("({})", working_directory.display()),
+                    e,
+                )
+            })?;
 
         if !output.status.success() {
             return Ok(vec![]);
@@ -184,11 +188,13 @@ impl GitCompletionProvider {
             .current_dir(working_directory)
             .output()
             .await
-            .map_err(|e| CompletionProviderError::io(
-                "git status",
-                format!("({})", working_directory.display()),
-                e,
-            ))?;
+            .map_err(|e| {
+                CompletionProviderError::io(
+                    "git status",
+                    format!("({})", working_directory.display()),
+                    e,
+                )
+            })?;
 
         if !output.status.success() {
             return Ok(vec![]);
