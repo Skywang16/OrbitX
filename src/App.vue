@@ -4,6 +4,7 @@
   import { useShortcutListener } from '@/shortcuts'
   import { useWindowOpacity } from '@/composables/useWindowOpacity'
   import { createStorage } from '@/utils/storage'
+  import { workspaceApi } from '@/api/workspace'
   import { onMounted, ref } from 'vue'
 
   const { reloadConfig } = useShortcutListener()
@@ -33,6 +34,9 @@
 
   onMounted(() => {
     ;(window as typeof window & { reloadShortcuts?: () => void }).reloadShortcuts = reloadConfig
+
+    // 后台维护工作区数据
+    workspaceApi.maintainWorkspaces()
   })
 </script>
 

@@ -13,8 +13,6 @@ export interface RecentWorkspace {
   id: number
   path: string
   last_accessed_at: number
-  access_count: number
-  created_at: number
 }
 
 /**
@@ -43,6 +41,14 @@ export class WorkspaceApi {
    */
   async removeRecentWorkspace(path: string): Promise<void> {
     await invoke('workspace_remove_recent', { path })
+  }
+
+  /**
+   * 维护数据：清理过期记录 + 限制总数
+   * @returns [old_count, excess_count] 分别表示过期记录数和超量记录数
+   */
+  async maintainWorkspaces(): Promise<[number, number]> {
+    return invoke<[number, number]>('workspace_maintain')
   }
 }
 

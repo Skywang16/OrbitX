@@ -282,7 +282,5 @@ END;
 CREATE TABLE IF NOT EXISTS recent_workspaces (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT NOT NULL UNIQUE,
-    last_accessed_at INTEGER NOT NULL,
-    access_count INTEGER DEFAULT 1,
-    created_at INTEGER NOT NULL
+    last_accessed_at INTEGER NOT NULL
 );

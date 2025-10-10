@@ -18,8 +18,6 @@ pub struct RecentWorkspace {
     pub id: i64,
     pub path: String,
     pub last_accessed_at: i64,
-    pub access_count: i64,
-    pub created_at: i64,
 }
 
 impl RowMapper<RecentWorkspace> for RecentWorkspace {
@@ -28,8 +26,6 @@ impl RowMapper<RecentWorkspace> for RecentWorkspace {
             id: row.try_get("id")?,
             path: row.try_get("path")?,
             last_accessed_at: row.try_get("last_accessed_at")?,
-            access_count: row.try_get("access_count")?,
-            created_at: row.try_get("created_at")?,
         })
     }
 }
@@ -50,16 +46,14 @@ impl RecentWorkspaceRepository {
         let now = chrono::Utc::now().timestamp();
 
         let query = r#"
-            INSERT INTO recent_workspaces (path, last_accessed_at, access_count, created_at)
-            VALUES (?, ?, 1, ?)
+            INSERT INTO recent_workspaces (path, last_accessed_at)
+            VALUES (?, ?)
             ON CONFLICT(path) DO UPDATE SET
-                last_accessed_at = excluded.last_accessed_at,
-                access_count = access_count + 1
+                last_accessed_at = excluded.last_accessed_at
         "#;
 
         sqlx::query(query)
             .bind(&normalized_path)
-            .bind(now)
             .bind(now)
             .execute(self.database.pool())
             .await?;
@@ -70,7 +64,7 @@ impl RecentWorkspaceRepository {
     /// 获取最近N个工作区（按last_accessed_at倒序）
     pub async fn get_recent(&self, limit: i64) -> RepositoryResult<Vec<RecentWorkspace>> {
         let query = r#"
-            SELECT id, path, last_accessed_at, access_count, created_at
+            SELECT id, path, last_accessed_at
             FROM recent_workspaces
             ORDER BY last_accessed_at DESC
             LIMIT ?
@@ -110,6 +104,32 @@ impl RecentWorkspaceRepository {
             .await?;
 
         Ok(result.rows_affected())
+    }
+
+    /// 限制记录数量（保留最近访问的 N 条）
+    pub async fn limit_records(&self, max_count: i64) -> RepositoryResult<u64> {
+        let query = r#"
+            DELETE FROM recent_workspaces
+            WHERE id NOT IN (
+                SELECT id FROM recent_workspaces
+                ORDER BY last_accessed_at DESC
+                LIMIT ?
+            )
+        "#;
+
+        let result = sqlx::query(query)
+            .bind(max_count)
+            .execute(self.database.pool())
+            .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    /// 维护数据：清理过期记录 + 限制总数
+    pub async fn maintain(&self, max_days: i64, max_count: i64) -> RepositoryResult<(u64, u64)> {
+        let old_count = self.cleanup_old(max_days).await?;
+        let excess_count = self.limit_records(max_count).await?;
+        Ok((old_count, excess_count))
     }
 }
 
