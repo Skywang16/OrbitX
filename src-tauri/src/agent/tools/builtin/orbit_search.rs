@@ -205,12 +205,10 @@ impl RunnableTool for OrbitSearchTool {
 
         if entries.is_empty() {
             return Ok(ToolResult {
-                content: vec![ToolResultContent::Text {
-                    text: format!(
-                        "No code found matching \"{}\". Try using different keywords or ensure the directory is indexed.",
-                        query
-                    ),
-                }],
+                content: vec![ToolResultContent::Success(format!(
+                    "No code found matching \"{}\". Try using different keywords or ensure the directory is indexed.",
+                    query
+                ))],
                 is_error: false,
                 execution_time_ms: Some(elapsed_ms),
                 ext_info: Some(json!({
@@ -234,9 +232,7 @@ impl RunnableTool for OrbitSearchTool {
         let details = format_result_details(&entries);
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Text {
-                text: format!("{}\n\n{}", summary, details),
-            }],
+            content: vec![ToolResultContent::Success(format!("{}\n\n{}", summary, details))],
             is_error: false,
             execution_time_ms: Some(elapsed_ms),
             ext_info: Some(json!({
@@ -384,10 +380,7 @@ fn is_index_ready(search_path: &Path) -> bool {
 
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,
@@ -396,10 +389,7 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,

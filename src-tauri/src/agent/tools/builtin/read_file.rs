@@ -193,7 +193,7 @@ impl RunnableTool for ReadFileTool {
             .await?;
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Text { text: result_text }],
+            content: vec![ToolResultContent::Success(result_text)],
             is_error: false,
             execution_time_ms: None,
             ext_info: Some(json!({
@@ -212,10 +212,7 @@ impl RunnableTool for ReadFileTool {
 
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,
@@ -224,10 +221,7 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,

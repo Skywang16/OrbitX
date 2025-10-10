@@ -275,7 +275,7 @@ impl RunnableTool for UnifiedEditTool {
 
 fn success_result(text: String, ext: serde_json::Value) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Text { text }],
+        content: vec![ToolResultContent::Success(text)],
         is_error: false,
         execution_time_ms: None,
         ext_info: Some(ext),
@@ -284,10 +284,7 @@ fn success_result(text: String, ext: serde_json::Value) -> ToolResult {
 
 fn error_result(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,

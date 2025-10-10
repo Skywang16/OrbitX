@@ -106,9 +106,9 @@ impl RunnableTool for WriteFileTool {
             .await?;
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Text {
-                text: format!("write_file applied\nfile={}", path.display()),
-            }],
+            content: vec![ToolResultContent::Success(
+                format!("write_file applied\nfile={}", path.display())
+            )],
             is_error: false,
             execution_time_ms: None,
             ext_info: Some(json!({
@@ -120,10 +120,7 @@ impl RunnableTool for WriteFileTool {
 
 fn error_result(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,

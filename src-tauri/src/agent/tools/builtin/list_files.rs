@@ -119,7 +119,7 @@ impl RunnableTool for ListFilesTool {
             .await?;
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Text { text }],
+            content: vec![ToolResultContent::Success(text)],
             is_error: false,
             execution_time_ms: None,
             ext_info: Some(json!({
@@ -137,10 +137,7 @@ impl RunnableTool for ListFilesTool {
 
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,
@@ -149,10 +146,7 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,

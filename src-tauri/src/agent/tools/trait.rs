@@ -24,29 +24,10 @@ pub struct ToolSchema {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum ToolResultContent {
-    Text {
-        text: String,
-    },
-    Json {
-        data: Value,
-    },
-    CommandOutput {
-        stdout: String,
-        stderr: String,
-        exit_code: i32,
-    },
-    File {
-        path: String,
-    },
-    Image {
-        base64: String,
-        format: String,
-    },
-    Error {
-        message: String,
-        details: Option<String>,
-    },
+    Success(String),
+    Error(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

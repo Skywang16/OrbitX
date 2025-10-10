@@ -292,14 +292,12 @@ impl ToolRegistry {
                 error!("工具 {} 超时 {:?}", resolved, timeout);
 
                 ToolResult {
-                    content: vec![ToolResultContent::Error {
-                        message: format!("工具 {} 执行超时", resolved),
-                        details: Some(format!(
-                            "timeout={:?}, priority={}",
-                            timeout,
-                            metadata.priority.as_str()
-                        )),
-                    }],
+                    content: vec![ToolResultContent::Error(format!(
+                        "工具 {} 执行超时 (timeout={:?}, priority={})",
+                        resolved,
+                        timeout,
+                        metadata.priority.as_str()
+                    ))],
                     is_error: true,
                     execution_time_ms: Some(elapsed),
                     ext_info: None,
@@ -392,11 +390,14 @@ impl ToolRegistry {
         self.update_stats(tool_name, false, elapsed).await;
         error!("工具 {} 执行失败: {}", tool_name, error_message);
 
+        let full_message = if let Some(d) = details {
+            format!("{} ({})", error_message, d)
+        } else {
+            error_message
+        };
+        
         ToolResult {
-            content: vec![ToolResultContent::Error {
-                message: error_message,
-                details,
-            }],
+            content: vec![ToolResultContent::Error(full_message)],
             is_error: true,
             execution_time_ms: Some(elapsed),
             ext_info: None,

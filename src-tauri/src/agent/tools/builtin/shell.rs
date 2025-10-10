@@ -143,10 +143,7 @@ impl RunnableTool for ShellTool {
         let args: ShellArgs = serde_json::from_value(args)?;
         if let Err(message) = ShellTool::validate_command(&args.command) {
             return Ok(ToolResult {
-                content: vec![ToolResultContent::Error {
-                    message,
-                    details: None,
-                }],
+                content: vec![ToolResultContent::Error(message)],
                 is_error: true,
                 execution_time_ms: None,
                 ext_info: Some(json!({
@@ -157,27 +154,29 @@ impl RunnableTool for ShellTool {
         }
 
         match ShellTool::execute(&args.command, &context.cwd).await {
-            Ok((stdout, stderr, exit_code)) => Ok(ToolResult {
-                content: vec![ToolResultContent::CommandOutput {
-                    stdout: stdout.clone(),
-                    stderr: stderr.clone(),
-                    exit_code,
-                }],
-                is_error: false,
-                execution_time_ms: None,
-                ext_info: Some(json!({
-                    "command": args.command,
-                    "paneId": args.pane_id,
-                    "stdout": stdout,
-                    "stderr": stderr,
-                    "exitCode": exit_code,
-                })),
-            }),
+            Ok((stdout, stderr, exit_code)) => {
+                // 构建输出字符串：如果有 stderr，显示它；否则显示 stdout
+                let output = if !stderr.is_empty() {
+                    format!("{}\n{}", stdout, stderr)
+                } else {
+                    stdout.clone()
+                };
+                
+                Ok(ToolResult {
+                    content: vec![ToolResultContent::Success(output)],
+                    is_error: false,
+                    execution_time_ms: None,
+                    ext_info: Some(json!({
+                        "command": args.command,
+                        "paneId": args.pane_id,
+                        "stdout": stdout,
+                        "stderr": stderr,
+                        "exitCode": exit_code,
+                    })),
+                })
+            }
             Err(err) => Ok(ToolResult {
-                content: vec![ToolResultContent::Error {
-                    message: format!("Command execution failed: {}", err),
-                    details: None,
-                }],
+                content: vec![ToolResultContent::Error(format!("Command execution failed: {}", err))],
                 is_error: true,
                 execution_time_ms: None,
                 ext_info: Some(json!({

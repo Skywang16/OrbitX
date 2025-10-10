@@ -131,9 +131,7 @@ impl RunnableTool for WebFetchTool {
         match try_jina_reader(&parsed_url, timeout_ms).await {
             Ok(Some(jina_content)) => {
                 return Ok(ToolResult {
-                    content: vec![ToolResultContent::Text {
-                        text: jina_content.clone(),
-                    }],
+                    content: vec![ToolResultContent::Success(jina_content.clone())],
                     is_error: false,
                     execution_time_ms: None,
                     ext_info: Some(json!({
@@ -187,10 +185,9 @@ impl RunnableTool for WebFetchTool {
             Ok(r) => r,
             Err(e) => {
                 return Ok(ToolResult {
-                    content: vec![ToolResultContent::Error {
-                        message: format!("request failed: {}", e),
-                        details: Some(args.url.clone()),
-                    }],
+                    content: vec![ToolResultContent::Error(
+                        format!("request failed: {}", e)
+                    )],
                     is_error: true,
                     execution_time_ms: Some(started.elapsed().as_millis() as u64),
                     ext_info: None,
@@ -243,7 +240,7 @@ impl RunnableTool for WebFetchTool {
         });
 
         Ok(ToolResult {
-            content: vec![ToolResultContent::Text { text: data_text }],
+            content: vec![ToolResultContent::Success(data_text)],
             is_error: !(200..400).contains(&status),
             execution_time_ms: Some(started.elapsed().as_millis() as u64),
             ext_info: Some(meta),
@@ -354,10 +351,7 @@ async fn try_jina_reader(url: &Url, timeout_ms: u64) -> Result<Option<String>, T
 
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,
@@ -366,10 +360,7 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error {
-            message: message.into(),
-            details: None,
-        }],
+        content: vec![ToolResultContent::Error(message.into())],
         is_error: true,
         execution_time_ms: None,
         ext_info: None,
