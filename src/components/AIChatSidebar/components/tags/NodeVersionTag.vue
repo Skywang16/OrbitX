@@ -102,7 +102,7 @@
     flex: 1;
     font-family: var(--font-mono, monospace);
     font-size: 11px;
-    cursor: default;
+    pointer-events: none;
     transition: color 0.1s ease;
   }
 </style>
