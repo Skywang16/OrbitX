@@ -1,24 +1,18 @@
-use std::sync::Arc;
-
-use serde_json;
+use serde_json::json;
 
 use crate::agent::config::CompactionConfig;
-use crate::agent::error::{AgentError, AgentResult};
-use crate::agent::tokenizer::{count_message_tokens, count_text_tokens};
-use crate::llm::service::LLMService;
-use crate::llm::types::{LLMMessage, LLMMessageContent, LLMMessagePart, LLMRequest};
-use crate::storage::repositories::RepositoryManager;
+use crate::agent::error::AgentResult;
+use crate::agent::tokenizer::count_message_tokens;
+use crate::llm::types::{LLMMessage, LLMMessageContent, LLMMessagePart};
 
 pub struct MessageCompactor {
     config: CompactionConfig,
-    llm_service: Arc<LLMService>,
 }
 
 impl MessageCompactor {
-    pub fn new(repositories: Arc<RepositoryManager>) -> Self {
+    pub fn new() -> Self {
         Self {
             config: CompactionConfig::default(),
-            llm_service: Arc::new(LLMService::new(repositories)),
         }
     }
 
@@ -30,19 +24,26 @@ impl MessageCompactor {
     pub async fn compact_if_needed(
         &self,
         messages: Vec<LLMMessage>,
-        model_id: &str,
+        _model_id: &str,
+        context_window: u32,
     ) -> AgentResult<CompactionResult> {
-        if messages.len() < self.config.trigger_threshold {
+        let current_tokens: u32 = messages
+            .iter()
+            .map(|msg| count_message_tokens(msg) as u32)
+            .sum();
+
+        // Only trigger when reaching 85% of context window
+        if current_tokens < (context_window as f32 * 0.85) as u32 {
             return Ok(CompactionResult::NoCompaction(messages));
         }
 
-        self.compact_messages(messages, model_id).await
+        self.compact_messages(messages, current_tokens).await
     }
 
     pub async fn compact_messages(
         &self,
         messages: Vec<LLMMessage>,
-        model_id: &str,
+        _current_tokens: u32,
     ) -> AgentResult<CompactionResult> {
         if messages.len() <= self.config.keep_recent_count + 1 {
             return Ok(CompactionResult::NoCompaction(messages));
@@ -53,29 +54,44 @@ impl MessageCompactor {
             return Ok(CompactionResult::NoCompaction(messages));
         }
 
+        // Clear tool results from middle messages to save tokens
+        let cleared_middle = self.clear_tool_results(&middle);
+        
         let original_tokens: u32 = middle
             .iter()
             .map(|msg| count_message_tokens(msg) as u32)
             .sum();
+        
+        let cleared_tokens: u32 = cleared_middle
+            .iter()
+            .map(|msg| count_message_tokens(msg) as u32)
+            .sum();
 
-        let summary = self.summarize_messages(&middle, model_id).await?;
-        let summary_tokens = count_text_tokens(&summary) as u32;
+        let tokens_saved = original_tokens.saturating_sub(cleared_tokens);
 
-        let mut compacted = Vec::with_capacity(2 + recent.len());
+        // If clearing didn't save enough (< 30%), drop older messages
+        let cleared_count = cleared_middle.len();
+        let final_middle = if tokens_saved < (original_tokens as f32 * 0.3) as u32 {
+            // Keep only the more recent half of middle messages
+            let keep_count = cleared_count / 2;
+            cleared_middle.into_iter().skip(cleared_count - keep_count).collect()
+        } else {
+            cleared_middle
+        };
+
+        let final_tokens: u32 = final_middle
+            .iter()
+            .map(|msg| count_message_tokens(msg) as u32)
+            .sum();
+
+        let mut compacted = Vec::with_capacity(1 + final_middle.len() + recent.len());
         compacted.push(system_msg);
-        compacted.push(LLMMessage {
-            role: "system".to_string(),
-            content: LLMMessageContent::Text(format!(
-                "## Previous Conversation Summary\n\n{}\n\n_Note: Compressed from {} messages._",
-                summary,
-                middle.len()
-            )),
-        });
+        compacted.extend(final_middle.into_iter());
         compacted.extend(recent.into_iter());
 
         Ok(CompactionResult::Compacted {
             messages: compacted,
-            tokens_saved: original_tokens.saturating_sub(summary_tokens),
+            tokens_saved: original_tokens.saturating_sub(final_tokens),
             messages_summarized: middle.len(),
         })
     }
@@ -97,125 +113,47 @@ impl MessageCompactor {
         (system_msg, middle, recent)
     }
 
-    async fn summarize_messages(&self, messages: &[LLMMessage], model_id: &str) -> AgentResult<String> {
-        let prompt = self.build_summary_prompt(messages);
-        let request = LLMRequest {
-            model: model_id.to_string(),
-            messages: vec![
-                LLMMessage {
-                    role: "system".to_string(),
-                    content: LLMMessageContent::Text(
-                        "You are an AI assistant summarizing previous conversation context. \
-                        Extract key goals, actions, tool usage, files touched, and outstanding items.".to_string(),
-                    ),
-                },
-                LLMMessage {
-                    role: "user".to_string(),
-                    content: LLMMessageContent::Text(prompt),
-                },
-            ],
-            temperature: Some(self.config.summary_temperature),
-            max_tokens: Some(self.config.summary_max_tokens),
-            tools: None,
-            tool_choice: None,
-            stream: false,
-        };
-
-        let response = self
-            .llm_service
-            .call(request)
-            .await
-            .map_err(|e| AgentError::Internal(format!("LLM summarization failed: {}", e)))?;
-
-        let content = response.content.trim();
-        if content.is_empty() {
-            return Err(AgentError::Internal("Empty summary from LLM".to_string()));
-        }
-
-        Ok(content.to_string())
-    }
-
-    fn build_summary_prompt(&self, messages: &[LLMMessage]) -> String {
-        let mut prompt = String::from("Summarize the following conversation segment:\n\n");
-        for (idx, message) in messages.iter().enumerate() {
-            let rendered = match &message.content {
-                LLMMessageContent::Text(text) => text.clone(),
-                LLMMessageContent::Parts(parts) => self.summarize_parts(parts),
-            };
-            prompt.push_str(&format!("{}. [{}] {}\n", idx + 1, message.role, rendered));
-        }
-        prompt.push_str(
-            "\nProvide a concise summary focusing on:\n\
-             - Main goals and decisions\n\
-             - Files read/modified (paths only, NO file content)\n\
-             - Tools used (name + outcome, NO raw output)\n\
-             - Errors or unresolved issues\n",
-        );
-        prompt
-    }
-
-    fn summarize_parts(&self, parts: &[LLMMessagePart]) -> String {
-        parts
+    /// Clear tool results from messages to save tokens (Anthropic's "tool result clearing" strategy)
+    fn clear_tool_results(&self, messages: &[LLMMessage]) -> Vec<LLMMessage> {
+        messages
             .iter()
-            .map(|part| match part {
-                LLMMessagePart::Text { text } => text.clone(),
-                LLMMessagePart::ToolCall {
-                    tool_name, args, ..
-                } => {
-                    let key_args = self.extract_key_args(tool_name, args);
-                    format!("→ Call {}{}", tool_name, key_args)
-                }
-                LLMMessagePart::ToolResult {
-                    tool_name, result, ..
-                } => {
-                    let file = result
-                        .get("file_path")
-                        .or_else(|| result.get("path"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    let status = if result.get("error").is_some() {
-                        "❌"
-                    } else {
-                        "✅"
-                    };
-                    if file.is_empty() {
-                        format!("← {} {}", tool_name, status)
-                    } else {
-                        format!("← {} {} {}", tool_name, file, status)
+            .map(|msg| {
+                let new_content = match &msg.content {
+                    LLMMessageContent::Text(text) => LLMMessageContent::Text(text.clone()),
+                    LLMMessageContent::Parts(parts) => {
+                        let cleared_parts: Vec<LLMMessagePart> = parts
+                            .iter()
+                            .map(|part| match part {
+                                LLMMessagePart::ToolResult {
+                                    tool_call_id,
+                                    tool_name,
+                                    result: _,
+                                } => {
+                                    // Keep only metadata, clear the actual result content
+                                    let cleared_result = json!({
+                                        "status": "cleared",
+                                        "original_tool": tool_name,
+                                    });
+                                    LLMMessagePart::ToolResult {
+                                        tool_call_id: tool_call_id.clone(),
+                                        tool_name: tool_name.clone(),
+                                        result: cleared_result,
+                                    }
+                                }
+                                other => other.clone(),
+                            })
+                            .collect();
+                        LLMMessageContent::Parts(cleared_parts)
                     }
-                }
-                LLMMessagePart::File { mime_type, data } => {
-                    format!("[File: {} ({}B)]", mime_type, data.len())
+                };
+                LLMMessage {
+                    role: msg.role.clone(),
+                    content: new_content,
                 }
             })
-            .collect::<Vec<_>>()
-            .join("\n")
+            .collect()
     }
 
-    fn extract_key_args(&self, tool_name: &str, args: &serde_json::Value) -> String {
-        match tool_name {
-            "read_file" | "edit_file" | "write_file" | "write_to_file" | "read_many_files"
-            | "insert_content" | "apply_diff" | "unified_edit" => {
-                if let Some(path) = args.get("path").or_else(|| args.get("file_path")) {
-                    if let Some(p) = path.as_str() {
-                        return format!(" {}", p);
-                    }
-                }
-            }
-            "shell" => {
-                if let Some(cmd) = args.get("command").and_then(|v| v.as_str()) {
-                    let short = if cmd.len() > 50 {
-                        format!("{}...", &cmd[..50])
-                    } else {
-                        cmd.to_string()
-                    };
-                    return format!(" `{}`", short);
-                }
-            }
-            _ => {}
-        }
-        String::new()
-    }
 }
 
 #[derive(Debug)]
