@@ -69,11 +69,6 @@ The frontend uses a modular architecture with clear separation of concerns:
   - `AIChatSidebar/`: AI assistant interface with message rendering, task management, and tool visualization
   - Terminal components for xterm.js integration
   - Theme and configuration management
-- **AI Core System** (`src/eko-core/`): Agent-based AI system with:
-  - Task tree planning and execution
-  - Tool registry and execution framework
-  - Memory management and context handling
-  - Event-driven architecture with state management
 - **API Layer** (`src/api/`): Modular TypeScript interfaces for Tauri commands
   - Each domain has its own module (terminal, ai, completion, workspace, etc.)
   - Centralized in `src/api/index.ts` for re-exports
@@ -110,7 +105,7 @@ The backend follows a Mux-centric architecture for terminal management:
 1. **Frontend → Backend**: Vue components invoke Tauri commands through `@tauri-apps/api`
 2. **Terminal I/O**: Mux manages PTY sessions, handling input/output through dedicated I/O threads
 3. **Events**: Backend emits events via Tauri's event system, frontend subscribes and reacts
-4. **AI Processing**: Eko core orchestrates AI tasks with tool execution and state management
+4. **AI Processing**: Backend agent system orchestrates AI tasks with tool execution and state management
 
 ## Key Technical Details
 

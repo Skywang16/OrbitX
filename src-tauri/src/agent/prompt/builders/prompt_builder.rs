@@ -9,7 +9,7 @@ use crate::agent::prompt::components::{
 };
 use crate::agent::prompt::template_engine::TemplateEngine;
 
-/// Builder options mirroring eko-core PromptBuildOptions.
+/// Builder options for prompt building.
 #[derive(Debug, Clone)]
 pub struct PromptBuildOptions {
     pub components: Vec<PromptComponent>,

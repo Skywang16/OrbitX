@@ -1,5 +1,4 @@
 // ReAct strategy utilities for Agent module
-// Mirrors the structure of the frontend eko-core/react implementation
 
 pub mod runtime;
 pub mod types;

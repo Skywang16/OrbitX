@@ -1,4 +1,4 @@
-//! Agent configuration facade aligning with eko-core semantics.
+//! Agent configuration module.
 
 pub mod agent;
 pub mod compaction;

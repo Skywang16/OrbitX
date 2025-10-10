@@ -135,8 +135,6 @@ Note: If the repository name or owner changes, please update badges and links ac
 - [Vue.js](https://vuejs.org/)
 - [xterm.js](https://xtermjs.org/)
 
-- [eko](https://github.com/FellouAI/eko)
-
 ## Contact
 
 For issues and suggestions, please create an [Issue](https://github.com/Skywang16/OrbitX/issues).

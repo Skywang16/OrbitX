@@ -9,7 +9,7 @@
 
 import { invoke } from '@/utils/request'
 import { llmChannelApi } from '@/api/channel/llm'
-// Local minimal types to decouple from eko-core
+
 export interface NativeLLMRequest extends Record<string, unknown> {
   abortSignal?: AbortSignal
 }

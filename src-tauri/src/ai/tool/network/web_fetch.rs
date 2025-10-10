@@ -85,7 +85,7 @@ pub async fn network_web_fetch_headless(
         } else {
             reqwest::redirect::Policy::none()
         })
-        .user_agent("Eko-Agent/1.0")
+        .user_agent("OrbitX-Agent/1.0")
         .danger_accept_invalid_certs(true);
 
     #[cfg(not(debug_assertions))]
@@ -96,7 +96,7 @@ pub async fn network_web_fetch_headless(
         } else {
             reqwest::redirect::Policy::none()
         })
-        .user_agent("Eko-Agent/1.0");
+        .user_agent("OrbitX-Agent/1.0");
 
     let client = match client_builder.build() {
         Ok(client) => client,

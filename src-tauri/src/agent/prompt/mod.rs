@@ -118,7 +118,7 @@ fn scenario_template_overrides(
         .unwrap_or_default()
 }
 
-/// Convenience API aligned with eko-core builders.
+/// Convenience API for building prompts.
 pub async fn build_agent_system_prompt(
     agent: Agent,
     task: Option<Task>,
