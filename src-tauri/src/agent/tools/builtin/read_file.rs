@@ -71,6 +71,7 @@ impl RunnableTool for ReadFileTool {
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::FileRead, ToolPriority::Standard)
             .with_tags(vec!["filesystem".into(), "read".into()])
+            .with_summary_key_arg("path")
     }
 
     fn required_permissions(&self) -> Vec<ToolPermission> {
@@ -159,9 +160,8 @@ impl RunnableTool for ReadFileTool {
         let mut output_lines = Vec::new();
         let mut truncated_line_detected = false;
 
-        for (idx, line) in lines
+        for line in lines
             .iter()
-            .enumerate()
             .skip(start_line)
             .take(end_line.saturating_sub(start_line))
         {
@@ -178,8 +178,7 @@ impl RunnableTool for ReadFileTool {
                 truncated.push_str("... [truncated]");
                 truncated_line_detected = true;
             }
-            let display_number = idx + 1; // 1-based display
-            output_lines.push(format!("{:>4}  {}", display_number, truncated));
+            output_lines.push(truncated);
         }
 
         let result_text = output_lines.join("\n");

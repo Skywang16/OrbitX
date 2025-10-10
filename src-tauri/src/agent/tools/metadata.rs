@@ -59,6 +59,8 @@ pub struct ToolMetadata {
     pub rate_limit: Option<RateLimitConfig>,
     pub requires_confirmation: bool,
     pub tags: Vec<String>,
+    /// Key argument field name for summarization (e.g., "path" for file tools, "command" for shell)
+    pub summary_key_arg: Option<&'static str>,
 }
 
 impl ToolMetadata {
@@ -70,6 +72,7 @@ impl ToolMetadata {
             rate_limit: None,
             requires_confirmation: false,
             tags: Vec::new(),
+            summary_key_arg: None,
         }
     }
 
@@ -90,6 +93,11 @@ impl ToolMetadata {
 
     pub fn with_tags(mut self, tags: Vec<String>) -> Self {
         self.tags = tags;
+        self
+    }
+
+    pub fn with_summary_key_arg(mut self, key_arg: &'static str) -> Self {
+        self.summary_key_arg = Some(key_arg);
         self
     }
 

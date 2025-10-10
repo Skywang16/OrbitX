@@ -53,6 +53,7 @@ impl RunnableTool for ListFilesTool {
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::FileSystem, ToolPriority::Standard)
             .with_tags(vec!["filesystem".into(), "list".into()])
+            .with_summary_key_arg("path")
     }
 
     fn required_permissions(&self) -> Vec<ToolPermission> {

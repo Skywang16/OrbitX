@@ -4,7 +4,7 @@
 
 use crate::agent::core::context::{TaskContext, ToolCallResult};
 use crate::agent::core::executor::TaskExecutor;
-use crate::agent::events::{TaskProgressPayload, ToolResultPayload};
+use crate::agent::events::{TaskProgressPayload, ToolResultPayload, ToolUsePayload};
 use crate::agent::persistence::ToolExecutionStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::tools::{ToolDescriptionContext, ToolRegistry};
@@ -103,6 +103,18 @@ impl TaskExecutor {
                 warn!("Failed to log tool start: {}", e);
                 format!("{}_{}", call_id, chrono::Utc::now().timestamp_millis())
             });
+
+        // 发送 ToolUse 事件 - 表示工具开始执行
+        context
+            .send_progress(TaskProgressPayload::ToolUse(ToolUsePayload {
+                task_id: context.task_id.clone(),
+                iteration,
+                tool_id: call_id.clone(),
+                tool_name: tool_name.clone(),
+                params: tool_call.arguments.clone(),
+                timestamp: Utc::now(),
+            }))
+            .await?;
 
         // 执行工具调用（保持与既有 JSON 结果结构一致）
         let result = self

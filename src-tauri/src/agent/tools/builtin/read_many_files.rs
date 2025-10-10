@@ -76,6 +76,7 @@ impl RunnableTool for ReadManyFilesTool {
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::FileRead, ToolPriority::Expensive)
             .with_tags(vec!["filesystem".into(), "batch".into()])
+            .with_summary_key_arg("paths")
     }
 
     fn required_permissions(&self) -> Vec<ToolPermission> {

@@ -107,6 +107,7 @@ impl RunnableTool for UnifiedEditTool {
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::FileWrite, ToolPriority::Standard)
             .with_tags(vec!["filesystem".into(), "edit".into()])
+            .with_summary_key_arg("path")
     }
 
     fn required_permissions(&self) -> Vec<ToolPermission> {

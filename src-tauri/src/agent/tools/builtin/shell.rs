@@ -129,6 +129,7 @@ impl RunnableTool for ShellTool {
             .with_confirmation()
             .with_timeout(Duration::from_millis(COMMAND_TIMEOUT_MS))
             .with_tags(vec!["shell".into(), "command".into()])
+            .with_summary_key_arg("command")
     }
 
     fn required_permissions(&self) -> Vec<ToolPermission> {
