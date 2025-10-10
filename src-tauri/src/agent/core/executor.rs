@@ -1198,8 +1198,9 @@ impl TaskExecutor {
             let mut stream_text = String::new();
             let mut saw_thinking_tag = false;
             let mut last_thinking_sent = String::new();
+            let mut last_thinking_char_count = 0;  // 追踪已发送的thinking字符数
             let mut last_visible_sent = String::new();
-            let mut last_visible_length = 0;
+            let mut last_visible_char_count = 0;  // 使用字符数而非字节数,避免UTF-8边界问题
             let mut announced_tool_ids: HashSet<String> = HashSet::new();
             let mut thinking_stream_id: Option<String> = None;
             let mut text_stream_id: Option<String> = None;
@@ -1231,13 +1232,19 @@ impl TaskExecutor {
                                     && visible.trim().len() > 0;
 
                                 if saw_thinking_tag {
-                                    if thinking_trim.len() < last_thinking_sent.len() {
+                                    let current_thinking_char_count = thinking_trim.chars().count();
+                                    if current_thinking_char_count < last_thinking_char_count {
                                         last_thinking_sent = thinking_trim.clone();
+                                        last_thinking_char_count = current_thinking_char_count;
                                     }
-                                    if thinking_trim.len() > last_thinking_sent.len() {
-                                        let thinking_to_send =
-                                            thinking_trim[last_thinking_sent.len()..].to_string();
+                                    if current_thinking_char_count > last_thinking_char_count {
+                                        // 使用字符迭代器安全提取增量thinking内容
+                                        let thinking_to_send: String = thinking_trim
+                                            .chars()
+                                            .skip(last_thinking_char_count)
+                                            .collect();
                                         last_thinking_sent = thinking_trim.clone();
+                                        last_thinking_char_count = current_thinking_char_count;
                                         if thinking_stream_id.is_none() {
                                             thinking_stream_id = Some(Uuid::new_v4().to_string());
                                         }
@@ -1265,13 +1272,18 @@ impl TaskExecutor {
                                         context.state_manager().reset_idle_rounds().await;
                                         iter_ctx.append_thinking(&thinking_to_send).await;
                                     }
+                                    let current_char_count = visible.chars().count();
                                     if can_send_visible
-                                        && visible.len() > last_visible_length
+                                        && current_char_count > last_visible_char_count
                                         && !last_thinking_sent.trim().is_empty()
                                         && !has_open_thinking
                                     {
-                                        let visible_delta = &visible[last_visible_length..];
-                                        last_visible_length = visible.len();
+                                        // 使用字符迭代器跳过已发送的字符,安全处理UTF-8多字节字符
+                                        let visible_delta: String = visible
+                                            .chars()
+                                            .skip(last_visible_char_count)
+                                            .collect();
+                                        last_visible_char_count = current_char_count;
                                         if text_stream_id.is_none() {
                                             text_stream_id = Some(Uuid::new_v4().to_string());
                                         }
@@ -1279,35 +1291,42 @@ impl TaskExecutor {
                                             .send_progress(TaskProgressPayload::Text(TextPayload {
                                                 task_id: context.task_id.clone(),
                                                 iteration,
-                                                text: visible_delta.to_string(),
+                                                text: visible_delta.clone(),
                                                 stream_id: text_stream_id.clone().unwrap(),
                                                 stream_done: false,
                                                 timestamp: Utc::now(),
                                             }))
                                             .await?;
-                                        last_visible_sent.push_str(visible_delta);
+                                        last_visible_sent.push_str(&visible_delta);
                                         context.state_manager().reset_idle_rounds().await;
-                                        iter_ctx.append_output(visible_delta).await;
+                                        iter_ctx.append_output(&visible_delta).await;
                                     }
-                                } else if can_send_visible && visible.len() > last_visible_length {
-                                    let visible_delta = &visible[last_visible_length..];
-                                    last_visible_length = visible.len();
+                                } else if can_send_visible {
+                                    let current_char_count = visible.chars().count();
+                                    if current_char_count > last_visible_char_count {
+                                        // 使用字符迭代器跳过已发送的字符,安全处理UTF-8多字节字符
+                                        let visible_delta: String = visible
+                                            .chars()
+                                            .skip(last_visible_char_count)
+                                            .collect();
+                                        last_visible_char_count = current_char_count;
                                     if text_stream_id.is_none() {
                                         text_stream_id = Some(Uuid::new_v4().to_string());
                                     }
-                                    context
-                                        .send_progress(TaskProgressPayload::Text(TextPayload {
-                                            task_id: context.task_id.clone(),
-                                            iteration,
-                                            text: visible_delta.to_string(),
-                                            stream_id: text_stream_id.clone().unwrap(),
-                                            stream_done: false,
-                                            timestamp: Utc::now(),
-                                        }))
-                                        .await?;
-                                    last_visible_sent.push_str(visible_delta);
-                                    context.state_manager().reset_idle_rounds().await;
-                                    iter_ctx.append_output(visible_delta).await;
+                                        context
+                                            .send_progress(TaskProgressPayload::Text(TextPayload {
+                                                task_id: context.task_id.clone(),
+                                                iteration,
+                                                text: visible_delta.clone(),
+                                                stream_id: text_stream_id.clone().unwrap(),
+                                                stream_done: false,
+                                                timestamp: Utc::now(),
+                                            }))
+                                            .await?;
+                                        last_visible_sent.push_str(&visible_delta);
+                                        context.state_manager().reset_idle_rounds().await;
+                                        iter_ctx.append_output(&visible_delta).await;
+                                    }
                                 }
                             }
 
@@ -1831,14 +1850,12 @@ fn tool_call_result_to_outcome(result: &ToolCallResult) -> ToolOutcome {
             .and_then(|v| v.as_str())
             .unwrap_or("Tool execution failed")
             .to_string();
-        ToolResultContent::Error {
-            message,
-            details: None,
-        }
+        ToolResultContent::Error(message)
     } else {
-        ToolResultContent::Json {
-            data: result.result.clone(),
-        }
+        // 将 JSON 结果转换为字符串
+        let result_str = serde_json::to_string(&result.result)
+            .unwrap_or_else(|_| "Tool execution succeeded".to_string());
+        ToolResultContent::Success(result_str)
     };
 
     ToolOutcome {
