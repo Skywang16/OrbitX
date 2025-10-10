@@ -1,18 +1,10 @@
-import { shellApi, storageApi, terminalApi, terminalContextApi, workspaceApi } from '@/api'
+import { shellApi, storageApi, terminalApi, terminalContextApi, windowApi, workspaceApi } from '@/api'
 import type { ShellInfo } from '@/api'
 import { useSessionStore } from '@/stores/session'
 import type { RuntimeTerminalState, TerminalState } from '@/types'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
 import { computed, ref, nextTick } from 'vue'
-
-declare global {
-  interface Window {
-    os?: {
-      homedir?: () => string
-    }
-  }
-}
 interface TerminalEventListeners {
   onOutput: (data: string) => void
   onExit: (exitCode: number | null) => void
@@ -97,6 +89,18 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
   const sessionStore = useSessionStore()
 
+  // 缓存 home 目录，避免重复请求
+  let _homeDirectory: string | null = null
+  const getHomeDirectory = async (): Promise<string> => {
+    if (!_homeDirectory) {
+      _homeDirectory = await windowApi.getHomeDirectory()
+    }
+    return _homeDirectory
+  }
+
+  // 跟踪每个终端的初始目录，避免记录
+  const _terminalInitialCwd = ref<Map<number, string>>(new Map())
+
   const activeTerminal = computed(() => terminals.value.find(t => t.id === activeTerminalId.value))
   const currentWorkingDirectory = computed(() => activeTerminal.value?.cwd || null)
 
@@ -160,8 +164,30 @@ export const useTerminalStore = defineStore('Terminal', () => {
       try {
         const terminal = terminals.value.find(t => t.id === payload.paneId)
         if (terminal) {
+          const previousCwd = terminal.cwd
           terminal.cwd = payload.cwd
           updateTerminalTitle(terminal, payload.cwd)
+
+          // 记录工作区到最近列表
+          // 排除：1) ~ 目录  2) home 目录  3) 终端的初始目录（首次 CWD 变化）
+          const initialCwd = _terminalInitialCwd.value.get(payload.paneId)
+          const isFirstCwdChange = initialCwd === undefined
+
+          if (isFirstCwdChange) {
+            // 记录初始目录，下次就不会记录了
+            _terminalInitialCwd.value.set(payload.paneId, payload.cwd)
+          } else if (payload.cwd && payload.cwd !== '~' && previousCwd !== payload.cwd) {
+            // 只有在 CWD 真正变化时才记录
+            getHomeDirectory()
+              .then(homeDir => {
+                if (payload.cwd !== homeDir) {
+                  return workspaceApi.addRecentWorkspace(payload.cwd)
+                }
+              })
+              .catch(error => {
+                console.warn('Failed to record recent workspace:', error)
+              })
+          }
         }
       } catch (error) {
         console.error('Error handling terminal CWD change event:', error)
@@ -272,15 +298,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
       }
       terminals.value.push(terminal)
 
-      // 记录工作区到最近列表
-      if (terminal.cwd && terminal.cwd !== '~') {
-        try {
-          await workspaceApi.addRecentWorkspace(terminal.cwd)
-        } catch (error) {
-          console.warn('Failed to record recent workspace:', error)
-        }
-      }
-
       await setActiveTerminal(paneId)
 
       // setActiveTerminal已经会调用syncToSessionStore和保存，不需要再次调用
@@ -296,6 +313,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
         console.warn(`尝试关闭不存在的终端: ${id}`)
         return
       }
+
+      // 清理终端的初始目录跟踪
+      _terminalInitialCwd.value.delete(id)
 
       unregisterTerminalCallbacks(id)
 
@@ -379,11 +399,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       let displayPath = cwd
 
-      if (typeof window !== 'undefined' && window.os?.homedir) {
-        const homeDir = window.os.homedir?.()
-        if (homeDir && cwd.startsWith(homeDir)) {
-          displayPath = cwd.replace(homeDir, '~')
-        }
+      // 使用缓存的 home 目录（如果有）
+      if (_homeDirectory && cwd.startsWith(_homeDirectory)) {
+        displayPath = cwd.replace(_homeDirectory, '~')
       }
 
       const pathParts = displayPath.split(/[/\\]/).filter(part => part.length > 0)
@@ -510,15 +528,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
         terminals.value.splice(existingIndex, 1)
       }
       terminals.value.push(terminal)
-
-      // 记录工作区到最近列表
-      if (terminal.cwd && terminal.cwd !== '~') {
-        try {
-          await workspaceApi.addRecentWorkspace(terminal.cwd)
-        } catch (error) {
-          console.warn('Failed to record recent workspace:', error)
-        }
-      }
 
       await setActiveTerminal(paneId)
       // setActiveTerminal已经会同步并保存状态

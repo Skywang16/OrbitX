@@ -58,14 +58,14 @@ const updateCSSVariables = (theme: Theme): void => {
 
     style.setProperty('--color-primary', theme.ui.primary)
     style.setProperty('--color-primary-hover', theme.ui.primary_hover)
-    style.setProperty('--color-primary-alpha', theme.ui.primary_alpha)
+    style.setProperty('--color-primary-alpha', applyOpacityToColor(theme.ui.primary_alpha, opacity))
     style.setProperty('--color-success', theme.ui.success)
     style.setProperty('--color-warning', theme.ui.warning)
     style.setProperty('--color-error', theme.ui.error)
     style.setProperty('--color-info', theme.ui.info)
 
-    style.setProperty('--color-hover', theme.ui.hover)
-    style.setProperty('--color-active', theme.ui.active)
+    style.setProperty('--color-hover', applyOpacityToColor(theme.ui.hover, opacity))
+    style.setProperty('--color-active', applyOpacityToColor(theme.ui.active, opacity))
     style.setProperty('--color-focus', theme.ui.focus)
     style.setProperty('--color-selection', theme.ui.selection)
   }

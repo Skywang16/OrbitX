@@ -407,12 +407,12 @@
   }
 
   .x-select--borderless .x-select__input:hover {
-    background-color: var(--color-hover, rgba(0, 0, 0, 0.05));
+    background-color: var(--color-hover);
     border: none;
   }
 
   .x-select--borderless.x-select--open .x-select__input {
-    background-color: var(--color-hover, rgba(0, 0, 0, 0.05));
+    background-color: var(--color-hover);
     box-shadow: none;
     border: none;
   }
@@ -576,12 +576,12 @@
 
   .x-select__option:hover,
   .x-select__option--highlighted {
-    background-color: var(--color-primary-alpha, rgba(59, 130, 246, 0.1));
+    background-color: var(--color-primary-alpha);
   }
 
   .x-select__option--selected {
-    background-color: var(--color-primary-alpha, rgba(59, 130, 246, 0.1));
-    color: var(--color-primary, #3b82f6);
+    background-color: var(--color-primary-alpha);
+    color: var(--color-primary);
     font-weight: 500;
   }
 

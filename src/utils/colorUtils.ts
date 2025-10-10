@@ -23,23 +23,27 @@ export function hexToRgba(hex: string, opacity: number): string {
 }
 
 export function rgbToRgba(rgb: string, opacity: number): string {
-  const rgbMatch = rgb.match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
+  const rgbaMatch = rgb.match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?/)
 
-  if (!rgbMatch) {
+  if (!rgbaMatch) {
     console.warn(`Invalid rgb color: ${rgb}`)
     return `rgba(0, 0, 0, ${opacity})`
   }
 
-  const r = parseInt(rgbMatch[1], 10)
-  const g = parseInt(rgbMatch[2], 10)
-  const b = parseInt(rgbMatch[3], 10)
+  const r = parseInt(rgbaMatch[1], 10)
+  const g = parseInt(rgbaMatch[2], 10)
+  const b = parseInt(rgbaMatch[3], 10)
+  const originalAlpha = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1.0
 
   if (isNaN(r) || isNaN(g) || isNaN(b)) {
     console.warn(`Failed to parse rgb color: ${rgb}`)
     return `rgba(0, 0, 0, ${opacity})`
   }
 
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`
+  // 如果原始颜色有 alpha 通道，则相乘；否则直接使用窗口透明度
+  const finalAlpha = originalAlpha * opacity
+
+  return `rgba(${r}, ${g}, ${b}, ${finalAlpha})`
 }
 
 export function applyOpacityToColor(color: string, opacity: number): string {
