@@ -280,11 +280,11 @@
   const cleanToolResult = computed(() => {
     const result = toolResult.value || props.step.content
 
-    if ('result' in result) {
+    if (result && typeof result === 'object' && 'result' in result) {
       const text = result?.result
       return typeof text === 'string' ? stripAnsi(text) : text
     }
-    if ('error' in result) {
+    if (result && typeof result === 'object' && 'error' in result) {
       const text = result.error
       return typeof text === 'string' ? stripAnsi(text) : text
     }

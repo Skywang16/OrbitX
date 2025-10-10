@@ -6,7 +6,6 @@
   import { reactive, ref, computed, onMounted, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useLLMRegistry } from '@/composables/useLLMRegistry'
-  import { createMessage } from '@/ui'
 
   interface Props {
     model?: AIModelConfig | null

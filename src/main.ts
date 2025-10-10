@@ -1,6 +1,5 @@
 import { completionApi } from '@/api'
 import { configApi } from '@/api/config'
-import { windowApi } from '@/api/window'
 
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useAIChatStore } from '@/components/AIChatSidebar/store'

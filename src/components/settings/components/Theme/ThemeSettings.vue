@@ -2,7 +2,6 @@
   import { computed, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useThemeStore } from '@/stores/theme'
-  import { windowApi } from '@/api/window'
   import { setWindowOpacity, getWindowOpacity } from '@/api/window/opacity'
   import { configApi } from '@/api/config'
   import { XSelect } from '@/ui'
