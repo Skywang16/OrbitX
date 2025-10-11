@@ -54,6 +54,8 @@ export interface TerminalState {
   active: boolean
   /** Shell 类型 */
   shell?: string
+  /** 工作目录（用于重启恢复） */
+  cwd?: string
 }
 
 export interface RuntimeTerminalState extends TerminalState {

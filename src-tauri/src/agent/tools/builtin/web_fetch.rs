@@ -251,11 +251,7 @@ fn truncate_text(s: &str, max_len: usize) -> String {
         return s.to_string();
     }
     let truncated = crate::agent::utils::truncate_at_char_boundary(s, max_len);
-    format!(
-        "{}...\n[truncated, original {} chars]",
-        truncated,
-        s.len()
-    )
+    format!("{}...\n[truncated, original {} chars]", truncated, s.len())
 }
 
 fn summarize_text(content: &str, max_len: usize) -> String {

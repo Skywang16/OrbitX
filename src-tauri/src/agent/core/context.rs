@@ -107,13 +107,11 @@ impl TaskContext {
         let runtime_config = ReactRuntimeConfig {
             max_iterations: agent_config.max_react_num,
             max_consecutive_errors: agent_config.max_react_error_streak,
-            max_idle_rounds: agent_config.max_react_idle_rounds,
         };
 
         let thresholds = TaskThresholds {
             max_consecutive_errors: agent_config.max_react_error_streak,
             max_iterations: agent_config.max_react_num,
-            max_idle_rounds: agent_config.max_react_idle_rounds,
         };
 
         let dummy_registry = Arc::new(ToolRegistry::new(
@@ -234,13 +232,11 @@ impl TaskContext {
         let runtime_config = ReactRuntimeConfig {
             max_iterations: agent_config.max_react_num,
             max_consecutive_errors: agent_config.max_react_error_streak,
-            max_idle_rounds: agent_config.max_react_idle_rounds,
         };
 
         let thresholds = TaskThresholds {
             max_consecutive_errors: agent_config.max_react_error_streak,
             max_iterations: agent_config.max_react_num,
-            max_idle_rounds: agent_config.max_react_idle_rounds,
         };
 
         let record = execution;

@@ -4,6 +4,9 @@ use tracing::warn;
 
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::persistence::{AgentPersistence, ConversationSummary};
+use crate::agent::prompt::components::conversation_summary::{
+    build_conversation_summary_user_prompt, CONVERSATION_SUMMARY_SYSTEM_PROMPT,
+};
 use crate::llm::registry::LLMRegistry;
 use crate::llm::service::LLMService;
 use crate::llm::types::{LLMMessage, LLMMessageContent, LLMRequest, LLMResponse};
@@ -69,7 +72,7 @@ impl ConversationSummarizer {
         }
 
         match self
-            .summarize_conversation(model_id, messages, context_window, current_tokens)
+            .summarize_conversation(model_id, messages, current_tokens)
             .await
         {
             Ok(result) => {
@@ -99,11 +102,10 @@ impl ConversationSummarizer {
             ));
         }
 
-        let context_window = self.lookup_context_window(model_id);
         let current_tokens = estimate_messages_tokens(messages);
 
         match self
-            .summarize_conversation(model_id, messages, context_window, current_tokens)
+            .summarize_conversation(model_id, messages, current_tokens)
             .await
         {
             Ok(result) => {
@@ -126,7 +128,6 @@ impl ConversationSummarizer {
         &self,
         model_id: &str,
         messages: &[LLMMessage],
-        _context_window: u32,
         current_tokens: u32,
     ) -> AgentResult<SummaryResult> {
         let (summary_scope, recent_tail) = split_messages(messages, RECENT_MESSAGES_TO_KEEP);
@@ -136,7 +137,7 @@ impl ConversationSummarizer {
             ));
         }
 
-        let prompt_messages = self.build_summary_prompt(&summary_scope, &recent_tail);
+        let prompt_messages = self.build_summary_prompt(&summary_scope);
         let request = LLMRequest {
             model: model_id.to_string(),
             messages: prompt_messages,
@@ -163,7 +164,17 @@ impl ConversationSummarizer {
             .map(|usage| usage.completion_tokens)
             .unwrap_or_else(|| estimate_tokens(&response.content));
         let recent_tokens = estimate_messages_tokens(&recent_tail);
-        let tokens_saved = current_tokens.saturating_sub(summary_tokens + recent_tokens);
+        let new_context_tokens = summary_tokens + recent_tokens;
+
+        // 关键验证：总结后的 token 数不能大于原来的
+        if new_context_tokens >= current_tokens {
+            return Err(AgentError::Internal(format!(
+                "Summary failed: new context ({} tokens) is not smaller than original ({} tokens). Summary might be too verbose.",
+                new_context_tokens, current_tokens
+            )));
+        }
+
+        let tokens_saved = current_tokens.saturating_sub(new_context_tokens);
 
         Ok(SummaryResult {
             summary: response.content.trim().to_string(),
@@ -175,52 +186,26 @@ impl ConversationSummarizer {
         })
     }
 
-    fn build_summary_prompt(
-        &self,
-        summary_scope: &[LLMMessage],
-        recent_tail: &[LLMMessage],
-    ) -> Vec<LLMMessage> {
-        let mut builder = String::new();
-        builder.push_str(
-            "Summarize the following conversation history for an autonomous coding agent.\n",
-        );
-        builder.push_str(
-            "Focus on goals, constraints, tools used, files touched, and unresolved items.\n",
-        );
-        builder.push_str("Return a concise markdown bullet list.\n\n");
-        builder.push_str("<history>\n");
+    fn build_summary_prompt(&self, summary_scope: &[LLMMessage]) -> Vec<LLMMessage> {
+        let mut history_builder = String::new();
         for message in summary_scope {
-            builder.push_str(&format!(
-                "[{role}] {content}\n",
+            history_builder.push_str(&format!(
+                "[{role}] {content}\n\n",
                 role = message.role,
                 content = render_message_content(&message.content)
             ));
-        }
-        builder.push_str("</history>\n");
-
-        if !recent_tail.is_empty() {
-            builder.push_str("\nRecent messages that must remain verbatim:\n");
-            for (idx, m) in recent_tail.iter().enumerate() {
-                builder.push_str(&format!(
-                    "- #{index} [{role}] {content}\n",
-                    index = idx + 1,
-                    role = m.role,
-                    content = render_message_content(&m.content)
-                ));
-            }
         }
 
         vec![
             LLMMessage {
                 role: "system".to_string(),
-                content: LLMMessageContent::Text(
-                    "You compress conversation history into a durable memory for an autonomous agent.
-Include key facts, open TODOs, and file references. Do not invent details.".to_string(),
-                ),
+                content: LLMMessageContent::Text(CONVERSATION_SUMMARY_SYSTEM_PROMPT.to_string()),
             },
             LLMMessage {
                 role: "user".to_string(),
-                content: LLMMessageContent::Text(builder),
+                content: LLMMessageContent::Text(build_conversation_summary_user_prompt(
+                    &history_builder,
+                )),
             },
         ]
     }
@@ -318,20 +303,8 @@ fn extract_cost(response: &LLMResponse) -> f64 {
 }
 
 impl ConversationSummarizer {
-    pub fn conversation_id(&self) -> i64 {
-        self.conversation_id
-    }
-
-    pub fn persistence(&self) -> Arc<AgentPersistence> {
-        Arc::clone(&self.persistence)
-    }
-
-    pub fn repositories(&self) -> Arc<RepositoryManager> {
+    fn repositories(&self) -> Arc<RepositoryManager> {
         Arc::clone(&self.repositories)
-    }
-
-    pub fn llm_registry(&self) -> Arc<LLMRegistry> {
-        Arc::clone(&self.llm_registry)
     }
 }
 

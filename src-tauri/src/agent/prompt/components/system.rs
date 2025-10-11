@@ -7,6 +7,45 @@ use crate::agent::config::PromptComponent;
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::prompt::components::types::{ComponentContext, ComponentDefinition};
 use crate::agent::prompt::template_engine::TemplateEngine;
+use crate::filesystem::commands::fs_list_directory;
+
+const MAX_PREVIEW_FILES: usize = 20;
+
+/// 获取目录文件列表预览（最多20个文件）
+async fn get_directory_preview(working_directory: &str) -> String {
+    if working_directory == "Not specified" || working_directory.trim().is_empty() {
+        return String::new();
+    }
+
+    match fs_list_directory(working_directory.to_string(), false).await {
+        Ok(response) if response.code == 200 => {
+            if let Some(mut entries) = response.data {
+                let total = entries.len();
+                let truncated = total > MAX_PREVIEW_FILES;
+
+                entries.truncate(MAX_PREVIEW_FILES);
+
+                let mut preview = String::from("Files in Current Directory:\n");
+                for entry in entries {
+                    preview.push_str(&format!("  {}", entry));
+                    preview.push('\n');
+                }
+
+                if truncated {
+                    preview.push_str(&format!(
+                        "  ... and {} more files (use list_files tool to see all)\n",
+                        total - MAX_PREVIEW_FILES
+                    ));
+                }
+
+                preview
+            } else {
+                String::new()
+            }
+        }
+        _ => String::new(),
+    }
+}
 
 pub fn definitions() -> Vec<Arc<dyn ComponentDefinition>> {
     vec![
@@ -41,7 +80,7 @@ impl ComponentDefinition for SystemInfoComponent {
     }
 
     fn default_template(&self) -> Option<&str> {
-        Some("SYSTEM INFORMATION\n\nOperating System: {platform}\nWorking Directory: {working_directory}\nEnvironment Context: {environment_context}")
+        Some("=== SYSTEM INFORMATION ===\nCurrent Working Directory: {working_directory}\nOperating System: {platform}\nEnvironment Context: {environment_context}\n\n{file_list_preview}\n\n**IMPORTANT: All file paths and commands should be relative to the Current Working Directory shown above.**")
     }
 
     async fn render(
@@ -72,6 +111,9 @@ impl ComponentDefinition for SystemInfoComponent {
             "No environment context available".to_string()
         };
 
+        // 获取当前目录的文件列表（最多20个）
+        let file_list_preview = get_directory_preview(working_directory).await;
+
         let mut template_context = HashMap::new();
         template_context.insert("platform".to_string(), json!("macOS"));
         template_context.insert("working_directory".to_string(), json!(working_directory));
@@ -79,6 +121,7 @@ impl ComponentDefinition for SystemInfoComponent {
             "environment_context".to_string(),
             json!(environment_context),
         );
+        template_context.insert("file_list_preview".to_string(), json!(file_list_preview));
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)

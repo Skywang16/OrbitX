@@ -114,7 +114,9 @@ impl ContextAwareProvider {
             Err(_) => return None,
         };
 
-        history.last().map(|record| (record.command.clone(), record.output.clone()))
+        history
+            .last()
+            .map(|record| (record.command.clone(), record.output.clone()))
     }
 
     /// 记录命令输出

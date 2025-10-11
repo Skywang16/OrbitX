@@ -159,7 +159,7 @@
   }
 
   .pin-btn.active {
-    background: var(--color-primary);
+    background: var(--color-primary-alpha);
   }
 
   .pin-btn.active .pin-icon {
@@ -180,7 +180,7 @@
   }
 
   .ai-chat-btn.active {
-    background: var(--color-primary);
+    background: var(--color-primary-alpha);
   }
 
   .ai-chat-btn.active .ai-chat-icon {

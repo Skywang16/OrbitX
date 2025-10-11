@@ -32,18 +32,18 @@ impl MessageCompactor {
             .map(|msg| count_message_tokens(msg) as u32)
             .sum();
 
-        // Only trigger when reaching 85% of context window
-        if current_tokens < (context_window as f32 * 0.85) as u32 {
+        // 调高阈值到 90%，因为 summarizer 已经在 85% 时处理过了
+        // MessageCompactor 应该只作为最后一道防线
+        if current_tokens < (context_window as f32 * 0.90) as u32 {
             return Ok(CompactionResult::NoCompaction(messages));
         }
 
-        self.compact_messages(messages, current_tokens).await
+        self.compact_messages(messages).await
     }
 
     pub async fn compact_messages(
         &self,
         messages: Vec<LLMMessage>,
-        _current_tokens: u32,
     ) -> AgentResult<CompactionResult> {
         if messages.len() <= self.config.keep_recent_count + 1 {
             return Ok(CompactionResult::NoCompaction(messages));
@@ -117,6 +117,7 @@ impl MessageCompactor {
     }
 
     /// Clear tool results from messages to save tokens (Anthropic's "tool result clearing" strategy)
+    /// 保留关键信息摘要，避免 LLM 重复执行相同操作
     fn clear_tool_results(&self, messages: &[LLMMessage]) -> Vec<LLMMessage> {
         messages
             .iter()
@@ -130,13 +131,11 @@ impl MessageCompactor {
                                 LLMMessagePart::ToolResult {
                                     tool_call_id,
                                     tool_name,
-                                    result: _,
+                                    result,
                                 } => {
-                                    // Keep only metadata, clear the actual result content
-                                    let cleared_result = json!({
-                                        "status": "cleared",
-                                        "original_tool": tool_name,
-                                    });
+                                    // 保留关键摘要信息，避免重复操作
+                                    let cleared_result =
+                                        create_tool_result_summary(tool_name, result);
                                     LLMMessagePart::ToolResult {
                                         tool_call_id: tool_call_id.clone(),
                                         tool_name: tool_name.clone(),
@@ -156,6 +155,59 @@ impl MessageCompactor {
             })
             .collect()
     }
+}
+
+/// 为工具结果创建简洁摘要，保留关键信息避免重复操作
+fn create_tool_result_summary(tool_name: &str, result: &serde_json::Value) -> serde_json::Value {
+    match tool_name {
+        "read_file" => {
+            // 保留文件路径和行数信息
+            if let Some(path) = result.get("path").and_then(|v| v.as_str()) {
+                let total_lines = result
+                    .get("totalLines")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                return json!({
+                    "status": "cleared",
+                    "tool": tool_name,
+                    "summary": format!("File '{}' was read ({} lines)", path, total_lines),
+                });
+            }
+        }
+        "list_files" => {
+            // 保留目录路径和文件数量
+            if let Some(path) = result.get("path").and_then(|v| v.as_str()) {
+                let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+                return json!({
+                    "status": "cleared",
+                    "tool": tool_name,
+                    "summary": format!("Directory '{}' was listed ({} entries)", path, count),
+                });
+            }
+        }
+        "execute_command" => {
+            // 保留命令和退出码
+            if let Some(command) = result.get("command").and_then(|v| v.as_str()) {
+                let exit_code = result
+                    .get("exitCode")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(-1);
+                return json!({
+                    "status": "cleared",
+                    "tool": tool_name,
+                    "summary": format!("Command '{}' executed (exit code: {})", command, exit_code),
+                });
+            }
+        }
+        _ => {}
+    }
+
+    // 默认情况：只保留工具名
+    json!({
+        "status": "cleared",
+        "tool": tool_name,
+        "summary": format!("{} was executed successfully", tool_name),
+    })
 }
 
 #[derive(Debug)]

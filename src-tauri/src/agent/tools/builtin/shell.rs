@@ -104,7 +104,7 @@ impl RunnableTool for ShellTool {
     }
 
     fn description(&self) -> &str {
-        "Execute shell commands in the current workspace with basic safety checks."
+        "Execute shell commands in the current workspace. Use grep/find for code search (e.g., 'grep -rn function_name src/'), ls/tree for directory exploration, git commands for version control. Prefer targeted searches before reading files."
     }
 
     fn parameters_schema(&self) -> serde_json::Value {

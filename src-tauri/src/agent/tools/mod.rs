@@ -16,8 +16,8 @@ pub use registry::{get_permissions_for_mode, ToolExecutionStats, ToolRegistry};
 
 // Builtin tool type re-exports
 pub use builtin::{
-    ListCodeDefinitionNamesTool, ListFilesTool, OrbitSearchTool, ReadFileTool, ReadManyFilesTool,
-    ShellTool, UnifiedEditTool, WebFetchTool, WriteFileTool,
+    ListCodeDefinitionNamesTool, ListFilesTool, OrbitSearchTool, ReadFileTool, ShellTool,
+    UnifiedEditTool, WebFetchTool, WriteFileTool,
 };
 
 use std::sync::Arc;
@@ -36,14 +36,6 @@ async fn register_builtin_tools(registry: &ToolRegistry, is_chat_mode: bool) {
 
     info!("注册 Agent 工具集 (chat_mode={})", is_chat_mode);
 
-    registry
-        .register(
-            "read_many_files",
-            Arc::new(ReadManyFilesTool::new()),
-            is_chat_mode,
-        )
-        .await
-        .ok();
     registry
         .register("web_fetch", Arc::new(WebFetchTool::new()), is_chat_mode)
         .await

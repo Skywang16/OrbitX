@@ -1,53 +1,56 @@
 /// 命令序列预测 - 硬编码关联表
-/// 
+///
 /// Linus式设计：简单到无法出错的静态配置。
 /// 不需要机器学习，不需要复杂算法，一个数组搞定。
-
 /// 命令关联对：(触发命令模式, 建议的后续命令列表)
 pub static COMMAND_PAIRS: &[(&str, &[&str])] = &[
     // 网络调试流程
     ("lsof", &["kill", "kill -9", "netstat"]),
     ("netstat", &["kill", "lsof", "ss"]),
     ("ss", &["kill", "lsof"]),
-    
     // Docker 工作流
-    ("docker ps", &["docker stop", "docker logs", "docker exec", "docker rm"]),
-    ("docker images", &["docker rmi", "docker run", "docker pull"]),
+    (
+        "docker ps",
+        &["docker stop", "docker logs", "docker exec", "docker rm"],
+    ),
+    (
+        "docker images",
+        &["docker rmi", "docker run", "docker pull"],
+    ),
     ("docker logs", &["docker restart", "docker stop"]),
-    
     // Git 工作流
     ("git status", &["git add", "git diff", "git restore"]),
     ("git add", &["git commit", "git status", "git reset"]),
     ("git commit", &["git push", "git log", "git show"]),
     ("git pull", &["git status", "git log"]),
     ("git diff", &["git add", "git restore"]),
-    
     // 进程管理
     ("ps aux", &["kill", "kill -9", "pkill"]),
     ("top", &["kill", "pkill"]),
     ("htop", &["kill", "pkill"]),
-    
     // 文件查找
     ("find", &["xargs", "rm", "ls", "cat"]),
     ("grep", &["cat", "less", "vim", "code"]),
     ("ls", &["cd", "cat", "less", "rm", "mv", "cp"]),
-    
     // 包管理 - Node
     ("npm install", &["npm run", "npm start", "npm test"]),
     ("npm run", &["npm test", "git add"]),
     ("npm test", &["git add", "npm run"]),
-    
     // 包管理 - Python
     ("pip install", &["python", "pytest"]),
     ("pytest", &["git add", "python"]),
-    
     // 包管理 - Rust
-    ("cargo build", &["cargo run", "cargo test", "./target/debug"]),
+    (
+        "cargo build",
+        &["cargo run", "cargo test", "./target/debug"],
+    ),
     ("cargo test", &["git add", "cargo build"]),
     ("cargo run", &["cargo build", "cargo test"]),
-    
     // 系统操作
-    ("systemctl status", &["systemctl restart", "systemctl stop", "journalctl"]),
+    (
+        "systemctl status",
+        &["systemctl restart", "systemctl stop", "journalctl"],
+    ),
     ("journalctl", &["systemctl restart", "systemctl status"]),
 ];
 
@@ -86,7 +89,7 @@ mod tests {
         let suggestions = get_suggested_commands("git status");
         assert!(suggestions.is_some());
         assert!(suggestions.unwrap().contains(&"git add".to_string()));
-        
+
         // git add → git commit
         let suggestions = get_suggested_commands("git add src/main.rs");
         assert!(suggestions.is_some());

@@ -3,12 +3,12 @@ pub fn truncate_at_char_boundary(s: &str, max_bytes: usize) -> &str {
     if s.len() <= max_bytes {
         return s;
     }
-    
+
     let mut pos = max_bytes;
     while pos > 0 && !s.is_char_boundary(pos) {
         pos -= 1;
     }
-    
+
     &s[..pos]
 }
 
@@ -16,7 +16,7 @@ pub fn truncate_with_ellipsis(s: &str, max_bytes: usize) -> String {
     if s.len() <= max_bytes {
         return s.to_string();
     }
-    
+
     format!("{}...", truncate_at_char_boundary(s, max_bytes))
 }
 

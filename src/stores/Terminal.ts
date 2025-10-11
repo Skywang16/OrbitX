@@ -168,6 +168,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
           terminal.cwd = payload.cwd
           updateTerminalTitle(terminal, payload.cwd)
 
+          // 保存最后的 CWD 到会话状态，通过后端 MessagePack 持久化
+          syncToSessionStore()
+          sessionStore.saveSessionState().catch(() => {})
+
           // 记录工作区到最近列表
           // 排除：1) ~ 目录  2) home 目录  3) 终端的初始目录（首次 CWD 变化）
           const initialCwd = _terminalInitialCwd.value.get(payload.paneId)
@@ -275,17 +279,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       const defaultShell = await shellApi.getDefaultShell()
 
-      let resolvedCwd = initialDirectory || null
-      try {
-        resolvedCwd = await storageApi.getTerminalCwd(paneId)
-      } catch (error) {
-        console.warn('获取终端工作目录失败，使用回退目录:', error)
-      }
-
       const terminal: RuntimeTerminalState = {
         id: paneId,
         title: defaultShell.name,
-        cwd: resolvedCwd || initialDirectory || '~',
+        cwd: initialDirectory || '~',
         active: false,
         shell: defaultShell.name,
       }
@@ -466,17 +463,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
         cwd: initialDirectory,
       })
 
-      let resolvedCwd = initialDirectory || null
-      try {
-        resolvedCwd = await storageApi.getTerminalCwd(paneId)
-      } catch (error) {
-        console.warn('获取Agent终端工作目录失败，使用回退目录:', error)
-      }
-
       const terminal: RuntimeTerminalState = {
         id: paneId,
         title: agentTerminalTitle,
-        cwd: resolvedCwd || initialDirectory || '~',
+        cwd: initialDirectory || '~',
         active: false,
         shell: 'agent',
       }
@@ -508,17 +498,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
         cols: 80,
       })
 
-      let resolvedCwd = shellInfo.path || null
-      try {
-        resolvedCwd = await storageApi.getTerminalCwd(paneId)
-      } catch (error) {
-        console.warn(`获取Shell(${shellName})终端工作目录失败，使用默认路径:`, error)
-      }
-
       const terminal: RuntimeTerminalState = {
         id: paneId,
         title,
-        cwd: resolvedCwd || shellInfo.path || '~',
+        cwd: shellInfo.path || '~',
         active: false,
         shell: shellInfo.name,
       }
@@ -546,6 +529,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       title: terminal.title,
       active: terminal.id === activeTerminalId.value,
       shell: terminal.shell,
+      cwd: terminal.cwd, // 保存工作目录用于重启恢复
     }))
 
     sessionStore.updateTerminals(terminalStates)
@@ -627,8 +611,35 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
 
     if (terminals.value.length === 0) {
-      await createTerminal()
-      return true
+      if (savedTerminals.length > 0) {
+        // 恢复所有保存的终端
+        const newTerminalIds: number[] = []
+
+        for (const saved of savedTerminals) {
+          const paneId = await createTerminal(saved.cwd)
+          newTerminalIds.push(paneId)
+
+          // 恢夏保存的属性
+          const terminal = terminals.value.find(t => t.id === paneId)
+          if (terminal) {
+            if (saved.title) terminal.title = saved.title
+            if (saved.shell) terminal.shell = saved.shell
+          }
+        }
+
+        // 激活之前活跃的终端（按顺序对应）
+        const activeIndex = savedTerminals.findIndex(t => t.active)
+        const targetId = newTerminalIds[activeIndex >= 0 ? activeIndex : 0]
+        if (targetId) {
+          await setActiveTerminal(targetId)
+        }
+
+        return true
+      } else {
+        // 没有保存的终端，创建一个新的
+        await createTerminal()
+        return true
+      }
     }
 
     return terminals.value.length > 0

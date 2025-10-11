@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod conversation_summary;
 pub mod dialogue;
 pub mod planning;
 pub mod registry;

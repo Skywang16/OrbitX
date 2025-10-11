@@ -1,50 +1,62 @@
 <template>
   <div class="tool-block" v-if="step?.stepType === 'tool_use' || step?.stepType === 'tool_result'">
     <div
-      class="tool-header"
-      :class="{ expandable: isExpandable, 'non-expandable': !isExpandable }"
-      @click="toggleExpanded"
+      class="tool-line"
+      :class="{ clickable: isExpandable, running: isRunning, error: isError }"
     >
-      <div class="tool-info">
-        <div class="tool-icon" v-html="getToolIcon(toolName)"></div>
-        <span class="tool-name">{{ toolName || 'Unknown Tool' }}</span>
-        <span class="tool-param" v-if="toolParam">
-          {{ toolParam }}
-        </span>
-      </div>
-      <div
-        class="status-dot"
-        :class="{
-          running: step.stepType === 'tool_use',
-          completed: step.stepType === 'tool_result' && !isError,
-          error: step.stepType === 'tool_result' && isError,
-        }"
-      ></div>
+      <span class="text" :class="{ clickable: isExpandable }" @click="toggleExpanded">
+        <span v-if="toolPrefix" class="tool-prefix">{{ toolPrefix }}</span>
+        <span class="tool-content">{{ getDisplayText() }}</span>
+      </span>
+      <span v-if="diffStats" class="diff-stats">
+        <span class="add">+{{ diffStats.added }}</span>
+        <span class="del">-{{ diffStats.removed }}</span>
+      </span>
+      <svg
+        v-if="isExpandable"
+        class="chevron"
+        :class="{ expanded: isExpanded }"
+        width="10"
+        height="10"
+        viewBox="0 0 10 10"
+        @click="toggleExpanded"
+      >
+        <path
+          d="M3.5 2.5L6 5L3.5 7.5"
+          stroke="currentColor"
+          stroke-width="1"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          fill="none"
+        />
+      </svg>
     </div>
 
-    <div v-if="isExpanded && hasResult" class="tool-result" @click.stop>
-      <EditResult v-if="isEditResult" :editData="editData" />
-      <div v-else class="tool-result-content">{{ cleanToolResult }}</div>
-    </div>
+    <transition name="expand">
+      <div v-if="isExpanded && hasResult" class="tool-result" :class="{ 'has-scroll': hasScroll }" @click.stop>
+        <div ref="resultWrapperRef" class="result-wrapper" @scroll="checkScroll">
+          <EditResult v-if="isEditResult" :editData="editData" />
+          <pre v-else-if="shouldHighlight" ref="resultTextRef" class="result-text"><code>{{ cleanToolResult }}</code></pre>
+          <pre v-else class="result-text-plain">{{ cleanToolResult }}</pre>
+        </div>
+      </div>
+    </transition>
   </div>
 
-  <div v-else class="tool-block error">
-    <div class="tool-header non-expandable">
-      <div class="tool-info">
-        <div class="tool-icon" v-html="getToolIcon('unknown')"></div>
-        <span class="tool-name">{{ t('tool.data_error') }}</span>
-      </div>
-      <div class="status-dot error"></div>
+  <div v-else class="tool-block">
+    <div class="tool-line error">
+      <span class="text">{{ t('tool.data_error') }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ref, computed } from 'vue'
+  import { ref, computed, nextTick, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import type { UiStep } from '@/api/agent/types'
   import EditResult from './components/EditResult.vue'
   import stripAnsi from 'strip-ansi'
+  import hljs from 'highlight.js'
 
   interface EditResultData {
     file: string
@@ -66,6 +78,9 @@
   }>()
 
   const isExpanded = ref(false)
+  const resultTextRef = ref<HTMLPreElement | null>(null)
+  const resultWrapperRef = ref<HTMLDivElement | null>(null)
+  const hasScroll = ref(false)
 
   // Extract tool information from step metadata
   const toolName = computed(() => {
@@ -90,6 +105,10 @@
 
   const isEditResult = computed(() => {
     return toolName.value === 'edit_file'
+  })
+
+  const shouldHighlight = computed(() => {
+    return toolName.value === 'read_file'
   })
 
   const editData = computed(() => {
@@ -126,134 +145,96 @@
     return toolName.value === 'edit_file' || hasResult.value
   })
 
-  const toolParam = computed(() => {
-    return getToolParam({ name: toolName.value, params: toolParams.value })
+  const isRunning = computed(() => {
+    return props.step.stepType === 'tool_use'
   })
 
-  const toolIcons = {
-    read_file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.89 22 5.99 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M16 13H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`,
-    read_many_files: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M15 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.89 22 5.99 22H18C19.1 22 20 21.1 20 20V7L15 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M15 2V7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M9 15H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M9 11H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M2 6H4V18H2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`,
+  const diffStats = computed(() => {
+    if (toolName.value !== 'edit_file' || !props.step.metadata?.extInfo) return null
+    const extInfo = props.step.metadata.extInfo as EditResultData
+    if (extInfo.old && extInfo.new) {
+      const oldLines = extInfo.old.split('\n').length
+      const newLines = extInfo.new.split('\n').length
+      return {
+        added: Math.max(0, newLines),
+        removed: Math.max(0, oldLines),
+      }
+    }
+    return null
+  })
 
-    edit_file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M18.5 2.50023C18.8978 2.1024 19.4374 1.87891 20 1.87891C20.5626 1.87891 21.1022 2.1024 21.5 2.50023C21.8978 2.89805 22.1213 3.43762 22.1213 4.00023C22.1213 4.56284 21.8978 5.1024 21.5 5.50023L12 15.0002L8 16.0002L9 12.0002L18.5 2.50023Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`,
-    shell: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
-      <path d="M8 21L16 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      <path d="M12 17L12 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      <path d="M6 7L8 9L6 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M10 11H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>`,
-    web_fetch: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-      <path d="M2 12H22" stroke="currentColor" stroke-width="2"/>
-      <path d="M12 2C14.5013 4.73835 15.9228 8.29203 16 12C15.9228 15.708 14.5013 19.2616 12 22C9.49872 19.2616 8.07725 15.708 8 12C8.07725 8.29203 9.49872 4.73835 12 2Z" stroke="currentColor" stroke-width="2"/>
-    </svg>`,
-    orbit_search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
-      <path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="11" cy="11" r="3" stroke="currentColor" stroke-width="2"/>
-      <path d="M8 11H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      <path d="M11 8V14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>`,
-    apply_diff: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.89 22 5.99 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M8 13H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M8 17H12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M16 17L18 15L16 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`,
-    list_files: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M3 7V5C3 3.89543 3.89543 3 5 3H9L11 5H19C20.1046 5 21 5.89543 21 7V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M3 7H21V17C21 18.1046 20.1046 19 19 19H5C3.89543 19 3 18.1046 3 17V7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M7 11H17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      <path d="M7 15H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>`,
-    list_code_definition_names: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M16 18L22 12L16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M8 6L2 12L8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M12 4L10 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`,
-    insert_content: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.89 22 5.99 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M9 15H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M12 12V18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`,
-    write_to_file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.89 22 5.99 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M10 12L12 14L16 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`,
-
-    unknown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-      <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M12 17H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`,
-  }
-
-  const getToolIcon = (toolName: string) => {
-    return toolIcons[toolName as keyof typeof toolIcons] || toolIcons.unknown
-  }
-
-  type AnyToolExecution = { name: string; params?: Record<string, unknown> }
-  const getToolParam = (toolExecution: AnyToolExecution) => {
-    const { name, params } = toolExecution
-
-    switch (name) {
-      case 'edit_file':
+  const toolPrefix = computed(() => {
+    switch (toolName.value) {
       case 'read_file':
-      case 'write_to_file':
-      case 'insert_content':
-        return formatPath((params?.path as string) || '')
-
-      case 'read_many_files':
-        return `${(params?.paths as string[])?.length || 0} files`
-
-      case 'web_fetch':
-        return formatUrl((params?.url as string) || '')
-
+        return 'Read '
       case 'orbit_search':
-        return formatText((params?.query as string) || '')
-
+        return 'Searched '
       case 'shell':
-        return formatText((params?.command as string) || '')
-
+        return 'Shell '
+      case 'edit_file':
+        return 'Edited '
+      case 'write_to_file':
+        return 'Wrote to '
+      case 'insert_content':
+        return 'Inserted to '
       case 'list_files':
-        return formatPath((params?.path as string) || '')
-
+        return 'Listed '
       case 'list_code_definition_names':
-        return formatPath((params?.path as string) || '')
-
+        return 'Listed definitions in '
+      case 'web_fetch':
+        return 'Fetched '
       case 'apply_diff':
-        return `${(params?.files as { path: string; hunks: unknown[] }[])?.length || 0} files`
-
+        return 'Applied diff to '
       default:
         return ''
+    }
+  })
+
+  const getDisplayText = () => {
+    const params = toolParams.value
+    const extInfo = props.step.metadata?.extInfo as Record<string, any> | undefined
+    
+    switch (toolName.value) {
+      case 'read_file': {
+        const path = formatPath(params?.path as string)
+        // 从 extInfo 读取行号(tool_result 才有)
+        const startLine = extInfo?.startLine as number | undefined
+        const endLine = extInfo?.endLine as number | undefined
+        if (startLine !== undefined && endLine !== undefined) {
+          return `${path} #L${startLine}-${endLine}`
+        } else if (startLine !== undefined) {
+          return `${path} #L${startLine}`
+        }
+        return path
+      }
+      case 'edit_file':
+        return formatPath(params?.path as string)
+      case 'write_to_file':
+        return formatPath(params?.path as string)
+      case 'insert_content':
+        return formatPath(params?.path as string)
+      case 'shell':
+        return formatText(params?.command as string)
+      case 'orbit_search':
+        return formatText(params?.query as string)
+      case 'list_files':
+        return formatPath(params?.path as string) || 'files'
+      case 'list_code_definition_names':
+        return formatPath(params?.path as string)
+      case 'web_fetch':
+        return formatUrl(params?.url as string)
+      case 'apply_diff':
+        return `${(params?.files as { path: string }[])?.length || 0} files`
+      default:
+        return toolName.value || 'Unknown'
     }
   }
 
   const formatPath = (path: string) => {
     if (!path) return ''
     const parts = path.split('/')
-    if (parts.length > 3) {
-      return `.../${parts.slice(-2).join('/')}`
-    }
-    return path
+    // 只返回文件名
+    return parts[parts.length - 1] || path
   }
 
   const formatUrl = (url: string) => {
@@ -269,12 +250,6 @@
   const formatText = (text: string) => {
     if (!text) return ''
     return text.length > 50 ? text.substring(0, 47) + '...' : text
-  }
-
-  const toggleExpanded = () => {
-    if (isExpandable.value) {
-      isExpanded.value = !isExpanded.value
-    }
   }
 
   const cleanToolResult = computed(() => {
@@ -293,135 +268,260 @@
     }
     return result
   })
+
+  const checkScroll = () => {
+    if (resultWrapperRef.value) {
+      hasScroll.value = resultWrapperRef.value.scrollHeight > resultWrapperRef.value.clientHeight
+    }
+  }
+
+  const toggleExpanded = () => {
+    if (isExpandable.value) {
+      isExpanded.value = !isExpanded.value
+      if (isExpanded.value) {
+        nextTick(() => {
+          highlightCode()
+          checkScroll()
+        })
+      }
+    }
+  }
+
+  const highlightCode = () => {
+    if (shouldHighlight.value && resultTextRef.value) {
+      hljs.highlightElement(resultTextRef.value)
+    }
+  }
+
+  // 监听结果变化,自动高亮
+  watch(
+    () => [isExpanded.value, cleanToolResult.value],
+    () => {
+      if (isExpanded.value) {
+        nextTick(() => {
+          highlightCode()
+          checkScroll()
+        })
+      }
+    }
+  )
 </script>
 
 <style scoped>
   .tool-block {
-    background: var(--bg-500);
-    border: 1px solid var(--border-200);
-    border-radius: var(--border-radius);
-    font-size: 13px;
-    max-width: 100%;
-    margin-bottom: var(--spacing-xs, 4px);
+    margin: 6px 0;
+    font-size: 14px;
+    line-height: 1.8;
   }
 
-  .tool-header {
-    padding: 8px 12px;
+  .tool-line {
     display: flex;
     align-items: center;
-    gap: 8px;
-    transition: background-color 0.2s ease;
+    gap: 4px;
+    padding: 4px 0;
+    color: var(--text-400);
+    transition: all 0.15s ease;
+    font-size: 14px;
   }
 
-  .tool-header.expandable {
+
+  .tool-line.running .text {
+    opacity: 0.6;
+  }
+
+  .tool-line.error {
+    color: var(--color-error);
+  }
+
+  .text {
+    font-size: 14px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .text.clickable {
     cursor: pointer;
   }
 
-  .tool-header.expandable:hover {
-    background: var(--bg-600);
-  }
-
-  .tool-header.non-expandable {
-    cursor: default;
-    opacity: 0.8;
-  }
-
-  .tool-header.non-expandable:hover {
-    background: transparent;
-  }
-
-  .tool-info {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-
-  .tool-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
+  .text.clickable:hover {
     color: var(--text-300);
   }
 
-  .tool-icon svg {
-    width: 14px;
-    height: 14px;
-  }
-
-  .tool-name {
-    color: var(--text-200);
-    font-weight: 500;
-    white-space: nowrap;
-  }
-
-  .tool-param {
-    color: var(--text-300);
-    font-size: 12px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 200px;
-    background: transparent;
-    margin-left: 8px;
-  }
-
-  .tool-command {
+  .tool-prefix {
     color: var(--text-400);
-    font-family: monospace;
+    font-weight: 400;
+  }
+
+  .tool-content {
+    color: var(--text-500);
+    font-weight: 400;
+  }
+
+  .diff-stats {
+    display: flex;
+    gap: 6px;
     font-size: 12px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex: 1;
+    font-weight: 500;
+    flex-shrink: 0;
   }
 
-  .status-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--color-success);
+  .diff-stats .add {
+    color: #10b981;
   }
 
-  .status-dot.running {
-    background: transparent;
-    border: 2px solid var(--color-info);
-    border-top-color: transparent;
-    animation: spin 0.8s linear infinite;
+  .diff-stats .del {
+    color: #ef4444;
   }
 
-  .status-dot.error {
-    background: var(--color-error);
+  .chevron {
+    flex-shrink: 0;
+    color: var(--text-500);
+    transition: transform 0.2s ease;
+    opacity: 0.5;
+    cursor: pointer;
   }
 
-  .status-dot.completed {
-    width: 6px;
-    height: 6px;
+  .chevron:hover,
+  .text.clickable:hover ~ .chevron {
+    opacity: 1;
+  }
+
+  .chevron.expanded {
+    transform: rotate(90deg);
   }
 
   .tool-result {
-    padding: 8px;
-    background: var(--bg-400);
-    border-radius: var(--border-radius-sm);
+    margin-top: 8px;
+    margin-left: 0;
+    position: relative;
+    max-height: 300px;
+    overflow: hidden;
   }
 
-  .tool-result-content {
-    font-family: monospace;
-    color: var(--text-300);
+  /* 只在有滚动条时显示渐变阴影 */
+  .tool-result::before,
+  .tool-result::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 20px;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .tool-result.has-scroll::before,
+  .tool-result.has-scroll::after {
+    opacity: 1;
+  }
+
+  .tool-result::before {
+    top: 0;
+    background: linear-gradient(
+      to bottom,
+      var(--bg-200) 0%,
+      transparent 100%
+    );
+  }
+
+  .tool-result::after {
+    bottom: 0;
+    background: linear-gradient(
+      to top,
+      var(--bg-200) 0%,
+      transparent 100%
+    );
+  }
+
+  .result-wrapper {
+    max-height: 300px;
+    overflow-y: auto;
+    overflow-x: auto;
+    padding: 0;
+    scrollbar-gutter: stable;
+  }
+
+  /* 和 MessageList 完全一致的滚动条样式 */
+  .result-wrapper::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .result-wrapper::-webkit-scrollbar-track {
+    background: var(--bg-200);
+    border-radius: 4px;
+  }
+
+  .result-wrapper::-webkit-scrollbar-thumb {
+    background: var(--border-300);
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+  }
+
+  .result-wrapper::-webkit-scrollbar-thumb:hover {
+    background: var(--border-400);
+  }
+
+  .result-text {
+    margin: 0;
+    padding: 0;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-400);
     white-space: pre-wrap;
     word-wrap: break-word;
-    font-size: 12px;
-    line-height: 1.4;
+    overflow-wrap: break-word;
+    background: transparent;
   }
 
-  @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
-      transform: rotate(360deg);
-    }
+  .result-text code {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    display: block;
+  }
+
+  .result-text-plain {
+    margin: 0;
+    padding: 0;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-400);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    background: transparent;
+  }
+
+  .tool-result::before,
+  .expand-enter-active,
+  .expand-leave-active {
+    transition: all 0.2s ease;
+    overflow: hidden;
+  }
+
+  .expand-enter-from,
+  .expand-leave-to {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+  }
+
+  .expand-enter-to,
+  .expand-leave-from {
+    max-height: 300px;
+    opacity: 1;
+    margin-top: 8px;
   }
 </style>

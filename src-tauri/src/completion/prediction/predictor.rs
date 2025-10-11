@@ -1,10 +1,9 @@
 /// 命令序列预测引擎
-/// 
+///
 /// Linus式设计：三个步骤，没有抽象
 /// 1. 根据上一条命令查表
 /// 2. 从输出提取实体
 /// 3. 生成带参数的建议
-
 use super::command_pairs::get_suggested_commands;
 use super::context_detector::ContextDetector;
 use crate::completion::smart_extractor::SmartExtractor;
@@ -61,7 +60,7 @@ impl CommandPredictor {
     }
 
     /// 预测下一条命令
-    /// 
+    ///
     /// Linus: "Keep it simple - 三步走"
     pub fn predict_next_commands(
         &self,
@@ -77,11 +76,7 @@ impl CommandPredictor {
                 // 过滤：只保留匹配输入前缀的
                 if cmd.starts_with(input_prefix) || input_prefix.is_empty() {
                     // 步骤2: 提取实体并注入参数
-                    let prediction = self.build_prediction(
-                        &cmd,
-                        last_command,
-                        last_output,
-                    );
+                    let prediction = self.build_prediction(&cmd, last_command, last_output);
                     predictions.push(prediction);
                 }
             }
@@ -137,12 +132,15 @@ impl CommandPredictor {
             command: suggested_cmd.to_string(),
             arguments,
             confidence,
-            source: format!("基于 '{}' 的预测", last_command.split_whitespace().next().unwrap_or("")),
+            source: format!(
+                "基于 '{}' 的预测",
+                last_command.split_whitespace().next().unwrap_or("")
+            ),
         }
     }
 
     /// 提取第一个 PID
-    /// 
+    ///
     /// Linus: "不需要完美，需要的是能用"
     fn extract_first_pid(&self, last_command: &str, output: &str) -> Option<String> {
         // 使用 SmartExtractor 提取 PID
@@ -209,63 +207,77 @@ mod tests {
     #[test]
     fn test_lsof_kill_prediction() {
         let predictor = CommandPredictor::new(env::current_dir().unwrap());
-        
+
         let last_cmd = "lsof -i :8080";
         let last_output = Some("COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME\nnode    12345 user   23u  IPv4 0x1234      0t0  TCP *:8080 (LISTEN)");
-        
+
         let predictions = predictor.predict_next_commands(last_cmd, last_output, "");
-        
+
         assert!(!predictions.is_empty());
         assert!(predictions.iter().any(|p| p.command.starts_with("kill")));
-        
+
         // 应该自动提取到 PID
-        let kill_pred = predictions.iter().find(|p| p.command.starts_with("kill")).unwrap();
+        let kill_pred = predictions
+            .iter()
+            .find(|p| p.command.starts_with("kill"))
+            .unwrap();
         assert!(kill_pred.arguments.contains(&"12345".to_string()));
     }
 
     #[test]
     fn test_docker_workflow() {
         let predictor = CommandPredictor::new(env::current_dir().unwrap());
-        
+
         let last_cmd = "docker ps";
         let last_output = Some("CONTAINER ID   IMAGE     COMMAND                  CREATED         STATUS         PORTS                    NAMES\nabc123def456   nginx     \"/docker-entrypoint.…\"   2 hours ago     Up 2 hours     0.0.0.0:8080->80/tcp     my-nginx");
-        
+
         let predictions = predictor.predict_next_commands(last_cmd, last_output, "");
-        
+
         assert!(!predictions.is_empty());
-        let stop_pred = predictions.iter().find(|p| p.command.starts_with("docker stop"));
+        let stop_pred = predictions
+            .iter()
+            .find(|p| p.command.starts_with("docker stop"));
         assert!(stop_pred.is_some());
-        
+
         // 应该自动提取到容器 ID
-        assert!(stop_pred.unwrap().arguments.contains(&"abc123def456".to_string()));
+        assert!(stop_pred
+            .unwrap()
+            .arguments
+            .contains(&"abc123def456".to_string()));
     }
 
     #[test]
     fn test_git_workflow() {
         let predictor = CommandPredictor::new(env::current_dir().unwrap());
-        
+
         let last_cmd = "git status";
-        let last_output = Some("On branch main\nChanges not staged for commit:\n  modified:   src/main.rs");
-        
+        let last_output =
+            Some("On branch main\nChanges not staged for commit:\n  modified:   src/main.rs");
+
         let predictions = predictor.predict_next_commands(last_cmd, last_output, "");
-        
+
         assert!(!predictions.is_empty());
-        let add_pred = predictions.iter().find(|p| p.command.starts_with("git add"));
+        let add_pred = predictions
+            .iter()
+            .find(|p| p.command.starts_with("git add"));
         assert!(add_pred.is_some());
-        
+
         // 应该自动提取到文件名
-        assert!(add_pred.unwrap().arguments.contains(&"src/main.rs".to_string()));
+        assert!(add_pred
+            .unwrap()
+            .arguments
+            .contains(&"src/main.rs".to_string()));
     }
 
     #[test]
     fn test_input_prefix_filter() {
         let predictor = CommandPredictor::new(env::current_dir().unwrap());
-        
+
         let last_cmd = "git status";
-        
+
         // 只返回以 "git a" 开头的预测
         let predictions = predictor.predict_next_commands(last_cmd, None, "git a");
-        
+
         assert!(predictions.iter().all(|p| p.command.starts_with("git a")));
     }
 }

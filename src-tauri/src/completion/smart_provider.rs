@@ -30,7 +30,7 @@ impl SmartCompletionProvider {
         // 获取当前工作目录，初始化预测器
         let current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let predictor = Some(CommandPredictor::new(current_dir));
-        
+
         Self {
             context_analyzer: Arc::new(ContextAnalyzer::new()),
             filesystem_provider,
@@ -88,7 +88,7 @@ impl SmartCompletionProvider {
                         Some(&last_output),
                         &context.current_word,
                     );
-                    
+
                     // 转换为补全项，预测命令得分 90-95
                     for pred in predictions {
                         items.push(pred.to_completion_item());
@@ -121,7 +121,9 @@ impl SmartCompletionProvider {
             if context_boost > 0.0 {
                 // 为匹配前缀的命令加分
                 for item in &mut items {
-                    if item.text.starts_with(&context.current_word) || context.current_word.is_empty() {
+                    if item.text.starts_with(&context.current_word)
+                        || context.current_word.is_empty()
+                    {
                         item.score += context_boost;
                     }
                 }

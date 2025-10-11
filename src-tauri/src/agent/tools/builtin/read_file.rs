@@ -42,7 +42,7 @@ impl RunnableTool for ReadFileTool {
     }
 
     fn description(&self) -> &str {
-        "Read and display file contents. Supports line range pagination via offset/limit."
+        "Read file contents with pagination support. IMPORTANT: For files larger than 500 lines, ALWAYS specify offset/limit to read targeted sections. Default limit is 2000 lines. Use grep or search tools first to locate the relevant lines before reading."
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -56,12 +56,12 @@ impl RunnableTool for ReadFileTool {
                 "offset": {
                     "type": "number",
                     "minimum": 0,
-                    "description": "Optional: 0-based line number to start reading from."
+                    "description": "Optional: 0-based line number to start reading from. RECOMMENDED when you know the target line range from grep or search results. Example: offset=100 starts reading from line 100."
                 },
                 "limit": {
                     "type": "number",
                     "minimum": 1,
-                    "description": "Optional: Maximum number of lines to read."
+                    "description": "Optional: Maximum number of lines to read (default: 2000). STRONGLY RECOMMENDED for large files. Example: limit=50 reads only 50 lines. For a 3000-line file, read in chunks: first call with offset=0&limit=500, then offset=500&limit=500, etc."
                 }
             },
             "required": ["path"]

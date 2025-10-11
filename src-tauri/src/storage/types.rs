@@ -75,7 +75,7 @@ impl Default for WindowState {
 ///
 /// 设计原则：
 /// - id 直接使用后端 pane_id，前后端统一标识
-/// - cwd 不持久化，由后端实时查询 ShellIntegration
+/// - cwd 保存工作目录，用于重启恢复
 /// - 仅保存必要的恢复信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,6 +88,9 @@ pub struct TerminalState {
     pub active: bool,
     /// Shell类型（可选）
     pub shell: Option<String>,
+    /// 工作目录（用于重启恢复）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

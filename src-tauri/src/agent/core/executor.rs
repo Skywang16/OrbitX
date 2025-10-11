@@ -15,6 +15,7 @@ use crate::agent::config::TaskExecutionConfig;
 use crate::agent::context::{ContextBuilder, ConversationSummarizer, SummaryResult};
 use crate::agent::core::chain::ToolChain;
 use crate::agent::core::context::{LLMResponseParsed, TaskContext, ToolCallResult};
+use crate::agent::core::iteration_outcome::IterationOutcome; // 架构重构核心
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::AgentError;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
@@ -51,7 +52,7 @@ use tauri::ipc::Channel;
 use tokio::sync::RwLock;
 use tokio::task::yield_now;
 use tokio_stream::StreamExt;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// 任务执行参数（与前端风格统一 camelCase）
@@ -1299,6 +1300,7 @@ impl TaskExecutor {
     }
 
     /// ReAct循环执行（核心逻辑）
+    /// ReAct循环执行（重构版：简化逻辑，移除idle计数安全网）
     pub(crate) async fn run_react_loop(&self, context: Arc<TaskContext>) -> TaskExecutorResult<()> {
         info!("Starting ReAct loop for task: {}", context.task_id);
 
@@ -1308,20 +1310,24 @@ impl TaskExecutor {
         while !context.should_stop().await {
             context.check_aborted(false).await?;
 
+            // ===== Phase 1: 迭代初始化 =====
+            let iteration = context.increment_iteration().await?;
+            debug!("Task {} starting iteration {}", context.task_id, iteration);
+
             let react_iteration_index = {
                 let runtime_handle = context.react_runtime();
                 let mut runtime = runtime_handle.write().await;
                 runtime.start_iteration()
             };
 
-            let iteration = context.increment_iteration().await?;
-            context.state_manager().reset_idle_rounds().await;
-            debug!("Task {} iteration {}", context.task_id, iteration);
-
             let iter_ctx = context.begin_iteration(iteration).await;
 
+            // ===== Phase 2: 准备消息上下文 =====
             let model_id = self.get_default_model_id().await?;
+            let mut request_messages = Vec::new();
+            context.copy_messages_into(&mut request_messages).await;
 
+            // 对话摘要（如果需要）
             let summarizer = ConversationSummarizer::new(
                 context.conversation_id,
                 persistence.clone(),
@@ -1329,57 +1335,59 @@ impl TaskExecutor {
                 self.llm_registry(),
             );
 
-            let mut request_messages = Vec::new();
-            context.copy_messages_into(&mut request_messages).await;
             if let Some(summary) = summarizer
                 .summarize_if_needed(&model_id, &request_messages)
                 .await?
             {
-                let summary_msg = LLMMessage {
-                    role: "system".to_string(),
-                    content: LLMMessageContent::Text(summary.summary.clone()),
-                };
                 let insert_at = if request_messages.len() > 1 {
                     1
                 } else {
                     request_messages.len()
                 };
-                request_messages.insert(insert_at, summary_msg);
-
-                let summary_payload = serde_json::json!({
-                    "summary": summary.summary,
-                    "tokens_saved": summary.tokens_saved,
-                    "prev_tokens": summary.prev_context_tokens,
-                });
+                request_messages.insert(
+                    insert_at,
+                    LLMMessage {
+                        role: "system".to_string(),
+                        content: LLMMessageContent::Text(summary.summary.clone()),
+                    },
+                );
 
                 let _ = persistence
                     .execution_events()
                     .record_event(
                         &context.task_id,
                         ExecutionEventType::Text,
-                        &serde_json::to_string(&summary_payload)
-                            .unwrap_or_else(|_| "{}".to_string()),
-                        context.current_iteration().await as i64,
+                        &serde_json::json!({
+                            "summary": summary.summary,
+                            "tokens_saved": summary.tokens_saved,
+                            "prev_tokens": summary.prev_context_tokens,
+                        })
+                        .to_string(),
+                        iteration as i64,
                     )
                     .await;
             }
 
+            // 压缩历史（如果有）
             let compressed_history = context.session().get_compressed_history_text().await;
             if !compressed_history.is_empty() {
-                let history_message = LLMMessage {
-                    role: "system".to_string(),
-                    content: LLMMessageContent::Text(compressed_history),
-                };
                 let insert_at = if request_messages.is_empty() { 0 } else { 1 };
-                request_messages.insert(insert_at, history_message);
+                request_messages.insert(
+                    insert_at,
+                    LLMMessage {
+                        role: "system".to_string(),
+                        content: LLMMessageContent::Text(compressed_history),
+                    },
+                );
             }
 
-            let recent_iterations = {
-                let runtime = context.react_runtime();
-                let guard = runtime.read().await;
-                guard.get_snapshot().iterations
-            };
-
+            // 文件上下文（如果有）
+            let recent_iterations = context
+                .react_runtime()
+                .read()
+                .await
+                .get_snapshot()
+                .iterations;
             let builder = self.get_context_builder(&context).await;
             if let Some(file_msg) = builder.build_file_context_message(&recent_iterations).await {
                 let insert_at = if request_messages.len() > 2 {
@@ -1390,13 +1398,14 @@ impl TaskExecutor {
                 request_messages.insert(insert_at, file_msg);
             }
 
+            // 消息压缩（如果超过上下文窗口）
             let context_window = self
                 .llm_registry()
                 .get_model_max_context(&model_id)
                 .unwrap_or(128_000);
 
-            let compactor = MessageCompactor::new().with_config(CompactionConfig::default());
-            let compaction_result = compactor
+            let compaction_result = MessageCompactor::new()
+                .with_config(CompactionConfig::default())
                 .compact_if_needed(request_messages, &model_id, context_window)
                 .await
                 .map_err(|e| {
@@ -1417,95 +1426,13 @@ impl TaskExecutor {
 
             let messages = compaction_result.messages();
 
-            // 打印发送给 LLM 的所有消息（方便调试）
-            info!(
-                "=== LLM Request Messages (task: {}, iteration: {}) ===",
-                context.task_id, iteration
-            );
-            for (idx, msg) in messages.iter().enumerate() {
-                let content_preview = match &msg.content {
-                    LLMMessageContent::Text(text) => {
-                        if text.len() > 200 {
-                            let truncated = crate::agent::utils::truncate_at_char_boundary(text, 200);
-                            format!("{}...[{} chars total]", truncated, text.len())
-                        } else {
-                            text.clone()
-                        }
-                    }
-                    LLMMessageContent::Parts(parts) => {
-                        let mut preview = String::new();
-                        for (i, part) in parts.iter().enumerate() {
-                            if i > 0 {
-                                preview.push_str(", ");
-                            }
-                            match part {
-                                LLMMessagePart::Text { text } => {
-                                    if text.len() > 100 {
-                                        let truncated = crate::agent::utils::truncate_at_char_boundary(text, 100);
-                                        preview.push_str(&format!("Text({}...)", truncated));
-                                    } else {
-                                        preview.push_str(&format!("Text({})", text));
-                                    }
-                                }
-                                LLMMessagePart::ToolCall {
-                                    tool_name, args, ..
-                                } => {
-                                    let args_str = serde_json::to_string(args)
-                                        .unwrap_or_else(|_| "{}".to_string());
-                                    if args_str.len() > 100 {
-                                        let truncated = crate::agent::utils::truncate_at_char_boundary(&args_str, 100);
-                                        preview.push_str(&format!(
-                                            "ToolCall[{}]({}...)",
-                                            tool_name,
-                                            truncated
-                                        ));
-                                    } else {
-                                        preview.push_str(&format!(
-                                            "ToolCall[{}]({})",
-                                            tool_name, args_str
-                                        ));
-                                    }
-                                }
-                                LLMMessagePart::ToolResult {
-                                    tool_name, result, ..
-                                } => {
-                                    let result_str = result.to_string();
-                                    if result_str.len() > 100 {
-                                        let truncated = crate::agent::utils::truncate_at_char_boundary(&result_str, 100);
-                                        preview.push_str(&format!(
-                                            "ToolResult[{}]({}...)",
-                                            tool_name,
-                                            truncated
-                                        ));
-                                    } else {
-                                        preview.push_str(&format!(
-                                            "ToolResult[{}]({})",
-                                            tool_name, result_str
-                                        ));
-                                    }
-                                }
-                                LLMMessagePart::File { .. } => {
-                                    preview.push_str("File(...)");
-                                }
-                            }
-                        }
-                        preview
-                    }
-                };
-                info!(
-                    "  [{}] role={:?}, content={}",
-                    idx, msg.role, content_preview
-                );
-            }
-            info!("=== End of LLM Request Messages ===");
-
+            // ===== Phase 3: 调用 LLM =====
             let tool_registry = context.tool_registry();
             let llm_request = self
                 .build_llm_request(messages, &tool_registry, &context.cwd)
                 .await?;
             let llm_request_snapshot = Arc::new(llm_request.clone());
 
-            // 流式调用LLM
             let llm_service = crate::llm::service::LLMService::new(context.repositories().clone());
             let cancel_token = context.register_step_token();
             let mut stream = llm_service
@@ -1515,33 +1442,33 @@ impl TaskExecutor {
                     TaskExecutorError::InternalError(format!("LLM stream call failed: {}", e))
                 })?;
 
-            let mut final_answer_acc = String::new();
+            // 流式响应状态
+            let mut stream_text = String::new();
             let mut pending_tool_calls: Vec<crate::llm::types::LLMToolCall> = Vec::new();
-            let mut finished_with_tool_calls = false;
             let mut finish_reason_enum: Option<FinishReason> = None;
 
-            let mut stream_text = String::new();
+            // 流式输出跟踪（thinking 和 visible 分离）
             let mut saw_thinking_tag = false;
-            let mut last_thinking_sent = String::new();
-            let mut last_thinking_char_count = 0; // 追踪已发送的thinking字符数
-            let mut last_visible_sent = String::new();
-            let mut last_visible_char_count = 0; // 使用字符数而非字节数,避免UTF-8边界问题
+            let mut last_thinking_char_count = 0;
+            let mut last_visible_char_count = 0;
             let mut thinking_stream_id: Option<String> = None;
             let mut text_stream_id: Option<String> = None;
 
+            // ===== Phase 4: 处理 LLM 流式响应 =====
             while let Some(item) = stream.next().await {
                 if context.check_aborted(true).await.is_err() {
                     break;
                 }
+
                 match item {
                     Ok(chunk) => match chunk {
                         crate::llm::types::LLMStreamChunk::Delta {
                             content,
                             tool_calls,
                         } => {
+                            // 处理文本增量
                             if let Some(text) = content {
                                 stream_text.push_str(&text);
-                                final_answer_acc.push_str(&text);
 
                                 if !saw_thinking_tag && stream_text.contains("<thinking") {
                                     saw_thinking_tag = true;
@@ -1550,65 +1477,60 @@ impl TaskExecutor {
                                 let (thinking, visible, has_open_thinking) =
                                     split_thinking_sections(&stream_text);
                                 let thinking_trim = sanitize_thinking_text(&thinking);
-                                let can_send_visible = !visible.is_empty()
-                                    && !visible.contains("<thinking")
-                                    && !has_open_thinking
-                                    && visible.trim().len() > 0;
 
+                                // 发送 thinking 增量
                                 if saw_thinking_tag {
-                                    let current_thinking_char_count = thinking_trim.chars().count();
-                                    if current_thinking_char_count < last_thinking_char_count {
-                                        last_thinking_sent = thinking_trim.clone();
-                                        last_thinking_char_count = current_thinking_char_count;
-                                    }
-                                    if current_thinking_char_count > last_thinking_char_count {
-                                        // 使用字符迭代器安全提取增量thinking内容
-                                        let thinking_to_send: String = thinking_trim
+                                    let current_thinking_count = thinking_trim.chars().count();
+                                    if current_thinking_count > last_thinking_char_count {
+                                        let thinking_delta: String = thinking_trim
                                             .chars()
                                             .skip(last_thinking_char_count)
                                             .collect();
-                                        last_thinking_sent = thinking_trim.clone();
-                                        last_thinking_char_count = current_thinking_char_count;
+
                                         if thinking_stream_id.is_none() {
                                             thinking_stream_id = Some(Uuid::new_v4().to_string());
                                         }
+
                                         context
                                             .send_progress(TaskProgressPayload::Thinking(
                                                 ThinkingPayload {
                                                     task_id: context.task_id.clone(),
                                                     iteration,
-                                                    thought: thinking_to_send.clone(),
+                                                    thought: thinking_delta.clone(),
                                                     stream_id: thinking_stream_id.clone().unwrap(),
                                                     stream_done: false,
                                                     timestamp: Utc::now(),
                                                 },
                                             ))
                                             .await?;
-                                        {
-                                            let runtime_handle = context.react_runtime();
-                                            let mut runtime = runtime_handle.write().await;
-                                            runtime.record_thought(
-                                                react_iteration_index,
-                                                stream_text.clone(),
-                                                thinking_to_send.clone(),
-                                            );
-                                        }
-                                        context.state_manager().reset_idle_rounds().await;
-                                        iter_ctx.append_thinking(&thinking_to_send).await;
+
+                                        context.react_runtime().write().await.record_thought(
+                                            react_iteration_index,
+                                            stream_text.clone(),
+                                            thinking_delta.clone(),
+                                        );
+
+                                        iter_ctx.append_thinking(&thinking_delta).await;
+                                        last_thinking_char_count = current_thinking_count;
                                     }
-                                    let current_char_count = visible.chars().count();
-                                    if can_send_visible
-                                        && current_char_count > last_visible_char_count
-                                        && !last_thinking_sent.trim().is_empty()
-                                        && !has_open_thinking
-                                    {
-                                        // 使用字符迭代器跳过已发送的字符,安全处理UTF-8多字节字符
+                                }
+
+                                // 发送 visible 增量
+                                let can_send_visible = !visible.is_empty()
+                                    && !visible.contains("<thinking")
+                                    && !has_open_thinking
+                                    && visible.trim().len() > 0;
+
+                                if can_send_visible {
+                                    let current_visible_count = visible.chars().count();
+                                    if current_visible_count > last_visible_char_count {
                                         let visible_delta: String =
                                             visible.chars().skip(last_visible_char_count).collect();
-                                        last_visible_char_count = current_char_count;
+
                                         if text_stream_id.is_none() {
                                             text_stream_id = Some(Uuid::new_v4().to_string());
                                         }
+
                                         context
                                             .send_progress(TaskProgressPayload::Text(TextPayload {
                                                 task_id: context.task_id.clone(),
@@ -1619,49 +1541,24 @@ impl TaskExecutor {
                                                 timestamp: Utc::now(),
                                             }))
                                             .await?;
-                                        last_visible_sent.push_str(&visible_delta);
-                                        context.state_manager().reset_idle_rounds().await;
+
                                         iter_ctx.append_output(&visible_delta).await;
-                                    }
-                                } else if can_send_visible {
-                                    let current_char_count = visible.chars().count();
-                                    if current_char_count > last_visible_char_count {
-                                        // 使用字符迭代器跳过已发送的字符,安全处理UTF-8多字节字符
-                                        let visible_delta: String =
-                                            visible.chars().skip(last_visible_char_count).collect();
-                                        last_visible_char_count = current_char_count;
-                                        if text_stream_id.is_none() {
-                                            text_stream_id = Some(Uuid::new_v4().to_string());
-                                        }
-                                        context
-                                            .send_progress(TaskProgressPayload::Text(TextPayload {
-                                                task_id: context.task_id.clone(),
-                                                iteration,
-                                                text: visible_delta.clone(),
-                                                stream_id: text_stream_id.clone().unwrap(),
-                                                stream_done: false,
-                                                timestamp: Utc::now(),
-                                            }))
-                                            .await?;
-                                        last_visible_sent.push_str(&visible_delta);
-                                        context.state_manager().reset_idle_rounds().await;
-                                        iter_ctx.append_output(&visible_delta).await;
+                                        last_visible_char_count = current_visible_count;
                                     }
                                 }
                             }
 
+                            // 处理工具调用
                             if let Some(calls) = tool_calls {
                                 for call in calls {
                                     iter_ctx.add_tool_call(call.clone()).await;
-                                    {
-                                        let runtime_handle = context.react_runtime();
-                                        let mut runtime = runtime_handle.write().await;
-                                        runtime.record_action(
-                                            react_iteration_index,
-                                            call.name.clone(),
-                                            call.arguments.clone(),
-                                        );
-                                    }
+
+                                    context.react_runtime().write().await.record_action(
+                                        react_iteration_index,
+                                        call.name.clone(),
+                                        call.arguments.clone(),
+                                    );
+
                                     let request_for_chain = Arc::clone(&llm_request_snapshot);
                                     let call_for_chain = call.clone();
                                     context
@@ -1672,104 +1569,78 @@ impl TaskExecutor {
                                             chain.push(entry);
                                         })
                                         .await;
-                                    context.state_manager().reset_idle_rounds().await;
+
                                     pending_tool_calls.push(call);
                                 }
                             }
                         }
+
                         crate::llm::types::LLMStreamChunk::Finish {
                             finish_reason,
                             usage,
                         } => {
-                            let (final_thinking_text_now, final_visible_text_now, _) =
+                            // 发送剩余内容并标记流结束
+                            let (final_thinking, final_visible, _) =
                                 split_thinking_sections(&stream_text);
-                            let final_thinking_trimmed_now =
-                                sanitize_thinking_text(&final_thinking_text_now);
-                            if let Some(reason_enum) = map_finish_reason(&finish_reason) {
-                                finish_reason_enum = Some(reason_enum);
-                            }
-                            if finish_reason == "tool_calls" || !pending_tool_calls.is_empty() {
-                                finished_with_tool_calls = true;
-                            }
-                            if thinking_stream_id.is_none()
-                                && (!final_thinking_trimmed_now.is_empty()
-                                    || !last_thinking_sent.is_empty())
-                            {
-                                thinking_stream_id = Some(Uuid::new_v4().to_string());
-                            }
-                            if text_stream_id.is_none() && !final_visible_text_now.trim().is_empty()
-                            {
-                                text_stream_id = Some(Uuid::new_v4().to_string());
-                            }
+                            let final_thinking_trim = sanitize_thinking_text(&final_thinking);
+
                             if let Some(tsid) = thinking_stream_id.clone() {
-                                // 计算剩余内容 - 使用字符计数而非字节长度避免UTF-8边界错误
-                                let current_thinking_char_count =
-                                    final_thinking_trimmed_now.chars().count();
-                                let delta =
-                                    if current_thinking_char_count > last_thinking_char_count {
-                                        let d: String = final_thinking_trimmed_now
-                                            .chars()
-                                            .skip(last_thinking_char_count)
-                                            .collect();
-                                        iter_ctx.append_thinking(&d).await;
-                                        d
-                                    } else {
-                                        String::new() // 没有剩余内容，发送空字符串
-                                    };
-                                // 无论是否有剩余内容，总是发送streamDone=true标记流结束
+                                let remaining_thinking: String = final_thinking_trim
+                                    .chars()
+                                    .skip(last_thinking_char_count)
+                                    .collect();
+
+                                if !remaining_thinking.is_empty() {
+                                    iter_ctx.append_thinking(&remaining_thinking).await;
+                                }
+
                                 context
                                     .send_progress(TaskProgressPayload::Thinking(ThinkingPayload {
                                         task_id: context.task_id.clone(),
                                         iteration,
-                                        thought: delta,
-                                        stream_id: tsid.clone(),
+                                        thought: remaining_thinking,
+                                        stream_id: tsid,
                                         stream_done: true,
                                         timestamp: Utc::now(),
                                     }))
                                     .await?;
                             }
+
                             if let Some(xsid) = text_stream_id.clone() {
-                                // 计算剩余内容 - 使用字符计数而非字节长度避免UTF-8边界错误
-                                let current_visible_char_count =
-                                    final_visible_text_now.chars().count();
-                                let delta = if current_visible_char_count > last_visible_char_count
-                                {
-                                    let d: String = final_visible_text_now
-                                        .chars()
-                                        .skip(last_visible_char_count)
-                                        .collect();
-                                    last_visible_sent.push_str(&d);
-                                    iter_ctx.append_output(&d).await;
-                                    d
-                                } else {
-                                    String::new() // 没有剩余内容，发送空字符串
-                                };
-                                // 无论是否有剩余内容，总是发送streamDone=true标记流结束
+                                let remaining_visible: String = final_visible
+                                    .chars()
+                                    .skip(last_visible_char_count)
+                                    .collect();
+
+                                if !remaining_visible.is_empty() {
+                                    iter_ctx.append_output(&remaining_visible).await;
+                                }
+
                                 context
                                     .send_progress(TaskProgressPayload::Text(TextPayload {
                                         task_id: context.task_id.clone(),
                                         iteration,
-                                        text: delta,
-                                        stream_id: xsid.clone(),
+                                        text: remaining_visible,
+                                        stream_id: xsid,
                                         stream_done: true,
                                         timestamp: Utc::now(),
                                     }))
                                     .await?;
                             }
+
                             yield_now().await;
-                            let usage_snapshot = usage.clone();
 
                             context
                                 .send_progress(TaskProgressPayload::Finish(FinishPayload {
                                     task_id: context.task_id.clone(),
                                     iteration,
-                                    finish_reason,
-                                    usage,
+                                    finish_reason: finish_reason.clone(),
+                                    usage: usage.clone(),
                                     timestamp: Utc::now(),
                                 }))
                                 .await?;
 
-                            if let Some(stats) = usage_snapshot {
+                            if let Some(stats) = usage {
                                 persistence
                                     .agent_executions()
                                     .update_token_usage(
@@ -1784,130 +1655,165 @@ impl TaskExecutor {
                                         TaskExecutorError::StatePersistenceFailed(e.to_string())
                                     })?;
                             }
+
+                            if let Some(reason_enum) = map_finish_reason(&finish_reason) {
+                                finish_reason_enum = Some(reason_enum);
+                            }
+
                             break;
                         }
+
                         crate::llm::types::LLMStreamChunk::Error { error } => {
                             return Err(TaskExecutorError::InternalError(format!(
                                 "LLM流式错误: {}",
                                 error
-                            ))
-                            .into());
+                            )));
                         }
                     },
                     Err(e) => {
                         return Err(TaskExecutorError::InternalError(format!(
                             "LLM流式管道错误: {}",
                             e
-                        ))
-                        .into());
+                        )));
                     }
                 }
             }
 
-            let (_, final_visible_text, _) = split_thinking_sections(&stream_text);
+            // ===== Phase 5: 分类迭代结果 =====
+            let (final_thinking_text, final_visible_text, _) =
+                split_thinking_sections(&stream_text);
+            let final_thinking_trimmed = sanitize_thinking_text(&final_thinking_text);
             let final_visible_trimmed = final_visible_text.trim().to_string();
-            if !final_visible_trimmed.is_empty() {
-                iter_ctx.append_output(&final_visible_trimmed).await;
-            }
 
-            if finished_with_tool_calls {
-                // 执行工具调用并继续下一轮迭代
-                for tool_call in pending_tool_calls.iter() {
-                    let result = self
-                        .execute_tool_call(&context, iteration, tool_call.clone())
-                        .await?;
+            let outcome = if !pending_tool_calls.is_empty() {
+                IterationOutcome::ContinueWithTools {
+                    tool_calls: pending_tool_calls.clone(),
+                }
+            } else if !final_thinking_trimmed.is_empty() || !final_visible_trimmed.is_empty() {
+                IterationOutcome::Complete {
+                    thinking: if final_thinking_trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(final_thinking_trimmed.clone())
+                    },
+                    output: if final_visible_trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(final_visible_trimmed.clone())
+                    },
+                }
+            } else {
+                IterationOutcome::Empty
+            };
 
-                    iter_ctx.add_tool_result(result.clone()).await;
+            debug!("Iteration {} outcome: {}", iteration, outcome.description());
 
-                    let outcome = tool_call_result_to_outcome(&result);
+            // ===== Phase 6: 根据结果执行动作 =====
+            match outcome {
+                IterationOutcome::ContinueWithTools { ref tool_calls } => {
+                    info!(
+                        "Iteration {}: executing {} tools",
+                        iteration,
+                        tool_calls.len()
+                    );
 
-                    {
-                        let call_id = result.call_id.clone();
-                        let outcome_for_chain = outcome.clone();
+                    for tool_call in tool_calls.iter() {
+                        let result = self
+                            .execute_tool_call(&context, iteration, tool_call.clone())
+                            .await?;
+
+                        iter_ctx.add_tool_result(result.clone()).await;
+
+                        let outcome = tool_call_result_to_outcome(&result);
                         context
-                            .with_chain_mut(move |chain| {
-                                chain.update_tool_result(&call_id, outcome_for_chain);
+                            .with_chain_mut({
+                                let call_id = result.call_id.clone();
+                                let outcome_for_chain = outcome.clone();
+                                move |chain| {
+                                    chain.update_tool_result(&call_id, outcome_for_chain);
+                                }
                             })
                             .await;
-                    }
 
-                    {
-                        let runtime_handle = context.react_runtime();
-                        let mut runtime = runtime_handle.write().await;
-                        runtime.record_observation(
-                            react_iteration_index,
-                            result.tool_name.clone(),
-                            outcome.clone(),
-                        );
-                        if result.is_error {
-                            runtime.fail_iteration(
+                        {
+                            let runtime_handle = context.react_runtime();
+                            let mut runtime = runtime_handle.write().await;
+                            runtime.record_observation(
                                 react_iteration_index,
-                                format!("Tool {} failed", result.tool_name),
+                                result.tool_name.clone(),
+                                outcome,
                             );
-                        } else {
-                            runtime.reset_error_counter();
-                            runtime.reset_idle_rounds();
+
+                            if result.is_error {
+                                runtime.fail_iteration(
+                                    react_iteration_index,
+                                    format!("Tool {} failed", result.tool_name),
+                                );
+                            } else {
+                                runtime.reset_error_counter();
+                            }
                         }
                     }
+
+                    context
+                        .add_llm_response(LLMResponseParsed {
+                            tool_calls: Some(tool_calls.clone()),
+                            final_answer: None,
+                        })
+                        .await;
+
+                    self.finalize_iteration(&context, &mut iteration_snapshots)
+                        .await?;
+                    continue;
                 }
 
-                context
-                    .add_llm_response(LLMResponseParsed {
-                        tool_calls: Some(pending_tool_calls),
-                        final_answer: None,
-                    })
-                    .await;
-                self.finalize_iteration(&context, &mut iteration_snapshots)
-                    .await?;
-                continue;
-            }
-            // 没有工具调用时，本轮对话已完成（Text 流和 Finish 已发送）
-            if final_visible_trimmed.is_empty() {
-                {
-                    let runtime_handle = context.react_runtime();
-                    let mut runtime = runtime_handle.write().await;
-                    runtime.mark_idle_round();
+                IterationOutcome::Complete { thinking, output } => {
+                    info!(
+                        "Iteration {}: task complete - {}",
+                        iteration,
+                        match (&thinking, &output) {
+                            (Some(_), Some(_)) => "thinking + output",
+                            (Some(_), None) => "thinking only",
+                            (None, Some(_)) => "output only",
+                            (None, None) => "empty (unexpected)",
+                        }
+                    );
+
+                    context.react_runtime().write().await.complete_iteration(
+                        react_iteration_index,
+                        output.clone(),
+                        finish_reason_enum,
+                    );
+
+                    context
+                        .add_llm_response(LLMResponseParsed {
+                            tool_calls: None,
+                            final_answer: output.or(thinking),
+                        })
+                        .await;
+
+                    self.finalize_iteration(&context, &mut iteration_snapshots)
+                        .await?;
+                    break;
                 }
-                context.state_manager().mark_idle_round().await;
-                self.finalize_iteration(&context, &mut iteration_snapshots)
-                    .await?;
-                continue;
-            }
 
-            {
-                let runtime_handle = context.react_runtime();
-                let mut runtime = runtime_handle.write().await;
-                runtime.complete_iteration(
-                    react_iteration_index,
-                    if final_visible_trimmed.is_empty() {
-                        None
-                    } else {
-                        Some(final_visible_trimmed.clone())
-                    },
-                    finish_reason_enum.clone(),
-                );
-            }
+                IterationOutcome::Empty => {
+                    warn!(
+                        "Iteration {}: empty response - terminating immediately",
+                        iteration
+                    );
 
-            context
-                .add_llm_response(LLMResponseParsed {
-                    tool_calls: None,
-                    final_answer: if final_visible_trimmed.is_empty() {
-                        None
-                    } else {
-                        Some(final_visible_trimmed.clone())
-                    },
-                })
-                .await;
-            self.finalize_iteration(&context, &mut iteration_snapshots)
-                .await?;
-            break;
+                    self.finalize_iteration(&context, &mut iteration_snapshots)
+                        .await?;
+                    break; // 空响应直接终止，不再尝试
+                }
+            }
         }
 
         info!("ReAct loop completed for task: {}", context.task_id);
         if !iteration_snapshots.is_empty() {
             self.compress_iteration_batch(&context, &iteration_snapshots)
                 .await?;
-            iteration_snapshots.clear();
         }
         Ok(())
     }

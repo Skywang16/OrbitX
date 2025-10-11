@@ -57,7 +57,7 @@ impl RunnableTool for OrbitSearchTool {
     }
 
     fn description(&self) -> &str {
-        "Search for code snippets in the current project using semantic or hybrid matching."
+        "Semantic code search tool. Use when you need to find code by CONCEPT or FUNCTIONALITY (e.g., 'authentication logic', 'database connection'). Returns file paths and line ranges. For exact keyword/function names, prefer 'grep' command instead - it's faster."
     }
 
     fn description_with_context(&self, context: &ToolDescriptionContext) -> Option<String> {
@@ -153,12 +153,6 @@ impl RunnableTool for OrbitSearchTool {
                 "Search path does not exist: {}",
                 search_path.display()
             )));
-        }
-
-        if requires_index(&mode) && !is_index_ready(&search_path) {
-            return Ok(tool_error(
-                "No semantic index found. Please build an index first using the CK index button in the chat interface.",
-            ));
         }
 
         let options = build_search_options(&search_path, query, &mode, max_results);

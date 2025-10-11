@@ -588,10 +588,10 @@
     position: relative;
     padding: 10px;
     margin: auto;
-    width: 90%;
+    width: 96%;
     margin-bottom: 10px;
     border: 1px solid var(--border-300);
-    border-radius: var(--border-radius-lg);
+    border-radius: 16px;
     background-color: var(--bg-400);
     transition: border-color 0.1s ease;
   }
