@@ -5,13 +5,11 @@ use tracing::{debug, warn};
 
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::{AgentError, ToolExecutorResult};
-use crate::agent::tools::{
-    RunnableTool, ToolPermission, ToolResult, ToolResultContent,
-};
+use crate::agent::tools::{RunnableTool, ToolPermission, ToolResult, ToolResultContent};
 
 /// TodoWrite工具 - 用于任务规划和进度跟踪
 ///
-/// 这是Claude Code核心设计的关键工具：
+
 /// - 强制多步骤任务先规划再执行
 /// - 提供用户可见的进度反馈
 /// - 一次只能有一个in_progress任务（避免并发混乱）

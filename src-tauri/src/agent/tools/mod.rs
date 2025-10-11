@@ -79,7 +79,7 @@ async fn register_builtin_tools(registry: &ToolRegistry, is_chat_mode: bool) {
         .await
         .ok();
 
-    // Claude Code风格：TodoWrite工具（任务规划和进度跟踪）
+    // TodoWrite工具（任务规划和进度跟踪）
     registry
         .register("todo_write", Arc::new(TodoWriteTool::new()), is_chat_mode)
         .await

@@ -1466,7 +1466,7 @@ impl TaskExecutor {
                         tool_calls.len()
                     );
 
-                    // ===== Claude Code风格：去重检测 =====
+                    // 去重检测
                     let deduplicated_calls = self.deduplicate_tool_calls(tool_calls);
                     if deduplicated_calls.len() < tool_calls.len() {
                         let duplicates_count = tool_calls.len() - deduplicated_calls.len();
@@ -1485,7 +1485,7 @@ impl TaskExecutor {
                         )).await;
                     }
 
-                    // ===== Claude Code风格：并行执行工具 =====
+                    // 并行执行工具
                     let results = self
                         .execute_tools_parallel(&context, iteration, deduplicated_calls)
                         .await?;
@@ -1531,7 +1531,7 @@ impl TaskExecutor {
                         })
                         .await;
 
-                    // ===== Claude Code风格：循环检测 =====
+                    // 循环检测
                     if let Some(loop_warning) = self.detect_loop_pattern(&context, iteration).await {
                         warn!("Loop pattern detected in iteration {}", iteration);
                         context.push_system_message(loop_warning).await;
@@ -1828,7 +1828,7 @@ impl TaskExecutor {
         Ok(conversation.id)
     }
 
-    // ===== Claude Code风格：工具去重和并行执行 =====
+    // 工具去重和并行执行
 
     /// 去重工具调用 - 检测同一iteration内的重复调用
     fn deduplicate_tool_calls(&self, tool_calls: &[crate::llm::types::LLMToolCall]) -> Vec<crate::llm::types::LLMToolCall> {
@@ -1894,7 +1894,7 @@ impl TaskExecutor {
         Ok(successful_results)
     }
 
-    // ===== Claude Code风格：循环检测系统 =====
+    // 循环检测系统
 
     /// 检测循环模式 - 分析最近N个iterations是否形成重复模式
     async fn detect_loop_pattern(
