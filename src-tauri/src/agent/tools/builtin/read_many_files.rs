@@ -202,7 +202,8 @@ impl RunnableTool for ReadManyFilesTool {
 
                             for line in &mut lines {
                                 if line.len() > MAX_LINE_LENGTH {
-                                    *line = format!("{}... [truncated]", &line[..MAX_LINE_LENGTH]);
+                                    let truncated = crate::agent::utils::truncate_at_char_boundary(line, MAX_LINE_LENGTH);
+                                    *line = format!("{}... [truncated]", truncated);
                                     was_truncated = true;
                                 }
                             }

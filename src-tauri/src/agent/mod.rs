@@ -18,6 +18,7 @@ pub mod state; // 任务上下文与错误
 pub mod tokenizer; // Token 预算与计数
 pub mod tools; // 工具接口与内置工具
 pub mod ui; // UI 回调持久化
+pub mod utils; // 工具函数
 pub use config::*;
 pub use error::*;
 pub use types::*;

@@ -250,9 +250,10 @@ fn truncate_text(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         return s.to_string();
     }
+    let truncated = crate::agent::utils::truncate_at_char_boundary(s, max_len);
     format!(
         "{}...\n[truncated, original {} chars]",
-        &s[..max_len],
+        truncated,
         s.len()
     )
 }
@@ -288,9 +289,10 @@ fn extract_content_from_html(html: &str, max_length: usize) -> (String, Option<S
         .collect::<Vec<_>>()
         .join("\n");
     let final_text = if cleaned.len() > max_length {
+        let truncated = crate::agent::utils::truncate_at_char_boundary(&cleaned, max_length);
         format!(
             "{}...\n\n[内容被截断，原始长度: {} 字符]",
-            &cleaned[..max_length],
+            truncated,
             cleaned.len()
         )
     } else {

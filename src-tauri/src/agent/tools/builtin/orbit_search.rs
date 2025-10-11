@@ -329,10 +329,7 @@ async fn extract_content_from_span(file: &Path, span: &ck_core::Span) -> String 
 }
 
 fn truncate_snippet(snippet: &str) -> String {
-    if snippet.len() <= SNIPPET_MAX_LEN {
-        return snippet.to_string();
-    }
-    format!("{}...", &snippet[..SNIPPET_MAX_LEN])
+    crate::agent::utils::truncate_with_ellipsis(snippet, SNIPPET_MAX_LEN)
 }
 
 fn resolve_to_absolute(path: Option<&str>, cwd: &str) -> Result<PathBuf, ToolResult> {

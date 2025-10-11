@@ -1426,7 +1426,8 @@ impl TaskExecutor {
                 let content_preview = match &msg.content {
                     LLMMessageContent::Text(text) => {
                         if text.len() > 200 {
-                            format!("{}...[{} chars total]", &text[..200], text.len())
+                            let truncated = crate::agent::utils::truncate_at_char_boundary(text, 200);
+                            format!("{}...[{} chars total]", truncated, text.len())
                         } else {
                             text.clone()
                         }
@@ -1440,7 +1441,8 @@ impl TaskExecutor {
                             match part {
                                 LLMMessagePart::Text { text } => {
                                     if text.len() > 100 {
-                                        preview.push_str(&format!("Text({}...)", &text[..100]));
+                                        let truncated = crate::agent::utils::truncate_at_char_boundary(text, 100);
+                                        preview.push_str(&format!("Text({}...)", truncated));
                                     } else {
                                         preview.push_str(&format!("Text({})", text));
                                     }
@@ -1451,10 +1453,11 @@ impl TaskExecutor {
                                     let args_str = serde_json::to_string(args)
                                         .unwrap_or_else(|_| "{}".to_string());
                                     if args_str.len() > 100 {
+                                        let truncated = crate::agent::utils::truncate_at_char_boundary(&args_str, 100);
                                         preview.push_str(&format!(
                                             "ToolCall[{}]({}...)",
                                             tool_name,
-                                            &args_str[..100]
+                                            truncated
                                         ));
                                     } else {
                                         preview.push_str(&format!(
@@ -1468,10 +1471,11 @@ impl TaskExecutor {
                                 } => {
                                     let result_str = result.to_string();
                                     if result_str.len() > 100 {
+                                        let truncated = crate::agent::utils::truncate_at_char_boundary(&result_str, 100);
                                         preview.push_str(&format!(
                                             "ToolResult[{}]({}...)",
                                             tool_name,
-                                            &result_str[..100]
+                                            truncated
                                         ));
                                     } else {
                                         preview.push_str(&format!(

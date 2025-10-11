@@ -128,7 +128,7 @@ impl IterationSnapshot {
 
         if !self.output.is_empty() {
             let preview = if self.output.len() > 120 {
-                format!("{}...", &self.output[..120])
+                crate::agent::utils::truncate_with_ellipsis(&self.output, 120)
             } else {
                 self.output.clone()
             };
