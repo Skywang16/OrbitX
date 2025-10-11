@@ -6,10 +6,7 @@ use crate::agent::prompt::builders::{
     build_agent_system_prompt as build_agent_system_prompt_impl,
     build_agent_user_prompt as build_agent_user_prompt_impl,
     build_dialogue_system_prompt as build_dialogue_system_prompt_impl,
-    build_plan_system_prompt as build_plan_system_prompt_impl,
-    build_plan_user_prompt as build_plan_user_prompt_impl,
-    build_tree_plan_system_prompt as build_tree_plan_system_prompt_impl,
-    build_tree_plan_user_prompt as build_tree_plan_user_prompt_impl, PromptBuildOptions,
+    PromptBuildOptions,
     PromptBuilder,
 };
 use crate::agent::prompt::components::types::ComponentContext;
@@ -20,7 +17,7 @@ pub mod components;
 pub mod template_engine;
 
 pub use builders::{
-    AgentPromptBuilder, DialoguePromptBuilder, PlanPromptBuilder,
+    AgentPromptBuilder, DialoguePromptBuilder,
     PromptBuildOptions as BuildersPromptBuildOptions, PromptBuilder as CorePromptBuilder,
 };
 pub use components::types::{ComponentContext as ComponentsComponentContext, ComponentDefinition};
@@ -145,27 +142,6 @@ pub async fn build_dialogue_system_prompt(
     tools: Vec<ToolSchema>,
 ) -> AgentResult<String> {
     build_dialogue_system_prompt_impl(agent, task, context, tools).await
-}
-
-pub async fn build_plan_system_prompt(
-    agent: Agent,
-    task: Option<Task>,
-    context: Option<Context>,
-    tools: Vec<ToolSchema>,
-) -> AgentResult<String> {
-    build_plan_system_prompt_impl(agent, task, context, tools).await
-}
-
-pub fn build_plan_user_prompt(task_prompt: &str) -> AgentResult<String> {
-    Ok(build_plan_user_prompt_impl(task_prompt))
-}
-
-pub async fn build_tree_plan_system_prompt() -> String {
-    build_tree_plan_system_prompt_impl().await
-}
-
-pub fn build_tree_plan_user_prompt(task_prompt: &str) -> String {
-    build_tree_plan_user_prompt_impl(task_prompt)
 }
 
 pub async fn build_agent_system_prompt_with_context(

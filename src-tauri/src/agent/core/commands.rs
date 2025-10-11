@@ -4,7 +4,7 @@
 
 use crate::agent::context::SummaryResult;
 use crate::agent::core::executor::{
-    ExecuteTaskParams, ExecuteTaskTreeParams, FileContextStatus, TaskExecutor, TaskSummary,
+    ExecuteTaskParams, FileContextStatus, TaskExecutor, TaskSummary,
 };
 use crate::agent::events::TaskProgressPayload;
 use crate::agent::ui::{UiConversation, UiMessage};
@@ -113,22 +113,6 @@ pub async fn agent_execute_task(
         Err(e) => {
             tracing::error!("Failed to execute Agent task: {}", e);
             Ok(api_error!("agent.execute_failed"))
-        }
-    }
-}
-
-/// 执行Agent任务树（先Plan，按需Tree，再按父节点串行执行并传递总结）
-#[tauri::command]
-pub async fn agent_execute_task_tree(
-    state: State<'_, TaskExecutorState>,
-    params: ExecuteTaskTreeParams,
-    channel: Channel<TaskProgressPayload>,
-) -> TauriApiResult<EmptyData> {
-    match state.executor.execute_task_tree(params, channel).await {
-        Ok(_) => Ok(api_success!()),
-        Err(e) => {
-            tracing::error!("Failed to execute Agent task tree: {}", e);
-            Ok(api_error!("agent.execute_tree_failed"))
         }
     }
 }

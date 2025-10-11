@@ -12,7 +12,6 @@ pub mod llm; // LLM 集成与解析
 pub mod mcp; // MCP 适配（预留）
 pub mod memory; // 对话/上下文压缩与快照策略（预留）
 pub mod persistence; // 持久化与仓库抽象
-pub mod plan; // 规划器与任务树
 pub mod react; // ReAct 策略与解析（预留）
 pub mod state; // 任务上下文与错误
 pub mod tokenizer; // Token 预算与计数

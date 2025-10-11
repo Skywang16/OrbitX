@@ -212,4 +212,159 @@
       opacity: 0.5;
     }
   }
+
+  /* Markdown 内容样式 */
+  .ai-message-text {
+    line-height: 1.6;
+    color: var(--text-200);
+  }
+
+  .ai-message-text :deep(p) {
+    margin: var(--spacing-sm) 0;
+  }
+
+  .ai-message-text :deep(p:first-child) {
+    margin-top: 0;
+  }
+
+  .ai-message-text :deep(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  /* 标题 */
+  .ai-message-text :deep(h1),
+  .ai-message-text :deep(h2),
+  .ai-message-text :deep(h3),
+  .ai-message-text :deep(h4),
+  .ai-message-text :deep(h5),
+  .ai-message-text :deep(h6) {
+    margin: var(--spacing-md) 0 var(--spacing-sm) 0;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--text-100);
+  }
+
+  .ai-message-text :deep(h1) {
+    font-size: 1.5em;
+    border-bottom: 1px solid var(--border-200);
+    padding-bottom: var(--spacing-xs);
+  }
+
+  .ai-message-text :deep(h2) {
+    font-size: 1.3em;
+  }
+
+  .ai-message-text :deep(h3) {
+    font-size: 1.15em;
+  }
+
+  .ai-message-text :deep(h4) {
+    font-size: 1em;
+  }
+
+  /* 代码 */
+  .ai-message-text :deep(code) {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    padding: 0.15em 0.4em;
+    background: var(--bg-400);
+    border-radius: 3px;
+    color: var(--text-200);
+  }
+
+  .ai-message-text :deep(pre) {
+    margin: var(--spacing-sm) 0;
+    overflow-x: auto;
+  }
+
+  .ai-message-text :deep(pre code) {
+    padding: 0;
+    background: transparent;
+    font-size: var(--font-size-sm);
+  }
+
+  /* 列表 */
+  .ai-message-text :deep(ul),
+  .ai-message-text :deep(ol) {
+    margin: var(--spacing-sm) 0;
+    padding-left: 1.5em;
+  }
+
+  .ai-message-text :deep(li) {
+    margin: var(--spacing-xs) 0;
+  }
+
+  .ai-message-text :deep(li > p) {
+    margin: var(--spacing-xs) 0;
+  }
+
+  /* 引用 */
+  .ai-message-text :deep(blockquote) {
+    margin: var(--spacing-sm) 0;
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-left: 3px solid var(--color-primary);
+    background: var(--bg-400);
+    color: var(--text-300);
+  }
+
+  .ai-message-text :deep(blockquote p) {
+    margin: var(--spacing-xs) 0;
+  }
+
+  /* 链接 */
+  .ai-message-text :deep(a) {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .ai-message-text :deep(a:hover) {
+    text-decoration: underline;
+  }
+
+  /* 分隔线 */
+  .ai-message-text :deep(hr) {
+    margin: var(--spacing-md) 0;
+    border: none;
+    border-top: 1px solid var(--border-200);
+  }
+
+  /* 表格 */
+  .ai-message-text :deep(table) {
+    margin: var(--spacing-sm) 0;
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .ai-message-text :deep(th),
+  .ai-message-text :deep(td) {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--border-200);
+    text-align: left;
+  }
+
+  .ai-message-text :deep(th) {
+    background: var(--bg-400);
+    font-weight: 600;
+  }
+
+  .ai-message-text :deep(tr:nth-child(even)) {
+    background: var(--bg-300);
+  }
+
+  /* 图片 */
+  .ai-message-text :deep(img) {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--border-radius);
+  }
+
+  /* 强调 */
+  .ai-message-text :deep(strong) {
+    font-weight: 600;
+    color: var(--text-100);
+  }
+
+  .ai-message-text :deep(em) {
+    font-style: italic;
+  }
 </style>

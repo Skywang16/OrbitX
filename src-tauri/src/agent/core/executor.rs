@@ -9,13 +9,12 @@
  * - 并发任务管理
  */
 
-use crate::agent::common::xml::build_agent_xml_from_planned;
 use crate::agent::config::CompactionConfig;
 use crate::agent::config::TaskExecutionConfig;
 use crate::agent::context::{ContextBuilder, ConversationSummarizer, SummaryResult};
 use crate::agent::core::chain::ToolChain;
 use crate::agent::core::context::{LLMResponseParsed, TaskContext, ToolCallResult};
-use crate::agent::core::iteration_outcome::IterationOutcome; // 架构重构核心
+use crate::agent::core::iteration_outcome::IterationOutcome;
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::AgentError;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
@@ -29,7 +28,6 @@ use crate::agent::persistence::{
     AgentExecution, AgentPersistence, Conversation, ConversationSummary, ExecutionEvent,
     ExecutionEventType, ExecutionMessage, FileContextEntry, ToolExecution,
 };
-use crate::agent::plan::{Planner, TreePlanner};
 use crate::agent::prompt::{build_agent_system_prompt, build_agent_user_prompt};
 use crate::agent::react::types::FinishReason;
 use crate::agent::state::iteration::IterationSnapshot;
@@ -63,23 +61,6 @@ pub struct ExecuteTaskParams {
     pub user_prompt: String,
     pub chat_mode: String,
     pub config_overrides: Option<serde_json::Value>,
-}
-
-/// 串行任务树执行参数
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExecuteTaskTreeParams {
-    pub conversation_id: i64,
-    pub user_prompt: String,
-    pub chat_mode: String,
-    /// 若为 false，则仅进行单次 plan 与执行（不生成任务树）
-    #[serde(default = "default_true")]
-    pub generate_tree: bool,
-    pub config_overrides: Option<serde_json::Value>,
-}
-
-fn default_true() -> bool {
-    true
 }
 
 static THINKING_TAG_RE: OnceLock<Regex> = OnceLock::new();
@@ -473,238 +454,6 @@ impl TaskExecutor {
             .await?;
 
         self.spawn_react_execution(context);
-        Ok(())
-    }
-
-    /// 执行“Plan → (可选)Tree → 串行父节点子树”的流程
-    pub async fn execute_task_tree(
-        &self,
-        params: ExecuteTaskTreeParams,
-        progress_channel: Channel<TaskProgressPayload>,
-    ) -> TaskExecutorResult<()> {
-        let root_params = ExecuteTaskParams {
-            conversation_id: params.conversation_id,
-            user_prompt: params.user_prompt.clone(),
-            chat_mode: params.chat_mode.clone(),
-            config_overrides: params.config_overrides.clone(),
-        };
-        let root_ctx = Arc::new(
-            self.create_task_context(root_params, Some(progress_channel.clone()), None)
-                .await?,
-        );
-
-        let planner = Planner::new(root_ctx.clone());
-        if let Err(e) = planner.plan(&params.user_prompt, true).await {
-            return Err(TaskExecutorError::InternalError(format!("Plan failed: {}", e)).into());
-        }
-
-        let planned_tree = if params.generate_tree {
-            let tree_planner = TreePlanner::new(root_ctx.clone());
-            match tree_planner.plan_tree(&params.user_prompt).await {
-                Ok(tree) => Some(tree),
-                Err(e) => {
-                    // If tree planning fails, fallback to single task execution
-                    tracing::warn!("Tree planning failed, fallback to single task: {}", e);
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-        if let Some(tree) = planned_tree {
-            let parents = tree.subtasks.unwrap_or_default();
-            let tool_registry = root_ctx.tool_registry();
-            let tool_schemas_full =
-                tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
-                    cwd: root_ctx.cwd.clone(),
-                });
-            let simple_tool_schemas: Vec<ToolSchema> = tool_schemas_full
-                .into_iter()
-                .map(|s| ToolSchema {
-                    name: s.name,
-                    description: s.description,
-                    parameters: s.parameters,
-                })
-                .collect();
-
-            let mut prev_summary: Option<String> = None;
-
-            for (idx, parent) in parents.into_iter().enumerate() {
-                let parent_prompt = parent
-                    .description
-                    .clone()
-                    .or(parent.name.clone())
-                    .unwrap_or_else(|| format!("Phase-{}", idx + 1));
-
-                let parent_params = ExecuteTaskParams {
-                    conversation_id: root_ctx.conversation_id,
-                    user_prompt: parent_prompt.clone(),
-                    chat_mode: params.chat_mode.clone(),
-                    config_overrides: None,
-                };
-                let parent_ctx = Arc::new(
-                    self.create_task_context(
-                        parent_params,
-                        Some(progress_channel.clone()),
-                        Some(root_ctx.cwd.clone()),
-                    )
-                    .await?,
-                );
-
-                if let Ok(agent_xml) = build_agent_xml_from_planned(&parent) {
-                    let tool_names: Vec<String> =
-                        simple_tool_schemas.iter().map(|t| t.name.clone()).collect();
-                    let agent_info = Agent {
-                        name: "OrbitX Agent".to_string(),
-                        description: "An AI coding assistant for OrbitX".to_string(),
-                        capabilities: vec![],
-                        tools: tool_names,
-                    };
-                    let task_for_prompt = Task {
-                        id: parent_ctx.task_id.clone(),
-                        conversation_id: parent_ctx.conversation_id,
-                        user_prompt: parent_prompt.clone(),
-                        xml: Some(agent_xml),
-                        status: crate::agent::types::TaskStatus::Created,
-                        created_at: Utc::now(),
-                        updated_at: Utc::now(),
-                    };
-
-                    let mut prompt_ctx = AgentContext::default();
-                    prompt_ctx.working_directory = Some(parent_ctx.cwd.clone());
-                    prompt_ctx.additional_context.insert(
-                        "taskPrompt".to_string(),
-                        serde_json::Value::String(parent_prompt.clone()),
-                    );
-
-                    // 获取用户前置提示词
-                    let user_prefix_prompt = self
-                        .repositories()
-                        .ai_models()
-                        .get_user_prefix_prompt()
-                        .await
-                        .ok()
-                        .flatten();
-
-                    let system_prompt = build_agent_system_prompt(
-                        agent_info.clone(),
-                        Some(task_for_prompt.clone()),
-                        Some(prompt_ctx.clone()),
-                        simple_tool_schemas.clone(),
-                        user_prefix_prompt,
-                    )
-                    .await
-                    .map_err(|e| {
-                        TaskExecutorError::InternalError(format!(
-                            "Failed to build system prompt: {}",
-                            e
-                        ))
-                    })?;
-
-                    let user_prompt = build_agent_user_prompt(
-                        agent_info,
-                        Some(task_for_prompt),
-                        Some(prompt_ctx),
-                        simple_tool_schemas.clone(),
-                    )
-                    .await
-                    .map_err(|e| {
-                        TaskExecutorError::InternalError(format!(
-                            "Failed to build user prompt: {}",
-                            e
-                        ))
-                    })?;
-
-                    // ✅ 只在第一个阶段设置初始提示
-                    if idx == 0 {
-                        parent_ctx
-                            .set_initial_prompts(system_prompt, user_prompt)
-                            .await?;
-                    } else {
-                        // ❌ 后续阶段不重置，只添加新的用户消息
-                        // parent_ctx.reset_message_state().await?;
-                        // parent_ctx.set_initial_prompts(system_prompt, user_prompt).await?;
-
-                        // ✅ 后续阶段：直接添加新的用户消息
-                        parent_ctx.push_user_message(parent_prompt.clone()).await;
-                    }
-                }
-
-                if let Some(children) = &parent.subtasks {
-                    if !children.is_empty() {
-                        let mut buf = String::from("Planned subtasks for this phase (execute sequentially, reuse the same context):\n");
-                        for (i, child) in children.iter().enumerate() {
-                            let name = child
-                                .name
-                                .as_deref()
-                                .unwrap_or(child.description.as_deref().unwrap_or("Subtask"));
-                            let desc = child.description.as_deref().unwrap_or("");
-                            buf.push_str(&format!("{}. {}\n{}\n\n", i + 1, name, desc));
-                        }
-                        parent_ctx.push_system_message(buf).await;
-                    }
-                }
-
-                if let Some(summary) = prev_summary.take() {
-                    parent_ctx
-                        .push_system_message(format!("Previous phase summary:\n{}", summary))
-                        .await;
-                }
-
-                {
-                    let active_tasks = self.active_tasks();
-                    let mut active = active_tasks.write().await;
-                    active.insert(parent_ctx.task_id.clone(), parent_ctx.clone());
-                }
-                parent_ctx.set_status(AgentTaskStatus::Running).await?;
-                parent_ctx
-                    .send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
-                        task_id: parent_ctx.task_id.clone(),
-                        iteration: parent_ctx.current_iteration().await,
-                    }))
-                    .await?;
-
-                if let Err(e) = self.run_react_loop(parent_ctx.clone()).await {
-                    self.handle_task_error(&parent_ctx.task_id, e.into(), parent_ctx.clone())
-                        .await;
-                } else {
-                    // 标记完成
-                    parent_ctx.set_status(AgentTaskStatus::Completed).await.ok();
-                    parent_ctx
-                        .send_progress(TaskProgressPayload::TaskCompleted(TaskCompletedPayload {
-                            task_id: parent_ctx.task_id.clone(),
-                            final_iteration: parent_ctx.current_iteration().await,
-                            completion_reason: "Parent phase completed".to_string(),
-                            timestamp: Utc::now(),
-                        }))
-                        .await
-                        .ok();
-
-                    prev_summary = parent_ctx
-                        .with_messages(|messages| extract_last_assistant_text(messages))
-                        .await;
-                }
-
-                {
-                    let active_tasks = self.active_tasks();
-                    let mut active = active_tasks.write().await;
-                    active.remove(&parent_ctx.task_id);
-                }
-                // ❌ 不清理 context_builder，保留阶段间的消息历史
-                // self.clear_context_builder(parent_ctx.conversation_id).await;
-            }
-        } else {
-            // 无任务树，直接执行单任务
-            let params_single = ExecuteTaskParams {
-                conversation_id: root_ctx.conversation_id,
-                user_prompt: params.user_prompt,
-                chat_mode: params.chat_mode,
-                config_overrides: None,
-            };
-            self.execute_task(params_single, progress_channel).await?;
-        }
-
         Ok(())
     }
 
@@ -1717,11 +1466,31 @@ impl TaskExecutor {
                         tool_calls.len()
                     );
 
-                    for tool_call in tool_calls.iter() {
-                        let result = self
-                            .execute_tool_call(&context, iteration, tool_call.clone())
-                            .await?;
+                    // ===== Claude Code风格：去重检测 =====
+                    let deduplicated_calls = self.deduplicate_tool_calls(tool_calls);
+                    if deduplicated_calls.len() < tool_calls.len() {
+                        let duplicates_count = tool_calls.len() - deduplicated_calls.len();
+                        warn!(
+                            "Detected {} duplicate tool calls in iteration {}, executing only unique ones",
+                            duplicates_count, iteration
+                        );
+                        
+                        // 注入系统消息警告LLM
+                        context.push_system_message(format!(
+                            "<system-reminder type=\"duplicate-tools\">\n\
+                             You called {} duplicate tool(s) in this iteration.\n\
+                             The results haven't changed. Please use the existing results instead of re-calling the same tools.\n\
+                             </system-reminder>",
+                            duplicates_count
+                        )).await;
+                    }
 
+                    // ===== Claude Code风格：并行执行工具 =====
+                    let results = self
+                        .execute_tools_parallel(&context, iteration, deduplicated_calls)
+                        .await?;
+
+                    for result in results {
                         iter_ctx.add_tool_result(result.clone()).await;
 
                         let outcome = tool_call_result_to_outcome(&result);
@@ -1761,6 +1530,12 @@ impl TaskExecutor {
                             final_answer: None,
                         })
                         .await;
+
+                    // ===== Claude Code风格：循环检测 =====
+                    if let Some(loop_warning) = self.detect_loop_pattern(&context, iteration).await {
+                        warn!("Loop pattern detected in iteration {}", iteration);
+                        context.push_system_message(loop_warning).await;
+                    }
 
                     self.finalize_iteration(&context, &mut iteration_snapshots)
                         .await?;
@@ -2051,6 +1826,204 @@ impl TaskExecutor {
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
         Ok(conversation.id)
+    }
+
+    // ===== Claude Code风格：工具去重和并行执行 =====
+
+    /// 去重工具调用 - 检测同一iteration内的重复调用
+    fn deduplicate_tool_calls(&self, tool_calls: &[crate::llm::types::LLMToolCall]) -> Vec<crate::llm::types::LLMToolCall> {
+        use std::collections::HashSet;
+        
+        let mut seen = HashSet::new();
+        let mut deduplicated = Vec::new();
+        
+        for call in tool_calls {
+            // 使用 (tool_name, arguments) 作为唯一键
+            let key = (call.name.clone(), serde_json::to_string(&call.arguments).unwrap_or_default());
+            
+            if seen.insert(key) {
+                deduplicated.push(call.clone());
+            } else {
+                debug!("Skipping duplicate tool call: {} with args {:?}", call.name, call.arguments);
+            }
+        }
+        
+        deduplicated
+    }
+
+    /// 并行执行多个工具调用
+    async fn execute_tools_parallel(
+        &self,
+        context: &Arc<TaskContext>,
+        iteration: u32,
+        tool_calls: Vec<crate::llm::types::LLMToolCall>,
+    ) -> TaskExecutorResult<Vec<ToolCallResult>> {
+        use futures::future::join_all;
+        
+        if tool_calls.is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        // 创建所有工具调用的futures
+        let futures: Vec<_> = tool_calls
+            .into_iter()
+            .map(|call| {
+                let executor = self.clone();
+                let ctx = Arc::clone(context);
+                async move {
+                    executor.execute_tool_call(&ctx, iteration, call).await
+                }
+            })
+            .collect();
+        
+        // 并行执行所有工具调用
+        let results = join_all(futures).await;
+        
+        // 收集成功的结果，记录失败的
+        let mut successful_results = Vec::new();
+        for result in results {
+            match result {
+                Ok(tool_result) => successful_results.push(tool_result),
+                Err(e) => {
+                    error!("Tool execution failed in parallel batch: {}", e);
+                    // 继续执行其他工具，不中断整个批次
+                }
+            }
+        }
+        
+        Ok(successful_results)
+    }
+
+    // ===== Claude Code风格：循环检测系统 =====
+
+    /// 检测循环模式 - 分析最近N个iterations是否形成重复模式
+    async fn detect_loop_pattern(
+        &self,
+        context: &Arc<TaskContext>,
+        current_iteration: u32,
+    ) -> Option<String> {
+        const LOOP_DETECTION_WINDOW: usize = 3;
+
+        if current_iteration < LOOP_DETECTION_WINDOW as u32 {
+            return None;
+        }
+
+        // 从ReactRuntime获取iterations历史
+        let runtime_handle = context.react_runtime();
+        let runtime_guard = runtime_handle.read().await;
+        let snapshot = runtime_guard.get_snapshot();
+        let iterations = &snapshot.iterations;
+
+        if iterations.len() < LOOP_DETECTION_WINDOW {
+            return None;
+        }
+
+        // 获取最近N个iterations
+        let recent: Vec<_> = iterations
+            .iter()
+            .rev()
+            .take(LOOP_DETECTION_WINDOW)
+            .collect();
+
+        // 检测模式1：完全相同的工具调用序列
+        if let Some(warning) = self.detect_identical_tool_sequence(&recent) {
+            return Some(warning);
+        }
+
+        // 检测模式2：相似的工具调用模式（同样的工具，不同参数）
+        if let Some(warning) = self.detect_similar_tool_pattern(&recent) {
+            return Some(warning);
+        }
+
+        None
+    }
+
+    /// 检测完全相同的工具调用序列
+    fn detect_identical_tool_sequence(
+        &self,
+        recent_iterations: &[&crate::agent::react::types::ReactIteration],
+    ) -> Option<String> {
+        if recent_iterations.len() < 2 {
+            return None;
+        }
+
+        // 提取每个iteration的工具名称序列
+        let tool_sequences: Vec<Vec<String>> = recent_iterations
+            .iter()
+            .map(|iter| {
+                iter.action
+                    .as_ref()
+                    .map(|action| vec![action.tool_name.clone()])
+                    .unwrap_or_default()
+            })
+            .collect();
+
+        // 检查是否所有序列都相同且非空
+        let first = &tool_sequences[0];
+        if first.is_empty() {
+            return None;
+        }
+
+        let all_identical = tool_sequences[1..].iter().all(|seq| seq == first);
+
+        if all_identical {
+            let tools_list = first.join(", ");
+            return Some(format!(
+                "<system-reminder type=\"loop-warning\">\n\
+                 You've called the same tools {} times in a row: {}\n\n\
+                 The results haven't changed. Consider:\n\
+                 - Have you gathered enough information?\n\
+                 - Can you proceed with what you have?\n\
+                 - Do you need to try a different approach?\n\n\
+                 Break the loop by using the information you already have or trying different tools.\n\
+                 </system-reminder>",
+                recent_iterations.len(),
+                tools_list
+            ));
+        }
+
+        None
+    }
+
+    /// 检测相似的工具调用模式（同样的工具类型，可能不同参数）
+    fn detect_similar_tool_pattern(
+        &self,
+        recent_iterations: &[&crate::agent::react::types::ReactIteration],
+    ) -> Option<String> {
+        if recent_iterations.len() < 3 {
+            return None;
+        }
+
+        // 提取工具名称（不考虑参数）
+        let tool_names: Vec<Option<String>> = recent_iterations
+            .iter()
+            .map(|iter| iter.action.as_ref().map(|a| a.tool_name.clone()))
+            .collect();
+
+        // 统计工具使用频率
+        let mut tool_counts = std::collections::HashMap::new();
+        for name in tool_names.iter().flatten() {
+            *tool_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        // 如果有工具被重复调用超过2次
+        for (tool, count) in tool_counts {
+            if count >= 3 {
+                return Some(format!(
+                    "<system-reminder type=\"loop-warning\">\n\
+                     You've called '{}' tool {} times in the last {} iterations.\n\n\
+                     You may be stuck in a pattern. Consider:\n\
+                     - Are you getting new information each time?\n\
+                     - Can you analyze the results you already have?\n\
+                     - Should you try a different approach?\n\n\
+                     Try to make progress with the information you've gathered.\n\
+                     </system-reminder>",
+                    tool, count, recent_iterations.len()
+                ));
+            }
+        }
+
+        None
     }
 }
 
