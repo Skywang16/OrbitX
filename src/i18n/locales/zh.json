@@ -218,14 +218,7 @@
     "project_rules": "项目规则文件",
     "project_rules_description": "选择要优先使用的项目规则文件",
     "click_to_switch": "点击切换",
-    "no_rules_files": "当前目录没有找到规则文件",
-    "rules_auto": "自动检测",
-    "rules_auto_desc": "按优先级自动检测",
-    "rules_claude": "CLAUDE.md",
-    "rules_agents": "AGENTS.md",
-    "rules_warp": "WARP.md",
-    "rules_cursorrules": ".cursorrules",
-    "rules_readme": "README.md"
+    "no_rules_files": "当前目录没有找到规则文件"
   },
   "ai_model_form": {
     "api_url": "API地址",

@@ -63,8 +63,6 @@ export class AiApi {
     await invoke<void>('agent_set_user_rules', { rules })
   }
 
-  // 项目规则方法已迁移到 workspaceApi
-  // 请使用 workspaceApi.getProjectRules(), workspaceApi.setProjectRules(), workspaceApi.listAvailableRulesFiles()
 
   async getSettings(): Promise<AISettings> {
     return await invoke<AISettings>('get_ai_settings')

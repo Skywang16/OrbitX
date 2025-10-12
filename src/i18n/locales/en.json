@@ -218,14 +218,7 @@
     "project_rules": "Project Rules File",
     "project_rules_description": "Select which project rules file to prioritize",
     "click_to_switch": "Click to switch",
-    "no_rules_files": "No rules files found in current directory",
-    "rules_auto": "Auto Detect",
-    "rules_auto_desc": "Auto detect by priority",
-    "rules_claude": "CLAUDE.md",
-    "rules_agents": "AGENTS.md",
-    "rules_warp": "WARP.md",
-    "rules_cursorrules": ".cursorrules",
-    "rules_readme": "README.md"
+    "no_rules_files": "No rules files found in current directory"
   },
   "ai_model_form": {
     "api_url": "API URL",

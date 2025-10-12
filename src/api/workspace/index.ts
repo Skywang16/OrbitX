@@ -79,6 +79,7 @@ export class WorkspaceApi {
   async listAvailableRulesFiles(cwd: string): Promise<string[]> {
     return invoke<string[]>('workspace_list_rules_files', { cwd })
   }
+
 }
 
 export const workspaceApi = new WorkspaceApi()

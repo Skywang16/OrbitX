@@ -135,3 +135,4 @@ pub async fn workspace_list_rules_files(cwd: String) -> TauriApiResult<Vec<Strin
     let files = get_available_rules_files(cwd);
     Ok(api_success!(files))
 }
+

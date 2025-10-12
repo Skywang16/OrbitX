@@ -36,6 +36,10 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
     builder.invoke_handler(tauri::generate_handler![
         // 文件拖拽命令
         file_handle_open,
+        // Dock 菜单命令
+        crate::dock::commands::dock_update_tabs,
+        crate::dock::commands::dock_get_tabs,
+        crate::dock::commands::dock_clear_tabs,
         // 工作区管理命令（来自 workspace 模块）
         crate::workspace::commands::workspace_get_recent,
         crate::workspace::commands::workspace_add_recent,
