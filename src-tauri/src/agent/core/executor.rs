@@ -2116,13 +2116,3 @@ fn convert_execution_messages(messages: &[ExecutionMessage]) -> Vec<LLMMessage> 
         .collect()
 }
 
-fn extract_last_assistant_text(messages: &[LLMMessage]) -> Option<String> {
-    messages
-        .iter()
-        .rev()
-        .find(|msg| msg.role == "assistant")
-        .and_then(|msg| match &msg.content {
-            LLMMessageContent::Text(text) => Some(text.clone()),
-            _ => None,
-        })
-}

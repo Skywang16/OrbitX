@@ -281,9 +281,6 @@ fn build_search_options(
     }
 }
 
-fn requires_index(mode: &SearchMode) -> bool {
-    !matches!(mode, SearchMode::Regex | SearchMode::Lexical)
-}
 
 fn mode_as_str(mode: &SearchMode) -> &'static str {
     match mode {
