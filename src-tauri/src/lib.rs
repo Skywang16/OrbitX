@@ -4,6 +4,7 @@ pub mod ck;
 pub mod commands;
 pub mod completion;
 pub mod config;
+pub mod dock;
 pub mod filesystem;
 pub mod llm;
 pub mod mux;

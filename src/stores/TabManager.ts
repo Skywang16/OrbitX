@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import { TabType, type TabItem } from '@/types'
 import { useTerminalStore } from './Terminal'
+import { dockApi } from '@/api'
 
 export const useTabManagerStore = defineStore('TabManager', () => {
   const tabs = ref<TabItem[]>([])
@@ -44,9 +45,11 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     if (typeof terminalStore.activeTerminalId === 'number') {
       activeTabId.value = terminalStore.activeTerminalId
     }
+
+    // Update dock menu with current tabs
+    updateDockMenu()
   }
 
-  /** 格式化工作目录为短显示名 */
   const getDisplayPath = (cwd: string): string => {
     if (!cwd || cwd === '~') return '~'
 
@@ -157,9 +160,6 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     }
   }
 
-  /**
-   * 关闭左侧全部标签页
-   */
   const closeLeftTabs = async (currentTabId: number | string) => {
     const currentIndex = tabs.value.findIndex(tab => tab.id === currentTabId)
     if (currentIndex <= 0) return
@@ -173,9 +173,6 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     }
   }
 
-  /**
-   * 关闭右侧全部标签页
-   */
   const closeRightTabs = async (currentTabId: number | string) => {
     const currentIndex = tabs.value.findIndex(tab => tab.id === currentTabId)
     if (currentIndex === -1 || currentIndex >= tabs.value.length - 1) return
@@ -189,9 +186,6 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     }
   }
 
-  /**
-   * 关闭其他所有标签页
-   */
   const closeOtherTabs = async (currentTabId: number | string) => {
     const idsToClose = tabs.value.filter(tab => tab.id !== currentTabId && tab.closable).map(t => t.id)
     for (const id of idsToClose) {
@@ -199,14 +193,24 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     }
   }
 
-  /**
-   * 关闭所有标签页
-   */
   const closeAllTabs = async () => {
     const idsToClose = tabs.value.filter(tab => tab.closable).map(t => t.id)
     for (const id of idsToClose) {
       await closeTab(id)
     }
+  }
+
+  const updateDockMenu = () => {
+    const tabEntries = tabs.value
+      .filter(tab => tab.type === TabType.TERMINAL)
+      .map(tab => ({
+        id: String(tab.id),
+        title: tab.path || tab.title || 'Terminal',
+      }))
+
+    const activeId = activeTabId.value !== null ? String(activeTabId.value) : null
+
+    dockApi.updateTabs(tabEntries, activeId)
   }
 
   return {

@@ -196,6 +196,17 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     let terminal_channel_state = TerminalChannelState::new();
     app.manage(terminal_channel_state);
 
+    // Initialize Dock Manager for platform-specific dock/jump list menus
+    match crate::dock::DockManager::new(&app.handle()) {
+        Ok(dock_manager) => {
+            app.manage(dock_manager);
+            tracing::info!("Dock manager initialized successfully");
+        }
+        Err(e) => {
+            tracing::warn!("Failed to initialize dock manager: {}", e);
+        }
+    }
+
     Ok(())
 }
 

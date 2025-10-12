@@ -31,7 +31,6 @@
     }
   }
 
-
   const debouncedSaveUserRules = debounce((newValue: string) => {
     saveUserRules(newValue)
   }, 500)

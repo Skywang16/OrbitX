@@ -21,7 +21,8 @@ doctest = false
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api"] }
+parking_lot = "0.12"
+tauri = { version = "2", features = ["macos-private-api", "devtools"] }
 tauri-plugin-opener = "2.5.0"
 tauri-plugin-fs = "2"
 tauri-plugin-deep-link = "2.0.0"
@@ -127,6 +128,13 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.27", features = ["term", "fs"] }
 libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.25"
+objc = { version = "0.2", features = ["exception"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = ["Win32_System_Com", "Win32_UI_Shell", "Win32_Foundation"] }
 
 
 

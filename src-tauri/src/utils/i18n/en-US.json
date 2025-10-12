@@ -134,5 +134,11 @@
     "update_config_failed": "Failed to update configuration",
     "save_session_failed": "Failed to save session state",
     "load_session_failed": "Failed to load session state"
+  },
+  "dock": {
+    "update_failed": "Failed to update dock menu",
+    "get_failed": "Failed to get dock tabs",
+    "clear_failed": "Failed to clear dock tabs",
+    "not_initialized": "Dock manager not initialized"
   }
 }

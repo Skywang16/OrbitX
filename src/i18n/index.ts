@@ -25,51 +25,43 @@ export const i18n = createI18n({
 
 // 异步初始化语言设置
 export async function initLocale() {
-  try {
-    // 优先从后端语言管理器获取（与后端 i18n 保持一致）
-    let savedLocale: string | undefined
-    const appLanguage = await invoke<string>('language_get_app_language').catch(error => {
-      console.warn('Failed to get app language:', error)
-      return undefined
-    })
-    savedLocale = appLanguage
+  // 优先从后端语言管理器获取（与后端 i18n 保持一致）
+  let savedLocale: string | undefined
+  const appLanguage = await invoke<string>('language_get_app_language').catch(error => {
+    console.warn('Failed to get app language:', error)
+    return undefined
+  })
+  savedLocale = appLanguage
 
-    if (!savedLocale) {
-      const appConfig = await storageApi.getAppConfig()
-      savedLocale = appConfig?.language
-    }
-
-    let locale = 'en-US'
-    if (savedLocale && (savedLocale === 'zh-CN' || savedLocale === 'en-US')) {
-      locale = savedLocale
-    } else {
-      // 回退到浏览器语言
-      const browserLang = navigator?.language?.toLowerCase() || ''
-      if (browserLang.startsWith('zh')) {
-        locale = 'zh-CN'
-      }
-    }
-
-    i18n.global.locale.value = locale as 'zh-CN' | 'en-US'
-
-    // 监听后端语言变化事件，保持回显同步
-    await listen<string>('language-changed', event => {
-      const next = event.payload
-      if (next === 'zh-CN' || next === 'en-US') {
-        i18n.global.locale.value = next
-        const sessionStore = useSessionStore()
-        sessionStore.updateUiState({ language: next })
-      }
-    }).catch(error => {
-      console.warn('Failed to setup language listener:', error)
-    })
-  } catch (error) {
-    console.warn('Failed to load locale from storage, using default:', error)
-    // 使用浏览器语言作为回退
-    const browserLang = navigator?.language?.toLowerCase() || ''
-    const locale = browserLang.startsWith('zh') ? 'zh-CN' : 'en-US'
-    i18n.global.locale.value = locale
+  if (!savedLocale) {
+    const appConfig = await storageApi.getAppConfig()
+    savedLocale = appConfig?.language
   }
+
+  let locale = 'en-US'
+  if (savedLocale && (savedLocale === 'zh-CN' || savedLocale === 'en-US')) {
+    locale = savedLocale
+  } else {
+    // 回退到浏览器语言
+    const browserLang = navigator?.language?.toLowerCase() || ''
+    if (browserLang.startsWith('zh')) {
+      locale = 'zh-CN'
+    }
+  }
+
+  i18n.global.locale.value = locale as 'zh-CN' | 'en-US'
+
+  // 监听后端语言变化事件，保持回显同步
+  await listen<string>('language-changed', event => {
+    const next = event.payload
+    if (next === 'zh-CN' || next === 'en-US') {
+      i18n.global.locale.value = next
+      const sessionStore = useSessionStore()
+      sessionStore.updateUiState({ language: next })
+    }
+  }).catch(error => {
+    console.warn('Failed to setup language listener:', error)
+  })
 }
 
 // 切换语言函数

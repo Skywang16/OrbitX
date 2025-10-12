@@ -1,4 +1,4 @@
-import { completionApi } from '@/api'
+import { completionApi, dockApi } from '@/api'
 import { configApi } from '@/api/config'
 
 import { useAISettingsStore } from '@/components/settings/components/AI'
@@ -7,6 +7,7 @@ import { useThemeStore } from '@/stores/theme'
 import { useSessionStore } from '@/stores/session'
 
 import { useTerminalStore } from '@/stores/Terminal'
+import { useTabManagerStore } from '@/stores/TabManager'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
@@ -78,6 +79,7 @@ const initializeApplication = async () => {
     await Promise.allSettled([initializeStores(), initializeSettings(), initializeServices()])
 
     setupWindowCloseListener()
+    setupDockFocusListener()
   } catch (error) {
     console.error('应用初始化过程中发生错误:', error)
     if (!document.getElementById('app')?.hasChildNodes()) {
@@ -110,6 +112,13 @@ const disableContextMenuInProduction = () => {
 }
 
 disableContextMenuInProduction()
+
+const setupDockFocusListener = async () => {
+  await dockApi.onDockSwitchTab(payload => {
+    const tabManager = useTabManagerStore()
+    tabManager.setActiveTab(payload.tabId)
+  })
+}
 
 const handleAppClose = async () => {
   try {

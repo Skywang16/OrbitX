@@ -63,7 +63,6 @@ export class AiApi {
     await invoke<void>('agent_set_user_rules', { rules })
   }
 
-
   async getSettings(): Promise<AISettings> {
     return await invoke<AISettings>('get_ai_settings')
   }
