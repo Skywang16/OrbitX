@@ -103,7 +103,7 @@
   const handleBlur = (_event: FocusEvent) => {}
 </script>
 
-<style scoped>
+<style>
   .x-button {
     --x-button-font-weight: 500;
     --x-button-border-width: 1px;
@@ -140,7 +140,7 @@
     background: var(--bg-300);
     border: var(--x-button-border-width) var(--x-button-border-style) var(--border-300);
     border-radius: var(--x-button-border-radius);
-    color: var(--text-300);
+    color: var(--text-200);
     cursor: pointer;
     user-select: none;
     touch-action: manipulation;
@@ -204,25 +204,26 @@
     border-radius: calc(var(--x-button-border-radius) + 2px);
   }
   .x-button--primary {
-    color: #ffffff;
+    color: var(--bg-100);
     background: var(--color-primary);
     border-color: var(--color-primary);
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+    font-weight: 600;
   }
 
   .x-button--primary::before {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.05);
   }
 
   .x-button--primary:hover {
-    color: #ffffff;
+    color: var(--bg-100);
     background: var(--color-primary-hover);
     border-color: var(--color-primary-hover);
     box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.15);
   }
 
   .x-button--primary:focus {
-    color: #ffffff;
+    color: var(--bg-100);
     background: var(--color-primary);
     border-color: var(--color-primary);
     box-shadow:
@@ -231,52 +232,53 @@
   }
 
   .x-button--primary:active {
-    color: #ffffff;
+    color: var(--bg-100);
     background: var(--color-primary-hover);
     border-color: var(--color-primary-hover);
     box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.1);
   }
 
   .x-button--secondary {
-    color: var(--text-300);
+    color: var(--text-200);
     background: var(--bg-400);
     border-color: var(--border-300);
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   }
 
   .x-button--secondary:hover {
-    color: var(--text-200);
+    color: var(--text-100);
     background: var(--bg-500);
     border-color: var(--border-400);
     box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
   }
 
   .x-button--secondary:active {
-    color: var(--text-200);
+    color: var(--text-100);
     background: var(--bg-300);
     border-color: var(--border-400);
     box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   }
   .x-button--danger {
-    color: #ffffff;
+    color: var(--bg-100);
     background: var(--color-error);
     border-color: var(--color-error);
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+    font-weight: 600;
   }
 
   .x-button--danger::before {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.05);
   }
 
   .x-button--danger:hover {
-    color: #ffffff;
+    color: var(--bg-100);
     background: var(--ansi-red);
     border-color: var(--ansi-red);
     box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.15);
   }
 
   .x-button--danger:focus {
-    color: #ffffff;
+    color: var(--bg-100);
     background: var(--color-error);
     border-color: var(--color-error);
     box-shadow:
@@ -285,14 +287,14 @@
   }
 
   .x-button--danger:active {
-    color: #ffffff;
+    color: var(--bg-100);
     background: var(--ansi-red);
     border-color: var(--ansi-red);
     box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.1);
   }
 
   .x-button--ghost {
-    color: var(--text-300);
+    color: var(--text-200);
     background: transparent;
     border-color: var(--border-300);
     box-shadow: none;
@@ -435,6 +437,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    color: inherit;
   }
 
   .x-button__loading-icon {
@@ -456,6 +459,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    color: inherit;
   }
 
   /* 让通过 #icon 插槽传入的 SVG 图标按按钮尺寸规范显示（不覆盖其 fill/stroke） */
@@ -494,6 +498,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    color: inherit;
   }
   @keyframes x-button-spin {
     0% {
