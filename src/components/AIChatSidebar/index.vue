@@ -33,6 +33,9 @@
     const message = messageInput.value.trim()
     messageInput.value = ''
 
+    // 重置输入框高度
+    chatInputRef.value?.adjustTextareaHeight()
+
     await aiChatStore.sendMessage(message)
   }
 

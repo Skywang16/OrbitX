@@ -21,6 +21,8 @@ export interface ExecuteTaskParams {
   userPrompt: string
   /** 聊天模式 - 必填！类型系统强制传递 */
   chatMode: ChatMode
+  /** 模型ID - 必填！ */
+  modelId: string
   /** 配置覆盖 */
   configOverrides?: Record<string, unknown>
   /** 要恢复的任务ID */

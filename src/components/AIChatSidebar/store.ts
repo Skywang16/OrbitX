@@ -283,7 +283,14 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     isLoading.value = true
     error.value = null
 
-    const stream = await agentApi.executeTask(content, currentConversationId.value, chatMode.value)
+    // 获取选中的模型ID
+    const selectedModelId = sessionStore.aiState?.selectedModelId
+
+    if (!selectedModelId) {
+      throw new Error('没有选择模型，请先选择一个模型')
+    }
+
+    const stream = await agentApi.executeTask(content, currentConversationId.value, chatMode.value, selectedModelId)
 
     if (!stream) throw new Error('无法创建任务流')
 

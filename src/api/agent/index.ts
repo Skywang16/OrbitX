@@ -34,12 +34,14 @@ export class AgentApi {
   async executeTask(
     userPrompt: string,
     conversationId: number,
-    chatMode: 'chat' | 'agent' = 'agent'
+    chatMode: 'chat' | 'agent' = 'agent',
+    modelId: string
   ): Promise<TaskProgressStream> {
     const params: ExecuteTaskParams = {
       conversationId,
       userPrompt,
       chatMode,
+      modelId,
     }
 
     const stream = agentChannelApi.createTaskStream(params)
