@@ -9,6 +9,7 @@ use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use rand::rngs::OsRng;
 use rand::RngCore;
+use sha2::{Digest, Sha256};
 use sqlx::sqlite::{
     SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
 };
@@ -311,7 +312,7 @@ impl KeyVault {
         let bytes = if let Some(bytes) = self.load_from_disk().await? {
             bytes
         } else {
-            self.generate_random().await?
+            self.derive_from_device().await?
         };
 
         *write_guard = Some(bytes);
@@ -365,11 +366,110 @@ impl KeyVault {
         Ok(Some(bytes))
     }
 
-    async fn generate_random(&self) -> DatabaseResult<[u8; 32]> {
+    async fn derive_from_device(&self) -> DatabaseResult<[u8; 32]> {
+        let device_id = self.get_device_identifier()?;
+
+        let mut hasher = Sha256::new();
+        hasher.update(device_id.as_bytes());
+        hasher.update(b"orbitx-secret-v1");
+
+        let result = hasher.finalize();
         let mut bytes = [0u8; 32];
-        OsRng.fill_bytes(&mut bytes);
+        bytes.copy_from_slice(&result);
+
         self.persist(bytes).await?;
         Ok(bytes)
+    }
+
+    fn get_device_identifier(&self) -> DatabaseResult<String> {
+        #[cfg(target_os = "macos")]
+        {
+            let output = std::process::Command::new("ioreg")
+                .args(["-rd1", "-c", "IOPlatformExpertDevice"])
+                .output()
+                .map_err(|e| {
+                    DatabaseError::internal(format!("获取设备UUID失败: {}", e))
+                })?;
+
+            if !output.status.success() {
+                return Err(DatabaseError::internal(
+                    "ioreg命令执行失败".to_string(),
+                ));
+            }
+
+            let output_str = String::from_utf8_lossy(&output.stdout);
+
+            for line in output_str.lines() {
+                if line.contains("IOPlatformUUID") {
+                    if let Some(uuid) = line.split('"').nth(3) {
+                        return Ok(uuid.to_string());
+                    }
+                }
+            }
+
+            let hostname = hostname::get()
+                .map_err(|e| DatabaseError::internal(format!("获取主机名失败: {}", e)))?
+                .to_string_lossy()
+                .to_string();
+            Ok(hostname)
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let output = std::process::Command::new("wmic")
+                .args(["csproduct", "get", "UUID"])
+                .output()
+                .map_err(|e| {
+                    DatabaseError::internal(format!("获取设备UUID失败: {}", e))
+                })?;
+
+            if !output.status.success() {
+                return Err(DatabaseError::internal(
+                    "wmic命令执行失败".to_string(),
+                ));
+            }
+
+            let output_str = String::from_utf8_lossy(&output.stdout);
+
+            for line in output_str.lines().skip(1) {
+                let uuid = line.trim();
+                if !uuid.is_empty() && uuid != "UUID" {
+                    return Ok(uuid.to_string());
+                }
+            }
+
+            let hostname = hostname::get()
+                .map_err(|e| DatabaseError::internal(format!("获取主机名失败: {}", e)))?
+                .to_string_lossy()
+                .to_string();
+            Ok(hostname)
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(content) = std::fs::read_to_string("/etc/machine-id") {
+                let machine_id = content.trim().to_string();
+                return Ok(machine_id);
+            }
+
+            if let Ok(content) = std::fs::read_to_string("/var/lib/dbus/machine-id") {
+                let machine_id = content.trim().to_string();
+                return Ok(machine_id);
+            }
+
+            let hostname = hostname::get()
+                .map_err(|e| DatabaseError::internal(format!("获取主机名失败: {}", e)))?
+                .to_string_lossy()
+                .to_string();
+            Ok(hostname)
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        {
+            Err(DatabaseError::internal(
+                "不支持的操作系统，无法获取设备标识".to_string(),
+            ))
+        }
     }
 
     async fn persist(&self, bytes: [u8; 32]) -> DatabaseResult<()> {
