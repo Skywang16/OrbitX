@@ -184,7 +184,7 @@ export interface ChatInputState {
 }
 
 export interface ConversationState {
-  currentConversationId: number | null
+  currentConversationId: number | null | -1 // 增加 -1 作为新建标识
   conversations: Conversation[]
   messages: Message[]
   isLoading: boolean

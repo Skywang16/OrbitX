@@ -29,7 +29,7 @@ impl Default for MessagePackOptions {
     fn default() -> Self {
         Self {
             compression: true,
-            backup_count: 3,
+            backup_count: 0,
             checksum_validation: true,
             max_file_size: 10 * 1024 * 1024,
         }

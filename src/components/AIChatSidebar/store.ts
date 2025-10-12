@@ -8,6 +8,9 @@ import type { Conversation, Message } from '@/types'
 import type { TaskProgressPayload } from '@/api/agent/types'
 import { getEventTaskId } from '@/api/agent/types'
 
+// 特殊标识：表示用户正处于"新建会话"的临时状态
+const NEW_SESSION_FLAG = -1
+
 export const useAIChatStore = defineStore('ai-chat', () => {
   const sessionStore = useSessionStore()
 
@@ -59,26 +62,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     sidebarWidth.value = Math.max(300, Math.min(800, width))
   }
 
-  const findEmptyConversation = (): Conversation | null => {
-    return conversations.value.find(c => c.messageCount === 0) || null
-  }
-
   const createConversation = async (title?: string): Promise<void> => {
     stopCurrentConversation()
 
-    const existingEmptyConversation = findEmptyConversation()
-    if (existingEmptyConversation) {
-      await switchToConversation(existingEmptyConversation.id)
-      return
-    }
-
-    isLoading.value = true
-    const conversationId = await agentApi.createConversation(title)
-    const newConversation = await agentApi.getConversation(conversationId)
-    conversations.value.unshift(newConversation)
-    currentConversationId.value = newConversation.id
+    // 进入临时新建状态，不触碰数据库
+    currentConversationId.value = NEW_SESSION_FLAG
     messageList.value = []
-    isLoading.value = false
   }
 
   const loadConversation = async (conversationId: number): Promise<void> => {
@@ -89,8 +78,19 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
 
   const switchToConversation = async (conversationId: number): Promise<void> => {
+    if (currentConversationId.value === conversationId) {
+      return
+    }
+
     stopCurrentConversation()
     messageList.value = []
+
+    // 如果是新建状态，直接切换不加载
+    if (conversationId === NEW_SESSION_FLAG) {
+      currentConversationId.value = NEW_SESSION_FLAG
+      return
+    }
+
     await loadConversation(conversationId)
   }
 
@@ -272,12 +272,19 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
 
   const sendMessage = async (content: string): Promise<void> => {
-    if (!currentConversationId.value) {
-      await createConversation()
-    }
-
-    if (!currentConversationId.value) {
-      throw new Error('无法创建会话')
+    // 如果处于新建状态或无会话，先创建真实会话
+    if (!currentConversationId.value || currentConversationId.value === NEW_SESSION_FLAG) {
+      isLoading.value = true
+      try {
+        const conversationId = await agentApi.createConversation()
+        const newConversation = await agentApi.getConversation(conversationId)
+        conversations.value.unshift(newConversation)
+        currentConversationId.value = newConversation.id
+        messageList.value = []
+      } catch (error) {
+        isLoading.value = false
+        throw new Error('无法创建会话: ' + (error instanceof Error ? error.message : String(error)))
+      }
     }
 
     isLoading.value = true
@@ -287,6 +294,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     const selectedModelId = sessionStore.aiState?.selectedModelId
 
     if (!selectedModelId) {
+      isLoading.value = false
       throw new Error('没有选择模型，请先选择一个模型')
     }
 
@@ -371,11 +379,15 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
 
   const saveToSessionState = (): void => {
+    // 过滤掉临时新建状态，不持久化
+    const conversationIdToSave =
+      currentConversationId.value === NEW_SESSION_FLAG ? undefined : currentConversationId.value || undefined
+
     sessionStore.updateAiState({
       visible: isVisible.value,
       width: sidebarWidth.value,
       mode: chatMode.value,
-      conversationId: currentConversationId.value || undefined,
+      conversationId: conversationIdToSave,
     })
   }
 
@@ -394,7 +406,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     restoreFromSessionState()
 
     if (currentConversationId.value) {
-      await switchToConversation(currentConversationId.value)
+      await loadConversation(currentConversationId.value)
     }
 
     await refreshConversations()

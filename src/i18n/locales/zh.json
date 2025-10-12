@@ -41,6 +41,7 @@
   },
   "chat": {
     "new_session": "新建会话",
+    "new_session_placeholder": "新建会话",
     "session_select": "选择会话",
     "input_placeholder": "输入消息..."
   },

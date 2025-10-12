@@ -1,28 +1,16 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { marked } from 'marked'
-  import { markedHighlight } from 'marked-highlight'
-  import hljs from 'highlight.js'
   import type { Message } from '@/types'
   import type { UiStep } from '@/api/agent/types'
   import { useAIChatStore } from '../../store'
   import { formatTime } from '@/utils/dateFormatter'
+  import { renderMarkdown } from '@/utils/markdown'
   import ThinkingBlock from './blocks/ThinkingBlock.vue'
   import ToolBlock from './blocks/ToolBlock.vue'
   import { useStepProcessor } from '@/composables/useStepProcessor'
   const { t } = useI18n()
   const { processSteps } = useStepProcessor()
-
-  marked.use(
-    markedHighlight({
-      langPrefix: 'hljs language-',
-      highlight(code, lang) {
-        const language = hljs.getLanguage(lang) ? lang : 'plaintext'
-        return hljs.highlight(code, { language }).value
-      },
-    })
-  )
 
   interface Props {
     message: Message
@@ -43,38 +31,28 @@
     const seconds = (ms / 1000).toFixed(1)
     return `${seconds}s`
   }
-
-  const renderMarkdown = (content?: string) => {
-    return marked(content || '')
-  }
 </script>
 
 <template>
   <div class="ai-message">
-    <!-- 双轨架构：只基于steps渲染 -->
     <template v-if="message.steps && message.steps.length > 0">
       <template v-for="(step, index) in sortedSteps" :key="step.metadata?.stepId || `fallback-${index}`">
-        <!-- 使用 ThinkingBlock 组件 -->
         <ThinkingBlock
           v-if="step.stepType === 'thinking'"
           :step="step"
           :is-streaming="message.status === 'streaming' || !message.status"
         />
 
-        <!-- 使用 ToolBlock 组件 -->
         <ToolBlock v-else-if="step.stepType === 'tool_use' || step.stepType === 'tool_result'" :step="step" />
 
-        <!-- 文本消息直接渲染 -->
         <div v-else-if="step.stepType === 'text'" class="ai-message-text step-block">
           <div v-html="renderMarkdown(step.content)"></div>
         </div>
 
-        <!-- 错误消息 -->
         <div v-else-if="step.stepType === 'error'" class="error-output step-block">
           <div class="error-content">{{ step.content }}</div>
         </div>
 
-        <!-- 未知步骤类型 -->
         <div v-else class="unknown-step step-block">
           <div class="unknown-header">
             <span class="unknown-icon">❓</span>
@@ -213,14 +191,15 @@
     }
   }
 
-  /* Markdown 内容样式 */
   .ai-message-text {
+    font-size: 0.9em;
     line-height: 1.6;
     color: var(--text-200);
   }
 
   .ai-message-text :deep(p) {
     margin: var(--spacing-sm) 0;
+    font-size: 0.95em;
   }
 
   .ai-message-text :deep(p:first-child) {
@@ -245,27 +224,27 @@
   }
 
   .ai-message-text :deep(h1) {
-    font-size: 1.5em;
+    font-size: 1.3em;
     border-bottom: 1px solid var(--border-200);
     padding-bottom: var(--spacing-xs);
   }
 
   .ai-message-text :deep(h2) {
-    font-size: 1.3em;
-  }
-
-  .ai-message-text :deep(h3) {
     font-size: 1.15em;
   }
 
+  .ai-message-text :deep(h3) {
+    font-size: 1.05em;
+  }
+
   .ai-message-text :deep(h4) {
-    font-size: 1em;
+    font-size: 0.95em;
   }
 
   /* 代码 */
   .ai-message-text :deep(code) {
     font-family: var(--font-mono);
-    font-size: 0.9em;
+    font-size: 0.85em;
     padding: 0.15em 0.4em;
     background: var(--bg-400);
     border-radius: 3px;
@@ -280,7 +259,7 @@
   .ai-message-text :deep(pre code) {
     padding: 0;
     background: transparent;
-    font-size: var(--font-size-sm);
+    font-size: 0.9em;
   }
 
   /* 列表 */

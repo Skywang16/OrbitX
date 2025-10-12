@@ -41,6 +41,7 @@
   },
   "chat": {
     "new_session": "New Session",
+    "new_session_placeholder": "New Session",
     "session_select": "Select Session",
     "input_placeholder": "Type a message..."
   },

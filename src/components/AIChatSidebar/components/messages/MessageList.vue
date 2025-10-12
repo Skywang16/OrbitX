@@ -17,10 +17,8 @@
 
   const props = defineProps<Props>()
 
-  // 消息列表容器引用
   const messageListRef = ref<HTMLElement | null>(null)
 
-  // 自动滚动到底部
   const scrollToBottom = async () => {
     await nextTick()
     if (messageListRef.value) {
@@ -28,16 +26,18 @@
     }
   }
 
-  // 监听消息列表变化，处理滚动
+  const previousLength = ref(props.messages.length)
+
   watch(
     () => props.messages.length,
-    () => {
-      scrollToBottom()
-    },
-    { immediate: true }
+    newLength => {
+      if (newLength > previousLength.value) {
+        scrollToBottom()
+      }
+      previousLength.value = newLength
+    }
   )
 
-  // 初始化AI设置
   onMounted(async () => {
     if (!aiSettingsStore.isInitialized) {
       await aiSettingsStore.loadSettings()
@@ -48,7 +48,6 @@
 <template>
   <div ref="messageListRef" class="message-list">
     <div v-if="messages.length === 0" class="empty-state">
-      <!-- 没有配置模型时的提醒 -->
       <div v-if="!aiSettingsStore.hasModels && aiSettingsStore.isInitialized" class="no-model-state">
         <div class="empty-text">{{ t('message_list.no_model_configured') }}</div>
         <div class="empty-hint">{{ t('message_list.configure_model_hint') }}</div>
@@ -86,7 +85,6 @@
     scrollbar-gutter: stable;
   }
 
-  /* 自定义滚动条样式 */
   .message-list::-webkit-scrollbar {
     width: 8px;
   }
