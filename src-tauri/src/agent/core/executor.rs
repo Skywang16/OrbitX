@@ -11,7 +11,7 @@
 
 use crate::agent::config::CompactionConfig;
 use crate::agent::config::TaskExecutionConfig;
-use crate::agent::context::{ContextBuilder, ConversationSummarizer, SummaryResult};
+use crate::agent::context::{ContextBuilder, ConversationSummarizer, ProjectContextLoader, SummaryResult};
 use crate::agent::core::chain::ToolChain;
 use crate::agent::core::context::{LLMResponseParsed, TaskContext, ToolCallResult};
 use crate::agent::core::iteration_outcome::IterationOutcome;
@@ -60,6 +60,7 @@ pub struct ExecuteTaskParams {
     pub conversation_id: i64,
     pub user_prompt: String,
     pub chat_mode: String,
+    pub model_id: String,
     pub config_overrides: Option<serde_json::Value>,
 }
 
@@ -310,8 +311,14 @@ impl TaskExecutor {
         params: ExecuteTaskParams,
         progress_channel: Channel<TaskProgressPayload>,
     ) -> TaskExecutorResult<()> {
+        info!("[MODEL_SELECTION] execute_task called with conversation_id: {}, model_id: {:?}", 
+            params.conversation_id, params.model_id);
+        
         // 1. Check memory cache first
         if let Some(existing_ctx) = self.conversation_context(params.conversation_id).await {
+            info!("[MODEL_SELECTION] Found existing context for conversation {}, using model_id: {}", 
+                params.conversation_id, params.model_id);
+            
             let status = existing_ctx.status().await;
             let is_actually_running =
                 matches!(status, AgentTaskStatus::Running | AgentTaskStatus::Paused);
@@ -377,7 +384,7 @@ impl TaskExecutor {
                 }))
                 .await?;
 
-            self.spawn_react_execution(existing_ctx);
+            self.spawn_react_execution(existing_ctx, params.model_id);
             return Ok(());
         }
 
@@ -420,11 +427,12 @@ impl TaskExecutor {
                 }))
                 .await?;
 
-            self.spawn_react_execution(restored_ctx);
+            self.spawn_react_execution(restored_ctx, params.model_id);
             return Ok(());
         }
 
         // 3. Create new task
+        let model_id = params.model_id.clone();
         let context = Arc::new(
             self.create_task_context(params, Some(progress_channel), None)
                 .await?,
@@ -453,7 +461,7 @@ impl TaskExecutor {
             }))
             .await?;
 
-        self.spawn_react_execution(context);
+        self.spawn_react_execution(context, model_id);
         Ok(())
     }
 
@@ -898,21 +906,48 @@ impl TaskExecutor {
             serde_json::Value::String(user_prompt.to_string()),
         );
 
-        // 获取用户前置提示词
-        let user_prefix_prompt = self
+        // 获取用户规则
+        let user_rules = self
             .repositories()
             .ai_models()
-            .get_user_prefix_prompt()
+            .get_user_rules()
             .await
             .ok()
             .flatten();
+
+        // 获取项目规则（指定使用哪个配置文件）
+        let project_rules = self
+            .repositories()
+            .ai_models()
+            .get_project_rules()
+            .await
+            .ok()
+            .flatten();
+
+        // 合并项目上下文和用户规则
+        let mut prompt_parts = Vec::new();
+
+        let loader = ProjectContextLoader::new(cwd);
+        if let Some(ctx) = loader.load_with_preference(project_rules.as_deref()).await {
+            prompt_parts.push(ctx.format_for_prompt());
+        }
+
+        if let Some(rules) = user_rules {
+            prompt_parts.push(rules);
+        }
+
+        let ext_sys_prompt = if prompt_parts.is_empty() {
+            None
+        } else {
+            Some(prompt_parts.join("\n\n"))
+        };
 
         let system_prompt = build_agent_system_prompt(
             agent_info.clone(),
             Some(task_for_prompt.clone()),
             Some(prompt_ctx.clone()),
             simple_tool_schemas.clone(),
-            user_prefix_prompt,
+            ext_sys_prompt,
         )
         .await
         .map_err(|e| {
@@ -933,12 +968,12 @@ impl TaskExecutor {
         Ok((system_prompt, user_prompt_built))
     }
 
-    fn spawn_react_execution(&self, context: Arc<TaskContext>) {
+    fn spawn_react_execution(&self, context: Arc<TaskContext>, model_id: String) {
         let executor = self.clone();
         tokio::spawn(async move {
             let task_id = context.task_id.clone();
             let _conversation_id = context.conversation_id;
-            let result = executor.run_react_loop(context.clone()).await;
+            let result = executor.run_react_loop(context.clone(), model_id).await;
 
             match result {
                 Ok(_) => {
@@ -1050,8 +1085,9 @@ impl TaskExecutor {
 
     /// ReAct循环执行（核心逻辑）
     /// ReAct循环执行（重构版：简化逻辑，移除idle计数安全网）
-    pub(crate) async fn run_react_loop(&self, context: Arc<TaskContext>) -> TaskExecutorResult<()> {
+    pub(crate) async fn run_react_loop(&self, context: Arc<TaskContext>, model_id: String) -> TaskExecutorResult<()> {
         info!("Starting ReAct loop for task: {}", context.task_id);
+        info!("[MODEL_SELECTION] run_react_loop using model_id: {}", model_id);
 
         let mut iteration_snapshots: Vec<IterationSnapshot> = Vec::new();
         let persistence = self.agent_persistence();
@@ -1072,7 +1108,8 @@ impl TaskExecutor {
             let iter_ctx = context.begin_iteration(iteration).await;
 
             // ===== Phase 2: 准备消息上下文 =====
-            let model_id = self.get_default_model_id().await?;
+            info!("[MODEL_SELECTION] Using model_id: {}", model_id);
+            
             let mut request_messages = Vec::new();
             context.copy_messages_into(&mut request_messages).await;
 
@@ -1178,7 +1215,7 @@ impl TaskExecutor {
             // ===== Phase 3: 调用 LLM =====
             let tool_registry = context.tool_registry();
             let llm_request = self
-                .build_llm_request(messages, &tool_registry, &context.cwd)
+                .build_llm_request(model_id.clone(), messages, &tool_registry, &context.cwd)
                 .await?;
             let llm_request_snapshot = Arc::new(llm_request.clone());
 
