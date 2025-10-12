@@ -8,7 +8,6 @@ import { useSessionStore } from '@/stores/session'
 
 import { useTerminalStore } from '@/stores/Terminal'
 import { useTabManagerStore } from '@/stores/TabManager'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import App from './App.vue'
@@ -31,6 +30,9 @@ const initializeStores = async () => {
 
     const terminalStore = useTerminalStore()
     await terminalStore.initializeTerminalStore()
+
+    const tabManagerStore = useTabManagerStore()
+    await tabManagerStore.initialize()
 
     const aiChatStore = useAIChatStore()
     await aiChatStore.initialize()
@@ -78,7 +80,6 @@ const initializeApplication = async () => {
 
     await Promise.allSettled([initializeStores(), initializeSettings(), initializeServices()])
 
-    setupWindowCloseListener()
     setupDockFocusListener()
   } catch (error) {
     console.error('应用初始化过程中发生错误:', error)
@@ -118,36 +119,4 @@ const setupDockFocusListener = async () => {
     const tabManager = useTabManagerStore()
     tabManager.setActiveTab(payload.tabId)
   })
-}
-
-const handleAppClose = async () => {
-  try {
-    const terminalStore = useTerminalStore()
-    await terminalStore.saveSessionState()
-
-    const sessionStore = useSessionStore()
-    sessionStore.cleanup()
-  } catch (error) {
-    console.error('应用关闭清理失败:', error)
-  }
-}
-
-const setupWindowCloseListener = async () => {
-  try {
-    const currentWindow = getCurrentWindow()
-    const unlistenClose = await currentWindow.onCloseRequested(async event => {
-      event.preventDefault()
-
-      await handleAppClose()
-
-      unlistenClose()
-      await currentWindow.close()
-    })
-
-    return () => {
-      unlistenClose()
-    }
-  } catch (error) {
-    console.error('设置窗口事件监听失败:', error)
-  }
 }

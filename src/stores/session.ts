@@ -1,12 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
-import { type SessionState, type TerminalState, type UiState, type AiState } from '@/types/domain/storage'
+import { type SessionState, type TabState, type UiState, type AiState } from '@/types/domain/storage'
 import { createDefaultSessionState } from '@/types/utils/helpers'
 import { storageApi } from '@/api/storage'
-import { debounce } from 'lodash-es'
 
 /**
- * 精简版会话状态管理Store
+ * 会话状态管理Store - 统一 tab 管理
  */
 export const useSessionStore = defineStore('session', () => {
   /** 当前会话状态 */
@@ -29,11 +28,11 @@ export const useSessionStore = defineStore('session', () => {
   /** 是否正在执行操作 */
   const isOperating = computed(() => isLoading.value || isSaving.value)
 
-  /** 终端状态列表 */
-  const terminals = computed(() => sessionState.value.terminals)
+  /** Tabs 列表 */
+  const tabs = computed(() => sessionState.value.tabs)
 
-  /** 活跃的终端 */
-  const activeTerminal = computed(() => sessionState.value.terminals.find(t => t.active) || null)
+  /** 活跃的 tab ID */
+  const activeTabId = computed(() => sessionState.value.activeTabId)
 
   /** UI状态 */
   const uiState = computed(() => sessionState.value.ui)
@@ -42,7 +41,6 @@ export const useSessionStore = defineStore('session', () => {
   const aiState = computed(() => sessionState.value.ai)
 
   const saveSessionState = async (): Promise<void> => {
-    // 如果正在保存，标记一次待保存；当前保存完成后会再补一次，直到没有新的待保存
     if (isSaving.value) {
       pendingSave.value = true
       return
@@ -74,20 +72,30 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  // 统一使用防抖保存，避免频繁保存
-  const debouncedSave = debounce(() => {
+  const updateTabs = (tabs: TabState[]): void => {
+    sessionState.value.tabs = tabs
     saveSessionState().catch(() => {})
-  }, 100)
+  }
 
-  const updateTerminals = (terminals: TerminalState[]): void => {
-    sessionState.value.terminals = terminals
-    debouncedSave()
+  /**
+   * 添加 tab
+   */
+  const addTab = (tab: TabState): void => {
+    sessionState.value.tabs.push(tab)
+    saveSessionState().catch(() => {})
+  }
+
+  /**
+   * 删除 tab
+   */
+  const removeTab = (tabId: number | string): void => {
+    sessionState.value.tabs = sessionState.value.tabs.filter(tab => tab.id !== tabId)
+    saveSessionState().catch(() => {})
   }
 
   const setActiveTabId = (tabId: number | string | null | undefined): void => {
     sessionState.value.activeTabId = tabId ?? undefined
-    // 这里使用防抖保存，减少频繁切换tab时的保存次数
-    debouncedSave()
+    saveSessionState().catch(() => {})
   }
 
   const updateUiState = (updates: Partial<UiState>): void => {
@@ -95,7 +103,7 @@ export const useSessionStore = defineStore('session', () => {
       ...sessionState.value.ui,
       ...updates,
     }
-    debouncedSave()
+    saveSessionState().catch(() => {})
   }
 
   const updateAiState = (updates: Partial<AiState>): void => {
@@ -103,7 +111,7 @@ export const useSessionStore = defineStore('session', () => {
       ...sessionState.value.ai,
       ...updates,
     }
-    debouncedSave()
+    saveSessionState().catch(() => {})
   }
 
   const clearError = (): void => {
@@ -131,8 +139,8 @@ export const useSessionStore = defineStore('session', () => {
     initialized: readonly(initialized),
 
     isOperating,
-    terminals,
-    activeTerminal,
+    tabs,
+    activeTabId,
     uiState,
     aiState,
 
@@ -143,7 +151,9 @@ export const useSessionStore = defineStore('session', () => {
     cleanup,
 
     // 状态更新方法
-    updateTerminals,
+    updateTabs,
+    addTab,
+    removeTab,
     setActiveTabId,
     updateUiState,
     updateAiState,

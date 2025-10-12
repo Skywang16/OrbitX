@@ -1,7 +1,7 @@
 import { shellApi, storageApi, terminalApi, terminalContextApi, windowApi, workspaceApi } from '@/api'
 import type { ShellInfo } from '@/api'
 import { useSessionStore } from '@/stores/session'
-import type { RuntimeTerminalState, TerminalState } from '@/types'
+import type { RuntimeTerminalState } from '@/types'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
 import { computed, ref, nextTick } from 'vue'
@@ -168,9 +168,22 @@ export const useTerminalStore = defineStore('Terminal', () => {
           terminal.cwd = payload.cwd
           updateTerminalTitle(terminal, payload.cwd)
 
-          // 保存最后的 CWD 到会话状态，通过后端 MessagePack 持久化
-          syncToSessionStore()
-          sessionStore.saveSessionState().catch(() => {})
+          // CWD 变化，更新 SessionStore
+          const terminalTab = {
+            type: 'terminal' as const,
+            id: terminal.id,
+            active: terminal.id === activeTerminalId.value,
+            data: {
+              title: terminal.title,
+              shell: terminal.shell,
+              cwd: terminal.cwd,
+            },
+          }
+          // 更新已存在的 tab
+          const existingTabIndex = sessionStore.tabs.findIndex(t => t.id === terminal.id)
+          if (existingTabIndex !== -1) {
+            sessionStore.updateTabs(sessionStore.tabs.map((t, i) => (i === existingTabIndex ? terminalTab : t)))
+          }
 
           // 记录工作区到最近列表
           // 排除：1) ~ 目录  2) home 目录  3) 终端的初始目录（首次 CWD 变化）
@@ -295,9 +308,19 @@ export const useTerminalStore = defineStore('Terminal', () => {
       }
       terminals.value.push(terminal)
 
-      await setActiveTerminal(paneId)
+      // 添加到 SessionStore
+      sessionStore.addTab({
+        type: 'terminal',
+        id: paneId,
+        active: false,
+        data: {
+          title: terminal.title,
+          shell: terminal.shell,
+          cwd: terminal.cwd,
+        },
+      })
 
-      // setActiveTerminal已经会调用syncToSessionStore和保存，不需要再次调用
+      await setActiveTerminal(paneId)
 
       return paneId
     })
@@ -318,13 +341,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       await terminalApi.closeTerminal(id)
 
+      // 从 SessionStore 删除
+      sessionStore.removeTab(id)
+
       await cleanupTerminalState(id)
-      // cleanupTerminalState内部可能会调用setActiveTerminal，它已经会保存状态
-      // 如果没有其他终端了，手动同步并保存
-      if (terminals.value.length === 0) {
-        syncToSessionStore()
-        sessionStore.setActiveTabId(null)
-      }
     })
   }
 
@@ -358,9 +378,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
     await terminalContextApi.setActivePaneId(id)
 
-    // 统一在最后同步并保存一次，避免多次调用
-    // sessionStore.setActiveTabId内部会调用saveSessionState，所以这里只需要同步状态即可
-    syncToSessionStore()
+    // 更新 SessionStore 的活跃 tab
     sessionStore.setActiveTabId(id)
   }
 
@@ -476,9 +494,22 @@ export const useTerminalStore = defineStore('Terminal', () => {
         terminals.value.splice(existingIndex, 1)
       }
       terminals.value.push(terminal)
+
+      // 添加到 SessionStore
+      sessionStore.addTab({
+        type: 'terminal',
+        id: paneId,
+        active: false,
+        data: {
+          title: terminal.title,
+          shell: terminal.shell,
+          cwd: terminal.cwd,
+        },
+      })
+
       await new Promise(resolve => setTimeout(resolve, 100))
       await setActiveTerminal(paneId)
-      // setActiveTerminal已经会同步并保存状态
+
       return paneId
     })
   }
@@ -512,8 +543,19 @@ export const useTerminalStore = defineStore('Terminal', () => {
       }
       terminals.value.push(terminal)
 
+      // 添加到 SessionStore
+      sessionStore.addTab({
+        type: 'terminal',
+        id: paneId,
+        active: false,
+        data: {
+          title: terminal.title,
+          shell: terminal.shell,
+          cwd: terminal.cwd,
+        },
+      })
+
       await setActiveTerminal(paneId)
-      // setActiveTerminal已经会同步并保存状态
 
       return paneId
     })
@@ -523,25 +565,13 @@ export const useTerminalStore = defineStore('Terminal', () => {
     await loadAvailableShells()
   }
 
-  const syncToSessionStore = () => {
-    const terminalStates: TerminalState[] = terminals.value.map(terminal => ({
-      id: terminal.id,
-      title: terminal.title,
-      active: terminal.id === activeTerminalId.value,
-      shell: terminal.shell,
-      cwd: terminal.cwd, // 保存工作目录用于重启恢复
-    }))
-
-    sessionStore.updateTerminals(terminalStates)
-    sessionStore.setActiveTabId(activeTerminalId.value)
-  }
-
   const restoreFromSessionState = async () => {
     if (!sessionStore.initialized) {
       await sessionStore.initialize()
     }
 
-    const savedTerminals = sessionStore.terminals || []
+    // 从 SessionState.tabs 中过滤出 terminal 类型的 tabs
+    const savedTerminalTabs = sessionStore.tabs.filter(tab => tab.type === 'terminal')
     let runtimeTerminals: RuntimeTerminalState[] = []
 
     try {
@@ -557,7 +587,8 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
     const restored: RuntimeTerminalState[] = []
 
-    for (const saved of savedTerminals) {
+    for (const saved of savedTerminalTabs) {
+      if (saved.type !== 'terminal') continue
       const runtime = runtimeMap.get(saved.id)
       if (!runtime) {
         continue
@@ -565,7 +596,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       restored.push({
         ...runtime,
-        title: saved.title || runtime.title,
+        title: saved.data.title || runtime.title,
       })
 
       runtimeMap.delete(saved.id)
@@ -578,57 +609,33 @@ export const useTerminalStore = defineStore('Terminal', () => {
     terminals.value = restored
     activeTerminalId.value = null
 
-    const normalizePaneId = (value: unknown): number | null => {
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        return value
-      }
-      if (typeof value === 'string' && value.trim().length > 0) {
-        const parsed = Number.parseInt(value, 10)
-        return Number.isNaN(parsed) ? null : parsed
-      }
-      return null
-    }
-
-    const savedActiveFromSession = normalizePaneId(sessionStore.sessionState.activeTabId)
-    const savedActiveTerminalId = normalizePaneId(savedTerminals.find(t => t.active)?.id)
-    const runtimeActiveTerminal = terminals.value.find(t => t.active)
-
-    let targetActiveId: number | null = null
-
-    if (savedActiveFromSession && terminals.value.some(t => t.id === savedActiveFromSession)) {
-      targetActiveId = savedActiveFromSession
-    } else if (savedActiveTerminalId && terminals.value.some(t => t.id === savedActiveTerminalId)) {
-      targetActiveId = savedActiveTerminalId
-    } else if (runtimeActiveTerminal) {
-      targetActiveId = runtimeActiveTerminal.id
-    } else if (terminals.value.length > 0) {
-      targetActiveId = terminals.value[0].id
-    }
-
-    if (targetActiveId != null) {
-      await setActiveTerminal(targetActiveId)
+    // 只在 activeTabId 是 number 时才激活对应的 terminal
+    const savedActiveId = sessionStore.sessionState.activeTabId
+    if (typeof savedActiveId === 'number') {
+      await setActiveTerminal(savedActiveId)
       return true
     }
 
     if (terminals.value.length === 0) {
-      if (savedTerminals.length > 0) {
+      if (savedTerminalTabs.length > 0) {
         // 恢复所有保存的终端
         const newTerminalIds: number[] = []
 
-        for (const saved of savedTerminals) {
-          const paneId = await createTerminal(saved.cwd)
+        for (const saved of savedTerminalTabs) {
+          if (saved.type !== 'terminal') continue
+          const paneId = await createTerminal(saved.data.cwd)
           newTerminalIds.push(paneId)
 
-          // 恢夏保存的属性
+          // 恢复保存的属性
           const terminal = terminals.value.find(t => t.id === paneId)
           if (terminal) {
-            if (saved.title) terminal.title = saved.title
-            if (saved.shell) terminal.shell = saved.shell
+            if (saved.data.title) terminal.title = saved.data.title
+            if (saved.data.shell) terminal.shell = saved.data.shell
           }
         }
 
         // 激活之前活跃的终端（按顺序对应）
-        const activeIndex = savedTerminals.findIndex(t => t.active)
+        const activeIndex = savedTerminalTabs.findIndex(t => t.type === 'terminal' && t.active)
         const targetId = newTerminalIds[activeIndex >= 0 ? activeIndex : 0]
         if (targetId) {
           await setActiveTerminal(targetId)
@@ -643,11 +650,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
 
     return terminals.value.length > 0
-  }
-
-  const saveSessionState = async () => {
-    syncToSessionStore()
-    await sessionStore.saveSessionState()
   }
 
   const initializeTerminalStore = async () => {
@@ -677,9 +679,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     resizeTerminal,
     createTerminalWithShell,
     initializeShellManager,
-    syncToSessionStore,
     restoreFromSessionState,
-    saveSessionState,
     initializeTerminalStore,
     subscribeToCommandEvents,
     emitCommandEvent,

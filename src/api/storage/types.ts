@@ -4,7 +4,16 @@
 import { ConfigSection } from '@/types'
 import type { AppConfig } from '@/api/config/types'
 
-export type { SessionState, DataQuery, SaveOptions, ConfigSection, TerminalState, RuntimeTerminalState } from '@/types'
+export type {
+  SessionState,
+  TabState,
+  TerminalTabState,
+  SettingsTabState,
+  RuntimeTerminalState,
+  DataQuery,
+  SaveOptions,
+  ConfigSection,
+} from '@/types'
 
 /**
  * 存储操作结果

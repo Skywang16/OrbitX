@@ -111,7 +111,7 @@ pub async fn storage_save_session_state(
     state: State<'_, StorageCoordinatorState>,
 ) -> TauriApiResult<EmptyData> {
     debug!("📊 会话状态统计:");
-    debug!("  - 终端数量: {}", session_state.terminals.len());
+    debug!("  - Tabs数量: {}", session_state.tabs.len());
     debug!("  - 版本: {}", session_state.version);
     debug!("  - AI可见: {}", session_state.ai.visible);
 
@@ -136,7 +136,7 @@ pub async fn storage_load_session_state(
 
     match state.coordinator.load_session_state().await {
         Ok(Some(session_state)) => {
-            debug!("  - 终端数量: {}", session_state.terminals.len());
+            debug!("  - Tabs数量: {}", session_state.tabs.len());
             debug!("  - 版本: {}", session_state.version);
             debug!("  - AI可见: {}", session_state.ai.visible);
 

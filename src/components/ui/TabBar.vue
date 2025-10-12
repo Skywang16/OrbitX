@@ -41,13 +41,32 @@
     return classes
   }
 
+  /**
+   * 从 TerminalStore 获取终端的 shell 名称
+   * 数据单一来源：TerminalStore.terminals
+   */
+  const getTerminalShell = (tabId: number | string): string => {
+    const terminal = terminalStore.terminals.find(t => t.id === tabId)
+    return terminal?.shell || 'shell'
+  }
+
+  /**
+   * 从 TerminalStore 获取终端的显示路径
+   * 数据单一来源：TerminalStore.terminals + tabManagerStore.getDisplayPath
+   */
+  const getTerminalPath = (tabId: number | string): string => {
+    const terminal = terminalStore.terminals.find(t => t.id === tabId)
+    if (!terminal) return '~'
+    return tabManagerStore.getDisplayPath(terminal.cwd)
+  }
+
   // 获取标签提示信息
   const getTabTooltip = (tab: TabItem): string => {
     if (tab.type === TabType.TERMINAL) {
-      // 获取完整路径信息
+      // 从 TerminalStore 获取数据（单一数据源）
       const terminal = terminalStore.terminals.find(t => t.id === tab.id)
       const fullPath = terminal?.cwd || '~'
-      const shell = tab.shell || 'shell'
+      const shell = terminal?.shell || 'shell'
 
       return `${shell} • ${fullPath}`
     }
@@ -222,10 +241,10 @@
         @contextmenu="handleTabContextMenu($event, tab.id)"
       >
         <div class="tab-content" :title="getTabTooltip(tab)">
-          <template v-if="tab.type === TabType.TERMINAL && tab.shell && tab.path">
+          <template v-if="tab.type === TabType.TERMINAL">
             <div class="terminal-info">
-              <span class="shell-badge">{{ tab.shell }}</span>
-              <span class="path-info">{{ tab.path }}</span>
+              <span class="shell-badge">{{ getTerminalShell(tab.id) }}</span>
+              <span class="path-info">{{ getTerminalPath(tab.id) }}</span>
             </div>
           </template>
           <template v-else>

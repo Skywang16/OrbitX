@@ -10,9 +10,14 @@
   import { configApi } from '@/api/config'
   import { onMounted, ref, nextTick } from 'vue'
   import { debounce } from 'lodash-es'
+  import { useTabManagerStore } from '@/stores/TabManager'
 
   const { t } = useI18n()
-  const activeSection = ref<string>('general')
+  const tabManagerStore = useTabManagerStore()
+
+  const currentTabId = tabManagerStore.activeTabId
+  const savedSection = currentTabId ? tabManagerStore.getSettingsTabSection(String(currentTabId)) : undefined
+  const activeSection = ref<string>(savedSection || 'general')
 
   const aiSettingsRef = ref()
   const themeSettingsRef = ref()
@@ -62,6 +67,11 @@
 
   const handleNavigationChange = async (section: string) => {
     activeSection.value = section
+
+    if (currentTabId) {
+      tabManagerStore.updateSettingsTabSection(String(currentTabId), section)
+    }
+
     await initializeCurrentSection()
   }
 

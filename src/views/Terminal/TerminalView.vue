@@ -74,15 +74,8 @@
       unlistenFileDrop()
     }
 
-    Promise.resolve().then(async () => {
-      try {
-        aiChatStore.saveToSessionState()
-
-        await terminalStore.saveSessionState()
-      } catch (error) {
-        console.warn('Failed to save session state:', error)
-      }
-    })
+    // AI Chat 状态需要在卸载前同步到 SessionStore
+    aiChatStore.saveToSessionState()
   })
 </script>
 
