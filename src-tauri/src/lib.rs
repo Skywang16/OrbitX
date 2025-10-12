@@ -14,6 +14,7 @@ pub mod storage;
 pub mod terminal;
 pub mod utils;
 pub mod window;
+pub mod workspace;
 
 use setup::{
     ensure_main_window_visible, handle_startup_args, init_logging, init_plugin,

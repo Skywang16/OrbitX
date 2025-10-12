@@ -55,13 +55,16 @@ export class AiApi {
     await invoke<void>('ai_models_test_connection', { config: payload })
   }
 
-  async getUserPrefixPrompt(): Promise<string | null> {
-    return await invoke<string | null>('agent_get_user_prefix_prompt')
+  async getUserRules(): Promise<string | null> {
+    return await invoke<string | null>('agent_get_user_rules')
   }
 
-  async setUserPrefixPrompt(prompt: string | null): Promise<void> {
-    await invoke<void>('agent_set_user_prefix_prompt', { prompt })
+  async setUserRules(rules: string | null): Promise<void> {
+    await invoke<void>('agent_set_user_rules', { rules })
   }
+
+  // 项目规则方法已迁移到 workspaceApi
+  // 请使用 workspaceApi.getProjectRules(), workspaceApi.setProjectRules(), workspaceApi.listAvailableRulesFiles()
 
   async getSettings(): Promise<AISettings> {
     return await invoke<AISettings>('get_ai_settings')

@@ -187,34 +187,34 @@ pub async fn agent_get_file_context_status(
     }
 }
 #[tauri::command]
-pub async fn agent_get_user_prefix_prompt(
+pub async fn agent_get_user_rules(
     state: State<'_, TaskExecutorState>,
 ) -> TauriApiResult<Option<String>> {
     let repositories = state.executor.repositories();
-    match repositories.ai_models().get_user_prefix_prompt().await {
-        Ok(prompt) => Ok(api_success!(prompt)),
+    match repositories.ai_models().get_user_rules().await {
+        Ok(rules) => Ok(api_success!(rules)),
         Err(e) => {
-            tracing::error!("Failed to get prefix prompt: {}", e);
-            Ok(api_error!("agent.conversation.prefix_prompt_failed"))
+            tracing::error!("Failed to get user rules: {}", e);
+            Ok(api_error!("agent.conversation.user_rules_failed"))
         }
     }
 }
 
 #[tauri::command]
-pub async fn agent_set_user_prefix_prompt(
-    prompt: Option<String>,
+pub async fn agent_set_user_rules(
+    rules: Option<String>,
     state: State<'_, TaskExecutorState>,
 ) -> TauriApiResult<EmptyData> {
     let repositories = state.executor.repositories();
     match repositories
         .ai_models()
-        .set_user_prefix_prompt(prompt)
+        .set_user_rules(rules)
         .await
     {
         Ok(_) => Ok(api_success!()),
         Err(e) => {
-            tracing::error!("Failed to set prefix prompt: {}", e);
-            Ok(api_error!("agent.conversation.set_prefix_prompt_failed"))
+            tracing::error!("Failed to set user rules: {}", e);
+            Ok(api_error!("agent.conversation.set_user_rules_failed"))
         }
     }
 }

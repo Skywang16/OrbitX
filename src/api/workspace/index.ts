@@ -1,10 +1,12 @@
 /**
  * 工作区管理 API
  *
- * 提供最近打开工作区的管理功能
+ * 提供工作区相关的管理功能，包括：
+ * - 最近打开工作区的管理
+ * - 项目规则文件管理
  */
 
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/utils/request'
 
 /**
  * 最近工作区条目
@@ -19,6 +21,8 @@ export interface RecentWorkspace {
  * 工作区 API 封装类
  */
 export class WorkspaceApi {
+  // ===== 最近工作区管理 =====
+
   /**
    * 获取最近打开的工作区列表
    * @param limit 限制返回数量，默认10个，最多50个
@@ -49,6 +53,31 @@ export class WorkspaceApi {
    */
   async maintainWorkspaces(): Promise<[number, number]> {
     return invoke<[number, number]>('workspace_maintain')
+  }
+
+  // ===== 项目规则管理 =====
+
+  /**
+   * 获取当前项目规则文件名
+   */
+  async getProjectRules(): Promise<string | null> {
+    return invoke<string | null>('workspace_get_project_rules')
+  }
+
+  /**
+   * 设置项目规则文件
+   * @param rules 规则文件名（如 "CLAUDE.md"）或 null 表示清除
+   */
+  async setProjectRules(rules: string | null): Promise<void> {
+    await invoke<void>('workspace_set_project_rules', { rules })
+  }
+
+  /**
+   * 列出指定目录下所有可用的规则文件
+   * @param cwd 工作目录路径
+   */
+  async listAvailableRulesFiles(cwd: string): Promise<string[]> {
+    return invoke<string[]>('workspace_list_rules_files', { cwd })
   }
 }
 

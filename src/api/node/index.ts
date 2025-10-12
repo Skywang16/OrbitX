@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/utils/request'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 // Node 版本信息
