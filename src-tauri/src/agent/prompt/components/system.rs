@@ -9,9 +9,9 @@ use crate::agent::prompt::components::types::{ComponentContext, ComponentDefinit
 use crate::agent::prompt::template_engine::TemplateEngine;
 use crate::filesystem::commands::fs_list_directory;
 
-const MAX_PREVIEW_FILES: usize = 20;
+const MAX_PREVIEW_FILES: usize = 50;
 
-/// 获取目录文件列表预览（最多20个文件）
+/// 获取目录文件列表预览（最多50个文件）
 async fn get_directory_preview(working_directory: &str) -> String {
     if working_directory == "Not specified" || working_directory.trim().is_empty() {
         return String::new();
@@ -48,11 +48,7 @@ async fn get_directory_preview(working_directory: &str) -> String {
 }
 
 pub fn definitions() -> Vec<Arc<dyn ComponentDefinition>> {
-    vec![
-        Arc::new(SystemInfoComponent),
-        Arc::new(DateTimeComponent),
-        Arc::new(PlatformComponent),
-    ]
+    vec![Arc::new(SystemInfoComponent), Arc::new(DateTimeComponent)]
 }
 
 struct SystemInfoComponent;
@@ -111,7 +107,7 @@ impl ComponentDefinition for SystemInfoComponent {
             "No environment context available".to_string()
         };
 
-        // 获取当前目录的文件列表（最多20个）
+        // 获取当前目录的文件列表（最多50个）
         let file_list_preview = get_directory_preview(working_directory).await;
 
         let mut template_context = HashMap::new();
@@ -184,62 +180,6 @@ impl ComponentDefinition for DateTimeComponent {
                 AgentError::TemplateRender(format!("failed to render datetime template: {}", e))
             })?;
 
-        Ok(Some(result))
-    }
-}
-
-struct PlatformComponent;
-
-#[async_trait]
-impl ComponentDefinition for PlatformComponent {
-    fn id(&self) -> PromptComponent {
-        PromptComponent::Platform
-    }
-
-    fn name(&self) -> &str {
-        "Platform"
-    }
-
-    fn description(&self) -> &str {
-        "Platform information"
-    }
-
-    fn required(&self) -> bool {
-        false
-    }
-
-    fn dependencies(&self) -> &[PromptComponent] {
-        &[]
-    }
-
-    fn default_template(&self) -> Option<&str> {
-        Some("Platform: {platform}")
-    }
-
-    async fn render(
-        &self,
-        context: &ComponentContext,
-        template_override: Option<&str>,
-    ) -> AgentResult<Option<String>> {
-        let template = template_override
-            .or_else(|| self.default_template())
-            .ok_or_else(|| AgentError::Internal("missing platform template".to_string()))?;
-
-        let platform = context
-            .context
-            .as_ref()
-            .and_then(|ctx| ctx.environment_vars.get("OS"))
-            .cloned()
-            .unwrap_or_else(|| "macOS".to_string());
-
-        let mut template_context = HashMap::new();
-        template_context.insert("platform".to_string(), json!(platform));
-
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("failed to render platform template: {}", e))
-            })?;
         Ok(Some(result))
     }
 }

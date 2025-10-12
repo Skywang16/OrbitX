@@ -11,7 +11,6 @@ use crate::agent::prompt::template_engine::TemplateEngine;
 pub fn definitions() -> Vec<Arc<dyn ComponentDefinition>> {
     vec![
         Arc::new(AgentRoleComponent),
-        Arc::new(AgentDescriptionComponent),
         Arc::new(AgentCapabilitiesComponent),
         Arc::new(AgentRulesComponent),
         Arc::new(WorkMethodologyComponent),
@@ -69,68 +68,6 @@ Now you are working as an interactive CLI agent in a terminal environment, helpi
             .resolve(template, &template_context)
             .map_err(|e| {
                 AgentError::TemplateRender(format!("failed to render agent role template: {}", e))
-            })?;
-
-        Ok(Some(result))
-    }
-}
-
-struct AgentDescriptionComponent;
-
-#[async_trait]
-impl ComponentDefinition for AgentDescriptionComponent {
-    fn id(&self) -> PromptComponent {
-        PromptComponent::AgentDescription
-    }
-
-    fn name(&self) -> &str {
-        "Agent Description"
-    }
-
-    fn description(&self) -> &str {
-        "Detailed description of the agent"
-    }
-
-    fn required(&self) -> bool {
-        true
-    }
-
-    fn dependencies(&self) -> &[PromptComponent] {
-        &[PromptComponent::AgentRole]
-    }
-
-    fn default_template(&self) -> Option<&str> {
-        Some("# Agent Description\n{description}")
-    }
-
-    async fn render(
-        &self,
-        context: &ComponentContext,
-        template_override: Option<&str>,
-    ) -> AgentResult<Option<String>> {
-        if context.agent.description.trim().is_empty() {
-            return Ok(None);
-        }
-
-        let template = template_override
-            .or_else(|| self.default_template())
-            .ok_or_else(|| {
-                AgentError::Internal("missing agent description template".to_string())
-            })?;
-
-        let mut template_context = HashMap::new();
-        template_context.insert(
-            "description".to_string(),
-            json!(context.agent.description.clone()),
-        );
-
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!(
-                    "failed to render agent description template: {}",
-                    e
-                ))
             })?;
 
         Ok(Some(result))

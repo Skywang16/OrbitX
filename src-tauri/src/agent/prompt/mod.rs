@@ -4,10 +4,7 @@ use crate::agent::config::{PromptComponent, PromptConfig, PromptType};
 use crate::agent::error::AgentResult;
 use crate::agent::prompt::builders::{
     build_agent_system_prompt as build_agent_system_prompt_impl,
-    build_agent_user_prompt as build_agent_user_prompt_impl,
-    build_dialogue_system_prompt as build_dialogue_system_prompt_impl,
-    PromptBuildOptions,
-    PromptBuilder,
+    build_agent_user_prompt as build_agent_user_prompt_impl, PromptBuildOptions, PromptBuilder,
 };
 use crate::agent::prompt::components::types::ComponentContext;
 use crate::agent::{Agent, Context, Task, ToolSchema};
@@ -17,8 +14,8 @@ pub mod components;
 pub mod template_engine;
 
 pub use builders::{
-    AgentPromptBuilder, DialoguePromptBuilder,
-    PromptBuildOptions as BuildersPromptBuildOptions, PromptBuilder as CorePromptBuilder,
+    AgentPromptBuilder, PromptBuildOptions as BuildersPromptBuildOptions,
+    PromptBuilder as CorePromptBuilder,
 };
 pub use components::types::{ComponentContext as ComponentsComponentContext, ComponentDefinition};
 pub use template_engine::TemplateEngine;
@@ -133,15 +130,6 @@ pub async fn build_agent_user_prompt(
     tools: Vec<ToolSchema>,
 ) -> AgentResult<String> {
     build_agent_user_prompt_impl(agent, task, context, tools).await
-}
-
-pub async fn build_dialogue_system_prompt(
-    agent: Agent,
-    task: Option<Task>,
-    context: Option<Context>,
-    tools: Vec<ToolSchema>,
-) -> AgentResult<String> {
-    build_dialogue_system_prompt_impl(agent, task, context, tools).await
 }
 
 pub async fn build_agent_system_prompt_with_context(
