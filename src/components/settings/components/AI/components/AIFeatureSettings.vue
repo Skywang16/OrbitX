@@ -1,67 +1,120 @@
 <script setup lang="ts">
-  import { onMounted, ref, watch } from 'vue'
+  import { computed, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { aiApi } from '@/api'
+  import { aiApi, workspaceApi } from '@/api'
   import { debounce } from 'lodash-es'
+  import { XSelect } from '@/ui'
   import SettingsCard from '../../../SettingsCard.vue'
 
   const { t } = useI18n()
 
-  const userPrefixPrompt = ref<string>('')
-  const isLoadingPrefix = ref(false)
+  const userRules = ref<string>('')
+  const isLoadingRules = ref(false)
 
-  const loadUserPrefixPrompt = async () => {
-    isLoadingPrefix.value = true
+  const projectRules = ref<string>('')
+  const isLoadingProjectRules = ref(false)
+
+  const rulesOptions = computed(() => [
+    { value: '', label: t('ai_feature.rules_auto') },
+    { value: 'CLAUDE.md', label: t('ai_feature.rules_claude') },
+    { value: 'AGENTS.md', label: t('ai_feature.rules_agents') },
+    { value: 'WARP.md', label: t('ai_feature.rules_warp') },
+    { value: '.cursorrules', label: t('ai_feature.rules_cursorrules') },
+    { value: 'README.md', label: t('ai_feature.rules_readme') },
+  ])
+
+  const loadUserRules = async () => {
+    isLoadingRules.value = true
     try {
-      const prompt = await aiApi.getUserPrefixPrompt()
-      userPrefixPrompt.value = prompt || ''
+      const rules = await aiApi.getUserRules()
+      userRules.value = rules || ''
     } catch (error) {
       // Error handled silently
     } finally {
-      isLoadingPrefix.value = false
+      isLoadingRules.value = false
     }
   }
 
-  const saveUserPrefixPrompt = async (value: string) => {
+  const saveUserRules = async (value: string) => {
     try {
-      const promptToSave = value.trim() || null
-      await aiApi.setUserPrefixPrompt(promptToSave)
+      const rulesToSave = value.trim() || null
+      await aiApi.setUserRules(rulesToSave)
     } catch (error) {
       // Error handled silently
     }
   }
 
-  const debouncedSave = debounce((newValue: string) => {
-    saveUserPrefixPrompt(newValue)
+  const loadProjectRules = async () => {
+    isLoadingProjectRules.value = true
+    const rules = await workspaceApi.getProjectRules()
+    projectRules.value = rules || ''
+    isLoadingProjectRules.value = false
+  }
+
+  const saveProjectRules = async (value: string) => {
+    const rulesToSave = value.trim() || null
+    await workspaceApi.setProjectRules(rulesToSave)
+  }
+
+  const handleProjectRulesChange = async (value: string | number | (string | number)[] | null) => {
+    if (typeof value === 'string') {
+      projectRules.value = value
+      await saveProjectRules(value)
+    }
+  }
+
+  const debouncedSaveUserRules = debounce((newValue: string) => {
+    saveUserRules(newValue)
   }, 500)
 
-  watch(userPrefixPrompt, debouncedSave)
+  watch(userRules, debouncedSaveUserRules)
 
   onMounted(() => {
-    loadUserPrefixPrompt()
+    loadUserRules()
+    loadProjectRules()
   })
 </script>
 
 <template>
   <div class="settings-group">
-    <h3 class="settings-group-title">{{ t('ai_feature.user_system_prompt') }}</h3>
+    <h3 class="settings-group-title">{{ t('ai_feature.user_rules') }}</h3>
 
+    <!-- Project Rules -->
     <SettingsCard>
       <div class="settings-item">
         <div class="settings-item-header">
-          <div class="settings-label">{{ t('ai_feature.user_system_prompt') }}</div>
-          <div class="settings-description">{{ t('ai_feature.prompt_placeholder') }}</div>
+          <div class="settings-label">{{ t('ai_feature.project_rules') }}</div>
+          <div class="settings-description">{{ t('ai_feature.project_rules_description') }}</div>
+        </div>
+        <div class="settings-item-control">
+          <x-select
+            :model-value="projectRules"
+            :options="rulesOptions"
+            @update:model-value="handleProjectRulesChange"
+            :placeholder="t('ai_feature.rules_auto')"
+            :disabled="isLoadingProjectRules"
+          />
+        </div>
+      </div>
+    </SettingsCard>
+
+    <!-- User Rules -->
+    <SettingsCard>
+      <div class="settings-item">
+        <div class="settings-item-header">
+          <div class="settings-label">{{ t('ai_feature.user_rules') }}</div>
+          <div class="settings-description">{{ t('ai_feature.rules_placeholder') }}</div>
         </div>
       </div>
 
       <div style="padding: 20px">
         <textarea
-          v-model="userPrefixPrompt"
+          v-model="userRules"
           class="settings-textarea"
-          :placeholder="t('ai_feature.prompt_placeholder')"
-          :aria-label="t('ai_feature.user_system_prompt')"
+          :placeholder="t('ai_feature.rules_placeholder')"
+          :aria-label="t('ai_feature.user_rules')"
           rows="4"
-          :disabled="isLoadingPrefix"
+          :disabled="isLoadingRules"
         ></textarea>
       </div>
     </SettingsCard>

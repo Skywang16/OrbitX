@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import { useNodeVersion } from '@/composables/useNodeVersion'
+  import { useProjectRules } from '@/composables/useProjectRules'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType } from '@/types'
@@ -10,10 +11,12 @@
   import TerminalSelectionTag from '../tags/TerminalSelectionTag.vue'
   import TerminalTabTag from '../tags/TerminalTabTag.vue'
   import NodeVersionTag from '../tags/NodeVersionTag.vue'
+  import ProjectRulesTag from '../tags/ProjectRulesTag.vue'
   import InputPopover from '@/components/ui/InputPopover.vue'
   import CkIndexContent from '../ckIndex/CkIndexContent.vue'
   import FolderPicker from '../tags/FolderPicker.vue'
   import NodeVersionPicker from '../tags/NodeVersionPicker.vue'
+  import ProjectRulesPicker from '../tags/ProjectRulesPicker.vue'
   import CircularProgress from '@/components/ui/CircularProgress.vue'
   import { ckApi, nodeApi } from '@/api'
 
@@ -66,10 +69,8 @@
   let compositionTimer: number | undefined
 
   const terminalSelection = useTerminalSelection()
-  const nodeVersion = useNodeVersion(
-    () => terminalSelection.currentTerminalTab.value?.terminalId,
-    () => terminalSelection.currentTerminalTab.value?.cwd
-  )
+  const nodeVersion = useNodeVersion()
+  const projectRules = useProjectRules()
 
   const tabManagerStore = useTabManagerStore()
   const terminalStore = useTerminalStore()
@@ -121,7 +122,6 @@
   }
 
   const handleCompositionStart = () => {
-    // 清理可能存在的延迟timer
     if (compositionTimer) {
       clearTimeout(compositionTimer)
       compositionTimer = undefined
@@ -130,7 +130,6 @@
   }
 
   const handleCompositionEnd = () => {
-    // 延迟重置状态，确保 keydown 事件能正确检查到 composition 状态
     compositionTimer = window.setTimeout(() => {
       isComposing.value = false
       compositionTimer = undefined
@@ -195,6 +194,20 @@
   }
 
   watch(
+    () => terminalSelection.currentTerminalTab.value,
+    async tab => {
+      if (!tab?.cwd || tab.cwd === '~') {
+        nodeVersion.state.value = { isNodeProject: false, currentVersion: null, manager: null }
+        projectRules.state.value = { hasRulesFile: false, selectedRulesFile: null }
+        return
+      }
+
+      await Promise.all([nodeVersion.detect(tab.cwd, tab.terminalId), projectRules.detect(tab.cwd)])
+    },
+    { immediate: true }
+  )
+
+  watch(
     [activeTerminalCwd, () => indexStatus.value.path],
     () => {
       syncResolvedPath()
@@ -212,8 +225,8 @@
   const showIndexModal = ref(false)
   const showNavigatorModal = ref(false)
   const showNodeVersionModal = ref(false)
+  const showProjectRulesModal = ref(false)
 
-  // Node 版本切换处理
   const handleNodeVersionSelect = async (version: string) => {
     const terminalId = terminalSelection.currentTerminalTab.value?.terminalId
     const manager = nodeVersion.state.value.manager
@@ -223,6 +236,11 @@
     const command = await nodeApi.getSwitchCommand(manager, version)
     await terminalStore.writeToTerminal(terminalId, command)
     showNodeVersionModal.value = false
+  }
+
+  const handleProjectRulesSelect = async (rulesFile: string) => {
+    await projectRules.refresh()
+    showProjectRulesModal.value = false
   }
 
   const handleCkIndexClick = async () => {
@@ -346,7 +364,6 @@
       return info || t('session.selected_content')
     }
 
-    // 获取路径显示
     let currentTabPath = 'terminal'
     if (activeTab.path && activeTab.path !== '~') {
       currentTabPath = activeTab.path
@@ -366,7 +383,6 @@
       }
     }
 
-    // 组合显示文本
     if (info) {
       const parts = info.split(' ')
       if (parts.length > 1) {
@@ -402,6 +418,8 @@
     }
     await checkCkIndexStatus()
     syncResolvedPath()
+
+    nodeVersion.setupListener(() => terminalSelection.currentTerminalTab.value?.terminalId ?? 0)
 
     try {
       const targetPath = indexStatus.value.path || activeTerminalCwd.value
@@ -450,6 +468,12 @@
       :visible="nodeVersion.state.value.isNodeProject"
       :version="nodeVersion.state.value.currentVersion"
       @click="showNodeVersionModal = true"
+    />
+
+    <ProjectRulesTag
+      :visible="projectRules.state.value.hasRulesFile"
+      :rules-file="projectRules.state.value.selectedRulesFile"
+      @click="showProjectRulesModal = true"
     />
 
     <TerminalSelectionTag
@@ -578,6 +602,16 @@
         :manager="nodeVersion.state.value.manager"
         :cwd="terminalSelection.currentTerminalTab.value?.cwd"
         @select="handleNodeVersionSelect"
+        @close="showNodeVersionModal = false"
+      />
+    </InputPopover>
+
+    <InputPopover :visible="showProjectRulesModal" @update:visible="showProjectRulesModal = $event">
+      <ProjectRulesPicker
+        :current-rules="projectRules.state.value.selectedRulesFile"
+        :cwd="terminalSelection.currentTerminalTab.value?.cwd"
+        @select="handleProjectRulesSelect"
+        @close="showProjectRulesModal = false"
       />
     </InputPopover>
   </div>
