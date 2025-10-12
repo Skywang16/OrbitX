@@ -49,8 +49,8 @@
     "conversation": {
       "create_failed": "创建会话失败",
       "delete_failed": "删除会话失败",
-      "prefix_prompt_failed": "获取前置提示词失败",
-      "set_prefix_prompt_failed": "设置前置提示词失败",
+      "user_rules_failed": "获取规则失败",
+      "set_user_rules_failed": "设置规则失败",
       "update_failed": "更新会话失败"
     },
     "execute_failed": "执行任务失败",

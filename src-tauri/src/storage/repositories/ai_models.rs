@@ -207,14 +207,16 @@ impl RowMapper<AIModelConfig> for AIModelConfig {
 
 pub struct AIModelRepository {
     database: Arc<DatabaseManager>,
-    user_prefix_prompt: Arc<RwLock<Option<String>>>,
+    user_rules: Arc<RwLock<Option<String>>>,
+    project_rules: Arc<RwLock<Option<String>>>,
 }
 
 impl AIModelRepository {
     pub fn new(database: Arc<DatabaseManager>) -> Self {
         Self {
             database,
-            user_prefix_prompt: Arc::new(RwLock::new(None)),
+            user_rules: Arc::new(RwLock::new(None)),
+            project_rules: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -448,23 +450,37 @@ impl AIModelRepository {
         Ok(())
     }
 
-    pub async fn get_user_prefix_prompt(&self) -> RepositoryResult<Option<String>> {
-        debug!("从内存缓存获取用户前置提示词");
+    pub async fn get_user_rules(&self) -> RepositoryResult<Option<String>> {
+        debug!("从内存缓存获取用户规则");
 
-        let prompt = self.user_prefix_prompt.read().await.clone();
+        let rules = self.user_rules.read().await.clone();
         debug!(
-            "用户前置提示词获取成功: {:?}",
-            prompt.as_ref().map(|p| p.len())
+            "用户规则获取成功: {:?}",
+            rules.as_ref().map(|r| r.len())
         );
-        Ok(prompt)
+        Ok(rules)
     }
 
-    pub async fn set_user_prefix_prompt(&self, prompt: Option<String>) -> RepositoryResult<()> {
-        debug!("设置用户前置提示词: {:?}", prompt.as_ref().map(|p| p.len()));
+    pub async fn set_user_rules(&self, rules: Option<String>) -> RepositoryResult<()> {
+        debug!("设置用户规则: {:?}", rules.as_ref().map(|r| r.len()));
 
-        *self.user_prefix_prompt.write().await = prompt;
+        *self.user_rules.write().await = rules;
 
-        debug!("用户前置提示词设置成功");
+        debug!("用户规则设置成功");
+        Ok(())
+    }
+
+    pub async fn get_project_rules(&self) -> RepositoryResult<Option<String>> {
+        let rules = self.project_rules.read().await.clone();
+        Ok(rules)
+    }
+
+    pub async fn set_project_rules(&self, rules: Option<String>) -> RepositoryResult<()> {
+        debug!("设置项目规则: {:?}", rules);
+
+        *self.project_rules.write().await = rules;
+
+        debug!("项目规则设置成功");
         Ok(())
     }
 }
