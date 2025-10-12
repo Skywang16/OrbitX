@@ -1,9 +1,6 @@
 <template>
   <div class="tool-block" v-if="step?.stepType === 'tool_use' || step?.stepType === 'tool_result'">
-    <div
-      class="tool-line"
-      :class="{ clickable: isExpandable, running: isRunning, error: isError }"
-    >
+    <div class="tool-line" :class="{ clickable: isExpandable, running: isRunning, error: isError }">
       <span class="text" :class="{ clickable: isExpandable }" @click="toggleExpanded">
         <span v-if="toolPrefix" class="tool-prefix">{{ toolPrefix }}</span>
         <span class="tool-content">{{ getDisplayText() }}</span>
@@ -36,7 +33,11 @@
       <div v-if="isExpanded && hasResult" class="tool-result" :class="{ 'has-scroll': hasScroll }" @click.stop>
         <div ref="resultWrapperRef" class="result-wrapper" @scroll="checkScroll">
           <EditResult v-if="isEditResult" :editData="editData" />
-          <pre v-else-if="shouldHighlight" ref="resultTextRef" class="result-text"><code>{{ cleanToolResult }}</code></pre>
+          <pre
+            v-else-if="shouldHighlight"
+            ref="resultTextRef"
+            class="result-text"
+          ><code>{{ cleanToolResult }}</code></pre>
           <pre v-else class="result-text-plain">{{ cleanToolResult }}</pre>
         </div>
       </div>
@@ -193,7 +194,7 @@
   const getDisplayText = () => {
     const params = toolParams.value
     const extInfo = props.step.metadata?.extInfo as Record<string, any> | undefined
-    
+
     switch (toolName.value) {
       case 'read_file': {
         const path = formatPath(params?.path as string)
@@ -324,7 +325,6 @@
     font-size: 14px;
   }
 
-
   .tool-line.running .text {
     opacity: 0.6;
   }
@@ -424,20 +424,12 @@
 
   .tool-result::before {
     top: 0;
-    background: linear-gradient(
-      to bottom,
-      var(--bg-200) 0%,
-      transparent 100%
-    );
+    background: linear-gradient(to bottom, var(--bg-200) 0%, transparent 100%);
   }
 
   .tool-result::after {
     bottom: 0;
-    background: linear-gradient(
-      to top,
-      var(--bg-200) 0%,
-      transparent 100%
-    );
+    background: linear-gradient(to top, var(--bg-200) 0%, transparent 100%);
   }
 
   .result-wrapper {
