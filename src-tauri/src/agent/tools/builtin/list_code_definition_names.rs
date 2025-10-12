@@ -40,7 +40,10 @@ impl RunnableTool for ListCodeDefinitionNamesTool {
         json!({
             "type": "object",
             "properties": {
-                "path": { "type": "string", "description": "File or directory path (relative or absolute)" }
+                "path": {
+                    "type": "string",
+                    "description": "Absolute path to the file or directory. Must be a complete path, for example: \"/Users/user/project/src\""
+                }
             },
             "required": ["path"]
         })

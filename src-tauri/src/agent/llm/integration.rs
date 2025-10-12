@@ -17,13 +17,11 @@ impl TaskExecutor {
     /// 构建 LLM请求
     pub(crate) async fn build_llm_request(
         &self,
+        model_id: String,
         messages: Vec<LLMMessage>,
         tool_registry: &ToolRegistry,
         cwd: &str,
     ) -> TaskExecutorResult<LLMRequest> {
-        // 获取默认模型配置
-        let model_id = self.get_default_model_id().await?;
-
         // 构建工具定义
         let tools = self.build_tool_definitions(tool_registry, cwd).await?;
 
@@ -34,7 +32,7 @@ impl TaskExecutor {
             max_tokens: None, // 不限制输出长度，让模型根据context自己决定
             tools: if tools.is_empty() { None } else { Some(tools) },
             tool_choice: None,
-            stream: false,
+            stream: true,
         })
     }
 }

@@ -43,7 +43,10 @@ impl RunnableTool for WriteFileTool {
         json!({
             "type": "object",
             "properties": {
-                "path": { "type": "string" },
+                "path": {
+                    "type": "string",
+                    "description": "Absolute path to the file. Must be a complete path, for example: \"/Users/user/project/src/main.ts\""
+                },
                 "content": { "type": "string" }
             },
             "required": ["path", "content"]

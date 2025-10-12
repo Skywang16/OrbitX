@@ -101,7 +101,10 @@ impl RunnableTool for UnifiedEditTool {
         json!({
             "type": "object",
             "properties": {
-                "path": { "type": "string" },
+                "path": {
+                    "type": "string",
+                    "description": "Absolute path to the file. Must be a complete path, for example: \"/Users/user/project/src/main.ts\""
+                },
                 "mode": { "type": "string", "enum": ["replace", "insert", "diff"] },
                 "old_text": { "type": "string" },
                 "new_text": { "type": "string" },

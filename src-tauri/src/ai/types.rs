@@ -118,7 +118,7 @@ impl AISettings {
 #[derive(Default)]
 pub struct AIFeatureSettings {
     pub chat: ChatSettings,
-    pub user_prefix_prompt: Option<String>,
+    pub user_rules: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

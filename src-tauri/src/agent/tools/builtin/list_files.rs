@@ -43,7 +43,10 @@ impl RunnableTool for ListFilesTool {
         json!({
             "type": "object",
             "properties": {
-                "path": { "type": "string", "description": "Directory path (relative or absolute)" },
+                "path": {
+                    "type": "string",
+                    "description": "Absolute path to the directory. Must be a complete path, for example: \"/Users/user/project/src\""
+                },
                 "recursive": { "type": "boolean", "description": "List recursively if true" }
             },
             "required": ["path"]
