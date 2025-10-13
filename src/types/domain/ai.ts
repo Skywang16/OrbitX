@@ -12,7 +12,7 @@ export interface ToolExecution {
   toolId?: string
 }
 
-export type AIProvider = 'openai' | 'anthropic' | 'gemini' | 'qwen' | 'custom'
+export type AIProvider = 'anthropic' | 'openai_compatible'
 
 export type ModelType = 'chat' | 'embedding'
 

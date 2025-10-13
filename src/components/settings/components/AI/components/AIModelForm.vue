@@ -24,8 +24,8 @@
   // 使用后端LLM注册表
   const { providerOptions, getChatModelOptions, loadProviders } = useLLMRegistry()
 
-  // 配置模式：preset（预设）或 custom（自定义）——默认自定义，避免误判
-  const configMode = ref<'preset' | 'custom'>('custom')
+  // 配置模式：preset（预设）或 openai_compatible（OpenAI兼容）——默认OpenAI兼容，避免误判
+  const configMode = ref<'preset' | 'openai_compatible'>('openai_compatible')
   const selectedPreset = ref<string>('')
 
   // 组件挂载时确保数据已加载
@@ -38,7 +38,7 @@
   // 表单数据
   const formData = reactive({
     name: '',
-    provider: 'custom' as AIModelConfig['provider'],
+    provider: 'openai_compatible' as AIModelConfig['provider'],
     apiUrl: '',
     apiKey: '',
     model: '',
@@ -48,6 +48,8 @@
       temperature: 0.7,
       timeout: 300000,
     },
+    useCustomBaseUrl: false,
+    customBaseUrl: '',
   })
 
   // 表单验证状态
@@ -89,15 +91,26 @@
         temperature: props.model.options?.temperature || 0.7,
         timeout: props.model.options?.timeout || 300000,
       },
+      useCustomBaseUrl: false,
+      customBaseUrl: '',
     })
 
     // 简化：仅依据 provider 判断模式
-    if (props.model.provider === 'custom') {
-      configMode.value = 'custom'
+    const modelProvider = props.model.provider
+    const modelApiUrl = props.model.apiUrl
+
+    if (modelProvider === 'openai_compatible') {
+      configMode.value = 'openai_compatible'
       selectedPreset.value = ''
     } else {
       configMode.value = 'preset'
-      selectedPreset.value = String(props.model.provider)
+      selectedPreset.value = String(modelProvider)
+      // 检查是否使用了自定义 base URL
+      const preset = providerOptions.value.find(p => p.value === String(modelProvider))
+      if (preset && modelApiUrl !== preset.apiUrl) {
+        formData.useCustomBaseUrl = true
+        formData.customBaseUrl = modelApiUrl
+      }
     }
   }
 
@@ -115,7 +128,7 @@
   )
 
   // 监听配置模式变化
-  const handleConfigModeChange = (mode: 'preset' | 'custom') => {
+  const handleConfigModeChange = (mode: 'preset' | 'openai_compatible') => {
     configMode.value = mode
 
     // 清空所有表单数据
@@ -127,11 +140,13 @@
     formData.options.maxTokens = 4096
     formData.options.temperature = 0.7
     formData.options.timeout = 300000
+    formData.useCustomBaseUrl = false
+    formData.customBaseUrl = ''
     errors.value = {}
 
     // 设置对应模式的 provider
-    if (mode === 'custom') {
-      formData.provider = 'custom'
+    if (mode === 'openai_compatible') {
+      formData.provider = 'openai_compatible'
     }
   }
 
@@ -142,7 +157,10 @@
     if (preset) {
       // 预设模式下，provider = 选中的预设值
       formData.provider = presetValue as AIModelConfig['provider']
-      formData.apiUrl = preset.apiUrl
+      // 如果使用自定义 base URL，则使用自定义的，否则使用预设的
+      if (!formData.useCustomBaseUrl) {
+        formData.apiUrl = preset.apiUrl
+      }
 
       // 只获取聊天模型选项
       const models = getChatModelOptions(presetValue)
@@ -156,6 +174,31 @@
         formData.model = ''
         formData.name = ''
       }
+    }
+  }
+
+  // 监听自定义 base URL 复选框变化
+  const handleUseCustomBaseUrlChange = () => {
+    if (formData.useCustomBaseUrl) {
+      // 勾选时，清空 customBaseUrl，让用户输入
+      formData.customBaseUrl = ''
+      formData.apiUrl = ''
+    } else {
+      // 取消勾选时，恢复为预设的 base URL
+      const preset = providerOptions.value.find(p => p.value === selectedPreset.value)
+      if (preset) {
+        formData.apiUrl = preset.apiUrl
+      }
+      formData.customBaseUrl = ''
+    }
+    // 清空相关错误
+    delete errors.value.customBaseUrl
+  }
+
+  // 监听自定义 base URL 输入变化
+  const handleCustomBaseUrlInput = () => {
+    if (formData.useCustomBaseUrl) {
+      formData.apiUrl = formData.customBaseUrl
     }
   }
 
@@ -188,6 +231,10 @@
       if (hasValidModels.value && !formData.model.trim()) {
         errors.value.model = t('ai_model.validation.model_required')
       }
+      // 验证自定义 base URL
+      if (formData.useCustomBaseUrl && !formData.customBaseUrl.trim()) {
+        errors.value.customBaseUrl = t('ai_model.validation.custom_base_url_required')
+      }
     } else {
       if (!formData.name.trim()) {
         errors.value.name = t('ai_model.validation.config_name_required')
@@ -219,6 +266,10 @@
         if (selectedPreset.value) {
           submitData.provider = selectedPreset.value as AIModelConfig['provider']
         }
+        // 如果使用自定义 base URL，确保 apiUrl 是自定义的
+        if (formData.useCustomBaseUrl && formData.customBaseUrl) {
+          submitData.apiUrl = formData.customBaseUrl
+        }
         // 若名称为空，使用当前模型的label
         if (!submitData.name.trim()) {
           // 只获取聊天模型选项
@@ -227,8 +278,8 @@
           if (modelInfo) submitData.name = modelInfo.label
         }
       } else {
-        // 自定义模式
-        submitData.provider = 'custom'
+        // OpenAI兼容模式
+        submitData.provider = 'openai_compatible'
       }
       emit('submit', submitData)
     } finally {
@@ -306,12 +357,12 @@
             <button
               type="button"
               class="tab-button"
-              :class="{ active: configMode === 'custom' }"
-              @click="handleConfigModeChange('custom')"
+              :class="{ active: configMode === 'openai_compatible' }"
+              @click="handleConfigModeChange('openai_compatible')"
             >
               {{ t('ai_model.custom_config') }}
             </button>
-            <div class="tab-indicator" :class="{ 'move-right': configMode === 'custom' }"></div>
+            <div class="tab-indicator" :class="{ 'move-right': configMode === 'openai_compatible' }"></div>
           </div>
         </div>
       </div>
@@ -351,6 +402,35 @@
             disabled
           />
           <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
+        </div>
+      </div>
+
+      <div v-if="isPresetMode" class="form-row">
+        <div class="form-group full-width">
+          <label class="form-label checkbox-label">
+            <input
+              type="checkbox"
+              v-model="formData.useCustomBaseUrl"
+              @change="handleUseCustomBaseUrlChange"
+              class="form-checkbox"
+            />
+            <span>{{ t('ai_model.use_custom_base_url') }}</span>
+          </label>
+        </div>
+      </div>
+
+      <div v-if="isPresetMode && formData.useCustomBaseUrl" class="form-row">
+        <div class="form-group full-width">
+          <label class="form-label">{{ t('ai_model.custom_base_url') }}</label>
+          <input
+            v-model="formData.customBaseUrl"
+            type="url"
+            class="form-input"
+            :class="{ error: errors.customBaseUrl }"
+            :placeholder="t('ai_model.custom_base_url_placeholder')"
+            @input="handleCustomBaseUrlInput"
+          />
+          <div v-if="errors.customBaseUrl" class="error-message">{{ errors.customBaseUrl }}</div>
         </div>
       </div>
 
@@ -579,5 +659,30 @@
     color: var(--text-400);
     margin-top: var(--spacing-xs);
     line-height: 1.4;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .checkbox-label span {
+    color: var(--text-200);
+    font-size: var(--font-size-sm);
+  }
+
+  .form-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--color-primary);
+  }
+
+  .form-checkbox:focus {
+    outline: 2px solid var(--color-primary-alpha);
+    outline-offset: 2px;
   }
 </style>

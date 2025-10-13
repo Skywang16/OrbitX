@@ -28,7 +28,7 @@
               <div class="config-divider"></div>
 
               <!-- 只有自定义提供商才显示名称输入框 -->
-              <div v-if="selectedProvider === 'custom'" class="form-group">
+              <div v-if="selectedProvider === 'openai_compatible'" class="form-group">
                 <label class="form-label">{{ t('onboarding.ai.config_name') }}</label>
                 <input
                   v-model="formData.name"
@@ -52,7 +52,33 @@
                 <div v-if="errors.apiKey" class="error-message">{{ errors.apiKey }}</div>
               </div>
 
-              <div class="form-group" v-if="selectedProvider === 'custom'">
+              <!-- 预设提供商的自定义 Base URL 选项 -->
+              <div v-if="selectedProvider !== 'openai_compatible'" class="form-group">
+                <label class="form-label checkbox-label">
+                  <input
+                    type="checkbox"
+                    v-model="formData.useCustomBaseUrl"
+                    @change="handleUseCustomBaseUrlChange"
+                    class="form-checkbox"
+                  />
+                  <span>{{ t('ai_model.use_custom_base_url') }}</span>
+                </label>
+              </div>
+
+              <div v-if="selectedProvider !== 'openai_compatible' && formData.useCustomBaseUrl" class="form-group">
+                <label class="form-label">{{ t('ai_model.custom_base_url') }}</label>
+                <input
+                  v-model="formData.customBaseUrl"
+                  type="url"
+                  class="form-input"
+                  :class="{ error: errors.customBaseUrl }"
+                  :placeholder="t('ai_model.custom_base_url_placeholder')"
+                  @input="handleCustomBaseUrlInput"
+                />
+                <div v-if="errors.customBaseUrl" class="error-message">{{ errors.customBaseUrl }}</div>
+              </div>
+
+              <div class="form-group" v-if="selectedProvider === 'openai_compatible'">
                 <label class="form-label">{{ t('ai_model_form.api_url') }}</label>
                 <input
                   v-model="formData.apiUrl"
@@ -68,7 +94,7 @@
                 <label class="form-label">{{ t('onboarding.ai.model_name') }}</label>
                 <!-- 预设provider使用下拉选择 -->
                 <x-select
-                  v-if="selectedProvider !== 'custom' && availableModels.length > 0"
+                  v-if="selectedProvider !== 'openai_compatible' && availableModels.length > 0"
                   v-model="formData.model"
                   :options="availableModels"
                   :placeholder="t('ai_model.select_model')"
@@ -86,7 +112,7 @@
                 <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
               </div>
 
-              <div v-if="selectedProvider === 'custom'" class="form-group">
+              <div v-if="selectedProvider === 'openai_compatible'" class="form-group">
                 <label class="form-label">{{ t('ai_model.max_tokens') }}</label>
                 <input
                   v-model.number="formData.options.maxTokens"
@@ -132,7 +158,7 @@
 
     // 添加自定义选项
     providers.push({
-      id: 'custom',
+      id: 'openai_compatible',
       name: t('onboarding.ai.models.custom.name'),
     })
 
@@ -157,6 +183,8 @@
       temperature: 0.7,
       timeout: 300000,
     },
+    useCustomBaseUrl: false,
+    customBaseUrl: '',
   })
 
   const errors = ref<Record<string, string>>({})
@@ -173,7 +201,7 @@
 
   // 计算当前选中provider的可用模型
   const availableModels = computed(() => {
-    if (!selectedProvider.value || selectedProvider.value === 'custom') {
+    if (!selectedProvider.value || selectedProvider.value === 'openai_compatible') {
       return []
     }
     return getModelOptions(selectedProvider.value)
@@ -188,7 +216,7 @@
       formData.provider = providerId as AIModelConfig['provider']
 
       // 如果不是自定义provider，自动设置API URL和默认模型
-      if (providerId !== 'custom') {
+      if (providerId !== 'openai_compatible') {
         const provider = providerOptions.value.find(p => p.value === providerId)
         if (provider) {
           formData.apiUrl = provider.apiUrl
@@ -202,7 +230,9 @@
     // 重置表单数据
     formData.name = ''
     formData.apiKey = ''
-    if (providerId === 'custom') {
+    formData.useCustomBaseUrl = false
+    formData.customBaseUrl = ''
+    if (providerId === 'openai_compatible') {
       formData.apiUrl = ''
       formData.model = ''
     }
@@ -210,7 +240,7 @@
   }
 
   const getModelPlaceholder = () => {
-    if (selectedProvider.value === 'custom') {
+    if (selectedProvider.value === 'openai_compatible') {
       return t('onboarding.ai.model_name_placeholder')
     }
 
@@ -219,20 +249,50 @@
     return models.length > 0 ? models[0].value : ''
   }
 
+  // 监听自定义 base URL 复选框变化
+  const handleUseCustomBaseUrlChange = () => {
+    if (formData.useCustomBaseUrl) {
+      // 勾选时，清空 customBaseUrl，让用户输入
+      formData.customBaseUrl = ''
+      formData.apiUrl = ''
+    } else {
+      // 取消勾选时，恢复为预设的 base URL
+      const provider = providerOptions.value.find(p => p.value === selectedProvider.value)
+      if (provider) {
+        formData.apiUrl = provider.apiUrl
+      }
+      formData.customBaseUrl = ''
+    }
+    // 清空相关错误
+    delete errors.value.customBaseUrl
+  }
+
+  // 监听自定义 base URL 输入变化
+  const handleCustomBaseUrlInput = () => {
+    if (formData.useCustomBaseUrl) {
+      formData.apiUrl = formData.customBaseUrl
+    }
+  }
+
   // 简化的表单验证
   const validateForm = () => {
     errors.value = {}
 
     // 只有自定义提供商才需要验证名称
-    if (selectedProvider.value === 'custom' && !formData.name.trim()) {
+    if (selectedProvider.value === 'openai_compatible' && !formData.name.trim()) {
       errors.value.name = t('onboarding.ai.config_name_required')
     }
     if (!formData.apiKey.trim()) errors.value.apiKey = t('onboarding.ai.api_key_required')
     if (!formData.model.trim()) errors.value.model = t('onboarding.ai.model_name_required')
 
     // 自定义提供商需要API URL
-    if (selectedProvider.value === 'custom' && !formData.apiUrl.trim()) {
+    if (selectedProvider.value === 'openai_compatible' && !formData.apiUrl.trim()) {
       errors.value.apiUrl = t('onboarding.ai.api_url_required')
+    }
+
+    // 验证自定义 base URL
+    if (formData.useCustomBaseUrl && !formData.customBaseUrl.trim()) {
+      errors.value.customBaseUrl = t('ai_model.validation.custom_base_url_required')
     }
 
     return Object.keys(errors.value).length === 0
@@ -240,8 +300,13 @@
 
   // 获取默认API URL
   const getDefaultApiUrl = () => {
-    if (selectedProvider.value === 'custom') {
+    if (selectedProvider.value === 'openai_compatible') {
       return formData.apiUrl
+    }
+
+    // 如果使用自定义 base URL，返回自定义的
+    if (formData.useCustomBaseUrl && formData.customBaseUrl) {
+      return formData.customBaseUrl
     }
 
     // 从后端注册表获取默认API URL
@@ -260,7 +325,7 @@
 
     // 预设提供商自动生成名称
     let configName = formData.name
-    if (selectedProvider.value !== 'custom') {
+    if (selectedProvider.value !== 'openai_compatible') {
       const models = getModelOptions(selectedProvider.value)
       const selectedModel = models.find(m => m.value === formData.model)
       configName = selectedModel ? selectedModel.label : formData.model
@@ -289,6 +354,8 @@
       apiUrl: '',
       model: '',
       options: { maxTokens: 4096, temperature: 0.7, timeout: 300000 },
+      useCustomBaseUrl: false,
+      customBaseUrl: '',
     })
     errors.value = {}
     isSubmitting.value = false
@@ -578,5 +645,30 @@
 
   .ai-option:not(.move-to-top) {
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .checkbox-label span {
+    color: var(--text-200);
+    font-size: 14px;
+  }
+
+  .form-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--color-primary);
+  }
+
+  .form-checkbox:focus {
+    outline: 2px solid var(--color-primary-alpha);
+    outline-offset: 2px;
   }
 </style>

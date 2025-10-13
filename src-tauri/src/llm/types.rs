@@ -125,11 +125,9 @@ pub enum LLMStreamChunk {
 /// LLM 提供商类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum LLMProviderType {
-    OpenAI,
     Anthropic,
-    Gemini,
-    Qwen,
-    Custom,
+    #[serde(rename = "openai_compatible")]
+    OpenAiCompatible,
 }
 
 /// LLM 提供商配置

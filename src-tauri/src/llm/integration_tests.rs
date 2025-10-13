@@ -12,14 +12,14 @@ mod integration_tests {
         let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
 
         let config = LLMProviderConfig {
-            provider_type: LLMProviderType::OpenAI,
+            provider_type: LLMProviderType::OpenAiCompatible,
             api_key,
             api_url: None,
             model: "gpt-3.5-turbo".to_string(),
             options: None,
         };
 
-        let provider = OpenAIProvider::new(config.clone());
+        let provider = AnthropicProvider::new(config.clone());
 
         let request = LLMRequest {
             model: "gpt-3.5-turbo".to_string(),
@@ -46,14 +46,14 @@ mod integration_tests {
         let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
 
         let config = LLMProviderConfig {
-            provider_type: LLMProviderType::OpenAI,
+            provider_type: LLMProviderType::OpenAiCompatible,
             api_key,
             api_url: None,
             model: "gpt-3.5-turbo".to_string(),
             options: None,
         };
 
-        let provider = OpenAIProvider::new(config.clone());
+        let provider = AnthropicProvider::new(config.clone());
 
         let request = LLMRequest {
             model: "gpt-3.5-turbo".to_string(),
@@ -276,14 +276,14 @@ mod integration_tests {
         let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
 
         let config = LLMProviderConfig {
-            provider_type: LLMProviderType::OpenAI,
+            provider_type: LLMProviderType::OpenAiCompatible,
             api_key,
             api_url: None,
             model: "gpt-3.5-turbo".to_string(),
             options: None,
         };
 
-        let provider = OpenAIProvider::new(config.clone());
+        let provider = AnthropicProvider::new(config.clone());
 
         let request = LLMRequest {
             model: "gpt-3.5-turbo".to_string(),

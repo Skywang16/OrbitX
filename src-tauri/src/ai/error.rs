@@ -39,8 +39,6 @@ pub enum AIServiceError {
         #[source]
         source: InvalidHeaderValue,
     },
-    #[error("Gemini API error: {0}")]
-    GeminiApi(String),
     #[error(transparent)]
     FileSystemTool(#[from] FileSystemToolError),
 }

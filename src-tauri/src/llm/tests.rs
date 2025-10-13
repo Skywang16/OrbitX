@@ -8,11 +8,8 @@ mod tests {
     #[test]
     fn test_provider_types() {
         let providers = vec![
-            LLMProviderType::OpenAI,
             LLMProviderType::Anthropic,
-            LLMProviderType::Gemini,
-            LLMProviderType::Qwen,
-            LLMProviderType::Custom,
+            LLMProviderType::OpenAiCompatible,
         ];
 
         // 测试序列化
@@ -147,7 +144,7 @@ mod tests {
     #[test]
     fn test_provider_config_creation() {
         let config = LLMProviderConfig {
-            provider_type: LLMProviderType::OpenAI,
+            provider_type: LLMProviderType::OpenAiCompatible,
             api_key: "test-key".to_string(),
             api_url: Some("https://api.openai.com/v1".to_string()),
             model: "gpt-5".to_string(),

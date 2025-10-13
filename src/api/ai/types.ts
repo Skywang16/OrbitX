@@ -11,6 +11,7 @@ export interface AIModelCreateInput {
   modelType: AIModelConfig['modelType']
   enabled?: boolean
   options?: AIModelConfig['options']
+  useCustomBaseUrl?: boolean
 }
 
 export type AIModelUpdateChanges = Partial<

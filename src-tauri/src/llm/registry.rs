@@ -100,49 +100,6 @@ impl LLMRegistry {
     /// 初始化默认供应商
     fn initialize_default_providers(&mut self) {
         self.providers.insert(
-            LLMProviderType::OpenAI,
-            ProviderInfo {
-                provider_type: LLMProviderType::OpenAI,
-                display_name: "OpenAI".to_string(),
-                default_api_url: "https://api.openai.com/v1".to_string(),
-                documentation_url: Some(
-                    "https://platform.openai.com/docs/api-reference".to_string(),
-                ),
-                requires_api_key: true,
-                models: vec![
-                    ModelInfo {
-                        id: "gpt-5".to_string(),
-                        display_name: "GPT-5".to_string(),
-                        model_type: ModelType::Chat,
-                        capabilities: ModelCapabilities {
-                            supports_tools: true,
-                            supports_vision: true,
-                            supports_streaming: true,
-                            is_reasoning_model: true,
-                            max_context_tokens: 400000,
-                            temperature_range: Some((0.0, 2.0)),
-                        },
-                        deprecated: false,
-                    },
-                    ModelInfo {
-                        id: "gpt-5-codex".to_string(),
-                        display_name: "GPT-5 Codex".to_string(),
-                        model_type: ModelType::Chat,
-                        capabilities: ModelCapabilities {
-                            supports_tools: true,
-                            supports_vision: false,
-                            supports_streaming: true,
-                            is_reasoning_model: true,
-                            max_context_tokens: 400000,
-                            temperature_range: Some((0.0, 2.0)),
-                        },
-                        deprecated: false,
-                    },
-                ],
-            },
-        );
-
-        self.providers.insert(
             LLMProviderType::Anthropic,
             ProviderInfo {
                 provider_type: LLMProviderType::Anthropic,
@@ -183,59 +140,6 @@ impl LLMRegistry {
                         deprecated: false,
                     },
                 ],
-            },
-        );
-
-        // Gemini
-        self.providers.insert(
-            LLMProviderType::Gemini,
-            ProviderInfo {
-                provider_type: LLMProviderType::Gemini,
-                display_name: "Google Gemini".to_string(),
-                default_api_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
-                documentation_url: Some("https://ai.google.dev/docs".to_string()),
-                requires_api_key: true,
-                models: vec![ModelInfo {
-                    id: "gemini-2.5-pro".to_string(),
-                    display_name: "Gemini 2.5 Pro".to_string(),
-                    model_type: ModelType::Chat,
-                    capabilities: ModelCapabilities {
-                        supports_tools: true,
-                        supports_vision: true,
-                        supports_streaming: true,
-                        is_reasoning_model: true,
-                        max_context_tokens: 1048576,
-                        temperature_range: Some((0.0, 2.0)),
-                    },
-                    deprecated: false,
-                }],
-            },
-        );
-
-        self.providers.insert(
-            LLMProviderType::Qwen,
-            ProviderInfo {
-                provider_type: LLMProviderType::Qwen,
-                display_name: "Qwen".to_string(),
-                default_api_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
-                documentation_url: Some(
-                    "https://help.aliyun.com/document_detail/2712581.html".to_string(),
-                ),
-                requires_api_key: true,
-                models: vec![ModelInfo {
-                    id: "qwen3-coder-plus".to_string(),
-                    display_name: "Qwen3 Coder Plus".to_string(),
-                    model_type: ModelType::Chat,
-                    capabilities: ModelCapabilities {
-                        supports_tools: true,
-                        supports_vision: false,
-                        supports_streaming: true,
-                        is_reasoning_model: false,
-                        max_context_tokens: 128000,
-                        temperature_range: Some((0.0, 2.0)),
-                    },
-                    deprecated: false,
-                }],
             },
         );
     }
@@ -323,36 +227,34 @@ mod tests {
     #[test]
     fn test_find_model() {
         let registry = LLMRegistry::new();
-        let result = registry.find_model("gpt-5");
+        let result = registry.find_model("claude-sonnet-4-5-20250929");
         assert!(result.is_some());
 
         let (provider, model) = result.unwrap();
-        assert_eq!(provider.provider_type, LLMProviderType::OpenAI);
-        assert_eq!(model.id, "gpt-5");
+        assert_eq!(provider.provider_type, LLMProviderType::Anthropic);
+        assert_eq!(model.id, "claude-sonnet-4-5-20250929");
     }
 
     #[test]
     fn test_model_capabilities() {
         let registry = LLMRegistry::new();
 
-        // 测试gpt-5模型（推理模型）
-        assert!(registry.model_supports_feature("gpt-5", "reasoning"));
-        assert!(registry.model_supports_feature("gpt-5", "tools"));
-        assert!(registry.model_supports_feature("gpt-5", "vision"));
+        // 测试claude-sonnet-4-5-20250929模型
+        assert!(!registry.model_supports_feature("claude-sonnet-4-5-20250929", "reasoning"));
+        assert!(registry.model_supports_feature("claude-sonnet-4-5-20250929", "tools"));
+        assert!(registry.model_supports_feature("claude-sonnet-4-5-20250929", "vision"));
 
-        // 测试gpt-5-codex模型（推理模型，无vision）
-        assert!(registry.model_supports_feature("gpt-5-codex", "reasoning"));
-        assert!(registry.model_supports_feature("gpt-5-codex", "tools"));
-        assert!(!registry.model_supports_feature("gpt-5-codex", "vision"));
+        // 测试claude-sonnet-4-20250514模型
+        assert!(!registry.model_supports_feature("claude-sonnet-4-20250514", "reasoning"));
+        assert!(registry.model_supports_feature("claude-sonnet-4-20250514", "tools"));
+        assert!(registry.model_supports_feature("claude-sonnet-4-20250514", "vision"));
     }
 
     #[test]
     fn test_model_availability() {
         let registry = LLMRegistry::new();
-        assert!(registry.is_model_available("gpt-5"));
         assert!(registry.is_model_available("claude-sonnet-4-5-20250929"));
-        assert!(registry.is_model_available("gemini-2.5-pro"));
-        assert!(registry.is_model_available("qwen3-coder-plus"));
+        assert!(registry.is_model_available("claude-sonnet-4-20250514"));
         assert!(!registry.is_model_available("non-existent-model"));
     }
 }

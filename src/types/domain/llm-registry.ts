@@ -32,7 +32,7 @@ export interface ModelInfo {
 }
 
 /// LLM供应商类型
-export type LLMProviderType = 'OpenAI' | 'Anthropic' | 'Gemini' | 'Qwen' | 'Custom'
+export type LLMProviderType = 'Anthropic' | 'OpenAiCompatible'
 
 /// 供应商配置
 export interface ProviderInfo {

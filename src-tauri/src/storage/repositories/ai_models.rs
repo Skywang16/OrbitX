@@ -28,26 +28,17 @@ fn default_timestamp() -> DateTime<Utc> {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AIProvider {
-    #[serde(rename = "openai")]
-    OpenAI,
     #[serde(rename = "anthropic")]
-    Claude,
-    #[serde(rename = "gemini")]
-    Gemini,
-    #[serde(rename = "qwen")]
-    Qwen,
-    #[serde(rename = "custom")]
-    Custom,
+    Anthropic,
+    #[serde(rename = "openai_compatible")]
+    OpenAiCompatible,
 }
 
 impl std::fmt::Display for AIProvider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AIProvider::OpenAI => write!(f, "OpenAI"),
-            AIProvider::Claude => write!(f, "Claude"),
-            AIProvider::Gemini => write!(f, "Gemini"),
-            AIProvider::Qwen => write!(f, "Qwen"),
-            AIProvider::Custom => write!(f, "Custom"),
+            AIProvider::Anthropic => write!(f, "Anthropic"),
+            AIProvider::OpenAiCompatible => write!(f, "OpenAI Compatible"),
         }
     }
 }
@@ -57,11 +48,8 @@ impl std::str::FromStr for AIProvider {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "openai" => Ok(AIProvider::OpenAI),
-            "anthropic" | "claude" => Ok(AIProvider::Claude),
-            "gemini" => Ok(AIProvider::Gemini),
-            "qwen" => Ok(AIProvider::Qwen),
-            "custom" => Ok(AIProvider::Custom),
+            "anthropic" => Ok(AIProvider::Anthropic),
+            "openai_compatible" => Ok(AIProvider::OpenAiCompatible),
             _ => Err(RepositoryError::Validation {
                 reason: format!("Unknown AI provider: {}", s),
             }),

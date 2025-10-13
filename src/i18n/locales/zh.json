@@ -94,7 +94,7 @@
       "api_url_required": "API地址不能为空",
       "models": {
         "custom": {
-          "name": "自定义"
+          "name": "OpenAI 兼容"
         }
       }
     }
@@ -108,7 +108,7 @@
     "edit_title": "编辑 AI 模型",
     "config_type": "配置类型",
     "preset_provider": "预设提供商",
-    "custom_config": "自定义配置",
+    "custom_config": "OpenAI 兼容",
     "provider": "提供商",
     "select_provider": "选择提供商",
     "model": "模型",
@@ -124,6 +124,9 @@
     "api_key_placeholder": "输入您的 API Key",
     "max_tokens": "最大 Token 数",
     "max_tokens_placeholder": "4096",
+    "use_custom_base_url": "使用自定义 Base URL",
+    "custom_base_url": "自定义 Base URL",
+    "custom_base_url_placeholder": "https://your-custom-api.com/v1",
     "test_connection": "测试连接",
     "testing": "测试中...",
     "loading": "加载中...",
@@ -145,7 +148,8 @@
       "model_required": "请选择一个模型",
       "config_name_required": "配置名称是必填项",
       "api_url_required": "API URL 是必填项",
-      "model_name_required": "模型名称是必填项"
+      "model_name_required": "模型名称是必填项",
+      "custom_base_url_required": "自定义 Base URL 是必填项"
     }
   },
   "session": {

@@ -33,11 +33,8 @@ impl LLMService {
 
         let provider_str = model.provider.to_string().to_lowercase();
         let provider_type = match provider_str.as_str() {
-            "openai" => LLMProviderType::OpenAI,
-            "claude" | "anthropic" => LLMProviderType::Anthropic,
-            "gemini" => LLMProviderType::Gemini,
-            "qwen" => LLMProviderType::Qwen,
-            "custom" => LLMProviderType::Custom,
+            "anthropic" => LLMProviderType::Anthropic,
+            "openai_compatible" => LLMProviderType::OpenAiCompatible,
             _ => {
                 return Err(LlmError::UnsupportedProvider {
                     provider: model.provider.to_string(),

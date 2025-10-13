@@ -94,7 +94,7 @@
       "api_url_required": "API URL is required",
       "models": {
         "custom": {
-          "name": "Custom"
+          "name": "OpenAI Compatible"
         }
       }
     }
@@ -108,7 +108,7 @@
     "edit_title": "Edit AI Model",
     "config_type": "Configuration Type",
     "preset_provider": "Preset Provider",
-    "custom_config": "Custom Configuration",
+    "custom_config": "OpenAI Compatible",
     "provider": "Provider",
     "select_provider": "Select Provider",
     "model": "Model",
@@ -124,6 +124,9 @@
     "api_key_placeholder": "Enter your API Key",
     "max_tokens": "Max Tokens",
     "max_tokens_placeholder": "4096",
+    "use_custom_base_url": "Use Custom Base URL",
+    "custom_base_url": "Custom Base URL",
+    "custom_base_url_placeholder": "https://your-custom-api.com/v1",
     "test_connection": "Test Connection",
     "testing": "Testing...",
     "loading": "Loading...",
@@ -145,7 +148,8 @@
       "model_required": "Please select a model",
       "config_name_required": "Configuration name is required",
       "api_url_required": "API URL is required",
-      "model_name_required": "Model name is required"
+      "model_name_required": "Model name is required",
+      "custom_base_url_required": "Custom Base URL is required"
     }
   },
   "session": {
