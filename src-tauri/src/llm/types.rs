@@ -122,18 +122,10 @@ pub enum LLMStreamChunk {
     },
 }
 
-/// LLM 提供商类型
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub enum LLMProviderType {
-    Anthropic,
-    #[serde(rename = "openai_compatible")]
-    OpenAiCompatible,
-}
-
 /// LLM 提供商配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMProviderConfig {
-    pub provider_type: LLMProviderType,
+    pub provider_type: String,
     pub api_key: String,
     pub api_url: Option<String>,
     pub model: String,

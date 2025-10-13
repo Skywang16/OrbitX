@@ -1,25 +1,9 @@
 #[cfg(test)]
 mod tests {
     use crate::llm::{
-        LLMMessage, LLMMessageContent, LLMMessagePart, LLMProviderConfig, LLMProviderType,
-        LLMRequest, LLMStreamChunk, LLMTool, LLMUsage,
+        LLMMessage, LLMMessageContent, LLMMessagePart, LLMProviderConfig, LLMRequest,
+        LLMStreamChunk, LLMTool, LLMUsage,
     };
-
-    #[test]
-    fn test_provider_types() {
-        let providers = vec![
-            LLMProviderType::Anthropic,
-            LLMProviderType::OpenAiCompatible,
-        ];
-
-        // 测试序列化
-        for provider in providers {
-            let json = serde_json::to_string(&provider).unwrap();
-            let _deserialized: LLMProviderType = serde_json::from_str(&json).unwrap();
-            // 基本检查
-            assert!(!json.is_empty());
-        }
-    }
 
     #[test]
     fn test_message_content_serialization() {
@@ -144,7 +128,7 @@ mod tests {
     #[test]
     fn test_provider_config_creation() {
         let config = LLMProviderConfig {
-            provider_type: LLMProviderType::OpenAiCompatible,
+            provider_type: "openai_compatible".to_string(),
             api_key: "test-key".to_string(),
             api_url: Some("https://api.openai.com/v1".to_string()),
             model: "gpt-5".to_string(),

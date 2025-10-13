@@ -206,11 +206,7 @@ pub async fn agent_set_user_rules(
     state: State<'_, TaskExecutorState>,
 ) -> TauriApiResult<EmptyData> {
     let repositories = state.executor.repositories();
-    match repositories
-        .ai_models()
-        .set_user_rules(rules)
-        .await
-    {
+    match repositories.ai_models().set_user_rules(rules).await {
         Ok(_) => Ok(api_success!()),
         Err(e) => {
             tracing::error!("Failed to set user rules: {}", e);

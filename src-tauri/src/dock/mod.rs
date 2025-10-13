@@ -60,7 +60,11 @@ impl<R: tauri::Runtime> DockManager<R> {
         }
     }
 
-    pub fn update_tabs(&self, tabs: Vec<TabEntry>, active_tab_id: Option<String>) -> Result<(), String> {
+    pub fn update_tabs(
+        &self,
+        tabs: Vec<TabEntry>,
+        active_tab_id: Option<String>,
+    ) -> Result<(), String> {
         self.state.update_tabs(tabs, active_tab_id)?;
 
         #[cfg(target_os = "macos")]

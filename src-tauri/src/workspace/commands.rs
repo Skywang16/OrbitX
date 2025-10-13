@@ -1,13 +1,13 @@
 /*!
  * Workspace Commands
- * 
+ *
  * 工作区相关的 Tauri 命令
  * 包含：最近工作区管理、项目规则管理
  */
 
 use super::rules::get_available_rules_files;
-use crate::ai::tool::storage::StorageCoordinatorState;
 use crate::agent::core::TaskExecutorState;
+use crate::ai::tool::storage::StorageCoordinatorState;
 use crate::storage::repositories::RecentWorkspace;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
@@ -135,4 +135,3 @@ pub async fn workspace_list_rules_files(cwd: String) -> TauriApiResult<Vec<Strin
     let files = get_available_rules_files(cwd);
     Ok(api_success!(files))
 }
-

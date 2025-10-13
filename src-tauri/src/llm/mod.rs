@@ -1,7 +1,8 @@
 pub mod commands;
 pub mod error;
+pub mod preset_models;
+pub mod provider_registry;
 pub mod providers;
-pub mod registry;
 pub mod service;
 pub mod types;
 
@@ -12,7 +13,7 @@ mod tests;
 
 pub use commands::*;
 pub use error::*;
+pub use provider_registry::*;
 pub use providers::*;
-pub use registry::*;
 pub use service::*;
 pub use types::*;

@@ -12,7 +12,7 @@ mod integration_tests {
         let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
 
         let config = LLMProviderConfig {
-            provider_type: LLMProviderType::OpenAiCompatible,
+            provider_type: "openai_compatible".to_string(),
             api_key,
             api_url: None,
             model: "gpt-3.5-turbo".to_string(),
@@ -46,7 +46,7 @@ mod integration_tests {
         let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
 
         let config = LLMProviderConfig {
-            provider_type: LLMProviderType::OpenAiCompatible,
+            provider_type: "openai_compatible".to_string(),
             api_key,
             api_url: None,
             model: "gpt-3.5-turbo".to_string(),
@@ -96,7 +96,7 @@ mod integration_tests {
         let api_key = env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY not set");
 
         let config = LLMProviderConfig {
-            provider_type: LLMProviderType::Anthropic,
+            provider_type: "anthropic".to_string(),
             api_key,
             api_url: None,
             model: "claude-3-haiku-20240307".to_string(),
@@ -136,7 +136,7 @@ mod integration_tests {
         let api_key = env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY not set");
 
         let config = LLMProviderConfig {
-            provider_type: LLMProviderType::Anthropic,
+            provider_type: "anthropic".to_string(),
             api_key,
             api_url: None,
             model: "claude-3-haiku-20240307".to_string(),
@@ -276,7 +276,7 @@ mod integration_tests {
         let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
 
         let config = LLMProviderConfig {
-            provider_type: LLMProviderType::OpenAiCompatible,
+            provider_type: "openai_compatible".to_string(),
             api_key,
             api_url: None,
             model: "gpt-3.5-turbo".to_string(),

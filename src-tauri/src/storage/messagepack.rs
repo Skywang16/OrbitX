@@ -122,7 +122,7 @@ impl MessagePackManager {
             let mut hasher = Sha256::new();
             hasher.update(payload);
             let digest = hasher.finalize();
-            if digest.as_slice() != &header[14..46] {
+            if &digest[..] != &header[14..46] {
                 return Err(MessagePackError::ChecksumFailed);
             }
         }

@@ -142,6 +142,14 @@
     "all_models": "All Models",
     "chat": "Chat",
     "add_chat_model": "Add Chat Model",
+    "context_window": "Context Window (tokens)",
+    "context_window_description": "Maximum context length the model can handle",
+    "max_output_tokens": "Max Output (tokens)",
+    "max_output_tokens_description": "Maximum output length for a single request, -1 uses model default",
+    "advanced_options": "Advanced Options",
+    "feature_support": "Feature Support",
+    "supports_images": "Supports Image Input",
+    "supports_prompt_cache": "Supports Prompt Cache",
     "validation": {
       "api_key_required": "API Key is required",
       "preset_required": "Please select a preset provider",
@@ -224,10 +232,6 @@
     "project_rules_description": "Select which project rules file to prioritize",
     "click_to_switch": "Click to switch",
     "no_rules_files": "No rules files found in current directory"
-  },
-  "ai_model_form": {
-    "api_url": "API URL",
-    "api_key": "API Key"
   },
   "message_list": {
     "start_conversation": "Start conversation",

@@ -18,13 +18,11 @@ pub struct AIService {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct AIModelUpdatePayload {
-    name: Option<String>,
     provider: Option<AIProvider>,
     api_url: Option<String>,
     api_key: Option<String>,
     model: Option<String>,
     model_type: Option<ModelType>,
-    enabled: Option<bool>,
     options: Option<Value>,
 }
 
@@ -100,9 +98,6 @@ impl AIService {
                 model_id: model_id.to_string(),
             })?;
 
-        if let Some(name) = update_payload.name.and_then(trimmed) {
-            existing.name = name;
-        }
         if let Some(provider) = update_payload.provider {
             existing.provider = provider;
         }
@@ -117,9 +112,6 @@ impl AIService {
         }
         if let Some(model_type) = update_payload.model_type {
             existing.model_type = model_type;
-        }
-        if let Some(enabled) = update_payload.enabled {
-            existing.enabled = enabled;
         }
         if let Some(options) = update_payload.options {
             existing.options = Some(options);
@@ -283,7 +275,6 @@ impl AIService {
             message: error_msg,
         })
     }
-
 
     fn resolve_timeout(&self, model: &AIModelConfig) -> Duration {
         model

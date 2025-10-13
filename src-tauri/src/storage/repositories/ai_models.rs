@@ -18,10 +18,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error};
 
-fn default_enabled() -> bool {
-    true
-}
-
 fn default_timestamp() -> DateTime<Utc> {
     Utc::now()
 }
@@ -34,12 +30,18 @@ pub enum AIProvider {
     OpenAiCompatible,
 }
 
+impl AIProvider {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AIProvider::Anthropic => "anthropic",
+            AIProvider::OpenAiCompatible => "openai_compatible",
+        }
+    }
+}
+
 impl std::fmt::Display for AIProvider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AIProvider::Anthropic => write!(f, "Anthropic"),
-            AIProvider::OpenAiCompatible => write!(f, "OpenAI Compatible"),
-        }
+        write!(f, "{}", self.as_str())
     }
 }
 
@@ -98,15 +100,12 @@ impl Default for ModelType {
 #[serde(rename_all = "camelCase")]
 pub struct AIModelConfig {
     pub id: String,
-    pub name: String,
     pub provider: AIProvider,
     pub api_url: String,
     pub api_key: String,
     pub model: String,
     #[serde(default)]
     pub model_type: ModelType,
-    #[serde(default = "default_enabled")]
-    pub enabled: bool,
     #[serde(default)]
     pub options: Option<Value>,
     #[serde(default = "default_timestamp")]
@@ -116,23 +115,15 @@ pub struct AIModelConfig {
 }
 
 impl AIModelConfig {
-    pub fn new(
-        name: String,
-        provider: AIProvider,
-        api_url: String,
-        api_key: String,
-        model: String,
-    ) -> Self {
+    pub fn new(provider: AIProvider, api_url: String, api_key: String, model: String) -> Self {
         let now = Utc::now();
         Self {
             id: uuid::Uuid::new_v4().to_string(),
-            name,
             provider,
             api_url,
             api_key,
             model,
-            model_type: ModelType::Chat, // 默认为聊天模型
-            enabled: true,
+            model_type: ModelType::Chat,
             options: None,
             created_at: now,
             updated_at: now,
@@ -140,7 +131,6 @@ impl AIModelConfig {
     }
 
     pub fn with_model_type(
-        name: String,
         provider: AIProvider,
         api_url: String,
         api_key: String,
@@ -150,13 +140,11 @@ impl AIModelConfig {
         let now = Utc::now();
         Self {
             id: uuid::Uuid::new_v4().to_string(),
-            name,
             provider,
             api_url,
             api_key,
             model,
             model_type,
-            enabled: true,
             options: None,
             created_at: now,
             updated_at: now,
@@ -180,13 +168,11 @@ impl RowMapper<AIModelConfig> for AIModelConfig {
 
         Ok(Self {
             id: row.try_get("id")?,
-            name: row.try_get("name")?,
             provider,
             api_url: row.try_get("api_url")?,
             api_key: String::new(), // 加密的API密钥需要单独解密
             model: row.try_get("model_name")?,
             model_type,
-            enabled: row.try_get("enabled")?,
             options,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
@@ -213,13 +199,11 @@ impl AIModelRepository {
         let (query, params) = SafeQueryBuilder::new("ai_models")
             .select(&[
                 "id",
-                "name",
                 "provider",
                 "api_url",
                 "api_key_encrypted",
                 "model_name",
                 "model_type",
-                "enabled",
                 "config_json",
                 "created_at",
                 "updated_at",
@@ -298,16 +282,20 @@ impl AIModelRepository {
     }
 
     pub async fn save_with_encryption(&self, model: &AIModelConfig) -> RepositoryResult<i64> {
-        debug!("保存AI模型: {}", model.name);
+        debug!("保存AI模型: {}", model.model);
 
         // 加密API密钥
         let encrypted_key = if !model.api_key.is_empty() {
-            let encrypted_bytes = self.database.encrypt_data(&model.api_key).await.map_err(|e| {
-                RepositoryError::internal(format!(
-                    "加密API密钥失败 (model_id={}): {}",
-                    model.id, e
-                ))
-            })?;
+            let encrypted_bytes =
+                self.database
+                    .encrypt_data(&model.api_key)
+                    .await
+                    .map_err(|e| {
+                        RepositoryError::internal(format!(
+                            "加密API密钥失败 (model_id={}): {}",
+                            model.id, e
+                        ))
+                    })?;
             Some(BASE64.encode(&encrypted_bytes))
         } else {
             // 如果没有提供新密钥，保留现有的加密密钥
@@ -327,7 +315,6 @@ impl AIModelRepository {
         let (query, params) = InsertBuilder::new("ai_models")
             .on_conflict_replace()
             .set("id", Value::String(model.id.clone()))
-            .set("name", Value::String(model.name.clone()))
             .set("provider", Value::String(model.provider.to_string()))
             .set("api_url", Value::String(model.api_url.clone()))
             .set(
@@ -336,7 +323,6 @@ impl AIModelRepository {
             )
             .set("model_name", Value::String(model.model.clone()))
             .set("model_type", Value::String(model.model_type.to_string()))
-            .set("enabled", Value::Bool(model.enabled))
             .set(
                 "config_json",
                 config_json.map(Value::String).unwrap_or(Value::Null),
@@ -361,7 +347,7 @@ impl AIModelRepository {
 
         let result = query_builder.execute(self.database.pool()).await?;
 
-        debug!("AI模型保存成功: {}", model.name);
+        debug!("AI模型保存成功: {}", model.model);
         Ok(result.last_insert_rowid())
     }
 }
@@ -419,10 +405,7 @@ impl AIModelRepository {
         debug!("从内存缓存获取用户规则");
 
         let rules = self.user_rules.read().await.clone();
-        debug!(
-            "用户规则获取成功: {:?}",
-            rules.as_ref().map(|r| r.len())
-        );
+        debug!("用户规则获取成功: {:?}", rules.as_ref().map(|r| r.len()));
         Ok(rules)
     }
 

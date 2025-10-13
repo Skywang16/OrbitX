@@ -254,7 +254,7 @@ impl TaskExecutor {
 
     /// 获取默认模型ID
     pub async fn get_default_model_id(&self) -> TaskExecutorResult<String> {
-        // 优先从数据库中选择“已启用”的模型；找不到则退化到任意一个模型
+        // 从数据库中获取第一个可用模型
         let models = self
             .repositories()
             .ai_models()
@@ -262,16 +262,12 @@ impl TaskExecutor {
             .await
             .map_err(TaskExecutorError::from)?;
 
-        if let Some(first_enabled) = models.iter().find(|m| m.enabled) {
-            return Ok(first_enabled.id.clone());
-        }
-
         if let Some(any_model) = models.first() {
             return Ok(any_model.id.clone());
         }
 
         Err(TaskExecutorError::InternalError(
-            "No available models found. Please add and enable at least one model in Settings -> Models."
+            "No available models found. Please add at least one model in Settings -> Models."
                 .to_string(),
         ))
     }

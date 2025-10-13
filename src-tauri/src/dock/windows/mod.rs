@@ -31,29 +31,26 @@ impl<R: Runtime> WindowsJumpList<R> {
     }
 
     pub fn refresh_menu(&self) -> Result<(), String> {
-        let tabs = self.state.get_tabs().map_err(|e| {
-            format!("Failed to get tabs: {}", e)
-        })?;
+        let tabs = self
+            .state
+            .get_tabs()
+            .map_err(|e| format!("Failed to get tabs: {}", e))?;
 
-        unsafe {
-            self.update_jump_list(&tabs)
-        }
+        unsafe { self.update_jump_list(&tabs) }
     }
 
     unsafe fn update_jump_list(&self, tabs: &[crate::dock::state::TabEntry]) -> Result<(), String> {
         use windows::core::HSTRING;
         use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
         use windows::Win32::UI::Shell::{
-            ICustomDestinationList, IObjectArray, IObjectCollection, DestinationList,
-            CLSID_DestinationList, CLSID_EnumerableObjectCollection,
+            CLSID_DestinationList, CLSID_EnumerableObjectCollection, DestinationList,
+            ICustomDestinationList, IObjectArray, IObjectCollection,
         };
 
         // Create destination list
-        let dest_list: ICustomDestinationList = CoCreateInstance(
-            &CLSID_DestinationList,
-            None,
-            CLSCTX_INPROC_SERVER,
-        ).map_err(|e| format!("Failed to create ICustomDestinationList: {:?}", e))?;
+        let dest_list: ICustomDestinationList =
+            CoCreateInstance(&CLSID_DestinationList, None, CLSCTX_INPROC_SERVER)
+                .map_err(|e| format!("Failed to create ICustomDestinationList: {:?}", e))?;
 
         // Begin list
         let mut min_slots = 0u32;
@@ -66,11 +63,13 @@ impl<R: Runtime> WindowsJumpList<R> {
             &CLSID_EnumerableObjectCollection,
             None,
             CLSCTX_INPROC_SERVER,
-        ).map_err(|e| format!("Failed to create IObjectCollection: {:?}", e))?;
+        )
+        .map_err(|e| format!("Failed to create IObjectCollection: {:?}", e))?;
 
         if !tabs.is_empty() {
             let category_name = HSTRING::from("Tabs");
-            let tasks: IObjectArray = collection.cast()
+            let tasks: IObjectArray = collection
+                .cast()
                 .map_err(|e| format!("Failed to cast to IObjectArray: {:?}", e))?;
 
             dest_list

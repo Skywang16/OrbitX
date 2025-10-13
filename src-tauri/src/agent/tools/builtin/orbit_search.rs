@@ -281,7 +281,6 @@ fn build_search_options(
     }
 }
 
-
 fn mode_as_str(mode: &SearchMode) -> &'static str {
     match mode {
         SearchMode::Semantic => "semantic",

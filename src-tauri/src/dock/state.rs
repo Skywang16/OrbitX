@@ -21,19 +21,23 @@ impl DockState {
         }
     }
 
-    pub fn update_tabs(&self, tabs: Vec<TabEntry>, active_tab_id: Option<String>) -> Result<(), String> {
+    pub fn update_tabs(
+        &self,
+        tabs: Vec<TabEntry>,
+        active_tab_id: Option<String>,
+    ) -> Result<(), String> {
         let mut state = self
             .tabs
             .write()
             .map_err(|e| format!("Failed to acquire write lock: {}", e))?;
         *state = tabs;
-        
+
         let mut active = self
             .active_tab_id
             .write()
             .map_err(|e| format!("Failed to acquire write lock: {}", e))?;
         *active = active_tab_id;
-        
+
         Ok(())
     }
 
@@ -44,7 +48,7 @@ impl DockState {
             .map_err(|e| format!("Failed to acquire read lock: {}", e))?;
         Ok(state.clone())
     }
-    
+
     pub fn get_active_tab_id(&self) -> Result<Option<String>, String> {
         let active = self
             .active_tab_id

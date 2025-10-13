@@ -1,9 +1,11 @@
 <template>
   <div class="ai-step">
-    <div class="step-header">
-      <h2 class="step-title">{{ t('onboarding.ai.title') }}</h2>
-      <p class="step-description">{{ t('onboarding.ai.description') }}</p>
-    </div>
+    <Transition name="fade-slide">
+      <div v-if="!selectedProvider" class="step-header">
+        <h2 class="step-title">{{ t('onboarding.ai.title') }}</h2>
+        <p class="step-description">{{ t('onboarding.ai.description') }}</p>
+      </div>
+    </Transition>
 
     <div class="ai-options">
       <TransitionGroup name="provider-list" tag="div" class="provider-container">
@@ -27,102 +29,152 @@
             <div v-if="selectedProvider === provider.id" class="ai-config-dropdown">
               <div class="config-divider"></div>
 
-              <!-- 只有自定义提供商才显示名称输入框 -->
-              <div v-if="selectedProvider === 'openai_compatible'" class="form-group">
-                <label class="form-label">{{ t('onboarding.ai.config_name') }}</label>
-                <input
-                  v-model="formData.name"
-                  type="text"
-                  class="form-input"
-                  :class="{ error: errors.name }"
-                  :placeholder="t('onboarding.ai.config_name_placeholder')"
-                />
-                <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">{{ t('ai_model_form.api_key') }}</label>
-                <input
-                  v-model="formData.apiKey"
-                  type="password"
-                  class="form-input"
-                  :class="{ error: errors.apiKey }"
-                  :placeholder="t('onboarding.ai.api_key_placeholder')"
-                />
-                <div v-if="errors.apiKey" class="error-message">{{ errors.apiKey }}</div>
-              </div>
-
-              <!-- 预设提供商的自定义 Base URL 选项 -->
-              <div v-if="selectedProvider !== 'openai_compatible'" class="form-group">
-                <label class="form-label checkbox-label">
-                  <input
-                    type="checkbox"
-                    v-model="formData.useCustomBaseUrl"
-                    @change="handleUseCustomBaseUrlChange"
-                    class="form-checkbox"
+              <template v-if="hasPresetModels">
+                <div class="form-group">
+                  <label class="form-label">{{ t('ai_model.model') }}</label>
+                  <x-select
+                    v-model="formData.model"
+                    :options="availableModels"
+                    :placeholder="t('ai_model.select_model')"
+                    :class="{ error: errors.model }"
                   />
-                  <span>{{ t('ai_model.use_custom_base_url') }}</span>
-                </label>
-              </div>
+                  <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
+                </div>
 
-              <div v-if="selectedProvider !== 'openai_compatible' && formData.useCustomBaseUrl" class="form-group">
-                <label class="form-label">{{ t('ai_model.custom_base_url') }}</label>
-                <input
-                  v-model="formData.customBaseUrl"
-                  type="url"
-                  class="form-input"
-                  :class="{ error: errors.customBaseUrl }"
-                  :placeholder="t('ai_model.custom_base_url_placeholder')"
-                  @input="handleCustomBaseUrlInput"
-                />
-                <div v-if="errors.customBaseUrl" class="error-message">{{ errors.customBaseUrl }}</div>
-              </div>
+                <div class="form-group">
+                  <label class="form-label checkbox-label">
+                    <input
+                      type="checkbox"
+                      v-model="formData.useCustomBaseUrl"
+                      @change="handleUseCustomBaseUrlChange"
+                      class="form-checkbox"
+                    />
+                    <span>{{ t('ai_model.use_custom_base_url') }}</span>
+                  </label>
+                </div>
 
-              <div class="form-group" v-if="selectedProvider === 'openai_compatible'">
-                <label class="form-label">{{ t('ai_model_form.api_url') }}</label>
-                <input
-                  v-model="formData.apiUrl"
-                  type="url"
-                  class="form-input"
-                  :class="{ error: errors.apiUrl }"
-                  :placeholder="t('onboarding.ai.api_url_placeholder')"
-                />
-                <div v-if="errors.apiUrl" class="error-message">{{ errors.apiUrl }}</div>
-              </div>
+                <div v-if="formData.useCustomBaseUrl" class="form-group">
+                  <label class="form-label">{{ t('ai_model.custom_base_url') }}</label>
+                  <input
+                    v-model="formData.customBaseUrl"
+                    type="url"
+                    class="form-input"
+                    :class="{ error: errors.customBaseUrl }"
+                    :placeholder="t('ai_model.custom_base_url_placeholder')"
+                    @input="handleCustomBaseUrlInput"
+                  />
+                  <div v-if="errors.customBaseUrl" class="error-message">{{ errors.customBaseUrl }}</div>
+                </div>
 
-              <div class="form-group">
-                <label class="form-label">{{ t('onboarding.ai.model_name') }}</label>
-                <!-- 预设provider使用下拉选择 -->
-                <x-select
-                  v-if="selectedProvider !== 'openai_compatible' && availableModels.length > 0"
-                  v-model="formData.model"
-                  :options="availableModels"
-                  :placeholder="t('ai_model.select_model')"
-                  :class="{ error: errors.model }"
-                />
-                <!-- 自定义provider使用文本输入 -->
-                <input
-                  v-else
-                  v-model="formData.model"
-                  type="text"
-                  class="form-input"
-                  :class="{ error: errors.model }"
-                  :placeholder="getModelPlaceholder()"
-                />
-                <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
-              </div>
+                <div class="form-group">
+                  <label class="form-label">{{ t('ai_model.api_key') }}</label>
+                  <input
+                    v-model="formData.apiKey"
+                    type="password"
+                    class="form-input"
+                    :class="{ error: errors.apiKey }"
+                    :placeholder="t('ai_model.api_key_placeholder')"
+                  />
+                  <div v-if="errors.apiKey" class="error-message">{{ errors.apiKey }}</div>
+                </div>
+              </template>
 
-              <div v-if="selectedProvider === 'openai_compatible'" class="form-group">
-                <label class="form-label">{{ t('ai_model.max_tokens') }}</label>
-                <input
-                  v-model.number="formData.options.maxTokens"
-                  type="number"
-                  class="form-input"
-                  :placeholder="t('ai_model.max_tokens_placeholder')"
-                  min="1"
-                  max="100000"
-                />
-              </div>
+              <template v-else-if="selectedProvider">
+                <div class="form-group">
+                  <label class="form-label">{{ t('ai_model.model_name') }} *</label>
+                  <input
+                    v-model="formData.model"
+                    type="text"
+                    class="form-input"
+                    :class="{ error: errors.model }"
+                    :placeholder="t('ai_model.model_name_placeholder')"
+                  />
+                  <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">{{ t('ai_model.api_url') }} *</label>
+                  <input
+                    v-model="formData.apiUrl"
+                    type="url"
+                    class="form-input"
+                    :class="{ error: errors.apiUrl }"
+                    :placeholder="t('ai_model.api_url_placeholder')"
+                  />
+                  <div v-if="errors.apiUrl" class="error-message">{{ errors.apiUrl }}</div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">{{ t('ai_model.api_key') }} *</label>
+                  <input
+                    v-model="formData.apiKey"
+                    type="password"
+                    class="form-input"
+                    :class="{ error: errors.apiKey }"
+                    :placeholder="t('ai_model.api_key_placeholder')"
+                  />
+                  <div v-if="errors.apiKey" class="error-message">{{ errors.apiKey }}</div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">{{ t('ai_model.context_window') }} *</label>
+                  <input
+                    v-model.number="formData.options.contextWindow"
+                    type="number"
+                    class="form-input"
+                    placeholder="128000"
+                    min="1000"
+                    max="2000000"
+                  />
+                  <div class="form-description">{{ t('ai_model.context_window_description') }}</div>
+                </div>
+
+                <div class="form-group">
+                  <button type="button" class="advanced-toggle" @click="showAdvancedOptions = !showAdvancedOptions">
+                    <svg
+                      class="toggle-icon"
+                      :class="{ expanded: showAdvancedOptions }"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 12 12"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path d="M4.5 3L7.5 6L4.5 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                    <span>{{ t('ai_model.advanced_options') }}</span>
+                  </button>
+                </div>
+
+                <div v-if="showAdvancedOptions" class="advanced-options">
+                  <div class="form-group">
+                    <label class="form-label">{{ t('ai_model.max_output_tokens') }}</label>
+                    <input
+                      v-model.number="formData.options.maxTokens"
+                      type="number"
+                      class="form-input"
+                      placeholder="-1"
+                      min="-1"
+                      max="200000"
+                    />
+                    <div class="form-description">{{ t('ai_model.max_output_tokens_description') }}</div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">{{ t('ai_model.feature_support') }}</label>
+                    <div class="checkbox-group">
+                      <label class="checkbox-label">
+                        <input type="checkbox" v-model="formData.options.supportsImages" class="form-checkbox" />
+                        <span>{{ t('ai_model.supports_images') }}</span>
+                      </label>
+                      <label class="checkbox-label">
+                        <input type="checkbox" v-model="formData.options.supportsPromptCache" class="form-checkbox" />
+                        <span>{{ t('ai_model.supports_prompt_cache') }}</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </template>
             </div>
           </Transition>
         </div>
@@ -143,29 +195,16 @@
 
   const { t } = useI18n()
   const aiSettingsStore = useAISettingsStore()
-
-  // 使用后端LLM注册表
-  const { providerOptions, getModelOptions, loadProviders } = useLLMRegistry()
-
+  const { providers, providerOptions, getChatModelOptions, loadProviders } = useLLMRegistry()
   const selectedProvider = ref('')
 
-  // 从后端注册表生成可用供应商列表
   const availableProviders = computed(() => {
-    const providers = providerOptions.value.map(provider => ({
+    return providerOptions.value.map(provider => ({
       id: provider.value,
       name: provider.label,
     }))
-
-    // 添加自定义选项
-    providers.push({
-      id: 'openai_compatible',
-      name: t('onboarding.ai.models.custom.name'),
-    })
-
-    return providers
   })
 
-  // 组件挂载时确保数据已加载
   onMounted(async () => {
     if (providerOptions.value.length === 0) {
       await loadProviders()
@@ -179,9 +218,13 @@
     apiUrl: '',
     model: '',
     options: {
-      maxTokens: 4096,
+      maxContextTokens: 128000,
       temperature: 0.7,
       timeout: 300000,
+      supportsImages: false,
+      supportsPromptCache: false,
+      contextWindow: 128000,
+      maxTokens: -1,
     },
     useCustomBaseUrl: false,
     customBaseUrl: '',
@@ -189,144 +232,103 @@
 
   const errors = ref<Record<string, string>>({})
   const isSubmitting = ref(false)
+  const showAdvancedOptions = ref(false)
 
-  // 计算可见的提供商列表
   const visibleProviders = computed(() => {
     if (!selectedProvider.value) {
       return availableProviders.value
     }
-    // 只显示选中的提供商
     return availableProviders.value.filter(provider => provider.id === selectedProvider.value)
   })
 
-  // 计算当前选中provider的可用模型
+  const providerInfo = computed(() => {
+    return providers.value.find(p => p.providerType.toLowerCase() === selectedProvider.value.toLowerCase())
+  })
+
+  const hasPresetModels = computed(() => {
+    return providerInfo.value?.presetModels && providerInfo.value.presetModels.length > 0
+  })
+
   const availableModels = computed(() => {
-    if (!selectedProvider.value || selectedProvider.value === 'openai_compatible') {
-      return []
-    }
-    return getModelOptions(selectedProvider.value)
+    return hasPresetModels.value ? getChatModelOptions(selectedProvider.value) : []
   })
 
   const selectProvider = (providerId: string) => {
-    // 如果点击的是已选中的提供商，则取消选中
     if (selectedProvider.value === providerId) {
       selectedProvider.value = ''
     } else {
       selectedProvider.value = providerId
       formData.provider = providerId as AIModelConfig['provider']
-
-      // 如果不是自定义provider，自动设置API URL和默认模型
-      if (providerId !== 'openai_compatible') {
-        const provider = providerOptions.value.find(p => p.value === providerId)
-        if (provider) {
-          formData.apiUrl = provider.apiUrl
-          const models = getModelOptions(providerId)
-          if (models.length > 0) {
-            formData.model = models[0].value // 默认选择第一个模型
-          }
+      const info = providerInfo.value
+      if (info) {
+        formData.apiUrl = info.defaultApiUrl
+        const models = getChatModelOptions(providerId)
+        if (models.length > 0) {
+          formData.model = models[0].value
+        } else {
+          formData.model = ''
         }
       }
     }
-    // 重置表单数据
     formData.name = ''
     formData.apiKey = ''
     formData.useCustomBaseUrl = false
     formData.customBaseUrl = ''
-    if (providerId === 'openai_compatible') {
-      formData.apiUrl = ''
-      formData.model = ''
-    }
     errors.value = {}
   }
 
-  const getModelPlaceholder = () => {
-    if (selectedProvider.value === 'openai_compatible') {
-      return t('onboarding.ai.model_name_placeholder')
-    }
-
-    // 从后端注册表获取第一个可用模型作为占位符
-    const models = getModelOptions(selectedProvider.value)
-    return models.length > 0 ? models[0].value : ''
-  }
-
-  // 监听自定义 base URL 复选框变化
   const handleUseCustomBaseUrlChange = () => {
     if (formData.useCustomBaseUrl) {
-      // 勾选时，清空 customBaseUrl，让用户输入
       formData.customBaseUrl = ''
       formData.apiUrl = ''
     } else {
-      // 取消勾选时，恢复为预设的 base URL
-      const provider = providerOptions.value.find(p => p.value === selectedProvider.value)
-      if (provider) {
-        formData.apiUrl = provider.apiUrl
-      }
+      formData.apiUrl = providerInfo.value?.defaultApiUrl || ''
       formData.customBaseUrl = ''
     }
-    // 清空相关错误
     delete errors.value.customBaseUrl
   }
 
-  // 监听自定义 base URL 输入变化
   const handleCustomBaseUrlInput = () => {
     if (formData.useCustomBaseUrl) {
       formData.apiUrl = formData.customBaseUrl
     }
   }
 
-  // 简化的表单验证
   const validateForm = () => {
     errors.value = {}
+    if (!selectedProvider.value) errors.value.provider = t('ai_model.validation.preset_required')
+    if (!formData.apiKey.trim()) errors.value.apiKey = t('ai_model.validation.api_key_required')
 
-    // 只有自定义提供商才需要验证名称
-    if (selectedProvider.value === 'openai_compatible' && !formData.name.trim()) {
-      errors.value.name = t('onboarding.ai.config_name_required')
-    }
-    if (!formData.apiKey.trim()) errors.value.apiKey = t('onboarding.ai.api_key_required')
-    if (!formData.model.trim()) errors.value.model = t('onboarding.ai.model_name_required')
-
-    // 自定义提供商需要API URL
-    if (selectedProvider.value === 'openai_compatible' && !formData.apiUrl.trim()) {
-      errors.value.apiUrl = t('onboarding.ai.api_url_required')
-    }
-
-    // 验证自定义 base URL
-    if (formData.useCustomBaseUrl && !formData.customBaseUrl.trim()) {
-      errors.value.customBaseUrl = t('ai_model.validation.custom_base_url_required')
+    if (hasPresetModels.value) {
+      if (!formData.model) errors.value.model = t('ai_model.validation.model_required')
+      if (formData.useCustomBaseUrl && !formData.customBaseUrl) {
+        errors.value.customBaseUrl = t('ai_model.validation.custom_base_url_required')
+      }
+    } else {
+      if (!formData.apiUrl) errors.value.apiUrl = t('ai_model.validation.api_url_required')
+      if (!formData.model) errors.value.model = t('ai_model.validation.model_name_required')
     }
 
     return Object.keys(errors.value).length === 0
   }
 
-  // 获取默认API URL
   const getDefaultApiUrl = () => {
-    if (selectedProvider.value === 'openai_compatible') {
-      return formData.apiUrl
-    }
-
-    // 如果使用自定义 base URL，返回自定义的
     if (formData.useCustomBaseUrl && formData.customBaseUrl) {
       return formData.customBaseUrl
     }
-
-    // 从后端注册表获取默认API URL
-    const provider = providerOptions.value.find(p => p.value === selectedProvider.value)
-    return provider?.apiUrl || formData.apiUrl
+    return formData.apiUrl
   }
 
-  // 保存配置
   const handleSaveConfig = async (): Promise<boolean> => {
-    // 如果没有选择提供商，提示用户选择或跳过
     if (!selectedProvider.value) return false
 
     if (!validateForm()) return false
 
     isSubmitting.value = true
 
-    // 预设提供商自动生成名称
     let configName = formData.name
-    if (selectedProvider.value !== 'openai_compatible') {
-      const models = getModelOptions(selectedProvider.value)
+    if (hasPresetModels.value) {
+      const models = getChatModelOptions(selectedProvider.value)
       const selectedModel = models.find(m => m.value === formData.model)
       configName = selectedModel ? selectedModel.label : formData.model
     }
@@ -338,14 +340,12 @@
       apiUrl: getDefaultApiUrl(),
       apiKey: formData.apiKey,
       model: formData.model,
-      modelType: 'chat', // 默认为聊天模型
+      modelType: 'chat',
       options: formData.options,
     }
 
-    // 调用AI设置store来保存配置
     await aiSettingsStore.addModel(newModel)
 
-    // 重置表单
     selectedProvider.value = ''
     Object.assign(formData, {
       name: '',
@@ -353,7 +353,15 @@
       apiKey: '',
       apiUrl: '',
       model: '',
-      options: { maxTokens: 4096, temperature: 0.7, timeout: 300000 },
+      options: {
+        maxContextTokens: 128000,
+        temperature: 0.7,
+        timeout: 300000,
+        supportsImages: false,
+        supportsPromptCache: false,
+        contextWindow: 128000,
+        maxTokens: -1,
+      },
       useCustomBaseUrl: false,
       customBaseUrl: '',
     })
@@ -362,12 +370,10 @@
     return true
   }
 
-  // 暂时跳过
   const handleSkip = () => {
     return true
   }
 
-  // 暴露给父组件
   defineExpose({
     selectedProvider,
     handleSaveConfig,
@@ -382,11 +388,15 @@
     align-items: center;
     width: 100%;
     max-width: 500px;
+    height: 100%;
+    overflow: hidden;
   }
 
   .step-header {
     text-align: center;
     margin-bottom: 40px;
+    flex-shrink: 0;
+    overflow: hidden;
   }
 
   .step-title {
@@ -405,13 +415,36 @@
 
   .ai-options {
     width: 100%;
-    margin-bottom: 40px;
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   .provider-container {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .provider-container::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .provider-container::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: var(--border-radius-xs);
+  }
+
+  .provider-container::-webkit-scrollbar-thumb {
+    background: var(--border-200);
+    border-radius: var(--border-radius-xs);
+  }
+
+  .provider-container::-webkit-scrollbar-thumb:hover {
+    background: var(--border-300);
   }
 
   .ai-option {
@@ -425,6 +458,10 @@
     position: relative;
     overflow: hidden;
     will-change: border-color, background-color;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
   }
 
   .ai-option-header {
@@ -434,6 +471,7 @@
     padding: 20px;
     transition: background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: background-color;
+    flex-shrink: 0;
   }
 
   .ai-option:not(.selected):hover .ai-option-header {
@@ -466,8 +504,9 @@
 
   .ai-config-dropdown {
     padding: 0 20px 24px 20px;
-    height: 40vh;
+    flex: 1;
     overflow-y: auto;
+    min-height: 0;
   }
 
   .ai-config-dropdown::-webkit-scrollbar {
@@ -670,5 +709,64 @@
   .form-checkbox:focus {
     outline: 2px solid var(--color-primary-alpha);
     outline-offset: 2px;
+  }
+
+  .checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0;
+  }
+
+  .advanced-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 0;
+    background: none;
+    border: none;
+    color: var(--text-300);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .toggle-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    color: var(--text-400);
+  }
+
+  .toggle-icon.expanded {
+    transform: rotate(90deg);
+  }
+
+  .advanced-options {
+    margin-top: 0;
+    padding-left: 18px;
+  }
+
+  .fade-slide-enter-active,
+  .fade-slide-leave-active {
+    transition:
+      opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+      max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      margin 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .fade-slide-enter-from,
+  .fade-slide-leave-to {
+    opacity: 0;
+    max-height: 0;
+    margin-bottom: 0;
+  }
+
+  .fade-slide-enter-to,
+  .fade-slide-leave-from {
+    opacity: 1;
+    max-height: 200px;
+    margin-bottom: 40px;
   }
 </style>

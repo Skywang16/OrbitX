@@ -57,14 +57,14 @@ pub type TabId = i32;
 pub enum TabState {
     #[serde(rename = "terminal", rename_all = "camelCase")]
     Terminal {
-        id: i32,  // 改用 i32 支持负数
+        id: i32, // 改用 i32 支持负数
         #[serde(rename = "isActive")]
         is_active: bool,
         data: TerminalTabData,
     },
     #[serde(rename = "settings", rename_all = "camelCase")]
     Settings {
-        id: i32,  // 改用 i32 支持负数
+        id: i32, // 改用 i32 支持负数
         #[serde(rename = "isActive")]
         is_active: bool,
         data: SettingsTabData,

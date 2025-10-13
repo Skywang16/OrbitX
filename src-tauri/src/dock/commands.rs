@@ -31,7 +31,6 @@ pub async fn dock_get_tabs(
     }
 }
 
-
 #[tauri::command]
 pub async fn dock_clear_tabs(
     dock_manager: State<'_, crate::dock::DockManager>,

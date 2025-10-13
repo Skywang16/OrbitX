@@ -6,7 +6,7 @@ use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use chacha20poly1305::aead::{Aead, KeyInit};
-use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
+use chacha20poly1305::ChaCha20Poly1305;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
@@ -196,10 +196,10 @@ impl DatabaseManager {
             return Err(DatabaseError::EncryptionNotEnabled);
         }
         let key_bytes = self.key_vault.master_key().await?;
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(&key_bytes));
+        let cipher = ChaCha20Poly1305::new(key_bytes.as_ref().into());
         let mut nonce_bytes = [0u8; NONCE_LEN];
         OsRng.fill_bytes(&mut nonce_bytes);
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce = nonce_bytes.as_ref().into();
         let ciphertext = cipher
             .encrypt(nonce, data.as_bytes())
             .map_err(DatabaseError::from)?;
@@ -217,9 +217,11 @@ impl DatabaseManager {
             return Err(DatabaseError::InvalidEncryptedData);
         }
         let key_bytes = self.key_vault.master_key().await?;
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(&key_bytes));
+        let cipher = ChaCha20Poly1305::new(key_bytes.as_ref().into());
         let (nonce_bytes, payload) = encrypted.split_at(NONCE_LEN);
-        let nonce = Nonce::from_slice(nonce_bytes);
+        let nonce = nonce_bytes
+            .try_into()
+            .map_err(|_| DatabaseError::InvalidEncryptedData)?;
         let plaintext = cipher
             .decrypt(nonce, payload)
             .map_err(DatabaseError::from)?;
@@ -387,14 +389,10 @@ impl KeyVault {
             let output = std::process::Command::new("ioreg")
                 .args(["-rd1", "-c", "IOPlatformExpertDevice"])
                 .output()
-                .map_err(|e| {
-                    DatabaseError::internal(format!("获取设备UUID失败: {}", e))
-                })?;
+                .map_err(|e| DatabaseError::internal(format!("获取设备UUID失败: {}", e)))?;
 
             if !output.status.success() {
-                return Err(DatabaseError::internal(
-                    "ioreg命令执行失败".to_string(),
-                ));
+                return Err(DatabaseError::internal("ioreg命令执行失败".to_string()));
             }
 
             let output_str = String::from_utf8_lossy(&output.stdout);
@@ -419,14 +417,10 @@ impl KeyVault {
             let output = std::process::Command::new("wmic")
                 .args(["csproduct", "get", "UUID"])
                 .output()
-                .map_err(|e| {
-                    DatabaseError::internal(format!("获取设备UUID失败: {}", e))
-                })?;
+                .map_err(|e| DatabaseError::internal(format!("获取设备UUID失败: {}", e)))?;
 
             if !output.status.success() {
-                return Err(DatabaseError::internal(
-                    "wmic命令执行失败".to_string(),
-                ));
+                return Err(DatabaseError::internal("wmic命令执行失败".to_string()));
             }
 
             let output_str = String::from_utf8_lossy(&output.stdout);

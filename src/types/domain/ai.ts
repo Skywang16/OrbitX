@@ -18,18 +18,15 @@ export type ModelType = 'chat' | 'embedding'
 
 export interface AIModelConfig {
   id: string
-  name: string
   provider: AIProvider
   apiUrl: string
   apiKey: string
   model: string
   modelType: ModelType
-  enabled?: boolean
   options?: {
-    maxTokens?: number
+    maxContextTokens?: number
     temperature?: number
     timeout?: number
-    customConfig?: string
   }
   createdAt?: Date
   updatedAt?: Date

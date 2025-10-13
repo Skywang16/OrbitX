@@ -3,7 +3,7 @@
   import type { AIModelTestConnectionInput } from '@/api/ai/types'
 
   import { aiApi } from '@/api'
-  import { reactive, ref, computed, onMounted, watch } from 'vue'
+  import { reactive, ref, computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useLLMRegistry } from '@/composables/useLLMRegistry'
 
@@ -22,284 +22,133 @@
   const { t } = useI18n()
 
   // 使用后端LLM注册表
-  const { providerOptions, getChatModelOptions, loadProviders } = useLLMRegistry()
+  const { providers, providerOptions, getChatModelOptions, loadProviders } = useLLMRegistry()
 
-  // 配置模式：preset（预设）或 openai_compatible（OpenAI兼容）——默认OpenAI兼容，避免误判
-  const configMode = ref<'preset' | 'openai_compatible'>('openai_compatible')
-  const selectedPreset = ref<string>('')
+  const selectedProvider = ref<string>('')
+  const errors = ref<Record<string, string>>({})
+  const isSubmitting = ref(false)
+  const isTesting = ref(false)
 
-  // 组件挂载时确保数据已加载
-  onMounted(async () => {
-    if (providerOptions.value.length === 0) {
-      await loadProviders()
-    }
-  })
-
-  // 表单数据
   const formData = reactive({
-    name: '',
-    provider: 'openai_compatible' as AIModelConfig['provider'],
+    provider: '' as AIModelConfig['provider'],
     apiUrl: '',
     apiKey: '',
     model: '',
     modelType: 'chat' as AIModelConfig['modelType'],
     options: {
-      maxTokens: 4096,
+      maxContextTokens: 128000,
       temperature: 0.7,
       timeout: 300000,
+      supportsImages: false,
+      supportsPromptCache: false,
+      contextWindow: 128000,
+      maxTokens: -1, // -1 表示使用模型默认值
     },
     useCustomBaseUrl: false,
     customBaseUrl: '',
   })
 
-  // 表单验证状态
-  const errors = ref<Record<string, string>>({})
-  const isSubmitting = ref(false)
-  const isTesting = ref(false)
+  // 高级选项展开状态
+  const showAdvancedOptions = ref(false)
 
-  // 计算属性：是否为预设模式
-  const isPresetMode = computed(() => configMode.value === 'preset')
-
-  // 计算属性：当前预设的可用模型
-  const availableModels = computed(() => {
-    if (isPresetMode.value && selectedPreset.value) {
-      // 只返回聊天模型
-      return getChatModelOptions(selectedPreset.value)
-    }
-    return []
+  // 当前服务商信息
+  const providerInfo = computed(() => {
+    return providers.value.find(p => p.providerType.toLowerCase() === selectedProvider.value.toLowerCase())
   })
-
-  // 计算属性：是否有可用模型（除了提示文本）
-  const hasValidModels = computed(() => {
-    if (!isPresetMode.value || !selectedPreset.value) return false
-    const models = availableModels.value
-    // 如果只有一个模型且其 value 为空，说明是提示文本
-    return models.length > 0 && !(models.length === 1 && models[0].value === '')
+  // 是否有预设模型
+  const hasPresetModels = computed(() => {
+    return providerInfo.value?.presetModels && providerInfo.value.presetModels.length > 0
   })
+  // 可用模型列表
+  const availableModels = computed(() => (hasPresetModels.value ? getChatModelOptions(selectedProvider.value) : []))
 
-  // 初始化表单数据
+  onMounted(() => loadProviders())
+
+  // 初始化
   if (props.model) {
-    Object.assign(formData, {
-      name: props.model.name,
-      provider: props.model.provider,
-      apiUrl: props.model.apiUrl,
-      apiKey: props.model.apiKey,
-      model: props.model.model,
-      modelType: 'chat',
-      options: {
-        maxTokens: props.model.options?.maxTokens || 4096,
-        temperature: props.model.options?.temperature || 0.7,
-        timeout: props.model.options?.timeout || 300000,
-      },
+    Object.assign(formData, props.model, {
+      options: props.model.options || formData.options,
       useCustomBaseUrl: false,
       customBaseUrl: '',
     })
-
-    // 简化：仅依据 provider 判断模式
-    const modelProvider = props.model.provider
-    const modelApiUrl = props.model.apiUrl
-
-    if (modelProvider === 'openai_compatible') {
-      configMode.value = 'openai_compatible'
-      selectedPreset.value = ''
-    } else {
-      configMode.value = 'preset'
-      selectedPreset.value = String(modelProvider)
-      // 检查是否使用了自定义 base URL
-      const preset = providerOptions.value.find(p => p.value === String(modelProvider))
-      if (preset && modelApiUrl !== preset.apiUrl) {
-        formData.useCustomBaseUrl = true
-        formData.customBaseUrl = modelApiUrl
-      }
-    }
+    selectedProvider.value = String(props.model.provider)
   }
 
-  // 监听模型类型变化，重置模型选择
-  watch(
-    () => formData.modelType,
-    () => {
-      if (isPresetMode.value && selectedPreset.value) {
-        formData.model = ''
-        formData.name = ''
-        // 重新触发预设选择逻辑
-        handlePresetChange(selectedPreset.value)
-      }
+  const handleProviderChange = (value: string) => {
+    selectedProvider.value = value
+    formData.provider = value as AIModelConfig['provider']
+
+    const info = providerInfo.value
+    if (!info) return
+
+    // 设置默认 API URL
+    formData.apiUrl = info.defaultApiUrl
+
+    // 如果有预设模型，自动选择第一个
+    const models = getChatModelOptions(value)
+    if (models.length > 0) {
+      formData.model = models[0].value
+    } else {
+      formData.model = ''
     }
-  )
 
-  // 监听配置模式变化
-  const handleConfigModeChange = (mode: 'preset' | 'openai_compatible') => {
-    configMode.value = mode
-
-    // 清空所有表单数据
-    selectedPreset.value = ''
-    formData.name = ''
-    formData.apiUrl = ''
-    formData.apiKey = ''
-    formData.model = ''
-    formData.options.maxTokens = 4096
-    formData.options.temperature = 0.7
-    formData.options.timeout = 300000
+    // 重置自定义 URL 选项
     formData.useCustomBaseUrl = false
     formData.customBaseUrl = ''
-    errors.value = {}
-
-    // 设置对应模式的 provider
-    if (mode === 'openai_compatible') {
-      formData.provider = 'openai_compatible'
-    }
   }
 
-  // 监听预设选择变化
-  const handlePresetChange = (presetValue: string) => {
-    selectedPreset.value = presetValue
-    const preset = providerOptions.value.find(p => p.value === presetValue)
-    if (preset) {
-      // 预设模式下，provider = 选中的预设值
-      formData.provider = presetValue as AIModelConfig['provider']
-      // 如果使用自定义 base URL，则使用自定义的，否则使用预设的
-      if (!formData.useCustomBaseUrl) {
-        formData.apiUrl = preset.apiUrl
-      }
-
-      // 只获取聊天模型选项
-      const models = getChatModelOptions(presetValue)
-
-      if (models.length > 0 && models[0].value !== '') {
-        formData.model = models[0].value // 默认选择第一个模型
-        // 名称直接等于选中模型的名字
-        formData.name = models[0].label
-      } else {
-        // 没有有效模型时，清空模型和名称
-        formData.model = ''
-        formData.name = ''
-      }
-    }
+  const handleModelChange = (value: string) => {
+    // Model selection updated
   }
 
-  // 监听自定义 base URL 复选框变化
   const handleUseCustomBaseUrlChange = () => {
     if (formData.useCustomBaseUrl) {
-      // 勾选时，清空 customBaseUrl，让用户输入
       formData.customBaseUrl = ''
       formData.apiUrl = ''
     } else {
-      // 取消勾选时，恢复为预设的 base URL
-      const preset = providerOptions.value.find(p => p.value === selectedPreset.value)
-      if (preset) {
-        formData.apiUrl = preset.apiUrl
-      }
+      formData.apiUrl = providerInfo.value?.defaultApiUrl || ''
       formData.customBaseUrl = ''
     }
-    // 清空相关错误
-    delete errors.value.customBaseUrl
   }
 
-  // 监听自定义 base URL 输入变化
-  const handleCustomBaseUrlInput = () => {
-    if (formData.useCustomBaseUrl) {
-      formData.apiUrl = formData.customBaseUrl
-    }
-  }
-
-  // 更换模型时，若处于预设模式，名称=模型名称
-  const handleModelChange = (modelValue: string) => {
-    if (configMode.value !== 'preset') return
-
-    // 只获取聊天模型选项
-    const models = getChatModelOptions(selectedPreset.value)
-
-    const modelInfo = models.find(m => m.value === modelValue)
-    if (modelInfo) {
-      formData.name = modelInfo.label
-    }
-  }
-
-  // 表单验证
   const validateForm = () => {
     errors.value = {}
+    if (!selectedProvider.value) errors.value.provider = t('ai_model.validation.preset_required')
+    if (!formData.apiKey.trim()) errors.value.apiKey = t('ai_model.validation.api_key_required')
 
-    if (!formData.apiKey.trim()) {
-      errors.value.apiKey = t('ai_model.validation.api_key_required')
-    }
-
-    if (isPresetMode.value) {
-      if (!selectedPreset.value) {
-        errors.value.preset = t('ai_model.validation.preset_required')
-      }
-      // 只有在有有效模型时才验证模型选择
-      if (hasValidModels.value && !formData.model.trim()) {
-        errors.value.model = t('ai_model.validation.model_required')
-      }
-      // 验证自定义 base URL
-      if (formData.useCustomBaseUrl && !formData.customBaseUrl.trim()) {
+    if (hasPresetModels.value) {
+      if (!formData.model) errors.value.model = t('ai_model.validation.model_required')
+      if (formData.useCustomBaseUrl && !formData.customBaseUrl) {
         errors.value.customBaseUrl = t('ai_model.validation.custom_base_url_required')
       }
     } else {
-      if (!formData.name.trim()) {
-        errors.value.name = t('ai_model.validation.config_name_required')
-      }
-      if (!formData.apiUrl.trim()) {
-        errors.value.apiUrl = t('ai_model.validation.api_url_required')
-      }
-      if (!formData.model.trim()) {
-        errors.value.model = t('ai_model.validation.model_name_required')
-      }
+      if (!formData.apiUrl) errors.value.apiUrl = t('ai_model.validation.api_url_required')
+      if (!formData.model) errors.value.model = t('ai_model.validation.model_name_required')
     }
 
     return Object.keys(errors.value).length === 0
   }
 
-  // 处理提交
   const handleSubmit = () => {
     if (!validateForm()) return
 
-    // 在预设模式下，如果没有有效模型，不允许提交
-    if (isPresetMode.value && !hasValidModels.value) {
-      return
-    }
-
     isSubmitting.value = true
-    try {
-      const submitData = { ...formData }
-      if (isPresetMode.value) {
-        if (selectedPreset.value) {
-          submitData.provider = selectedPreset.value as AIModelConfig['provider']
-        }
-        // 如果使用自定义 base URL，确保 apiUrl 是自定义的
-        if (formData.useCustomBaseUrl && formData.customBaseUrl) {
-          submitData.apiUrl = formData.customBaseUrl
-        }
-        // 若名称为空，使用当前模型的label
-        if (!submitData.name.trim()) {
-          // 只获取聊天模型选项
-          const models = getChatModelOptions(selectedPreset.value)
-          const modelInfo = models.find(m => m.value === submitData.model)
-          if (modelInfo) submitData.name = modelInfo.label
-        }
-      } else {
-        // OpenAI兼容模式
-        submitData.provider = 'openai_compatible'
-      }
-      emit('submit', submitData)
-    } finally {
-      isSubmitting.value = false
-    }
+    const submitData = { ...formData }
+    if (formData.useCustomBaseUrl) submitData.apiUrl = formData.customBaseUrl
+    emit('submit', submitData)
+    isSubmitting.value = false
   }
 
-  // 处理取消
   const handleCancel = () => {
     emit('cancel')
   }
 
-  // 测试连接
   const handleTestConnection = async () => {
     if (!validateForm()) return
 
     isTesting.value = true
     try {
       const testConfig: AIModelTestConnectionInput = {
-        name: formData.name || 'Test Model',
         provider: formData.provider,
         apiUrl: formData.apiUrl,
         apiKey: formData.apiKey,
@@ -344,111 +193,78 @@
 
       <div class="form-row">
         <div class="form-group full-width">
-          <label class="form-label">{{ t('ai_model.config_type') }}</label>
-          <div class="tab-switcher">
-            <button
-              type="button"
-              class="tab-button"
-              :class="{ active: configMode === 'preset' }"
-              @click="handleConfigModeChange('preset')"
-            >
-              {{ t('ai_model.preset_provider') }}
-            </button>
-            <button
-              type="button"
-              class="tab-button"
-              :class="{ active: configMode === 'openai_compatible' }"
-              @click="handleConfigModeChange('openai_compatible')"
-            >
-              {{ t('ai_model.custom_config') }}
-            </button>
-            <div class="tab-indicator" :class="{ 'move-right': configMode === 'openai_compatible' }"></div>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="isPresetMode" class="form-row">
-        <div class="form-group">
           <label class="form-label">{{ t('ai_model.provider') }}</label>
           <x-select
-            v-model="selectedPreset"
+            v-model="selectedProvider"
             :options="providerOptions.map(p => ({ value: p.value, label: p.label }))"
             :placeholder="t('ai_model.select_provider')"
-            @update:modelValue="handlePresetChange"
+            @update:modelValue="handleProviderChange"
           />
-          <div v-if="errors.preset" class="error-message">{{ errors.preset }}</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('ai_model.model') }}</label>
-          <x-select
-            v-if="hasValidModels"
-            v-model="formData.model"
-            :options="availableModels"
-            :placeholder="t('ai_model.select_model')"
-            @update:modelValue="handleModelChange"
-          />
-          <x-select
-            v-else-if="availableModels.length > 0 && availableModels[0].value === ''"
-            :model-value="''"
-            :options="availableModels"
-            disabled
-            :placeholder="availableModels[0].label"
-          />
-          <input
-            v-else
-            type="text"
-            class="form-input disabled"
-            :placeholder="t('ai_model.select_provider_first')"
-            disabled
-          />
-          <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
+          <div v-if="errors.provider" class="error-message">{{ errors.provider }}</div>
         </div>
       </div>
 
-      <div v-if="isPresetMode" class="form-row">
-        <div class="form-group full-width">
-          <label class="form-label checkbox-label">
-            <input
-              type="checkbox"
-              v-model="formData.useCustomBaseUrl"
-              @change="handleUseCustomBaseUrlChange"
-              class="form-checkbox"
-            />
-            <span>{{ t('ai_model.use_custom_base_url') }}</span>
-          </label>
-        </div>
-      </div>
-
-      <div v-if="isPresetMode && formData.useCustomBaseUrl" class="form-row">
-        <div class="form-group full-width">
-          <label class="form-label">{{ t('ai_model.custom_base_url') }}</label>
-          <input
-            v-model="formData.customBaseUrl"
-            type="url"
-            class="form-input"
-            :class="{ error: errors.customBaseUrl }"
-            :placeholder="t('ai_model.custom_base_url_placeholder')"
-            @input="handleCustomBaseUrlInput"
-          />
-          <div v-if="errors.customBaseUrl" class="error-message">{{ errors.customBaseUrl }}</div>
-        </div>
-      </div>
-
-      <template v-if="!isPresetMode">
+      <template v-if="hasPresetModels">
         <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">{{ t('ai_model.config_name') }}</label>
-            <input
-              v-model="formData.name"
-              type="text"
-              class="form-input"
-              :class="{ error: errors.name }"
-              :placeholder="t('ai_model.config_name_placeholder')"
+          <div class="form-group full-width">
+            <label class="form-label">{{ t('ai_model.model') }}</label>
+            <x-select
+              v-model="formData.model"
+              :options="availableModels"
+              :placeholder="t('ai_model.select_model')"
+              @update:modelValue="handleModelChange"
             />
-            <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
+            <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
           </div>
-          <div class="form-group">
-            <label class="form-label">{{ t('ai_model.model_name') }}</label>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group full-width">
+            <label class="form-label checkbox-label">
+              <input
+                type="checkbox"
+                v-model="formData.useCustomBaseUrl"
+                @change="handleUseCustomBaseUrlChange"
+                class="form-checkbox"
+              />
+              <span>{{ t('ai_model.use_custom_base_url') }}</span>
+            </label>
+          </div>
+        </div>
+
+        <div v-if="formData.useCustomBaseUrl" class="form-row">
+          <div class="form-group full-width">
+            <label class="form-label">{{ t('ai_model.custom_base_url') }}</label>
+            <input
+              v-model="formData.customBaseUrl"
+              type="url"
+              class="form-input"
+              :class="{ error: errors.customBaseUrl }"
+              :placeholder="t('ai_model.custom_base_url_placeholder')"
+            />
+            <div v-if="errors.customBaseUrl" class="error-message">{{ errors.customBaseUrl }}</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group full-width">
+            <label class="form-label">{{ t('ai_model.api_key') }}</label>
+            <input
+              v-model="formData.apiKey"
+              type="password"
+              class="form-input"
+              :class="{ error: errors.apiKey }"
+              :placeholder="t('ai_model.api_key_placeholder')"
+            />
+            <div v-if="errors.apiKey" class="error-message">{{ errors.apiKey }}</div>
+          </div>
+        </div>
+      </template>
+
+      <template v-else-if="selectedProvider">
+        <div class="form-row">
+          <div class="form-group full-width">
+            <label class="form-label">{{ t('ai_model.model_name') }} *</label>
             <input
               v-model="formData.model"
               type="text"
@@ -459,9 +275,10 @@
             <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
           </div>
         </div>
+
         <div class="form-row">
           <div class="form-group full-width">
-            <label class="form-label">{{ t('ai_model.api_url') }}</label>
+            <label class="form-label">{{ t('ai_model.api_url') }} *</label>
             <input
               v-model="formData.apiUrl"
               type="url"
@@ -472,35 +289,88 @@
             <div v-if="errors.apiUrl" class="error-message">{{ errors.apiUrl }}</div>
           </div>
         </div>
+
+        <div class="form-row">
+          <div class="form-group full-width">
+            <label class="form-label">{{ t('ai_model.api_key') }} *</label>
+            <input
+              v-model="formData.apiKey"
+              type="password"
+              class="form-input"
+              :class="{ error: errors.apiKey }"
+              :placeholder="t('ai_model.api_key_placeholder')"
+            />
+            <div v-if="errors.apiKey" class="error-message">{{ errors.apiKey }}</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group full-width">
+            <label class="form-label">{{ t('ai_model.context_window') }} *</label>
+            <input
+              v-model.number="formData.options.contextWindow"
+              type="number"
+              class="form-input"
+              placeholder="128000"
+              min="1000"
+              max="2000000"
+            />
+            <div class="form-description">{{ t('ai_model.context_window_description') }}</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group full-width">
+            <button type="button" class="advanced-toggle" @click="showAdvancedOptions = !showAdvancedOptions">
+              <svg
+                class="toggle-icon"
+                :class="{ expanded: showAdvancedOptions }"
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M4.5 3L7.5 6L4.5 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+              <span>{{ t('ai_model.advanced_options') }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="showAdvancedOptions" class="advanced-options">
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label class="form-label">{{ t('ai_model.max_output_tokens') }}</label>
+              <input
+                v-model.number="formData.options.maxTokens"
+                type="number"
+                class="form-input"
+                placeholder="-1"
+                min="-1"
+                max="200000"
+              />
+              <div class="form-description">{{ t('ai_model.max_output_tokens_description') }}</div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label class="form-label">{{ t('ai_model.feature_support') }}</label>
+              <div class="checkbox-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="formData.options.supportsImages" class="form-checkbox" />
+                  <span>{{ t('ai_model.supports_images') }}</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="formData.options.supportsPromptCache" class="form-checkbox" />
+                  <span>{{ t('ai_model.supports_prompt_cache') }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
       </template>
-
-      <div class="form-row">
-        <div class="form-group full-width">
-          <label class="form-label">{{ t('ai_model.api_key') }}</label>
-          <input
-            v-model="formData.apiKey"
-            type="password"
-            class="form-input"
-            :class="{ error: errors.apiKey }"
-            :placeholder="t('ai_model.api_key_placeholder')"
-          />
-          <div v-if="errors.apiKey" class="error-message">{{ errors.apiKey }}</div>
-        </div>
-      </div>
-
-      <div v-if="!isPresetMode" class="form-row">
-        <div class="form-group full-width">
-          <label class="form-label">{{ t('ai_model.max_tokens') }}</label>
-          <input
-            v-model.number="formData.options.maxTokens"
-            type="number"
-            class="form-input"
-            :placeholder="t('ai_model.max_tokens_placeholder')"
-            min="1"
-            max="100000"
-          />
-        </div>
-      </div>
     </form>
   </x-modal>
 </template>
@@ -559,74 +429,6 @@
     box-shadow: 0 0 0 2px rgba(244, 71, 71, 0.1);
   }
 
-  .form-input.disabled {
-    background-color: var(--bg-500);
-    color: var(--text-400);
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
-
-  .form-input::placeholder {
-    color: var(--text-400);
-  }
-
-  .tab-switcher {
-    position: relative;
-    display: flex;
-    background-color: var(--bg-500);
-    border-radius: var(--border-radius);
-    padding: 4px;
-    border: none;
-  }
-
-  .tab-button {
-    flex: 1;
-    position: relative;
-    z-index: 2;
-    padding: var(--spacing-md) var(--spacing-lg);
-    border: none;
-    background: transparent;
-    color: var(--text-400);
-    font-size: var(--font-size-sm);
-    font-family: var(--font-family);
-    font-weight: 500;
-    cursor: pointer;
-    transition: color var(--x-duration-normal) var(--x-ease-out);
-    user-select: none;
-    border-radius: var(--border-radius-sm);
-    text-align: center;
-  }
-
-  .tab-button:hover {
-    color: var(--text-300);
-  }
-
-  .tab-button.active {
-    color: var(--text-100);
-  }
-
-  .tab-button:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
-  }
-
-  .tab-indicator {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    width: calc(50% - 4px);
-    height: calc(100% - 8px);
-    background-color: var(--bg-300);
-    border-radius: var(--border-radius-sm);
-    transition: transform var(--x-duration-normal) var(--x-ease-out);
-    z-index: 1;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  }
-
-  .tab-indicator.move-right {
-    transform: translateX(100%);
-  }
-
   .error-message {
     font-size: var(--font-size-xs);
     color: var(--color-error);
@@ -635,11 +437,6 @@
     align-items: center;
     gap: var(--spacing-xs);
     line-height: 1.4;
-  }
-
-  .error-message::before {
-    font-size: 12px;
-    flex-shrink: 0;
   }
 
   .modal-footer {
@@ -681,8 +478,40 @@
     accent-color: var(--color-primary);
   }
 
-  .form-checkbox:focus {
-    outline: 2px solid var(--color-primary-alpha);
-    outline-offset: 2px;
+  .checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) 0;
+  }
+
+  .advanced-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 0;
+    background: none;
+    border: none;
+    color: var(--text-300);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .toggle-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    color: var(--text-400);
+  }
+
+  .toggle-icon.expanded {
+    transform: rotate(90deg);
+  }
+
+  .advanced-options {
+    margin-top: 0;
+    padding-left: 18px;
   }
 </style>

@@ -4,10 +4,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::llm::{
     error::{LlmError, LlmProviderResult, LlmResult},
-    providers::ProviderFactory,
+    provider_registry::ProviderRegistry,
     types::{
-        EmbeddingRequest, EmbeddingResponse, LLMProviderConfig, LLMProviderType, LLMRequest,
-        LLMResponse, LLMStreamChunk,
+        EmbeddingRequest, EmbeddingResponse, LLMProviderConfig, LLMRequest, LLMResponse,
+        LLMStreamChunk,
     },
 };
 use crate::storage::repositories::RepositoryManager;
@@ -31,16 +31,13 @@ impl LLMService {
                 model_id: model_id.to_string(),
             })?;
 
-        let provider_str = model.provider.to_string().to_lowercase();
-        let provider_type = match provider_str.as_str() {
-            "anthropic" => LLMProviderType::Anthropic,
-            "openai_compatible" => LLMProviderType::OpenAiCompatible,
-            _ => {
-                return Err(LlmError::UnsupportedProvider {
-                    provider: model.provider.to_string(),
-                })
-            }
-        };
+        let provider_type = model.provider.as_str().to_string();
+
+        if !ProviderRegistry::global().supports(&provider_type) {
+            return Err(LlmError::UnsupportedProvider {
+                provider: provider_type.clone(),
+            });
+        }
 
         let options = match model.options {
             Some(value) => Some(
@@ -70,7 +67,9 @@ impl LLMService {
         self.validate_request(&request)?;
         let original_model_id = request.model.clone();
         let config = self.get_provider_config(&request.model).await?;
-        let provider = ProviderFactory::create_provider(config.clone()).map_err(LlmError::from)?;
+        let provider = ProviderRegistry::global()
+            .create(config.clone())
+            .map_err(LlmError::from)?;
 
         let mut actual_request = request.clone();
         actual_request.model = config.model.clone();
@@ -106,7 +105,9 @@ impl LLMService {
         self.validate_request(&request)?;
         let original_model_id = request.model.clone();
         let config = self.get_provider_config(&request.model).await?;
-        let provider = ProviderFactory::create_provider(config.clone()).map_err(LlmError::from)?;
+        let provider = ProviderRegistry::global()
+            .create(config.clone())
+            .map_err(LlmError::from)?;
 
         let mut actual_request = request.clone();
         actual_request.model = config.model.clone();
@@ -158,7 +159,9 @@ impl LLMService {
     ) -> LlmResult<EmbeddingResponse> {
         let original_model_id = request.model.clone();
         let config = self.get_provider_config(&request.model).await?;
-        let provider = ProviderFactory::create_provider(config.clone()).map_err(LlmError::from)?;
+        let provider = ProviderRegistry::global()
+            .create(config.clone())
+            .map_err(LlmError::from)?;
 
         let mut actual_request = request.clone();
         actual_request.model = config.model.clone();

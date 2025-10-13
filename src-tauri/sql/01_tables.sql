@@ -4,13 +4,11 @@
 -- AI模型配置表
 CREATE TABLE IF NOT EXISTS ai_models (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
     provider TEXT NOT NULL,
     api_url TEXT,
     api_key_encrypted TEXT,
     model_name TEXT NOT NULL,
     model_type TEXT DEFAULT 'chat' CHECK (model_type IN ('chat', 'embedding')),
-    enabled BOOLEAN DEFAULT TRUE,
     config_json TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

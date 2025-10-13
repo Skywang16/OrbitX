@@ -7,7 +7,6 @@ use crate::agent::persistence::{AgentPersistence, ConversationSummary};
 use crate::agent::prompt::components::conversation_summary::{
     build_conversation_summary_user_prompt, CONVERSATION_SUMMARY_SYSTEM_PROMPT,
 };
-use crate::llm::registry::LLMRegistry;
 use crate::llm::service::LLMService;
 use crate::llm::types::{LLMMessage, LLMMessageContent, LLMRequest, LLMResponse};
 use crate::storage::repositories::RepositoryManager;
@@ -30,7 +29,6 @@ pub struct ConversationSummarizer {
     conversation_id: i64,
     persistence: Arc<AgentPersistence>,
     repositories: Arc<RepositoryManager>,
-    llm_registry: Arc<LLMRegistry>,
 }
 
 impl ConversationSummarizer {
@@ -38,13 +36,11 @@ impl ConversationSummarizer {
         conversation_id: i64,
         persistence: Arc<AgentPersistence>,
         repositories: Arc<RepositoryManager>,
-        llm_registry: Arc<LLMRegistry>,
     ) -> Self {
         Self {
             conversation_id,
             persistence,
             repositories,
-            llm_registry,
         }
     }
 
@@ -256,9 +252,28 @@ impl ConversationSummarizer {
     }
 
     fn lookup_context_window(&self, model_id: &str) -> u32 {
-        self.llm_registry
-            .get_model_max_context(model_id)
-            .unwrap_or(128_000)
+        // 同步获取模型配置中的 context window
+        let model_result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                self.repositories
+                    .ai_models()
+                    .find_by_string_id(model_id)
+                    .await
+            })
+        });
+
+        if let Ok(Some(model)) = model_result {
+            if let Some(options) = model.options {
+                if let Some(max_tokens) = options.get("maxContextTokens") {
+                    if let Some(value) = max_tokens.as_u64() {
+                        return value as u32;
+                    }
+                }
+            }
+        }
+
+        // 默认值：大多数现代 LLM 支持 128K tokens
+        128_000
     }
 }
 

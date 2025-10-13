@@ -1,6 +1,6 @@
 /*!
  * Workspace Rules Management
- * 
+ *
  * 项目规则文件的查找和管理
  * 从 agent/context/project_context.rs 迁移而来
  */
@@ -9,7 +9,7 @@ use super::types::RULES_FILES;
 use std::path::PathBuf;
 
 /// 获取指定目录下所有存在的规则文件列表
-/// 
+///
 /// 按优先级顺序返回存在的规则文件名
 pub fn get_available_rules_files<P: Into<PathBuf>>(project_root: P) -> Vec<String> {
     let root: PathBuf = project_root.into();

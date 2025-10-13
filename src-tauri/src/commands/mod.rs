@@ -173,9 +173,6 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::llm::commands::llm_get_available_models,
         crate::llm::commands::llm_test_model_connection,
         crate::llm::commands::llm_get_providers,
-        crate::llm::commands::llm_get_provider_models,
-        crate::llm::commands::llm_get_model_info,
-        crate::llm::commands::llm_check_model_feature,
         // Agent 执行器命令（注册以供前端调用）
         crate::agent::core::commands::agent_execute_task,
         crate::agent::core::commands::agent_pause_task,

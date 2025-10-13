@@ -142,6 +142,14 @@
     "all_models": "所有模型",
     "chat": "聊天",
     "add_chat_model": "添加AI模型",
+    "context_window": "上下文窗口 (tokens)",
+    "context_window_description": "模型能处理的最大上下文长度",
+    "max_output_tokens": "最大输出 (tokens)",
+    "max_output_tokens_description": "单次请求的最大输出长度，-1 表示使用模型默认值",
+    "advanced_options": "高级选项",
+    "feature_support": "功能支持",
+    "supports_images": "支持图片输入",
+    "supports_prompt_cache": "支持提示词缓存",
     "validation": {
       "api_key_required": "API Key 是必填项",
       "preset_required": "请选择一个预设提供商",
@@ -224,10 +232,6 @@
     "project_rules_description": "选择要优先使用的项目规则文件",
     "click_to_switch": "点击切换",
     "no_rules_files": "当前目录没有找到规则文件"
-  },
-  "ai_model_form": {
-    "api_url": "API地址",
-    "api_key": "API密钥"
   },
   "message_list": {
     "start_conversation": "开始对话吧",

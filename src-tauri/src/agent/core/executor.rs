@@ -11,7 +11,9 @@
 
 use crate::agent::config::CompactionConfig;
 use crate::agent::config::TaskExecutionConfig;
-use crate::agent::context::{ContextBuilder, ConversationSummarizer, ProjectContextLoader, SummaryResult};
+use crate::agent::context::{
+    ContextBuilder, ConversationSummarizer, ProjectContextLoader, SummaryResult,
+};
 use crate::agent::core::chain::ToolChain;
 use crate::agent::core::context::{LLMResponseParsed, TaskContext, ToolCallResult};
 use crate::agent::core::iteration_outcome::IterationOutcome;
@@ -38,7 +40,6 @@ use crate::agent::tools::{
 };
 use crate::agent::types::{Agent, Context as AgentContext, Task, ToolSchema};
 use crate::agent::ui::AgentUiPersistence;
-use crate::llm::registry::LLMRegistry;
 use crate::llm::{LLMMessage, LLMMessageContent, LLMMessagePart};
 use crate::storage::repositories::RepositoryManager;
 use crate::terminal::TerminalContextService;
@@ -227,7 +228,6 @@ struct TaskExecutorInner {
     repositories: Arc<RepositoryManager>,
     agent_persistence: Arc<AgentPersistence>,
     ui_persistence: Arc<AgentUiPersistence>,
-    llm_registry: Arc<LLMRegistry>,
     tool_logger: Arc<ToolExecutionLogger>,
     context_builder_cache: Arc<RwLock<HashMap<i64, Arc<ContextBuilder>>>>,
     active_tasks: Arc<RwLock<HashMap<String, Arc<TaskContext>>>>,
@@ -244,7 +244,6 @@ impl TaskExecutor {
         repositories: Arc<RepositoryManager>,
         agent_persistence: Arc<AgentPersistence>,
         ui_persistence: Arc<AgentUiPersistence>,
-        llm_registry: Arc<LLMRegistry>,
         terminal_context_service: Arc<TerminalContextService>,
     ) -> Self {
         let tool_logger = Arc::new(ToolExecutionLogger::new(
@@ -257,7 +256,6 @@ impl TaskExecutor {
             repositories,
             agent_persistence,
             ui_persistence,
-            llm_registry,
             tool_logger,
             context_builder_cache: Arc::new(RwLock::new(HashMap::new())),
             active_tasks: Arc::new(RwLock::new(HashMap::new())),
@@ -275,10 +273,6 @@ impl TaskExecutor {
 
     pub(crate) fn repositories(&self) -> Arc<RepositoryManager> {
         Arc::clone(&self.inner().repositories)
-    }
-
-    pub(crate) fn llm_registry(&self) -> Arc<LLMRegistry> {
-        Arc::clone(&self.inner().llm_registry)
     }
 
     pub(crate) fn tool_logger(&self) -> Arc<ToolExecutionLogger> {
@@ -311,14 +305,18 @@ impl TaskExecutor {
         params: ExecuteTaskParams,
         progress_channel: Channel<TaskProgressPayload>,
     ) -> TaskExecutorResult<()> {
-        info!("[MODEL_SELECTION] execute_task called with conversation_id: {}, model_id: {:?}", 
-            params.conversation_id, params.model_id);
-        
+        info!(
+            "[MODEL_SELECTION] execute_task called with conversation_id: {}, model_id: {:?}",
+            params.conversation_id, params.model_id
+        );
+
         // 1. Check memory cache first
         if let Some(existing_ctx) = self.conversation_context(params.conversation_id).await {
-            info!("[MODEL_SELECTION] Found existing context for conversation {}, using model_id: {}", 
-                params.conversation_id, params.model_id);
-            
+            info!(
+                "[MODEL_SELECTION] Found existing context for conversation {}, using model_id: {}",
+                params.conversation_id, params.model_id
+            );
+
             let status = existing_ctx.status().await;
             let is_actually_running =
                 matches!(status, AgentTaskStatus::Running | AgentTaskStatus::Paused);
@@ -1043,12 +1041,8 @@ impl TaskExecutor {
         }
 
         let llm_messages = convert_execution_messages(&messages);
-        let summarizer = ConversationSummarizer::new(
-            conversation_id,
-            persistence.clone(),
-            self.repositories(),
-            self.llm_registry(),
-        );
+        let summarizer =
+            ConversationSummarizer::new(conversation_id, persistence.clone(), self.repositories());
 
         let model_id = match model_override {
             Some(model) => model,
@@ -1083,11 +1077,39 @@ impl TaskExecutor {
         Arc::clone(&self.inner().ui_persistence)
     }
 
+    /// 从数据库获取模型的 context window 大小
+    async fn get_model_context_window(&self, model_id: &str) -> Option<u32> {
+        let model = self
+            .repositories()
+            .ai_models()
+            .find_by_string_id(model_id)
+            .await
+            .ok()??;
+
+        // 从 options JSON 中读取 maxContextTokens
+        if let Some(options) = model.options {
+            if let Some(max_tokens) = options.get("maxContextTokens") {
+                if let Some(value) = max_tokens.as_u64() {
+                    return Some(value as u32);
+                }
+            }
+        }
+
+        None
+    }
+
     /// ReAct循环执行（核心逻辑）
     /// ReAct循环执行（重构版：简化逻辑，移除idle计数安全网）
-    pub(crate) async fn run_react_loop(&self, context: Arc<TaskContext>, model_id: String) -> TaskExecutorResult<()> {
+    pub(crate) async fn run_react_loop(
+        &self,
+        context: Arc<TaskContext>,
+        model_id: String,
+    ) -> TaskExecutorResult<()> {
         info!("Starting ReAct loop for task: {}", context.task_id);
-        info!("[MODEL_SELECTION] run_react_loop using model_id: {}", model_id);
+        info!(
+            "[MODEL_SELECTION] run_react_loop using model_id: {}",
+            model_id
+        );
 
         let mut iteration_snapshots: Vec<IterationSnapshot> = Vec::new();
         let persistence = self.agent_persistence();
@@ -1109,7 +1131,7 @@ impl TaskExecutor {
 
             // ===== Phase 2: 准备消息上下文 =====
             info!("[MODEL_SELECTION] Using model_id: {}", model_id);
-            
+
             let mut request_messages = Vec::new();
             context.copy_messages_into(&mut request_messages).await;
 
@@ -1118,7 +1140,6 @@ impl TaskExecutor {
                 context.conversation_id,
                 persistence.clone(),
                 self.repositories(),
-                self.llm_registry(),
             );
 
             if let Some(summary) = summarizer
@@ -1186,8 +1207,8 @@ impl TaskExecutor {
 
             // 消息压缩（如果超过上下文窗口）
             let context_window = self
-                .llm_registry()
-                .get_model_max_context(&model_id)
+                .get_model_context_window(&model_id)
+                .await
                 .unwrap_or(128_000);
 
             let compaction_result = MessageCompactor::new()
@@ -1511,7 +1532,7 @@ impl TaskExecutor {
                             "Detected {} duplicate tool calls in iteration {}, executing only unique ones",
                             duplicates_count, iteration
                         );
-                        
+
                         // 注入系统消息警告LLM
                         context.push_system_message(format!(
                             "<system-reminder type=\"duplicate-tools\">\n\
@@ -1569,7 +1590,8 @@ impl TaskExecutor {
                         .await;
 
                     // 循环检测
-                    if let Some(loop_warning) = self.detect_loop_pattern(&context, iteration).await {
+                    if let Some(loop_warning) = self.detect_loop_pattern(&context, iteration).await
+                    {
                         warn!("Loop pattern detected in iteration {}", iteration);
                         context.push_system_message(loop_warning).await;
                     }
@@ -1868,23 +1890,32 @@ impl TaskExecutor {
     // 工具去重和并行执行
 
     /// 去重工具调用 - 检测同一iteration内的重复调用
-    fn deduplicate_tool_calls(&self, tool_calls: &[crate::llm::types::LLMToolCall]) -> Vec<crate::llm::types::LLMToolCall> {
+    fn deduplicate_tool_calls(
+        &self,
+        tool_calls: &[crate::llm::types::LLMToolCall],
+    ) -> Vec<crate::llm::types::LLMToolCall> {
         use std::collections::HashSet;
-        
+
         let mut seen = HashSet::new();
         let mut deduplicated = Vec::new();
-        
+
         for call in tool_calls {
             // 使用 (tool_name, arguments) 作为唯一键
-            let key = (call.name.clone(), serde_json::to_string(&call.arguments).unwrap_or_default());
-            
+            let key = (
+                call.name.clone(),
+                serde_json::to_string(&call.arguments).unwrap_or_default(),
+            );
+
             if seen.insert(key) {
                 deduplicated.push(call.clone());
             } else {
-                debug!("Skipping duplicate tool call: {} with args {:?}", call.name, call.arguments);
+                debug!(
+                    "Skipping duplicate tool call: {} with args {:?}",
+                    call.name, call.arguments
+                );
             }
         }
-        
+
         deduplicated
     }
 
@@ -1896,26 +1927,24 @@ impl TaskExecutor {
         tool_calls: Vec<crate::llm::types::LLMToolCall>,
     ) -> TaskExecutorResult<Vec<ToolCallResult>> {
         use futures::future::join_all;
-        
+
         if tool_calls.is_empty() {
             return Ok(Vec::new());
         }
-        
+
         // 创建所有工具调用的futures
         let futures: Vec<_> = tool_calls
             .into_iter()
             .map(|call| {
                 let executor = self.clone();
                 let ctx = Arc::clone(context);
-                async move {
-                    executor.execute_tool_call(&ctx, iteration, call).await
-                }
+                async move { executor.execute_tool_call(&ctx, iteration, call).await }
             })
             .collect();
-        
+
         // 并行执行所有工具调用
         let results = join_all(futures).await;
-        
+
         // 收集成功的结果，记录失败的
         let mut successful_results = Vec::new();
         for result in results {
@@ -1927,7 +1956,7 @@ impl TaskExecutor {
                 }
             }
         }
-        
+
         Ok(successful_results)
     }
 
@@ -2055,7 +2084,9 @@ impl TaskExecutor {
                      - Should you try a different approach?\n\n\
                      Try to make progress with the information you've gathered.\n\
                      </system-reminder>",
-                    tool, count, recent_iterations.len()
+                    tool,
+                    count,
+                    recent_iterations.len()
                 ));
             }
         }
@@ -2115,4 +2146,3 @@ fn convert_execution_messages(messages: &[ExecutionMessage]) -> Vec<LLMMessage> 
         })
         .collect()
 }
-

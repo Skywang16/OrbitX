@@ -2,19 +2,14 @@ use crate::dock::state::DockState;
 use cocoa::appkit::{NSApp, NSMenu, NSMenuItem};
 use cocoa::base::{id, nil, NO};
 use cocoa::foundation::{NSAutoreleasePool, NSString};
-use objc::{class, msg_send, sel, sel_impl};
 use objc::runtime::{Class, Object, Sel, BOOL};
+use objc::{class, msg_send, sel, sel_impl};
 use serde_json::json;
 use std::ffi::CStr;
 use tauri::{AppHandle, Emitter, Runtime};
 
 extern "C" {
-    fn objc_setAssociatedObject(
-        object: id,
-        key: *const std::ffi::c_void,
-        value: id,
-        policy: usize,
-    );
+    fn objc_setAssociatedObject(object: id, key: *const std::ffi::c_void, value: id, policy: usize);
     fn objc_getAssociatedObject(object: id, key: *const std::ffi::c_void) -> id;
     fn class_addMethod(
         cls: *mut Class,
@@ -38,17 +33,17 @@ extern "C" fn switch_to_tab_action(this: &Object, _cmd: Sel, sender: id) {
             tracing::warn!("No tab ID found in menu item");
             return;
         }
-        
+
         let tab_id_cstr: *const i8 = msg_send![tab_id_obj, UTF8String];
         if tab_id_cstr.is_null() {
             tracing::warn!("Failed to get tab ID string");
             return;
         }
-        
+
         let tab_id_str = std::ffi::CStr::from_ptr(tab_id_cstr)
             .to_string_lossy()
             .to_string();
-        
+
         let pane_id: u32 = match tab_id_str.parse() {
             Ok(id) => id,
             Err(_) => {
@@ -56,13 +51,13 @@ extern "C" fn switch_to_tab_action(this: &Object, _cmd: Sel, sender: id) {
                 return;
             }
         };
-        
+
         tracing::info!("Dock menu: switching to tab {}", pane_id);
-        
+
         static APP_HANDLE_KEY: &[u8] = b"orbitx_dock_app_handle\0";
         let key_ptr = APP_HANDLE_KEY.as_ptr() as *const std::ffi::c_void;
         let number: id = objc_getAssociatedObject(this as *const _ as id, key_ptr);
-        
+
         if number != nil {
             let app_handle_ptr: usize = msg_send![number, unsignedLongLongValue];
             if app_handle_ptr != 0 {
@@ -79,12 +74,11 @@ extern "C" fn switch_to_tab_action(this: &Object, _cmd: Sel, sender: id) {
         } else {
             tracing::warn!("No AppHandle found in associated object");
         }
-        
+
         let app = NSApp();
         let _: () = msg_send![app, activateIgnoringOtherApps: cocoa::base::YES];
     }
 }
-
 
 impl<R: Runtime> MacOSDockMenu<R> {
     pub fn new(state: DockState, app_handle: &AppHandle<R>) -> Result<Self, String> {
@@ -110,7 +104,7 @@ impl<R: Runtime> MacOSDockMenu<R> {
             }
 
             let delegate_class: *const Class = msg_send![delegate, class];
-            
+
             let state_clone = self.state.clone();
             let state_ptr = Box::into_raw(Box::new(state_clone));
             let state_ptr_value = state_ptr as usize;
@@ -119,20 +113,27 @@ impl<R: Runtime> MacOSDockMenu<R> {
             let key_ptr = KEY.as_ptr() as *const std::ffi::c_void;
 
             objc::rc::autoreleasepool(|| {
-                let number: id = msg_send![class!(NSNumber), numberWithUnsignedLongLong: state_ptr_value];
+                let number: id =
+                    msg_send![class!(NSNumber), numberWithUnsignedLongLong: state_ptr_value];
                 objc_setAssociatedObject(delegate, key_ptr, number, OBJC_ASSOCIATION_RETAIN);
             });
-            
+
             let app_handle_clone = self.app_handle.clone();
             let app_handle_ptr = Box::into_raw(Box::new(app_handle_clone));
             let app_handle_ptr_value = app_handle_ptr as usize;
-            
+
             static APP_HANDLE_KEY: &[u8] = b"orbitx_dock_app_handle\0";
             let app_handle_key_ptr = APP_HANDLE_KEY.as_ptr() as *const std::ffi::c_void;
-            
+
             objc::rc::autoreleasepool(|| {
-                let number: id = msg_send![class!(NSNumber), numberWithUnsignedLongLong: app_handle_ptr_value];
-                objc_setAssociatedObject(delegate, app_handle_key_ptr, number, OBJC_ASSOCIATION_RETAIN);
+                let number: id =
+                    msg_send![class!(NSNumber), numberWithUnsignedLongLong: app_handle_ptr_value];
+                objc_setAssociatedObject(
+                    delegate,
+                    app_handle_key_ptr,
+                    number,
+                    OBJC_ASSOCIATION_RETAIN,
+                );
             });
 
             let dock_menu_sel = sel!(applicationDockMenu:);
@@ -176,58 +177,59 @@ impl<R: Runtime> MacOSDockMenu<R> {
 }
 
 unsafe fn build_dock_menu(state: &DockState) -> id {
-        let _pool = NSAutoreleasePool::new(nil);
+    let _pool = NSAutoreleasePool::new(nil);
 
-        let menu = NSMenu::alloc(nil);
-        let menu: id = msg_send![menu, init];
+    let menu = NSMenu::alloc(nil);
+    let menu: id = msg_send![menu, init];
 
-        let tabs = match state.get_tabs() {
-            Ok(tabs) => tabs,
-            Err(e) => {
-                tracing::error!("Failed to get tabs for dock menu: {}", e);
-                return menu;
-            }
-        };
-        
-        let active_tab_id = state.get_active_tab_id().ok().flatten();
+    let tabs = match state.get_tabs() {
+        Ok(tabs) => tabs,
+        Err(e) => {
+            tracing::error!("Failed to get tabs for dock menu: {}", e);
+            return menu;
+        }
+    };
 
-        if tabs.is_empty() {
+    let active_tab_id = state.get_active_tab_id().ok().flatten();
+
+    if tabs.is_empty() {
+        let title = NSString::alloc(nil);
+        let title: id = msg_send![title, initWithUTF8String: "No Active Tabs\0".as_ptr()];
+        let item = NSMenuItem::alloc(nil);
+        let empty_key = NSString::alloc(nil);
+        let empty_key: id = msg_send![empty_key, initWithUTF8String: "\0".as_ptr()];
+        let item = item.initWithTitle_action_keyEquivalent_(title, sel!(noAction:), empty_key);
+        let _: () = msg_send![item, setEnabled: NO];
+        menu.addItem_(item);
+    } else {
+        let app = NSApp();
+        let delegate: id = msg_send![app, delegate];
+
+        for tab in tabs {
             let title = NSString::alloc(nil);
-            let title: id = msg_send![title, initWithUTF8String: "No Active Tabs\0".as_ptr()];
+            let title_cstr = format!("{}\0", tab.title);
+            let title: id = msg_send![title, initWithUTF8String: title_cstr.as_ptr()];
             let item = NSMenuItem::alloc(nil);
             let empty_key = NSString::alloc(nil);
             let empty_key: id = msg_send![empty_key, initWithUTF8String: "\0".as_ptr()];
-            let item = item.initWithTitle_action_keyEquivalent_(title, sel!(noAction:), empty_key);
-            let _: () = msg_send![item, setEnabled: NO];
-            menu.addItem_(item);
-        } else {
-            let app = NSApp();
-            let delegate: id = msg_send![app, delegate];
-            
-            for tab in tabs {
-                let title = NSString::alloc(nil);
-                let title_cstr = format!("{}\0", tab.title);
-                let title: id = msg_send![title, initWithUTF8String: title_cstr.as_ptr()];
-                let item = NSMenuItem::alloc(nil);
-                let empty_key = NSString::alloc(nil);
-                let empty_key: id = msg_send![empty_key, initWithUTF8String: "\0".as_ptr()];
-                let item = item.initWithTitle_action_keyEquivalent_(title, sel!(switchToTab:), empty_key);
-                let _: () = msg_send![item, setTarget: delegate];
-                
-                let tab_id_cstr = format!("{}\0", tab.id);
-                let tab_id_str = NSString::alloc(nil);
-                let tab_id_str: id = msg_send![tab_id_str, initWithUTF8String: tab_id_cstr.as_ptr()];
-                let _: () = msg_send![item, setRepresentedObject: tab_id_str];
-                
-                if let Some(ref active_id) = active_tab_id {
-                    if *active_id == tab.id {
-                        let _: () = msg_send![item, setState: 1];
-                    }
-                }
+            let item =
+                item.initWithTitle_action_keyEquivalent_(title, sel!(switchToTab:), empty_key);
+            let _: () = msg_send![item, setTarget: delegate];
 
-                menu.addItem_(item);
+            let tab_id_cstr = format!("{}\0", tab.id);
+            let tab_id_str = NSString::alloc(nil);
+            let tab_id_str: id = msg_send![tab_id_str, initWithUTF8String: tab_id_cstr.as_ptr()];
+            let _: () = msg_send![item, setRepresentedObject: tab_id_str];
+
+            if let Some(ref active_id) = active_tab_id {
+                if *active_id == tab.id {
+                    let _: () = msg_send![item, setState: 1];
+                }
             }
+
+            menu.addItem_(item);
         }
+    }
 
     menu
 }
@@ -271,7 +273,7 @@ impl<R: Runtime> Drop for MacOSDockMenu<R> {
 
             static KEY: &[u8] = b"orbitx_dock_state\0";
             let key_ptr = KEY.as_ptr() as *const std::ffi::c_void;
-            
+
             static APP_HANDLE_KEY: &[u8] = b"orbitx_dock_app_handle\0";
             let app_handle_key_ptr = APP_HANDLE_KEY.as_ptr() as *const std::ffi::c_void;
 
@@ -284,10 +286,11 @@ impl<R: Runtime> Drop for MacOSDockMenu<R> {
                         let _boxed = Box::from_raw(state_ptr);
                     }
                 }
-                
+
                 let app_handle_number: id = objc_getAssociatedObject(delegate, app_handle_key_ptr);
                 if app_handle_number != nil {
-                    let app_handle_ptr_value: usize = msg_send![app_handle_number, unsignedLongLongValue];
+                    let app_handle_ptr_value: usize =
+                        msg_send![app_handle_number, unsignedLongLongValue];
                     let app_handle_ptr = app_handle_ptr_value as *mut AppHandle<R>;
                     if !app_handle_ptr.is_null() {
                         let _boxed = Box::from_raw(app_handle_ptr);
@@ -295,9 +298,13 @@ impl<R: Runtime> Drop for MacOSDockMenu<R> {
                 }
 
                 objc_setAssociatedObject(delegate, key_ptr, nil, OBJC_ASSOCIATION_RETAIN);
-                objc_setAssociatedObject(delegate, app_handle_key_ptr, nil, OBJC_ASSOCIATION_RETAIN);
+                objc_setAssociatedObject(
+                    delegate,
+                    app_handle_key_ptr,
+                    nil,
+                    OBJC_ASSOCIATION_RETAIN,
+                );
             });
         }
     }
 }
-

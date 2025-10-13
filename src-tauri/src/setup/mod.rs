@@ -161,7 +161,6 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     // 初始化TaskExecutor状态
     let task_executor_state = {
         let storage_state = app.state::<StorageCoordinatorState>();
-        let llm_state = app.state::<LLMManagerState>();
         let terminal_context_state = app.state::<TerminalContextState>();
         let repositories = storage_state.coordinator.repositories();
         let database_manager = storage_state.coordinator.database_manager();
@@ -171,14 +170,12 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         let ui_persistence = Arc::new(crate::agent::ui::AgentUiPersistence::new(Arc::clone(
             &database_manager,
         )));
-        let llm_registry = llm_state.registry.clone();
         let terminal_context_service = terminal_context_state.context_service().clone();
 
         let executor = Arc::new(crate::agent::core::TaskExecutor::new(
             Arc::clone(&repositories),
             Arc::clone(&agent_persistence),
             Arc::clone(&ui_persistence),
-            Arc::clone(&llm_registry),
             Arc::clone(&terminal_context_service),
         ));
 

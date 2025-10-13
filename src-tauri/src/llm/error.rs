@@ -33,6 +33,8 @@ pub enum LlmProviderError {
     Anthropic(#[from] AnthropicError),
     #[error(transparent)]
     Gemini(#[from] GeminiError),
+    #[error("Unsupported provider: {provider}")]
+    UnsupportedProvider { provider: String },
     #[error("Provider operation unsupported: {provider}::{operation}")]
     UnsupportedOperation {
         provider: &'static str,

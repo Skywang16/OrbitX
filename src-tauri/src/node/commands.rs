@@ -44,10 +44,7 @@ pub async fn node_list_versions() -> TauriApiResult<Vec<NodeVersionInfo>> {
 }
 
 #[tauri::command]
-pub async fn node_get_switch_command(
-    manager: String,
-    version: String,
-) -> TauriApiResult<String> {
+pub async fn node_get_switch_command(manager: String, version: String) -> TauriApiResult<String> {
     let mgr = NodeVersionManager::from_str(&manager);
     let version_cleaned = version.trim().trim_start_matches('v');
 

@@ -1,69 +1,39 @@
 // LLM供应商注册表相关类型定义
-// 对应后端 src-tauri/src/llm/registry.rs
 
-/// 模型特殊能力标志
-export interface ModelCapabilities {
-  /// 是否支持工具调用
-  supportsTools: boolean
-  /// 是否支持视觉输入
-  supportsVision: boolean
-  /// 是否支持流式输出
-  supportsStreaming: boolean
-  /// 是否为推理模型（如o1系列）
-  isReasoningModel: boolean
-  /// 最大上下文长度
-  maxContextTokens: number
-  /// 推荐的温度范围
-  temperatureRange?: [number, number]
-}
-
-/// 模型信息
-export interface ModelInfo {
-  /// 模型ID
+/// 预设模型信息（与后端 PresetModel 结构一致）
+/// 数据结构参考 Cline 项目的 ModelInfo 接口
+export interface PresetModel {
   id: string
-  /// 显示名称
-  displayName: string
-  /// 模型类型
-  modelType: 'chat' | 'embedding'
-  /// 模型能力
-  capabilities: ModelCapabilities
-  /// 是否已弃用
-  deprecated: boolean
+  name: string
+  maxTokens: number | null
+  contextWindow: number
+  supportsImages: boolean
+  supportsPromptCache: boolean
+  inputPrice?: number // 每百万 tokens，单位：美元
+  outputPrice?: number // 每百万 tokens，单位：美元
+  cacheReadsPrice?: number // 每百万 tokens，单位：美元
+  cacheWritesPrice?: number // 每百万 tokens，单位：美元
+  description?: string
 }
 
-/// LLM供应商类型
-export type LLMProviderType = 'Anthropic' | 'OpenAiCompatible'
-
-/// 供应商配置
+/// 供应商元数据
 export interface ProviderInfo {
-  /// 供应商类型
-  providerType: LLMProviderType
-  /// 显示名称
+  providerType: string
   displayName: string
-  /// 默认API URL
   defaultApiUrl: string
-  /// 文档链接
-  documentationUrl?: string
-  /// 支持的模型列表
-  models: ModelInfo[]
-  /// 是否需要API密钥
-  requiresApiKey: boolean
+  presetModels: PresetModel[]
 }
 
-/// 前端使用的Provider选项，用于表单
+/// 前端使用的Provider选项
 export interface ProviderOption {
   value: string
   label: string
   apiUrl: string
   models: string[]
-  requiresApiKey?: boolean
-  documentationUrl?: string
 }
 
-/// 前端使用的Model选项，用于表单
+/// 前端使用的Model选项
 export interface ModelOption {
   value: string
   label: string
-  capabilities?: ModelCapabilities
-  deprecated?: boolean
 }
