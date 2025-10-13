@@ -238,7 +238,7 @@
     showNodeVersionModal.value = false
   }
 
-  const handleProjectRulesSelect = async (rulesFile: string) => {
+  const handleProjectRulesSelect = async () => {
     await projectRules.refresh()
     showProjectRulesModal.value = false
   }

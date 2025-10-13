@@ -31,8 +31,6 @@ impl StorageLayer {
 pub struct SessionState {
     pub version: u32,
     pub tabs: Vec<TabState>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub active_tab_id: Option<TabId>,
     pub ui: UiState,
     pub ai: AiState,
     pub timestamp: DateTime<Utc>,
@@ -41,9 +39,8 @@ pub struct SessionState {
 impl Default for SessionState {
     fn default() -> Self {
         Self {
-            version: 2,
+            version: 1,
             tabs: Vec::new(),
-            active_tab_id: None,
             ui: UiState::default(),
             ai: AiState::default(),
             timestamp: Utc::now(),
@@ -51,51 +48,39 @@ impl Default for SessionState {
     }
 }
 
-/// Tab ID - 支持 number 和 string
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(untagged)]
-pub enum TabId {
-    Number(u32),
-    String(String),
-}
+/// Tab ID - 统一使用 i32（支持负数，用于特殊 tab 如 Settings）
+pub type TabId = i32;
 
-/// Tab 状态 - 支持不同类型的 tab
+/// Tab 状态 - 支持不同类型的 tab（扁平结构）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum TabState {
-    #[serde(rename = "terminal")]
-    Terminal(TerminalTabState),
-    #[serde(rename = "settings")]
-    Settings(SettingsTabState),
-}
-
-/// Terminal tab 状态
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TerminalTabState {
-    pub id: u32,
-    pub active: bool,
-    pub data: TerminalTabData,
+    #[serde(rename = "terminal", rename_all = "camelCase")]
+    Terminal {
+        id: i32,  // 改用 i32 支持负数
+        #[serde(rename = "isActive")]
+        is_active: bool,
+        data: TerminalTabData,
+    },
+    #[serde(rename = "settings", rename_all = "camelCase")]
+    Settings {
+        id: i32,  // 改用 i32 支持负数
+        #[serde(rename = "isActive")]
+        is_active: bool,
+        data: SettingsTabData,
+    },
 }
 
 /// Terminal tab 数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalTabData {
-    pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shell: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub shell_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
-}
-
-/// Settings tab 状态
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SettingsTabState {
-    pub id: String,
-    pub active: bool,
-    pub data: SettingsTabData,
 }
 
 /// Settings tab 数据
@@ -134,9 +119,7 @@ impl Default for WindowState {
 #[serde(rename_all = "camelCase")]
 pub struct TerminalRuntimeState {
     pub id: u32,
-    pub title: String,
     pub cwd: String,
-    pub active: bool,
     pub shell: Option<String>,
 }
 

@@ -29,7 +29,7 @@
           @click="handleOpenWorkspace(workspace.path)"
         >
           <div class="workspace-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
             </svg>
           </div>
@@ -223,36 +223,36 @@
   .workspace-list {
     display: flex;
     flex-direction: column;
+    gap: var(--spacing-sm);
   }
 
   .workspace-item {
     display: flex;
     align-items: center;
-    gap: var(--spacing-md);
+    gap: var(--spacing-sm);
     padding: var(--spacing-md) var(--spacing-md);
-    margin: 0 calc(var(--spacing-md) * -1);
+    background: var(--bg-300);
+    border-radius: var(--border-radius-md);
     cursor: pointer;
     transition: background-color 0.15s ease;
     user-select: none;
-    border-bottom: 1px solid var(--border-200);
-  }
-
-  .workspace-item:last-child {
-    border-bottom: none;
   }
 
   .workspace-item:hover {
-    background: var(--bg-300);
+    background: var(--bg-400);
   }
 
   .workspace-icon {
     flex-shrink: 0;
     color: var(--text-400);
+    display: flex;
+    align-items: center;
   }
 
   .workspace-info {
     flex: 1;
     display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: var(--spacing-lg);
     min-width: 0;
@@ -262,18 +262,21 @@
     font-size: var(--font-size-sm);
     font-weight: 500;
     color: var(--text-200);
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .workspace-path {
     font-size: var(--font-size-xs);
     color: var(--text-400);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font-family: var(--font-family-mono);
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    direction: rtl;
+    text-align: right;
   }
 
   /* Clone dialog layout */

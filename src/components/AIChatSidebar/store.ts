@@ -62,7 +62,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     sidebarWidth.value = Math.max(300, Math.min(800, width))
   }
 
-  const createConversation = async (title?: string): Promise<void> => {
+  const createConversation = async (): Promise<void> => {
     stopCurrentConversation()
 
     // 进入临时新建状态，不触碰数据库

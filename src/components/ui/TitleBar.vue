@@ -7,12 +7,12 @@
 
   interface Props {
     tabs: TabItem[]
-    activeTabId: number | string | null
+    activeTabId: number | null
   }
 
   interface Emits {
-    (e: 'switch', id: number | string): void
-    (e: 'close', id: number | string): void
+    (e: 'switch', tabId: number): void
+    (e: 'close', tabId: number): void
   }
 
   const props = defineProps<Props>()

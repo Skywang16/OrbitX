@@ -31,8 +31,8 @@ export const useSessionStore = defineStore('session', () => {
   /** Tabs 列表 */
   const tabs = computed(() => sessionState.value.tabs)
 
-  /** 活跃的 tab ID */
-  const activeTabId = computed(() => sessionState.value.activeTabId)
+  /** 活跃的 tab ID - 从 tabs 数组中计算 */
+  const activeTabId = computed(() => sessionState.value.tabs.find(t => t.isActive)?.id ?? null)
 
   /** UI状态 */
   const uiState = computed(() => sessionState.value.ui)
@@ -88,13 +88,19 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 删除 tab
    */
-  const removeTab = (tabId: number | string): void => {
+  const removeTab = (tabId: number): void => {
     sessionState.value.tabs = sessionState.value.tabs.filter(tab => tab.id !== tabId)
     saveSessionState().catch(() => {})
   }
 
-  const setActiveTabId = (tabId: number | string | null | undefined): void => {
-    sessionState.value.activeTabId = tabId ?? undefined
+  /**
+   * 设置活跃 tab - 更新 tabs 数组中的 isActive 字段
+   */
+  const setActiveTab = (tabId: number | null): void => {
+    sessionState.value.tabs = sessionState.value.tabs.map(tab => ({
+      ...tab,
+      isActive: tab.id === tabId,
+    }))
     saveSessionState().catch(() => {})
   }
 
@@ -154,7 +160,7 @@ export const useSessionStore = defineStore('session', () => {
     updateTabs,
     addTab,
     removeTab,
-    setActiveTabId,
+    setActiveTab,
     updateUiState,
     updateAiState,
 

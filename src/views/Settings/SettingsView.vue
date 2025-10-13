@@ -16,7 +16,7 @@
   const tabManagerStore = useTabManagerStore()
 
   const currentTabId = tabManagerStore.activeTabId
-  const savedSection = currentTabId ? tabManagerStore.getSettingsTabSection(String(currentTabId)) : undefined
+  const savedSection = currentTabId ? tabManagerStore.getSettingsTabSection(currentTabId) : undefined
   const activeSection = ref<string>(savedSection || 'general')
 
   const aiSettingsRef = ref()
@@ -68,8 +68,8 @@
   const handleNavigationChange = async (section: string) => {
     activeSection.value = section
 
-    if (currentTabId) {
-      tabManagerStore.updateSettingsTabSection(String(currentTabId), section)
+    if (currentTabId !== null) {
+      tabManagerStore.updateSettingsTabSection(currentTabId, section)
     }
 
     await initializeCurrentSection()

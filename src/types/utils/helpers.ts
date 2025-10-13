@@ -21,7 +21,6 @@ export const createSaveOptions = (table?: string) => ({
 export const createDefaultSessionState = () => ({
   version: 1,
   tabs: [],
-  activeTabId: undefined,
   ui: {
     theme: 'dark',
     fontSize: 14,

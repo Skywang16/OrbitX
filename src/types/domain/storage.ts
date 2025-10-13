@@ -38,16 +38,16 @@ export interface WindowState {
 }
 
 /**
- * Tab ID - 支持 number 和 string
+ * Tab ID - 统一使用 number
  */
-export type TabId = number | string
+export type TabId = number
 
 /**
  * Terminal tab 数据
  */
 export interface TerminalTabData {
-  title: string
   shell?: string
+  shellType?: string
   cwd?: string
 }
 
@@ -56,8 +56,8 @@ export interface TerminalTabData {
  */
 export interface TerminalTabState {
   type: 'terminal'
-  id: number
-  active: boolean
+  id: number // 直接使用 paneId，无需字符串包装
+  isActive: boolean // 是否为活跃 tab
   data: TerminalTabData
 }
 
@@ -73,8 +73,8 @@ export interface SettingsTabData {
  */
 export interface SettingsTabState {
   type: 'settings'
-  id: string
-  active: boolean
+  id: number // 使用 number，和 Terminal 一致
+  isActive: boolean // 是否为活跃 tab
   data: SettingsTabData
 }
 
@@ -88,9 +88,7 @@ export type TabState = TerminalTabState | SettingsTabState
  */
 export interface RuntimeTerminalState {
   id: number
-  title: string
   cwd: string
-  active: boolean
   shell?: string
 }
 
@@ -122,7 +120,6 @@ export interface AiState {
 export interface SessionState {
   version: number
   tabs: TabState[]
-  activeTabId?: TabId
   ui: UiState
   ai: AiState
   timestamp: string
