@@ -42,7 +42,18 @@ impl RunnableTool for ReadFileTool {
     }
 
     fn description(&self) -> &str {
-        "Read file contents with pagination support. IMPORTANT: For files larger than 500 lines, ALWAYS specify offset/limit to read targeted sections. Default limit is 2000 lines. Use grep or search tools first to locate the relevant lines before reading."
+        "Reads a file from the local filesystem. You can access any file directly by using this tool.
+Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
+
+Usage:
+- The path parameter must be an absolute path, not a relative path
+- By default, it reads up to 2000 lines starting from the beginning of the file
+- You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters
+- Any lines longer than 2000 characters will be truncated
+- Results are returned with line numbers starting at 1
+- Binary files are automatically detected and rejected with an error message
+- You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
+- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents."
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -51,17 +62,17 @@ impl RunnableTool for ReadFileTool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Absolute path to the file. Must be a complete path, for example: \"/Users/user/project/src/main.ts\""
+                    "description": "The absolute path to the file to read. Must be a complete absolute path, for example: \"/Users/user/project/src/main.ts\". Relative paths are not supported."
                 },
                 "offset": {
                     "type": "number",
                     "minimum": 0,
-                    "description": "Optional: 0-based line number to start reading from. RECOMMENDED when you know the target line range from grep or search results. Example: offset=100 starts reading from line 100."
+                    "description": "The 0-based line number to start reading from. Only provide if you know the file is extremely large (>2000 lines) or if you need to read a specific section. Leave empty to read from the beginning. Example: offset=100 starts reading from line 100."
                 },
                 "limit": {
                     "type": "number",
                     "minimum": 1,
-                    "description": "Optional: Maximum number of lines to read (default: 2000). STRONGLY RECOMMENDED for large files. Example: limit=50 reads only 50 lines. For a 3000-line file, read in chunks: first call with offset=0&limit=500, then offset=500&limit=500, etc."
+                    "description": "The maximum number of lines to read (default: 2000). Only provide if you know the file is extremely large. For most files, omit this parameter to read the entire file. Example: limit=500 reads only 500 lines. For a 5000-line file, read in chunks: first call offset=0&limit=1000, then offset=1000&limit=1000, etc."
                 }
             },
             "required": ["path"]

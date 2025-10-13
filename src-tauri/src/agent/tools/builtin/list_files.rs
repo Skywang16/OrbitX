@@ -36,7 +36,15 @@ impl RunnableTool for ListFilesTool {
     }
 
     fn description(&self) -> &str {
-        "List files and directories within the specified directory."
+        "Lists files and directories in a given path. The path parameter must be an absolute path, not a relative path.
+
+Usage:
+- The path parameter must be an absolute path to a directory
+- Returns a list of files and directories with their relative paths
+- Supports recursive listing to show all nested files and directories
+- Automatically respects .gitignore patterns to avoid listing ignored files
+- Hidden files (starting with .) are included by default
+- You should generally prefer the orbit_search tool if you know which directories to search for specific code"
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -45,9 +53,12 @@ impl RunnableTool for ListFilesTool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Absolute path to the directory. Must be a complete path, for example: \"/Users/user/project/src\""
+                    "description": "The absolute path to the directory to list (must be absolute, not relative). For example: \"/Users/user/project/src\". Will return an error if the path doesn't exist or is not a directory."
                 },
-                "recursive": { "type": "boolean", "description": "List recursively if true" }
+                "recursive": {
+                    "type": "boolean",
+                    "description": "If true, lists all files and directories recursively in the entire directory tree. If false or omitted, lists only the immediate children of the directory. Default: false."
+                }
             },
             "required": ["path"]
         })

@@ -57,7 +57,17 @@ impl RunnableTool for OrbitSearchTool {
     }
 
     fn description(&self) -> &str {
-        "Semantic code search tool. Use when you need to find code by CONCEPT or FUNCTIONALITY (e.g., 'authentication logic', 'database connection'). Returns file paths and line ranges. For exact keyword/function names, prefer 'grep' command instead - it's faster."
+        "A powerful semantic and pattern-based code search tool.
+
+Usage:
+  - ALWAYS use orbit_search for finding code in the codebase. NEVER invoke `grep` or `find` as a shell command for code searching.
+  - Supports three search modes: 'semantic' (AI-powered, requires index), 'hybrid' (semantic + keyword, requires index), 'regex' (pattern-based, always available)
+  - Returns file paths, line ranges, code snippets, and relevance scores
+  - Automatically respects .gitignore patterns
+  - Use semantic/hybrid modes for conceptual searches (e.g., 'authentication logic', 'database connection')
+  - Use regex mode for exact patterns (e.g., 'function\\s+\\w+', 'class.*Controller')
+  - Pattern syntax: Uses ripgrep regex (not grep) - literal braces need escaping
+  - You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful."
     }
 
     fn description_with_context(&self, context: &ToolDescriptionContext) -> Option<String> {
@@ -77,22 +87,22 @@ impl RunnableTool for OrbitSearchTool {
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Natural language description of the desired code"
+                    "description": "The search query. For semantic/hybrid modes: use natural language (e.g., 'file upload handler', 'authentication middleware'). For regex mode: use ripgrep regex syntax (e.g., 'function\\s+\\w+', 'class.*Component'). Query must be at least 3 characters."
                 },
                 "maxResults": {
                     "type": "number",
                     "minimum": 1,
                     "maximum": 50,
-                    "description": "Maximum number of results to return (default 10)"
+                    "description": "Maximum number of results to return (default: 10, max: 50). Use lower numbers (5-10) for focused searches, higher numbers (20-50) when exploring."
                 },
                 "path": {
                     "type": "string",
-                    "description": "Optional path to scope the search"
+                    "description": "Optional absolute path to scope the search to a specific directory or file. If omitted, searches the entire workspace. Example: '/Users/user/project/src/components'"
                 },
                 "mode": {
                     "type": "string",
                     "enum": ["semantic", "hybrid", "regex"],
-                    "description": "Search mode"
+                    "description": "Search mode: 'semantic' for AI-powered concept search (requires index), 'hybrid' for combined semantic+keyword (requires index), 'regex' for pattern matching (always available). Default: 'semantic'. Use 'hybrid' for best results."
                 }
             },
             "required": ["query"]

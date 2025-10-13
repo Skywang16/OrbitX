@@ -32,8 +32,6 @@ const DANGEROUS_COMMANDS: &[&str] = &[
 #[serde(rename_all = "camelCase")]
 struct ShellArgs {
     command: String,
-    #[serde(rename = "paneId")]
-    pane_id: Option<i64>,
 }
 
 pub struct ShellTool;
@@ -104,7 +102,31 @@ impl RunnableTool for ShellTool {
     }
 
     fn description(&self) -> &str {
-        "Execute shell commands in the current workspace. Use grep/find for code search (e.g., 'grep -rn function_name src/'), ls/tree for directory exploration, git commands for version control. Prefer targeted searches before reading files."
+        "Executes a given shell command with optional timeout, ensuring proper handling and security measures.
+
+Before executing the command, please follow these steps:
+
+1. Directory Verification:
+   - If the command will create new directories or files, first use the list_files tool to verify the parent directory exists and is the correct location
+   - For example, before running \"mkdir foo/bar\", first use list_files to check that \"foo\" exists and is the intended parent directory
+
+2. Command Execution:
+   - Always quote file paths that contain spaces with double quotes (e.g., cd \"path with spaces/file.txt\")
+   - Examples of proper quoting:
+     - cd \"/Users/name/My Documents\" (correct)
+     - cd /Users/name/My Documents (incorrect - will fail)
+     - python \"/path/with spaces/script.py\" (correct)
+     - python /path/with spaces/script.py (incorrect - will fail)
+   - After ensuring proper quoting, execute the command.
+   - Capture the output of the command.
+
+Usage notes:
+  - The command argument is required.
+  - Commands will timeout after 120000ms (2 minutes).
+  - VERY IMPORTANT: You MUST avoid using search commands like `find` and `grep`. Instead use orbit_search to search. You MUST avoid read tools like `cat`, `head`, `tail`, and `ls`, and use read_file and list_files instead.
+  - If the output exceeds a certain limit, output will be truncated before being returned to you.
+  - Dangerous commands like 'rm -rf /', 'shutdown', 'reboot' are automatically blocked for safety.
+  - You MUST ensure that commands you run do not hang or require user input."
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -113,11 +135,7 @@ impl RunnableTool for ShellTool {
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "Command to execute, e.g. 'ls -la'"
-                },
-                "paneId": {
-                    "type": "number",
-                    "description": "Optional terminal pane identifier (unused in backend)"
+                    "description": "The shell command to execute. Examples: 'git status', 'npm test', 'cargo build'. IMPORTANT: Quote paths with spaces using double quotes. Avoid using cat/grep/find - use dedicated tools instead."
                 }
             },
             "required": ["command"]
@@ -149,7 +167,6 @@ impl RunnableTool for ShellTool {
                 execution_time_ms: None,
                 ext_info: Some(json!({
                     "command": args.command,
-                    "paneId": args.pane_id,
                 })),
             });
         }
@@ -169,7 +186,6 @@ impl RunnableTool for ShellTool {
                     execution_time_ms: None,
                     ext_info: Some(json!({
                         "command": args.command,
-                        "paneId": args.pane_id,
                         "stdout": stdout,
                         "stderr": stderr,
                         "exitCode": exit_code,
@@ -185,7 +201,6 @@ impl RunnableTool for ShellTool {
                 execution_time_ms: None,
                 ext_info: Some(json!({
                     "command": args.command,
-                    "paneId": args.pane_id,
                 })),
             }),
         }

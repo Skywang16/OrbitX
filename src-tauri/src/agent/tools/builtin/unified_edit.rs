@@ -94,7 +94,15 @@ impl RunnableTool for UnifiedEditTool {
     }
 
     fn description(&self) -> &str {
-        "Edit a file using replace, insert, or diff modes."
+        "Performs exact string replacements or insertions in files.
+
+Usage:
+- You MUST use the read_file tool at least once before editing. This tool will error if you attempt an edit without reading the file first.
+- When editing text from read_file tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears in the file
+- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
+- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.
+- The edit will FAIL if `old_text` is not unique in the file. Either provide a larger string with more surrounding context to make it unique.
+- For replace mode, include enough surrounding context to make the old_text unique"
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -103,14 +111,34 @@ impl RunnableTool for UnifiedEditTool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Absolute path to the file. Must be a complete path, for example: \"/Users/user/project/src/main.ts\""
+                    "description": "The absolute path to the file to modify (must be absolute, not relative). For example: \"/Users/user/project/src/main.ts\""
                 },
-                "mode": { "type": "string", "enum": ["replace", "insert", "diff"] },
-                "old_text": { "type": "string" },
-                "new_text": { "type": "string" },
-                "after_line": { "type": "integer", "minimum": 0 },
-                "content": { "type": "string" },
-                "diff_content": { "type": "string" }
+                "mode": {
+                    "type": "string",
+                    "enum": ["replace", "insert", "diff"],
+                    "description": "Edit mode: 'replace' for find-and-replace, 'insert' for inserting at a line number, 'diff' for applying unified diffs"
+                },
+                "old_text": {
+                    "type": "string",
+                    "description": "[replace mode only] The exact text to find and replace. Must match exactly including whitespace and indentation. Include enough surrounding context to make this unique in the file."
+                },
+                "new_text": {
+                    "type": "string",
+                    "description": "[replace mode only] The text to replace old_text with. Must be different from old_text."
+                },
+                "after_line": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "[insert mode only] 0-based line number after which to insert content. Use 0 to insert at the beginning of the file."
+                },
+                "content": {
+                    "type": "string",
+                    "description": "[insert mode only] The content to insert at the specified line."
+                },
+                "diff_content": {
+                    "type": "string",
+                    "description": "[diff mode only] A unified diff format patch to apply to the file."
+                }
             },
             "required": ["path", "mode"]
         })

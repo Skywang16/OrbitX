@@ -36,7 +36,14 @@ impl RunnableTool for WriteFileTool {
     }
 
     fn description(&self) -> &str {
-        "Create or overwrite a file with the provided content."
+        "Writes a file to the local filesystem.
+
+Usage:
+- This tool will overwrite the existing file if there is one at the provided path.
+- If this is an existing file, you MUST use the read_file tool first to read the file's contents. This tool will fail if you did not read the file first.
+- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
+- NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked."
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -45,9 +52,12 @@ impl RunnableTool for WriteFileTool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Absolute path to the file. Must be a complete path, for example: \"/Users/user/project/src/main.ts\""
+                    "description": "The absolute path to the file to write (must be absolute, not relative). For example: \"/Users/user/project/src/main.ts\". Parent directory must already exist."
                 },
-                "content": { "type": "string" }
+                "content": {
+                    "type": "string",
+                    "description": "The complete content to write to the file. This will overwrite any existing content. For existing files, prefer using edit_file tool instead."
+                }
             },
             "required": ["path", "content"]
         })
@@ -76,26 +86,32 @@ impl RunnableTool for WriteFileTool {
 
         if is_probably_binary(&path) {
             return Ok(error_result(format!(
-                "文件 {} 可能为二进制",
+                "File {} appears to be binary, cannot write as text",
                 path.display()
             )));
         }
 
         if let Some(parent) = path.parent() {
             if !parent.exists() {
-                return Ok(error_result(format!("父目录不存在: {}", parent.display())));
+                return Ok(error_result(format!(
+                    "Parent directory does not exist: {}. Please verify the path or create the directory first.",
+                    parent.display()
+                )));
             }
         }
 
         if let Ok(meta) = fs::metadata(&path).await {
             if meta.is_dir() {
-                return Ok(error_result(format!("路径 {} 是目录", path.display())));
+                return Ok(error_result(format!(
+                    "Path {} is a directory, not a file",
+                    path.display()
+                )));
             }
         }
 
         if let Err(err) = fs::write(&path, args.content).await {
             return Ok(error_result(format!(
-                "写入文件 {} 失败: {}",
+                "Failed to write file {}: {}",
                 path.display(),
                 err
             )));

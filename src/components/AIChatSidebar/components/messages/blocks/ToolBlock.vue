@@ -180,8 +180,6 @@
         return 'Inserted to '
       case 'list_files':
         return 'Listed '
-      case 'list_code_definition_names':
-        return 'Listed definitions in '
       case 'web_fetch':
         return 'Fetched '
       case 'apply_diff':
@@ -220,8 +218,6 @@
         return formatText(params?.query as string)
       case 'list_files':
         return formatPath(params?.path as string) || 'files'
-      case 'list_code_definition_names':
-        return formatPath(params?.path as string)
       case 'web_fetch':
         return formatUrl(params?.url as string)
       case 'apply_diff':
