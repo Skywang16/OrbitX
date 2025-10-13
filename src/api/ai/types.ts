@@ -13,7 +13,7 @@ export interface AIModelCreateInput {
 }
 
 export type AIModelUpdateChanges = Partial<
-  Pick<AIModelConfig, 'provider' | 'apiUrl' | 'apiKey' | 'model' | 'modelType' | 'options'>
+  Pick<AIModelConfig, 'provider' | 'apiUrl' | 'apiKey' | 'model' | 'modelType' | 'options' | 'useCustomBaseUrl'>
 >
 
 export interface AIModelUpdateInput {

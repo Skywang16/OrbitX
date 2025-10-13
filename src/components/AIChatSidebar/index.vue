@@ -99,7 +99,7 @@
 
   const modelOptions = computed(() => {
     return aiSettingsStore.chatModels.map(model => ({
-      label: model.name,
+      label: model.model,
       value: model.id,
     }))
   })

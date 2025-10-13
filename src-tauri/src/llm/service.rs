@@ -49,6 +49,13 @@ impl LLMService {
             None => None,
         };
 
+        // 从 options 中提取 supportsPromptCache
+        let supports_prompt_cache = options
+            .as_ref()
+            .and_then(|opts| opts.get("supportsPromptCache"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
         Ok(LLMProviderConfig {
             provider_type,
             api_key: model.api_key,
@@ -59,6 +66,7 @@ impl LLMService {
             },
             model: model.model,
             options,
+            supports_prompt_cache,
         })
     }
 

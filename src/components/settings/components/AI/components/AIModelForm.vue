@@ -45,7 +45,6 @@
       maxTokens: -1, // -1 表示使用模型默认值
     },
     useCustomBaseUrl: false,
-    customBaseUrl: '',
   })
 
   // 高级选项展开状态
@@ -68,8 +67,7 @@
   if (props.model) {
     Object.assign(formData, props.model, {
       options: props.model.options || formData.options,
-      useCustomBaseUrl: false,
-      customBaseUrl: '',
+      useCustomBaseUrl: props.model.useCustomBaseUrl || false,
     })
     selectedProvider.value = String(props.model.provider)
   }
@@ -94,7 +92,6 @@
 
     // 重置自定义 URL 选项
     formData.useCustomBaseUrl = false
-    formData.customBaseUrl = ''
   }
 
   const handleModelChange = (value: string) => {
@@ -103,11 +100,9 @@
 
   const handleUseCustomBaseUrlChange = () => {
     if (formData.useCustomBaseUrl) {
-      formData.customBaseUrl = ''
       formData.apiUrl = ''
     } else {
       formData.apiUrl = providerInfo.value?.defaultApiUrl || ''
-      formData.customBaseUrl = ''
     }
   }
 
@@ -118,8 +113,8 @@
 
     if (hasPresetModels.value) {
       if (!formData.model) errors.value.model = t('ai_model.validation.model_required')
-      if (formData.useCustomBaseUrl && !formData.customBaseUrl) {
-        errors.value.customBaseUrl = t('ai_model.validation.custom_base_url_required')
+      if (formData.useCustomBaseUrl && !formData.apiUrl) {
+        errors.value.apiUrl = t('ai_model.validation.custom_base_url_required')
       }
     } else {
       if (!formData.apiUrl) errors.value.apiUrl = t('ai_model.validation.api_url_required')
@@ -133,9 +128,7 @@
     if (!validateForm()) return
 
     isSubmitting.value = true
-    const submitData = { ...formData }
-    if (formData.useCustomBaseUrl) submitData.apiUrl = formData.customBaseUrl
-    emit('submit', submitData)
+    emit('submit', formData)
     isSubmitting.value = false
   }
 
@@ -236,13 +229,13 @@
           <div class="form-group full-width">
             <label class="form-label">{{ t('ai_model.custom_base_url') }}</label>
             <input
-              v-model="formData.customBaseUrl"
+              v-model="formData.apiUrl"
               type="url"
               class="form-input"
-              :class="{ error: errors.customBaseUrl }"
+              :class="{ error: errors.apiUrl }"
               :placeholder="t('ai_model.custom_base_url_placeholder')"
             />
-            <div v-if="errors.customBaseUrl" class="error-message">{{ errors.customBaseUrl }}</div>
+            <div v-if="errors.apiUrl" class="error-message">{{ errors.apiUrl }}</div>
           </div>
         </div>
 

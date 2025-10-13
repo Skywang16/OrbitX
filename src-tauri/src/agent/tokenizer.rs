@@ -24,7 +24,7 @@ pub fn count_message_tokens(message: &LLMMessage) -> usize {
 
 fn count_part_tokens(part: &LLMMessagePart) -> usize {
     match part {
-        LLMMessagePart::Text { text } => count_text_tokens(text),
+        LLMMessagePart::Text { text, .. } => count_text_tokens(text),
         LLMMessagePart::File { mime_type, data } => {
             let truncated = &data[..data.len().min(1024)];
             let payload = serde_json::json!({

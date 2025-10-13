@@ -56,14 +56,13 @@
                 <div v-if="formData.useCustomBaseUrl" class="form-group">
                   <label class="form-label">{{ t('ai_model.custom_base_url') }}</label>
                   <input
-                    v-model="formData.customBaseUrl"
+                    v-model="formData.apiUrl"
                     type="url"
                     class="form-input"
-                    :class="{ error: errors.customBaseUrl }"
+                    :class="{ error: errors.apiUrl }"
                     :placeholder="t('ai_model.custom_base_url_placeholder')"
-                    @input="handleCustomBaseUrlInput"
                   />
-                  <div v-if="errors.customBaseUrl" class="error-message">{{ errors.customBaseUrl }}</div>
+                  <div v-if="errors.apiUrl" class="error-message">{{ errors.apiUrl }}</div>
                 </div>
 
                 <div class="form-group">
@@ -212,7 +211,6 @@
   })
 
   const formData = reactive({
-    name: '',
     provider: 'anthropic' as AIModelConfig['provider'],
     apiKey: '',
     apiUrl: '',
@@ -227,7 +225,6 @@
       maxTokens: -1,
     },
     useCustomBaseUrl: false,
-    customBaseUrl: '',
   })
 
   const errors = ref<Record<string, string>>({})
@@ -270,28 +267,18 @@
         }
       }
     }
-    formData.name = ''
     formData.apiKey = ''
     formData.useCustomBaseUrl = false
-    formData.customBaseUrl = ''
     errors.value = {}
   }
 
   const handleUseCustomBaseUrlChange = () => {
     if (formData.useCustomBaseUrl) {
-      formData.customBaseUrl = ''
       formData.apiUrl = ''
     } else {
       formData.apiUrl = providerInfo.value?.defaultApiUrl || ''
-      formData.customBaseUrl = ''
     }
-    delete errors.value.customBaseUrl
-  }
-
-  const handleCustomBaseUrlInput = () => {
-    if (formData.useCustomBaseUrl) {
-      formData.apiUrl = formData.customBaseUrl
-    }
+    delete errors.value.apiUrl
   }
 
   const validateForm = () => {
@@ -301,8 +288,8 @@
 
     if (hasPresetModels.value) {
       if (!formData.model) errors.value.model = t('ai_model.validation.model_required')
-      if (formData.useCustomBaseUrl && !formData.customBaseUrl) {
-        errors.value.customBaseUrl = t('ai_model.validation.custom_base_url_required')
+      if (formData.useCustomBaseUrl && !formData.apiUrl) {
+        errors.value.apiUrl = t('ai_model.validation.custom_base_url_required')
       }
     } else {
       if (!formData.apiUrl) errors.value.apiUrl = t('ai_model.validation.api_url_required')
@@ -313,9 +300,6 @@
   }
 
   const getDefaultApiUrl = () => {
-    if (formData.useCustomBaseUrl && formData.customBaseUrl) {
-      return formData.customBaseUrl
-    }
     return formData.apiUrl
   }
 
@@ -326,29 +310,21 @@
 
     isSubmitting.value = true
 
-    let configName = formData.name
-    if (hasPresetModels.value) {
-      const models = getChatModelOptions(selectedProvider.value)
-      const selectedModel = models.find(m => m.value === formData.model)
-      configName = selectedModel ? selectedModel.label : formData.model
-    }
-
     const newModel: AIModelConfig = {
       id: uuidv4(),
-      name: configName,
       provider: formData.provider,
       apiUrl: getDefaultApiUrl(),
       apiKey: formData.apiKey,
       model: formData.model,
       modelType: 'chat',
       options: formData.options,
+      useCustomBaseUrl: formData.useCustomBaseUrl,
     }
 
     await aiSettingsStore.addModel(newModel)
 
     selectedProvider.value = ''
     Object.assign(formData, {
-      name: '',
       provider: 'anthropic' as AIModelConfig['provider'],
       apiKey: '',
       apiUrl: '',
@@ -363,7 +339,6 @@
         maxTokens: -1,
       },
       useCustomBaseUrl: false,
-      customBaseUrl: '',
     })
     errors.value = {}
     isSubmitting.value = false

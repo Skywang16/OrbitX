@@ -1,12 +1,32 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Prompt Cache 缓存控制
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheControl {
+    #[serde(rename = "type")]
+    pub cache_type: String, // "ephemeral"
+}
+
+impl CacheControl {
+    /// 创建 ephemeral 类型的缓存控制
+    pub fn ephemeral() -> Self {
+        Self {
+            cache_type: "ephemeral".to_string(),
+        }
+    }
+}
+
 /// LLM 消息内容部分
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum LLMMessagePart {
     #[serde(rename = "text")]
-    Text { text: String },
+    Text {
+        text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cache_control: Option<CacheControl>,
+    },
     #[serde(rename = "file")]
     File {
         #[serde(rename = "mimeType")]
@@ -130,6 +150,9 @@ pub struct LLMProviderConfig {
     pub api_url: Option<String>,
     pub model: String,
     pub options: Option<HashMap<String, serde_json::Value>>,
+    /// 是否支持 Prompt Cache（从模型配置中提取，避免运行时查找）
+    #[serde(default)]
+    pub supports_prompt_cache: bool,
 }
 
 /// Embedding 请求参数
@@ -165,4 +188,46 @@ pub struct EmbeddingData {
     pub index: usize,
     /// 对象类型
     pub object: String,
+}
+
+#[cfg(test)]
+mod cache_control_tests {
+    use super::*;
+
+    #[test]
+    fn test_cache_control_serialization() {
+        let cache_control = CacheControl::ephemeral();
+        let json = serde_json::to_value(&cache_control).unwrap();
+        
+        assert_eq!(json["type"], "ephemeral");
+    }
+
+    #[test]
+    fn test_text_part_with_cache_control() {
+        let text_part = LLMMessagePart::Text {
+            text: "Hello world".to_string(),
+            cache_control: Some(CacheControl::ephemeral()),
+        };
+        
+        let json = serde_json::to_value(&text_part).unwrap();
+        
+        assert_eq!(json["type"], "text");
+        assert_eq!(json["text"], "Hello world");
+        assert_eq!(json["cache_control"]["type"], "ephemeral");
+    }
+
+    #[test]
+    fn test_text_part_without_cache_control() {
+        let text_part = LLMMessagePart::Text {
+            text: "Hello world".to_string(),
+            cache_control: None,
+        };
+        
+        let json = serde_json::to_value(&text_part).unwrap();
+        
+        assert_eq!(json["type"], "text");
+        assert_eq!(json["text"], "Hello world");
+        // cache_control 字段不应出现在 JSON 中
+        assert!(json.get("cache_control").is_none());
+    }
 }

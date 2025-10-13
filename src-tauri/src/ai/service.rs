@@ -24,6 +24,7 @@ struct AIModelUpdatePayload {
     model: Option<String>,
     model_type: Option<ModelType>,
     options: Option<Value>,
+    use_custom_base_url: Option<bool>,
 }
 
 struct ProviderHttpRequest {
@@ -115,6 +116,9 @@ impl AIService {
         }
         if let Some(options) = update_payload.options {
             existing.options = Some(options);
+        }
+        if let Some(use_custom_base_url) = update_payload.use_custom_base_url {
+            existing.use_custom_base_url = Some(use_custom_base_url);
         }
 
         existing.updated_at = Utc::now();

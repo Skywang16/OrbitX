@@ -27,6 +27,7 @@ mod tests {
             content: LLMMessageContent::Parts(vec![
                 LLMMessagePart::Text {
                     text: "Hello".to_string(),
+                    cache_control: None,
                 },
                 LLMMessagePart::File {
                     mime_type: "image/png".to_string(),
@@ -42,7 +43,7 @@ mod tests {
             LLMMessageContent::Parts(parts) => {
                 assert_eq!(parts.len(), 2);
                 match &parts[0] {
-                    LLMMessagePart::Text { text } => assert_eq!(text, "Hello"),
+                    LLMMessagePart::Text { text, .. } => assert_eq!(text, "Hello"),
                     _ => panic!("Expected text part"),
                 }
                 match &parts[1] {
@@ -133,6 +134,7 @@ mod tests {
             api_url: Some("https://api.openai.com/v1".to_string()),
             model: "gpt-5".to_string(),
             options: Some(std::collections::HashMap::new()),
+            supports_prompt_cache: false,
         };
 
         assert_eq!(config.model, "gpt-5");
@@ -194,6 +196,7 @@ mod tests {
             content: LLMMessageContent::Parts(vec![
                 LLMMessagePart::Text {
                     text: "What's in this image?".to_string(),
+                    cache_control: None,
                 },
                 LLMMessagePart::File {
                     mime_type: "image/jpeg".to_string(),
@@ -209,7 +212,7 @@ mod tests {
             LLMMessageContent::Parts(parts) => {
                 assert_eq!(parts.len(), 2);
                 match &parts[0] {
-                    LLMMessagePart::Text { text } => {
+                    LLMMessagePart::Text { text, .. } => {
                         assert_eq!(text, "What's in this image?");
                     }
                     _ => panic!("Expected text part"),
@@ -233,6 +236,7 @@ mod tests {
             content: LLMMessageContent::Parts(vec![
                 LLMMessagePart::Text {
                     text: "I'll help you with that calculation.".to_string(),
+                    cache_control: None,
                 },
                 LLMMessagePart::ToolCall {
                     tool_call_id: "call_123".to_string(),

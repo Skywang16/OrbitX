@@ -11,14 +11,13 @@ export class AiApi {
     const timestamp = new Date()
     const config: AIModelConfig = {
       id: crypto.randomUUID(),
-      name: model.name,
       provider: model.provider,
       apiUrl: model.apiUrl,
       apiKey: model.apiKey,
       model: model.model,
       modelType: model.modelType,
-      enabled: model.enabled ?? true,
       options: model.options,
+      useCustomBaseUrl: model.useCustomBaseUrl,
       createdAt: timestamp,
       updatedAt: timestamp,
     }
@@ -40,14 +39,13 @@ export class AiApi {
   testConnectionWithConfig = async (config: AIModelTestConnectionInput): Promise<void> => {
     const payload: AIModelConfig = {
       id: crypto.randomUUID(),
-      name: config.name,
       provider: config.provider,
       apiUrl: config.apiUrl,
       apiKey: config.apiKey,
       model: config.model,
       modelType: config.modelType,
-      enabled: config.enabled ?? true,
       options: config.options,
+      useCustomBaseUrl: config.useCustomBaseUrl,
       createdAt: new Date(),
       updatedAt: new Date(),
     }

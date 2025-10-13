@@ -1,7 +1,7 @@
 // LLM供应商注册表相关类型定义
 
 /// 预设模型信息（与后端 PresetModel 结构一致）
-/// 数据结构参考 Cline 项目的 ModelInfo 接口
+
 export interface PresetModel {
   id: string
   name: string

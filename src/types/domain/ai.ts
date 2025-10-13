@@ -28,6 +28,7 @@ export interface AIModelConfig {
     temperature?: number
     timeout?: number
   }
+  useCustomBaseUrl?: boolean
   createdAt?: Date
   updatedAt?: Date
 }

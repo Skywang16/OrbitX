@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS ai_models (
     model_name TEXT NOT NULL,
     model_type TEXT DEFAULT 'chat' CHECK (model_type IN ('chat', 'embedding')),
     config_json TEXT,
+    use_custom_base_url INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

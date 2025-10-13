@@ -108,6 +108,8 @@ pub struct AIModelConfig {
     pub model_type: ModelType,
     #[serde(default)]
     pub options: Option<Value>,
+    #[serde(default)]
+    pub use_custom_base_url: Option<bool>,
     #[serde(default = "default_timestamp")]
     pub created_at: DateTime<Utc>,
     #[serde(default = "default_timestamp")]
@@ -125,6 +127,7 @@ impl AIModelConfig {
             model,
             model_type: ModelType::Chat,
             options: None,
+            use_custom_base_url: None,
             created_at: now,
             updated_at: now,
         }
@@ -146,6 +149,7 @@ impl AIModelConfig {
             model,
             model_type,
             options: None,
+            use_custom_base_url: None,
             created_at: now,
             updated_at: now,
         }
@@ -166,6 +170,9 @@ impl RowMapper<AIModelConfig> for AIModelConfig {
             None
         };
 
+        let use_custom_base_url = row.try_get::<Option<i64>, _>("use_custom_base_url")?
+            .map(|v| v != 0);
+
         Ok(Self {
             id: row.try_get("id")?,
             provider,
@@ -174,6 +181,7 @@ impl RowMapper<AIModelConfig> for AIModelConfig {
             model: row.try_get("model_name")?,
             model_type,
             options,
+            use_custom_base_url,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
         })
@@ -205,6 +213,7 @@ impl AIModelRepository {
                 "model_name",
                 "model_type",
                 "config_json",
+                "use_custom_base_url",
                 "created_at",
                 "updated_at",
             ])
@@ -326,6 +335,10 @@ impl AIModelRepository {
             .set(
                 "config_json",
                 config_json.map(Value::String).unwrap_or(Value::Null),
+            )
+            .set(
+                "use_custom_base_url",
+                model.use_custom_base_url.map(|v| Value::Bool(v)).unwrap_or(Value::Null),
             )
             .set("created_at", Value::String(model.created_at.to_rfc3339()))
             .set("updated_at", Value::String(model.updated_at.to_rfc3339()))

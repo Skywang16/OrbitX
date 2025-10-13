@@ -11,9 +11,9 @@ use crate::llm::{
     error::{LlmProviderError, LlmProviderResult, OpenAiError},
     providers::base::LLMProvider,
     types::{
-        EmbeddingData, EmbeddingRequest, EmbeddingResponse, LLMMessage, LLMMessageContent,
-        LLMMessagePart, LLMProviderConfig, LLMRequest, LLMResponse, LLMStreamChunk, LLMTool,
-        LLMToolCall, LLMUsage,
+        CacheControl, EmbeddingData, EmbeddingRequest, EmbeddingResponse, LLMMessage,
+        LLMMessageContent, LLMMessagePart, LLMProviderConfig, LLMRequest, LLMResponse,
+        LLMStreamChunk, LLMTool, LLMToolCall, LLMUsage,
     },
 };
 
@@ -33,10 +33,14 @@ impl OpenAIProvider {
         }
     }
 
-    fn build_body(&self, request: &LLMRequest) -> Value {
+    pub(crate) fn build_body(&self, request: &LLMRequest) -> Value {
+        // 只有 openai_compatible 类型才支持 cache_control 注入
+        // openai 官方使用自动缓存，不需要显式 cache_control 字段
+        let supports_cache = self.config.supports_prompt_cache 
+            && self.config.provider_type == "openai_compatible";
         let mut body = json!({
             "model": request.model,
-            "messages": self.convert_messages(&request.messages),
+            "messages": self.convert_messages(&request.messages, supports_cache),
             "stream": request.stream,
         });
 
@@ -108,10 +112,33 @@ impl OpenAIProvider {
     }
 
     /// 转换统一的消息为 OpenAI 特定格式
-    fn convert_messages(&self, messages: &[LLMMessage]) -> Value {
+    /// 
+    /// # 缓存策略
+    /// - `supports_cache=true`: 仅用于 openai_compatible（如 LiteLLM、OpenRouter）
+    ///   会在 system 和最近两条 user 消息上添加 cache_control 标记
+    /// - `supports_cache=false`: 用于 openai 官方或不支持缓存的兼容端点
+    ///   OpenAI 官方会自动缓存，通过 usage.prompt_tokens_details.cached_tokens 体现
+    fn convert_messages(&self, messages: &[LLMMessage], supports_cache: bool) -> Value {
+        // 找到所有 user 消息的索引
+        let user_msg_indices: Vec<usize> = messages
+            .iter()
+            .enumerate()
+            .filter(|(_, msg)| msg.role == "user")
+            .map(|(idx, _)| idx)
+            .collect();
+        
+        let last_user_idx = user_msg_indices.last().copied();
+        let second_last_user_idx = if user_msg_indices.len() >= 2 {
+            Some(user_msg_indices[user_msg_indices.len() - 2])
+        } else {
+            None
+        };
         let openai_messages: Vec<Value> = messages
             .iter()
-            .map(|msg| {
+            .enumerate()
+            .map(|(msg_idx, msg)| {
+                let should_cache_this_msg = supports_cache
+                    && (Some(msg_idx) == last_user_idx || Some(msg_idx) == second_last_user_idx);
                 // Assistant 的 tool_calls 需要特殊处理
                 if msg.role == "assistant" {
                     if let LLMMessageContent::Parts(parts) = &msg.content {
@@ -168,12 +195,32 @@ impl OpenAIProvider {
 
                 // 其他通用消息
                 let content = match &msg.content {
-                    LLMMessageContent::Text(text) => json!(text),
+                    LLMMessageContent::Text(text) => {
+                        // 为 system/user 消息的文本内容添加缓存支持
+                        if should_cache_this_msg || (msg.role == "system" && supports_cache) {
+                            json!([{
+                                "type": "text",
+                                "text": text,
+                                "cache_control": CacheControl::ephemeral(),
+                            }])
+                        } else {
+                            json!(text)
+                        }
+                    },
                     LLMMessageContent::Parts(parts) => {
                         let content_parts: Vec<Value> = parts
                             .iter()
-                            .map(|part| match part {
-                                LLMMessagePart::Text { text } => json!({ "type": "text", "text": text }),
+                            .enumerate()
+                            .map(|(part_idx, part)| match part {
+                                LLMMessagePart::Text { text, cache_control } => {
+                                    let mut text_obj = json!({ "type": "text", "text": text });
+                                    if let Some(cache_ctrl) = cache_control {
+                                        text_obj["cache_control"] = json!(cache_ctrl);
+                                    } else if should_cache_this_msg && part_idx == parts.len() - 1 {
+                                        text_obj["cache_control"] = json!(CacheControl::ephemeral());
+                                    }
+                                    text_obj
+                                },
                                 LLMMessagePart::File { mime_type, data } => {
                                     json!({
                                         "type": "image_url",

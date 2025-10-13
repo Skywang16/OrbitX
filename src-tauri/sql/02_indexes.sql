@@ -14,7 +14,6 @@ CREATE INDEX IF NOT EXISTS idx_terminal_sessions_active ON terminal_sessions(is_
 
 
 -- AI模型索引
-CREATE INDEX IF NOT EXISTS idx_ai_models_enabled ON ai_models(enabled);
 CREATE INDEX IF NOT EXISTS idx_ai_models_provider ON ai_models(provider);
 CREATE INDEX IF NOT EXISTS idx_ai_features_enabled ON ai_features(enabled);
 

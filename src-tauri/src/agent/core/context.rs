@@ -694,7 +694,10 @@ impl TaskContext {
 
         let content = if !structured_parts.is_empty() {
             if let Some(answer_text) = cleaned_answer.clone() {
-                structured_parts.push(LLMMessagePart::Text { text: answer_text });
+                structured_parts.push(LLMMessagePart::Text { 
+                    text: answer_text,
+                    cache_control: None,
+                });
             }
             LLMMessageContent::Parts(structured_parts)
         } else if let Some(answer_text) = cleaned_answer {

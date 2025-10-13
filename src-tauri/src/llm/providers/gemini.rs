@@ -91,7 +91,7 @@ impl GeminiProvider {
                 LLMMessageContent::Parts(parts) => parts
                     .iter()
                     .filter_map(|part| match part {
-                        LLMMessagePart::Text { text } => Some(json!({ "text": text })),
+                        LLMMessagePart::Text { text, .. } => Some(json!({ "text": text })),
                         LLMMessagePart::File { mime_type, data } => Some(json!({
                             "inline_data": { "mime_type": mime_type, "data": data }
                         })),

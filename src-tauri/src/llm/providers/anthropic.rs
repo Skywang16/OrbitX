@@ -11,8 +11,8 @@ use crate::llm::{
     error::{AnthropicError, LlmProviderError, LlmProviderResult},
     providers::base::LLMProvider,
     types::{
-        LLMMessage, LLMMessageContent, LLMMessagePart, LLMProviderConfig, LLMRequest, LLMResponse,
-        LLMStreamChunk, LLMTool, LLMToolCall, LLMUsage,
+        CacheControl, LLMMessage, LLMMessageContent, LLMMessagePart, LLMProviderConfig,
+        LLMRequest, LLMResponse, LLMStreamChunk, LLMTool, LLMToolCall, LLMUsage,
     },
 };
 
@@ -49,23 +49,63 @@ impl AnthropicProvider {
         headers
     }
 
-    fn convert_messages(&self, messages: &[LLMMessage]) -> (Option<String>, Value) {
+    /// 转换消息，支持 Prompt Cache
+    /// 
+    /// supports_cache: 是否为支持缓存的模型启用缓存标记
+    fn convert_messages(
+        &self,
+        messages: &[LLMMessage],
+        supports_cache: bool,
+    ) -> (Option<String>, Value) {
         let mut system_prompt = None;
         let mut converted_messages = Vec::new();
 
-        for msg in messages {
+        // 找到所有 user 消息的索引
+        let user_msg_indices: Vec<usize> = messages
+            .iter()
+            .enumerate()
+            .filter(|(_, msg)| msg.role == "user")
+            .map(|(idx, _)| idx)
+            .collect();
+        
+        let last_user_idx = user_msg_indices.last().copied();
+        let second_last_user_idx = if user_msg_indices.len() >= 2 {
+            Some(user_msg_indices[user_msg_indices.len() - 2])
+        } else {
+            None
+        };
+
+        for (msg_idx, msg) in messages.iter().enumerate() {
             if msg.role == "system" {
                 if let LLMMessageContent::Text(text) = &msg.content {
                     system_prompt = Some(text.clone());
                 }
             } else {
+                // 判断是否应该为这条消息添加缓存标记
+                let should_cache_this_msg = supports_cache
+                    && (Some(msg_idx) == last_user_idx || Some(msg_idx) == second_last_user_idx);
+
                 let content_parts: Vec<Value> = match &msg.content {
-                    LLMMessageContent::Text(text) => vec![json!({ "type": "text", "text": text })],
+                    LLMMessageContent::Text(text) => {
+                        let mut text_obj = json!({ "type": "text", "text": text });
+                        if should_cache_this_msg {
+                            text_obj["cache_control"] = json!(CacheControl::ephemeral());
+                        }
+                        vec![text_obj]
+                    }
                     LLMMessageContent::Parts(parts) => parts
                         .iter()
-                        .filter_map(|part| match part {
-                            LLMMessagePart::Text { text } => {
-                                Some(json!({ "type": "text", "text": text }))
+                        .enumerate()
+                        .filter_map(|(part_idx, part)| match part {
+                            LLMMessagePart::Text { text, cache_control } => {
+                                let mut text_obj = json!({ "type": "text", "text": text });
+                                // 使用已有的 cache_control 或在最后一个 part 添加缓存
+                                if let Some(cache_ctrl) = cache_control {
+                                    text_obj["cache_control"] = json!(cache_ctrl);
+                                } else if should_cache_this_msg && part_idx == parts.len() - 1 {
+                                    text_obj["cache_control"] = json!(CacheControl::ephemeral());
+                                }
+                                Some(text_obj)
                             }
                             LLMMessagePart::ToolCall {
                                 tool_call_id,
@@ -114,7 +154,8 @@ impl AnthropicProvider {
     }
 
     fn build_body(&self, request: &LLMRequest) -> Value {
-        let (system_prompt, messages) = self.convert_messages(&request.messages);
+        let supports_cache = self.config.supports_prompt_cache;
+        let (system_prompt, messages) = self.convert_messages(&request.messages, supports_cache);
 
         let mut body = json!({
             "model": request.model,
@@ -123,8 +164,16 @@ impl AnthropicProvider {
             "stream": request.stream,
         });
 
+        // System prompt 始终使用数组格式（Anthropic API 支持）
         if let Some(system) = system_prompt {
-            body["system"] = json!(system);
+            let mut sys_obj = json!({
+                "type": "text",
+                "text": system,
+            });
+            if supports_cache {
+                sys_obj["cache_control"] = json!(CacheControl::ephemeral());
+            }
+            body["system"] = json!([sys_obj]);
         }
         if let Some(temp) = request.temperature {
             body["temperature"] = json!(temp);

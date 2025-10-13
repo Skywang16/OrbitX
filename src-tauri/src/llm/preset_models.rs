@@ -1,14 +1,13 @@
 //! 预设模型数据定义
 //!
 //! 本模块包含所有 LLM 供应商的预设模型列表。
-//! 数据结构参考 Cline 项目，确保模型 ID、名称和参数准确。
 
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
 /// 预设模型信息
-/// 
-/// 数据结构参考 Cline 项目的 ModelInfo 接口
+///
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PresetModel {
@@ -86,12 +85,12 @@ pub static ANTHROPIC_MODELS: Lazy<Vec<PresetModel>> = Lazy::new(|| {
             "Claude Sonnet 4.5",
             Some(8192),
             200_000,
-            true,  // supports_images
-            true,  // supports_prompt_cache
-            Some(3.0),   // input_price
-            Some(15.0),  // output_price
-            Some(0.3),   // cache_reads_price
-            Some(3.75),  // cache_writes_price
+            true,       // supports_images
+            true,       // supports_prompt_cache
+            Some(3.0),  // input_price
+            Some(15.0), // output_price
+            Some(0.3),  // cache_reads_price
+            Some(3.75), // cache_writes_price
             None,
         ),
         // Claude 4 系列
@@ -167,7 +166,7 @@ pub static ANTHROPIC_MODELS: Lazy<Vec<PresetModel>> = Lazy::new(|| {
             "Claude 3.5 Haiku",
             Some(8192),
             200_000,
-            false,  // haiku 不支持图片
+            false, // haiku 不支持图片
             true,
             Some(0.8),
             Some(4.0),
@@ -439,7 +438,7 @@ pub static GEMINI_MODELS: Lazy<Vec<PresetModel>> = Lazy::new(|| {
             1_048_576,
             true,
             true,
-            Some(2.5),   // 默认价格（最高层级）
+            Some(2.5), // 默认价格（最高层级）
             Some(15.0),
             Some(0.625),
             None,
@@ -532,7 +531,7 @@ pub static GEMINI_MODELS: Lazy<Vec<PresetModel>> = Lazy::new(|| {
             1_048_576,
             true,
             true,
-            Some(0.15),  // 默认价格（最高层级）
+            Some(0.15), // 默认价格（最高层级）
             Some(0.6),
             Some(0.0375),
             Some(1.0),
@@ -601,7 +600,9 @@ mod tests {
             "OpenAI Compatible suggestions should not be empty"
         );
         assert!(
-            OPENAI_COMPATIBLE_SUGGESTIONS.iter().all(|m| !m.id.is_empty()),
+            OPENAI_COMPATIBLE_SUGGESTIONS
+                .iter()
+                .all(|m| !m.id.is_empty()),
             "All models should have valid IDs"
         );
     }

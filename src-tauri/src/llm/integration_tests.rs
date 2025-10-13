@@ -12,14 +12,15 @@ mod integration_tests {
         let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
 
         let config = LLMProviderConfig {
-            provider_type: "openai_compatible".to_string(),
+            provider_type: "openai".to_string(),
             api_key,
             api_url: None,
             model: "gpt-3.5-turbo".to_string(),
             options: None,
+            supports_prompt_cache: false,
         };
 
-        let provider = AnthropicProvider::new(config.clone());
+        let provider = OpenAIProvider::new(config.clone());
 
         let request = LLMRequest {
             model: "gpt-3.5-turbo".to_string(),
@@ -46,14 +47,15 @@ mod integration_tests {
         let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
 
         let config = LLMProviderConfig {
-            provider_type: "openai_compatible".to_string(),
+            provider_type: "openai".to_string(),
             api_key,
             api_url: None,
             model: "gpt-3.5-turbo".to_string(),
             options: None,
+            supports_prompt_cache: false,
         };
 
-        let provider = AnthropicProvider::new(config.clone());
+        let provider = OpenAIProvider::new(config.clone());
 
         let request = LLMRequest {
             model: "gpt-3.5-turbo".to_string(),
@@ -101,6 +103,7 @@ mod integration_tests {
             api_url: None,
             model: "claude-3-haiku-20240307".to_string(),
             options: None,
+            supports_prompt_cache: true,
         };
 
         let provider = AnthropicProvider::new(config.clone());
@@ -141,6 +144,7 @@ mod integration_tests {
             api_url: None,
             model: "claude-3-haiku-20240307".to_string(),
             options: None,
+            supports_prompt_cache: true,
         };
 
         let provider = AnthropicProvider::new(config.clone());
@@ -194,6 +198,7 @@ mod integration_tests {
             content: LLMMessageContent::Parts(vec![
                 LLMMessagePart::Text {
                     text: "I'll help you with that calculation.".to_string(),
+                    cache_control: None,
                 },
                 LLMMessagePart::ToolCall {
                     tool_call_id: "call_123".to_string(),
@@ -238,6 +243,7 @@ mod integration_tests {
             content: LLMMessageContent::Parts(vec![
                 LLMMessagePart::Text {
                     text: "What do you see in this image?".to_string(),
+                    cache_control: None,
                 },
                 LLMMessagePart::File {
                     mime_type: "image/jpeg".to_string(),
@@ -253,7 +259,7 @@ mod integration_tests {
             LLMMessageContent::Parts(parts) => {
                 assert_eq!(parts.len(), 2);
                 match &parts[0] {
-                    LLMMessagePart::Text { text } => {
+                    LLMMessagePart::Text { text, .. } => {
                         assert_eq!(text, "What do you see in this image?");
                     }
                     _ => panic!("Expected text part"),
@@ -276,14 +282,15 @@ mod integration_tests {
         let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
 
         let config = LLMProviderConfig {
-            provider_type: "openai_compatible".to_string(),
+            provider_type: "openai".to_string(),
             api_key,
             api_url: None,
             model: "gpt-3.5-turbo".to_string(),
             options: None,
+            supports_prompt_cache: false,
         };
 
-        let provider = AnthropicProvider::new(config.clone());
+        let provider = OpenAIProvider::new(config.clone());
 
         let request = LLMRequest {
             model: "gpt-3.5-turbo".to_string(),

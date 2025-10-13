@@ -79,14 +79,13 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
 
   const addModel = async (model: AIModelConfig) => {
     const payload: AIModelCreateInput = {
-      name: model.name,
       provider: model.provider,
       apiUrl: model.apiUrl,
       apiKey: model.apiKey,
       model: model.model,
       modelType: model.modelType,
-      enabled: model.enabled,
       options: model.options,
+      useCustomBaseUrl: model.useCustomBaseUrl,
     }
 
     await aiApi.addModel(payload)
@@ -103,14 +102,13 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
     const payload: AIModelUpdateInput = {
       id: modelId,
       changes: {
-        name: updatedModel.name,
         provider: updatedModel.provider,
         apiUrl: updatedModel.apiUrl,
         apiKey: updatedModel.apiKey,
         model: updatedModel.model,
         modelType: updatedModel.modelType,
-        enabled: updatedModel.enabled,
         options: updatedModel.options,
+        useCustomBaseUrl: updatedModel.useCustomBaseUrl,
       },
     }
 
