@@ -16,33 +16,33 @@ import type { ShellInfo, BackgroundCommandResult } from './types'
 export class ShellApi {
   // ===== 基本操作 =====
 
-  async getAvailableShells(): Promise<ShellInfo[]> {
+  getAvailableShells = async (): Promise<ShellInfo[]> => {
     return await invoke<ShellInfo[]>('terminal_get_available_shells')
   }
 
-  async getDefaultShell(): Promise<ShellInfo> {
+  getDefaultShell = async (): Promise<ShellInfo> => {
     return await invoke<ShellInfo>('terminal_get_default_shell')
   }
 
-  async validateShellPath(path: string): Promise<boolean> {
+  validateShellPath = async (path: string): Promise<boolean> => {
     return await invoke<boolean>('terminal_validate_shell_path', { path })
   }
 
   // ===== 查找功能 =====
 
-  async findShellByName(name: string): Promise<ShellInfo | null> {
+  findShellByName = async (name: string): Promise<ShellInfo | null> => {
     const shells = await this.getAvailableShells()
     return shells.find(shell => shell.name.toLowerCase() === name.toLowerCase()) || null
   }
 
-  async findShellByPath(path: string): Promise<ShellInfo | null> {
+  findShellByPath = async (path: string): Promise<ShellInfo | null> => {
     const shells = await this.getAvailableShells()
     return shells.find(shell => shell.path === path) || null
   }
 
   // ===== 后台命令执行功能 =====
 
-  async executeBackgroundCommand(command: string, workingDirectory?: string): Promise<BackgroundCommandResult> {
+  executeBackgroundCommand = async (command: string, workingDirectory?: string): Promise<BackgroundCommandResult> => {
     return await invoke<BackgroundCommandResult>('shell_execute_background_command', {
       command,
       working_directory: workingDirectory,

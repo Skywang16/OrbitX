@@ -6,7 +6,7 @@ interface ProjectRulesState {
   selectedRulesFile: string | null
 }
 
-export function useProjectRules() {
+export const useProjectRules = () => {
   const state = ref<ProjectRulesState>({
     hasRulesFile: false,
     selectedRulesFile: null,

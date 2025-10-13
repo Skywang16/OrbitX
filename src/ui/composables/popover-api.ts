@@ -24,7 +24,7 @@ export interface PopoverOptions {
 /**
  * 显示系统级右键菜单
  */
-export async function showContextMenu(options: PopoverOptions): Promise<void> {
+export const showContextMenu = async (options: PopoverOptions): Promise<void> => {
   if (options.items.length === 0) return
 
   const menuItems = []
@@ -56,7 +56,7 @@ export async function showContextMenu(options: PopoverOptions): Promise<void> {
  *
  * 用于替代原来的 Popover 组件
  */
-export function createPopover() {
+export const createPopover = () => {
   const visible = ref(false)
   const currentItems = ref<PopoverMenuItem[]>([])
 
@@ -85,6 +85,6 @@ export function createPopover() {
 /**
  * 便捷函数：直接在指定位置显示菜单
  */
-export async function showPopoverAt(x: number, y: number, items: PopoverMenuItem[]): Promise<void> {
+export const showPopoverAt = async (x: number, y: number, items: PopoverMenuItem[]): Promise<void> => {
   await showContextMenu({ x, y, items })
 }

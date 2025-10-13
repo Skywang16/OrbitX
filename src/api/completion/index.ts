@@ -14,11 +14,11 @@ import type { CompletionEngineStatus, CompletionRequest, CompletionResponse, Com
  * 补全 API 接口类
  */
 export class CompletionApi {
-  async initEngine(): Promise<void> {
+  initEngine = async (): Promise<void> => {
     await invoke<void>('completion_init_engine')
   }
 
-  async getCompletions(request: CompletionRequest): Promise<CompletionResponse> {
+  getCompletions = async (request: CompletionRequest): Promise<CompletionResponse> => {
     return await invoke<CompletionResponse>('completion_get', {
       input: request.input,
       cursorPosition: request.cursorPosition,
@@ -27,16 +27,16 @@ export class CompletionApi {
     })
   }
 
-  async clearCache(): Promise<void> {
+  clearCache = async (): Promise<void> => {
     await invoke<void>('completion_clear_cache')
   }
 
-  async getStats(): Promise<CompletionStats> {
+  getStats = async (): Promise<CompletionStats> => {
     const stats = await invoke<string>('completion_get_stats')
     return JSON.parse(stats) as CompletionStats
   }
 
-  async getEngineStatus(): Promise<CompletionEngineStatus> {
+  getEngineStatus = async (): Promise<CompletionEngineStatus> => {
     await this.getStats()
     return { initialized: true, ready: true }
   }

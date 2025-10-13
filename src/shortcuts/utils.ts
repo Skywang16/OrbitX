@@ -8,14 +8,14 @@ import type { ShortcutBinding } from '@/types'
 /**
  * 标准化按键名称
  */
-export function normalizeKey(key: string): string {
+export const normalizeKey = (key: string): string => {
   return KEY_NORMALIZATION_MAP[key] || key.toLowerCase()
 }
 
 /**
  * 获取事件的修饰键
  */
-export function getEventModifiers(event: KeyboardEvent): string[] {
+export const getEventModifiers = (event: KeyboardEvent): string[] => {
   const modifiers: string[] = []
 
   if (event.ctrlKey) modifiers.push(MODIFIER_KEYS.CTRL)
@@ -36,14 +36,14 @@ export function getEventModifiers(event: KeyboardEvent): string[] {
 /**
  * 标准化修饰键数组
  */
-export function normalizeModifiers(modifiers: string[]): string[] {
+export const normalizeModifiers = (modifiers: string[]): string[] => {
   return modifiers.map(m => m.toLowerCase()).sort()
 }
 
 /**
  * 比较修饰键是否相等
  */
-export function areModifiersEqual(mods1: string[], mods2: string[]): boolean {
+export const areModifiersEqual = (mods1: string[], mods2: string[]): boolean => {
   if (mods1.length !== mods2.length) return false
 
   for (let i = 0; i < mods1.length; i++) {
@@ -56,7 +56,7 @@ export function areModifiersEqual(mods1: string[], mods2: string[]): boolean {
 /**
  * 格式化按键组合为字符串
  */
-export function formatKeyCombo(event: KeyboardEvent): string {
+export const formatKeyCombo = (event: KeyboardEvent): string => {
   const modifiers = getEventModifiers(event)
   const key = normalizeKey(event.key)
 
@@ -69,7 +69,7 @@ export function formatKeyCombo(event: KeyboardEvent): string {
 /**
  * 检查按键事件是否匹配快捷键
  */
-export function isShortcutMatch(event: KeyboardEvent, shortcut: ShortcutBinding): boolean {
+export const isShortcutMatch = (event: KeyboardEvent, shortcut: ShortcutBinding): boolean => {
   // 检查主按键
   const normalizedKey = normalizeKey(event.key)
   const shortcutKey = normalizeKey(shortcut.key)
@@ -88,14 +88,14 @@ export function isShortcutMatch(event: KeyboardEvent, shortcut: ShortcutBinding)
 /**
  * 提取动作名称
  */
-export function extractActionName(action: string): string {
+export const extractActionName = (action: string): string => {
   return action
 }
 
 /**
  * 检查是否为平台特定的快捷键
  */
-export function isPlatformShortcut(keyCombo: string): boolean {
+export const isPlatformShortcut = (keyCombo: string): boolean => {
   const isMac = navigator.platform.includes('Mac')
 
   // 常见的平台快捷键
@@ -112,7 +112,7 @@ export function isPlatformShortcut(keyCombo: string): boolean {
 /**
  * 生成调试信息
  */
-export function generateDebugInfo(event: KeyboardEvent, shortcut?: ShortcutBinding) {
+export const generateDebugInfo = (event: KeyboardEvent, shortcut?: ShortcutBinding) => {
   return {
     timestamp: new Date().toISOString(),
     keyInfo: {

@@ -6,10 +6,10 @@ export const useWindowStore = defineStore('window', {
     alwaysOnTop: false as boolean,
   }),
   actions: {
-    setAlwaysOnTop(value: boolean) {
+    setAlwaysOnTop: function (value: boolean) {
       this.alwaysOnTop = value
     },
-    async initFromSystem() {
+    initFromSystem: async function () {
       try {
         const state = await windowApi.getWindowState()
         this.alwaysOnTop = !!state.alwaysOnTop

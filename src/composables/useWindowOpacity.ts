@@ -11,7 +11,7 @@ import { applyBackgroundOpacity } from '@/utils/themeApplier'
 /**
  * 窗口透明度管理 hook
  */
-export function useWindowOpacity() {
+export const useWindowOpacity = () => {
   const opacity = ref(1.0)
   const isLoading = ref(false)
   let unlisten: (() => void) | null = null

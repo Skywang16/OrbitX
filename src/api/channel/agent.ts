@@ -8,13 +8,13 @@ class AgentChannelApi {
   /**
    * 创建 Agent 任务执行流
    */
-  createTaskStream(params: {
+  createTaskStream = (params: {
     conversationId: number
     userPrompt: string
     chatMode: 'chat' | 'agent'
     configOverrides?: Record<string, unknown>
     restoreTaskId?: string
-  }): ReadableStream<TaskProgressPayload> {
+  }): ReadableStream<TaskProgressPayload> => {
     return channelApi.createStream<TaskProgressPayload>(
       'agent_execute_task',
       { params },
@@ -34,7 +34,7 @@ class AgentChannelApi {
   /**
    * 创建 Agent 任务恢复流
    */
-  createResumeStream(taskId: string): ReadableStream<TaskProgressPayload> {
+  createResumeStream = (taskId: string): ReadableStream<TaskProgressPayload> => {
     return channelApi.createStream<TaskProgressPayload>(
       'agent_resume_task',
       { task_id: taskId },

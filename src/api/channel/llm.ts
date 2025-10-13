@@ -10,7 +10,7 @@ class LLMChannelApi {
   /**
    * 创建 LLM 流式调用
    */
-  createStream(request: Record<string, unknown>): ReadableStream<LLMStreamChunk> {
+  createStream = (request: Record<string, unknown>): ReadableStream<LLMStreamChunk> => {
     return channelApi.createStream<LLMStreamChunk>(
       'llm_call_stream',
       { request },
@@ -26,7 +26,7 @@ class LLMChannelApi {
   /**
    * 取消流式调用
    */
-  async cancelStream(requestId = 'current'): Promise<void> {
+  cancelStream = async (requestId = 'current'): Promise<void> => {
     await invoke('llm_cancel_stream', { requestId })
   }
 }

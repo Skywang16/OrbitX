@@ -11,7 +11,7 @@ import { shortcutActionsService } from './actions'
 import { formatKeyCombo, isShortcutMatch, extractActionName } from './utils'
 import { useTerminalStore } from '@/stores/Terminal'
 
-export function useShortcutListener() {
+export const useShortcutListener = () => {
   const isListening = ref(false)
   const config = ref<ShortcutsConfig | null>(null)
   let keydownHandler: ((event: KeyboardEvent) => void) | null = null

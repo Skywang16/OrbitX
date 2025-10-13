@@ -31,7 +31,7 @@ export class APIClient {
 
   private constructor() {}
 
-  static getInstance(): APIClient {
+  static getInstance = (): APIClient => {
     if (!APIClient.instance) {
       APIClient.instance = new APIClient()
     }
@@ -41,7 +41,7 @@ export class APIClient {
   /**
    * 执行Tauri命令调用
    */
-  async invoke<T>(command: string, args?: Record<string, unknown>, options?: APIOptions): Promise<T> {
+  invoke = async <T>(command: string, args?: Record<string, unknown>, options?: APIOptions): Promise<T> => {
     try {
       // 检查是否已被取消
       if (options?.signal?.aborted) {
@@ -65,7 +65,11 @@ export class APIClient {
   /**
    * 执行实际的Tauri命令
    */
-  private async executeCommand<T>(command: string, args?: Record<string, unknown>, options?: APIOptions): Promise<T> {
+  private executeCommand = async <T>(
+    command: string,
+    args?: Record<string, unknown>,
+    options?: APIOptions
+  ): Promise<T> => {
     const timeout = options?.timeout || 300000
 
     return new Promise((resolve, reject) => {
@@ -100,7 +104,7 @@ export class APIClient {
   /**
    * 清理资源
    */
-  private cleanup(signal?: AbortSignal, abortHandler?: () => void, timeoutId?: NodeJS.Timeout) {
+  private cleanup = (signal?: AbortSignal, abortHandler?: () => void, timeoutId?: NodeJS.Timeout) => {
     if (timeoutId) {
       clearTimeout(timeoutId)
     }
@@ -112,10 +116,10 @@ export class APIClient {
   /**
    * 批量调用API
    */
-  async batchInvoke<T>(
+  batchInvoke = async <T>(
     commands: Array<{ command: string; args?: Record<string, unknown> }>,
     options?: APIOptions
-  ): Promise<T[]> {
+  ): Promise<T[]> => {
     const promises = commands.map(({ command, args }) => this.invoke<T>(command, args, options))
     return Promise.all(promises)
   }
@@ -123,11 +127,11 @@ export class APIClient {
   /**
    * 带重试的API调用
    */
-  async invokeWithRetry<T>(
+  invokeWithRetry = async <T>(
     command: string,
     args?: Record<string, unknown>,
     options?: APIOptions & { retries?: number; retryDelay?: number }
-  ): Promise<T> {
+  ): Promise<T> => {
     const maxRetries = options?.retries || 3
     const retryDelay = options?.retryDelay || 1000
 

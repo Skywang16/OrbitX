@@ -26,63 +26,63 @@ import type {
 export class StorageApi {
   // ===== 配置管理 =====
 
-  async getConfig<S extends ConfigSection>(section: S): Promise<ConfigSectionMap[S]> {
+  getConfig = async <S extends ConfigSection>(section: S): Promise<ConfigSectionMap[S]> => {
     return await invoke<ConfigSectionMap[S]>('storage_get_config', { section })
   }
 
-  async updateConfig<S extends ConfigSection>(section: S, data: ConfigSectionMap[S]): Promise<void> {
+  updateConfig = async <S extends ConfigSection>(section: S, data: ConfigSectionMap[S]): Promise<void> => {
     await invoke<void>('storage_update_config', { section, data })
   }
 
   // ===== 会话状态管理 =====
 
-  async saveSessionState(sessionState: SessionState): Promise<void> {
+  saveSessionState = async (sessionState: SessionState): Promise<void> => {
     await invoke<void>('storage_save_session_state', { sessionState })
   }
 
-  async loadSessionState(): Promise<SessionState | null> {
+  loadSessionState = async (): Promise<SessionState | null> => {
     return await invoke<SessionState | null>('storage_load_session_state')
   }
 
   // ===== 便捷方法 =====
 
-  async getAppConfig(): Promise<AppSection> {
+  getAppConfig = async (): Promise<AppSection> => {
     return this.getConfig(ConfigSection.App)
   }
 
-  async getAppearanceConfig(): Promise<AppearanceSection> {
+  getAppearanceConfig = async (): Promise<AppearanceSection> => {
     return this.getConfig(ConfigSection.Appearance)
   }
 
-  async getTerminalConfig(): Promise<TerminalSection> {
+  getTerminalConfig = async (): Promise<TerminalSection> => {
     return this.getConfig(ConfigSection.Terminal)
   }
 
-  async getShortcutsConfig(): Promise<ShortcutsSection> {
+  getShortcutsConfig = async (): Promise<ShortcutsSection> => {
     return this.getConfig(ConfigSection.Shortcuts)
   }
 
-  async getAiConfig(): Promise<AiSection> {
+  getAiConfig = async (): Promise<AiSection> => {
     return this.getConfig(ConfigSection.Ai)
   }
 
-  async updateAppConfig(data: AppSection): Promise<void> {
+  updateAppConfig = async (data: AppSection): Promise<void> => {
     return this.updateConfig(ConfigSection.App, data)
   }
 
-  async updateAppearanceConfig(data: AppearanceSection): Promise<void> {
+  updateAppearanceConfig = async (data: AppearanceSection): Promise<void> => {
     return this.updateConfig(ConfigSection.Appearance, data)
   }
 
-  async updateTerminalConfig(data: TerminalSection): Promise<void> {
+  updateTerminalConfig = async (data: TerminalSection): Promise<void> => {
     return this.updateConfig(ConfigSection.Terminal, data)
   }
 
-  async updateShortcutsConfig(data: ShortcutsSection): Promise<void> {
+  updateShortcutsConfig = async (data: ShortcutsSection): Promise<void> => {
     return this.updateConfig(ConfigSection.Shortcuts, data)
   }
 
-  async updateAiConfig(data: AiSection): Promise<void> {
+  updateAiConfig = async (data: AiSection): Promise<void> => {
     return this.updateConfig(ConfigSection.Ai, data)
   }
 
@@ -96,7 +96,7 @@ export class StorageApi {
    * - 不依赖前端缓存，确保数据准确性
    * - 用于应用启动、会话恢复、前端同步等场景
    */
-  async getTerminalsState(): Promise<RuntimeTerminalState[]> {
+  getTerminalsState = async (): Promise<RuntimeTerminalState[]> => {
     return await invoke<RuntimeTerminalState[]>('storage_get_terminals_state')
   }
 
@@ -105,7 +105,7 @@ export class StorageApi {
    *
    * @param paneId 后端 pane ID
    */
-  async getTerminalCwd(paneId: number): Promise<string> {
+  getTerminalCwd = async (paneId: number): Promise<string> => {
     return await invoke<string>('storage_get_terminal_cwd', { paneId })
   }
 }

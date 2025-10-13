@@ -23,14 +23,14 @@ export class LLMApi {
   /**
    * 普通LLM调用
    */
-  async call(request: NativeLLMRequest): Promise<NativeLLMResponse> {
+  call = async (request: NativeLLMRequest): Promise<NativeLLMResponse> => {
     return await invoke<NativeLLMResponse>('llm_call', { request })
   }
 
   /**
    * 流式LLM调用
    */
-  async callStream(request: NativeLLMRequest): Promise<ReadableStream<NativeLLMStreamChunk>> {
+  callStream = async (request: NativeLLMRequest): Promise<ReadableStream<NativeLLMStreamChunk>> => {
     // Handle abort signal if provided
     if (request.abortSignal) {
       request.abortSignal.addEventListener('abort', () => {
@@ -45,21 +45,21 @@ export class LLMApi {
   /**
    * 获取可用模型列表
    */
-  async getAvailableModels(): Promise<string[]> {
+  getAvailableModels = async (): Promise<string[]> => {
     return await invoke<string[]>('llm_get_available_models')
   }
 
   /**
    * 测试模型连接
    */
-  async testModelConnection(modelId: string): Promise<boolean> {
+  testModelConnection = async (modelId: string): Promise<boolean> => {
     return await invoke<boolean>('llm_test_model_connection', { modelId })
   }
 
   /**
    * 取消流式调用
    */
-  async cancelStream(): Promise<void> {
+  cancelStream = async (): Promise<void> => {
     return llmChannelApi.cancelStream()
   }
 }

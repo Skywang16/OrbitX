@@ -8,7 +8,7 @@ interface NodeVersionState {
   manager: string | null
 }
 
-export function useNodeVersion() {
+export const useNodeVersion = () => {
   const state = ref<NodeVersionState>({
     isNodeProject: false,
     currentVersion: null,

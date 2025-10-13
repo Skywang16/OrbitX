@@ -24,7 +24,7 @@ export const i18n = createI18n({
 })
 
 // 异步初始化语言设置
-export async function initLocale() {
+export const initLocale = async () => {
   // 优先从后端语言管理器获取（与后端 i18n 保持一致）
   let savedLocale: string | undefined
   const appLanguage = await invoke<string>('language_get_app_language').catch(error => {
@@ -65,7 +65,7 @@ export async function initLocale() {
 }
 
 // 切换语言函数
-export async function setLocale(locale: string) {
+export const setLocale = async (locale: string) => {
   // 验证locale参数
   if (!locale || typeof locale !== 'string') {
     console.error('Invalid locale type:', typeof locale, locale)
@@ -94,6 +94,6 @@ export async function setLocale(locale: string) {
   }
 }
 
-export function getCurrentLocale() {
+export const getCurrentLocale = () => {
   return i18n.global.locale.value
 }

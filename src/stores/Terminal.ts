@@ -66,11 +66,11 @@ export const useTerminalStore = defineStore('Terminal', () => {
     started: CommandEventStartedPayload
     finished: CommandEventFinishedPayload
   }
-  function emitCommandEvent<E extends CommandEventType>(
+  const emitCommandEvent = <E extends CommandEventType>(
     terminalId: number,
     event: E,
     data: CommandEventPayloadMap[E]
-  ): void {
+  ): void => {
     _commandEventListeners.value.forEach(callback => {
       try {
         callback(terminalId, event, data)

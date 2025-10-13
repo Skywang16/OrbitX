@@ -20,7 +20,7 @@ export class TerminalContextApi {
    * 设置活跃终端面板ID
    * @param paneId 面板ID
    */
-  async setActivePaneId(paneId: number): Promise<void> {
+  setActivePaneId = async (paneId: number): Promise<void> => {
     await invoke('terminal_context_set_active_pane', { paneId })
   }
 
@@ -28,7 +28,7 @@ export class TerminalContextApi {
    * 获取当前活跃终端面板ID
    * @returns 活跃终端面板ID，如果没有活跃终端则返回null
    */
-  async getActivePaneId(): Promise<number | null> {
+  getActivePaneId = async (): Promise<number | null> => {
     return await invoke<number | null>('terminal_context_get_active_pane')
   }
 
@@ -39,7 +39,7 @@ export class TerminalContextApi {
    * @param paneId 可选的面板ID，如果不提供则获取活跃终端的上下文
    * @returns 终端上下文信息
    */
-  async getTerminalContext(paneId?: number): Promise<TerminalContext> {
+  getTerminalContext = async (paneId?: number): Promise<TerminalContext> => {
     return await invoke<TerminalContext>('terminal_context_get', { paneId })
   }
 
@@ -47,7 +47,7 @@ export class TerminalContextApi {
    * 获取活跃终端的上下文信息
    * @returns 活跃终端的上下文信息
    */
-  async getActiveTerminalContext(): Promise<TerminalContext> {
+  getActiveTerminalContext = async (): Promise<TerminalContext> => {
     return await invoke<TerminalContext>('terminal_context_get_active')
   }
 
@@ -58,7 +58,7 @@ export class TerminalContextApi {
    * @param paneId 可选的面板ID，如果不提供则获取活跃终端的CWD
    * @returns 当前工作目录路径
    */
-  async getCurrentWorkingDirectory(paneId?: number): Promise<string | null> {
+  getCurrentWorkingDirectory = async (paneId?: number): Promise<string | null> => {
     const context = await this.getTerminalContext(paneId)
     return context.currentWorkingDirectory
   }
@@ -68,7 +68,7 @@ export class TerminalContextApi {
    * @param paneId 可选的面板ID，如果不提供则获取活跃终端的Shell类型
    * @returns Shell类型
    */
-  async getShellType(paneId?: number): Promise<string | null> {
+  getShellType = async (paneId?: number): Promise<string | null> => {
     const context = await this.getTerminalContext(paneId)
     return context.shellType
   }
@@ -78,7 +78,7 @@ export class TerminalContextApi {
    * @param paneId 可选的面板ID，如果不提供则检查活跃终端
    * @returns 是否启用Shell集成
    */
-  async isShellIntegrationEnabled(paneId?: number): Promise<boolean> {
+  isShellIntegrationEnabled = async (paneId?: number): Promise<boolean> => {
     const context = await this.getTerminalContext(paneId)
     return context.shellIntegrationEnabled
   }
@@ -88,7 +88,7 @@ export class TerminalContextApi {
    * @param paneId 面板ID
    * @returns 终端是否存在
    */
-  async terminalExists(paneId: number): Promise<boolean> {
+  terminalExists = async (paneId: number): Promise<boolean> => {
     await this.getTerminalContext(paneId)
     return true
   }

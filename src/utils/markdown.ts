@@ -22,6 +22,6 @@ marked.use(
  * @param content Markdown 文本
  * @returns 渲染后的 HTML 字符串
  */
-export function renderMarkdown(content?: string): string {
+export const renderMarkdown = (content?: string): string => {
   return marked.parse(content || '') as string
 }

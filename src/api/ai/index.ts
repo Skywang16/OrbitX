@@ -3,11 +3,11 @@ import { invoke } from '@/utils/request'
 import type { AIModelCreateInput, AIModelUpdateInput, AIModelTestConnectionInput } from './types'
 
 export class AiApi {
-  async getModels(): Promise<AIModelConfig[]> {
+  getModels = async (): Promise<AIModelConfig[]> => {
     return await invoke<AIModelConfig[]>('ai_models_get')
   }
 
-  async addModel(model: AIModelCreateInput): Promise<AIModelConfig> {
+  addModel = async (model: AIModelCreateInput): Promise<AIModelConfig> => {
     const timestamp = new Date()
     const config: AIModelConfig = {
       id: crypto.randomUUID(),
@@ -26,18 +26,18 @@ export class AiApi {
     return await invoke<AIModelConfig>('ai_models_add', { config })
   }
 
-  async updateModel({ id, changes }: AIModelUpdateInput): Promise<void> {
+  updateModel = async ({ id, changes }: AIModelUpdateInput): Promise<void> => {
     await invoke<void>('ai_models_update', {
       modelId: id,
       updates: changes,
     })
   }
 
-  async deleteModel(modelId: string): Promise<void> {
+  deleteModel = async (modelId: string): Promise<void> => {
     await invoke<void>('ai_models_remove', { modelId })
   }
 
-  async testConnectionWithConfig(config: AIModelTestConnectionInput): Promise<void> {
+  testConnectionWithConfig = async (config: AIModelTestConnectionInput): Promise<void> => {
     const payload: AIModelConfig = {
       id: crypto.randomUUID(),
       name: config.name,
@@ -55,27 +55,27 @@ export class AiApi {
     await invoke<void>('ai_models_test_connection', { config: payload })
   }
 
-  async getUserRules(): Promise<string | null> {
+  getUserRules = async (): Promise<string | null> => {
     return await invoke<string | null>('agent_get_user_rules')
   }
 
-  async setUserRules(rules: string | null): Promise<void> {
+  setUserRules = async (rules: string | null): Promise<void> => {
     await invoke<void>('agent_set_user_rules', { rules })
   }
 
-  async getSettings(): Promise<AISettings> {
+  getSettings = async (): Promise<AISettings> => {
     return await invoke<AISettings>('get_ai_settings')
   }
 
-  async updateSettings(settings: Partial<AISettings>): Promise<void> {
+  updateSettings = async (settings: Partial<AISettings>): Promise<void> => {
     await invoke<void>('update_ai_settings', { settings })
   }
 
-  async getStats(): Promise<AIStats> {
+  getStats = async (): Promise<AIStats> => {
     return await invoke<AIStats>('get_ai_stats')
   }
 
-  async getHealthStatus(): Promise<AIHealthStatus> {
+  getHealthStatus = async (): Promise<AIHealthStatus> => {
     return await invoke<AIHealthStatus>('get_ai_health_status')
   }
 }

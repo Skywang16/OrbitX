@@ -71,7 +71,7 @@ export const useThemeStore = defineStore('theme', () => {
       lastOperation,
     }
 
-    async switchToTheme(themeName: string): Promise<void> {
+    switchToTheme = async (themeName: string): Promise<void> => {
       const operation: ThemeOperation = {
         type: 'SWITCH_THEME',
         payload: { themeName },
@@ -99,7 +99,7 @@ export const useThemeStore = defineStore('theme', () => {
       })
     }
 
-    async setFollowSystem(followSystem: boolean, lightTheme?: string, darkTheme?: string): Promise<void> {
+    setFollowSystem = async (followSystem: boolean, lightTheme?: string, darkTheme?: string): Promise<void> => {
       const operation: ThemeOperation = {
         type: 'SET_FOLLOW_SYSTEM',
         payload: { followSystem, lightTheme, darkTheme },
@@ -125,7 +125,7 @@ export const useThemeStore = defineStore('theme', () => {
       })
     }
 
-    private async executeOperation(operation: ThemeOperation, action: () => Promise<void>): Promise<void> {
+    private executeOperation = async (operation: ThemeOperation, action: () => Promise<void>): Promise<void> => {
       // 保存当前状态用于回滚
       const snapshot = this.createStateSnapshot()
 
@@ -146,7 +146,7 @@ export const useThemeStore = defineStore('theme', () => {
       }
     }
 
-    private optimisticUpdateTheme(themeName: string): void {
+    private optimisticUpdateTheme = (themeName: string): void => {
       if (this.store.configStatus.value) {
         this.store.configStatus.value = {
           ...this.store.configStatus.value,
@@ -163,7 +163,7 @@ export const useThemeStore = defineStore('theme', () => {
       this.syncAvailableThemesState(themeName)
     }
 
-    private optimisticUpdateFollowSystem(followSystem: boolean, lightTheme?: string, darkTheme?: string): void {
+    private optimisticUpdateFollowSystem = (followSystem: boolean, lightTheme?: string, darkTheme?: string): void => {
       if (this.store.configStatus.value) {
         this.store.configStatus.value = {
           ...this.store.configStatus.value,
@@ -177,14 +177,14 @@ export const useThemeStore = defineStore('theme', () => {
       }
     }
 
-    private createStateSnapshot(): StateSnapshot {
+    private createStateSnapshot = (): StateSnapshot => {
       return {
         configStatus: this.store.configStatus.value,
         currentTheme: this.store.currentTheme.value,
       }
     }
 
-    private restoreStateSnapshot(snapshot: StateSnapshot): void {
+    private restoreStateSnapshot = (snapshot: StateSnapshot): void => {
       this.store.configStatus.value = snapshot.configStatus
       this.store.currentTheme.value = snapshot.currentTheme
 
@@ -196,7 +196,7 @@ export const useThemeStore = defineStore('theme', () => {
       }
     }
 
-    private syncAvailableThemesState(currentThemeName: string): void {
+    private syncAvailableThemesState = (currentThemeName: string): void => {
       // 只有在状态真正需要改变时才更新，避免不必要的响应式更新
       const needsUpdate = availableThemes.value.some(
         theme =>
@@ -216,7 +216,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   // 数据加载
 
-  async function loadThemeConfigStatus(): Promise<void> {
+  const loadThemeConfigStatus = async (): Promise<void> => {
     try {
       operationState.value = ThemeOperationState.UPDATING_CONFIG
       const status = await themeAPI.getThemeConfigStatus()
@@ -230,7 +230,7 @@ export const useThemeStore = defineStore('theme', () => {
     }
   }
 
-  async function loadCurrentTheme(): Promise<void> {
+  const loadCurrentTheme = async (): Promise<void> => {
     try {
       const theme = await themeAPI.getCurrentTheme()
       currentTheme.value = theme
@@ -247,11 +247,11 @@ export const useThemeStore = defineStore('theme', () => {
 
   // 初始化和清理
 
-  async function initialize(): Promise<void> {
+  const initialize = async (): Promise<void> => {
     await Promise.all([loadThemeConfigStatus(), loadCurrentTheme()])
   }
 
-  function clearError(): void {
+  const clearError = (): void => {
     error.value = null
   }
 

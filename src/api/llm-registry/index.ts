@@ -24,15 +24,15 @@ export interface LLMRegistryApi {
 }
 
 class LLMRegistryApiImpl implements LLMRegistryApi {
-  async getProviders(): Promise<ProviderInfo[]> {
+  getProviders = async (): Promise<ProviderInfo[]> => {
     return await invoke('llm_get_providers')
   }
 
-  async getProviderModels(providerType: LLMProviderType): Promise<ModelInfo[]> {
+  getProviderModels = async (providerType: LLMProviderType): Promise<ModelInfo[]> => {
     return await invoke('llm_get_provider_models', { providerType })
   }
 
-  async getModelInfo(modelId: string): Promise<{ provider: ProviderInfo; model: ModelInfo } | null> {
+  getModelInfo = async (modelId: string): Promise<{ provider: ProviderInfo; model: ModelInfo } | null> => {
     const result = await invoke<[ProviderInfo, ModelInfo] | null>('llm_get_model_info', { modelId })
     if (result) {
       return {
@@ -43,7 +43,7 @@ class LLMRegistryApiImpl implements LLMRegistryApi {
     return null
   }
 
-  async checkModelFeature(modelId: string, feature: string): Promise<boolean> {
+  checkModelFeature = async (modelId: string, feature: string): Promise<boolean> => {
     return await invoke('llm_check_model_feature', { modelId, feature })
   }
 }

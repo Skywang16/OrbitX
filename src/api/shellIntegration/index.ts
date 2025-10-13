@@ -20,7 +20,7 @@ export class ShellIntegrationApi {
    * @param paneId 终端面板ID
    * @param silent 是否静默设置
    */
-  async setupShellIntegration(paneId: number, silent: boolean = true): Promise<void> {
+  setupShellIntegration = async (paneId: number, silent: boolean = true): Promise<void> => {
     await invoke('shell_setup_integration', { paneId, silent })
   }
 
@@ -28,14 +28,14 @@ export class ShellIntegrationApi {
    * 检查Shell Integration状态
    * @param paneId 终端面板ID
    */
-  async checkShellIntegrationStatus(paneId: number): Promise<boolean> {
+  checkShellIntegrationStatus = async (paneId: number): Promise<boolean> => {
     return await invoke<boolean>('shell_check_integration_status', { paneId })
   }
 
   /**
    * 获取面板的 Shell 状态快照（包含 node_version 等）
    */
-  async getPaneShellState<T = { node_version?: string | null } | null>(paneId: number): Promise<T> {
+  getPaneShellState = async <T = { node_version?: string | null } | null>(paneId: number): Promise<T> => {
     // 直接调用后端命令 get_pane_shell_state
     // 返回 FrontendPaneState，可按需解构 node_version 字段
     return await invoke<T>('get_pane_shell_state', { paneId })

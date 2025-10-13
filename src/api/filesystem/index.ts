@@ -17,21 +17,23 @@ export class FilesystemApi {
   /**
    * 读取文本文件
    */
-  async readTextFile(path: string): Promise<ArrayBuffer> {
+  readTextFile = async (path: string): Promise<ArrayBuffer> => {
     return await invoke<ArrayBuffer>('plugin:fs|read_text_file', { path })
   }
 
   /**
    * 检查文件或目录是否存在
    */
-  async exists(path: string): Promise<boolean> {
+  exists = async (path: string): Promise<boolean> => {
     return await invoke<boolean>('plugin:fs|exists', { path })
   }
 
   /**
    * 获取文件或目录元数据（使用 Tauri fs 插件的 stat 接口）
    */
-  async getMetadata(path: string): Promise<{ isDir?: boolean; size?: number; isFile?: boolean; isSymlink?: boolean }> {
+  getMetadata = async (
+    path: string
+  ): Promise<{ isDir?: boolean; size?: number; isFile?: boolean; isSymlink?: boolean }> => {
     // tauri-plugin-fs v2 使用 'stat'，权限对应 capabilities 中的 "fs:allow-stat"
     return await invoke<{ isDir?: boolean; size?: number; isFile?: boolean; isSymlink?: boolean }>('plugin:fs|stat', {
       path,
@@ -41,7 +43,7 @@ export class FilesystemApi {
   /**
    * 检查是否为目录
    */
-  async isDirectory(path: string): Promise<boolean> {
+  isDirectory = async (path: string): Promise<boolean> => {
     const metadata = await this.getMetadata(path)
     return metadata.isDir || false
   }
@@ -49,7 +51,7 @@ export class FilesystemApi {
   /**
    * 获取文件大小
    */
-  async getFileSize(path: string): Promise<number> {
+  getFileSize = async (path: string): Promise<number> => {
     const metadata = await this.getMetadata(path)
     return metadata.size || 0
   }
@@ -57,14 +59,16 @@ export class FilesystemApi {
   /**
    * 读取目录内容
    */
-  async readDir(path: string): Promise<
+  readDir = async (
+    path: string
+  ): Promise<
     Array<{
       name: string
       isDirectory: boolean
       isFile: boolean
       isSymlink: boolean
     }>
-  > {
+  > => {
     return await invoke<
       Array<{
         name: string
@@ -78,7 +82,7 @@ export class FilesystemApi {
   /**
    * 列出目录（后端命令，完整 .gitignore 语义，递归可选）
    */
-  async listDirectory(path: string, recursive: boolean = false): Promise<string[]> {
+  listDirectory = async (path: string, recursive: boolean = false): Promise<string[]> => {
     return await appInvoke<string[]>('fs_list_directory', { path, recursive })
   }
 }

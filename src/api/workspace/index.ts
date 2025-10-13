@@ -27,7 +27,7 @@ export class WorkspaceApi {
    * 获取最近打开的工作区列表
    * @param limit 限制返回数量，默认10个，最多50个
    */
-  async getRecentWorkspaces(limit?: number): Promise<RecentWorkspace[]> {
+  getRecentWorkspaces = async (limit?: number): Promise<RecentWorkspace[]> => {
     return invoke<RecentWorkspace[]>('workspace_get_recent', { limit })
   }
 
@@ -35,7 +35,7 @@ export class WorkspaceApi {
    * 添加或更新工作区访问记录
    * @param path 工作区路径
    */
-  async addRecentWorkspace(path: string): Promise<void> {
+  addRecentWorkspace = async (path: string): Promise<void> => {
     await invoke('workspace_add_recent', { path })
   }
 
@@ -43,7 +43,7 @@ export class WorkspaceApi {
    * 删除指定工作区记录
    * @param path 工作区路径
    */
-  async removeRecentWorkspace(path: string): Promise<void> {
+  removeRecentWorkspace = async (path: string): Promise<void> => {
     await invoke('workspace_remove_recent', { path })
   }
 
@@ -51,7 +51,7 @@ export class WorkspaceApi {
    * 维护数据：清理过期记录 + 限制总数
    * @returns [old_count, excess_count] 分别表示过期记录数和超量记录数
    */
-  async maintainWorkspaces(): Promise<[number, number]> {
+  maintainWorkspaces = async (): Promise<[number, number]> => {
     return invoke<[number, number]>('workspace_maintain')
   }
 
@@ -60,7 +60,7 @@ export class WorkspaceApi {
   /**
    * 获取当前项目规则文件名
    */
-  async getProjectRules(): Promise<string | null> {
+  getProjectRules = async (): Promise<string | null> => {
     return invoke<string | null>('workspace_get_project_rules')
   }
 
@@ -68,7 +68,7 @@ export class WorkspaceApi {
    * 设置项目规则文件
    * @param rules 规则文件名（如 "CLAUDE.md"）或 null 表示清除
    */
-  async setProjectRules(rules: string | null): Promise<void> {
+  setProjectRules = async (rules: string | null): Promise<void> => {
     await invoke<void>('workspace_set_project_rules', { rules })
   }
 
@@ -76,7 +76,7 @@ export class WorkspaceApi {
    * 列出指定目录下所有可用的规则文件
    * @param cwd 工作目录路径
    */
-  async listAvailableRulesFiles(cwd: string): Promise<string[]> {
+  listAvailableRulesFiles = async (cwd: string): Promise<string[]> => {
     return invoke<string[]>('workspace_list_rules_files', { cwd })
   }
 }

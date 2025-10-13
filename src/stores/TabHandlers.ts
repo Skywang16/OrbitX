@@ -98,7 +98,7 @@ const getDisplayPath = (cwd: string): string => {
 }
 
 handlers.set('terminal', {
-  buildTabItem(tab: TerminalTabState): TabItem {
+  buildTabItem: (tab: TerminalTabState): TabItem => {
     const terminalStore = useTerminalStore()
     const terminal = terminalStore.terminals.find(t => t.id === tab.id)
 
@@ -112,17 +112,17 @@ handlers.set('terminal', {
     }
   },
 
-  async activate(tabId: number): Promise<void> {
+  activate: async (tabId: number): Promise<void> => {
     await useTerminalStore().setActiveTerminal(tabId)
   },
 
-  async close(tabId: number): Promise<void> {
+  close: async (tabId: number): Promise<void> => {
     await useTerminalStore().closeTerminal(tabId)
   },
 })
 
 handlers.set('settings', {
-  buildTabItem(tab: SettingsTabState): TabItem {
+  buildTabItem: (tab: SettingsTabState): TabItem => {
     return {
       id: tab.id,
       type: TabType.SETTINGS,
@@ -134,7 +134,7 @@ handlers.set('settings', {
     }
   },
 
-  async activate(tabId: number): Promise<void> {
+  activate: async (tabId: number): Promise<void> => {
     useSessionStore().setActiveTab(tabId)
   },
 })
