@@ -42,11 +42,10 @@ impl RunnableTool for ReadFileTool {
     }
 
     fn description(&self) -> &str {
-        "Reads a file from the local filesystem. You can access any file directly by using this tool.
-Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
+        "Reads a file from the local filesystem.
 
 Usage:
-- The path parameter must be an absolute path, not a relative path
+- The path parameter must be an absolute path (e.g., '/Users/user/project/src/main.ts')
 - By default, it reads up to 2000 lines starting from the beginning of the file
 - You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters
 - Any lines longer than 2000 characters will be truncated
@@ -62,7 +61,7 @@ Usage:
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The absolute path to the file to read. Must be a complete absolute path, for example: \"/Users/user/project/src/main.ts\". Relative paths are not supported."
+                    "description": "The absolute path to the file to read. For example: \"/Users/user/project/src/main.ts\". Will return an error if the file doesn't exist."
                 },
                 "offset": {
                     "type": "number",

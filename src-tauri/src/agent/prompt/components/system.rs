@@ -76,7 +76,7 @@ impl ComponentDefinition for SystemInfoComponent {
     }
 
     fn default_template(&self) -> Option<&str> {
-        Some("=== SYSTEM INFORMATION ===\nCurrent Working Directory: {working_directory}\nOperating System: {platform}\nEnvironment Context: {environment_context}\n\n{file_list_preview}\n\n**IMPORTANT: All file paths and commands should be relative to the Current Working Directory shown above.**")
+        Some("Here is useful information about the environment you are running in:\n<env>\nWorking directory: {working_directory}\nPlatform: {platform}\nToday's date: {current_date}\n</env>\n\n{file_list_preview}")
     }
 
     async fn render(
@@ -94,19 +94,6 @@ impl ComponentDefinition for SystemInfoComponent {
             .and_then(|c| c.working_directory.as_deref())
             .unwrap_or("Not specified");
 
-        let environment_context = if let Some(ctx) = &context.context {
-            if ctx.environment_vars.is_empty() {
-                "No environment variables specified".to_string()
-            } else {
-                format!(
-                    "{} environment variables available",
-                    ctx.environment_vars.len()
-                )
-            }
-        } else {
-            "No environment context available".to_string()
-        };
-
         // 获取当前目录的文件列表（最多50个）
         let file_list_preview = get_directory_preview(working_directory).await;
 
@@ -114,8 +101,8 @@ impl ComponentDefinition for SystemInfoComponent {
         template_context.insert("platform".to_string(), json!("macOS"));
         template_context.insert("working_directory".to_string(), json!(working_directory));
         template_context.insert(
-            "environment_context".to_string(),
-            json!(environment_context),
+            "current_date".to_string(),
+            json!(chrono::Utc::now().format("%Y-%m-%d").to_string()),
         );
         template_context.insert("file_list_preview".to_string(), json!(file_list_preview));
 
@@ -154,7 +141,7 @@ impl ComponentDefinition for DateTimeComponent {
     }
 
     fn default_template(&self) -> Option<&str> {
-        Some("Current time: {current_time}")
+        Some("You are OrbitX Agent, a terminal-focused AI assistant.")
     }
 
     async fn render(
@@ -166,20 +153,6 @@ impl ComponentDefinition for DateTimeComponent {
             .or_else(|| self.default_template())
             .ok_or_else(|| AgentError::Internal("missing datetime template".to_string()))?;
 
-        let mut template_context = HashMap::new();
-        template_context.insert(
-            "current_time".to_string(),
-            json!(chrono::Utc::now()
-                .format("%Y-%m-%d %H:%M:%S UTC")
-                .to_string()),
-        );
-
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("failed to render datetime template: {}", e))
-            })?;
-
-        Ok(Some(result))
+        Ok(Some(template.to_string()))
     }
 }

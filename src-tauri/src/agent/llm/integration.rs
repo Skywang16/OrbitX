@@ -8,31 +8,51 @@ use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::events::{TaskProgressPayload, ToolResultPayload, ToolUsePayload};
 use crate::agent::persistence::ToolExecutionStatus;
 use crate::agent::tools::{ToolDescriptionContext, ToolRegistry};
-use crate::llm::types::{LLMMessage, LLMRequest, LLMTool, LLMToolCall};
+use crate::llm::anthropic_types::{CreateMessageRequest, MessageParam, SystemPrompt, Tool};
 use chrono::Utc;
 use serde_json::Value;
 use tracing::warn;
 
 impl TaskExecutor {
-    /// 构建 LLM请求
+    /// 构建 LLM 请求（零转换，只做组装）
     pub(crate) async fn build_llm_request(
         &self,
+        context: &TaskContext,
         model_id: String,
-        messages: Vec<LLMMessage>,
         tool_registry: &ToolRegistry,
         cwd: &str,
-    ) -> TaskExecutorResult<LLMRequest> {
-        // 构建工具定义
-        let tools = self.build_tool_definitions(tool_registry, cwd).await?;
+        additional_messages: Option<Vec<MessageParam>>,
+    ) -> TaskExecutorResult<CreateMessageRequest> {
+        // 1) 直接获取 Anthropic 原生消息与 system prompt（或使用提供的消息覆盖）
+        let messages: Vec<MessageParam> = if let Some(m) = additional_messages { m } else { context.get_messages().await };
+        let system: Option<SystemPrompt> = context.get_system_prompt().await;
 
-        Ok(LLMRequest {
+        // 2) 构建工具定义（根据当前工作目录上下文）
+        let tool_schemas = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
+            cwd: cwd.to_string(),
+        });
+        let tools: Vec<Tool> = tool_schemas
+            .into_iter()
+            .map(|schema| Tool {
+                name: schema.name,
+                description: schema.description,
+                input_schema: schema.parameters,
+            })
+            .collect();
+
+        // 3) 组装 CreateMessageRequest（零转换）
+        Ok(CreateMessageRequest {
             model: model_id,
             messages,
-            temperature: Some(0.7),
-            max_tokens: None, // 不限制输出长度，让模型根据context自己决定
+            system,
             tools: if tools.is_empty() { None } else { Some(tools) },
-            tool_choice: None,
+            max_tokens: 4096,
+            temperature: Some(0.7),
             stream: true,
+            stop_sequences: None,
+            top_p: None,
+            top_k: None,
+            metadata: None,
         })
     }
 }
@@ -86,16 +106,18 @@ impl TaskExecutor {
         &self,
         context: &TaskContext,
         iteration: u32,
-        tool_call: LLMToolCall,
+        tool_id: String,
+        tool_name: String,
+        tool_arguments: serde_json::Value,
     ) -> TaskExecutorResult<ToolCallResult> {
-        let call_id = tool_call.id.clone();
-        let tool_name = tool_call.name.clone();
+        let call_id = tool_id.clone();
+        let tool_name = tool_name.clone();
         let start_time = std::time::Instant::now();
 
         // 记录工具执行开始（使用ToolExecutionLogger, 内部会创建 Running 记录）
         let logger = self.tool_logger();
         let log_id = logger
-            .log_start(context, &call_id, &tool_name, &tool_call.arguments)
+            .log_start(context, &call_id, &tool_name, &tool_arguments)
             .await
             .unwrap_or_else(|e| {
                 warn!("Failed to log tool start: {}", e);
@@ -109,14 +131,14 @@ impl TaskExecutor {
                 iteration,
                 tool_id: call_id.clone(),
                 tool_name: tool_name.clone(),
-                params: tool_call.arguments.clone(),
+                params: tool_arguments.clone(),
                 timestamp: Utc::now(),
             }))
             .await?;
 
         // 执行工具调用（保持与既有 JSON 结果结构一致）
         let result = self
-            .execute_tool_internal(&tool_name, &tool_call.arguments, context)
+            .execute_tool_internal(&tool_name, &tool_arguments, context)
             .await;
         let execution_time = start_time.elapsed().as_millis() as u64;
 
@@ -246,8 +268,8 @@ impl TaskExecutor {
                 .await?;
         }
 
-        // 7. 添加工具结果到上下文
-        context.add_tool_result(tool_result.clone()).await;
+// 7. 添加工具结果到上下文
+        context.add_tool_results(vec![tool_result.clone()]).await;
 
         Ok(tool_result)
     }
@@ -270,29 +292,6 @@ impl TaskExecutor {
             "No available models found. Please add at least one model in Settings -> Models."
                 .to_string(),
         ))
-    }
-
-    /// 构建工具定义
-    async fn build_tool_definitions(
-        &self,
-        tool_registry: &ToolRegistry,
-        cwd: &str,
-    ) -> TaskExecutorResult<Vec<LLMTool>> {
-        // 从工具注册表获取可用工具并转换为LLM工具定义
-        let tool_schemas = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
-            cwd: cwd.to_string(),
-        });
-
-        let tools: Vec<LLMTool> = tool_schemas
-            .into_iter()
-            .map(|schema| LLMTool {
-                name: schema.name,
-                description: schema.description,
-                parameters: schema.parameters,
-            })
-            .collect();
-
-        Ok(tools)
     }
 
     // react 解析器已在 agent::react 中实现

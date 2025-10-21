@@ -109,7 +109,7 @@
   })
 
   const shouldHighlight = computed(() => {
-    return toolName.value === 'read_file'
+    return toolName.value === 'read_file' || toolName.value === 'read_terminal'
   })
 
   const editData = computed(() => {
@@ -168,6 +168,8 @@
     switch (toolName.value) {
       case 'read_file':
         return 'Read '
+      case 'read_terminal':
+        return 'Read Terminal '
       case 'orbit_search':
         return 'Searched '
       case 'shell':
@@ -205,6 +207,17 @@
           return `${path} #L${startLine}`
         }
         return path
+      }
+      case 'read_terminal': {
+        const maxLines = params?.maxLines as number | undefined
+        const returnedLines = extInfo?.returnedLines as number | undefined
+        const totalLines = extInfo?.totalLines as number | undefined
+        if (returnedLines && totalLines) {
+          return `(${returnedLines}/${totalLines} lines)`
+        } else if (maxLines) {
+          return `(max ${maxLines} lines)`
+        }
+        return 'output'
       }
       case 'edit_file':
         return formatPath(params?.path as string)
@@ -322,7 +335,28 @@
   }
 
   .tool-line.running .text {
-    opacity: 0.6;
+    background: linear-gradient(
+      90deg,
+      var(--text-500) 0%,
+      var(--text-500) 25%,
+      var(--text-200) 50%,
+      var(--text-500) 75%,
+      var(--text-500) 100%
+    );
+    background-size: 300% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: scan 2s linear infinite;
+  }
+
+  @keyframes scan {
+    0% {
+      background-position: 100% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
   }
 
   .tool-line.error {

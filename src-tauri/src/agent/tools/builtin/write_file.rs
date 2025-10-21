@@ -39,6 +39,7 @@ impl RunnableTool for WriteFileTool {
         "Writes a file to the local filesystem.
 
 Usage:
+- The path parameter must be an absolute path (e.g., '/Users/user/project/src/main.ts')
 - This tool will overwrite the existing file if there is one at the provided path.
 - If this is an existing file, you MUST use the read_file tool first to read the file's contents. This tool will fail if you did not read the file first.
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
@@ -52,7 +53,7 @@ Usage:
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The absolute path to the file to write (must be absolute, not relative). For example: \"/Users/user/project/src/main.ts\". Parent directory must already exist."
+                    "description": "The absolute path to the file to write. For example: \"/Users/user/project/src/main.ts\". Parent directory must already exist."
                 },
                 "content": {
                     "type": "string",

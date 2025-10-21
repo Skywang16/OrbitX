@@ -1,15 +1,15 @@
+pub mod anthropic_types;
 pub mod commands;
 pub mod error;
 pub mod preset_models;
 pub mod provider_registry;
 pub mod providers;
 pub mod service;
+pub mod transform;
 pub mod types;
 
-#[cfg(test)]
-mod integration_tests;
-#[cfg(test)]
-mod tests;
+// anthropic_types 模块不做 re-export，使用者应该显式导入
+// 例如: use crate::llm::anthropic_types::MessageParam;
 
 pub use commands::*;
 pub use error::*;

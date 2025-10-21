@@ -2,11 +2,8 @@ use std::sync::Arc;
 use tauri::{ipc::Channel, State};
 use tokio_stream::StreamExt;
 
-use super::{
-    provider_registry::ProviderRegistry,
-    service::LLMService,
-    types::{LLMRequest, LLMResponse, LLMStreamChunk},
-};
+use super::{provider_registry::ProviderRegistry, service::LLMService};
+use crate::llm::anthropic_types::{CreateMessageRequest, Message, StreamEvent};
 use crate::storage::repositories::RepositoryManager;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
@@ -25,8 +22,8 @@ impl LLMManagerState {
 #[tauri::command]
 pub async fn llm_call(
     state: State<'_, LLMManagerState>,
-    request: LLMRequest,
-) -> TauriApiResult<LLMResponse> {
+    request: CreateMessageRequest,
+) -> TauriApiResult<Message> {
     match state.service.call(request).await {
         Ok(response) => Ok(api_success!(response)),
         Err(_) => Ok(api_error!("llm.call_failed")),
@@ -36,8 +33,8 @@ pub async fn llm_call(
 #[tauri::command]
 pub async fn llm_call_stream(
     state: State<'_, LLMManagerState>,
-    request: LLMRequest,
-    on_chunk: Channel<LLMStreamChunk>,
+    request: CreateMessageRequest,
+    on_chunk: Channel<StreamEvent>,
 ) -> TauriApiResult<EmptyData> {
     tracing::debug!("Starting stream call for model: {}", request.model);
 
@@ -57,7 +54,6 @@ pub async fn llm_call_stream(
 
         match chunk_result {
             Ok(chunk) => {
-                // tracing::debug!("Sending chunk to frontend: {:?}", chunk);
                 if let Err(e) = on_chunk.send(chunk) {
                     tracing::error!("Failed to send chunk: {}", e);
                     break;
@@ -65,8 +61,11 @@ pub async fn llm_call_stream(
             }
             Err(e) => {
                 tracing::error!("Stream error: {}", e);
-                let error_chunk = LLMStreamChunk::Error {
-                    error: e.to_string(),
+                let error_chunk = StreamEvent::Error {
+                    error: crate::llm::anthropic_types::ErrorData {
+                        error_type: "stream_error".to_string(),
+                        message: e.to_string(),
+                    },
                 };
                 if let Err(e) = on_chunk.send(error_chunk) {
                     tracing::error!("Failed to send error chunk: {}", e);

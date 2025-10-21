@@ -21,6 +21,7 @@ pub fn get_permissions_for_mode(mode: &str) -> Vec<ToolPermission> {
             ToolPermission::FileSystem,
             ToolPermission::SystemCommand,
             ToolPermission::Network,
+            ToolPermission::Terminal,
         ],
     }
 }

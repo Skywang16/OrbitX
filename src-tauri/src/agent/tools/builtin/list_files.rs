@@ -36,10 +36,10 @@ impl RunnableTool for ListFilesTool {
     }
 
     fn description(&self) -> &str {
-        "Lists files and directories in a given path. The path parameter must be an absolute path, not a relative path.
+        "Lists files and directories in a given path.
 
 Usage:
-- The path parameter must be an absolute path to a directory
+- The path parameter must be an absolute path to a directory (e.g., '/Users/user/project/src')
 - Returns a list of files and directories with their relative paths
 - Supports recursive listing to show all nested files and directories
 - Automatically respects .gitignore patterns to avoid listing ignored files
@@ -53,7 +53,7 @@ Usage:
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The absolute path to the directory to list (must be absolute, not relative). For example: \"/Users/user/project/src\". Will return an error if the path doesn't exist or is not a directory."
+                    "description": "The absolute path to the directory to list. For example: '/Users/user/project/src'. Will return an error if the path doesn't exist or is not a directory."
                 },
                 "recursive": {
                     "type": "boolean",
@@ -89,6 +89,38 @@ Usage:
             Ok(resolved) => resolved,
             Err(err) => return Ok(validation_error(err.to_string())),
         };
+
+        // 禁止列出根目录和系统敏感目录
+        let path_str = path.to_string_lossy();
+        if path_str == "/" {
+            return Ok(validation_error(
+                "Cannot list root directory '/'. Please specify a more specific directory path."
+            ));
+        }
+
+        // 禁止列出系统敏感目录
+        let forbidden_paths = [
+            "/System",
+            "/Library",
+            "/private",
+            "/bin",
+            "/sbin",
+            "/usr",
+            "/var",
+            "/etc",
+            "/dev",
+            "/proc",
+            "/sys",
+        ];
+        
+        for forbidden in &forbidden_paths {
+            if path_str == *forbidden || path_str.starts_with(&format!("{}/", forbidden)) {
+                return Ok(validation_error(format!(
+                    "Cannot list system directory '{}'. Please specify a user directory path.",
+                    forbidden
+                )));
+            }
+        }
 
         let recursive = args.recursive.unwrap_or(false);
         let request_path = path.to_string_lossy().to_string();

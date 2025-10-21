@@ -74,15 +74,15 @@ impl Default for PromptConfig {
         default_component_order.insert(
             PromptType::Agent,
             vec![
-                PromptComponent::AgentRole,
-                PromptComponent::AgentCapabilities,
-                PromptComponent::AgentRules,
-                PromptComponent::WorkMethodology,
-                PromptComponent::SystemInfo,
-                PromptComponent::TaskContext,
-                PromptComponent::ToolsDescription,
-                PromptComponent::TaskNodes,
                 PromptComponent::CustomInstructions,
+                PromptComponent::ToolsDescription,
+                PromptComponent::TaskContext,
+                PromptComponent::AgentCapabilities,
+                PromptComponent::WorkMethodology,
+                PromptComponent::AgentRules,
+                PromptComponent::TaskNodes,
+                PromptComponent::AgentRole,
+                PromptComponent::SystemInfo,
                 PromptComponent::DateTime,
             ],
         );

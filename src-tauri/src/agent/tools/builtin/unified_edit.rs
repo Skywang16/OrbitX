@@ -97,6 +97,7 @@ impl RunnableTool for UnifiedEditTool {
         "Performs exact string replacements or insertions in files.
 
 Usage:
+- The path parameter must be an absolute path (e.g., '/Users/user/project/src/main.ts')
 - You MUST use the read_file tool at least once before editing. This tool will error if you attempt an edit without reading the file first.
 - When editing text from read_file tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears in the file
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
@@ -111,7 +112,7 @@ Usage:
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The absolute path to the file to modify (must be absolute, not relative). For example: \"/Users/user/project/src/main.ts\""
+                    "description": "The absolute path to the file to modify. For example: \"/Users/user/project/src/main.ts\""
                 },
                 "mode": {
                     "type": "string",

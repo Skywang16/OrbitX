@@ -3,6 +3,7 @@ import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useSessionStore } from '@/stores/session'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import { debounce } from 'lodash-es'
 import type { ChatMode } from '@/types'
 import type { Conversation, Message } from '@/types'
 import type { TaskProgressPayload } from '@/api/agent/types'
@@ -391,13 +392,14 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     })
   }
 
-  const handleStateChange = () => {
+  // 防抖保存状态 - 避免拖拽等高频操作频繁调用后端
+  const debouncedSaveState = debounce(() => {
     if (isInitialized.value) {
       saveToSessionState()
     }
-  }
+  }, 500)
 
-  watch([isVisible, sidebarWidth, chatMode, currentConversationId], handleStateChange)
+  watch([isVisible, sidebarWidth, chatMode, currentConversationId], debouncedSaveState)
 
   const initialize = async (): Promise<void> => {
     if (isInitialized.value) return

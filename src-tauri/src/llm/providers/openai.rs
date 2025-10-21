@@ -1,29 +1,73 @@
 use async_trait::async_trait;
 use eventsource_stream::Eventsource;
-use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::pin::Pin;
 use tokio_stream::Stream;
 
 use crate::llm::{
     error::{LlmProviderError, LlmProviderResult, OpenAiError},
     providers::base::LLMProvider,
-    types::{
-        CacheControl, EmbeddingData, EmbeddingRequest, EmbeddingResponse, LLMMessage,
-        LLMMessageContent, LLMMessagePart, LLMProviderConfig, LLMRequest, LLMResponse,
-        LLMStreamChunk, LLMTool, LLMToolCall, LLMUsage,
-    },
+    types::{EmbeddingData, EmbeddingRequest, EmbeddingResponse, LLMProviderConfig, LLMUsage},
 };
 
-/// OpenAI提供者
+/// OpenAI Provider (messages unsupported in zero-abstraction mode)
 pub struct OpenAIProvider {
     client: Client,
     config: LLMProviderConfig,
 }
 
 type OpenAiResult<T> = Result<T, OpenAiError>;
+
+fn build_openai_chat_body(
+    config: &LLMProviderConfig,
+    req: &crate::llm::anthropic_types::CreateMessageRequest,
+    stream: bool,
+) -> Value {
+    use crate::llm::anthropic_types::{SystemPrompt};
+    // 转换 system + messages -> OpenAI chat messages
+    let mut chat_messages: Vec<Value> = Vec::new();
+    if let Some(system) = &req.system {
+        let sys_text = match system {
+            SystemPrompt::Text(t) => t.clone(),
+            SystemPrompt::Blocks(_blocks) => {
+                // 仅提取文本，blocks暂不支持，返回空字符串
+                String::new()
+            }
+        };
+        if !sys_text.is_empty() {
+            chat_messages.push(json!({"role":"system","content":sys_text}));
+        }
+    }
+    // 使用统一转换器，保留 tool_calls 与 tool 结果
+    let converted = crate::llm::transform::openai::convert_to_openai_messages(&req.messages);
+    chat_messages.extend(converted);
+
+    // 工具定义
+    let tools_val = req.tools.as_ref().map(|tools| {
+        Value::Array(tools.iter().map(|t| json!({
+            "type": "function",
+            "function": {"name": t.name, "description": t.description, "parameters": t.input_schema}
+        })).collect())
+    });
+
+    let mut body = json!({
+        "model": config.model,
+        "messages": chat_messages,
+        "stream": stream
+    });
+    if let Some(temp) = req.temperature {
+        body["temperature"] = json!(temp);
+    }
+    body["max_tokens"] = json!(req.max_tokens);
+    if let Some(tv) = tools_val {
+        body["tools"] = tv;
+        body["tool_choice"] = json!("auto");
+    }
+
+    body
+}
 
 impl OpenAIProvider {
     pub fn new(config: LLMProviderConfig) -> Self {
@@ -33,37 +77,8 @@ impl OpenAIProvider {
         }
     }
 
-    pub(crate) fn build_body(&self, request: &LLMRequest) -> Value {
-        // 只有 openai_compatible 类型才支持 cache_control 注入
-        // openai 官方使用自动缓存，不需要显式 cache_control 字段
-        let supports_cache = self.config.supports_prompt_cache 
-            && self.config.provider_type == "openai_compatible";
-        let mut body = json!({
-            "model": request.model,
-            "messages": self.convert_messages(&request.messages, supports_cache),
-            "stream": request.stream,
-        });
-
-        if let Some(temp) = request.temperature {
-            body["temperature"] = json!(temp);
-        }
-        if let Some(max_tokens) = request.max_tokens {
-            body["max_tokens"] = json!(max_tokens);
-        }
-        if let Some(tools) = &request.tools {
-            if !tools.is_empty() {
-                body["tools"] = self.convert_tools(tools);
-                if let Some(tool_choice) = &request.tool_choice {
-                    body["tool_choice"] = json!(tool_choice);
-                }
-            }
-        }
-
-        body
-    }
-
-    /// 获取 API 端点
-    fn get_endpoint(&self) -> String {
+    /// 获取 Chat Completions 端点
+    fn get_chat_endpoint(&self) -> String {
         let base = self
             .config
             .api_url
@@ -93,247 +108,10 @@ impl OpenAIProvider {
         headers
     }
 
-    /// 转换统一的工具定义为 OpenAI 特定格式
-    fn convert_tools(&self, tools: &[LLMTool]) -> Value {
-        let openai_tools: Vec<Value> = tools
-            .iter()
-            .map(|tool| {
-                json!({
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "parameters": tool.parameters
-                    }
-                })
-            })
-            .collect();
-        json!(openai_tools)
-    }
-
-    /// 转换统一的消息为 OpenAI 特定格式
-    /// 
-    /// # 缓存策略
-    /// - `supports_cache=true`: 仅用于 openai_compatible（如 LiteLLM、OpenRouter）
-    ///   会在 system 和最近两条 user 消息上添加 cache_control 标记
-    /// - `supports_cache=false`: 用于 openai 官方或不支持缓存的兼容端点
-    ///   OpenAI 官方会自动缓存，通过 usage.prompt_tokens_details.cached_tokens 体现
-    fn convert_messages(&self, messages: &[LLMMessage], supports_cache: bool) -> Value {
-        // 找到所有 user 消息的索引
-        let user_msg_indices: Vec<usize> = messages
-            .iter()
-            .enumerate()
-            .filter(|(_, msg)| msg.role == "user")
-            .map(|(idx, _)| idx)
-            .collect();
-        
-        let last_user_idx = user_msg_indices.last().copied();
-        let second_last_user_idx = if user_msg_indices.len() >= 2 {
-            Some(user_msg_indices[user_msg_indices.len() - 2])
-        } else {
-            None
-        };
-        let openai_messages: Vec<Value> = messages
-            .iter()
-            .enumerate()
-            .map(|(msg_idx, msg)| {
-                let should_cache_this_msg = supports_cache
-                    && (Some(msg_idx) == last_user_idx || Some(msg_idx) == second_last_user_idx);
-                // Assistant 的 tool_calls 需要特殊处理
-                if msg.role == "assistant" {
-                    if let LLMMessageContent::Parts(parts) = &msg.content {
-                        let tool_calls: Vec<Value> = parts
-                            .iter()
-                            .filter_map(|part| {
-                                if let LLMMessagePart::ToolCall {
-                                    tool_call_id,
-                                    tool_name,
-                                    args,
-                                } = part
-                                {
-                                    Some(json!({
-                                        "id": tool_call_id,
-                                        "type": "function",
-                                        "function": {
-                                            "name": tool_name,
-                                            "arguments": args.to_string()
-                                        }
-                                    }))
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-
-                        if !tool_calls.is_empty() {
-                            return json!({
-                                "role": "assistant",
-                                "content": null,
-                                "tool_calls": tool_calls
-                            });
-                        }
-                    }
-                }
-
-                // Tool 角色的消息需要特殊处理
-                if msg.role == "tool" {
-                    if let LLMMessageContent::Parts(parts) = &msg.content {
-                        if let Some(LLMMessagePart::ToolResult {
-                            tool_call_id,
-                            result,
-                            ..
-                        }) = parts.first()
-                        {
-                            return json!({
-                                "role": "tool",
-                                "tool_call_id": tool_call_id,
-                                "content": result.to_string()
-                            });
-                        }
-                    }
-                }
-
-                // 其他通用消息
-                let content = match &msg.content {
-                    LLMMessageContent::Text(text) => {
-                        // 为 system/user 消息的文本内容添加缓存支持
-                        if should_cache_this_msg || (msg.role == "system" && supports_cache) {
-                            json!([{
-                                "type": "text",
-                                "text": text,
-                                "cache_control": CacheControl::ephemeral(),
-                            }])
-                        } else {
-                            json!(text)
-                        }
-                    },
-                    LLMMessageContent::Parts(parts) => {
-                        let content_parts: Vec<Value> = parts
-                            .iter()
-                            .enumerate()
-                            .map(|(part_idx, part)| match part {
-                                LLMMessagePart::Text { text, cache_control } => {
-                                    let mut text_obj = json!({ "type": "text", "text": text });
-                                    if let Some(cache_ctrl) = cache_control {
-                                        text_obj["cache_control"] = json!(cache_ctrl);
-                                    } else if should_cache_this_msg && part_idx == parts.len() - 1 {
-                                        text_obj["cache_control"] = json!(CacheControl::ephemeral());
-                                    }
-                                    text_obj
-                                },
-                                LLMMessagePart::File { mime_type, data } => {
-                                    json!({
-                                        "type": "image_url",
-                                        "image_url": { "url": format!("data:{};base64,{}", mime_type, data) }
-                                    })
-                                }
-                                // ToolCall 和 ToolResult 已被特殊处理，这里可以忽略或作为文本回退
-                                _ => json!({ "type": "text", "text": "Unsupported content part" }),
-                            })
-                            .collect();
-                        json!(content_parts)
-                    }
-                };
-
-                json!({ "role": msg.role, "content": content })
-            })
-            .collect();
-
-        json!(openai_messages)
-    }
-
-    /// 从提供商响应中解析 LLMResponse
-    fn parse_response(&self, response_json: &Value) -> OpenAiResult<LLMResponse> {
-        let choice = response_json["choices"]
-            .as_array()
-            .and_then(|arr| arr.first())
-            .ok_or(OpenAiError::MissingField { field: "choices" })?;
-
-        let content = choice["message"]["content"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-
-        let finish_reason = choice["finish_reason"]
-            .as_str()
-            .unwrap_or("stop")
-            .to_string();
-
-        let tool_calls = self.extract_tool_calls(choice)?;
-        let usage = self.extract_usage(response_json);
-
-        Ok(LLMResponse {
-            content,
-            finish_reason,
-            tool_calls,
-            usage,
-        })
-    }
-
-    /// 从响应中提取工具调用
-    fn extract_tool_calls(&self, choice: &Value) -> OpenAiResult<Option<Vec<LLMToolCall>>> {
-        if let Some(tool_calls_json) = choice["message"]["tool_calls"].as_array() {
-            let extracted_calls: OpenAiResult<Vec<LLMToolCall>> = tool_calls_json
-                .iter()
-                .map(|tc| {
-                    let id = tc["id"]
-                        .as_str()
-                        .ok_or(OpenAiError::MissingField {
-                            field: "tool_calls[].id",
-                        })?
-                        .to_string();
-                    let function = &tc["function"];
-                    let name = function["name"]
-                        .as_str()
-                        .ok_or(OpenAiError::MissingField {
-                            field: "tool_calls[].function.name",
-                        })?
-                        .to_string();
-
-                    let arguments_str = function["arguments"].as_str().unwrap_or("{}");
-                    let arguments: Value = serde_json::from_str(arguments_str)
-                        .map_err(|source| OpenAiError::ToolCallArguments { source })?;
-
-                    Ok(LLMToolCall {
-                        id,
-                        name,
-                        arguments,
-                    })
-                })
-                .collect();
-
-            return Ok(Some(extracted_calls?));
-        }
-        Ok(None)
-    }
-
-    /// 从响应中提取使用统计
-    fn extract_usage(&self, response_json: &Value) -> Option<LLMUsage> {
-        response_json["usage"]
-            .as_object()
-            .map(|usage_obj| LLMUsage {
-                prompt_tokens: usage_obj
-                    .get("prompt_tokens")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32,
-                completion_tokens: usage_obj
-                    .get("completion_tokens")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32,
-                total_tokens: usage_obj
-                    .get("total_tokens")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32,
-            })
-    }
-
     /// 处理 API 错误响应
     fn handle_error_response(&self, status: StatusCode, body: &str) -> OpenAiError {
         if let Ok(error_json) = serde_json::from_str::<Value>(body) {
             if let Some(error_obj) = error_json.get("error").and_then(|v| v.as_object()) {
-                // 兼容不同的 OpenAI 兼容 API：
-                // - 标准 OpenAI: 使用 "type" 字段
-                // - ModelScope 等: 使用 "code" 字段
                 let error_type = error_obj
                     .get("type")
                     .or_else(|| error_obj.get("code"))
@@ -359,152 +137,6 @@ impl OpenAIProvider {
             status,
             message: format!("意外的响应: {}", body),
         }
-    }
-
-    /// 解析流式响应中的工具调用增量
-    fn parse_delta_tool_calls(delta: &Value) -> OpenAiResult<Option<Vec<LLMToolCall>>> {
-        if let Some(tool_calls_array) = delta["tool_calls"].as_array() {
-            let mut parsed_calls = Vec::new();
-
-            for tool_call_delta in tool_calls_array {
-                let index = tool_call_delta["index"].as_u64().unwrap_or(0) as usize;
-
-                // 工具调用ID（可能在第一个delta中出现）
-                let id = tool_call_delta["id"]
-                    .as_str()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| format!("tool_call_{}", index));
-
-                // 解析function信息
-                if let Some(function_delta) = tool_call_delta.get("function") {
-                    let name = function_delta["name"]
-                        .as_str()
-                        .map(|s| s.to_string())
-                        .unwrap_or_default();
-
-                    // 参数可能是增量式的，这里我们收集所有可用的参数
-                    let arguments_str = function_delta["arguments"].as_str().unwrap_or("{}");
-
-                    // 尝试解析参数，如果解析失败则使用空对象
-                    let arguments = if arguments_str.is_empty() {
-                        serde_json::Value::Object(serde_json::Map::new())
-                    } else {
-                        serde_json::from_str(arguments_str).unwrap_or_else(|_| {
-                            serde_json::json!({
-                                "_streaming_args": arguments_str,
-                                "_is_streaming": true
-                            })
-                        })
-                    };
-
-                    // 只有当我们有名称时才创建工具调用
-                    if !name.is_empty() {
-                        parsed_calls.push(LLMToolCall {
-                            id,
-                            name,
-                            arguments,
-                        });
-                    }
-                }
-            }
-
-            if !parsed_calls.is_empty() {
-                return Ok(Some(parsed_calls));
-            }
-        }
-
-        Ok(None)
-    }
-
-    /// 解析 SSE 流中的单个数据块 (关联函数，不依赖 self)
-    fn parse_stream_chunk(data: &str) -> OpenAiResult<LLMStreamChunk> {
-        if data == "[DONE]" {
-            return Ok(LLMStreamChunk::Finish {
-                finish_reason: "stop".to_string(),
-                usage: None, // Usage is often sent in a separate event or not at all in streams
-            });
-        }
-
-        // 跳过空数据或无效数据
-        if data.trim().is_empty() {
-            return Err(OpenAiError::Stream {
-                message: "Empty stream payload".to_string(),
-            });
-        }
-
-        let json_data: Value =
-            serde_json::from_str(data).map_err(|source| OpenAiError::Json { source })?;
-
-        let choice = json_data["choices"]
-            .as_array()
-            .and_then(|arr| arr.first())
-            .ok_or(OpenAiError::MissingField { field: "choices" })?;
-
-        if let Some(finish_reason) = choice["finish_reason"].as_str() {
-            // 当finish_reason是"tool_calls"时，检查是否有工具调用需要处理
-            if finish_reason == "tool_calls" {
-                if let Some(delta) = choice.get("delta") {
-                    let tool_calls = Self::parse_delta_tool_calls(delta)?;
-                    if tool_calls.is_some() {
-                        return Ok(LLMStreamChunk::Delta {
-                            content: None,
-                            tool_calls,
-                        });
-                    }
-                }
-            }
-
-            return Ok(LLMStreamChunk::Finish {
-                finish_reason: finish_reason.to_string(),
-                // 在流的末尾，OpenAI 可能会附带 usage 统计
-                usage: Self::extract_usage_static(&json_data),
-            });
-        }
-
-        if let Some(delta) = choice.get("delta") {
-            let content = delta["content"].as_str().map(|s| s.to_string());
-
-            // 解析流式工具调用
-            let tool_calls = Self::parse_delta_tool_calls(delta)?;
-
-            // 只有当有实际内容或工具调用时才返回delta
-            if (content.is_some() && !content.as_ref().unwrap().is_empty()) || tool_calls.is_some()
-            {
-                return Ok(LLMStreamChunk::Delta {
-                    content,
-                    tool_calls,
-                });
-            } else {
-                // 跳过空的delta
-                return Err(OpenAiError::Stream {
-                    message: "Empty delta chunk".to_string(),
-                });
-            }
-        }
-
-        Err(OpenAiError::Stream {
-            message: "Unknown stream chunk format".to_string(),
-        })
-    }
-
-    // extract_usage 的静态版本
-    fn extract_usage_static(response_json: &Value) -> Option<LLMUsage> {
-        response_json["usage"]
-            .as_object()
-            .map(|usage_obj| LLMUsage {
-                prompt_tokens: usage_obj
-                    .get("prompt_tokens")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32,
-                completion_tokens: usage_obj
-                    .get("completion_tokens")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32,
-                total_tokens: usage_obj
-                    .get("total_tokens")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32,
-            })
     }
 
     /// 解析embedding响应
@@ -544,94 +176,379 @@ impl OpenAIProvider {
             usage,
         })
     }
+
+    // extract_usage 的静态版本
+    fn extract_usage_static(response_json: &Value) -> Option<LLMUsage> {
+        response_json["usage"]
+            .as_object()
+            .map(|usage_obj| LLMUsage {
+                prompt_tokens: usage_obj
+                    .get("prompt_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
+                completion_tokens: usage_obj
+                    .get("completion_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
+                total_tokens: usage_obj
+                    .get("total_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
+            })
+    }
 }
 
 #[async_trait]
 impl LLMProvider for OpenAIProvider {
-    /// 非流式调用
-    async fn call(&self, request: LLMRequest) -> LlmProviderResult<LLMResponse> {
-        let url = self.get_endpoint();
-        let headers = self.get_headers();
-        let body = self.build_body(&request);
+    /// 非流式调用（Anthropic 原生接口）
+    async fn call(
+        &self,
+        request: crate::llm::anthropic_types::CreateMessageRequest,
+    ) -> LlmProviderResult<crate::llm::anthropic_types::Message> {
+        use crate::llm::anthropic_types::{ContentBlock, Message, MessageRole, Usage};
 
-        let mut req_builder = self.client.post(&url).json(&body);
-        for (key, value) in headers {
-            req_builder = req_builder.header(&key, &value);
+        let url = self.get_chat_endpoint();
+        let headers = self.get_headers();
+        let body = build_openai_chat_body(&self.config, &request, false);
+
+        let mut req = self.client.post(&url).json(&body);
+        for (k, v) in headers {
+            req = req.header(&k, &v);
         }
 
-        let response = req_builder
+        let resp = req
             .send()
             .await
             .map_err(|source| LlmProviderError::OpenAi(OpenAiError::Http { source }))?;
-
-        let status = response.status();
+        let status = resp.status();
         if !status.is_success() {
-            let error_text = response
+            let txt = resp
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            let error = self.handle_error_response(status, &error_text);
-            return Err(LlmProviderError::from(error));
+            return Err(LlmProviderError::from(
+                self.handle_error_response(status, &txt),
+            ));
         }
-
-        let response_json: Value = response
+        let json: Value = resp
             .json()
             .await
             .map_err(|source| LlmProviderError::OpenAi(OpenAiError::Http { source }))?;
-        self.parse_response(&response_json)
-            .map_err(LlmProviderError::from)
+        // 解析文本
+        let content = json["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        let usage_obj = json.get("usage");
+        let usage = usage_obj
+            .and_then(|u| {
+                Some(Usage {
+                    input_tokens: u.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0)
+                        as u32,
+                    output_tokens: u
+                        .get("completion_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as u32,
+                    cache_creation_input_tokens: None,
+                    cache_read_input_tokens: None,
+                })
+            })
+            .unwrap_or(Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
+            });
+
+        let message = Message {
+            id: format!("msg_{}", uuid::Uuid::new_v4()),
+            message_type: "message".to_string(),
+            role: MessageRole::Assistant,
+            content: vec![ContentBlock::Text {
+                text: content,
+                cache_control: None,
+            }],
+            model: self.config.model.clone(),
+            stop_reason: None,
+            stop_sequence: None,
+            usage,
+        };
+        Ok(message)
     }
 
-    /// 流式调用
+    /// 流式调用（Anthropic 原生接口）
     async fn call_stream(
         &self,
-        mut request: LLMRequest,
-    ) -> LlmProviderResult<Pin<Box<dyn Stream<Item = LlmProviderResult<LLMStreamChunk>> + Send>>>
-    {
-        request.stream = true;
-        let url = self.get_endpoint();
-        let headers = self.get_headers();
-        let body = self.build_body(&request);
+        request: crate::llm::anthropic_types::CreateMessageRequest,
+    ) -> LlmProviderResult<
+        Pin<
+            Box<
+                dyn Stream<Item = LlmProviderResult<crate::llm::anthropic_types::StreamEvent>>
+                    + Send,
+            >,
+        >,
+    > {
+        use crate::llm::anthropic_types::{
+            ContentBlockStart, ContentDelta, MessageDeltaData, MessageRole, MessageStartData,
+            StopReason, StreamEvent, Usage,
+        };
 
-        let mut req_builder = self.client.post(&url).json(&body);
-        for (key, value) in headers {
-            req_builder = req_builder.header(&key, &value);
+        let url = self.get_chat_endpoint();
+        let headers = self.get_headers();
+        let body = build_openai_chat_body(&self.config, &request, true);
+
+        let mut req = self.client.post(&url).json(&body);
+        for (k, v) in headers {
+            req = req.header(&k, &v);
         }
 
-        let response = req_builder
+        let resp = req
             .send()
             .await
             .map_err(|source| LlmProviderError::OpenAi(OpenAiError::Http { source }))?;
 
-        let status = response.status();
+        let status = resp.status();
         if !status.is_success() {
-            let error_text = response
+            let txt = resp
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            let error = self.handle_error_response(status, &error_text);
-            return Err(LlmProviderError::from(error));
+            return Err(LlmProviderError::from(
+                self.handle_error_response(status, &txt),
+            ));
         }
 
-        let stream = response
-            .bytes_stream()
-            .eventsource()
-            .filter_map(|event_result| {
-                futures::future::ready(match event_result {
-                    Ok(event) => {
-                        // 解析SSE事件数据
-                        match Self::parse_stream_chunk(&event.data) {
-                            Ok(chunk) => Some(Ok(chunk)),
-                            Err(_) => None, // 静默跳过解析错误（通常是空内容）
+        use futures::stream;
+        use futures::StreamExt as FuturesStreamExt;
+
+        // 状态机：记录是否已发送关键事件
+        struct StreamState {
+            message_started: bool,
+            content_block_started: bool,
+            pending_events: VecDeque<StreamEvent>,
+            tool_use_started: HashSet<usize>,
+        }
+
+        let model = self.config.model.clone();
+        let raw_stream = resp.bytes_stream().eventsource();
+
+        // 使用 unfold 来维护状态
+        let event_stream = stream::unfold(
+            (
+                raw_stream,
+                StreamState {
+                    message_started: false,
+                    content_block_started: false,
+                    pending_events: VecDeque::new(),
+                    tool_use_started: HashSet::new(),
+                },
+            ),
+            move |(mut stream, mut state)| {
+                let model = model.clone();
+                async move {
+                    loop {
+                        // 优先输出已排队的事件
+                        if let Some(evt) = state.pending_events.pop_front() {
+                            return Some((Ok(evt), (stream, state)));
+                        }
+                        match FuturesStreamExt::next(&mut stream).await {
+                            Some(Ok(event)) => {
+                                // OpenAI 流结束标记
+                                if event.data == "[DONE]" {
+                                    tracing::debug!("OpenAI stream finished");
+                                    // 结束前关闭未关闭的块
+                                    if state.content_block_started {
+                                        state.content_block_started = false;
+                                        state
+                                            .pending_events
+                                            .push_back(StreamEvent::ContentBlockStop { index: 0 });
+                                    }
+                                    if !state.tool_use_started.is_empty() {
+                                        let indices: Vec<usize> = state.tool_use_started.iter().copied().collect();
+                                        for idx in indices {
+                                            state
+                                                .pending_events
+                                                .push_back(StreamEvent::ContentBlockStop { index: idx });
+                                        }
+                                        state.tool_use_started.clear();
+                                    }
+                                    state.pending_events.push_back(StreamEvent::MessageStop);
+                                    if let Some(evt) = state.pending_events.pop_front() {
+                                        return Some((Ok(evt), (stream, state)));
+                                    } else {
+                                        continue;
+                                    }
+                                }
+
+                                // 解析 OpenAI 的流式响应
+                                let value: Value = match serde_json::from_str(&event.data) {
+                                    Ok(v) => v,
+                                    Err(_) => continue, // 跳过无效数据
+                                };
+
+                                // 提取 choices[0]
+                                let choice =
+                                    match value["choices"].as_array().and_then(|arr| arr.first()) {
+                                        Some(c) => c,
+                                        None => continue,
+                                    };
+
+                                let delta = &choice["delta"];
+
+                                // 第一个事件：MessageStart
+                                if !state.message_started {
+                                    state.message_started = true;
+                                    state.pending_events.push_back(StreamEvent::MessageStart {
+                                        message: MessageStartData {
+                                            id: format!("msg_{}", uuid::Uuid::new_v4()),
+                                            message_type: "message".to_string(),
+                                            role: MessageRole::Assistant,
+                                            model: model.clone(),
+                                            usage: Usage {
+                                                input_tokens: 0,
+                                                output_tokens: 0,
+                                                cache_creation_input_tokens: None,
+                                                cache_read_input_tokens: None,
+                                            },
+                                        },
+                                    });
+                                }
+
+                                // 第二个事件：ContentBlockStart（当第一次遇到 content 时）
+                                if !state.content_block_started && delta.get("content").is_some() {
+                                    state.content_block_started = true;
+                                    state.pending_events.push_back(StreamEvent::ContentBlockStart {
+                                        index: 0,
+                                        content_block: ContentBlockStart::Text {
+                                            text: String::new(),
+                                        },
+                                    });
+                                }
+
+                                // ContentBlockDelta（content 增量）
+                                if let Some(content) = delta["content"].as_str() {
+                                    if !content.is_empty() {
+                                        state.pending_events.push_back(StreamEvent::ContentBlockDelta {
+                                            index: 0,
+                                            delta: ContentDelta::TextDelta {
+                                                text: content.to_string(),
+                                            },
+                                        });
+                                    }
+                                }
+
+                                // 处理工具调用增量 delta.tool_calls
+                                if let Some(tc_arr) = delta.get("tool_calls").and_then(|v| v.as_array()) {
+                                    for tc in tc_arr {
+                                        let raw_index = tc.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                        let event_index = raw_index + 1; // 将工具块索引与文本块(0)错开
+
+                                        let func = tc.get("function");
+                                        let name_opt = func.and_then(|f| f.get("name")).and_then(|v| v.as_str());
+                                        let args_opt = func.and_then(|f| f.get("arguments")).and_then(|v| v.as_str());
+
+                                        if !state.tool_use_started.contains(&event_index) {
+                                            if let Some(name) = name_opt {
+                                                let id = tc
+                                                    .get("id")
+                                                    .and_then(|v| v.as_str())
+                                                    .map(|s| s.to_string())
+                                                    .unwrap_or_else(|| format!("call_{}", uuid::Uuid::new_v4()));
+                                                state.tool_use_started.insert(event_index);
+                                                state.pending_events.push_back(StreamEvent::ContentBlockStart {
+                                                    index: event_index,
+                                                    content_block: ContentBlockStart::ToolUse {
+                                                        id,
+                                                        name: name.to_string(),
+                                                    },
+                                                });
+                                            }
+                                        }
+
+                                        if let Some(arguments) = args_opt {
+                                            if !arguments.is_empty() {
+                                                if state.tool_use_started.contains(&event_index) {
+                                                    state.pending_events.push_back(StreamEvent::ContentBlockDelta {
+                                                        index: event_index,
+                                                        delta: ContentDelta::InputJsonDelta {
+                                                            partial_json: arguments.to_string(),
+                                                        },
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // finish_reason（流结束原因）
+                                if let Some(reason) = choice["finish_reason"].as_str() {
+                                    // 先发送 ContentBlockStop（文本）
+                                    if state.content_block_started {
+                                        state.content_block_started = false;
+                                        state
+                                            .pending_events
+                                            .push_back(StreamEvent::ContentBlockStop { index: 0 });
+                                    }
+                                    // 如果是工具调用结束，也关闭所有已开启的工具块
+                                    if reason == "tool_calls" && !state.tool_use_started.is_empty() {
+                                        let indices: Vec<usize> = state.tool_use_started.iter().copied().collect();
+                                        for idx in indices {
+                                            state
+                                                .pending_events
+                                                .push_back(StreamEvent::ContentBlockStop { index: idx });
+                                        }
+                                        state.tool_use_started.clear();
+                                    }
+
+                                    // 然后发送 MessageDelta 带着 stop_reason
+                                    let stop_reason = match reason {
+                                        "stop" => Some(StopReason::EndTurn),
+                                        "length" => Some(StopReason::MaxTokens),
+                                        "tool_calls" => Some(StopReason::ToolUse),
+                                        "content_filter" => Some(StopReason::EndTurn),
+                                        _ => None,
+                                    };
+
+                                    state.pending_events.push_back(StreamEvent::MessageDelta {
+                                        delta: MessageDeltaData {
+                                            stop_reason,
+                                            stop_sequence: None,
+                                        },
+                                        usage: Usage {
+                                            input_tokens: 0,
+                                            output_tokens: 0,
+                                            cache_creation_input_tokens: None,
+                                            cache_read_input_tokens: None,
+                                        },
+                                    });
+
+                                    if let Some(evt) = state.pending_events.pop_front() {
+                                        return Some((Ok(evt), (stream, state)));
+                                    } else {
+                                        continue;
+                                    }
+                                }
+
+                                // 跳过其他 delta（如 role: "assistant"）
+                                continue;
+                            }
+                            Some(Err(e)) => {
+                                tracing::error!("OpenAI SSE stream error: {:?}", e);
+                                return Some((
+                                    Err(LlmProviderError::OpenAi(OpenAiError::Stream {
+                                        message: format!("Network error: {}", e),
+                                    })),
+                                    (stream, state),
+                                ));
+                            }
+                            None => return None, // 流结束
                         }
                     }
-                    Err(e) => Some(Err(LlmProviderError::OpenAi(OpenAiError::Stream {
-                        message: format!("Network error: {e}"),
-                    }))),
-                })
-            });
+                }
+            },
+        );
 
-        Ok(Box::pin(stream))
+        Ok(Box::pin(event_stream))
     }
 
     /// Embedding调用实现

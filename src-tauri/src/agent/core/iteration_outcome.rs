@@ -9,7 +9,6 @@
  * 3. 职责单一：只负责分类，不负责执行
  */
 
-use crate::llm::types::LLMToolCall;
 use serde::{Deserialize, Serialize};
 
 /// 迭代结果：LLM 响应后的明确分类
@@ -25,8 +24,8 @@ pub enum IterationOutcome {
     ///
     /// 这是唯一需要继续循环的情况。
     ContinueWithTools {
-        /// 待执行的工具调用列表
-        tool_calls: Vec<LLMToolCall>,
+        /// 待执行的工具调用列表 (id, name, input)
+        tool_calls: Vec<(String, String, serde_json::Value)>,
     },
 
     /// 任务完成：LLM 给出了响应内容
@@ -74,7 +73,7 @@ impl IterationOutcome {
     }
 
     /// 获取工具调用列表（如果有）
-    pub fn get_tool_calls(&self) -> Option<&[LLMToolCall]> {
+    pub fn get_tool_calls(&self) -> Option<&[(String, String, serde_json::Value)]> {
         match self {
             Self::ContinueWithTools { tool_calls } => Some(tool_calls),
             _ => None,

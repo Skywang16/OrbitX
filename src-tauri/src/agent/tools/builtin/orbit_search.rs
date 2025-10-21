@@ -97,7 +97,7 @@ Usage:
                 },
                 "path": {
                     "type": "string",
-                    "description": "Optional absolute path to scope the search to a specific directory or file. If omitted, searches the entire workspace. Example: '/Users/user/project/src/components'"
+                    "description": "Optional absolute path to scope the search to a specific directory or file. For example: '/Users/user/project/src/components'. If omitted, searches the entire workspace."
                 },
                 "mode": {
                     "type": "string",

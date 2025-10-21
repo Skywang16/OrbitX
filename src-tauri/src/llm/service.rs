@@ -3,12 +3,10 @@ use tokio_stream::StreamExt;
 use tokio_util::sync::CancellationToken;
 
 use crate::llm::{
+    anthropic_types::{CreateMessageRequest, Message, MessageContent, MessageParam, StreamEvent},
     error::{LlmError, LlmProviderResult, LlmResult},
     provider_registry::ProviderRegistry,
-    types::{
-        EmbeddingRequest, EmbeddingResponse, LLMProviderConfig, LLMRequest, LLMResponse,
-        LLMStreamChunk,
-    },
+    types::{EmbeddingRequest, EmbeddingResponse, LLMProviderConfig},
 };
 use crate::storage::repositories::RepositoryManager;
 
@@ -70,8 +68,8 @@ impl LLMService {
         })
     }
 
-    /// 非流式调用
-    pub async fn call(&self, request: LLMRequest) -> LlmResult<LLMResponse> {
+    /// 非流式调用（Anthropic 原生类型）
+    pub async fn call(&self, request: CreateMessageRequest) -> LlmResult<Message> {
         self.validate_request(&request)?;
         let original_model_id = request.model.clone();
         let config = self.get_provider_config(&request.model).await?;
@@ -80,6 +78,7 @@ impl LLMService {
             .map_err(LlmError::from)?;
 
         let mut actual_request = request.clone();
+        // 替换为真实provider模型ID
         actual_request.model = config.model.clone();
 
         tracing::debug!(
@@ -104,12 +103,12 @@ impl LLMService {
         result.map_err(LlmError::from)
     }
 
-    /// 流式调用（携带外部取消令牌）
+    /// 流式调用（携带外部取消令牌，Anthropic 原生类型）
     pub async fn call_stream(
         &self,
-        request: LLMRequest,
+        request: CreateMessageRequest,
         token: CancellationToken,
-    ) -> LlmResult<impl tokio_stream::Stream<Item = LlmProviderResult<LLMStreamChunk>>> {
+    ) -> LlmResult<impl tokio_stream::Stream<Item = LlmProviderResult<StreamEvent>>> {
         self.validate_request(&request)?;
         let original_model_id = request.model.clone();
         let config = self.get_provider_config(&request.model).await?;
@@ -118,6 +117,7 @@ impl LLMService {
             .map_err(LlmError::from)?;
 
         let mut actual_request = request.clone();
+        // 替换为真实provider模型ID
         actual_request.model = config.model.clone();
 
         tracing::debug!(
@@ -208,19 +208,23 @@ impl LLMService {
         Ok(models.into_iter().map(|m| m.id).collect())
     }
 
-    /// 测试模型连接
+    /// 测试模型连接（构造最简 Anthropic CreateMessageRequest）
     pub async fn test_model_connection(&self, model_id: &str) -> LlmResult<bool> {
-        let test_request = LLMRequest {
+        let test_request = CreateMessageRequest {
             model: model_id.to_string(),
-            messages: vec![super::types::LLMMessage {
-                role: "user".to_string(),
-                content: super::types::LLMMessageContent::Text("Hello".to_string()),
+            messages: vec![MessageParam {
+                role: crate::llm::anthropic_types::MessageRole::User,
+                content: MessageContent::Text("Hello".to_string()),
             }],
-            temperature: Some(0.1),
-            max_tokens: Some(10),
+            max_tokens: 10,
+            system: None,
             tools: None,
-            tool_choice: None,
+            temperature: Some(0.1),
             stream: false,
+            stop_sequences: None,
+            top_p: None,
+            top_k: None,
+            metadata: None,
         };
 
         let result = self.call(test_request).await;
@@ -233,8 +237,8 @@ impl LLMService {
         }
     }
 
-    /// 验证请求参数
-    fn validate_request(&self, request: &LLMRequest) -> LlmResult<()> {
+    /// 验证请求参数（Anthropic 原生类型）
+    fn validate_request(&self, request: &CreateMessageRequest) -> LlmResult<()> {
         if request.model.is_empty() {
             return Err(LlmError::InvalidRequest {
                 reason: "Model identifier cannot be empty".to_string(),
@@ -255,12 +259,10 @@ impl LLMService {
             }
         }
 
-        if let Some(max_tokens) = request.max_tokens {
-            if max_tokens == 0 {
-                return Err(LlmError::InvalidRequest {
-                    reason: "max_tokens must be greater than zero".to_string(),
-                });
-            }
+        if request.max_tokens == 0 {
+            return Err(LlmError::InvalidRequest {
+                reason: "max_tokens must be greater than zero".to_string(),
+            });
         }
 
         Ok(())

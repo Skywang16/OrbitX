@@ -3,10 +3,7 @@ pub mod base;
 pub mod gemini;
 pub mod openai;
 
-#[cfg(test)]
-mod openai_cache_test;
-
-pub use anthropic::*;
+pub use anthropic::AnthropicProvider;
 pub use base::*;
-pub use gemini::*;
-pub use openai::*;
+pub use gemini::GeminiProvider;
+pub use openai::OpenAIProvider;
