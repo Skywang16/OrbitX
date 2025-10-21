@@ -7,13 +7,48 @@ use crate::agent::config::PromptComponent;
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::prompt::components::types::{ComponentContext, ComponentDefinition};
 use crate::agent::prompt::template_engine::TemplateEngine;
+use crate::filesystem::commands::fs_list_directory;
+
+const MAX_PREVIEW_FILES: usize = 50;
+
+/// 获取目录文件列表预览（最多50个文件）
+async fn get_directory_preview(working_directory: &str) -> String {
+    if working_directory == "Not specified" || working_directory.trim().is_empty() {
+        return String::new();
+    }
+
+    match fs_list_directory(working_directory.to_string(), false).await {
+        Ok(response) if response.code == 200 => {
+            if let Some(mut entries) = response.data {
+                let total = entries.len();
+                let truncated = total > MAX_PREVIEW_FILES;
+
+                entries.truncate(MAX_PREVIEW_FILES);
+
+                let mut preview = String::from("Files in Current Directory:\n");
+                for entry in entries {
+                    preview.push_str(&format!("  {}", entry));
+                    preview.push('\n');
+                }
+
+                if truncated {
+                    preview.push_str(&format!(
+                        "  ... and {} more files (use list_files tool to see all)\n",
+                        total - MAX_PREVIEW_FILES
+                    ));
+                }
+
+                preview
+            } else {
+                String::new()
+            }
+        }
+        _ => String::new(),
+    }
+}
 
 pub fn definitions() -> Vec<Arc<dyn ComponentDefinition>> {
-    vec![
-        Arc::new(SystemInfoComponent),
-        Arc::new(DateTimeComponent),
-        Arc::new(PlatformComponent),
-    ]
+    vec![Arc::new(SystemInfoComponent), Arc::new(DateTimeComponent)]
 }
 
 struct SystemInfoComponent;
@@ -41,7 +76,7 @@ impl ComponentDefinition for SystemInfoComponent {
     }
 
     fn default_template(&self) -> Option<&str> {
-        Some("SYSTEM INFORMATION\n\nOperating System: {platform}\nWorking Directory: {working_directory}\nEnvironment Context: {environment_context}")
+        Some("Here is useful information about the environment you are running in:\n<env>\nWorking directory: {working_directory}\nPlatform: {platform}\nToday's date: {current_date}\n</env>\n\n{file_list_preview}")
     }
 
     async fn render(
@@ -59,26 +94,17 @@ impl ComponentDefinition for SystemInfoComponent {
             .and_then(|c| c.working_directory.as_deref())
             .unwrap_or("Not specified");
 
-        let environment_context = if let Some(ctx) = &context.context {
-            if ctx.environment_vars.is_empty() {
-                "No environment variables specified".to_string()
-            } else {
-                format!(
-                    "{} environment variables available",
-                    ctx.environment_vars.len()
-                )
-            }
-        } else {
-            "No environment context available".to_string()
-        };
+        // 获取当前目录的文件列表（最多50个）
+        let file_list_preview = get_directory_preview(working_directory).await;
 
         let mut template_context = HashMap::new();
         template_context.insert("platform".to_string(), json!("macOS"));
         template_context.insert("working_directory".to_string(), json!(working_directory));
         template_context.insert(
-            "environment_context".to_string(),
-            json!(environment_context),
+            "current_date".to_string(),
+            json!(chrono::Utc::now().format("%Y-%m-%d").to_string()),
         );
+        template_context.insert("file_list_preview".to_string(), json!(file_list_preview));
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)
@@ -115,7 +141,7 @@ impl ComponentDefinition for DateTimeComponent {
     }
 
     fn default_template(&self) -> Option<&str> {
-        Some("Current time: {current_time}")
+        Some("You are OrbitX Agent, a terminal-focused AI assistant.")
     }
 
     async fn render(
@@ -127,76 +153,6 @@ impl ComponentDefinition for DateTimeComponent {
             .or_else(|| self.default_template())
             .ok_or_else(|| AgentError::Internal("missing datetime template".to_string()))?;
 
-        let mut template_context = HashMap::new();
-        template_context.insert(
-            "current_time".to_string(),
-            json!(chrono::Utc::now()
-                .format("%Y-%m-%d %H:%M:%S UTC")
-                .to_string()),
-        );
-
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("failed to render datetime template: {}", e))
-            })?;
-
-        Ok(Some(result))
-    }
-}
-
-struct PlatformComponent;
-
-#[async_trait]
-impl ComponentDefinition for PlatformComponent {
-    fn id(&self) -> PromptComponent {
-        PromptComponent::Platform
-    }
-
-    fn name(&self) -> &str {
-        "Platform"
-    }
-
-    fn description(&self) -> &str {
-        "Platform information"
-    }
-
-    fn required(&self) -> bool {
-        false
-    }
-
-    fn dependencies(&self) -> &[PromptComponent] {
-        &[]
-    }
-
-    fn default_template(&self) -> Option<&str> {
-        Some("Platform: {platform}")
-    }
-
-    async fn render(
-        &self,
-        context: &ComponentContext,
-        template_override: Option<&str>,
-    ) -> AgentResult<Option<String>> {
-        let template = template_override
-            .or_else(|| self.default_template())
-            .ok_or_else(|| AgentError::Internal("missing platform template".to_string()))?;
-
-        let platform = context
-            .context
-            .as_ref()
-            .and_then(|ctx| ctx.environment_vars.get("OS"))
-            .cloned()
-            .unwrap_or_else(|| "macOS".to_string());
-
-        let mut template_context = HashMap::new();
-        template_context.insert("platform".to_string(), json!(platform));
-
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("failed to render platform template: {}", e))
-            })?;
-        Ok(Some(result))
+        Ok(Some(template.to_string()))
     }
 }

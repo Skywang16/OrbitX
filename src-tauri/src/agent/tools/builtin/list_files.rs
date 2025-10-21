@@ -36,15 +36,29 @@ impl RunnableTool for ListFilesTool {
     }
 
     fn description(&self) -> &str {
-        "List files and directories within the specified directory."
+        "Lists files and directories in a given path.
+
+Usage:
+- The path parameter must be an absolute path to a directory (e.g., '/Users/user/project/src')
+- Returns a list of files and directories with their relative paths
+- Supports recursive listing to show all nested files and directories
+- Automatically respects .gitignore patterns to avoid listing ignored files
+- Hidden files (starting with .) are included by default
+- You should generally prefer the orbit_search tool if you know which directories to search for specific code"
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
         json!({
             "type": "object",
             "properties": {
-                "path": { "type": "string", "description": "Directory path (relative or absolute)" },
-                "recursive": { "type": "boolean", "description": "List recursively if true" }
+                "path": {
+                    "type": "string",
+                    "description": "The absolute path to the directory to list. For example: '/Users/user/project/src'. Will return an error if the path doesn't exist or is not a directory."
+                },
+                "recursive": {
+                    "type": "boolean",
+                    "description": "If true, lists all files and directories recursively in the entire directory tree. If false or omitted, lists only the immediate children of the directory. Default: false."
+                }
             },
             "required": ["path"]
         })
@@ -75,6 +89,38 @@ impl RunnableTool for ListFilesTool {
             Ok(resolved) => resolved,
             Err(err) => return Ok(validation_error(err.to_string())),
         };
+
+        // 禁止列出根目录和系统敏感目录
+        let path_str = path.to_string_lossy();
+        if path_str == "/" {
+            return Ok(validation_error(
+                "Cannot list root directory '/'. Please specify a more specific directory path."
+            ));
+        }
+
+        // 禁止列出系统敏感目录
+        let forbidden_paths = [
+            "/System",
+            "/Library",
+            "/private",
+            "/bin",
+            "/sbin",
+            "/usr",
+            "/var",
+            "/etc",
+            "/dev",
+            "/proc",
+            "/sys",
+        ];
+        
+        for forbidden in &forbidden_paths {
+            if path_str == *forbidden || path_str.starts_with(&format!("{}/", forbidden)) {
+                return Ok(validation_error(format!(
+                    "Cannot list system directory '{}'. Please specify a user directory path.",
+                    forbidden
+                )));
+            }
+        }
 
         let recursive = args.recursive.unwrap_or(false);
         let request_path = path.to_string_lossy().to_string();

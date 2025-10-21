@@ -1,4 +1,4 @@
-export function hexToRgba(hex: string, opacity: number): string {
+export const hexToRgba = (hex: string, opacity: number): string => {
   const cleanHex = hex.replace(/^#/, '')
   let r: number, g: number, b: number
   if (cleanHex.length === 3) {
@@ -22,7 +22,7 @@ export function hexToRgba(hex: string, opacity: number): string {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`
 }
 
-export function rgbToRgba(rgb: string, opacity: number): string {
+export const rgbToRgba = (rgb: string, opacity: number): string => {
   const rgbaMatch = rgb.match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?/)
 
   if (!rgbaMatch) {
@@ -46,7 +46,7 @@ export function rgbToRgba(rgb: string, opacity: number): string {
   return `rgba(${r}, ${g}, ${b}, ${finalAlpha})`
 }
 
-export function applyOpacityToColor(color: string, opacity: number): string {
+export const applyOpacityToColor = (color: string, opacity: number): string => {
   if (!color) {
     return `rgba(0, 0, 0, ${opacity})`
   }
@@ -70,7 +70,7 @@ export function applyOpacityToColor(color: string, opacity: number): string {
   return `rgba(0, 0, 0, ${clampedOpacity})`
 }
 
-export function getCurrentOpacity(): number {
+export const getCurrentOpacity = (): number => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return 1.0
   }

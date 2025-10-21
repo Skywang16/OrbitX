@@ -12,7 +12,7 @@ export enum TabType {
 }
 
 export interface TabItem {
-  id: number | string
+  id: number
   title?: string
   type: TabType
   closable?: boolean

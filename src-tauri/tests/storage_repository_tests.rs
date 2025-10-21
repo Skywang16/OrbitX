@@ -53,7 +53,7 @@ fn create_test_ai_model() -> AIModelConfig {
     AIModelConfig {
         id: "test-model-1".to_string(),
         name: "Test GPT Model".to_string(),
-        provider: AIProvider::OpenAI,
+        provider: AIProvider::OpenAiCompatible,
         api_url: "https://api.openai.com/v1".to_string(),
         api_key: "test-api-key-12345".to_string(),
         model: "gpt-4".to_string(),

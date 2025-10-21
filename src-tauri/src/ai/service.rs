@@ -6,7 +6,6 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, info, warn};
@@ -19,14 +18,13 @@ pub struct AIService {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct AIModelUpdatePayload {
-    name: Option<String>,
     provider: Option<AIProvider>,
     api_url: Option<String>,
     api_key: Option<String>,
     model: Option<String>,
     model_type: Option<ModelType>,
-    enabled: Option<bool>,
     options: Option<Value>,
+    use_custom_base_url: Option<bool>,
 }
 
 struct ProviderHttpRequest {
@@ -40,7 +38,6 @@ struct ProviderHttpRequest {
 
 enum ConnectionProbe {
     Http(ProviderHttpRequest),
-    Gemini,
 }
 
 impl AIService {
@@ -102,9 +99,6 @@ impl AIService {
                 model_id: model_id.to_string(),
             })?;
 
-        if let Some(name) = update_payload.name.and_then(trimmed) {
-            existing.name = name;
-        }
         if let Some(provider) = update_payload.provider {
             existing.provider = provider;
         }
@@ -120,11 +114,11 @@ impl AIService {
         if let Some(model_type) = update_payload.model_type {
             existing.model_type = model_type;
         }
-        if let Some(enabled) = update_payload.enabled {
-            existing.enabled = enabled;
-        }
         if let Some(options) = update_payload.options {
             existing.options = Some(options);
+        }
+        if let Some(use_custom_base_url) = update_payload.use_custom_base_url {
+            existing.use_custom_base_url = Some(use_custom_base_url);
         }
 
         existing.updated_at = Utc::now();
@@ -162,7 +156,6 @@ impl AIService {
 
         match probe {
             ConnectionProbe::Http(request) => self.execute_http_probe(request).await,
-            ConnectionProbe::Gemini => self.execute_gemini_probe(model).await,
         }
     }
 
@@ -170,21 +163,7 @@ impl AIService {
         let timeout = self.resolve_timeout(model);
 
         match model.provider {
-            AIProvider::OpenAI => {
-                let url = join_url(model.api_url.trim(), "v1/chat/completions");
-                let headers =
-                    header_map(&[("authorization", format!("Bearer {}", model.api_key))])?;
-                let payload = basic_chat_payload(&model.model);
-                Ok(ConnectionProbe::Http(ProviderHttpRequest {
-                    provider_label: "OpenAI",
-                    url,
-                    headers,
-                    payload,
-                    timeout,
-                    tolerated: &TOLERATED_STANDARD_CODES,
-                }))
-            }
-            AIProvider::Claude => {
+            AIProvider::Anthropic => {
                 let url = join_url(model.api_url.trim(), "v1/messages");
                 let headers = header_map(&[
                     ("x-api-key", model.api_key.clone()),
@@ -196,7 +175,7 @@ impl AIService {
                     "messages": [{"role": "user", "content": "Hello"}]
                 });
                 Ok(ConnectionProbe::Http(ProviderHttpRequest {
-                    provider_label: "Claude",
+                    provider_label: "Anthropic",
                     url,
                     headers,
                     payload,
@@ -204,27 +183,13 @@ impl AIService {
                     tolerated: &TOLERATED_STANDARD_CODES,
                 }))
             }
-            AIProvider::Qwen => {
+            AIProvider::OpenAiCompatible => {
                 let url = join_url(model.api_url.trim(), "v1/chat/completions");
                 let headers =
                     header_map(&[("authorization", format!("Bearer {}", model.api_key))])?;
                 let payload = basic_chat_payload(&model.model);
                 Ok(ConnectionProbe::Http(ProviderHttpRequest {
-                    provider_label: "Qwen",
-                    url,
-                    headers,
-                    payload,
-                    timeout,
-                    tolerated: &TOLERATED_STANDARD_CODES,
-                }))
-            }
-            AIProvider::Custom => {
-                let url = join_url(model.api_url.trim(), "v1/chat/completions");
-                let headers =
-                    header_map(&[("authorization", format!("Bearer {}", model.api_key))])?;
-                let payload = basic_chat_payload(&model.model);
-                Ok(ConnectionProbe::Http(ProviderHttpRequest {
-                    provider_label: "自定义",
+                    provider_label: "OpenAI Compatible",
                     url,
                     headers,
                     payload,
@@ -232,7 +197,6 @@ impl AIService {
                     tolerated: &TOLERATED_CUSTOM_CODES,
                 }))
             }
-            AIProvider::Gemini => Ok(ConnectionProbe::Gemini),
         }
     }
 
@@ -314,47 +278,6 @@ impl AIService {
             status,
             message: error_msg,
         })
-    }
-
-    async fn execute_gemini_probe(&self, model: &AIModelConfig) -> AIServiceResult<String> {
-        use crate::llm::providers::base::LLMProvider;
-        use crate::llm::providers::gemini::GeminiProvider;
-        use crate::llm::types::{
-            LLMMessage, LLMMessageContent, LLMProviderConfig, LLMProviderType, LLMRequest,
-        };
-
-        let provider_options = match model.options.clone() {
-            Some(Value::Object(map)) => Some(map.into_iter().collect::<HashMap<_, _>>()),
-            _ => None,
-        };
-
-        let config = LLMProviderConfig {
-            provider_type: LLMProviderType::Gemini,
-            api_url: trimmed(model.api_url.clone()),
-            api_key: model.api_key.clone(),
-            model: model.model.clone(),
-            options: provider_options,
-        };
-
-        let provider = GeminiProvider::new(config);
-        let request = LLMRequest {
-            model: model.model.clone(),
-            messages: vec![LLMMessage {
-                role: "user".to_string(),
-                content: LLMMessageContent::Text("Hello".to_string()),
-            }],
-            temperature: Some(0.0),
-            max_tokens: Some(1),
-            stream: false,
-            tools: None,
-            tool_choice: None,
-        };
-
-        provider
-            .call(request)
-            .await
-            .map(|_| "Connection successful".to_string())
-            .map_err(|e| AIServiceError::GeminiApi(e.to_string()))
     }
 
     fn resolve_timeout(&self, model: &AIModelConfig) -> Duration {

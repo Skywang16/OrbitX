@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import TerminalView from '@/views/Terminal/TerminalView.vue'
-  import { OnboardingView } from '@/components/Onboarding'
+  import { OnboardingView } from '@/views/Onboarding'
   import { useShortcutListener } from '@/shortcuts'
   import { useWindowOpacity } from '@/composables/useWindowOpacity'
   import { createStorage } from '@/utils/storage'

@@ -47,6 +47,7 @@ pub enum ToolPermission {
     FileSystem,
     SystemCommand,
     Network,
+    Terminal,
 }
 
 #[async_trait]

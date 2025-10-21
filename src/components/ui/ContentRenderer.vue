@@ -6,7 +6,7 @@
       v-for="tab in tabManagerStore.tabs.filter(t => t.type === TabType.TERMINAL)"
       v-show="tab.id === tabManagerStore.activeTabId"
       :key="tab.id"
-      :terminal-id="typeof tab.id === 'number' ? tab.id : parseInt(String(tab.id))"
+      :terminal-id="Number(tab.id)"
       :is-active="tab.id === tabManagerStore.activeTabId"
       @input="handleInput"
       @resize="handleResize"
@@ -26,7 +26,7 @@
   import { useTerminalStore } from '@/stores/Terminal'
   import Terminal from '@/components/terminal/Terminal.vue'
   import SettingsView from '@/views/Settings/SettingsView.vue'
-  import EmptyState from '@/components/ui/EmptyState.vue'
+  import EmptyState from '@/views/EmptyState/EmptyStateView.vue'
 
   const tabManagerStore = useTabManagerStore()
   const terminalStore = useTerminalStore()

@@ -7,13 +7,11 @@ use std::collections::HashMap;
 pub enum PromptComponent {
     // Agent level
     AgentRole,
-    AgentDescription,
     AgentCapabilities,
 
     // System and context
     SystemInfo,
     DateTime,
-    Platform,
 
     // Tools and interaction
     ToolsDescription,
@@ -21,31 +19,17 @@ pub enum PromptComponent {
     // Task specific
     TaskContext,
     TaskNodes,
-    TaskExamples,
-
-    // Planning
-    PlanningGuidelines,
-    PlanningExamples,
-    OutputFormat,
-
-    // Dialogue
-    DialogueCapabilities,
-    DialogueGuidelines,
 
     // Extras
-    WorkspaceSnapshot,
     CustomInstructions,
-    AdditionalContext,
     AgentRules,
     WorkMethodology,
 }
 
-/// Prompt channels: agent / dialogue / planning.
+/// Prompt type.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum PromptType {
     Agent,
-    Dialogue,
-    Planning,
 }
 
 /// Conditional rule for component evaluation.
@@ -90,38 +74,15 @@ impl Default for PromptConfig {
         default_component_order.insert(
             PromptType::Agent,
             vec![
-                PromptComponent::AgentRole,
-                PromptComponent::AgentCapabilities,
-                PromptComponent::AgentRules,
-                PromptComponent::WorkMethodology,
-                PromptComponent::SystemInfo,
-                PromptComponent::TaskContext,
+                PromptComponent::CustomInstructions,
                 PromptComponent::ToolsDescription,
-                PromptComponent::TaskNodes,
-                PromptComponent::CustomInstructions,
-                PromptComponent::DateTime,
-            ],
-        );
-
-        default_component_order.insert(
-            PromptType::Dialogue,
-            vec![
-                PromptComponent::AgentRole,
-                PromptComponent::DialogueCapabilities,
-                PromptComponent::DialogueGuidelines,
-                PromptComponent::CustomInstructions,
-                PromptComponent::DateTime,
-            ],
-        );
-
-        default_component_order.insert(
-            PromptType::Planning,
-            vec![
-                PromptComponent::AgentRole,
-                PromptComponent::PlanningGuidelines,
+                PromptComponent::TaskContext,
                 PromptComponent::AgentCapabilities,
-                PromptComponent::OutputFormat,
-                PromptComponent::PlanningExamples,
+                PromptComponent::WorkMethodology,
+                PromptComponent::AgentRules,
+                PromptComponent::TaskNodes,
+                PromptComponent::AgentRole,
+                PromptComponent::SystemInfo,
                 PromptComponent::DateTime,
             ],
         );
@@ -135,14 +96,6 @@ impl Default for PromptConfig {
             )]),
         );
 
-        template_overrides.insert(
-            "development".to_string(),
-            HashMap::from([(
-                PromptComponent::AgentRole,
-                "You are {name}, a development-focused AI assistant.".to_string(),
-            )]),
-        );
-
         let mut component_config = HashMap::new();
         component_config.insert(
             PromptComponent::AgentRole,
@@ -150,15 +103,6 @@ impl Default for PromptConfig {
                 enabled: true,
                 priority: 100,
                 dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::AgentDescription,
-            ComponentConfig {
-                enabled: true,
-                priority: 90,
-                dependencies: vec![PromptComponent::AgentRole],
                 conditional_rules: vec![],
             },
         );
@@ -217,91 +161,10 @@ impl Default for PromptConfig {
             },
         );
         component_config.insert(
-            PromptComponent::WorkspaceSnapshot,
-            ComponentConfig {
-                enabled: false,
-                priority: 20,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
             PromptComponent::ToolsDescription,
             ComponentConfig {
                 enabled: true,
                 priority: 50,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::DialogueCapabilities,
-            ComponentConfig {
-                enabled: true,
-                priority: 50,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::DialogueGuidelines,
-            ComponentConfig {
-                enabled: true,
-                priority: 40,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::PlanningGuidelines,
-            ComponentConfig {
-                enabled: true,
-                priority: 60,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::PlanningExamples,
-            ComponentConfig {
-                enabled: true,
-                priority: 50,
-                dependencies: vec![PromptComponent::PlanningGuidelines],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::OutputFormat,
-            ComponentConfig {
-                enabled: true,
-                priority: 40,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::Platform,
-            ComponentConfig {
-                enabled: true,
-                priority: 30,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::TaskExamples,
-            ComponentConfig {
-                enabled: false,
-                priority: 30,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::AdditionalContext,
-            ComponentConfig {
-                enabled: false,
-                priority: 20,
                 dependencies: vec![],
                 conditional_rules: vec![],
             },
@@ -325,38 +188,12 @@ impl Default for PromptConfig {
             },
         );
 
-        let mut variants = HashMap::new();
-        variants.insert(
-            "minimal_agent".to_string(),
-            PromptVariant {
-                prompt_type: PromptType::Agent,
-                components: vec![
-                    PromptComponent::AgentRole,
-                    PromptComponent::AgentDescription,
-                    PromptComponent::DateTime,
-                ],
-                template: "{AgentRole}\n{AgentDescription}\n{DateTime}".to_string(),
-            },
-        );
-        variants.insert(
-            "minimal_dialogue".to_string(),
-            PromptVariant {
-                prompt_type: PromptType::Dialogue,
-                components: vec![
-                    PromptComponent::AgentRole,
-                    PromptComponent::DialogueCapabilities,
-                    PromptComponent::DateTime,
-                ],
-                template: "{AgentRole}\n{DialogueCapabilities}\n{DateTime}".to_string(),
-            },
-        );
-
         Self {
             default_component_order,
             template_overrides,
             enabled_features: vec![],
             component_config,
-            variants,
+            variants: HashMap::new(),
         }
     }
 }

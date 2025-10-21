@@ -27,7 +27,7 @@ export class CkApi {
   /**
    * 获取CK索引状态（传入路径）
    */
-  async getIndexStatus(params: { path: string }): Promise<CkIndexStatus> {
+  getIndexStatus = async (params: { path: string }): Promise<CkIndexStatus> => {
     try {
       return await invoke<CkIndexStatus>('ck_index_status', { path: params.path })
     } catch (error) {
@@ -42,35 +42,35 @@ export class CkApi {
   /**
    * 构建CK索引（传入路径）
    */
-  async buildIndex(params: { path: string }): Promise<void> {
+  buildIndex = async (params: { path: string }): Promise<void> => {
     await invoke('ck_build_index', { path: params.path })
   }
 
   /**
    * 删除CK索引（传入路径）
    */
-  async deleteIndex(params: { path: string }): Promise<void> {
+  deleteIndex = async (params: { path: string }): Promise<void> => {
     return await invoke('ck_delete_index', { path: params.path })
   }
 
   /**
    * 获取CK构建进度（传入路径）
    */
-  async getBuildProgress(params: { path: string }): Promise<CkBuildProgress> {
+  getBuildProgress = async (params: { path: string }): Promise<CkBuildProgress> => {
     return await invoke('ck_get_build_progress', { path: params.path })
   }
 
   /**
    * 取消CK构建（传入路径）
    */
-  async cancelBuild(params: { path: string }): Promise<void> {
+  cancelBuild = async (params: { path: string }): Promise<void> => {
     return await invoke('ck_cancel_build', { path: params.path })
   }
 
   /**
    * 执行CK代码搜索
    */
-  async search(params: CkSearchParams): Promise<CkSearchResult[]> {
+  search = async (params: CkSearchParams): Promise<CkSearchResult[]> => {
     const results = await invoke<CkSearchResult[]>('ck_search', {
       params: {
         query: params.query,

@@ -10,12 +10,12 @@
 
   interface Props {
     tabs: TabItem[]
-    activeTabId: number | string | null
+    activeTabId: number | null
   }
 
   interface Emits {
-    (e: 'switch', id: number | string): void
-    (e: 'close', id: number | string): void
+    (e: 'switch', id: number): void
+    (e: 'close', id: number): void
   }
 
   const props = defineProps<Props>()
@@ -41,13 +41,30 @@
     return classes
   }
 
+  /**
+   * 从 TerminalStore 获取终端的 shell 名称
+   * 数据单一来源：TerminalStore.terminals
+   */
+  const getTerminalShell = (tabId: number): string => {
+    const terminal = terminalStore.terminals.find(t => t.id === tabId)
+    return terminal?.shell || 'shell'
+  }
+
+  /**
+   * 获取 tab 的显示路径
+   * 数据单一来源：tab.path（已由 handler 计算）
+   */
+  const getTerminalPath = (tab: TabItem): string => {
+    return tab.path || '~'
+  }
+
   // 获取标签提示信息
   const getTabTooltip = (tab: TabItem): string => {
     if (tab.type === TabType.TERMINAL) {
-      // 获取完整路径信息
+      // 从 TerminalStore 获取数据（单一数据源）
       const terminal = terminalStore.terminals.find(t => t.id === tab.id)
       const fullPath = terminal?.cwd || '~'
-      const shell = tab.shell || 'shell'
+      const shell = terminal?.shell || 'shell'
 
       return `${shell} • ${fullPath}`
     }
@@ -86,14 +103,14 @@
   }
 
   // 处理标签点击
-  const handleTabClick = (id: number | string) => {
+  const handleTabClick = (id: number) => {
     if (id !== props.activeTabId) {
       emit('switch', id)
     }
   }
 
   // 处理关闭按钮点击
-  const handleCloseClick = (event: MouseEvent, id: number | string) => {
+  const handleCloseClick = (event: MouseEvent, id: number) => {
     event.stopPropagation()
     emit('close', id)
   }
@@ -117,7 +134,7 @@
   })
 
   // 处理右键菜单
-  const handleTabContextMenu = async (event: MouseEvent, tabId: number | string) => {
+  const handleTabContextMenu = async (event: MouseEvent, tabId: number) => {
     event.preventDefault()
 
     const tab = props.tabs.find(t => t.id === tabId)
@@ -198,7 +215,7 @@
   }
 
   // 处理鼠标按下事件（中键关闭）
-  const handleMouseDown = (event: MouseEvent, id: number | string) => {
+  const handleMouseDown = (event: MouseEvent, id: number) => {
     if (event.button === 1) {
       const tab = props.tabs.find(t => t.id === id)
       if (tab && canShowCloseButton(tab)) {
@@ -222,10 +239,10 @@
         @contextmenu="handleTabContextMenu($event, tab.id)"
       >
         <div class="tab-content" :title="getTabTooltip(tab)">
-          <template v-if="tab.type === TabType.TERMINAL && tab.shell && tab.path">
+          <template v-if="tab.type === TabType.TERMINAL">
             <div class="terminal-info">
-              <span class="shell-badge">{{ tab.shell }}</span>
-              <span class="path-info">{{ tab.path }}</span>
+              <span class="shell-badge">{{ getTerminalShell(tab.id) }}</span>
+              <span class="path-info">{{ getTerminalPath(tab) }}</span>
             </div>
           </template>
           <template v-else>

@@ -19,7 +19,7 @@ pub struct TaskNode {
     pub text: String,
 }
 
-/// Detailed task description captured from planner output.
+/// Detailed task description for tracking.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskDetail {
     pub task_id: String,
@@ -47,23 +47,6 @@ impl Default for TaskDetailStatus {
         TaskDetailStatus::Init
     }
 }
-
-/// Planned task tree node used by TreePlanner outputs.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PlannedTaskNode {
-    pub text: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PlannedTask {
-    pub name: Option<String>,
-    pub thought: Option<String>,
-    pub description: Option<String>,
-    pub nodes: Option<Vec<PlannedTaskNode>>,
-    pub subtasks: Option<Vec<PlannedTask>>,
-}
-
-pub type PlannedTaskTree = PlannedTask;
 
 /// High level task status shared with front-end
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

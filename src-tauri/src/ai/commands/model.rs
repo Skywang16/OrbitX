@@ -12,16 +12,7 @@ use tracing::warn;
 #[tauri::command]
 pub async fn ai_models_get(state: State<'_, AIManagerState>) -> TauriApiResult<Vec<AIModelConfig>> {
     match state.ai_service.get_models().await {
-        Ok(models) => {
-            let sanitized: Vec<AIModelConfig> = models
-                .into_iter()
-                .map(|mut m| {
-                    m.api_key.clear();
-                    m
-                })
-                .collect();
-            Ok(api_success!(sanitized))
-        }
+        Ok(models) => Ok(api_success!(models)),
         Err(error) => {
             warn!(error = %error, "加载AI模型配置失败");
             Ok(api_error!("ai.get_models_failed"))

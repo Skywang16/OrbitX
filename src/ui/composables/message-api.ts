@@ -48,7 +48,7 @@ class MessageManager {
   }
 
   // 创建消息实例
-  create(config: MessageConfig): MessageInstance {
+  create = (config: MessageConfig): MessageInstance => {
     const id = config.id || `message_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     const container = this.getContainer()
 
@@ -125,12 +125,12 @@ class MessageManager {
   }
 
   // 关闭所有消息
-  closeAll(): void {
+  closeAll = (): void => {
     this.instances.forEach(instance => instance.close())
   }
 
   // 根据ID关闭消息
-  close(id: string): void {
+  close = (id: string): void => {
     this.instances.get(id)?.close()
   }
 }

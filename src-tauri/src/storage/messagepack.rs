@@ -29,7 +29,7 @@ impl Default for MessagePackOptions {
     fn default() -> Self {
         Self {
             compression: true,
-            backup_count: 3,
+            backup_count: 0,
             checksum_validation: true,
             max_file_size: 10 * 1024 * 1024,
         }
@@ -122,7 +122,7 @@ impl MessagePackManager {
             let mut hasher = Sha256::new();
             hasher.update(payload);
             let digest = hasher.finalize();
-            if digest.as_slice() != &header[14..46] {
+            if &digest[..] != &header[14..46] {
                 return Err(MessagePackError::ChecksumFailed);
             }
         }

@@ -57,7 +57,17 @@ impl RunnableTool for OrbitSearchTool {
     }
 
     fn description(&self) -> &str {
-        "Search for code snippets in the current project using semantic or hybrid matching."
+        "A powerful semantic and pattern-based code search tool.
+
+Usage:
+  - ALWAYS use orbit_search for finding code in the codebase. NEVER invoke `grep` or `find` as a shell command for code searching.
+  - Supports three search modes: 'semantic' (AI-powered, requires index), 'hybrid' (semantic + keyword, requires index), 'regex' (pattern-based, always available)
+  - Returns file paths, line ranges, code snippets, and relevance scores
+  - Automatically respects .gitignore patterns
+  - Use semantic/hybrid modes for conceptual searches (e.g., 'authentication logic', 'database connection')
+  - Use regex mode for exact patterns (e.g., 'function\\s+\\w+', 'class.*Controller')
+  - Pattern syntax: Uses ripgrep regex (not grep) - literal braces need escaping
+  - You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful."
     }
 
     fn description_with_context(&self, context: &ToolDescriptionContext) -> Option<String> {
@@ -77,22 +87,22 @@ impl RunnableTool for OrbitSearchTool {
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Natural language description of the desired code"
+                    "description": "The search query. For semantic/hybrid modes: use natural language (e.g., 'file upload handler', 'authentication middleware'). For regex mode: use ripgrep regex syntax (e.g., 'function\\s+\\w+', 'class.*Component'). Query must be at least 3 characters."
                 },
                 "maxResults": {
                     "type": "number",
                     "minimum": 1,
                     "maximum": 50,
-                    "description": "Maximum number of results to return (default 10)"
+                    "description": "Maximum number of results to return (default: 10, max: 50). Use lower numbers (5-10) for focused searches, higher numbers (20-50) when exploring."
                 },
                 "path": {
                     "type": "string",
-                    "description": "Optional path to scope the search"
+                    "description": "Optional absolute path to scope the search to a specific directory or file. For example: '/Users/user/project/src/components'. If omitted, searches the entire workspace."
                 },
                 "mode": {
                     "type": "string",
                     "enum": ["semantic", "hybrid", "regex"],
-                    "description": "Search mode"
+                    "description": "Search mode: 'semantic' for AI-powered concept search (requires index), 'hybrid' for combined semantic+keyword (requires index), 'regex' for pattern matching (always available). Default: 'semantic'. Use 'hybrid' for best results."
                 }
             },
             "required": ["query"]
@@ -153,12 +163,6 @@ impl RunnableTool for OrbitSearchTool {
                 "Search path does not exist: {}",
                 search_path.display()
             )));
-        }
-
-        if requires_index(&mode) && !is_index_ready(&search_path) {
-            return Ok(tool_error(
-                "No semantic index found. Please build an index first using the CK index button in the chat interface.",
-            ));
         }
 
         let options = build_search_options(&search_path, query, &mode, max_results);
@@ -287,10 +291,6 @@ fn build_search_options(
     }
 }
 
-fn requires_index(mode: &SearchMode) -> bool {
-    !matches!(mode, SearchMode::Regex | SearchMode::Lexical)
-}
-
 fn mode_as_str(mode: &SearchMode) -> &'static str {
     match mode {
         SearchMode::Semantic => "semantic",
@@ -329,10 +329,7 @@ async fn extract_content_from_span(file: &Path, span: &ck_core::Span) -> String 
 }
 
 fn truncate_snippet(snippet: &str) -> String {
-    if snippet.len() <= SNIPPET_MAX_LEN {
-        return snippet.to_string();
-    }
-    format!("{}...", &snippet[..SNIPPET_MAX_LEN])
+    crate::agent::utils::truncate_with_ellipsis(snippet, SNIPPET_MAX_LEN)
 }
 
 fn resolve_to_absolute(path: Option<&str>, cwd: &str) -> Result<PathBuf, ToolResult> {

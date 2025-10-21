@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::agent::tools::ToolResult;
-use crate::llm::types::{LLMRequest, LLMToolCall};
+use crate::llm::anthropic_types::CreateMessageRequest;
 
 /// Event emitted when the tool chain updates.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,16 +21,16 @@ pub type ChainListener = Arc<dyn Fn(&Chain, &ChainEvent) + Send + Sync + 'static
 pub struct ToolChain {
     pub tool_name: String,
     pub tool_call_id: String,
-    pub request: Arc<LLMRequest>,
+    pub request: Arc<CreateMessageRequest>,
     pub params: Option<serde_json::Value>,
     pub tool_result: Option<ToolResult>,
 }
 
 impl ToolChain {
-    pub fn new(tool_call: &LLMToolCall, request: Arc<LLMRequest>) -> Self {
+    pub fn new(tool_name: &str, tool_call_id: &str, request: Arc<CreateMessageRequest>) -> Self {
         Self {
-            tool_name: tool_call.name.clone(),
-            tool_call_id: tool_call.id.clone(),
+            tool_name: tool_name.to_string(),
+            tool_call_id: tool_call_id.to_string(),
             request,
             params: None,
             tool_result: None,
@@ -49,7 +49,7 @@ impl ToolChain {
 #[derive(Clone)]
 pub struct Chain {
     pub task_prompt: String,
-    pub plan_request: Option<LLMRequest>,
+    pub plan_request: Option<CreateMessageRequest>,
     pub plan_result: Option<String>,
     pub tools: Vec<ToolChain>,
     listeners: Arc<Mutex<Vec<ChainListener>>>,

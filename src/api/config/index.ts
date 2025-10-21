@@ -2,23 +2,23 @@ import { invoke } from '@/utils/request'
 import type { AppConfig, ConfigFileInfo, Theme, ThemeInfo, ThemeConfigStatus } from './types'
 
 class ThemeAPI {
-  async getThemeConfigStatus(): Promise<ThemeConfigStatus> {
+  getThemeConfigStatus = async (): Promise<ThemeConfigStatus> => {
     return await invoke<ThemeConfigStatus>('theme_get_config_status')
   }
 
-  async getCurrentTheme(): Promise<Theme> {
+  getCurrentTheme = async (): Promise<Theme> => {
     return await invoke<Theme>('theme_get_current')
   }
 
-  async getAvailableThemes(): Promise<ThemeInfo[]> {
+  getAvailableThemes = async (): Promise<ThemeInfo[]> => {
     return await invoke<ThemeInfo[]>('theme_get_available')
   }
 
-  async setTerminalTheme(name: string): Promise<void> {
+  setTerminalTheme = async (name: string): Promise<void> => {
     await invoke<void>('theme_set_terminal', { themeName: name })
   }
 
-  async setFollowSystemTheme(followSystem: boolean, lightTheme?: string, darkTheme?: string): Promise<void> {
+  setFollowSystemTheme = async (followSystem: boolean, lightTheme?: string, darkTheme?: string): Promise<void> => {
     await invoke<void>('theme_set_follow_system', {
       followSystem,
       lightTheme: lightTheme || null,
@@ -30,83 +30,83 @@ class ThemeAPI {
 export class ConfigApi {
   private themeAPI = new ThemeAPI()
 
-  async getConfig(): Promise<AppConfig> {
+  getConfig = async (): Promise<AppConfig> => {
     return await invoke<AppConfig>('config_get')
   }
 
-  async updateConfig(config: AppConfig): Promise<void> {
+  updateConfig = async (config: AppConfig): Promise<void> => {
     await invoke<void>('config_update', { newConfig: config })
   }
 
-  async saveConfig(): Promise<void> {
+  saveConfig = async (): Promise<void> => {
     await invoke<void>('config_save')
   }
 
-  async validateConfig(): Promise<void> {
+  validateConfig = async (): Promise<void> => {
     await invoke<void>('config_validate')
   }
 
-  async resetConfig(): Promise<void> {
+  resetConfig = async (): Promise<void> => {
     await invoke<void>('reset_config')
   }
 
-  async reloadConfig(): Promise<void> {
+  reloadConfig = async (): Promise<void> => {
     await invoke<void>('reload_config')
   }
 
-  async getConfigFileInfo(): Promise<ConfigFileInfo> {
+  getConfigFileInfo = async (): Promise<ConfigFileInfo> => {
     return await invoke<ConfigFileInfo>('config_get_file_info')
   }
 
-  async exportConfig(): Promise<string> {
+  exportConfig = async (): Promise<string> => {
     return await invoke<string>('export_config')
   }
 
-  async importConfig(configData: string): Promise<void> {
+  importConfig = async (configData: string): Promise<void> => {
     await invoke<void>('import_config', { data: configData })
   }
 
-  async resetToDefaults(): Promise<void> {
+  resetToDefaults = async (): Promise<void> => {
     await invoke<void>('config_reset_to_defaults')
   }
 
-  async getFilePath(): Promise<string> {
+  getFilePath = async (): Promise<string> => {
     return await invoke<string>('config_get_file_path')
   }
 
-  async getFileInfo(): Promise<ConfigFileInfo> {
+  getFileInfo = async (): Promise<ConfigFileInfo> => {
     return await invoke<ConfigFileInfo>('config_get_file_info')
   }
 
-  async openFile(): Promise<void> {
+  openFile = async (): Promise<void> => {
     await invoke<void>('config_open_file')
   }
 
-  async getConfigFolderPath(): Promise<string> {
+  getConfigFolderPath = async (): Promise<string> => {
     return await invoke<string>('config_get_folder_path')
   }
 
-  async openConfigFolder(): Promise<void> {
+  openConfigFolder = async (): Promise<void> => {
     await invoke<void>('config_open_folder')
   }
 
-  async getThemeConfigStatus(): Promise<ThemeConfigStatus> {
+  getThemeConfigStatus = async (): Promise<ThemeConfigStatus> => {
     return this.themeAPI.getThemeConfigStatus()
   }
 
-  async getCurrentTheme(): Promise<Theme> {
+  getCurrentTheme = async (): Promise<Theme> => {
     return this.themeAPI.getCurrentTheme()
   }
 
-  async getAvailableThemes(): Promise<ThemeInfo[]> {
+  getAvailableThemes = async (): Promise<ThemeInfo[]> => {
     return this.themeAPI.getAvailableThemes()
   }
 
-  async setTerminalTheme(name: string): Promise<void> {
+  setTerminalTheme = async (name: string): Promise<void> => {
     return this.themeAPI.setTerminalTheme(name)
   }
 
-  async setFollowSystemTheme(followSystem: boolean, lightTheme?: string, darkTheme?: string): Promise<void> {
+  setFollowSystemTheme = async (followSystem: boolean, lightTheme?: string, darkTheme?: string): Promise<void> => {
     return this.themeAPI.setFollowSystemTheme(followSystem, lightTheme, darkTheme)
   }
 

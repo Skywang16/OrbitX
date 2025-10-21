@@ -1,28 +1,16 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { marked } from 'marked'
-  import { markedHighlight } from 'marked-highlight'
-  import hljs from 'highlight.js'
   import type { Message } from '@/types'
   import type { UiStep } from '@/api/agent/types'
   import { useAIChatStore } from '../../store'
   import { formatTime } from '@/utils/dateFormatter'
+  import { renderMarkdown } from '@/utils/markdown'
   import ThinkingBlock from './blocks/ThinkingBlock.vue'
   import ToolBlock from './blocks/ToolBlock.vue'
   import { useStepProcessor } from '@/composables/useStepProcessor'
   const { t } = useI18n()
   const { processSteps } = useStepProcessor()
-
-  marked.use(
-    markedHighlight({
-      langPrefix: 'hljs language-',
-      highlight(code, lang) {
-        const language = hljs.getLanguage(lang) ? lang : 'plaintext'
-        return hljs.highlight(code, { language }).value
-      },
-    })
-  )
 
   interface Props {
     message: Message
@@ -43,38 +31,28 @@
     const seconds = (ms / 1000).toFixed(1)
     return `${seconds}s`
   }
-
-  const renderMarkdown = (content?: string) => {
-    return marked(content || '')
-  }
 </script>
 
 <template>
   <div class="ai-message">
-    <!-- 双轨架构：只基于steps渲染 -->
     <template v-if="message.steps && message.steps.length > 0">
       <template v-for="(step, index) in sortedSteps" :key="step.metadata?.stepId || `fallback-${index}`">
-        <!-- 使用 ThinkingBlock 组件 -->
         <ThinkingBlock
           v-if="step.stepType === 'thinking'"
           :step="step"
           :is-streaming="message.status === 'streaming' || !message.status"
         />
 
-        <!-- 使用 ToolBlock 组件 -->
         <ToolBlock v-else-if="step.stepType === 'tool_use' || step.stepType === 'tool_result'" :step="step" />
 
-        <!-- 文本消息直接渲染 -->
         <div v-else-if="step.stepType === 'text'" class="ai-message-text step-block">
           <div v-html="renderMarkdown(step.content)"></div>
         </div>
 
-        <!-- 错误消息 -->
         <div v-else-if="step.stepType === 'error'" class="error-output step-block">
           <div class="error-content">{{ step.content }}</div>
         </div>
 
-        <!-- 未知步骤类型 -->
         <div v-else class="unknown-step step-block">
           <div class="unknown-header">
             <span class="unknown-icon">❓</span>
@@ -111,155 +89,6 @@
   .ai-message {
     margin-bottom: var(--spacing-md);
     width: 100%;
-  }
-
-  .ai-message-text {
-    width: 100%;
-    padding: var(--spacing-sm) 0;
-    font-size: var(--font-size-md);
-    line-height: 1.5;
-    color: var(--text-200);
-    word-wrap: break-word;
-    word-break: break-word;
-  }
-
-  .ai-message-text :deep(h1),
-  .ai-message-text :deep(h2),
-  .ai-message-text :deep(h3) {
-    margin: 0.8em 0 0.5em 0;
-    font-weight: 600;
-    color: var(--text-100);
-    line-height: 1.3;
-  }
-
-  .ai-message-text :deep(h1) {
-    font-size: 1.5em;
-    border-bottom: 2px solid var(--border-300);
-    padding-bottom: 0.3em;
-  }
-
-  .ai-message-text :deep(h2) {
-    font-size: 1.3em;
-    border-bottom: 1px solid var(--border-200);
-    padding-bottom: 0.2em;
-  }
-
-  .ai-message-text :deep(h3) {
-    font-size: 1.15em;
-  }
-
-  .ai-message-text :deep(p) {
-    margin: 0.5em 0;
-  }
-
-  .ai-message-text :deep(code) {
-    background: var(--bg-500);
-    padding: 0.2em 0.4em;
-    border-radius: var(--border-radius-xs);
-    font-family: var(--font-family-mono);
-    font-size: 0.9em;
-    color: var(--syntax-string);
-    border: 1px solid var(--border-300);
-  }
-
-  .ai-message-text :deep(pre) {
-    background: var(--bg-500);
-    padding: var(--spacing-md);
-    border-radius: var(--border-radius);
-    overflow-x: auto;
-    margin: 0.8em 0;
-    border: 1px solid var(--border-300);
-    box-shadow: var(--shadow-sm);
-  }
-
-  .ai-message-text :deep(pre code) {
-    background: none;
-    padding: 0;
-    border: none;
-    color: var(--text-200);
-    font-size: var(--font-size-sm);
-    line-height: 1.6;
-  }
-
-  .ai-message-text :deep(ul),
-  .ai-message-text :deep(ol) {
-    margin: 0.8em 0;
-    padding-left: 1.8em;
-  }
-
-  .ai-message-text :deep(li) {
-    margin: 0.3em 0;
-    line-height: 1.6;
-  }
-
-  .ai-message-text :deep(li::marker) {
-    color: var(--color-primary);
-  }
-
-  .ai-message-text :deep(a) {
-    color: var(--color-primary);
-    text-decoration: none;
-    border-bottom: 1px solid transparent;
-    transition: all 0.2s;
-  }
-
-  .ai-message-text :deep(a:hover) {
-    border-bottom-color: var(--color-primary);
-    filter: brightness(1.2);
-  }
-
-  .ai-message-text :deep(blockquote) {
-    margin: 0.8em 0;
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-left: 3px solid var(--color-primary);
-    background: var(--bg-400);
-    border-radius: var(--border-radius-xs);
-    color: var(--text-300);
-  }
-
-  .ai-message-text :deep(blockquote p) {
-    margin: 0.3em 0;
-  }
-
-  .ai-message-text :deep(hr) {
-    margin: 1em 0;
-    border: none;
-    border-top: 2px solid var(--border-300);
-  }
-
-  .ai-message-text :deep(table) {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 0.8em 0;
-    font-size: var(--font-size-sm);
-  }
-
-  .ai-message-text :deep(th),
-  .ai-message-text :deep(td) {
-    border: 1px solid var(--border-300);
-    padding: var(--spacing-sm) var(--spacing-md);
-    text-align: left;
-  }
-
-  .ai-message-text :deep(th) {
-    background: var(--bg-500);
-    font-weight: 600;
-    color: var(--text-100);
-  }
-
-  .ai-message-text :deep(tr:hover) {
-    background: var(--bg-400);
-  }
-
-  .ai-message-text :deep(img) {
-    max-width: 100%;
-    height: auto;
-    border-radius: var(--border-radius);
-    margin: 0.5em 0;
-  }
-
-  .ai-message-text :deep(strong) {
-    font-weight: 600;
   }
 
   .step-block {
@@ -360,5 +189,161 @@
     50% {
       opacity: 0.5;
     }
+  }
+
+  .ai-message-text {
+    font-size: 0.9em;
+    line-height: 1.6;
+    color: var(--text-200);
+  }
+
+  .ai-message-text :deep(p) {
+    margin: var(--spacing-sm) 0;
+    font-size: 0.95em;
+  }
+
+  .ai-message-text :deep(p:first-child) {
+    margin-top: 0;
+  }
+
+  .ai-message-text :deep(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  /* 标题 */
+  .ai-message-text :deep(h1),
+  .ai-message-text :deep(h2),
+  .ai-message-text :deep(h3),
+  .ai-message-text :deep(h4),
+  .ai-message-text :deep(h5),
+  .ai-message-text :deep(h6) {
+    margin: var(--spacing-md) 0 var(--spacing-sm) 0;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--text-100);
+  }
+
+  .ai-message-text :deep(h1) {
+    font-size: 1.3em;
+    border-bottom: 1px solid var(--border-200);
+    padding-bottom: var(--spacing-xs);
+  }
+
+  .ai-message-text :deep(h2) {
+    font-size: 1.15em;
+  }
+
+  .ai-message-text :deep(h3) {
+    font-size: 1.05em;
+  }
+
+  .ai-message-text :deep(h4) {
+    font-size: 0.95em;
+  }
+
+  /* 代码 */
+  .ai-message-text :deep(code) {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    padding: 0.15em 0.4em;
+    background: var(--bg-400);
+    border-radius: 3px;
+    color: var(--text-200);
+  }
+
+  .ai-message-text :deep(pre) {
+    margin: var(--spacing-sm) 0;
+    overflow-x: auto;
+  }
+
+  .ai-message-text :deep(pre code) {
+    padding: 0;
+    background: transparent;
+    font-size: 0.9em;
+  }
+
+  /* 列表 */
+  .ai-message-text :deep(ul),
+  .ai-message-text :deep(ol) {
+    margin: var(--spacing-sm) 0;
+    padding-left: 1.5em;
+  }
+
+  .ai-message-text :deep(li) {
+    margin: var(--spacing-xs) 0;
+  }
+
+  .ai-message-text :deep(li > p) {
+    margin: var(--spacing-xs) 0;
+  }
+
+  /* 引用 */
+  .ai-message-text :deep(blockquote) {
+    margin: var(--spacing-sm) 0;
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-left: 3px solid var(--color-primary);
+    background: var(--bg-400);
+    color: var(--text-300);
+  }
+
+  .ai-message-text :deep(blockquote p) {
+    margin: var(--spacing-xs) 0;
+  }
+
+  /* 链接 */
+  .ai-message-text :deep(a) {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .ai-message-text :deep(a:hover) {
+    text-decoration: underline;
+  }
+
+  /* 分隔线 */
+  .ai-message-text :deep(hr) {
+    margin: var(--spacing-md) 0;
+    border: none;
+    border-top: 1px solid var(--border-200);
+  }
+
+  /* 表格 */
+  .ai-message-text :deep(table) {
+    margin: var(--spacing-sm) 0;
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .ai-message-text :deep(th),
+  .ai-message-text :deep(td) {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--border-200);
+    text-align: left;
+  }
+
+  .ai-message-text :deep(th) {
+    background: var(--bg-400);
+    font-weight: 600;
+  }
+
+  .ai-message-text :deep(tr:nth-child(even)) {
+    background: var(--bg-300);
+  }
+
+  /* 图片 */
+  .ai-message-text :deep(img) {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--border-radius);
+  }
+
+  /* 强调 */
+  .ai-message-text :deep(strong) {
+    font-weight: 600;
+    color: var(--text-100);
+  }
+
+  .ai-message-text :deep(em) {
+    font-style: italic;
   }
 </style>

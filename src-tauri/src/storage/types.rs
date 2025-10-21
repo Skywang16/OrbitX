@@ -25,12 +25,12 @@ impl StorageLayer {
     }
 }
 
-/// 会话状态数据结构 - 精简版
+/// 会话状态数据结构 - 统一 tab 管理
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionState {
     pub version: u32,
-    pub terminals: Vec<TerminalState>,
+    pub tabs: Vec<TabState>,
     pub ui: UiState,
     pub ai: AiState,
     pub timestamp: DateTime<Utc>,
@@ -40,12 +40,55 @@ impl Default for SessionState {
     fn default() -> Self {
         Self {
             version: 1,
-            terminals: Vec::new(),
+            tabs: Vec::new(),
             ui: UiState::default(),
             ai: AiState::default(),
             timestamp: Utc::now(),
         }
     }
+}
+
+/// Tab ID - 统一使用 i32（支持负数，用于特殊 tab 如 Settings）
+pub type TabId = i32;
+
+/// Tab 状态 - 支持不同类型的 tab（扁平结构）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum TabState {
+    #[serde(rename = "terminal", rename_all = "camelCase")]
+    Terminal {
+        id: i32, // 改用 i32 支持负数
+        #[serde(rename = "isActive")]
+        is_active: bool,
+        data: TerminalTabData,
+    },
+    #[serde(rename = "settings", rename_all = "camelCase")]
+    Settings {
+        id: i32, // 改用 i32 支持负数
+        #[serde(rename = "isActive")]
+        is_active: bool,
+        data: SettingsTabData,
+    },
+}
+
+/// Terminal tab 数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalTabData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shell: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shell_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+}
+
+/// Settings tab 数据
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SettingsTabData {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_section: Option<String>,
 }
 
 /// 窗口状态 - 精简版
@@ -71,32 +114,12 @@ impl Default for WindowState {
     }
 }
 
-/// 终端状态 - 最优版本
-///
-/// 设计原则：
-/// - id 直接使用后端 pane_id，前后端统一标识
-/// - cwd 不持久化，由后端实时查询 ShellIntegration
-/// - 仅保存必要的恢复信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TerminalState {
-    /// 终端ID（即后端 pane_id）
-    pub id: u32,
-    /// 终端标题（用户自定义或从 cwd 生成）
-    pub title: String,
-    /// 是否为活跃终端
-    pub active: bool,
-    /// Shell类型（可选）
-    pub shell: Option<String>,
-}
-
+/// 运行时终端状态（用于命令返回）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalRuntimeState {
     pub id: u32,
-    pub title: String,
     pub cwd: String,
-    pub active: bool,
     pub shell: Option<String>,
 }
 

@@ -11,6 +11,7 @@ pub enum ToolCategory {
     Execution,
     Network,
     FileSystem,
+    Terminal,
 }
 
 impl ToolCategory {
@@ -22,6 +23,7 @@ impl ToolCategory {
             Self::Execution => "execution",
             Self::Network => "network",
             Self::FileSystem => "filesystem",
+            Self::Terminal => "terminal",
         }
     }
 }

@@ -12,25 +12,23 @@ export interface ToolExecution {
   toolId?: string
 }
 
-export type AIProvider = 'openai' | 'anthropic' | 'gemini' | 'qwen' | 'custom'
+export type AIProvider = 'anthropic' | 'openai_compatible'
 
 export type ModelType = 'chat' | 'embedding'
 
 export interface AIModelConfig {
   id: string
-  name: string
   provider: AIProvider
   apiUrl: string
   apiKey: string
   model: string
   modelType: ModelType
-  enabled?: boolean
   options?: {
-    maxTokens?: number
+    maxContextTokens?: number
     temperature?: number
     timeout?: number
-    customConfig?: string
   }
+  useCustomBaseUrl?: boolean
   createdAt?: Date
   updatedAt?: Date
 }
@@ -184,7 +182,7 @@ export interface ChatInputState {
 }
 
 export interface ConversationState {
-  currentConversationId: number | null
+  currentConversationId: number | null | -1 // 增加 -1 作为新建标识
   conversations: Conversation[]
   messages: Message[]
   isLoading: boolean

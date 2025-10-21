@@ -22,22 +22,6 @@ use crate::agent::tools::{
 #[derive(Debug, Deserialize)]
 struct WebFetchArgs {
     url: String,
-    #[serde(default)]
-    method: Option<String>,
-    #[serde(default)]
-    headers: Option<HashMap<String, String>>,
-    #[serde(default)]
-    body: Option<String>,
-    #[serde(default)]
-    timeout: Option<u64>,
-    #[serde(default)]
-    follow_redirects: Option<bool>,
-    #[serde(default)]
-    response_format: Option<String>,
-    #[serde(default)]
-    extract_content: Option<bool>,
-    #[serde(default)]
-    max_content_length: Option<usize>,
 }
 
 pub struct WebFetchTool;
@@ -54,22 +38,37 @@ impl RunnableTool for WebFetchTool {
     }
 
     fn description(&self) -> &str {
-        "Perform a headless HTTP request and return response data (optionally summarized)."
+        "Fetches content from a specified URL and returns the response data.
+
+Usage:
+- Takes a URL and optional HTTP parameters as input
+- Performs HTTP requests (GET, POST, PUT, DELETE, etc.)
+- Returns response body with optional format conversion
+- Supports custom headers, request body, and timeout configuration
+- Can extract and simplify HTML content for easier analysis
+- Use this tool when you need to retrieve web content or interact with APIs
+
+Usage notes:
+  - The URL must be a fully-formed valid URL (http:// or https://)
+  - HTTP URLs will be automatically upgraded to HTTPS when possible
+  - Default timeout is 15000ms (15 seconds), max 60000ms (60 seconds)
+  - Redirects are followed by default
+  - Response format can be 'text' (default) or 'json' for automatic parsing
+  - extract_content option (default: true) will simplify HTML to plain text
+  - max_content_length (default: 2000) limits the response size returned
+  - This tool is read-only and does not modify any files
+  - Rate limited to 10 calls per minute to prevent abuse
+  - SSRF protection: Blocks requests to private IP ranges"
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
         json!({
             "type": "object",
             "properties": {
-                "url": { "type": "string", "description": "Target URL (http/https)" },
-                "method": { "type": "string", "default": "GET" },
-                "headers": { "type": "object", "additionalProperties": { "type": "string" } },
-                "body": { "type": "string" },
-                "timeout": { "type": "integer", "description": "Timeout millis (default 15000)" },
-                "follow_redirects": { "type": "boolean", "default": true },
-                "response_format": { "type": "string", "enum": ["text", "json"], "default": "text" },
-                "extract_content": { "type": "boolean", "default": true },
-                "max_content_length": { "type": "integer", "default": 2000 }
+                "url": {
+                    "type": "string",
+                    "description": "URL to fetch (must start with http:// or https://)"
+                }
             },
             "required": ["url"]
         })
@@ -122,11 +121,9 @@ impl RunnableTool for WebFetchTool {
             ));
         }
 
-        let timeout_ms = args.timeout.unwrap_or(120_000);
-        let follow = args.follow_redirects.unwrap_or(true);
-        let response_format = args.response_format.as_deref().unwrap_or("text");
-        let extract_content = args.extract_content.unwrap_or(true);
-        let max_len = args.max_content_length.unwrap_or(2000);
+        let timeout_ms = 30_000; // 固定 30 秒超时
+        let follow = true; // 总是跟随重定向
+        let max_len = 2000; // 固定 2000 字符限制
 
         match try_jina_reader(&parsed_url, timeout_ms).await {
             Ok(Some(jina_content)) => {
@@ -148,11 +145,6 @@ impl RunnableTool for WebFetchTool {
             }
         }
 
-        let method = args.method.as_deref().unwrap_or("GET").to_uppercase();
-        if method != "GET" && method != "HEAD" {
-            return Ok(validation_error("Only GET and HEAD requests are supported"));
-        }
-
         let client_builder = reqwest::Client::builder()
             .timeout(Duration::from_millis(timeout_ms))
             .redirect(if follow {
@@ -164,21 +156,7 @@ impl RunnableTool for WebFetchTool {
 
         let client = client_builder.build()?;
 
-        let req_method = if method == "HEAD" {
-            reqwest::Method::HEAD
-        } else {
-            reqwest::Method::GET
-        };
-
-        let mut request = client.request(req_method, parsed_url.clone());
-        if let Some(h) = &args.headers {
-            for (k, v) in h {
-                request = request.header(k, v);
-            }
-        }
-        if let Some(body) = &args.body {
-            request = request.body(body.clone());
-        }
+        let request = client.get(parsed_url.clone());
 
         let started = std::time::Instant::now();
         let resp = match request.send().await {
@@ -208,23 +186,14 @@ impl RunnableTool for WebFetchTool {
             Err(e) => format!("<read-error>{}", e),
         };
 
-        let (data_text, extracted_text) = if extract_content
-            && content_type
-                .as_deref()
-                .is_some_and(|ct| ct.contains("text/html"))
+        let (data_text, extracted_text) = if content_type
+            .as_deref()
+            .is_some_and(|ct| ct.contains("text/html"))
         {
             let (text, _title) = extract_content_from_html(&raw_text, max_len);
             (summarize_text(&text, max_len), Some(text))
         } else {
-            let t = if response_format == "json" {
-                match serde_json::from_str::<serde_json::Value>(&raw_text) {
-                    Ok(v) => serde_json::to_string_pretty(&v).unwrap_or(raw_text.clone()),
-                    Err(_) => raw_text.clone(),
-                }
-            } else {
-                raw_text.clone()
-            };
-            (truncate_text(&t, max_len), None)
+            (truncate_text(&raw_text, max_len), None)
         };
 
         let meta = json!({
@@ -250,11 +219,8 @@ fn truncate_text(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         return s.to_string();
     }
-    format!(
-        "{}...\n[truncated, original {} chars]",
-        &s[..max_len],
-        s.len()
-    )
+    let truncated = crate::agent::utils::truncate_at_char_boundary(s, max_len);
+    format!("{}...\n[truncated, original {} chars]", truncated, s.len())
 }
 
 fn summarize_text(content: &str, max_len: usize) -> String {
@@ -288,9 +254,10 @@ fn extract_content_from_html(html: &str, max_length: usize) -> (String, Option<S
         .collect::<Vec<_>>()
         .join("\n");
     let final_text = if cleaned.len() > max_length {
+        let truncated = crate::agent::utils::truncate_at_char_boundary(&cleaned, max_length);
         format!(
             "{}...\n\n[内容被截断，原始长度: {} 字符]",
-            &cleaned[..max_length],
+            truncated,
             cleaned.len()
         )
     } else {

@@ -38,26 +38,58 @@ export interface WindowState {
 }
 
 /**
- * 终端持久化状态（存 MessagePack）
- *
- * 设计原则：
- * - 只存恢复终端所需的最小信息
- * - id 直接用后端 pane_id（数字）
- * - 不存 cwd，启动时从后端 ShellIntegration 查询
+ * Tab ID - 统一使用 number
  */
-export interface TerminalState {
-  /** 终端ID（后端 pane_id） */
-  id: number
-  /** 终端标题 */
-  title: string
-  /** 是否为活跃终端 */
-  active: boolean
-  /** Shell 类型 */
+export type TabId = number
+
+/**
+ * Terminal tab 数据
+ */
+export interface TerminalTabData {
   shell?: string
+  shellType?: string
+  cwd?: string
 }
 
-export interface RuntimeTerminalState extends TerminalState {
+/**
+ * Terminal tab 状态
+ */
+export interface TerminalTabState {
+  type: 'terminal'
+  id: number // 直接使用 paneId，无需字符串包装
+  isActive: boolean // 是否为活跃 tab
+  data: TerminalTabData
+}
+
+/**
+ * Settings tab 数据
+ */
+export interface SettingsTabData {
+  lastSection?: string
+}
+
+/**
+ * Settings tab 状态
+ */
+export interface SettingsTabState {
+  type: 'settings'
+  id: number // 使用 number，和 Terminal 一致
+  isActive: boolean // 是否为活跃 tab
+  data: SettingsTabData
+}
+
+/**
+ * Tab 状态 - union type
+ */
+export type TabState = TerminalTabState | SettingsTabState
+
+/**
+ * 运行时终端状态（从后端查询）
+ */
+export interface RuntimeTerminalState {
+  id: number
   cwd: string
+  shell?: string
 }
 
 export interface UiState {
@@ -80,13 +112,14 @@ export interface AiState {
   mode: 'chat' | 'agent'
   conversationId?: number
   selectedModelId?: string | null
-  // 注意：任务状态现在由TaskManager管理，不再存储在session中
 }
 
+/**
+ * 会话状态 - 统一 tab 管理
+ */
 export interface SessionState {
   version: number
-  terminals: TerminalState[]
-  activeTabId?: number | string
+  tabs: TabState[]
   ui: UiState
   ai: AiState
   timestamp: string

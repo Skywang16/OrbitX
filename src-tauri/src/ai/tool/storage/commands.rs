@@ -110,10 +110,7 @@ pub async fn storage_save_session_state(
     session_state: SessionState,
     state: State<'_, StorageCoordinatorState>,
 ) -> TauriApiResult<EmptyData> {
-    debug!("📊 会话状态统计:");
-    debug!("  - 终端数量: {}", session_state.terminals.len());
-    debug!("  - 版本: {}", session_state.version);
-    debug!("  - AI可见: {}", session_state.ai.visible);
+    debug!("保存会话状态: {} tabs", session_state.tabs.len());
 
     match state.coordinator.save_session_state(&session_state).await {
         Ok(()) => {
@@ -132,22 +129,19 @@ pub async fn storage_save_session_state(
 pub async fn storage_load_session_state(
     state: State<'_, StorageCoordinatorState>,
 ) -> TauriApiResult<Option<SessionState>> {
-    debug!("🔍 开始加载会话状态");
+    debug!("开始加载会话状态");
 
     match state.coordinator.load_session_state().await {
         Ok(Some(session_state)) => {
-            debug!("  - 终端数量: {}", session_state.terminals.len());
-            debug!("  - 版本: {}", session_state.version);
-            debug!("  - AI可见: {}", session_state.ai.visible);
-
+            debug!("加载会话状态成功: {} tabs", session_state.tabs.len());
             Ok(api_success!(Some(session_state)))
         }
         Ok(None) => {
-            debug!("ℹ️ 没有找到保存的会话状态");
+            debug!("没有找到保存的会话状态");
             Ok(api_success!(None))
         }
         Err(_) => {
-            error!("❌ 会话状态加载失败");
+            error!("会话状态加载失败");
             Ok(api_error!("storage.load_session_failed"))
         }
     }
@@ -156,9 +150,8 @@ pub async fn storage_load_session_state(
 /// 从后端获取所有终端的运行时状态（包括实时 CWD）
 ///
 /// 设计说明：
-/// - 实时查询 ShellIntegration 获取当前 CWD
-/// - 不依赖持久化数据，确保数据准确性
-/// - 用于应用启动、会话恢复、前端同步等场景
+/// - 直接从 Mux 查询当前运行时状态，Mux 是单一数据源
+/// - ShellIntegration 状态恢复应该在应用启动时完成，不在此处理
 #[tauri::command]
 pub async fn storage_get_terminals_state(
     _state: State<'_, StorageCoordinatorState>,
@@ -166,46 +159,34 @@ pub async fn storage_get_terminals_state(
     use crate::mux::singleton::get_mux;
     use crate::storage::types::TerminalRuntimeState;
 
-    debug!("🔍 查询所有终端的实时运行状态");
+    debug!("🔍 查询终端运行时状态");
 
     let mux = get_mux();
     let pane_ids = mux.list_panes();
 
-    let mut terminals = Vec::new();
-    for pane_id in pane_ids {
-        // 从 ShellIntegration 获取实时 CWD
-        let cwd = mux.shell_get_pane_cwd(pane_id).unwrap_or_else(|| {
-            // 回退：如果 Shell Integration 还未初始化，使用 home 目录
-            dirs::home_dir()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|| "~".to_string())
-        });
+    let terminals: Vec<TerminalRuntimeState> = pane_ids
+        .into_iter()
+        .map(|pane_id| {
+            let cwd = mux.shell_get_pane_cwd(pane_id).unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "~".to_string())
+            });
 
-        let shell_state = mux.get_pane_shell_state(pane_id);
-        let shell_type = shell_state
-            .as_ref()
-            .and_then(|state| state.shell_type.as_ref().map(|t| format!("{:?}", t)));
+            let shell_state = mux.get_pane_shell_state(pane_id);
+            let shell_type = shell_state
+                .as_ref()
+                .and_then(|state| state.shell_type.as_ref().map(|t| format!("{:?}", t)));
 
-        let title = cwd
-            .trim_end_matches('/')
-            .split('/')
-            .last()
-            .unwrap_or("~")
-            .to_string();
+            TerminalRuntimeState {
+                id: pane_id.as_u32(),
+                cwd,
+                shell: shell_type,
+            }
+        })
+        .collect();
 
-        terminals.push(TerminalRuntimeState {
-            id: pane_id.as_u32(),
-            title,
-            cwd,
-            active: false,
-            shell: shell_type,
-        });
-    }
-
-    debug!(
-        "✅ 查询到 {} 个终端，CWD 数据来源：ShellIntegration",
-        terminals.len()
-    );
+    debug!("✅ 返回 {} 个终端状态", terminals.len());
     Ok(api_success!(terminals))
 }
 

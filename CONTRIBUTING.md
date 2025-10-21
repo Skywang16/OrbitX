@@ -1,70 +1,70 @@
-# 贡献指南
+# Contributing Guide
 
-感谢你对 OrbitX 项目的关注！我们欢迎所有形式的贡献。
+Thank you for your interest in the OrbitX project! We welcome all forms of contributions.
 
-## 🤝 如何贡献
+## 🤝 How to Contribute
 
-### 报告问题
+### Reporting Issues
 
-如果你发现了 bug 或有功能建议：
+If you find a bug or have a feature suggestion:
 
-1. 在 [Issues](https://github.com/Skywang16/OrbitX/issues) 中搜索是否已有相关问题
-2. 如果没有，创建一个新的 Issue
-3. 使用清晰的标题和详细的描述
-4. 如果是 bug，请提供复现步骤
+1. Search [Issues](https://github.com/Skywang16/OrbitX/issues) to see if the issue already exists
+2. If not, create a new Issue
+3. Use a clear title and detailed description
+4. For bugs, provide reproduction steps
 
-### 提交代码
+### Submitting Code
 
-1. **Fork 仓库**
+1. **Fork the repository**
 
    ```bash
    git clone https://github.com/Skywang16/OrbitX.git
    cd OrbitX
    ```
 
-2. **创建分支**
+2. **Create a branch**
 
    ```bash
    git checkout -b feature/your-feature-name
-   # 或
+   # or
    git checkout -b fix/your-bug-fix
    ```
 
-3. **设置开发环境**
+3. **Set up development environment**
 
    ```bash
    npm install
    npm run dev
    ```
 
-4. **进行更改**
-   - 遵循现有的代码风格
-   - 添加必要的测试
-   - 更新相关文档
+4. **Make changes**
+   - Follow existing code style
+   - Add necessary tests
+   - Update relevant documentation
 
-5. **提交更改**
+5. **Commit changes**
 
    ```bash
    git add .
    git commit -m "feat: add your feature description"
    ```
 
-6. **推送分支**
+6. **Push branch**
 
    ```bash
    git push origin feature/your-feature-name
    ```
 
-7. **创建 Pull Request**
-   - 提供清晰的 PR 标题和描述
-   - 链接相关的 Issues
-   - 等待代码审查
+7. **Create Pull Request**
+   - Provide clear PR title and description
+   - Link related Issues
+   - Wait for code review
 
-## 📝 代码规范
+## 📝 Code Standards
 
-### 提交信息格式
+### Commit Message Format
 
-使用 [Conventional Commits](https://www.conventionalcommits.org/) 格式：
+Use [Conventional Commits](https://www.conventionalcommits.org/) format:
 
 ```
 <type>[optional scope]: <description>
@@ -74,102 +74,102 @@
 [optional footer(s)]
 ```
 
-类型包括：
+Types include:
 
-- `feat`: 新功能
-- `fix`: 修复 bug
-- `docs`: 文档更新
-- `style`: 代码格式化
-- `refactor`: 代码重构
-- `test`: 添加测试
-- `chore`: 构建过程或辅助工具的变动
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation update
+- `style`: Code formatting
+- `refactor`: Code refactoring
+- `test`: Add tests
+- `chore`: Build process or tooling changes
 
-### 代码风格
+### Code Style
 
-- 使用 ESLint 和 Prettier 进行代码格式化
-- 运行 `npm run lint` 检查代码风格
-- 运行 `npm run format` 自动格式化代码
+- Use ESLint and Prettier for code formatting
+- Run `npm run lint` to check code style
+- Run `npm run format` to auto-format code
 
 ### TypeScript
 
-- 为新功能添加适当的类型定义
-- 避免使用 `any` 类型
-- 使用接口定义复杂对象结构
+- Add appropriate type definitions for new features
+- Avoid using `any` type
+- Use interfaces for complex object structures
 
 ### Vue.js
 
-- 使用 Composition API
-- 组件名使用 PascalCase
-- Props 和 events 使用 camelCase
+- Use Composition API
+- Component names use PascalCase
+- Props and events use camelCase
 
-## 🧪 测试
+## 🧪 Testing
 
-- 为新功能编写测试
-- 确保所有测试通过
-- 运行 `npm run test` 执行测试
+- Write tests for new features
+- Ensure all tests pass
+- Run `npm run test` to execute tests
 
-## 📚 文档
+## 📚 Documentation
 
-- 更新相关的 README 和文档
-- 为新功能添加使用示例
-- 保持文档与代码同步
+- Update relevant README and documentation
+- Add usage examples for new features
+- Keep documentation in sync with code
 
-## 🔍 代码审查
+## 🔍 Code Review
 
-所有的 Pull Request 都需要经过代码审查：
+All Pull Requests require code review:
 
-- 至少需要一个维护者的批准
-- 解决所有审查意见
-- 确保 CI 检查通过
+- At least one maintainer approval required
+- Address all review comments
+- Ensure CI checks pass
 
-## 🎯 开发指南
+## 🎯 Development Guide
 
-### 项目结构
+### Project Structure
 
 ```
 src/
-├── components/     # 可复用组件
-├── views/         # 页面组件
-├── stores/        # 状态管理
-├── utils/         # 工具函数
-├── types/         # 类型定义
-└── ui/           # UI 组件库
+├── components/     # Reusable components
+├── views/         # Page components
+├── stores/        # State management
+├── utils/         # Utility functions
+├── types/         # Type definitions
+└── ui/           # UI component library
 ```
 
-### 添加新功能
+### Adding New Features
 
-1. 在 `src/components/` 或 `src/views/` 中创建组件
-2. 如需状态管理，在 `src/stores/` 中添加 store
-3. 更新路由配置（如果需要）
-4. 添加相应的类型定义
+1. Create components in `src/components/` or `src/views/`
+2. Add store in `src/stores/` if state management is needed
+3. Update routing configuration (if needed)
+4. Add corresponding type definitions
 
-### 调试
+### Debugging
 
-- 使用浏览器开发者工具调试前端
-- 使用 `console.log` 或 `debugger` 进行调试
-- Tauri 后端可以使用 Rust 的调试工具
+- Use browser developer tools for frontend debugging
+- Use `console.log` or `debugger` for debugging
+- Tauri backend can use Rust debugging tools
 
-## 🚀 发布流程
+## 🚀 Release Process
 
-维护者负责版本发布：
+Maintainers handle version releases:
 
-1. 更新版本号
-2. 更新 CHANGELOG
-3. 创建 Git 标签
-4. 发布 GitHub Release
+1. Update version number
+2. Update CHANGELOG
+3. Create Git tag
+4. Publish GitHub Release
 
-## 📞 获取帮助
+## 📞 Getting Help
 
-如果你在贡献过程中遇到问题：
+If you encounter issues while contributing:
 
-- 查看现有的 Issues 和 Discussions
-- 在 Issue 中提问
-- 联系维护者
+- Check existing Issues and Discussions
+- Ask questions in Issues
+- Contact maintainers
 
-## 🙏 致谢
+## 🙏 Acknowledgments
 
-感谢所有为 OrbitX 项目做出贡献的开发者！
+Thanks to all developers who contribute to the OrbitX project!
 
 ---
 
-再次感谢你的贡献！🎉
+Thank you again for your contribution! 🎉

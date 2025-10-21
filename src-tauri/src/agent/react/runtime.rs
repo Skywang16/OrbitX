@@ -13,7 +13,6 @@ pub struct ReactRuntime {
     config: ReactRuntimeConfig,
     iterations: Vec<ReactIteration>,
     consecutive_errors: u32,
-    idle_rounds: u32,
     final_response: Option<String>,
     stop_reason: Option<FinishReasonOrTerminal>,
     aborted: bool,
@@ -25,7 +24,6 @@ impl ReactRuntime {
             config,
             iterations: Vec::new(),
             consecutive_errors: 0,
-            idle_rounds: 0,
             final_response: None,
             stop_reason: None,
             aborted: false,
@@ -87,7 +85,6 @@ impl ReactRuntime {
             iteration.action = Some(action.clone());
             iteration.status = ReactPhase::Action;
         }
-        self.idle_rounds = 0;
         action
     }
 
@@ -128,7 +125,6 @@ impl ReactRuntime {
         if let Some(reason) = finish_reason {
             self.stop_reason = Some(reason.into());
         }
-        self.idle_rounds = 0;
         self.consecutive_errors = 0;
     }
 
@@ -140,16 +136,8 @@ impl ReactRuntime {
         self.consecutive_errors = self.consecutive_errors.saturating_add(1);
     }
 
-    pub fn mark_idle_round(&mut self) {
-        self.idle_rounds = self.idle_rounds.saturating_add(1);
-    }
-
     pub fn reset_error_counter(&mut self) {
         self.consecutive_errors = 0;
-    }
-
-    pub fn reset_idle_rounds(&mut self) {
-        self.idle_rounds = 0;
     }
 
     pub fn set_stop_reason(&mut self, reason: FinishReasonOrTerminal) {
@@ -179,9 +167,6 @@ impl ReactRuntime {
             return true;
         }
         if self.consecutive_errors >= self.config.max_consecutive_errors {
-            return true;
-        }
-        if self.idle_rounds >= self.config.max_idle_rounds {
             return true;
         }
         false

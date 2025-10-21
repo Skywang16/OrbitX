@@ -1,166 +1,96 @@
 import { defineStore } from 'pinia'
-import { computed, ref, watch } from 'vue'
-import { v4 as uuidv4 } from 'uuid'
+import { computed, watch } from 'vue'
 import { TabType, type TabItem } from '@/types'
 import { useTerminalStore } from './Terminal'
+import { useSessionStore } from './session'
+import { dockApi } from '@/api'
+import { getHandler, defaultCloseTab } from './TabHandlers'
 
 export const useTabManagerStore = defineStore('TabManager', () => {
-  const tabs = ref<TabItem[]>([])
-  const activeTabId = ref<number | string | null>(null)
   const terminalStore = useTerminalStore()
+  const sessionStore = useSessionStore()
 
+  const tabs = computed<TabItem[]>(() => {
+    return sessionStore.tabs.map(tab => getHandler(tab.type).buildTabItem(tab))
+  })
+
+  const activeTabId = computed(() => sessionStore.activeTabId)
   const activeTab = computed(() => tabs.value.find(tab => tab.id === activeTabId.value))
 
   watch(
     () => terminalStore.terminals,
     () => {
-      syncTerminalTabs()
+      updateDockMenu()
     },
     { deep: true }
   )
 
-  const syncTerminalTabs = () => {
-    tabs.value = tabs.value.filter(tab => tab.type !== TabType.TERMINAL)
-
-    tabs.value.push(
-      ...terminalStore.terminals.map(terminal => {
-        const shellName = terminal.shell || 'shell'
-        const cwd = terminal.cwd || '~'
-        const displayPath = getDisplayPath(cwd)
-
-        return {
-          id: terminal.id,
-          title: '',
-          type: TabType.TERMINAL,
-          closable: true,
-          icon: '🖥️',
-          data: { paneId: terminal.id },
-          shell: shellName,
-          path: displayPath,
-        }
-      })
-    )
-
-    if (typeof terminalStore.activeTerminalId === 'number') {
-      activeTabId.value = terminalStore.activeTerminalId
-    }
-  }
-
-  /** 格式化工作目录为短显示名 */
-  const getDisplayPath = (cwd: string): string => {
-    if (!cwd || cwd === '~') return '~'
-
-    try {
-      const cleanPath = cwd.replace(/\/$/, '')
-      const homePatterns = [/^\/Users\/[^/]+/, /^\/home\/[^/]+/, /^C:\\Users\\[^\\]+/i]
-
-      for (const homePattern of homePatterns) {
-        if (homePattern.test(cleanPath)) {
-          const homeMatch = cleanPath.match(homePattern)?.[0]
-          if (homeMatch && cleanPath === homeMatch) {
-            return '~'
-          }
-          const relativePath = cleanPath.replace(homePattern, '~')
-          const pathParts = relativePath.split(/[/\\]/).filter(p => p.length > 0)
-          if (pathParts.length > 0) {
-            const lastPart = pathParts[pathParts.length - 1]
-            return lastPart.length > 20 ? lastPart.substring(0, 17) + '...' : lastPart
-          }
-          return '~'
-        }
-      }
-      const systemDirs: Record<string, string> = {
-        '/': 'root',
-        '/usr': 'usr',
-        '/etc': 'etc',
-        '/var': 'var',
-        '/tmp': 'tmp',
-        '/opt': 'opt',
-        '/Applications': 'Apps',
-        '/System': 'System',
-        '/Library': 'Library',
-        'C:\\': 'C:',
-        'D:\\': 'D:',
-      }
-
-      if (systemDirs[cleanPath]) {
-        return systemDirs[cleanPath]
-      }
-      const pathParts = cleanPath.split(/[/\\]/).filter(p => p.length > 0)
-
-      if (pathParts.length === 0) return '/'
-
-      const lastPart = pathParts[pathParts.length - 1]
-      if (pathParts.length === 1 && (cleanPath.startsWith('/') || cleanPath.match(/^[A-Z]:\\/i))) {
-        return navigator.platform.toLowerCase().includes('win') ? lastPart : `/${lastPart}`
-      }
-      if (lastPart.length > 20) {
-        return lastPart.substring(0, 17) + '...'
-      }
-
-      return lastPart
-    } catch (error) {
-      console.warn('路径处理错误:', error, '原始路径:', cwd)
-      const parts = cwd.split(/[/\\]/).filter(p => p.length > 0)
-      return parts.length > 0 ? parts[parts.length - 1] : '~'
-    }
-  }
-
-  const createSettingsTab = (): string => {
-    const existing = tabs.value.find(tab => tab.type === TabType.SETTINGS)
+  const createSettingsTab = (): number => {
+    const existing = sessionStore.tabs.find(tab => tab.type === 'settings')
     if (existing) {
       setActiveTab(existing.id)
-      return String(existing.id)
+      return existing.id
     }
 
-    const id = `settings-${uuidv4()}`
-    tabs.value.push({
+    const id = -1
+    const newTab = {
+      type: 'settings' as const,
       id,
-      title: 'settings',
-      type: TabType.SETTINGS,
-      closable: true,
-      data: {},
-    })
+      isActive: false,
+      data: {
+        lastSection: 'general',
+      },
+    }
+
+    sessionStore.updateTabs([...sessionStore.tabs, newTab])
     setActiveTab(id)
+
     return id
   }
 
-  const setActiveTab = (tabId: number | string) => {
-    const tab = tabs.value.find(t => t.id === tabId)
+  const updateSettingsTabSection = (tabId: number, section: string) => {
+    const updatedTabs = sessionStore.tabs.map(tab => {
+      if (tab.type === 'settings' && tab.id === tabId) {
+        return {
+          ...tab,
+          data: {
+            ...tab.data,
+            lastSection: section,
+          },
+        }
+      }
+      return tab
+    })
+    sessionStore.updateTabs(updatedTabs)
+  }
+
+  const getSettingsTabSection = (tabId: number): string | undefined => {
+    const tab = sessionStore.tabs.find(t => t.type === 'settings' && t.id === tabId)
+    if (tab && tab.type === 'settings') {
+      return tab.data.lastSection
+    }
+    return undefined
+  }
+
+  const setActiveTab = async (tabId: number) => {
+    const tab = sessionStore.tabs.find(t => t.id === tabId)
+    if (!tab) return
+    await getHandler(tab.type).activate(tabId)
+  }
+
+  const closeTab = async (tabId: number) => {
+    const tab = sessionStore.tabs.find(t => t.id === tabId)
     if (!tab) return
 
-    activeTabId.value = tabId
-
-    if (tab.type === TabType.TERMINAL && typeof tab.id === 'number') {
-      terminalStore.setActiveTerminal(tab.id)
+    const handler = getHandler(tab.type)
+    if (handler.close) {
+      await handler.close(tabId)
+    } else {
+      await defaultCloseTab(tabId)
     }
   }
 
-  const closeTab = async (tabId: number | string) => {
-    const tabIndex = tabs.value.findIndex(tab => tab.id === tabId)
-    if (tabIndex === -1) return
-
-    const tab = tabs.value[tabIndex]
-
-    if (tab.type === TabType.TERMINAL && typeof tab.id === 'number') {
-      await terminalStore.closeTerminal(tab.id)
-      return
-    }
-
-    tabs.value.splice(tabIndex, 1)
-
-    if (activeTabId.value === tabId && tabs.value.length > 0) {
-      const newIndex = Math.max(0, tabIndex - 1)
-      setActiveTab(tabs.value[newIndex].id)
-    } else if (tabs.value.length === 0) {
-      activeTabId.value = null
-    }
-  }
-
-  /**
-   * 关闭左侧全部标签页
-   */
-  const closeLeftTabs = async (currentTabId: number | string) => {
+  const closeLeftTabs = async (currentTabId: number) => {
     const currentIndex = tabs.value.findIndex(tab => tab.id === currentTabId)
     if (currentIndex <= 0) return
 
@@ -173,10 +103,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     }
   }
 
-  /**
-   * 关闭右侧全部标签页
-   */
-  const closeRightTabs = async (currentTabId: number | string) => {
+  const closeRightTabs = async (currentTabId: number) => {
     const currentIndex = tabs.value.findIndex(tab => tab.id === currentTabId)
     if (currentIndex === -1 || currentIndex >= tabs.value.length - 1) return
 
@@ -189,19 +116,13 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     }
   }
 
-  /**
-   * 关闭其他所有标签页
-   */
-  const closeOtherTabs = async (currentTabId: number | string) => {
+  const closeOtherTabs = async (currentTabId: number) => {
     const idsToClose = tabs.value.filter(tab => tab.id !== currentTabId && tab.closable).map(t => t.id)
     for (const id of idsToClose) {
       await closeTab(id)
     }
   }
 
-  /**
-   * 关闭所有标签页
-   */
   const closeAllTabs = async () => {
     const idsToClose = tabs.value.filter(tab => tab.closable).map(t => t.id)
     for (const id of idsToClose) {
@@ -209,18 +130,45 @@ export const useTabManagerStore = defineStore('TabManager', () => {
     }
   }
 
+  const updateDockMenu = () => {
+    const tabEntries = tabs.value
+      .filter(tab => tab.type === TabType.TERMINAL)
+      .map(tab => ({
+        id: String(tab.id),
+        title: tab.path || tab.title || 'Terminal',
+      }))
+
+    const activeId = activeTabId.value !== null ? String(activeTabId.value) : null
+
+    dockApi.updateTabs(tabEntries, activeId)
+  }
+
+  const initialize = async () => {
+    if (!sessionStore.initialized) {
+      await sessionStore.initialize()
+    }
+  }
+
   return {
+    // 计算属性
     tabs,
     activeTabId,
     activeTab,
+
+    // Settings tab 操作
     createSettingsTab,
+    updateSettingsTabSection,
+    getSettingsTabSection,
+
+    // Tab 操作
     setActiveTab,
     closeTab,
     closeLeftTabs,
     closeRightTabs,
     closeOtherTabs,
     closeAllTabs,
-    syncTerminalTabs,
-    initialize: syncTerminalTabs,
+
+    // 工具方法
+    initialize,
   }
 })

@@ -49,8 +49,8 @@
     "conversation": {
       "create_failed": "Failed to create conversation",
       "delete_failed": "Failed to delete conversation",
-      "prefix_prompt_failed": "Failed to get prefix prompt",
-      "set_prefix_prompt_failed": "Failed to set prefix prompt",
+      "user_rules_failed": "Failed to get user rules",
+      "set_user_rules_failed": "Failed to set user rules",
       "update_failed": "Failed to update conversation"
     },
     "execute_failed": "Failed to execute task",
@@ -134,5 +134,11 @@
     "update_config_failed": "Failed to update configuration",
     "save_session_failed": "Failed to save session state",
     "load_session_failed": "Failed to load session state"
+  },
+  "dock": {
+    "update_failed": "Failed to update dock menu",
+    "get_failed": "Failed to get dock tabs",
+    "clear_failed": "Failed to clear dock tabs",
+    "not_initialized": "Dock manager not initialized"
   }
 }

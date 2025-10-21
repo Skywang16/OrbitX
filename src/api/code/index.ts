@@ -10,7 +10,7 @@ export interface CodeDefItem {
 }
 
 export class CodeApi {
-  async listDefinitionNames(params: { path: string }): Promise<CodeDefItem[]> {
+  listDefinitionNames = async (params: { path: string }): Promise<CodeDefItem[]> => {
     return await invoke<CodeDefItem[]>('code_list_definition_names', { path: params.path })
   }
 }

@@ -244,51 +244,6 @@
   min-width: 50px;
 }
 
-.settings-item-control :deep(.x-button) {
-  min-width: 80px;
-  height: 28px;
-  padding: 0 14px;
-  border-radius: var(--border-radius);
-  font-size: 13px;
-  border: none;
-  background: var(--bg-500);
-  color: var(--text-200);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.settings-item-control :deep(.x-button:hover) {
-  background: var(--bg-400);
-}
-
-.settings-item-control :deep(.x-button.primary) {
-  background: var(--color-primary);
-  color: white;
-}
-
-.settings-item-control :deep(.x-button.primary:hover) {
-  background: var(--color-primary-hover);
-}
-
-.settings-item-control :deep(.x-button.secondary) {
-  background: var(--bg-500);
-  color: var(--text-200);
-}
-
-.settings-item-control :deep(.x-button.secondary:hover) {
-  background: var(--bg-400);
-}
-
-.settings-item-control :deep(.x-button.danger) {
-  background: var(--color-error);
-  color: white;
-}
-
-.settings-item-control :deep(.x-button.danger:hover) {
-  background: var(--color-error);
-  opacity: 0.9;
-}
-
 .settings-item-control :deep(.x-select),
 .settings-item-control :deep(.language-switch) {
   min-width: 120px;

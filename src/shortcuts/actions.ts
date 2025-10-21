@@ -15,7 +15,7 @@ export class ShortcutActionsService {
     return useTerminalStore()
   }
 
-  switchToTab(index: number): boolean {
+  switchToTab = (index: number): boolean => {
     const tabs = this.tabManagerStore.tabs
     if (index >= 0 && index < tabs.length) {
       this.tabManagerStore.setActiveTab(tabs[index].id)
@@ -24,7 +24,7 @@ export class ShortcutActionsService {
     return false
   }
 
-  switchToLastTab(): boolean {
+  switchToLastTab = (): boolean => {
     const tabs = this.tabManagerStore.tabs
     if (tabs.length > 0) {
       this.tabManagerStore.setActiveTab(tabs[tabs.length - 1].id)
@@ -33,12 +33,12 @@ export class ShortcutActionsService {
     return false
   }
 
-  async newTab(): Promise<boolean> {
+  newTab = async (): Promise<boolean> => {
     await this.terminalStore.createTerminal()
     return true
   }
 
-  closeCurrentTab(): boolean {
+  closeCurrentTab = (): boolean => {
     const activeTab = this.tabManagerStore.activeTab
 
     if (!activeTab) {
@@ -50,7 +50,7 @@ export class ShortcutActionsService {
     return true
   }
 
-  async newWindow(): Promise<boolean> {
+  newWindow = async (): Promise<boolean> => {
     if ((window as unknown as { __TAURI__?: unknown }).__TAURI__) {
       return false
     }
@@ -58,21 +58,21 @@ export class ShortcutActionsService {
     return true
   }
 
-  async copyToClipboard(): Promise<boolean> {
+  copyToClipboard = async (): Promise<boolean> => {
     return true
   }
 
-  async pasteFromClipboard(): Promise<boolean> {
+  pasteFromClipboard = async (): Promise<boolean> => {
     return true
   }
 
-  terminalSearch(): boolean {
+  terminalSearch = (): boolean => {
     const event = new CustomEvent('open-terminal-search')
     document.dispatchEvent(event)
     return true
   }
 
-  acceptCompletion(): boolean {
+  acceptCompletion = (): boolean => {
     const activeTerminal = document.querySelector('.terminal-active')
     if (activeTerminal) {
       const event = new CustomEvent('accept-completion', { bubbles: true })
@@ -82,12 +82,12 @@ export class ShortcutActionsService {
     return false
   }
 
-  openSettings(): boolean {
+  openSettings = (): boolean => {
     this.tabManagerStore.createSettingsTab()
     return true
   }
 
-  clearTerminal(): boolean {
+  clearTerminal = (): boolean => {
     const activeTerminal = document.querySelector('.terminal-active')
     if (activeTerminal) {
       const event = new CustomEvent('clear-terminal', { bubbles: true })
@@ -97,7 +97,7 @@ export class ShortcutActionsService {
     return false
   }
 
-  increaseFontSize(): boolean {
+  increaseFontSize = (): boolean => {
     document.dispatchEvent(
       new CustomEvent('font-size-change', {
         detail: { action: 'increase' },
@@ -106,7 +106,7 @@ export class ShortcutActionsService {
     return true
   }
 
-  decreaseFontSize(): boolean {
+  decreaseFontSize = (): boolean => {
     document.dispatchEvent(
       new CustomEvent('font-size-change', {
         detail: { action: 'decrease' },
@@ -115,27 +115,27 @@ export class ShortcutActionsService {
     return true
   }
 
-  async increaseOpacity(): Promise<boolean> {
+  increaseOpacity = async (): Promise<boolean> => {
     const currentOpacity = await getWindowOpacity()
     const newOpacity = Math.min(currentOpacity + 0.05, 1.0)
     await setWindowOpacity(newOpacity)
     return true
   }
 
-  async decreaseOpacity(): Promise<boolean> {
+  decreaseOpacity = async (): Promise<boolean> => {
     const currentOpacity = await getWindowOpacity()
     const newOpacity = Math.max(currentOpacity - 0.05, 0.05)
     await setWindowOpacity(newOpacity)
     return true
   }
 
-  toggleAISidebar(): boolean {
+  toggleAISidebar = (): boolean => {
     const aiChatStore = useAIChatStore()
     aiChatStore.toggleSidebar()
     return true
   }
 
-  async toggleWindowPin(): Promise<boolean> {
+  toggleWindowPin = async (): Promise<boolean> => {
     const newState = await windowApi.toggleAlwaysOnTop()
     const windowStore = useWindowStore()
     windowStore.setAlwaysOnTop(newState)

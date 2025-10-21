@@ -44,7 +44,6 @@
       const newModelData = {
         ...modelData,
         modelType: modelData.modelType || defaultModelType.value,
-        enabled: true,
       }
       await aiSettingsStore.addModel(newModelData as AIModelConfig)
     }
@@ -99,7 +98,7 @@
             <div class="settings-item-header">
               <div class="model-info">
                 <div class="settings-label">
-                  {{ model.name }}
+                  {{ model.model }}
                   <!--  <span class="model-type-tag chat">
                     {{ t('ai_model.chat') }}
                   </span> -->
@@ -113,7 +112,7 @@
               </x-button>
               <x-popconfirm
                 :title="t('ai_model.delete_confirm')"
-                :description="t('ai_model.delete_description', { name: model.name })"
+                :description="t('ai_model.delete_description', { name: model.model })"
                 type="danger"
                 :confirm-text="t('ai_model.delete_confirm_text')"
                 :cancel-text="t('ai_model.cancel')"

@@ -21,10 +21,8 @@ pub struct TaskState {
     pub pause_reason: Option<String>,
     pub consecutive_errors: u32,
     pub iterations: u32,
-    pub idle_rounds: u32,
     pub max_consecutive_errors: u32,
     pub max_iterations: u32,
-    pub max_idle_rounds: u32,
     pub last_status_change: i64,
     pub status_change_reason: Option<String>,
 }
@@ -38,10 +36,8 @@ impl TaskState {
             pause_reason: None,
             consecutive_errors: 0,
             iterations: 0,
-            idle_rounds: 0,
             max_consecutive_errors: config.max_consecutive_errors,
             max_iterations: config.max_iterations,
-            max_idle_rounds: config.max_idle_rounds,
             last_status_change: Utc::now().timestamp_millis(),
             status_change_reason: None,
         }
@@ -52,7 +48,6 @@ impl TaskState {
 pub struct TaskThresholds {
     pub max_consecutive_errors: u32,
     pub max_iterations: u32,
-    pub max_idle_rounds: u32,
 }
 
 #[derive(Default, Clone)]
@@ -210,48 +205,10 @@ impl StateManager {
         self.emitter.emit(event);
     }
 
-    pub async fn mark_idle_round(&self) {
-        let timestamp = Utc::now().timestamp_millis();
-        let event = {
-            let mut state = self.state.write().await;
-            state.idle_rounds = state.idle_rounds.saturating_add(1);
-            let task_id = state.task_id.clone();
-            let idle_rounds = state.idle_rounds;
-            TaskStateEvent {
-                event_type: "idle_round_changed".into(),
-                payload: serde_json::json!({
-                    "taskId": task_id,
-                    "idleRounds": idle_rounds,
-                    "timestamp": timestamp,
-                }),
-            }
-        };
-        self.emitter.emit(event);
-    }
-
-    pub async fn reset_idle_rounds(&self) {
-        let timestamp = Utc::now().timestamp_millis();
-        let event = {
-            let mut state = self.state.write().await;
-            state.idle_rounds = 0;
-            let task_id = state.task_id.clone();
-            TaskStateEvent {
-                event_type: "idle_round_changed".into(),
-                payload: serde_json::json!({
-                    "taskId": task_id,
-                    "idleRounds": 0,
-                    "timestamp": timestamp,
-                }),
-            }
-        };
-        self.emitter.emit(event);
-    }
-
     pub async fn should_halt(&self) -> bool {
         let state = self.state.read().await;
         state.consecutive_errors >= state.max_consecutive_errors
             || state.iterations >= state.max_iterations
-            || state.idle_rounds >= state.max_idle_rounds
     }
 
     pub fn emitter(&self) -> &StateEventEmitter {

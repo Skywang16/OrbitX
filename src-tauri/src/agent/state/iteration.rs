@@ -5,14 +5,14 @@ use tokio::sync::RwLock;
 
 use crate::agent::core::context::ToolCallResult;
 use crate::agent::state::session::SessionContext;
-use crate::llm::types::{LLMMessage, LLMToolCall};
+use crate::llm::anthropic_types::MessageParam;
 
 pub struct IterationContext {
     pub iteration_num: u32,
     pub started_at: DateTime<Utc>,
     session: Arc<SessionContext>,
-    current_messages: Arc<RwLock<Vec<LLMMessage>>>,
-    pending_tools: Arc<RwLock<Vec<LLMToolCall>>>,
+    current_messages: Arc<RwLock<Vec<MessageParam>>>,
+    pending_tools: Arc<RwLock<Vec<(String, String, serde_json::Value)>>>,
     tool_results: Arc<RwLock<Vec<ToolCallResult>>>,
     thinking_buffer: Arc<RwLock<String>>,
     output_buffer: Arc<RwLock<String>>,
@@ -38,12 +38,12 @@ impl IterationContext {
         Arc::clone(&self.session)
     }
 
-    pub async fn add_message(&self, message: LLMMessage) {
+    pub async fn add_message(&self, message: MessageParam) {
         self.current_messages.write().await.push(message);
     }
 
-    pub async fn add_tool_call(&self, tool_call: LLMToolCall) {
-        self.pending_tools.write().await.push(tool_call);
+    pub async fn add_tool_call(&self, id: String, name: String, arguments: serde_json::Value) {
+        self.pending_tools.write().await.push((id, name, arguments));
     }
 
     pub async fn add_tool_result(&self, result: ToolCallResult) {
@@ -65,7 +65,7 @@ impl IterationContext {
         }
     }
 
-    pub async fn messages(&self) -> Vec<LLMMessage> {
+    pub async fn messages(&self) -> Vec<MessageParam> {
         self.current_messages.read().await.clone()
     }
 
@@ -73,7 +73,7 @@ impl IterationContext {
         self.tool_results.read().await.clone()
     }
 
-    pub async fn pending_tools(&self) -> Vec<LLMToolCall> {
+    pub async fn pending_tools(&self) -> Vec<(String, String, serde_json::Value)> {
         self.pending_tools.read().await.clone()
     }
 
@@ -86,7 +86,7 @@ impl IterationContext {
             .read()
             .await
             .iter()
-            .map(|tool| tool.name.clone())
+            .map(|(_, name, _)| name.clone())
             .collect::<Vec<_>>();
 
         IterationSnapshot {
@@ -128,7 +128,7 @@ impl IterationSnapshot {
 
         if !self.output.is_empty() {
             let preview = if self.output.len() > 120 {
-                format!("{}...", &self.output[..120])
+                crate::agent::utils::truncate_with_ellipsis(&self.output, 120)
             } else {
                 self.output.clone()
             };

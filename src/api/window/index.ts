@@ -29,11 +29,11 @@ export class WindowApi {
 
   // ===== 窗口状态管理 =====
 
-  async manageWindowState(request: WindowStateBatchRequest): Promise<WindowStateBatchResponse> {
+  manageWindowState = async (request: WindowStateBatchRequest): Promise<WindowStateBatchResponse> => {
     return await invoke<WindowStateBatchResponse>('window_manage_state', { request })
   }
 
-  async getCompleteWindowState(): Promise<CompleteWindowState> {
+  getCompleteWindowState = async (): Promise<CompleteWindowState> => {
     const request = {
       operations: [
         {
@@ -53,7 +53,7 @@ export class WindowApi {
     throw new Error('获取窗口状态失败')
   }
 
-  async setAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
+  setAlwaysOnTop = async (alwaysOnTop: boolean): Promise<void> => {
     const request = {
       operations: [
         {
@@ -71,7 +71,7 @@ export class WindowApi {
     this.alwaysOnTopState = alwaysOnTop
   }
 
-  async toggleAlwaysOnTop(): Promise<boolean> {
+  toggleAlwaysOnTop = async (): Promise<boolean> => {
     const request = {
       operations: [
         {
@@ -91,40 +91,40 @@ export class WindowApi {
     throw new Error('切换窗口置顶状态失败')
   }
 
-  getAlwaysOnTopState(): boolean {
+  getAlwaysOnTopState = (): boolean => {
     return this.alwaysOnTopState
   }
 
   // ===== 目录操作 =====
 
-  async getCurrentDirectory(options: DirectoryOptions = {}): Promise<string> {
+  getCurrentDirectory = async (options: DirectoryOptions = {}): Promise<string> => {
     return await invoke<string>('window_get_current_directory', { useCache: options.useCache })
   }
 
-  async getHomeDirectory(): Promise<string> {
+  getHomeDirectory = async (): Promise<string> => {
     return await invoke<string>('window_get_home_directory', { forceRefresh: true })
   }
 
-  async clearDirectoryCache(): Promise<void> {
+  clearDirectoryCache = async (): Promise<void> => {
     await invoke<void>('window_clear_directory_cache')
     createMessage.success(useI18n().t('cache.directory_cleared'))
   }
 
   // ===== 路径操作 =====
 
-  async pathExists(path: string): Promise<boolean> {
+  pathExists = async (path: string): Promise<boolean> => {
     return await invoke<boolean>('window_path_exists', { path })
   }
 
-  async normalizePath(path: string): Promise<string> {
+  normalizePath = async (path: string): Promise<string> => {
     return await invoke<string>('window_normalize_path', { path })
   }
 
-  async joinPaths(...paths: string[]): Promise<string> {
+  joinPaths = async (...paths: string[]): Promise<string> => {
     return await invoke<string>('window_join_paths', { paths })
   }
 
-  isAbsolutePath(path: string): boolean {
+  isAbsolutePath = (path: string): boolean => {
     if (!path) return false
     if (path.startsWith('/')) return true
     if (path.match(/^[A-Za-z]:/)) return true
@@ -132,7 +132,7 @@ export class WindowApi {
     return false
   }
 
-  getParentDirectory(path: string): string {
+  getParentDirectory = (path: string): string => {
     if (!path) return ''
     const normalized = path.replace(/\\/g, '/').replace(/\/+/g, '/')
     const lastSlash = normalized.lastIndexOf('/')
@@ -142,14 +142,14 @@ export class WindowApi {
     return normalized.substring(0, lastSlash)
   }
 
-  getFileName(path: string): string {
+  getFileName = (path: string): string => {
     if (!path) return ''
     const normalized = path.replace(/\\/g, '/').replace(/\/+/g, '/')
     const lastSlash = normalized.lastIndexOf('/')
     return normalized.substring(lastSlash + 1)
   }
 
-  async getPathInfo(path: string): Promise<PathInfo> {
+  getPathInfo = async (path: string): Promise<PathInfo> => {
     const [exists, normalized] = await Promise.all([this.pathExists(path), this.normalizePath(path)])
 
     return {
@@ -164,7 +164,7 @@ export class WindowApi {
 
   // ===== 平台信息 =====
 
-  async getPlatformInfo(): Promise<PlatformInfo> {
+  getPlatformInfo = async (): Promise<PlatformInfo> => {
     if (this.platformInfoCache) {
       return this.platformInfoCache
     }
@@ -174,14 +174,14 @@ export class WindowApi {
     return platformInfo
   }
 
-  async isMac(): Promise<boolean> {
+  isMac = async (): Promise<boolean> => {
     const platformInfo = await this.getPlatformInfo()
     return platformInfo.is_mac
   }
 
   // ===== 综合状态 =====
 
-  async getWindowState(): Promise<WindowState> {
+  getWindowState = async (): Promise<WindowState> => {
     const completeState = await this.getCompleteWindowState()
     this.alwaysOnTopState = completeState.alwaysOnTop
 
@@ -194,7 +194,7 @@ export class WindowApi {
 
   // ===== 透明度管理 =====
 
-  async setWindowOpacity(opacity: number): Promise<void> {
+  setWindowOpacity = async (opacity: number): Promise<void> => {
     if (opacity < 0 || opacity > 1) {
       throw new Error('透明度值必须在 0 到 1 之间')
     }
@@ -202,18 +202,18 @@ export class WindowApi {
     await invoke<void>('window_set_opacity', { opacity })
   }
 
-  async getWindowOpacity(): Promise<number> {
+  getWindowOpacity = async (): Promise<number> => {
     const opacity = await invoke<number>('window_get_opacity')
     return opacity
   }
 
-  async resetWindowOpacity(): Promise<void> {
+  resetWindowOpacity = async (): Promise<void> => {
     await this.setWindowOpacity(1.0)
   }
 
   // ===== 文件处理 =====
 
-  async handleFileOpen(path: string): Promise<string> {
+  handleFileOpen = async (path: string): Promise<string> => {
     return await invoke<string>('file_handle_open', { path })
   }
 }

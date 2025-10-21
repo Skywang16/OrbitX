@@ -36,6 +36,10 @@
   })
 
   const displayValue = computed(() => {
+    // 处于新建状态时显示特殊提示
+    if (props.currentSessionId === -1) {
+      return t('chat.new_session_placeholder')
+    }
     if (!props.currentSessionId) return t('chat.session_select')
     const session = props.sessions.find(s => s.id === props.currentSessionId)
     return session?.title || t('session.unnamed_session')

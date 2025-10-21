@@ -9,7 +9,7 @@ use crate::agent::config::ContextBuilderConfig;
 use crate::agent::context::FileContextTracker;
 use crate::agent::react::types::ReactIteration;
 use crate::agent::tools::ToolResult;
-use crate::llm::{LLMMessage, LLMMessageContent};
+use crate::llm::anthropic_types::{MessageContent, MessageParam};
 
 pub struct ContextBuilder {
     file_tracker: Arc<FileContextTracker>,
@@ -32,7 +32,7 @@ impl ContextBuilder {
     pub async fn build_file_context_message(
         &self,
         recent_iterations: &[ReactIteration],
-    ) -> Option<LLMMessage> {
+    ) -> Option<MessageParam> {
         let mentioned = self.extract_mentioned_files(recent_iterations);
         if mentioned.is_empty() {
             return None;
@@ -118,9 +118,9 @@ impl ContextBuilder {
             content.push_str("...");
         }
 
-        Some(LLMMessage {
-            role: "user".to_string(),
-            content: LLMMessageContent::Text(content),
+        Some(MessageParam {
+            role: crate::llm::anthropic_types::MessageRole::User,
+            content: MessageContent::Text(content),
         })
     }
 

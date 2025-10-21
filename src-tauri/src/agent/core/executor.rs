@@ -9,28 +9,26 @@
  * - 并发任务管理
  */
 
-use crate::agent::common::xml::build_agent_xml_from_planned;
 use crate::agent::config::CompactionConfig;
 use crate::agent::config::TaskExecutionConfig;
-use crate::agent::context::{ContextBuilder, ConversationSummarizer, SummaryResult};
-use crate::agent::core::chain::ToolChain;
-use crate::agent::core::context::{LLMResponseParsed, TaskContext, ToolCallResult};
+use crate::agent::context::{
+    ContextBuilder, ConversationSummarizer, ProjectContextLoader, SummaryResult,
+};
+use crate::agent::core::context::{TaskContext, ToolCallResult};
+use crate::agent::core::iteration_outcome::IterationOutcome;
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::AgentError;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::events::{
-    FinishPayload, TaskCancelledPayload, TaskCompletedPayload, TaskCreatedPayload,
-    TaskErrorPayload, TaskPausedPayload, TaskProgressPayload, TaskStartedPayload, TextPayload,
-    ThinkingPayload,
+    TaskCancelledPayload, TaskCompletedPayload, TaskCreatedPayload, TaskErrorPayload,
+    TaskPausedPayload, TaskProgressPayload, TaskStartedPayload, TextPayload, ThinkingPayload,
 };
 use crate::agent::memory::compactor::{CompactionResult, MessageCompactor};
 use crate::agent::persistence::{
     AgentExecution, AgentPersistence, Conversation, ConversationSummary, ExecutionEvent,
     ExecutionEventType, ExecutionMessage, FileContextEntry, ToolExecution,
 };
-use crate::agent::plan::{Planner, TreePlanner};
 use crate::agent::prompt::{build_agent_system_prompt, build_agent_user_prompt};
-use crate::agent::react::types::FinishReason;
 use crate::agent::state::iteration::IterationSnapshot;
 use crate::agent::state::session::CompressedMemory;
 use crate::agent::tools::{
@@ -39,19 +37,19 @@ use crate::agent::tools::{
 };
 use crate::agent::types::{Agent, Context as AgentContext, Task, ToolSchema};
 use crate::agent::ui::AgentUiPersistence;
-use crate::llm::registry::LLMRegistry;
-use crate::llm::{LLMMessage, LLMMessageContent, LLMMessagePart};
+use crate::llm::anthropic_types::{
+    ContentBlock, ContentBlockStart, ContentDelta, MessageContent, MessageParam, StreamEvent,
+    SystemPrompt, ToolResultContent as AnthropicToolResultContent,
+};
 use crate::storage::repositories::RepositoryManager;
 use crate::terminal::TerminalContextService;
 use chrono::Utc;
-use regex::Regex;
 use std::collections::HashMap;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use tauri::ipc::Channel;
 use tokio::sync::RwLock;
-use tokio::task::yield_now;
 use tokio_stream::StreamExt;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// 任务执行参数（与前端风格统一 camelCase）
@@ -61,136 +59,19 @@ pub struct ExecuteTaskParams {
     pub conversation_id: i64,
     pub user_prompt: String,
     pub chat_mode: String,
+    pub model_id: String,
     pub config_overrides: Option<serde_json::Value>,
 }
 
-/// 串行任务树执行参数
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExecuteTaskTreeParams {
-    pub conversation_id: i64,
-    pub user_prompt: String,
-    pub chat_mode: String,
-    /// 若为 false，则仅进行单次 plan 与执行（不生成任务树）
-    #[serde(default = "default_true")]
-    pub generate_tree: bool,
-    pub config_overrides: Option<serde_json::Value>,
-}
-
-fn default_true() -> bool {
-    true
-}
-
-static THINKING_TAG_RE: OnceLock<Regex> = OnceLock::new();
-
-fn sanitize_thinking_text(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-
-    THINKING_TAG_RE
-        .get_or_init(|| Regex::new(r"(?is)</?thinking[^>]*>?").expect("valid thinking tag regex"))
-        .replace_all(trimmed, "")
-        .trim()
-        .to_string()
-}
-
-/// 将流式文本拆分为 (thinking, visible, has_open_thinking)
-/// - thinking: 已闭合的 <thinking>...</thinking> 内容 + 最后一个未闭合的 <thinking> 部分
-/// - visible: 去除已闭合的 thinking 块，并在存在未闭合 thinking 时移除其后的可见文本
-/// - has_open_thinking: 当前是否处于一个未闭合的 thinking 块中
-fn split_thinking_sections(raw: &str) -> (String, String, bool) {
-    if raw.is_empty() {
-        return (String::new(), String::new(), false);
-    }
-
-    // 收集所有闭合的 <thinking>...</thinking> 内容
-    let re_closed = Regex::new(r"(?is)<thinking>(.*?)</thinking>").unwrap();
-    let mut thinking_parts: Vec<String> = Vec::new();
-    for cap in re_closed.captures_iter(raw) {
-        if let Some(m) = cap.get(1) {
-            thinking_parts.push(m.as_str().to_string());
-        }
-    }
-
-    // 从原文中移除所有闭合的 thinking 块，得到 working 文本
-    let working = re_closed.replace_all(raw, "").to_string();
-
-    let mut has_open_thinking = false;
-    let mut partial = String::new();
-    let mut visible = working.clone();
-
-    if let Some(last_idx) = working.rfind("<thinking") {
-        // 查找最后一个 '<thinking' 之后是否有 '>'
-        let tail = &working[last_idx..];
-        if let Some(_gt_offset) = tail.find('>') {
-            // 存在完整的开头标签，但（在 working 中）没有匹配的闭合标签 => 视为未闭合块
-            has_open_thinking = true;
-            // 尝试定位标准的 "<thinking>"（不带属性），找不到就使用 last_idx
-            let open_tag_idx = working.rfind("<thinking>").unwrap_or(last_idx);
-            let start_content = open_tag_idx + working[open_tag_idx..].find('>').unwrap_or(0) + 1;
-            if start_content <= working.len() {
-                visible = working[..open_tag_idx].to_string();
-                partial = working[start_content..].to_string();
-            }
-        } else {
-            // 连 '>' 都未出现，认为是未完成的起始标签：将其之后内容从可见文本中移除
-            has_open_thinking = true;
-            visible = working[..last_idx].to_string();
-        }
-    } else {
-        // 检测部分的 <thinking 开始标签或 </thinking 闭合标签（流式输出时可能只收到部分）
-        const THINKING_OPEN: &str = "<thinking";
-        const THINKING_CLOSE: &str = "</thinking";
-
-        let mut found_partial = false;
-
-        // 先检测部分的闭合标签 </thinking
-        for prefix_len in (2..=THINKING_CLOSE.len()).rev() {
-            let prefix = &THINKING_CLOSE[..prefix_len];
-            if working.ends_with(prefix) {
-                // 发现部分闭合标签，从 visible 中移除
-                let char_indices: Vec<(usize, char)> = working.char_indices().collect();
-                if let Some((byte_pos, _)) = char_indices.iter().rev().nth(prefix_len - 1) {
-                    visible = working[..*byte_pos].to_string();
-                } else {
-                    visible = String::new();
-                }
-                found_partial = true;
-                break;
-            }
-        }
-
-        // 如果没找到闭合标签，再检测部分的开始标签 <thinking
-        if !found_partial {
-            for prefix_len in (2..THINKING_OPEN.len()).rev() {
-                let prefix = &THINKING_OPEN[..prefix_len];
-                if working.ends_with(prefix) {
-                    has_open_thinking = true;
-                    let char_indices: Vec<(usize, char)> = working.char_indices().collect();
-                    if let Some((byte_pos, _)) = char_indices.iter().rev().nth(prefix_len - 1) {
-                        visible = working[..*byte_pos].to_string();
-                    } else {
-                        visible = String::new();
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    let thinking = {
-        if partial.trim().is_empty() {
-            thinking_parts.join("\n").trim().to_string()
-        } else {
-            let mut v = thinking_parts;
-            v.push(partial);
-            v.join("\n").trim().to_string()
-        }
-    };
-
-    (thinking, visible, has_open_thinking)
+/// 内容块累积器（用于流式组装）
+enum BlockAccumulator {
+    Text(String),
+    ToolUse {
+        id: String,
+        name: String,
+        input_json: String,
+    },
+    Thinking(String),
 }
 
 /// 任务摘要信息
@@ -244,7 +125,6 @@ struct TaskExecutorInner {
     repositories: Arc<RepositoryManager>,
     agent_persistence: Arc<AgentPersistence>,
     ui_persistence: Arc<AgentUiPersistence>,
-    llm_registry: Arc<LLMRegistry>,
     tool_logger: Arc<ToolExecutionLogger>,
     context_builder_cache: Arc<RwLock<HashMap<i64, Arc<ContextBuilder>>>>,
     active_tasks: Arc<RwLock<HashMap<String, Arc<TaskContext>>>>,
@@ -261,7 +141,6 @@ impl TaskExecutor {
         repositories: Arc<RepositoryManager>,
         agent_persistence: Arc<AgentPersistence>,
         ui_persistence: Arc<AgentUiPersistence>,
-        llm_registry: Arc<LLMRegistry>,
         terminal_context_service: Arc<TerminalContextService>,
     ) -> Self {
         let tool_logger = Arc::new(ToolExecutionLogger::new(
@@ -274,7 +153,6 @@ impl TaskExecutor {
             repositories,
             agent_persistence,
             ui_persistence,
-            llm_registry,
             tool_logger,
             context_builder_cache: Arc::new(RwLock::new(HashMap::new())),
             active_tasks: Arc::new(RwLock::new(HashMap::new())),
@@ -292,10 +170,6 @@ impl TaskExecutor {
 
     pub(crate) fn repositories(&self) -> Arc<RepositoryManager> {
         Arc::clone(&self.inner().repositories)
-    }
-
-    pub(crate) fn llm_registry(&self) -> Arc<LLMRegistry> {
-        Arc::clone(&self.inner().llm_registry)
     }
 
     pub(crate) fn tool_logger(&self) -> Arc<ToolExecutionLogger> {
@@ -328,8 +202,18 @@ impl TaskExecutor {
         params: ExecuteTaskParams,
         progress_channel: Channel<TaskProgressPayload>,
     ) -> TaskExecutorResult<()> {
+        info!(
+            "[MODEL_SELECTION] execute_task called with conversation_id: {}, model_id: {:?}",
+            params.conversation_id, params.model_id
+        );
+
         // 1. Check memory cache first
         if let Some(existing_ctx) = self.conversation_context(params.conversation_id).await {
+            info!(
+                "[MODEL_SELECTION] Found existing context for conversation {}, using model_id: {}",
+                params.conversation_id, params.model_id
+            );
+
             let status = existing_ctx.status().await;
             let is_actually_running =
                 matches!(status, AgentTaskStatus::Running | AgentTaskStatus::Paused);
@@ -370,7 +254,7 @@ impl TaskExecutor {
                 .begin_followup_turn(&params.user_prompt)
                 .await?;
             existing_ctx
-                .push_user_message(params.user_prompt.clone())
+                .add_user_message(params.user_prompt.clone())
                 .await;
 
             existing_ctx
@@ -395,7 +279,7 @@ impl TaskExecutor {
                 }))
                 .await?;
 
-            self.spawn_react_execution(existing_ctx);
+            self.spawn_react_execution(existing_ctx, params.model_id);
             return Ok(());
         }
 
@@ -413,7 +297,7 @@ impl TaskExecutor {
                 .begin_followup_turn(&params.user_prompt)
                 .await?;
             restored_ctx
-                .push_user_message(params.user_prompt.clone())
+                .add_user_message(params.user_prompt.clone())
                 .await;
 
             restored_ctx
@@ -438,11 +322,12 @@ impl TaskExecutor {
                 }))
                 .await?;
 
-            self.spawn_react_execution(restored_ctx);
+            self.spawn_react_execution(restored_ctx, params.model_id);
             return Ok(());
         }
 
         // 3. Create new task
+        let model_id = params.model_id.clone();
         let context = Arc::new(
             self.create_task_context(params, Some(progress_channel), None)
                 .await?,
@@ -471,239 +356,7 @@ impl TaskExecutor {
             }))
             .await?;
 
-        self.spawn_react_execution(context);
-        Ok(())
-    }
-
-    /// 执行“Plan → (可选)Tree → 串行父节点子树”的流程
-    pub async fn execute_task_tree(
-        &self,
-        params: ExecuteTaskTreeParams,
-        progress_channel: Channel<TaskProgressPayload>,
-    ) -> TaskExecutorResult<()> {
-        let root_params = ExecuteTaskParams {
-            conversation_id: params.conversation_id,
-            user_prompt: params.user_prompt.clone(),
-            chat_mode: params.chat_mode.clone(),
-            config_overrides: params.config_overrides.clone(),
-        };
-        let root_ctx = Arc::new(
-            self.create_task_context(root_params, Some(progress_channel.clone()), None)
-                .await?,
-        );
-
-        let planner = Planner::new(root_ctx.clone());
-        if let Err(e) = planner.plan(&params.user_prompt, true).await {
-            return Err(TaskExecutorError::InternalError(format!("Plan failed: {}", e)).into());
-        }
-
-        let planned_tree = if params.generate_tree {
-            let tree_planner = TreePlanner::new(root_ctx.clone());
-            match tree_planner.plan_tree(&params.user_prompt).await {
-                Ok(tree) => Some(tree),
-                Err(e) => {
-                    // If tree planning fails, fallback to single task execution
-                    tracing::warn!("Tree planning failed, fallback to single task: {}", e);
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-        if let Some(tree) = planned_tree {
-            let parents = tree.subtasks.unwrap_or_default();
-            let tool_registry = root_ctx.tool_registry();
-            let tool_schemas_full =
-                tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
-                    cwd: root_ctx.cwd.clone(),
-                });
-            let simple_tool_schemas: Vec<ToolSchema> = tool_schemas_full
-                .into_iter()
-                .map(|s| ToolSchema {
-                    name: s.name,
-                    description: s.description,
-                    parameters: s.parameters,
-                })
-                .collect();
-
-            let mut prev_summary: Option<String> = None;
-
-            for (idx, parent) in parents.into_iter().enumerate() {
-                let parent_prompt = parent
-                    .description
-                    .clone()
-                    .or(parent.name.clone())
-                    .unwrap_or_else(|| format!("Phase-{}", idx + 1));
-
-                let parent_params = ExecuteTaskParams {
-                    conversation_id: root_ctx.conversation_id,
-                    user_prompt: parent_prompt.clone(),
-                    chat_mode: params.chat_mode.clone(),
-                    config_overrides: None,
-                };
-                let parent_ctx = Arc::new(
-                    self.create_task_context(
-                        parent_params,
-                        Some(progress_channel.clone()),
-                        Some(root_ctx.cwd.clone()),
-                    )
-                    .await?,
-                );
-
-                if let Ok(agent_xml) = build_agent_xml_from_planned(&parent) {
-                    let tool_names: Vec<String> =
-                        simple_tool_schemas.iter().map(|t| t.name.clone()).collect();
-                    let agent_info = Agent {
-                        name: "OrbitX Agent".to_string(),
-                        description: "An AI coding assistant for OrbitX".to_string(),
-                        capabilities: vec![],
-                        tools: tool_names,
-                    };
-                    let task_for_prompt = Task {
-                        id: parent_ctx.task_id.clone(),
-                        conversation_id: parent_ctx.conversation_id,
-                        user_prompt: parent_prompt.clone(),
-                        xml: Some(agent_xml),
-                        status: crate::agent::types::TaskStatus::Created,
-                        created_at: Utc::now(),
-                        updated_at: Utc::now(),
-                    };
-
-                    let mut prompt_ctx = AgentContext::default();
-                    prompt_ctx.working_directory = Some(parent_ctx.cwd.clone());
-                    prompt_ctx.additional_context.insert(
-                        "taskPrompt".to_string(),
-                        serde_json::Value::String(parent_prompt.clone()),
-                    );
-
-                    // 获取用户前置提示词
-                    let user_prefix_prompt = self
-                        .repositories()
-                        .ai_models()
-                        .get_user_prefix_prompt()
-                        .await
-                        .ok()
-                        .flatten();
-
-                    let system_prompt = build_agent_system_prompt(
-                        agent_info.clone(),
-                        Some(task_for_prompt.clone()),
-                        Some(prompt_ctx.clone()),
-                        simple_tool_schemas.clone(),
-                        user_prefix_prompt,
-                    )
-                    .await
-                    .map_err(|e| {
-                        TaskExecutorError::InternalError(format!(
-                            "Failed to build system prompt: {}",
-                            e
-                        ))
-                    })?;
-
-                    let user_prompt = build_agent_user_prompt(
-                        agent_info,
-                        Some(task_for_prompt),
-                        Some(prompt_ctx),
-                        simple_tool_schemas.clone(),
-                    )
-                    .await
-                    .map_err(|e| {
-                        TaskExecutorError::InternalError(format!(
-                            "Failed to build user prompt: {}",
-                            e
-                        ))
-                    })?;
-
-                    // ✅ 只在第一个阶段设置初始提示
-                    if idx == 0 {
-                        parent_ctx
-                            .set_initial_prompts(system_prompt, user_prompt)
-                            .await?;
-                    } else {
-                        // ❌ 后续阶段不重置，只添加新的用户消息
-                        // parent_ctx.reset_message_state().await?;
-                        // parent_ctx.set_initial_prompts(system_prompt, user_prompt).await?;
-
-                        // ✅ 后续阶段：直接添加新的用户消息
-                        parent_ctx.push_user_message(parent_prompt.clone()).await;
-                    }
-                }
-
-                if let Some(children) = &parent.subtasks {
-                    if !children.is_empty() {
-                        let mut buf = String::from("Planned subtasks for this phase (execute sequentially, reuse the same context):\n");
-                        for (i, child) in children.iter().enumerate() {
-                            let name = child
-                                .name
-                                .as_deref()
-                                .unwrap_or(child.description.as_deref().unwrap_or("Subtask"));
-                            let desc = child.description.as_deref().unwrap_or("");
-                            buf.push_str(&format!("{}. {}\n{}\n\n", i + 1, name, desc));
-                        }
-                        parent_ctx.push_system_message(buf).await;
-                    }
-                }
-
-                if let Some(summary) = prev_summary.take() {
-                    parent_ctx
-                        .push_system_message(format!("Previous phase summary:\n{}", summary))
-                        .await;
-                }
-
-                {
-                    let active_tasks = self.active_tasks();
-                    let mut active = active_tasks.write().await;
-                    active.insert(parent_ctx.task_id.clone(), parent_ctx.clone());
-                }
-                parent_ctx.set_status(AgentTaskStatus::Running).await?;
-                parent_ctx
-                    .send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
-                        task_id: parent_ctx.task_id.clone(),
-                        iteration: parent_ctx.current_iteration().await,
-                    }))
-                    .await?;
-
-                if let Err(e) = self.run_react_loop(parent_ctx.clone()).await {
-                    self.handle_task_error(&parent_ctx.task_id, e.into(), parent_ctx.clone())
-                        .await;
-                } else {
-                    // 标记完成
-                    parent_ctx.set_status(AgentTaskStatus::Completed).await.ok();
-                    parent_ctx
-                        .send_progress(TaskProgressPayload::TaskCompleted(TaskCompletedPayload {
-                            task_id: parent_ctx.task_id.clone(),
-                            final_iteration: parent_ctx.current_iteration().await,
-                            completion_reason: "Parent phase completed".to_string(),
-                            timestamp: Utc::now(),
-                        }))
-                        .await
-                        .ok();
-
-                    prev_summary = parent_ctx
-                        .with_messages(|messages| extract_last_assistant_text(messages))
-                        .await;
-                }
-
-                {
-                    let active_tasks = self.active_tasks();
-                    let mut active = active_tasks.write().await;
-                    active.remove(&parent_ctx.task_id);
-                }
-                // ❌ 不清理 context_builder，保留阶段间的消息历史
-                // self.clear_context_builder(parent_ctx.conversation_id).await;
-            }
-        } else {
-            // 无任务树，直接执行单任务
-            let params_single = ExecuteTaskParams {
-                conversation_id: root_ctx.conversation_id,
-                user_prompt: params.user_prompt,
-                chat_mode: params.chat_mode,
-                config_overrides: None,
-            };
-            self.execute_task(params_single, progress_channel).await?;
-        }
-
+        self.spawn_react_execution(context, model_id);
         Ok(())
     }
 
@@ -1002,71 +655,46 @@ impl TaskExecutor {
         )
         .await?;
 
-        // Restore message history from database
-        let mut llm_messages = Vec::new();
+        // Restore message history from database -> Anthropic 原生消息
+        let mut restored_messages: Vec<MessageParam> = Vec::new();
 
         for db_msg in db_messages {
-            let msg = match db_msg.role {
-                crate::agent::persistence::MessageRole::System => LLMMessage {
-                    role: "system".to_string(),
-                    content: LLMMessageContent::Text(db_msg.content),
-                },
-                crate::agent::persistence::MessageRole::User => LLMMessage {
-                    role: "user".to_string(),
-                    content: LLMMessageContent::Text(db_msg.content),
-                },
+            match db_msg.role {
+                crate::agent::persistence::MessageRole::System => {
+                    // 系统消息不作为消息恢复，系统提示词通过 build_task_prompts 刷新
+                    let _ = db_msg; // ignore
+                }
+                crate::agent::persistence::MessageRole::User => {
+                    restored_messages.push(MessageParam {
+                        role: crate::llm::anthropic_types::MessageRole::User,
+                        content: MessageContent::Text(db_msg.content),
+                    });
+                }
                 crate::agent::persistence::MessageRole::Assistant => {
-                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&db_msg.content) {
-                        if parsed.is_object() && parsed.get("tool_calls").is_some() {
-                            if let Ok(parts) = serde_json::from_value::<Vec<LLMMessagePart>>(
-                                parsed["parts"].clone(),
-                            ) {
-                                LLMMessage {
-                                    role: "assistant".to_string(),
-                                    content: LLMMessageContent::Parts(parts),
-                                }
-                            } else {
-                                LLMMessage {
-                                    role: "assistant".to_string(),
-                                    content: LLMMessageContent::Text(db_msg.content),
-                                }
-                            }
-                        } else {
-                            LLMMessage {
-                                role: "assistant".to_string(),
-                                content: LLMMessageContent::Text(db_msg.content),
-                            }
-                        }
-                    } else {
-                        LLMMessage {
-                            role: "assistant".to_string(),
-                            content: LLMMessageContent::Text(db_msg.content),
-                        }
-                    }
+                    // 旧存储可能包含 parts 字段，这里简单回退为 Text
+                    restored_messages.push(MessageParam {
+                        role: crate::llm::anthropic_types::MessageRole::Assistant,
+                        content: MessageContent::Text(db_msg.content),
+                    });
                 }
                 crate::agent::persistence::MessageRole::Tool => {
                     if let Ok(result) = serde_json::from_str::<ToolCallResult>(&db_msg.content) {
-                        LLMMessage {
-                            role: "tool".to_string(),
-                            content: LLMMessageContent::Parts(vec![LLMMessagePart::ToolResult {
-                                tool_call_id: result.call_id,
-                                tool_name: result.tool_name,
-                                result: result.result,
+                        let serialized = serde_json::to_string(&result.result)
+                            .unwrap_or_else(|_| "{}".to_string());
+                        restored_messages.push(MessageParam {
+                            role: crate::llm::anthropic_types::MessageRole::User,
+                            content: MessageContent::Blocks(vec![ContentBlock::ToolResult {
+                                tool_use_id: result.call_id,
+                                content: Some(AnthropicToolResultContent::Text(serialized)),
+                                is_error: Some(result.is_error),
                             }]),
-                        }
-                    } else {
-                        LLMMessage {
-                            role: "tool".to_string(),
-                            content: LLMMessageContent::Text(db_msg.content),
-                        }
+                        });
                     }
                 }
-            };
-
-            llm_messages.push(msg);
+            }
         }
 
-        context.restore_messages(llm_messages).await?;
+        context.restore_messages(restored_messages).await?;
 
         // Rebuild System Prompt with latest environment
         let (new_system_prompt, _) = self
@@ -1148,21 +776,48 @@ impl TaskExecutor {
             serde_json::Value::String(user_prompt.to_string()),
         );
 
-        // 获取用户前置提示词
-        let user_prefix_prompt = self
+        // 获取用户规则
+        let user_rules = self
             .repositories()
             .ai_models()
-            .get_user_prefix_prompt()
+            .get_user_rules()
             .await
             .ok()
             .flatten();
+
+        // 获取项目规则（指定使用哪个配置文件）
+        let project_rules = self
+            .repositories()
+            .ai_models()
+            .get_project_rules()
+            .await
+            .ok()
+            .flatten();
+
+        // 合并项目上下文和用户规则
+        let mut prompt_parts = Vec::new();
+
+        let loader = ProjectContextLoader::new(cwd);
+        if let Some(ctx) = loader.load_with_preference(project_rules.as_deref()).await {
+            prompt_parts.push(ctx.format_for_prompt());
+        }
+
+        if let Some(rules) = user_rules {
+            prompt_parts.push(rules);
+        }
+
+        let ext_sys_prompt = if prompt_parts.is_empty() {
+            None
+        } else {
+            Some(prompt_parts.join("\n\n"))
+        };
 
         let system_prompt = build_agent_system_prompt(
             agent_info.clone(),
             Some(task_for_prompt.clone()),
             Some(prompt_ctx.clone()),
             simple_tool_schemas.clone(),
-            user_prefix_prompt,
+            ext_sys_prompt,
         )
         .await
         .map_err(|e| {
@@ -1183,12 +838,12 @@ impl TaskExecutor {
         Ok((system_prompt, user_prompt_built))
     }
 
-    fn spawn_react_execution(&self, context: Arc<TaskContext>) {
+    fn spawn_react_execution(&self, context: Arc<TaskContext>, model_id: String) {
         let executor = self.clone();
         tokio::spawn(async move {
             let task_id = context.task_id.clone();
             let _conversation_id = context.conversation_id;
-            let result = executor.run_react_loop(context.clone()).await;
+            let result = executor.run_react_loop(context.clone(), model_id).await;
 
             match result {
                 Ok(_) => {
@@ -1258,12 +913,8 @@ impl TaskExecutor {
         }
 
         let llm_messages = convert_execution_messages(&messages);
-        let summarizer = ConversationSummarizer::new(
-            conversation_id,
-            persistence.clone(),
-            self.repositories(),
-            self.llm_registry(),
-        );
+        let summarizer =
+            ConversationSummarizer::new(conversation_id, persistence.clone(), self.repositories());
 
         let model_id = match model_override {
             Some(model) => model,
@@ -1271,7 +922,7 @@ impl TaskExecutor {
         };
 
         let result = summarizer
-            .summarize_now(&model_id, &llm_messages)
+            .summarize_now(&model_id, &llm_messages, &None)
             .await
             .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?;
 
@@ -1298,15 +949,48 @@ impl TaskExecutor {
         Arc::clone(&self.inner().ui_persistence)
     }
 
+    /// 从数据库获取模型的 context window 大小
+    async fn get_model_context_window(&self, model_id: &str) -> Option<u32> {
+        let model = self
+            .repositories()
+            .ai_models()
+            .find_by_string_id(model_id)
+            .await
+            .ok()??;
+
+        // 从 options JSON 中读取 maxContextTokens
+        if let Some(options) = model.options {
+            if let Some(max_tokens) = options.get("maxContextTokens") {
+                if let Some(value) = max_tokens.as_u64() {
+                    return Some(value as u32);
+                }
+            }
+        }
+
+        None
+    }
+
     /// ReAct循环执行（核心逻辑）
-    pub(crate) async fn run_react_loop(&self, context: Arc<TaskContext>) -> TaskExecutorResult<()> {
+    /// ReAct循环执行（重构版：简化逻辑，移除idle计数安全网）
+    pub(crate) async fn run_react_loop(
+        &self,
+        context: Arc<TaskContext>,
+        model_id: String,
+    ) -> TaskExecutorResult<()> {
         info!("Starting ReAct loop for task: {}", context.task_id);
+        info!(
+            "[MODEL_SELECTION] run_react_loop using model_id: {}",
+            model_id
+        );
 
         let mut iteration_snapshots: Vec<IterationSnapshot> = Vec::new();
-        let persistence = self.agent_persistence();
 
         while !context.should_stop().await {
             context.check_aborted(false).await?;
+
+            // ===== Phase 1: 迭代初始化 =====
+            let iteration = context.increment_iteration().await?;
+            debug!("Task {} starting iteration {}", context.task_id, iteration);
 
             let react_iteration_index = {
                 let runtime_handle = context.react_runtime();
@@ -1314,95 +998,88 @@ impl TaskExecutor {
                 runtime.start_iteration()
             };
 
-            let iteration = context.increment_iteration().await?;
-            context.state_manager().reset_idle_rounds().await;
-            debug!("Task {} iteration {}", context.task_id, iteration);
-
             let iter_ctx = context.begin_iteration(iteration).await;
 
-            let model_id = self.get_default_model_id().await?;
+            // ===== Phase 2: 准备消息上下文（零转换） =====
+            info!("[MODEL_SELECTION] Using model_id: {}", model_id);
 
-            let summarizer = ConversationSummarizer::new(
-                context.conversation_id,
-                persistence.clone(),
-                self.repositories(),
-                self.llm_registry(),
-            );
-
-            let mut request_messages = Vec::new();
-            context.copy_messages_into(&mut request_messages).await;
-            if let Some(summary) = summarizer
-                .summarize_if_needed(&model_id, &request_messages)
-                .await?
-            {
-                let summary_msg = LLMMessage {
-                    role: "system".to_string(),
-                    content: LLMMessageContent::Text(summary.summary.clone()),
-                };
-                let insert_at = if request_messages.len() > 1 {
-                    1
-                } else {
-                    request_messages.len()
-                };
-                request_messages.insert(insert_at, summary_msg);
-
-                let summary_payload = serde_json::json!({
-                    "summary": summary.summary,
-                    "tokens_saved": summary.tokens_saved,
-                    "prev_tokens": summary.prev_context_tokens,
-                });
-
-                let _ = persistence
-                    .execution_events()
-                    .record_event(
-                        &context.task_id,
-                        ExecutionEventType::Text,
-                        &serde_json::to_string(&summary_payload)
-                            .unwrap_or_else(|_| "{}".to_string()),
-                        context.current_iteration().await as i64,
-                    )
-                    .await;
-            }
-
-            let compressed_history = context.session().get_compressed_history_text().await;
-            if !compressed_history.is_empty() {
-                let history_message = LLMMessage {
-                    role: "system".to_string(),
-                    content: LLMMessageContent::Text(compressed_history),
-                };
-                let insert_at = if request_messages.is_empty() { 0 } else { 1 };
-                request_messages.insert(insert_at, history_message);
-            }
-
-            let recent_iterations = {
-                let runtime = context.react_runtime();
-                let guard = runtime.read().await;
-                guard.get_snapshot().iterations
-            };
-
-            let builder = self.get_context_builder(&context).await;
-            if let Some(file_msg) = builder.build_file_context_message(&recent_iterations).await {
-                let insert_at = if request_messages.len() > 2 {
-                    2
-                } else {
-                    request_messages.len()
-                };
-                request_messages.insert(insert_at, file_msg);
-            }
-
-            let context_window = self
-                .llm_registry()
-                .get_model_max_context(&model_id)
+            // 上下文窗口（后续 compactor/summarizer 将使用）
+            let _context_window = self
+                .get_model_context_window(&model_id)
+                .await
                 .unwrap_or(128_000);
 
-            let compactor = MessageCompactor::new().with_config(CompactionConfig::default());
-            let compaction_result = compactor
-                .compact_if_needed(request_messages, &model_id, context_window)
+            // ===== Phase 3: 调用 LLM =====
+            let tool_registry = context.tool_registry();
+
+            // ===== Phase 2 (续): 摘要、压缩、文件上下文（零持久化） =====
+            let mut working_messages: Vec<MessageParam> = context.get_messages().await;
+            let mut system_prompt: Option<SystemPrompt> = context.get_system_prompt().await;
+
+            // 摘要（如果需要）
+            let summarizer = ConversationSummarizer::new(
+                context.conversation_id,
+                self.agent_persistence(),
+                self.repositories(),
+            );
+            if let Ok(Some(summary)) = summarizer
+                .summarize_if_needed(&model_id, &working_messages, &system_prompt)
+                .await
+            {
+                let sys_text = match system_prompt.clone() {
+                    Some(SystemPrompt::Text(t)) => {
+                        format!("{}\n\n[summary]\n{}", t, summary.summary)
+                    }
+                    Some(SystemPrompt::Blocks(_)) => summary.summary, // 简化处理
+                    None => summary.summary,
+                };
+                let _ = context.update_system_prompt(sys_text).await;
+                system_prompt = context.get_system_prompt().await;
+            }
+
+            // 会话压缩历史（如有），并入 system prompt
+            let compressed_history = context.session().get_compressed_history_text().await;
+            if !compressed_history.is_empty() {
+                let sys_text = match system_prompt.clone() {
+                    Some(SystemPrompt::Text(t)) => {
+                        format!("{}\n\n[history]\n{}", t, compressed_history)
+                    }
+                    Some(SystemPrompt::Blocks(_)) => compressed_history.clone(),
+                    None => compressed_history.clone(),
+                };
+                let _ = context.update_system_prompt(sys_text).await;
+                system_prompt = context.get_system_prompt().await;
+            }
+
+            // 文件上下文（如有），追加为 user 临时消息
+            let recent_iterations = context
+                .react_runtime()
+                .read()
+                .await
+                .get_snapshot()
+                .iterations;
+            let builder = self.get_context_builder(&context).await;
+            if let Some(file_msg) = builder.build_file_context_message(&recent_iterations).await {
+                working_messages.push(file_msg);
+            }
+
+            // 消息压缩（超过上下文窗口时）
+            let context_window = self
+                .get_model_context_window(&model_id)
+                .await
+                .unwrap_or(128_000);
+            let compaction_result = MessageCompactor::new()
+                .with_config(CompactionConfig::default())
+                .compact_if_needed(
+                    working_messages,
+                    system_prompt.clone(),
+                    &model_id,
+                    context_window,
+                )
                 .await
                 .map_err(|e| {
                     TaskExecutorError::InternalError(format!("Compaction failed: {}", e))
                 })?;
-
             if let CompactionResult::Compacted {
                 tokens_saved,
                 messages_summarized,
@@ -1414,94 +1091,25 @@ impl TaskExecutor {
                     messages_summarized, tokens_saved
                 );
             }
+            let final_messages = compaction_result.messages();
 
-            let messages = compaction_result.messages();
-
-            // 打印发送给 LLM 的所有消息（方便调试）
-            info!(
-                "=== LLM Request Messages (task: {}, iteration: {}) ===",
-                context.task_id, iteration
-            );
-            for (idx, msg) in messages.iter().enumerate() {
-                let content_preview = match &msg.content {
-                    LLMMessageContent::Text(text) => {
-                        if text.len() > 200 {
-                            format!("{}...[{} chars total]", &text[..200], text.len())
-                        } else {
-                            text.clone()
-                        }
-                    }
-                    LLMMessageContent::Parts(parts) => {
-                        let mut preview = String::new();
-                        for (i, part) in parts.iter().enumerate() {
-                            if i > 0 {
-                                preview.push_str(", ");
-                            }
-                            match part {
-                                LLMMessagePart::Text { text } => {
-                                    if text.len() > 100 {
-                                        preview.push_str(&format!("Text({}...)", &text[..100]));
-                                    } else {
-                                        preview.push_str(&format!("Text({})", text));
-                                    }
-                                }
-                                LLMMessagePart::ToolCall {
-                                    tool_name, args, ..
-                                } => {
-                                    let args_str = serde_json::to_string(args)
-                                        .unwrap_or_else(|_| "{}".to_string());
-                                    if args_str.len() > 100 {
-                                        preview.push_str(&format!(
-                                            "ToolCall[{}]({}...)",
-                                            tool_name,
-                                            &args_str[..100]
-                                        ));
-                                    } else {
-                                        preview.push_str(&format!(
-                                            "ToolCall[{}]({})",
-                                            tool_name, args_str
-                                        ));
-                                    }
-                                }
-                                LLMMessagePart::ToolResult {
-                                    tool_name, result, ..
-                                } => {
-                                    let result_str = result.to_string();
-                                    if result_str.len() > 100 {
-                                        preview.push_str(&format!(
-                                            "ToolResult[{}]({}...)",
-                                            tool_name,
-                                            &result_str[..100]
-                                        ));
-                                    } else {
-                                        preview.push_str(&format!(
-                                            "ToolResult[{}]({})",
-                                            tool_name, result_str
-                                        ));
-                                    }
-                                }
-                                LLMMessagePart::File { .. } => {
-                                    preview.push_str("File(...)");
-                                }
-                            }
-                        }
-                        preview
-                    }
-                };
-                info!(
-                    "  [{}] role={:?}, content={}",
-                    idx, msg.role, content_preview
-                );
-            }
-            info!("=== End of LLM Request Messages ===");
-
-            let tool_registry = context.tool_registry();
             let llm_request = self
-                .build_llm_request(messages, &tool_registry, &context.cwd)
+                .build_llm_request(
+                    &context,
+                    model_id.clone(),
+                    &tool_registry,
+                    &context.cwd,
+                    Some(final_messages),
+                )
                 .await?;
-            let llm_request_snapshot = Arc::new(llm_request.clone());
 
-            // 流式调用LLM
+            // 打印 system prompt
+            if let Some(ref sp) = llm_request.system {
+                if let crate::llm::anthropic_types::SystemPrompt::Text(text) = sp {
+                    println!("\n{}\nFINAL SYSTEM PROMPT:\n{}\n{}\n{}\n", "=".repeat(80), "=".repeat(80), text, "=".repeat(80));
+                }
+            }
+
             let llm_service = crate::llm::service::LLMService::new(context.repositories().clone());
             let cancel_token = context.register_step_token();
             let mut stream = llm_service
@@ -1511,60 +1119,75 @@ impl TaskExecutor {
                     TaskExecutorError::InternalError(format!("LLM stream call failed: {}", e))
                 })?;
 
-            let mut final_answer_acc = String::new();
-            let mut pending_tool_calls: Vec<crate::llm::types::LLMToolCall> = Vec::new();
-            let mut finished_with_tool_calls = false;
-            let mut finish_reason_enum: Option<FinishReason> = None;
+            // 新的流处理状态
+            let mut current_blocks: HashMap<usize, BlockAccumulator> = HashMap::new();
+            let mut text_content: Vec<String> = Vec::new();
+            let mut tool_use_blocks: Vec<ContentBlock> = Vec::new();
+            let mut pending_tool_calls: Vec<(String, String, serde_json::Value)> = Vec::new();
 
-            let mut stream_text = String::new();
-            let mut saw_thinking_tag = false;
-            let mut last_thinking_sent = String::new();
-            let mut last_thinking_char_count = 0; // 追踪已发送的thinking字符数
-            let mut last_visible_sent = String::new();
-            let mut last_visible_char_count = 0; // 使用字符数而非字节数,避免UTF-8边界问题
             let mut thinking_stream_id: Option<String> = None;
             let mut text_stream_id: Option<String> = None;
 
+            // ===== Phase 4: 处理 Anthropic StreamEvent =====
             while let Some(item) = stream.next().await {
-                if context.check_aborted(true).await.is_err() {
-                    break;
-                }
+                context.check_aborted(true).await?;
+
                 match item {
-                    Ok(chunk) => match chunk {
-                        crate::llm::types::LLMStreamChunk::Delta {
-                            content,
-                            tool_calls,
-                        } => {
-                            if let Some(text) = content {
-                                stream_text.push_str(&text);
-                                final_answer_acc.push_str(&text);
-
-                                if !saw_thinking_tag && stream_text.contains("<thinking") {
-                                    saw_thinking_tag = true;
-                                }
-
-                                let (thinking, visible, has_open_thinking) =
-                                    split_thinking_sections(&stream_text);
-                                let thinking_trim = sanitize_thinking_text(&thinking);
-                                let can_send_visible = !visible.is_empty()
-                                    && !visible.contains("<thinking")
-                                    && !has_open_thinking
-                                    && visible.trim().len() > 0;
-
-                                if saw_thinking_tag {
-                                    let current_thinking_char_count = thinking_trim.chars().count();
-                                    if current_thinking_char_count < last_thinking_char_count {
-                                        last_thinking_sent = thinking_trim.clone();
-                                        last_thinking_char_count = current_thinking_char_count;
+                    Ok(StreamEvent::MessageStart { message }) => {
+                        tracing::debug!("Message started: {}", message.id);
+                    }
+                    Ok(StreamEvent::ContentBlockStart {
+                        index,
+                        content_block,
+                    }) => match content_block {
+                        ContentBlockStart::Text { text } => {
+                            current_blocks.insert(index, BlockAccumulator::Text(text));
+                        }
+                        ContentBlockStart::ToolUse { id, name } => {
+                            current_blocks.insert(
+                                index,
+                                BlockAccumulator::ToolUse {
+                                    id,
+                                    name,
+                                    input_json: String::new(),
+                                },
+                            );
+                        }
+                        ContentBlockStart::Thinking { thinking } => {
+                            current_blocks.insert(index, BlockAccumulator::Thinking(thinking));
+                        }
+                    },
+                    Ok(StreamEvent::ContentBlockDelta { index, delta }) => {
+                        if let Some(block) = current_blocks.get_mut(&index) {
+                            match delta {
+                                ContentDelta::TextDelta { text } => {
+                                    if let BlockAccumulator::Text(s) = block {
+                                        s.push_str(&text);
+                                        // emit text delta
+                                        if text_stream_id.is_none() {
+                                            text_stream_id = Some(Uuid::new_v4().to_string());
+                                        }
+                                        context
+                                            .send_progress(TaskProgressPayload::Text(TextPayload {
+                                                task_id: context.task_id.clone(),
+                                                iteration,
+                                                text,
+                                                stream_id: text_stream_id.clone().unwrap(),
+                                                stream_done: false,
+                                                timestamp: Utc::now(),
+                                            }))
+                                            .await?;
+                                        iter_ctx.append_output(&s).await;
                                     }
-                                    if current_thinking_char_count > last_thinking_char_count {
-                                        // 使用字符迭代器安全提取增量thinking内容
-                                        let thinking_to_send: String = thinking_trim
-                                            .chars()
-                                            .skip(last_thinking_char_count)
-                                            .collect();
-                                        last_thinking_sent = thinking_trim.clone();
-                                        last_thinking_char_count = current_thinking_char_count;
+                                }
+                                ContentDelta::InputJsonDelta { partial_json } => {
+                                    if let BlockAccumulator::ToolUse { input_json, .. } = block {
+                                        input_json.push_str(&partial_json);
+                                    }
+                                }
+                                ContentDelta::ThinkingDelta { thinking } => {
+                                    if let BlockAccumulator::Thinking(s) = block {
+                                        s.push_str(&thinking);
                                         if thinking_stream_id.is_none() {
                                             thinking_stream_id = Some(Uuid::new_v4().to_string());
                                         }
@@ -1573,337 +1196,224 @@ impl TaskExecutor {
                                                 ThinkingPayload {
                                                     task_id: context.task_id.clone(),
                                                     iteration,
-                                                    thought: thinking_to_send.clone(),
+                                                    thought: thinking,
                                                     stream_id: thinking_stream_id.clone().unwrap(),
                                                     stream_done: false,
                                                     timestamp: Utc::now(),
                                                 },
                                             ))
                                             .await?;
-                                        {
-                                            let runtime_handle = context.react_runtime();
-                                            let mut runtime = runtime_handle.write().await;
-                                            runtime.record_thought(
-                                                react_iteration_index,
-                                                stream_text.clone(),
-                                                thinking_to_send.clone(),
-                                            );
-                                        }
-                                        context.state_manager().reset_idle_rounds().await;
-                                        iter_ctx.append_thinking(&thinking_to_send).await;
+                                        iter_ctx.append_thinking(&s).await;
                                     }
-                                    let current_char_count = visible.chars().count();
-                                    if can_send_visible
-                                        && current_char_count > last_visible_char_count
-                                        && !last_thinking_sent.trim().is_empty()
-                                        && !has_open_thinking
-                                    {
-                                        // 使用字符迭代器跳过已发送的字符,安全处理UTF-8多字节字符
-                                        let visible_delta: String =
-                                            visible.chars().skip(last_visible_char_count).collect();
-                                        last_visible_char_count = current_char_count;
-                                        if text_stream_id.is_none() {
-                                            text_stream_id = Some(Uuid::new_v4().to_string());
-                                        }
-                                        context
-                                            .send_progress(TaskProgressPayload::Text(TextPayload {
-                                                task_id: context.task_id.clone(),
-                                                iteration,
-                                                text: visible_delta.clone(),
-                                                stream_id: text_stream_id.clone().unwrap(),
-                                                stream_done: false,
-                                                timestamp: Utc::now(),
-                                            }))
-                                            .await?;
-                                        last_visible_sent.push_str(&visible_delta);
-                                        context.state_manager().reset_idle_rounds().await;
-                                        iter_ctx.append_output(&visible_delta).await;
-                                    }
-                                } else if can_send_visible {
-                                    let current_char_count = visible.chars().count();
-                                    if current_char_count > last_visible_char_count {
-                                        // 使用字符迭代器跳过已发送的字符,安全处理UTF-8多字节字符
-                                        let visible_delta: String =
-                                            visible.chars().skip(last_visible_char_count).collect();
-                                        last_visible_char_count = current_char_count;
-                                        if text_stream_id.is_none() {
-                                            text_stream_id = Some(Uuid::new_v4().to_string());
-                                        }
-                                        context
-                                            .send_progress(TaskProgressPayload::Text(TextPayload {
-                                                task_id: context.task_id.clone(),
-                                                iteration,
-                                                text: visible_delta.clone(),
-                                                stream_id: text_stream_id.clone().unwrap(),
-                                                stream_done: false,
-                                                timestamp: Utc::now(),
-                                            }))
-                                            .await?;
-                                        last_visible_sent.push_str(&visible_delta);
-                                        context.state_manager().reset_idle_rounds().await;
-                                        iter_ctx.append_output(&visible_delta).await;
-                                    }
-                                }
-                            }
-
-                            if let Some(calls) = tool_calls {
-                                for call in calls {
-                                    iter_ctx.add_tool_call(call.clone()).await;
-                                    {
-                                        let runtime_handle = context.react_runtime();
-                                        let mut runtime = runtime_handle.write().await;
-                                        runtime.record_action(
-                                            react_iteration_index,
-                                            call.name.clone(),
-                                            call.arguments.clone(),
-                                        );
-                                    }
-                                    let request_for_chain = Arc::clone(&llm_request_snapshot);
-                                    let call_for_chain = call.clone();
-                                    context
-                                        .with_chain_mut(move |chain| {
-                                            let mut entry =
-                                                ToolChain::new(&call_for_chain, request_for_chain);
-                                            entry.update_params(call_for_chain.arguments.clone());
-                                            chain.push(entry);
-                                        })
-                                        .await;
-                                    context.state_manager().reset_idle_rounds().await;
-                                    pending_tool_calls.push(call);
                                 }
                             }
                         }
-                        crate::llm::types::LLMStreamChunk::Finish {
-                            finish_reason,
-                            usage,
-                        } => {
-                            let (final_thinking_text_now, final_visible_text_now, _) =
-                                split_thinking_sections(&stream_text);
-                            let final_thinking_trimmed_now =
-                                sanitize_thinking_text(&final_thinking_text_now);
-                            if let Some(reason_enum) = map_finish_reason(&finish_reason) {
-                                finish_reason_enum = Some(reason_enum);
-                            }
-                            if finish_reason == "tool_calls" || !pending_tool_calls.is_empty() {
-                                finished_with_tool_calls = true;
-                            }
-                            if thinking_stream_id.is_none()
-                                && (!final_thinking_trimmed_now.is_empty()
-                                    || !last_thinking_sent.is_empty())
-                            {
-                                thinking_stream_id = Some(Uuid::new_v4().to_string());
-                            }
-                            if text_stream_id.is_none() && !final_visible_text_now.trim().is_empty()
-                            {
-                                text_stream_id = Some(Uuid::new_v4().to_string());
-                            }
-                            if let Some(tsid) = thinking_stream_id.clone() {
-                                // 计算剩余内容 - 使用字符计数而非字节长度避免UTF-8边界错误
-                                let current_thinking_char_count =
-                                    final_thinking_trimmed_now.chars().count();
-                                let delta =
-                                    if current_thinking_char_count > last_thinking_char_count {
-                                        let d: String = final_thinking_trimmed_now
-                                            .chars()
-                                            .skip(last_thinking_char_count)
-                                            .collect();
-                                        iter_ctx.append_thinking(&d).await;
-                                        d
-                                    } else {
-                                        String::new() // 没有剩余内容，发送空字符串
-                                    };
-                                // 无论是否有剩余内容，总是发送streamDone=true标记流结束
-                                context
-                                    .send_progress(TaskProgressPayload::Thinking(ThinkingPayload {
-                                        task_id: context.task_id.clone(),
-                                        iteration,
-                                        thought: delta,
-                                        stream_id: tsid.clone(),
-                                        stream_done: true,
-                                        timestamp: Utc::now(),
-                                    }))
-                                    .await?;
-                            }
-                            if let Some(xsid) = text_stream_id.clone() {
-                                // 计算剩余内容 - 使用字符计数而非字节长度避免UTF-8边界错误
-                                let current_visible_char_count =
-                                    final_visible_text_now.chars().count();
-                                let delta = if current_visible_char_count > last_visible_char_count
-                                {
-                                    let d: String = final_visible_text_now
-                                        .chars()
-                                        .skip(last_visible_char_count)
-                                        .collect();
-                                    last_visible_sent.push_str(&d);
-                                    iter_ctx.append_output(&d).await;
-                                    d
-                                } else {
-                                    String::new() // 没有剩余内容，发送空字符串
-                                };
-                                // 无论是否有剩余内容，总是发送streamDone=true标记流结束
-                                context
-                                    .send_progress(TaskProgressPayload::Text(TextPayload {
-                                        task_id: context.task_id.clone(),
-                                        iteration,
-                                        text: delta,
-                                        stream_id: xsid.clone(),
-                                        stream_done: true,
-                                        timestamp: Utc::now(),
-                                    }))
-                                    .await?;
-                            }
-                            yield_now().await;
-                            let usage_snapshot = usage.clone();
-
-                            context
-                                .send_progress(TaskProgressPayload::Finish(FinishPayload {
-                                    task_id: context.task_id.clone(),
-                                    iteration,
-                                    finish_reason,
-                                    usage,
-                                    timestamp: Utc::now(),
-                                }))
-                                .await?;
-
-                            if let Some(stats) = usage_snapshot {
-                                persistence
-                                    .agent_executions()
-                                    .update_token_usage(
-                                        &context.task_id,
-                                        stats.prompt_tokens as i64,
-                                        stats.completion_tokens as i64,
-                                        stats.total_tokens as i64,
-                                        0.0,
+                    }
+                    Ok(StreamEvent::ContentBlockStop { index }) => {
+                        if let Some(block) = current_blocks.remove(&index) {
+                            match block {
+                                BlockAccumulator::Text(text) => {
+                                    if !text.is_empty() {
+                                        text_content.push(text);
+                                    }
+                                }
+                                BlockAccumulator::ToolUse {
+                                    id,
+                                    name,
+                                    input_json,
+                                } => {
+                                    // 尝试解析完整 JSON
+                                    let input: serde_json::Value = serde_json::from_str(
+                                        &input_json,
                                     )
-                                    .await
-                                    .map_err(|e| {
-                                        TaskExecutorError::StatePersistenceFailed(e.to_string())
-                                    })?;
+                                    .unwrap_or(serde_json::json!({"_streaming_args": input_json}));
+                                    tool_use_blocks.push(ContentBlock::ToolUse {
+                                        id: id.clone(),
+                                        name: name.clone(),
+                                        input: input.clone(),
+                                    });
+
+                                    // 记录动作与收集待执行工具
+                                    context.react_runtime().write().await.record_action(
+                                        react_iteration_index,
+                                        name.clone(),
+                                        input.clone(),
+                                    );
+                                    iter_ctx
+                                        .add_tool_call(id.clone(), name.clone(), input.clone())
+                                        .await;
+                                    pending_tool_calls.push((id, name, input));
+                                }
+                                BlockAccumulator::Thinking(_) => {}
                             }
-                            break;
                         }
-                        crate::llm::types::LLMStreamChunk::Error { error } => {
-                            return Err(TaskExecutorError::InternalError(format!(
-                                "LLM流式错误: {}",
-                                error
-                            ))
-                            .into());
-                        }
-                    },
+                    }
+                    Ok(StreamEvent::MessageDelta { delta, usage }) => {
+                        // 可在此记录 stop_reason/usage
+                        let _ = delta;
+                        let _ = usage;
+                    }
+                    Ok(StreamEvent::MessageStop) => {
+                        break;
+                    }
+                    Ok(StreamEvent::Ping) => {}
+                    Ok(StreamEvent::Error { error }) => {
+                        return Err(TaskExecutorError::InternalError(error.message));
+                    }
                     Err(e) => {
-                        return Err(TaskExecutorError::InternalError(format!(
-                            "LLM流式管道错误: {}",
-                            e
-                        ))
-                        .into());
+                        return Err(TaskExecutorError::InternalError(e.to_string()));
                     }
                 }
             }
 
-            let (_, final_visible_text, _) = split_thinking_sections(&stream_text);
-            let final_visible_trimmed = final_visible_text.trim().to_string();
-            if !final_visible_trimmed.is_empty() {
-                iter_ctx.append_output(&final_visible_trimmed).await;
-            }
+            // ===== Phase 4: 将累积内容写入上下文 =====
+            let final_text = if !text_content.is_empty() {
+                Some(text_content.join("\n"))
+            } else {
+                None
+            };
+            context
+                .add_assistant_message(final_text.clone(), Some(tool_use_blocks))
+                .await;
 
-            if finished_with_tool_calls {
-                // 执行工具调用并继续下一轮迭代
-                for tool_call in pending_tool_calls.iter() {
-                    let result = self
-                        .execute_tool_call(&context, iteration, tool_call.clone())
+            // ===== Phase 5: 分类迭代结果 =====
+            let outcome = if !pending_tool_calls.is_empty() {
+                IterationOutcome::ContinueWithTools {
+                    tool_calls: pending_tool_calls.clone(),
+                }
+            } else if final_text
+                .as_ref()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false)
+            {
+                IterationOutcome::Complete {
+                    thinking: None,
+                    output: final_text.clone(),
+                }
+            } else {
+                IterationOutcome::Empty
+            };
+
+            debug!("Iteration {} outcome: {}", iteration, outcome.description());
+
+            // ===== Phase 6: 根据结果执行动作 =====
+            match outcome {
+                IterationOutcome::ContinueWithTools { ref tool_calls } => {
+                    info!(
+                        "Iteration {}: executing {} tools",
+                        iteration,
+                        tool_calls.len()
+                    );
+
+                    // 去重检测
+                    let deduplicated_calls = self.deduplicate_tool_uses(tool_calls);
+                    if deduplicated_calls.len() < tool_calls.len() {
+                        let duplicates_count = tool_calls.len() - deduplicated_calls.len();
+                        warn!(
+                            "Detected {} duplicate tool calls in iteration {}",
+                            duplicates_count, iteration
+                        );
+
+                        // 注入系统消息警告LLM（仅内存，不持久化）
+                        let _ = context.set_system_prompt(format!(
+                            "<system-reminder type=\"duplicate-tools\">\n\
+                             You called {} duplicate tool(s) in this iteration.\n\
+                             The results haven't changed. Please use the existing results instead of re-calling the same tools.\n\
+                             </system-reminder>",
+                            duplicates_count
+                        )).await;
+                    }
+
+                    let results = self
+                        .execute_tools_parallel(&context, iteration, deduplicated_calls)
                         .await?;
 
-                    iter_ctx.add_tool_result(result.clone()).await;
+                    for result in results {
+                        iter_ctx.add_tool_result(result.clone()).await;
 
-                    let outcome = tool_call_result_to_outcome(&result);
-
-                    {
-                        let call_id = result.call_id.clone();
-                        let outcome_for_chain = outcome.clone();
+                        let outcome = tool_call_result_to_outcome(&result);
                         context
-                            .with_chain_mut(move |chain| {
-                                chain.update_tool_result(&call_id, outcome_for_chain);
+                            .with_chain_mut({
+                                let call_id = result.call_id.clone();
+                                let outcome_for_chain = outcome.clone();
+                                move |chain| {
+                                    chain.update_tool_result(&call_id, outcome_for_chain);
+                                }
                             })
                             .await;
-                    }
 
-                    {
-                        let runtime_handle = context.react_runtime();
-                        let mut runtime = runtime_handle.write().await;
-                        runtime.record_observation(
-                            react_iteration_index,
-                            result.tool_name.clone(),
-                            outcome.clone(),
-                        );
-                        if result.is_error {
-                            runtime.fail_iteration(
+                        {
+                            let runtime_handle = context.react_runtime();
+                            let mut runtime = runtime_handle.write().await;
+                            runtime.record_observation(
                                 react_iteration_index,
-                                format!("Tool {} failed", result.tool_name),
+                                result.tool_name.clone(),
+                                outcome,
                             );
-                        } else {
-                            runtime.reset_error_counter();
-                            runtime.reset_idle_rounds();
+
+                            if result.is_error {
+                                runtime.fail_iteration(
+                                    react_iteration_index,
+                                    format!("Tool {} failed", result.tool_name),
+                                );
+                            } else {
+                                runtime.reset_error_counter();
+                            }
                         }
                     }
+
+                    // 循环检测
+                    if let Some(loop_warning) = self.detect_loop_pattern(&context, iteration).await
+                    {
+                        warn!("Loop pattern detected in iteration {}", iteration);
+                        let _ = context.set_system_prompt(loop_warning).await;
+                    }
+
+                    self.finalize_iteration(&context, &mut iteration_snapshots)
+                        .await?;
+                    continue;
                 }
 
-                context
-                    .add_llm_response(LLMResponseParsed {
-                        tool_calls: Some(pending_tool_calls),
-                        final_answer: None,
-                    })
-                    .await;
-                self.finalize_iteration(&context, &mut iteration_snapshots)
-                    .await?;
-                continue;
-            }
-            // 没有工具调用时，本轮对话已完成（Text 流和 Finish 已发送）
-            if final_visible_trimmed.is_empty() {
-                {
-                    let runtime_handle = context.react_runtime();
-                    let mut runtime = runtime_handle.write().await;
-                    runtime.mark_idle_round();
+                IterationOutcome::Complete { thinking, output } => {
+                    info!(
+                        "Iteration {}: task complete - {}",
+                        iteration,
+                        match (&thinking, &output) {
+                            (Some(_), Some(_)) => "thinking + output",
+                            (Some(_), None) => "thinking only",
+                            (None, Some(_)) => "output only",
+                            (None, None) => "empty (unexpected)",
+                        }
+                    );
+
+                    context.react_runtime().write().await.complete_iteration(
+                        react_iteration_index,
+                        output.clone(),
+                        None,
+                    );
+
+                    self.finalize_iteration(&context, &mut iteration_snapshots)
+                        .await?;
+                    break;
                 }
-                context.state_manager().mark_idle_round().await;
-                self.finalize_iteration(&context, &mut iteration_snapshots)
-                    .await?;
-                continue;
-            }
 
-            {
-                let runtime_handle = context.react_runtime();
-                let mut runtime = runtime_handle.write().await;
-                runtime.complete_iteration(
-                    react_iteration_index,
-                    if final_visible_trimmed.is_empty() {
-                        None
-                    } else {
-                        Some(final_visible_trimmed.clone())
-                    },
-                    finish_reason_enum.clone(),
-                );
-            }
+                IterationOutcome::Empty => {
+                    warn!(
+                        "Iteration {}: empty response - terminating immediately",
+                        iteration
+                    );
 
-            context
-                .add_llm_response(LLMResponseParsed {
-                    tool_calls: None,
-                    final_answer: if final_visible_trimmed.is_empty() {
-                        None
-                    } else {
-                        Some(final_visible_trimmed.clone())
-                    },
-                })
-                .await;
-            self.finalize_iteration(&context, &mut iteration_snapshots)
-                .await?;
-            break;
+                    self.finalize_iteration(&context, &mut iteration_snapshots)
+                        .await?;
+                    break; // 空响应直接终止，不再尝试
+                }
+            }
         }
 
         info!("ReAct loop completed for task: {}", context.task_id);
         if !iteration_snapshots.is_empty() {
             self.compress_iteration_batch(&context, &iteration_snapshots)
                 .await?;
-            iteration_snapshots.clear();
         }
         Ok(())
     }
@@ -2142,15 +1652,216 @@ impl TaskExecutor {
 
         Ok(conversation.id)
     }
-}
 
-fn map_finish_reason(value: &str) -> Option<FinishReason> {
-    match value {
-        "stop" => Some(FinishReason::Stop),
-        "length" => Some(FinishReason::Length),
-        "tool_calls" => Some(FinishReason::ToolCalls),
-        "content_filter" => Some(FinishReason::ContentFilter),
-        _ => None,
+    // 工具去重和并行执行
+
+    /// 去重工具调用 - 检测同一iteration内的重复调用
+    fn deduplicate_tool_uses(
+        &self,
+        tool_calls: &[(String, String, serde_json::Value)],
+    ) -> Vec<(String, String, serde_json::Value)> {
+        use std::collections::HashSet;
+
+        let mut seen = HashSet::new();
+        let mut deduplicated = Vec::new();
+
+        for (id, name, args) in tool_calls.iter() {
+            // 使用 (tool_name, arguments) 作为唯一键
+            let key = (
+                name.clone(),
+                serde_json::to_string(args).unwrap_or_default(),
+            );
+
+            if seen.insert(key) {
+                deduplicated.push((id.clone(), name.clone(), args.clone()));
+            } else {
+                debug!(
+                    "Skipping duplicate tool call: {} with args {:?}",
+                    name, args
+                );
+            }
+        }
+
+        deduplicated
+    }
+
+    /// 并行执行多个工具调用
+    async fn execute_tools_parallel(
+        &self,
+        context: &Arc<TaskContext>,
+        iteration: u32,
+        tool_calls: Vec<(String, String, serde_json::Value)>,
+    ) -> TaskExecutorResult<Vec<ToolCallResult>> {
+        use futures::future::join_all;
+
+        if tool_calls.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // 创建所有工具调用的futures
+        let futures: Vec<_> = tool_calls
+            .into_iter()
+            .map(|(id, name, args)| {
+                let executor = self.clone();
+                let ctx = Arc::clone(context);
+                async move {
+                    executor
+                        .execute_tool_call(&ctx, iteration, id, name, args)
+                        .await
+                }
+            })
+            .collect();
+
+        // 并行执行所有工具调用
+        let results = join_all(futures).await;
+
+        // 收集成功的结果，记录失败的
+        let mut successful_results = Vec::new();
+        for result in results {
+            match result {
+                Ok(tool_result) => successful_results.push(tool_result),
+                Err(e) => {
+                    error!("Tool execution failed in parallel batch: {}", e);
+                    // 继续执行其他工具，不中断整个批次
+                }
+            }
+        }
+
+        Ok(successful_results)
+    }
+
+    // 循环检测系统
+
+    /// 检测循环模式 - 分析最近N个iterations是否形成重复模式
+    async fn detect_loop_pattern(
+        &self,
+        context: &Arc<TaskContext>,
+        current_iteration: u32,
+    ) -> Option<String> {
+        const LOOP_DETECTION_WINDOW: usize = 3;
+
+        if current_iteration < LOOP_DETECTION_WINDOW as u32 {
+            return None;
+        }
+
+        // 从ReactRuntime获取iterations历史
+        let runtime_handle = context.react_runtime();
+        let runtime_guard = runtime_handle.read().await;
+        let snapshot = runtime_guard.get_snapshot();
+        let iterations = &snapshot.iterations;
+
+        if iterations.len() < LOOP_DETECTION_WINDOW {
+            return None;
+        }
+
+        // 获取最近N个iterations
+        let recent: Vec<_> = iterations
+            .iter()
+            .rev()
+            .take(LOOP_DETECTION_WINDOW)
+            .collect();
+
+        // 检测模式1：完全相同的工具调用序列
+        if let Some(warning) = self.detect_identical_tool_sequence(&recent) {
+            return Some(warning);
+        }
+
+        // 检测模式2：相似的工具调用模式（同样的工具，不同参数）
+        if let Some(warning) = self.detect_similar_tool_pattern(&recent) {
+            return Some(warning);
+        }
+
+        None
+    }
+
+    /// 检测完全相同的工具调用序列
+    fn detect_identical_tool_sequence(
+        &self,
+        recent_iterations: &[&crate::agent::react::types::ReactIteration],
+    ) -> Option<String> {
+        if recent_iterations.len() < 2 {
+            return None;
+        }
+
+        // 提取每个iteration的工具名称序列
+        let tool_sequences: Vec<Vec<String>> = recent_iterations
+            .iter()
+            .map(|iter| {
+                iter.action
+                    .as_ref()
+                    .map(|action| vec![action.tool_name.clone()])
+                    .unwrap_or_default()
+            })
+            .collect();
+
+        // 检查是否所有序列都相同且非空
+        let first = &tool_sequences[0];
+        if first.is_empty() {
+            return None;
+        }
+
+        let all_identical = tool_sequences[1..].iter().all(|seq| seq == first);
+
+        if all_identical {
+            let tools_list = first.join(", ");
+            return Some(format!(
+                "<system-reminder type=\"loop-warning\">\n\
+                 You've called the same tools {} times in a row: {}\n\n\
+                 The results haven't changed. Consider:\n\
+                 - Have you gathered enough information?\n\
+                 - Can you proceed with what you have?\n\
+                 - Do you need to try a different approach?\n\n\
+                 Break the loop by using the information you already have or trying different tools.\n\
+                 </system-reminder>",
+                recent_iterations.len(),
+                tools_list
+            ));
+        }
+
+        None
+    }
+
+    /// 检测相似的工具调用模式（同样的工具类型，可能不同参数）
+    fn detect_similar_tool_pattern(
+        &self,
+        recent_iterations: &[&crate::agent::react::types::ReactIteration],
+    ) -> Option<String> {
+        if recent_iterations.len() < 3 {
+            return None;
+        }
+
+        // 提取工具名称（不考虑参数）
+        let tool_names: Vec<Option<String>> = recent_iterations
+            .iter()
+            .map(|iter| iter.action.as_ref().map(|a| a.tool_name.clone()))
+            .collect();
+
+        // 统计工具使用频率
+        let mut tool_counts = std::collections::HashMap::new();
+        for name in tool_names.iter().flatten() {
+            *tool_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        // 如果有工具被重复调用超过2次
+        for (tool, count) in tool_counts {
+            if count >= 3 {
+                return Some(format!(
+                    "<system-reminder type=\"loop-warning\">\n\
+                     You've called '{}' tool {} times in the last {} iterations.\n\n\
+                     You may be stuck in a pattern. Consider:\n\
+                     - Are you getting new information each time?\n\
+                     - Can you analyze the results you already have?\n\
+                     - Should you try a different approach?\n\n\
+                     Try to make progress with the information you've gathered.\n\
+                     </system-reminder>",
+                    tool,
+                    count,
+                    recent_iterations.len()
+                ));
+            }
+        }
+
+        None
     }
 }
 
@@ -2186,23 +1897,15 @@ fn tail_vec<T: Clone>(items: Vec<T>, limit: usize) -> Vec<T> {
     }
 }
 
-fn convert_execution_messages(messages: &[ExecutionMessage]) -> Vec<LLMMessage> {
+fn convert_execution_messages(messages: &[ExecutionMessage]) -> Vec<MessageParam> {
     messages
         .iter()
-        .map(|msg| LLMMessage {
-            role: msg.role.as_str().to_string(),
-            content: LLMMessageContent::Text(msg.content.clone()),
+        .map(|msg| MessageParam {
+            role: match msg.role.as_str() {
+                "user" => crate::llm::anthropic_types::MessageRole::User,
+                _ => crate::llm::anthropic_types::MessageRole::Assistant,
+            },
+            content: MessageContent::Text(msg.content.clone()),
         })
         .collect()
-}
-
-fn extract_last_assistant_text(messages: &[LLMMessage]) -> Option<String> {
-    messages
-        .iter()
-        .rev()
-        .find(|msg| msg.role == "assistant")
-        .and_then(|msg| match &msg.content {
-            LLMMessageContent::Text(text) => Some(text.clone()),
-            _ => None,
-        })
 }

@@ -36,8 +36,8 @@
   }
 
   .user-message-bubble {
-    background: var(--color-primary);
-    color: white;
+    background: var(--color-primary-alpha);
+    color: var(--text-100);
     padding: var(--spacing-sm) var(--spacing-md);
     border-radius: var(--border-radius-lg);
     word-wrap: break-word;

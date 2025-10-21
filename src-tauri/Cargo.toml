@@ -7,6 +7,9 @@ edition = "2021"
 default-run = "orbitx"
 license = "GPL-3.0-or-later"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
@@ -17,11 +20,17 @@ name = "terminal_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 doctest = false
 
+# 排除工具二进制文件，避免在打包时出现问题
+[[bin]]
+name = "orbitx"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api"] }
+parking_lot = "0.12"
+tauri = { version = "2", features = ["macos-private-api", "devtools"] }
 tauri-plugin-opener = "2.5.0"
 tauri-plugin-fs = "2"
 tauri-plugin-deep-link = "2.0.0"
@@ -54,7 +63,6 @@ once_cell = "1.19"
 # AI集成功能相关依赖
 chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
-reqwest-eventsource = "0.6"
 uuid = { version = "1.17.0", features = ["v4", "serde"] }
 futures = "0.3"
 tokio-stream = { version = "0.1", features = ["io-util"] }
@@ -73,8 +81,8 @@ rmp = "0.8"
 rmp-serde = "1.1"
 sha2 = "0.10"
 
-# OS Keychain integration for storing secrets securely
-keyring = "2.3"
+# 主机名获取
+hostname = "0.4"
 
 # LLM 提供商 SDK
 async-openai = "0.29"
@@ -128,6 +136,13 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.27", features = ["term", "fs"] }
 libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.25"
+objc = "0.2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = ["Win32_System_Com", "Win32_UI_Shell", "Win32_Foundation"] }
 
 
 

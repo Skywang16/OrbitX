@@ -4,9 +4,11 @@ use tracing::warn;
 
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::persistence::{AgentPersistence, ConversationSummary};
-use crate::llm::registry::LLMRegistry;
+use crate::agent::prompt::components::conversation_summary::{
+    build_conversation_summary_user_prompt, CONVERSATION_SUMMARY_SYSTEM_PROMPT,
+};
+use crate::llm::anthropic_types::{ContentBlock, CreateMessageRequest, MessageContent, MessageParam, SystemPrompt};
 use crate::llm::service::LLMService;
-use crate::llm::types::{LLMMessage, LLMMessageContent, LLMRequest, LLMResponse};
 use crate::storage::repositories::RepositoryManager;
 
 const COMPRESSION_THRESHOLD: f32 = 0.85;
@@ -27,7 +29,6 @@ pub struct ConversationSummarizer {
     conversation_id: i64,
     persistence: Arc<AgentPersistence>,
     repositories: Arc<RepositoryManager>,
-    llm_registry: Arc<LLMRegistry>,
 }
 
 impl ConversationSummarizer {
@@ -35,13 +36,11 @@ impl ConversationSummarizer {
         conversation_id: i64,
         persistence: Arc<AgentPersistence>,
         repositories: Arc<RepositoryManager>,
-        llm_registry: Arc<LLMRegistry>,
     ) -> Self {
         Self {
             conversation_id,
             persistence,
             repositories,
-            llm_registry,
         }
     }
 
@@ -55,7 +54,8 @@ impl ConversationSummarizer {
     pub async fn summarize_if_needed(
         &self,
         model_id: &str,
-        messages: &[LLMMessage],
+        messages: &[MessageParam],
+        _system: &Option<SystemPrompt>,
     ) -> AgentResult<Option<SummaryResult>> {
         if messages.is_empty() {
             return Ok(None);
@@ -69,7 +69,7 @@ impl ConversationSummarizer {
         }
 
         match self
-            .summarize_conversation(model_id, messages, context_window, current_tokens)
+            .summarize_conversation(model_id, messages, current_tokens)
             .await
         {
             Ok(result) => {
@@ -91,7 +91,8 @@ impl ConversationSummarizer {
     pub async fn summarize_now(
         &self,
         model_id: &str,
-        messages: &[LLMMessage],
+        messages: &[MessageParam],
+        _system: &Option<SystemPrompt>,
     ) -> AgentResult<SummaryResult> {
         if messages.is_empty() {
             return Err(AgentError::Internal(
@@ -99,11 +100,10 @@ impl ConversationSummarizer {
             ));
         }
 
-        let context_window = self.lookup_context_window(model_id);
         let current_tokens = estimate_messages_tokens(messages);
 
         match self
-            .summarize_conversation(model_id, messages, context_window, current_tokens)
+            .summarize_conversation(model_id, messages, current_tokens)
             .await
         {
             Ok(result) => {
@@ -125,8 +125,7 @@ impl ConversationSummarizer {
     async fn summarize_conversation(
         &self,
         model_id: &str,
-        messages: &[LLMMessage],
-        _context_window: u32,
+        messages: &[MessageParam],
         current_tokens: u32,
     ) -> AgentResult<SummaryResult> {
         let (summary_scope, recent_tail) = split_messages(messages, RECENT_MESSAGES_TO_KEEP);
@@ -136,16 +135,8 @@ impl ConversationSummarizer {
             ));
         }
 
-        let prompt_messages = self.build_summary_prompt(&summary_scope, &recent_tail);
-        let request = LLMRequest {
-            model: model_id.to_string(),
-            messages: prompt_messages,
-            temperature: Some(0.3),
-            max_tokens: Some(SUMMARY_MAX_TOKENS),
-            tools: None,
-            tool_choice: None,
-            stream: false,
-        };
+        // 构建 Anthropic 请求：system + user(prompt)
+        let request = self.build_summary_request(model_id, &summary_scope);
 
         // LLMService 会在内部将 model 字段转换为 provider-specific 名称
         let llm_service = LLMService::new(self.repositories());
@@ -153,90 +144,72 @@ impl ConversationSummarizer {
             AgentError::Internal(format!("Failed to call LLM for summary generation: {}", e))
         })?;
 
-        if response.content.trim().is_empty() {
+        let summary_text = render_content_blocks(&response.content);
+        if summary_text.trim().is_empty() {
             return Err(AgentError::Internal("LLM summary is empty".to_string()));
         }
 
-        let summary_tokens = response
-            .usage
-            .as_ref()
-            .map(|usage| usage.completion_tokens)
-            .unwrap_or_else(|| estimate_tokens(&response.content));
+        let summary_tokens = response.usage.output_tokens;
         let recent_tokens = estimate_messages_tokens(&recent_tail);
-        let tokens_saved = current_tokens.saturating_sub(summary_tokens + recent_tokens);
+        let new_context_tokens = summary_tokens + recent_tokens;
+
+        // 关键验证：总结后的 token 数不能大于原来的
+        if new_context_tokens >= current_tokens {
+            return Err(AgentError::Internal(format!(
+                "Summary failed: new context ({} tokens) is not smaller than original ({} tokens). Summary might be too verbose.",
+                new_context_tokens, current_tokens
+            )));
+        }
+
+        let tokens_saved = current_tokens.saturating_sub(new_context_tokens);
 
         Ok(SummaryResult {
-            summary: response.content.trim().to_string(),
+            summary: summary_text.trim().to_string(),
             token_count: summary_tokens,
-            cost: extract_cost(&response),
+            cost: extract_cost_from_usage(response.usage.total_tokens()),
             prev_context_tokens: current_tokens,
             messages_before_summary: summary_scope.len(),
             tokens_saved,
         })
     }
 
-    fn build_summary_prompt(
-        &self,
-        summary_scope: &[LLMMessage],
-        recent_tail: &[LLMMessage],
-    ) -> Vec<LLMMessage> {
-        let mut builder = String::new();
-        builder.push_str(
-            "Summarize the following conversation history for an autonomous coding agent.\n",
-        );
-        builder.push_str(
-            "Focus on goals, constraints, tools used, files touched, and unresolved items.\n",
-        );
-        builder.push_str("Return a concise markdown bullet list.\n\n");
-        builder.push_str("<history>\n");
+    fn build_summary_request(&self, model_id: &str, summary_scope: &[MessageParam]) -> CreateMessageRequest {
+        let mut history_builder = String::new();
         for message in summary_scope {
-            builder.push_str(&format!(
-                "[{role}] {content}\n",
-                role = message.role,
-                content = render_message_content(&message.content)
+            history_builder.push_str(&format!(
+                "[{role}] {content}\n\n",
+                role = match message.role { crate::llm::anthropic_types::MessageRole::User => "user", crate::llm::anthropic_types::MessageRole::Assistant => "assistant" },
+                content = render_message_param_content(&message.content)
             ));
         }
-        builder.push_str("</history>\n");
 
-        if !recent_tail.is_empty() {
-            builder.push_str("\nRecent messages that must remain verbatim:\n");
-            for (idx, m) in recent_tail.iter().enumerate() {
-                builder.push_str(&format!(
-                    "- #{index} [{role}] {content}\n",
-                    index = idx + 1,
-                    role = m.role,
-                    content = render_message_content(&m.content)
-                ));
-            }
+        CreateMessageRequest {
+            model: model_id.to_string(),
+            messages: vec![MessageParam { role: crate::llm::anthropic_types::MessageRole::User, content: MessageContent::Text(build_conversation_summary_user_prompt(&history_builder)) }],
+            max_tokens: SUMMARY_MAX_TOKENS,
+            system: Some(SystemPrompt::Text(CONVERSATION_SUMMARY_SYSTEM_PROMPT.to_string())),
+            tools: None,
+            temperature: Some(0.3),
+            stop_sequences: None,
+            stream: false,
+            top_p: None,
+            top_k: None,
+            metadata: None,
         }
-
-        vec![
-            LLMMessage {
-                role: "system".to_string(),
-                content: LLMMessageContent::Text(
-                    "You compress conversation history into a durable memory for an autonomous agent.
-Include key facts, open TODOs, and file references. Do not invent details.".to_string(),
-                ),
-            },
-            LLMMessage {
-                role: "user".to_string(),
-                content: LLMMessageContent::Text(builder),
-            },
-        ]
     }
 
     fn fallback_to_sliding_window(
         &self,
-        messages: &[LLMMessage],
+        messages: &[MessageParam],
         current_tokens: u32,
     ) -> SummaryResult {
         let (summary_scope, _) = split_messages(messages, RECENT_MESSAGES_TO_KEEP);
         let mut text = String::new();
         for message in summary_scope.iter().take(RECENT_MESSAGES_TO_KEEP * 4) {
             text.push_str(&format!(
-                "[{role}] {content}\n",
+                "[{role:?}] {content}\n",
                 role = message.role,
-                content = render_message_content(&message.content)
+                content = render_message_param_content(&message.content)
             ));
         }
         if text.len() > 2000 {
@@ -249,7 +222,7 @@ Include key facts, open TODOs, and file references. Do not invent details.".to_s
                 "Failed to compress via LLM. Retained leading context:\n{}",
                 text
             ),
-            token_count: estimate_tokens(&text),
+            token_count: estimate_text_tokens(&text),
             cost: 0.0,
             prev_context_tokens: current_tokens,
             messages_before_summary: summary_scope.len(),
@@ -271,16 +244,35 @@ Include key facts, open TODOs, and file references. Do not invent details.".to_s
     }
 
     fn lookup_context_window(&self, model_id: &str) -> u32 {
-        self.llm_registry
-            .get_model_max_context(model_id)
-            .unwrap_or(128_000)
+        // 同步获取模型配置中的 context window
+        let model_result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                self.repositories
+                    .ai_models()
+                    .find_by_string_id(model_id)
+                    .await
+            })
+        });
+
+        if let Ok(Some(model)) = model_result {
+            if let Some(options) = model.options {
+                if let Some(max_tokens) = options.get("maxContextTokens") {
+                    if let Some(value) = max_tokens.as_u64() {
+                        return value as u32;
+                    }
+                }
+            }
+        }
+
+        // 默认值：大多数现代 LLM 支持 128K tokens
+        128_000
     }
 }
 
 fn split_messages<'a>(
-    messages: &'a [LLMMessage],
+    messages: &'a [MessageParam],
     tail_keep: usize,
-) -> (Vec<LLMMessage>, Vec<LLMMessage>) {
+) -> (Vec<MessageParam>, Vec<MessageParam>) {
     if messages.len() <= tail_keep {
         return (Vec::new(), messages.to_vec());
     }
@@ -290,48 +282,56 @@ fn split_messages<'a>(
     (summary_scope, recent_tail)
 }
 
-fn estimate_messages_tokens(messages: &[LLMMessage]) -> u32 {
+fn estimate_messages_tokens(messages: &[MessageParam]) -> u32 {
+    use crate::agent::utils::tokenizer::count_message_param_tokens;
     messages
         .iter()
-        .map(|m| estimate_tokens(&render_message_content(&m.content)))
-        .sum()
+        .map(|m| count_message_param_tokens(m) as u32)
+        .fold(0u32, |acc, n| acc.saturating_add(n))
 }
 
-fn estimate_tokens(text: &str) -> u32 {
+fn estimate_text_tokens(text: &str) -> u32 {
     ((text.len() as f32) / 4.0).ceil() as u32
 }
 
-fn render_message_content(content: &LLMMessageContent) -> String {
+fn render_message_param_content(content: &MessageContent) -> String {
     match content {
-        LLMMessageContent::Text(text) => text.trim().to_string(),
-        LLMMessageContent::Parts(parts) => serde_json::to_string(parts).unwrap_or_default(),
+        MessageContent::Text(text) => text.trim().to_string(),
+        MessageContent::Blocks(blocks) => render_content_blocks(blocks),
     }
 }
 
-fn extract_cost(response: &LLMResponse) -> f64 {
-    // 多数供应商需要额外的元数据才能计算成本；此处占位，后续可根据模型信息完善
-    response
-        .usage
-        .as_ref()
-        .map(|usage| (usage.total_tokens as f64) * 0.000_002)
-        .unwrap_or(0.0)
+fn render_content_blocks(blocks: &Vec<ContentBlock>) -> String {
+    let mut out = String::new();
+    for b in blocks {
+        match b {
+            ContentBlock::Text { text, .. } => {
+                if !out.is_empty() { out.push_str("\n"); }
+                out.push_str(text);
+            }
+            ContentBlock::Thinking { thinking, .. } => {
+                // 不放入用户可见摘要
+                let _ = thinking; // 忽略
+            }
+            other => {
+                // 对于非文本块，简化为 JSON 摘要
+                let s = serde_json::to_string(other).unwrap_or_default();
+                if !out.is_empty() { out.push_str("\n"); }
+                out.push_str(&s);
+            }
+        }
+    }
+    out
+}
+
+fn extract_cost_from_usage(total_tokens: u32) -> f64 {
+    // 占位：按 token 数乘以统一单价估算
+    (total_tokens as f64) * 0.000_002
 }
 
 impl ConversationSummarizer {
-    pub fn conversation_id(&self) -> i64 {
-        self.conversation_id
-    }
-
-    pub fn persistence(&self) -> Arc<AgentPersistence> {
-        Arc::clone(&self.persistence)
-    }
-
-    pub fn repositories(&self) -> Arc<RepositoryManager> {
+    fn repositories(&self) -> Arc<RepositoryManager> {
         Arc::clone(&self.repositories)
-    }
-
-    pub fn llm_registry(&self) -> Arc<LLMRegistry> {
-        Arc::clone(&self.llm_registry)
     }
 }
 
@@ -342,14 +342,8 @@ mod tests {
     #[test]
     fn split_messages_handles_short_history() {
         let messages = vec![
-            LLMMessage {
-                role: "system".into(),
-                content: LLMMessageContent::Text("hello".into()),
-            },
-            LLMMessage {
-                role: "user".into(),
-                content: LLMMessageContent::Text("world".into()),
-            },
+            MessageParam { role: crate::llm::anthropic_types::MessageRole::User, content: MessageContent::Text("hello".into()) },
+            MessageParam { role: crate::llm::anthropic_types::MessageRole::Assistant, content: MessageContent::Text("world".into()) },
         ];
 
         let (summary, tail) = split_messages(&messages, 3);
@@ -360,20 +354,11 @@ mod tests {
     #[test]
     fn split_messages_keeps_tail() {
         let messages = (0..5)
-            .map(|i| LLMMessage {
-                role: format!("r{}", i),
-                content: LLMMessageContent::Text(format!("m{}", i)),
-            })
+            .map(|i| MessageParam { role: if i % 2 == 0 { crate::llm::anthropic_types::MessageRole::User } else { crate::llm::anthropic_types::MessageRole::Assistant }, content: MessageContent::Text(format!("m{}", i)) })
             .collect::<Vec<_>>();
 
         let (summary, tail) = split_messages(&messages, 3);
         assert_eq!(summary.len(), 2);
         assert_eq!(tail.len(), 3);
-        assert_eq!(tail[0].role, "r2");
-    }
-
-    #[test]
-    fn estimate_tokens_is_not_zero_for_content() {
-        assert!(estimate_tokens("hello world") > 0);
     }
 }

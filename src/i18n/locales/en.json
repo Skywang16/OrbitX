@@ -41,6 +41,7 @@
   },
   "chat": {
     "new_session": "New Session",
+    "new_session_placeholder": "New Session",
     "session_select": "Select Session",
     "input_placeholder": "Type a message..."
   },
@@ -93,7 +94,7 @@
       "api_url_required": "API URL is required",
       "models": {
         "custom": {
-          "name": "Custom"
+          "name": "OpenAI Compatible"
         }
       }
     }
@@ -107,7 +108,7 @@
     "edit_title": "Edit AI Model",
     "config_type": "Configuration Type",
     "preset_provider": "Preset Provider",
-    "custom_config": "Custom Configuration",
+    "custom_config": "OpenAI Compatible",
     "provider": "Provider",
     "select_provider": "Select Provider",
     "model": "Model",
@@ -123,6 +124,9 @@
     "api_key_placeholder": "Enter your API Key",
     "max_tokens": "Max Tokens",
     "max_tokens_placeholder": "4096",
+    "use_custom_base_url": "Use Custom Base URL",
+    "custom_base_url": "Custom Base URL",
+    "custom_base_url_placeholder": "https://your-custom-api.com/v1",
     "test_connection": "Test Connection",
     "testing": "Testing...",
     "loading": "Loading...",
@@ -138,13 +142,22 @@
     "all_models": "All Models",
     "chat": "Chat",
     "add_chat_model": "Add Chat Model",
+    "context_window": "Context Window (tokens)",
+    "context_window_description": "Maximum context length the model can handle",
+    "max_output_tokens": "Max Output (tokens)",
+    "max_output_tokens_description": "Maximum output length for a single request, -1 uses model default",
+    "advanced_options": "Advanced Options",
+    "feature_support": "Feature Support",
+    "supports_images": "Supports Image Input",
+    "supports_prompt_cache": "Supports Prompt Cache",
     "validation": {
       "api_key_required": "API Key is required",
       "preset_required": "Please select a preset provider",
       "model_required": "Please select a model",
       "config_name_required": "Configuration name is required",
       "api_url_required": "API URL is required",
-      "model_name_required": "Model name is required"
+      "model_name_required": "Model name is required",
+      "custom_base_url_required": "Custom Base URL is required"
     }
   },
   "session": {
@@ -213,12 +226,12 @@
     "data_error": "Data Error"
   },
   "ai_feature": {
-    "user_system_prompt": "User System Prompt",
-    "prompt_placeholder": "Enter your system prompt here, e.g., Please answer all questions in Chinese..."
-  },
-  "ai_model_form": {
-    "api_url": "API URL",
-    "api_key": "API Key"
+    "user_rules": "User Rules",
+    "rules_placeholder": "Enter your rules here",
+    "project_rules": "Project Rules File",
+    "project_rules_description": "Select which project rules file to prioritize",
+    "click_to_switch": "Click to switch",
+    "no_rules_files": "No rules files found in current directory"
   },
   "message_list": {
     "start_conversation": "Start conversation",

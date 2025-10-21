@@ -1,10 +1,11 @@
 import { shellApi, storageApi, terminalApi, terminalContextApi, windowApi, workspaceApi } from '@/api'
 import type { ShellInfo } from '@/api'
 import { useSessionStore } from '@/stores/session'
-import type { RuntimeTerminalState, TerminalState } from '@/types'
+import type { RuntimeTerminalState, TerminalTabState } from '@/types'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
 import { computed, ref, nextTick } from 'vue'
+import { getHandler } from './TabHandlers'
 interface TerminalEventListeners {
   onOutput: (data: string) => void
   onExit: (exitCode: number | null) => void
@@ -65,11 +66,11 @@ export const useTerminalStore = defineStore('Terminal', () => {
     started: CommandEventStartedPayload
     finished: CommandEventFinishedPayload
   }
-  function emitCommandEvent<E extends CommandEventType>(
+  const emitCommandEvent = <E extends CommandEventType>(
     terminalId: number,
     event: E,
     data: CommandEventPayloadMap[E]
-  ): void {
+  ): void => {
     _commandEventListeners.value.forEach(callback => {
       try {
         callback(terminalId, event, data)
@@ -166,7 +167,13 @@ export const useTerminalStore = defineStore('Terminal', () => {
         if (terminal) {
           const previousCwd = terminal.cwd
           terminal.cwd = payload.cwd
-          updateTerminalTitle(terminal, payload.cwd)
+
+          // CWD 变化，更新 SessionStore（仅保存 cwd，不同步 title）
+          const existingTab = sessionStore.tabs.find(t => t.type === 'terminal' && t.id === terminal.id)
+          if (existingTab && existingTab.type === 'terminal') {
+            existingTab.data.cwd = payload.cwd
+            sessionStore.updateTabs([...sessionStore.tabs])
+          }
 
           // 记录工作区到最近列表
           // 排除：1) ~ 目录  2) home 目录  3) 终端的初始目录（首次 CWD 变化）
@@ -275,22 +282,11 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       const defaultShell = await shellApi.getDefaultShell()
 
-      let resolvedCwd = initialDirectory || null
-      try {
-        resolvedCwd = await storageApi.getTerminalCwd(paneId)
-      } catch (error) {
-        console.warn('获取终端工作目录失败，使用回退目录:', error)
-      }
-
       const terminal: RuntimeTerminalState = {
         id: paneId,
-        title: defaultShell.name,
-        cwd: resolvedCwd || initialDirectory || '~',
-        active: false,
+        cwd: initialDirectory || '~',
         shell: defaultShell.name,
       }
-
-      updateTerminalTitle(terminal, terminal.cwd)
 
       const existingIndex = terminals.value.findIndex(t => t.id === paneId)
       if (existingIndex !== -1) {
@@ -298,9 +294,19 @@ export const useTerminalStore = defineStore('Terminal', () => {
       }
       terminals.value.push(terminal)
 
-      await setActiveTerminal(paneId)
+      // 添加到 SessionStore（不包含 title，直接使用 paneId 作为 ID）
+      sessionStore.addTab({
+        type: 'terminal',
+        id: paneId,
+        isActive: false,
+        data: {
+          shell: terminal.shell,
+          shellType: terminal.shell,
+          cwd: terminal.cwd,
+        },
+      })
 
-      // setActiveTerminal已经会调用syncToSessionStore和保存，不需要再次调用
+      await setActiveTerminal(paneId)
 
       return paneId
     })
@@ -321,13 +327,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       await terminalApi.closeTerminal(id)
 
+      // 从 SessionStore 删除（直接使用 paneId）
+      sessionStore.removeTab(id)
+
       await cleanupTerminalState(id)
-      // cleanupTerminalState内部可能会调用setActiveTerminal，它已经会保存状态
-      // 如果没有其他终端了，手动同步并保存
-      if (terminals.value.length === 0) {
-        syncToSessionStore()
-        sessionStore.setActiveTabId(null)
-      }
     })
   }
 
@@ -355,16 +358,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
     activeTerminalId.value = id
 
-    terminals.value.forEach(terminal => {
-      terminal.active = terminal.id === id
-    })
-
     await terminalContextApi.setActivePaneId(id)
 
-    // 统一在最后同步并保存一次，避免多次调用
-    // sessionStore.setActiveTabId内部会调用saveSessionState，所以这里只需要同步状态即可
-    syncToSessionStore()
-    sessionStore.setActiveTabId(id)
+    // 更新 SessionStore 的活跃 tab（直接使用 paneId）
+    sessionStore.setActiveTab(id)
   }
 
   const writeToTerminal = async (id: number, data: string) => {
@@ -390,54 +387,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
       cols,
     })
   }
-
-  const updateTerminalTitle = (terminal: RuntimeTerminalState, cwd: string) => {
-    try {
-      if (terminal.shell === 'agent') {
-        return
-      }
-
-      let displayPath = cwd
-
-      // 使用缓存的 home 目录（如果有）
-      if (_homeDirectory && cwd.startsWith(_homeDirectory)) {
-        displayPath = cwd.replace(_homeDirectory, '~')
-      }
-
-      const pathParts = displayPath.split(/[/\\]/).filter(part => part.length > 0)
-
-      let newTitle: string
-
-      if (displayPath === '~') {
-        newTitle = displayPath
-      } else {
-        const parts = displayPath === '/' ? [] : pathParts
-        if (parts.length === 0) {
-          newTitle = '/'
-        } else {
-          newTitle = parts.slice(-2).join('/')
-          if (parts.length > 3) {
-            newTitle = `…/${newTitle}`
-          }
-        }
-      }
-
-      if (newTitle.length > 30) {
-        newTitle = `…${newTitle.slice(-27)}`
-      }
-
-      if (terminal.title !== newTitle) {
-        terminal.title = newTitle
-      }
-    } catch (error) {
-      console.error('更新终端标题时发生错误:', error)
-      const fallbackTitle = cwd.split(/[/\\]/).pop() || 'Terminal'
-      if (terminal.title !== fallbackTitle) {
-        terminal.title = fallbackTitle
-      }
-    }
-  }
-
   const loadAvailableShells = async () => {
     shellManager.value.isLoading = true
     shellManager.value.error = null
@@ -446,17 +395,12 @@ export const useTerminalStore = defineStore('Terminal', () => {
     shellManager.value.isLoading = false
   }
 
-  const createAgentTerminal = async (agentName: string = 'AI Agent', initialDirectory?: string): Promise<number> => {
+  const createAgentTerminal = async (initialDirectory?: string): Promise<number> => {
     return queueOperation(async () => {
-      const agentTerminalTitle = agentName
-
-      const existingAgentTerminal = terminals.value.find(
-        terminal => terminal.shell === 'agent' && terminal.title === agentName
-      )
+      const existingAgentTerminal = terminals.value.find(terminal => terminal.shell === 'agent')
 
       if (existingAgentTerminal) {
         await setActiveTerminal(existingAgentTerminal.id)
-        existingAgentTerminal.title = agentTerminalTitle
         return existingAgentTerminal.id
       }
 
@@ -466,18 +410,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
         cwd: initialDirectory,
       })
 
-      let resolvedCwd = initialDirectory || null
-      try {
-        resolvedCwd = await storageApi.getTerminalCwd(paneId)
-      } catch (error) {
-        console.warn('获取Agent终端工作目录失败，使用回退目录:', error)
-      }
-
       const terminal: RuntimeTerminalState = {
         id: paneId,
-        title: agentTerminalTitle,
-        cwd: resolvedCwd || initialDirectory || '~',
-        active: false,
+        cwd: initialDirectory || '~',
         shell: 'agent',
       }
 
@@ -486,17 +421,27 @@ export const useTerminalStore = defineStore('Terminal', () => {
         terminals.value.splice(existingIndex, 1)
       }
       terminals.value.push(terminal)
+
+      sessionStore.addTab({
+        type: 'terminal',
+        id: paneId,
+        isActive: false,
+        data: {
+          shell: terminal.shell,
+          shellType: terminal.shell,
+          cwd: terminal.cwd,
+        },
+      })
+
       await new Promise(resolve => setTimeout(resolve, 100))
       await setActiveTerminal(paneId)
-      // setActiveTerminal已经会同步并保存状态
+
       return paneId
     })
   }
 
   const createTerminalWithShell = async (shellName: string): Promise<number> => {
     return queueOperation(async () => {
-      const title = shellName
-
       const shellInfo = shellManager.value.availableShells.find(s => s.name === shellName)
       if (!shellInfo) {
         throw new Error(`未找到shell: ${shellName}`)
@@ -508,18 +453,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
         cols: 80,
       })
 
-      let resolvedCwd = shellInfo.path || null
-      try {
-        resolvedCwd = await storageApi.getTerminalCwd(paneId)
-      } catch (error) {
-        console.warn(`获取Shell(${shellName})终端工作目录失败，使用默认路径:`, error)
-      }
-
       const terminal: RuntimeTerminalState = {
         id: paneId,
-        title,
-        cwd: resolvedCwd || shellInfo.path || '~',
-        active: false,
+        cwd: shellInfo.path || '~',
         shell: shellInfo.name,
       }
 
@@ -529,8 +465,18 @@ export const useTerminalStore = defineStore('Terminal', () => {
       }
       terminals.value.push(terminal)
 
+      sessionStore.addTab({
+        type: 'terminal',
+        id: paneId,
+        isActive: false,
+        data: {
+          shell: terminal.shell,
+          shellType: terminal.shell,
+          cwd: terminal.cwd,
+        },
+      })
+
       await setActiveTerminal(paneId)
-      // setActiveTerminal已经会同步并保存状态
 
       return paneId
     })
@@ -540,103 +486,112 @@ export const useTerminalStore = defineStore('Terminal', () => {
     await loadAvailableShells()
   }
 
-  const syncToSessionStore = () => {
-    const terminalStates: TerminalState[] = terminals.value.map(terminal => ({
-      id: terminal.id,
-      title: terminal.title,
-      active: terminal.id === activeTerminalId.value,
-      shell: terminal.shell,
-    }))
-
-    sessionStore.updateTerminals(terminalStates)
-    sessionStore.setActiveTabId(activeTerminalId.value)
-  }
-
   const restoreFromSessionState = async () => {
-    if (!sessionStore.initialized) {
-      await sessionStore.initialize()
-    }
+    await sessionStore.initialize()
 
-    const savedTerminals = sessionStore.terminals || []
-    let runtimeTerminals: RuntimeTerminalState[] = []
-
+    // 1. 从后端获取运行时终端状态（进程是否还活着）
+    let runtimeStates: RuntimeTerminalState[] = []
     try {
-      runtimeTerminals = await storageApi.getTerminalsState()
+      runtimeStates = await storageApi.getTerminalsState()
     } catch (error) {
-      console.error('加载终端运行时状态失败:', error)
+      console.error('获取终端运行时状态失败:', error)
+      return false
     }
 
-    const runtimeMap = new Map<number, RuntimeTerminalState>()
-    runtimeTerminals.forEach(runtime => {
-      runtimeMap.set(runtime.id, runtime)
+    // 2. 从 SessionStore 获取保存的 tabs
+    const allTabs = sessionStore.tabs
+    const terminalTabs = allTabs.filter((t): t is TerminalTabState => t.type === 'terminal')
+
+    // 3. 构建运行时 Map，快速查找
+    const runtimeMap = new Map(runtimeStates.map(r => [r.id, r]))
+
+    // 4. 恢复逻辑：按 session 顺序处理终端 tabs
+    const restored: RuntimeTerminalState[] = []
+    const restoredTabIds = new Set<number>()
+
+    for (const tab of terminalTabs) {
+      const runtime = runtimeMap.get(tab.id)
+
+      if (runtime) {
+        // 进程还活着 → 用运行时数据（cwd 可能已经变化）
+        restored.push(runtime)
+        restoredTabIds.add(tab.id)
+        runtimeMap.delete(tab.id)
+      } else {
+        // 进程死了 → 从 session 数据重新创建终端进程
+        console.warn(`终端 ${tab.id} 进程已终止，尝试重新创建`)
+        try {
+          const shellName = tab.data.shell || 'default'
+          const cwd = tab.data.cwd
+
+          const paneId = await terminalApi.createTerminal({
+            rows: 24,
+            cols: 80,
+            cwd,
+          })
+
+          const newTerminal: RuntimeTerminalState = {
+            id: paneId,
+            cwd: cwd || '~',
+            shell: shellName,
+          }
+
+          restored.push(newTerminal)
+          restoredTabIds.add(paneId)
+
+          // 更新 SessionStore 中的 tab ID（新进程新 paneId）
+          tab.id = paneId
+        } catch (error) {
+          console.error(`重新创建终端失败:`, error)
+        }
+      }
+    }
+
+    // 5. 后端有但 session 没有的终端（孤儿进程）→ 也保留
+    if (runtimeMap.size > 0) {
+      console.warn(`发现 ${runtimeMap.size} 个孤儿终端进程，将保留`)
+      for (const runtime of runtimeMap.values()) {
+        restored.push(runtime)
+        restoredTabIds.add(runtime.id)
+
+        // 添加到 SessionStore
+        allTabs.push({
+          type: 'terminal',
+          id: runtime.id,
+          isActive: false,
+          data: {
+            shell: runtime.shell,
+            shellType: runtime.shell,
+            cwd: runtime.cwd,
+          },
+        })
+      }
+    }
+
+    // 6. 更新 terminals 和 SessionStore
+    terminals.value = restored
+
+    // 重新构建 tabs：保持原始顺序，只过滤掉恢复失败的终端
+    const finalTabs = allTabs.filter(tab => {
+      if (tab.type === 'terminal') {
+        // 终端 tab：只保留成功恢复的
+        return restoredTabIds.has(tab.id)
+      } else {
+        // 非终端 tab（如 Settings）：直接保留
+        return true
+      }
     })
 
-    const restored: RuntimeTerminalState[] = []
+    sessionStore.updateTabs(finalTabs)
 
-    for (const saved of savedTerminals) {
-      const runtime = runtimeMap.get(saved.id)
-      if (!runtime) {
-        continue
-      }
-
-      restored.push({
-        ...runtime,
-        title: saved.title || runtime.title,
-      })
-
-      runtimeMap.delete(saved.id)
+    const activeTab = finalTabs.find(t => t.isActive)
+    if (activeTab) {
+      await getHandler(activeTab.type).activate(activeTab.id)
+    } else if (finalTabs.length > 0) {
+      await getHandler(finalTabs[0].type).activate(finalTabs[0].id)
     }
 
-    for (const runtime of runtimeMap.values()) {
-      restored.push(runtime)
-    }
-
-    terminals.value = restored
-    activeTerminalId.value = null
-
-    const normalizePaneId = (value: unknown): number | null => {
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        return value
-      }
-      if (typeof value === 'string' && value.trim().length > 0) {
-        const parsed = Number.parseInt(value, 10)
-        return Number.isNaN(parsed) ? null : parsed
-      }
-      return null
-    }
-
-    const savedActiveFromSession = normalizePaneId(sessionStore.sessionState.activeTabId)
-    const savedActiveTerminalId = normalizePaneId(savedTerminals.find(t => t.active)?.id)
-    const runtimeActiveTerminal = terminals.value.find(t => t.active)
-
-    let targetActiveId: number | null = null
-
-    if (savedActiveFromSession && terminals.value.some(t => t.id === savedActiveFromSession)) {
-      targetActiveId = savedActiveFromSession
-    } else if (savedActiveTerminalId && terminals.value.some(t => t.id === savedActiveTerminalId)) {
-      targetActiveId = savedActiveTerminalId
-    } else if (runtimeActiveTerminal) {
-      targetActiveId = runtimeActiveTerminal.id
-    } else if (terminals.value.length > 0) {
-      targetActiveId = terminals.value[0].id
-    }
-
-    if (targetActiveId != null) {
-      await setActiveTerminal(targetActiveId)
-      return true
-    }
-
-    if (terminals.value.length === 0) {
-      await createTerminal()
-      return true
-    }
-
-    return terminals.value.length > 0
-  }
-
-  const saveSessionState = async () => {
-    syncToSessionStore()
-    await sessionStore.saveSessionState()
+    return finalTabs.length > 0
   }
 
   const initializeTerminalStore = async () => {
@@ -666,9 +621,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     resizeTerminal,
     createTerminalWithShell,
     initializeShellManager,
-    syncToSessionStore,
     restoreFromSessionState,
-    saveSessionState,
     initializeTerminalStore,
     subscribeToCommandEvents,
     emitCommandEvent,

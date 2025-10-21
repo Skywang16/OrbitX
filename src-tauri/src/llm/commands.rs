@@ -2,33 +2,28 @@ use std::sync::Arc;
 use tauri::{ipc::Channel, State};
 use tokio_stream::StreamExt;
 
-use super::{
-    registry::{LLMRegistry, ModelInfo, ProviderInfo},
-    service::LLMService,
-    types::{LLMProviderType, LLMRequest, LLMResponse, LLMStreamChunk},
-};
+use super::{provider_registry::ProviderRegistry, service::LLMService};
+use crate::llm::anthropic_types::{CreateMessageRequest, Message, StreamEvent};
 use crate::storage::repositories::RepositoryManager;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 
 pub struct LLMManagerState {
     pub service: Arc<LLMService>,
-    pub registry: Arc<LLMRegistry>,
 }
 
 impl LLMManagerState {
     pub fn new(repositories: Arc<RepositoryManager>) -> Self {
         let service = Arc::new(LLMService::new(repositories.clone()));
-        let registry = Arc::new(LLMRegistry::new());
-        Self { service, registry }
+        Self { service }
     }
 }
 
 #[tauri::command]
 pub async fn llm_call(
     state: State<'_, LLMManagerState>,
-    request: LLMRequest,
-) -> TauriApiResult<LLMResponse> {
+    request: CreateMessageRequest,
+) -> TauriApiResult<Message> {
     match state.service.call(request).await {
         Ok(response) => Ok(api_success!(response)),
         Err(_) => Ok(api_error!("llm.call_failed")),
@@ -38,8 +33,8 @@ pub async fn llm_call(
 #[tauri::command]
 pub async fn llm_call_stream(
     state: State<'_, LLMManagerState>,
-    request: LLMRequest,
-    on_chunk: Channel<LLMStreamChunk>,
+    request: CreateMessageRequest,
+    on_chunk: Channel<StreamEvent>,
 ) -> TauriApiResult<EmptyData> {
     tracing::debug!("Starting stream call for model: {}", request.model);
 
@@ -59,7 +54,6 @@ pub async fn llm_call_stream(
 
         match chunk_result {
             Ok(chunk) => {
-                // tracing::debug!("Sending chunk to frontend: {:?}", chunk);
                 if let Err(e) = on_chunk.send(chunk) {
                     tracing::error!("Failed to send chunk: {}", e);
                     break;
@@ -67,8 +61,11 @@ pub async fn llm_call_stream(
             }
             Err(e) => {
                 tracing::error!("Stream error: {}", e);
-                let error_chunk = LLMStreamChunk::Error {
-                    error: e.to_string(),
+                let error_chunk = StreamEvent::Error {
+                    error: crate::llm::anthropic_types::ErrorData {
+                        error_type: "stream_error".to_string(),
+                        message: e.to_string(),
+                    },
                 };
                 if let Err(e) = on_chunk.send(error_chunk) {
                     tracing::error!("Failed to send error chunk: {}", e);
@@ -108,52 +105,12 @@ pub async fn llm_test_model_connection(
 /// 获取所有供应商信息
 #[tauri::command]
 pub async fn llm_get_providers(
-    state: State<'_, LLMManagerState>,
-) -> TauriApiResult<Vec<ProviderInfo>> {
-    let providers = state
-        .registry
-        .get_all_providers()
+    _state: State<'_, LLMManagerState>,
+) -> TauriApiResult<Vec<super::provider_registry::ProviderMetadata>> {
+    let providers = ProviderRegistry::global()
+        .get_all_providers_metadata()
         .into_iter()
         .cloned()
         .collect();
     Ok(api_success!(providers))
-}
-
-/// 获取指定供应商的模型列表
-#[tauri::command]
-pub async fn llm_get_provider_models(
-    state: State<'_, LLMManagerState>,
-    provider_type: LLMProviderType,
-) -> TauriApiResult<Vec<ModelInfo>> {
-    let models = state
-        .registry
-        .get_models_for_provider(&provider_type)
-        .into_iter()
-        .cloned()
-        .collect();
-    Ok(api_success!(models))
-}
-
-/// 根据模型ID获取模型信息
-#[tauri::command]
-pub async fn llm_get_model_info(
-    state: State<'_, LLMManagerState>,
-    model_id: String,
-) -> TauriApiResult<Option<(ProviderInfo, ModelInfo)>> {
-    let model_info = state
-        .registry
-        .find_model(&model_id)
-        .map(|(provider, model)| (provider.clone(), model.clone()));
-    Ok(api_success!(model_info))
-}
-
-/// 检查模型是否支持指定功能
-#[tauri::command]
-pub async fn llm_check_model_feature(
-    state: State<'_, LLMManagerState>,
-    model_id: String,
-    feature: String,
-) -> TauriApiResult<bool> {
-    let supports = state.registry.model_supports_feature(&model_id, &feature);
-    Ok(api_success!(supports))
 }

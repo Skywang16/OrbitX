@@ -31,15 +31,17 @@ export class AgentApi {
    * @param chatMode 聊天模式 ('chat' | 'agent')
    * @returns 返回任务进度流
    */
-  async executeTask(
+  executeTask = async (
     userPrompt: string,
     conversationId: number,
-    chatMode: 'chat' | 'agent' = 'agent'
-  ): Promise<TaskProgressStream> {
+    chatMode: 'chat' | 'agent' = 'agent',
+    modelId: string
+  ): Promise<TaskProgressStream> => {
     const params: ExecuteTaskParams = {
       conversationId,
       userPrompt,
       chatMode,
+      modelId,
     }
 
     const stream = agentChannelApi.createTaskStream(params)
@@ -51,7 +53,7 @@ export class AgentApi {
    * 暂停正在执行的任务
    * @param taskId 任务ID
    */
-  async pauseTask(taskId: string): Promise<void> {
+  pauseTask = async (taskId: string): Promise<void> => {
     await invoke('agent_pause_task', { taskId })
   }
 
@@ -60,7 +62,7 @@ export class AgentApi {
    * @param taskId 任务ID
    * @returns 返回任务进度流
    */
-  async resumeTask(taskId: string): Promise<TaskProgressStream> {
+  resumeTask = async (taskId: string): Promise<TaskProgressStream> => {
     const stream = agentChannelApi.createResumeStream(taskId)
 
     return this.createProgressStreamFromReadableStream(stream)
@@ -71,7 +73,7 @@ export class AgentApi {
    * @param taskId 任务ID
    * @param reason 取消原因
    */
-  async cancelTask(taskId: string, reason?: string): Promise<void> {
+  cancelTask = async (taskId: string, reason?: string): Promise<void> => {
     await invoke('agent_cancel_task', { taskId, reason })
   }
 
@@ -80,7 +82,7 @@ export class AgentApi {
    * @param filters 过滤条件
    * @returns 任务摘要列表
    */
-  async listTasks(filters?: TaskListFilter): Promise<TaskSummary[]> {
+  listTasks = async (filters?: TaskListFilter): Promise<TaskSummary[]> => {
     return await invoke<TaskSummary[]>('agent_list_tasks', {
       conversationId: filters?.conversationId,
       statusFilter: filters?.status,
@@ -95,7 +97,7 @@ export class AgentApi {
    * @param workspacePath 工作空间路径
    * @returns 会话ID
    */
-  async createConversation(title?: string, workspacePath?: string): Promise<number> {
+  createConversation = async (title?: string, workspacePath?: string): Promise<number> => {
     return await invoke<number>('agent_create_conversation', { title, workspacePath })
   }
 
@@ -105,7 +107,7 @@ export class AgentApi {
    * @param offset 偏移量
    * @returns 会话列表
    */
-  async listConversations(): Promise<ChatConversation[]> {
+  listConversations = async (): Promise<ChatConversation[]> => {
     const conversations = await invoke<UiConversation[]>('agent_ui_get_conversations')
     return conversations.map(record => this.convertUiConversation(record))
   }
@@ -114,7 +116,7 @@ export class AgentApi {
    * 删除会话
    * @param conversationId 会话ID
    */
-  async deleteConversation(conversationId: number): Promise<void> {
+  deleteConversation = async (conversationId: number): Promise<void> => {
     await invoke('agent_delete_conversation', { conversationId })
   }
 
@@ -123,12 +125,12 @@ export class AgentApi {
    * @param conversationId 会话ID
    * @param title 新标题
    */
-  async updateConversationTitle(conversationId: number, title: string): Promise<void> {
+  updateConversationTitle = async (conversationId: number, title: string): Promise<void> => {
     await invoke('agent_update_conversation_title', { conversationId, title })
   }
 
   /** 获取单个会话 */
-  async getConversation(conversationId: number): Promise<ChatConversation> {
+  getConversation = async (conversationId: number): Promise<ChatConversation> => {
     const conversations = await this.listConversations()
     const target = conversations.find(convo => convo.id === conversationId)
     if (!target) {
@@ -142,7 +144,7 @@ export class AgentApi {
    * @param taskId 任务ID
    * @returns 任务详细信息
    */
-  async getTask(taskId: string): Promise<TaskSummary> {
+  getTask = async (taskId: string): Promise<TaskSummary> => {
     const tasks = await this.listTasks()
     const task = tasks.find(t => t.taskId === taskId)
 
@@ -156,7 +158,7 @@ export class AgentApi {
   /**
    * 获取会话消息（UI轨）
    */
-  async getMessages(conversationId: number): Promise<Message[]> {
+  getMessages = async (conversationId: number): Promise<Message[]> => {
     const uiMessages = await invoke<UiMessage[]>('agent_ui_get_messages', {
       conversationId,
     })
@@ -168,7 +170,7 @@ export class AgentApi {
    * @param taskId 任务ID
    * @param command 控制命令
    */
-  async sendCommand(taskId: string, command: TaskControlCommand): Promise<void> {
+  sendCommand = async (taskId: string, command: TaskControlCommand): Promise<void> => {
     switch (command.type) {
       case 'pause':
         await this.pauseTask(taskId)
@@ -317,7 +319,7 @@ export class AgentApi {
     return taskProgressStream
   }
 
-  private convertUiMessage(message: UiMessage): Message {
+  private convertUiMessage = (message: UiMessage): Message => {
     const toDate = (timestamp: number) => new Date(timestamp * 1000)
     const base: Message = {
       id: message.id,
@@ -341,7 +343,7 @@ export class AgentApi {
     }
   }
 
-  private convertUiConversation(record: UiConversation): ChatConversation {
+  private convertUiConversation = (record: UiConversation): ChatConversation => {
     const toDate = (timestamp: number) => new Date(timestamp * 1000)
     return {
       id: record.id,
