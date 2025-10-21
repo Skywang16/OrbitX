@@ -143,7 +143,7 @@ cocoa = "0.25"
 objc = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58", features = ["Win32_System_Com", "Win32_UI_Shell", "Win32_Foundation"] }
+windows = { version = "0.58", features = ["Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_Foundation"] }
 
 
 

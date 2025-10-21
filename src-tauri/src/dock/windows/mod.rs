@@ -43,12 +43,10 @@ impl<R: Runtime> WindowsJumpList<R> {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
 
-        use windows::core::{HSTRING, PCWSTR};
+        use windows::core::{HSTRING, PCWSTR, Interface, IUnknown};
         use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
-        use windows::Win32::UI::Shell::{
-            DestinationList, ICustomDestinationList, IObjectArray, IObjectCollection, ShellLink,
-            IShellLinkW,
-        };
+        use windows::Win32::UI::Shell::{DestinationList, ICustomDestinationList, IShellLinkW, ShellLink};
+        use windows::Win32::UI::Shell::Common::{EnumerableObjectCollection, IObjectArray, IObjectCollection};
 
         // Create destination list
         let dest_list: ICustomDestinationList =
@@ -62,7 +60,7 @@ impl<R: Runtime> WindowsJumpList<R> {
             .map_err(|e| format!("Failed to begin list: {:?}", e))?;
 
         // Build custom category from current tabs (limit to avoid oversized lists)
-        let collection: IObjectCollection = CoCreateInstance(&windows::Win32::UI::Shell::EnumerableObjectCollection, None, CLSCTX_INPROC_SERVER)
+        let collection: IObjectCollection = CoCreateInstance(&EnumerableObjectCollection, None, CLSCTX_INPROC_SERVER)
             .map_err(|e| format!("Failed to create EnumerableObjectCollection: {:?}", e))?;
 
         // Resolve current exe path
@@ -96,12 +94,16 @@ impl<R: Runtime> WindowsJumpList<R> {
 
             // Add to collection
             collection
-                .AddObject(link.cast().unwrap())
+                .AddObject(
+                    link
+                        .cast::<IUnknown>()
+                        .map_err(|e| format!("Failed to cast IShellLink to IUnknown: {:?}", e))?,
+                )
                 .map_err(|e| format!("Failed to add link to collection: {:?}", e))?;
         }
 
         let tasks: IObjectArray = collection
-            .cast()
+            .cast::<IObjectArray>()
             .map_err(|e| format!("Failed to cast collection to IObjectArray: {:?}", e))?;
 
         let category_name = HSTRING::from("Tabs");
