@@ -113,7 +113,7 @@ impl ConfigPaths {
         {
             let config_dir =
                 dirs::config_dir().ok_or(ConfigPathsError::ConfigDirectoryUnavailable)?;
-            Ok(config_dir.join("orbitx"))
+            Ok(config_dir.join(app_name.to_lowercase()))
         }
 
         #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
