@@ -94,10 +94,6 @@
     formData.useCustomBaseUrl = false
   }
 
-  const handleModelChange = (value: string) => {
-    // Model selection updated
-  }
-
   const handleUseCustomBaseUrlChange = () => {
     if (formData.useCustomBaseUrl) {
       formData.apiUrl = ''
@@ -201,12 +197,7 @@
         <div class="form-row">
           <div class="form-group full-width">
             <label class="form-label">{{ t('ai_model.model') }}</label>
-            <x-select
-              v-model="formData.model"
-              :options="availableModels"
-              :placeholder="t('ai_model.select_model')"
-              @update:modelValue="handleModelChange"
-            />
+            <x-select v-model="formData.model" :options="availableModels" :placeholder="t('ai_model.select_model')" />
             <div v-if="errors.model" class="error-message">{{ errors.model }}</div>
           </div>
         </div>
