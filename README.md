@@ -15,6 +15,12 @@
 - 主题与配置可定制（见 `config/`）
 - Pinia 管理应用状态
 
+## 预览
+
+![alt text](image.png)
+![alt text](image-1.png)
+![alt text](image-2.png)
+
 ## 技术栈
 
 - 前端：Vue 3 + TypeScript + Vite
