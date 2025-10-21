@@ -40,42 +40,74 @@ impl<R: Runtime> WindowsJumpList<R> {
     }
 
     unsafe fn update_jump_list(&self, tabs: &[crate::dock::state::TabEntry]) -> Result<(), String> {
-        use windows::core::HSTRING;
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+
+        use windows::core::{HSTRING, PCWSTR};
         use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
         use windows::Win32::UI::Shell::{
-            CLSID_DestinationList, CLSID_EnumerableObjectCollection, DestinationList,
-            ICustomDestinationList, IObjectArray, IObjectCollection,
+            DestinationList, ICustomDestinationList, IObjectArray, IObjectCollection, ShellLink,
+            IShellLinkW,
         };
 
         // Create destination list
         let dest_list: ICustomDestinationList =
-            CoCreateInstance(&CLSID_DestinationList, None, CLSCTX_INPROC_SERVER)
+            CoCreateInstance(&DestinationList, None, CLSCTX_INPROC_SERVER)
                 .map_err(|e| format!("Failed to create ICustomDestinationList: {:?}", e))?;
 
         // Begin list
-        let mut min_slots = 0u32;
-        let removed: IObjectArray = dest_list
-            .BeginList(&mut min_slots)
+        let mut _min_slots = 0u32;
+        let _removed: IObjectArray = dest_list
+            .BeginList(&mut _min_slots)
             .map_err(|e| format!("Failed to begin list: {:?}", e))?;
 
-        // Create object collection for custom category
-        let collection: IObjectCollection = CoCreateInstance(
-            &CLSID_EnumerableObjectCollection,
-            None,
-            CLSCTX_INPROC_SERVER,
-        )
-        .map_err(|e| format!("Failed to create IObjectCollection: {:?}", e))?;
+        // Build custom category from current tabs (limit to avoid oversized lists)
+        let collection: IObjectCollection = CoCreateInstance(&windows::Win32::UI::Shell::EnumerableObjectCollection, None, CLSCTX_INPROC_SERVER)
+            .map_err(|e| format!("Failed to create EnumerableObjectCollection: {:?}", e))?;
 
-        if !tabs.is_empty() {
-            let category_name = HSTRING::from("Tabs");
-            let tasks: IObjectArray = collection
-                .cast()
-                .map_err(|e| format!("Failed to cast to IObjectArray: {:?}", e))?;
+        // Resolve current exe path
+        let exe_path = std::env::current_exe()
+            .map_err(|e| format!("Failed to get current exe path: {e}"))?;
+        let exe_w: Vec<u16> = exe_path
+            .as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
 
-            dest_list
-                .AppendCategory(&category_name, &tasks)
-                .map_err(|e| format!("Failed to append category: {:?}", e))?;
+        for tab in tabs.iter().take(10) {
+            // Create a shell link to the current executable with arguments to identify the tab
+            let link: IShellLinkW =
+                CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
+                    .map_err(|e| format!("Failed to create IShellLink: {:?}", e))?;
+
+            link
+                .SetPath(PCWSTR(exe_w.as_ptr()))
+                .map_err(|e| format!("Failed to SetPath on IShellLink: {:?}", e))?;
+
+            let args = format!("--activate-tab {}", tab.id);
+            let args_w: Vec<u16> = OsStr::new(&args).encode_wide().chain(Some(0)).collect();
+            link
+                .SetArguments(PCWSTR(args_w.as_ptr()))
+                .map_err(|e| format!("Failed to SetArguments on IShellLink: {:?}", e))?;
+
+            // Optionally set description (title) via IPropertyStore if needed in future
+            // let prop_store: IPropertyStore = link.cast()?;
+            // prop_store.SetValue(&PKEY_Title, &PropVariantFromString(...))?;
+
+            // Add to collection
+            collection
+                .AddObject(link.cast().unwrap())
+                .map_err(|e| format!("Failed to add link to collection: {:?}", e))?;
         }
+
+        let tasks: IObjectArray = collection
+            .cast()
+            .map_err(|e| format!("Failed to cast collection to IObjectArray: {:?}", e))?;
+
+        let category_name = HSTRING::from("Tabs");
+        dest_list
+            .AppendCategory(&category_name, &tasks)
+            .map_err(|e| format!("Failed to append custom category: {:?}", e))?;
 
         // Commit the list
         dest_list
@@ -87,6 +119,6 @@ impl<R: Runtime> WindowsJumpList<R> {
     }
 }
 
-impl Drop for WindowsJumpList {
+impl<R: Runtime> Drop for WindowsJumpList<R> {
     fn drop(&mut self) {}
 }
