@@ -1,44 +1,48 @@
 # OrbitX
 
-一款跨平台终端应用，内置基础 AI 助手能力。基于 Vue 3 与 Tauri 构建。
+[中文](./README_zh.md) | English
+
+A cross-platform terminal application with built-in AI assistant capabilities. Built with Vue 3 and Tauri.
 
 ![CI](https://img.shields.io/github/actions/workflow/status/Skywang16/OrbitX/ci.yml?branch=main&label=CI)
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Release](https://img.shields.io/github/v/release/Skywang16/OrbitX)](https://github.com/Skywang16/OrbitX/releases)
 
-> 平台支持：当前仅适配 macOS（Windows/Linux 正在适配中）
+> Platform Support: Currently macOS only (Windows/Linux support coming soon)
 
-## 特性
+## Features
 
-- 跨平台目标：Windows / macOS / Linux（当前仅适配 macOS）
-- 基于 Tauri，体积小、资源占用低
-- xterm.js 终端，支持常用插件（搜索、链接、自适应尺寸）
-- 主题与配置可定制（见 `config/`）
-- Pinia 管理应用状态
+- Cross-platform: Windows / macOS / Linux (currently macOS only)
+- Built with Tauri - small size, low resource usage
+- xterm.js terminal with plugins (search, links, auto-fit)
+- Customizable themes and configuration (see `config/`)
+- AI assistant integration with multiple providers
+- State management with Pinia
 
-## 预览
+## Screenshots
 
 ![alt text](image.png)
 ![alt text](image-1.png)
 ![alt text](image-2.png)
 
-## 技术栈
+## Tech Stack
 
-- 前端：Vue 3 + TypeScript + Vite
-- 桌面框架：Tauri 2
-- 终端：xterm.js
-- 状态管理：Pinia
-- 后端（Tauri）：Rust
+- Frontend: Vue 3 + TypeScript + Vite
+- Desktop Framework: Tauri 2
+- Terminal: xterm.js
+- State Management: Pinia
+- Backend (Tauri): Rust
 
-## 开发环境与依赖
+## Prerequisites
 
 - Node.js 18+
-- Rust stable（建议与 CI 一致）
-- 系统依赖：
-  - macOS：Xcode Command Line Tools
-  - Windows：Visual Studio Build Tools（含 C++ 工具集）、WebView2 Runtime
-  - Ubuntu/Debian：`libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf`
+- Rust stable (recommended to match CI version)
+- System dependencies:
+  - macOS: Xcode Command Line Tools
+  - Windows: Visual Studio Build Tools (with C++ toolset), WebView2 Runtime
+  - Ubuntu/Debian: `libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf`
 
-## 安装
+## Installation
 
 ```bash
 git clone https://github.com/Skywang16/OrbitX.git
@@ -46,96 +50,96 @@ cd OrbitX
 npm install
 ```
 
-### 可选：安装 Tauri CLI
+### Optional: Install Tauri CLI
 
 ```bash
 npm install -g @tauri-apps/cli
 ```
 
-## 本地开发
+## Development
 
 ```bash
-# 启动前端开发服务器
+# Start frontend dev server
 npm run dev
 
-# 在另一个终端启动 Tauri 开发模式
+# In another terminal, start Tauri in dev mode
 npm run tauri dev
 ```
 
-## 构建
+## Build
 
 ```bash
-# 构建前端（类型检查 + 打包）
+# Build frontend (type check + bundle)
 npm run build
 
-# 构建 Tauri 应用（多平台依赖见下文 CI/Release）
+# Build Tauri app (see CI/Release for platform dependencies)
 npm run tauri build
 ```
 
-## 项目结构
+## Project Structure
 
 ```text
 orbitx/
-├── src/                     # 前端源代码（Vue 3 + TS + Vite）
-│   ├── api/                 # 前端与 Tauri/Rust 的 API 声明
-│   ├── components/          # Vue 组件
-│   ├── composables/         # 可复用 hooks（useXxx）
-│   ├── constants/           # 常量
-│   ├── stores/              # Pinia 状态管理
-│   ├── types/               # TypeScript 类型定义
+├── src/                     # Frontend source code (Vue 3 + TS + Vite)
+│   ├── api/                 # API declarations for Tauri/Rust
+│   ├── components/          # Vue components
+│   ├── composables/         # Reusable hooks (useXxx)
+│   ├── constants/           # Constants
+│   ├── stores/              # Pinia state management
+│   ├── types/               # TypeScript type definitions
 │   └── ...
-├── src-tauri/               # Tauri/Rust 后端
+├── src-tauri/               # Tauri/Rust backend
 ```
 
-## 配置
+## Configuration
 
-- 主题：`config/themes/*.toml`
-- 全局配置：`config/config.toml`
+- Themes: `config/themes/*.toml`
+- Global config: `config/config.toml`
 
-## 使用
+## Usage
 
-常见操作：
+Common operations:
 
-- 多标签页与搜索（xterm.js 插件）
-- 主题切换与跟随系统
-- 快捷键（复制/粘贴/搜索、标签页管理等）
+- Multiple tabs with search (xterm.js plugins)
+- Theme switching with system sync
+- Keyboard shortcuts (copy/paste/search, tab management, etc.)
 
-## 📋 开发状态
+## 📋 Development Status
 
-### ✅ 已实现功能
+### ✅ Implemented
 
-- **终端核心**: 基于 xterm.js 的终端模拟，多标签页管理
-- **AI 助手**: 集成多种 AI 模型（OpenAI、Claude、Gemini 等），实现agent能力。
-- **智能补全**: 命令补全、文件路径补全、Git/NPM 集成
-- **主题系统**: 多种内置主题，支持亮色/暗色模式
-- **数据存储**: 数据AI历史会话存储
+- **Terminal Core**: xterm.js-based terminal emulation with multi-tab management
+- **AI Assistant**: Integration with multiple AI models (OpenAI, Claude, Gemini, etc.) with agent capabilities
+- **Smart Completion**: Command completion, file path completion, Git/NPM integration
+- **Theme System**: Multiple built-in themes with light/dark mode support
+- **Data Storage**: AI conversation history storage
 
-### 🚧 开发中
+### 🚧 In Progress
 
-- **跨平台支持**: Windows 和 Linux 平台适配
-- **界面优化**: 设置界面改进，用户体验提升
+- **Cross-platform Support**: Windows and Linux adaptation
+- **UI Improvements**: Settings interface enhancement, UX optimization
 
-### 📅 计划开发
+### 📅 Planned
 
-- **分屏功能**: 支持终端窗口分割
-- **会话管理**: 会话保存与恢复
-- **边车AI**: 无感知的本地边车AI，实时分析用户输入输出
+- **Split Pane**: Terminal window splitting support
+- **Session Management**: Session save and restore
+- **Sidecar AI**: Seamless local sidecar AI for real-time I/O analysis
 
-## 脚本
+## Scripts
 
-- `npm run dev`：前端开发（结合 `npm run tauri dev`）
-- `npm run build`：类型检查 + 打包
-- `npm run lint:check`：ESLint 检查
-- `npm run format:check`：Prettier 检查
+- `npm run dev`: Frontend development (use with `npm run tauri dev`)
+- `npm run build`: Type check + bundle
+- `npm run lint:check`: ESLint check
+- `npm run format:check`: Prettier check
 
 ## CI/Release
 
-- CI：见 `.github/workflows/ci.yml`（lint/format/build）
-- Release：推送 `v*` 标签将触发 `.github/workflows/release.yml`，在 macOS/Windows/Ubuntu 构建并发布
+- CI: See `.github/workflows/ci.yml` (lint/format/build)
+- Release: Pushing a `v*` tag triggers `.github/workflows/release.yml` to build and release on macOS/Windows/Ubuntu
 
 Note: If the repository name or owner changes, please update badges and links accordingly.
 
-## 致谢
+## Acknowledgments
 
 - [Tauri](https://tauri.app/)
 - [Vue.js](https://vuejs.org/)
@@ -145,9 +149,9 @@ Note: If the repository name or owner changes, please update badges and links ac
 
 For issues and suggestions, please create an [Issue](https://github.com/Skywang16/OrbitX/issues).
 
-## 许可
+## License
 
-- 本项目以 GPL-3.0-or-later 授权。详见 `LICENSE` 文件。
+This project is licensed under GPL-3.0-or-later. See the `LICENSE` file for details.
 
 ---
 
