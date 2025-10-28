@@ -25,12 +25,12 @@ export const defaultCloseTab = async (tabId: number): Promise<void> => {
   const tabIndex = sessionStore.tabs.findIndex(t => t.id === tabId)
   if (tabIndex === -1) return
 
+  const activeTabId = sessionStore.activeTabId
   const remainingTabs = sessionStore.tabs.filter(t => t.id !== tabId)
   sessionStore.updateTabs(remainingTabs)
 
-  const activeTabId = sessionStore.activeTabId
   if (activeTabId === tabId && remainingTabs.length > 0) {
-    const newIndex = Math.max(0, tabIndex - 1)
+    const newIndex = Math.min(Math.max(0, tabIndex - 1), remainingTabs.length - 1)
     const newActiveTab = remainingTabs[newIndex]
     await getHandler(newActiveTab.type).activate(newActiveTab.id)
   } else if (remainingTabs.length === 0) {
@@ -118,6 +118,7 @@ handlers.set('terminal', {
 
   close: async (tabId: number): Promise<void> => {
     await useTerminalStore().closeTerminal(tabId)
+    await defaultCloseTab(tabId)
   },
 })
 

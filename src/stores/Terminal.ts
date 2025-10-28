@@ -327,26 +327,15 @@ export const useTerminalStore = defineStore('Terminal', () => {
 
       await terminalApi.closeTerminal(id)
 
-      // 从 SessionStore 删除（直接使用 paneId）
-      sessionStore.removeTab(id)
+      const index = terminals.value.findIndex(t => t.id === id)
+      if (index !== -1) {
+        terminals.value.splice(index, 1)
+      }
 
-      await cleanupTerminalState(id)
-    })
-  }
-
-  const cleanupTerminalState = async (id: number) => {
-    const index = terminals.value.findIndex(t => t.id === id)
-    if (index !== -1) {
-      terminals.value.splice(index, 1)
-    }
-
-    if (activeTerminalId.value === id) {
-      if (terminals.value.length > 0) {
-        await setActiveTerminal(terminals.value[0].id)
-      } else {
+      if (activeTerminalId.value === id && terminals.value.length === 0) {
         activeTerminalId.value = null
       }
-    }
+    })
   }
 
   const setActiveTerminal = async (id: number) => {
