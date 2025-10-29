@@ -27,3 +27,6 @@ pub use shell_manager::*;
 pub use singleton::*;
 pub use terminal_mux::*;
 pub use types::*;
+
+// 从统一events模块导出Mux事件
+pub use crate::events::MuxNotification;

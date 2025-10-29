@@ -16,6 +16,9 @@ pub struct ConfigPaths {
     /// 应用程序数据目录
     app_data_dir: PathBuf,
 
+    /// 缓存的canonical应用目录路径（用于路径验证，避免重复syscall）
+    canonical_app_dir: PathBuf,
+
     /// 配置目录
     config_dir: PathBuf,
 
@@ -60,6 +63,10 @@ impl ConfigPaths {
     pub fn with_app_data_dir<P: AsRef<Path>>(app_data_dir: P) -> ConfigPathsResult<Self> {
         let app_data_dir = app_data_dir.as_ref().to_path_buf();
 
+        // 一次性计算并缓存canonical路径
+        let canonical_app_dir = fs::canonicalize(&app_data_dir)
+            .unwrap_or_else(|_| app_data_dir.clone());
+
         let config_dir = app_data_dir.join(crate::config::CONFIG_DIR_NAME);
         let themes_dir = config_dir.join(crate::config::THEMES_DIR_NAME);
         let backups_dir = app_data_dir.join(crate::config::BACKUPS_DIR_NAME);
@@ -69,6 +76,7 @@ impl ConfigPaths {
 
         let paths = Self {
             app_data_dir,
+            canonical_app_dir,
             config_dir,
             themes_dir,
             backups_dir,
@@ -243,10 +251,8 @@ impl ConfigPaths {
         let canonical_path = fs::canonicalize(path)
             .map_err(|e| ConfigPathsError::directory_access(path.to_path_buf(), e))?;
 
-        let canonical_app_dir = fs::canonicalize(&self.app_data_dir)
-            .map_err(|e| ConfigPathsError::directory_access(self.app_data_dir.clone(), e))?;
-
-        if !canonical_path.starts_with(&canonical_app_dir) {
+        // 使用缓存的canonical路径，节省一次syscall
+        if !canonical_path.starts_with(&self.canonical_app_dir) {
             return Err(ConfigPathsError::validation(format!(
                 "路径不在允许的目录范围内: {}",
                 path.display()
@@ -471,8 +477,10 @@ impl ConfigPaths {
     /// 创建用于测试的配置路径管理器
     #[cfg(test)]
     pub fn new_for_test(base_dir: PathBuf) -> Self {
+        let canonical_app_dir = fs::canonicalize(&base_dir).unwrap_or_else(|_| base_dir.clone());
         Self {
             app_data_dir: base_dir.clone(),
+            canonical_app_dir,
             config_dir: base_dir.clone(),
             themes_dir: base_dir.join("themes"),
             backups_dir: base_dir.join("backups"),

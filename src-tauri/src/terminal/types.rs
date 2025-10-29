@@ -14,29 +14,7 @@ pub enum TerminalChannelMessage {
     Close { pane_id: u32 },
 }
 
-/// 终端上下文事件类型
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum TerminalContextEvent {
-    /// 活跃面板变化
-    ActivePaneChanged {
-        old_pane_id: Option<PaneId>,
-        new_pane_id: Option<PaneId>,
-    },
-    /// 面板上下文更新
-    PaneContextUpdated {
-        pane_id: PaneId,
-        context: TerminalContext,
-    },
-    /// 面板CWD变化
-    PaneCwdChanged {
-        pane_id: PaneId,
-        old_cwd: Option<String>,
-        new_cwd: String,
-    },
-    /// 面板Shell集成状态变化
-    PaneShellIntegrationChanged { pane_id: PaneId, enabled: bool },
-}
+// TerminalContextEvent 已移至 crate::events::context 模块
 
 /// 终端上下文数据结构
 #[derive(Debug, Clone, Serialize, Deserialize)]

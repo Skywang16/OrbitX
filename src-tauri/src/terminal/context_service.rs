@@ -396,12 +396,12 @@ impl TerminalContextService {
             );
 
             if let Some(current_cmd) = shell_state.current_command {
-                context.set_current_command(Some(self.convert_command_info(current_cmd)));
+                context.set_current_command(Some(self.convert_command_info(&current_cmd)));
             }
 
             let history: Vec<CommandInfo> = shell_state
                 .command_history
-                .into_iter()
+                .iter()
                 .map(|cmd| self.convert_command_info(cmd))
                 .collect();
             context.command_history = history;
@@ -432,7 +432,7 @@ impl TerminalContextService {
         }
     }
 
-    fn convert_command_info(&self, cmd: crate::shell::CommandInfo) -> CommandInfo {
+    fn convert_command_info(&self, cmd: &crate::shell::CommandInfo) -> CommandInfo {
         let (command, args) = if let Some(command_line) = &cmd.command_line {
             let parts: Vec<&str> = command_line.split_whitespace().collect();
             if parts.is_empty() {
@@ -452,7 +452,7 @@ impl TerminalContextService {
             start_time: cmd.start_time_wallclock,
             end_time: cmd.end_time_wallclock,
             exit_code: cmd.exit_code,
-            working_directory: cmd.working_directory,
+            working_directory: cmd.working_directory.clone(),
         }
     }
 

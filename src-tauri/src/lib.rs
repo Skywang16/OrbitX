@@ -5,6 +5,7 @@ pub mod commands;
 pub mod completion;
 pub mod config;
 pub mod dock;
+pub mod events;
 pub mod filesystem;
 pub mod llm;
 pub mod mux;

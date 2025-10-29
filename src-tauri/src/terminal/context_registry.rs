@@ -4,9 +4,9 @@
  * 提供线程安全的活跃终端状态管理和事件发送机制
  */
 
+use crate::events::TerminalContextEvent;
 use crate::mux::PaneId;
 use crate::terminal::error::{ContextRegistryError, ContextRegistryResult};
-use crate::terminal::types::TerminalContextEvent;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};

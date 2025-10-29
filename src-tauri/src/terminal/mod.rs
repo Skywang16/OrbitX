@@ -24,3 +24,6 @@ pub use error::{
 };
 pub use event_handler::{create_terminal_event_handler, TerminalEventHandler};
 pub use types::*;
+
+// 从统一events模块导出Context事件
+pub use crate::events::TerminalContextEvent;

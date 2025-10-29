@@ -1,6 +1,5 @@
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
-use ignore::gitignore::GitignoreBuilder;
 use ignore::WalkBuilder;
 use std::path::PathBuf;
 
@@ -32,20 +31,13 @@ pub(crate) async fn fs_list_directory(
 
     let mut entries: Vec<(String, bool)> = Vec::new();
 
-    // Load root .gitignore explicitly to ensure ignore semantics even when walker misses them
-    let gitignore = {
-        let mut builder = GitignoreBuilder::new(&root);
-        let gi_path = root.join(".gitignore");
-        if gi_path.exists() {
-            let _ = builder.add(gi_path);
-        }
-        builder.build().ok()
-    };
-
     for result in builder.build() {
         let entry = match result {
             Ok(e) => e,
-            Err(_) => continue,
+            Err(e) => {
+                tracing::warn!("Failed to read directory entry: {}", e);
+                continue;
+            }
         };
         if entry.depth() == 0 {
             continue;
@@ -56,12 +48,6 @@ pub(crate) async fn fs_list_directory(
             .file_type()
             .map(|ft| ft.is_dir())
             .unwrap_or_else(|| p.is_dir());
-        // Extra guard: apply root .gitignore matcher if available
-        if let Some(matcher) = &gitignore {
-            if matcher.matched_path_or_any_parents(rel, is_dir).is_ignore() {
-                continue;
-            }
-        }
         let mut name = rel.to_string_lossy().to_string();
         if is_dir && !name.ends_with('/') {
             name.push('/');
@@ -70,7 +56,7 @@ pub(crate) async fn fs_list_directory(
     }
 
     // 排序：目录在前，字典序
-    entries.sort_by(|a, b| match (a.1, b.1) {
+    entries.sort_unstable_by(|a, b| match (a.1, b.1) {
         (true, false) => std::cmp::Ordering::Less,
         (false, true) => std::cmp::Ordering::Greater,
         _ => a.0.cmp(&b.0),

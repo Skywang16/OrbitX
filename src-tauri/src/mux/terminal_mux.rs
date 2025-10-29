@@ -74,15 +74,6 @@ impl TerminalMux {
 
         let io_handler = IoHandler::new(notification_sender.clone(), shell_integration.clone());
 
-        let notification_sender_clone = notification_sender.clone();
-        shell_integration.register_cwd_callback(move |pane_id, new_cwd| {
-            let notification = MuxNotification::PaneCwdChanged {
-                pane_id,
-                cwd: new_cwd.to_string(),
-            };
-            let _ = notification_sender_clone.send(notification);
-        });
-
         Self {
             panes: RwLock::new(HashMap::new()),
             subscribers: RwLock::new(HashMap::new()),
@@ -97,7 +88,10 @@ impl TerminalMux {
         }
     }
 
-    /// 获取状态统计信息
+    pub fn shell_integration(&self) -> &Arc<ShellIntegrationManager> {
+        &self.shell_integration
+    }
+
     pub fn get_status(&self) -> TerminalMuxResult<TerminalMuxStatus> {
         let panes = self
             .panes
@@ -441,8 +435,8 @@ impl TerminalMux {
 
         let shell_type = self
             .shell_integration
-            .get_pane_shell_state(pane_id)
-            .and_then(|state| state.shell_type)
+            .with_pane_state(pane_id, |state| state.shell_type.clone())
+            .flatten()
             .unwrap_or_else(|| {
                 warn!("面板 {:?} 没有设置Shell类型，使用默认Bash", pane_id);
                 ShellType::Bash
@@ -484,12 +478,10 @@ impl TerminalMux {
             .update_current_working_directory(pane_id, cwd);
     }
 
-    /// 获取面板的完整Shell状态
     pub fn get_pane_shell_state(&self, pane_id: PaneId) -> Option<crate::shell::PaneShellState> {
         self.shell_integration.get_pane_shell_state(pane_id)
     }
 
-    /// 设置面板的Shell类型
     pub fn set_pane_shell_type(&self, pane_id: PaneId, shell_type: crate::shell::ShellType) {
         self.shell_integration
             .set_pane_shell_type(pane_id, shell_type);
@@ -523,13 +515,11 @@ impl TerminalMux {
         self.shell_integration.disable_integration(pane_id);
     }
 
-    /// 获取面板的当前命令信息
-    pub fn get_pane_current_command(&self, pane_id: PaneId) -> Option<crate::shell::CommandInfo> {
+    pub fn get_pane_current_command(&self, pane_id: PaneId) -> Option<std::sync::Arc<crate::shell::CommandInfo>> {
         self.shell_integration.get_current_command(pane_id)
     }
 
-    /// 获取面板的命令历史
-    pub fn get_pane_command_history(&self, pane_id: PaneId) -> Vec<crate::shell::CommandInfo> {
+    pub fn get_pane_command_history(&self, pane_id: PaneId) -> Vec<std::sync::Arc<crate::shell::CommandInfo>> {
         self.shell_integration.get_command_history(pane_id)
     }
 

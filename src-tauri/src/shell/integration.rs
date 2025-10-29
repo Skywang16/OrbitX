@@ -1,8 +1,10 @@
 use dashmap::DashMap;
 use std::collections::{HashMap, VecDeque};
-use std::sync::{RwLock, Weak};
+use std::sync::{Arc, RwLock, Weak};
 use std::time::{Duration, Instant, SystemTime};
+use tokio::sync::broadcast;
 
+use crate::events::ShellEvent;
 use super::osc_parser::{
     CommandStatus, IntegrationMarker, OscParser, OscSequence, ShellIntegrationState,
 };
@@ -10,12 +12,16 @@ use super::script_generator::{ShellIntegrationConfig, ShellScriptGenerator, Shel
 use crate::mux::PaneId;
 use crate::shell::error::ShellScriptResult;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct CommandInfo {
     pub id: u64,
+    #[serde(skip)]
     pub start_time: Instant,
+    #[serde(skip)]
     pub start_time_wallclock: SystemTime,
+    #[serde(skip)]
     pub end_time: Option<Instant>,
+    #[serde(skip)]
     pub end_time_wallclock: Option<SystemTime>,
     pub exit_code: Option<i32>,
     pub status: CommandStatus,
@@ -55,8 +61,8 @@ pub struct PaneShellState {
     pub integration_state: ShellIntegrationState,
     pub shell_type: Option<ShellType>,
     pub current_working_directory: Option<String>,
-    pub current_command: Option<CommandInfo>,
-    pub command_history: VecDeque<CommandInfo>,
+    pub current_command: Option<Arc<CommandInfo>>,
+    pub command_history: VecDeque<Arc<CommandInfo>>,
     pub next_command_id: u64,
     pub window_title: Option<String>,
     pub last_activity: SystemTime,
@@ -85,83 +91,13 @@ pub trait ContextServiceIntegration: Send + Sync {
     fn send_shell_integration_changed_event(&self, pane_id: PaneId, enabled: bool);
 }
 
-struct CallbackRegistry {
-    cwd: RwLock<Vec<Box<dyn Fn(PaneId, &str) + Send + Sync>>>,
-    command: RwLock<Vec<Box<dyn Fn(PaneId, &CommandInfo) + Send + Sync>>>,
-    title: RwLock<Vec<Box<dyn Fn(PaneId, &str) + Send + Sync>>>,
-    node_version: RwLock<Vec<Box<dyn Fn(PaneId, &str) + Send + Sync>>>,
-}
-
-impl CallbackRegistry {
-    fn new() -> Self {
-        Self {
-            cwd: RwLock::new(Vec::new()),
-            command: RwLock::new(Vec::new()),
-            title: RwLock::new(Vec::new()),
-            node_version: RwLock::new(Vec::new()),
-        }
-    }
-
-    fn on_cwd<F>(&self, cb: F)
-    where
-        F: Fn(PaneId, &str) + Send + Sync + 'static,
-    {
-        self.cwd.write().unwrap().push(Box::new(cb));
-    }
-
-    fn on_command<F>(&self, cb: F)
-    where
-        F: Fn(PaneId, &CommandInfo) + Send + Sync + 'static,
-    {
-        self.command.write().unwrap().push(Box::new(cb));
-    }
-
-    fn on_title<F>(&self, cb: F)
-    where
-        F: Fn(PaneId, &str) + Send + Sync + 'static,
-    {
-        self.title.write().unwrap().push(Box::new(cb));
-    }
-
-    fn emit_cwd(&self, pane_id: PaneId, cwd: &str) {
-        for cb in self.cwd.read().unwrap().iter() {
-            cb(pane_id, cwd);
-        }
-    }
-
-    fn emit_command(&self, pane_id: PaneId, command: &CommandInfo) {
-        for cb in self.command.read().unwrap().iter() {
-            cb(pane_id, command);
-        }
-    }
-
-    fn emit_title(&self, pane_id: PaneId, title: &str) {
-        for cb in self.title.read().unwrap().iter() {
-            cb(pane_id, title);
-        }
-    }
-
-    fn on_node_version<F>(&self, cb: F)
-    where
-        F: Fn(PaneId, &str) + Send + Sync + 'static,
-    {
-        self.node_version.write().unwrap().push(Box::new(cb));
-    }
-
-    fn emit_node_version(&self, pane_id: PaneId, version: &str) {
-        for cb in self.node_version.read().unwrap().iter() {
-            cb(pane_id, version);
-        }
-    }
-}
-
 pub struct ShellIntegrationManager {
     states: DashMap<PaneId, PaneShellState>,
     parser: OscParser,
     script_generator: ShellScriptGenerator,
-    callbacks: CallbackRegistry,
     history_limit: usize,
     context_service: RwLock<Option<Weak<dyn ContextServiceIntegration>>>,
+    event_sender: broadcast::Sender<(PaneId, ShellEvent)>,
 }
 
 impl ShellIntegrationManager {
@@ -170,13 +106,15 @@ impl ShellIntegrationManager {
     }
 
     pub fn new_with_config(config: ShellIntegrationConfig) -> Self {
+        let (event_sender, _) = broadcast::channel(1000);
+        
         Self {
             states: DashMap::new(),
             parser: OscParser::new(),
             script_generator: ShellScriptGenerator::new(config),
-            callbacks: CallbackRegistry::new(),
             history_limit: 128,
             context_service: RwLock::new(None),
+            event_sender,
         }
     }
 
@@ -191,45 +129,37 @@ impl ShellIntegrationManager {
         *self.context_service.write().unwrap() = None;
     }
 
-    pub fn register_cwd_callback<F>(&self, callback: F)
-    where
-        F: Fn(PaneId, &str) + Send + Sync + 'static,
-    {
-        self.callbacks.on_cwd(callback);
-    }
-
-    pub fn register_command_callback<F>(&self, callback: F)
-    where
-        F: Fn(PaneId, &CommandInfo) + Send + Sync + 'static,
-    {
-        self.callbacks.on_command(callback);
-    }
-
-    pub fn register_title_callback<F>(&self, callback: F)
-    where
-        F: Fn(PaneId, &str) + Send + Sync + 'static,
-    {
-        self.callbacks.on_title(callback);
-    }
-
-    pub fn register_node_version_callback<F>(&self, callback: F)
-    where
-        F: Fn(PaneId, &str) + Send + Sync + 'static,
-    {
-        self.callbacks.on_node_version(callback);
+    pub fn subscribe_events(&self) -> broadcast::Receiver<(PaneId, ShellEvent)> {
+        self.event_sender.subscribe()
     }
 
     pub fn process_output(&self, pane_id: PaneId, data: &str) {
         for sequence in self.parser.parse(data) {
             match sequence {
-                OscSequence::CurrentWorkingDirectory { path } => self.apply_cwd(pane_id, path),
-                OscSequence::WindowsTerminalCwd { path } => self.apply_cwd(pane_id, path),
-                OscSequence::ShellIntegration { marker, data } => {
-                    self.apply_shell_integration(pane_id, marker, data)
+                OscSequence::CurrentWorkingDirectory { path } => {
+                    if let Some(event) = self.apply_cwd(pane_id, path) {
+                        let _ = self.event_sender.send((pane_id, event));
+                    }
                 }
-                OscSequence::WindowTitle { title, .. } => self.apply_title(pane_id, title),
+                OscSequence::WindowsTerminalCwd { path } => {
+                    if let Some(event) = self.apply_cwd(pane_id, path) {
+                        let _ = self.event_sender.send((pane_id, event));
+                    }
+                }
+                OscSequence::ShellIntegration { marker, data } => {
+                    for event in self.apply_shell_integration(pane_id, marker, data) {
+                        let _ = self.event_sender.send((pane_id, event.clone()));
+                    }
+                }
+                OscSequence::WindowTitle { title, .. } => {
+                    if let Some(event) = self.apply_title(pane_id, title) {
+                        let _ = self.event_sender.send((pane_id, event));
+                    }
+                }
                 OscSequence::OrbitXNodeVersion { version } => {
-                    self.apply_node_version(pane_id, version)
+                    if let Some(event) = self.apply_node_version(pane_id, version) {
+                        let _ = self.event_sender.send((pane_id, event));
+                    }
                 }
                 OscSequence::Unknown { .. } => {}
             }
@@ -252,6 +182,13 @@ impl ShellIntegrationManager {
 
     pub fn get_pane_state(&self, pane_id: PaneId) -> Option<()> {
         self.states.get(&pane_id).map(|_| ())
+    }
+
+    pub fn with_pane_state<F, R>(&self, pane_id: PaneId, f: F) -> Option<R>
+    where
+        F: FnOnce(&PaneShellState) -> R,
+    {
+        self.states.get(&pane_id).map(|state| f(state.value()))
     }
 
     pub fn get_pane_shell_state(&self, pane_id: PaneId) -> Option<PaneShellState> {
@@ -336,16 +273,25 @@ impl ShellIntegrationManager {
             .unwrap_or(false)
     }
 
-    pub fn get_current_command(&self, pane_id: PaneId) -> Option<CommandInfo> {
+    pub fn with_current_command<F, R>(&self, pane_id: PaneId, f: F) -> Option<R>
+    where
+        F: FnOnce(&CommandInfo) -> R,
+    {
         self.states
             .get(&pane_id)
-            .and_then(|state| state.current_command.clone())
+            .and_then(|state| state.current_command.as_ref().map(|cmd| f(cmd)))
     }
 
-    pub fn get_command_history(&self, pane_id: PaneId) -> Vec<CommandInfo> {
+    pub fn get_current_command(&self, pane_id: PaneId) -> Option<Arc<CommandInfo>> {
         self.states
             .get(&pane_id)
-            .map(|state| state.command_history.iter().cloned().collect())
+            .and_then(|state| state.current_command.as_ref().map(Arc::clone))
+    }
+
+    pub fn get_command_history(&self, pane_id: PaneId) -> Vec<Arc<CommandInfo>> {
+        self.states
+            .get(&pane_id)
+            .map(|state| state.command_history.iter().map(Arc::clone).collect())
             .unwrap_or_default()
     }
 
@@ -374,9 +320,6 @@ impl ShellIntegrationManager {
         self.states.remove(&pane_id);
     }
 
-    pub fn get_pane_state_snapshot(&self, pane_id: PaneId) -> Option<PaneShellState> {
-        self.get_pane_shell_state(pane_id)
-    }
 
     pub fn get_multiple_pane_states(&self, pane_ids: &[PaneId]) -> HashMap<PaneId, PaneShellState> {
         pane_ids
@@ -389,7 +332,7 @@ impl ShellIntegrationManager {
         self.states.iter().map(|entry| *entry.key()).collect()
     }
 
-    fn apply_cwd(&self, pane_id: PaneId, new_path: String) {
+    fn apply_cwd(&self, pane_id: PaneId, new_path: String) -> Option<ShellEvent> {
         let change = {
             let mut entry = self
                 .states
@@ -403,19 +346,19 @@ impl ShellIntegrationManager {
                 state.current_working_directory = Some(new_path.clone());
                 state.last_activity = SystemTime::now();
                 if let Some(cmd) = &mut state.current_command {
-                    cmd.working_directory = Some(new_path.clone());
+                    Arc::make_mut(cmd).working_directory = Some(new_path.clone());
                 }
                 Some((old, new_path))
             }
         };
 
-        if let Some((old, new_value)) = change {
-            self.callbacks.emit_cwd(pane_id, &new_value);
-            self.notify_context_service_cwd_changed(pane_id, old, new_value);
-        }
+        change.map(|(old, new_cwd)| {
+            self.notify_context_service_cwd_changed(pane_id, old, new_cwd.clone());
+            ShellEvent::CwdChanged { new_cwd }
+        })
     }
 
-    fn apply_title(&self, pane_id: PaneId, title: String) {
+    fn apply_title(&self, pane_id: PaneId, title: String) -> Option<ShellEvent> {
         let changed = {
             let mut entry = self
                 .states
@@ -431,13 +374,13 @@ impl ShellIntegrationManager {
             }
         };
 
-        if let Some(title) = changed {
-            self.callbacks.emit_title(pane_id, &title);
+        changed.map(|new_title| {
             self.notify_context_service_cache_invalidation(pane_id);
-        }
+            ShellEvent::TitleChanged { new_title }
+        })
     }
 
-    fn apply_node_version(&self, pane_id: PaneId, new_version: String) {
+    fn apply_node_version(&self, pane_id: PaneId, new_version: String) -> Option<ShellEvent> {
         let changed = {
             let mut entry = self
                 .states
@@ -460,9 +403,7 @@ impl ShellIntegrationManager {
             }
         };
 
-        if let Some(version) = changed {
-            self.callbacks.emit_node_version(pane_id, &version);
-        }
+        changed.map(|version| ShellEvent::NodeVersionChanged { version })
     }
 
     fn apply_shell_integration(
@@ -470,7 +411,8 @@ impl ShellIntegrationManager {
         pane_id: PaneId,
         marker: IntegrationMarker,
         data: Option<String>,
-    ) {
+    ) -> Vec<ShellEvent> {
+        let mut events = Vec::new();
         let mut command_events = Vec::new();
         {
             let mut entry = self
@@ -484,15 +426,16 @@ impl ShellIntegrationManager {
             match marker {
                 IntegrationMarker::PromptStart => {
                     if let Some(cmd) = state.current_command.take() {
-                        let mut finished = cmd;
+                        let mut finished = Arc::try_unwrap(cmd).unwrap_or_else(|arc| (*arc).clone());
                         finished.end_time = Some(Instant::now());
                         finished.end_time_wallclock = Some(SystemTime::now());
                         finished.status = CommandStatus::Finished { exit_code: None };
-                        state.command_history.push_back(finished.clone());
+                        let finished_arc = Arc::new(finished);
+                        state.command_history.push_back(Arc::clone(&finished_arc));
                         if state.command_history.len() > self.history_limit {
                             state.command_history.pop_front();
                         }
-                        command_events.push(finished);
+                        command_events.push(finished_arc);
                     }
                 }
                 IntegrationMarker::CommandStart => {
@@ -506,87 +449,98 @@ impl ShellIntegrationManager {
                         }
                     }
                     state.next_command_id += 1;
-                    state.current_command = Some(command.clone());
-                    command_events.push(command);
+                    let command_arc = Arc::new(command);
+                    state.current_command = Some(Arc::clone(&command_arc));
+                    command_events.push(command_arc);
                     self.notify_context_service_cache_invalidation(pane_id);
                 }
                 IntegrationMarker::CommandExecuted => {
                     if let Some(cmd) = &mut state.current_command {
-                        cmd.status = CommandStatus::Running;
-                        if cmd.command_line.is_none() {
+                        let cmd_mut = Arc::make_mut(cmd);
+                        cmd_mut.status = CommandStatus::Running;
+                        if cmd_mut.command_line.is_none() {
                             if let Some(ref line) = data {
                                 if !line.is_empty() {
-                                    cmd.command_line = Some(line.clone());
+                                    cmd_mut.command_line = Some(line.clone());
                                 }
                             }
                         }
-                        command_events.push(cmd.clone());
+                        command_events.push(Arc::clone(cmd));
                     }
                 }
                 IntegrationMarker::CommandFinished { exit_code } => {
-                    if let Some(mut cmd) = state.current_command.take() {
-                        cmd.end_time = Some(Instant::now());
-                        cmd.end_time_wallclock = Some(SystemTime::now());
-                        cmd.exit_code = exit_code;
-                        cmd.status = CommandStatus::Finished { exit_code };
-                        state.command_history.push_back(cmd.clone());
+                    if let Some(cmd) = state.current_command.take() {
+                        let mut finished = Arc::try_unwrap(cmd).unwrap_or_else(|arc| (*arc).clone());
+                        finished.end_time = Some(Instant::now());
+                        finished.end_time_wallclock = Some(SystemTime::now());
+                        finished.exit_code = exit_code;
+                        finished.status = CommandStatus::Finished { exit_code };
+                        let finished_arc = Arc::new(finished);
+                        state.command_history.push_back(Arc::clone(&finished_arc));
                         if state.command_history.len() > self.history_limit {
                             state.command_history.pop_front();
                         }
-                        command_events.push(cmd);
+                        command_events.push(finished_arc);
                         self.notify_context_service_cache_invalidation(pane_id);
                     }
                 }
                 IntegrationMarker::CommandContinuation => {
                     if let (Some(cmd), Some(ref fragment)) = (&mut state.current_command, &data) {
-                        let entry = cmd.command_line.get_or_insert_with(String::new);
+                        let cmd_mut = Arc::make_mut(cmd);
+                        let entry = cmd_mut.command_line.get_or_insert_with(String::new);
                         if !entry.is_empty() {
                             entry.push(' ');
                         }
                         entry.push_str(fragment);
-                        command_events.push(cmd.clone());
+                        command_events.push(Arc::clone(cmd));
                     }
                 }
                 IntegrationMarker::RightPrompt => {}
                 IntegrationMarker::CommandInvalid => {
-                    if let Some(mut cmd) = state.current_command.take() {
-                        cmd.end_time = Some(Instant::now());
-                        cmd.end_time_wallclock = Some(SystemTime::now());
-                        cmd.status = CommandStatus::Finished { exit_code: None };
-                        state.command_history.push_back(cmd.clone());
+                    if let Some(cmd) = state.current_command.take() {
+                        let mut finished = Arc::try_unwrap(cmd).unwrap_or_else(|arc| (*arc).clone());
+                        finished.end_time = Some(Instant::now());
+                        finished.end_time_wallclock = Some(SystemTime::now());
+                        finished.status = CommandStatus::Finished { exit_code: None };
+                        let finished_arc = Arc::new(finished);
+                        state.command_history.push_back(Arc::clone(&finished_arc));
                         if state.command_history.len() > self.history_limit {
                             state.command_history.pop_front();
                         }
-                        command_events.push(cmd);
+                        command_events.push(finished_arc);
                     }
                 }
                 IntegrationMarker::CommandCancelled => {
-                    if let Some(mut cmd) = state.current_command.take() {
-                        cmd.end_time = Some(Instant::now());
-                        cmd.end_time_wallclock = Some(SystemTime::now());
-                        cmd.exit_code = Some(130);
-                        cmd.status = CommandStatus::Finished {
+                    if let Some(cmd) = state.current_command.take() {
+                        let mut cancelled = Arc::try_unwrap(cmd).unwrap_or_else(|arc| (*arc).clone());
+                        cancelled.end_time = Some(Instant::now());
+                        cancelled.end_time_wallclock = Some(SystemTime::now());
+                        cancelled.exit_code = Some(130);
+                        cancelled.status = CommandStatus::Finished {
                             exit_code: Some(130),
                         };
-                        state.command_history.push_back(cmd.clone());
+                        let cancelled_arc = Arc::new(cancelled);
+                        state.command_history.push_back(Arc::clone(&cancelled_arc));
                         if state.command_history.len() > self.history_limit {
                             state.command_history.pop_front();
                         }
-                        command_events.push(cmd);
+                        command_events.push(cancelled_arc);
                         self.notify_context_service_cache_invalidation(pane_id);
                     }
                 }
                 IntegrationMarker::Property { key, value } => {
                     if key.eq_ignore_ascii_case("cwd") {
-                        self.apply_cwd(pane_id, value);
+                        if let Some(event) = self.apply_cwd(pane_id, value) {
+                            events.push(event);
+                        }
                     }
                 }
             }
         }
 
-        for event in command_events {
-            self.callbacks.emit_command(pane_id, &event);
-        }
+        // 转换命令事件为ShellEvent
+        events.extend(command_events.into_iter().map(|command| ShellEvent::CommandEvent { command }));
+        events
     }
 
     fn notify_context_service_cache_invalidation(&self, pane_id: PaneId) {

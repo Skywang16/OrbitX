@@ -7,19 +7,27 @@ use tokio::sync::broadcast;
 use tracing::{debug, error, warn};
 
 use crate::completion::output_analyzer::OutputAnalyzer;
-use crate::mux::{MuxNotification, SubscriberCallback, TerminalMux};
+use crate::events::{ShellEvent, TerminalContextEvent};
+use crate::mux::{MuxNotification, PaneId, SubscriberCallback, TerminalMux};
 use crate::terminal::error::{EventHandlerError, EventHandlerResult};
-use crate::terminal::types::TerminalContextEvent;
 
 /// 统一的终端事件处理器
 ///
 /// 负责整合来自不同源的终端事件，并统一发送到前端
+/// 
+/// 订阅三层事件:
+/// 1. Mux层 - 进程生命周期事件 (crossbeam channel)
+/// 2. Shell层 - OSC解析事件 (broadcast channel)
+/// 3. Context层 - 上下文变化事件 (broadcast channel)
 pub struct TerminalEventHandler<R: Runtime> {
     app_handle: AppHandle<R>,
     mux_subscriber_id: Option<usize>,
     context_event_receiver: Option<broadcast::Receiver<TerminalContextEvent>>,
+    shell_event_receiver: Option<broadcast::Receiver<(crate::mux::PaneId, crate::shell::ShellEvent)>>,
     /// 上下文事件处理任务句柄
     context_task_handle: Option<tauri::async_runtime::JoinHandle<()>>,
+    /// Shell事件处理任务句柄
+    shell_task_handle: Option<tauri::async_runtime::JoinHandle<()>>,
 }
 
 // Implement Send and Sync to allow the handler to be managed by Tauri
@@ -33,17 +41,20 @@ impl<R: Runtime> TerminalEventHandler<R> {
             app_handle,
             mux_subscriber_id: None,
             context_event_receiver: None,
+            shell_event_receiver: None,
             context_task_handle: None,
+            shell_task_handle: None,
         }
     }
 
     /// 启动事件处理器
     ///
-    /// 订阅来自 TerminalMux 和 TerminalContextRegistry 的事件
+    /// 订阅来自三层的事件: Mux, Shell, Context
     pub fn start(
         &mut self,
         mux: &Arc<TerminalMux>,
         context_event_receiver: broadcast::Receiver<TerminalContextEvent>,
+        shell_event_receiver: broadcast::Receiver<(crate::mux::PaneId, crate::shell::ShellEvent)>,
     ) -> EventHandlerResult<()> {
         if self.mux_subscriber_id.is_some() {
             return Err(EventHandlerError::AlreadyStarted);
@@ -102,6 +113,12 @@ impl<R: Runtime> TerminalEventHandler<R> {
         // 启动上下文事件处理任务
         self.start_context_event_task();
 
+        // 保存Shell事件接收器
+        self.shell_event_receiver = Some(shell_event_receiver);
+
+        // 启动Shell事件处理任务
+        self.start_shell_event_task();
+
         debug!("终端事件处理器已启动，Mux订阅者ID: {}", subscriber_id);
         Ok(())
     }
@@ -124,6 +141,15 @@ impl<R: Runtime> TerminalEventHandler<R> {
 
         // 清理上下文事件接收器
         self.context_event_receiver = None;
+
+        // 停止Shell事件处理任务
+        if let Some(handle) = self.shell_task_handle.take() {
+            handle.abort();
+            debug!("已中止Shell事件处理任务");
+        }
+
+        // 清理Shell事件接收器
+        self.shell_event_receiver = None;
 
         Ok(())
     }
@@ -160,6 +186,49 @@ impl<R: Runtime> TerminalEventHandler<R> {
             });
             
             self.context_task_handle = Some(handle);
+        }
+    }
+
+    /// 启动Shell事件处理任务
+    fn start_shell_event_task(&mut self) {
+        if let Some(mut receiver) = self.shell_event_receiver.take() {
+            let app_handle = self.app_handle.clone();
+
+            let handle = tauri::async_runtime::spawn(async move {
+                loop {
+                    match receiver.recv().await {
+                        Ok((pane_id, event)) => {
+                            Self::handle_shell_event(&app_handle, pane_id, event);
+                        }
+                        Err(e) => {
+                            if matches!(e, broadcast::error::RecvError::Closed) {
+                                debug!("Shell事件通道已关闭，退出处理任务");
+                                break;
+                            } else {
+                                warn!("Shell事件接收lag: {:?}", e);
+                                continue;
+                            }
+                        }
+                    }
+                }
+                debug!("Shell事件处理任务已结束");
+            });
+            
+            self.shell_task_handle = Some(handle);
+        }
+    }
+
+    /// 处理Shell事件
+    fn handle_shell_event(app_handle: &AppHandle<R>, pane_id: PaneId, event: ShellEvent) {
+        let (event_name, payload) = Self::shell_event_to_tauri_event(pane_id, &event);
+
+        match app_handle.emit(event_name, payload) {
+            Ok(_) => {
+                debug!("Shell事件已发送: {}", event_name);
+            }
+            Err(e) => {
+                error!("Shell事件发送失败: {}, 错误: {}", event_name, e);
+            }
         }
     }
 
@@ -221,11 +290,41 @@ impl<R: Runtime> TerminalEventHandler<R> {
                     "exitCode": exit_code
                 }),
             ),
-            MuxNotification::PaneCwdChanged { pane_id, cwd } => (
+        }
+    }
+
+    /// 将 ShellEvent 转换为 Tauri 事件
+    pub fn shell_event_to_tauri_event(
+        pane_id: PaneId,
+        event: &ShellEvent,
+    ) -> (&'static str, serde_json::Value) {
+        match event {
+            ShellEvent::CwdChanged { new_cwd } => (
                 "pane_cwd_changed",
                 json!({
                     "paneId": pane_id.as_u32(),
-                    "cwd": cwd
+                    "cwd": new_cwd
+                }),
+            ),
+            ShellEvent::NodeVersionChanged { version } => (
+                "node_version_changed",
+                json!({
+                    "paneId": pane_id.as_u32(),
+                    "version": version
+                }),
+            ),
+            ShellEvent::TitleChanged { new_title } => (
+                "pane_title_changed",
+                json!({
+                    "paneId": pane_id.as_u32(),
+                    "title": new_title
+                }),
+            ),
+            ShellEvent::CommandEvent { command } => (
+                "pane_command_event",
+                json!({
+                    "paneId": pane_id.as_u32(),
+                    "command": command
                 }),
             ),
         }
@@ -281,9 +380,10 @@ pub fn create_terminal_event_handler<R: Runtime>(
     app_handle: AppHandle<R>,
     mux: &Arc<TerminalMux>,
     context_event_receiver: broadcast::Receiver<TerminalContextEvent>,
+    shell_event_receiver: broadcast::Receiver<(PaneId, ShellEvent)>,
 ) -> EventHandlerResult<TerminalEventHandler<R>> {
     let mut handler = TerminalEventHandler::new(app_handle);
-    handler.start(mux, context_event_receiver)?;
+    handler.start(mux, context_event_receiver, shell_event_receiver)?;
     Ok(handler)
 }
 

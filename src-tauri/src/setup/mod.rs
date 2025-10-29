@@ -138,16 +138,8 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     // 创建 Shell Integration 并注册 Node 版本回调
     let shell_integration = Arc::new(crate::shell::ShellIntegrationManager::new());
 
-    // 注册 Node 版本变化回调
-    let app_handle = app.handle().clone();
-    shell_integration.register_node_version_callback(move |pane_id, version| {
-        use serde_json::json;
-        let payload = json!({
-            "paneId": pane_id.as_u32(),
-            "version": version,
-        });
-        let _ = app_handle.emit("node_version_changed", payload);
-    });
+    // TODO: Node版本变化事件已迁移到IoHandler处理
+    // 如需前端通知,应添加MuxNotification::NodeVersionChanged类型
 
     // 初始化全局 Mux
     let global_mux =
@@ -364,7 +356,11 @@ fn setup_unified_terminal_events<R: tauri::Runtime>(app_handle: tauri::AppHandle
     // 订阅上下文事件
     let context_event_receiver = registry.subscribe_events();
 
-    match create_terminal_event_handler(app_handle.clone(), &mux, context_event_receiver) {
+    // 订阅Shell事件
+    let shell_integration = mux.shell_integration();
+    let shell_event_receiver = shell_integration.subscribe_events();
+
+    match create_terminal_event_handler(app_handle.clone(), &mux, context_event_receiver, shell_event_receiver) {
         Ok(handler) => {
             tracing::debug!("统一终端事件处理器已启动");
             // Use Box::leak to prevent the handler from being dropped

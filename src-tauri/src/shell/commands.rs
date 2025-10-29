@@ -13,43 +13,9 @@ use tracing::{debug, error};
 use super::{CommandInfo, PaneShellState, ShellType};
 use crate::mux::{PaneId, TerminalMux};
 
+/// 使用shell-words解析命令行 - 零开销,不重复造轮子
 fn parse_command_line(command: &str) -> Result<Vec<String>, String> {
-    let mut parts = Vec::new();
-    let mut current_part = String::new();
-    let mut in_single_quote = false;
-    let mut in_double_quote = false;
-    let mut chars = command.chars().peekable();
-
-    while let Some(ch) = chars.next() {
-        match ch {
-            '\'' if !in_double_quote => {
-                in_single_quote = !in_single_quote;
-            }
-            '"' if !in_single_quote => {
-                in_double_quote = !in_double_quote;
-            }
-            ' ' | '\t' if !in_single_quote && !in_double_quote => {
-                if !current_part.is_empty() {
-                    parts.push(current_part.clone());
-                    current_part.clear();
-                }
-            }
-            _ => {
-                current_part.push(ch);
-            }
-        }
-    }
-
-    // 添加最后一个部分
-    if !current_part.is_empty() {
-        parts.push(current_part);
-    }
-
-    if in_single_quote || in_double_quote {
-        return Err("Quotes mismatch".to_string());
-    }
-
-    Ok(parts)
+    shell_words::split(command).map_err(|_| "Invalid shell syntax".to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,11 +97,11 @@ impl From<&PaneShellState> for FrontendPaneState {
             current_command: state
                 .current_command
                 .as_ref()
-                .map(FrontendCommandInfo::from),
+                .map(|cmd| FrontendCommandInfo::from(&**cmd)),
             command_history: state
                 .command_history
                 .iter()
-                .map(FrontendCommandInfo::from)
+                .map(|cmd| FrontendCommandInfo::from(&**cmd))
                 .collect(),
             window_title: state.window_title.clone(),
             last_activity,
@@ -311,7 +277,7 @@ pub async fn get_pane_current_command(
 
     let command = mux
         .get_pane_current_command(pane_id)
-        .map(|cmd| FrontendCommandInfo::from(&cmd));
+        .map(|cmd| FrontendCommandInfo::from(&*cmd));
     Ok(api_success!(command))
 }
 
@@ -330,7 +296,7 @@ pub async fn get_pane_command_history(
     let history = mux
         .get_pane_command_history(pane_id)
         .into_iter()
-        .map(|cmd| FrontendCommandInfo::from(&cmd))
+        .map(|cmd| FrontendCommandInfo::from(&*cmd))
         .collect();
     Ok(api_success!(history))
 }

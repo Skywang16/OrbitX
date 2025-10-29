@@ -4892,6 +4892,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "shell-words",
  "sqlx",
  "syn 2.0.106",
  "tauri",

@@ -16,3 +16,6 @@ pub use error::*;
 pub use integration::*;
 pub use osc_parser::*;
 pub use script_generator::*;
+
+// 从统一events模块导出Shell事件
+pub use crate::events::ShellEvent;

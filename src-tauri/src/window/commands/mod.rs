@@ -14,6 +14,7 @@ use crate::window::WindowStateResult;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, Runtime, State};
@@ -100,7 +101,7 @@ pub struct WindowConfigManager {
 pub struct WindowStateManager {
     cached_cwd: Option<PathBuf>,
     cached_home: Option<PathBuf>,
-    always_on_top: bool,
+    always_on_top: Arc<AtomicBool>,  // 复用pane.rs的Atomic模式
     last_update: Option<Instant>,
     cache_ttl: std::time::Duration,
 }
@@ -116,25 +117,26 @@ impl WindowStateManager {
         Self {
             cached_cwd: None,
             cached_home: None,
-            always_on_top: false,
+            always_on_top: Arc::new(AtomicBool::new(false)),  // 复用pane.rs模式
             last_update: None,
             cache_ttl: std::time::Duration::from_secs(30),
         }
     }
 
     pub fn set_always_on_top(&mut self, value: bool) {
-        self.always_on_top = value;
+        self.always_on_top.store(value, Ordering::Release);  // 原子写入
         self.last_update = Some(Instant::now());
     }
 
     pub fn get_always_on_top(&self) -> bool {
-        self.always_on_top
+        self.always_on_top.load(Ordering::Acquire)  // 原子读取
     }
 
     pub fn toggle_always_on_top(&mut self) -> bool {
-        self.always_on_top = !self.always_on_top;
+        let new_value = !self.always_on_top.load(Ordering::Acquire);
+        self.always_on_top.store(new_value, Ordering::Release);
         self.last_update = Some(Instant::now());
-        self.always_on_top
+        new_value
     }
 
     pub fn set_cached_cwd(&mut self, path: PathBuf) {
@@ -171,7 +173,7 @@ impl WindowStateManager {
     }
 
     pub fn reset(&mut self) {
-        self.always_on_top = false;
+        self.always_on_top.store(false, Ordering::Release);
         self.clear_cache();
     }
 }

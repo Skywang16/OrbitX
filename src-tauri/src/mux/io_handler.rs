@@ -175,7 +175,9 @@ impl IoHandler {
                     Ok(0) => break,
                     Ok(len) => {
                         for chunk in decode_utf8_stream(&mut pending, &buffer[..len]) {
+                            // Shell事件现在通过broadcast channel发送,不再返回
                             integration.process_output(pane_id, &chunk);
+                            
                             let cleaned = integration.strip_osc_sequences(&chunk);
 
                             if cleaned.is_empty() {
