@@ -35,7 +35,7 @@ use crate::agent::tools::{
     logger::ToolExecutionLogger, ToolDescriptionContext, ToolRegistry, ToolResult as ToolOutcome,
     ToolResultContent,
 };
-use crate::agent::types::{Agent, Context as AgentContext, Task, ToolSchema};
+use crate::agent::types::{Agent, Context as AgentContext, Task};
 use crate::agent::ui::AgentUiPersistence;
 use crate::llm::anthropic_types::{
     ContentBlock, ContentBlockStart, ContentDelta, MessageContent, MessageParam, StreamEvent,
@@ -126,9 +126,9 @@ struct TaskExecutorInner {
     agent_persistence: Arc<AgentPersistence>,
     ui_persistence: Arc<AgentUiPersistence>,
     tool_logger: Arc<ToolExecutionLogger>,
-    context_builder_cache: Arc<DashMap<i64, Arc<ContextBuilder>>>,
-    active_tasks: Arc<DashMap<String, Arc<TaskContext>>>,
-    conversation_contexts: Arc<DashMap<i64, Arc<TaskContext>>>,
+    context_builder_cache: DashMap<i64, Arc<ContextBuilder>>,
+    active_tasks: DashMap<String, TaskContext>,
+    conversation_contexts: DashMap<i64, TaskContext>,
     default_config: TaskExecutionConfig,
     terminal_context_service: Arc<TerminalContextService>,
     cache: Arc<crate::storage::UnifiedCache>,
@@ -156,9 +156,9 @@ impl TaskExecutor {
             agent_persistence,
             ui_persistence,
             tool_logger,
-            context_builder_cache: Arc::new(DashMap::new()),
-            active_tasks: Arc::new(DashMap::new()),
-            conversation_contexts: Arc::new(DashMap::new()),
+            context_builder_cache: DashMap::new(),
+            active_tasks: DashMap::new(),
+            conversation_contexts: DashMap::new(),
             default_config: TaskExecutionConfig::default(),
             terminal_context_service,
             cache,
@@ -183,16 +183,16 @@ impl TaskExecutor {
         &self.inner().context_builder_cache
     }
 
-    fn active_tasks(&self) -> &DashMap<String, Arc<TaskContext>> {
+    fn active_tasks(&self) -> &DashMap<String, TaskContext> {
         &self.inner().active_tasks
     }
 
-    fn conversation_contexts(&self) -> &DashMap<i64, Arc<TaskContext>> {
+    fn conversation_contexts(&self) -> &DashMap<i64, TaskContext> {
         &self.inner().conversation_contexts
     }
 
-    fn default_config(&self) -> TaskExecutionConfig {
-        self.inner().default_config.clone()
+    fn default_config(&self) -> &TaskExecutionConfig {
+        &self.inner().default_config
     }
 
     fn terminal_context_service(&self) -> Arc<TerminalContextService> {
@@ -222,7 +222,7 @@ impl TaskExecutor {
                 matches!(status, AgentTaskStatus::Running | AgentTaskStatus::Paused);
 
             if is_actually_running {
-                if self.active_tasks().contains_key(&existing_ctx.task_id) {
+                if self.active_tasks().contains_key(existing_ctx.task_id.as_ref()) {
                     return Err(TaskExecutorError::InternalError(format!(
                         "Conversation {} still has active task, cannot start new task",
                         params.conversation_id
@@ -240,7 +240,7 @@ impl TaskExecutor {
             let (system_prompt, _) = self
                 .build_task_prompts(
                     params.conversation_id,
-                    existing_ctx.task_id.clone(),
+                    existing_ctx.task_id.to_string(),
                     &params.user_prompt,
                     Some(&existing_ctx.cwd),
                     &*existing_ctx.tool_registry(),
@@ -264,19 +264,20 @@ impl TaskExecutor {
 
             existing_ctx.set_status(AgentTaskStatus::Running).await?;
 
+            let task_id = existing_ctx.task_id.clone();
             self.active_tasks().insert(
-                existing_ctx.task_id.clone(),
+                task_id.to_string(),  // DashMap key 是 String
                 existing_ctx.clone(),
             );
 
             existing_ctx
                 .send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
-                    task_id: existing_ctx.task_id.clone(),
+                    task_id: task_id.to_string(),
                     iteration: existing_ctx.current_iteration().await,
                 }))
                 .await?;
 
-            self.spawn_react_execution(existing_ctx, params.model_id);
+            self.spawn_react_execution(existing_ctx.clone(), params.model_id);
             return Ok(());
         }
 
@@ -306,28 +307,27 @@ impl TaskExecutor {
 
             restored_ctx.set_status(AgentTaskStatus::Running).await?;
 
+            let task_id = restored_ctx.task_id.clone();
             self.active_tasks().insert(
-                restored_ctx.task_id.clone(),
+                task_id.to_string(),  // DashMap key 是 String
                 restored_ctx.clone(),
             );
 
             restored_ctx
                 .send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
-                    task_id: restored_ctx.task_id.clone(),
+                    task_id: task_id.to_string(),
                     iteration: restored_ctx.current_iteration().await,
                 }))
                 .await?;
 
-            self.spawn_react_execution(restored_ctx, params.model_id);
+            self.spawn_react_execution(restored_ctx.clone(), params.model_id);
             return Ok(());
         }
 
         // 3. Create new task
         let model_id = params.model_id.clone();
-        let context = Arc::new(
-            self.create_task_context(params, Some(progress_channel), None)
-                .await?,
-        );
+        let context = self.create_task_context(params, Some(progress_channel), None)
+                .await?;
         self.register_conversation_context(context.clone()).await;
 
         let persistence = self.agent_persistence();
@@ -339,19 +339,21 @@ impl TaskExecutor {
 
         context.set_status(AgentTaskStatus::Running).await?;
 
+        // Arc<str> clone 是零成本的（仅增加引用计数）
+        let task_id = context.task_id.clone();
         self.active_tasks().insert(
-            context.task_id.clone(),
+            task_id.to_string(),  // DashMap key 是 String
             context.clone(),
         );
 
         context
             .send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
-                task_id: context.task_id.clone(),
+                task_id: task_id.to_string(),  // Payload 需要 String
                 iteration: context.current_iteration().await,
             }))
             .await?;
 
-        self.spawn_react_execution(context, model_id);
+        self.spawn_react_execution(context.clone(), model_id);
         Ok(())
     }
 
@@ -383,8 +385,8 @@ impl TaskExecutor {
     ) -> TaskExecutorResult<()> {
         let context = self.active_tasks()
             .get(task_id)
-            .ok_or_else(|| TaskExecutorError::TaskNotFound(task_id.to_string()))?;
-        let context = context.value().clone();
+            .ok_or_else(|| TaskExecutorError::TaskNotFound(task_id.to_string()))?
+            .clone();
 
         context.set_pause(false, true);
         context.abort();
@@ -398,10 +400,7 @@ impl TaskExecutor {
             }))
             .await?;
 
-        // ✅ 只删除 active_tasks，保留 conversation_contexts
         self.active_tasks().remove(task_id);
-
-        // ❌ 不清理 context_builder，保留对话上下文用于后续继续
         // self.clear_context_builder(conversation_id).await;
 
         info!(
@@ -434,7 +433,7 @@ impl TaskExecutor {
 
         let mut summaries = Vec::new();
         for execution in executions {
-            let status = AgentTaskStatus::from(execution.status.clone());
+            let status = AgentTaskStatus::from(execution.status);
             if let Some(filter) = &status_filter {
                 if status.as_str() != filter {
                     continue;
@@ -554,28 +553,30 @@ impl TaskExecutor {
         })
     }
 
-    async fn register_conversation_context(&self, context: Arc<TaskContext>) {
+    async fn register_conversation_context(&self, context: TaskContext) {
         self.conversation_contexts().insert(context.conversation_id, context);
     }
 
-    async fn get_context_builder(&self, context: &Arc<TaskContext>) -> Arc<ContextBuilder> {
-        self.context_builder_cache()
-            .entry(context.conversation_id)
-            .or_insert_with(|| Arc::new(ContextBuilder::new(context.file_tracker())))
-            .clone()
+    async fn get_context_builder(&self, context: &TaskContext) -> Arc<ContextBuilder> {
+        Arc::clone(
+            self.context_builder_cache()
+                .entry(context.conversation_id)
+                .or_insert_with(|| Arc::new(ContextBuilder::new(context.file_tracker())))
+                .value()
+        )
     }
 
-    async fn conversation_context(&self, conversation_id: i64) -> Option<Arc<TaskContext>> {
+    async fn conversation_context(&self, conversation_id: i64) -> Option<TaskContext> {
         self.conversation_contexts()
             .get(&conversation_id)
-            .map(|entry| entry.value().clone())
+            .map(|entry| entry.clone())
     }
 
     /// Restore TaskContext from database (used after app restart).
     async fn restore_from_db(
         &self,
         conversation_id: i64,
-    ) -> TaskExecutorResult<Option<Arc<TaskContext>>> {
+    ) -> TaskExecutorResult<Option<TaskContext>> {
         let persistence = self.agent_persistence();
 
         let executions = persistence
@@ -599,7 +600,7 @@ impl TaskExecutor {
             .rebuild_task_context(conversation_id, execution.clone(), db_messages)
             .await?;
 
-        Ok(Some(Arc::new(context)))
+        Ok(Some(context))
     }
 
     /// Rebuild TaskContext from database records.
@@ -616,7 +617,7 @@ impl TaskExecutor {
         let chat_mode = "agent".to_string();
         let tool_registry = crate::agent::tools::create_tool_registry(&chat_mode).await;
 
-        let mut config = self.default_config();
+        let mut config = *self.default_config();
         if let Some(config_json) = &execution.execution_config {
             if let Ok(saved_config) = serde_json::from_str::<TaskExecutionConfig>(config_json) {
                 config = saved_config;
@@ -624,7 +625,7 @@ impl TaskExecutor {
         }
 
         let context = TaskContext::new(
-            execution.clone(),
+            execution,
             config,
             cwd.clone(),
             tool_registry.clone(),
@@ -720,16 +721,9 @@ impl TaskExecutor {
             tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
                 cwd: cwd.to_string(),
             });
-        let simple_tool_schemas: Vec<ToolSchema> = tool_schemas_full
-            .into_iter()
-            .map(|s| ToolSchema {
-                name: s.name,
-                description: s.description,
-                parameters: s.parameters,
-            })
-            .collect();
 
-        let tool_names: Vec<String> = simple_tool_schemas.iter().map(|t| t.name.clone()).collect();
+        let tool_names: Vec<String> = tool_schemas_full.iter().map(|s| s.name.clone()).collect();
+
         let agent_info = Agent {
             name: "OrbitX Agent".to_string(),
             description: "An AI coding assistant for OrbitX".to_string(),
@@ -740,7 +734,7 @@ impl TaskExecutor {
         let task_for_prompt = Task {
             id: task_id,
             conversation_id,
-            user_prompt: user_prompt.to_string(),
+            user_prompt: user_prompt.to_owned(),
             xml: None,
             status: crate::agent::types::TaskStatus::Created,
             created_at: Utc::now(),
@@ -749,11 +743,11 @@ impl TaskExecutor {
 
         let mut prompt_ctx = AgentContext::default();
         if let Some(dir) = working_directory {
-            prompt_ctx.working_directory = Some(dir.to_string());
+            prompt_ctx.working_directory = Some(dir.to_owned());
         }
         prompt_ctx.additional_context.insert(
             "taskPrompt".to_string(),
-            serde_json::Value::String(user_prompt.to_string()),
+            serde_json::Value::String(user_prompt.to_owned()),
         );
 
         // 获取用户规则
@@ -784,19 +778,17 @@ impl TaskExecutor {
             agent_info.clone(),
             Some(task_for_prompt.clone()),
             Some(prompt_ctx.clone()),
-            simple_tool_schemas.clone(),
+            tool_schemas_full.clone(),
             ext_sys_prompt,
         )
         .await
-        .map_err(|e| {
-            TaskExecutorError::InternalError(format!("Failed to build system prompt: {}", e))
-        })?;
+        .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?;
 
         let user_prompt_built = build_agent_user_prompt(
             agent_info,
             Some(task_for_prompt),
             Some(prompt_ctx),
-            simple_tool_schemas,
+            tool_schemas_full,
         )
         .await
         .map_err(|e| {
@@ -806,12 +798,12 @@ impl TaskExecutor {
         Ok((system_prompt, user_prompt_built))
     }
 
-    fn spawn_react_execution(&self, context: Arc<TaskContext>, model_id: String) {
+    fn spawn_react_execution(&self, context: TaskContext, model_id: String) {
         let executor = self.clone();
         tokio::spawn(async move {
-            let task_id = context.task_id.clone();
+            let task_id = &context.task_id;
             let _conversation_id = context.conversation_id;
-            let result = executor.run_react_loop(context.clone(), model_id).await;
+            let result = executor.run_react_loop(&context, model_id).await;
 
             match result {
                 Ok(_) => {
@@ -821,7 +813,7 @@ impl TaskExecutor {
 
                     if let Err(e) = context
                         .send_progress(TaskProgressPayload::TaskCompleted(TaskCompletedPayload {
-                            task_id: task_id.clone(),
+                            task_id: task_id.to_string(),
                             final_iteration: context.current_iteration().await,
                             completion_reason: "Task completed successfully".to_string(),
                             timestamp: Utc::now(),
@@ -833,7 +825,7 @@ impl TaskExecutor {
                 }
                 Err(e) => {
                     executor
-                        .handle_task_error(&task_id, e.into(), context.clone())
+                        .handle_task_error(task_id, e.into(), &context)
                         .await;
                 }
             }
@@ -841,7 +833,7 @@ impl TaskExecutor {
             // 显式关闭 progress channel，确保前端收到 stream 结束信号
             context.set_progress_channel(None).await;
 
-            executor.active_tasks().remove(&task_id);
+            executor.active_tasks().remove(task_id.as_ref());
 
             info!(
                 "Task {} execution completed, conversation context preserved",
@@ -937,7 +929,7 @@ impl TaskExecutor {
     /// ReAct循环执行（重构版：简化逻辑，移除idle计数安全网）
     pub(crate) async fn run_react_loop(
         &self,
-        context: Arc<TaskContext>,
+        context: &TaskContext,
         model_id: String,
     ) -> TaskExecutorResult<()> {
         info!("Starting ReAct loop for task: {}", context.task_id);
@@ -956,9 +948,8 @@ impl TaskExecutor {
             debug!("Task {} starting iteration {}", context.task_id, iteration);
 
             let react_iteration_index = {
-                let runtime_handle = context.react_runtime();
-                let mut runtime = runtime_handle.write().await;
-                runtime.start_iteration()
+                let mut state = context.state.write().await;
+                state.react_runtime.start_iteration()
             };
 
             let iter_ctx = context.begin_iteration(iteration).await;
@@ -976,9 +967,13 @@ impl TaskExecutor {
             let tool_registry = context.tool_registry();
 
             // ===== Phase 2 (续): 摘要、压缩、文件上下文（零持久化） =====
-            // 注：这里转Vec是因为summarizer/compactor还用Vec，这是合理的边界转换
-            let mut working_messages: Vec<MessageParam> = context.get_messages().await.into();
-            let mut system_prompt: Option<SystemPrompt> = context.get_system_prompt().await;
+            // 性能优化：使用批量读取，一次锁获取所有数据
+            let (mut working_messages, mut system_prompt) = context.batch_read_state(|state| {
+                (
+                    state.execution.messages.iter().cloned().collect::<Vec<_>>(),
+                    state.execution.system_prompt.clone(),
+                )
+            }).await;
 
             // 摘要（如果需要）
             let summarizer = ConversationSummarizer::new(
@@ -990,50 +985,44 @@ impl TaskExecutor {
                 .summarize_if_needed(&model_id, &working_messages, &system_prompt)
                 .await
             {
-                let sys_text = match system_prompt.clone() {
+                let sys_text = match &system_prompt {
                     Some(SystemPrompt::Text(t)) => {
-                        // 使用with_capacity预分配，避免多次内存分配
                         let capacity = t.len() + summary.summary.len() + 15;
                         let mut buf = String::with_capacity(capacity);
-                        buf.push_str(&t);
+                        buf.push_str(t);
                         buf.push_str("\n\n[summary]\n");
                         buf.push_str(&summary.summary);
                         buf
                     }
-                    Some(SystemPrompt::Blocks(_)) => summary.summary, // 简化处理
-                    None => summary.summary,
+                    Some(SystemPrompt::Blocks(_)) | None => summary.summary,
                 };
+                // 性能优化：直接更新，减少一次读锁
+                system_prompt = Some(SystemPrompt::Text(sys_text.clone()));
                 let _ = context.update_system_prompt(sys_text).await;
-                system_prompt = context.get_system_prompt().await;
             }
 
-            // 会话压缩历史（如有），并入 system prompt
             let compressed_history = context.session().get_compressed_history_text().await;
             if !compressed_history.is_empty() {
-                let sys_text = match system_prompt.clone() {
+                let sys_text = match &system_prompt {
                     Some(SystemPrompt::Text(t)) => {
-                        // 使用with_capacity预分配，避免多次内存分配
                         let capacity = t.len() + compressed_history.len() + 15;
                         let mut buf = String::with_capacity(capacity);
-                        buf.push_str(&t);
+                        buf.push_str(t);
                         buf.push_str("\n\n[history]\n");
                         buf.push_str(&compressed_history);
                         buf
                     }
-                    Some(SystemPrompt::Blocks(_)) => compressed_history.clone(),
-                    None => compressed_history.clone(),
+                    Some(SystemPrompt::Blocks(_)) | None => compressed_history,
                 };
+                // 性能优化：直接更新，减少一次读锁
+                system_prompt = Some(SystemPrompt::Text(sys_text.clone()));
                 let _ = context.update_system_prompt(sys_text).await;
-                system_prompt = context.get_system_prompt().await;
             }
 
             // 文件上下文（如有），追加为 user 临时消息
-            let recent_iterations = context
-                .react_runtime()
-                .read()
-                .await
-                .get_snapshot()
-                .iterations;
+            let recent_iterations = context.batch_read_state(|state| {
+                state.react_runtime.get_snapshot().iterations.clone()
+            }).await;
             let builder = self.get_context_builder(&context).await;
             if let Some(file_msg) = builder.build_file_context_message(&recent_iterations).await {
                 working_messages.push(file_msg);
@@ -1047,7 +1036,7 @@ impl TaskExecutor {
             let compaction_result = MessageCompactor::new()
                 .with_config(CompactionConfig::default())
                 .compact_if_needed(
-                    working_messages,
+                    working_messages,  // 已经是 Vec<MessageParam>
                     system_prompt.clone(),
                     &model_id,
                     context_window,
@@ -1145,7 +1134,7 @@ impl TaskExecutor {
                                         }
                                         context
                                             .send_progress(TaskProgressPayload::Text(TextPayload {
-                                                task_id: context.task_id.clone(),
+                                                task_id: context.task_id.to_string(),
                                                 iteration,
                                                 text,
                                                 stream_id: text_stream_id.clone().unwrap(),
@@ -1170,7 +1159,7 @@ impl TaskExecutor {
                                         context
                                             .send_progress(TaskProgressPayload::Thinking(
                                                 ThinkingPayload {
-                                                    task_id: context.task_id.clone(),
+                                                    task_id: context.task_id.to_string(),
                                                     iteration,
                                                     thought: thinking,
                                                     stream_id: thinking_stream_id.clone().unwrap(),
@@ -1210,7 +1199,7 @@ impl TaskExecutor {
                                     });
 
                                     // 记录动作与收集待执行工具
-                                    context.react_runtime().write().await.record_action(
+                                    context.state.write().await.react_runtime.record_action(
                                         react_iteration_index,
                                         name.clone(),
                                         input.clone(),
@@ -1319,21 +1308,20 @@ impl TaskExecutor {
                             .await;
 
                         {
-                            let runtime_handle = context.react_runtime();
-                            let mut runtime = runtime_handle.write().await;
-                            runtime.record_observation(
+                            let mut state = context.state.write().await;
+                            state.react_runtime.record_observation(
                                 react_iteration_index,
                                 result.tool_name.clone(),
                                 outcome,
                             );
 
                             if result.is_error {
-                                runtime.fail_iteration(
+                                state.react_runtime.fail_iteration(
                                     react_iteration_index,
                                     format!("Tool {} failed", result.tool_name),
                                 );
                             } else {
-                                runtime.reset_error_counter();
+                                state.react_runtime.reset_error_counter();
                             }
                         }
                     }
@@ -1362,7 +1350,7 @@ impl TaskExecutor {
                         }
                     );
 
-                    context.react_runtime().write().await.complete_iteration(
+                    context.state.write().await.react_runtime.complete_iteration(
                         react_iteration_index,
                         output.clone(),
                         None,
@@ -1396,7 +1384,7 @@ impl TaskExecutor {
 
     async fn finalize_iteration(
         &self,
-        context: &Arc<TaskContext>,
+        context: &TaskContext,
         snapshots: &mut Vec<IterationSnapshot>,
     ) -> TaskExecutorResult<()> {
         if let Some(snapshot) = context.end_iteration().await {
@@ -1421,7 +1409,7 @@ impl TaskExecutor {
 
     async fn compress_iteration_batch(
         &self,
-        context: &Arc<TaskContext>,
+        context: &TaskContext,
         snapshots: &[IterationSnapshot],
     ) -> TaskExecutorResult<()> {
         if snapshots.is_empty() {
@@ -1467,7 +1455,7 @@ impl TaskExecutor {
         progress_channel: Option<Channel<TaskProgressPayload>>,
         cwd_override: Option<String>,
     ) -> TaskExecutorResult<TaskContext> {
-        let mut config = self.default_config();
+        let mut config = self.default_config().clone(); // Clone config to get owned value
         if let Some(overrides) = params.config_overrides {
             self.apply_config_overrides(&mut config, overrides)?;
         }
@@ -1516,7 +1504,7 @@ impl TaskExecutor {
 
         let context = TaskContext::new(
             execution,
-            config,
+            config, // Move config (already owned)
             cwd.clone(),
             tool_registry,
             progress_channel.clone(),
@@ -1534,7 +1522,7 @@ impl TaskExecutor {
 
         if let Some(channel) = &progress_channel {
             channel.send(TaskProgressPayload::TaskCreated(TaskCreatedPayload {
-                task_id: context.task_id.clone(),
+                task_id: context.task_id.to_string(),
                 conversation_id: context.conversation_id,
                 user_prompt,
             }))?;
@@ -1548,7 +1536,7 @@ impl TaskExecutor {
         &self,
         task_id: &str,
         error: AgentError,
-        context: Arc<TaskContext>,
+        context: &TaskContext,
     ) {
         error!("Task {} error: {}", task_id, error);
 
@@ -1664,7 +1652,7 @@ impl TaskExecutor {
     /// 并行执行多个工具调用
     async fn execute_tools_parallel(
         &self,
-        context: &Arc<TaskContext>,
+        context: &TaskContext,
         iteration: u32,
         tool_calls: Vec<(String, String, serde_json::Value)>,
     ) -> TaskExecutorResult<Vec<ToolCallResult>> {
@@ -1679,7 +1667,7 @@ impl TaskExecutor {
             .into_iter()
             .map(|(id, name, args)| {
                 let executor = self.clone();
-                let ctx = Arc::clone(context);
+                let ctx = context.clone(); // TaskContext is cheap to clone
                 async move {
                     executor
                         .execute_tool_call(&ctx, iteration, id, name, args)
@@ -1711,7 +1699,7 @@ impl TaskExecutor {
     /// 检测循环模式 - 分析最近N个iterations是否形成重复模式
     async fn detect_loop_pattern(
         &self,
-        context: &Arc<TaskContext>,
+        context: &TaskContext,
         current_iteration: u32,
     ) -> Option<String> {
         const LOOP_DETECTION_WINDOW: usize = 3;
@@ -1721,9 +1709,8 @@ impl TaskExecutor {
         }
 
         // 从ReactRuntime获取iterations历史
-        let runtime_handle = context.react_runtime();
-        let runtime_guard = runtime_handle.read().await;
-        let snapshot = runtime_guard.get_snapshot();
+        let state = context.state.read().await;
+        let snapshot = state.react_runtime.get_snapshot();
         let iterations = &snapshot.iterations;
 
         if iterations.len() < LOOP_DETECTION_WINDOW {

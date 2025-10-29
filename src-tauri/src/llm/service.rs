@@ -70,14 +70,15 @@ impl LLMService {
     /// 非流式调用（Anthropic 原生类型）
     pub async fn call(&self, request: CreateMessageRequest) -> LlmResult<Message> {
         self.validate_request(&request)?;
-        let original_model_id = request.model.clone();
-        let config = self.get_provider_config(&request.model).await?;
+        let mut config = self.get_provider_config(&request.model).await?;
+        // ✅ Move model out before passing config to create (avoid clone)
+        let provider_model = std::mem::take(&mut config.model);
         let provider = ProviderRegistry::global()
-            .create(config.clone())
+            .create(config)
             .map_err(LlmError::from)?;
 
         let mut actual_request = request;
-        actual_request.model = config.model;
+        let original_model_id = std::mem::replace(&mut actual_request.model, provider_model);
 
         tracing::debug!(
             "Making LLM call with model: {} (config: {})",
@@ -108,15 +109,16 @@ impl LLMService {
         token: CancellationToken,
     ) -> LlmResult<impl tokio_stream::Stream<Item = LlmProviderResult<StreamEvent>>> {
         self.validate_request(&request)?;
-        let original_model_id = request.model.clone();
-        let config = self.get_provider_config(&request.model).await?;
+        let mut config = self.get_provider_config(&request.model).await?;
+        // ✅ Move model out before passing config to create (avoid clone)
+        let provider_model = std::mem::take(&mut config.model);
         let provider = ProviderRegistry::global()
-            .create(config.clone())
+            .create(config)
             .map_err(LlmError::from)?;
 
         let mut actual_request = request;
-        // 替换为真实provider模型ID（移动而非克隆）
-        actual_request.model = config.model;
+        // ✅ Move provider model into request (zero-cost)
+        let original_model_id = std::mem::replace(&mut actual_request.model, provider_model);
 
         tracing::debug!(
             "Making streaming LLM call with model: {} (config: {}), with external cancel token",
@@ -163,14 +165,14 @@ impl LLMService {
         &self,
         request: EmbeddingRequest,
     ) -> LlmResult<EmbeddingResponse> {
-        let original_model_id = request.model.clone();
         let config = self.get_provider_config(&request.model).await?;
+        let provider_model = config.model.clone();
         let provider = ProviderRegistry::global()
-            .create(config.clone())
+            .create(config)
             .map_err(LlmError::from)?;
 
         let mut actual_request = request;
-        actual_request.model = config.model;
+        let original_model_id = std::mem::replace(&mut actual_request.model, provider_model);
 
         tracing::debug!(
             "Making embedding call with model: {} (config: {})",

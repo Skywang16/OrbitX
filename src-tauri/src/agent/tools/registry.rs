@@ -59,13 +59,13 @@ impl RateLimiter {
 }
 
 pub struct ToolRegistry {
-    tools: Arc<DashMap<String, Arc<dyn RunnableTool>>>,
-    metadata_index: Arc<DashMap<String, ToolMetadata>>,
-    category_index: Arc<DashMap<ToolCategory, Vec<String>>>,
-    rate_limiters: Arc<DashMap<String, RateLimiter>>,
-    aliases: Arc<DashMap<String, String>>,
-    granted_permissions: Arc<Vec<ToolPermission>>,
-    execution_stats: Arc<DashMap<String, ToolExecutionStats>>,
+    tools: DashMap<String, Arc<dyn RunnableTool>>,
+    metadata_index: DashMap<String, ToolMetadata>,
+    category_index: DashMap<ToolCategory, Vec<String>>,
+    rate_limiters: DashMap<String, RateLimiter>,
+    aliases: DashMap<String, String>,
+    granted_permissions: Vec<ToolPermission>,
+    execution_stats: DashMap<String, ToolExecutionStats>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -82,13 +82,13 @@ impl ToolRegistry {
     /// 唯一的构造函数 - 显式传递权限
     pub fn new(granted: Vec<ToolPermission>) -> Self {
         Self {
-            tools: Arc::new(DashMap::new()),
-            metadata_index: Arc::new(DashMap::new()),
-            category_index: Arc::new(DashMap::new()),
-            rate_limiters: Arc::new(DashMap::new()),
-            aliases: Arc::new(DashMap::new()),
-            granted_permissions: Arc::new(granted),
-            execution_stats: Arc::new(DashMap::new()),
+            tools: DashMap::new(),
+            metadata_index: DashMap::new(),
+            category_index: DashMap::new(),
+            rate_limiters: DashMap::new(),
+            aliases: DashMap::new(),
+            granted_permissions: granted,
+            execution_stats: DashMap::new(),
         }
     }
 
@@ -99,7 +99,7 @@ impl ToolRegistry {
         is_chat_mode: bool, // 新增参数
     ) -> ToolExecutorResult<()> {
         let key = name.to_string();
-        let granted = self.granted_permissions.as_ref();
+        let granted = &self.granted_permissions;
         let metadata = tool.metadata();
 
         // === Chat 模式工具过滤逻辑 ===
@@ -225,7 +225,7 @@ impl ToolRegistry {
             return Some(name.to_string());
         }
 
-        self.aliases.get(name).map(|entry| entry.value().clone())
+        self.aliases.get(name).map(|entry| entry.clone())
     }
 
     pub async fn get_tool(&self, name: &str) -> Option<Arc<dyn RunnableTool>> {
@@ -329,7 +329,7 @@ impl ToolRegistry {
             }
         };
 
-        let granted = self.granted_permissions.as_ref();
+        let granted = &self.granted_permissions;
         if !tool.check_permissions(granted) {
             return self
                 .make_error_result(
@@ -455,15 +455,15 @@ impl ToolRegistry {
 
     pub async fn get_tool_metadata(&self, name: &str) -> Option<ToolMetadata> {
         if let Some(meta) = self.metadata_index.get(name) {
-            return Some(meta.value().clone());
+            return Some(meta.clone());
         }
 
         if let Some(alias) = self.aliases.get(name) {
-            let actual = alias.value().clone();
+            let actual = alias.clone();
             return self
                 .metadata_index
                 .get(&actual)
-                .map(|entry| entry.value().clone());
+                .map(|entry| entry.clone());
         }
 
         None
@@ -472,7 +472,7 @@ impl ToolRegistry {
     pub async fn list_tools_by_category(&self, category: ToolCategory) -> Vec<String> {
         self.category_index
             .get(&category)
-            .map(|entry| entry.value().clone())
+            .map(|entry| entry.clone())
             .unwrap_or_default()
     }
 }

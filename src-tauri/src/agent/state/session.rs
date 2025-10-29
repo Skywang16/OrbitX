@@ -102,9 +102,15 @@ impl SessionContext {
     pub async fn add_compressed_memory(&self, memory: CompressedMemory) {
         let mut history = self.compressed_history.write().await;
         history.push(memory);
-        if history.len() > 32 {
-            let excess = history.len() - 32;
+        // 限制历史记录数量
+        const MAX_COMPRESSED_HISTORY: usize = 32;
+        if history.len() > MAX_COMPRESSED_HISTORY {
+            let excess = history.len() - MAX_COMPRESSED_HISTORY;
             history.drain(0..excess);
+        }
+        // 内存优化：定期缩容，防止 Vec 容量无限增长
+        if history.capacity() > history.len() * 3 {
+            history.shrink_to_fit();
         }
     }
 

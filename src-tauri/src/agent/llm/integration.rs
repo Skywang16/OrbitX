@@ -101,7 +101,7 @@ impl TaskExecutor {
         // 发送 ToolUse 事件 - 表示工具开始执行
         context
             .send_progress(TaskProgressPayload::ToolUse(ToolUsePayload {
-                task_id: context.task_id.clone(),
+                task_id: context.task_id.to_string(),
                 iteration,
                 tool_id: call_id.clone(),
                 tool_name: tool_name.clone(),
@@ -170,7 +170,7 @@ impl TaskExecutor {
         // 发送结果事件（包含 ext_info 给前端 UI）
         context
             .send_progress(TaskProgressPayload::ToolResult(ToolResultPayload {
-                task_id: context.task_id.clone(),
+                task_id: context.task_id.to_string(),
                 iteration,
                 tool_id: call_id.clone(),
                 tool_name: tool_name.clone(),
@@ -233,12 +233,13 @@ impl TaskExecutor {
                 .await?;
         }
 
-        // 7. 添加工具结果到上下文
+        // 7. 添加工具结果到上下文并返回
+        let result = tool_call_result;
         context
-            .add_tool_results(vec![tool_call_result.clone()])
+            .add_tool_results(vec![result.clone()])
             .await;
 
-        Ok(tool_call_result)
+        Ok(result)
     }
 
     /// 获取默认模型ID
