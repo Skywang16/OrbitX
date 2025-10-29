@@ -1,18 +1,12 @@
 /*!
- * 审计日志Repository
- *
- * 处理审计日志的数据访问逻辑
+ * 审计日志访问层 - 直接使用 sqlx
  */
 
-use super::{Repository, RowMapper};
 use crate::storage::database::DatabaseManager;
 use crate::storage::error::{RepositoryError, RepositoryResult};
-use crate::storage::query::{InsertBuilder, QueryCondition, SafeQueryBuilder};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use sqlx::Row;
-use std::sync::Arc;
 
 /// 审计日志条目
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,7 +46,7 @@ impl AuditLogEntry {
     }
 }
 
-impl RowMapper<AuditLogEntry> for AuditLogEntry {
+impl AuditLogEntry {
     fn from_row(row: &sqlx::sqlite::SqliteRow) -> RepositoryResult<Self> {
         Ok(Self {
             id: Some(row.try_get("id")?),
@@ -68,14 +62,14 @@ impl RowMapper<AuditLogEntry> for AuditLogEntry {
     }
 }
 
-/// 审计日志Repository
-pub struct AuditLogRepository {
-    database: Arc<DatabaseManager>,
+/// 审计日志访问器
+pub struct AuditLogs<'a> {
+    db: &'a DatabaseManager,
 }
 
-impl AuditLogRepository {
-    pub fn new(database: Arc<DatabaseManager>) -> Self {
-        Self { database }
+impl<'a> AuditLogs<'a> {
+    pub fn new(db: &'a DatabaseManager) -> Self {
+        Self { db }
     }
 
     /// 记录审计事件
@@ -109,62 +103,39 @@ impl AuditLogRepository {
         operation: Option<&str>,
         limit: Option<i64>,
     ) -> RepositoryResult<Vec<AuditLogEntry>> {
-        let mut builder = SafeQueryBuilder::new("audit_logs")
-            .select(&[
-                "id",
-                "operation",
-                "table_name",
-                "record_id",
-                "user_context",
-                "details",
-                "timestamp",
-                "success",
-                "error_message",
-            ])
-            .order_by(crate::storage::query::QueryOrder::Desc(
-                "timestamp".to_string(),
-            ));
+        let mut sql = String::from(
+            "SELECT id, operation, table_name, record_id, user_context, details, timestamp, success, error_message FROM audit_logs",
+        );
+        let mut where_clauses: Vec<&str> = Vec::new();
 
+        // Collect conditions
+        if table_name.is_some() {
+            where_clauses.push("table_name = ?");
+        }
+        if operation.is_some() {
+            where_clauses.push("operation = ?");
+        }
+        if !where_clauses.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&where_clauses.join(" AND "));
+        }
+        sql.push_str(" ORDER BY timestamp DESC");
+        if limit.is_some() {
+            sql.push_str(" LIMIT ?");
+        }
+
+        let mut qb = sqlx::query(&sql);
         if let Some(table) = table_name {
-            builder = builder.where_condition(QueryCondition::Eq(
-                "table_name".to_string(),
-                Value::String(table.to_string()),
-            ));
+            qb = qb.bind(table);
         }
-
         if let Some(op) = operation {
-            builder = builder.where_condition(QueryCondition::Eq(
-                "operation".to_string(),
-                Value::String(op.to_string()),
-            ));
+            qb = qb.bind(op);
         }
-
         if let Some(limit) = limit {
-            builder = builder.limit(limit);
+            qb = qb.bind(limit);
         }
 
-        let (sql, params) = builder.build()?;
-
-        let mut query_builder = sqlx::query(&sql);
-        for param in params {
-            query_builder = match param {
-                Value::String(s) => query_builder.bind(s),
-                Value::Number(n) => {
-                    if let Some(i) = n.as_i64() {
-                        query_builder.bind(i)
-                    } else {
-                        return Err(RepositoryError::UnsupportedNumberType);
-                    }
-                }
-                _ => {
-                    return Err(RepositoryError::unsupported_parameter(
-                        "audit_logs parameter",
-                    ))
-                }
-            };
-        }
-
-        let rows = query_builder.fetch_all(self.database.pool()).await?;
+        let rows = qb.fetch_all(self.db.pool()).await?;
         let entries: Vec<AuditLogEntry> = rows
             .iter()
             .map(|row| AuditLogEntry::from_row(row))
@@ -172,97 +143,49 @@ impl AuditLogRepository {
 
         Ok(entries)
     }
-}
+    pub async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<AuditLogEntry>> {
+        let row = sqlx::query(
+            r#"SELECT id, operation, table_name, record_id, user_context, details, timestamp, success, error_message
+            FROM audit_logs WHERE id = ? LIMIT 1"#,
+        )
+        .bind(id)
+        .fetch_optional(self.db.pool())
+        .await?;
 
-#[async_trait::async_trait]
-impl Repository<AuditLogEntry> for AuditLogRepository {
-    async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<AuditLogEntry>> {
-        let (sql, _params) = SafeQueryBuilder::new("audit_logs")
-            .where_condition(QueryCondition::Eq(
-                "id".to_string(),
-                Value::Number(id.into()),
-            ))
-            .build()?;
-
-        let row = sqlx::query(&sql)
-            .bind(id)
-            .fetch_optional(self.database.pool())
-            .await?;
-
-        match row {
-            Some(row) => Ok(Some(AuditLogEntry::from_row(&row)?)),
-            None => Ok(None),
-        }
+        Ok(row.map(|r| AuditLogEntry::from_row(&r)).transpose()?)
     }
 
-    async fn find_all(&self) -> RepositoryResult<Vec<AuditLogEntry>> {
+    pub async fn find_all(&self) -> RepositoryResult<Vec<AuditLogEntry>> {
         self.find_logs(None, None, None).await
     }
 
-    async fn save(&self, entity: &AuditLogEntry) -> RepositoryResult<i64> {
-        let (sql, params) = InsertBuilder::new("audit_logs")
-            .set("operation", Value::String(entity.operation.clone()))
-            .set("table_name", Value::String(entity.table_name.clone()))
-            .set(
-                "record_id",
-                entity
-                    .record_id
-                    .as_ref()
-                    .map(|r| Value::String(r.clone()))
-                    .unwrap_or(Value::Null),
-            )
-            .set(
-                "user_context",
-                entity
-                    .user_context
-                    .as_ref()
-                    .map(|u| Value::String(u.clone()))
-                    .unwrap_or(Value::Null),
-            )
-            .set("details", Value::String(entity.details.clone()))
-            .set("success", Value::Bool(entity.success))
-            .set(
-                "error_message",
-                entity
-                    .error_message
-                    .as_ref()
-                    .map(|e| Value::String(e.clone()))
-                    .unwrap_or(Value::Null),
-            )
-            .build()?;
-
-        let mut query_builder = sqlx::query(&sql);
-        for param in params {
-            query_builder = match param {
-                Value::String(s) => query_builder.bind(s),
-                Value::Bool(b) => query_builder.bind(b),
-                Value::Null => query_builder.bind(None::<String>),
-                _ => {
-                    return Err(RepositoryError::unsupported_parameter(
-                        "audit_logs parameter",
-                    ))
-                }
-            };
-        }
-
-        let result = query_builder.execute(self.database.pool()).await?;
+    pub async fn save(&self, entity: &AuditLogEntry) -> RepositoryResult<i64> {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO audit_logs (operation, table_name, record_id, user_context, details, success, error_message)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&entity.operation)
+        .bind(&entity.table_name)
+        .bind(&entity.record_id)
+        .bind(&entity.user_context)
+        .bind(&entity.details)
+        .bind(entity.success)
+        .bind(&entity.error_message)
+        .execute(self.db.pool())
+        .await?;
         Ok(result.last_insert_rowid())
     }
 
-    async fn update(&self, _entity: &AuditLogEntry) -> RepositoryResult<()> {
-        Err(RepositoryError::AuditLogUpdateNotSupported)
-    }
-
-    async fn delete(&self, id: i64) -> RepositoryResult<()> {
+    pub async fn delete(&self, id: i64) -> RepositoryResult<()> {
         let result = sqlx::query("DELETE FROM audit_logs WHERE id = ?")
             .bind(id)
-            .execute(self.database.pool())
+            .execute(self.db.pool())
             .await?;
-
         if result.rows_affected() == 0 {
             return Err(RepositoryError::AuditLogNotFound { id: id.to_string() });
         }
-
         Ok(())
     }
 }

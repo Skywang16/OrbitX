@@ -41,7 +41,7 @@ use crate::llm::anthropic_types::{
     ContentBlock, ContentBlockStart, ContentDelta, MessageContent, MessageParam, StreamEvent,
     SystemPrompt, ToolResultContent as AnthropicToolResultContent,
 };
-use crate::storage::repositories::RepositoryManager;
+use crate::storage::DatabaseManager;
 use crate::terminal::TerminalContextService;
 use chrono::Utc;
 use dashmap::DashMap;
@@ -122,7 +122,7 @@ pub struct FileContextStatus {
 
 /// TaskExecutor核心结构体
 struct TaskExecutorInner {
-    repositories: Arc<RepositoryManager>,
+    database: Arc<DatabaseManager>,
     agent_persistence: Arc<AgentPersistence>,
     ui_persistence: Arc<AgentUiPersistence>,
     tool_logger: Arc<ToolExecutionLogger>,
@@ -131,6 +131,7 @@ struct TaskExecutorInner {
     conversation_contexts: Arc<DashMap<i64, Arc<TaskContext>>>,
     default_config: TaskExecutionConfig,
     terminal_context_service: Arc<TerminalContextService>,
+    cache: Arc<crate::storage::UnifiedCache>,
 }
 
 #[derive(Clone)]
@@ -138,19 +139,20 @@ pub struct TaskExecutor(Arc<TaskExecutorInner>);
 
 impl TaskExecutor {
     pub fn new(
-        repositories: Arc<RepositoryManager>,
+        database: Arc<DatabaseManager>,
         agent_persistence: Arc<AgentPersistence>,
         ui_persistence: Arc<AgentUiPersistence>,
         terminal_context_service: Arc<TerminalContextService>,
+        cache: Arc<crate::storage::UnifiedCache>,
     ) -> Self {
         let tool_logger = Arc::new(ToolExecutionLogger::new(
-            repositories.clone(),
+            database.clone(),
             agent_persistence.clone(),
             true,
         ));
 
         let inner = TaskExecutorInner {
-            repositories,
+            database,
             agent_persistence,
             ui_persistence,
             tool_logger,
@@ -159,6 +161,7 @@ impl TaskExecutor {
             conversation_contexts: Arc::new(DashMap::new()),
             default_config: TaskExecutionConfig::default(),
             terminal_context_service,
+            cache,
         };
 
         Self(Arc::new(inner))
@@ -168,8 +171,8 @@ impl TaskExecutor {
         self.0.as_ref()
     }
 
-    pub(crate) fn repositories(&self) -> Arc<RepositoryManager> {
-        Arc::clone(&self.inner().repositories)
+    pub(crate) fn database(&self) -> Arc<DatabaseManager> {
+        Arc::clone(&self.inner().database)
     }
 
     pub(crate) fn tool_logger(&self) -> Arc<ToolExecutionLogger> {
@@ -626,7 +629,7 @@ impl TaskExecutor {
             cwd.clone(),
             tool_registry.clone(),
             None,
-            self.repositories(),
+            self.database(),
             self.agent_persistence(),
             self.ui_persistence(),
         )
@@ -754,22 +757,10 @@ impl TaskExecutor {
         );
 
         // 获取用户规则
-        let user_rules = self
-            .repositories()
-            .ai_models()
-            .get_user_rules()
-            .await
-            .ok()
-            .flatten();
+        let user_rules = self.inner().cache.get_user_rules().await;
 
         // 获取项目规则（指定使用哪个配置文件）
-        let project_rules = self
-            .repositories()
-            .ai_models()
-            .get_project_rules()
-            .await
-            .ok()
-            .flatten();
+        let project_rules = self.inner().cache.get_project_rules().await;
 
         // 合并项目上下文和用户规则
         let mut prompt_parts = Vec::new();
@@ -887,7 +878,7 @@ impl TaskExecutor {
 
         let llm_messages = convert_execution_messages(&messages);
         let summarizer =
-            ConversationSummarizer::new(conversation_id, persistence.clone(), self.repositories());
+            ConversationSummarizer::new(conversation_id, persistence.clone(), self.database());
 
         let model_id = match model_override {
             Some(model) => model,
@@ -924,10 +915,9 @@ impl TaskExecutor {
 
     /// 从数据库获取模型的 context window 大小
     async fn get_model_context_window(&self, model_id: &str) -> Option<u32> {
-        let model = self
-            .repositories()
-            .ai_models()
-            .find_by_string_id(model_id)
+        let db = self.database();
+        let model = crate::storage::repositories::AIModels::new(&db)
+            .find_by_id(model_id)
             .await
             .ok()??;
 
@@ -994,7 +984,7 @@ impl TaskExecutor {
             let summarizer = ConversationSummarizer::new(
                 context.conversation_id,
                 self.agent_persistence(),
-                self.repositories(),
+                self.database(),
             );
             if let Ok(Some(summary)) = summarizer
                 .summarize_if_needed(&model_id, &working_messages, &system_prompt)
@@ -1096,7 +1086,7 @@ impl TaskExecutor {
                 }
             }
 
-            let llm_service = crate::llm::service::LLMService::new(context.repositories().clone());
+            let llm_service = crate::llm::service::LLMService::new(self.database());
             let cancel_token = context.register_step_token();
             let mut stream = llm_service
                 .call_stream(llm_request, cancel_token)
@@ -1530,7 +1520,7 @@ impl TaskExecutor {
             cwd.clone(),
             tool_registry,
             progress_channel.clone(),
-            self.repositories(),
+            self.database(),
             persistence.clone(),
             self.ui_persistence(),
         )

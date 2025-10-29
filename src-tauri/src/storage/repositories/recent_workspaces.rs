@@ -4,13 +4,11 @@
  * 处理最近打开的工作区记录的数据访问逻辑
  */
 
-use super::RowMapper;
 use crate::storage::database::DatabaseManager;
 use crate::storage::error::{RepositoryError, RepositoryResult};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::path::Path;
-use std::sync::Arc;
 
 /// 最近工作区条目
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,7 +18,7 @@ pub struct RecentWorkspace {
     pub last_accessed_at: i64,
 }
 
-impl RowMapper<RecentWorkspace> for RecentWorkspace {
+impl RecentWorkspace {
     fn from_row(row: &sqlx::sqlite::SqliteRow) -> RepositoryResult<Self> {
         Ok(Self {
             id: row.try_get("id")?,
@@ -30,14 +28,14 @@ impl RowMapper<RecentWorkspace> for RecentWorkspace {
     }
 }
 
-/// 最近工作区Repository
-pub struct RecentWorkspaceRepository {
-    database: Arc<DatabaseManager>,
+/// 最近工作区访问器
+pub struct RecentWorkspaces<'a> {
+    db: &'a DatabaseManager,
 }
 
-impl RecentWorkspaceRepository {
-    pub fn new(database: Arc<DatabaseManager>) -> Self {
-        Self { database }
+impl<'a> RecentWorkspaces<'a> {
+    pub fn new(db: &'a DatabaseManager) -> Self {
+        Self { db }
     }
 
     /// 添加或更新工作区访问记录
@@ -55,7 +53,7 @@ impl RecentWorkspaceRepository {
         sqlx::query(query)
             .bind(&normalized_path)
             .bind(now)
-            .execute(self.database.pool())
+            .execute(self.db.pool())
             .await?;
 
         Ok(())
@@ -72,7 +70,7 @@ impl RecentWorkspaceRepository {
 
         let rows = sqlx::query(query)
             .bind(limit)
-            .fetch_all(self.database.pool())
+            .fetch_all(self.db.pool())
             .await?;
 
         rows.iter()
@@ -87,7 +85,7 @@ impl RecentWorkspaceRepository {
 
         sqlx::query(query)
             .bind(&normalized_path)
-            .execute(self.database.pool())
+            .execute(self.db.pool())
             .await?;
 
         Ok(())
@@ -100,7 +98,7 @@ impl RecentWorkspaceRepository {
 
         let result = sqlx::query(query)
             .bind(cutoff)
-            .execute(self.database.pool())
+            .execute(self.db.pool())
             .await?;
 
         Ok(result.rows_affected())
@@ -119,7 +117,7 @@ impl RecentWorkspaceRepository {
 
         let result = sqlx::query(query)
             .bind(max_count)
-            .execute(self.database.pool())
+            .execute(self.db.pool())
             .await?;
 
         Ok(result.rows_affected())

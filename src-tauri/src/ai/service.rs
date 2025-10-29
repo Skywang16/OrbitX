@@ -1,6 +1,7 @@
 use crate::ai::error::{AIServiceError, AIServiceResult};
 use crate::ai::types::{AIModelConfig, AIProvider, ModelType};
-use crate::storage::repositories::{Repository, RepositoryManager};
+use crate::storage::DatabaseManager;
+use crate::storage::repositories::AIModels;
 use chrono::Utc;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 use reqwest::{Client, StatusCode};
@@ -12,7 +13,7 @@ use tracing::{debug, info, warn};
 
 #[derive(Clone)]
 pub struct AIService {
-    repositories: Arc<RepositoryManager>,
+    database: Arc<DatabaseManager>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,8 +42,8 @@ enum ConnectionProbe {
 }
 
 impl AIService {
-    pub fn new(repositories: Arc<RepositoryManager>) -> Self {
-        Self { repositories }
+    pub fn new(database: Arc<DatabaseManager>) -> Self {
+        Self { database }
     }
 
     pub async fn initialize(&self) -> AIServiceResult<()> {
@@ -50,8 +51,7 @@ impl AIService {
     }
 
     pub async fn get_models(&self) -> AIServiceResult<Vec<AIModelConfig>> {
-        self.repositories
-            .ai_models()
+        AIModels::new(&self.database)
             .find_all()
             .await
             .map_err(|err| AIServiceError::Repository {
@@ -61,8 +61,7 @@ impl AIService {
     }
 
     pub async fn add_model(&self, config: AIModelConfig) -> AIServiceResult<()> {
-        self.repositories
-            .ai_models()
+        AIModels::new(&self.database)
             .save(&config)
             .await
             .map(|_| ())
@@ -73,12 +72,11 @@ impl AIService {
     }
 
     pub async fn remove_model(&self, model_id: &str) -> AIServiceResult<()> {
-        self.repositories
-            .ai_models()
-            .delete_by_string_id(model_id)
+        AIModels::new(&self.database)
+            .delete(model_id)
             .await
             .map_err(|err| AIServiceError::Repository {
-                operation: "ai_models.delete_by_string_id",
+                operation: "ai_models.delete",
                 source: err,
             })
     }
@@ -87,12 +85,12 @@ impl AIService {
         let update_payload: AIModelUpdatePayload =
             serde_json::from_value(updates).map_err(AIServiceError::InvalidUpdatePayload)?;
 
-        let repo = self.repositories.ai_models();
+        let repo = AIModels::new(&self.database);
         let mut existing = repo
-            .find_by_string_id(model_id)
+            .find_by_id(model_id)
             .await
             .map_err(|err| AIServiceError::Repository {
-                operation: "ai_models.find_by_string_id",
+                operation: "ai_models.find_by_id",
                 source: err,
             })?
             .ok_or_else(|| AIServiceError::ModelNotFound {
@@ -123,22 +121,20 @@ impl AIService {
 
         existing.updated_at = Utc::now();
 
-        repo.update(&existing)
+        repo.save(&existing)
             .await
             .map_err(|err| AIServiceError::Repository {
-                operation: "ai_models.update",
+                operation: "ai_models.save",
                 source: err,
             })
     }
 
     pub async fn test_connection(&self, model_id: &str) -> AIServiceResult<String> {
-        let model = self
-            .repositories
-            .ai_models()
-            .find_by_string_id(model_id)
+        let model = AIModels::new(&self.database)
+            .find_by_id(model_id)
             .await
             .map_err(|err| AIServiceError::Repository {
-                operation: "ai_models.find_by_string_id",
+                operation: "ai_models.find_by_id",
                 source: err,
             })?
             .ok_or_else(|| AIServiceError::ModelNotFound {

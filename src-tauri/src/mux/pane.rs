@@ -255,11 +255,8 @@ impl Pane for LocalPane {
 
     fn write(&self, data: &[u8]) -> PaneResult<()> {
         if self.is_dead() {
-            tracing::debug!("尝试写入已死亡的面板: {:?}", self.pane_id);
             return Err(PaneError::PaneDead);
         }
-
-        tracing::debug!("面板 {:?} 写入 {} 字节数据", self.pane_id, data.len());
 
         let mut writer = self
             .writer
@@ -269,24 +266,22 @@ impl Pane for LocalPane {
         // 使用Write trait写入数据
         use std::io::Write;
         writer.write_all(data).map_err(|err| {
+            tracing::error!("Pane {:?} write failed: {}", self.pane_id, err);
             PaneError::Internal(format!("Pane {:?} PTY write failed: {err}", self.pane_id))
         })?;
 
         writer.flush().map_err(|err| {
+            tracing::error!("Pane {:?} flush failed: {}", self.pane_id, err);
             PaneError::Internal(format!("Pane {:?} PTY flush failed: {err}", self.pane_id))
         })?;
 
-        tracing::trace!("面板 {:?} 写入完成", self.pane_id);
         Ok(())
     }
 
     fn resize(&self, size: PtySize) -> PaneResult<()> {
         if self.is_dead() {
-            tracing::debug!("尝试调整已死亡面板的大小: {:?}", self.pane_id);
             return Err(PaneError::PaneDead);
         }
-
-        tracing::info!("调整面板 {:?} 大小: {:?}", self.pane_id, size);
 
         // 更新内部尺寸记录
         {
@@ -311,10 +306,10 @@ impl Pane for LocalPane {
             .map_err(|err| PaneError::from_poison("master", err))?;
 
         master.resize(pty_size).map_err(|err| {
+            tracing::error!("Pane {:?} resize failed: {}", self.pane_id, err);
             PaneError::Internal(format!("Pane {:?} PTY resize failed: {err}", self.pane_id))
         })?;
 
-        tracing::debug!("面板 {:?} 大小调整完成", self.pane_id);
         Ok(())
     }
 

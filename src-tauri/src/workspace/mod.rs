@@ -6,8 +6,8 @@
  */
 
 pub mod commands;
-pub mod rules;
-pub mod types;
+mod rules;
+mod types;
 
 // 导出常用类型和函数
 pub use commands::*;

@@ -11,12 +11,9 @@ pub type StorageResult<T> = Result<T, StorageError>;
 pub type DatabaseResult<T> = Result<T, DatabaseError>;
 pub type MessagePackResult<T> = Result<T, MessagePackError>;
 pub type StoragePathsResult<T> = Result<T, StoragePathsError>;
-pub type StorageRecoveryResult<T> = Result<T, StorageRecoveryError>;
-pub type StorageCoordinatorResult<T> = Result<T, StorageCoordinatorError>;
 pub type RepositoryResult<T> = Result<T, RepositoryError>;
-pub type QueryResult<T> = Result<T, QueryBuilderError>;
-pub type CacheResult<T> = Result<T, CacheError>;
 pub type SqlScriptResult<T> = Result<T, SqlScriptError>;
+pub type CacheResult<T> = Result<T, CacheError>;
 
 #[derive(Debug, Error)]
 pub enum StorageError {
@@ -27,18 +24,32 @@ pub enum StorageError {
     #[error(transparent)]
     Paths(#[from] StoragePathsError),
     #[error(transparent)]
-    Recovery(#[from] StorageRecoveryError),
-    #[error(transparent)]
-    Coordinator(#[from] StorageCoordinatorError),
-    #[error(transparent)]
     Repository(#[from] RepositoryError),
-    #[error(transparent)]
-    Query(#[from] QueryBuilderError),
-    #[error(transparent)]
-    Cache(#[from] CacheError),
     #[error(transparent)]
     SqlScript(#[from] SqlScriptError),
     #[error("Storage internal error: {0}")]
+    Internal(String),
+}
+
+#[derive(Debug, Error)]
+pub enum CacheError {
+    #[error("JSON serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
+}
+
+#[derive(Debug, Error)]
+pub enum StorageCoordinatorError {
+    #[error(transparent)]
+    Paths(#[from] StoragePathsError),
+    #[error(transparent)]
+    MessagePack(#[from] MessagePackError),
+    #[error(transparent)]
+    Database(#[from] DatabaseError),
+    #[error("Configuration error: {0}")]
+    Config(String),
+    #[error("JSON serialization error: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("Storage coordinator internal error: {0}")]
     Internal(String),
 }
 
@@ -188,55 +199,6 @@ impl StoragePathsError {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum StorageRecoveryError {
-    #[error("I/O error while {context}: {source}")]
-    Io {
-        context: String,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("Backup file does not exist: {path}")]
-    BackupMissing { path: PathBuf },
-    #[error("JSON serialization error: {0}")]
-    Json(#[from] serde_json::Error),
-    #[error("Recovery strategy {strategy} failed: {reason}")]
-    StrategyFailed {
-        strategy: &'static str,
-        reason: String,
-    },
-    #[error("Storage recovery internal error: {0}")]
-    Internal(String),
-}
-
-impl StorageRecoveryError {
-    pub fn io(context: impl Into<String>, source: std::io::Error) -> Self {
-        StorageRecoveryError::Io {
-            context: context.into(),
-            source,
-        }
-    }
-
-    pub fn internal(message: impl Into<String>) -> Self {
-        StorageRecoveryError::Internal(message.into())
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum StorageCoordinatorError {
-    #[error(transparent)]
-    Paths(#[from] StoragePathsError),
-    #[error(transparent)]
-    MessagePack(#[from] MessagePackError),
-    #[error(transparent)]
-    Database(#[from] DatabaseError),
-    #[error("Configuration error: {0}")]
-    Config(String),
-    #[error("JSON serialization error: {0}")]
-    Json(#[from] serde_json::Error),
-    #[error("Storage coordinator internal error: {0}")]
-    Internal(String),
-}
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
@@ -246,8 +208,6 @@ pub enum RepositoryError {
     Serialization(#[from] serde_json::Error),
     #[error("Timestamp parse error: {0}")]
     TimestampParse(#[from] chrono::ParseError),
-    #[error("Query builder error: {0}")]
-    Query(#[from] QueryBuilderError),
 
     #[error("AI model not found: {id}")]
     AiModelNotFound { id: String },
@@ -257,21 +217,9 @@ pub enum RepositoryError {
     CommandHistoryNotFound { id: String },
     #[error("Audit log entry not found: {id}")]
     AuditLogNotFound { id: String },
+    #[error("Recent workspace not found: {id}")]
+    RecentWorkspaceNotFound { id: String },
 
-    #[error("AI model uses string identifiers; call {recommended} instead")]
-    AiModelRequiresStringId { recommended: &'static str },
-    #[error("AI feature uses string identifiers; call {recommended} instead")]
-    AiFeatureRequiresStringId { recommended: &'static str },
-
-    #[error("Audit logs do not support update operations")]
-    AuditLogUpdateNotSupported,
-    #[error("Command history entries do not support update operations")]
-    CommandHistoryUpdateNotSupported,
-
-    #[error("Unsupported number type")]
-    UnsupportedNumberType,
-    #[error("Unsupported parameter type: {name}")]
-    UnsupportedParameterType { name: String },
     #[error("Repository validation error: {reason}")]
     Validation { reason: String },
     #[error("Repository internal error: {0}")]
@@ -279,35 +227,18 @@ pub enum RepositoryError {
 }
 
 impl RepositoryError {
-    pub fn unsupported_parameter(name: impl Into<String>) -> Self {
-        RepositoryError::UnsupportedParameterType { name: name.into() }
-    }
-
     pub fn internal(message: impl Into<String>) -> Self {
         RepositoryError::Internal(message.into())
     }
 }
 
-#[derive(Debug, Error)]
-pub enum QueryBuilderError {
-    #[error("No fields specified for insert")]
-    InsertFieldsEmpty,
-    #[error("No fields specified for update")]
-    UpdateFieldsEmpty,
-    #[error("Query builder internal error: {0}")]
-    Internal(String),
-}
-
-impl QueryBuilderError {
-    pub fn internal(message: impl Into<String>) -> Self {
-        QueryBuilderError::Internal(message.into())
+impl From<DatabaseError> for RepositoryError {
+    fn from(err: DatabaseError) -> Self {
+        match err {
+            DatabaseError::Sqlx(e) => RepositoryError::Database(e),
+            _ => RepositoryError::Internal(err.to_string()),
+        }
     }
-}
-
-#[derive(Debug, Error)]
-pub enum CacheError {
-    #[error("JSON serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
 }
 
 #[derive(Debug, Error)]

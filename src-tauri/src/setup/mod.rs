@@ -5,7 +5,6 @@ pub mod error;
 pub use error::{SetupError, SetupResult};
 
 use crate::ai::tool::shell::TerminalState;
-use crate::ai::tool::storage::StorageCoordinatorState;
 use crate::ai::AIManagerState;
 use crate::completion::commands::CompletionState;
 use crate::config::{ConfigManagerState, ShortcutManagerState};
@@ -72,19 +71,61 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     let config_manager = app.state::<ConfigManagerState>().toml_manager.clone();
     app.manage(config_manager);
 
-    let storage_state = {
-        let config_manager = app.state::<ConfigManagerState>().toml_manager.clone();
-        tauri::async_runtime::block_on(async {
-            StorageCoordinatorState::new(config_manager).await
-        })?
+    // 初始化 DatabaseManager
+    let database_manager = {
+        use crate::storage::{DatabaseManager, StoragePaths};
+        use std::env;
+
+        let app_dir = if let Ok(dir) = env::var("OrbitX_DATA_DIR") {
+            std::path::PathBuf::from(dir)
+        } else {
+            let data_dir = dirs::data_dir().ok_or("无法获取系统数据目录")?;
+            data_dir.join("OrbitX")
+        };
+
+        let paths = StoragePaths::new(app_dir)?;
+        let options = crate::storage::DatabaseOptions::default();
+        
+        Arc::new(
+            tauri::async_runtime::block_on(async {
+                let db = DatabaseManager::new(paths.clone(), options).await?;
+                db.initialize().await?;
+                Ok::<_, SetupError>(db)
+            })?
+        )
     };
-    app.manage(storage_state);
+    app.manage(database_manager.clone());
+
+    // 初始化 MessagePackManager
+    let messagepack_manager = {
+        use crate::storage::{MessagePackManager, MessagePackOptions, StoragePaths};
+        use std::env;
+
+        let app_dir = if let Ok(dir) = env::var("OrbitX_DATA_DIR") {
+            std::path::PathBuf::from(dir)
+        } else {
+            let data_dir = dirs::data_dir().ok_or("无法获取系统数据目录")?;
+            data_dir.join("OrbitX")
+        };
+
+        let paths = StoragePaths::new(app_dir)?;
+        
+        Arc::new(
+            tauri::async_runtime::block_on(async {
+                MessagePackManager::new(paths, MessagePackOptions::default()).await
+            })?
+        )
+    };
+    app.manage(messagepack_manager);
+
+    // 初始化 UnifiedCache
+    let cache = Arc::new(crate::storage::cache::UnifiedCache::new());
+    app.manage(cache.clone());
 
     let theme_service = tauri::async_runtime::block_on(async {
         use crate::config::{paths::ConfigPaths, theme::ThemeManagerOptions, theme::ThemeService};
 
-        let storage_state = app.state::<StorageCoordinatorState>();
-        let cache = storage_state.coordinator.cache();
+        let cache = app.state::<Arc<crate::storage::cache::UnifiedCache>>().inner().clone();
         let paths = app.state::<ConfigPaths>().inner().clone();
 
         ThemeService::new(paths, ThemeManagerOptions::default(), cache).await
@@ -115,8 +156,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
 
     let terminal_context_state = {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
-        let storage_state = app.state::<StorageCoordinatorState>();
-        let cache = storage_state.coordinator.cache();
+        let cache = app.state::<Arc<crate::storage::cache::UnifiedCache>>().inner().clone();
 
         // 启用与 ShellIntegration 的上下文服务集成（回调、缓存失效、事件转发）
         let context_service = TerminalContextService::new_with_integration(
@@ -131,13 +171,12 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     app.manage(terminal_context_state);
 
     let ai_state = {
-        let storage_state = app.state::<StorageCoordinatorState>();
-        let repositories = storage_state.coordinator.repositories();
-        let cache = storage_state.coordinator.cache();
+        let database = app.state::<Arc<crate::storage::DatabaseManager>>().inner().clone();
+        let cache = app.state::<Arc<crate::storage::cache::UnifiedCache>>().inner().clone();
         let terminal_context_state = app.state::<TerminalContextState>();
         let terminal_context_service = terminal_context_state.context_service().clone();
 
-        let state = AIManagerState::new(repositories, cache, terminal_context_service)
+        let state = AIManagerState::new(database, cache, terminal_context_service)
             .map_err(SetupError::AIState)?;
 
         tauri::async_runtime::block_on(async {
@@ -152,18 +191,15 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     app.manage(ai_state);
 
     let llm_state = {
-        let storage_state = app.state::<StorageCoordinatorState>();
-        let repositories = storage_state.coordinator.repositories();
-        LLMManagerState::new(repositories)
+        let database = app.state::<Arc<crate::storage::DatabaseManager>>().inner().clone();
+        LLMManagerState::new(database)
     };
     app.manage(llm_state);
 
     // 初始化TaskExecutor状态
     let task_executor_state = {
-        let storage_state = app.state::<StorageCoordinatorState>();
         let terminal_context_state = app.state::<TerminalContextState>();
-        let repositories = storage_state.coordinator.repositories();
-        let database_manager = storage_state.coordinator.database_manager();
+        let database_manager = app.state::<Arc<crate::storage::DatabaseManager>>().inner().clone();
         let agent_persistence = Arc::new(crate::agent::persistence::AgentPersistence::new(
             Arc::clone(&database_manager),
         ));
@@ -171,12 +207,14 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
             &database_manager,
         )));
         let terminal_context_service = terminal_context_state.context_service().clone();
+        let cache = app.state::<Arc<crate::storage::UnifiedCache>>().inner().clone();
 
         let executor = Arc::new(crate::agent::core::TaskExecutor::new(
-            Arc::clone(&repositories),
+            Arc::clone(&database_manager),
             Arc::clone(&agent_persistence),
             Arc::clone(&ui_persistence),
             Arc::clone(&terminal_context_service),
+            Arc::clone(&cache),
         ));
 
         crate::agent::core::commands::TaskExecutorState::new(executor)

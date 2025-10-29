@@ -17,9 +17,8 @@ use sqlx::{ConnectOptions, Executor};
 use std::fmt;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
-use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 const KEY_FILE_NAME: &str = "master.key";
@@ -288,43 +287,35 @@ impl DatabaseManager {
 
 struct KeyVault {
     path: PathBuf,
-    cache: RwLock<Option<[u8; 32]>>,
-    argon2: Argon2<'static>,
+    key: OnceLock<[u8; 32]>,
 }
 
 impl KeyVault {
     fn new(path: PathBuf) -> Self {
         Self {
             path,
-            cache: RwLock::new(None),
-            argon2: Argon2::default(),
+            key: OnceLock::new(),
         }
     }
 
     async fn master_key(&self) -> DatabaseResult<[u8; 32]> {
-        if let Some(bytes) = *self.cache.read().await {
-            return Ok(bytes);
+        if let Some(&key) = self.key.get() {
+            return Ok(key);
         }
 
-        let mut write_guard = self.cache.write().await;
-        if let Some(bytes) = *write_guard {
-            return Ok(bytes);
-        }
-
-        let bytes = if let Some(bytes) = self.load_from_disk().await? {
-            bytes
-        } else {
-            self.derive_from_device().await?
+        let key = match self.load_from_disk().await {
+            Ok(Some(k)) => k,
+            _ => self.derive_from_device().await?,
         };
 
-        *write_guard = Some(bytes);
-        Ok(bytes)
+        let _ = self.key.set(key);
+        Ok(key)
     }
 
     async fn set_from_password(&self, password: &str) -> DatabaseResult<[u8; 32]> {
+        let argon2 = Argon2::default();
         let salt = SaltString::generate(&mut OsRng);
-        let password_hash = self
-            .argon2
+        let password_hash = argon2
             .hash_password(password.as_bytes(), &salt)
             .map_err(DatabaseError::from)?;
 
@@ -338,7 +329,7 @@ impl KeyVault {
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&hash_bytes[..32]);
         self.persist(bytes).await?;
-        *self.cache.write().await = Some(bytes);
+        let _ = self.key.set(bytes);
         Ok(bytes)
     }
 

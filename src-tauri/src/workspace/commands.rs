@@ -6,11 +6,11 @@
  */
 
 use super::rules::get_available_rules_files;
-use crate::agent::core::TaskExecutorState;
-use crate::ai::tool::storage::StorageCoordinatorState;
-use crate::storage::repositories::RecentWorkspace;
+use crate::storage::{DatabaseManager, UnifiedCache};
+use crate::storage::repositories::{RecentWorkspace, RecentWorkspaces};
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
+use std::sync::Arc;
 use tauri::State;
 
 // ===== 最近工作区管理命令 =====
@@ -18,13 +18,10 @@ use tauri::State;
 #[tauri::command]
 pub async fn workspace_get_recent(
     limit: Option<i64>,
-    storage: State<'_, StorageCoordinatorState>,
+    database: State<'_, Arc<DatabaseManager>>,
 ) -> TauriApiResult<Vec<RecentWorkspace>> {
     let limit = limit.unwrap_or(10).min(50);
-    match storage
-        .coordinator
-        .repositories()
-        .recent_workspaces()
+    match RecentWorkspaces::new(&database)
         .get_recent(limit)
         .await
     {
@@ -39,12 +36,9 @@ pub async fn workspace_get_recent(
 #[tauri::command]
 pub async fn workspace_add_recent(
     path: String,
-    storage: State<'_, StorageCoordinatorState>,
+    database: State<'_, Arc<DatabaseManager>>,
 ) -> TauriApiResult<EmptyData> {
-    match storage
-        .coordinator
-        .repositories()
-        .recent_workspaces()
+    match RecentWorkspaces::new(&database)
         .add_or_update(&path)
         .await
     {
@@ -59,12 +53,9 @@ pub async fn workspace_add_recent(
 #[tauri::command]
 pub async fn workspace_remove_recent(
     path: String,
-    storage: State<'_, StorageCoordinatorState>,
+    database: State<'_, Arc<DatabaseManager>>,
 ) -> TauriApiResult<EmptyData> {
-    match storage
-        .coordinator
-        .repositories()
-        .recent_workspaces()
+    match RecentWorkspaces::new(&database)
         .remove(&path)
         .await
     {
@@ -78,13 +69,10 @@ pub async fn workspace_remove_recent(
 
 #[tauri::command]
 pub async fn workspace_maintain(
-    storage: State<'_, StorageCoordinatorState>,
+    database: State<'_, Arc<DatabaseManager>>,
 ) -> TauriApiResult<(u64, u64)> {
     // 清理 30 天未访问 + 限制最多 50 条
-    match storage
-        .coordinator
-        .repositories()
-        .recent_workspaces()
+    match RecentWorkspaces::new(&database)
         .maintain(30, 50)
         .await
     {
@@ -101,32 +89,20 @@ pub async fn workspace_maintain(
 /// 获取当前项目规则
 #[tauri::command]
 pub async fn workspace_get_project_rules(
-    state: State<'_, TaskExecutorState>,
+    cache: State<'_, Arc<UnifiedCache>>,
 ) -> TauriApiResult<Option<String>> {
-    let repositories = state.executor.repositories();
-    match repositories.ai_models().get_project_rules().await {
-        Ok(rules) => Ok(api_success!(rules)),
-        Err(e) => {
-            tracing::error!("Failed to get project rules: {}", e);
-            Ok(api_error!("workspace.rules.get_failed"))
-        }
-    }
+    let rules = cache.get_project_rules().await;
+    Ok(api_success!(rules))
 }
 
 /// 设置项目规则
 #[tauri::command]
 pub async fn workspace_set_project_rules(
     rules: Option<String>,
-    state: State<'_, TaskExecutorState>,
+    cache: State<'_, Arc<UnifiedCache>>,
 ) -> TauriApiResult<EmptyData> {
-    let repositories = state.executor.repositories();
-    match repositories.ai_models().set_project_rules(rules).await {
-        Ok(_) => Ok(api_success!()),
-        Err(e) => {
-            tracing::error!("Failed to set project rules: {}", e);
-            Ok(api_error!("workspace.rules.set_failed"))
-        }
-    }
+    cache.set_project_rules(rules).await.ok();
+    Ok(api_success!())
 }
 
 /// 列出指定目录下所有可用的规则文件

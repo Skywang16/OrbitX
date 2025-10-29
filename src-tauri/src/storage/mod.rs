@@ -1,33 +1,38 @@
-// 统一存储系统模块
+/*!
+ * 存储系统模块
+ *
+ * 职责：
+ * - database: SQLite 数据库管理
+ * - cache: 统一内存缓存（带命名空间）
+ * - messagepack: MessagePack 序列化存储
+ * - repositories: 数据访问层（每个表一个结构体）
+ * - paths: 路径管理
+ * - error: 统一错误类型
+ */
 
 pub mod cache;
-pub mod coordinator;
+pub mod database;
 pub mod error;
 pub mod messagepack;
 pub mod paths;
-pub mod recovery;
+pub mod repositories;
+pub mod sql_scripts;
 pub mod types;
 
-pub mod database;
-pub mod query;
-pub mod repositories;
-
-pub mod sql_scripts;
-
-pub use cache::UnifiedCache;
-pub use coordinator::{StorageCoordinator, StorageCoordinatorOptions};
+// ==================== 核心管理器 ====================
+pub use cache::{CacheNamespace, UnifiedCache};
 pub use database::{DatabaseManager, DatabaseOptions};
-pub use error::{
-    CacheError, CacheResult, DatabaseError, DatabaseResult, MessagePackError, MessagePackResult,
-    QueryBuilderError, QueryResult, RepositoryError, RepositoryResult, SqlScriptError,
-    SqlScriptResult, StorageCoordinatorError, StorageCoordinatorResult, StorageError,
-    StoragePathsError, StoragePathsResult, StorageRecoveryError, StorageRecoveryResult,
-    StorageResult,
-};
 pub use messagepack::{MessagePackManager, MessagePackOptions};
 pub use paths::{StoragePaths, StoragePathsBuilder};
-pub use query::{QueryCondition, QueryOrder, SafeQueryBuilder};
-pub use repositories::*;
+
+// ==================== 错误类型 ====================
+pub use error::{
+    CacheError, CacheResult, DatabaseError, DatabaseResult, MessagePackError, MessagePackResult,
+    RepositoryError, RepositoryResult, SqlScriptError, SqlScriptResult, StorageError,
+    StoragePathsError, StoragePathsResult, StorageResult,
+};
+
+// ==================== 通用类型 ====================
 pub use types::{SessionState, StorageLayer};
 // 存储系统版本
 pub const STORAGE_VERSION: &str = "1.0.0";

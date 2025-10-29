@@ -4,7 +4,7 @@ use tokio_stream::StreamExt;
 
 use super::{provider_registry::ProviderRegistry, service::LLMService};
 use crate::llm::anthropic_types::{CreateMessageRequest, Message, StreamEvent};
-use crate::storage::repositories::RepositoryManager;
+use crate::storage::DatabaseManager;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 
@@ -13,8 +13,8 @@ pub struct LLMManagerState {
 }
 
 impl LLMManagerState {
-    pub fn new(repositories: Arc<RepositoryManager>) -> Self {
-        let service = Arc::new(LLMService::new(repositories.clone()));
+    pub fn new(database: Arc<DatabaseManager>) -> Self {
+        let service = Arc::new(LLMService::new(database.clone()));
         Self { service }
     }
 }

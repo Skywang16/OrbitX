@@ -1,21 +1,15 @@
 /*!
- * AI模型Repository
- *
- * 处理AI模型配置的数据访问逻辑
+ * AI 模型数据访问
  */
 
-use super::{Repository, RowMapper};
 use crate::storage::database::DatabaseManager;
-use crate::storage::error::{RepositoryError, RepositoryResult};
-use crate::storage::query::{InsertBuilder, SafeQueryBuilder};
+use crate::storage::error::RepositoryResult;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tracing::{debug, error};
 
 fn default_timestamp() -> DateTime<Utc> {
@@ -46,13 +40,13 @@ impl std::fmt::Display for AIProvider {
 }
 
 impl std::str::FromStr for AIProvider {
-    type Err = RepositoryError;
+    type Err = crate::storage::error::RepositoryError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "anthropic" => Ok(AIProvider::Anthropic),
             "openai_compatible" => Ok(AIProvider::OpenAiCompatible),
-            _ => Err(RepositoryError::Validation {
+            _ => Err(crate::storage::error::RepositoryError::Validation {
                 reason: format!("Unknown AI provider: {}", s),
             }),
         }
@@ -77,13 +71,13 @@ impl std::fmt::Display for ModelType {
 }
 
 impl std::str::FromStr for ModelType {
-    type Err = RepositoryError;
+    type Err = crate::storage::error::RepositoryError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "chat" => Ok(ModelType::Chat),
             "embedding" => Ok(ModelType::Embedding),
-            _ => Err(RepositoryError::Validation {
+            _ => Err(crate::storage::error::RepositoryError::Validation {
                 reason: format!("Unknown model type: {}", s),
             }),
         }
@@ -156,164 +150,102 @@ impl AIModelConfig {
     }
 }
 
-impl RowMapper<AIModelConfig> for AIModelConfig {
-    fn from_row(row: &sqlx::sqlite::SqliteRow) -> RepositoryResult<Self> {
-        let provider_str: String = row.try_get("provider")?;
-        let provider = provider_str.parse()?;
-
-        let model_type_str: String = row.try_get("model_type")?;
-        let model_type = model_type_str.parse()?;
-
-        let options = if let Some(config_json) = row.try_get::<Option<String>, _>("config_json")? {
-            serde_json::from_str(&config_json).ok()
-        } else {
-            None
-        };
-
-        let use_custom_base_url = row.try_get::<Option<i64>, _>("use_custom_base_url")?
-            .map(|v| v != 0);
-
-        Ok(Self {
-            id: row.try_get("id")?,
-            provider,
-            api_url: row.try_get("api_url")?,
-            api_key: String::new(), // 加密的API密钥需要单独解密
-            model: row.try_get("model_name")?,
-            model_type,
-            options,
-            use_custom_base_url,
-            created_at: row.try_get("created_at")?,
-            updated_at: row.try_get("updated_at")?,
-        })
-    }
+/// AI 模型数据访问结构体
+pub struct AIModels<'a> {
+    db: &'a DatabaseManager,
 }
 
-pub struct AIModelRepository {
-    database: Arc<DatabaseManager>,
-    user_rules: Arc<RwLock<Option<String>>>,
-    project_rules: Arc<RwLock<Option<String>>>,
-}
-
-impl AIModelRepository {
-    pub fn new(database: Arc<DatabaseManager>) -> Self {
-        Self {
-            database,
-            user_rules: Arc::new(RwLock::new(None)),
-            project_rules: Arc::new(RwLock::new(None)),
-        }
+impl<'a> AIModels<'a> {
+    pub fn new(db: &'a DatabaseManager) -> Self {
+        Self { db }
     }
 
-    pub async fn find_all_with_decrypted_keys(&self) -> RepositoryResult<Vec<AIModelConfig>> {
-        let (query, params) = SafeQueryBuilder::new("ai_models")
-            .select(&[
-                "id",
-                "provider",
-                "api_url",
-                "api_key_encrypted",
-                "model_name",
-                "model_type",
-                "config_json",
-                "use_custom_base_url",
-                "created_at",
-                "updated_at",
-            ])
-            .order_by(crate::storage::query::QueryOrder::Asc(
-                "created_at".to_string(),
-            ))
-            .build()?;
-
-        let mut query_builder = sqlx::query(&query);
-        for param in params {
-            query_builder = match param {
-                Value::String(s) => query_builder.bind(s),
-                Value::Number(n) => {
-                    if let Some(i) = n.as_i64() {
-                        query_builder.bind(i)
-                    } else if let Some(f) = n.as_f64() {
-                        query_builder.bind(f)
-                    } else {
-                        return Err(RepositoryError::UnsupportedNumberType);
-                    }
-                }
-                Value::Bool(b) => query_builder.bind(b),
-                Value::Null => query_builder.bind(None::<String>),
-                _ => {
-                    return Err(RepositoryError::unsupported_parameter(
-                        "ai_models parameter",
-                    ))
-                }
-            };
-        }
-
-        let rows = query_builder.fetch_all(self.database.pool()).await?;
+    /// 查询所有模型（包含解密的密钥）
+    pub async fn find_all(&self) -> RepositoryResult<Vec<AIModelConfig>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, provider, api_url, api_key_encrypted, model_name, model_type,
+                   config_json, use_custom_base_url, created_at, updated_at
+            FROM ai_models
+            ORDER BY created_at ASC
+            "#,
+        )
+        .fetch_all(self.db.pool())
+        .await?;
 
         let mut models = Vec::new();
-
         for row in rows {
-            let mut model = match AIModelConfig::from_row(&row) {
-                Ok(m) => m,
-                Err(e) => {
-                    error!("解析数据失败: {}", e);
-                    continue;
-                }
-            };
+            let id: String = row.try_get("id")?;
+            let provider_str: String = row.try_get("provider")?;
+            let provider = provider_str.parse()?;
+            let model_type_str: String = row.try_get("model_type")?;
+            let model_type = model_type_str.parse()?;
 
-            // 从数据库读取加密的API密钥并解密
-            if let Some(encrypted_base64) = row.try_get::<Option<String>, _>("api_key_encrypted")? {
+            let options = row
+                .try_get::<Option<String>, _>("config_json")?
+                .and_then(|s| serde_json::from_str(&s).ok());
+
+            let use_custom_base_url = row
+                .try_get::<Option<i64>, _>("use_custom_base_url")?
+                .map(|v| v != 0);
+
+            // 解密 API 密钥
+            let api_key = if let Some(encrypted_base64) =
+                row.try_get::<Option<String>, _>("api_key_encrypted")?
+            {
                 if !encrypted_base64.is_empty() {
                     match BASE64.decode(&encrypted_base64) {
-                        Ok(encrypted_bytes) => {
-                            match self.database.decrypt_data(&encrypted_bytes).await {
-                                Ok(decrypted) => {
-                                    model.api_key = decrypted;
-                                }
-                                Err(e) => {
-                                    error!("解密API密钥失败 (model_id={}): {}", model.id, e);
-                                    model.api_key = String::new();
-                                }
-                            }
-                        }
+                        Ok(encrypted_bytes) => self
+                            .db
+                            .decrypt_data(&encrypted_bytes)
+                            .await
+                            .unwrap_or_else(|e| {
+                                error!("解密API密钥失败 ({}): {}", id, e);
+                                String::new()
+                            }),
                         Err(e) => {
-                            error!("Base64解码失败 (model_id={}): {}", model.id, e);
-                            model.api_key = String::new();
+                            error!("Base64解码失败 ({}): {}", id, e);
+                            String::new()
                         }
                     }
                 } else {
-                    model.api_key = String::new();
+                    String::new()
                 }
             } else {
-                model.api_key = String::new();
-            }
+                String::new()
+            };
 
-            models.push(model);
+            models.push(AIModelConfig {
+                id,
+                provider,
+                api_url: row.try_get("api_url")?,
+                api_key,
+                model: row.try_get("model_name")?,
+                model_type,
+                options,
+                use_custom_base_url,
+                created_at: row.try_get("created_at")?,
+                updated_at: row.try_get("updated_at")?,
+            });
         }
+
         Ok(models)
     }
 
-    pub async fn save_with_encryption(&self, model: &AIModelConfig) -> RepositoryResult<i64> {
+    /// 保存模型（自动加密密钥）
+    pub async fn save(&self, model: &AIModelConfig) -> RepositoryResult<()> {
         debug!("保存AI模型: {}", model.model);
 
-        // 加密API密钥
+        // 加密 API 密钥
         let encrypted_key = if !model.api_key.is_empty() {
-            let encrypted_bytes =
-                self.database
-                    .encrypt_data(&model.api_key)
-                    .await
-                    .map_err(|e| {
-                        RepositoryError::internal(format!(
-                            "加密API密钥失败 (model_id={}): {}",
-                            model.id, e
-                        ))
-                    })?;
+            let encrypted_bytes = self.db.encrypt_data(&model.api_key).await?;
             Some(BASE64.encode(&encrypted_bytes))
         } else {
-            // 如果没有提供新密钥，保留现有的加密密钥
-            sqlx::query("SELECT api_key_encrypted FROM ai_models WHERE id = ?")
+            // 保留现有密钥
+            sqlx::query_scalar("SELECT api_key_encrypted FROM ai_models WHERE id = ?")
                 .bind(&model.id)
-                .fetch_optional(self.database.pool())
+                .fetch_optional(self.db.pool())
                 .await?
-                .and_then(|row| row.try_get::<Option<String>, _>(0).ok())
-                .flatten()
         };
 
         let config_json = model
@@ -321,127 +253,51 @@ impl AIModelRepository {
             .as_ref()
             .map(|opts| serde_json::to_string(opts).unwrap_or_default());
 
-        let (query, params) = InsertBuilder::new("ai_models")
-            .on_conflict_replace()
-            .set("id", Value::String(model.id.clone()))
-            .set("provider", Value::String(model.provider.to_string()))
-            .set("api_url", Value::String(model.api_url.clone()))
-            .set(
-                "api_key_encrypted",
-                encrypted_key.map(Value::String).unwrap_or(Value::Null),
-            )
-            .set("model_name", Value::String(model.model.clone()))
-            .set("model_type", Value::String(model.model_type.to_string()))
-            .set(
-                "config_json",
-                config_json.map(Value::String).unwrap_or(Value::Null),
-            )
-            .set(
-                "use_custom_base_url",
-                model.use_custom_base_url.map(|v| Value::Bool(v)).unwrap_or(Value::Null),
-            )
-            .set("created_at", Value::String(model.created_at.to_rfc3339()))
-            .set("updated_at", Value::String(model.updated_at.to_rfc3339()))
-            .build()?;
-
-        let mut query_builder = sqlx::query(&query);
-        for param in params {
-            query_builder = match param {
-                Value::String(s) => query_builder.bind(s),
-                Value::Bool(b) => query_builder.bind(b),
-                Value::Null => query_builder.bind(None::<String>),
-                _ => {
-                    return Err(RepositoryError::unsupported_parameter(
-                        "ai_models parameter",
-                    ))
-                }
-            };
-        }
-
-        let result = query_builder.execute(self.database.pool()).await?;
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO ai_models 
+            (id, provider, api_url, api_key_encrypted, model_name, model_type, 
+             config_json, use_custom_base_url, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&model.id)
+        .bind(model.provider.to_string())
+        .bind(&model.api_url)
+        .bind(encrypted_key)
+        .bind(&model.model)
+        .bind(model.model_type.to_string())
+        .bind(config_json)
+        .bind(model.use_custom_base_url.map(|v| v as i64))
+        .bind(model.created_at)
+        .bind(model.updated_at)
+        .execute(self.db.pool())
+        .await?;
 
         debug!("AI模型保存成功: {}", model.model);
-        Ok(result.last_insert_rowid())
-    }
-}
-
-#[async_trait::async_trait]
-impl Repository<AIModelConfig> for AIModelRepository {
-    async fn find_by_id(&self, _id: i64) -> RepositoryResult<Option<AIModelConfig>> {
-        // AI模型使用字符串ID，这个方法不适用
-        Err(RepositoryError::AiModelRequiresStringId {
-            recommended: "find_by_string_id",
-        })
-    }
-
-    async fn find_all(&self) -> RepositoryResult<Vec<AIModelConfig>> {
-        self.find_all_with_decrypted_keys().await
-    }
-
-    async fn save(&self, entity: &AIModelConfig) -> RepositoryResult<i64> {
-        self.save_with_encryption(entity).await
-    }
-
-    async fn update(&self, entity: &AIModelConfig) -> RepositoryResult<()> {
-        self.save_with_encryption(entity).await?;
         Ok(())
     }
 
-    async fn delete(&self, _id: i64) -> RepositoryResult<()> {
-        Err(RepositoryError::AiModelRequiresStringId {
-            recommended: "delete_by_string_id",
-        })
-    }
-}
-
-impl AIModelRepository {
-    pub async fn find_by_string_id(&self, id: &str) -> RepositoryResult<Option<AIModelConfig>> {
-        let models = self.find_all_with_decrypted_keys().await?;
+    /// 根据 ID 查找模型
+    pub async fn find_by_id(&self, id: &str) -> RepositoryResult<Option<AIModelConfig>> {
+        let models = self.find_all().await?;
         Ok(models.into_iter().find(|m| m.id == id))
     }
 
-    pub async fn delete_by_string_id(&self, id: &str) -> RepositoryResult<()> {
+    /// 删除模型
+    pub async fn delete(&self, id: &str) -> RepositoryResult<()> {
         let result = sqlx::query("DELETE FROM ai_models WHERE id = ?")
             .bind(id)
-            .execute(self.database.pool())
+            .execute(self.db.pool())
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(RepositoryError::AiModelNotFound { id: id.to_string() });
+            return Err(crate::storage::error::RepositoryError::AiModelNotFound {
+                id: id.to_string(),
+            });
         }
 
         debug!("AI模型删除成功: {}", id);
-        Ok(())
-    }
-
-    pub async fn get_user_rules(&self) -> RepositoryResult<Option<String>> {
-        debug!("从内存缓存获取用户规则");
-
-        let rules = self.user_rules.read().await.clone();
-        debug!("用户规则获取成功: {:?}", rules.as_ref().map(|r| r.len()));
-        Ok(rules)
-    }
-
-    pub async fn set_user_rules(&self, rules: Option<String>) -> RepositoryResult<()> {
-        debug!("设置用户规则: {:?}", rules.as_ref().map(|r| r.len()));
-
-        *self.user_rules.write().await = rules;
-
-        debug!("用户规则设置成功");
-        Ok(())
-    }
-
-    pub async fn get_project_rules(&self) -> RepositoryResult<Option<String>> {
-        let rules = self.project_rules.read().await.clone();
-        Ok(rules)
-    }
-
-    pub async fn set_project_rules(&self, rules: Option<String>) -> RepositoryResult<()> {
-        debug!("设置项目规则: {:?}", rules);
-
-        *self.project_rules.write().await = rules;
-
-        debug!("项目规则设置成功");
         Ok(())
     }
 }

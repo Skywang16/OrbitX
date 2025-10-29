@@ -186,33 +186,22 @@ pub async fn agent_get_file_context_status(
         }
     }
 }
+
 #[tauri::command]
 pub async fn agent_get_user_rules(
-    state: State<'_, TaskExecutorState>,
+    cache: State<'_, Arc<crate::storage::UnifiedCache>>,
 ) -> TauriApiResult<Option<String>> {
-    let repositories = state.executor.repositories();
-    match repositories.ai_models().get_user_rules().await {
-        Ok(rules) => Ok(api_success!(rules)),
-        Err(e) => {
-            tracing::error!("Failed to get user rules: {}", e);
-            Ok(api_error!("agent.conversation.user_rules_failed"))
-        }
-    }
+    let rules = cache.get_user_rules().await;
+    Ok(api_success!(rules))
 }
 
 #[tauri::command]
 pub async fn agent_set_user_rules(
     rules: Option<String>,
-    state: State<'_, TaskExecutorState>,
+    cache: State<'_, Arc<crate::storage::UnifiedCache>>,
 ) -> TauriApiResult<EmptyData> {
-    let repositories = state.executor.repositories();
-    match repositories.ai_models().set_user_rules(rules).await {
-        Ok(_) => Ok(api_success!()),
-        Err(e) => {
-            tracing::error!("Failed to set user rules: {}", e);
-            Ok(api_error!("agent.conversation.set_user_rules_failed"))
-        }
-    }
+    cache.set_user_rules(rules).await.ok();
+    Ok(api_success!())
 }
 
 /// 手动触发会话摘要

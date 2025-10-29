@@ -8,7 +8,7 @@ use crate::agent::config::TaskExecutionConfig;
 use crate::agent::context::FileContextTracker;
 use crate::agent::persistence::AgentPersistence;
 use crate::agent::ui::AgentUiPersistence;
-use crate::storage::repositories::RepositoryManager;
+use crate::storage::DatabaseManager;
 
 #[derive(Debug, Clone)]
 pub struct CompressedMemory {
@@ -40,7 +40,7 @@ pub struct SessionContext {
 
     compressed_history: Arc<RwLock<Vec<CompressedMemory>>>,
     file_tracker: Arc<FileContextTracker>,
-    repositories: Arc<RepositoryManager>,
+    repositories: Arc<DatabaseManager>,
     agent_persistence: Arc<AgentPersistence>,
     ui_persistence: Arc<AgentUiPersistence>,
     stats: Arc<RwLock<SessionStats>>,
@@ -54,7 +54,7 @@ impl SessionContext {
         workspace: PathBuf,
         initial_request: String,
         config: TaskExecutionConfig,
-        repositories: Arc<RepositoryManager>,
+        repositories: Arc<DatabaseManager>,
         agent_persistence: Arc<AgentPersistence>,
         ui_persistence: Arc<AgentUiPersistence>,
     ) -> Self {
@@ -79,7 +79,7 @@ impl SessionContext {
         }
     }
 
-    pub fn repositories(&self) -> Arc<RepositoryManager> {
+    pub fn repositories(&self) -> Arc<DatabaseManager> {
         Arc::clone(&self.repositories)
     }
 

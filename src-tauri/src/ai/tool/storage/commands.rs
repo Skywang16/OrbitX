@@ -1,13 +1,10 @@
 /*!
- * 存储系统 Tauri 命令模块
- *
- * 仅保留通用配置与会话状态读写接口，
- * 任务相关命令已在 Agent 持久层中实现。
+ * 存储系统 Tauri 命令模块 - 直接使用管理器
  */
 
-use crate::storage::error::StorageCoordinatorError;
+use crate::config::TomlConfigManager;
+use crate::storage::messagepack::MessagePackManager;
 use crate::storage::types::SessionState;
-use crate::storage::StorageCoordinator;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use serde_json::Value;
@@ -15,51 +12,11 @@ use std::sync::Arc;
 use tauri::State;
 use tracing::{debug, error};
 
-/// 存储协调器状态管理
-pub struct StorageCoordinatorState {
-    pub coordinator: Arc<StorageCoordinator>,
-}
-
-impl StorageCoordinatorState {
-    pub async fn new(
-        config_manager: Arc<crate::config::TomlConfigManager>,
-    ) -> Result<Self, StorageCoordinatorError> {
-        use crate::storage::{StorageCoordinatorOptions, StoragePaths};
-        use std::env;
-
-        let app_dir = if let Ok(dir) = env::var("OrbitX_DATA_DIR") {
-            tracing::debug!("使用环境变量指定的数据目录: {}", dir);
-            std::path::PathBuf::from(dir)
-        } else {
-            let data_dir = dirs::data_dir().ok_or_else(|| {
-                StorageCoordinatorError::Internal(
-                    "无法获取系统应用数据目录，请检查系统配置或设置 OrbitX_DATA_DIR 环境变量"
-                        .to_string(),
-                )
-            })?;
-            let app_dir = data_dir.join("OrbitX");
-            tracing::debug!("使用默认应用数据目录: {}", app_dir.display());
-            app_dir
-        };
-
-        tracing::debug!("初始化存储路径，应用目录: {}", app_dir.display());
-        let paths = StoragePaths::new(app_dir)?;
-
-        let coordinator = Arc::new(
-            StorageCoordinator::new(paths, StorageCoordinatorOptions::default(), config_manager)
-                .await?,
-        );
-
-        tracing::debug!("存储协调器状态初始化成功");
-        Ok(Self { coordinator })
-    }
-}
-
 /// 获取配置数据
 #[tauri::command]
 pub async fn storage_get_config(
     section: String,
-    state: State<'_, StorageCoordinatorState>,
+    config: State<'_, Arc<TomlConfigManager>>,
 ) -> TauriApiResult<Value> {
     debug!("存储命令: 获取配置节 {}", section);
 
@@ -67,10 +24,15 @@ pub async fn storage_get_config(
         return Ok(api_error!("common.invalid_params"));
     }
 
-    match state.coordinator.config_get(&section).await {
-        Ok(config) => {
+    match config.inner().config_get().await {
+        Ok(app_config) => {
+            // 从配置中提取section
+            let value = serde_json::to_value(&app_config)
+                .ok()
+                .and_then(|v| v.get(&section).cloned())
+                .unwrap_or(Value::Null);
             debug!("配置节 {} 获取成功", section);
-            Ok(api_success!(config))
+            Ok(api_success!(value))
         }
         Err(e) => {
             error!("配置节 {} 获取失败: {}", section, e);
@@ -84,7 +46,7 @@ pub async fn storage_get_config(
 pub async fn storage_update_config(
     section: String,
     data: Value,
-    state: State<'_, StorageCoordinatorState>,
+    config: State<'_, Arc<TomlConfigManager>>,
 ) -> TauriApiResult<EmptyData> {
     debug!("存储命令: 更新配置节 {}", section);
 
@@ -92,7 +54,7 @@ pub async fn storage_update_config(
         return Ok(api_error!("common.invalid_params"));
     }
 
-    match state.coordinator.config_update(&section, data).await {
+    match config.inner().update_section(&section, data).await {
         Ok(()) => {
             debug!("配置节 {} 更新成功", section);
             Ok(api_success!())
@@ -108,11 +70,11 @@ pub async fn storage_update_config(
 #[tauri::command]
 pub async fn storage_save_session_state(
     session_state: SessionState,
-    state: State<'_, StorageCoordinatorState>,
+    msgpack: State<'_, Arc<MessagePackManager>>,
 ) -> TauriApiResult<EmptyData> {
     debug!("保存会话状态: {} tabs", session_state.tabs.len());
 
-    match state.coordinator.save_session_state(&session_state).await {
+    match msgpack.inner().save_state(&session_state).await {
         Ok(()) => {
             debug!("✅ 会话状态保存成功");
             Ok(api_success!())
@@ -127,11 +89,11 @@ pub async fn storage_save_session_state(
 /// 加载会话状态
 #[tauri::command]
 pub async fn storage_load_session_state(
-    state: State<'_, StorageCoordinatorState>,
+    msgpack: State<'_, Arc<MessagePackManager>>,
 ) -> TauriApiResult<Option<SessionState>> {
     debug!("开始加载会话状态");
 
-    match state.coordinator.load_session_state().await {
+    match msgpack.inner().load_state().await {
         Ok(Some(session_state)) => {
             debug!("加载会话状态成功: {} tabs", session_state.tabs.len());
             Ok(api_success!(Some(session_state)))
@@ -153,9 +115,7 @@ pub async fn storage_load_session_state(
 /// - 直接从 Mux 查询当前运行时状态，Mux 是单一数据源
 /// - ShellIntegration 状态恢复应该在应用启动时完成，不在此处理
 #[tauri::command]
-pub async fn storage_get_terminals_state(
-    _state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<Vec<crate::storage::types::TerminalRuntimeState>> {
+pub async fn storage_get_terminals_state() -> TauriApiResult<Vec<crate::storage::types::TerminalRuntimeState>> {
     use crate::mux::singleton::get_mux;
     use crate::storage::types::TerminalRuntimeState;
 
@@ -196,10 +156,7 @@ pub async fn storage_get_terminals_state(
 /// - 直接从 ShellIntegration 查询实时 CWD
 /// - 供 Agent 工具、前端组件等需要单个终端 CWD 的场景使用
 #[tauri::command]
-pub async fn storage_get_terminal_cwd(
-    pane_id: u32,
-    _state: State<'_, StorageCoordinatorState>,
-) -> TauriApiResult<String> {
+pub async fn storage_get_terminal_cwd(pane_id: u32) -> TauriApiResult<String> {
     use crate::mux::singleton::get_mux;
     use crate::mux::PaneId;
 

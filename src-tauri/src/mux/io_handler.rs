@@ -95,33 +95,59 @@ impl IoHandler {
 
     pub fn shutdown(&self) -> IoHandlerResult<()> {
         debug!("开始关闭所有I/O处理线程");
-        
+
         if let Ok(mut threads) = self.reader_threads.write() {
             let thread_count = threads.len();
-            if thread_count > 0 {
-                debug!("等待 {} 个I/O线程结束", thread_count);
-                
-                // 使用后台线程批量 join，设置超时
-                let handles: Vec<_> = threads.drain().collect();
-                thread::spawn(move || {
-                    let start = std::time::Instant::now();
-                    for (pane_id, handle) in handles {
-                        if start.elapsed() > Duration::from_secs(2) {
-                            warn!("I/O线程关闭超时，放弃等待剩余线程");
-                            break;
+            if thread_count == 0 {
+                debug!("没有运行中的I/O线程");
+                return Ok(());
+            }
+
+            debug!("等待 {} 个I/O线程结束", thread_count);
+
+            // 使用后台线程批量 join，设置超时并记录结果
+            let handles: Vec<_> = threads.drain().collect();
+            let (tx, rx) = std::sync::mpsc::channel();
+
+            thread::spawn(move || {
+                let start = std::time::Instant::now();
+                let mut joined = 0;
+                let mut panicked = 0;
+
+                for (pane_id, handle) in handles {
+                    if start.elapsed() > Duration::from_secs(2) {
+                        warn!("I/O线程关闭超时，放弃等待剩余线程");
+                        break;
+                    }
+
+                    match handle.join() {
+                        Ok(_) => {
+                            debug!("面板 {:?} 的I/O线程已结束", pane_id);
+                            joined += 1;
                         }
-                        
-                        match handle.join() {
-                            Ok(_) => debug!("面板 {:?} 的I/O线程已结束", pane_id),
-                            Err(_) => warn!("面板 {:?} 的I/O线程结束失败", pane_id),
+                        Err(e) => {
+                            warn!("面板 {:?} 的I/O线程 panic: {:?}", pane_id, e);
+                            panicked += 1;
                         }
                     }
-                });
-            }
+                }
+
+                // 发送结果统计
+                let _ = tx.send((joined, panicked));
+            });
+
+            // 非阻塞地记录结果
+            thread::spawn(move || {
+                if let Ok((joined, panicked)) = rx.recv_timeout(Duration::from_secs(3)) {
+                    debug!("I/O线程关闭完成: {} 个正常结束, {} 个 panic", joined, panicked);
+                } else {
+                    warn!("等待I/O线程关闭结果超时");
+                }
+            });
         } else {
             warn!("无法获取线程锁以关闭I/O处理器");
         }
-        
+
         Ok(())
     }
 

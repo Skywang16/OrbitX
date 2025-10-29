@@ -1,4 +1,4 @@
-//! 统一缓存系统
+//! 统一缓存系统 - 带命名空间管理
 
 use crate::storage::error::CacheResult;
 use serde::{de::DeserializeOwned, Serialize};
@@ -57,6 +57,36 @@ pub struct CacheEntrySnapshot {
     pub remaining_ttl: Option<Duration>,
 }
 
+/// 缓存命名空间 - 避免不同模块的 key 冲突
+#[derive(Debug, Clone, Copy)]
+pub enum CacheNamespace {
+    Rules,      // 用户规则、项目规则
+    Session,    // 会话状态
+    UI,         // UI 状态
+    Agent,      // Agent 临时数据
+    Completion, // 补全缓存
+    Terminal,   // 终端相关
+    Global,     // 全局命名空间（默认）
+}
+
+impl CacheNamespace {
+    fn prefix(&self) -> &'static str {
+        match self {
+            Self::Rules => "rules:",
+            Self::Session => "session:",
+            Self::UI => "ui:",
+            Self::Agent => "agent:",
+            Self::Completion => "completion:",
+            Self::Terminal => "terminal:",
+            Self::Global => "",
+        }
+    }
+
+    fn make_key(&self, key: &str) -> String {
+        format!("{}{}", self.prefix(), key)
+    }
+}
+
 /// 统一缓存管理器
 #[derive(Clone)]
 pub struct UnifiedCache {
@@ -70,6 +100,181 @@ impl UnifiedCache {
             data: Arc::new(RwLock::new(HashMap::new())),
         }
     }
+
+    // ==================== 带命名空间的新 API ====================
+
+    /// 获取缓存值（带命名空间）
+    pub async fn get_ns(&self, namespace: CacheNamespace, key: &str) -> Option<Value> {
+        self.get(&namespace.make_key(key)).await
+    }
+
+    /// 设置缓存值（带命名空间）
+    pub async fn set_ns(&self, namespace: CacheNamespace, key: &str, value: Value) -> CacheResult<()> {
+        self.set(&namespace.make_key(key), value).await
+    }
+
+    /// 设置带 TTL 的缓存值（带命名空间）
+    pub async fn set_ns_with_ttl(
+        &self,
+        namespace: CacheNamespace,
+        key: &str,
+        value: Value,
+        ttl: Duration,
+    ) -> CacheResult<()> {
+        self.set_with_ttl(&namespace.make_key(key), value, ttl).await
+    }
+
+    /// 序列化并存储任意值（带命名空间）
+    pub async fn set_serialized_ns<T>(
+        &self,
+        namespace: CacheNamespace,
+        key: &str,
+        value: &T,
+    ) -> CacheResult<()>
+    where
+        T: Serialize,
+    {
+        self.set_serialized(&namespace.make_key(key), value).await
+    }
+
+    /// 序列化并存储带 TTL 的值（带命名空间）
+    pub async fn set_serialized_ns_with_ttl<T>(
+        &self,
+        namespace: CacheNamespace,
+        key: &str,
+        value: &T,
+        ttl: Duration,
+    ) -> CacheResult<()>
+    where
+        T: Serialize,
+    {
+        self.set_serialized_with_ttl(&namespace.make_key(key), value, ttl).await
+    }
+
+    /// 以指定类型读取缓存（带命名空间）
+    pub async fn get_deserialized_ns<T>(
+        &self,
+        namespace: CacheNamespace,
+        key: &str,
+    ) -> CacheResult<Option<T>>
+    where
+        T: DeserializeOwned,
+    {
+        self.get_deserialized(&namespace.make_key(key)).await
+    }
+
+    /// 删除缓存值（带命名空间）
+    pub async fn remove_ns(&self, namespace: CacheNamespace, key: &str) -> Option<Value> {
+        self.remove(&namespace.make_key(key)).await
+    }
+
+    /// 检查键是否存在（带命名空间）
+    pub async fn contains_key_ns(&self, namespace: CacheNamespace, key: &str) -> bool {
+        self.contains_key(&namespace.make_key(key)).await
+    }
+
+    /// 清空整个命名空间
+    pub async fn clear_namespace(&self, namespace: CacheNamespace) -> usize {
+        let prefix = namespace.prefix();
+        if prefix.is_empty() {
+            // Global namespace - 清空所有
+            let len = self.data.read().await.len();
+            self.data.write().await.clear();
+            return len;
+        }
+
+        let mut data = self.data.write().await;
+        let keys_to_remove: Vec<String> = data
+            .keys()
+            .filter(|k| k.starts_with(prefix))
+            .cloned()
+            .collect();
+
+        let removed = keys_to_remove.len();
+        for key in keys_to_remove {
+            data.remove(&key);
+        }
+        removed
+    }
+
+    /// 获取命名空间下的所有 key（不含前缀）
+    pub async fn keys_in_namespace(&self, namespace: CacheNamespace) -> Vec<String> {
+        let prefix = namespace.prefix();
+        let prefix_len = prefix.len();
+
+        self.purge_expired().await;
+        self.data
+            .read()
+            .await
+            .keys()
+            .filter_map(|key| {
+                if key.starts_with(prefix) {
+                    Some(key[prefix_len..].to_string())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    // ==================== 便捷方法（常用的快捷方式）====================
+
+    /// Rules: 获取用户规则
+    pub async fn get_user_rules(&self) -> Option<String> {
+        self.get_deserialized_ns(CacheNamespace::Rules, "user_rules")
+            .await
+            .ok()
+            .flatten()
+    }
+
+    /// Rules: 设置用户规则
+    pub async fn set_user_rules(&self, rules: Option<String>) -> CacheResult<()> {
+        if let Some(r) = rules {
+            self.set_serialized_ns(CacheNamespace::Rules, "user_rules", &r).await
+        } else {
+            self.remove_ns(CacheNamespace::Rules, "user_rules").await;
+            Ok(())
+        }
+    }
+
+    /// Rules: 获取项目规则
+    pub async fn get_project_rules(&self) -> Option<String> {
+        self.get_deserialized_ns(CacheNamespace::Rules, "project_rules")
+            .await
+            .ok()
+            .flatten()
+    }
+
+    /// Rules: 设置项目规则
+    pub async fn set_project_rules(&self, rules: Option<String>) -> CacheResult<()> {
+        if let Some(r) = rules {
+            self.set_serialized_ns(CacheNamespace::Rules, "project_rules", &r).await
+        } else {
+            self.remove_ns(CacheNamespace::Rules, "project_rules").await;
+            Ok(())
+        }
+    }
+
+    /// Session: 获取活跃会话
+    pub async fn get_active_conversation(&self) -> Option<i64> {
+        self.get_deserialized_ns(CacheNamespace::Session, "active_conversation")
+            .await
+            .ok()
+            .flatten()
+    }
+
+    /// Session: 设置活跃会话
+    pub async fn set_active_conversation(&self, id: Option<i64>) -> CacheResult<()> {
+        if let Some(conversation_id) = id {
+            self.set_serialized_ns(CacheNamespace::Session, "active_conversation", &conversation_id)
+                .await
+        } else {
+            self.remove_ns(CacheNamespace::Session, "active_conversation").await;
+            Ok(())
+        }
+    }
+
+    // ==================== 原有的无命名空间 API（保持向后兼容）====================
 
     /// 获取缓存值
     pub async fn get(&self, key: &str) -> Option<Value> {

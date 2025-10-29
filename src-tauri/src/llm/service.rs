@@ -8,22 +8,21 @@ use crate::llm::{
     provider_registry::ProviderRegistry,
     types::{EmbeddingRequest, EmbeddingResponse, LLMProviderConfig},
 };
-use crate::storage::repositories::RepositoryManager;
+use crate::storage::DatabaseManager;
+use crate::storage::repositories::AIModels;
 
 pub struct LLMService {
-    repositories: Arc<RepositoryManager>,
+    database: Arc<DatabaseManager>,
 }
 
 impl LLMService {
-    pub fn new(repositories: Arc<RepositoryManager>) -> Self {
-        Self { repositories }
+    pub fn new(database: Arc<DatabaseManager>) -> Self {
+        Self { database }
     }
 
     async fn get_provider_config(&self, model_id: &str) -> LlmResult<LLMProviderConfig> {
-        let model = self
-            .repositories
-            .ai_models()
-            .find_by_string_id(model_id)
+        let model = AIModels::new(&self.database)
+            .find_by_id(model_id)
             .await?
             .ok_or_else(|| LlmError::ModelNotFound {
                 model_id: model_id.to_string(),
@@ -198,11 +197,8 @@ impl LLMService {
 
     /// 获取可用的模型列表
     pub async fn get_available_models(&self) -> LlmResult<Vec<String>> {
-        let models = self
-            .repositories
-            .ai_models()
-            .find_all_with_decrypted_keys()
-            .await?;
+        let ai_models = AIModels::new(&self.database);
+        let models = ai_models.find_all().await?;
 
         Ok(models.into_iter().map(|m| m.id).collect())
     }

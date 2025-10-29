@@ -14,18 +14,18 @@ use crate::agent::core::context::TaskContext;
 use crate::agent::error::AgentResult;
 use crate::agent::persistence::{AgentPersistence, ToolExecutionStatus};
 use crate::agent::tools::ToolResult;
-use crate::storage::repositories::RepositoryManager;
+use crate::storage::DatabaseManager;
 
 pub struct ToolExecutionLogger {
     persistence: Arc<AgentPersistence>,
     verbose: bool,
     #[allow(unused)]
-    repositories: Arc<RepositoryManager>,
+    repositories: Arc<DatabaseManager>,
 }
 
 impl ToolExecutionLogger {
     pub fn new(
-        repositories: Arc<RepositoryManager>,
+        repositories: Arc<DatabaseManager>,
         persistence: Arc<AgentPersistence>,
         verbose: bool,
     ) -> Self {

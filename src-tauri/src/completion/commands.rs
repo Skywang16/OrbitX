@@ -1,6 +1,6 @@
 //! Completion command handlers for Tauri
 
-use crate::ai::tool::storage::StorageCoordinatorState;
+use crate::storage::UnifiedCache;
 use crate::completion::engine::{CompletionEngine, CompletionEngineConfig};
 use crate::completion::error::{CompletionStateError, CompletionStateResult};
 use crate::completion::types::{CompletionContext, CompletionResponse};
@@ -100,12 +100,11 @@ pub async fn completion_get(
 #[tauri::command]
 pub async fn completion_init_engine(
     state: State<'_, CompletionState>,
-    storage_state: State<'_, StorageCoordinatorState>,
+    cache: State<'_, Arc<UnifiedCache>>,
 ) -> TauriApiResult<EmptyData> {
     let config = CompletionEngineConfig::default();
-    let cache = storage_state.coordinator.cache();
 
-    match CompletionEngine::with_default_providers(config, cache).await {
+    match CompletionEngine::with_default_providers(config, cache.inner().clone()).await {
         Ok(engine) => match state.set_engine(Arc::new(engine)).await {
             Ok(_) => Ok(api_success!()),
             Err(_) => Ok(api_error!("completion.init_failed")),

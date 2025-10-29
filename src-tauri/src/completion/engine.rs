@@ -8,7 +8,7 @@ use crate::completion::providers::{
 use crate::completion::scoring::MIN_SCORE;
 use crate::completion::smart_provider::SmartCompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionResponse};
-use crate::storage::cache::UnifiedCache;
+use crate::storage::{CacheNamespace, UnifiedCache};
 use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
@@ -134,7 +134,10 @@ impl CompletionEngine {
 
         if let Some(cached) = self
             .cache
-            .get_deserialized::<CompletionResponse>(&result_cache_key)
+            .get_deserialized_ns::<CompletionResponse>(
+                CacheNamespace::Completion,
+                &result_cache_key,
+            )
             .await?
         {
             return Ok(cached);
@@ -153,7 +156,10 @@ impl CompletionEngine {
             let provider_cache_key = Self::provider_cache_key(handle.name(), fingerprint);
             if let Some(entry) = self
                 .cache
-                .get_deserialized::<ProviderCacheEntry>(&provider_cache_key)
+                .get_deserialized_ns::<ProviderCacheEntry>(
+                    CacheNamespace::Completion,
+                    &provider_cache_key,
+                )
                 .await?
             {
                 if !entry.items.is_empty() {
@@ -247,7 +253,12 @@ impl CompletionEngine {
         if self.config.result_cache_ttl > Duration::from_millis(0) {
             if let Err(error) = self
                 .cache
-                .set_serialized_with_ttl(&result_cache_key, &response, self.config.result_cache_ttl)
+                .set_serialized_ns_with_ttl(
+                    CacheNamespace::Completion,
+                    &result_cache_key,
+                    &response,
+                    self.config.result_cache_ttl,
+                )
                 .await
             {
                 warn!(error = %error, "completion.cache_store_failed");
@@ -274,12 +285,7 @@ impl CompletionEngine {
     }
 
     pub async fn clear_cached_results(&self) -> CompletionEngineResult<()> {
-        let keys = self.cache.keys().await;
-        for key in keys {
-            if key.starts_with("completion/") {
-                self.cache.remove(&key).await;
-            }
-        }
+        self.cache.clear_namespace(CacheNamespace::Completion).await;
         Ok(())
     }
 
@@ -324,7 +330,12 @@ impl CompletionEngine {
                     if !items.is_empty() {
                         let entry = ProviderCacheEntry::new(items.clone());
                         if let Err(error) = cache
-                            .set_serialized_with_ttl(&cache_key, &entry, config.provider_cache_ttl)
+                            .set_serialized_ns_with_ttl(
+                                CacheNamespace::Completion,
+                                &cache_key,
+                                &entry,
+                                config.provider_cache_ttl,
+                            )
                             .await
                         {
                             warn!(
@@ -377,11 +388,11 @@ impl CompletionEngine {
     }
 
     fn result_cache_key(fingerprint: u64) -> String {
-        format!("completion/result/{}", fingerprint)
+        format!("result:{}", fingerprint)
     }
 
     fn provider_cache_key(provider: &str, fingerprint: u64) -> String {
-        format!("completion/provider/{}/{}", provider, fingerprint)
+        format!("provider:{}:{}", provider, fingerprint)
     }
 }
 

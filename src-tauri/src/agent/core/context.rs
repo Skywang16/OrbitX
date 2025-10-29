@@ -38,7 +38,7 @@ use crate::llm::anthropic_types::{
     ContentBlock, MessageContent, MessageParam, MessageRole as AnthropicRole, SystemPrompt,
     ToolResultContent,
 };
-use crate::storage::repositories::RepositoryManager;
+use crate::storage::DatabaseManager;
 
 pub fn generate_node_id(task_id: &str, phase: &str, node_index: Option<usize>) -> String {
     if let Some(index) = node_index {
@@ -165,7 +165,6 @@ impl TaskContext {
                 ))
                 .expect("Failed to create dummy DB"),
         );
-        let dummy_repos = Arc::new(RepositoryManager::new(Arc::clone(&dummy_db)));
         let dummy_persistence = Arc::new(AgentPersistence::new(Arc::clone(&dummy_db)));
         let dummy_ui_persistence = Arc::new(AgentUiPersistence::new(Arc::clone(&dummy_db)));
 
@@ -177,7 +176,7 @@ impl TaskContext {
             PathBuf::from(&cwd),
             String::new(),
             config.clone(),
-            Arc::clone(&dummy_repos),
+            Arc::clone(&dummy_db),
             Arc::clone(&dummy_persistence),
             Arc::clone(&dummy_ui_persistence),
         ));
@@ -231,7 +230,7 @@ impl TaskContext {
         cwd: String,
         tool_registry: Arc<ToolRegistry>,
         progress_channel: Option<Channel<TaskProgressPayload>>,
-        repositories: Arc<RepositoryManager>,
+        repositories: Arc<DatabaseManager>,
         agent_persistence: Arc<AgentPersistence>,
         ui_persistence: Arc<AgentUiPersistence>,
     ) -> TaskExecutorResult<Self> {
@@ -512,7 +511,7 @@ impl TaskContext {
     }
 
     /// Access repositories (used by LLM/tool bridges).
-    pub fn repositories(&self) -> Arc<RepositoryManager> {
+    pub fn repositories(&self) -> Arc<DatabaseManager> {
         self.session.repositories()
     }
 

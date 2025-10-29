@@ -1,5 +1,6 @@
-use crate::ai::tool::storage::StorageCoordinatorState;
+use crate::config::TomlConfigManager;
 use crate::utils::{EmptyData, Language, LanguageManager, TauriApiResult};
+use std::sync::Arc;
 use crate::{api_error, api_success};
 use serde_json::Value;
 use tauri::{Emitter, State};
@@ -7,7 +8,7 @@ use tauri::{Emitter, State};
 #[tauri::command]
 pub async fn language_set_app_language<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-    state: State<'_, StorageCoordinatorState>,
+    config: State<'_, Arc<TomlConfigManager>>,
     language: String,
 ) -> TauriApiResult<EmptyData> {
     let lang = Language::from_str(&language);
@@ -16,9 +17,9 @@ pub async fn language_set_app_language<R: tauri::Runtime>(
         return Ok(api_error!("common.system_error"));
     }
 
-    if let Err(_) = state
-        .coordinator
-        .config_update("app.language", Value::String(language.clone()))
+    if let Err(_) = config
+        .inner()
+        .update_section("app.language", Value::String(language.clone()))
         .await
     {
         return Ok(api_error!("config.update_failed"));

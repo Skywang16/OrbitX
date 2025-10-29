@@ -9,7 +9,7 @@ use crate::agent::prompt::components::conversation_summary::{
 };
 use crate::llm::anthropic_types::{ContentBlock, CreateMessageRequest, MessageContent, MessageParam, SystemPrompt};
 use crate::llm::service::LLMService;
-use crate::storage::repositories::RepositoryManager;
+use crate::storage::DatabaseManager;
 
 const COMPRESSION_THRESHOLD: f32 = 0.85;
 const SUMMARY_MAX_TOKENS: u32 = 512;
@@ -28,14 +28,14 @@ pub struct SummaryResult {
 pub struct ConversationSummarizer {
     conversation_id: i64,
     persistence: Arc<AgentPersistence>,
-    repositories: Arc<RepositoryManager>,
+    repositories: Arc<DatabaseManager>,
 }
 
 impl ConversationSummarizer {
     pub fn new(
         conversation_id: i64,
         persistence: Arc<AgentPersistence>,
-        repositories: Arc<RepositoryManager>,
+        repositories: Arc<DatabaseManager>,
     ) -> Self {
         Self {
             conversation_id,
@@ -247,9 +247,8 @@ impl ConversationSummarizer {
         // 同步获取模型配置中的 context window
         let model_result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                self.repositories
-                    .ai_models()
-                    .find_by_string_id(model_id)
+                crate::storage::repositories::AIModels::new(&self.repositories)
+                    .find_by_id(model_id)
                     .await
             })
         });
@@ -330,7 +329,7 @@ fn extract_cost_from_usage(total_tokens: u32) -> f64 {
 }
 
 impl ConversationSummarizer {
-    fn repositories(&self) -> Arc<RepositoryManager> {
+    fn repositories(&self) -> Arc<DatabaseManager> {
         Arc::clone(&self.repositories)
     }
 }

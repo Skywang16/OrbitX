@@ -8,7 +8,7 @@ use crate::agent::context::{FileContextTracker, FileOperationRecord};
 use crate::agent::persistence::{AgentPersistence, FileRecordSource, FileRecordState};
 use crate::agent::ui::AgentUiPersistence;
 use crate::storage::database::PoolSize;
-use crate::storage::{DatabaseManager, DatabaseOptions, RepositoryManager, StoragePathsBuilder};
+use crate::storage::{DatabaseManager, DatabaseOptions, DatabaseManager, StoragePathsBuilder};
 struct TestHarness {
     #[allow(dead_code)]
     temp_dir: TempDir,
@@ -16,7 +16,7 @@ struct TestHarness {
     database: Arc<DatabaseManager>,
     persistence: Arc<AgentPersistence>,
     ui_persistence: Arc<AgentUiPersistence>,
-    repositories: Arc<RepositoryManager>,
+    repositories: Arc<DatabaseManager>,
 }
 
 impl TestHarness {
@@ -49,7 +49,7 @@ impl TestHarness {
 
         let persistence = Arc::new(AgentPersistence::new(Arc::clone(&database)));
         let ui_persistence = Arc::new(AgentUiPersistence::new(Arc::clone(&database)));
-        let repositories = Arc::new(RepositoryManager::new(Arc::clone(&database)));
+        let repositories = Arc::new(DatabaseManager::new(Arc::clone(&database)));
 
         Self {
             temp_dir,

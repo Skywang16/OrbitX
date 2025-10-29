@@ -24,32 +24,6 @@ CREATE TABLE IF NOT EXISTS ai_features (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 命令历史表
-CREATE TABLE IF NOT EXISTS command_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    command TEXT NOT NULL,
-    working_directory TEXT,
-    exit_code INTEGER,
-    output TEXT,
-    duration_ms INTEGER,
-    executed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    session_id TEXT,
-    tags TEXT
-);
-
--- 命令使用统计表
-CREATE TABLE IF NOT EXISTS command_usage_stats (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    command_hash TEXT NOT NULL,
-    command TEXT NOT NULL,
-    working_directory TEXT NOT NULL,
-    usage_count INTEGER DEFAULT 1,
-    last_used DATETIME DEFAULT CURRENT_TIMESTAMP,
-    avg_duration_ms INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(command_hash, working_directory)
-);
-
 -- 终端会话表
 CREATE TABLE IF NOT EXISTS terminal_sessions (
     id TEXT PRIMARY KEY,

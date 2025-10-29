@@ -244,10 +244,9 @@ impl TaskExecutor {
     /// 获取默认模型ID
     pub async fn get_default_model_id(&self) -> TaskExecutorResult<String> {
         // 从数据库中获取第一个可用模型
-        let models = self
-            .repositories()
-            .ai_models()
-            .find_all_with_decrypted_keys()
+        let db = self.database();
+        let models = crate::storage::repositories::AIModels::new(&db)
+            .find_all()
             .await
             .map_err(TaskExecutorError::from)?;
 
