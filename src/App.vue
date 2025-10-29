@@ -42,8 +42,10 @@
 
 <template>
   <div class="app-layout">
-    <OnboardingView v-if="showOnboarding" @complete="handleOnboardingComplete" />
-    <TerminalView v-else />
+    <Transition name="fade-scale" mode="out-in">
+      <OnboardingView v-if="showOnboarding" key="onboarding" @complete="handleOnboardingComplete" />
+      <TerminalView v-else key="terminal" />
+    </Transition>
   </div>
 </template>
 
@@ -84,5 +86,21 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
+  }
+
+  /* Onboarding → Terminal 过渡动画 */
+  .fade-scale-enter-active,
+  .fade-scale-leave-active {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .fade-scale-enter-from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+
+  .fade-scale-leave-to {
+    opacity: 0;
+    transform: scale(1.02);
   }
 </style>
