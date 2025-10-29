@@ -32,7 +32,7 @@ pub enum CompletionType {
 }
 
 /// 补全项
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CompletionItem {
     /// 补全文本
@@ -115,6 +115,24 @@ impl CompletionItem {
     }
 }
 
+impl PartialOrd for CompletionItem {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Eq for CompletionItem {}
+
+impl Ord for CompletionItem {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // 按分数降序排序，分数相同则按文本字母序
+        other.score
+            .partial_cmp(&self.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| self.text.cmp(&other.text))
+    }
+}
+
 impl fmt::Display for CompletionType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -148,9 +166,6 @@ pub struct CompletionContext {
     /// 当前工作目录
     pub working_directory: PathBuf,
 
-    /// 环境变量
-    pub environment: HashMap<String, String>,
-
     /// 当前正在补全的词
     pub current_word: String,
 
@@ -164,14 +179,12 @@ pub struct CompletionContext {
 impl CompletionContext {
     /// 创建新的补全上下文
     pub fn new(input: String, cursor_position: usize, working_directory: PathBuf) -> Self {
-        let environment = std::env::vars().collect();
         let (current_word, word_start) = Self::extract_current_word(&input, cursor_position);
 
         Self {
             input,
             cursor_position,
             working_directory,
-            environment,
             current_word,
             word_start,
             parsed_command: None,

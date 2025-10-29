@@ -11,9 +11,8 @@ use crate::completion::types::{CompletionContext, CompletionItem, CompletionResp
 use crate::storage::cache::UnifiedCache;
 use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, timeout};
@@ -131,7 +130,7 @@ impl CompletionEngine {
     ) -> CompletionEngineResult<CompletionResponse> {
         let start = Instant::now();
         let fingerprint = Self::context_fingerprint(context);
-        let result_cache_key = Self::result_cache_key(&fingerprint);
+        let result_cache_key = Self::result_cache_key(fingerprint);
 
         if let Some(cached) = self
             .cache
@@ -151,7 +150,7 @@ impl CompletionEngine {
             .cloned()
             .filter(|handle| handle.should_provide(context))
         {
-            let provider_cache_key = Self::provider_cache_key(handle.name(), &fingerprint);
+            let provider_cache_key = Self::provider_cache_key(handle.name(), fingerprint);
             if let Some(entry) = self
                 .cache
                 .get_deserialized::<ProviderCacheEntry>(&provider_cache_key)
@@ -170,12 +169,14 @@ impl CompletionEngine {
             }
         }
 
-        let config = self.config.clone();
+        let config = Arc::new(self.config.clone());
         let cache = Arc::clone(&self.cache);
+        let context_arc = Arc::new(context.clone());
+        
         let mut task_stream = stream::iter(pending.into_iter().map(|(handle, cache_key)| {
-            let context = context.clone();
+            let context = Arc::clone(&context_arc);
             let cache = Arc::clone(&cache);
-            let config = config.clone();
+            let config = Arc::clone(&config);
             async move { Self::run_provider(handle, context, cache, cache_key, config).await }
         }))
         .buffer_unordered(self.config.max_concurrency);
@@ -284,54 +285,26 @@ impl CompletionEngine {
 
     /// 完成补全项处理：过滤、去重、排序
     ///
-    /// 遵循 "好品味" 原则：每个函数只做一件事
-    fn finalize_items(&self, items: Vec<CompletionItem>) -> Vec<CompletionItem> {
-        Self::sort_by_relevance(Self::deduplicate_by_text(Self::filter_by_score(items)))
-    }
-
-    /// 过滤低分项
-    fn filter_by_score(items: Vec<CompletionItem>) -> Vec<CompletionItem> {
-        items
-            .into_iter()
-            .filter(|item| item.score >= MIN_SCORE)
-            .collect()
-    }
-
-    /// 去重：保留每个文本的最高分项
-    fn deduplicate_by_text(items: Vec<CompletionItem>) -> Vec<CompletionItem> {
-        let mut merged: HashMap<String, CompletionItem> = HashMap::new();
-
-        for item in items {
-            merged
-                .entry(item.text.clone())
-                .and_modify(|existing| {
-                    if item.score > existing.score {
-                        *existing = item.clone();
-                    }
-                })
-                .or_insert(item);
-        }
-
-        merged.into_values().collect()
-    }
-
-    /// 按相关性排序
-    fn sort_by_relevance(mut items: Vec<CompletionItem>) -> Vec<CompletionItem> {
-        items.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(Ordering::Equal)
-                .then_with(|| a.text.cmp(&b.text))
-        });
+    /// 使用原地操作减少内存分配
+    fn finalize_items(&self, mut items: Vec<CompletionItem>) -> Vec<CompletionItem> {
+        // 1. 过滤低分项（原地操作）
+        items.retain(|item| item.score >= MIN_SCORE);
+        
+        // 2. 排序（使用 CompletionItem 的 Ord 实现）
+        items.sort_unstable();
+        
+        // 3. 去重：保留每个文本的第一个（因已按分数排序，第一个即最高分）
+        items.dedup_by(|a, b| a.text == b.text);
+        
         items
     }
 
     async fn run_provider(
         handle: ProviderHandle,
-        context: CompletionContext,
+        context: Arc<CompletionContext>,
         cache: Arc<UnifiedCache>,
         cache_key: String,
-        config: CompletionEngineConfig,
+        config: Arc<CompletionEngineConfig>,
     ) -> ProviderOutcome {
         let start = Instant::now();
         let mut attempts = 0;
@@ -340,10 +313,10 @@ impl CompletionEngine {
         while attempts <= config.max_retries {
             attempts += 1;
             let provider = Arc::clone(&handle.provider);
-            let ctx = context.clone();
+            let ctx = Arc::clone(&context);
 
             match timeout(config.provider_timeout, async move {
-                provider.provide_completions(&ctx).await
+                provider.provide_completions(&*ctx).await
             })
             .await
             {
@@ -394,28 +367,20 @@ impl CompletionEngine {
         }
     }
 
-    fn context_fingerprint(context: &CompletionContext) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(context.input.as_bytes());
-        hasher.update(context.cursor_position.to_le_bytes());
-        hasher.update(context.working_directory.to_string_lossy().as_bytes());
-        hasher.update(context.current_word.as_bytes());
-
-        let mut env_pairs: Vec<_> = context.environment.iter().collect();
-        env_pairs.sort_by(|a, b| a.0.cmp(b.0));
-        for (key, value) in env_pairs.iter().take(16) {
-            hasher.update(key.as_bytes());
-            hasher.update(value.as_bytes());
-        }
-
-        format!("{:x}", hasher.finalize())
+    fn context_fingerprint(context: &CompletionContext) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        context.input.hash(&mut hasher);
+        context.cursor_position.hash(&mut hasher);
+        context.working_directory.hash(&mut hasher);
+        context.current_word.hash(&mut hasher);
+        hasher.finish()
     }
 
-    fn result_cache_key(fingerprint: &str) -> String {
+    fn result_cache_key(fingerprint: u64) -> String {
         format!("completion/result/{}", fingerprint)
     }
 
-    fn provider_cache_key(provider: &str, fingerprint: &str) -> String {
+    fn provider_cache_key(provider: &str, fingerprint: u64) -> String {
         format!("completion/provider/{}/{}", provider, fingerprint)
     }
 }

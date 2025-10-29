@@ -66,26 +66,6 @@ pub enum SmartExtractorError {
     #[error("Configuration serialization error: {0}")]
     Serde(#[from] serde_json::Error),
 }
-
-impl From<io::Error> for CompletionProviderError {
-    fn from(error: io::Error) -> Self {
-        CompletionProviderError::Io {
-            operation: "IO operation",
-            context: String::new(),
-            source: error,
-        }
-    }
-}
-
-impl From<RegexError> for CompletionProviderError {
-    fn from(error: RegexError) -> Self {
-        CompletionProviderError::RegexCompile {
-            pattern: String::new(),
-            source: error,
-        }
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum OutputAnalyzerError {
     #[error("Mutex poisoned while accessing {resource}")]

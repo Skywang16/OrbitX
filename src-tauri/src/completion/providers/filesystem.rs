@@ -165,12 +165,8 @@ impl FilesystemProvider {
             }
         }
 
-        // 按分数排序
-        items.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        // 按分数排序（使用 CompletionItem 的 Ord 实现）
+        items.sort_unstable();
 
         Ok(items)
     }
@@ -249,12 +245,8 @@ impl CompletionProvider for FilesystemProvider {
                         })
                         .collect();
 
-                    // 按分数排序
-                    items.sort_by(|a, b| {
-                        b.score
-                            .partial_cmp(&a.score)
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    });
+                    // 按分数排序（使用 CompletionItem 的 Ord 实现）
+                    items.sort_unstable();
                 }
 
                 Ok(items)

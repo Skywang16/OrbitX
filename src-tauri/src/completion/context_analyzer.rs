@@ -3,7 +3,7 @@
 //! 基于优秀的补全系统（如zsh、fish、carapace等）的设计原理，
 //! 实现智能的上下文感知补全分析
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// 补全位置类型
 #[derive(Debug, Clone, PartialEq)]
@@ -75,6 +75,8 @@ pub enum ArgType {
 pub struct ContextAnalyzer {
     /// 内置命令知识库
     command_db: HashMap<String, CommandMeta>,
+    /// 需要参数值的选项集合（消除硬编码特殊情况）
+    options_taking_values: HashSet<&'static str>,
 }
 
 impl ContextAnalyzer {
@@ -82,9 +84,36 @@ impl ContextAnalyzer {
     pub fn new() -> Self {
         let mut analyzer = Self {
             command_db: HashMap::new(),
+            options_taking_values: Self::build_options_set(),
         };
         analyzer.load_builtin_commands();
         analyzer
+    }
+    
+    /// 构建需要参数值的选项集合（初始化一次，避免重复匹配）
+    fn build_options_set() -> HashSet<&'static str> {
+        let mut set = HashSet::new();
+        // 长选项
+        set.insert("--file");
+        set.insert("--output");
+        set.insert("--input");
+        set.insert("--config");
+        set.insert("--directory");
+        set.insert("--format");
+        set.insert("--type");
+        set.insert("--name");
+        set.insert("--path");
+        set.insert("--url");
+        // 短选项
+        set.insert("-f");
+        set.insert("-o");
+        set.insert("-i");
+        set.insert("-c");
+        set.insert("-d");
+        set.insert("-t");
+        set.insert("-n");
+        set.insert("-p");
+        set
     }
 
     /// 分析命令行上下文
@@ -344,30 +373,9 @@ impl ContextAnalyzer {
         chars[start..end].iter().collect()
     }
 
-    /// 检查是否是需要值的选项
+    /// 检查是否是需要值的选项（O(1) 查找）
     fn is_option_that_takes_value(&self, option: &str) -> bool {
-        // 常见的需要值的选项模式
-        matches!(
-            option,
-            "--file"
-                | "--output"
-                | "--input"
-                | "--config"
-                | "--directory"
-                | "--format"
-                | "--type"
-                | "--name"
-                | "--path"
-                | "--url"
-                | "-f"
-                | "-o"
-                | "-i"
-                | "-c"
-                | "-d"
-                | "-t"
-                | "-n"
-                | "-p"
-        )
+        self.options_taking_values.contains(option)
     }
 
     /// 检查是否看起来像路径
