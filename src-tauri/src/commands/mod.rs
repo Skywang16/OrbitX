@@ -59,8 +59,6 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::window::commands::window_get_platform_info,
         crate::window::commands::window_set_opacity,
         crate::window::commands::window_get_opacity,
-        // 文件拖拽命令
-        file_handle_open,
         // 终端管理命令
         crate::ai::tool::shell::terminal_create,
         crate::ai::tool::shell::terminal_write,

@@ -40,7 +40,10 @@ use serde_json::{json, Value as JsonValue};
 ///
 /// let openai_messages = convert_to_openai_messages(&messages);
 /// ```
-pub fn convert_to_openai_messages(anthropic_messages: &[MessageParam]) -> Vec<JsonValue> {
+pub fn convert_to_openai_messages<'a, I>(anthropic_messages: I) -> Vec<JsonValue>
+where
+    I: IntoIterator<Item = &'a MessageParam>,
+{
     let mut openai_messages = Vec::new();
 
     for msg in anthropic_messages {

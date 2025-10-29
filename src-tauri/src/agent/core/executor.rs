@@ -44,10 +44,10 @@ use crate::llm::anthropic_types::{
 use crate::storage::repositories::RepositoryManager;
 use crate::terminal::TerminalContextService;
 use chrono::Utc;
+use dashmap::DashMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::ipc::Channel;
-use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -126,9 +126,9 @@ struct TaskExecutorInner {
     agent_persistence: Arc<AgentPersistence>,
     ui_persistence: Arc<AgentUiPersistence>,
     tool_logger: Arc<ToolExecutionLogger>,
-    context_builder_cache: Arc<RwLock<HashMap<i64, Arc<ContextBuilder>>>>,
-    active_tasks: Arc<RwLock<HashMap<String, Arc<TaskContext>>>>,
-    conversation_contexts: Arc<RwLock<HashMap<i64, Arc<TaskContext>>>>,
+    context_builder_cache: Arc<DashMap<i64, Arc<ContextBuilder>>>,
+    active_tasks: Arc<DashMap<String, Arc<TaskContext>>>,
+    conversation_contexts: Arc<DashMap<i64, Arc<TaskContext>>>,
     default_config: TaskExecutionConfig,
     terminal_context_service: Arc<TerminalContextService>,
 }
@@ -154,9 +154,9 @@ impl TaskExecutor {
             agent_persistence,
             ui_persistence,
             tool_logger,
-            context_builder_cache: Arc::new(RwLock::new(HashMap::new())),
-            active_tasks: Arc::new(RwLock::new(HashMap::new())),
-            conversation_contexts: Arc::new(RwLock::new(HashMap::new())),
+            context_builder_cache: Arc::new(DashMap::new()),
+            active_tasks: Arc::new(DashMap::new()),
+            conversation_contexts: Arc::new(DashMap::new()),
             default_config: TaskExecutionConfig::default(),
             terminal_context_service,
         };
@@ -176,16 +176,16 @@ impl TaskExecutor {
         Arc::clone(&self.inner().tool_logger)
     }
 
-    fn context_builder_cache(&self) -> Arc<RwLock<HashMap<i64, Arc<ContextBuilder>>>> {
-        Arc::clone(&self.inner().context_builder_cache)
+    fn context_builder_cache(&self) -> &DashMap<i64, Arc<ContextBuilder>> {
+        &self.inner().context_builder_cache
     }
 
-    fn active_tasks(&self) -> Arc<RwLock<HashMap<String, Arc<TaskContext>>>> {
-        Arc::clone(&self.inner().active_tasks)
+    fn active_tasks(&self) -> &DashMap<String, Arc<TaskContext>> {
+        &self.inner().active_tasks
     }
 
-    fn conversation_contexts(&self) -> Arc<RwLock<HashMap<i64, Arc<TaskContext>>>> {
-        Arc::clone(&self.inner().conversation_contexts)
+    fn conversation_contexts(&self) -> &DashMap<i64, Arc<TaskContext>> {
+        &self.inner().conversation_contexts
     }
 
     fn default_config(&self) -> TaskExecutionConfig {
@@ -219,12 +219,7 @@ impl TaskExecutor {
                 matches!(status, AgentTaskStatus::Running | AgentTaskStatus::Paused);
 
             if is_actually_running {
-                let active_tasks = self.active_tasks();
-                if active_tasks
-                    .read()
-                    .await
-                    .contains_key(&existing_ctx.task_id)
-                {
+                if self.active_tasks().contains_key(&existing_ctx.task_id) {
                     return Err(TaskExecutorError::InternalError(format!(
                         "Conversation {} still has active task, cannot start new task",
                         params.conversation_id
@@ -266,11 +261,10 @@ impl TaskExecutor {
 
             existing_ctx.set_status(AgentTaskStatus::Running).await?;
 
-            {
-                let active_handle = self.active_tasks();
-                let mut active = active_handle.write().await;
-                active.insert(existing_ctx.task_id.clone(), existing_ctx.clone());
-            }
+            self.active_tasks().insert(
+                existing_ctx.task_id.clone(),
+                existing_ctx.clone(),
+            );
 
             existing_ctx
                 .send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
@@ -309,11 +303,10 @@ impl TaskExecutor {
 
             restored_ctx.set_status(AgentTaskStatus::Running).await?;
 
-            {
-                let active_handle = self.active_tasks();
-                let mut active = active_handle.write().await;
-                active.insert(restored_ctx.task_id.clone(), restored_ctx.clone());
-            }
+            self.active_tasks().insert(
+                restored_ctx.task_id.clone(),
+                restored_ctx.clone(),
+            );
 
             restored_ctx
                 .send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
@@ -343,11 +336,10 @@ impl TaskExecutor {
 
         context.set_status(AgentTaskStatus::Running).await?;
 
-        {
-            let active_tasks = self.active_tasks();
-            let mut active_tasks = active_tasks.write().await;
-            active_tasks.insert(context.task_id.clone(), context.clone());
-        }
+        self.active_tasks().insert(
+            context.task_id.clone(),
+            context.clone(),
+        );
 
         context
             .send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
@@ -362,9 +354,7 @@ impl TaskExecutor {
 
     /// 暂停任务
     pub async fn pause_task(&self, task_id: &str) -> TaskExecutorResult<()> {
-        let active_tasks_handle = self.active_tasks();
-        let active_tasks = active_tasks_handle.read().await;
-        if let Some(context) = active_tasks.get(task_id) {
+        if let Some(context) = self.active_tasks().get(task_id) {
             context.set_status(AgentTaskStatus::Paused).await?;
             context.set_pause(true, false);
 
@@ -388,13 +378,10 @@ impl TaskExecutor {
         task_id: &str,
         reason: Option<String>,
     ) -> TaskExecutorResult<()> {
-        let active_handle = self.active_tasks();
-        let active_guard = active_handle.read().await;
-        let context = match active_guard.get(task_id) {
-            Some(ctx) => Arc::clone(ctx),
-            None => return Err(TaskExecutorError::TaskNotFound(task_id.to_string()).into()),
-        };
-        drop(active_guard);
+        let context = self.active_tasks()
+            .get(task_id)
+            .ok_or_else(|| TaskExecutorError::TaskNotFound(task_id.to_string()))?;
+        let context = context.value().clone();
 
         context.set_pause(false, true);
         context.abort();
@@ -409,10 +396,7 @@ impl TaskExecutor {
             .await?;
 
         // ✅ 只删除 active_tasks，保留 conversation_contexts
-        let active_handle = self.active_tasks();
-        let mut active_tasks = active_handle.write().await;
-        active_tasks.remove(task_id);
-        drop(active_tasks);
+        self.active_tasks().remove(task_id);
 
         // ❌ 不清理 context_builder，保留对话上下文用于后续继续
         // self.clear_context_builder(conversation_id).await;
@@ -492,16 +476,13 @@ impl TaskExecutor {
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
-        let mut active_task_ids = {
-            let guard_handle = self.active_tasks();
-            let guard = guard_handle.read().await;
-            guard
-                .iter()
-                .filter_map(|(task_id, ctx)| {
-                    (ctx.conversation_id == conversation_id).then(|| task_id.clone())
-                })
-                .collect::<Vec<_>>()
-        };
+        let mut active_task_ids: Vec<String> = self.active_tasks()
+            .iter()
+            .filter_map(|entry| {
+                let (task_id, ctx) = entry.pair();
+                (ctx.conversation_id == conversation_id).then(|| task_id.clone())
+            })
+            .collect();
         active_task_ids.sort();
 
         let executions = persistence
@@ -571,24 +552,20 @@ impl TaskExecutor {
     }
 
     async fn register_conversation_context(&self, context: Arc<TaskContext>) {
-        let contexts = self.conversation_contexts();
-        let mut guard = contexts.write().await;
-        guard.insert(context.conversation_id, context);
+        self.conversation_contexts().insert(context.conversation_id, context);
     }
 
     async fn get_context_builder(&self, context: &Arc<TaskContext>) -> Arc<ContextBuilder> {
-        let cache_handle = self.context_builder_cache();
-        let mut cache = cache_handle.write().await;
-        cache
+        self.context_builder_cache()
             .entry(context.conversation_id)
             .or_insert_with(|| Arc::new(ContextBuilder::new(context.file_tracker())))
             .clone()
     }
 
     async fn conversation_context(&self, conversation_id: i64) -> Option<Arc<TaskContext>> {
-        let contexts = self.conversation_contexts();
-        let guard = contexts.read().await;
-        guard.get(&conversation_id).cloned()
+        self.conversation_contexts()
+            .get(&conversation_id)
+            .map(|entry| entry.value().clone())
     }
 
     /// Restore TaskContext from database (used after app restart).
@@ -873,11 +850,7 @@ impl TaskExecutor {
             // 显式关闭 progress channel，确保前端收到 stream 结束信号
             context.set_progress_channel(None).await;
 
-            {
-                let handle = executor.active_tasks();
-                let mut active = handle.write().await;
-                active.remove(&task_id);
-            }
+            executor.active_tasks().remove(&task_id);
 
             info!(
                 "Task {} execution completed, conversation context preserved",
@@ -1013,7 +986,8 @@ impl TaskExecutor {
             let tool_registry = context.tool_registry();
 
             // ===== Phase 2 (续): 摘要、压缩、文件上下文（零持久化） =====
-            let mut working_messages: Vec<MessageParam> = context.get_messages().await;
+            // 注：这里转Vec是因为summarizer/compactor还用Vec，这是合理的边界转换
+            let mut working_messages: Vec<MessageParam> = context.get_messages().await.into();
             let mut system_prompt: Option<SystemPrompt> = context.get_system_prompt().await;
 
             // 摘要（如果需要）
@@ -1028,7 +1002,13 @@ impl TaskExecutor {
             {
                 let sys_text = match system_prompt.clone() {
                     Some(SystemPrompt::Text(t)) => {
-                        format!("{}\n\n[summary]\n{}", t, summary.summary)
+                        // 使用with_capacity预分配，避免多次内存分配
+                        let capacity = t.len() + summary.summary.len() + 15;
+                        let mut buf = String::with_capacity(capacity);
+                        buf.push_str(&t);
+                        buf.push_str("\n\n[summary]\n");
+                        buf.push_str(&summary.summary);
+                        buf
                     }
                     Some(SystemPrompt::Blocks(_)) => summary.summary, // 简化处理
                     None => summary.summary,
@@ -1042,7 +1022,13 @@ impl TaskExecutor {
             if !compressed_history.is_empty() {
                 let sys_text = match system_prompt.clone() {
                     Some(SystemPrompt::Text(t)) => {
-                        format!("{}\n\n[history]\n{}", t, compressed_history)
+                        // 使用with_capacity预分配，避免多次内存分配
+                        let capacity = t.len() + compressed_history.len() + 15;
+                        let mut buf = String::with_capacity(capacity);
+                        buf.push_str(&t);
+                        buf.push_str("\n\n[history]\n");
+                        buf.push_str(&compressed_history);
+                        buf
                     }
                     Some(SystemPrompt::Blocks(_)) => compressed_history.clone(),
                     None => compressed_history.clone(),

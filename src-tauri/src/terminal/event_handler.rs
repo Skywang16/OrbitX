@@ -18,6 +18,8 @@ pub struct TerminalEventHandler<R: Runtime> {
     app_handle: AppHandle<R>,
     mux_subscriber_id: Option<usize>,
     context_event_receiver: Option<broadcast::Receiver<TerminalContextEvent>>,
+    /// 上下文事件处理任务句柄
+    context_task_handle: Option<tauri::async_runtime::JoinHandle<()>>,
 }
 
 // Implement Send and Sync to allow the handler to be managed by Tauri
@@ -31,6 +33,7 @@ impl<R: Runtime> TerminalEventHandler<R> {
             app_handle,
             mux_subscriber_id: None,
             context_event_receiver: None,
+            context_task_handle: None,
         }
     }
 
@@ -113,6 +116,12 @@ impl<R: Runtime> TerminalEventHandler<R> {
             }
         }
 
+        // 停止上下文事件处理任务
+        if let Some(handle) = self.context_task_handle.take() {
+            handle.abort();
+            debug!("已中止上下文事件处理任务");
+        }
+
         // 清理上下文事件接收器
         self.context_event_receiver = None;
 
@@ -128,12 +137,29 @@ impl<R: Runtime> TerminalEventHandler<R> {
 
             // Use tauri::async_runtime::spawn instead of tokio::spawn to ensure
             // we're using Tauri's async runtime during app initialization
-            tauri::async_runtime::spawn(async move {
-                while let Ok(event) = receiver.recv().await {
-                    Self::handle_context_event(&app_handle, event);
+            let handle = tauri::async_runtime::spawn(async move {
+                loop {
+                    match receiver.recv().await {
+                        Ok(event) => {
+                            Self::handle_context_event(&app_handle, event);
+                        }
+                        Err(e) => {
+                            // 接收失败可能是因为发送端关闭或 lag
+                            if matches!(e, broadcast::error::RecvError::Closed) {
+                                debug!("上下文事件通道已关闭，退出处理任务");
+                                break;
+                            } else {
+                                // RecvError::Lagged - 接收太慢，跳过一些消息
+                                warn!("上下文事件接收lag: {:?}", e);
+                                continue;
+                            }
+                        }
+                    }
                 }
                 debug!("上下文事件处理任务已结束");
             });
+            
+            self.context_task_handle = Some(handle);
         }
     }
 

@@ -24,7 +24,11 @@ impl TaskExecutor {
         additional_messages: Option<Vec<MessageParam>>,
     ) -> TaskExecutorResult<CreateMessageRequest> {
         // 1) 直接获取 Anthropic 原生消息与 system prompt（或使用提供的消息覆盖）
-        let messages: Vec<MessageParam> = if let Some(m) = additional_messages { m } else { context.get_messages().await };
+        let messages = if let Some(m) = additional_messages {
+            std::collections::VecDeque::from(m)
+        } else {
+            context.get_messages().await
+        };
         let system: Option<SystemPrompt> = context.get_system_prompt().await;
 
         // 2) 构建工具定义（根据当前工作目录上下文）
@@ -58,47 +62,17 @@ impl TaskExecutor {
 }
 
 impl TaskExecutor {
-    /// 内部执行工具调用：将 ToolResult 转换为 JSON Value（保持与 LLM 交互的一致性）
+    /// 内部执行工具调用：返回完整 ToolResult（包含 ext_info）
     async fn execute_tool_internal(
         &self,
         tool_name: &str,
         args: &Value,
         context: &TaskContext,
-    ) -> TaskExecutorResult<Value> {
-        // 使用 ToolRegistry 执行工具（现在返回 ToolResult 而不是 Result）
+    ) -> crate::agent::tools::ToolResult {
         let tool_registry = context.tool_registry();
-        let tool_result = tool_registry
+        tool_registry
             .execute_tool(tool_name, context, args.clone())
-            .await;
-
-        // 将 ToolResult 转换为统一的 JSON Value 格式: {"result": "..."} 或 {"error": "..."}
-        let result_json = if tool_result.is_error {
-            // 错误情况: {"error": "错误信息"}
-            let error_msg = tool_result
-                .content
-                .first()
-                .map(|c| match c {
-                    crate::agent::tools::ToolResultContent::Error(msg) => msg.clone(),
-                    crate::agent::tools::ToolResultContent::Success(msg) => msg.clone(),
-                })
-                .unwrap_or_else(|| "Unknown error".to_string());
-
-            serde_json::json!({ "error": error_msg })
-        } else {
-            // 成功情况: {"result": "结果内容"}
-            let result_text = tool_result
-                .content
-                .first()
-                .map(|c| match c {
-                    crate::agent::tools::ToolResultContent::Success(text) => text.clone(),
-                    crate::agent::tools::ToolResultContent::Error(msg) => msg.clone(),
-                })
-                .unwrap_or_else(|| "No result".to_string());
-
-            serde_json::json!({ "result": result_text })
-        };
-
-        Ok(result_json)
+            .await
     }
 
     /// 执行工具调用
@@ -136,109 +110,100 @@ impl TaskExecutor {
             }))
             .await?;
 
-        // 执行工具调用（保持与既有 JSON 结果结构一致）
-        let result = self
+        // 执行工具调用，获取完整 ToolResult
+        let tool_result = self
             .execute_tool_internal(&tool_name, &tool_arguments, context)
             .await;
         let execution_time = start_time.elapsed().as_millis() as u64;
 
-        // 处理执行结果
-        let tool_result = match result {
-            Ok(tool_output) => {
-                // 记录工具执行成功（使用ToolExecutionLogger）
-                // 将 JSON 对象转为字符串记录
-                let log_text = serde_json::to_string(&tool_output)
-                    .unwrap_or_else(|_| "Tool execution succeeded".to_string());
+        // 将 ToolResult 转换为简化的 JSON（给 LLM 用）
+        let result_json = if tool_result.is_error {
+            let error_msg = tool_result
+                .content
+                .first()
+                .map(|c| match c {
+                    crate::agent::tools::ToolResultContent::Error(msg) => msg.clone(),
+                    crate::agent::tools::ToolResultContent::Success(msg) => msg.clone(),
+                })
+                .unwrap_or_else(|| "Unknown error".to_string());
+            serde_json::json!({ "error": error_msg })
+        } else {
+            let result_text = tool_result
+                .content
+                .first()
+                .map(|c| match c {
+                    crate::agent::tools::ToolResultContent::Success(text) => text.clone(),
+                    crate::agent::tools::ToolResultContent::Error(msg) => msg.clone(),
+                })
+                .unwrap_or_else(|| "No result".to_string());
+            serde_json::json!({ "result": result_text })
+        };
 
-                if let Err(e) = logger
-                    .log_success(
-                        &log_id,
-                        &crate::agent::tools::ToolResult {
-                            content: vec![crate::agent::tools::ToolResultContent::Success(
-                                log_text,
-                            )],
-                            is_error: false,
-                            execution_time_ms: Some(execution_time),
-                            ext_info: None,
-                        },
-                        execution_time,
-                    )
-                    .await
-                {
-                    warn!("Failed to log tool success: {}", e);
-                }
+        // 记录工具执行结果（使用ToolExecutionLogger）
+        let log_text = serde_json::to_string(&result_json)
+            .unwrap_or_else(|_| "Tool execution completed".to_string());
 
-                // 发送成功结果事件
-                context
-                    .send_progress(TaskProgressPayload::ToolResult(ToolResultPayload {
-                        task_id: context.task_id.clone(),
-                        iteration,
-                        tool_id: call_id.clone(),
-                        tool_name: tool_name.clone(),
-                        result: tool_output.clone(),
+        if tool_result.is_error {
+            if let Err(e) = logger.log_failure(&log_id, &log_text, execution_time).await {
+                warn!("Failed to log tool failure: {}", e);
+            }
+        } else {
+            if let Err(e) = logger
+                .log_success(
+                    &log_id,
+                    &crate::agent::tools::ToolResult {
+                        content: vec![crate::agent::tools::ToolResultContent::Success(
+                            log_text.clone(),
+                        )],
                         is_error: false,
-                        timestamp: Utc::now(),
-                    }))
-                    .await?;
-
-                ToolCallResult {
-                    call_id: call_id.clone(),
-                    tool_name: tool_name.clone(),
-                    result: tool_output,
-                    is_error: false,
-                    execution_time_ms: execution_time,
-                }
+                        execution_time_ms: Some(execution_time),
+                        ext_info: tool_result.ext_info.clone(),
+                    },
+                    execution_time,
+                )
+                .await
+            {
+                warn!("Failed to log tool success: {}", e);
             }
-            Err(error) => {
-                // 记录工具执行失败（使用ToolExecutionLogger）
-                if let Err(e) = logger
-                    .log_failure(&log_id, &error.to_string(), execution_time)
-                    .await
-                {
-                    warn!("Failed to log tool failure: {}", e);
-                }
+        }
 
-                // 发送错误结果事件
-                let error_result = serde_json::json!({
-                    "error": error.to_string(),
-                    "tool_name": tool_name,
-                    "call_id": call_id
-                });
+        // 发送结果事件（包含 ext_info 给前端 UI）
+        context
+            .send_progress(TaskProgressPayload::ToolResult(ToolResultPayload {
+                task_id: context.task_id.clone(),
+                iteration,
+                tool_id: call_id.clone(),
+                tool_name: tool_name.clone(),
+                result: result_json.clone(),
+                is_error: tool_result.is_error,
+                timestamp: Utc::now(),
+                ext_info: tool_result.ext_info.clone(),
+            }))
+            .await?;
 
-                context
-                    .send_progress(TaskProgressPayload::ToolResult(ToolResultPayload {
-                        task_id: context.task_id.clone(),
-                        iteration,
-                        tool_id: call_id.clone(),
-                        tool_name: tool_name.clone(),
-                        result: error_result.clone(),
-                        is_error: true,
-                        timestamp: Utc::now(),
-                    }))
-                    .await?;
+        // 如果是错误，递增错误计数
+        if tool_result.is_error {
+            context.increment_error_count().await?;
+        }
 
-                // 递增错误计数
-                context.increment_error_count().await?;
-
-                ToolCallResult {
-                    call_id: call_id.clone(),
-                    tool_name: tool_name.clone(),
-                    result: error_result,
-                    is_error: true,
-                    execution_time_ms: execution_time,
-                }
-            }
+        // 创建 ToolCallResult（简化版给 LLM context）
+        let tool_call_result = ToolCallResult {
+            call_id: call_id.clone(),
+            tool_name: tool_name.clone(),
+            result: result_json.clone(),
+            is_error: tool_result.is_error,
+            execution_time_ms: execution_time,
         };
 
         // 6. 更新工具执行状态为已完成
         let completed_at = Some(chrono::Utc::now());
-        let duration_ms = Some(tool_result.execution_time_ms as i64);
+        let duration_ms = Some(execution_time as i64);
 
-        if tool_result.is_error {
-            // 从 result 中提取错误信息
-            let error_msg = tool_result
-                .result
-                .as_str()
+        if tool_call_result.is_error {
+            // 从 result_json 中提取错误信息
+            let error_msg = result_json
+                .get("error")
+                .and_then(|v| v.as_str())
                 .unwrap_or("Unknown error")
                 .to_string();
 
@@ -254,13 +219,13 @@ impl TaskExecutor {
                 )
                 .await?;
         } else {
-            let result_json = serde_json::to_string(&tool_result.result).unwrap_or_default();
+            let result_str = serde_json::to_string(&result_json).unwrap_or_default();
             self.agent_persistence()
                 .tool_executions()
                 .update_status(
                     &call_id,
                     ToolExecutionStatus::Completed,
-                    Some(&result_json),
+                    Some(&result_str),
                     None,
                     completed_at,
                     duration_ms,
@@ -268,10 +233,12 @@ impl TaskExecutor {
                 .await?;
         }
 
-// 7. 添加工具结果到上下文
-        context.add_tool_results(vec![tool_result.clone()]).await;
+        // 7. 添加工具结果到上下文
+        context
+            .add_tool_results(vec![tool_call_result.clone()])
+            .await;
 
-        Ok(tool_result)
+        Ok(tool_call_result)
     }
 
     /// 获取默认模型ID

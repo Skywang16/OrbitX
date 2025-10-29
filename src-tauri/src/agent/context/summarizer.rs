@@ -185,7 +185,7 @@ impl ConversationSummarizer {
 
         CreateMessageRequest {
             model: model_id.to_string(),
-            messages: vec![MessageParam { role: crate::llm::anthropic_types::MessageRole::User, content: MessageContent::Text(build_conversation_summary_user_prompt(&history_builder)) }],
+            messages: std::collections::VecDeque::from(vec![MessageParam { role: crate::llm::anthropic_types::MessageRole::User, content: MessageContent::Text(build_conversation_summary_user_prompt(&history_builder)) }]),
             max_tokens: SUMMARY_MAX_TOKENS,
             system: Some(SystemPrompt::Text(CONVERSATION_SUMMARY_SYSTEM_PROMPT.to_string())),
             tools: None,

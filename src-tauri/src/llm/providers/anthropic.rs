@@ -33,8 +33,10 @@
 use async_trait::async_trait;
 use eventsource_stream::Eventsource;
 use futures::StreamExt;
+use once_cell::sync::Lazy;
 use reqwest::{Client, StatusCode};
 use std::pin::Pin;
+use std::time::Duration;
 use tokio_stream::Stream;
 
 use crate::llm::anthropic_types::*;
@@ -44,11 +46,21 @@ use crate::llm::types::LLMProviderConfig;
 
 type AnthropicResult<T> = Result<T, AnthropicError>;
 
+/// 全局共享的HTTP客户端，优化连接复用
+static SHARED_HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
+    Client::builder()
+        .pool_max_idle_per_host(20)
+        .pool_idle_timeout(Duration::from_secs(90))
+        .timeout(Duration::from_secs(120))
+        .build()
+        .expect("Failed to create shared HTTP client")
+});
+
 /// Anthropic Provider
 ///
 /// 直接使用 Anthropic API 的原生类型，无中间转换层
+/// 使用全局共享HTTP客户端优化性能
 pub struct AnthropicProvider {
-    client: Client,
     api_key: String,
     base_url: String,
 }
@@ -57,12 +69,16 @@ impl AnthropicProvider {
     /// 从配置创建新的 Anthropic provider
     pub fn new(config: LLMProviderConfig) -> Self {
         Self {
-            client: Client::new(),
             api_key: config.api_key,
             base_url: config
                 .api_url
                 .unwrap_or_else(|| "https://api.anthropic.com/v1".to_string()),
         }
+    }
+
+    /// 获取共享HTTP客户端
+    fn client(&self) -> &'static Client {
+        &SHARED_HTTP_CLIENT
     }
 
     /// 获取 API endpoint
@@ -82,7 +98,7 @@ impl AnthropicProvider {
     /// 内部非流式调用实现
     async fn call_internal(&self, request: CreateMessageRequest) -> AnthropicResult<Message> {
         let response = self
-            .client
+            .client()
             .post(self.get_endpoint())
             .headers(self.build_headers())
             .json(&request)
@@ -112,7 +128,7 @@ impl AnthropicProvider {
         request.stream = true;
 
         let response = self
-            .client
+            .client()
             .post(self.get_endpoint())
             .headers(self.build_headers())
             .json(&request)

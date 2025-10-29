@@ -77,9 +77,8 @@ impl LLMService {
             .create(config.clone())
             .map_err(LlmError::from)?;
 
-        let mut actual_request = request.clone();
-        // 替换为真实provider模型ID
-        actual_request.model = config.model.clone();
+        let mut actual_request = request;
+        actual_request.model = config.model;
 
         tracing::debug!(
             "Making LLM call with model: {} (config: {})",
@@ -116,9 +115,9 @@ impl LLMService {
             .create(config.clone())
             .map_err(LlmError::from)?;
 
-        let mut actual_request = request.clone();
-        // 替换为真实provider模型ID
-        actual_request.model = config.model.clone();
+        let mut actual_request = request;
+        // 替换为真实provider模型ID（移动而非克隆）
+        actual_request.model = config.model;
 
         tracing::debug!(
             "Making streaming LLM call with model: {} (config: {}), with external cancel token",
@@ -171,8 +170,8 @@ impl LLMService {
             .create(config.clone())
             .map_err(LlmError::from)?;
 
-        let mut actual_request = request.clone();
-        actual_request.model = config.model.clone();
+        let mut actual_request = request;
+        actual_request.model = config.model;
 
         tracing::debug!(
             "Making embedding call with model: {} (config: {})",
@@ -212,10 +211,10 @@ impl LLMService {
     pub async fn test_model_connection(&self, model_id: &str) -> LlmResult<bool> {
         let test_request = CreateMessageRequest {
             model: model_id.to_string(),
-            messages: vec![MessageParam {
+            messages: std::collections::VecDeque::from(vec![MessageParam {
                 role: crate::llm::anthropic_types::MessageRole::User,
                 content: MessageContent::Text("Hello".to_string()),
-            }],
+            }]),
             max_tokens: 10,
             system: None,
             tools: None,

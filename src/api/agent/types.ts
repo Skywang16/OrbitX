@@ -180,6 +180,7 @@ export interface ToolResultEvent {
     result: unknown
     isError: boolean
     timestamp: string
+    extInfo?: unknown
   }
 }
 

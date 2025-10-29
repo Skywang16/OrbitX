@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
@@ -47,11 +48,14 @@ pub fn generate_node_id(task_id: &str, phase: &str, node_index: Option<usize>) -
     }
 }
 
+/// 消息历史最大数量（防止内存无限增长）
+const MAX_MESSAGE_HISTORY: usize = 100;
+
 struct ExecutionState {
     record: AgentExecution,
     runtime_status: AgentTaskStatus,
     system_prompt: Option<SystemPrompt>,
-    messages: Vec<MessageParam>,
+    messages: VecDeque<MessageParam>,
     message_sequence: i64,
     tool_results: Vec<ToolCallResult>,
     current_iteration: Option<Arc<IterationContext>>,
@@ -182,7 +186,7 @@ impl TaskContext {
             record: dummy_execution,
             runtime_status: AgentTaskStatus::Running,
             system_prompt: None,
-            messages: Vec::new(),
+            messages: VecDeque::with_capacity(MAX_MESSAGE_HISTORY),
             message_sequence: 0,
             tool_results: Vec::new(),
             current_iteration: None,
@@ -259,7 +263,7 @@ impl TaskContext {
             record,
             runtime_status: task_status.clone(),
             system_prompt: None,
-            messages: Vec::new(),
+            messages: VecDeque::with_capacity(MAX_MESSAGE_HISTORY),
             message_sequence: 0,
             tool_results: Vec::new(),
             current_iteration: None,
@@ -700,7 +704,11 @@ impl TaskContext {
 
         {
             let mut state = self.execution.write().await;
-            state.messages.push(MessageParam {
+            // 使用VecDeque并实施容量限制
+            if state.messages.len() >= MAX_MESSAGE_HISTORY {
+                state.messages.pop_front();
+            }
+            state.messages.push_back(MessageParam {
                 role: AnthropicRole::Assistant,
                 content: content.clone(),
             });
@@ -730,7 +738,11 @@ impl TaskContext {
         {
             let mut state = self.execution.write().await;
             state.tool_results.extend(results.clone());
-            state.messages.push(MessageParam {
+            // 使用VecDeque并实施容量限制
+            if state.messages.len() >= MAX_MESSAGE_HISTORY {
+                state.messages.pop_front();
+            }
+            state.messages.push_back(MessageParam {
                 role: AnthropicRole::User,
                 content: MessageContent::Blocks(blocks),
             });
@@ -766,7 +778,7 @@ impl TaskContext {
     }
 
     /// Get messages (Anthropic native) by cloning current buffer.
-    pub async fn get_messages(&self) -> Vec<MessageParam> {
+    pub async fn get_messages(&self) -> VecDeque<MessageParam> {
         let guard = self.execution.read().await;
         guard.messages.clone()
     }
@@ -777,7 +789,7 @@ impl TaskContext {
     }
 
     /// Borrow current Anthropic messages without cloning.
-    pub async fn with_messages<T>(&self, f: impl FnOnce(&[MessageParam]) -> T) -> T {
+    pub async fn with_messages<T>(&self, f: impl FnOnce(&VecDeque<MessageParam>) -> T) -> T {
         let guard = self.execution.read().await;
         f(&guard.messages)
     }
@@ -787,7 +799,11 @@ impl TaskContext {
         {
             let mut state = self.execution.write().await;
             let before = state.messages.len();
-            state.messages.push(MessageParam {
+            // 使用VecDeque并实施容量限制
+            if state.messages.len() >= MAX_MESSAGE_HISTORY {
+                state.messages.pop_front();
+            }
+            state.messages.push_back(MessageParam {
                 role: AnthropicRole::User,
                 content: MessageContent::Text(text.clone()),
             });
@@ -832,10 +848,14 @@ impl TaskContext {
     }
 
     /// Restore messages from database (signature updated to Anthropic-native types).
-    /// Actual DB reconstruction for MessageParam will be handled in later phases.
     pub async fn restore_messages(&self, messages: Vec<MessageParam>) -> TaskExecutorResult<()> {
         let mut state = self.execution.write().await;
-        state.messages = messages;
+        // 直接从Vec转为VecDeque，保留最近MAX_MESSAGE_HISTORY条
+        let mut deque = VecDeque::from(messages);
+        while deque.len() > MAX_MESSAGE_HISTORY {
+            deque.pop_front();
+        }
+        state.messages = deque;
         state.runtime_status = AgentTaskStatus::Completed;
         info!(
             "[TaskContext] restore_messages: Restored {} messages for task {}",

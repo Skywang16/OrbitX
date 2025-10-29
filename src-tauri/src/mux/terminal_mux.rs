@@ -148,12 +148,9 @@ impl TerminalMux {
         config: &TerminalConfig,
     ) -> TerminalMuxResult<PaneId> {
         let pane_id = self.next_pane_id();
-
-        debug!("创建LocalPane实例: pane_id={:?}", pane_id);
         let pane = Arc::new(LocalPane::new_with_config(pane_id, size, config)?);
 
         // 添加到面板映射
-        debug!("添加面板到映射: pane_id={:?}", pane_id);
         {
             let mut panes = self
                 .panes
@@ -161,34 +158,20 @@ impl TerminalMux {
                 .map_err(|err| TerminalMuxError::from_write_poison("panes", err))?;
 
             if panes.contains_key(&pane_id) {
-                error!("面板ID已存在: pane_id={:?}", pane_id);
                 return Err(TerminalMuxError::PaneExists { pane_id });
             }
-
             panes.insert(pane_id, pane.clone());
-            debug!(
-                "面板添加到映射成功: pane_id={:?}, total_panes={}",
-                pane_id,
-                panes.len()
-            );
         }
 
         // 设置面板的Shell类型到shell_integration
         let shell_type = crate::shell::ShellType::from_program(&config.shell_config.program);
         self.shell_integration
             .set_pane_shell_type(pane_id, shell_type.clone());
-        debug!(
-            "设置面板Shell类型: pane_id={:?}, shell_type={:?}",
-            pane_id,
-            shell_type.display_name()
-        );
 
         // 启动I/O处理线程
-        debug!("启动I/O处理线程: pane_id={:?}", pane_id);
         self.io_handler.spawn_io_threads(pane.clone())?;
 
         // 发送面板添加通知
-        debug!("发送面板添加通知: pane_id={:?}", pane_id);
         self.notify(MuxNotification::PaneAdded(pane_id));
 
         debug!(
@@ -223,28 +206,17 @@ impl TerminalMux {
     #[instrument(skip(self), fields(pane_id = ?pane_id))]
     pub fn remove_pane(&self, pane_id: PaneId) -> TerminalMuxResult<()> {
         let pane = {
-            debug!("获取面板写锁: pane_id={:?}", pane_id);
             let mut panes = self
                 .panes
                 .write()
                 .map_err(|err| TerminalMuxError::from_write_poison("panes", err))?;
 
-            debug!("从映射中移除面板: pane_id={:?}", pane_id);
-            let pane = panes.remove(&pane_id).ok_or_else(|| {
-                error!("面板不存在: pane_id={:?}", pane_id);
+            panes.remove(&pane_id).ok_or_else(|| {
                 TerminalMuxError::PaneNotFound { pane_id }
-            })?;
-
-            debug!(
-                "面板从映射中移除成功: pane_id={:?}, remaining_panes={}",
-                pane_id,
-                panes.len()
-            );
-            pane
+            })?
         };
 
         // 标记面板为死亡状态，停止I/O线程
-        debug!("标记面板为死亡状态: pane_id={:?}", pane_id);
         pane.mark_dead();
 
         // 停止I/O处理
@@ -253,14 +225,7 @@ impl TerminalMux {
         }
 
         // 发送面板移除通知
-        debug!("发送面板移除通知: pane_id={:?}", pane_id);
         self.notify(MuxNotification::PaneRemoved(pane_id));
-
-        debug!(
-            "移除面板成功: pane_id={:?}, remaining_panes={}",
-            pane_id,
-            self.pane_count()
-        );
         Ok(())
     }
 
@@ -281,20 +246,13 @@ impl TerminalMux {
     ///
     /// - 使用结构化日志格式
     /// - 包含性能指标
-    #[instrument(skip(self, data), fields(pane_id = ?pane_id, data_len = data.len()))]
+    #[instrument(skip(self, data), fields(pane_id = ?pane_id, data_len = data.len()), level = "trace")]
     pub fn write_to_pane(&self, pane_id: PaneId, data: &[u8]) -> TerminalMuxResult<()> {
         let pane = self.get_pane(pane_id).ok_or_else(|| {
-            error!("面板不存在: pane_id={:?}", pane_id);
             TerminalMuxError::PaneNotFound { pane_id }
         })?;
 
         pane.write(data)?;
-
-        debug!(
-            "写入数据成功: pane_id={:?}, data_len={}",
-            pane_id,
-            data.len()
-        );
         Ok(())
     }
 
@@ -305,20 +263,13 @@ impl TerminalMux {
     #[instrument(skip(self), fields(pane_id = ?pane_id, size = ?size))]
     pub fn resize_pane(&self, pane_id: PaneId, size: PtySize) -> TerminalMuxResult<()> {
         let pane = self.get_pane(pane_id).ok_or_else(|| {
-            error!("面板不存在: pane_id={:?}", pane_id);
             TerminalMuxError::PaneNotFound { pane_id }
         })?;
 
         pane.resize(size)?;
 
         // 发送大小调整通知
-        debug!("发送面板大小调整通知: pane_id={:?}", pane_id);
         self.notify(MuxNotification::PaneResized { pane_id, size });
-
-        debug!(
-            "调整面板大小成功: pane_id={:?}, size={}x{}",
-            pane_id, size.cols, size.rows
-        );
         Ok(())
     }
 
@@ -331,7 +282,6 @@ impl TerminalMux {
 
         if let Ok(mut subscribers) = self.subscribers.write() {
             subscribers.insert(subscriber_id, Box::new(subscriber));
-            debug!("添加订阅者: {}", subscriber_id);
         } else {
             error!("无法获取订阅者写锁");
         }
@@ -342,11 +292,7 @@ impl TerminalMux {
     /// 取消订阅
     pub fn unsubscribe(&self, subscriber_id: usize) -> bool {
         if let Ok(mut subscribers) = self.subscribers.write() {
-            let removed = subscribers.remove(&subscriber_id).is_some();
-            if removed {
-                debug!("移除订阅者: {}", subscriber_id);
-            }
-            removed
+            subscribers.remove(&subscriber_id).is_some()
         } else {
             error!("无法获取订阅者写锁");
             false
@@ -361,8 +307,6 @@ impl TerminalMux {
             // 从其他线程发送通知，使用通道发送到主线程
             if let Err(e) = self.notification_sender.send(notification) {
                 error!("跨线程通知发送失败: {}", e);
-            } else {
-                debug!("跨线程通知已发送");
             }
         }
     }
@@ -409,8 +353,6 @@ impl TerminalMux {
     pub fn notify_from_any_thread(&self, notification: MuxNotification) {
         if let Err(e) = self.notification_sender.send(notification) {
             error!("跨线程通知发送失败: {}", e);
-        } else {
-            debug!("跨线程通知已发送");
         }
     }
 

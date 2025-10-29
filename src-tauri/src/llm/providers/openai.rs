@@ -1,9 +1,11 @@
 use async_trait::async_trait;
 use eventsource_stream::Eventsource;
+use once_cell::sync::Lazy;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::pin::Pin;
+use std::time::Duration;
 use tokio_stream::Stream;
 
 use crate::llm::{
@@ -12,9 +14,19 @@ use crate::llm::{
     types::{EmbeddingData, EmbeddingRequest, EmbeddingResponse, LLMProviderConfig, LLMUsage},
 };
 
+/// 全局共享的HTTP客户端，优化连接复用
+static SHARED_HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
+    Client::builder()
+        .pool_max_idle_per_host(20)
+        .pool_idle_timeout(Duration::from_secs(90))
+        .timeout(Duration::from_secs(120))
+        .build()
+        .expect("Failed to create shared HTTP client")
+});
+
 /// OpenAI Provider (messages unsupported in zero-abstraction mode)
+/// 使用全局共享HTTP客户端优化性能
 pub struct OpenAIProvider {
-    client: Client,
     config: LLMProviderConfig,
 }
 
@@ -41,6 +53,7 @@ fn build_openai_chat_body(
         }
     }
     // 使用统一转换器，保留 tool_calls 与 tool 结果
+    // 直接传VecDeque的迭代器，零转换
     let converted = crate::llm::transform::openai::convert_to_openai_messages(&req.messages);
     chat_messages.extend(converted);
 
@@ -71,10 +84,12 @@ fn build_openai_chat_body(
 
 impl OpenAIProvider {
     pub fn new(config: LLMProviderConfig) -> Self {
-        Self {
-            client: Client::new(),
-            config,
-        }
+        Self { config }
+    }
+
+    /// 获取共享HTTP客户端
+    fn client(&self) -> &'static Client {
+        &SHARED_HTTP_CLIENT
     }
 
     /// 获取 Chat Completions 端点
@@ -211,7 +226,7 @@ impl LLMProvider for OpenAIProvider {
         let headers = self.get_headers();
         let body = build_openai_chat_body(&self.config, &request, false);
 
-        let mut req = self.client.post(&url).json(&body);
+        let mut req = self.client().post(&url).json(&body);
         for (k, v) in headers {
             req = req.header(&k, &v);
         }
@@ -297,7 +312,7 @@ impl LLMProvider for OpenAIProvider {
         let headers = self.get_headers();
         let body = build_openai_chat_body(&self.config, &request, true);
 
-        let mut req = self.client.post(&url).json(&body);
+        let mut req = self.client().post(&url).json(&body);
         for (k, v) in headers {
             req = req.header(&k, &v);
         }
@@ -573,7 +588,7 @@ impl LLMProvider for OpenAIProvider {
             body["dimensions"] = json!(dimensions);
         }
 
-        let mut req_builder = self.client.post(&url).json(&body);
+        let mut req_builder = self.client().post(&url).json(&body);
         for (key, value) in headers {
             req_builder = req_builder.header(&key, &value);
         }

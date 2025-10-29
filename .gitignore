@@ -22,6 +22,10 @@ src-tauri/target/
 src-tauri/gen/
 src-tauri/logs/
 
+# Rust build outputs
+target/
+ck-main/target/
+
 # Documentation
 docs/
 

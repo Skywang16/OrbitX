@@ -237,6 +237,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
             ...lastStep.metadata,
             result: event.payload.result,
             isError: event.payload.isError,
+            extInfo: event.payload.extInfo,
           }
         }
         break

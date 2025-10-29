@@ -293,7 +293,8 @@ impl AIService {
 }
 
 fn header_map(entries: &[(&'static str, String)]) -> AIServiceResult<HeaderMap> {
-    let mut headers = HeaderMap::new();
+    // 预分配容量，避免多次rehash
+    let mut headers = HeaderMap::with_capacity(entries.len());
     for (name, value) in entries {
         let header_name = HeaderName::from_static(name);
         let header_value = HeaderValue::from_str(value.trim())

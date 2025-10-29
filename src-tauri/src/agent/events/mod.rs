@@ -77,6 +77,8 @@ pub struct ToolResultPayload {
     pub result: serde_json::Value,
     pub is_error: bool,
     pub timestamp: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ext_info: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

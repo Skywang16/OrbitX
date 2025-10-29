@@ -242,7 +242,7 @@ impl Tool {
 // API 请求/响应
 // ============================================================
 
-/// 创建消息请求
+/// CreateMessageRequest - Anthropic 消息创建请求
 ///
 /// 对应 API: `POST /v1/messages`
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -250,8 +250,8 @@ pub struct CreateMessageRequest {
     /// 模型ID（如 "claude-3-5-sonnet-20241022"）
     pub model: String,
 
-    /// 消息历史
-    pub messages: Vec<MessageParam>,
+    /// 消息历史（使用VecDeque优化内存管理）
+    pub messages: std::collections::VecDeque<MessageParam>,
 
     /// 最大生成token数
     pub max_tokens: u32,
