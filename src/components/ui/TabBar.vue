@@ -3,13 +3,13 @@
   import { useI18n } from 'vue-i18n'
   import { useTerminalStore } from '@/stores/Terminal'
   import { useTabManagerStore } from '@/stores/TabManager'
-  import { TabType, type TabItem } from '@/types'
+  import { TabType, type AnyTabItem } from '@/types'
   import { showPopoverAt } from '@/ui/composables/popover-api'
 
   const { t } = useI18n()
 
   interface Props {
-    tabs: TabItem[]
+    tabs: AnyTabItem[]
     activeTabId: number | null
   }
 
@@ -21,71 +21,51 @@
   const props = defineProps<Props>()
   const emit = defineEmits<Emits>()
 
-  // 使用store
   const terminalStore = useTerminalStore()
   const tabManagerStore = useTabManagerStore()
 
-  // 获取标签样式类
-  const getTabClass = (tab: TabItem): string[] => {
+  const getTabClass = (tab: AnyTabItem): string[] => {
     const classes = ['tab']
-
-    // 使用activeTabId作为激活状态的唯一判断依据，确保状态一致性
     if (tab.id === props.activeTabId) {
       classes.push('active')
     }
-
-    if (tab.type === TabType.TERMINAL && tab.title === 'OrbitX') {
-      classes.push('agent-tab')
-    }
-
     return classes
   }
-
-  /**
-   * 从 TerminalStore 获取终端的 shell 名称
-   * 数据单一来源：TerminalStore.terminals
-   */
-  const getTerminalShell = (tabId: number): string => {
-    const terminal = terminalStore.terminals.find(t => t.id === tabId)
-    return terminal?.shell || 'shell'
-  }
-
-  /**
-   * 获取 tab 的显示路径
-   * 数据单一来源：tab.path（已由 handler 计算）
-   */
-  const getTerminalPath = (tab: TabItem): string => {
-    return tab.path || '~'
-  }
-
-  // 获取标签提示信息
-  const getTabTooltip = (tab: TabItem): string => {
+  const getTerminalShell = (tab: AnyTabItem): string => {
     if (tab.type === TabType.TERMINAL) {
-      // 从 TerminalStore 获取数据（单一数据源）
+      return tab.data.shell
+    }
+    return 'shell'
+  }
+
+  const getTerminalPath = (tab: AnyTabItem): string => {
+    if (tab.type === TabType.TERMINAL) {
+      return tab.data.path
+    }
+    return '~'
+  }
+
+  const getTabTooltip = (tab: AnyTabItem): string => {
+    if (tab.type === TabType.TERMINAL) {
       const terminal = terminalStore.terminals.find(t => t.id === tab.id)
       const fullPath = terminal?.cwd || '~'
-      const shell = terminal?.shell || 'shell'
-
+      const shell = tab.data.shell
       return `${shell} • ${fullPath}`
     }
-
-    return tab.title || 'Tab'
+    return t('settings.title')
   }
 
   const tabBarRef = ref<HTMLDivElement | null>(null)
   const tabBarWrapperRef = ref<HTMLDivElement | null>(null)
 
-  // 简化的标签宽度配置
   const MIN_TAB_WIDTH = 60
   const MAX_TAB_WIDTH = 150
 
-  // 简化的标签宽度计算
   const tabWidth = computed(() => {
     const tabCount = props.tabs.length
     if (tabCount === 0) return MAX_TAB_WIDTH
 
     const containerWidth = tabBarWrapperRef.value?.clientWidth || 400
-
     const paddingAndGaps = 6 + 4 + 34 + 6 * tabCount
     const availableWidth = containerWidth - paddingAndGaps
     const widthPerTab = availableWidth / tabCount
@@ -93,34 +73,28 @@
     return Math.max(MIN_TAB_WIDTH, Math.min(MAX_TAB_WIDTH, widthPerTab))
   })
 
-  // 简化的滚动判断
   const needsScroll = computed(() => tabWidth.value <= MIN_TAB_WIDTH)
 
-  // 判断标签页是否可以显示关闭按钮
-  const canShowCloseButton = (tab: TabItem): boolean => {
-    // 只要标签页是可关闭的，就显示关闭按钮
-    return tab.closable ?? false
+  const canShowCloseButton = (tab: AnyTabItem): boolean => {
+    return tab.closable
   }
 
-  // 处理标签点击
   const handleTabClick = (id: number) => {
     if (id !== props.activeTabId) {
       emit('switch', id)
     }
   }
 
-  // 处理关闭按钮点击
   const handleCloseClick = (event: MouseEvent, id: number) => {
     event.stopPropagation()
     emit('close', id)
   }
 
-  // 获取 tab 标题的显示文本
-  const getTabTitle = (tab: TabItem): string => {
-    if (tab.type === TabType.SETTINGS && tab.title === 'settings') {
+  const getTabTitle = (tab: AnyTabItem): string => {
+    if (tab.type === TabType.SETTINGS) {
       return t('settings.title')
     }
-    return tab.title || 'Tab'
+    return 'Tab'
   }
 
   // 添加菜单项：仅显示可用 shell 名称
@@ -241,7 +215,7 @@
         <div class="tab-content" :title="getTabTooltip(tab)">
           <template v-if="tab.type === TabType.TERMINAL">
             <div class="terminal-info">
-              <span class="shell-badge">{{ getTerminalShell(tab.id) }}</span>
+              <span class="shell-badge">{{ getTerminalShell(tab) }}</span>
               <span class="path-info">{{ getTerminalPath(tab) }}</span>
             </div>
           </template>
@@ -392,65 +366,21 @@
     box-shadow: 0 -1px 4px var(--color-primary-alpha);
   }
 
-  .tab:not(.agent-tab) {
+  .tab {
     background: var(--bg-400);
   }
 
-  .tab:not(.agent-tab):hover {
+  .tab:hover {
     background: var(--bg-500);
   }
 
-  .tab:not(.agent-tab).active {
+  .tab.active {
     background: var(--color-primary-alpha);
   }
 
-  .tab:not(.agent-tab).active::before {
+  .tab.active::before {
     background: var(--color-primary);
     box-shadow: 0 -1px 4px var(--color-primary-alpha);
-  }
-
-  .tab.agent-tab {
-    background: rgba(117, 190, 255, 0.1);
-    position: relative;
-  }
-
-  .tab.agent-tab:hover {
-    background: rgba(117, 190, 255, 0.15);
-  }
-
-  .tab.agent-tab.active {
-    background: rgba(117, 190, 255, 0.15);
-    border-color: transparent;
-  }
-
-  .tab.agent-tab.active::before {
-    background: var(--color-info);
-    box-shadow: 0 -1px 4px var(--color-primary-alpha);
-  }
-
-  .tab.agent-tab::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    width: 6px;
-    height: 6px;
-    background: var(--color-info);
-    border-radius: 50%;
-    box-shadow: 0 0 6px var(--color-primary-alpha);
-    animation: pulse-glow 2s infinite;
-  }
-
-  @keyframes pulse-glow {
-    0%,
-    100% {
-      opacity: 0.8;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1.1);
-    }
   }
 
   .tab-content {

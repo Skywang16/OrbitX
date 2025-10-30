@@ -1,10 +1,10 @@
-import { TabType, type TabItem } from '@/types'
+import { TabType, type AnyTabItem, type TerminalTabItem, type SettingsTabItem } from '@/types'
 import type { TabState, TerminalTabState, SettingsTabState } from '@/types/domain/storage'
 import { useTerminalStore } from './Terminal'
 import { useSessionStore } from './session'
 
-export interface TabHandler<T extends TabState = TabState> {
-  buildTabItem(tab: T): TabItem
+export interface TabHandler<T extends TabState = TabState, R extends AnyTabItem = AnyTabItem> {
+  buildTabItem(tab: T): R
   activate(tabId: number): Promise<void>
   close?(tabId: number): Promise<void>
 }
@@ -98,7 +98,7 @@ const getDisplayPath = (cwd: string): string => {
 }
 
 handlers.set('terminal', {
-  buildTabItem: (tab: TerminalTabState): TabItem => {
+  buildTabItem: (tab: TerminalTabState): TerminalTabItem => {
     const terminalStore = useTerminalStore()
     const terminal = terminalStore.terminals.find(t => t.id === tab.id)
 
@@ -106,9 +106,10 @@ handlers.set('terminal', {
       id: tab.id,
       type: TabType.TERMINAL,
       closable: true,
-      shell: terminal?.shell,
-      path: terminal ? getDisplayPath(terminal.cwd) : '~',
-      title: terminal ? `${terminal.id}` : String(tab.id),
+      data: {
+        shell: terminal?.shell || 'shell',
+        path: terminal ? getDisplayPath(terminal.cwd) : '~',
+      },
     }
   },
 
@@ -123,14 +124,13 @@ handlers.set('terminal', {
 })
 
 handlers.set('settings', {
-  buildTabItem: (tab: SettingsTabState): TabItem => {
+  buildTabItem: (tab: SettingsTabState): SettingsTabItem => {
     return {
       id: tab.id,
       type: TabType.SETTINGS,
-      title: 'settings',
       closable: true,
       data: {
-        section: tab.data.lastSection,
+        section: tab.data?.lastSection || 'general',
       },
     }
   },

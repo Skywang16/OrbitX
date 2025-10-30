@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, watch } from 'vue'
-import { TabType, type TabItem } from '@/types'
+import { TabType, type AnyTabItem, type TerminalTabItem } from '@/types'
 import { useTerminalStore } from './Terminal'
 import { useSessionStore } from './session'
 import { dockApi } from '@/api'
@@ -10,7 +10,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
   const terminalStore = useTerminalStore()
   const sessionStore = useSessionStore()
 
-  const tabs = computed<TabItem[]>(() => {
+  const tabs = computed<AnyTabItem[]>(() => {
     return sessionStore.tabs.map(tab => getHandler(tab.type).buildTabItem(tab))
   })
 
@@ -133,10 +133,10 @@ export const useTabManagerStore = defineStore('TabManager', () => {
 
   const updateDockMenu = () => {
     const tabEntries = tabs.value
-      .filter(tab => tab.type === TabType.TERMINAL)
+      .filter((tab): tab is TerminalTabItem => tab.type === TabType.TERMINAL)
       .map(tab => ({
         id: String(tab.id),
-        title: tab.path!, // TERMINAL类型的path一定有值（目录名或'~'）
+        title: tab.data.path,
       }))
 
     const activeId = activeTabId.value !== null ? String(activeTabId.value) : null
