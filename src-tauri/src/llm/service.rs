@@ -209,10 +209,10 @@ impl LLMService {
     pub async fn test_model_connection(&self, model_id: &str) -> LlmResult<bool> {
         let test_request = CreateMessageRequest {
             model: model_id.to_string(),
-            messages: std::collections::VecDeque::from(vec![MessageParam {
+            messages: vec![MessageParam {
                 role: crate::llm::anthropic_types::MessageRole::User,
                 content: MessageContent::Text("Hello".to_string()),
-            }]),
+            }],
             max_tokens: 10,
             system: None,
             tools: None,

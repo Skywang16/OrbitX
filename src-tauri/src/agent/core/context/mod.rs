@@ -1,24 +1,24 @@
 pub mod chain;
+pub mod states;
 
-use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use uuid::Uuid;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::ipc::Channel;
-use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
 use self::chain::Chain;
+use self::states::{ExecutionState, PlanningState, TaskStates};
 use crate::agent::config::{AgentConfig, TaskExecutionConfig};
 use crate::agent::context::FileContextTracker;
+use crate::agent::core::ring_buffer::MessageRingBuffer;
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::events::TaskProgressPayload;
@@ -50,186 +50,26 @@ pub fn generate_node_id(task_id: &str, phase: &str, node_index: Option<usize>) -
     }
 }
 
-/// 消息历史最大数量（防止内存无限增长）
 const MAX_MESSAGE_HISTORY: usize = 100;
-/// 缩容阈值：当容量超过使用量的这个倍数时触发缩容
-const SHRINK_THRESHOLD_MULTIPLIER: usize = 3;
-
-pub(crate) struct ExecutionState {
-    pub(crate) record: AgentExecution,
-    pub(crate) runtime_status: AgentTaskStatus,
-    pub(crate) system_prompt: Option<SystemPrompt>,
-    pub(crate) messages: VecDeque<MessageParam>,
-    pub(crate) message_sequence: i64,
-    pub(crate) tool_results: Vec<ToolCallResult>,
-    pub(crate) current_iteration: Option<Arc<IterationContext>>,
-    pub(crate) ui_assistant_message_id: Option<i64>,
-}
-
-pub(crate) struct PlanningState {
-    chain: Chain,
-    conversation: Vec<String>,
-    current_node_id: Option<String>,
-    task_detail: Option<TaskDetail>,
-    root_task_id: Option<String>,
-    parent_task_id: Option<String>,
-    children: Vec<String>,
-}
-
-#[derive(Default)]
-pub(crate) struct UiState {
-    steps: Vec<UiStep>,
-}
-
-pub(crate) struct MutableState {
-    pub(crate) execution: ExecutionState,
-    pub(crate) planning: PlanningState,
-    pub(crate) ui: UiState,
-    pub(crate) progress_channel: Option<Channel<TaskProgressPayload>>,
-    pub(crate) cancellation: CancellationToken,
-    pub(crate) step_tokens: Vec<CancellationToken>,
-    pub(crate) react_runtime: ReactRuntime,
-}
 
 pub struct TaskContext {
-    // 优化：使用 Arc<str> 而非 String，使 clone 变为零成本（仅增加引用计数）
     pub task_id: Arc<str>,
     pub conversation_id: i64,
     pub user_prompt: Arc<str>,
     pub cwd: Arc<str>,
-    // 零成本抽象：TaskExecutionConfig 只有8字节且实现了Copy，直接内嵌
     config: TaskExecutionConfig,
 
     session: Arc<SessionContext>,
     tool_registry: Arc<ToolRegistry>,
     state_manager: Arc<StateManager>,
 
-    pub(crate) state: Arc<RwLock<MutableState>>,
+    pub(crate) states: TaskStates,
 
-    pause_status: Arc<AtomicU8>,
-    event_seq: Arc<AtomicU64>,
+    pause_status: AtomicU8,
+    event_seq: AtomicU64,
 }
 
 impl TaskContext {
-    /// Create a dummy context for error handling (used in tool registry)
-    /// Note: This is a minimal context only for error handling purposes
-    #[allow(clippy::arc_with_non_send_sync)]
-    pub fn dummy() -> Self {
-        use crate::agent::config::AgentConfig;
-
-        let agent_config = AgentConfig::default();
-        let runtime_config = ReactRuntimeConfig {
-            max_iterations: agent_config.max_react_num,
-            max_consecutive_errors: agent_config.max_react_error_streak,
-        };
-
-        let thresholds = TaskThresholds {
-            max_consecutive_errors: agent_config.max_react_error_streak,
-            max_iterations: agent_config.max_react_num,
-        };
-
-        let dummy_registry = Arc::new(ToolRegistry::new(
-            crate::agent::tools::get_permissions_for_mode("agent"),
-        ));
-
-        let dummy_execution = AgentExecution {
-            id: -1,
-            execution_id: "dummy".to_string(),
-            conversation_id: -1,
-            user_request: String::new(),
-            system_prompt_used: String::new(),
-            execution_config: None,
-            has_conversation_context: false,
-            status: ExecutionStatus::Running,
-            current_iteration: 0,
-            error_count: 0,
-            max_iterations: 0,
-            total_input_tokens: 0,
-            total_output_tokens: 0,
-            total_cost: 0.0,
-            context_tokens: 0,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-            started_at: None,
-            completed_at: None,
-        };
-
-        let task_state = TaskState::new("dummy".to_string(), thresholds);
-
-        // Note: 这些字段在 dummy context 中不会被使用，只是为了满足类型系统
-        // 如果真的被调用，会 panic
-        let runtime = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
-        let temp_app_dir =
-            std::env::temp_dir().join(format!("orbitx-agent-dummy-{}", Uuid::new_v4()));
-        std::fs::create_dir_all(&temp_app_dir).expect("Failed to create temp dir for dummy DB");
-        let storage_paths = crate::storage::paths::StoragePaths::new(temp_app_dir)
-            .expect("Failed to create storage paths for dummy DB");
-        let dummy_db = Arc::new(
-            runtime
-                .block_on(crate::storage::database::DatabaseManager::new(
-                    storage_paths,
-                    crate::storage::database::DatabaseOptions::default(),
-                ))
-                .expect("Failed to create dummy DB"),
-        );
-        let dummy_persistence = Arc::new(AgentPersistence::new(Arc::clone(&dummy_db)));
-        let dummy_ui_persistence = Arc::new(AgentUiPersistence::new(Arc::clone(&dummy_db)));
-
-        let cwd = fallback_cwd();
-        let config = TaskExecutionConfig::default();
-        let session = Arc::new(SessionContext::new(
-            "dummy".to_string(),
-            -1,
-            PathBuf::from(&cwd),
-            String::new(),
-            config,
-            Arc::clone(&dummy_db),
-            Arc::clone(&dummy_persistence),
-            Arc::clone(&dummy_ui_persistence),
-        ));
-
-        let mutable_state = MutableState {
-            execution: ExecutionState {
-                record: dummy_execution,
-                runtime_status: AgentTaskStatus::Running,
-                system_prompt: None,
-                messages: VecDeque::with_capacity(MAX_MESSAGE_HISTORY),
-                message_sequence: 0,
-                tool_results: Vec::new(),
-                current_iteration: None,
-                ui_assistant_message_id: None,
-            },
-            planning: PlanningState {
-                chain: Chain::new(String::new()),
-                conversation: Vec::new(),
-                current_node_id: None,
-                task_detail: None,
-                root_task_id: None,
-                parent_task_id: None,
-                children: Vec::new(),
-            },
-            ui: UiState::default(),
-            progress_channel: None,
-            cancellation: CancellationToken::new(),
-            step_tokens: Vec::new(),
-            react_runtime: ReactRuntime::new(runtime_config),
-        };
-
-        Self {
-            task_id: Arc::from("dummy"),
-            conversation_id: -1,
-            user_prompt: Arc::from(""),
-            cwd: Arc::from(cwd.as_str()),
-            config,
-            session,
-            tool_registry: dummy_registry,
-            state_manager: Arc::new(StateManager::new(task_state, StateEventEmitter::new())),
-            state: Arc::new(RwLock::new(mutable_state)),
-            pause_status: Arc::new(AtomicU8::new(0)),
-            event_seq: Arc::new(AtomicU64::new(0)),
-        }
-    }
-
     /// Construct a fresh context for a new task.
     pub async fn new(
         execution: AgentExecution,
@@ -282,32 +122,11 @@ impl TaskContext {
             Arc::clone(&ui_persistence),
         ));
 
-        let mutable_state = MutableState {
-            execution: ExecutionState {
-                record,
-                runtime_status: task_status.clone(),
-                system_prompt: None,
-                messages: VecDeque::with_capacity(MAX_MESSAGE_HISTORY),
-                message_sequence: 0,
-                tool_results: Vec::new(),
-                current_iteration: None,
-                ui_assistant_message_id: None,
-            },
-            planning: PlanningState {
-                chain: Chain::new(user_prompt.clone()),
-                conversation: Vec::new(),
-                current_node_id: None,
-                task_detail: None,
-                root_task_id: None,
-                parent_task_id: None,
-                children: Vec::new(),
-            },
-            ui: UiState::default(),
-            progress_channel,
-            cancellation: CancellationToken::new(),
-            step_tokens: Vec::new(),
-            react_runtime: ReactRuntime::new(runtime_config),
-        };
+        let execution = ExecutionState::new(record, task_status);
+        let planning = PlanningState::new(user_prompt.clone());
+        let react_runtime = ReactRuntime::new(runtime_config);
+
+        let states = TaskStates::new(execution, planning, react_runtime, progress_channel);
 
         Ok(Self {
             task_id: Arc::from(task_id.as_str()),
@@ -318,25 +137,24 @@ impl TaskContext {
             session,
             tool_registry,
             state_manager: Arc::new(StateManager::new(task_state, StateEventEmitter::new())),
-            state: Arc::new(RwLock::new(mutable_state)),
-            pause_status: Arc::new(AtomicU8::new(0)),
-            event_seq: Arc::new(AtomicU64::new(0)),
+            states,
+            pause_status: AtomicU8::new(0),
+            event_seq: AtomicU64::new(0),
         })
     }
 
-    /// Attach a new progress channel (used when resuming tasks).
     pub async fn set_progress_channel(&self, channel: Option<Channel<TaskProgressPayload>>) {
-        self.state.write().await.progress_channel = channel;
+        *self.states.progress_channel.lock().await = channel;
     }
 
     pub async fn begin_iteration(&self, iteration_num: u32) -> Arc<IterationContext> {
         let iter_ctx = Arc::new(IterationContext::new(iteration_num, self.session()));
-        self.state.write().await.execution.current_iteration = Some(Arc::clone(&iter_ctx));
+        self.states.execution.write().await.current_iteration = Some(Arc::clone(&iter_ctx));
         iter_ctx
     }
 
     pub async fn end_iteration(&self) -> Option<IterationSnapshot> {
-        let maybe_ctx = self.state.write().await.execution.current_iteration.take();
+        let maybe_ctx = self.states.execution.write().await.current_iteration.take();
         if let Some(ctx) = maybe_ctx {
             match Arc::try_unwrap(ctx) {
                 Ok(inner) => Some(inner.finalize().await),
@@ -352,7 +170,7 @@ impl TaskContext {
     }
 
     pub async fn current_iteration_ctx(&self) -> Option<Arc<IterationContext>> {
-        self.state.read().await.execution.current_iteration.clone()
+        self.states.execution.read().await.current_iteration.clone()
     }
 
     pub fn session(&self) -> Arc<SessionContext> {
@@ -375,21 +193,19 @@ impl TaskContext {
         Arc::clone(&self.tool_registry)
     }
 
-    /// Current status of the task.
     pub async fn status(&self) -> AgentTaskStatus {
-        self.state.read().await.execution.runtime_status
+        self.states.execution.read().await.runtime_status
     }
 
-    /// Set the task status and persist the change.
     pub async fn set_status(&self, status: AgentTaskStatus) -> TaskExecutorResult<()> {
         let (execution_status, current_iteration, error_count) = {
-            let mut state = self.state.write().await;
-            state.execution.runtime_status = status;
-            state.execution.record.status = ExecutionStatus::from(&status);
+            let mut exec = self.states.execution.write().await;
+            exec.runtime_status = status;
+            exec.record.status = ExecutionStatus::from(&status);
             (
-                state.execution.record.status,
-                state.execution.record.current_iteration,
-                state.execution.record.error_count,
+                exec.record.status,
+                exec.record.current_iteration,
+                exec.record.error_count,
             )
         };
 
@@ -424,15 +240,14 @@ impl TaskContext {
     /// Increment iteration counter and sync to storage.
     pub async fn increment_iteration(&self) -> TaskExecutorResult<u32> {
         let (current, current_raw, status, errors) = {
-            let mut state = self.state.write().await;
-            state.execution.record.current_iteration =
-                state.execution.record.current_iteration.saturating_add(1);
-            state.execution.message_sequence = 0;
+            let mut exec = self.states.execution.write().await;
+            exec.record.current_iteration = exec.record.current_iteration.saturating_add(1);
+            exec.message_sequence = 0;
             (
-                state.execution.record.current_iteration as u32,
-                state.execution.record.current_iteration,
-                state.execution.record.status,
-                state.execution.record.error_count,
+                exec.record.current_iteration as u32,
+                exec.record.current_iteration,
+                exec.record.status,
+                exec.record.error_count,
             )
         };
 
@@ -448,20 +263,19 @@ impl TaskContext {
 
     /// Current iteration number.
     pub async fn current_iteration(&self) -> u32 {
-        self.state.read().await.execution.record.current_iteration as u32
+        self.states.execution.read().await.record.current_iteration as u32
     }
 
     /// Increase error counter and persist.
     pub async fn increment_error_count(&self) -> TaskExecutorResult<u32> {
         let (count, status, iteration, errors) = {
-            let mut state = self.state.write().await;
-            state.execution.record.error_count =
-                state.execution.record.error_count.saturating_add(1);
+            let mut exec = self.states.execution.write().await;
+            exec.record.error_count = exec.record.error_count.saturating_add(1);
             (
-                state.execution.record.error_count as u32,
-                state.execution.record.status,
-                state.execution.record.current_iteration,
-                state.execution.record.error_count,
+                exec.record.error_count as u32,
+                exec.record.status,
+                exec.record.current_iteration,
+                exec.record.error_count,
             )
         };
         self.agent_persistence()
@@ -475,12 +289,9 @@ impl TaskContext {
 
     pub async fn reset_error_count(&self) -> TaskExecutorResult<()> {
         let (status, iteration) = {
-            let mut state = self.state.write().await;
-            state.execution.record.error_count = 0;
-            (
-                state.execution.record.status,
-                state.execution.record.current_iteration,
-            )
+            let mut exec = self.states.execution.write().await;
+            exec.record.error_count = 0;
+            (exec.record.status, exec.record.current_iteration)
         };
         self.agent_persistence()
             .agent_executions()
@@ -494,11 +305,11 @@ impl TaskContext {
     /// Determine if execution should stop based on status and thresholds.
     pub async fn should_stop(&self) -> bool {
         let (status, iteration, errors) = {
-            let state = self.state.read().await;
+            let exec = self.states.execution.read().await;
             (
-                state.execution.runtime_status,
-                state.execution.record.current_iteration as u32,
-                state.execution.record.error_count as u32,
+                exec.runtime_status,
+                exec.record.current_iteration as u32,
+                exec.record.error_count as u32,
             )
         };
         if matches!(
@@ -530,84 +341,99 @@ impl TaskContext {
     /// 性能优化：避免多次 read().await
     pub(crate) async fn batch_read_state<F, R>(&self, f: F) -> R
     where
-        F: FnOnce(&MutableState) -> R,
+        F: FnOnce(&ExecutionState) -> R,
     {
-        let state = self.state.read().await;
-        f(&state)
+        let exec = self.states.execution.read().await;
+        f(&exec)
     }
 
-    /// 批量更新状态 - 减少锁争用，一次锁完成所有修改
-    /// 性能优化：避免多次 write().await，这是最大的性能瓶颈
     #[allow(dead_code)]
     pub(crate) async fn batch_update_state<F, R>(&self, f: F) -> R
     where
-        F: FnOnce(&mut MutableState) -> R,
+        F: FnOnce(&mut ExecutionState) -> R,
     {
-        let mut state = self.state.write().await;
-        f(&mut state)
+        let mut exec = self.states.execution.write().await;
+        f(&mut exec)
     }
 
     pub async fn with_chain<T>(&self, f: impl FnOnce(&Chain) -> T) -> T {
-        let state = self.state.read().await;
-        f(&state.planning.chain)
+        let planning = self.states.planning.read().await;
+        f(&planning.chain)
     }
 
     pub async fn with_chain_mut<T>(&self, f: impl FnOnce(&mut Chain) -> T) -> T {
-        let mut state = self.state.write().await;
-        f(&mut state.planning.chain)
+        let mut planning = self.states.planning.write().await;
+        f(&mut planning.chain)
     }
 
     /// Push a user intervention (manual conversation entry).
     pub async fn push_conversation_message(&self, message: String) {
-        self.state.write().await.planning.conversation.push(message);
+        self.states
+            .planning
+            .write()
+            .await
+            .conversation
+            .push(message);
     }
 
-    /// Drain user interventions (similar to frontend behaviour).
     pub async fn drain_conversation(&self) -> Vec<String> {
-        let mut state = self.state.write().await;
-        std::mem::take(&mut state.planning.conversation)
+        let mut planning = self.states.planning.write().await;
+        std::mem::take(&mut planning.conversation)
     }
 
-    /// Update cached task detail.
     pub async fn set_task_detail(&self, task: Option<TaskDetail>) {
-        self.state.write().await.planning.task_detail = task;
+        self.states.planning.write().await.task_detail = task;
     }
 
     pub async fn task_detail(&self) -> Option<TaskDetail> {
-        self.state.read().await.planning.task_detail.clone()
+        self.states.planning.read().await.task_detail.clone()
     }
 
     pub async fn attach_parent(&self, parent_task_id: String, root_task_id: Option<String>) {
-        let mut state = self.state.write().await;
-        state.planning.parent_task_id = Some(parent_task_id.clone());
-        state.planning.root_task_id = Some(root_task_id.unwrap_or(parent_task_id));
+        let mut planning = self.states.planning.write().await;
+        planning.parent_task_id = Some(parent_task_id.clone());
+        planning.root_task_id = Some(root_task_id.unwrap_or(parent_task_id));
     }
 
     pub async fn add_child(&self, child_task_id: String) {
-        let mut state = self.state.write().await;
-        if !state.planning.children.contains(&child_task_id) {
-            state.planning.children.push(child_task_id);
+        let mut planning = self.states.planning.write().await;
+        if !planning.children.contains(&child_task_id) {
+            planning.children.push(child_task_id);
         }
     }
 
     /// Read current node identifier.
     pub async fn current_node_id(&self) -> Option<String> {
-        self.state.read().await.planning.current_node_id.clone()
+        self.states.planning.read().await.current_node_id.clone()
     }
 
     pub async fn set_planning_node(&self, node_id: Option<String>) {
-        self.state.write().await.planning.current_node_id = node_id;
+        self.states.planning.write().await.current_node_id = node_id;
     }
 
     pub async fn check_aborted(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
-        if self.state.read().await.cancellation.is_cancelled() {
+        if self
+            .states
+            .cancellation
+            .lock()
+            .await
+            .main_token
+            .is_cancelled()
+        {
             return Err(TaskExecutorError::TaskInterrupted.into());
         }
         if no_check_pause {
             return Ok(());
         }
         loop {
-            if self.state.read().await.cancellation.is_cancelled() {
+            if self
+                .states
+                .cancellation
+                .lock()
+                .await
+                .main_token
+                .is_cancelled()
+            {
                 return Err(TaskExecutorError::TaskInterrupted.into());
             }
             let status = self.pause_status.load(Ordering::SeqCst);
@@ -623,22 +449,20 @@ impl TaskContext {
         Ok(())
     }
 
-    /// Abort the entire task execution.
     pub fn abort(&self) {
-        if let Ok(state) = self.state.try_read() {
-            state.cancellation.cancel();
+        if let Ok(cancellation) = self.states.cancellation.try_lock() {
+            cancellation.main_token.cancel();
         }
         self.abort_current_steps();
-        if let Ok(mut state) = self.state.try_write() {
-            state.react_runtime.mark_abort();
+        if let Ok(mut react) = self.states.react_runtime.try_write() {
+            react.mark_abort();
         }
     }
 
-    /// 重置 cancellation token（用于中断后继续对话）
     pub async fn reset_cancellation(&self) {
-        let mut state = self.state.write().await;
-        state.cancellation = CancellationToken::new();
-        state.step_tokens.clear();
+        let mut cancellation = self.states.cancellation.lock().await;
+        cancellation.main_token = CancellationToken::new();
+        cancellation.step_tokens.clear();
     }
 
     pub fn set_pause(&self, paused: bool, abort_current_step: bool) {
@@ -657,22 +481,21 @@ impl TaskContext {
         }
     }
 
-    /// Register a new cancellation token for an inner step (e.g., LLM call).
     pub fn register_step_token(&self) -> CancellationToken {
-        let token = if let Ok(state) = self.state.try_read() {
-            state.cancellation.child_token()
+        let token = if let Ok(cancellation) = self.states.cancellation.try_lock() {
+            cancellation.main_token.child_token()
         } else {
             CancellationToken::new()
         };
-        if let Ok(mut state) = self.state.try_write() {
-            state.step_tokens.push(token.clone());
+        if let Ok(mut cancellation) = self.states.cancellation.try_lock() {
+            cancellation.step_tokens.push(token.clone());
         }
         token
     }
 
     fn abort_current_steps(&self) {
-        if let Ok(mut state) = self.state.try_write() {
-            for token in state.step_tokens.drain(..) {
+        if let Ok(mut cancellation) = self.states.cancellation.try_lock() {
+            for token in cancellation.step_tokens.drain(..) {
                 token.cancel();
             }
         }
@@ -702,22 +525,11 @@ impl TaskContext {
         };
 
         {
-            let mut state = self.state.write().await;
-            // 使用VecDeque并实施容量限制
-            // 限制消息数量
-            if state.execution.messages.len() >= MAX_MESSAGE_HISTORY {
-                state.execution.messages.pop_front();
-            }
-            state.execution.messages.push_back(MessageParam {
+            let mut exec = self.states.execution.write().await;
+            exec.messages.push(MessageParam {
                 role: AnthropicRole::Assistant,
                 content: content.clone(),
             });
-            // 内存优化：定期缩容，防止容量无限增长
-            if state.execution.messages.capacity()
-                > state.execution.messages.len() * SHRINK_THRESHOLD_MULTIPLIER
-            {
-                state.execution.messages.shrink_to_fit();
-            }
         }
 
         // Persist assistant visible content only as a string; do not modify DB schema.
@@ -750,23 +562,12 @@ impl TaskContext {
         }
 
         {
-            let mut state = self.state.write().await;
-            state.execution.tool_results.extend(results);
-            // 使用VecDeque并实施容量限制
-            // 限制消息数量
-            if state.execution.messages.len() >= MAX_MESSAGE_HISTORY {
-                state.execution.messages.pop_front();
-            }
-            state.execution.messages.push_back(MessageParam {
+            let mut exec = self.states.execution.write().await;
+            exec.tool_results.extend(results);
+            exec.messages.push(MessageParam {
                 role: AnthropicRole::User,
                 content: MessageContent::Blocks(blocks),
             });
-            // 内存优化：定期缩容
-            if state.execution.messages.capacity()
-                > state.execution.messages.len() * SHRINK_THRESHOLD_MULTIPLIER
-            {
-                state.execution.messages.shrink_to_fit();
-            }
         }
     }
 
@@ -777,55 +578,41 @@ impl TaskContext {
         system_prompt: String,
         user_prompt: String,
     ) -> TaskExecutorResult<()> {
-        // Set system prompt in memory only (no DB persist per requirement)
         {
-            let mut state = self.state.write().await;
-            state.execution.system_prompt = Some(SystemPrompt::Text(system_prompt));
-            state.execution.messages.clear();
-            state.execution.message_sequence = 0;
+            let mut exec = self.states.execution.write().await;
+            exec.system_prompt = Some(SystemPrompt::Text(system_prompt));
+            exec.messages.clear();
+            exec.message_sequence = 0;
         }
-        // Append the initial user message
         self.add_user_message(user_prompt).await;
         Ok(())
     }
 
-    /// Get messages (Anthropic native) by cloning current buffer.
-    pub async fn get_messages(&self) -> VecDeque<MessageParam> {
-        self.state.read().await.execution.messages.clone()
+    pub async fn get_messages(&self) -> Vec<MessageParam> {
+        self.states.execution.read().await.messages_vec()
     }
 
     pub async fn get_system_prompt(&self) -> Option<SystemPrompt> {
-        self.state.read().await.execution.system_prompt.clone()
+        self.states.execution.read().await.system_prompt.clone()
     }
 
-    /// Borrow current Anthropic messages without cloning.
-    pub async fn with_messages<T>(&self, f: impl FnOnce(&VecDeque<MessageParam>) -> T) -> T {
-        let guard = self.state.read().await;
-        f(&guard.execution.messages)
+    pub async fn with_messages<T>(
+        &self,
+        f: impl FnOnce(&MessageRingBuffer<MessageParam, MAX_MESSAGE_HISTORY>) -> T,
+    ) -> T {
+        let exec = self.states.execution.read().await;
+        f(&exec.messages)
     }
 
-    /// Append a user message to the conversation history (Anthropic-native types).
     pub async fn add_user_message(&self, text: String) {
         {
-            let mut state = self.state.write().await;
-            let before = state.execution.messages.len();
-            // 使用VecDeque并实施容量限制
-            // 限制消息数量
-            if state.execution.messages.len() >= MAX_MESSAGE_HISTORY {
-                state.execution.messages.pop_front();
-            }
-            state.execution.messages.push_back(MessageParam {
+            let mut exec = self.states.execution.write().await;
+            let before = exec.messages.len();
+            exec.messages.push(MessageParam {
                 role: AnthropicRole::User,
                 content: MessageContent::Text(text.clone()),
             });
-            // 内存优化：定期缩容
-            if state.execution.messages.capacity()
-                > state.execution.messages.len() * SHRINK_THRESHOLD_MULTIPLIER
-            {
-                state.execution.messages.shrink_to_fit();
-            }
-            let after = state.execution.messages.len();
-            drop(state);
+            let after = exec.messages.len();
             info!(
                 "[TaskContext] add_user_message: messages {} -> {}",
                 before, after
@@ -834,12 +621,11 @@ impl TaskContext {
         let _ = self.append_message(MessageRole::User, &text, false).await;
     }
 
-    /// Clear current message buffer and persisted records for this execution.
     pub async fn reset_message_state(&self) -> TaskExecutorResult<()> {
         {
-            let mut state = self.state.write().await;
-            state.execution.messages.clear();
-            state.execution.message_sequence = 0;
+            let mut exec = self.states.execution.write().await;
+            exec.messages.clear();
+            exec.message_sequence = 0;
         }
 
         self.agent_persistence()
@@ -852,30 +638,27 @@ impl TaskContext {
 
     /// Set system prompt in memory only; do not persist system message to DB.
     pub async fn set_system_prompt(&self, prompt: String) -> TaskExecutorResult<()> {
-        self.state.write().await.execution.system_prompt = Some(SystemPrompt::Text(prompt));
+        self.states.execution.write().await.system_prompt = Some(SystemPrompt::Text(prompt));
         Ok(())
     }
 
     // Deprecated: system prompt is stored separately and not part of messages.
     pub async fn update_system_prompt(&self, new_system_prompt: String) -> TaskExecutorResult<()> {
-        self.state.write().await.execution.system_prompt =
+        self.states.execution.write().await.system_prompt =
             Some(SystemPrompt::Text(new_system_prompt));
         Ok(())
     }
 
-    /// Restore messages from database (signature updated to Anthropic-native types).
     pub async fn restore_messages(&self, messages: Vec<MessageParam>) -> TaskExecutorResult<()> {
-        let mut state = self.state.write().await;
-        // 直接从Vec转为VecDeque，保留最近MAX_MESSAGE_HISTORY条
-        let mut deque = VecDeque::from(messages);
-        while deque.len() > MAX_MESSAGE_HISTORY {
-            deque.pop_front();
+        let mut exec = self.states.execution.write().await;
+        exec.messages.clear();
+        for msg in messages {
+            exec.messages.push(msg);
         }
-        state.execution.messages = deque;
-        state.execution.runtime_status = AgentTaskStatus::Completed;
+        exec.runtime_status = AgentTaskStatus::Completed;
         info!(
             "[TaskContext] restore_messages: Restored {} messages for task {}",
-            state.execution.messages.len(),
+            exec.messages.len(),
             self.task_id
         );
         Ok(())
@@ -888,10 +671,10 @@ impl TaskContext {
         is_summary: bool,
     ) -> TaskExecutorResult<()> {
         let (iteration, seq) = {
-            let mut state = self.state.write().await;
-            let iteration = state.execution.record.current_iteration;
-            let seq = state.execution.message_sequence;
-            state.execution.message_sequence = seq.saturating_add(1);
+            let mut exec = self.states.execution.write().await;
+            let iteration = exec.record.current_iteration;
+            let seq = exec.message_sequence;
+            exec.message_sequence = seq.saturating_add(1);
             (iteration, seq)
         };
 
@@ -927,11 +710,10 @@ impl TaskContext {
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
         {
-            let mut state = self.state.write().await;
-            state.execution.ui_assistant_message_id = Some(assistant_message_id);
-            state.ui.steps.clear();
+            let mut exec = self.states.execution.write().await;
+            exec.ui_assistant_message_id = Some(assistant_message_id);
         }
-
+        self.states.ui.lock().await.steps.clear();
         Ok(())
     }
 
@@ -950,11 +732,10 @@ impl TaskContext {
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
         {
-            let mut state = self.state.write().await;
-            state.execution.ui_assistant_message_id = Some(assistant_message_id);
-            state.ui.steps.clear();
+            let mut exec = self.states.execution.write().await;
+            exec.ui_assistant_message_id = Some(assistant_message_id);
         }
-
+        self.states.ui.lock().await.steps.clear();
         Ok(())
     }
 
@@ -965,10 +746,10 @@ impl TaskContext {
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?
         {
-            let mut state = self.state.write().await;
-            state.execution.ui_assistant_message_id = Some(message.id);
+            let mut exec = self.states.execution.write().await;
+            exec.ui_assistant_message_id = Some(message.id);
             if let Some(steps) = message.steps {
-                state.ui.steps = steps;
+                self.states.ui.lock().await.steps = steps;
             }
         }
         Ok(())
@@ -1096,8 +877,8 @@ impl TaskContext {
             }
         }
         {
-            let guard = self.state.read().await;
-            if let Some(channel) = guard.progress_channel.as_ref() {
+            let channel_guard = self.states.progress_channel.lock().await;
+            if let Some(channel) = channel_guard.as_ref() {
                 channel
                     .send(payload.clone())
                     .map_err(TaskExecutorError::ChannelError)?;
@@ -1153,9 +934,8 @@ impl TaskContext {
         }
 
         let steps_snapshot = {
-            let mut state = self.state.write().await;
+            let mut ui = self.states.ui.lock().await;
             if let Some(step) = maybe_step.take() {
-                // 对thinking/text根据streamId合并，其他直接push
                 let stream_id = step
                     .metadata
                     .as_ref()
@@ -1163,7 +943,7 @@ impl TaskContext {
                     .and_then(|v| v.as_str());
 
                 if let Some(sid) = stream_id {
-                    if let Some(existing) = state.ui.steps.iter_mut().find(|s| {
+                    if let Some(existing) = ui.steps.iter_mut().find(|s| {
                         s.step_type == step.step_type
                             && s.metadata
                                 .as_ref()
@@ -1171,20 +951,17 @@ impl TaskContext {
                                 .and_then(|v| v.as_str())
                                 == Some(sid)
                     }) {
-                        // 合并：拼接内容+更新metadata
                         existing.content.push_str(&step.content);
                         existing.timestamp = step.timestamp;
                         existing.metadata = step.metadata;
                     } else {
-                        // 新流，push
-                        state.ui.steps.push(step);
+                        ui.steps.push(step);
                     }
                 } else {
-                    // 无streamId，直接push
-                    state.ui.steps.push(step);
+                    ui.steps.push(step);
                 }
             }
-            state.ui.steps.clone()
+            ui.steps.clone()
         };
 
         let status = status_override.unwrap_or("streaming");
@@ -1192,7 +969,7 @@ impl TaskContext {
     }
 
     async fn persist_ui_steps(&self, steps: &[UiStep], status: &str) -> TaskExecutorResult<()> {
-        let current_id = self.state.read().await.execution.ui_assistant_message_id;
+        let current_id = self.states.execution.read().await.ui_assistant_message_id;
 
         if let Some(message_id) = current_id {
             self.ui_persistence()
@@ -1349,7 +1126,6 @@ fn render_message_content(content: &MessageContent) -> String {
     }
 }
 
-/// Normalised tool call result stored in the task context.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallResult {
     pub call_id: String,

@@ -18,8 +18,8 @@ impl LoopDetector {
             return None;
         }
 
-        let state = context.state.read().await;
-        let snapshot = state.react_runtime.get_snapshot();
+        let react = context.states.react_runtime.read().await;
+        let snapshot = react.get_snapshot();
         let iterations = &snapshot.iterations;
 
         if iterations.len() < LOOP_DETECTION_WINDOW {
@@ -110,7 +110,9 @@ impl LoopDetector {
                      - Should you try a different approach?\n\n\
                      Try to make progress with the information you've gathered.\n\
                      </system-reminder>",
-                    tool, count, recent_iterations.len()
+                    tool,
+                    count,
+                    recent_iterations.len()
                 ));
             }
         }

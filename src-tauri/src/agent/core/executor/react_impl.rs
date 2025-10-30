@@ -1,11 +1,11 @@
 /*!
  * ReactHandler 实现 - TaskExecutor作为ReAct处理器
- * 
+ *
  * 零成本抽象：所有方法都会被内联，无运行时开销
  */
 
-use std::sync::Arc;
 use serde_json::Value;
+use std::sync::Arc;
 
 use crate::agent::context::ContextBuilder;
 use crate::agent::core::context::{TaskContext, ToolCallResult};
@@ -17,7 +17,7 @@ use crate::llm::anthropic_types::CreateMessageRequest;
 
 #[async_trait::async_trait]
 impl ReactHandler for TaskExecutor {
-    #[inline]  // 编译器内联，零开销
+    #[inline] // 编译器内联，零开销
     async fn build_llm_request(
         &self,
         context: &TaskContext,
@@ -27,11 +27,9 @@ impl ReactHandler for TaskExecutor {
         messages: Option<Vec<crate::llm::anthropic_types::MessageParam>>,
     ) -> TaskExecutorResult<CreateMessageRequest> {
         // 获取工具schema
-        let tool_schemas = tool_registry.get_tool_schemas_with_context(
-            &ToolDescriptionContext {
-                cwd: cwd.to_string(),
-            },
-        );
+        let tool_schemas = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
+            cwd: cwd.to_string(),
+        });
 
         // 转换为Anthropic Tool类型
         let tools: Vec<crate::llm::anthropic_types::Tool> = tool_schemas
@@ -43,10 +41,9 @@ impl ReactHandler for TaskExecutor {
             })
             .collect();
 
-        // 获取系统提示和消息
         let system_prompt = context.get_system_prompt().await;
         let final_messages = if let Some(msgs) = messages {
-            msgs.into()
+            msgs
         } else {
             context.get_messages().await
         };
@@ -159,4 +156,3 @@ impl ReactHandler for TaskExecutor {
         Arc::new(ContextBuilder::new(file_tracker))
     }
 }
-

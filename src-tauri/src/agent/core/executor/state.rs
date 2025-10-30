@@ -19,13 +19,13 @@ impl TaskExecutor {
             .ok_or_else(|| TaskExecutorError::TaskNotFound(task_id.to_string()))?;
 
         let (status, current_iteration, error_count, created_at, updated_at) = ctx
-            .batch_read_state(|state| {
+            .batch_read_state(|exec| {
                 (
-                    state.execution.runtime_status,
-                    state.execution.record.current_iteration,
-                    state.execution.record.error_count,
-                    state.execution.record.created_at,
-                    state.execution.record.updated_at,
+                    exec.runtime_status,
+                    exec.record.current_iteration,
+                    exec.record.error_count,
+                    exec.record.created_at,
+                    exec.record.updated_at,
                 )
             })
             .await;
@@ -104,10 +104,11 @@ impl TaskExecutor {
             .filter_map(|entry| {
                 let status = entry
                     .value()
-                    .state
+                    .states
+                    .execution
                     .try_read()
                     .ok()
-                    .map(|state| state.execution.runtime_status);
+                    .map(|exec| exec.runtime_status);
 
                 if let Some(status) = status {
                     use crate::agent::core::status::AgentTaskStatus;

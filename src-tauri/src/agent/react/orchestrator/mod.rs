@@ -86,8 +86,8 @@ impl ReactOrchestrator {
             debug!("Task {} starting iteration {}", context.task_id, iteration);
 
             let react_iteration_index = {
-                let mut state = context.state.write().await;
-                state.react_runtime.start_iteration()
+                let mut react = context.states.react_runtime.write().await;
+                react.start_iteration()
             };
 
             let iter_ctx = context.begin_iteration(iteration).await;
@@ -99,10 +99,10 @@ impl ReactOrchestrator {
 
             // 性能优化：使用批量读取，一次锁获取所有数据
             let (mut working_messages, mut system_prompt) = context
-                .batch_read_state(|state| {
+                .batch_read_state(|exec| {
                     (
-                        state.execution.messages.iter().cloned().collect::<Vec<_>>(),
-                        state.execution.system_prompt.clone(),
+                        exec.messages.iter().cloned().collect::<Vec<_>>(),
+                        exec.system_prompt.clone(),
                     )
                 })
                 .await;
@@ -150,9 +150,10 @@ impl ReactOrchestrator {
             }
 
             // 文件上下文（如有），追加为 user 临时消息
-            let recent_iterations = context
-                .batch_read_state(|state| state.react_runtime.get_snapshot().iterations.clone())
-                .await;
+            let recent_iterations = {
+                let react = context.states.react_runtime.read().await;
+                react.get_snapshot().iterations.clone()
+            };
             let builder = handler.get_context_builder(context).await;
             if let Some(file_msg) = builder.build_file_context_message(&recent_iterations).await {
                 working_messages.push(file_msg);
@@ -331,7 +332,7 @@ impl ReactOrchestrator {
                                         input: input.clone(),
                                     });
 
-                                    context.state.write().await.react_runtime.record_action(
+                                    context.states.react_runtime.write().await.record_action(
                                         react_iteration_index,
                                         name.clone(),
                                         input.clone(),
@@ -440,20 +441,20 @@ impl ReactOrchestrator {
                             .await;
 
                         {
-                            let mut state = context.state.write().await;
-                            state.react_runtime.record_observation(
+                            let mut react = context.states.react_runtime.write().await;
+                            react.record_observation(
                                 react_iteration_index,
                                 result.tool_name.clone(),
                                 outcome,
                             );
 
                             if result.is_error {
-                                state.react_runtime.fail_iteration(
+                                react.fail_iteration(
                                     react_iteration_index,
                                     format!("Tool {} failed", result.tool_name),
                                 );
                             } else {
-                                state.react_runtime.reset_error_counter();
+                                react.reset_error_counter();
                             }
                         }
                     }
@@ -483,10 +484,10 @@ impl ReactOrchestrator {
                     );
 
                     context
-                        .state
+                        .states
+                        .react_runtime
                         .write()
                         .await
-                        .react_runtime
                         .complete_iteration(react_iteration_index, output.clone(), None);
 
                     Self::finalize_iteration(context, &mut iteration_snapshots).await?;
