@@ -8,7 +8,6 @@
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
-  import TerminalSelectionTag from '../tags/TerminalSelectionTag.vue'
   import TerminalTabTag from '../tags/TerminalTabTag.vue'
   import NodeVersionTag from '../tags/NodeVersionTag.vue'
   import ProjectRulesTag from '../tags/ProjectRulesTag.vue'
@@ -356,56 +355,6 @@
     }
   }
 
-  const getSelectionDisplayText = () => {
-    const info = terminalSelection.selectionInfo.value
-    const activeTab = tabManagerStore.activeTab
-
-    if (!activeTab || activeTab.type !== TabType.TERMINAL) {
-      return info || t('session.selected_content')
-    }
-
-    let currentTabPath = 'terminal'
-    if (activeTab.path && activeTab.path !== '~') {
-      currentTabPath = activeTab.path
-    } else {
-      const terminal = terminalStore.terminals.find(t => t.id === activeTab.id)
-      if (terminal?.cwd) {
-        const parts = terminal.cwd
-          .replace(/\/$/, '')
-          .split(/[/\\]/)
-          .filter(p => p.length > 0)
-        if (parts.length === 0) {
-          currentTabPath = '~'
-        } else {
-          const lastPart = parts[parts.length - 1]
-          currentTabPath = lastPart.length > 15 ? lastPart.substring(0, 12) + '...' : lastPart
-        }
-      }
-    }
-
-    if (info) {
-      const parts = info.split(' ')
-      if (parts.length > 1) {
-        return `${currentTabPath} ${parts.slice(1).join(' ')}`
-      }
-    }
-    return `${currentTabPath} ${t('session.selected_content')}`
-  }
-
-  const handleInsertSelectedText = () => {
-    const selectedText = terminalSelection.getSelectedText()
-    if (!selectedText.trim()) return
-
-    const newValue = props.modelValue ? `${props.modelValue} ${selectedText}` : selectedText
-
-    emit('update:modelValue', newValue)
-
-    nextTick(() => {
-      inputTextarea.value?.focus()
-      adjustTextareaHeight()
-    })
-  }
-
   const getTagContextInfo = () => {
     return terminalSelection.getTagContextInfo()
   }
@@ -474,14 +423,6 @@
       :visible="projectRules.state.value.hasRulesFile"
       :rules-file="projectRules.state.value.selectedRulesFile"
       @click="showProjectRulesModal = true"
-    />
-
-    <TerminalSelectionTag
-      :visible="terminalSelection.hasSelection.value"
-      :selected-text="terminalSelection.selectedText.value"
-      :display-text="getSelectionDisplayText()"
-      @clear="terminalSelection.clearSelection"
-      @insert="handleInsertSelectedText"
     />
 
     <div class="input-main">
