@@ -136,7 +136,7 @@ export const useTabManagerStore = defineStore('TabManager', () => {
       .filter(tab => tab.type === TabType.TERMINAL)
       .map(tab => ({
         id: String(tab.id),
-        title: tab.path || tab.title || 'Terminal',
+        title: tab.path!, // TERMINAL类型的path一定有值（目录名或'~'）
       }))
 
     const activeId = activeTabId.value !== null ? String(activeTabId.value) : null
