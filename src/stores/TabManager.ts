@@ -17,8 +17,9 @@ export const useTabManagerStore = defineStore('TabManager', () => {
   const activeTabId = computed(() => sessionStore.activeTabId)
   const activeTab = computed(() => tabs.value.find(tab => tab.id === activeTabId.value))
 
+  // 监听终端列表和活动标签页变化时更新Dock菜单
   watch(
-    () => terminalStore.terminals,
+    [() => terminalStore.terminals, () => activeTabId.value],
     () => {
       updateDockMenu()
     },
