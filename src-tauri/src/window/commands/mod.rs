@@ -101,7 +101,7 @@ pub struct WindowConfigManager {
 pub struct WindowStateManager {
     cached_cwd: Option<PathBuf>,
     cached_home: Option<PathBuf>,
-    always_on_top: Arc<AtomicBool>,  // 复用pane.rs的Atomic模式
+    always_on_top: AtomicBool,
     last_update: Option<Instant>,
     cache_ttl: std::time::Duration,
 }
@@ -117,7 +117,7 @@ impl WindowStateManager {
         Self {
             cached_cwd: None,
             cached_home: None,
-            always_on_top: Arc::new(AtomicBool::new(false)),  // 复用pane.rs模式
+            always_on_top: AtomicBool::new(false),
             last_update: None,
             cache_ttl: std::time::Duration::from_secs(30),
         }

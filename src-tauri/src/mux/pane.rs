@@ -2,7 +2,7 @@
 
 use std::io::{Read, Write};
 use std::process;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::mux::error::{PaneError, PaneResult};
@@ -27,8 +27,11 @@ pub trait Pane: Send + Sync {
 
 pub struct LocalPane {
     pane_id: PaneId,
-    size: Arc<Mutex<PtySize>>,
-    dead: Arc<AtomicBool>,
+    rows: AtomicU16,
+    cols: AtomicU16,
+    pixel_width: AtomicU16,
+    pixel_height: AtomicU16,
+    dead: AtomicBool,
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     _slave: Arc<Mutex<Box<dyn SlavePty + Send>>>,
@@ -61,8 +64,11 @@ impl LocalPane {
 
         Ok(Self {
             pane_id,
-            size: Arc::new(Mutex::new(size)),
-            dead: Arc::new(AtomicBool::new(false)),
+            rows: AtomicU16::new(size.rows),
+            cols: AtomicU16::new(size.cols),
+            pixel_width: AtomicU16::new(size.pixel_width),
+            pixel_height: AtomicU16::new(size.pixel_height),
+            dead: AtomicBool::new(false),
             master,
             writer,
             _slave: slave,
@@ -283,14 +289,11 @@ impl Pane for LocalPane {
             return Err(PaneError::PaneDead);
         }
 
-        // 更新内部尺寸记录
-        {
-            let mut current_size = self
-                .size
-                .lock()
-                .map_err(|err| PaneError::from_poison("size", err))?;
-            *current_size = size;
-        }
+        // 原子更新尺寸
+        self.rows.store(size.rows, Ordering::Relaxed);
+        self.cols.store(size.cols, Ordering::Relaxed);
+        self.pixel_width.store(size.pixel_width, Ordering::Relaxed);
+        self.pixel_height.store(size.pixel_height, Ordering::Relaxed);
 
         // 调整PTY大小
         let pty_size = PortablePtySize {
@@ -340,10 +343,12 @@ impl Pane for LocalPane {
     }
 
     fn get_size(&self) -> PtySize {
-        self.size
-            .lock()
-            .map(|size| *size)
-            .unwrap_or_else(|_| PtySize::default())
+        PtySize {
+            rows: self.rows.load(Ordering::Relaxed),
+            cols: self.cols.load(Ordering::Relaxed),
+            pixel_width: self.pixel_width.load(Ordering::Relaxed),
+            pixel_height: self.pixel_height.load(Ordering::Relaxed),
+        }
     }
 }
 

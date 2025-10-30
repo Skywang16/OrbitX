@@ -134,7 +134,6 @@ impl ConfigPaths {
     /// 获取项目主题目录
     ///
     /// 返回项目根目录下的 config/themes 目录路径
-
     /// 确保所有必要的目录存在
     fn ensure_directories_exist(&self) -> ConfigPathsResult<()> {
         let directories = [

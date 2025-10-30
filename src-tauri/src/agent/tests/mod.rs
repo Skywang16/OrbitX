@@ -8,7 +8,7 @@ use crate::agent::context::{FileContextTracker, FileOperationRecord};
 use crate::agent::persistence::{AgentPersistence, FileRecordSource, FileRecordState};
 use crate::agent::ui::AgentUiPersistence;
 use crate::storage::database::PoolSize;
-use crate::storage::{DatabaseManager, DatabaseOptions, DatabaseManager, StoragePathsBuilder};
+use crate::storage::{DatabaseManager, DatabaseOptions, StoragePathsBuilder};
 struct TestHarness {
     #[allow(dead_code)]
     temp_dir: TempDir,

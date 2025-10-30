@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 
 use crate::agent::config::TaskExecutionConfig;
 use crate::agent::context::FileContextTracker;
+use crate::agent::core::ring_buffer::MessageRingBuffer;
 use crate::agent::persistence::AgentPersistence;
 use crate::agent::ui::AgentUiPersistence;
 use crate::storage::DatabaseManager;
@@ -38,7 +39,7 @@ pub struct SessionContext {
     pub created_at: DateTime<Utc>,
     pub config: TaskExecutionConfig,
 
-    compressed_history: Arc<RwLock<Vec<CompressedMemory>>>,
+    compressed_history: Arc<RwLock<MessageRingBuffer<CompressedMemory, 32>>>,
     file_tracker: Arc<FileContextTracker>,
     repositories: Arc<DatabaseManager>,
     agent_persistence: Arc<AgentPersistence>,
@@ -70,7 +71,7 @@ impl SessionContext {
             initial_request,
             created_at: Utc::now(),
             config,
-            compressed_history: Arc::new(RwLock::new(Vec::new())),
+            compressed_history: Arc::new(RwLock::new(MessageRingBuffer::new())),
             file_tracker: tracker,
             repositories,
             agent_persistence,
@@ -102,20 +103,10 @@ impl SessionContext {
     pub async fn add_compressed_memory(&self, memory: CompressedMemory) {
         let mut history = self.compressed_history.write().await;
         history.push(memory);
-        // 限制历史记录数量
-        const MAX_COMPRESSED_HISTORY: usize = 32;
-        if history.len() > MAX_COMPRESSED_HISTORY {
-            let excess = history.len() - MAX_COMPRESSED_HISTORY;
-            history.drain(0..excess);
-        }
-        // 内存优化：定期缩容，防止 Vec 容量无限增长
-        if history.capacity() > history.len() * 3 {
-            history.shrink_to_fit();
-        }
     }
 
     pub async fn compressed_history(&self) -> Vec<CompressedMemory> {
-        self.compressed_history.read().await.clone()
+        self.compressed_history.read().await.to_vec()
     }
 
     pub async fn get_compressed_history_text(&self) -> String {

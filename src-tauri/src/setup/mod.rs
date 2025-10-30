@@ -265,7 +265,6 @@ pub fn setup_app_events<R: tauri::Runtime>(app: &tauri::App<R>) {
             if let WindowEvent::CloseRequested { .. } = event {
                 if let Err(e) = crate::mux::singleton::shutdown_mux() {
                     warn!("Failed to shutdown TerminalMux: {}", e);
-                } else {
                 }
             }
         });

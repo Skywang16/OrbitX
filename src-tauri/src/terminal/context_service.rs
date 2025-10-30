@@ -72,9 +72,9 @@ pub struct TerminalContextService {
     shell_integration: Arc<ShellIntegrationManager>,
     terminal_mux: Arc<TerminalMux>,
     cache: Arc<UnifiedCache>,
-    cache_hits: Arc<AtomicU64>,
-    cache_misses: Arc<AtomicU64>,
-    cache_evictions: Arc<AtomicU64>,
+    cache_hits: AtomicU64,
+    cache_misses: AtomicU64,
+    cache_evictions: AtomicU64,
     query_timeout: Duration,
     min_cache_ttl: Duration,
     base_cache_ttl: Duration,
@@ -93,9 +93,9 @@ impl TerminalContextService {
             shell_integration,
             terminal_mux,
             cache,
-            cache_hits: Arc::new(AtomicU64::new(0)),
-            cache_misses: Arc::new(AtomicU64::new(0)),
-            cache_evictions: Arc::new(AtomicU64::new(0)),
+            cache_hits: AtomicU64::new(0),
+            cache_misses: AtomicU64::new(0),
+            cache_evictions: AtomicU64::new(0),
             query_timeout: Duration::from_millis(1500),
             min_cache_ttl: Duration::from_secs(3),
             base_cache_ttl: Duration::from_secs(12),
@@ -475,21 +475,17 @@ impl TerminalContextService {
 impl ContextServiceIntegration for TerminalContextService {
     fn invalidate_cache(&self, pane_id: PaneId) {
         let cache = Arc::clone(&self.cache);
-        let evictions = Arc::clone(&self.cache_evictions);
         let cache_key = Self::cache_key(pane_id);
 
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            self.cache_evictions.fetch_add(1, Ordering::Relaxed);
             handle.spawn(async move {
-                if cache.remove(&cache_key).await.is_some() {
-                    evictions.fetch_add(1, Ordering::Relaxed);
-                }
+                cache.remove(&cache_key).await;
             });
         } else if let Ok(rt) = tokio::runtime::Runtime::new() {
-            rt.block_on(async {
-                if cache.remove(&cache_key).await.is_some() {
-                    evictions.fetch_add(1, Ordering::Relaxed);
-                }
-            });
+            if rt.block_on(cache.remove(&cache_key)).is_some() {
+                self.cache_evictions.fetch_add(1, Ordering::Relaxed);
+            }
         }
     }
 

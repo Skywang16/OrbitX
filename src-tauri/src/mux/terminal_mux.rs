@@ -5,7 +5,7 @@
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
 use tracing::{debug, error, instrument, trace, warn};
@@ -46,7 +46,7 @@ pub struct TerminalMux {
     notification_sender: Sender<MuxNotification>,
 
     /// 跨线程通知接收器
-    notification_receiver: Arc<RwLock<Option<Receiver<MuxNotification>>>>,
+    notification_receiver: Mutex<Option<Receiver<MuxNotification>>>,
 
     /// I/O 处理器
     io_handler: IoHandler,
@@ -81,7 +81,7 @@ impl TerminalMux {
             next_pane_id: AtomicU32::new(1),
             next_subscriber_id: AtomicU32::new(1),
             notification_sender,
-            notification_receiver: Arc::new(RwLock::new(Some(notification_receiver))),
+            notification_receiver: Mutex::new(Some(notification_receiver)),
             io_handler,
             shell_integration,
             shutting_down: std::sync::atomic::AtomicBool::new(false),
@@ -352,7 +352,7 @@ impl TerminalMux {
 
     /// 处理来自其他线程的通知（应该在主线程定期调用）
     pub fn process_notifications(&self) {
-        if let Ok(receiver_guard) = self.notification_receiver.read() {
+        if let Ok(receiver_guard) = self.notification_receiver.lock() {
             if let Some(receiver) = receiver_guard.as_ref() {
                 while let Ok(notification) = receiver.try_recv() {
                     self.notify_internal(&notification);
@@ -367,7 +367,7 @@ impl TerminalMux {
         thread::spawn(move || {
             // 取出接收器，避免重复访问
             let receiver = {
-                if let Ok(mut receiver_guard) = mux.notification_receiver.write() {
+                if let Ok(mut receiver_guard) = mux.notification_receiver.lock() {
                     receiver_guard.take()
                 } else {
                     error!("无法获取通知接收器");
@@ -386,7 +386,6 @@ impl TerminalMux {
                             mux.notify_internal(&notification);
                         }
                         Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                            // 更频繁地检查关闭标志（50ms而不是200ms）
                             continue;
                         }
                         Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
