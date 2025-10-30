@@ -109,7 +109,7 @@ pub async fn agent_execute_task(
     channel: Channel<TaskProgressPayload>,
 ) -> TauriApiResult<EmptyData> {
     match state.executor.execute_task(params, channel).await {
-        Ok(_) => Ok(api_success!()),
+        Ok(_context) => Ok(api_success!()),
         Err(e) => {
             tracing::error!("Failed to execute Agent task: {}", e);
             Ok(api_error!("agent.execute_failed"))
@@ -123,7 +123,7 @@ pub async fn agent_pause_task(
     state: State<'_, TaskExecutorState>,
     task_id: String,
 ) -> TauriApiResult<EmptyData> {
-    match state.executor.pause_task(&task_id).await {
+    match state.executor.pause_task(&task_id, true).await {
         Ok(_) => Ok(api_success!()),
         Err(e) => {
             tracing::error!("Failed to pause task: {}", e);
@@ -176,7 +176,7 @@ pub async fn agent_get_file_context_status(
 ) -> TauriApiResult<FileContextStatus> {
     match state
         .executor
-        .fetch_file_context_status(conversation_id)
+        .get_file_context_status(conversation_id)
         .await
     {
         Ok(status) => Ok(api_success!(status)),

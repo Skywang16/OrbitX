@@ -85,14 +85,12 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
 
         let paths = StoragePaths::new(app_dir)?;
         let options = crate::storage::DatabaseOptions::default();
-        
-        Arc::new(
-            tauri::async_runtime::block_on(async {
-                let db = DatabaseManager::new(paths.clone(), options).await?;
-                db.initialize().await?;
-                Ok::<_, SetupError>(db)
-            })?
-        )
+
+        Arc::new(tauri::async_runtime::block_on(async {
+            let db = DatabaseManager::new(paths.clone(), options).await?;
+            db.initialize().await?;
+            Ok::<_, SetupError>(db)
+        })?)
     };
     app.manage(database_manager.clone());
 
@@ -109,12 +107,10 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         };
 
         let paths = StoragePaths::new(app_dir)?;
-        
-        Arc::new(
-            tauri::async_runtime::block_on(async {
-                MessagePackManager::new(paths, MessagePackOptions::default()).await
-            })?
-        )
+
+        Arc::new(tauri::async_runtime::block_on(async {
+            MessagePackManager::new(paths, MessagePackOptions::default()).await
+        })?)
     };
     app.manage(messagepack_manager);
 
@@ -125,7 +121,10 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     let theme_service = tauri::async_runtime::block_on(async {
         use crate::config::{paths::ConfigPaths, theme::ThemeManagerOptions, theme::ThemeService};
 
-        let cache = app.state::<Arc<crate::storage::cache::UnifiedCache>>().inner().clone();
+        let cache = app
+            .state::<Arc<crate::storage::cache::UnifiedCache>>()
+            .inner()
+            .clone();
         let paths = app.state::<ConfigPaths>().inner().clone();
 
         ThemeService::new(paths, ThemeManagerOptions::default(), cache).await
@@ -148,7 +147,10 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
 
     let terminal_context_state = {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
-        let cache = app.state::<Arc<crate::storage::cache::UnifiedCache>>().inner().clone();
+        let cache = app
+            .state::<Arc<crate::storage::cache::UnifiedCache>>()
+            .inner()
+            .clone();
 
         // 启用与 ShellIntegration 的上下文服务集成（回调、缓存失效、事件转发）
         let context_service = TerminalContextService::new_with_integration(
@@ -163,8 +165,14 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     app.manage(terminal_context_state);
 
     let ai_state = {
-        let database = app.state::<Arc<crate::storage::DatabaseManager>>().inner().clone();
-        let cache = app.state::<Arc<crate::storage::cache::UnifiedCache>>().inner().clone();
+        let database = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
+        let cache = app
+            .state::<Arc<crate::storage::cache::UnifiedCache>>()
+            .inner()
+            .clone();
         let terminal_context_state = app.state::<TerminalContextState>();
         let terminal_context_service = terminal_context_state.context_service().clone();
 
@@ -183,30 +191,36 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     app.manage(ai_state);
 
     let llm_state = {
-        let database = app.state::<Arc<crate::storage::DatabaseManager>>().inner().clone();
+        let database = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
         LLMManagerState::new(database)
     };
     app.manage(llm_state);
 
     // 初始化TaskExecutor状态
     let task_executor_state = {
-        let terminal_context_state = app.state::<TerminalContextState>();
-        let database_manager = app.state::<Arc<crate::storage::DatabaseManager>>().inner().clone();
+        let database_manager = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
         let agent_persistence = Arc::new(crate::agent::persistence::AgentPersistence::new(
             Arc::clone(&database_manager),
         ));
         let ui_persistence = Arc::new(crate::agent::ui::AgentUiPersistence::new(Arc::clone(
             &database_manager,
         )));
-        let terminal_context_service = terminal_context_state.context_service().clone();
-        let cache = app.state::<Arc<crate::storage::UnifiedCache>>().inner().clone();
+        let cache = app
+            .state::<Arc<crate::storage::UnifiedCache>>()
+            .inner()
+            .clone();
 
         let executor = Arc::new(crate::agent::core::TaskExecutor::new(
             Arc::clone(&database_manager),
+            Arc::clone(&cache),
             Arc::clone(&agent_persistence),
             Arc::clone(&ui_persistence),
-            Arc::clone(&terminal_context_service),
-            Arc::clone(&cache),
         ));
 
         crate::agent::core::commands::TaskExecutorState::new(executor)
@@ -360,7 +374,12 @@ fn setup_unified_terminal_events<R: tauri::Runtime>(app_handle: tauri::AppHandle
     let shell_integration = mux.shell_integration();
     let shell_event_receiver = shell_integration.subscribe_events();
 
-    match create_terminal_event_handler(app_handle.clone(), &mux, context_event_receiver, shell_event_receiver) {
+    match create_terminal_event_handler(
+        app_handle.clone(),
+        &mux,
+        context_event_receiver,
+        shell_event_receiver,
+    ) {
         Ok(handler) => {
             tracing::debug!("统一终端事件处理器已启动");
             // Use Box::leak to prevent the handler from being dropped

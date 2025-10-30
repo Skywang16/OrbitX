@@ -194,7 +194,7 @@ impl ContextAwareProvider {
                 })?;
 
         // 根据当前命令类型提供相应的补全
-        match current_command.as_str() {
+        match &*current_command {
             "kill" | "killall" => {
                 // 为 kill 命令提供 PID 补全
                 items.extend(self.get_pid_completions(&history)?);

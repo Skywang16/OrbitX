@@ -165,8 +165,8 @@ impl LLMService {
         &self,
         request: EmbeddingRequest,
     ) -> LlmResult<EmbeddingResponse> {
-        let config = self.get_provider_config(&request.model).await?;
-        let provider_model = config.model.clone();
+        let mut config = self.get_provider_config(&request.model).await?;
+        let provider_model = std::mem::take(&mut config.model);
         let provider = ProviderRegistry::global()
             .create(config)
             .map_err(LlmError::from)?;

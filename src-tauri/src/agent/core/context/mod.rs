@@ -1,3 +1,5 @@
+pub mod chain;
+
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::path::PathBuf;
@@ -14,9 +16,9 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
+use self::chain::Chain;
 use crate::agent::config::{AgentConfig, TaskExecutionConfig};
 use crate::agent::context::FileContextTracker;
-use crate::agent::core::chain::Chain;
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::events::TaskProgressPayload;
@@ -30,10 +32,10 @@ use crate::agent::state::manager::{
     StateEventEmitter, StateManager, TaskState, TaskStatus, TaskThresholds,
 };
 use crate::agent::state::session::SessionContext;
-use crate::agent::utils::tokenizer::count_text_tokens;
 use crate::agent::tools::ToolRegistry;
 use crate::agent::types::TaskDetail;
 use crate::agent::ui::{AgentUiPersistence, UiStep};
+use crate::agent::utils::tokenizer::count_text_tokens;
 use crate::llm::anthropic_types::{
     ContentBlock, MessageContent, MessageParam, MessageRole as AnthropicRole, SystemPrompt,
     ToolResultContent,
@@ -64,7 +66,7 @@ pub(crate) struct ExecutionState {
     pub(crate) ui_assistant_message_id: Option<i64>,
 }
 
-struct PlanningState {
+pub(crate) struct PlanningState {
     chain: Chain,
     conversation: Vec<String>,
     current_node_id: Option<String>,
@@ -75,7 +77,7 @@ struct PlanningState {
 }
 
 #[derive(Default)]
-struct UiState {
+pub(crate) struct UiState {
     steps: Vec<UiStep>,
 }
 
@@ -89,15 +91,14 @@ pub(crate) struct MutableState {
     pub(crate) react_runtime: ReactRuntime,
 }
 
-#[derive(Clone)]
 pub struct TaskContext {
     // 优化：使用 Arc<str> 而非 String，使 clone 变为零成本（仅增加引用计数）
     pub task_id: Arc<str>,
     pub conversation_id: i64,
     pub user_prompt: Arc<str>,
     pub cwd: Arc<str>,
-    // 优化：config 也改为 Arc，避免每次 clone 复制整个 config
-    config: Arc<TaskExecutionConfig>,
+    // 零成本抽象：TaskExecutionConfig 只有8字节且实现了Copy，直接内嵌
+    config: TaskExecutionConfig,
 
     session: Arc<SessionContext>,
     tool_registry: Arc<ToolRegistry>,
@@ -181,7 +182,7 @@ impl TaskContext {
             -1,
             PathBuf::from(&cwd),
             String::new(),
-            config.clone(),
+            config,
             Arc::clone(&dummy_db),
             Arc::clone(&dummy_persistence),
             Arc::clone(&dummy_ui_persistence),
@@ -219,7 +220,7 @@ impl TaskContext {
             conversation_id: -1,
             user_prompt: Arc::from(""),
             cwd: Arc::from(cwd.as_str()),
-            config: Arc::new(config),
+            config,
             session,
             tool_registry: dummy_registry,
             state_manager: Arc::new(StateManager::new(task_state, StateEventEmitter::new())),
@@ -275,7 +276,7 @@ impl TaskContext {
             conversation_id,
             PathBuf::from(&cwd),
             user_prompt.clone(),
-            config.clone(),
+            config,
             Arc::clone(&repositories),
             Arc::clone(&agent_persistence),
             Arc::clone(&ui_persistence),
@@ -313,7 +314,7 @@ impl TaskContext {
             conversation_id,
             user_prompt: Arc::from(user_prompt.as_str()),
             cwd: Arc::from(cwd.as_str()),
-            config: Arc::new(config),
+            config,
             session,
             tool_registry,
             state_manager: Arc::new(StateManager::new(task_state, StateEventEmitter::new())),
@@ -424,7 +425,8 @@ impl TaskContext {
     pub async fn increment_iteration(&self) -> TaskExecutorResult<u32> {
         let (current, current_raw, status, errors) = {
             let mut state = self.state.write().await;
-            state.execution.record.current_iteration = state.execution.record.current_iteration.saturating_add(1);
+            state.execution.record.current_iteration =
+                state.execution.record.current_iteration.saturating_add(1);
             state.execution.message_sequence = 0;
             (
                 state.execution.record.current_iteration as u32,
@@ -453,7 +455,8 @@ impl TaskContext {
     pub async fn increment_error_count(&self) -> TaskExecutorResult<u32> {
         let (count, status, iteration, errors) = {
             let mut state = self.state.write().await;
-            state.execution.record.error_count = state.execution.record.error_count.saturating_add(1);
+            state.execution.record.error_count =
+                state.execution.record.error_count.saturating_add(1);
             (
                 state.execution.record.error_count as u32,
                 state.execution.record.status,
@@ -474,7 +477,10 @@ impl TaskContext {
         let (status, iteration) = {
             let mut state = self.state.write().await;
             state.execution.record.error_count = 0;
-            (state.execution.record.status, state.execution.record.current_iteration)
+            (
+                state.execution.record.status,
+                state.execution.record.current_iteration,
+            )
         };
         self.agent_persistence()
             .agent_executions()
@@ -506,10 +512,9 @@ impl TaskContext {
             || errors >= self.config.max_errors
     }
 
-    /// Access the execution configuration.
+    /// Access the execution configuration (零成本访问).
     pub fn config(&self) -> &TaskExecutionConfig {
-        // Arc 自动 Deref 为内部类型引用
-        &*self.config
+        &self.config
     }
 
     /// Access repositories (used by LLM/tool bridges).
@@ -523,7 +528,7 @@ impl TaskContext {
 
     /// 批量读取状态 - 减少锁争用，一次锁获取所有需要的数据
     /// 性能优化：避免多次 read().await
-    pub async fn batch_read_state<F, R>(&self, f: F) -> R
+    pub(crate) async fn batch_read_state<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&MutableState) -> R,
     {
@@ -533,7 +538,8 @@ impl TaskContext {
 
     /// 批量更新状态 - 减少锁争用，一次锁完成所有修改
     /// 性能优化：避免多次 write().await，这是最大的性能瓶颈
-    pub async fn batch_update_state<F, R>(&self, f: F) -> R
+    #[allow(dead_code)]
+    pub(crate) async fn batch_update_state<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&mut MutableState) -> R,
     {
@@ -707,7 +713,9 @@ impl TaskContext {
                 content: content.clone(),
             });
             // 内存优化：定期缩容，防止容量无限增长
-            if state.execution.messages.capacity() > state.execution.messages.len() * SHRINK_THRESHOLD_MULTIPLIER {
+            if state.execution.messages.capacity()
+                > state.execution.messages.len() * SHRINK_THRESHOLD_MULTIPLIER
+            {
                 state.execution.messages.shrink_to_fit();
             }
         }
@@ -754,7 +762,9 @@ impl TaskContext {
                 content: MessageContent::Blocks(blocks),
             });
             // 内存优化：定期缩容
-            if state.execution.messages.capacity() > state.execution.messages.len() * SHRINK_THRESHOLD_MULTIPLIER {
+            if state.execution.messages.capacity()
+                > state.execution.messages.len() * SHRINK_THRESHOLD_MULTIPLIER
+            {
                 state.execution.messages.shrink_to_fit();
             }
         }
@@ -809,7 +819,9 @@ impl TaskContext {
                 content: MessageContent::Text(text.clone()),
             });
             // 内存优化：定期缩容
-            if state.execution.messages.capacity() > state.execution.messages.len() * SHRINK_THRESHOLD_MULTIPLIER {
+            if state.execution.messages.capacity()
+                > state.execution.messages.len() * SHRINK_THRESHOLD_MULTIPLIER
+            {
                 state.execution.messages.shrink_to_fit();
             }
             let after = state.execution.messages.len();
@@ -846,7 +858,8 @@ impl TaskContext {
 
     // Deprecated: system prompt is stored separately and not part of messages.
     pub async fn update_system_prompt(&self, new_system_prompt: String) -> TaskExecutorResult<()> {
-        self.state.write().await.execution.system_prompt = Some(SystemPrompt::Text(new_system_prompt));
+        self.state.write().await.execution.system_prompt =
+            Some(SystemPrompt::Text(new_system_prompt));
         Ok(())
     }
 

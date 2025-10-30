@@ -18,7 +18,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, timeout};
 use tracing::{info, warn};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct CompletionEngineConfig {
     pub max_results: usize,
     pub provider_timeout: Duration,
@@ -66,7 +66,7 @@ impl ProviderHandle {
 
 pub struct CompletionEngine {
     providers: Vec<ProviderHandle>,
-    config: CompletionEngineConfig,
+    config: CompletionEngineConfig,  // 直接内嵌，零成本
     cache: Arc<UnifiedCache>,
 }
 
@@ -163,7 +163,7 @@ impl CompletionEngine {
                 .await?
             {
                 if !entry.items.is_empty() {
-                    aggregated_items.extend(entry.items.clone());
+                    aggregated_items.extend_from_slice(&entry.items);
                 }
                 provider_logs.push(format!(
                     "{}(cache, {} items)",
@@ -175,14 +175,14 @@ impl CompletionEngine {
             }
         }
 
-        let config = Arc::new(self.config.clone());
+        let config = &self.config;
         let cache = Arc::clone(&self.cache);
         let context_arc = Arc::new(context.clone());
         
         let mut task_stream = stream::iter(pending.into_iter().map(|(handle, cache_key)| {
             let context = Arc::clone(&context_arc);
             let cache = Arc::clone(&cache);
-            let config = Arc::clone(&config);
+            let config = *config;  // Copy, 零成本
             async move { Self::run_provider(handle, context, cache, cache_key, config).await }
         }))
         .buffer_unordered(self.config.max_concurrency);
@@ -310,7 +310,7 @@ impl CompletionEngine {
         context: Arc<CompletionContext>,
         cache: Arc<UnifiedCache>,
         cache_key: String,
-        config: Arc<CompletionEngineConfig>,
+        config: CompletionEngineConfig,  // 直接传递，零成本Copy
     ) -> ProviderOutcome {
         let start = Instant::now();
         let mut attempts = 0;
@@ -398,14 +398,14 @@ impl CompletionEngine {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProviderCacheEntry {
-    items: Vec<CompletionItem>,
+    items: Arc<[CompletionItem]>,
     cached_at: u64,
 }
 
 impl ProviderCacheEntry {
     fn new(items: Vec<CompletionItem>) -> Self {
         Self {
-            items,
+            items: items.into(),
             cached_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()

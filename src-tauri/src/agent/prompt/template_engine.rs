@@ -1,6 +1,10 @@
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
+
+// Compile regex once at startup
+static PLACEHOLDER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{([^}]+)\}").unwrap());
 
 /// 模板引擎，支持变量替换和嵌套对象访问
 pub struct TemplateEngine {
@@ -20,10 +24,8 @@ impl TemplateEngine {
     ) -> Result<String, String> {
         let mut result = template.to_string();
 
-        // 使用正则表达式查找所有 {variable} 占位符
-        let re = Regex::new(r"\{([^}]+)\}").map_err(|e| e.to_string())?;
-
-        for capture in re.captures_iter(template) {
+        // 使用预编译的正则表达式查找所有 {variable} 占位符
+        for capture in PLACEHOLDER_RE.captures_iter(template) {
             let full_match = &capture[0];
             let variable_path = &capture[1].trim();
 
@@ -66,10 +68,9 @@ impl TemplateEngine {
 
     /// 提取模板中的所有占位符
     pub fn extract_placeholders(&self, template: &str) -> Result<Vec<String>, String> {
-        let re = Regex::new(r"\{([^}]+)\}").map_err(|e| e.to_string())?;
         let mut placeholders = Vec::new();
 
-        for capture in re.captures_iter(template) {
+        for capture in PLACEHOLDER_RE.captures_iter(template) {
             let placeholder = capture[1].trim().to_string();
             if !placeholders.contains(&placeholder) {
                 placeholders.push(placeholder);

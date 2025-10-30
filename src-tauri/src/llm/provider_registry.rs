@@ -1,128 +1,107 @@
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::OnceLock;
 
 use crate::llm::{
     error::{LlmProviderError, LlmProviderResult},
     preset_models::PresetModel,
-    providers::base::LLMProvider,
+    providers::{AnthropicProvider, GeminiProvider, OpenAIProvider, Provider},
     types::LLMProviderConfig,
 };
 
-type ProviderBuilder = fn(LLMProviderConfig) -> Box<dyn LLMProvider>;
-
-/// Provider 元数据信息（给前端展示用）
+/// Provider 元数据 - 编译期常量
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderMetadata {
-    pub provider_type: String,
-    pub display_name: String,
-    pub default_api_url: String,
+    pub provider_type: &'static str,
+    pub display_name: &'static str,
+    pub default_api_url: &'static str,
     pub preset_models: Vec<PresetModel>,
 }
 
-struct ProviderEntry {
-    builder: ProviderBuilder,
-    metadata: ProviderMetadata,
-}
+/// 全局 Provider 元数据 - 延迟初始化，但只分配一次
+static PROVIDER_METADATA: Lazy<Vec<ProviderMetadata>> = Lazy::new(|| {
+    use crate::llm::preset_models::*;
 
-pub struct ProviderRegistry {
-    providers: HashMap<String, ProviderEntry>,
-}
+    vec![
+        ProviderMetadata {
+            provider_type: "anthropic",
+            display_name: "Anthropic",
+            default_api_url: "https://api.anthropic.com/v1",
+            preset_models: ANTHROPIC_MODELS.clone(),
+        },
+        ProviderMetadata {
+            provider_type: "openai",
+            display_name: "OpenAI",
+            default_api_url: "https://api.openai.com/v1",
+            preset_models: OPENAI_MODELS.clone(),
+        },
+        ProviderMetadata {
+            provider_type: "openai_compatible",
+            display_name: "OpenAI Compatible",
+            default_api_url: "",
+            preset_models: vec![],
+        },
+        ProviderMetadata {
+            provider_type: "gemini",
+            display_name: "Gemini",
+            default_api_url: "https://generativelanguage.googleapis.com/v1beta",
+            preset_models: GEMINI_MODELS.clone(),
+        },
+    ]
+});
+
+/// Provider 注册表 - 零成本抽象版本
+///
+/// 删除所有运行时开销：
+/// - 零哈希查找（编译期 match）
+/// - 零堆分配（直接构造枚举）
+/// - 零函数指针（静态分发）
+pub struct ProviderRegistry;
 
 impl ProviderRegistry {
-    fn new() -> Self {
-        Self {
-            providers: HashMap::new(),
+    pub fn global() -> &'static ProviderRegistry {
+        &ProviderRegistry
+    }
+
+    /// 创建 Provider - 编译期 match，零运行时开销
+    #[inline]
+    pub fn create(&self, config: LLMProviderConfig) -> LlmProviderResult<Provider> {
+        let provider_type = config.provider_type.as_str();
+
+        match provider_type {
+            "openai" | "openai_compatible" => Ok(Provider::OpenAI(OpenAIProvider::new(config))),
+            "anthropic" => Ok(Provider::Anthropic(AnthropicProvider::new(config))),
+            "gemini" => Ok(Provider::Gemini(GeminiProvider::new(config))),
+            _ => Err(LlmProviderError::UnsupportedProvider {
+                provider: provider_type.to_string(),
+            }),
         }
     }
 
-    pub fn global() -> &'static ProviderRegistry {
-        static REGISTRY: OnceLock<ProviderRegistry> = OnceLock::new();
-        REGISTRY.get_or_init(|| {
-            let mut registry = Self::new();
-            registry.register_builtin();
-            registry
-        })
+    /// 支持的 provider 列表 - 编译期常量
+    #[inline]
+    pub fn list_providers(&self) -> &'static [&'static str] {
+        &["anthropic", "openai", "openai_compatible", "gemini"]
     }
 
-    fn register_builtin(&mut self) {
-        use crate::llm::{preset_models::*, providers::*};
-
-        self.register(
-            "anthropic",
-            |config| Box::new(AnthropicProvider::new(config)),
-            ProviderMetadata {
-                provider_type: "anthropic".to_string(),
-                display_name: "Anthropic".to_string(),
-                default_api_url: "https://api.anthropic.com/v1".to_string(),
-                preset_models: ANTHROPIC_MODELS.clone(),
-            },
-        );
-
-        self.register(
-            "openai_compatible",
-            |config| Box::new(OpenAIProvider::new(config)),
-            ProviderMetadata {
-                provider_type: "openai_compatible".to_string(),
-                display_name: "OpenAI Compatible".to_string(),
-                default_api_url: "".to_string(),
-                // OpenAI Compatible 不提供预设模型，用户需要自己输入
-                preset_models: vec![],
-            },
-        );
-
-        self.register(
-            "openai",
-            |config| Box::new(OpenAIProvider::new(config)),
-            ProviderMetadata {
-                provider_type: "openai".to_string(),
-                display_name: "OpenAI".to_string(),
-                default_api_url: "https://api.openai.com/v1".to_string(),
-                preset_models: OPENAI_MODELS.clone(),
-            },
-        );
-
-        self.register(
-            "gemini",
-            |config| Box::new(GeminiProvider::new(config)),
-            ProviderMetadata {
-                provider_type: "gemini".to_string(),
-                display_name: "Gemini".to_string(),
-                default_api_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
-                preset_models: GEMINI_MODELS.clone(),
-            },
-        );
-    }
-
-    fn register(&mut self, name: &str, builder: ProviderBuilder, metadata: ProviderMetadata) {
-        self.providers
-            .insert(name.to_string(), ProviderEntry { builder, metadata });
-    }
-
-    pub fn create(&self, config: LLMProviderConfig) -> LlmProviderResult<Box<dyn LLMProvider>> {
-        let entry = self.providers.get(&config.provider_type).ok_or_else(|| {
-            LlmProviderError::UnsupportedProvider {
-                provider: config.provider_type.clone(),
-            }
-        })?;
-
-        Ok((entry.builder)(config))
-    }
-
-    pub fn list_providers(&self) -> Vec<&str> {
-        self.providers.keys().map(|s| s.as_str()).collect()
-    }
-
+    /// 获取 Provider 元数据
     pub fn get_provider_metadata(&self, provider_type: &str) -> Option<&ProviderMetadata> {
-        self.providers.get(provider_type).map(|e| &e.metadata)
+        PROVIDER_METADATA
+            .iter()
+            .find(|m| m.provider_type == provider_type)
     }
 
-    pub fn get_all_providers_metadata(&self) -> Vec<&ProviderMetadata> {
-        self.providers.values().map(|e| &e.metadata).collect()
+    /// 获取所有 Provider 元数据
+    pub fn get_all_providers_metadata(&self) -> &[ProviderMetadata] {
+        &PROVIDER_METADATA
     }
 
+    /// 检查是否支持指定 provider - 编译期 match
+    #[inline]
     pub fn supports(&self, provider_type: &str) -> bool {
-        self.providers.contains_key(provider_type)
+        matches!(
+            provider_type,
+            "openai" | "openai_compatible" | "anthropic" | "gemini"
+        )
     }
 }

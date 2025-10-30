@@ -144,7 +144,7 @@ impl SmartCompletionProvider {
         let mut items = Vec::new();
 
         if let Some(token) = context.tokens.first() {
-            let command = &token.text;
+            let command = token.text(&context.input);
 
             // 从命令知识库获取选项
             if let Some(meta) = self.context_analyzer.get_command_meta(command) {
@@ -221,7 +221,7 @@ impl SmartCompletionProvider {
         let command = context
             .tokens
             .first()
-            .map(|t| t.text.as_str())
+            .map(|t| t.text(&context.input))
             .unwrap_or("");
 
         // 根据选项类型提供补全
@@ -512,9 +512,9 @@ impl SmartCompletionProvider {
         context: &CompletionContext,
     ) -> crate::completion::types::CompletionContext {
         crate::completion::types::CompletionContext::new(
-            context.input.clone(),
+            context.input.to_string(),
             context.cursor_position,
-            std::path::PathBuf::from("."), // 默认工作目录
+            std::path::PathBuf::from("."),
         )
     }
 
