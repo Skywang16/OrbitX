@@ -165,12 +165,12 @@ mod tests {
         let result = state.context_service.get_active_context().await;
         if result.is_err() {
             let error_msg = result.unwrap_err().to_string();
-            println!("实际错误消息: '{}'", error_msg);
+            let error_msg_lower = error_msg.to_lowercase();
             assert!(
-                error_msg.contains("面板不存在")
-                    || error_msg.contains("pane")
-                    || error_msg.contains("active")
-                    || error_msg.contains("查询终端上下文失败")
+                error_msg_lower.contains("面板不存在")
+                    || error_msg_lower.contains("pane")
+                    || error_msg_lower.contains("active")
+                    || error_msg_lower.contains("查询终端上下文失败")
             );
         } else {
             panic!("Expected error for non-existent pane");

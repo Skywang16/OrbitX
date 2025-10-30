@@ -49,14 +49,13 @@ impl TestHarness {
 
         let persistence = Arc::new(AgentPersistence::new(Arc::clone(&database)));
         let ui_persistence = Arc::new(AgentUiPersistence::new(Arc::clone(&database)));
-        let repositories = Arc::new(DatabaseManager::new(Arc::clone(&database)));
 
         Self {
             temp_dir,
-            database,
+            database: Arc::clone(&database),
             persistence,
             ui_persistence,
-            repositories,
+            repositories: database,
         }
     }
 }
