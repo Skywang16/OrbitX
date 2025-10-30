@@ -7,6 +7,7 @@
 
 export { aiApi } from './ai'
 export { agentApi } from './agent'
+export { appApi } from './app'
 export { ckApi } from './ck'
 export { completionApi } from './completion'
 export { configApi } from './config'
@@ -44,6 +45,7 @@ export type * from './terminal/types'
 
 export type { CkApi, CkSearchParams, CkIndexStatus } from './ck'
 export type { AgentApi } from './agent'
+export type { AppApi } from './app'
 export type { FilesystemApi } from './filesystem'
 export type { LLMApi } from './llm'
 export type { LLMRegistryApi } from './llm-registry'

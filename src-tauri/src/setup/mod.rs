@@ -264,16 +264,52 @@ pub fn setup_app_events<R: tauri::Runtime>(app: &tauri::App<R>) {
     // 启动系统主题监听器
     start_system_theme_listener(app.handle().clone());
 
-    // 在窗口关闭请求时优雅关闭 TerminalMux，释放后台线程
+    // 配置窗口关闭行为：macOS 上隐藏窗口，其他平台退出应用
     if let Some(window) = app.get_webview_window("main") {
-        use tauri::WindowEvent;
-        window.on_window_event(|event| {
-            if let WindowEvent::CloseRequested { .. } = event {
-                if let Err(e) = crate::mux::singleton::shutdown_mux() {
-                    warn!("Failed to shutdown TerminalMux: {}", e);
+        #[cfg(target_os = "macos")]
+        {
+            // macOS: 点击关闭按钮时隐藏窗口，应用保持在 Dock 栏运行
+            // 用户可以通过 Command+Q 或菜单退出来真正退出应用
+            let window_clone = window.clone();
+            let app_handle = app.handle().clone();
+            window.on_window_event(move |event| {
+                use tauri::WindowEvent;
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    // 阻止默认的关闭行为
+                    api.prevent_close();
+
+                    // 清空所有标签页
+                    if let Some(dock_manager) = app_handle.try_state::<crate::dock::DockManager>() {
+                        if let Err(e) = dock_manager.state().clear() {
+                            warn!("Failed to clear dock tabs: {}", e);
+                        }
+                    }
+
+                    // 通知前端清空所有标签页
+                    if let Err(e) = window_clone.emit("clear-all-tabs", ()) {
+                        warn!("Failed to emit clear-all-tabs event: {}", e);
+                    }
+
+                    // 隐藏窗口而不是关闭
+                    if let Err(e) = window_clone.hide() {
+                        warn!("Failed to hide window: {}", e);
+                    }
                 }
-            }
-        });
+            });
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            // 其他平台：点击关闭按钮时退出应用并清理资源
+            use tauri::WindowEvent;
+            window.on_window_event(|event| {
+                if let WindowEvent::CloseRequested { .. } = event {
+                    if let Err(e) = crate::mux::singleton::shutdown_mux() {
+                        warn!("Failed to shutdown TerminalMux: {}", e);
+                    }
+                }
+            });
+        }
     }
 }
 

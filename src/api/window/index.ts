@@ -5,11 +5,14 @@
  * - 窗口状态管理
  * - 目录操作
  * - 路径处理
+ * - 文件拖放事件监听
  */
 
 import { createMessage } from '@/ui'
 import { invoke } from '@/utils/request'
 import { useI18n } from 'vue-i18n'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import type {
   CompleteWindowState,
   DirectoryOptions,
@@ -215,6 +218,44 @@ export class WindowApi {
 
   handleFileOpen = async (path: string): Promise<string> => {
     return await invoke<string>('file_handle_open', { path })
+  }
+
+  // ===== 事件监听 =====
+
+  /**
+   * 监听启动文件事件
+   */
+  onStartupFile = async (callback: (filePath: string) => void): Promise<UnlistenFn> => {
+    return await listen<string>('startup-file', event => {
+      callback(event.payload)
+    })
+  }
+
+  /**
+   * 监听文件拖放事件（应用图标拖放）
+   */
+  onFileDropped = async (callback: (filePath: string) => void): Promise<UnlistenFn> => {
+    return await listen<string>('file-dropped', event => {
+      callback(event.payload)
+    })
+  }
+
+  /**
+   * 监听窗口拖放事件
+   */
+  onWindowDragDrop = async (callback: (filePath: string) => void): Promise<UnlistenFn> => {
+    const webview = getCurrentWebview()
+    return await webview.onDragDropEvent(event => {
+      if (
+        event.event === 'tauri://drag-drop' &&
+        event.payload &&
+        'paths' in event.payload &&
+        event.payload.paths &&
+        event.payload.paths.length > 0
+      ) {
+        callback(event.payload.paths[0])
+      }
+    })
   }
 }
 

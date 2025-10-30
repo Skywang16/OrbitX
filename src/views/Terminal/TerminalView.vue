@@ -5,9 +5,8 @@
   import { useTerminalStore } from '@/stores/Terminal'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { windowApi } from '@/api'
-  import { listen, UnlistenFn } from '@tauri-apps/api/event'
-  import { getCurrentWebview } from '@tauri-apps/api/webview'
   import { onBeforeUnmount, onMounted } from 'vue'
+  import type { UnlistenFn } from '@tauri-apps/api/event'
   import AIChatSidebar from '@/components/AIChatSidebar/index.vue'
 
   const terminalStore = useTerminalStore()
@@ -39,25 +38,17 @@
   }
 
   onMounted(async () => {
-    const handleAppIconFileDrop = (event: { payload: string }) => {
-      handleFilePath(event.payload, 'app-icon')
+    // 监听启动文件和应用图标拖放事件
+    const handleAppIconFileDrop = (filePath: string) => {
+      handleFilePath(filePath, 'app-icon')
     }
 
-    unlistenStartupFile = await listen<string>('startup-file', handleAppIconFileDrop)
-    unlistenFileDropped = await listen<string>('file-dropped', handleAppIconFileDrop)
+    unlistenStartupFile = await windowApi.onStartupFile(handleAppIconFileDrop)
+    unlistenFileDropped = await windowApi.onFileDropped(handleAppIconFileDrop)
 
-    const webview = getCurrentWebview()
-    unlistenFileDrop = await webview.onDragDropEvent(event => {
-      if (
-        event.event === 'tauri://drag-drop' &&
-        event.payload &&
-        'paths' in event.payload &&
-        event.payload.paths &&
-        event.payload.paths.length > 0
-      ) {
-        const filePath = event.payload.paths[0]
-        handleFilePath(filePath, 'window')
-      }
+    // 监听窗口拖放事件
+    unlistenFileDrop = await windowApi.onWindowDragDrop(filePath => {
+      handleFilePath(filePath, 'window')
     })
   })
 
