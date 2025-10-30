@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use tauri::ipc::Channel;
 use tokio::task;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
@@ -19,26 +19,20 @@ use crate::agent::events::{
 };
 
 impl TaskExecutor {
-    /// 执行新任务或恢复现有任务
-    ///
-    /// # 返回值
-    /// 返回 Arc<TaskContext>，调用者可以持有引用而不需要clone
     pub async fn execute_task(
         &self,
         params: ExecuteTaskParams,
         progress_channel: Channel<TaskProgressPayload>,
     ) -> TaskExecutorResult<Arc<TaskContext>> {
         info!(
-            "Starting task execution for conversation_id={}, model={}",
-            params.conversation_id, params.model_id
+            "Starting task execution for conversation_id={}, has_context={}",
+            params.conversation_id, params.has_context
         );
 
-        // 构建或恢复上下文
         let ctx = self
             .build_or_restore_context(&params, Some(progress_channel))
             .await?;
 
-        // 发送TaskCreated事件
         ctx.send_progress(TaskProgressPayload::TaskCreated(TaskCreatedPayload {
             task_id: ctx.task_id.to_string(),
             conversation_id: ctx.conversation_id,
@@ -46,40 +40,39 @@ impl TaskExecutor {
         }))
         .await?;
 
-        // 初始化UI track
         ctx.initialize_ui_track(&params.user_prompt).await?;
 
-        // 构建prompts
-        let (system_prompt, user_prompt) = self
+        let (system_prompt, _) = self
             .prompt_orchestrator()
             .build_task_prompts(
                 params.conversation_id,
                 ctx.task_id.to_string(),
                 &params.user_prompt,
-                params.cwd.as_deref(),
+                Some(&ctx.cwd),
                 &ctx.tool_registry(),
             )
             .await?;
 
-        // 设置初始prompts
-        ctx.set_initial_prompts(system_prompt, user_prompt).await?;
+        ctx.set_system_prompt(system_prompt).await?;
 
-        // 设置状态为Running
+        if params.has_context {
+            self.restore_conversation_history(&ctx, params.conversation_id)
+                .await?;
+        }
+
+        ctx.add_user_message(params.user_prompt).await;
         ctx.set_status(AgentTaskStatus::Running).await?;
 
-        // 发送TaskStarted事件
         ctx.send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
             task_id: ctx.task_id.to_string(),
             iteration: 0,
         }))
         .await?;
 
-        // 克隆必要的数据用于spawn
         let executor = self.clone();
         let ctx_for_spawn = Arc::clone(&ctx);
         let model_id = params.model_id.clone();
 
-        // Spawn ReAct循环
         task::spawn(async move {
             if let Err(e) = executor.run_task_loop(ctx_for_spawn, model_id).await {
                 error!("Task execution failed: {}", e);
@@ -89,9 +82,6 @@ impl TaskExecutor {
         Ok(ctx)
     }
 
-    /// 执行任务循环（内部方法）
-    /// 
-    /// 零成本抽象：直接传递self，编译器会内联所有trait方法调用
     async fn run_task_loop(
         &self,
         ctx: Arc<TaskContext>,
@@ -146,8 +136,11 @@ impl TaskExecutor {
         Ok(())
     }
 
-    /// 暂停任务
-    pub async fn pause_task(&self, task_id: &str, abort_current_step: bool) -> TaskExecutorResult<()> {
+    pub async fn pause_task(
+        &self,
+        task_id: &str,
+        abort_current_step: bool,
+    ) -> TaskExecutorResult<()> {
         let ctx = self
             .active_tasks()
             .get(task_id)
@@ -173,7 +166,6 @@ impl TaskExecutor {
         Ok(())
     }
 
-    /// 恢复任务
     pub async fn resume_task(
         &self,
         task_id: &str,
@@ -204,33 +196,65 @@ impl TaskExecutor {
         Ok(())
     }
 
-    /// 取消任务
-    pub async fn cancel_task(&self, task_id: &str, _reason: Option<String>) -> TaskExecutorResult<()> {
-        let ctx = self
+    pub async fn cancel_task(
+        &self,
+        task_id: &str,
+        _reason: Option<String>,
+    ) -> TaskExecutorResult<()> {
+        // 尝试从 active_tasks 获取任务
+        let ctx_opt = self
             .active_tasks()
             .get(task_id)
-            .map(|entry| Arc::clone(entry.value()))
-            .ok_or_else(|| TaskExecutorError::TaskNotFound(task_id.to_string()))?;
+            .map(|entry| Arc::clone(entry.value()));
 
-        // 中止执行
-        ctx.abort();
-        ctx.set_status(AgentTaskStatus::Cancelled).await?;
+        if let Some(ctx) = ctx_opt {
+            // 任务存在，执行正常的取消流程
+            info!("Cancelling active task {}", task_id);
 
-        ctx.send_progress(TaskProgressPayload::TaskCancelled(TaskCancelledPayload {
-            task_id: task_id.to_string(),
-            reason: "user_requested".to_string(),
-            timestamp: chrono::Utc::now(),
-        }))
-        .await?;
+            // 中止执行
+            ctx.abort();
+            ctx.set_status(AgentTaskStatus::Cancelled).await?;
 
-        // 从active_tasks移除
-        self.active_tasks().remove(task_id);
+            ctx.send_progress(TaskProgressPayload::TaskCancelled(TaskCancelledPayload {
+                task_id: task_id.to_string(),
+                reason: "user_requested".to_string(),
+                timestamp: chrono::Utc::now(),
+            }))
+            .await?;
 
-        info!("Task {} cancelled", task_id);
+            // 从active_tasks移除
+            self.active_tasks().remove(task_id);
+
+            info!("Task {} cancelled successfully", task_id);
+        } else {
+            // 任务不存在，可能还没开始或已经完成
+            // 尝试从 conversation_contexts 中查找
+            let mut found_in_conversation = false;
+            for entry in self.conversation_contexts().iter() {
+                let ctx = entry.value();
+                if ctx.task_id.as_ref() == task_id {
+                    info!(
+                        "Found task {} in conversation context, attempting to cancel",
+                        task_id
+                    );
+                    ctx.abort();
+                    ctx.set_status(AgentTaskStatus::Cancelled).await?;
+                    found_in_conversation = true;
+                    break;
+                }
+            }
+
+            if !found_in_conversation {
+                warn!(
+                    "Task {} not found in active_tasks or conversation_contexts, it may have already completed or been cancelled",
+                    task_id
+                );
+            }
+        }
+
         Ok(())
     }
 
-    /// 创建新会话
     pub async fn create_conversation(
         &self,
         title: Option<String>,
@@ -246,7 +270,6 @@ impl TaskExecutor {
         Ok(conversation.id)
     }
 
-    /// 触发会话摘要生成
     pub async fn trigger_conversation_summary(
         &self,
         conversation_id: i64,
@@ -288,11 +311,8 @@ impl TaskExecutor {
             })
             .collect();
 
-        let summarizer = ConversationSummarizer::new(
-            conversation_id,
-            persistence.clone(),
-            self.database(),
-        );
+        let summarizer =
+            ConversationSummarizer::new(conversation_id, persistence.clone(), self.database());
 
         let model_id = model_override.unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string());
 
@@ -316,7 +336,6 @@ impl TaskExecutor {
         Ok(Some(result))
     }
 
-    /// 继续对话（在已有conversation中添加新的user message）
     pub async fn continue_conversation(
         &self,
         conversation_id: i64,
@@ -324,51 +343,90 @@ impl TaskExecutor {
         model_id: String,
         progress_channel: Channel<TaskProgressPayload>,
     ) -> TaskExecutorResult<Arc<TaskContext>> {
-        // 获取或创建context
-        let ctx = if let Some(entry) = self.conversation_contexts().get(&conversation_id) {
-            let ctx = Arc::clone(entry.value());
-
-            // 重置cancellation token（允许继续执行）
-            ctx.reset_cancellation().await;
-
-            // 更新progress channel
-            ctx.set_progress_channel(Some(progress_channel)).await;
-
-            ctx
-        } else {
-            // 创建新任务
-            let params = ExecuteTaskParams {
-                conversation_id,
-                user_prompt: user_prompt.clone(),
-                chat_mode: "agent".to_string(),
-                model_id: model_id.clone(),
-                cwd: None,
-                has_context: false,
-            };
-
-            self.build_or_restore_context(&params, Some(progress_channel))
-                .await?
+        let params = ExecuteTaskParams {
+            conversation_id,
+            user_prompt,
+            chat_mode: "agent".to_string(),
+            model_id,
+            cwd: None,
+            has_context: true,
         };
 
-        // 开始新的turn
-        ctx.begin_followup_turn(&user_prompt).await?;
-
-        // 添加user message
-        ctx.add_user_message(user_prompt).await;
-
-        // 设置状态为Running
-        ctx.set_status(AgentTaskStatus::Running).await?;
-
-        // Spawn执行循环
-        let executor = self.clone();
-        let ctx_for_spawn = Arc::clone(&ctx);
-        task::spawn(async move {
-            if let Err(e) = executor.run_task_loop(ctx_for_spawn, model_id).await {
-                error!("Continue conversation failed: {}", e);
-            }
-        });
-
-        Ok(ctx)
+        self.execute_task(params, progress_channel).await
     }
 
+    async fn restore_conversation_history(
+        &self,
+        ctx: &TaskContext,
+        conversation_id: i64,
+    ) -> TaskExecutorResult<()> {
+        use crate::agent::persistence::MessageRole;
+        use crate::llm::anthropic_types::{
+            MessageContent, MessageParam, MessageRole as AnthropicRole,
+        };
+
+        let executions = self
+            .agent_persistence()
+            .agent_executions()
+            .list_recent_by_conversation(conversation_id, 10)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        if executions.is_empty() {
+            return Ok(());
+        }
+
+        let current_task_id = ctx.task_id.to_string();
+        let mut all_messages = Vec::new();
+        let mut restored_executions = 0;
+
+        for execution in executions.iter().rev() {
+            if execution.execution_id == current_task_id {
+                continue;
+            }
+
+            let messages = self
+                .agent_persistence()
+                .execution_messages()
+                .list_by_execution(&execution.execution_id)
+                .await
+                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+            if messages.is_empty() {
+                continue;
+            }
+
+            restored_executions += 1;
+
+            for msg in messages {
+                let role = match msg.role {
+                    MessageRole::User => AnthropicRole::User,
+                    MessageRole::Assistant => AnthropicRole::Assistant,
+                    MessageRole::Tool | MessageRole::System => continue,
+                };
+
+                all_messages.push(MessageParam {
+                    role,
+                    content: MessageContent::Text(msg.content),
+                });
+            }
+        }
+
+        if !all_messages.is_empty() {
+            info!(
+                "Restored {} messages from {} previous turns for conversation {}",
+                all_messages.len(),
+                restored_executions,
+                conversation_id
+            );
+            ctx.restore_messages(all_messages).await?;
+        } else {
+            info!(
+                "No messages to restore for conversation {}",
+                conversation_id
+            );
+        }
+
+        Ok(())
+    }
 }

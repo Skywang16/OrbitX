@@ -14,11 +14,10 @@ use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::events::TaskProgressPayload;
 use crate::agent::persistence::{AgentExecution, ExecutionStatus};
-use crate::agent::tools::ToolRegistry;
 
 impl TaskExecutor {
     /// 构建或恢复TaskContext
-    /// 
+    ///
     /// # 返回值
     /// 返回 Arc<TaskContext> 而非 TaskContext，避免后续clone
     pub async fn build_or_restore_context(
@@ -34,16 +33,14 @@ impl TaskExecutor {
                 "Restored existing task {} for conversation {}",
                 existing_ctx.task_id, conversation_id
             );
-            
+
             // 更新progress channel
             existing_ctx.set_progress_channel(progress_channel).await;
-            
+
             // 存储到active_tasks
-            self.active_tasks().insert(
-                existing_ctx.task_id.to_string(),
-                Arc::clone(&existing_ctx),
-            );
-            
+            self.active_tasks()
+                .insert(existing_ctx.task_id.to_string(), Arc::clone(&existing_ctx));
+
             return Ok(existing_ctx);
         }
 
@@ -58,7 +55,10 @@ impl TaskExecutor {
     ) -> TaskExecutorResult<Option<Arc<TaskContext>>> {
         // 先检查内存中是否已有
         if let Some(entry) = self.conversation_contexts().get(&conversation_id) {
-            debug!("Found existing context in memory for conversation {}", conversation_id);
+            debug!(
+                "Found existing context in memory for conversation {}",
+                conversation_id
+            );
             return Ok(Some(Arc::clone(entry.value())));
         }
 
@@ -86,22 +86,26 @@ impl TaskExecutor {
             return Ok(None);
         }
 
-        debug!("Restoring execution {} from database", execution.execution_id);
-        
+        debug!(
+            "Restoring execution {} from database",
+            execution.execution_id
+        );
+
         // 构建TaskContext
         let ctx = self.build_context_from_execution(execution, None).await?;
-        
+
         // 恢复消息历史
         self.restore_messages_for_context(&ctx).await?;
-        
+
         // 恢复UI track
         ctx.restore_ui_track().await?;
 
         let ctx_arc = Arc::new(ctx);
-        
+
         // 缓存到内存
-        self.conversation_contexts().insert(conversation_id, Arc::clone(&ctx_arc));
-        
+        self.conversation_contexts()
+            .insert(conversation_id, Arc::clone(&ctx_arc));
+
         Ok(Some(ctx_arc))
     }
 
@@ -163,16 +167,12 @@ impl TaskExecutor {
             .await?;
 
         let ctx_arc = Arc::new(ctx);
-        
+
         // 缓存到内存
-        self.active_tasks().insert(
-            task_id.clone(),
-            Arc::clone(&ctx_arc),
-        );
-        self.conversation_contexts().insert(
-            params.conversation_id,
-            Arc::clone(&ctx_arc),
-        );
+        self.active_tasks()
+            .insert(task_id.clone(), Arc::clone(&ctx_arc));
+        self.conversation_contexts()
+            .insert(params.conversation_id, Arc::clone(&ctx_arc));
 
         Ok(ctx_arc)
     }
@@ -184,8 +184,7 @@ impl TaskExecutor {
         progress_channel: Option<Channel<TaskProgressPayload>>,
     ) -> TaskExecutorResult<TaskContext> {
         let config = if let Some(config_str) = &execution.execution_config {
-            serde_json::from_str(config_str)
-                .unwrap_or_else(|_| TaskExecutionConfig::default())
+            serde_json::from_str(config_str).unwrap_or_else(|_| TaskExecutionConfig::default())
         } else {
             TaskExecutionConfig::default()
         };
@@ -193,11 +192,14 @@ impl TaskExecutor {
         let cwd = self
             .get_workspace_cwd(execution.conversation_id)
             .await
+            .or_else(|| {
+                std::env::var("HOME")
+                    .or_else(|_| std::env::var("USERPROFILE"))
+                    .ok()
+            })
             .unwrap_or_else(|| "/".to_string());
 
-        let tool_registry = Arc::new(ToolRegistry::new(
-            crate::agent::tools::get_permissions_for_mode("agent"),
-        ));
+        let tool_registry = crate::agent::tools::create_tool_registry("agent").await;
 
         TaskContext::new(
             execution,
@@ -213,10 +215,7 @@ impl TaskExecutor {
     }
 
     /// 恢复消息历史
-    async fn restore_messages_for_context(
-        &self,
-        ctx: &TaskContext,
-    ) -> TaskExecutorResult<()> {
+    async fn restore_messages_for_context(&self, ctx: &TaskContext) -> TaskExecutorResult<()> {
         let messages = self
             .agent_persistence()
             .execution_messages()
@@ -255,12 +254,13 @@ impl TaskExecutor {
         Ok(())
     }
 
-    /// 获取workspace的cwd
     async fn get_workspace_cwd(&self, conversation_id: i64) -> Option<String> {
-        // TODO: 从数据库查询conversation关联的workspace路径
-        // 暂时返回None，使用默认路径
-        let _ = conversation_id;
-        None
+        self.agent_persistence()
+            .conversations()
+            .get(conversation_id)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|conv| conv.workspace_path)
     }
 }
-

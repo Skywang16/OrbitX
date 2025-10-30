@@ -307,10 +307,10 @@ impl LLMProvider for OpenAIProvider {
         let headers = self.get_headers();
         let body = build_openai_chat_body(&request, true);
 
-        tracing::debug!(
-            "OpenAI stream request body: {}",
-            serde_json::to_string_pretty(&body).unwrap_or_else(|_| format!("{:?}", body))
-        );
+        // tracing::debug!(
+        // "OpenAI stream request body: {}",
+        // serde_json::to_string_pretty(&body).unwrap_or_else(|_| format!("{:?}", body))
+        // );
 
         let mut req = self.client().post(&url).json(&body);
         for (k, v) in headers {

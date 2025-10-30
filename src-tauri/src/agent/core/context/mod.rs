@@ -449,14 +449,34 @@ impl TaskContext {
         Ok(())
     }
 
+    /// 中止任务执行
+    /// 使用 spawn_blocking 确保即使在同步上下文中也能正确取消
     pub fn abort(&self) {
-        if let Ok(cancellation) = self.states.cancellation.try_lock() {
-            cancellation.main_token.cancel();
-        }
-        self.abort_current_steps();
-        if let Ok(mut react) = self.states.react_runtime.try_write() {
+        use std::sync::Arc;
+        
+        // 克隆必要的状态以在异步任务中使用
+        let cancellation = Arc::clone(&self.states.cancellation);
+        let react_runtime = Arc::clone(&self.states.react_runtime);
+        
+        // 在后台异步执行取消操作，避免阻塞
+        tokio::spawn(async move {
+            // 使用阻塞锁确保取消一定能执行
+            let cancellation_guard = cancellation.lock().await;
+            cancellation_guard.main_token.cancel();
+            
+            // 取消所有步骤 tokens
+            for token in cancellation_guard.step_tokens.iter() {
+                token.cancel();
+            }
+            drop(cancellation_guard);
+            
+            // 标记 react 运行时为中止状态
+            let mut react = react_runtime.write().await;
             react.mark_abort();
-        }
+        });
+        
+        // 同步部分：立即尝试中止当前步骤
+        self.abort_current_steps();
     }
 
     pub async fn reset_cancellation(&self) {
@@ -655,7 +675,7 @@ impl TaskContext {
         for msg in messages {
             exec.messages.push(msg);
         }
-        exec.runtime_status = AgentTaskStatus::Completed;
+        // 不修改 runtime_status，保持当前状态
         info!(
             "[TaskContext] restore_messages: Restored {} messages for task {}",
             exec.messages.len(),

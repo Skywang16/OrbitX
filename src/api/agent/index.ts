@@ -94,11 +94,10 @@ export class AgentApi {
   /**
    * 创建新会话
    * @param title 会话标题
-   * @param workspacePath 工作空间路径
    * @returns 会话ID
    */
-  createConversation = async (title?: string, workspacePath?: string): Promise<number> => {
-    return await invoke<number>('agent_create_conversation', { title, workspacePath })
+  createConversation = async (title?: string): Promise<number> => {
+    return await invoke<number>('agent_create_conversation', { title })
   }
 
   /**

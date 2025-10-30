@@ -229,10 +229,19 @@ pub async fn agent_trigger_context_summary(
 #[tauri::command]
 pub async fn agent_create_conversation(
     state: State<'_, TaskExecutorState>,
+    context_state: State<'_, crate::terminal::commands::TerminalContextState>,
     title: Option<String>,
-    workspace_path: Option<String>,
 ) -> TauriApiResult<i64> {
     let title_clone = title.clone();
+
+    // 自动从当前活跃终端获取工作目录
+    let workspace_path = context_state
+        .context_service
+        .get_active_context()
+        .await
+        .ok()
+        .and_then(|ctx| ctx.current_working_directory);
+
     match state
         .executor
         .create_conversation(title, workspace_path)
