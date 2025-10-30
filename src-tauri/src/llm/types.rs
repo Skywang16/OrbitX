@@ -1,13 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// LLM 提供商配置（保留，用于 Embeddings 与 Provider 路由）
+/// Provider 连接配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMProviderConfig {
     pub provider_type: String,
     pub api_key: String,
     pub api_url: Option<String>,
-    pub model: String,
     pub options: Option<HashMap<String, serde_json::Value>>,
     #[serde(default)]
     pub supports_prompt_cache: bool,

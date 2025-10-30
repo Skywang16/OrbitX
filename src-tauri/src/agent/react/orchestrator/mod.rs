@@ -200,17 +200,17 @@ impl ReactOrchestrator {
                 .await?;
 
             // 打印 system prompt
-            if let Some(ref sp) = llm_request.system {
-                if let SystemPrompt::Text(text) = sp {
-                    println!(
-                        "\n{}\nFINAL SYSTEM PROMPT:\n{}\n{}\n{}\n",
-                        "=".repeat(80),
-                        "=".repeat(80),
-                        text,
-                        "=".repeat(80)
-                    );
-                }
-            }
+            //  if let Some(ref sp) = llm_request.system {
+            // if let SystemPrompt::Text(text) = sp {
+            // println!(
+            // "\n{}\nFINAL SYSTEM PROMPT:\n{}\n{}\n{}\n",
+            // "=".repeat(80),
+            // "=".repeat(80),
+            // text,
+            // "=".repeat(80)
+            // );
+            // }
+            //  }
 
             let llm_service = crate::llm::service::LLMService::new(Arc::clone(&self.database));
             let cancel_token = context.register_step_token();

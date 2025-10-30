@@ -26,12 +26,52 @@ impl ReactHandler for TaskExecutor {
         cwd: &str,
         messages: Option<Vec<crate::llm::anthropic_types::MessageParam>>,
     ) -> TaskExecutorResult<CreateMessageRequest> {
-        // 获取工具schema
+        use crate::storage::repositories::AIModels;
+
+        let model_config = AIModels::new(&self.inner.database)
+            .find_by_id(model_id)
+            .await?
+            .ok_or_else(|| {
+                crate::agent::error::TaskExecutorError::ConfigurationError(format!(
+                    "Model not found: {}",
+                    model_id
+                ))
+            })?;
+
+        let max_tokens = model_config
+            .options
+            .as_ref()
+            .and_then(|opts| opts.get("maxTokens"))
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32)
+            .unwrap_or(4096);
+
+        let temperature = model_config
+            .options
+            .as_ref()
+            .and_then(|opts| opts.get("temperature"))
+            .and_then(|v| v.as_f64())
+            .map(|v| v as f32)
+            .or(Some(0.7));
+
+        let top_p = model_config
+            .options
+            .as_ref()
+            .and_then(|opts| opts.get("topP"))
+            .and_then(|v| v.as_f64())
+            .map(|v| v as f32);
+
+        let top_k = model_config
+            .options
+            .as_ref()
+            .and_then(|opts| opts.get("topK"))
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32);
+
         let tool_schemas = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
             cwd: cwd.to_string(),
         });
 
-        // 转换为Anthropic Tool类型
         let tools: Vec<crate::llm::anthropic_types::Tool> = tool_schemas
             .into_iter()
             .map(|schema| crate::llm::anthropic_types::Tool {
@@ -50,14 +90,14 @@ impl ReactHandler for TaskExecutor {
 
         Ok(CreateMessageRequest {
             model: model_id.to_string(),
-            max_tokens: 4096,
+            max_tokens,
             system: system_prompt,
             messages: final_messages,
             tools: if tools.is_empty() { None } else { Some(tools) },
             stream: true,
-            temperature: Some(0.7),
-            top_p: None,
-            top_k: None,
+            temperature,
+            top_p,
+            top_k,
             metadata: None,
             stop_sequences: None,
         })

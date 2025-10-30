@@ -8,8 +8,8 @@ use crate::llm::{
     provider_registry::ProviderRegistry,
     types::{EmbeddingRequest, EmbeddingResponse, LLMProviderConfig},
 };
-use crate::storage::DatabaseManager;
 use crate::storage::repositories::AIModels;
+use crate::storage::DatabaseManager;
 
 pub struct LLMService {
     database: Arc<DatabaseManager>,
@@ -20,7 +20,11 @@ impl LLMService {
         Self { database }
     }
 
-    async fn get_provider_config(&self, model_id: &str) -> LlmResult<LLMProviderConfig> {
+    /// 获取 Provider 配置和模型名：model_id → (config, model_name)
+    async fn get_provider_config_and_model(
+        &self,
+        model_id: &str,
+    ) -> LlmResult<(LLMProviderConfig, String)> {
         let model = AIModels::new(&self.database)
             .find_by_id(model_id)
             .await?
@@ -46,14 +50,13 @@ impl LLMService {
             None => None,
         };
 
-        // 从 options 中提取 supportsPromptCache
         let supports_prompt_cache = options
             .as_ref()
             .and_then(|opts| opts.get("supportsPromptCache"))
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        Ok(LLMProviderConfig {
+        let config = LLMProviderConfig {
             provider_type,
             api_key: model.api_key,
             api_url: if model.api_url.is_empty() {
@@ -61,30 +64,33 @@ impl LLMService {
             } else {
                 Some(model.api_url)
             },
-            model: model.model,
             options,
             supports_prompt_cache,
-        })
+        };
+
+        Ok((config, model.model))
     }
 
-    /// 非流式调用（Anthropic 原生类型）
+    /// 非流式调用
     pub async fn call(&self, request: CreateMessageRequest) -> LlmResult<Message> {
         self.validate_request(&request)?;
-        let mut config = self.get_provider_config(&request.model).await?;
-        // ✅ Move model out before passing config to create (avoid clone)
-        let provider_model = std::mem::take(&mut config.model);
+
+        let (config, model_name) = self.get_provider_config_and_model(&request.model).await?;
+        let original_model_id = request.model.clone();
+
         let provider = ProviderRegistry::global()
             .create(config)
             .map_err(LlmError::from)?;
 
         let mut actual_request = request;
-        let original_model_id = std::mem::replace(&mut actual_request.model, provider_model);
+        actual_request.model = model_name;
 
         tracing::debug!(
             "Making LLM call with model: {} (config: {})",
             actual_request.model,
             original_model_id
         );
+
         let result = provider.call(actual_request).await;
 
         match &result {
@@ -102,23 +108,23 @@ impl LLMService {
         result.map_err(LlmError::from)
     }
 
-    /// 流式调用（携带外部取消令牌，Anthropic 原生类型）
+    /// 流式调用（带取消令牌）
     pub async fn call_stream(
         &self,
         request: CreateMessageRequest,
         token: CancellationToken,
     ) -> LlmResult<impl tokio_stream::Stream<Item = LlmProviderResult<StreamEvent>>> {
         self.validate_request(&request)?;
-        let mut config = self.get_provider_config(&request.model).await?;
-        // ✅ Move model out before passing config to create (avoid clone)
-        let provider_model = std::mem::take(&mut config.model);
+
+        let (config, model_name) = self.get_provider_config_and_model(&request.model).await?;
+        let original_model_id = request.model.clone();
+
         let provider = ProviderRegistry::global()
             .create(config)
             .map_err(LlmError::from)?;
 
         let mut actual_request = request;
-        // ✅ Move provider model into request (zero-cost)
-        let original_model_id = std::mem::replace(&mut actual_request.model, provider_model);
+        actual_request.model = model_name;
 
         tracing::debug!(
             "Making streaming LLM call with model: {} (config: {}), with external cancel token",
@@ -165,14 +171,15 @@ impl LLMService {
         &self,
         request: EmbeddingRequest,
     ) -> LlmResult<EmbeddingResponse> {
-        let mut config = self.get_provider_config(&request.model).await?;
-        let provider_model = std::mem::take(&mut config.model);
+        let (config, model_name) = self.get_provider_config_and_model(&request.model).await?;
+        let original_model_id = request.model.clone();
+
         let provider = ProviderRegistry::global()
             .create(config)
             .map_err(LlmError::from)?;
 
         let mut actual_request = request;
-        let original_model_id = std::mem::replace(&mut actual_request.model, provider_model);
+        actual_request.model = model_name;
 
         tracing::debug!(
             "Making embedding call with model: {} (config: {})",
@@ -234,7 +241,7 @@ impl LLMService {
         }
     }
 
-    /// 验证请求参数（Anthropic 原生类型）
+    /// 验证请求参数
     fn validate_request(&self, request: &CreateMessageRequest) -> LlmResult<()> {
         if request.model.is_empty() {
             return Err(LlmError::InvalidRequest {

@@ -33,12 +33,10 @@ pub struct OpenAIProvider {
 type OpenAiResult<T> = Result<T, OpenAiError>;
 
 fn build_openai_chat_body(
-    config: &LLMProviderConfig,
     req: &crate::llm::anthropic_types::CreateMessageRequest,
     stream: bool,
 ) -> Value {
-    use crate::llm::anthropic_types::{SystemPrompt};
-    // 转换 system + messages -> OpenAI chat messages
+    use crate::llm::anthropic_types::SystemPrompt;
     let mut chat_messages: Vec<Value> = Vec::new();
     if let Some(system) = &req.system {
         let sys_text = match system {
@@ -52,12 +50,9 @@ fn build_openai_chat_body(
             chat_messages.push(json!({"role":"system","content":sys_text}));
         }
     }
-    // 使用统一转换器，保留 tool_calls 与 tool 结果
-    // 直接传VecDeque的迭代器，零转换
     let converted = crate::llm::transform::openai::convert_to_openai_messages(&req.messages);
     chat_messages.extend(converted);
 
-    // 工具定义
     let tools_val = req.tools.as_ref().map(|tools| {
         Value::Array(tools.iter().map(|t| json!({
             "type": "function",
@@ -66,7 +61,7 @@ fn build_openai_chat_body(
     });
 
     let mut body = json!({
-        "model": config.model,
+        "model": req.model,
         "messages": chat_messages,
         "stream": stream
     });
@@ -224,7 +219,7 @@ impl LLMProvider for OpenAIProvider {
 
         let url = self.get_chat_endpoint();
         let headers = self.get_headers();
-        let body = build_openai_chat_body(&self.config, &request, false);
+        let body = build_openai_chat_body(&request, false);
 
         let mut req = self.client().post(&url).json(&body);
         for (k, v) in headers {
@@ -283,7 +278,7 @@ impl LLMProvider for OpenAIProvider {
                 text: content,
                 cache_control: None,
             }],
-            model: self.config.model.clone(),
+            model: request.model.clone(),
             stop_reason: None,
             stop_sequence: None,
             usage,
@@ -310,7 +305,12 @@ impl LLMProvider for OpenAIProvider {
 
         let url = self.get_chat_endpoint();
         let headers = self.get_headers();
-        let body = build_openai_chat_body(&self.config, &request, true);
+        let body = build_openai_chat_body(&request, true);
+
+        tracing::debug!(
+            "OpenAI stream request body: {}",
+            serde_json::to_string_pretty(&body).unwrap_or_else(|_| format!("{:?}", body))
+        );
 
         let mut req = self.client().post(&url).json(&body);
         for (k, v) in headers {
@@ -344,7 +344,7 @@ impl LLMProvider for OpenAIProvider {
             tool_use_started: HashSet<usize>,
         }
 
-        let model = self.config.model.clone();
+        let model = request.model.clone();
         let raw_stream = resp.bytes_stream().eventsource();
 
         // 使用 unfold 来维护状态
@@ -379,11 +379,12 @@ impl LLMProvider for OpenAIProvider {
                                             .push_back(StreamEvent::ContentBlockStop { index: 0 });
                                     }
                                     if !state.tool_use_started.is_empty() {
-                                        let indices: Vec<usize> = state.tool_use_started.iter().copied().collect();
+                                        let indices: Vec<usize> =
+                                            state.tool_use_started.iter().copied().collect();
                                         for idx in indices {
-                                            state
-                                                .pending_events
-                                                .push_back(StreamEvent::ContentBlockStop { index: idx });
+                                            state.pending_events.push_back(
+                                                StreamEvent::ContentBlockStop { index: idx },
+                                            );
                                         }
                                         state.tool_use_started.clear();
                                     }
@@ -432,35 +433,47 @@ impl LLMProvider for OpenAIProvider {
                                 // 第二个事件：ContentBlockStart（当第一次遇到 content 时）
                                 if !state.content_block_started && delta.get("content").is_some() {
                                     state.content_block_started = true;
-                                    state.pending_events.push_back(StreamEvent::ContentBlockStart {
-                                        index: 0,
-                                        content_block: ContentBlockStart::Text {
-                                            text: String::new(),
+                                    state.pending_events.push_back(
+                                        StreamEvent::ContentBlockStart {
+                                            index: 0,
+                                            content_block: ContentBlockStart::Text {
+                                                text: String::new(),
+                                            },
                                         },
-                                    });
+                                    );
                                 }
 
                                 // ContentBlockDelta（content 增量）
                                 if let Some(content) = delta["content"].as_str() {
                                     if !content.is_empty() {
-                                        state.pending_events.push_back(StreamEvent::ContentBlockDelta {
-                                            index: 0,
-                                            delta: ContentDelta::TextDelta {
-                                                text: content.to_string(),
+                                        state.pending_events.push_back(
+                                            StreamEvent::ContentBlockDelta {
+                                                index: 0,
+                                                delta: ContentDelta::TextDelta {
+                                                    text: content.to_string(),
+                                                },
                                             },
-                                        });
+                                        );
                                     }
                                 }
 
                                 // 处理工具调用增量 delta.tool_calls
-                                if let Some(tc_arr) = delta.get("tool_calls").and_then(|v| v.as_array()) {
+                                if let Some(tc_arr) =
+                                    delta.get("tool_calls").and_then(|v| v.as_array())
+                                {
                                     for tc in tc_arr {
-                                        let raw_index = tc.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                        let raw_index =
+                                            tc.get("index").and_then(|v| v.as_u64()).unwrap_or(0)
+                                                as usize;
                                         let event_index = raw_index + 1; // 将工具块索引与文本块(0)错开
 
                                         let func = tc.get("function");
-                                        let name_opt = func.and_then(|f| f.get("name")).and_then(|v| v.as_str());
-                                        let args_opt = func.and_then(|f| f.get("arguments")).and_then(|v| v.as_str());
+                                        let name_opt = func
+                                            .and_then(|f| f.get("name"))
+                                            .and_then(|v| v.as_str());
+                                        let args_opt = func
+                                            .and_then(|f| f.get("arguments"))
+                                            .and_then(|v| v.as_str());
 
                                         if !state.tool_use_started.contains(&event_index) {
                                             if let Some(name) = name_opt {
@@ -468,27 +481,33 @@ impl LLMProvider for OpenAIProvider {
                                                     .get("id")
                                                     .and_then(|v| v.as_str())
                                                     .map(|s| s.to_string())
-                                                    .unwrap_or_else(|| format!("call_{}", uuid::Uuid::new_v4()));
+                                                    .unwrap_or_else(|| {
+                                                        format!("call_{}", uuid::Uuid::new_v4())
+                                                    });
                                                 state.tool_use_started.insert(event_index);
-                                                state.pending_events.push_back(StreamEvent::ContentBlockStart {
-                                                    index: event_index,
-                                                    content_block: ContentBlockStart::ToolUse {
-                                                        id,
-                                                        name: name.to_string(),
+                                                state.pending_events.push_back(
+                                                    StreamEvent::ContentBlockStart {
+                                                        index: event_index,
+                                                        content_block: ContentBlockStart::ToolUse {
+                                                            id,
+                                                            name: name.to_string(),
+                                                        },
                                                     },
-                                                });
+                                                );
                                             }
                                         }
 
                                         if let Some(arguments) = args_opt {
                                             if !arguments.is_empty() {
                                                 if state.tool_use_started.contains(&event_index) {
-                                                    state.pending_events.push_back(StreamEvent::ContentBlockDelta {
-                                                        index: event_index,
-                                                        delta: ContentDelta::InputJsonDelta {
-                                                            partial_json: arguments.to_string(),
+                                                    state.pending_events.push_back(
+                                                        StreamEvent::ContentBlockDelta {
+                                                            index: event_index,
+                                                            delta: ContentDelta::InputJsonDelta {
+                                                                partial_json: arguments.to_string(),
+                                                            },
                                                         },
-                                                    });
+                                                    );
                                                 }
                                             }
                                         }
@@ -505,12 +524,14 @@ impl LLMProvider for OpenAIProvider {
                                             .push_back(StreamEvent::ContentBlockStop { index: 0 });
                                     }
                                     // 如果是工具调用结束，也关闭所有已开启的工具块
-                                    if reason == "tool_calls" && !state.tool_use_started.is_empty() {
-                                        let indices: Vec<usize> = state.tool_use_started.iter().copied().collect();
+                                    if reason == "tool_calls" && !state.tool_use_started.is_empty()
+                                    {
+                                        let indices: Vec<usize> =
+                                            state.tool_use_started.iter().copied().collect();
                                         for idx in indices {
-                                            state
-                                                .pending_events
-                                                .push_back(StreamEvent::ContentBlockStop { index: idx });
+                                            state.pending_events.push_back(
+                                                StreamEvent::ContentBlockStop { index: idx },
+                                            );
                                         }
                                         state.tool_use_started.clear();
                                     }
