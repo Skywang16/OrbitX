@@ -1,7 +1,7 @@
 use crate::ai::error::{AIServiceError, AIServiceResult};
 use crate::ai::types::{AIModelConfig, AIProvider, ModelType};
-use crate::storage::DatabaseManager;
 use crate::storage::repositories::AIModels;
+use crate::storage::DatabaseManager;
 use chrono::Utc;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 use reqwest::{Client, StatusCode};
@@ -160,7 +160,7 @@ impl AIService {
 
         match model.provider {
             AIProvider::Anthropic => {
-                let url = join_url(model.api_url.trim(), "v1/messages");
+                let url = join_url(model.api_url.trim(), "messages");
                 let headers = header_map(&[
                     ("x-api-key", model.api_key.clone()),
                     ("anthropic-version", "2023-06-01".to_string()),
@@ -180,7 +180,7 @@ impl AIService {
                 }))
             }
             AIProvider::OpenAiCompatible => {
-                let url = join_url(model.api_url.trim(), "v1/chat/completions");
+                let url = join_url(model.api_url.trim(), "chat/completions");
                 let headers =
                     header_map(&[("authorization", format!("Bearer {}", model.api_key))])?;
                 let payload = basic_chat_payload(&model.model);
@@ -321,12 +321,7 @@ fn basic_chat_payload(model: &str) -> Value {
 fn join_url(base: &str, suffix: &str) -> String {
     let base = base.trim_end_matches('/');
     let suffix = suffix.trim_start_matches('/');
-
-    if base.ends_with("/v1") && suffix.starts_with("v1/") {
-        format!("{}/{}", base, &suffix[3..])
-    } else {
-        format!("{}/{}", base, suffix)
-    }
+    format!("{}/{}", base, suffix)
 }
 
 const TOLERATED_STANDARD_CODES: &[StatusCode] =
