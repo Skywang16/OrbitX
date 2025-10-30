@@ -572,7 +572,6 @@ impl ThemeManager {
     pub async fn create_builtin_themes(&self) -> ThemeConfigResult<()> {
         let themes_dir = self.paths.themes_dir();
 
-        // 确保themes目录存在
         if !themes_dir.exists() {
             fs::create_dir_all(themes_dir).map_err(|err| {
                 ThemeConfigError::Internal(format!(
@@ -581,22 +580,25 @@ impl ThemeManager {
                     err
                 ))
             })?;
-            info!("创建主题目录: {}", themes_dir.display());
         }
 
-        // 尝试从资源目录复制主题文件
-        self.copy_themes_from_resources().await?;
+        // 检查已有的主题文件数量
+        if let Ok(entries) = fs::read_dir(themes_dir) {
+            let count = entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("toml"))
+                .count();
 
+            if count > 0 {
+                // 已有主题文件，刷新索引后返回
+                let _ = self.refresh_index().await;
+                return Ok(());
+            }
+        }
+
+        // 没有主题文件时创建默认主题作为后备
         self.ensure_default_themes_exist(themes_dir).await?;
-
-        // 内置主题文件检查完成
-
-        // 刷新主题索引以确保新创建的主题被正确识别
-        if let Err(e) = self.refresh_index().await {
-            warn!("Failed to refresh theme index: {}", e);
-        } else {
-            debug!("Theme index refreshed");
-        }
+        let _ = self.refresh_index().await;
 
         Ok(())
     }
@@ -861,13 +863,7 @@ selection = "rgba(3, 102, 214, 0.3)"
         Ok(())
     }
 
-    /// 从打包的资源目录复制主题文件
-    async fn copy_themes_from_resources(&self) -> ThemeConfigResult<()> {
-        // 实际的资源复制在应用初始化时通过 AppHandle 完成
-        Ok(())
-    }
-
-    /// 确保默认主题存在
+    /// 确保默认主题存在（仅在没有任何主题文件时作为后备方案）
     async fn ensure_default_themes_exist(&self, themes_dir: &Path) -> ThemeConfigResult<()> {
         let dark_theme_path = themes_dir.join("dark.toml");
         let light_theme_path = themes_dir.join("light.toml");

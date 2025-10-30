@@ -118,6 +118,12 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     let cache = Arc::new(crate::storage::cache::UnifiedCache::new());
     app.manage(cache.clone());
 
+    // 在 ThemeManager 初始化前复制主题文件
+    tauri::async_runtime::block_on(async {
+        let _ = copy_themes_from_resources(app.handle()).await;
+        let _ = copy_default_config_from_resources(app.handle()).await;
+    });
+
     let theme_service = tauri::async_runtime::block_on(async {
         use crate::config::{paths::ConfigPaths, theme::ThemeManagerOptions, theme::ThemeService};
 
@@ -419,16 +425,17 @@ fn start_system_theme_listener<R: tauri::Runtime>(app_handle: tauri::AppHandle<R
 /// 获取回退的主题文件列表
 fn get_fallback_theme_list() -> Vec<String> {
     vec![
+        "catppuccin-latte.toml".to_string(),
+        "catppuccin-mocha.toml".to_string(),
         "dark.toml".to_string(),
-        "light.toml".to_string(),
         "dracula.toml".to_string(),
+        "github-dark.toml".to_string(),
         "gruvbox-dark.toml".to_string(),
         "index.toml".to_string(),
-        "monokai.toml".to_string(),
+        "light.toml".to_string(),
+        "material-dark.toml".to_string(),
         "nord.toml".to_string(),
         "one-dark.toml".to_string(),
-        "solarized-dark.toml".to_string(),
-        "solarized-light.toml".to_string(),
         "tokyo-night.toml".to_string(),
     ]
 }
@@ -440,39 +447,38 @@ async fn get_theme_files_from_resources<R: tauri::Runtime>(
     use std::path::PathBuf;
     use tauri::path::BaseDirectory;
 
-    // 开发模式直接从项目根目录读取，生产模式从资源读取
     let themes_resource_path = if cfg!(debug_assertions) {
         let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         current_dir.join("..").join("config").join("themes")
     } else {
         app_handle
             .path()
-            .resolve("themes", BaseDirectory::Resource)
+            .resolve("_up_/config/themes", BaseDirectory::Resource)
             .map_err(|_| "Failed to resolve resource path")?
     };
+
     match std::fs::read_dir(&themes_resource_path) {
         Ok(entries) => {
-            let mut theme_files = Vec::new();
-            for entry in entries {
-                if let Ok(entry) = entry {
+            let theme_files: Vec<String> = entries
+                .flatten()
+                .filter_map(|entry| {
                     let path = entry.path();
                     if path.is_file() {
-                        if let Some(file_name) = path.file_name() {
-                            if let Some(file_name_str) = file_name.to_str() {
-                                if file_name_str.ends_with(".toml") {
-                                    theme_files.push(file_name_str.to_string());
-                                }
-                            }
-                        }
+                        path.file_name()
+                            .and_then(|n| n.to_str())
+                            .filter(|name| name.ends_with(".toml"))
+                            .map(String::from)
+                    } else {
+                        None
                     }
-                }
-            }
+                })
+                .collect();
 
-            if theme_files.is_empty() {
-                Ok(get_fallback_theme_list())
+            Ok(if theme_files.is_empty() {
+                get_fallback_theme_list()
             } else {
-                Ok(theme_files)
-            }
+                theme_files
+            })
         }
         Err(_) => Ok(get_fallback_theme_list()),
     }
@@ -489,46 +495,32 @@ async fn copy_themes_from_resources<R: tauri::Runtime>(
     let paths = ConfigPaths::new()?;
     let themes_dir = paths.themes_dir();
 
-    // 确保主题目录存在
     if !themes_dir.exists() {
         fs::create_dir_all(themes_dir)?;
     }
 
-    // 动态获取所有主题文件，避免硬编码列表
     let theme_files = get_theme_files_from_resources(app_handle).await?;
-
-    let mut _copied_count = 0;
 
     for theme_file in &theme_files {
         let dest_path = themes_dir.join(theme_file);
 
-        if dest_path.exists() {
-            continue;
-        }
-
-        // 开发模式直接从项目根目录读取，生产模式从资源读取
         let source_path = if cfg!(debug_assertions) {
             let current_dir =
                 std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let dev_file_path = current_dir
+            current_dir
                 .join("..")
                 .join("config")
                 .join("themes")
-                .join(theme_file);
-            Some(dev_file_path)
+                .join(theme_file)
         } else {
-            app_handle
-                .path()
-                .resolve(theme_file, BaseDirectory::Resource)
-                .ok()
+            app_handle.path().resolve(
+                format!("_up_/config/themes/{}", theme_file),
+                BaseDirectory::Resource,
+            )?
         };
 
-        if let Some(resource_path) = source_path {
-            if let Ok(content) = std::fs::read_to_string(&resource_path) {
-                if std::fs::write(&dest_path, content).is_ok() {
-                    _copied_count += 1;
-                }
-            }
+        if let Ok(content) = std::fs::read_to_string(&source_path) {
+            let _ = std::fs::write(&dest_path, content);
         }
     }
 
@@ -559,7 +551,7 @@ async fn copy_default_config_from_resources<R: tauri::Runtime>(
     // 尝试从资源目录读取默认配置文件
     match app_handle
         .path()
-        .resolve("config.toml", BaseDirectory::Resource)
+        .resolve("_up_/config/config.toml", BaseDirectory::Resource)
     {
         Ok(resource_path) => match fs::read_to_string(&resource_path) {
             Ok(content) => match fs::write(&config_file_path, content) {
@@ -582,24 +574,7 @@ async fn copy_default_config_from_resources<R: tauri::Runtime>(
     Ok(())
 }
 
-/// 创建一个 Tauri 插件，用于在应用启动时复制默认主题
+/// 创建一个 Tauri 插件，用于应用初始化
 pub fn init_plugin<R: tauri::Runtime>(name: &'static str) -> tauri::plugin::TauriPlugin<R> {
-    tauri::plugin::Builder::new(name)
-        .setup(|app_handle, _api| {
-            // 从资源目录复制配置文件和主题文件到用户配置目录
-            let app_handle = app_handle.clone();
-            tauri::async_runtime::spawn(async move {
-                // 复制默认配置文件
-                if let Err(e) = copy_default_config_from_resources(&app_handle).await {
-                    eprintln!("Failed to copy default config file: {}", e);
-                }
-
-                // 复制主题文件
-                if let Err(e) = copy_themes_from_resources(&app_handle).await {
-                    eprintln!("Failed to copy theme files: {}", e);
-                }
-            });
-            Ok(())
-        })
-        .build()
+    tauri::plugin::Builder::new(name).build()
 }
