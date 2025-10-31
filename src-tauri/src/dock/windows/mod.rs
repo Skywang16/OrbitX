@@ -43,10 +43,10 @@ impl<R: Runtime> WindowsJumpList<R> {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
 
-        use windows::core::{HSTRING, PCWSTR, Interface, IUnknown};
+        use windows::core::{HSTRING, PCWSTR, Interface, GUID};
         use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
         use windows::Win32::UI::Shell::{DestinationList, ICustomDestinationList, IShellLinkW, ShellLink};
-        use windows::Win32::UI::Shell::Common::{EnumerableObjectCollection, IObjectArray, IObjectCollection};
+        use windows::Win32::UI::Shell::Common::{IObjectArray, IObjectCollection};
 
         // Create destination list
         let dest_list: ICustomDestinationList =
@@ -60,7 +60,9 @@ impl<R: Runtime> WindowsJumpList<R> {
             .map_err(|e| format!("Failed to begin list: {:?}", e))?;
 
         // Build custom category from current tabs (limit to avoid oversized lists)
-        let collection: IObjectCollection = CoCreateInstance(&EnumerableObjectCollection, None, CLSCTX_INPROC_SERVER)
+        // CLSID for EnumerableObjectCollection: {2d3468c1-36a7-43b6-ac24-d3f02fd9607a}
+        let clsid_enumerable_object_collection = GUID::from_u128(0x2d3468c1_36a7_43b6_ac24_d3f02fd9607a);
+        let collection: IObjectCollection = CoCreateInstance(&clsid_enumerable_object_collection, None, CLSCTX_INPROC_SERVER)
             .map_err(|e| format!("Failed to create EnumerableObjectCollection: {:?}", e))?;
 
         // Resolve current exe path
@@ -94,11 +96,7 @@ impl<R: Runtime> WindowsJumpList<R> {
 
             // Add to collection
             collection
-                .AddObject(
-                    link
-                        .cast::<IUnknown>()
-                        .map_err(|e| format!("Failed to cast IShellLink to IUnknown: {:?}", e))?,
-                )
+                .AddObject(&link)
                 .map_err(|e| format!("Failed to add link to collection: {:?}", e))?;
         }
 

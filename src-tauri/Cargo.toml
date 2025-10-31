@@ -85,6 +85,8 @@ sha2 = "0.10"
 
 # 主机名获取
 hostname = "0.4"
+# 跨平台机器 UID 获取
+machine-uid = "0.5"
 
 # LLM 提供商 SDK
 async-openai = "0.29"

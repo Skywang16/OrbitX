@@ -375,85 +375,20 @@ impl KeyVault {
     }
 
     fn get_device_identifier(&self) -> DatabaseResult<String> {
-        #[cfg(target_os = "macos")]
-        {
-            let output = std::process::Command::new("ioreg")
-                .args(["-rd1", "-c", "IOPlatformExpertDevice"])
-                .output()
-                .map_err(|e| DatabaseError::internal(format!("获取设备UUID失败: {}", e)))?;
-
-            if !output.status.success() {
-                return Err(DatabaseError::internal("ioreg命令执行失败".to_string()));
+        // 使用 machine-uid crate 获取跨平台的机器唯一标识符
+        // Windows: 从注册表读取 HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography\MachineGuid
+        // macOS: 使用 ioreg 获取 IOPlatformUUID
+        // Linux: 读取 /var/lib/dbus/machine-id 或 /etc/machine-id
+        match machine_uid::get() {
+            Ok(uid) => Ok(uid),
+            Err(e) => {
+                tracing::warn!("无法获取机器 UID: {}, 使用主机名作为备选方案", e);
+                
+                // 如果获取机器 UID 失败，使用主机名作为备选方案
+                hostname::get()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .map_err(|e| DatabaseError::internal(format!("获取主机名失败: {}", e)))
             }
-
-            let output_str = String::from_utf8_lossy(&output.stdout);
-
-            for line in output_str.lines() {
-                if line.contains("IOPlatformUUID") {
-                    if let Some(uuid) = line.split('"').nth(3) {
-                        return Ok(uuid.to_string());
-                    }
-                }
-            }
-
-            let hostname = hostname::get()
-                .map_err(|e| DatabaseError::internal(format!("获取主机名失败: {}", e)))?
-                .to_string_lossy()
-                .to_string();
-            Ok(hostname)
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            let output = std::process::Command::new("wmic")
-                .args(["csproduct", "get", "UUID"])
-                .output()
-                .map_err(|e| DatabaseError::internal(format!("获取设备UUID失败: {}", e)))?;
-
-            if !output.status.success() {
-                return Err(DatabaseError::internal("wmic命令执行失败".to_string()));
-            }
-
-            let output_str = String::from_utf8_lossy(&output.stdout);
-
-            for line in output_str.lines().skip(1) {
-                let uuid = line.trim();
-                if !uuid.is_empty() && uuid != "UUID" {
-                    return Ok(uuid.to_string());
-                }
-            }
-
-            let hostname = hostname::get()
-                .map_err(|e| DatabaseError::internal(format!("获取主机名失败: {}", e)))?
-                .to_string_lossy()
-                .to_string();
-            Ok(hostname)
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            if let Ok(content) = std::fs::read_to_string("/etc/machine-id") {
-                let machine_id = content.trim().to_string();
-                return Ok(machine_id);
-            }
-
-            if let Ok(content) = std::fs::read_to_string("/var/lib/dbus/machine-id") {
-                let machine_id = content.trim().to_string();
-                return Ok(machine_id);
-            }
-
-            let hostname = hostname::get()
-                .map_err(|e| DatabaseError::internal(format!("获取主机名失败: {}", e)))?
-                .to_string_lossy()
-                .to_string();
-            Ok(hostname)
-        }
-
-        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-        {
-            Err(DatabaseError::internal(
-                "不支持的操作系统，无法获取设备标识".to_string(),
-            ))
         }
     }
 
