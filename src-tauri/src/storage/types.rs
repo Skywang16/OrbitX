@@ -72,7 +72,7 @@ pub enum TabState {
 #[serde(rename_all = "camelCase")]
 pub struct TerminalTabData {
     pub shell: String,
-    pub path: String,
+    pub cwd: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,7 +108,7 @@ impl Default for WindowState {
 pub struct TerminalRuntimeState {
     pub id: u32,
     pub cwd: String,
-    pub shell: Option<String>,
+    pub shell: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

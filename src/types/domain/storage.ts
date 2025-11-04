@@ -43,12 +43,11 @@ export interface WindowState {
 export type TabId = number
 
 /**
- * Terminal tab 数据
+ * Terminal tab 数据（持久化到 session）
  */
 export interface TerminalTabData {
-  shell?: string
-  shellType?: string
-  cwd?: string
+  shell: string
+  cwd: string
 }
 
 /**
@@ -89,7 +88,7 @@ export type TabState = TerminalTabState | SettingsTabState
 export interface RuntimeTerminalState {
   id: number
   cwd: string
-  shell?: string
+  shell: string
 }
 
 export interface UiState {

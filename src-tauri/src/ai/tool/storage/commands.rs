@@ -126,23 +126,23 @@ pub async fn storage_get_terminals_state() -> TauriApiResult<Vec<crate::storage:
 
     let terminals: Vec<TerminalRuntimeState> = pane_ids
         .into_iter()
-        .map(|pane_id| {
+        .filter_map(|pane_id| {
+            let pane = mux.get_pane(pane_id)?;
+            
             let cwd = mux.shell_get_pane_cwd(pane_id).unwrap_or_else(|| {
                 dirs::home_dir()
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_else(|| "~".to_string())
             });
 
-            let shell_state = mux.get_pane_shell_state(pane_id);
-            let shell_type = shell_state
-                .as_ref()
-                .and_then(|state| state.shell_type.as_ref().map(|t| format!("{:?}", t)));
+            // 直接从 Pane 读取创建时的 shell，不依赖异步检测
+            let shell = pane.shell_name().to_string();
 
-            TerminalRuntimeState {
+            Some(TerminalRuntimeState {
                 id: pane_id.as_u32(),
                 cwd,
-                shell: shell_type,
-            }
+                shell,
+            })
         })
         .collect();
 

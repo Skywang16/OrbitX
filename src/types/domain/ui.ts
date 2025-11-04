@@ -14,7 +14,6 @@ export enum TabType {
 // 终端标签页的私有数据
 export interface TerminalTabData {
   shell: string
-  path: string
 }
 
 // 设置标签页的私有数据

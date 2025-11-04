@@ -1,11 +1,13 @@
 <script setup lang="ts">
   import { computed, ref, watch, onMounted } from 'vue'
-  import terminalContextApi from '@/api/terminal-context'
+  import { ckApi, terminalContextApi } from '@/api'
+  import { useI18n } from 'vue-i18n'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
-  import { useI18n } from 'vue-i18n'
+  import { getPathBasename } from '@/utils/path'
+
   const { t } = useI18n()
 
   interface Props {
@@ -62,12 +64,6 @@
   const homePath = ref<string>('')
   const indexSize = ref<string>('')
 
-  const simplify = (p: string) => {
-    const parts = p.replace(/\/$/, '').split(/[/\\]/).filter(Boolean)
-    if (parts.length === 0) return '~'
-    return parts[parts.length - 1]
-  }
-
   const normalize = (p: string) => p.replace(/\\/g, '/').replace(/\/$/, '')
 
   const refreshDisplayPath = async () => {
@@ -75,13 +71,9 @@
     if (!p || p === '.') {
       const activeTab = tabManagerStore.activeTab
       if (activeTab && activeTab.type === TabType.TERMINAL) {
-        if (activeTab.path && activeTab.path !== '~') {
-          p = activeTab.path
-        } else {
-          const terminal = terminalStore.terminals.find(t => t.id === activeTab.id)
-          if (terminal?.cwd) {
-            p = terminal.cwd
-          }
+        const terminal = terminalStore.terminals.find(t => t.id === activeTab.id)
+        if (terminal?.cwd) {
+          p = terminal.cwd
         }
       }
       if (!p || p === '.') {
@@ -95,7 +87,7 @@
       }
     }
     resolvedPath.value = p || '.'
-    displayPath.value = p && p !== '.' ? simplify(p) : '.'
+    displayPath.value = p && p !== '.' ? getPathBasename(p) : '.'
   }
 
   const canBuild = computed(() => {

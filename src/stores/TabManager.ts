@@ -5,6 +5,7 @@ import { useTerminalStore } from './Terminal'
 import { useSessionStore } from './session'
 import { dockApi } from '@/api'
 import { getHandler, defaultCloseTab } from './TabHandlers'
+import { getPathBasename } from '@/utils/path'
 
 export const useTabManagerStore = defineStore('TabManager', () => {
   const terminalStore = useTerminalStore()
@@ -134,10 +135,13 @@ export const useTabManagerStore = defineStore('TabManager', () => {
   const updateDockMenu = () => {
     const tabEntries = tabs.value
       .filter((tab): tab is TerminalTabItem => tab.type === TabType.TERMINAL)
-      .map(tab => ({
-        id: String(tab.id),
-        title: tab.data.path,
-      }))
+      .map(tab => {
+        const terminal = terminalStore.terminals.find(t => t.id === tab.id)
+        return {
+          id: String(tab.id),
+          title: getPathBasename(terminal?.cwd ?? ''),
+        }
+      })
 
     const activeId = activeTabId.value !== null ? String(activeTabId.value) : null
 

@@ -9,7 +9,6 @@
     <div
       v-if="visible"
       :class="messageClasses"
-      :style="messageStyle"
       role="alert"
       :aria-live="type === 'error' ? 'assertive' : 'polite'"
     >
@@ -49,7 +48,7 @@
         <div v-if="dangerouslyUseHTMLString" class="x-message__text" v-html="message"></div>
         <div v-else class="x-message__text">{{ message }}</div>
       </div>
-      <button v-if="closable" class="x-message__close" type="button" :aria-label="closeButtonText" @click="handleClose">
+      <button v-if="closable" class="x-message__close" type="button" aria-label="关闭消息" @click="handleClose">
         <svg class="x-message__close-icon" viewBox="0 0 24 24">
           <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
         </svg>
@@ -87,9 +86,6 @@
     },
   ])
 
-  const messageStyle = computed(() => ({}))
-
-  const closeButtonText = computed(() => '关闭消息')
 
   const handleClose = () => {
     clearTimer()

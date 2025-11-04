@@ -23,6 +23,9 @@ pub trait Pane: Send + Sync {
     fn mark_dead(&self);
 
     fn get_size(&self) -> PtySize;
+
+    /// 获取创建时使用的 shell 名称
+    fn shell_name(&self) -> &str;
 }
 
 pub struct LocalPane {
@@ -32,6 +35,7 @@ pub struct LocalPane {
     pixel_width: AtomicU16,
     pixel_height: AtomicU16,
     dead: AtomicBool,
+    shell_name: String,
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     _slave: Arc<Mutex<Box<dyn SlavePty + Send>>>,
@@ -69,6 +73,7 @@ impl LocalPane {
             pixel_width: AtomicU16::new(size.pixel_width),
             pixel_height: AtomicU16::new(size.pixel_height),
             dead: AtomicBool::new(false),
+            shell_name: config.shell_config.program.clone(),
             master,
             writer,
             _slave: slave,
@@ -349,6 +354,10 @@ impl Pane for LocalPane {
             pixel_width: self.pixel_width.load(Ordering::Relaxed),
             pixel_height: self.pixel_height.load(Ordering::Relaxed),
         }
+    }
+
+    fn shell_name(&self) -> &str {
+        &self.shell_name
     }
 }
 

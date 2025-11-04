@@ -5,6 +5,7 @@
   import { useTabManagerStore } from '@/stores/TabManager'
   import { TabType, type AnyTabItem } from '@/types'
   import { showPopoverAt } from '@/ui/composables/popover-api'
+  import { getPathBasename } from '@/utils/path'
 
   const { t } = useI18n()
 
@@ -31,26 +32,17 @@
     }
     return classes
   }
-  const getTerminalShell = (tab: AnyTabItem): string => {
-    if (tab.type === TabType.TERMINAL) {
-      return tab.data.shell
-    }
-    return 'shell'
-  }
 
-  const getTerminalPath = (tab: AnyTabItem): string => {
-    if (tab.type === TabType.TERMINAL) {
-      return tab.data.path
-    }
-    return '~'
+  // 获取 terminal 的 cwd（调用前确保 tab 是 terminal 类型）
+  const getTerminalCwd = (tabId: number): string => {
+    const terminal = terminalStore.terminals.find(t => t.id === tabId)
+    return terminal?.cwd ?? ''
   }
 
   const getTabTooltip = (tab: AnyTabItem): string => {
     if (tab.type === TabType.TERMINAL) {
-      const terminal = terminalStore.terminals.find(t => t.id === tab.id)
-      const fullPath = terminal?.cwd || '~'
-      const shell = tab.data.shell
-      return `${shell} • ${fullPath}`
+      const cwd = getTerminalCwd(tab.id)
+      return `${tab.data.shell} • ${cwd}`
     }
     return t('settings.title')
   }
@@ -215,8 +207,8 @@
         <div class="tab-content" :title="getTabTooltip(tab)">
           <template v-if="tab.type === TabType.TERMINAL">
             <div class="terminal-info">
-              <span class="shell-badge">{{ getTerminalShell(tab) }}</span>
-              <span class="path-info">{{ getTerminalPath(tab) }}</span>
+              <span class="shell-badge">{{ tab.data.shell }}</span>
+              <span class="path-info">{{ getPathBasename(getTerminalCwd(tab.id)) }}</span>
             </div>
           </template>
           <template v-else>

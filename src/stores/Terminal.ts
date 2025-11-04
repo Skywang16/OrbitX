@@ -168,13 +168,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
           const previousCwd = terminal.cwd
           terminal.cwd = payload.cwd
 
-          // CWD 变化，更新 SessionStore（仅保存 cwd，不同步 title）
-          const existingTab = sessionStore.tabs.find(t => t.type === 'terminal' && t.id === terminal.id)
-          if (existingTab && existingTab.type === 'terminal') {
-            existingTab.data.cwd = payload.cwd
-            sessionStore.updateTabs([...sessionStore.tabs])
-          }
-
           // 记录工作区到最近列表
           // 排除：1) ~ 目录  2) home 目录  3) 终端的初始目录（首次 CWD 变化）
           const initialCwd = _terminalInitialCwd.value.get(payload.paneId)
@@ -301,7 +294,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
         isActive: false,
         data: {
           shell: terminal.shell,
-          shellType: terminal.shell,
           cwd: terminal.cwd,
         },
       })
@@ -417,7 +409,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
         isActive: false,
         data: {
           shell: terminal.shell,
-          shellType: terminal.shell,
           cwd: terminal.cwd,
         },
       })
@@ -460,7 +451,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
         isActive: false,
         data: {
           shell: terminal.shell,
-          shellType: terminal.shell,
           cwd: terminal.cwd,
         },
       })
@@ -550,7 +540,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
           isActive: false,
           data: {
             shell: runtime.shell,
-            shellType: runtime.shell,
             cwd: runtime.cwd,
           },
         })

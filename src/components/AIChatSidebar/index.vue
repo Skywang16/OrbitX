@@ -9,7 +9,6 @@
   import MessageList from './components/messages/MessageList.vue'
   import ChatInput from './components/input/ChatInput.vue'
   import ResizeHandle from './components/layout/ResizeHandle.vue'
-  //  import TaskList from './components/TaskList.vue'
 
   const aiChatStore = useAIChatStore()
   const aiSettingsStore = useAISettingsStore()
