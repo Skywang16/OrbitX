@@ -3,7 +3,7 @@ pub mod states;
 
 use std::convert::TryFrom;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,7 +12,6 @@ use serde_json::{json, Value};
 use tauri::ipc::Channel;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, warn};
 
 use self::chain::Chain;
 use self::states::{ExecutionState, PlanningState, TaskStates};
@@ -27,7 +26,6 @@ use crate::agent::persistence::{
 };
 use crate::agent::react::runtime::ReactRuntime;
 use crate::agent::react::types::ReactRuntimeConfig;
-use crate::agent::state::iteration::{IterationContext, IterationSnapshot};
 use crate::agent::state::manager::{
     StateEventEmitter, StateManager, TaskState, TaskStatus, TaskThresholds,
 };
@@ -66,7 +64,6 @@ pub struct TaskContext {
     pub(crate) states: TaskStates,
 
     pause_status: AtomicU8,
-    event_seq: AtomicU64,
 }
 
 impl TaskContext {
@@ -139,38 +136,11 @@ impl TaskContext {
             state_manager: Arc::new(StateManager::new(task_state, StateEventEmitter::new())),
             states,
             pause_status: AtomicU8::new(0),
-            event_seq: AtomicU64::new(0),
         })
     }
 
     pub async fn set_progress_channel(&self, channel: Option<Channel<TaskProgressPayload>>) {
         *self.states.progress_channel.lock().await = channel;
-    }
-
-    pub async fn begin_iteration(&self, iteration_num: u32) -> Arc<IterationContext> {
-        let iter_ctx = Arc::new(IterationContext::new(iteration_num, self.session()));
-        self.states.execution.write().await.current_iteration = Some(Arc::clone(&iter_ctx));
-        iter_ctx
-    }
-
-    pub async fn end_iteration(&self) -> Option<IterationSnapshot> {
-        let maybe_ctx = self.states.execution.write().await.current_iteration.take();
-        if let Some(ctx) = maybe_ctx {
-            match Arc::try_unwrap(ctx) {
-                Ok(inner) => Some(inner.finalize().await),
-                Err(arc_ctx) => {
-                    warn!("IterationContext still has outstanding references; skipping finalize");
-                    drop(arc_ctx);
-                    None
-                }
-            }
-        } else {
-            None
-        }
-    }
-
-    pub async fn current_iteration_ctx(&self) -> Option<Arc<IterationContext>> {
-        self.states.execution.read().await.current_iteration.clone()
     }
 
     pub fn session(&self) -> Arc<SessionContext> {
@@ -627,16 +597,10 @@ impl TaskContext {
     pub async fn add_user_message(&self, text: String) {
         {
             let mut exec = self.states.execution.write().await;
-            let before = exec.messages.len();
             exec.messages.push(MessageParam {
                 role: AnthropicRole::User,
                 content: MessageContent::Text(text.clone()),
             });
-            let after = exec.messages.len();
-            info!(
-                "[TaskContext] add_user_message: messages {} -> {}",
-                before, after
-            );
         }
         let _ = self.append_message(MessageRole::User, &text, false).await;
     }
@@ -676,11 +640,6 @@ impl TaskContext {
             exec.messages.push(msg);
         }
         // 不修改 runtime_status，保持当前状态
-        info!(
-            "[TaskContext] restore_messages: Restored {} messages for task {}",
-            exec.messages.len(),
-            self.task_id
-        );
         Ok(())
     }
 
@@ -778,124 +737,6 @@ impl TaskContext {
     /// Send progress payload back to the frontend if a channel is attached and update UI track.
     pub async fn send_progress(&self, payload: TaskProgressPayload) -> TaskExecutorResult<()> {
         // Debug emission ordering with a per-context sequence
-        let seq = self.event_seq.fetch_add(1, Ordering::SeqCst);
-        match &payload {
-            TaskProgressPayload::Thinking(p) => {
-                info!(
-                    target: "task::event",
-                    seq,
-                    task_id = %self.task_id,
-                    event = "Thinking",
-                    iteration = p.iteration,
-                    stream_id = %p.stream_id,
-                    stream_done = p.stream_done,
-                    len = p.thought.len(),
-                    ts = %p.timestamp,
-                    "emit"
-                );
-            }
-            TaskProgressPayload::Text(_p) => {}
-            TaskProgressPayload::ToolUse(p) => {
-                info!(
-                    target: "task::event",
-                    seq,
-                    task_id = %self.task_id,
-                    event = "ToolUse",
-                    iteration = p.iteration,
-                    tool_id = %p.tool_id,
-                    tool_name = %p.tool_name,
-                    ts = %p.timestamp,
-                    "emit"
-                );
-            }
-            TaskProgressPayload::ToolResult(p) => {
-                info!(
-                    target: "task::event",
-                    seq,
-                    task_id = %self.task_id,
-                    event = "ToolResult",
-                    iteration = p.iteration,
-                    tool_id = %p.tool_id,
-                    tool_name = %p.tool_name,
-                    is_error = p.is_error,
-                    ts = %p.timestamp,
-                    "emit"
-                );
-            }
-            TaskProgressPayload::Finish(p) => {
-                info!(
-                    target: "task::event",
-                    seq,
-                    task_id = %self.task_id,
-                    event = "Finish",
-                    iteration = p.iteration,
-                    reason = %p.finish_reason,
-                    ts = %p.timestamp,
-                    "emit"
-                );
-            }
-            TaskProgressPayload::TaskStarted(p) => {
-                info!(
-                    target: "task::event",
-                    seq,
-                    task_id = %self.task_id,
-                    event = "TaskStarted",
-                    iteration = p.iteration,
-                    "emit"
-                );
-            }
-            TaskProgressPayload::TaskCreated(p) => {
-                info!(
-                    target: "task::event",
-                    seq,
-                    task_id = %p.task_id,
-                    event = "TaskCreated",
-                    conversation_id = p.conversation_id,
-                    "emit"
-                );
-            }
-            TaskProgressPayload::TaskCompleted(p) => {
-                info!(
-                    target: "task::event",
-                    seq,
-                    task_id = %self.task_id,
-                    event = "TaskCompleted",
-                    final_iteration = p.final_iteration,
-                    ts = %p.timestamp,
-                    "emit"
-                );
-            }
-            TaskProgressPayload::TaskPaused(p) => {
-                info!(target: "task::event", seq, task_id = %self.task_id, event = "TaskPaused", reason = %p.reason, ts = %p.timestamp, "emit");
-            }
-            TaskProgressPayload::TaskResumed(p) => {
-                info!(target: "task::event", seq, task_id = %self.task_id, event = "TaskResumed", from_iteration = p.from_iteration, ts = %p.timestamp, "emit");
-            }
-            TaskProgressPayload::TaskError(p) => {
-                info!(target: "task::event", seq, task_id = %self.task_id, event = "TaskError", iteration = p.iteration, ty = %p.error_type, msg = %p.error_message, ts = %p.timestamp, "emit");
-            }
-            TaskProgressPayload::TaskCancelled(p) => {
-                info!(target: "task::event", seq, task_id = %self.task_id, event = "TaskCancelled", reason = %p.reason, ts = %p.timestamp, "emit");
-            }
-            TaskProgressPayload::StatusChanged(p) => {
-                info!(target: "task::event", seq, task_id = %self.task_id, event = "StatusChanged", status = ?p.status, ts = %p.timestamp, "emit");
-            }
-            TaskProgressPayload::StatusUpdate(p) => {
-                info!(target: "task::event", seq, task_id = %self.task_id, event = "StatusUpdate", status = %p.status, it = p.current_iteration, err = p.error_count, ts = %p.timestamp, "emit");
-            }
-            TaskProgressPayload::SystemMessage(p) => {
-                info!(target: "task::event", seq, task_id = %self.task_id, event = "SystemMessage", level = %p.level, "emit");
-            }
-            TaskProgressPayload::FinalAnswer(p) => {
-                info!(target: "task::event", seq, task_id = %self.task_id, event = "FinalAnswer", iteration = p.iteration, len = p.answer.len(), ts = %p.timestamp, "emit");
-            }
-            TaskProgressPayload::ToolPreparing(p) => {
-                info!(target: "task::event", seq, task_id = %self.task_id, event = "ToolPreparing", tool_name = %p.tool_name, conf = p.confidence, "emit");
-            }
-            TaskProgressPayload::Error(p) => {
-                info!(target: "task::event", seq, task_id = %self.task_id, event = "Error", msg = %p.message, recoverable = p.recoverable, "emit");
-            }
-        }
         {
             let channel_guard = self.states.progress_channel.lock().await;
             if let Some(channel) = channel_guard.as_ref() {
@@ -912,42 +753,6 @@ impl TaskContext {
     async fn update_ui_track(&self, payload: &TaskProgressPayload) -> TaskExecutorResult<()> {
         let mut maybe_step = Self::step_from_payload(payload);
         let status_override = Self::status_from_payload(payload);
-
-        if let Some(step) = maybe_step.as_ref() {
-            let stream_id = step
-                .metadata
-                .as_ref()
-                .and_then(|meta| meta.get("streamId"))
-                .and_then(|v| v.as_str());
-            let stream_done = step
-                .metadata
-                .as_ref()
-                .and_then(|meta| meta.get("streamDone"))
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-
-            if stream_done {
-                debug!(
-                    target: "task::executor::ui",
-                    task_id = %self.task_id,
-                    conversation_id = self.conversation_id,
-                    step_type = %step.step_type,
-                    content_len = step.content.len(),
-                    stream_id,
-                    "ui stream closed"
-                );
-            }
-        }
-
-        if let Some(status) = status_override {
-            debug!(
-                target: "task::executor::ui",
-                task_id = %self.task_id,
-                conversation_id = self.conversation_id,
-                status,
-                "ui status override"
-            );
-        }
 
         if maybe_step.is_none() && status_override.is_none() {
             return Ok(());

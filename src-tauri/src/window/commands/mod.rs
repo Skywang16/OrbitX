@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::Mutex;
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 // Window state management container
 pub struct WindowState {
@@ -220,8 +220,6 @@ impl Default for WindowConfigManager {
 
 impl WindowState {
     pub fn new() -> WindowStateResult<Self> {
-        debug!("Initialising window state container");
-
         let config_manager = Arc::new(Mutex::new(WindowConfigManager::new()));
         let state_manager = Arc::new(Mutex::new(WindowStateManager::new()));
 
@@ -231,7 +229,6 @@ impl WindowState {
             state_manager,
         };
 
-        debug!("Window state initialised");
         Ok(state)
     }
 

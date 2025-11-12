@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dashmap::{mapref::entry::Entry, DashMap};
-use tracing::{debug, error, info, warn};
+use tracing::{ error, warn};
 
 use super::metadata::{RateLimitConfig, ToolCategory, ToolMetadata};
 use super::r#trait::{
@@ -107,11 +107,6 @@ impl ToolRegistry {
             // 黑名单:禁止 FileWrite 和 Execution 类别
             match metadata.category {
                 ToolCategory::FileWrite | ToolCategory::Execution => {
-                    info!(
-                        "工具 {} 在 Chat 模式下被过滤（category={}）",
-                        name,
-                        metadata.category.as_str()
-                    );
                     return Ok(()); // 静默跳过,不注册
                 }
                 // 白名单:允许只读类工具
@@ -169,12 +164,6 @@ impl ToolRegistry {
         self.execution_stats
             .insert(key.clone(), ToolExecutionStats::default());
 
-        info!(
-            "注册工具: {} (category={}, priority={})",
-            name,
-            metadata.category.as_str(),
-            metadata.priority.as_str()
-        );
 
         Ok(())
     }
@@ -216,7 +205,6 @@ impl ToolRegistry {
 
         self.aliases
             .insert(alias.to_string(), tool_name.to_string());
-        debug!("添加工具别名: {} -> {}", alias, tool_name);
         Ok(())
     }
 

@@ -4,7 +4,7 @@ use serde_json::json;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::broadcast;
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 use crate::completion::output_analyzer::OutputAnalyzer;
 use crate::events::{ShellEvent, TerminalContextEvent};
@@ -119,16 +119,13 @@ impl<R: Runtime> TerminalEventHandler<R> {
         // 启动Shell事件处理任务
         self.start_shell_event_task();
 
-        debug!("终端事件处理器已启动，Mux订阅者ID: {}", subscriber_id);
         Ok(())
     }
 
     /// 停止事件处理器
     pub fn stop(&mut self, mux: &Arc<TerminalMux>) -> EventHandlerResult<()> {
         if let Some(subscriber_id) = self.mux_subscriber_id.take() {
-            if mux.unsubscribe(subscriber_id) {
-                debug!("终端事件处理器已停止，Mux订阅者ID: {}", subscriber_id);
-            } else {
+            if !mux.unsubscribe(subscriber_id) {
                 warn!("无法取消Mux订阅者 {}", subscriber_id);
             }
         }
@@ -136,7 +133,6 @@ impl<R: Runtime> TerminalEventHandler<R> {
         // 停止上下文事件处理任务
         if let Some(handle) = self.context_task_handle.take() {
             handle.abort();
-            debug!("已中止上下文事件处理任务");
         }
 
         // 清理上下文事件接收器
@@ -145,7 +141,6 @@ impl<R: Runtime> TerminalEventHandler<R> {
         // 停止Shell事件处理任务
         if let Some(handle) = self.shell_task_handle.take() {
             handle.abort();
-            debug!("已中止Shell事件处理任务");
         }
 
         // 清理Shell事件接收器
@@ -172,7 +167,6 @@ impl<R: Runtime> TerminalEventHandler<R> {
                         Err(e) => {
                             // 接收失败可能是因为发送端关闭或 lag
                             if matches!(e, broadcast::error::RecvError::Closed) {
-                                debug!("上下文事件通道已关闭，退出处理任务");
                                 break;
                             } else {
                                 // RecvError::Lagged - 接收太慢，跳过一些消息
@@ -182,7 +176,6 @@ impl<R: Runtime> TerminalEventHandler<R> {
                         }
                     }
                 }
-                debug!("上下文事件处理任务已结束");
             });
             
             self.context_task_handle = Some(handle);
@@ -202,7 +195,6 @@ impl<R: Runtime> TerminalEventHandler<R> {
                         }
                         Err(e) => {
                             if matches!(e, broadcast::error::RecvError::Closed) {
-                                debug!("Shell事件通道已关闭，退出处理任务");
                                 break;
                             } else {
                                 warn!("Shell事件接收lag: {:?}", e);
@@ -211,7 +203,6 @@ impl<R: Runtime> TerminalEventHandler<R> {
                         }
                     }
                 }
-                debug!("Shell事件处理任务已结束");
             });
             
             self.shell_task_handle = Some(handle);
@@ -222,13 +213,8 @@ impl<R: Runtime> TerminalEventHandler<R> {
     fn handle_shell_event(app_handle: &AppHandle<R>, pane_id: PaneId, event: ShellEvent) {
         let (event_name, payload) = Self::shell_event_to_tauri_event(pane_id, &event);
 
-        match app_handle.emit(event_name, payload) {
-            Ok(_) => {
-                debug!("Shell事件已发送: {}", event_name);
-            }
-            Err(e) => {
-                error!("Shell事件发送失败: {}, 错误: {}", event_name, e);
-            }
+        if let Err(e) = app_handle.emit(event_name, payload) {
+            error!("Shell事件发送失败: {}, 错误: {}", event_name, e);
         }
     }
 
@@ -236,18 +222,12 @@ impl<R: Runtime> TerminalEventHandler<R> {
     fn handle_context_event(app_handle: &AppHandle<R>, event: TerminalContextEvent) {
         // 避免与 Mux 事件造成的重复：不再转发上下文层面的 pane_cwd_changed 到前端
         if let TerminalContextEvent::PaneCwdChanged { .. } = &event {
-            debug!("忽略上下文层面的 pane_cwd_changed（以 Mux 事件为唯一来源）");
             return;
         }
         let (event_name, payload) = Self::context_event_to_tauri_event(&event);
 
-        match app_handle.emit(event_name, payload) {
-            Ok(_) => {
-                debug!("上下文事件已发送: {}", event_name);
-            }
-            Err(e) => {
-                error!("发送上下文事件失败: {}, 错误: {}", event_name, e);
-            }
+        if let Err(e) = app_handle.emit(event_name, payload) {
+            error!("发送上下文事件失败: {}, 错误: {}", event_name, e);
         }
     }
 

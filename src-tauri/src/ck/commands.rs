@@ -10,7 +10,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use tauri::State;
 use tokio::task::JoinHandle;
-use tracing::debug;
 
 fn default_index_dir(base: &Path) -> PathBuf {
     base.join(".oxi")
@@ -137,8 +136,6 @@ pub(crate) async fn ck_search(
     params: CkSearchParams,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<Vec<CkSearchResultItem>> {
-    debug!("Code search: query={}, path={}", params.query, params.path);
-
     if params.query.trim().len() < 3 {
         return Ok(api_error!("ck.invalid_query"));
     }
@@ -158,10 +155,6 @@ pub(crate) async fn ck_search(
         ck_core::SearchMode::Regex | ck_core::SearchMode::Lexical
     ) && !is_index_ready(&search_path)
     {
-        debug!(
-            "Index not ready; cannot run semantic/hybrid search: {:?}",
-            search_path
-        );
         return Ok(api_error!("ck.index_not_found"));
     }
 
@@ -334,17 +327,10 @@ pub(crate) async fn ck_index_status(
     path: String,
     _terminal_state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<CkIndexStatusResult> {
-    debug!("Start getting CK index status, path: {}", path);
-
     let search_path = PathBuf::from(path);
 
     let is_ready = is_index_ready(&search_path);
     let path_str = search_path.display().to_string();
-
-    debug!(
-        "Index status checked: path={}, is_ready={}",
-        path_str, is_ready
-    );
 
     // 仅统计索引目录顶层文件大小，避免递归带来的性能影响
     let idx_dir = resolve_index_dir(&search_path);
@@ -375,7 +361,6 @@ pub(crate) async fn ck_build_index(
 
     if let Some(existing_task) = get_tasks_store().lock().unwrap().remove(path_key.as_ref()) {
         existing_task.abort();
-        debug!("Canceled ongoing build task: {}", path_key);
     }
 
     update_build_progress(
@@ -436,7 +421,6 @@ pub(crate) async fn ck_build_index(
 
         match result {
             Ok(_stats) => {
-                debug!("Index build succeeded: {}", path_key);
                 update_build_progress(
                     &path_key,
                     CkBuildProgress {
@@ -453,16 +437,9 @@ pub(crate) async fn ck_build_index(
                 let idx_dir = default_index_dir(&search_path);
                 if idx_dir.exists() && idx_dir.join("manifest.json").exists() {
                     let _ = fs::write(&ready_marker, b"ready");
-                } else {
-                    debug!(
-                        "Manifest or index dir not detected after build: dir={}, manifest={}",
-                        idx_dir.display(),
-                        idx_dir.join("manifest.json").display()
-                    );
                 }
             }
             Err(e) => {
-                debug!("Index build failed: {}, error: {}", path_key, e);
                 update_build_progress(
                     &path_key,
                     CkBuildProgress {
@@ -480,7 +457,6 @@ pub(crate) async fn ck_build_index(
 
         let _ = fs::remove_file(&building_lock);
         get_tasks_store().lock().unwrap().remove(path_key.as_ref());
-        debug!("Build task finished and cleaned up: {}", path_key);
     });
 
     get_tasks_store()
@@ -507,7 +483,6 @@ pub(crate) async fn ck_cancel_build(
     let task_opt = { get_tasks_store().lock().unwrap().remove(path_key.as_str()) };
     if let Some(task) = task_opt {
         task.abort();
-        debug!("Aborted tokio task: {}", path_key);
     }
 
     // 从内存中清理进度状态
@@ -530,7 +505,6 @@ pub(crate) async fn ck_delete_index(
     let path_key = search_path.display().to_string();
     if let Some(task) = get_tasks_store().lock().unwrap().remove(path_key.as_str()) {
         task.abort();
-        debug!("Canceled ongoing build task before deletion: {}", &path_key);
     }
 
     // 删除 .oxi 索引目录；若不存在则尝试删除旧的 .ck
@@ -545,11 +519,9 @@ pub(crate) async fn ck_delete_index(
         match tokio::fs::remove_dir_all(target).await {
             Ok(_) => {
                 get_progress_store().lock().unwrap().remove(&path_key);
-                debug!("Successfully deleted CK index: {}", path_key);
                 Ok(api_success!(()))
             }
-            Err(e) => {
-                debug!("Failed to delete CK index: {}, error: {}", path_key, e);
+            Err(_e) => {
                 Ok(api_error!("ck.delete_failed"))
             }
         }

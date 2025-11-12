@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::timeout;
-use tracing::{debug, warn};
+use tracing::{ warn};
 
 const CONTEXT_CACHE_PREFIX: &str = "terminal/context";
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,7 +124,6 @@ impl TerminalContextService {
             .terminal_context_get_active_pane()
             .ok_or(ContextServiceError::NoActivePane)?;
 
-        debug!("获取活跃终端上下文: pane_id={:?}", active_pane_id);
         self.get_context_by_pane(active_pane_id).await
     }
 
@@ -411,7 +410,6 @@ impl TerminalContextService {
             }
         }
 
-        debug!("成功查询终端上下文: pane_id={:?}", pane_id);
         Ok(context)
     }
 

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use tauri::ipc::Channel;
 use tokio::task;
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
@@ -24,10 +24,6 @@ impl TaskExecutor {
         params: ExecuteTaskParams,
         progress_channel: Channel<TaskProgressPayload>,
     ) -> TaskExecutorResult<Arc<TaskContext>> {
-        info!(
-            "Starting task execution for conversation_id={}, has_context={}",
-            params.conversation_id, params.has_context
-        );
 
         let ctx = self
             .build_or_restore_context(&params, Some(progress_channel))
@@ -162,7 +158,6 @@ impl TaskExecutor {
         }))
         .await?;
 
-        info!("Task {} paused", task_id);
         Ok(())
     }
 
@@ -192,7 +187,6 @@ impl TaskExecutor {
         }))
         .await?;
 
-        info!("Task {} resumed from iteration {}", task_id, iteration);
         Ok(())
     }
 
@@ -209,7 +203,6 @@ impl TaskExecutor {
 
         if let Some(ctx) = ctx_opt {
             // 任务存在，执行正常的取消流程
-            info!("Cancelling active task {}", task_id);
 
             // 中止执行
             ctx.abort();
@@ -225,7 +218,6 @@ impl TaskExecutor {
             // 从active_tasks移除
             self.active_tasks().remove(task_id);
 
-            info!("Task {} cancelled successfully", task_id);
         } else {
             // 任务不存在，可能还没开始或已经完成
             // 尝试从 conversation_contexts 中查找
@@ -233,10 +225,6 @@ impl TaskExecutor {
             for entry in self.conversation_contexts().iter() {
                 let ctx = entry.value();
                 if ctx.task_id.as_ref() == task_id {
-                    info!(
-                        "Found task {} in conversation context, attempting to cancel",
-                        task_id
-                    );
                     ctx.abort();
                     ctx.set_status(AgentTaskStatus::Cancelled).await?;
                     found_in_conversation = true;
@@ -378,7 +366,6 @@ impl TaskExecutor {
 
         let current_task_id = ctx.task_id.to_string();
         let mut all_messages = Vec::new();
-        let mut restored_executions = 0;
 
         for execution in executions.iter().rev() {
             if execution.execution_id == current_task_id {
@@ -396,8 +383,6 @@ impl TaskExecutor {
                 continue;
             }
 
-            restored_executions += 1;
-
             for msg in messages {
                 let role = match msg.role {
                     MessageRole::User => AnthropicRole::User,
@@ -413,18 +398,7 @@ impl TaskExecutor {
         }
 
         if !all_messages.is_empty() {
-            info!(
-                "Restored {} messages from {} previous turns for conversation {}",
-                all_messages.len(),
-                restored_executions,
-                conversation_id
-            );
             ctx.restore_messages(all_messages).await?;
-        } else {
-            info!(
-                "No messages to restore for conversation {}",
-                conversation_id
-            );
         }
 
         Ok(())

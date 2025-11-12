@@ -16,7 +16,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, timeout};
-use tracing::{info, warn};
+use tracing::{ warn};
 
 #[derive(Debug, Clone, Copy)]
 pub struct CompletionEngineConfig {
@@ -128,7 +128,7 @@ impl CompletionEngine {
         &self,
         context: &CompletionContext,
     ) -> CompletionEngineResult<CompletionResponse> {
-        let start = Instant::now();
+        let _start = Instant::now();
         let fingerprint = Self::context_fingerprint(context);
         let result_cache_key = Self::result_cache_key(fingerprint);
 
@@ -263,16 +263,6 @@ impl CompletionEngine {
             {
                 warn!(error = %error, "completion.cache_store_failed");
             }
-        }
-
-        if !provider_logs.is_empty() {
-            info!(
-                input = %context.input,
-                providers = %provider_logs.join(", "),
-                total_items = response.items.len(),
-                total_time_ms = start.elapsed().as_millis(),
-                "completion.summary"
-            );
         }
 
         Ok(response)

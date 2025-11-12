@@ -266,7 +266,7 @@ pub struct CreateMessageRequest {
 
     /// 温度参数 (0.0-1.0)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f32>,
+    pub temperature: Option<f64>,
 
     /// 自定义停止序列
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -278,7 +278,7 @@ pub struct CreateMessageRequest {
 
     /// Top-p 采样参数
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub top_p: Option<f32>,
+    pub top_p: Option<f64>,
 
     /// Top-k 采样参数
     #[serde(skip_serializing_if = "Option::is_none")]

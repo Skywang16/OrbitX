@@ -307,11 +307,6 @@ impl LLMProvider for OpenAIProvider {
         let headers = self.get_headers();
         let body = build_openai_chat_body(&request, true);
 
-        // tracing::debug!(
-        // "OpenAI stream request body: {}",
-        // serde_json::to_string_pretty(&body).unwrap_or_else(|_| format!("{:?}", body))
-        // );
-
         let mut req = self.client().post(&url).json(&body);
         for (k, v) in headers {
             req = req.header(&k, &v);
@@ -370,7 +365,6 @@ impl LLMProvider for OpenAIProvider {
                             Some(Ok(event)) => {
                                 // OpenAI 流结束标记
                                 if event.data == "[DONE]" {
-                                    tracing::debug!("OpenAI stream finished");
                                     // 结束前关闭未关闭的块
                                     if state.content_block_started {
                                         state.content_block_started = false;
@@ -613,8 +607,6 @@ impl LLMProvider for OpenAIProvider {
         for (key, value) in headers {
             req_builder = req_builder.header(&key, &value);
         }
-
-        tracing::debug!("Making embedding API call to: {}", url);
 
         let response = req_builder
             .send()

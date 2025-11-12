@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use tauri::ipc::Channel;
-use tracing::{debug, info};
 
 use crate::agent::config::TaskExecutionConfig;
 use crate::agent::core::context::TaskContext;
@@ -29,10 +28,6 @@ impl TaskExecutor {
 
         // 尝试从数据库恢复
         if let Some(existing_ctx) = self.try_restore_from_db(conversation_id).await? {
-            info!(
-                "Restored existing task {} for conversation {}",
-                existing_ctx.task_id, conversation_id
-            );
 
             // 更新progress channel
             existing_ctx.set_progress_channel(progress_channel).await;
@@ -55,10 +50,6 @@ impl TaskExecutor {
     ) -> TaskExecutorResult<Option<Arc<TaskContext>>> {
         // 先检查内存中是否已有
         if let Some(entry) = self.conversation_contexts().get(&conversation_id) {
-            debug!(
-                "Found existing context in memory for conversation {}",
-                conversation_id
-            );
             return Ok(Some(Arc::clone(entry.value())));
         }
 
@@ -79,17 +70,9 @@ impl TaskExecutor {
             execution.status,
             ExecutionStatus::Completed | ExecutionStatus::Cancelled | ExecutionStatus::Error
         ) {
-            debug!(
-                "Latest execution for conversation {} is {:?}, not restoring",
-                conversation_id, execution.status
-            );
             return Ok(None);
         }
 
-        debug!(
-            "Restoring execution {} from database",
-            execution.execution_id
-        );
 
         // 构建TaskContext
         let ctx = self.build_context_from_execution(execution, None).await?;

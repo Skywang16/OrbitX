@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tokio::sync::broadcast;
-use tracing::{debug, warn};
+use tracing::{ warn};
 
 /// 窗口ID类型（为未来多窗口支持预留）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -75,7 +75,6 @@ impl ActiveTerminalContextRegistry {
             let old_id = *active_pane;
 
             if old_id == Some(pane_id) {
-                debug!("活跃终端未变化，跳过事件发送: {:?}", pane_id);
                 return Ok(());
             }
 
@@ -83,7 +82,6 @@ impl ActiveTerminalContextRegistry {
             old_id
         };
 
-        debug!("活跃终端已更新: {:?} -> {:?}", old_pane_id, Some(pane_id));
 
         // 发送事件
         let event = TerminalContextEvent::ActivePaneChanged {
@@ -130,7 +128,6 @@ impl ActiveTerminalContextRegistry {
         };
 
         if old_pane_id.is_some() {
-            debug!("活跃终端已清除: {:?}", old_pane_id);
 
             // 发送事件
             let event = TerminalContextEvent::ActivePaneChanged {
@@ -178,7 +175,7 @@ impl ActiveTerminalContextRegistry {
         window_id: WindowId,
         pane_id: PaneId,
     ) -> ContextRegistryResult<()> {
-        let old_pane_id = {
+        let _old_pane_id = {
             let mut window_panes = self.window_active_panes.write().map_err(|err| {
                 ContextRegistryError::from_write_poison("window_active_panes", err)
             })?;
@@ -186,12 +183,6 @@ impl ActiveTerminalContextRegistry {
             window_panes.insert(window_id, pane_id)
         };
 
-        debug!(
-            "窗口 {} 的活跃终端已更新: {:?} -> {:?}",
-            window_id.as_u32(),
-            old_pane_id,
-            Some(pane_id)
-        );
 
         if window_id.as_u32() == 0 || self.terminal_context_get_active_pane().is_none() {
             self.terminal_context_set_active_pane(pane_id)?;
@@ -239,11 +230,6 @@ impl ActiveTerminalContextRegistry {
         };
 
         if let Some(pane_id) = removed_pane {
-            debug!(
-                "窗口 {} 的活跃终端记录已移除: {}",
-                window_id.as_u32(),
-                pane_id
-            );
 
             if self.terminal_context_get_active_pane() == Some(pane_id) {
                 self.terminal_context_clear_active_pane()?;

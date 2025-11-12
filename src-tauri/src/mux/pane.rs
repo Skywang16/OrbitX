@@ -52,19 +52,10 @@ impl LocalPane {
         size: PtySize,
         config: &TerminalConfig,
     ) -> PaneResult<Self> {
-        tracing::info!(
-            "创建本地面板: {:?}, 大小: {:?}, shell: {}",
-            pane_id,
-            size,
-            config.shell_config.program
-        );
-
         let pty_pair = Self::create_pty(pane_id, size)?;
         let mut cmd = Self::build_command(config)?;
         Self::setup_shell_integration(&mut cmd, config)?;
         let (master, writer, slave) = Self::spawn_process(pane_id, pty_pair, cmd)?;
-
-        tracing::info!("本地面板创建完成: {:?}", pane_id);
 
         Ok(Self {
             pane_id,
@@ -343,7 +334,6 @@ impl Pane for LocalPane {
     }
 
     fn mark_dead(&self) {
-        tracing::debug!("标记面板为死亡状态: {:?}", self.pane_id);
         self.dead.store(true, Ordering::Relaxed);
     }
 

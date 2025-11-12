@@ -14,7 +14,7 @@ use std::sync::Arc;
 use chrono::Utc;
 use serde_json::Value;
 use tokio_stream::StreamExt;
-use tracing::{debug, info, warn};
+use tracing::{warn};
 use uuid::Uuid;
 
 use crate::agent::config::CompactionConfig;
@@ -25,7 +25,7 @@ use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::events::{TaskProgressPayload, TextPayload, ThinkingPayload};
 use crate::agent::memory::compactor::{CompactionResult, MessageCompactor};
 use crate::agent::persistence::AgentPersistence;
-use crate::agent::state::iteration::IterationSnapshot;
+use crate::agent::state::iteration::{IterationContext, IterationSnapshot};
 use crate::agent::state::session::CompressedMemory;
 use crate::llm::anthropic_types::{
     ContentBlock, ContentBlockStart, ContentDelta, StreamEvent, SystemPrompt,
@@ -70,11 +70,6 @@ impl ReactOrchestrator {
     where
         H: crate::agent::core::executor::ReactHandler,
     {
-        info!("Starting ReAct loop for task: {}", context.task_id);
-        info!(
-            "[MODEL_SELECTION] run_react_loop using model_id: {}",
-            model_id
-        );
 
         let mut iteration_snapshots: Vec<IterationSnapshot> = Vec::new();
 
@@ -83,17 +78,15 @@ impl ReactOrchestrator {
 
             // ===== Phase 1: 迭代初始化 =====
             let iteration = context.increment_iteration().await?;
-            debug!("Task {} starting iteration {}", context.task_id, iteration);
 
             let react_iteration_index = {
                 let mut react = context.states.react_runtime.write().await;
                 react.start_iteration()
             };
 
-            let iter_ctx = context.begin_iteration(iteration).await;
+            let iter_ctx = IterationContext::new(iteration, context.session());
 
             // ===== Phase 2: 准备消息上下文（零转换） =====
-            info!("[MODEL_SELECTION] Using model_id: {}", model_id);
 
             let tool_registry = context.tool_registry();
 
@@ -177,15 +170,11 @@ impl ReactOrchestrator {
                     TaskExecutorError::InternalError(format!("Compaction failed: {}", e))
                 })?;
             if let CompactionResult::Compacted {
-                tokens_saved,
-                messages_summarized,
+                
+                
                 ..
             } = &compaction_result
             {
-                info!(
-                    "Compacted {} messages, saved {} tokens",
-                    messages_summarized, tokens_saved
-                );
             }
             let final_messages = compaction_result.messages();
 
@@ -198,19 +187,6 @@ impl ReactOrchestrator {
                     Some(final_messages),
                 )
                 .await?;
-
-            // 打印 system prompt
-            //  if let Some(ref sp) = llm_request.system {
-            // if let SystemPrompt::Text(text) = sp {
-            // println!(
-            // "\n{}\nFINAL SYSTEM PROMPT:\n{}\n{}\n{}\n",
-            // "=".repeat(80),
-            // "=".repeat(80),
-            // text,
-            // "=".repeat(80)
-            // );
-            // }
-            //  }
 
             let llm_service = crate::llm::service::LLMService::new(Arc::clone(&self.database));
             let cancel_token = context.register_step_token();
@@ -235,9 +211,7 @@ impl ReactOrchestrator {
                 context.check_aborted(true).await?;
 
                 match item {
-                    Ok(StreamEvent::MessageStart { message }) => {
-                        tracing::debug!("Message started: {}", message.id);
-                    }
+                    Ok(StreamEvent::MessageStart { .. }) => {}
                     Ok(StreamEvent::ContentBlockStart {
                         index,
                         content_block,
@@ -390,16 +364,10 @@ impl ReactOrchestrator {
                 IterationOutcome::Empty
             };
 
-            debug!("Iteration {} outcome: {}", iteration, outcome.description());
 
             // ===== Phase 6: 根据结果执行动作 =====
             match outcome {
                 IterationOutcome::ContinueWithTools { ref tool_calls } => {
-                    info!(
-                        "Iteration {}: executing {} tools",
-                        iteration,
-                        tool_calls.len()
-                    );
 
                     let deduplicated_calls =
                         crate::agent::core::utils::deduplicate_tool_uses(tool_calls);
@@ -467,21 +435,12 @@ impl ReactOrchestrator {
                         let _ = context.set_system_prompt(loop_warning).await;
                     }
 
-                    Self::finalize_iteration(context, &mut iteration_snapshots).await?;
+                    let snapshot = iter_ctx.finalize().await;
+                    Self::finalize_iteration(context, snapshot, &mut iteration_snapshots).await?;
                     continue;
                 }
 
-                IterationOutcome::Complete { thinking, output } => {
-                    info!(
-                        "Iteration {}: task complete - {}",
-                        iteration,
-                        match (&thinking, &output) {
-                            (Some(_), Some(_)) => "thinking + output",
-                            (Some(_), None) => "thinking only",
-                            (None, Some(_)) => "output only",
-                            (None, None) => "empty (unexpected)",
-                        }
-                    );
+                IterationOutcome::Complete { thinking: _, output } => {
 
                     context
                         .states
@@ -490,7 +449,8 @@ impl ReactOrchestrator {
                         .await
                         .complete_iteration(react_iteration_index, output.clone(), None);
 
-                    Self::finalize_iteration(context, &mut iteration_snapshots).await?;
+                    let snapshot = iter_ctx.finalize().await;
+                    Self::finalize_iteration(context, snapshot, &mut iteration_snapshots).await?;
                     break;
                 }
 
@@ -500,13 +460,13 @@ impl ReactOrchestrator {
                         iteration
                     );
 
-                    Self::finalize_iteration(context, &mut iteration_snapshots).await?;
+                    let snapshot = iter_ctx.finalize().await;
+                    Self::finalize_iteration(context, snapshot, &mut iteration_snapshots).await?;
                     break;
                 }
             }
         }
 
-        info!("ReAct loop completed for task: {}", context.task_id);
         if !iteration_snapshots.is_empty() {
             Self::compress_iteration_batch(context, &iteration_snapshots).await?;
         }
@@ -515,24 +475,23 @@ impl ReactOrchestrator {
 
     async fn finalize_iteration(
         context: &TaskContext,
+        snapshot: IterationSnapshot,
         snapshots: &mut Vec<IterationSnapshot>,
     ) -> TaskExecutorResult<()> {
-        if let Some(snapshot) = context.end_iteration().await {
-            let tool_calls = snapshot.tools_used.len() as u32;
-            let files = snapshot.files_touched.len() as u32;
-            context
-                .session()
-                .update_stats(|stats| {
-                    stats.total_iterations = stats.total_iterations.saturating_add(1);
-                    stats.total_tool_calls = stats.total_tool_calls.saturating_add(tool_calls);
-                    stats.files_read = stats.files_read.saturating_add(files);
-                })
-                .await;
-            snapshots.push(snapshot);
-            if snapshots.len() >= 5 {
-                Self::compress_iteration_batch(context, snapshots).await?;
-                snapshots.clear();
-            }
+        let tool_calls = snapshot.tools_used.len() as u32;
+        let files = snapshot.files_touched.len() as u32;
+        context
+            .session()
+            .update_stats(|stats| {
+                stats.total_iterations = stats.total_iterations.saturating_add(1);
+                stats.total_tool_calls = stats.total_tool_calls.saturating_add(tool_calls);
+                stats.files_read = stats.files_read.saturating_add(files);
+            })
+            .await;
+        snapshots.push(snapshot);
+        if snapshots.len() >= 5 {
+            Self::compress_iteration_batch(context, snapshots).await?;
+            snapshots.clear();
         }
         Ok(())
     }

@@ -76,7 +76,6 @@ impl LLMService {
         self.validate_request(&request)?;
 
         let (config, model_name) = self.get_provider_config_and_model(&request.model).await?;
-        let original_model_id = request.model.clone();
 
         let provider = ProviderRegistry::global()
             .create(config)
@@ -85,24 +84,10 @@ impl LLMService {
         let mut actual_request = request;
         actual_request.model = model_name;
 
-        tracing::debug!(
-            "Making LLM call with model: {} (config: {})",
-            actual_request.model,
-            original_model_id
-        );
-
         let result = provider.call(actual_request).await;
 
-        match &result {
-            Ok(response) => {
-                tracing::debug!(
-                    "LLM call successful, response length: {}",
-                    response.content.len()
-                );
-            }
-            Err(e) => {
-                tracing::error!("LLM call failed: {}", e);
-            }
+        if let Err(e) = &result {
+            tracing::error!("LLM call failed: {}", e);
         }
 
         result.map_err(LlmError::from)
@@ -117,7 +102,6 @@ impl LLMService {
         self.validate_request(&request)?;
 
         let (config, model_name) = self.get_provider_config_and_model(&request.model).await?;
-        let original_model_id = request.model.clone();
 
         let provider = ProviderRegistry::global()
             .create(config)
@@ -125,12 +109,6 @@ impl LLMService {
 
         let mut actual_request = request;
         actual_request.model = model_name;
-
-        tracing::debug!(
-            "Making streaming LLM call with model: {} (config: {}), with external cancel token",
-            actual_request.model,
-            original_model_id
-        );
 
         let stream = provider
             .call_stream(actual_request)
@@ -145,7 +123,6 @@ impl LLMService {
                 loop {
                     tokio::select! {
                         _ = token.cancelled() => {
-                            tracing::debug!("Stream cancelled by token.");
                             break;
                         }
                         item = stream.next() => {
@@ -172,7 +149,6 @@ impl LLMService {
         request: EmbeddingRequest,
     ) -> LlmResult<EmbeddingResponse> {
         let (config, model_name) = self.get_provider_config_and_model(&request.model).await?;
-        let original_model_id = request.model.clone();
 
         let provider = ProviderRegistry::global()
             .create(config)
@@ -181,24 +157,10 @@ impl LLMService {
         let mut actual_request = request;
         actual_request.model = model_name;
 
-        tracing::debug!(
-            "Making embedding call with model: {} (config: {})",
-            actual_request.model,
-            original_model_id
-        );
-
         let result = provider.create_embeddings(actual_request).await;
 
-        match &result {
-            Ok(response) => {
-                tracing::debug!(
-                    "Embedding call successful, {} vectors generated",
-                    response.data.len()
-                );
-            }
-            Err(e) => {
-                tracing::error!("Embedding call failed: {}", e);
-            }
+        if let Err(e) = &result {
+            tracing::error!("Embedding call failed: {}", e);
         }
 
         result.map_err(LlmError::from)

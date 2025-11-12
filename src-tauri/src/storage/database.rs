@@ -19,7 +19,7 @@ use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
-use tracing::{debug, info};
+use tracing;
 
 const KEY_FILE_NAME: &str = "master.key";
 const KEY_FILE_VERSION: &str = "v1";
@@ -186,7 +186,6 @@ impl DatabaseManager {
             return Err(DatabaseError::EncryptionNotEnabled);
         }
         self.key_vault.set_from_password(password).await?;
-        info!("主密钥已更新");
         Ok(())
     }
 
@@ -229,12 +228,10 @@ impl DatabaseManager {
 
     async fn execute_sql_scripts(&self) -> DatabaseResult<()> {
         if self.scripts.is_empty() {
-            debug!("SQL脚本目录为空，跳过初始化");
             return Ok(());
         }
 
         for script in self.scripts.iter() {
-            debug!("执行SQL脚本: {}", script.name);
             for statement in script.statements.iter() {
                 if statement.trim().is_empty() {
                     continue;

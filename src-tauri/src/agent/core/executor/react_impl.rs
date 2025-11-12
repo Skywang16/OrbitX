@@ -51,15 +51,13 @@ impl ReactHandler for TaskExecutor {
             .as_ref()
             .and_then(|opts| opts.get("temperature"))
             .and_then(|v| v.as_f64())
-            .map(|v| v as f32)
             .or(Some(0.7));
 
         let top_p = model_config
             .options
             .as_ref()
             .and_then(|opts| opts.get("topP"))
-            .and_then(|v| v.as_f64())
-            .map(|v| v as f32);
+            .and_then(|v| v.as_f64());
 
         let top_k = model_config
             .options

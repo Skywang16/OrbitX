@@ -32,9 +32,7 @@ pub async fn create_tool_registry(chat_mode: &str) -> Arc<ToolRegistry> {
 
 async fn register_builtin_tools(registry: &ToolRegistry, is_chat_mode: bool) {
     use std::sync::Arc;
-    use tracing::info;
 
-    info!("注册 Agent 工具集 (chat_mode={})", is_chat_mode);
 
     registry
         .register("web_fetch", Arc::new(WebFetchTool::new()), is_chat_mode)

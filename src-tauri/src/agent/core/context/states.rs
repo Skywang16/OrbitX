@@ -25,7 +25,6 @@ pub(crate) struct ExecutionState {
     pub(crate) messages: MessageRingBuffer<MessageParam, MAX_MESSAGE_HISTORY>,
     pub(crate) message_sequence: i64,
     pub(crate) tool_results: Vec<ToolCallResult>,
-    pub(crate) current_iteration: Option<Arc<crate::agent::state::iteration::IterationContext>>,
     pub(crate) ui_assistant_message_id: Option<i64>,
 }
 
@@ -38,7 +37,6 @@ impl ExecutionState {
             messages: MessageRingBuffer::new(),
             message_sequence: 0,
             tool_results: Vec::new(),
-            current_iteration: None,
             ui_assistant_message_id: None,
         }
     }

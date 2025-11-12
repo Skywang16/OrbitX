@@ -23,7 +23,7 @@ use tracing_subscriber::{self, EnvFilter};
 pub fn init_logging() {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         #[cfg(debug_assertions)]
-        let default_level = "debug";
+        let default_level = "debug,ignore=warn";
         #[cfg(not(debug_assertions))]
         let default_level = "info";
 
@@ -40,9 +40,7 @@ pub fn init_logging() {
         .try_init();
 
     match result {
-        Ok(_) => {
-            println!("Log system initialized successfully");
-        }
+        Ok(_) => {}
         Err(e) => {
             eprintln!("Log system initialization failed: {}", e);
             std::process::exit(1);
@@ -247,7 +245,6 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     match crate::dock::DockManager::new(&app.handle()) {
         Ok(dock_manager) => {
             app.manage(dock_manager);
-            tracing::info!("Dock manager initialized successfully");
         }
         Err(e) => {
             tracing::warn!("Failed to initialize dock manager: {}", e);
@@ -422,7 +419,6 @@ fn setup_unified_terminal_events<R: tauri::Runtime>(app_handle: tauri::AppHandle
         shell_event_receiver,
     ) {
         Ok(handler) => {
-            tracing::debug!("统一终端事件处理器已启动");
             // Use Box::leak to prevent the handler from being dropped
             // This ensures the event subscriptions remain active for the app lifetime
             // The memory will be cleaned up when the process exits

@@ -19,14 +19,10 @@ impl<R: Runtime> WindowsJumpList<R> {
     fn initialize(&self) -> Result<(), String> {
         unsafe {
             use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
-            let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            if hr.is_err() {
-                tracing::warn!("COM already initialized or initialization failed: {:?}", hr);
-            }
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         }
 
         self.refresh_menu()?;
-        tracing::debug!("Windows Jump List initialized");
         Ok(())
     }
 
@@ -114,7 +110,6 @@ impl<R: Runtime> WindowsJumpList<R> {
             .CommitList()
             .map_err(|e| format!("Failed to commit list: {:?}", e))?;
 
-        tracing::debug!("Windows Jump List updated with {} tabs", tabs.len());
         Ok(())
     }
 }

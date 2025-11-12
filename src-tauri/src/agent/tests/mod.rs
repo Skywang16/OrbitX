@@ -15,7 +15,9 @@ struct TestHarness {
     #[allow(dead_code)]
     database: Arc<DatabaseManager>,
     persistence: Arc<AgentPersistence>,
+    #[allow(dead_code)]
     ui_persistence: Arc<AgentUiPersistence>,
+    #[allow(dead_code)]
     repositories: Arc<DatabaseManager>,
 }
 

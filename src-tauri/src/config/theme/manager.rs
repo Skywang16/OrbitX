@@ -10,7 +10,7 @@ use std::{
     time::{Instant, SystemTime},
 };
 use tokio::sync::Mutex;
-use tracing::{debug, info, warn};
+use tracing::{warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -144,7 +144,6 @@ impl ThemeManager {
         // 直接刷新索引而不是加载现有索引（确保索引与实际文件同步）
         manager.refresh_index().await?;
 
-        info!("Theme manager initialized successfully");
         Ok(manager)
     }
 
@@ -154,7 +153,6 @@ impl ThemeManager {
 
         if !themes_dir.exists() {
             fs::create_dir_all(themes_dir).map_err(|e| ThemeConfigError::Io(e))?;
-            info!("创建主题目录: {}", themes_dir.display());
         }
 
         Ok(())
@@ -203,10 +201,6 @@ impl ThemeManager {
             ))
         })?;
 
-        debug!(
-            "Theme index loaded successfully with {} themes",
-            index.total_themes
-        );
         Ok(index)
     }
 
@@ -249,7 +243,6 @@ impl ThemeManager {
                 ))
             })?;
 
-        debug!("Theme index saved to: {}", index_path.display());
         Ok(())
     }
 
@@ -350,11 +343,6 @@ impl ThemeManager {
                 themes.extend(theme_index.builtin_themes.clone());
                 themes.extend(theme_index.custom_themes.clone());
 
-                debug!(
-                    "Theme list fetched: {} builtin themes, {} custom themes",
-                    theme_index.builtin_themes.len(),
-                    theme_index.custom_themes.len()
-                );
 
                 Some(themes)
             } else {
@@ -363,7 +351,6 @@ impl ThemeManager {
         };
 
         if themes.is_none() {
-            warn!("Theme index not initialized, attempting reload");
             self.load_theme_index().await?;
 
             let index = self.index.read().map_err(ThemeConfigError::from_poison)?;
@@ -392,7 +379,6 @@ impl ThemeManager {
                 let mut refreshed_themes = Vec::new();
                 refreshed_themes.extend(theme_index.builtin_themes.clone());
                 refreshed_themes.extend(theme_index.custom_themes.clone());
-                info!("Fetched {} themes after refresh", refreshed_themes.len());
                 return Ok(refreshed_themes);
             }
         }
@@ -415,7 +401,6 @@ impl ThemeManager {
 
     /// 刷新主题索引
     pub async fn refresh_index(&self) -> ThemeConfigResult<()> {
-        info!("Starting theme index refresh");
 
         // 只扫描主题目录，不区分内置和自定义主题
         let themes_dir = self.paths.themes_dir();
@@ -689,7 +674,6 @@ impl ThemeManager {
 
     /// 创建默认主题文件
     async fn create_default_theme_files(&self, themes_dir: &Path) -> ThemeConfigResult<()> {
-        info!("Creating default theme files");
 
         let dark_theme_content = r##"[theme]
 name = "dark"
@@ -859,7 +843,6 @@ selection = "rgba(3, 102, 214, 0.3)"
                 ))
             })?;
 
-        info!("Default theme files created successfully");
         Ok(())
     }
 

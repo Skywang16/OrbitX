@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
-use tracing::{debug, error};
+use tracing::{ error};
 
 fn default_timestamp() -> DateTime<Utc> {
     Utc::now()
@@ -234,7 +234,6 @@ impl<'a> AIModels<'a> {
 
     /// 保存模型（自动加密密钥）
     pub async fn save(&self, model: &AIModelConfig) -> RepositoryResult<()> {
-        debug!("保存AI模型: {}", model.model);
 
         // 加密 API 密钥
         let encrypted_key = if !model.api_key.is_empty() {
@@ -274,7 +273,6 @@ impl<'a> AIModels<'a> {
         .execute(self.db.pool())
         .await?;
 
-        debug!("AI模型保存成功: {}", model.model);
         Ok(())
     }
 
@@ -297,7 +295,6 @@ impl<'a> AIModels<'a> {
             });
         }
 
-        debug!("AI模型删除成功: {}", id);
         Ok(())
     }
 }

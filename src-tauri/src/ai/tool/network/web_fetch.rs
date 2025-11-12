@@ -49,8 +49,6 @@ pub struct WebFetchResponse {
 pub async fn network_web_fetch_headless(
     request: WebFetchRequest,
 ) -> WebFetchResult<WebFetchResponse> {
-    tracing::debug!("🌐 [WebFetch] 开始无头请求: {}", request.url);
-
     let start_time = std::time::Instant::now();
 
     // 验证 URL
@@ -152,8 +150,6 @@ pub async fn network_web_fetch_headless(
         request_builder = request_builder.body(body.clone());
     }
 
-    tracing::info!("🚀 [WebFetch] 发送请求到: {}", request.url);
-
     // 发送请求
     match request_builder.send().await {
         Ok(response) => {
@@ -171,8 +167,6 @@ pub async fn network_web_fetch_headless(
                     headers.insert(key.to_string(), value_str.to_string());
                 }
             }
-
-            tracing::debug!("📡 [WebFetch] 收到响应: {} {}", status, status_text);
 
             let content_type = headers.get("content-type").cloned();
 

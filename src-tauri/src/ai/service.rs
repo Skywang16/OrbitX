@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{warn};
 
 #[derive(Clone)]
 pub struct AIService {
@@ -207,7 +207,6 @@ impl AIService {
             .entry(CONTENT_TYPE)
             .or_insert(HeaderValue::from_static("application/json"));
 
-        debug!("开始{}连接测试: {}", request.provider_label, request.url);
 
         let response = client
             .post(&request.url)
@@ -224,10 +223,6 @@ impl AIService {
 
         // 成功状态码：2xx
         if status.is_success() {
-            info!(
-                "{} connection test successful, status code {}",
-                request.provider_label, status
-            );
             return Ok("Connection successful".to_string());
         }
 
@@ -252,10 +247,6 @@ impl AIService {
         // 400: 请求格式错误，但说明服务器可达
         // 429: 请求过多，但说明认证成功
         if request.tolerated.iter().any(|code| *code == status) {
-            info!(
-                "{} connection test successful (tolerated status: {})",
-                request.provider_label, status
-            );
             return Ok("Connection successful".to_string());
         }
 

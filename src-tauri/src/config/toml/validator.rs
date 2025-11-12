@@ -2,7 +2,6 @@
 
 use crate::config::error::{TomlConfigError, TomlConfigResult};
 use crate::config::{theme::ThemeConfig, types::AppConfig};
-use tracing::{debug, info};
 
 /// TOML配置验证器
 pub struct TomlConfigValidator;
@@ -15,7 +14,6 @@ impl TomlConfigValidator {
 
     /// 验证完整配置
     pub fn config_validate(&self, config: &AppConfig) -> TomlConfigResult<()> {
-        debug!("开始验证配置");
 
         let mut errors = Vec::new();
 
@@ -45,7 +43,6 @@ impl TomlConfigValidator {
             });
         }
 
-        info!("配置验证通过");
         Ok(())
     }
 

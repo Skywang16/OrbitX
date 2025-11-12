@@ -11,7 +11,7 @@ use crate::mux::ConfigManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
-use tracing::{debug, warn};
+use tracing::{ warn};
 
 /// 全局输出分析器实例
 static GLOBAL_OUTPUT_ANALYZER: OnceLock<Arc<OutputAnalyzer>> = OnceLock::new();
@@ -99,7 +99,6 @@ impl OutputAnalyzer {
 
     /// 分析终端输出
     pub fn analyze_output(&self, pane_id: u32, data: &str) -> OutputAnalyzerResult<()> {
-        debug!("分析面板 {} 的输出，数据长度: {}", pane_id, data.len());
 
         self.maybe_cleanup_stale_buffers()?;
 
@@ -168,7 +167,6 @@ impl OutputAnalyzer {
         if byte_start > 0 && byte_start < content.len() {
             let truncated = content.split_off(byte_start);
             *content = truncated;
-            debug!("缓冲区已截断，新长度: {}", content.len());
         }
 
         Ok(())
@@ -184,11 +182,9 @@ impl OutputAnalyzer {
 
     /// 处理完整的命令（在锁外调用，避免死锁）
     fn process_complete_commands(&self, pane_id: u32, output: &str) -> OutputAnalyzerResult<()> {
-        debug!("处理面板 {} 的完整命令", pane_id);
 
         // 尝试检测命令
         if let Some((command, command_output)) = self.detect_command_completion(output) {
-            debug!("检测到完整命令: {}", command);
 
             self.process_complete_command(&command, &command_output)?;
 
@@ -205,7 +201,6 @@ impl OutputAnalyzer {
                         entry.content.clear();
                     }
 
-                    debug!("清理后缓冲区长度: {}", entry.content.len());
                 }
             }
         }
@@ -234,11 +229,9 @@ impl OutputAnalyzer {
 
     /// 清理过期的缓冲区
     fn cleanup_stale_buffers(&self) -> OutputAnalyzerResult<()> {
-        debug!("开始清理过期缓冲区");
 
         let config = ConfigManager::config_get();
         let stale_threshold = config.stale_threshold();
-        let mut removed_count = 0;
 
         {
             let mut buffer = self.get_buffer_lock()?;
@@ -254,7 +247,6 @@ impl OutputAnalyzer {
             // 删除过期条目
             for pane_id in to_remove {
                 buffer.remove(&pane_id);
-                removed_count += 1;
             }
         }
 
@@ -268,19 +260,13 @@ impl OutputAnalyzer {
             *cleanup_guard = Instant::now();
         }
 
-        if removed_count > 0 {
-            debug!("清理了 {} 个过期缓冲区", removed_count);
-        }
-
         Ok(())
     }
 
     /// 清理指定面板的缓冲区（外部调用）
     pub fn cleanup_pane_buffer(&self, pane_id: u32) -> OutputAnalyzerResult<()> {
         let mut buffer = self.get_buffer_lock()?;
-        if buffer.remove(&pane_id).is_some() {
-            debug!("清理面板 {} 的缓冲区", pane_id);
-        }
+        buffer.remove(&pane_id);
         Ok(())
     }
 
@@ -417,22 +403,13 @@ impl OutputAnalyzer {
         entry.content = content;
         entry.access();
 
-        debug!(
-            "设置面板 {} 缓冲区内容，长度: {}",
-            pane_id,
-            entry.content.len()
-        );
         Ok(())
     }
 
     /// 清理指定面板的缓冲区
     pub fn clear_pane_buffer(&self, pane_id: u32) -> OutputAnalyzerResult<()> {
         let mut buffer = self.get_buffer_lock()?;
-
-        if buffer.remove(&pane_id).is_some() {
-            debug!("清理面板 {} 的缓冲区", pane_id);
-        }
-
+        buffer.remove(&pane_id);
         Ok(())
     }
 

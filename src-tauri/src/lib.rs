@@ -34,9 +34,6 @@ pub fn run() {
         eprintln!("初始化国际化失败: {}", e);
     }
 
-    tracing::debug!("OrbitX 应用程序启动");
-    println!("OrbitX 应用程序启动 - 控制台输出");
-
     let mut builder = tauri::Builder::default();
 
     // 配置single instance插件 (仅限桌面平台)

@@ -21,8 +21,6 @@ pub fn deduplicate_tool_uses(
 
         if seen.insert(key) {
             deduplicated.push((id.clone(), name.clone(), args.clone()));
-        } else {
-            tracing::debug!("Skipping duplicate tool call: {} with args {:?}", name, args);
         }
     }
 

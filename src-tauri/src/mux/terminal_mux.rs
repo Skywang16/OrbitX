@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
-use tracing::{debug, error, instrument, trace, warn};
+use tracing::{error, instrument, warn};
 
 use crate::mux::{
     error::{TerminalMuxError, TerminalMuxResult},
@@ -70,8 +70,6 @@ impl TerminalMux {
     /// 这允许共享同一个 ShellIntegrationManager 实例和其注册的回调
     pub fn new_with_shell_integration(shell_integration: Arc<ShellIntegrationManager>) -> Self {
         let (notification_sender, notification_receiver) = unbounded();
-        debug!("创建通知通道成功");
-
         let io_handler = IoHandler::new(notification_sender.clone(), shell_integration.clone());
 
         Self {
@@ -110,7 +108,6 @@ impl TerminalMux {
             main_thread_id: self.main_thread_id,
         };
 
-        debug!("获取状态信息: {:?}", status);
         Ok(status)
     }
 
@@ -167,15 +164,6 @@ impl TerminalMux {
 
         // 发送面板添加通知
         self.notify(MuxNotification::PaneAdded(pane_id));
-
-        debug!(
-            "创建面板成功: pane_id={:?}, size={}x{}, shell={}, total_panes={}",
-            pane_id,
-            size.cols,
-            size.rows,
-            config.shell_config.program,
-            self.pane_count()
-        );
         Ok(pane_id)
     }
 
@@ -316,11 +304,9 @@ impl TerminalMux {
                 })) {
                     Ok(true) => {
                         // 订阅者处理成功，继续保持订阅
-                        trace!("订阅者 {} 处理通知成功", subscriber_id);
                     }
                     Ok(false) => {
                         // 订阅者返回false，标记为需要移除
-                        debug!("订阅者 {} 请求取消订阅", subscriber_id);
                         dead_subscribers.push(subscriber_id);
                     }
                     Err(_) => {
@@ -337,7 +323,6 @@ impl TerminalMux {
             if let Ok(mut subscribers) = self.subscribers.write() {
                 for subscriber_id in dead_subscribers {
                     subscribers.remove(&subscriber_id);
-                    debug!("清理无效订阅者: {}", subscriber_id);
                 }
             }
         }
@@ -397,14 +382,6 @@ impl TerminalMux {
         })
     }
 
-    /// 创建一个简单的日志订阅者（用于调试）
-    pub fn create_debug_subscriber() -> SubscriberCallback {
-        Box::new(|notification| {
-            tracing::debug!("Mux通知: {:?}", notification);
-            true
-        })
-    }
-
     /// 设置面板的Shell Integration
     pub fn setup_pane_integration(&self, pane_id: PaneId) -> TerminalMuxResult<()> {
         self.shell_integration.enable_integration(pane_id);
@@ -440,12 +417,6 @@ impl TerminalMux {
                 warn!("面板 {:?} 没有设置Shell类型，使用默认Bash", pane_id);
                 ShellType::Bash
             });
-
-        debug!(
-            "面板 {:?} 使用Shell类型: {}",
-            pane_id,
-            shell_type.display_name()
-        );
 
         if !silent {
             let script = self
@@ -531,7 +502,6 @@ impl TerminalMux {
             .store(true, std::sync::atomic::Ordering::Relaxed);
 
         let pane_ids: Vec<PaneId> = self.list_panes();
-        tracing::debug!("准备关闭 {} 个面板", pane_ids.len());
 
         // 立即标记所有面板为死亡状态，加速关闭过程
         {
@@ -543,15 +513,12 @@ impl TerminalMux {
                 pane.mark_dead();
             }
         }
-        tracing::debug!("所有面板已标记为死亡状态");
 
         // 逐个关闭面板
         let mut failed_panes = Vec::new();
         for pane_id in pane_ids {
             match self.remove_pane(pane_id) {
-                Ok(_) => {
-                    tracing::debug!("面板 {:?} 关闭成功", pane_id);
-                }
+                Ok(_) => {}
                 Err(e) => {
                     tracing::warn!("关闭面板 {:?} 失败: {}", pane_id, e);
                     failed_panes.push(pane_id);
@@ -574,24 +541,12 @@ impl TerminalMux {
 
         // 清理所有订阅者
         if let Ok(mut subscribers) = self.subscribers.write() {
-            let count = subscribers.len();
             subscribers.clear();
-            tracing::debug!("清理了 {} 个订阅者", count);
-        } else {
-            tracing::warn!("无法获取订阅者锁进行清理");
         }
 
         // 关闭I/O处理器
-        match self.io_handler.shutdown() {
-            Ok(_) => {
-                tracing::debug!("I/O处理器已关闭");
-            }
-            Err(e) => {
-                tracing::warn!("关闭I/O处理器失败（可能已经关闭）: {}", e);
-            }
-        }
+        let _ = self.io_handler.shutdown();
 
-        tracing::debug!("TerminalMux 关闭完成");
         Ok(())
     }
 }

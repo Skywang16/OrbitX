@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 pub type ActionHandler =
     Box<dyn Fn(&ActionContext) -> ShortcutsActionResult<serde_json::Value> + Send + Sync>;
@@ -58,8 +58,6 @@ impl ActionRegistry {
     where
         F: Fn(&ActionContext) -> ShortcutsActionResult<serde_json::Value> + Send + Sync + 'static,
     {
-        debug!("Registering shortcut action: {}", metadata.name);
-
         let action_name = metadata.name.clone();
 
         {
@@ -90,7 +88,6 @@ impl ActionRegistry {
         context: &ActionContext,
     ) -> OperationResult<serde_json::Value> {
         let action_name = self.extract_action_name(action);
-        debug!("Executing action: {}", action_name);
 
         self.emit_event(ShortcutEvent {
             event_type: ShortcutEventType::KeyPressed,
@@ -227,8 +224,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("复制动作上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String("🔥 复制功能已触发！".to_string()))
                 },
             )
@@ -247,8 +243,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("粘贴动作上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String("🔥 粘贴功能已触发！".to_string()))
                 },
             )
@@ -267,8 +262,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("搜索动作上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String("🔥 搜索功能已触发！".to_string()))
                 },
             )
@@ -289,8 +283,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("新建标签页上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 新建标签页功能已触发！".to_string(),
                     ))
@@ -312,12 +305,9 @@ impl ActionRegistry {
                     ],
                 },
                 |context| {
-                    debug!("关闭标签页上下文: {:?}", context);
-
                     if let Some(frontend_result) = context.metadata.get("frontendResult") {
                         if let Some(result_bool) = frontend_result.as_bool() {
                             if result_bool {
-                                debug!("前端已成功处理关闭标签页，后端跳过处理");
                                 return Ok(serde_json::Value::String(
                                     "前端已处理关闭标签页".to_string(),
                                 ));
@@ -346,8 +336,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("标签页切换上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 切换到标签页1功能已触发！".to_string(),
                     ))
@@ -369,8 +358,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("标签页切换上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 切换到标签页2功能已触发！".to_string(),
                     ))
@@ -392,8 +380,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("标签页切换上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 切换到标签页3功能已触发！".to_string(),
                     ))
@@ -415,8 +402,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("标签页切换上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 切换到标签页4功能已触发！".to_string(),
                     ))
@@ -438,8 +424,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("标签页切换上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 切换到标签页5功能已触发！".to_string(),
                     ))
@@ -461,8 +446,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("标签页切换上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 切换到最后一个标签页功能已触发！".to_string(),
                     ))
@@ -484,8 +468,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("补全接受上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 补全接受功能已触发！".to_string(),
                     ))
@@ -509,8 +492,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("清空终端上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 清空终端功能已触发！".to_string(),
                     ))
@@ -532,8 +514,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("打开设置上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 打开设置功能已触发！".to_string(),
                     ))
@@ -555,8 +536,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("切换主题上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 切换主题功能已触发！".to_string(),
                     ))
@@ -578,8 +558,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("增大字体上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 增大字体功能已触发！".to_string(),
                     ))
@@ -601,8 +580,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("减小字体上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 减小字体功能已触发！".to_string(),
                     ))
@@ -624,8 +602,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("切换AI侧边栏上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 AI侧边栏切换功能已触发！".to_string(),
                     ))
@@ -647,8 +624,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |context| {
-                    debug!("切换窗口钉住状态上下文: {:?}", context);
+                |_context| {
                     Ok(serde_json::Value::String(
                         "🔥 窗口钉住切换功能已触发！".to_string(),
                     ))

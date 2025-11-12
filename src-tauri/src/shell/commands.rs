@@ -8,7 +8,7 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Instant;
 use tauri::State;
-use tracing::{debug, error};
+use tracing::error;
 
 use super::{CommandInfo, PaneShellState, ShellType};
 use crate::mux::{PaneId, TerminalMux};
@@ -330,8 +330,6 @@ pub async fn shell_execute_background_command(
     command: String,
     working_directory: Option<String>,
 ) -> TauriApiResult<BackgroundCommandResult> {
-    debug!("执行后台命令: {}", command);
-
     let start_time = Instant::now();
 
     // 解析命令和参数 - 正确处理引号
@@ -363,11 +361,6 @@ pub async fn shell_execute_background_command(
 
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-            debug!(
-                "Background command finished: {} (exit_code: {}, elapsed_ms: {})",
-                command, exit_code, execution_time
-            );
 
             Ok(api_success!(BackgroundCommandResult {
                 command,
