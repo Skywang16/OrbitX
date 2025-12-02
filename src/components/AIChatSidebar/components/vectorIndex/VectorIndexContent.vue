@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { computed, ref, watch, onMounted } from 'vue'
-  import { ckApi, terminalContextApi } from '@/api'
+  import { terminalContextApi } from '@/api'
   import { useI18n } from 'vue-i18n'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { useTerminalStore } from '@/stores/Terminal'
@@ -125,7 +125,7 @@
 </script>
 
 <template>
-  <div class="ck-index-content">
+  <div class="vector-index-content">
     <div class="header">
       <div class="title-section">
         <h3 class="title">{{ t('ck.title') }}</h3>
@@ -206,55 +206,46 @@
 </template>
 
 <style scoped>
-  .ck-index-content {
+  .vector-index-content {
     overflow: hidden;
   }
-
   .header {
     padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-md) var(--spacing-lg);
     border-bottom: 1px solid var(--border-200);
   }
-
   .title-section {
     text-align: left;
   }
-
   .title {
     font-size: var(--font-size-lg);
     font-weight: 600;
     color: var(--text-100);
     margin: 0 0 var(--spacing-xs) 0;
   }
-
   .subtitle {
     font-size: var(--font-size-sm);
     color: var(--text-300);
     margin: 0;
     line-height: 1.4;
   }
-
   .body {
     padding: var(--spacing-lg);
   }
-
   .workspace-section {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
   }
-
   .workspace-info {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
   }
-
   .workspace-label {
     font-size: var(--font-size-sm);
     font-weight: 500;
     color: var(--text-200);
   }
-
   .workspace-path {
     font-size: var(--font-size-sm);
     color: var(--text-100);
@@ -265,59 +256,33 @@
     border: 1px solid var(--border-200);
     word-break: break-all;
   }
-
-  .build-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-sm) var(--spacing-md);
-    background: var(--color-primary);
-    color: white;
-    border: none;
-    border-radius: var(--border-radius-sm);
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-  }
-
-  .build-button:hover {
-    background: var(--color-primary-dark);
-  }
-
   .indexed-section {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
   }
-
   .status-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--spacing-md);
   }
-
   .status-info {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
   }
-
   .status-text {
     font-size: var(--font-size-sm);
     font-weight: 500;
     color: var(--text-100);
   }
-
   .index-size-info {
     display: flex;
     align-items: center;
     gap: var(--spacing-xs);
     font-size: var(--font-size-xs);
   }
-
   .size-value {
     color: var(--text-200);
     font-family: var(--font-family-mono);
@@ -326,70 +291,28 @@
     border-radius: var(--border-radius-xs);
     border: 1px solid var(--border-200);
   }
-
   .action-buttons {
     display: flex;
     gap: var(--spacing-sm);
   }
-
-  /* 增加系统 x-button 内部图标与文字的间距，仅作用于本组件按钮区 */
   .action-buttons :deep(.x-button) {
     gap: 6px;
   }
-
-  .action-button {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border: 1px solid var(--border-200);
-    border-radius: var(--border-radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  .action-button.secondary {
-    background: var(--bg-200);
-    color: var(--text-200);
-  }
-
-  .action-button.secondary:hover {
-    background: var(--bg-300);
-    border-color: var(--border-300);
-    color: var(--text-100);
-  }
-
-  .action-button.danger {
-    background: var(--bg-200);
-    color: var(--color-danger);
-  }
-
-  .action-button.danger:hover {
-    background: var(--color-danger);
-    color: white;
-    border-color: var(--color-danger);
-  }
-
   .building-section {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
   }
-
   .progress-container {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
   }
-
   .progress-bar-wrapper {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
   }
-
   .progress-bar {
     flex: 1;
     height: 8px;
@@ -398,14 +321,12 @@
     overflow: hidden;
     border: 1px solid var(--border-200);
   }
-
   .progress-fill {
     height: 100%;
     background: var(--color-primary);
     transition: width 0.3s ease;
     border-radius: var(--border-radius-sm);
   }
-
   .progress-text {
     font-size: var(--font-size-sm);
     font-weight: 500;

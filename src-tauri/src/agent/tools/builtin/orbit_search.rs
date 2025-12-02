@@ -2,7 +2,13 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use async_trait::async_trait;
-use ck_core::{self, SearchMode};
+
+#[derive(Clone, Debug)]
+enum SearchMode {
+    Semantic,
+    Hybrid,
+    Regex,
+}
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
@@ -165,30 +171,39 @@ Usage:
             )));
         }
 
-        let options = build_search_options(&search_path, query, &mode, max_results);
         let started = Instant::now();
-        let raw_results = match ck_engine::search(&options).await {
-            Ok(results) => results,
-            Err(err) => {
-                return Ok(tool_error(format!("Search failed: {}", err)));
-            }
+
+        // Use vector_db global search engine
+        let global = match crate::vector_db::commands::get_global_state() {
+            Some(g) => g,
+            None => return Ok(tool_error("Vector DB not initialized")),
+        };
+        let vd_opts = crate::vector_db::search::SearchOptions {
+            top_k: max_results,
+            threshold: 0.3,
+            include_snippet: true,
+            filter_languages: vec![],
+        };
+        let results = match global.search_engine.search(query, vd_opts).await {
+            Ok(v) => v,
+            Err(e) => return Ok(tool_error(format!("Search failed: {}", e))),
         };
 
         let mut entries: Vec<OrbitSearchResultEntry> = Vec::new();
-        for result in raw_results.into_iter().take(max_results) {
-            let span = result.span.clone();
-            let snippet = extract_content_from_span(&result.file, &span).await;
-            let language = language_to_string(&result.lang);
+        for r in results.into_iter().take(max_results) {
+            // Scope to path if provided
+            if !search_path.as_os_str().is_empty() && !r.file_path.starts_with(&search_path) {
+                continue;
+            }
+            let span = r.span.clone();
+            let snippet = extract_content_from_span(&r.file_path, &span).await;
+            let language = language_from_path(&r.file_path);
             entries.push(OrbitSearchResultEntry {
-                file_path: result.file.display().to_string(),
+                file_path: r.file_path.display().to_string(),
                 start_line: span.line_start,
                 end_line: span.line_end,
                 snippet,
-                score: if result.score > 0.0 {
-                    Some(result.score)
-                } else {
-                    None
-                },
+                score: Some(r.score),
                 language,
             });
         }
@@ -254,40 +269,23 @@ Usage:
     }
 }
 
-fn build_search_options(
-    path: &Path,
-    query: &str,
-    mode: &SearchMode,
-    max_results: usize,
-) -> ck_core::SearchOptions {
-    ck_core::SearchOptions {
-        mode: mode.clone(),
-        query: query.to_string(),
-        path: path.to_path_buf(),
-        top_k: Some(max_results),
-        threshold: None,
-        case_insensitive: true,
-        whole_word: false,
-        fixed_string: false,
-        line_numbers: false,
-        context_lines: 0,
-        before_context_lines: 0,
-        after_context_lines: 0,
-        recursive: true,
-        json_output: false,
-        jsonl_output: false,
-        no_snippet: false,
-        reindex: false,
-        show_scores: false,
-        show_filenames: true,
-        files_with_matches: false,
-        files_without_matches: false,
-        exclude_patterns: ck_core::get_default_exclude_patterns(),
-        respect_gitignore: true,
-        full_section: false,
-        rerank: false,
-        rerank_model: None,
-        embedding_model: None,
+fn language_from_path(path: &Path) -> String {
+    use crate::vector_db::core::Language;
+    match Language::from_path(path) {
+        Some(Language::Rust) => "rust".into(),
+        Some(Language::TypeScript) => "typescript".into(),
+        Some(Language::JavaScript) => "javascript".into(),
+        Some(Language::Python) => "python".into(),
+        Some(Language::Go) => "go".into(),
+        Some(Language::Java) => "java".into(),
+        Some(Language::C) => "c".into(),
+        Some(Language::Cpp) => "cpp".into(),
+        Some(Language::CSharp) => "csharp".into(),
+        Some(Language::Ruby) => "ruby".into(),
+        Some(Language::Php) => "php".into(),
+        Some(Language::Swift) => "swift".into(),
+        Some(Language::Kotlin) => "kotlin".into(),
+        None => "text".into(),
     }
 }
 
@@ -296,16 +294,10 @@ fn mode_as_str(mode: &SearchMode) -> &'static str {
         SearchMode::Semantic => "semantic",
         SearchMode::Hybrid => "hybrid",
         SearchMode::Regex => "regex",
-        SearchMode::Lexical => "lexical",
     }
 }
 
-fn language_to_string(lang: &Option<ck_core::Language>) -> String {
-    lang.map(|l| l.to_string())
-        .unwrap_or_else(|| "text".to_string())
-}
-
-async fn extract_content_from_span(file: &Path, span: &ck_core::Span) -> String {
+async fn extract_content_from_span(file: &Path, span: &crate::vector_db::core::Span) -> String {
     match fs::read_to_string(file).await {
         Ok(content) => {
             let lines: Vec<&str> = content.lines().collect();

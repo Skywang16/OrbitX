@@ -303,5 +303,31 @@
   "node": {
     "click_to_switch": "点击切换版本",
     "no_versions": "未找到已安装的Node.js版本"
+  },
+  "embedding_model": {
+    "title": "向量模型配置",
+    "config_label": "向量模型",
+    "description": "配置用于语义搜索的向量模型（OpenAI 兼容 API）",
+    "configure": "配置",
+    "edit": "编辑",
+    "not_configured": "尚未配置向量模型，语义搜索功能将不可用",
+    "add_title": "配置向量模型",
+    "edit_title": "编辑向量模型",
+    "presets": "快速预设",
+    "api_url": "API URL",
+    "api_key": "API Key",
+    "api_key_placeholder": "输入您的 API Key",
+    "model_name": "模型名称",
+    "dimension": "向量维度",
+    "dimension_hint": "必须与模型输出维度一致，否则索引会失败",
+    "test_connection": "测试连接",
+    "test_success": "连接成功",
+    "save_success": "配置已保存，重建索引后生效",
+    "validation": {
+      "api_url_required": "API URL 是必填项",
+      "api_key_required": "API Key 是必填项",
+      "model_name_required": "模型名称是必填项",
+      "dimension_required": "向量维度必须大于 0"
+    }
   }
 }

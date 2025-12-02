@@ -198,17 +198,19 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         // 网络请求命令
         crate::ai::tool::network::network_web_fetch_headless,
         crate::ai::tool::network::network_simple_web_fetch,
-        // CK 索引与搜索命令（供前端 ckApi 使用）
-        crate::ck::commands::ck_index_status,
-        crate::ck::commands::ck_build_index,
-        crate::ck::commands::ck_get_build_progress,
-        crate::ck::commands::ck_cancel_build,
-        crate::ck::commands::ck_delete_index,
-        crate::ck::commands::ck_search,
         // Node.js 版本管理命令
         crate::node::commands::node_check_project,
         crate::node::commands::node_get_version_manager,
         crate::node::commands::node_list_versions,
         crate::node::commands::node_get_switch_command,
+        // 向量数据库命令
+        crate::vector_db::commands::semantic_search,
+        crate::vector_db::commands::get_index_status,
+        crate::vector_db::commands::index_files,
+        crate::vector_db::commands::update_file_index,
+        crate::vector_db::commands::remove_file_index,
+        crate::vector_db::commands::vector_build_index,
+        crate::vector_db::commands::vector_get_build_progress,
+        crate::vector_db::commands::vector_cancel_build,
     ])
 }

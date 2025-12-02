@@ -251,6 +251,43 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         }
     }
 
+    // 初始化向量数据库状态
+    {
+        use std::path::PathBuf;
+        use std::sync::Arc;
+        use crate::vector_db::{core::VectorDbConfig, index::VectorIndex, storage::IndexManager, search::SemanticSearchEngine, commands::VectorDbState};
+        // 复用与数据库相同的应用数据目录作为根
+        let app_dir = if let Ok(dir) = std::env::var("OrbitX_DATA_DIR") {
+            PathBuf::from(dir)
+        } else {
+            let data_dir = dirs::data_dir().ok_or("无法获取系统数据目录")?;
+            data_dir.join("OrbitX")
+        };
+
+        let config = VectorDbConfig::default();
+        if let Err(e) = config.validate() {
+            warn!("Vector DB config validate failed: {}", e);
+        }
+
+        if let Ok(state) = (|| -> Result<VectorDbState, crate::vector_db::core::VectorDbError> {
+            let index_manager = Arc::new(IndexManager::new(&app_dir, config.clone())?);
+            let embedder = crate::vector_db::embedding::create_embedder(&config.embedding)?;
+            let vector_index = Arc::new(VectorIndex::new(config.embedding.dimension));
+            let search_engine = Arc::new(SemanticSearchEngine::new(index_manager.clone(), vector_index.clone(), embedder.clone(), config));
+            // 设置全局只读访问
+            crate::vector_db::commands::set_global_state(
+                search_engine.clone(),
+                index_manager.clone(),
+                vector_index.clone(),
+            );
+            Ok(VectorDbState::new(search_engine, index_manager, vector_index))
+        })() {
+            app.manage(state);
+        } else {
+            warn!("Failed to initialize vector DB");
+        }
+    }
+
     Ok(())
 }
 

@@ -1,6 +1,5 @@
 pub mod agent;
 pub mod ai;
-pub mod ck;
 pub mod commands;
 pub mod completion;
 pub mod config;
@@ -17,6 +16,7 @@ pub mod terminal;
 pub mod utils;
 pub mod window;
 pub mod workspace;
+pub mod vector_db;
 
 use setup::{
     ensure_main_window_visible, handle_startup_args, init_logging, init_plugin,

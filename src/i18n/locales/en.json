@@ -303,5 +303,31 @@
   "node": {
     "click_to_switch": "Click to switch version",
     "no_versions": "No installed Node.js versions found"
+  },
+  "embedding_model": {
+    "title": "Embedding Model",
+    "config_label": "Embedding Model",
+    "description": "Configure embedding model for semantic search (OpenAI compatible API)",
+    "configure": "Configure",
+    "edit": "Edit",
+    "not_configured": "Embedding model not configured, semantic search will be unavailable",
+    "add_title": "Configure Embedding Model",
+    "edit_title": "Edit Embedding Model",
+    "presets": "Quick Presets",
+    "api_url": "API URL",
+    "api_key": "API Key",
+    "api_key_placeholder": "Enter your API Key",
+    "model_name": "Model Name",
+    "dimension": "Vector Dimension",
+    "dimension_hint": "Must match model output dimension, otherwise indexing will fail",
+    "test_connection": "Test Connection",
+    "test_success": "Connection successful",
+    "save_success": "Configuration saved, rebuild index to apply",
+    "validation": {
+      "api_url_required": "API URL is required",
+      "api_key_required": "API Key is required",
+      "model_name_required": "Model name is required",
+      "dimension_required": "Dimension must be greater than 0"
+    }
   }
 }
