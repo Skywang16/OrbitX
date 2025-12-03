@@ -19,14 +19,16 @@ use terminal_lib::terminal::{
 fn create_test_context_state() -> TerminalContextState {
     let registry = Arc::new(ActiveTerminalContextRegistry::new());
     let shell_integration = Arc::new(ShellIntegrationManager::new());
-    let terminal_mux = Arc::new(TerminalMux::new());
+    let terminal_mux = Arc::new(TerminalMux::new_with_shell_integration(
+        shell_integration.clone(),
+    ));
     let cache = Arc::new(UnifiedCache::new());
-    let context_service = Arc::new(TerminalContextService::new(
+    let context_service = TerminalContextService::new_with_integration(
         registry.clone(),
         shell_integration,
         terminal_mux,
         cache,
-    ));
+    );
 
     TerminalContextState::new(registry, context_service)
 }

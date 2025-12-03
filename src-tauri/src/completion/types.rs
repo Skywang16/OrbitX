@@ -65,9 +65,9 @@ pub struct CompletionItem {
 
 impl CompletionItem {
     /// 创建新的补全项
-    pub fn new(text: String, completion_type: CompletionType) -> Self {
+    pub fn new(text: impl Into<String>, completion_type: CompletionType) -> Self {
         Self {
-            text,
+            text: text.into(),
             display_text: None,
             completion_type: completion_type.to_string(),
             description: None,
@@ -79,14 +79,14 @@ impl CompletionItem {
     }
 
     /// 设置显示文本
-    pub fn with_display_text(mut self, display_text: String) -> Self {
-        self.display_text = Some(display_text);
+    pub fn with_display_text(mut self, display_text: impl Into<String>) -> Self {
+        self.display_text = Some(display_text.into());
         self
     }
 
     /// 设置描述
-    pub fn with_description(mut self, description: String) -> Self {
-        self.description = Some(description);
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
         self
     }
 
@@ -97,8 +97,8 @@ impl CompletionItem {
     }
 
     /// 设置来源
-    pub fn with_source(mut self, source: String) -> Self {
-        self.source = Some(source);
+    pub fn with_source(mut self, source: impl Into<String>) -> Self {
+        self.source = Some(source.into());
         self
     }
 
@@ -109,8 +109,8 @@ impl CompletionItem {
     }
 
     /// 添加元数据
-    pub fn with_metadata(mut self, key: String, value: String) -> Self {
-        self.metadata.insert(key, value);
+    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
         self
     }
 }
@@ -612,14 +612,14 @@ impl OutputEntity {
     }
 
     /// 设置描述
-    pub fn with_description(mut self, description: String) -> Self {
-        self.description = Some(description);
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
         self
     }
 
     /// 添加属性
-    pub fn with_attribute(mut self, key: String, value: String) -> Self {
-        self.attributes.insert(key, value);
+    pub fn with_attribute(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.attributes.insert(key.into(), value.into());
         self
     }
 

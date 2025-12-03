@@ -52,7 +52,7 @@ pub struct TaskThresholds {
 
 #[derive(Default, Clone)]
 pub struct StateEventEmitter {
-    listeners: Arc<Mutex<Vec<Arc<dyn Fn(&TaskStateEvent) + Send + Sync + 'static>>>>,
+    listeners: Arc<Mutex<Vec<Box<dyn Fn(&TaskStateEvent) + Send + Sync + 'static>>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -76,7 +76,7 @@ impl StateEventEmitter {
         }
     }
 
-    pub fn on(&self, listener: Arc<dyn Fn(&TaskStateEvent) + Send + Sync + 'static>) {
+    pub fn on(&self, listener: Box<dyn Fn(&TaskStateEvent) + Send + Sync + 'static>) {
         if let Ok(mut listeners) = self.listeners.lock() {
             listeners.push(listener);
         }

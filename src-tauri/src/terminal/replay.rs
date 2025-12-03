@@ -2,7 +2,6 @@ use crate::completion::output_analyzer::OutputAnalyzer;
 use crate::mux::{singleton::get_mux, PaneId, PtySize};
 use crate::terminal::error::{ReplayError, ReplayResult};
 use serde::{Deserialize, Serialize};
-use tracing::debug;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -25,7 +24,6 @@ impl ProcessReplayEvent {
 
     pub fn from_buffer(buffer: String, size: PtySize) -> Self {
         if buffer.is_empty() {
-            debug!("ProcessReplayEvent::from_buffer -> empty buffer");
             return Self::empty();
         }
 
@@ -53,10 +51,6 @@ pub fn build_replay(pane_id: u32) -> ReplayResult<ProcessReplayEvent> {
         .unwrap_or_else(PtySize::default);
 
     Ok(ProcessReplayEvent::from_buffer(text, size))
-}
-
-pub fn mark_replay_complete(pane_id: u32) {
-    debug!(pane_id, "mark_replay_complete");
 }
 
 #[cfg(test)]

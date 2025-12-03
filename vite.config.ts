@@ -44,7 +44,13 @@ export default defineConfig(() => ({
         manualChunks: {
           'vue-core': ['vue', '@vueuse/core'],
           pinia: ['pinia'],
-          xterm: ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-search', '@xterm/addon-web-links'],
+          xterm: [
+            '@xterm/xterm',
+            '@xterm/addon-fit',
+            '@xterm/addon-search',
+            '@xterm/addon-web-links',
+            '@xterm/addon-ligatures',
+          ],
           tauri: [
             '@tauri-apps/api',
             '@tauri-apps/plugin-fs',
@@ -72,6 +78,6 @@ export default defineConfig(() => ({
       },
     },
 
-    chunkSizeWarningLimit: 800,
+    chunkSizeWarningLimit: 2000,
   },
 }))

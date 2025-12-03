@@ -11,15 +11,30 @@ export enum TabType {
   SETTINGS = 'settings',
 }
 
-export interface TabItem {
-  id: number
-  title?: string
-  type: TabType
-  closable?: boolean
-  shell?: string
-  path?: string
-  data?: { section?: string; paneId?: number | null; [key: string]: unknown }
+// 终端标签页的私有数据
+export interface TerminalTabData {
+  shell: string
 }
+
+// 设置标签页的私有数据
+export interface SettingsTabData {
+  section: string
+}
+
+// 标签页基础结构：通用字段 + 类型化的私有数据
+export interface TabItem<TData = unknown> {
+  id: number
+  type: TabType
+  closable: boolean
+  data: TData
+}
+
+// 类型别名（方便使用）
+export type TerminalTabItem = TabItem<TerminalTabData>
+export type SettingsTabItem = TabItem<SettingsTabData>
+
+// 联合类型（实际使用的类型）
+export type AnyTabItem = TerminalTabItem | SettingsTabItem
 
 // ===== 应用设置类型 =====
 

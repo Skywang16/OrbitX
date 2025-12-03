@@ -2,11 +2,11 @@
   import { ref } from 'vue'
   import ButtonGroup from '@/components/ui/ButtonGroup.vue'
   import TabBar from '@/components/ui/TabBar.vue'
-  import type { TabItem } from '@/types'
+  import type { AnyTabItem } from '@/types'
   import { getCurrentWindow } from '@tauri-apps/api/window'
 
   interface Props {
-    tabs: TabItem[]
+    tabs: AnyTabItem[]
     activeTabId: number | null
   }
 

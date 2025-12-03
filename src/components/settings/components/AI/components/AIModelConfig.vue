@@ -4,6 +4,7 @@
   import { computed, onMounted, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import AIModelForm from './AIModelForm.vue'
+  import EmbeddingModelForm from './EmbeddingModelForm.vue'
   import { useAISettingsStore } from '../store'
   import SettingsCard from '../../../SettingsCard.vue'
 
@@ -15,22 +16,36 @@
   const editingModel = ref<AIModelConfig | null>(null)
   const defaultModelType = ref<'chat' | 'embedding'>('chat')
 
-  const models = computed(() => aiSettingsStore.models.filter(model => model.modelType === 'chat'))
+  // 所有模型（Chat + Embedding）
+  const models = computed(() => aiSettingsStore.models)
   const loading = computed(() => aiSettingsStore.isLoading)
 
   onMounted(async () => {
     await aiSettingsStore.loadModels()
   })
 
+  const showEmbeddingForm = ref(false)
+  const editingEmbeddingModel = ref<AIModelConfig | null>(null)
+
   const handleAddModel = (modelType: 'chat' | 'embedding' = 'chat') => {
-    editingModel.value = null
-    defaultModelType.value = modelType
-    showAddForm.value = true
+    if (modelType === 'embedding') {
+      editingEmbeddingModel.value = null
+      showEmbeddingForm.value = true
+    } else {
+      editingModel.value = null
+      defaultModelType.value = modelType
+      showAddForm.value = true
+    }
   }
 
   const handleEditModel = (model: AIModelConfig) => {
-    editingModel.value = { ...model }
-    showAddForm.value = true
+    if (model.modelType === 'embedding') {
+      editingEmbeddingModel.value = { ...model }
+      showEmbeddingForm.value = true
+    } else {
+      editingModel.value = { ...model }
+      showAddForm.value = true
+    }
   }
 
   const handleDeleteModel = async (modelId: string) => {
@@ -55,6 +70,35 @@
     showAddForm.value = false
     editingModel.value = null
   }
+
+  // Embedding 模型表单处理
+  const handleEmbeddingFormSubmit = async (data: {
+    apiUrl: string
+    apiKey: string
+    modelName: string
+    dimension: number
+  }) => {
+    const modelData: Omit<AIModelConfig, 'id'> = {
+      provider: 'openai_compatible',
+      apiUrl: data.apiUrl,
+      apiKey: data.apiKey,
+      model: data.modelName,
+      modelType: 'embedding',
+      options: { dimension: data.dimension },
+    }
+    if (editingEmbeddingModel.value) {
+      await aiSettingsStore.updateModel(editingEmbeddingModel.value.id, modelData)
+    } else {
+      await aiSettingsStore.addModel(modelData as AIModelConfig)
+    }
+    showEmbeddingForm.value = false
+    editingEmbeddingModel.value = null
+  }
+
+  const handleEmbeddingFormCancel = () => {
+    showEmbeddingForm.value = false
+    editingEmbeddingModel.value = null
+  }
 </script>
 
 <template>
@@ -70,6 +114,9 @@
         <div class="settings-item-control model-add-buttons">
           <x-button variant="primary" @click="handleAddModel('chat')">
             {{ t('ai_model.add_chat_model') }}
+          </x-button>
+          <x-button variant="primary" @click="handleAddModel('embedding')">
+            {{ t('ai_model.add_embedding_model') }}
           </x-button>
         </div>
       </div>
@@ -99,11 +146,16 @@
               <div class="model-info">
                 <div class="settings-label">
                   {{ model.model }}
-                  <!--  <span class="model-type-tag chat">
-                    {{ t('ai_model.chat') }}
-                  </span> -->
+                  <span :class="['model-type-tag', model.modelType]">
+                    {{ model.modelType === 'embedding' ? t('ai_model.embedding') : t('ai_model.chat') }}
+                  </span>
                 </div>
-                <div class="settings-description">{{ model.provider }}</div>
+                <div class="settings-description">
+                  {{ model.provider }}
+                  <template v-if="model.modelType === 'embedding' && model.options?.dimension">
+                    · {{ t('embedding_model.dimension') }}: {{ model.options.dimension }}
+                  </template>
+                </div>
               </div>
             </div>
             <div class="settings-item-control">
@@ -137,6 +189,22 @@
       :defaultModelType="defaultModelType"
       @submit="handleFormSubmit"
       @cancel="handleFormCancel"
+    />
+
+    <EmbeddingModelForm
+      v-if="showEmbeddingForm"
+      :config="
+        editingEmbeddingModel
+          ? {
+              apiUrl: editingEmbeddingModel.apiUrl,
+              apiKey: editingEmbeddingModel.apiKey,
+              modelName: editingEmbeddingModel.model,
+              dimension: editingEmbeddingModel.options?.dimension || 1536,
+            }
+          : null
+      "
+      @submit="handleEmbeddingFormSubmit"
+      @cancel="handleEmbeddingFormCancel"
     />
   </div>
 </template>

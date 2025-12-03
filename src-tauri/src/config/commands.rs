@@ -5,7 +5,6 @@ use crate::{api_error, api_success};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
-use tracing::debug;
 
 /// 配置管理器状态
 pub struct ConfigManagerState {
@@ -61,7 +60,6 @@ pub async fn config_save(state: State<'_, ConfigManagerState>) -> TauriApiResult
 
 #[tauri::command]
 pub async fn config_validate(state: State<'_, ConfigManagerState>) -> TauriApiResult<EmptyData> {
-    debug!("开始验证配置");
     let config = match state.toml_manager.config_get().await {
         Ok(config) => config,
         Err(_) => return Ok(api_error!("config.get_failed")),
@@ -76,7 +74,6 @@ pub async fn config_validate(state: State<'_, ConfigManagerState>) -> TauriApiRe
 pub async fn config_reset_to_defaults(
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
-    debug!("开始重置配置为默认值");
     let default_config = create_default_config();
     match state
         .toml_manager
@@ -112,13 +109,11 @@ pub async fn config_get_file_info() -> TauriApiResult<ConfigFileInfo> {
 
 #[tauri::command]
 pub async fn config_open_file() -> TauriApiResult<EmptyData> {
-    debug!("打开配置文件功能需要重新实现");
     Ok(api_success!())
 }
 
 #[tauri::command]
 pub async fn config_subscribe_events() -> TauriApiResult<EmptyData> {
-    debug!("订阅配置事件");
     Ok(api_success!())
 }
 
@@ -126,8 +121,6 @@ pub async fn config_subscribe_events() -> TauriApiResult<EmptyData> {
 pub async fn config_get_folder_path(
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<String> {
-    debug!("获取配置文件夹路径");
-
     let config_path = state.toml_manager.get_config_path().await;
 
     if let Some(config_dir) = config_path.parent() {
@@ -142,8 +135,6 @@ pub async fn config_open_folder<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
-    debug!("打开配置文件夹");
-
     let config_path = state.toml_manager.get_config_path().await;
 
     let config_dir = if let Some(dir) = config_path.parent() {

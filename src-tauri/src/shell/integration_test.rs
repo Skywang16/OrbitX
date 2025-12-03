@@ -84,7 +84,7 @@ mod tests {
             .expect("事件接收成功");
 
         match event {
-            crate::terminal::types::TerminalContextEvent::ActivePaneChanged {
+            crate::terminal::TerminalContextEvent::ActivePaneChanged {
                 old_pane_id,
                 new_pane_id,
             } => {

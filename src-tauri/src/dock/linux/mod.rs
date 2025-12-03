@@ -8,7 +8,6 @@ pub struct LinuxDockMenu<R: Runtime> {
 
 impl<R: Runtime> LinuxDockMenu<R> {
     pub fn new(state: DockState, app_handle: &AppHandle<R>) -> Result<Self, String> {
-        tracing::info!("Linux dock menu is not yet implemented");
         Ok(Self {
             _state: state,
             _app_handle: app_handle.clone(),

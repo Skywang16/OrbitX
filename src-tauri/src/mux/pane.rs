@@ -2,7 +2,7 @@
 
 use std::io::{Read, Write};
 use std::process;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::mux::error::{PaneError, PaneResult};
@@ -23,12 +23,19 @@ pub trait Pane: Send + Sync {
     fn mark_dead(&self);
 
     fn get_size(&self) -> PtySize;
+
+    /// 获取创建时使用的 shell 名称
+    fn shell_name(&self) -> &str;
 }
 
 pub struct LocalPane {
     pane_id: PaneId,
-    size: Arc<Mutex<PtySize>>,
-    dead: Arc<AtomicBool>,
+    rows: AtomicU16,
+    cols: AtomicU16,
+    pixel_width: AtomicU16,
+    pixel_height: AtomicU16,
+    dead: AtomicBool,
+    shell_name: String,
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     _slave: Arc<Mutex<Box<dyn SlavePty + Send>>>,
@@ -45,24 +52,19 @@ impl LocalPane {
         size: PtySize,
         config: &TerminalConfig,
     ) -> PaneResult<Self> {
-        tracing::info!(
-            "创建本地面板: {:?}, 大小: {:?}, shell: {}",
-            pane_id,
-            size,
-            config.shell_config.program
-        );
-
         let pty_pair = Self::create_pty(pane_id, size)?;
         let mut cmd = Self::build_command(config)?;
         Self::setup_shell_integration(&mut cmd, config)?;
         let (master, writer, slave) = Self::spawn_process(pane_id, pty_pair, cmd)?;
 
-        tracing::info!("本地面板创建完成: {:?}", pane_id);
-
         Ok(Self {
             pane_id,
-            size: Arc::new(Mutex::new(size)),
-            dead: Arc::new(AtomicBool::new(false)),
+            rows: AtomicU16::new(size.rows),
+            cols: AtomicU16::new(size.cols),
+            pixel_width: AtomicU16::new(size.pixel_width),
+            pixel_height: AtomicU16::new(size.pixel_height),
+            dead: AtomicBool::new(false),
+            shell_name: config.shell_config.program.clone(),
             master,
             writer,
             _slave: slave,
@@ -283,14 +285,11 @@ impl Pane for LocalPane {
             return Err(PaneError::PaneDead);
         }
 
-        // 更新内部尺寸记录
-        {
-            let mut current_size = self
-                .size
-                .lock()
-                .map_err(|err| PaneError::from_poison("size", err))?;
-            *current_size = size;
-        }
+        // 原子更新尺寸
+        self.rows.store(size.rows, Ordering::Relaxed);
+        self.cols.store(size.cols, Ordering::Relaxed);
+        self.pixel_width.store(size.pixel_width, Ordering::Relaxed);
+        self.pixel_height.store(size.pixel_height, Ordering::Relaxed);
 
         // 调整PTY大小
         let pty_size = PortablePtySize {
@@ -335,15 +334,20 @@ impl Pane for LocalPane {
     }
 
     fn mark_dead(&self) {
-        tracing::debug!("标记面板为死亡状态: {:?}", self.pane_id);
         self.dead.store(true, Ordering::Relaxed);
     }
 
     fn get_size(&self) -> PtySize {
-        self.size
-            .lock()
-            .map(|size| *size)
-            .unwrap_or_else(|_| PtySize::default())
+        PtySize {
+            rows: self.rows.load(Ordering::Relaxed),
+            cols: self.cols.load(Ordering::Relaxed),
+            pixel_width: self.pixel_width.load(Ordering::Relaxed),
+            pixel_height: self.pixel_height.load(Ordering::Relaxed),
+        }
+    }
+
+    fn shell_name(&self) -> &str {
+        &self.shell_name
     }
 }
 

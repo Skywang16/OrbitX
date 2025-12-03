@@ -140,5 +140,11 @@
     "get_failed": "Failed to get dock tabs",
     "clear_failed": "Failed to clear dock tabs",
     "not_initialized": "Dock manager not initialized"
+  },
+  "vector_db": {
+    "index_failed": "Failed to index files",
+    "update_failed": "Failed to update file index",
+    "remove_failed": "Failed to remove file index",
+    "search_failed": "Semantic search failed"
   }
 }

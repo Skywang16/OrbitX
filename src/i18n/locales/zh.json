@@ -141,7 +141,9 @@
     "no_models": "暂无模型配置",
     "all_models": "所有模型",
     "chat": "聊天",
-    "add_chat_model": "添加AI模型",
+    "add_chat_model": "添加Chat模型",
+    "add_embedding_model": "添加向量模型",
+    "embedding": "向量",
     "context_window": "上下文窗口 (tokens)",
     "context_window_description": "模型能处理的最大上下文长度",
     "max_output_tokens": "最大输出 (tokens)",
@@ -273,7 +275,6 @@
   "cache": {
     "directory_cleared": "目录缓存已清除"
   },
-  "config": {},
   "ck": {
     "index_ready": "已构建向量索引",
     "index_not_ready": "语义索引未就绪",
@@ -303,5 +304,22 @@
   "node": {
     "click_to_switch": "点击切换版本",
     "no_versions": "未找到已安装的Node.js版本"
+  },
+  "embedding_model": {
+    "add_title": "添加向量模型",
+    "edit_title": "编辑向量模型",
+    "presets": "快速预设",
+    "api_url": "API URL",
+    "api_key": "API Key",
+    "api_key_placeholder": "输入您的 API Key",
+    "model_name": "模型名称",
+    "dimension": "向量维度",
+    "dimension_hint": "必须与模型输出维度一致，否则索引会失败",
+    "validation": {
+      "api_url_required": "API URL 是必填项",
+      "api_key_required": "API Key 是必填项",
+      "model_name_required": "模型名称是必填项",
+      "dimension_required": "向量维度必须大于 0"
+    }
   }
 }

@@ -11,6 +11,7 @@ use crate::agent::{Agent, Context, Task, ToolSchema};
 
 pub mod builders;
 pub mod components;
+pub mod orchestrator;
 pub mod template_engine;
 
 pub use builders::{

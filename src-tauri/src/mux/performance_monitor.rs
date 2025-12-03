@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{debug, warn};
+use tracing::{ warn};
 
 use crate::mux::TerminalMuxStatus;
 
@@ -43,7 +43,6 @@ impl PerformanceMonitor {
             *last_metrics = Some(metrics.clone());
         }
 
-        debug!("收集性能指标: {}", metrics_summary(&metrics));
         metrics
     }
 
@@ -110,13 +109,4 @@ impl Default for PerformanceMonitor {
     fn default() -> Self {
         Self::new()
     }
-}
-
-fn metrics_summary(metrics: &PerformanceMetrics) -> String {
-    format!(
-        "panes={}, threads={}, memory={}KB",
-        metrics.active_panes,
-        metrics.reader_threads,
-        metrics.estimated_memory_usage / 1024
-    )
 }

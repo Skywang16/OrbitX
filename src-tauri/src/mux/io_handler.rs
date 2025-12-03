@@ -14,7 +14,7 @@ use std::{
     thread,
     time::Duration,
 };
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 pub struct IoHandler {
     buffer_size: usize,
@@ -75,35 +75,22 @@ impl IoHandler {
     pub fn stop_pane_io(&self, pane_id: PaneId) -> IoHandlerResult<()> {
         if let Ok(mut threads) = self.reader_threads.write() {
             if let Some(handle) = threads.remove(&pane_id) {
-                debug!("等待面板 {:?} 的I/O线程结束", pane_id);
-                
                 // 使用 thread::spawn 在后台 join，避免阻塞
                 thread::spawn(move || {
-                    match handle.join() {
-                        Ok(_) => debug!("面板 {:?} 的I/O线程已正常结束", pane_id),
-                        Err(e) => warn!("面板 {:?} 的I/O线程结束时发生错误: {:?}", pane_id, e),
+                    if let Err(e) = handle.join() {
+                        warn!("面板 {:?} 的I/O线程结束时发生错误: {:?}", pane_id, e);
                     }
                 });
-            } else {
-                debug!("面板 {:?} 没有运行中的I/O线程", pane_id);
             }
-        } else {
-            warn!("无法获取线程锁以停止面板 {:?} 的I/O", pane_id);
         }
         Ok(())
     }
 
     pub fn shutdown(&self) -> IoHandlerResult<()> {
-        debug!("开始关闭所有I/O处理线程");
-
         if let Ok(mut threads) = self.reader_threads.write() {
-            let thread_count = threads.len();
-            if thread_count == 0 {
-                debug!("没有运行中的I/O线程");
+            if threads.is_empty() {
                 return Ok(());
             }
-
-            debug!("等待 {} 个I/O线程结束", thread_count);
 
             // 使用后台线程批量 join，设置超时并记录结果
             let handles: Vec<_> = threads.drain().collect();
@@ -121,10 +108,7 @@ impl IoHandler {
                     }
 
                     match handle.join() {
-                        Ok(_) => {
-                            debug!("面板 {:?} 的I/O线程已结束", pane_id);
-                            joined += 1;
-                        }
+                        Ok(_) => joined += 1,
                         Err(e) => {
                             warn!("面板 {:?} 的I/O线程 panic: {:?}", pane_id, e);
                             panicked += 1;
@@ -138,14 +122,10 @@ impl IoHandler {
 
             // 非阻塞地记录结果
             thread::spawn(move || {
-                if let Ok((joined, panicked)) = rx.recv_timeout(Duration::from_secs(3)) {
-                    debug!("I/O线程关闭完成: {} 个正常结束, {} 个 panic", joined, panicked);
-                } else {
+                if rx.recv_timeout(Duration::from_secs(3)).is_err() {
                     warn!("等待I/O线程关闭结果超时");
                 }
             });
-        } else {
-            warn!("无法获取线程锁以关闭I/O处理器");
         }
 
         Ok(())
@@ -167,7 +147,6 @@ impl IoHandler {
             loop {
                 // 检查面板是否已死亡
                 if pane.is_dead() {
-                    debug!("面板 {:?} 已标记为死亡，退出I/O线程", pane_id);
                     break;
                 }
                 
@@ -190,7 +169,6 @@ impl IoHandler {
                             };
 
                             if sender.send(notification).is_err() {
-                                debug!("面板 {:?} 输出通知发送失败", pane_id);
                                 return;
                             }
                         }
@@ -218,8 +196,7 @@ impl IoHandler {
                     data: Bytes::from(cleaned.into_bytes()),
                 };
 
-                if let Err(err) = sender.send(notification) {
-                    debug!("面板 {:?} 输出通知发送失败（终止前刷新）: {}", pane_id, err);
+                if sender.send(notification).is_err() {
                     return;
                 }
             }

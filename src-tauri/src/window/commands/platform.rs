@@ -3,14 +3,12 @@
 use super::*;
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
-use tracing::debug;
 
 // 获取平台信息，支持缓存
 #[tauri::command]
 pub async fn window_get_platform_info(
     state: State<'_, WindowState>,
 ) -> TauriApiResult<PlatformInfo> {
-    debug!("开始获取平台信息");
 
     let platform_info = match state
         .with_config_manager(|config| Ok(config.window_get_platform_info().cloned()))
@@ -23,14 +21,9 @@ pub async fn window_get_platform_info(
     };
 
     if let Some(info) = platform_info {
-        debug!(
-            "从缓存获取平台信息: platform={}, arch={}, is_mac={}",
-            info.platform, info.arch, info.is_mac
-        );
         return Ok(api_success!(info));
     }
 
-    debug!("首次检测平台信息");
 
     let platform_info = PlatformInfo {
         platform: std::env::consts::OS.to_string(),
@@ -50,10 +43,6 @@ pub async fn window_get_platform_info(
         return Ok(api_error!("window.get_platform_info_failed"));
     }
 
-    debug!(
-        "平台信息检测完成并已缓存: platform={}, arch={}, os_version={}, is_mac={}",
-        platform_info.platform, platform_info.arch, platform_info.os_version, platform_info.is_mac
-    );
 
     Ok(api_success!(platform_info))
 }

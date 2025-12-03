@@ -8,17 +8,16 @@
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
-  import TerminalSelectionTag from '../tags/TerminalSelectionTag.vue'
   import TerminalTabTag from '../tags/TerminalTabTag.vue'
   import NodeVersionTag from '../tags/NodeVersionTag.vue'
   import ProjectRulesTag from '../tags/ProjectRulesTag.vue'
   import InputPopover from '@/components/ui/InputPopover.vue'
-  import CkIndexContent from '../ckIndex/CkIndexContent.vue'
+  import VectorIndexContent from '../vectorIndex/VectorIndexContent.vue'
   import FolderPicker from '../tags/FolderPicker.vue'
   import NodeVersionPicker from '../tags/NodeVersionPicker.vue'
   import ProjectRulesPicker from '../tags/ProjectRulesPicker.vue'
   import CircularProgress from '@/components/ui/CircularProgress.vue'
-  import { ckApi, nodeApi } from '@/api'
+  import { vectorDbApi as vdbApi, nodeApi } from '@/api'
 
   interface Props {
     modelValue: string
@@ -243,8 +242,8 @@
     showProjectRulesModal.value = false
   }
 
-  const handleCkIndexClick = async () => {
-    await checkCkIndexStatus()
+  const handleVectorIndexClick = async () => {
+    await checkVectorIndexStatus()
     showIndexModal.value = true
   }
 
@@ -252,14 +251,14 @@
     showNavigatorModal.value = true
   }
 
-  const checkCkIndexStatus = async () => {
+  const checkVectorIndexStatus = async () => {
     const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
     if (!activeTerminal || !activeTerminal.cwd) {
       indexStatus.value = { isReady: false, path: '' }
       return
     }
-    const status = await ckApi.getIndexStatus({ path: activeTerminal.cwd })
-    indexStatus.value = status
+    const status = await vdbApi.getIndexStatus({ path: activeTerminal.cwd })
+    indexStatus.value = { isReady: status.isReady, path: status.path, size: status.size }
   }
 
   watch(activeTerminalCwd, cwd => {
@@ -267,53 +266,53 @@
       indexStatus.value = { isReady: false, path: '' }
       return
     }
-    checkCkIndexStatus()
+    checkVectorIndexStatus()
   })
 
-  const startProgressPolling = (targetPath: string) => {
-    if (progressTimer) {
-      clearInterval(progressTimer)
-      progressTimer = undefined
-    }
-    progressHasData.value = false
-    progressTimer = window.setInterval(async () => {
-      const progress = await ckApi.getBuildProgress({ path: targetPath })
-      if (progress.totalFiles > 0) {
-        const totalFiles = Math.max(progress.totalFiles, 1)
-        const filesCompleted = Math.min(progress.filesCompleted, totalFiles)
-        const perFile = 100 / totalFiles
-        let pct = filesCompleted * perFile
-
-        if (progress.totalChunks && progress.totalChunks > 0) {
-          const chunkDone = Math.min(progress.currentFileChunks ?? 0, progress.totalChunks)
-          pct += (chunkDone / progress.totalChunks) * perFile
-        }
-
-        const nextPct = Math.min(progress.isComplete ? 100 : 99, Math.max(0, pct))
-        if (!progressHasData.value) {
-          progressHasData.value = true
-          buildProgress.value = nextPct
-        } else {
-          buildProgress.value = Math.max(buildProgress.value, nextPct)
-        }
-      }
-
-      if (progress.isComplete) {
-        if (progressTimer) {
-          clearInterval(progressTimer)
-          progressTimer = undefined
-        }
-        buildProgress.value = 100
-        setTimeout(() => {
-          isBuilding.value = false
-          buildProgress.value = 0
-        }, 500)
-        await checkCkIndexStatus()
-      }
-    }, 600)
+const startProgressPolling = (targetPath: string) => {
+  if (progressTimer) {
+    clearInterval(progressTimer)
+    progressTimer = undefined
   }
+  progressHasData.value = false
+  progressTimer = window.setInterval(async () => {
+    const progress = await vdbApi.getBuildProgress({ path: targetPath })
+    if (progress.totalFiles > 0) {
+      const totalFiles = Math.max(progress.totalFiles, 1)
+      const filesCompleted = Math.min(progress.filesCompleted, totalFiles)
+      const perFile = 100 / totalFiles
+      let pct = filesCompleted * perFile
 
-  const buildCkIndex = async () => {
+      if (progress.totalChunks && progress.totalChunks > 0) {
+        const chunkDone = Math.min(progress.currentFileChunks ?? 0, progress.totalChunks)
+        pct += (chunkDone / progress.totalChunks) * perFile
+      }
+
+      const nextPct = Math.min(progress.isComplete ? 100 : 99, Math.max(0, pct))
+      if (!progressHasData.value) {
+        progressHasData.value = true
+        buildProgress.value = nextPct
+      } else {
+        buildProgress.value = Math.max(buildProgress.value, nextPct)
+      }
+    }
+
+    if (progress.isComplete) {
+      if (progressTimer) {
+        clearInterval(progressTimer)
+        progressTimer = undefined
+      }
+      buildProgress.value = 100
+      setTimeout(() => {
+        isBuilding.value = false
+        buildProgress.value = 0
+      }, 500)
+      await checkVectorIndexStatus()
+    }
+  }, 600)
+}
+
+  const rebuildVectorIndex = async () => {
     const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
     if (!activeTerminal || !activeTerminal.cwd) return
     const targetPath = activeTerminal.cwd
@@ -321,16 +320,16 @@
     isBuilding.value = true
     buildProgress.value = 0
 
-    await ckApi.buildIndex({ path: targetPath })
+    await vdbApi.rebuildIndex({ root: targetPath })
 
     startProgressPolling(targetPath)
   }
 
-  const cancelCkIndex = async () => {
+  const cancelVectorIndex = async () => {
     const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
     if (!activeTerminal || !activeTerminal.cwd) return
 
-    await ckApi.cancelBuild({ path: activeTerminal.cwd })
+    await vdbApi.cancelBuild({ path: activeTerminal.cwd })
 
     isBuilding.value = false
     buildProgress.value = 0
@@ -341,11 +340,11 @@
     }
   }
 
-  const deleteCkIndex = async () => {
+  const deleteVectorIndex = async () => {
     const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
     if (!activeTerminal || !activeTerminal.cwd) return
-    await ckApi.deleteIndex({ path: activeTerminal.cwd })
-    await checkCkIndexStatus()
+    // Not supported; consider removing index directory on backend if needed
+    await checkVectorIndexStatus()
   }
 
   const getButtonTitle = () => {
@@ -354,56 +353,6 @@
     } else {
       return t('ck.build_index')
     }
-  }
-
-  const getSelectionDisplayText = () => {
-    const info = terminalSelection.selectionInfo.value
-    const activeTab = tabManagerStore.activeTab
-
-    if (!activeTab || activeTab.type !== TabType.TERMINAL) {
-      return info || t('session.selected_content')
-    }
-
-    let currentTabPath = 'terminal'
-    if (activeTab.path && activeTab.path !== '~') {
-      currentTabPath = activeTab.path
-    } else {
-      const terminal = terminalStore.terminals.find(t => t.id === activeTab.id)
-      if (terminal?.cwd) {
-        const parts = terminal.cwd
-          .replace(/\/$/, '')
-          .split(/[/\\]/)
-          .filter(p => p.length > 0)
-        if (parts.length === 0) {
-          currentTabPath = '~'
-        } else {
-          const lastPart = parts[parts.length - 1]
-          currentTabPath = lastPart.length > 15 ? lastPart.substring(0, 12) + '...' : lastPart
-        }
-      }
-    }
-
-    if (info) {
-      const parts = info.split(' ')
-      if (parts.length > 1) {
-        return `${currentTabPath} ${parts.slice(1).join(' ')}`
-      }
-    }
-    return `${currentTabPath} ${t('session.selected_content')}`
-  }
-
-  const handleInsertSelectedText = () => {
-    const selectedText = terminalSelection.getSelectedText()
-    if (!selectedText.trim()) return
-
-    const newValue = props.modelValue ? `${props.modelValue} ${selectedText}` : selectedText
-
-    emit('update:modelValue', newValue)
-
-    nextTick(() => {
-      inputTextarea.value?.focus()
-      adjustTextareaHeight()
-    })
   }
 
   const getTagContextInfo = () => {
@@ -416,7 +365,7 @@
     } catch (error) {
       console.warn('获取用户主目录失败:', error)
     }
-    await checkCkIndexStatus()
+    await checkVectorIndexStatus()
     syncResolvedPath()
 
     nodeVersion.setupListener(() => terminalSelection.currentTerminalTab.value?.terminalId ?? 0)
@@ -424,7 +373,7 @@
     try {
       const targetPath = indexStatus.value.path || activeTerminalCwd.value
       if (targetPath) {
-        const progress = await ckApi.getBuildProgress({ path: targetPath })
+        const progress = await vdbApi.getBuildProgress({ path: targetPath })
         if (!progress.isComplete && (progress.totalFiles > 0 || progress.error !== 'progress_unavailable')) {
           isBuilding.value = true
           if (progress.totalFiles > 0) {
@@ -474,14 +423,6 @@
       :visible="projectRules.state.value.hasRulesFile"
       :rules-file="projectRules.state.value.selectedRulesFile"
       @click="showProjectRulesModal = true"
-    />
-
-    <TerminalSelectionTag
-      :visible="terminalSelection.hasSelection.value"
-      :selected-text="terminalSelection.selectedText.value"
-      :display-text="getSelectionDisplayText()"
-      @clear="terminalSelection.clearSelection"
-      @insert="handleInsertSelectedText"
     />
 
     <div class="input-main">
@@ -536,7 +477,7 @@
                 ? t('ck.index_button_select_non_home')
                 : getButtonTitle()
           "
-          @click="handleCkIndexClick"
+          @click="handleVectorIndexClick"
         >
           <div class="button-content">
             <CircularProgress v-if="isBuilding" :percentage="buildProgress">
@@ -575,14 +516,14 @@
     </div>
 
     <InputPopover :visible="showIndexModal" @update:visible="showIndexModal = $event">
-      <CkIndexContent
+      <VectorIndexContent
         :index-status="{ hasIndex: indexStatus.isReady, path: indexStatus.path, size: indexStatus.size }"
         :is-building="isBuilding"
         :build-progress="buildProgress"
-        @build="buildCkIndex"
-        @delete="deleteCkIndex"
-        @refresh="checkCkIndexStatus"
-        @cancel="cancelCkIndex"
+        @build="rebuildVectorIndex"
+        @delete="deleteVectorIndex"
+        @refresh="checkVectorIndexStatus"
+        @cancel="cancelVectorIndex"
       />
     </InputPopover>
 

@@ -1,10 +1,10 @@
-import { TabType, type TabItem } from '@/types'
+import { TabType, type AnyTabItem, type TerminalTabItem, type SettingsTabItem } from '@/types'
 import type { TabState, TerminalTabState, SettingsTabState } from '@/types/domain/storage'
 import { useTerminalStore } from './Terminal'
 import { useSessionStore } from './session'
 
-export interface TabHandler<T extends TabState = TabState> {
-  buildTabItem(tab: T): TabItem
+export interface TabHandler<T extends TabState = TabState, R extends AnyTabItem = AnyTabItem> {
+  buildTabItem(tab: T): R
   activate(tabId: number): Promise<void>
   close?(tabId: number): Promise<void>
 }
@@ -38,67 +38,8 @@ export const defaultCloseTab = async (tabId: number): Promise<void> => {
   }
 }
 
-const getDisplayPath = (cwd: string): string => {
-  if (!cwd || cwd === '~') return '~'
-
-  try {
-    const cleanPath = cwd.replace(/\/$/, '')
-    const homePatterns = [/^\/Users\/[^/]+/, /^\/home\/[^/]+/, /^C:\\Users\\[^\\]+/i]
-
-    for (const homePattern of homePatterns) {
-      if (homePattern.test(cleanPath)) {
-        const homeMatch = cleanPath.match(homePattern)?.[0]
-        if (homeMatch && cleanPath === homeMatch) {
-          return '~'
-        }
-        const relativePath = cleanPath.replace(homePattern, '~')
-        const pathParts = relativePath.split(/[/\\]/).filter(p => p.length > 0)
-        if (pathParts.length > 0) {
-          const lastPart = pathParts[pathParts.length - 1]
-          return lastPart.length > 20 ? lastPart.substring(0, 17) + '...' : lastPart
-        }
-        return '~'
-      }
-    }
-    const systemDirs: Record<string, string> = {
-      '/': 'root',
-      '/usr': 'usr',
-      '/etc': 'etc',
-      '/var': 'var',
-      '/tmp': 'tmp',
-      '/opt': 'opt',
-      '/Applications': 'Apps',
-      '/System': 'System',
-      '/Library': 'Library',
-      'C:\\': 'C:',
-      'D:\\': 'D:',
-    }
-
-    if (systemDirs[cleanPath]) {
-      return systemDirs[cleanPath]
-    }
-    const pathParts = cleanPath.split(/[/\\]/).filter(p => p.length > 0)
-
-    if (pathParts.length === 0) return '/'
-
-    const lastPart = pathParts[pathParts.length - 1]
-    if (pathParts.length === 1 && (cleanPath.startsWith('/') || cleanPath.match(/^[A-Z]:\\/i))) {
-      return navigator.platform.toLowerCase().includes('win') ? lastPart : `/${lastPart}`
-    }
-    if (lastPart.length > 20) {
-      return lastPart.substring(0, 17) + '...'
-    }
-
-    return lastPart
-  } catch (error) {
-    console.warn('路径处理错误:', error, '原始路径:', cwd)
-    const parts = cwd.split(/[/\\]/).filter(p => p.length > 0)
-    return parts.length > 0 ? parts[parts.length - 1] : '~'
-  }
-}
-
 handlers.set('terminal', {
-  buildTabItem: (tab: TerminalTabState): TabItem => {
+  buildTabItem: (tab: TerminalTabState): TerminalTabItem => {
     const terminalStore = useTerminalStore()
     const terminal = terminalStore.terminals.find(t => t.id === tab.id)
 
@@ -106,9 +47,9 @@ handlers.set('terminal', {
       id: tab.id,
       type: TabType.TERMINAL,
       closable: true,
-      shell: terminal?.shell,
-      path: terminal ? getDisplayPath(terminal.cwd) : '~',
-      title: terminal ? `${terminal.id}` : String(tab.id),
+      data: {
+        shell: terminal ? terminal.shell : tab.data.shell,
+      },
     }
   },
 
@@ -123,14 +64,13 @@ handlers.set('terminal', {
 })
 
 handlers.set('settings', {
-  buildTabItem: (tab: SettingsTabState): TabItem => {
+  buildTabItem: (tab: SettingsTabState): SettingsTabItem => {
     return {
       id: tab.id,
       type: TabType.SETTINGS,
-      title: 'settings',
       closable: true,
       data: {
-        section: tab.data.lastSection,
+        section: tab.data?.lastSection || 'general',
       },
     }
   },

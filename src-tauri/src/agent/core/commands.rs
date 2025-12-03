@@ -109,7 +109,7 @@ pub async fn agent_execute_task(
     channel: Channel<TaskProgressPayload>,
 ) -> TauriApiResult<EmptyData> {
     match state.executor.execute_task(params, channel).await {
-        Ok(_) => Ok(api_success!()),
+        Ok(_context) => Ok(api_success!()),
         Err(e) => {
             tracing::error!("Failed to execute Agent task: {}", e);
             Ok(api_error!("agent.execute_failed"))
@@ -123,7 +123,7 @@ pub async fn agent_pause_task(
     state: State<'_, TaskExecutorState>,
     task_id: String,
 ) -> TauriApiResult<EmptyData> {
-    match state.executor.pause_task(&task_id).await {
+    match state.executor.pause_task(&task_id, true).await {
         Ok(_) => Ok(api_success!()),
         Err(e) => {
             tracing::error!("Failed to pause task: {}", e);
@@ -176,7 +176,7 @@ pub async fn agent_get_file_context_status(
 ) -> TauriApiResult<FileContextStatus> {
     match state
         .executor
-        .fetch_file_context_status(conversation_id)
+        .get_file_context_status(conversation_id)
         .await
     {
         Ok(status) => Ok(api_success!(status)),
@@ -229,10 +229,19 @@ pub async fn agent_trigger_context_summary(
 #[tauri::command]
 pub async fn agent_create_conversation(
     state: State<'_, TaskExecutorState>,
+    context_state: State<'_, crate::terminal::commands::TerminalContextState>,
     title: Option<String>,
-    workspace_path: Option<String>,
 ) -> TauriApiResult<i64> {
     let title_clone = title.clone();
+
+    // 自动从当前活跃终端获取工作目录
+    let workspace_path = context_state
+        .context_service
+        .get_active_context()
+        .await
+        .ok()
+        .and_then(|ctx| ctx.current_working_directory);
+
     match state
         .executor
         .create_conversation(title, workspace_path)

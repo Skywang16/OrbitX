@@ -7,7 +7,8 @@
 
 export { aiApi } from './ai'
 export { agentApi } from './agent'
-export { ckApi } from './ck'
+export { appApi } from './app'
+export { vectorDbApi } from './vector-db'
 export { completionApi } from './completion'
 export { configApi } from './config'
 export { dockApi } from './dock'
@@ -27,7 +28,6 @@ export { codeApi } from './code'
 
 export type * from './ai/types'
 export type * from './agent/types'
-export type * from './ck/types'
 export type * from './completion/types'
 export type * from './shortcuts/types'
 export type * from './storage/types'
@@ -42,8 +42,8 @@ export type { ShellInfo, BackgroundCommandResult } from './shell/types'
 // 从terminal导出所有类型
 export type * from './terminal/types'
 
-export type { CkApi, CkSearchParams, CkIndexStatus } from './ck'
 export type { AgentApi } from './agent'
+export type { AppApi } from './app'
 export type { FilesystemApi } from './filesystem'
 export type { LLMApi } from './llm'
 export type { LLMRegistryApi } from './llm-registry'

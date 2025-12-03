@@ -25,7 +25,6 @@ impl StorageLayer {
     }
 }
 
-/// 会话状态数据结构 - 统一 tab 管理
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionState {
@@ -48,50 +47,40 @@ impl Default for SessionState {
     }
 }
 
-/// Tab ID - 统一使用 i32（支持负数，用于特殊 tab 如 Settings）
 pub type TabId = i32;
 
-/// Tab 状态 - 支持不同类型的 tab（扁平结构）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum TabState {
     #[serde(rename = "terminal", rename_all = "camelCase")]
     Terminal {
-        id: i32, // 改用 i32 支持负数
+        id: i32,
         #[serde(rename = "isActive")]
         is_active: bool,
         data: TerminalTabData,
     },
     #[serde(rename = "settings", rename_all = "camelCase")]
     Settings {
-        id: i32, // 改用 i32 支持负数
+        id: i32,
         #[serde(rename = "isActive")]
         is_active: bool,
         data: SettingsTabData,
     },
 }
 
-/// Terminal tab 数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalTabData {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub shell: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub shell_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cwd: Option<String>,
+    pub shell: String,
+    pub cwd: String,
 }
 
-/// Settings tab 数据
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase", default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SettingsTabData {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_section: Option<String>,
+    pub section: String,
 }
 
-/// 窗口状态 - 精简版
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowState {
@@ -114,24 +103,19 @@ impl Default for WindowState {
     }
 }
 
-/// 运行时终端状态（用于命令返回）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalRuntimeState {
     pub id: u32,
     pub cwd: String,
-    pub shell: Option<String>,
+    pub shell: String,
 }
 
-/// UI状态 - 精简版
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UiState {
-    /// 主题名称
     pub theme: String,
-    /// 字体大小
     pub font_size: f32,
-    /// 侧边栏宽度
     pub sidebar_width: u32,
 }
 
@@ -145,19 +129,13 @@ impl Default for UiState {
     }
 }
 
-/// AI状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiState {
-    /// 是否可见
     pub visible: bool,
-    /// 侧边栏宽度
     pub width: u32,
-    /// 聊天模式
-    pub mode: String, // "chat" | "agent"
-    /// 当前会话ID
+    pub mode: String,
     pub conversation_id: Option<i64>,
-    /// 选中的模型ID
     pub selected_model_id: Option<String>,
 }
 

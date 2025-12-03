@@ -186,26 +186,32 @@
     gap: var(--spacing-sm);
     padding: var(--spacing-md) var(--spacing-md);
     width: 140px;
-    background: var(--bg-300);
-    border: 1px solid var(--border-200);
-    border-radius: var(--border-radius-lg);
+    background: var(--color-primary-alpha);
+    border: 1px solid transparent;
+    border-radius: var(--border-radius-md);
     cursor: pointer;
-    transition: background-color 0.15s ease;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     user-select: none;
   }
 
   .action-card:hover {
-    background: var(--bg-400);
+    background: var(--color-primary-alpha);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 
   .action-card svg {
-    color: var(--text-300);
+    color: var(--color-primary);
+    transition: transform 0.15s ease;
+  }
+
+  .action-card:hover svg {
+    transform: scale(1.05);
   }
 
   .action-card span {
     font-size: var(--font-size-md);
     font-weight: 500;
-    color: var(--text-200);
+    color: var(--color-primary);
   }
 
   .recent-section {

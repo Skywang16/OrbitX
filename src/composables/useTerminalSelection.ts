@@ -9,6 +9,7 @@ import {
   type TagState,
   type TagContextInfo,
 } from '@/types/tags'
+import { getPathBasename } from '@/utils/path'
 
 interface TerminalSelection {
   text: string
@@ -55,9 +56,9 @@ export const useTerminalSelection = () => {
 
     return {
       terminalId: terminal.id,
-      shell: terminal.shell || 'shell',
-      cwd: terminal.cwd || '~',
-      displayPath: activeTab.path || '~',
+      shell: terminal.shell,
+      cwd: terminal.cwd,
+      displayPath: getPathBasename(terminal.cwd),
     }
   })
 

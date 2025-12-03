@@ -36,8 +36,6 @@ pub async fn llm_call_stream(
     request: CreateMessageRequest,
     on_chunk: Channel<StreamEvent>,
 ) -> TauriApiResult<EmptyData> {
-    tracing::debug!("Starting stream call for model: {}", request.model);
-
     use tokio_util::sync::CancellationToken;
     let token = CancellationToken::new();
     let mut stream = match state.service.call_stream(request, token).await {
@@ -45,13 +43,7 @@ pub async fn llm_call_stream(
         Err(_) => return Ok(api_error!("llm.stream_failed")),
     };
 
-    tracing::debug!("Stream created successfully, starting to read chunks");
-    let mut chunk_count = 0;
-
     while let Some(chunk_result) = stream.next().await {
-        chunk_count += 1;
-        // tracing::debug!("Received chunk #{}: {:?}", chunk_count, chunk_result);
-
         match chunk_result {
             Ok(chunk) => {
                 if let Err(e) = on_chunk.send(chunk) {
@@ -75,7 +67,6 @@ pub async fn llm_call_stream(
         }
     }
 
-    tracing::debug!("Stream completed, total chunks: {}", chunk_count);
     Ok(api_success!())
 }
 

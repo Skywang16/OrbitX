@@ -11,6 +11,7 @@ use crate::agent::react::types::ReactIteration;
 use crate::agent::tools::ToolResult;
 use crate::llm::anthropic_types::{MessageContent, MessageParam};
 
+#[derive(Clone)]
 pub struct ContextBuilder {
     file_tracker: Arc<FileContextTracker>,
     config: ContextBuilderConfig,
