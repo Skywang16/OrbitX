@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import { reactive, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import { aiApi } from '@/api'
+  import type { AIModelTestConnectionInput } from '@/api/ai/types'
 
   export interface EmbeddingModelConfig {
     id?: string
@@ -72,9 +74,15 @@
     if (!validateForm()) return
     isTesting.value = true
     try {
-      // TODO: 调用后端测试连接
-      // await vectorDbApi.testEmbeddingConnection(formData)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const testConfig: AIModelTestConnectionInput = {
+        provider: 'openai_compatible',
+        apiUrl: formData.apiUrl,
+        apiKey: formData.apiKey,
+        model: formData.modelName,
+        modelType: 'embedding',
+        options: { dimension: formData.dimension },
+      }
+      await aiApi.testConnectionWithConfig(testConfig)
     } finally {
       isTesting.value = false
     }
@@ -217,39 +225,52 @@
     font-size: var(--font-size-sm);
     font-weight: 500;
     color: var(--text-200);
-    margin-bottom: 6px;
+    margin-bottom: var(--spacing-sm);
   }
 
   .form-input {
     width: 100%;
-    padding: 8px 12px;
-    font-size: var(--font-size-sm);
+    height: 32px;
+    padding: 0 var(--spacing-md);
     border: 1px solid var(--border-300);
-    border-radius: var(--border-radius-sm);
-    background: var(--bg-400);
-    color: var(--text-100);
-    transition: border-color 0.2s;
+    border-radius: var(--border-radius);
+    background-color: var(--bg-400);
+    color: var(--text-200);
+    font-size: var(--font-size-md);
+    font-family: var(--font-family);
+    line-height: 1.5;
+    transition: all var(--x-duration-normal) var(--x-ease-out);
+    box-sizing: border-box;
   }
 
   .form-input:focus {
     outline: none;
-    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary-alpha);
   }
 
   .form-input.error {
-    border-color: var(--color-danger);
+    border-color: var(--color-error);
+  }
+
+  .form-input.error:focus {
+    box-shadow: 0 0 0 2px rgba(244, 71, 71, 0.1);
   }
 
   .form-description {
-    font-size: 12px;
+    font-size: var(--font-size-xs);
     color: var(--text-400);
-    margin-top: 4px;
+    margin-top: var(--spacing-xs);
+    line-height: 1.4;
   }
 
   .error-message {
-    font-size: 12px;
-    color: var(--color-danger);
-    margin-top: 4px;
+    font-size: var(--font-size-xs);
+    color: var(--color-error);
+    margin-top: var(--spacing-xs);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    line-height: 1.4;
   }
 
   .preset-buttons {
@@ -262,11 +283,11 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    width: 100%;
+    gap: var(--spacing-lg);
   }
 
   .footer-right {
     display: flex;
-    gap: 8px;
+    gap: var(--spacing-md);
   }
 </style>

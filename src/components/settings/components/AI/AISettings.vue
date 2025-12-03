@@ -4,7 +4,6 @@
   import { useAISettingsStore } from './store'
   import AIFeatureSettings from './components/AIFeatureSettings.vue'
   import AIModelConfig from './components/AIModelConfig.vue'
-  import EmbeddingModelConfig from './components/EmbeddingModelConfig.vue'
 
   const aiSettingsStore = useAISettingsStore()
   const { t } = useI18n()
@@ -28,9 +27,6 @@
 
     <div class="settings-group">
       <AIModelConfig />
-    </div>
-    <div class="settings-group">
-      <EmbeddingModelConfig />
     </div>
     <div class="settings-group">
       <AIFeatureSettings />

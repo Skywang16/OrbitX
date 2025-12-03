@@ -1,12 +1,12 @@
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use parking_lot::RwLock;
+use super::{ChunkMetadata, FileStore, IndexManifest};
+use crate::vector_db::chunking::TextChunker;
 use crate::vector_db::core::{Chunk, Result, VectorDbConfig, VectorDbError};
 use crate::vector_db::embedding::Embedder;
 use crate::vector_db::index::VectorIndex;
 use crate::vector_db::utils::{blake3_hash_bytes, collect_source_files};
-use crate::vector_db::chunking::TextChunker;
-use super::{FileStore, IndexManifest, ChunkMetadata};
+use parking_lot::RwLock;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 pub struct IndexManager {
     pub(crate) store: Arc<FileStore>,
@@ -18,7 +18,7 @@ impl IndexManager {
     pub fn new(project_root: &Path, config: VectorDbConfig) -> Result<Self> {
         let store = Arc::new(FileStore::new(project_root)?);
         store.initialize()?;
-        
+
         let manifest_path = store.root_path().join("manifest.json");
         let manifest = if manifest_path.exists() {
             IndexManifest::load(&manifest_path)?
@@ -28,7 +28,7 @@ impl IndexManager {
                 config.embedding.dimension,
             )
         };
-        
+
         Ok(Self {
             store,
             manifest: Arc::new(RwLock::new(manifest)),
@@ -101,8 +101,17 @@ impl IndexManager {
         if embeddings.is_empty() {
             return Err(VectorDbError::Embedding("No embeddings returned".into()));
         }
-        if embeddings[0].len() != self.config.embedding.dimension {
-            return Err(VectorDbError::InvalidDimension { expected: self.config.embedding.dimension, actual: embeddings[0].len() });
+        let actual_dim = embeddings[0].len();
+        if actual_dim != self.config.embedding.dimension {
+            tracing::error!(
+                "向量维度不匹配: 期望 {}, 实际 {}. 请在模型配置中设置正确的维度。",
+                self.config.embedding.dimension,
+                actual_dim
+            );
+            return Err(VectorDbError::InvalidDimension {
+                expected: self.config.embedding.dimension,
+                actual: actual_dim,
+            });
         }
 
         // 5. 写入索引与清单
@@ -148,7 +157,7 @@ impl IndexManager {
         vector_index: &VectorIndex,
     ) -> Result<()> {
         use futures::stream::{self, StreamExt};
-        
+
         // 收集所有需要索引的文件
         let mut files_to_index = Vec::new();
         for p in file_paths {
@@ -159,22 +168,23 @@ impl IndexManager {
                 files_to_index.extend(files);
             }
         }
-        
+
         // 并行索引（最多 4 个并发任务）
         let concurrency = 4;
         let results: Vec<Result<()>> = stream::iter(files_to_index)
             .map(|file_path| async move {
-                self.index_file_with(&file_path, embedder, vector_index).await
+                self.index_file_with(&file_path, embedder, vector_index)
+                    .await
             })
             .buffer_unordered(concurrency)
             .collect()
             .await;
-        
+
         // 检查是否有错误
         for result in results {
             result?;
         }
-        
+
         Ok(())
     }
 
@@ -184,12 +194,17 @@ impl IndexManager {
         embedder: &dyn Embedder,
         vector_index: &VectorIndex,
     ) -> Result<()> {
-        self.index_file_with(file_path, embedder, vector_index).await
+        self.index_file_with(file_path, embedder, vector_index)
+            .await
     }
 
     pub fn remove_file(&self, file_path: &Path) -> Result<()> {
         let mut manifest = self.manifest.write();
-        let chunk_ids: Vec<_> = manifest.get_file_chunks(file_path).into_iter().map(|(id, _)| id).collect();
+        let chunk_ids: Vec<_> = manifest
+            .get_file_chunks(file_path)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
         for id in chunk_ids {
             let _ = self.store.delete_vectors(id);
             manifest.remove_chunk(&id);
@@ -208,14 +223,17 @@ impl IndexManager {
         // 重置清单
         {
             let mut manifest = self.manifest.write();
-            *manifest = IndexManifest::new(self.config.embedding.model_name.clone(), self.config.embedding.dimension);
+            *manifest = IndexManifest::new(
+                self.config.embedding.model_name.clone(),
+                self.config.embedding.dimension,
+            );
         }
         self.save_manifest()?;
 
         let files = collect_source_files(root, self.config.max_file_size);
         self.index_files_with(&files, embedder, vector_index).await
     }
-    
+
     pub fn get_status(&self) -> IndexStatus {
         let manifest = self.manifest.read();
         IndexStatus {
@@ -224,6 +242,27 @@ impl IndexManager {
             embedding_model: manifest.embedding_model.clone(),
             vector_dimension: manifest.vector_dimension,
         }
+    }
+
+    /// 获取所有 chunk_id
+    pub fn get_chunk_ids(&self) -> Vec<crate::vector_db::core::ChunkId> {
+        let manifest = self.manifest.read();
+        manifest.chunks.keys().cloned().collect()
+    }
+
+    /// 获取所有 chunk 元数据
+    pub fn get_all_chunk_metadata(&self) -> Vec<(crate::vector_db::core::ChunkId, ChunkMetadata)> {
+        let manifest = self.manifest.read();
+        manifest
+            .chunks
+            .iter()
+            .map(|(id, meta)| (*id, meta.clone()))
+            .collect()
+    }
+
+    /// 获取 FileStore 引用
+    pub fn store(&self) -> &FileStore {
+        &self.store
     }
 }
 

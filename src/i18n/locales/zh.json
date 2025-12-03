@@ -141,7 +141,9 @@
     "no_models": "暂无模型配置",
     "all_models": "所有模型",
     "chat": "聊天",
-    "add_chat_model": "添加AI模型",
+    "add_chat_model": "添加Chat模型",
+    "add_embedding_model": "添加向量模型",
+    "embedding": "向量",
     "context_window": "上下文窗口 (tokens)",
     "context_window_description": "模型能处理的最大上下文长度",
     "max_output_tokens": "最大输出 (tokens)",
@@ -273,7 +275,6 @@
   "cache": {
     "directory_cleared": "目录缓存已清除"
   },
-  "config": {},
   "ck": {
     "index_ready": "已构建向量索引",
     "index_not_ready": "语义索引未就绪",
@@ -305,13 +306,7 @@
     "no_versions": "未找到已安装的Node.js版本"
   },
   "embedding_model": {
-    "title": "向量模型配置",
-    "config_label": "向量模型",
-    "description": "配置用于语义搜索的向量模型（OpenAI 兼容 API）",
-    "configure": "配置",
-    "edit": "编辑",
-    "not_configured": "尚未配置向量模型，语义搜索功能将不可用",
-    "add_title": "配置向量模型",
+    "add_title": "添加向量模型",
     "edit_title": "编辑向量模型",
     "presets": "快速预设",
     "api_url": "API URL",
@@ -320,9 +315,6 @@
     "model_name": "模型名称",
     "dimension": "向量维度",
     "dimension_hint": "必须与模型输出维度一致，否则索引会失败",
-    "test_connection": "测试连接",
-    "test_success": "连接成功",
-    "save_success": "配置已保存，重建索引后生效",
     "validation": {
       "api_url_required": "API URL 是必填项",
       "api_key_required": "API Key 是必填项",

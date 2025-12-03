@@ -358,7 +358,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
   const resizeTerminal = async (id: number, rows: number, cols: number) => {
     const terminalSession = terminals.value.find(t => t.id === id)
     if (!terminalSession) {
-      console.error(`无法调整终端 '${id}' 大小: 未找到。`)
+      console.warn(`[HMR] 终端 '${id}' 不在 store 中，可能是热更新导致`)
       return
     }
 

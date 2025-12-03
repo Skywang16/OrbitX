@@ -142,6 +142,8 @@
     "all_models": "All Models",
     "chat": "Chat",
     "add_chat_model": "Add Chat Model",
+    "add_embedding_model": "Add Embedding Model",
+    "embedding": "Embedding",
     "context_window": "Context Window (tokens)",
     "context_window_description": "Maximum context length the model can handle",
     "max_output_tokens": "Max Output (tokens)",
@@ -273,7 +275,6 @@
   "cache": {
     "directory_cleared": "Directory cache cleared"
   },
-  "config": {},
   "ck": {
     "index_ready": "semantic index is ready",
     "index_not_ready": "semantic index is not ready",
@@ -305,13 +306,7 @@
     "no_versions": "No installed Node.js versions found"
   },
   "embedding_model": {
-    "title": "Embedding Model",
-    "config_label": "Embedding Model",
-    "description": "Configure embedding model for semantic search (OpenAI compatible API)",
-    "configure": "Configure",
-    "edit": "Edit",
-    "not_configured": "Embedding model not configured, semantic search will be unavailable",
-    "add_title": "Configure Embedding Model",
+    "add_title": "Add Embedding Model",
     "edit_title": "Edit Embedding Model",
     "presets": "Quick Presets",
     "api_url": "API URL",
@@ -320,9 +315,6 @@
     "model_name": "Model Name",
     "dimension": "Vector Dimension",
     "dimension_hint": "Must match model output dimension, otherwise indexing will fail",
-    "test_connection": "Test Connection",
-    "test_success": "Connection successful",
-    "save_success": "Configuration saved, rebuild index to apply",
     "validation": {
       "api_url_required": "API URL is required",
       "api_key_required": "API Key is required",

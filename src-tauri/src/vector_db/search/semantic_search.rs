@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use super::SearchOptions;
 use crate::vector_db::core::{Result, SearchResult, VectorDbConfig};
 use crate::vector_db::embedding::Embedder;
 use crate::vector_db::index::VectorIndex;
 use crate::vector_db::storage::IndexManager;
-use super::SearchOptions;
+use std::sync::Arc;
 
 pub struct SemanticSearchEngine {
     _index_manager: Arc<IndexManager>,
@@ -30,19 +30,23 @@ impl SemanticSearchEngine {
     pub fn embedder(&self) -> Arc<dyn Embedder> {
         self.embedder.clone()
     }
-    
+
+    pub fn config(&self) -> &VectorDbConfig {
+        &self.config
+    }
+
     pub async fn search(&self, query: &str, options: SearchOptions) -> Result<Vec<SearchResult>> {
         // 1. 生成查询向量（使用引用，零克隆）
         let query_embedding = self.embedder.embed(&[query]).await?;
         let query_vec = &query_embedding[0];
-        
+
         // 2. 向量搜索
         let results = self.vector_index.search(
             query_vec,
             options.top_k,
             self.config.similarity_threshold.max(options.threshold),
         )?;
-        
+
         // 3. 构建搜索结果（预分配容量）
         let mut search_results = Vec::with_capacity(results.len());
         for (chunk_id, score) in results {
@@ -59,7 +63,7 @@ impl SemanticSearchEngine {
                 ));
             }
         }
-        
+
         Ok(search_results)
     }
 }

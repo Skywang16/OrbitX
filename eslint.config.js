@@ -13,7 +13,6 @@ export default [
       'dist/**',
       'node_modules/**',
       'src-tauri/**',
-      'ck-main/**',
       '*.d.ts',
       'public/**',
       'vite.config.ts',

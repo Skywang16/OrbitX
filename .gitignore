@@ -24,7 +24,6 @@ src-tauri/logs/
 
 # Rust build outputs
 target/
-ck-main/target/
 
 # Documentation
 docs/
@@ -41,6 +40,5 @@ docs/
 *.sln
 *.sw?
 *.oxi
-*.ck
 AGENTS.md
 WARP.md

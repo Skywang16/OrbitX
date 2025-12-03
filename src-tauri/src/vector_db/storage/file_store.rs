@@ -1,7 +1,7 @@
+use crate::vector_db::core::{ChunkId, FileMetadata, Result, VectorDbError};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::vector_db::core::{ChunkId, FileMetadata, Result, VectorDbError};
 
 /// 文件系统存储管理器
 pub struct FileStore {
@@ -18,8 +18,8 @@ pub struct FileStore {
 impl FileStore {
     /// 创建新的文件存储
     pub fn new(project_root: &Path) -> Result<Self> {
-        let root_path = project_root.join(".orbitx").join("vector_index");
-        let vectors_path = root_path.join("vectors");
+        let root_path = project_root.join(".oxi");
+        let vectors_path = root_path.clone();
         let metadata_path = root_path.join("metadata");
         let cache_path = root_path.join("cache");
 
@@ -42,7 +42,7 @@ impl FileStore {
 
     /// 保存向量数据
     pub fn save_vectors(&self, chunk_id: ChunkId, vectors: &[f32]) -> Result<()> {
-        let file_path = self.vectors_path.join(format!("{}.bin", chunk_id));
+        let file_path = self.vectors_path.join(format!("{}.oxi", chunk_id));
         let data = bincode::serialize(vectors)?;
         fs::write(file_path, data)?;
         Ok(())
@@ -50,7 +50,7 @@ impl FileStore {
 
     /// 加载向量数据
     pub fn load_vectors(&self, chunk_id: ChunkId) -> Result<Vec<f32>> {
-        let file_path = self.vectors_path.join(format!("{}.bin", chunk_id));
+        let file_path = self.vectors_path.join(format!("{}.oxi", chunk_id));
         if !file_path.exists() {
             return Err(VectorDbError::FileNotFound(format!(
                 "Vector file not found: {}",
@@ -66,7 +66,7 @@ impl FileStore {
     pub fn save_file_metadata(&self, metadata: &FileMetadata) -> Result<()> {
         let mut all_metadata = self.load_all_file_metadata().unwrap_or_default();
         all_metadata.insert(metadata.path.clone(), metadata.clone());
-        
+
         let file_path = self.metadata_path.join("files.json");
         let json = serde_json::to_string_pretty(&all_metadata)?;
         fs::write(file_path, json)?;
@@ -89,11 +89,11 @@ impl FileStore {
         // 删除元数据
         let mut all_metadata = self.load_all_file_metadata().unwrap_or_default();
         all_metadata.remove(file_path);
-        
+
         let metadata_file = self.metadata_path.join("files.json");
         let json = serde_json::to_string_pretty(&all_metadata)?;
         fs::write(metadata_file, json)?;
-        
+
         Ok(())
     }
 
@@ -107,7 +107,7 @@ impl FileStore {
 
     /// 删除某个向量文件
     pub fn delete_vectors(&self, chunk_id: ChunkId) -> Result<()> {
-        let file_path = self.vectors_path.join(format!("{}.bin", chunk_id));
+        let file_path = self.vectors_path.join(format!("{}.oxi", chunk_id));
         if file_path.exists() {
             std::fs::remove_file(file_path)?;
         }

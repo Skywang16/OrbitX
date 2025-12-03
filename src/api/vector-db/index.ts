@@ -21,11 +21,16 @@ export interface VectorBuildProgress {
 }
 
 export class VectorDbApi {
-  getIndexStatus = async (params: { path?: string } = {}): Promise<VectorIndexStatus> => {
-    const raw = await invoke<{ total_files: number; total_chunks: number; embedding_model: string; vector_dimension: number }>('get_index_status')
+  getIndexStatus = async (params: { path: string }): Promise<VectorIndexStatus> => {
+    const raw = await invoke<{
+      total_files: number
+      total_chunks: number
+      embedding_model: string
+      vector_dimension: number
+    }>('get_index_status', { path: params.path })
     return {
       isReady: raw.total_chunks > 0,
-      path: params.path || '.',
+      path: params.path,
       size: '',
       totalFiles: raw.total_files,
       totalChunks: raw.total_chunks,
@@ -52,7 +57,15 @@ export class VectorDbApi {
   }
 
   getBuildProgress = async (params: { path: string }): Promise<VectorBuildProgress> => {
-    const p = await invoke<{ current_file?: string; files_completed: number; total_files: number; current_file_chunks?: number; total_chunks: number; is_complete: boolean; error?: string }>('vector_get_build_progress', { path: params.path })
+    const p = await invoke<{
+      current_file?: string
+      files_completed: number
+      total_files: number
+      current_file_chunks?: number
+      total_chunks: number
+      is_complete: boolean
+      error?: string
+    }>('vector_get_build_progress', { path: params.path })
     return {
       currentFile: p.current_file,
       filesCompleted: p.files_completed,
@@ -70,4 +83,3 @@ export class VectorDbApi {
 }
 
 export const vectorDbApi = new VectorDbApi()
-export type { VectorIndexStatus, VectorBuildProgress }

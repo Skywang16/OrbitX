@@ -253,9 +253,18 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
 
     // 初始化向量数据库状态
     {
+        use crate::llm::types::LLMProviderConfig;
+        use crate::storage::repositories::{AIModels, ModelType};
+        use crate::vector_db::{
+            commands::VectorDbState,
+            core::{RemoteEmbeddingConfig, VectorDbConfig},
+            index::VectorIndex,
+            search::SemanticSearchEngine,
+            storage::IndexManager,
+        };
         use std::path::PathBuf;
         use std::sync::Arc;
-        use crate::vector_db::{core::VectorDbConfig, index::VectorIndex, storage::IndexManager, search::SemanticSearchEngine, commands::VectorDbState};
+
         // 复用与数据库相同的应用数据目录作为根
         let app_dir = if let Ok(dir) = std::env::var("OrbitX_DATA_DIR") {
             PathBuf::from(dir)
@@ -264,7 +273,61 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
             data_dir.join("OrbitX")
         };
 
-        let config = VectorDbConfig::default();
+        // 从数据库读取 embedding 模型配置
+        let database = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
+        let embedding_config = tauri::async_runtime::block_on(async {
+            let models = AIModels::new(&database)
+                .find_all()
+                .await
+                .unwrap_or_default();
+            models
+                .into_iter()
+                .find(|m| m.model_type == ModelType::Embedding)
+        });
+
+        let config =
+            if let Some(model) = embedding_config {
+                // 从 options 中读取维度，默认 1024
+                let dimension = model
+                    .options
+                    .as_ref()
+                    .and_then(|opts| opts.get("dimension"))
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as usize)
+                    .unwrap_or(1024);
+
+                tracing::info!(
+                    "使用配置的 embedding 模型: {} @ {}, 维度: {}",
+                    model.model,
+                    model.api_url,
+                    dimension
+                );
+                VectorDbConfig {
+                    embedding: RemoteEmbeddingConfig {
+                        provider_config: LLMProviderConfig {
+                            provider_type: model.provider.as_str().to_string(),
+                            api_key: model.api_key,
+                            api_url: Some(model.api_url),
+                            options: model.options.as_ref().and_then(|v| v.as_object()).map(
+                                |obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+                            ),
+                            supports_prompt_cache: false,
+                        },
+                        model_name: model.model,
+                        dimension,
+                        chunk_size: 512,
+                        chunk_overlap: 100,
+                    },
+                    ..VectorDbConfig::default()
+                }
+            } else {
+                tracing::warn!("未找到 embedding 模型配置，使用默认值");
+                VectorDbConfig::default()
+            };
+
         if let Err(e) = config.validate() {
             warn!("Vector DB config validate failed: {}", e);
         }
@@ -273,14 +336,23 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
             let index_manager = Arc::new(IndexManager::new(&app_dir, config.clone())?);
             let embedder = crate::vector_db::embedding::create_embedder(&config.embedding)?;
             let vector_index = Arc::new(VectorIndex::new(config.embedding.dimension));
-            let search_engine = Arc::new(SemanticSearchEngine::new(index_manager.clone(), vector_index.clone(), embedder.clone(), config));
+            let search_engine = Arc::new(SemanticSearchEngine::new(
+                index_manager.clone(),
+                vector_index.clone(),
+                embedder.clone(),
+                config,
+            ));
             // 设置全局只读访问
             crate::vector_db::commands::set_global_state(
                 search_engine.clone(),
                 index_manager.clone(),
                 vector_index.clone(),
             );
-            Ok(VectorDbState::new(search_engine, index_manager, vector_index))
+            Ok(VectorDbState::new(
+                search_engine,
+                index_manager,
+                vector_index,
+            ))
         })() {
             app.manage(state);
         } else {

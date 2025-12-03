@@ -140,5 +140,11 @@
     "get_failed": "获取 Dock 标签页失败",
     "clear_failed": "清除 Dock 标签页失败",
     "not_initialized": "Dock 管理器未初始化"
+  },
+  "vector_db": {
+    "index_failed": "索引文件失败",
+    "update_failed": "更新文件索引失败",
+    "remove_failed": "移除文件索引失败",
+    "search_failed": "语义搜索失败"
   }
 }

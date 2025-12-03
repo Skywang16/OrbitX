@@ -148,6 +148,55 @@ impl std::fmt::Display for ChunkType {
     }
 }
 
+/// Stride 信息 - 用于记录大 chunk 拆分后的信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StrideInfo {
+    /// 原始 chunk 的唯一 ID
+    pub original_chunk_id: String,
+    /// 当前 stride 的索引（从 0 开始）
+    pub stride_index: usize,
+    /// 总 stride 数量
+    pub total_strides: usize,
+    /// 与前一个 stride 重叠的起始字节偏移
+    pub overlap_start: usize,
+    /// 与后一个 stride 重叠的结束字节偏移
+    pub overlap_end: usize,
+}
+
+/// Chunk 配置
+#[derive(Debug, Clone)]
+pub struct ChunkConfig {
+    /// 每个 chunk 的最大 token 数
+    pub max_tokens: usize,
+    /// stride 重叠的 token 数
+    pub stride_overlap: usize,
+    /// 是否启用 striding（大 chunk 拆分）
+    pub enable_striding: bool,
+}
+
+impl Default for ChunkConfig {
+    fn default() -> Self {
+        Self {
+            max_tokens: 8192,     // 默认使用大模型限制
+            stride_overlap: 1024, // 12.5% 重叠
+            enable_striding: true,
+        }
+    }
+}
+
+impl ChunkConfig {
+    /// 根据模型名称创建配置
+    pub fn for_model(model_name: Option<&str>) -> Self {
+        let (max_tokens, stride_overlap) =
+            crate::vector_db::chunking::TokenEstimator::get_model_chunk_config(model_name);
+        Self {
+            max_tokens,
+            stride_overlap,
+            enable_striding: true,
+        }
+    }
+}
+
 /// 文本块
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chunk {
@@ -156,15 +205,30 @@ pub struct Chunk {
     pub span: Span,
     pub content: String,
     pub chunk_type: ChunkType,
+    /// Stride 信息（如果这个 chunk 是从大 chunk 拆分出来的）
+    pub stride_info: Option<StrideInfo>,
 }
 
 impl Chunk {
     /// 创建新的文本块
-    pub fn new(
+    pub fn new(file_path: PathBuf, span: Span, content: String, chunk_type: ChunkType) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            file_path,
+            span,
+            content,
+            chunk_type,
+            stride_info: None,
+        }
+    }
+
+    /// 创建带 stride 信息的文本块
+    pub fn with_stride(
         file_path: PathBuf,
         span: Span,
         content: String,
         chunk_type: ChunkType,
+        stride_info: StrideInfo,
     ) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -172,6 +236,7 @@ impl Chunk {
             span,
             content,
             chunk_type,
+            stride_info: Some(stride_info),
         }
     }
 }
