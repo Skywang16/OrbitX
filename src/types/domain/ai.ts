@@ -27,6 +27,10 @@ export interface AIModelConfig {
     maxContextTokens?: number
     temperature?: number
     timeout?: number
+    dimension?: number // 向量模型的维度
+    supportsImages?: boolean // 是否支持图片输入
+    contextWindow?: number
+    maxTokens?: number
   }
   useCustomBaseUrl?: boolean
   createdAt?: Date
@@ -159,6 +163,14 @@ export interface NonToolStep extends BaseStep {
 
 export type AIOutputStep = ToolStep | NonToolStep
 
+export interface MessageImage {
+  id: string
+  dataUrl: string
+  fileName: string
+  fileSize: number
+  mimeType: string
+}
+
 export interface Message {
   id: number
   conversationId: number
@@ -169,6 +181,7 @@ export interface Message {
   duration?: number
   // 双轨架构：user消息直接显示content，assistant消息只通过steps渲染
   content?: string // 仅用于user消息
+  images?: MessageImage[] // 用户消息的图片附件
 }
 
 export type ChatStatus = 'idle' | 'loading' | 'streaming' | 'error'

@@ -184,31 +184,71 @@ impl VectorIndex {
 
     /// 持久化到磁盘
     pub async fn save(&self, store: &FileStore) -> Result<()> {
+        use std::collections::HashMap;
+        use std::path::PathBuf;
+
         let data = self.data.read();
-        
+
+        // 按文件分组收集向量
+        let mut file_vectors: HashMap<PathBuf, Vec<(ChunkId, Vec<f32>)>> = HashMap::new();
+
         for (chunk_id, vector) in data.vectors.iter() {
-            store.save_vectors(*chunk_id, vector)?;
+            if let Some(chunk_metadata) = data.chunks.get(chunk_id) {
+                file_vectors
+                    .entry(chunk_metadata.file_path.clone())
+                    .or_default()
+                    .push((*chunk_id, vector.clone()));
+            }
         }
-        
+
+        // 每个文件保存一个向量文件
+        for (file_path, vectors) in file_vectors {
+            store.save_file_vectors(&file_path, &vectors)?;
+        }
+
         Ok(())
     }
 
     /// 从磁盘加载
-    pub async fn load(store: &FileStore, chunk_ids: &[ChunkId], dimension: usize) -> Result<Self> {
+    pub async fn load(
+        store: &FileStore,
+        chunk_metadata: &HashMap<ChunkId, ChunkMetadata>,
+        dimension: usize
+    ) -> Result<Self> {
+        use std::collections::HashMap;
+        use std::path::PathBuf;
+
         let index = Self::new(dimension);
         let mut data = index.data.write();
-        
+
         // 预分配容量
-        data.vectors.reserve(chunk_ids.len());
-        
-        for chunk_id in chunk_ids {
-            if let Ok(vector) = store.load_vectors(*chunk_id) {
-                // 规范化加载的向量
-                let normalized = Self::normalize_vector(&vector);
-                data.vectors.insert(*chunk_id, normalized);
+        let chunk_count = chunk_metadata.len();
+        data.vectors.reserve(chunk_count);
+        data.chunks.reserve(chunk_count);
+
+        // 按文件分组加载
+        let mut files_to_load: HashMap<PathBuf, Vec<(ChunkId, &ChunkMetadata)>> = HashMap::new();
+        for (chunk_id, metadata) in chunk_metadata {
+            files_to_load
+                .entry(metadata.file_path.clone())
+                .or_default()
+                .push((*chunk_id, metadata));
+        }
+
+        // 每个文件加载一次
+        for (file_path, chunks) in files_to_load {
+            if let Ok(file_vectors) = store.load_file_vectors(&file_path) {
+                for (chunk_id, metadata) in chunks {
+                    if let Some(vector) = file_vectors.chunks.get(&chunk_id) {
+                        // 规范化加载的向量
+                        let normalized = Self::normalize_vector(vector);
+                        data.vectors.insert(chunk_id, normalized);
+                        data.chunks.insert(chunk_id, metadata.clone());
+                    }
+                }
             }
         }
-        
+
         drop(data);
         Ok(index)
     }

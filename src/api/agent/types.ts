@@ -23,6 +23,8 @@ export interface ExecuteTaskParams {
   chatMode: ChatMode
   /** 模型ID - 必填！ */
   modelId: string
+  /** 图片附件（可选） */
+  images?: Array<{ type: 'image'; dataUrl: string; mimeType: string }>
   /** 配置覆盖 */
   configOverrides?: Record<string, unknown>
   /** 要恢复的任务ID */
@@ -528,6 +530,14 @@ export interface UiStep {
   metadata?: Record<string, unknown>
 }
 
+export interface UiMessageImage {
+  id: string
+  dataUrl: string
+  fileName: string
+  fileSize: number
+  mimeType: string
+}
+
 export interface UiMessage {
   id: number
   conversationId: number
@@ -537,6 +547,7 @@ export interface UiMessage {
   status?: 'streaming' | 'complete' | 'error'
   durationMs?: number
   createdAt: number
+  images?: UiMessageImage[]
 }
 
 export interface UiConversation {

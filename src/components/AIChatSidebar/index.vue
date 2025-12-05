@@ -9,6 +9,7 @@
   import MessageList from './components/messages/MessageList.vue'
   import ChatInput from './components/input/ChatInput.vue'
   import ResizeHandle from './components/layout/ResizeHandle.vue'
+  import ImageLightbox from './components/input/ImageLightbox.vue'
 
   const aiChatStore = useAIChatStore()
   const aiSettingsStore = useAISettingsStore()
@@ -26,8 +27,10 @@
     return messageInput.value.trim().length > 0 && aiChatStore.canSendMessage
   })
 
-  const sendMessage = async () => {
-    if (!canSend.value) return
+  const sendMessage = async (
+    images?: Array<{ id: string; dataUrl: string; fileName: string; fileSize: number; mimeType: string }>
+  ) => {
+    if (!canSend.value && (!images || images.length === 0)) return
 
     const message = messageInput.value.trim()
     messageInput.value = ''
@@ -35,7 +38,12 @@
     // 重置输入框高度
     chatInputRef.value?.adjustTextareaHeight()
 
-    await aiChatStore.sendMessage(message)
+    // 清空图片
+    if (images && images.length > 0) {
+      chatInputRef.value?.clearImages()
+    }
+
+    await aiChatStore.sendMessage(message, images)
   }
 
   const selectSession = (sessionId: number) => {
@@ -184,6 +192,8 @@
         @mode-change="handleSwitchMode"
       />
     </div>
+
+    <ImageLightbox />
   </div>
 </template>
 

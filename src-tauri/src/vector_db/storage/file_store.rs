@@ -3,6 +3,13 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// 单个文件的向量数据
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct FileVectors {
+    /// chunk_id -> 向量
+    pub chunks: HashMap<ChunkId, Vec<f32>>,
+}
+
 /// 文件系统存储管理器
 pub struct FileStore {
     /// 索引根目录
@@ -13,13 +20,15 @@ pub struct FileStore {
     metadata_path: PathBuf,
     /// 缓存目录
     cache_path: PathBuf,
+    /// 项目根目录
+    project_root: PathBuf,
 }
 
 impl FileStore {
     /// 创建新的文件存储
     pub fn new(project_root: &Path) -> Result<Self> {
         let root_path = project_root.join(".oxi");
-        let vectors_path = root_path.clone();
+        let vectors_path = root_path.join("vectors");
         let metadata_path = root_path.join("metadata");
         let cache_path = root_path.join("cache");
 
@@ -28,6 +37,7 @@ impl FileStore {
             vectors_path,
             metadata_path,
             cache_path,
+            project_root: project_root.to_path_buf(),
         })
     }
 
@@ -40,26 +50,78 @@ impl FileStore {
         Ok(())
     }
 
-    /// 保存向量数据
-    pub fn save_vectors(&self, chunk_id: ChunkId, vectors: &[f32]) -> Result<()> {
-        let file_path = self.vectors_path.join(format!("{}.oxi", chunk_id));
-        let data = bincode::serialize(vectors)?;
-        fs::write(file_path, data)?;
+    /// 获取文件对应的向量文件路径
+    fn get_vector_file_path(&self, source_file: &Path) -> PathBuf {
+        // 将源文件路径转换为相对于项目根目录的路径
+        let relative_path = source_file
+            .strip_prefix(&self.project_root)
+            .unwrap_or(source_file);
+
+        // 在 vectors 目录下创建对应的目录结构
+        let vector_dir = self.vectors_path.join(
+            relative_path.parent().unwrap_or_else(|| Path::new("")),
+        );
+
+        // 使用源文件名 + .oxi 后缀
+        let file_name = format!(
+            "{}.oxi",
+            relative_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown")
+        );
+
+        vector_dir.join(file_name)
+    }
+
+    /// 保存单个文件的所有向量数据
+    pub fn save_file_vectors(
+        &self,
+        source_file: &Path,
+        chunks: &[(ChunkId, Vec<f32>)],
+    ) -> Result<()> {
+        let vector_file = self.get_vector_file_path(source_file);
+
+        // 确保目录存在
+        if let Some(parent) = vector_file.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        // 构建向量数据
+        let file_vectors = FileVectors {
+            chunks: chunks.iter().cloned().collect(),
+        };
+
+        // 序列化并保存
+        let data = bincode::serialize(&file_vectors)?;
+        fs::write(&vector_file, data)?;
+
         Ok(())
     }
 
-    /// 加载向量数据
-    pub fn load_vectors(&self, chunk_id: ChunkId) -> Result<Vec<f32>> {
-        let file_path = self.vectors_path.join(format!("{}.oxi", chunk_id));
-        if !file_path.exists() {
+    /// 加载单个文件的所有向量数据
+    pub fn load_file_vectors(&self, source_file: &Path) -> Result<FileVectors> {
+        let vector_file = self.get_vector_file_path(source_file);
+
+        if !vector_file.exists() {
             return Err(VectorDbError::FileNotFound(format!(
                 "Vector file not found: {}",
-                file_path.display()
+                vector_file.display()
             )));
         }
-        let data = fs::read(file_path)?;
-        let vectors: Vec<f32> = bincode::deserialize(&data)?;
-        Ok(vectors)
+
+        let data = fs::read(&vector_file)?;
+        let file_vectors: FileVectors = bincode::deserialize(&data)?;
+        Ok(file_vectors)
+    }
+
+    /// 删除文件的向量数据
+    pub fn delete_file_vectors(&self, source_file: &Path) -> Result<()> {
+        let vector_file = self.get_vector_file_path(source_file);
+        if vector_file.exists() {
+            fs::remove_file(&vector_file)?;
+        }
+        Ok(())
     }
 
     /// 保存文件元数据
@@ -86,6 +148,9 @@ impl FileStore {
 
     /// 删除文件相关数据
     pub fn delete_file_data(&self, file_path: &Path) -> Result<()> {
+        // 删除向量文件
+        self.delete_file_vectors(file_path)?;
+
         // 删除元数据
         let mut all_metadata = self.load_all_file_metadata().unwrap_or_default();
         all_metadata.remove(file_path);
@@ -105,17 +170,13 @@ impl FileStore {
         Ok(())
     }
 
-    /// 删除某个向量文件
-    pub fn delete_vectors(&self, chunk_id: ChunkId) -> Result<()> {
-        let file_path = self.vectors_path.join(format!("{}.oxi", chunk_id));
-        if file_path.exists() {
-            std::fs::remove_file(file_path)?;
-        }
-        Ok(())
-    }
-
     /// 获取存储根目录
     pub fn root_path(&self) -> &Path {
         &self.root_path
+    }
+
+    /// 获取向量目录
+    pub fn vectors_path(&self) -> &Path {
+        &self.vectors_path
     }
 }

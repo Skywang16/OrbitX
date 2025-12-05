@@ -209,6 +209,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::vector_db::commands::index_files,
         crate::vector_db::commands::update_file_index,
         crate::vector_db::commands::remove_file_index,
+        crate::vector_db::commands::delete_workspace_index,
         crate::vector_db::commands::vector_build_index,
         crate::vector_db::commands::vector_get_build_progress,
         crate::vector_db::commands::vector_cancel_build,

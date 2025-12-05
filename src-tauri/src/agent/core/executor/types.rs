@@ -4,6 +4,16 @@
 
 use serde::{Deserialize, Serialize};
 
+/// 图片附件
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageAttachment {
+    #[serde(rename = "type")]
+    pub attachment_type: String,
+    pub data_url: String,
+    pub mime_type: String,
+}
+
 /// 任务执行参数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,6 +26,8 @@ pub struct ExecuteTaskParams {
     pub cwd: Option<String>,
     #[serde(default)]
     pub has_context: bool,
+    #[serde(default)]
+    pub images: Option<Vec<ImageAttachment>>,
 }
 
 /// 任务摘要信息

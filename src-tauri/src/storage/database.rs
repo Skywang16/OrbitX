@@ -380,7 +380,7 @@ impl KeyVault {
             Ok(uid) => Ok(uid),
             Err(e) => {
                 tracing::warn!("无法获取机器 UID: {}, 使用主机名作为备选方案", e);
-                
+
                 // 如果获取机器 UID 失败，使用主机名作为备选方案
                 hostname::get()
                     .map(|h| h.to_string_lossy().to_string())

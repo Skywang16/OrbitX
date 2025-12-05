@@ -29,19 +29,23 @@ export class AgentApi {
    * @param userPrompt 用户输入
    * @param conversationId 会话ID
    * @param chatMode 聊天模式 ('chat' | 'agent')
+   * @param modelId 模型ID
+   * @param images 图片附件（可选）
    * @returns 返回任务进度流
    */
   executeTask = async (
     userPrompt: string,
     conversationId: number,
     chatMode: 'chat' | 'agent' = 'agent',
-    modelId: string
+    modelId: string,
+    images?: Array<{ type: 'image'; dataUrl: string; mimeType: string }>
   ): Promise<TaskProgressStream> => {
     const params: ExecuteTaskParams = {
       conversationId,
       userPrompt,
       chatMode,
       modelId,
+      images,
     }
 
     const stream = agentChannelApi.createTaskStream(params)
@@ -333,6 +337,7 @@ export class AgentApi {
       return {
         ...base,
         content: message.content,
+        images: message.images,
       }
     }
 

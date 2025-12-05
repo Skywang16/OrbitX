@@ -12,6 +12,8 @@ class AgentChannelApi {
     conversationId: number
     userPrompt: string
     chatMode: 'chat' | 'agent'
+    modelId: string
+    images?: Array<{ type: 'image'; dataUrl: string; mimeType: string }>
     configOverrides?: Record<string, unknown>
     restoreTaskId?: string
   }): ReadableStream<TaskProgressPayload> => {

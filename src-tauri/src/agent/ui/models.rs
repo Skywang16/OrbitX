@@ -10,6 +10,17 @@ pub struct UiConversation {
     pub updated_at: i64,
 }
 
+/// 消息中的图片附件
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UiMessageImage {
+    pub id: String,
+    pub data_url: String,
+    pub file_name: String,
+    pub file_size: i64,
+    pub mime_type: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UiMessage {
@@ -21,6 +32,7 @@ pub struct UiMessage {
     pub status: Option<String>,
     pub duration_ms: Option<i64>,
     pub created_at: i64,
+    pub images: Option<Vec<UiMessageImage>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

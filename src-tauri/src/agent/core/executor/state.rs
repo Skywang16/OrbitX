@@ -55,11 +55,18 @@ impl TaskExecutor {
         summaries
     }
 
-    /// 获取conversation的context
-    pub async fn get_conversation_context(&self, conversation_id: i64) -> Option<Arc<TaskContext>> {
-        self.conversation_contexts()
-            .get(&conversation_id)
-            .map(|entry| Arc::clone(entry.value()))
+    /// 获取 conversation 的 context（从活跃任务中查找）
+    pub async fn get_conversation_context(
+        &self,
+        conversation_id: i64,
+    ) -> Option<Arc<TaskContext>> {
+        // 遍历活跃任务查找匹配的 conversation_id
+        for entry in self.active_tasks().iter() {
+            if entry.value().conversation_id == conversation_id {
+                return Some(Arc::clone(entry.value()));
+            }
+        }
+        None
     }
 
     /// 获取文件上下文状态
@@ -72,7 +79,7 @@ impl TaskExecutor {
             .await
             .ok_or_else(|| {
                 TaskExecutorError::InternalError(format!(
-                    "No context found for conversation {}",
+                    "No active context found for conversation {}",
                     conversation_id
                 ))
             })?;
@@ -138,7 +145,6 @@ impl TaskExecutor {
     pub fn get_stats(&self) -> TaskExecutorStats {
         TaskExecutorStats {
             active_tasks: self.active_tasks().len(),
-            conversation_contexts: self.conversation_contexts().len(),
         }
     }
 
@@ -191,5 +197,4 @@ impl TaskExecutor {
 #[derive(Debug, Clone)]
 pub struct TaskExecutorStats {
     pub active_tasks: usize,
-    pub conversation_contexts: usize,
 }

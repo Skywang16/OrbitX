@@ -81,6 +81,23 @@ pub async fn remove_file_index(
     }
 }
 
+/// 删除整个工作区的向量索引
+#[tauri::command]
+pub async fn delete_workspace_index(
+    path: String,
+    _state: State<'_, VectorDbState>,
+) -> TauriApiResult<EmptyData> {
+    let index_dir = PathBuf::from(&path).join(".oxi");
+
+    if index_dir.exists() {
+        if let Err(e) = std::fs::remove_dir_all(&index_dir) {
+            warn!(error = %e, "删除索引失败");
+            return Ok(api_error!("vector_db.delete_failed"));
+        }
+    }
+    Ok(api_success!(EmptyData::default()))
+}
+
 // ---------------- Progress + Cancel Support ----------------
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

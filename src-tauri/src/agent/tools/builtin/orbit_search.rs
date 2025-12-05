@@ -188,18 +188,21 @@ Usage:
                 Err(e) => return Ok(tool_error(format!("Failed to load index: {}", e))),
             };
 
-        // 获取所有 chunk_id 并加载向量到内存
-        let chunk_ids: Vec<_> = index_manager.get_chunk_ids();
-        if chunk_ids.is_empty() {
+        // 获取所有 chunk 元数据并加载向量到内存
+        let chunk_metadata_vec = index_manager.get_all_chunk_metadata();
+        if chunk_metadata_vec.is_empty() {
             return Ok(tool_error(format!(
                 "No code found matching \"{}\". Try using different keywords or ensure the directory is indexed.",
                 query
             )));
         }
 
+        // 转换为HashMap
+        let chunk_metadata: std::collections::HashMap<_, _> = chunk_metadata_vec.into_iter().collect();
+
         let vector_index = match crate::vector_db::index::VectorIndex::load(
             index_manager.store(),
-            &chunk_ids,
+            &chunk_metadata,
             config.embedding.dimension,
         )
         .await
@@ -207,13 +210,6 @@ Usage:
             Ok(index) => index,
             Err(e) => return Ok(tool_error(format!("Failed to load vectors: {}", e))),
         };
-
-        // 加载 chunk 元数据
-        for (chunk_id, metadata) in index_manager.get_all_chunk_metadata() {
-            if let Ok(vector) = index_manager.store().load_vectors(chunk_id) {
-                let _ = vector_index.add(chunk_id, vector, metadata);
-            }
-        }
 
         // 生成查询向量
         let embedder = global.search_engine.embedder();

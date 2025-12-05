@@ -24,7 +24,6 @@ impl TaskExecutor {
         params: ExecuteTaskParams,
         progress_channel: Channel<TaskProgressPayload>,
     ) -> TaskExecutorResult<Arc<TaskContext>> {
-
         let ctx = self
             .build_or_restore_context(&params, Some(progress_channel))
             .await?;
@@ -36,7 +35,8 @@ impl TaskExecutor {
         }))
         .await?;
 
-        ctx.initialize_ui_track(&params.user_prompt).await?;
+        ctx.initialize_ui_track(&params.user_prompt, params.images.as_deref())
+            .await?;
 
         let (system_prompt, _) = self
             .prompt_orchestrator()
@@ -56,7 +56,8 @@ impl TaskExecutor {
                 .await?;
         }
 
-        ctx.add_user_message(params.user_prompt).await;
+        ctx.add_user_message_with_images(params.user_prompt, params.images.as_deref())
+            .await;
         ctx.set_status(AgentTaskStatus::Running).await?;
 
         ctx.send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
@@ -217,27 +218,12 @@ impl TaskExecutor {
 
             // 从active_tasks移除
             self.active_tasks().remove(task_id);
-
         } else {
             // 任务不存在，可能还没开始或已经完成
-            // 尝试从 conversation_contexts 中查找
-            let mut found_in_conversation = false;
-            for entry in self.conversation_contexts().iter() {
-                let ctx = entry.value();
-                if ctx.task_id.as_ref() == task_id {
-                    ctx.abort();
-                    ctx.set_status(AgentTaskStatus::Cancelled).await?;
-                    found_in_conversation = true;
-                    break;
-                }
-            }
-
-            if !found_in_conversation {
-                warn!(
-                    "Task {} not found in active_tasks or conversation_contexts, it may have already completed or been cancelled",
-                    task_id
-                );
-            }
+            warn!(
+                "Task {} not found in active_tasks, it may have already completed or been cancelled",
+                task_id
+            );
         }
 
         Ok(())
@@ -338,6 +324,7 @@ impl TaskExecutor {
             model_id,
             cwd: None,
             has_context: true,
+            images: None,
         };
 
         self.execute_task(params, progress_channel).await

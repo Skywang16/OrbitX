@@ -31,15 +31,18 @@ pub async fn semantic_search(
             }
         };
 
-    // 获取所有 chunk_id 并加载向量到内存
-    let chunk_ids: Vec<_> = index_manager.get_chunk_ids();
-    if chunk_ids.is_empty() {
+    // 获取所有 chunk 元数据并加载向量到内存
+    let chunk_metadata_vec = index_manager.get_all_chunk_metadata();
+    if chunk_metadata_vec.is_empty() {
         return Ok(api_success!(vec![]));
     }
 
+    // 转换为HashMap
+    let chunk_metadata: std::collections::HashMap<_, _> = chunk_metadata_vec.into_iter().collect();
+
     let vector_index = match crate::vector_db::index::VectorIndex::load(
         index_manager.store(),
-        &chunk_ids,
+        &chunk_metadata,
         config.embedding.dimension,
     )
     .await
@@ -50,13 +53,6 @@ pub async fn semantic_search(
             return Ok(api_error!("vector_db.search_failed"));
         }
     };
-
-    // 加载 chunk 元数据
-    for (chunk_id, metadata) in index_manager.get_all_chunk_metadata() {
-        if let Ok(vector) = index_manager.store().load_vectors(chunk_id) {
-            let _ = vector_index.add(chunk_id, vector, metadata);
-        }
-    }
 
     // 生成查询向量
     let embedder = state.search_engine.embedder();
@@ -109,24 +105,28 @@ pub async fn get_index_status(
     path: String,
     state: State<'_, VectorDbState>,
 ) -> TauriApiResult<IndexStatus> {
-    use std::path::PathBuf;
-
     let workspace_path = PathBuf::from(&path);
 
-    // 为当前工作区创建 IndexManager 来获取状态
+    // 索引目录不存在就返回空状态
+    if !workspace_path.join(".oxi").exists() {
+        return Ok(api_success!(IndexStatus {
+            total_files: 0,
+            total_chunks: 0,
+            embedding_model: String::new(),
+            vector_dimension: 0,
+        }));
+    }
+
     match crate::vector_db::storage::IndexManager::new(
         &workspace_path,
         state.search_engine.config().clone(),
     ) {
         Ok(manager) => Ok(api_success!(manager.get_status())),
-        Err(_) => {
-            // 如果工作区没有索引，返回空状态
-            Ok(api_success!(IndexStatus {
-                total_files: 0,
-                total_chunks: 0,
-                embedding_model: String::new(),
-                vector_dimension: 0,
-            }))
-        }
+        Err(_) => Ok(api_success!(IndexStatus {
+            total_files: 0,
+            total_chunks: 0,
+            embedding_model: String::new(),
+            vector_dimension: 0,
+        })),
     }
 }

@@ -1,14 +1,17 @@
 <script setup lang="ts">
-  import { computed, ref, watch, onMounted } from 'vue'
-  import { terminalContextApi } from '@/api'
+  import { computed, ref, watch, onMounted, reactive } from 'vue'
+  import { terminalContextApi, aiApi } from '@/api'
   import { useI18n } from 'vue-i18n'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { useTerminalStore } from '@/stores/Terminal'
   import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
   import { getPathBasename } from '@/utils/path'
+  import { useAISettingsStore } from '@/components/settings/components/AI/store'
+  import type { AIModelTestConnectionInput } from '@/api/ai/types'
 
   const { t } = useI18n()
+  const aiSettingsStore = useAISettingsStore()
 
   interface Props {
     indexStatus: {
@@ -91,6 +94,9 @@
   }
 
   const canBuild = computed(() => {
+    // 首先检查是否配置了 embedding 模型
+    if (!hasEmbeddingModel.value) return false
+
     const pRaw = resolvedPath.value
     if (!pRaw) return false
     const p = normalize(pRaw)
@@ -116,12 +122,126 @@
     { deep: true, immediate: true }
   )
 
-  onMounted(() => {
+  onMounted(async () => {
     refreshDisplayPath()
     homeDir()
       .then(path => (homePath.value = path))
       .catch(() => {})
+    // 加载向量模型配置
+    await aiSettingsStore.loadModels()
   })
+
+  // ========== 向量模型配置 ==========
+  interface EmbeddingModelConfig {
+    apiUrl: string
+    apiKey: string
+    modelName: string
+    dimension: number
+  }
+
+  // 当前配置的向量模型
+  const embeddingModel = computed(() => aiSettingsStore.embeddingModels[0] || null)
+  const hasEmbeddingModel = computed(() => !!embeddingModel.value)
+
+  // 表单数据
+  const formData = reactive<EmbeddingModelConfig>({
+    apiUrl: '',
+    apiKey: '',
+    modelName: '',
+    dimension: 1536,
+  })
+
+  const errors = ref<Record<string, string>>({})
+  const isSubmitting = ref(false)
+  const isTesting = ref(false)
+  const showForm = ref(false)
+
+  // 监听 embeddingModel 变化，同步到表单
+  watch(
+    embeddingModel,
+    model => {
+      if (model) {
+        formData.apiUrl = model.apiUrl || 'https://api.openai.com/v1'
+        formData.apiKey = model.apiKey || ''
+        formData.modelName = model.model || 'text-embedding-3-small'
+        formData.dimension = model.options?.dimension || 1536
+      }
+    },
+    { immediate: true }
+  )
+
+  const validateForm = () => {
+    errors.value = {}
+    if (!formData.apiUrl.trim()) errors.value.apiUrl = t('embedding_model.validation.api_url_required')
+    if (!formData.apiKey.trim()) errors.value.apiKey = t('embedding_model.validation.api_key_required')
+    if (!formData.modelName.trim()) errors.value.modelName = t('embedding_model.validation.model_name_required')
+    if (!formData.dimension || formData.dimension < 1)
+      errors.value.dimension = t('embedding_model.validation.dimension_required')
+    return Object.keys(errors.value).length === 0
+  }
+
+  const handleSaveEmbeddingModel = async () => {
+    if (!validateForm()) return
+    isSubmitting.value = true
+    try {
+      const modelData = {
+        provider: 'openai_compatible' as const,
+        apiUrl: formData.apiUrl,
+        apiKey: formData.apiKey,
+        model: formData.modelName,
+        modelType: 'embedding' as const,
+        options: { dimension: formData.dimension },
+      }
+      if (embeddingModel.value) {
+        await aiSettingsStore.updateModel(embeddingModel.value.id, modelData)
+      } else {
+        await aiSettingsStore.addModel(modelData)
+      }
+      showForm.value = false
+    } finally {
+      isSubmitting.value = false
+    }
+  }
+
+  const handleTestConnection = async () => {
+    if (!validateForm()) return
+    isTesting.value = true
+    try {
+      const testConfig: AIModelTestConnectionInput = {
+        provider: 'openai_compatible',
+        apiUrl: formData.apiUrl,
+        apiKey: formData.apiKey,
+        model: formData.modelName,
+        modelType: 'embedding',
+        options: { dimension: formData.dimension },
+      }
+      await aiApi.testConnectionWithConfig(testConfig)
+    } finally {
+      isTesting.value = false
+    }
+  }
+
+  const handleDeleteEmbeddingModel = async () => {
+    if (embeddingModel.value) {
+      await aiSettingsStore.removeModel(embeddingModel.value.id)
+    }
+  }
+
+  const handleEditEmbeddingModel = () => {
+    showForm.value = true
+  }
+
+  const handleCancelForm = () => {
+    showForm.value = false
+    // 重置表单到当前模型状态
+    if (embeddingModel.value) {
+      formData.apiUrl = embeddingModel.value.apiUrl || 'https://api.openai.com/v1'
+      formData.apiKey = embeddingModel.value.apiKey || ''
+      formData.modelName = embeddingModel.value.model || 'text-embedding-3-small'
+      formData.dimension = embeddingModel.value.options?.dimension || 1536
+    }
+    errors.value = {}
+  }
 </script>
 
 <template>
@@ -134,6 +254,125 @@
     </div>
 
     <div class="body">
+      <!-- 向量模型配置区域 -->
+      <div class="embedding-config-section">
+        <div class="section-header">
+          <span class="section-title">{{ t('ck.embedding_model') }}</span>
+        </div>
+
+        <!-- 已配置模型：显示模型信息 -->
+        <div v-if="hasEmbeddingModel && !showForm" class="model-display">
+          <div class="model-info">
+            <div class="model-name">{{ embeddingModel?.model }}</div>
+            <div class="model-detail">
+              {{ t('embedding_model.dimension') }}: {{ embeddingModel?.options?.dimension }}
+            </div>
+          </div>
+          <div class="model-actions">
+            <x-button size="small" variant="secondary" @click="handleEditEmbeddingModel">
+              {{ t('ai_model.edit') }}
+            </x-button>
+            <x-popconfirm
+              :title="t('ai_model.delete_confirm')"
+              :description="t('ai_model.delete_description', { name: embeddingModel?.model })"
+              type="danger"
+              :confirm-text="t('ai_model.delete_confirm_text')"
+              :cancel-text="t('ai_model.cancel')"
+              placement="top"
+              @confirm="handleDeleteEmbeddingModel"
+            >
+              <template #trigger>
+                <x-button size="small" variant="danger">
+                  {{ t('ai_model.delete') }}
+                </x-button>
+              </template>
+            </x-popconfirm>
+          </div>
+        </div>
+
+        <!-- 未配置或编辑模式：显示表单 -->
+        <div v-if="!hasEmbeddingModel || showForm" class="embedding-form">
+          <!-- API URL -->
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">{{ t('embedding_model.api_url') }} *</label>
+              <input
+                v-model="formData.apiUrl"
+                type="url"
+                class="form-input"
+                :class="{ error: errors.apiUrl }"
+                placeholder="https://api.openai.com/v1"
+              />
+              <div v-if="errors.apiUrl" class="error-message">{{ errors.apiUrl }}</div>
+            </div>
+          </div>
+
+          <!-- API Key -->
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">{{ t('embedding_model.api_key') }} *</label>
+              <input
+                v-model="formData.apiKey"
+                type="password"
+                class="form-input"
+                :class="{ error: errors.apiKey }"
+                :placeholder="t('embedding_model.api_key_placeholder')"
+              />
+              <div v-if="errors.apiKey" class="error-message">{{ errors.apiKey }}</div>
+            </div>
+          </div>
+
+          <!-- Model Name -->
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">{{ t('embedding_model.model_name') }} *</label>
+              <input
+                v-model="formData.modelName"
+                type="text"
+                class="form-input"
+                :class="{ error: errors.modelName }"
+                placeholder="text-embedding-3-small"
+              />
+              <div v-if="errors.modelName" class="error-message">{{ errors.modelName }}</div>
+            </div>
+          </div>
+
+          <!-- Dimension -->
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">{{ t('embedding_model.dimension') }} *</label>
+              <input
+                v-model.number="formData.dimension"
+                type="number"
+                class="form-input"
+                :class="{ error: errors.dimension }"
+                placeholder="1536"
+                min="64"
+                max="8192"
+              />
+              <div class="form-description">{{ t('embedding_model.dimension_hint') }}</div>
+              <div v-if="errors.dimension" class="error-message">{{ errors.dimension }}</div>
+            </div>
+          </div>
+
+          <!-- 表单按钮 -->
+          <div class="form-actions">
+            <x-button variant="secondary" size="small" :loading="isTesting" @click="handleTestConnection">
+              {{ isTesting ? t('ai_model.testing') : t('ai_model.test_connection') }}
+            </x-button>
+            <div class="form-actions-right">
+              <x-button v-if="showForm" variant="secondary" size="small" @click="handleCancelForm">
+                {{ t('common.cancel') }}
+              </x-button>
+              <x-button variant="primary" size="small" :loading="isSubmitting" @click="handleSaveEmbeddingModel">
+                {{ t('common.save') }}
+              </x-button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
       <div v-if="!indexStatus.hasIndex" class="workspace-section">
         <div class="workspace-info">
           <div class="workspace-label">{{ t('ck.current_workspace') }}</div>
@@ -334,5 +573,111 @@
     min-width: 45px;
     text-align: right;
     font-family: var(--font-family-mono);
+  }
+
+  /* 向量模型配置区域样式 */
+  .embedding-config-section {
+    margin-bottom: var(--spacing-md);
+  }
+  .section-header {
+    margin-bottom: var(--spacing-sm);
+  }
+  .section-title {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-200);
+  }
+  .model-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-300);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius-sm);
+    border: 1px solid var(--border-200);
+  }
+  .model-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .model-name {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-100);
+    font-family: var(--font-family-mono);
+  }
+  .model-detail {
+    font-size: var(--font-size-xs);
+    color: var(--text-300);
+  }
+  .model-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+  }
+  .divider {
+    height: 1px;
+    background: var(--border-200);
+    margin: var(--spacing-md) 0;
+  }
+  .embedding-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+  .form-row {
+    display: flex;
+    flex-direction: column;
+  }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+  .form-label {
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    color: var(--text-200);
+  }
+  .form-input {
+    width: 100%;
+    height: 32px;
+    padding: 0 var(--spacing-sm);
+    border: 1px solid var(--border-300);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--bg-400);
+    color: var(--text-200);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+  }
+  .form-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary-alpha);
+  }
+  .form-input.error {
+    border-color: var(--color-error);
+  }
+  .form-description {
+    font-size: var(--font-size-xs);
+    color: var(--text-400);
+    line-height: 1.4;
+  }
+  .error-message {
+    font-size: var(--font-size-xs);
+    color: var(--color-error);
+    line-height: 1.4;
+  }
+  .form-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: var(--spacing-sm);
+  }
+  .form-actions-right {
+    display: flex;
+    gap: var(--spacing-xs);
   }
 </style>

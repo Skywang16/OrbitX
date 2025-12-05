@@ -203,6 +203,7 @@ CREATE TABLE IF NOT EXISTS agent_ui_messages (
     status TEXT CHECK (status IN ('streaming', 'complete', 'error')),
     duration_ms INTEGER,
     created_at INTEGER NOT NULL,
+    images_json TEXT,
     FOREIGN KEY (conversation_id) REFERENCES agent_ui_conversations(id) ON DELETE CASCADE
 );
 

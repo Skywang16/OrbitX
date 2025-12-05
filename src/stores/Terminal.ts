@@ -278,7 +278,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       const terminal: RuntimeTerminalState = {
         id: paneId,
         cwd: initialDirectory || '~',
-        shell: defaultShell.name,
+        shell: defaultShell.displayName,
       }
 
       const existingIndex = terminals.value.findIndex(t => t.id === paneId)
@@ -436,7 +436,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       const terminal: RuntimeTerminalState = {
         id: paneId,
         cwd: shellInfo.path || '~',
-        shell: shellInfo.name,
+        shell: shellInfo.displayName,
       }
 
       const existingIndex = terminals.value.findIndex(t => t.id === paneId)
@@ -500,7 +500,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
         // 进程死了 → 从 session 数据重新创建终端进程
         console.warn(`终端 ${tab.id} 进程已终止，尝试重新创建`)
         try {
-          const shellName = tab.data.shell || 'default'
           const cwd = tab.data.cwd
 
           const paneId = await terminalApi.createTerminal({
@@ -509,10 +508,13 @@ export const useTerminalStore = defineStore('Terminal', () => {
             cwd,
           })
 
+          // 获取实际创建的 shell 信息
+          const defaultShell = await shellApi.getDefaultShell()
+
           const newTerminal: RuntimeTerminalState = {
             id: paneId,
             cwd: cwd || '~',
-            shell: shellName,
+            shell: defaultShell.displayName,
           }
 
           restored.push(newTerminal)

@@ -5,5 +5,5 @@
 mod models;
 mod persistence;
 
-pub use models::{UiConversation, UiMessage, UiStep};
+pub use models::{UiConversation, UiMessage, UiMessageImage, UiStep};
 pub use persistence::AgentUiPersistence;

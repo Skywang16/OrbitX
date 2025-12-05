@@ -4,7 +4,7 @@ use sqlx::{sqlite::SqliteRow, Row};
 
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::persistence::now_timestamp;
-use crate::agent::ui::models::{UiConversation, UiMessage, UiStep};
+use crate::agent::ui::models::{UiConversation, UiMessage, UiMessageImage, UiStep};
 use crate::storage::database::DatabaseManager;
 
 #[derive(Debug)]
@@ -98,7 +98,7 @@ impl AgentUiPersistence {
 
     pub async fn get_messages(&self, conversation_id: i64) -> AgentResult<Vec<UiMessage>> {
         let rows = sqlx::query(
-            "SELECT id, conversation_id, role, content, steps_json, status, duration_ms, created_at
+            "SELECT id, conversation_id, role, content, steps_json, status, duration_ms, created_at, images_json
              FROM agent_ui_messages
              WHERE conversation_id = ?
              ORDER BY created_at ASC, id ASC",
@@ -114,17 +114,20 @@ impl AgentUiPersistence {
         &self,
         conversation_id: i64,
         content: &str,
+        images: Option<&[UiMessageImage]>,
     ) -> AgentResult<i64> {
         self.ensure_conversation(conversation_id, None).await?;
         let ts = now_timestamp();
         let preview = build_conversation_preview(content);
+        let images_json = images.map(|imgs| serde_json::to_string(imgs).unwrap_or_default());
         let result = sqlx::query(
-            "INSERT INTO agent_ui_messages (conversation_id, role, content, steps_json, status, duration_ms, created_at)
-             VALUES (?, 'user', ?, NULL, NULL, NULL, ?)",
+            "INSERT INTO agent_ui_messages (conversation_id, role, content, steps_json, status, duration_ms, created_at, images_json)
+             VALUES (?, 'user', ?, NULL, NULL, NULL, ?, ?)",
         )
         .bind(conversation_id)
         .bind(content)
         .bind(ts)
+        .bind(images_json)
         .execute(self.pool())
         .await?;
 
@@ -335,6 +338,18 @@ fn build_ui_message(row: SqliteRow) -> AgentResult<UiMessage> {
         None => None,
     };
 
+    let images_json: Option<String> = row.try_get("images_json").unwrap_or(None);
+    let images = match images_json {
+        Some(raw) => {
+            if raw.is_empty() {
+                None
+            } else {
+                serde_json::from_str::<Vec<UiMessageImage>>(&raw).ok()
+            }
+        }
+        None => None,
+    };
+
     Ok(UiMessage {
         id: row.try_get("id")?,
         conversation_id: row.try_get("conversation_id")?,
@@ -344,5 +359,6 @@ fn build_ui_message(row: SqliteRow) -> AgentResult<UiMessage> {
         status: row.try_get("status")?,
         duration_ms: row.try_get("duration_ms")?,
         created_at: row.try_get("created_at")?,
+        images,
     })
 }

@@ -6,12 +6,7 @@
     @leave="onLeave"
     @after-leave="onAfterLeave"
   >
-    <div
-      v-if="visible"
-      :class="messageClasses"
-      role="alert"
-      :aria-live="type === 'error' ? 'assertive' : 'polite'"
-    >
+    <div v-if="visible" :class="messageClasses" role="alert" :aria-live="type === 'error' ? 'assertive' : 'polite'">
       <div v-if="showIcon" class="x-message__icon">
         <slot name="icon">
           <svg v-if="type === 'success'" class="x-message__icon-svg" viewBox="0 0 20 20" fill="currentColor">
@@ -85,7 +80,6 @@
       'x-message--with-icon': props.showIcon,
     },
   ])
-
 
   const handleClose = () => {
     clearTimer()

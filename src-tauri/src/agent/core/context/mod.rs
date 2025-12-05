@@ -11,13 +11,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::ipc::Channel;
 use tokio::time::sleep;
-use tokio_util::sync::CancellationToken;
 
 use self::chain::Chain;
 use self::states::{ExecutionState, PlanningState, TaskStates};
 use crate::agent::config::{AgentConfig, TaskExecutionConfig};
 use crate::agent::context::FileContextTracker;
-use crate::agent::core::ring_buffer::MessageRingBuffer;
+use crate::agent::core::executor::ImageAttachment;
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::events::TaskProgressPayload;
@@ -32,23 +31,14 @@ use crate::agent::state::manager::{
 use crate::agent::state::session::SessionContext;
 use crate::agent::tools::ToolRegistry;
 use crate::agent::types::TaskDetail;
-use crate::agent::ui::{AgentUiPersistence, UiStep};
+use crate::agent::ui::{AgentUiPersistence, UiMessageImage, UiStep};
 use crate::agent::utils::tokenizer::count_text_tokens;
 use crate::llm::anthropic_types::{
     ContentBlock, MessageContent, MessageParam, MessageRole as AnthropicRole, SystemPrompt,
     ToolResultContent,
 };
 use crate::storage::DatabaseManager;
-
-pub fn generate_node_id(task_id: &str, phase: &str, node_index: Option<usize>) -> String {
-    if let Some(index) = node_index {
-        format!("{}_node_{}", task_id, index)
-    } else {
-        format!("{}_{}", task_id, phase)
-    }
-}
-
-const MAX_MESSAGE_HISTORY: usize = 100;
+use tokio_util::sync::CancellationToken;
 
 pub struct TaskContext {
     pub task_id: Arc<str>,
@@ -381,38 +371,39 @@ impl TaskContext {
         self.states.planning.write().await.current_node_id = node_id;
     }
 
-    pub async fn check_aborted(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
-        if self
-            .states
-            .cancellation
-            .lock()
-            .await
-            .main_token
-            .is_cancelled()
-        {
+    /// 检查任务是否被中止
+    /// 简化版：只检查 aborted 标志，无需锁
+    pub fn check_aborted(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
+        if self.states.aborted.load(Ordering::SeqCst) {
+            return Err(TaskExecutorError::TaskInterrupted.into());
+        }
+        if no_check_pause {
+            return Ok(());
+        }
+        // 暂停检查保持同步方式
+        let status = self.pause_status.load(Ordering::SeqCst);
+        if status != 0 {
+            // 如果暂停，返回错误让调用者处理
+            return Err(TaskExecutorError::TaskInterrupted.into());
+        }
+        Ok(())
+    }
+
+    /// 异步检查任务是否被中止（带暂停等待）
+    pub async fn check_aborted_async(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
+        if self.states.aborted.load(Ordering::SeqCst) {
             return Err(TaskExecutorError::TaskInterrupted.into());
         }
         if no_check_pause {
             return Ok(());
         }
         loop {
-            if self
-                .states
-                .cancellation
-                .lock()
-                .await
-                .main_token
-                .is_cancelled()
-            {
+            if self.states.aborted.load(Ordering::SeqCst) {
                 return Err(TaskExecutorError::TaskInterrupted.into());
             }
             let status = self.pause_status.load(Ordering::SeqCst);
             if status == 0 {
                 break;
-            }
-            if status == 2 {
-                self.abort_current_steps();
-                self.pause_status.store(1, Ordering::SeqCst);
             }
             sleep(Duration::from_millis(500)).await;
         }
@@ -420,75 +411,47 @@ impl TaskContext {
     }
 
     /// 中止任务执行
-    /// 使用 spawn_blocking 确保即使在同步上下文中也能正确取消
+    /// 简化版：只需设置 aborted 标志
     pub fn abort(&self) {
-        use std::sync::Arc;
-        
-        // 克隆必要的状态以在异步任务中使用
-        let cancellation = Arc::clone(&self.states.cancellation);
+        self.states.aborted.store(true, Ordering::SeqCst);
+
+        // 标记 react 运行时为中止状态
         let react_runtime = Arc::clone(&self.states.react_runtime);
-        
-        // 在后台异步执行取消操作，避免阻塞
         tokio::spawn(async move {
-            // 使用阻塞锁确保取消一定能执行
-            let cancellation_guard = cancellation.lock().await;
-            cancellation_guard.main_token.cancel();
-            
-            // 取消所有步骤 tokens
-            for token in cancellation_guard.step_tokens.iter() {
-                token.cancel();
-            }
-            drop(cancellation_guard);
-            
-            // 标记 react 运行时为中止状态
             let mut react = react_runtime.write().await;
             react.mark_abort();
         });
-        
-        // 同步部分：立即尝试中止当前步骤
-        self.abort_current_steps();
     }
 
-    pub async fn reset_cancellation(&self) {
-        let mut cancellation = self.states.cancellation.lock().await;
-        cancellation.main_token = CancellationToken::new();
-        cancellation.step_tokens.clear();
+    /// 检查是否已中止
+    pub fn is_aborted(&self) -> bool {
+        self.states.aborted.load(Ordering::SeqCst)
     }
 
-    pub fn set_pause(&self, paused: bool, abort_current_step: bool) {
-        let new_status = if paused {
-            if abort_current_step {
-                2
-            } else {
-                1
-            }
-        } else {
-            0
-        };
+    pub fn set_pause(&self, paused: bool, _abort_current_step: bool) {
+        let new_status = if paused { 1 } else { 0 };
         self.pause_status.store(new_status, Ordering::SeqCst);
-        if new_status == 2 {
-            self.abort_current_steps();
-        }
     }
 
-    pub fn register_step_token(&self) -> CancellationToken {
-        let token = if let Ok(cancellation) = self.states.cancellation.try_lock() {
-            cancellation.main_token.child_token()
-        } else {
-            CancellationToken::new()
-        };
-        if let Ok(mut cancellation) = self.states.cancellation.try_lock() {
-            cancellation.step_tokens.push(token.clone());
-        }
-        token
-    }
+    /// 为 LLM 流创建取消令牌
+    /// 这个 token 会在任务 aborted 时自动取消
+    pub fn create_stream_cancel_token(&self) -> CancellationToken {
+        let token = CancellationToken::new();
+        let aborted = Arc::clone(&self.states.aborted);
+        let child_token = token.clone();
 
-    fn abort_current_steps(&self) {
-        if let Ok(mut cancellation) = self.states.cancellation.try_lock() {
-            for token in cancellation.step_tokens.drain(..) {
-                token.cancel();
+        // 监控 aborted 标志，如果被设置则取消 token
+        tokio::spawn(async move {
+            loop {
+                if aborted.load(Ordering::SeqCst) {
+                    child_token.cancel();
+                    break;
+                }
+                sleep(Duration::from_millis(100)).await;
             }
-        }
+        });
+
+        token
     }
 
     /// Add assistant message using Anthropic-native types (text and/or tool uses).
@@ -586,20 +549,55 @@ impl TaskContext {
         self.states.execution.read().await.system_prompt.clone()
     }
 
-    pub async fn with_messages<T>(
-        &self,
-        f: impl FnOnce(&MessageRingBuffer<MessageParam, MAX_MESSAGE_HISTORY>) -> T,
-    ) -> T {
-        let exec = self.states.execution.read().await;
-        f(&exec.messages)
+    pub async fn add_user_message(&self, text: String) {
+        self.add_user_message_with_images(text, None).await;
     }
 
-    pub async fn add_user_message(&self, text: String) {
+    pub async fn add_user_message_with_images(
+        &self,
+        text: String,
+        images: Option<&[ImageAttachment]>,
+    ) {
+        let content = if let Some(imgs) = images {
+            // 构建包含图片和文本的内容块
+            let mut blocks: Vec<ContentBlock> = imgs
+                .iter()
+                .filter_map(|img| {
+                    // 从 data URL 提取 base64 数据
+                    // 格式: data:image/jpeg;base64,/9j/4AAQ...
+                    let parts: Vec<&str> = img.data_url.splitn(2, ',').collect();
+                    if parts.len() == 2 {
+                        Some(ContentBlock::Image {
+                            source: crate::llm::anthropic_types::ImageSource::Base64 {
+                                media_type: img.mime_type.clone(),
+                                data: parts[1].to_string(),
+                            },
+                            cache_control: None,
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            // 添加文本块
+            if !text.is_empty() {
+                blocks.push(ContentBlock::Text {
+                    text: text.clone(),
+                    cache_control: None,
+                });
+            }
+
+            MessageContent::Blocks(blocks)
+        } else {
+            MessageContent::Text(text.clone())
+        };
+
         {
             let mut exec = self.states.execution.write().await;
             exec.messages.push(MessageParam {
                 role: AnthropicRole::User,
-                content: MessageContent::Text(text.clone()),
+                content,
             });
         }
         let _ = self.append_message(MessageRole::User, &text, false).await;
@@ -673,13 +671,32 @@ impl TaskContext {
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()).into())
     }
 
-    pub async fn initialize_ui_track(&self, user_prompt: &str) -> TaskExecutorResult<()> {
+    pub async fn initialize_ui_track(
+        &self,
+        user_prompt: &str,
+        images: Option<&[ImageAttachment]>,
+    ) -> TaskExecutorResult<()> {
         self.ui_persistence()
             .ensure_conversation(self.conversation_id, None)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        // 转换图片格式
+        let ui_images: Option<Vec<UiMessageImage>> = images.map(|imgs| {
+            imgs.iter()
+                .enumerate()
+                .map(|(i, img)| UiMessageImage {
+                    id: format!("{}-{}", chrono::Utc::now().timestamp_millis(), i),
+                    data_url: img.data_url.clone(),
+                    file_name: format!("image_{}.jpg", i),
+                    file_size: img.data_url.len() as i64,
+                    mime_type: img.mime_type.clone(),
+                })
+                .collect()
+        });
+
         self.ui_persistence()
-            .create_user_message(self.conversation_id, user_prompt)
+            .create_user_message(self.conversation_id, user_prompt, ui_images.as_deref())
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
@@ -702,7 +719,7 @@ impl TaskContext {
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
         self.ui_persistence()
-            .create_user_message(self.conversation_id, user_prompt)
+            .create_user_message(self.conversation_id, user_prompt, None)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
         let assistant_message_id = self

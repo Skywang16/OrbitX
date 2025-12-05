@@ -46,9 +46,9 @@ struct TaskExecutorInner {
     prompt_orchestrator: Arc<PromptOrchestrator>,
     react_orchestrator: Arc<ReactOrchestrator>,
 
-    // 任务状态管理 - 使用Arc避免clone整个TaskContext
+    // 任务状态管理 - 仅用于查找正在运行的任务以便中断
+    // 不再缓存 conversation_contexts，每次从 DB ��载
     active_tasks: DashMap<String, Arc<crate::agent::core::context::TaskContext>>,
-    conversation_contexts: DashMap<i64, Arc<crate::agent::core::context::TaskContext>>,
 }
 
 /// TaskExecutor - 任务执行器
@@ -85,7 +85,6 @@ impl TaskExecutor {
                 prompt_orchestrator,
                 react_orchestrator,
                 active_tasks: DashMap::new(),
-                conversation_contexts: DashMap::new(),
             }),
         }
     }
@@ -120,11 +119,5 @@ impl TaskExecutor {
         &self,
     ) -> &DashMap<String, Arc<crate::agent::core::context::TaskContext>> {
         &self.inner.active_tasks
-    }
-
-    pub(crate) fn conversation_contexts(
-        &self,
-    ) -> &DashMap<i64, Arc<crate::agent::core::context::TaskContext>> {
-        &self.inner.conversation_contexts
     }
 }

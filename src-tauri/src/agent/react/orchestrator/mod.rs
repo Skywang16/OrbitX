@@ -74,7 +74,7 @@ impl ReactOrchestrator {
         let mut iteration_snapshots: Vec<IterationSnapshot> = Vec::new();
 
         while !context.should_stop().await {
-            context.check_aborted(false).await?;
+            context.check_aborted_async(false).await?;
 
             // ===== Phase 1: 迭代初始化 =====
             let iteration = context.increment_iteration().await?;
@@ -94,7 +94,7 @@ impl ReactOrchestrator {
             let (mut working_messages, mut system_prompt) = context
                 .batch_read_state(|exec| {
                     (
-                        exec.messages.iter().cloned().collect::<Vec<_>>(),
+                        exec.messages.clone(),
                         exec.system_prompt.clone(),
                     )
                 })
@@ -189,7 +189,7 @@ impl ReactOrchestrator {
                 .await?;
 
             let llm_service = crate::llm::service::LLMService::new(Arc::clone(&self.database));
-            let cancel_token = context.register_step_token();
+            let cancel_token = context.create_stream_cancel_token();
             let mut stream = llm_service
                 .call_stream(llm_request, cancel_token)
                 .await
@@ -208,7 +208,7 @@ impl ReactOrchestrator {
 
             // ===== Phase 3: 处理 Anthropic StreamEvent =====
             while let Some(item) = stream.next().await {
-                context.check_aborted(true).await?;
+                context.check_aborted_async(true).await?;
 
                 match item {
                     Ok(StreamEvent::MessageStart { .. }) => {}

@@ -314,7 +314,6 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
                             options: model.options.as_ref().and_then(|v| v.as_object()).map(
                                 |obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
                             ),
-                            supports_prompt_cache: false,
                         },
                         model_name: model.model,
                         dimension,

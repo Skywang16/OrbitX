@@ -13,6 +13,7 @@ pub mod mcp; // MCP 适配（预留）
 pub mod memory; // 对话/上下文压缩与快照策略（预留）
 pub mod persistence; // 持久化与仓库抽象
 pub mod react; // ReAct 策略与解析(预留)
+pub mod shell; // Shell 执行模块
 pub mod state; // 任务上下文与错误
 pub mod tools; // 工具接口与内置工具
 pub mod ui; // UI 回调持久化

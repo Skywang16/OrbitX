@@ -273,7 +273,10 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     }
   }
 
-  const sendMessage = async (content: string): Promise<void> => {
+  const sendMessage = async (
+    content: string,
+    images?: Array<{ id: string; dataUrl: string; fileName: string; fileSize: number; mimeType: string }>
+  ): Promise<void> => {
     // 如果处于新建状态或无会话，先创建真实会话
     if (!currentConversationId.value || currentConversationId.value === NEW_SESSION_FLAG) {
       isLoading.value = true
@@ -300,7 +303,21 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       throw new Error('没有选择模型，请先选择一个模型')
     }
 
-    const stream = await agentApi.executeTask(content, currentConversationId.value, chatMode.value, selectedModelId)
+    // 构建包含图片的消息内容
+    let messageContent = content
+    const imageAttachments = images?.map(img => ({
+      type: 'image' as const,
+      dataUrl: img.dataUrl,
+      mimeType: img.mimeType,
+    }))
+
+    const stream = await agentApi.executeTask(
+      messageContent,
+      currentConversationId.value,
+      chatMode.value,
+      selectedModelId,
+      imageAttachments
+    )
 
     if (!stream) throw new Error('无法创建任务流')
 
