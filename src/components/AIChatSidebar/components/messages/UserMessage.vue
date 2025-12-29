@@ -1,10 +1,12 @@
 <script setup lang="ts">
-  import type { Message } from '@/types'
+  import type { Message, CheckpointSummary } from '@/types'
   import { useImageLightboxStore } from '@/stores/imageLightbox'
-  import { formatTime } from '@/utils/dateFormatter'
+  import CheckpointIndicator from './CheckpointIndicator.vue'
 
   interface Props {
     message: Message
+    checkpoint?: CheckpointSummary | null
+    workspacePath?: string
   }
 
   defineProps<Props>()
@@ -38,7 +40,12 @@
         </div>
         <div v-if="message.content" class="user-message-text">{{ message.content }}</div>
       </div>
-      <div class="user-message-time">{{ formatTime(message.createdAt) }}</div>
+      <CheckpointIndicator
+        class="rollback-action"
+        :checkpoint="checkpoint"
+        :message-id="message.id"
+        :workspace-path="workspacePath || ''"
+      />
     </div>
   </div>
 </template>
@@ -55,6 +62,18 @@
     flex-direction: column;
     align-items: flex-end;
     max-width: 80%;
+    position: relative;
+  }
+
+  .rollback-action {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    margin-top: 4px;
+    margin-right: 4px;
+  }
+
+  .user-message:hover .rollback-action {
+    opacity: 1;
   }
 
   .user-message-bubble {
@@ -72,13 +91,6 @@
     font-size: var(--font-size-md);
     line-height: 1.4;
     margin: 0;
-  }
-
-  .user-message-time {
-    font-size: var(--font-size-xs);
-    color: var(--text-400);
-    margin-top: var(--spacing-xs);
-    margin-right: var(--spacing-sm);
   }
 
   .user-message-images {

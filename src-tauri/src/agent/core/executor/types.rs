@@ -25,8 +25,6 @@ pub struct ExecuteTaskParams {
     #[serde(default)]
     pub cwd: Option<String>,
     #[serde(default)]
-    pub has_context: bool,
-    #[serde(default)]
     pub images: Option<Vec<ImageAttachment>>,
 }
 

@@ -14,7 +14,7 @@ use std::sync::Arc;
 use chrono::Utc;
 use serde_json::Value;
 use tokio_stream::StreamExt;
-use tracing::{warn};
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::agent::config::CompactionConfig;
@@ -70,7 +70,6 @@ impl ReactOrchestrator {
     where
         H: crate::agent::core::executor::ReactHandler,
     {
-
         let mut iteration_snapshots: Vec<IterationSnapshot> = Vec::new();
 
         while !context.should_stop().await {
@@ -92,12 +91,7 @@ impl ReactOrchestrator {
 
             // 性能优化：使用批量读取，一次锁获取所有数据
             let (mut working_messages, mut system_prompt) = context
-                .batch_read_state(|exec| {
-                    (
-                        exec.messages.clone(),
-                        exec.system_prompt.clone(),
-                    )
-                })
+                .batch_read_state(|exec| (exec.messages.clone(), exec.system_prompt.clone()))
                 .await;
 
             // 摘要（如果需要）
@@ -169,13 +163,7 @@ impl ReactOrchestrator {
                 .map_err(|e| {
                     TaskExecutorError::InternalError(format!("Compaction failed: {}", e))
                 })?;
-            if let CompactionResult::Compacted {
-                
-                
-                ..
-            } = &compaction_result
-            {
-            }
+            if let CompactionResult::Compacted { .. } = &compaction_result {}
             let final_messages = compaction_result.messages();
 
             let llm_request = handler
@@ -208,6 +196,9 @@ impl ReactOrchestrator {
 
             // ===== Phase 3: 处理 Anthropic StreamEvent =====
             while let Some(item) = stream.next().await {
+                if context.is_aborted() {
+                    break;
+                }
                 context.check_aborted_async(true).await?;
 
                 match item {
@@ -364,11 +355,9 @@ impl ReactOrchestrator {
                 IterationOutcome::Empty
             };
 
-
             // ===== Phase 6: 根据结果执行动作 =====
             match outcome {
                 IterationOutcome::ContinueWithTools { ref tool_calls } => {
-
                     let deduplicated_calls =
                         crate::agent::core::utils::deduplicate_tool_uses(tool_calls);
                     if deduplicated_calls.len() < tool_calls.len() {
@@ -440,8 +429,10 @@ impl ReactOrchestrator {
                     continue;
                 }
 
-                IterationOutcome::Complete { thinking: _, output } => {
-
+                IterationOutcome::Complete {
+                    thinking: _,
+                    output,
+                } => {
                     context
                         .states
                         .react_runtime

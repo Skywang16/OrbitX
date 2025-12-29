@@ -186,6 +186,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::agent::core::commands::agent_update_conversation_title,
         crate::agent::core::commands::agent_ui_get_conversations,
         crate::agent::core::commands::agent_ui_get_messages,
+        crate::agent::core::commands::agent_ui_delete_messages_from,
         // crate::agent::core::commands::agent_trigger_context_summary, // 暂时注释：类型问题待修复
         // 存储系统命令
         crate::ai::tool::storage::storage_get_config,
@@ -213,5 +214,13 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::vector_db::commands::vector_build_index,
         crate::vector_db::commands::vector_get_build_progress,
         crate::vector_db::commands::vector_cancel_build,
+        // Checkpoint 系统命令
+        crate::checkpoint::commands::checkpoint_create,
+        crate::checkpoint::commands::checkpoint_list,
+        crate::checkpoint::commands::checkpoint_rollback,
+        crate::checkpoint::commands::checkpoint_diff,
+        crate::checkpoint::commands::checkpoint_diff_with_current,
+        crate::checkpoint::commands::checkpoint_get_file_content,
+        crate::checkpoint::commands::checkpoint_delete,
     ])
 }

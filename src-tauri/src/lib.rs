@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod ai;
+pub mod checkpoint;
 pub mod commands;
 pub mod completion;
 pub mod config;
@@ -14,9 +15,9 @@ pub mod shell;
 pub mod storage;
 pub mod terminal;
 pub mod utils;
+pub mod vector_db;
 pub mod window;
 pub mod workspace;
-pub mod vector_db;
 
 use setup::{
     ensure_main_window_visible, handle_startup_args, init_logging, init_plugin,

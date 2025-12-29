@@ -82,6 +82,7 @@ md5 = "0.7"
 rmp = "0.8"
 rmp-serde = "1.1"
 sha2 = "0.10"
+hex = "0.4"
 
 # 主机名获取
 hostname = "0.4"

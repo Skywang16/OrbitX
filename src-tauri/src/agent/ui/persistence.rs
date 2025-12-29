@@ -272,6 +272,48 @@ impl AgentUiPersistence {
         Ok(title)
     }
 
+    /// 删除指定消息及其之后的所有消息（用于回滚功能）
+    /// 返回被删除的消息内容（如果是用户消息）
+    pub async fn delete_messages_from(
+        &self,
+        conversation_id: i64,
+        message_id: i64,
+    ) -> AgentResult<Option<String>> {
+        // 先获取该消息的内容（如果是用户消息）
+        let message_content: Option<String> = sqlx::query_scalar(
+            "SELECT content FROM agent_ui_messages WHERE id = ? AND role = 'user'",
+        )
+        .bind(message_id)
+        .fetch_optional(self.pool())
+        .await?
+        .flatten();
+
+        // 获取该消息的创建时间
+        let created_at: i64 =
+            sqlx::query_scalar("SELECT created_at FROM agent_ui_messages WHERE id = ?")
+                .bind(message_id)
+                .fetch_one(self.pool())
+                .await?;
+
+        // 删除该消息及其之后的所有消息
+        sqlx::query(
+            "DELETE FROM agent_ui_messages 
+             WHERE conversation_id = ? AND (created_at > ? OR (created_at = ? AND id >= ?))",
+        )
+        .bind(conversation_id)
+        .bind(created_at)
+        .bind(created_at)
+        .bind(message_id)
+        .execute(self.pool())
+        .await?;
+
+        // 更新会话的消息计数
+        let ts = now_timestamp();
+        self.touch_conversation(conversation_id, ts, None).await?;
+
+        Ok(message_content)
+    }
+
     async fn touch_conversation(
         &self,
         conversation_id: i64,

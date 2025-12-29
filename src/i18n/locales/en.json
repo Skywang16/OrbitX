@@ -224,6 +224,17 @@
     "generating": "Generating...",
     "duration_info": "Duration: {duration}"
   },
+  "checkpoint": {
+    "rollback": "Rollback",
+    "rollback_confirm": "Are you sure you want to rollback to this checkpoint? This will restore files to their state at that moment.",
+    "rollback_success": "Successfully restored {count} files",
+    "rollback_partial": "Restored {restored} files, {failed} failed",
+    "rollback_failed": "Rollback failed",
+    "confirm_revert": "Confirm Revert",
+    "revert_changes_desc": "Reverting will apply these changes:",
+    "loading_files": "Loading files...",
+    "no_files_changed": "No files changed"
+  },
   "tool": {
     "data_error": "Data Error"
   },

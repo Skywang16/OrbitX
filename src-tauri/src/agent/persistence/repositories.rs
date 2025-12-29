@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use sqlx::{self, sqlite::SqliteQueryResult, Row};
-use uuid::Uuid;
 
 use crate::agent::error::{AgentError, AgentResult};
 use crate::storage::database::DatabaseManager;
@@ -425,6 +424,27 @@ impl FileContextRepository {
             .await?;
         Ok(())
     }
+
+    /// 获取被 Agent 编辑过的文件（有 agent_edit_timestamp 的文件）
+    pub async fn get_agent_edited_files(
+        &self,
+        conversation_id: i64,
+    ) -> AgentResult<Vec<FileContextEntry>> {
+        let rows = sqlx::query(
+            "SELECT id, conversation_id, file_path, record_state, record_source,
+                    agent_read_timestamp, agent_edit_timestamp, user_edit_timestamp, created_at
+             FROM file_context_entries
+             WHERE conversation_id = ? AND agent_edit_timestamp IS NOT NULL
+             ORDER BY agent_edit_timestamp DESC",
+        )
+        .bind(conversation_id)
+        .fetch_all(self.pool())
+        .await?;
+
+        rows.into_iter()
+            .map(|row| build_file_context_entry(&row))
+            .collect()
+    }
 }
 
 /// Repository for agent execution records.
@@ -445,6 +465,7 @@ impl AgentExecutionRepository {
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
         &self,
+        execution_id: &str,
         conversation_id: i64,
         user_request: &str,
         system_prompt_used: &str,
@@ -452,7 +473,6 @@ impl AgentExecutionRepository {
         has_conversation_context: bool,
         max_iterations: i64,
     ) -> AgentResult<AgentExecution> {
-        let execution_id = Uuid::new_v4().to_string();
         let ts = now_timestamp();
         sqlx::query(
             "INSERT INTO agent_executions (
@@ -462,7 +482,7 @@ impl AgentExecutionRepository {
                 created_at, updated_at
              ) VALUES (?, ?, ?, ?, ?, ?, 'running', 0, 0, ?, 0, 0, 0.0, 0, ?, ?)",
         )
-        .bind(&execution_id)
+        .bind(execution_id)
         .bind(conversation_id)
         .bind(user_request)
         .bind(system_prompt_used)

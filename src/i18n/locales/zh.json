@@ -224,6 +224,17 @@
     "generating": "正在生成...",
     "duration_info": "耗时: {duration}"
   },
+  "checkpoint": {
+    "rollback": "回滚",
+    "rollback_confirm": "确定要回滚到此检查点吗？这将恢复文件到该时刻的状态。",
+    "rollback_success": "成功恢复 {count} 个文件",
+    "rollback_partial": "恢复了 {restored} 个文件，{failed} 个失败",
+    "rollback_failed": "回滚失败",
+    "confirm_revert": "确认回滚",
+    "revert_changes_desc": "回滚将恢复以下文件的修改：",
+    "loading_files": "加载文件列表...",
+    "no_files_changed": "没有文件变更"
+  },
   "tool": {
     "data_error": "数据错误"
   },

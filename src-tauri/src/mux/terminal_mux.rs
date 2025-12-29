@@ -336,6 +336,14 @@ impl TerminalMux {
         }
     }
 
+    /// 创建调试订阅者（用于测试和调试）
+    pub fn create_debug_subscriber() -> impl Fn(&MuxNotification) -> bool + Send + Sync + 'static {
+        move |notification: &MuxNotification| {
+            tracing::debug!("MuxNotification: {:?}", notification);
+            true
+        }
+    }
+
     /// 处理来自其他线程的通知（应该在主线程定期调用）
     pub fn process_notifications(&self) {
         if let Ok(receiver_guard) = self.notification_receiver.lock() {

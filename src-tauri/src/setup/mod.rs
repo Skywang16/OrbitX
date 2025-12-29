@@ -203,7 +203,22 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     };
     app.manage(llm_state);
 
-    // 初始化TaskExecutor状态
+    // 初始化 Checkpoint 服务（提前创建，供 TaskExecutor 使用）
+    let checkpoint_service = {
+        use crate::checkpoint::{BlobStore, CheckpointService, CheckpointStorage};
+
+        let database = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
+        let pool = database.pool().clone();
+
+        let storage = Arc::new(CheckpointStorage::new(pool.clone()));
+        let blob_store = Arc::new(BlobStore::new(pool));
+        Arc::new(CheckpointService::new(storage, blob_store))
+    };
+
+    // 初始化TaskExecutor状态（带有 Checkpoint 服务）
     let task_executor_state = {
         let database_manager = app
             .state::<Arc<crate::storage::DatabaseManager>>()
@@ -220,11 +235,12 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
             .inner()
             .clone();
 
-        let executor = Arc::new(crate::agent::core::TaskExecutor::new(
+        let executor = Arc::new(crate::agent::core::TaskExecutor::with_checkpoint_service(
             Arc::clone(&database_manager),
             Arc::clone(&cache),
             Arc::clone(&agent_persistence),
             Arc::clone(&ui_persistence),
+            Arc::clone(&checkpoint_service),
         ));
 
         crate::agent::core::commands::TaskExecutorState::new(executor)
@@ -250,6 +266,13 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
             tracing::warn!("Failed to initialize dock manager: {}", e);
         }
     }
+
+    // 初始化 Checkpoint 状态（复用之前创建的 checkpoint_service）
+    let checkpoint_state = {
+        use crate::checkpoint::CheckpointState;
+        CheckpointState::new(checkpoint_service)
+    };
+    app.manage(checkpoint_state);
 
     // 初始化向量数据库状态
     {

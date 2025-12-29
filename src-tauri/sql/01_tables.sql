@@ -258,3 +258,54 @@ CREATE TABLE IF NOT EXISTS recent_workspaces (
     path TEXT NOT NULL UNIQUE,
     last_accessed_at INTEGER NOT NULL
 );
+
+-- ===========================
+-- Checkpoint 系统架构
+-- ===========================
+-- 用于追踪 Agent 对文件的修改历史，支持回滚到任意历史状态
+
+-- Blob 存储表：内容寻址存储
+CREATE TABLE IF NOT EXISTS checkpoint_blobs (
+    hash TEXT PRIMARY KEY,
+    content BLOB NOT NULL,
+    size INTEGER NOT NULL,
+    ref_count INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL
+);
+
+-- Checkpoint 主表：树状结构
+CREATE TABLE IF NOT EXISTS checkpoints (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL,
+    parent_id INTEGER,
+    user_message TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_id) REFERENCES checkpoints(id) ON DELETE SET NULL
+);
+
+-- 文件快照表：记录每个 checkpoint 包含哪些文件
+CREATE TABLE IF NOT EXISTS checkpoint_file_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    checkpoint_id INTEGER NOT NULL,
+    file_path TEXT NOT NULL,
+    blob_hash TEXT NOT NULL,
+    change_type TEXT NOT NULL CHECK (change_type IN ('added', 'modified', 'deleted')),
+    file_size INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE (checkpoint_id, file_path),
+    FOREIGN KEY (checkpoint_id) REFERENCES checkpoints(id) ON DELETE CASCADE,
+    FOREIGN KEY (blob_hash) REFERENCES checkpoint_blobs(hash)
+);
+
+-- Checkpoint 相关索引
+CREATE INDEX IF NOT EXISTS idx_checkpoints_conversation
+    ON checkpoints(conversation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_parent
+    ON checkpoints(parent_id);
+CREATE INDEX IF NOT EXISTS idx_file_snapshots_checkpoint
+    ON checkpoint_file_snapshots(checkpoint_id);
+CREATE INDEX IF NOT EXISTS idx_file_snapshots_blob
+    ON checkpoint_file_snapshots(blob_hash);
+CREATE INDEX IF NOT EXISTS idx_blobs_ref_count
+    ON checkpoint_blobs(ref_count);

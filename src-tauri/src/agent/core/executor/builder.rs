@@ -90,10 +90,8 @@ impl TaskExecutor {
             conversation_id: params.conversation_id,
             user_request: params.user_prompt.clone(),
             system_prompt_used: String::new(),
-            execution_config: Some(
-                serde_json::to_string(&TaskExecutionConfig::default()).unwrap(),
-            ),
-            has_conversation_context: params.has_context,
+            execution_config: Some(serde_json::to_string(&TaskExecutionConfig::default()).unwrap()),
+            has_conversation_context: false, // 由后端自动检测
             status: ExecutionStatus::Running,
             current_iteration: 0,
             error_count: 0,
@@ -108,11 +106,12 @@ impl TaskExecutor {
             completed_at: None,
         };
 
-        // 持久化execution记录
+        // 持久化execution记录，传入已生成的 task_id 确保一致性
         let created_execution = self
             .agent_persistence()
             .agent_executions()
             .create(
+                &task_id,
                 execution.conversation_id,
                 &execution.user_request,
                 &execution.system_prompt_used,
@@ -226,6 +225,6 @@ impl TaskExecutor {
             .await
             .ok()
             .flatten()
-            .and_then(|conv| conv.workspace_path)
+            .and_then(|conv| conv.workspace_path.clone())
     }
 }

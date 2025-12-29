@@ -4,16 +4,21 @@
   import { useAIChatStore } from './store'
   import { useAISettingsStore } from '@/components/settings/components/AI'
   import { useSessionStore } from '@/stores/session'
+  import { windowApi } from '@/api/window'
+  import { agentApi } from '@/api/agent'
 
   import ChatHeader from './components/layout/ChatHeader.vue'
   import MessageList from './components/messages/MessageList.vue'
   import ChatInput from './components/input/ChatInput.vue'
   import ResizeHandle from './components/layout/ResizeHandle.vue'
   import ImageLightbox from './components/input/ImageLightbox.vue'
+  import RollbackConfirmDialog from './components/messages/RollbackConfirmDialog.vue'
+  import { useCheckpoint } from '@/composables/useCheckpoint'
 
   const aiChatStore = useAIChatStore()
   const aiSettingsStore = useAISettingsStore()
   const sessionStore = useSessionStore()
+  const workspacePath = ref('')
 
   const { t } = useI18n()
 
@@ -126,8 +131,59 @@
     }
   }
 
+  const { refreshCheckpoints } = useCheckpoint()
+
+  // 处理消息回滚
+  const handleRollbackToMessage = async (messageId: number, content: string) => {
+    if (!aiChatStore.currentConversationId) return
+
+    try {
+      // 调用后端删除消息
+      await agentApi.deleteMessagesFrom(aiChatStore.currentConversationId, messageId)
+
+      // 重新加载消息列表
+      await aiChatStore.loadConversation(aiChatStore.currentConversationId)
+
+      // 将消息内容填充到输入框
+      messageInput.value = content
+    } catch (error) {
+      console.error('Failed to rollback messages:', error)
+    }
+  }
+
+  // 处理文件回滚结果
+  const handleRollbackResult = async (result: { success: boolean; message: string; messageId: number }) => {
+    if (result.success) {
+      // 找到被回滚的消息
+      const message = aiChatStore.messageList.find(m => m.id === result.messageId)
+      const content = message?.content || ''
+      const images = message?.images || []
+
+      // 执行消息回滚
+      await handleRollbackToMessage(result.messageId, content)
+
+      // 恢复图片到输入框
+      if (images.length > 0) {
+        chatInputRef.value?.setImages(images)
+      }
+
+      // 刷新 checkpoints
+      if (aiChatStore.currentConversationId) {
+        await refreshCheckpoints(aiChatStore.currentConversationId)
+      }
+    }
+    console.warn('Checkpoint rollback:', result.message)
+  }
+
   onMounted(async () => {
     await aiChatStore.initialize()
+
+    // 获取当前工作目录
+    try {
+      workspacePath.value = await windowApi.getCurrentDirectory()
+    } catch (e) {
+      console.warn('Failed to get workspace path:', e)
+    }
 
     // 从 sessionStore 恢复选中的模型（改用公开的计算属性）
     const savedModelId = sessionStore.aiState?.selectedModelId || null
@@ -172,6 +228,8 @@
           :messages="aiChatStore.messageList"
           :is-loading="aiChatStore.isLoading"
           :chat-mode="aiChatStore.chatMode"
+          :conversation-id="aiChatStore.currentConversationId"
+          :workspace-path="workspacePath"
         />
 
         <!--  <TaskList /> -->
@@ -194,6 +252,7 @@
     </div>
 
     <ImageLightbox />
+    <RollbackConfirmDialog @rollback="handleRollbackResult" />
   </div>
 </template>
 

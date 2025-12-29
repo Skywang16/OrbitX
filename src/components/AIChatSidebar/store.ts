@@ -324,8 +324,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     let messagesLoaded = false
     let cancelSent = false
     stream.onProgress(async event => {
-      const taskId = getEventTaskId(event)
-      if (taskId && !currentTaskId.value) currentTaskId.value = taskId
+      // 只从 TaskCreated 事件中获取 taskId，确保获取正确的任务 ID
+      if (event.type === 'TaskCreated' && !currentTaskId.value) {
+        currentTaskId.value = event.payload.taskId
+      }
+
       if (!cancelSent && cancelRequested.value && currentTaskId.value) {
         await agentApi.cancelTask(currentTaskId.value)
         cancelSent = true

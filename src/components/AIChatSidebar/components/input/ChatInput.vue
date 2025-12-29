@@ -484,6 +484,9 @@
     clearImages: () => {
       imageAttachments.value = []
     },
+    setImages: (images: ImageAttachment[]) => {
+      imageAttachments.value = images
+    },
   })
 </script>
 

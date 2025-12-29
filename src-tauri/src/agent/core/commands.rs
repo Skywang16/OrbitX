@@ -95,6 +95,27 @@ pub async fn agent_ui_get_messages(
     }
 }
 
+/// 删除指定消息及其之后的所有消息（用于回滚功能）
+#[tauri::command]
+pub async fn agent_ui_delete_messages_from(
+    state: State<'_, TaskExecutorState>,
+    conversation_id: i64,
+    message_id: i64,
+) -> TauriApiResult<Option<String>> {
+    match state
+        .executor
+        .ui_persistence()
+        .delete_messages_from(conversation_id, message_id)
+        .await
+    {
+        Ok(content) => Ok(api_success!(content)),
+        Err(e) => {
+            tracing::error!("Failed to delete messages from {}: {}", message_id, e);
+            Ok(api_error!("agent.ui.delete_messages_failed"))
+        }
+    }
+}
+
 impl TaskExecutorState {
     pub fn new(executor: Arc<TaskExecutor>) -> Self {
         Self { executor }

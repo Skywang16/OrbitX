@@ -2,11 +2,12 @@
  * 任务生命周期管理
  */
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::ipc::Channel;
 use tokio::task;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
@@ -27,6 +28,17 @@ impl TaskExecutor {
         let ctx = self
             .build_or_restore_context(&params, Some(progress_channel))
             .await?;
+
+        // 在任务执行前自动创建 checkpoint（如果已配置 checkpoint 服务）
+        if let Some(checkpoint_service) = self.checkpoint_service() {
+            self.create_pre_execution_checkpoint(
+                &checkpoint_service,
+                params.conversation_id,
+                &params.user_prompt,
+                &ctx.cwd,
+            )
+            .await;
+        }
 
         ctx.send_progress(TaskProgressPayload::TaskCreated(TaskCreatedPayload {
             task_id: ctx.task_id.to_string(),
@@ -51,7 +63,16 @@ impl TaskExecutor {
 
         ctx.set_system_prompt(system_prompt).await?;
 
-        if params.has_context {
+        // 自动检测会话是否有历史执行记录，有则恢复上下文
+        let has_history = self
+            .agent_persistence()
+            .agent_executions()
+            .list_recent_by_conversation(params.conversation_id, 2)
+            .await
+            .map(|execs| execs.len() > 1) // 当前执行 + 至少一个历史执行
+            .unwrap_or(false);
+
+        if has_history {
             self.restore_conversation_history(&ctx, params.conversation_id)
                 .await?;
         }
@@ -196,35 +217,23 @@ impl TaskExecutor {
         task_id: &str,
         _reason: Option<String>,
     ) -> TaskExecutorResult<()> {
-        // 尝试从 active_tasks 获取任务
-        let ctx_opt = self
+        let ctx = self
             .active_tasks()
             .get(task_id)
-            .map(|entry| Arc::clone(entry.value()));
+            .map(|entry| Arc::clone(entry.value()))
+            .ok_or_else(|| TaskExecutorError::TaskNotFound(task_id.to_string()))?;
 
-        if let Some(ctx) = ctx_opt {
-            // 任务存在，执行正常的取消流程
+        ctx.abort();
+        ctx.set_status(AgentTaskStatus::Cancelled).await?;
 
-            // 中止执行
-            ctx.abort();
-            ctx.set_status(AgentTaskStatus::Cancelled).await?;
+        ctx.send_progress(TaskProgressPayload::TaskCancelled(TaskCancelledPayload {
+            task_id: task_id.to_string(),
+            reason: "user_requested".to_string(),
+            timestamp: chrono::Utc::now(),
+        }))
+        .await?;
 
-            ctx.send_progress(TaskProgressPayload::TaskCancelled(TaskCancelledPayload {
-                task_id: task_id.to_string(),
-                reason: "user_requested".to_string(),
-                timestamp: chrono::Utc::now(),
-            }))
-            .await?;
-
-            // 从active_tasks移除
-            self.active_tasks().remove(task_id);
-        } else {
-            // 任务不存在，可能还没开始或已经完成
-            warn!(
-                "Task {} not found in active_tasks, it may have already completed or been cancelled",
-                task_id
-            );
-        }
+        self.active_tasks().remove(task_id);
 
         Ok(())
     }
@@ -389,5 +398,95 @@ impl TaskExecutor {
         }
 
         Ok(())
+    }
+
+    /// 在任务执行前创建 checkpoint
+    ///
+    /// 获取会话中所有被 Agent 追踪的活跃文件，并创建快照
+    async fn create_pre_execution_checkpoint(
+        &self,
+        checkpoint_service: &crate::checkpoint::CheckpointService,
+        conversation_id: i64,
+        user_message: &str,
+        workspace_path: &str,
+    ) {
+        // 获取会话中所有活跃的文件（Agent 读取或编辑过的文件）
+        let files = match self.get_tracked_files_for_checkpoint(conversation_id).await {
+            Ok(files) => files,
+            Err(e) => {
+                warn!("Failed to get tracked files for checkpoint: {}", e);
+                return;
+            }
+        };
+
+        // 如果没有被追踪的文件，跳过 checkpoint 创建
+        if files.is_empty() {
+            info!(
+                "No tracked files for conversation {}, skipping checkpoint",
+                conversation_id
+            );
+            return;
+        }
+
+        let workspace = PathBuf::from(workspace_path);
+
+        match checkpoint_service
+            .create_checkpoint(conversation_id, user_message, files.clone(), &workspace)
+            .await
+        {
+            Ok(checkpoint) => {
+                info!(
+                    "Created checkpoint {} for conversation {} with {} files",
+                    checkpoint.id,
+                    conversation_id,
+                    files.len()
+                );
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to create checkpoint for conversation {}: {}",
+                    conversation_id, e
+                );
+            }
+        }
+    }
+
+    /// 获取会话中被追踪的文件列表（用于 checkpoint）
+    ///
+    /// 优先返回被 Agent 编辑过的文件，如果没有则返回所有活跃文件
+    async fn get_tracked_files_for_checkpoint(
+        &self,
+        conversation_id: i64,
+    ) -> TaskExecutorResult<Vec<PathBuf>> {
+        let persistence = self.agent_persistence();
+        let file_context = persistence.file_context();
+
+        // 首先尝试获取被 Agent 编辑过的文件
+        let edited_files = file_context
+            .get_agent_edited_files(conversation_id)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        // 如果有被编辑的文件，只对这些文件创建快照
+        if !edited_files.is_empty() {
+            let files: Vec<PathBuf> = edited_files
+                .into_iter()
+                .map(|entry| PathBuf::from(entry.file_path))
+                .collect();
+            return Ok(files);
+        }
+
+        // 否则获取所有活跃文件（Agent 读取过的文件）
+        let active_files = file_context
+            .get_active_files(conversation_id)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        let files: Vec<PathBuf> = active_files
+            .into_iter()
+            .map(|entry| PathBuf::from(entry.file_path))
+            .collect();
+
+        Ok(files)
     }
 }

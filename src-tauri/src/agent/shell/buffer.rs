@@ -108,7 +108,7 @@ mod tests {
         buf.write_str("hello world!"); // 12 bytes > 10
         assert_eq!(buf.len(), 10);
         assert!(buf.is_overflowed());
-        assert_eq!(buf.content_string(), "lo world!");
+        assert_eq!(buf.content_string(), "llo world!"); // 保留最后10个字节
     }
 
     #[test]
@@ -118,5 +118,39 @@ mod tests {
         buf.write_str("world!"); // 6 bytes, total 11 > 10
         assert!(buf.is_overflowed());
         assert_eq!(buf.len(), 10);
+        assert_eq!(buf.content_string(), "elloworld!"); // 丢弃第一个字节 'h'
+        assert_eq!(buf.total_written(), 11);
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut buf = OutputRingBuffer::new(10);
+        buf.write_str("hello world!"); // 触发溢出
+        assert!(buf.is_overflowed());
+
+        buf.clear();
+        assert!(!buf.is_overflowed());
+        assert!(buf.is_empty());
+        assert_eq!(buf.total_written(), 0);
+    }
+
+    #[test]
+    fn test_exact_capacity() {
+        let mut buf = OutputRingBuffer::new(5);
+        buf.write_str("hello"); // 刚好 5 bytes
+        assert_eq!(buf.len(), 5);
+        // 注意：当单次写入 >= capacity 时，实现会标记为溢出
+        // 这是因为无法区分是否有旧数据被覆盖
+        assert!(buf.is_overflowed());
+        assert_eq!(buf.content_string(), "hello");
+    }
+
+    #[test]
+    fn test_under_capacity() {
+        let mut buf = OutputRingBuffer::new(10);
+        buf.write_str("hello"); // 5 bytes < 10
+        assert_eq!(buf.len(), 5);
+        assert!(!buf.is_overflowed());
+        assert_eq!(buf.content_string(), "hello");
     }
 }

@@ -169,6 +169,22 @@ export class AgentApi {
   }
 
   /**
+   * 删除指定消息及其之后的所有消息（用于回滚功能）
+   * @returns 被删除的用户消息内容（如果有）
+   */
+  deleteMessagesFrom = async (conversationId: number, messageId: number): Promise<string | null> => {
+    interface ApiResponse {
+      success: boolean
+      data?: string | null
+    }
+    const result = await invoke<ApiResponse>('agent_ui_delete_messages_from', {
+      conversationId,
+      messageId,
+    })
+    return result.data ?? null
+  }
+
+  /**
    * 发送任务控制命令
    * @param taskId 任务ID
    * @param command 控制命令

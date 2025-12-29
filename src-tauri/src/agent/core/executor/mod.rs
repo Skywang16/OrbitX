@@ -15,14 +15,14 @@
 
 mod builder;
 mod lifecycle;
-mod state;
-mod types;
 mod react_handler;
 mod react_impl;
+mod state;
+mod types;
 
+pub use react_handler::ReactHandler;
 pub use state::TaskExecutorStats;
 pub use types::*;
-pub use react_handler::ReactHandler;
 
 use std::sync::Arc;
 
@@ -32,6 +32,7 @@ use crate::agent::persistence::AgentPersistence;
 use crate::agent::prompt::orchestrator::PromptOrchestrator;
 use crate::agent::react::orchestrator::ReactOrchestrator;
 use crate::agent::ui::AgentUiPersistence;
+use crate::checkpoint::CheckpointService;
 use crate::storage::{DatabaseManager, UnifiedCache};
 
 /// TaskExecutor内部状态
@@ -42,12 +43,15 @@ struct TaskExecutorInner {
     agent_persistence: Arc<AgentPersistence>,
     ui_persistence: Arc<AgentUiPersistence>,
 
+    // Checkpoint 服务（可选，用于自动创建 checkpoint）
+    checkpoint_service: Option<Arc<CheckpointService>>,
+
     // 编排器
     prompt_orchestrator: Arc<PromptOrchestrator>,
     react_orchestrator: Arc<ReactOrchestrator>,
 
     // 任务状态管理 - 仅用于查找正在运行的任务以便中断
-    // 不再缓存 conversation_contexts，每次从 DB ��载
+    // 不再缓存 conversation_contexts，每次从 DB 加载
     active_tasks: DashMap<String, Arc<crate::agent::core::context::TaskContext>>,
 }
 
@@ -82,6 +86,35 @@ impl TaskExecutor {
                 cache,
                 agent_persistence,
                 ui_persistence,
+                checkpoint_service: None,
+                prompt_orchestrator,
+                react_orchestrator,
+                active_tasks: DashMap::new(),
+            }),
+        }
+    }
+
+    /// 创建带有 Checkpoint 服务的 TaskExecutor 实例
+    pub fn with_checkpoint_service(
+        database: Arc<DatabaseManager>,
+        cache: Arc<UnifiedCache>,
+        agent_persistence: Arc<AgentPersistence>,
+        ui_persistence: Arc<AgentUiPersistence>,
+        checkpoint_service: Arc<CheckpointService>,
+    ) -> Self {
+        let prompt_orchestrator = Arc::new(PromptOrchestrator::new(Arc::clone(&cache)));
+        let react_orchestrator = Arc::new(ReactOrchestrator::new(
+            Arc::clone(&database),
+            Arc::clone(&agent_persistence),
+        ));
+
+        Self {
+            inner: Arc::new(TaskExecutorInner {
+                database,
+                cache,
+                agent_persistence,
+                ui_persistence,
+                checkpoint_service: Some(checkpoint_service),
                 prompt_orchestrator,
                 react_orchestrator,
                 active_tasks: DashMap::new(),
@@ -119,5 +152,10 @@ impl TaskExecutor {
         &self,
     ) -> &DashMap<String, Arc<crate::agent::core::context::TaskContext>> {
         &self.inner.active_tasks
+    }
+
+    /// 获取 Checkpoint 服务（如果已配置）
+    pub fn checkpoint_service(&self) -> Option<Arc<CheckpointService>> {
+        self.inner.checkpoint_service.clone()
     }
 }
