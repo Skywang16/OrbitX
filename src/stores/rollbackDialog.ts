@@ -23,7 +23,11 @@ export const useRollbackDialogStore = defineStore('rollbackDialog', () => {
 
     try {
       if (data.checkpoint && data.checkpoint.parentId !== null) {
-        files.value = await checkpointApi.diff(data.checkpoint.parentId, data.checkpoint.id)
+        files.value = await checkpointApi.diff(
+          data.checkpoint.parentId,
+          data.checkpoint.id,
+          data.workspacePath
+        )
       }
     } catch (error) {
       console.error('[RollbackDialog] Failed to load file diffs:', error)

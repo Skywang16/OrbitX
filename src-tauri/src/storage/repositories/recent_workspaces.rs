@@ -9,6 +9,7 @@ use crate::storage::error::{RepositoryError, RepositoryResult};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::path::Path;
+use tokio::task;
 
 /// 最近工作区条目
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,7 +41,10 @@ impl<'a> RecentWorkspaces<'a> {
 
     /// 添加或更新工作区访问记录
     pub async fn add_or_update(&self, path: &str) -> RepositoryResult<()> {
-        let normalized_path = normalize_path(path)?;
+        let path_owned = path.to_string();
+        let normalized_path = task::spawn_blocking(move || normalize_path(&path_owned))
+            .await
+            .map_err(|e| RepositoryError::Internal(format!("Failed to normalize path: {}", e)))??;
         let now = chrono::Utc::now().timestamp();
 
         let query = r#"
@@ -80,7 +84,10 @@ impl<'a> RecentWorkspaces<'a> {
 
     /// 删除指定路径的记录
     pub async fn remove(&self, path: &str) -> RepositoryResult<()> {
-        let normalized_path = normalize_path(path)?;
+        let path_owned = path.to_string();
+        let normalized_path = task::spawn_blocking(move || normalize_path(&path_owned))
+            .await
+            .map_err(|e| RepositoryError::Internal(format!("Failed to normalize path: {}", e)))??;
         let query = "DELETE FROM recent_workspaces WHERE path = ?";
 
         sqlx::query(query)

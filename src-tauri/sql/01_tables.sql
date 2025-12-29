@@ -24,6 +24,13 @@ CREATE TABLE IF NOT EXISTS ai_features (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 全局偏好设置表
+CREATE TABLE IF NOT EXISTS app_preferences (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 终端会话表
 CREATE TABLE IF NOT EXISTS terminal_sessions (
     id TEXT PRIMARY KEY,

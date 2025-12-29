@@ -179,68 +179,27 @@ Usage:
             None => return Ok(tool_error("Vector DB not initialized")),
         };
 
-        let config = global.search_engine.config().clone();
+        let search_options = crate::vector_db::search::SearchOptions {
+            top_k: max_results,
+            threshold: 0.3,
+            include_snippet: true,
+            filter_languages: vec![],
+        };
 
-        // 为工作区创建 IndexManager 并加载向量索引
-        let index_manager =
-            match crate::vector_db::storage::IndexManager::new(&search_path, config.clone()) {
-                Ok(manager) => manager,
-                Err(e) => return Ok(tool_error(format!("Failed to load index: {}", e))),
-            };
-
-        // 获取所有 chunk 元数据并加载向量到内存
-        let chunk_metadata_vec = index_manager.get_all_chunk_metadata();
-        if chunk_metadata_vec.is_empty() {
-            return Ok(tool_error(format!(
-                "No code found matching \"{}\". Try using different keywords or ensure the directory is indexed.",
-                query
-            )));
-        }
-
-        // 转换为HashMap
-        let chunk_metadata: std::collections::HashMap<_, _> = chunk_metadata_vec.into_iter().collect();
-
-        let vector_index = match crate::vector_db::index::VectorIndex::load(
-            index_manager.store(),
-            &chunk_metadata,
-            config.embedding.dimension,
-        )
-        .await
+        let results = match global
+            .search_engine
+            .search_in_workspace(&search_path, query, search_options)
+            .await
         {
-            Ok(index) => index,
-            Err(e) => return Ok(tool_error(format!("Failed to load vectors: {}", e))),
-        };
-
-        // 生成查询向量
-        let embedder = global.search_engine.embedder();
-        let query_embedding = match embedder.embed(&[query]).await {
-            Ok(embeddings) if !embeddings.is_empty() => embeddings.into_iter().next().unwrap(),
-            Ok(_) => return Ok(tool_error("Failed to generate query embedding")),
-            Err(e) => return Ok(tool_error(format!("Embedding failed: {}", e))),
-        };
-
-        // 执行向量搜索
-        let results = match vector_index.search(&query_embedding, max_results, 0.3) {
-            Ok(r) => r,
+            Ok(r) if !r.is_empty() => r,
+            Ok(_) => {
+                return Ok(tool_error(format!(
+                    "No code found matching \"{}\". Try using different keywords or ensure the directory is indexed.",
+                    query
+                )))
+            }
             Err(e) => return Ok(tool_error(format!("Search failed: {}", e))),
         };
-
-        // 转换结果
-        let results: Vec<crate::vector_db::core::SearchResult> = results
-            .into_iter()
-            .filter_map(|(chunk_id, score)| {
-                vector_index.get_chunk_metadata(&chunk_id).map(|metadata| {
-                    crate::vector_db::core::SearchResult::new(
-                        metadata.file_path.clone(),
-                        metadata.span.clone(),
-                        score,
-                        format!("Chunk {:?}", metadata.chunk_type),
-                        None,
-                        Some(metadata.chunk_type),
-                    )
-                })
-            })
-            .collect();
 
         let mut entries: Vec<OrbitSearchResultEntry> = Vec::new();
         for r in results.into_iter().take(max_results) {

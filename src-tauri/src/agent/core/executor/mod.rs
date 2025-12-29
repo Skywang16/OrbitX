@@ -74,7 +74,10 @@ impl TaskExecutor {
         agent_persistence: Arc<AgentPersistence>,
         ui_persistence: Arc<AgentUiPersistence>,
     ) -> Self {
-        let prompt_orchestrator = Arc::new(PromptOrchestrator::new(Arc::clone(&cache)));
+        let prompt_orchestrator = Arc::new(PromptOrchestrator::new(
+            Arc::clone(&cache),
+            Arc::clone(&database),
+        ));
         let react_orchestrator = Arc::new(ReactOrchestrator::new(
             Arc::clone(&database),
             Arc::clone(&agent_persistence),
@@ -102,7 +105,10 @@ impl TaskExecutor {
         ui_persistence: Arc<AgentUiPersistence>,
         checkpoint_service: Arc<CheckpointService>,
     ) -> Self {
-        let prompt_orchestrator = Arc::new(PromptOrchestrator::new(Arc::clone(&cache)));
+        let prompt_orchestrator = Arc::new(PromptOrchestrator::new(
+            Arc::clone(&cache),
+            Arc::clone(&database),
+        ));
         let react_orchestrator = Arc::new(ReactOrchestrator::new(
             Arc::clone(&database),
             Arc::clone(&agent_persistence),

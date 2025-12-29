@@ -207,9 +207,6 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         // 向量数据库命令
         crate::vector_db::commands::semantic_search,
         crate::vector_db::commands::get_index_status,
-        crate::vector_db::commands::index_files,
-        crate::vector_db::commands::update_file_index,
-        crate::vector_db::commands::remove_file_index,
         crate::vector_db::commands::delete_workspace_index,
         crate::vector_db::commands::vector_build_index,
         crate::vector_db::commands::vector_get_build_progress,

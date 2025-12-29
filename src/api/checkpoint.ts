@@ -37,10 +37,11 @@ export const checkpointApi = {
   /**
    * 获取两个checkpoint之间的diff
    */
-  async diff(fromId: number, toId: number): Promise<FileDiff[]> {
+  async diff(fromId: number, toId: number, workspacePath: string): Promise<FileDiff[]> {
     const res = await invoke<ApiResponse<FileDiff[]>>('checkpoint_diff', {
       fromId,
       toId,
+      workspacePath,
     })
     if (!res.success || !res.data) return []
     return res.data

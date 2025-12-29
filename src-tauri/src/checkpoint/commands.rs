@@ -86,8 +86,19 @@ pub async fn checkpoint_diff(
     state: State<'_, CheckpointState>,
     from_id: i64,
     to_id: i64,
+    workspace_path: String,
 ) -> TauriApiResult<Vec<FileDiff>> {
-    match state.service.diff_checkpoints(from_id, to_id).await {
+    if workspace_path.trim().is_empty() {
+        return Ok(api_error!("common.invalid_path"));
+    }
+
+    let workspace = PathBuf::from(&workspace_path);
+
+    match state
+        .service
+        .diff_checkpoints(from_id, to_id, &workspace)
+        .await
+    {
         Ok(diffs) => Ok(api_success!(diffs)),
         Err(e) => {
             tracing::error!("Failed to compute checkpoint diff: {}", e);

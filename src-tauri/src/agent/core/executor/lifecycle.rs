@@ -332,7 +332,6 @@ impl TaskExecutor {
             chat_mode: "agent".to_string(),
             model_id,
             cwd: None,
-            has_context: true,
             images: None,
         };
 

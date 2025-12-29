@@ -17,6 +17,12 @@ pub enum CheckpointError {
     #[error("解析错误: {0}")]
     Parse(String),
 
+    #[error("工作区路径无效: {0}")]
+    InvalidWorkspace(String),
+
+    #[error("文件路径不在工作区: {0}")]
+    InvalidFilePath(String),
+
     #[error("Checkpoint 不存在: {0}")]
     NotFound(i64),
 

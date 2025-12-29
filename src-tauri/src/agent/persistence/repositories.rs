@@ -696,6 +696,22 @@ impl AgentExecutionRepository {
             .await?;
         Ok(())
     }
+
+    pub async fn delete_after(
+        &self,
+        conversation_id: i64,
+        cutoff_timestamp: i64,
+    ) -> AgentResult<()> {
+        sqlx::query(
+            "DELETE FROM agent_executions
+             WHERE conversation_id = ? AND created_at >= ?",
+        )
+        .bind(conversation_id)
+        .bind(cutoff_timestamp)
+        .execute(self.pool())
+        .await?;
+        Ok(())
+    }
 }
 
 /// Repository for execution messages.

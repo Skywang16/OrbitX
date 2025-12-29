@@ -10,6 +10,7 @@ use crate::config::{
     defaults::create_default_terminal_config,
     types::{CursorConfig, ShellConfig, TerminalBehaviorConfig, TerminalConfig},
 };
+use crate::mux::ShellManager;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 
@@ -292,11 +293,17 @@ pub async fn config_terminal_update_behavior(
 /// 获取Shell信息
 #[tauri::command]
 pub async fn config_terminal_get_shell_info() -> TauriApiResult<String> {
-    Ok(api_success!("zsh".to_string()))
+    let info = ShellManager::get_cached_default_shell();
+    Ok(api_success!(info.path))
 }
 
 /// 验证终端Shell路径（存根实现）
 #[tauri::command]
-pub async fn config_terminal_validate_shell_path() -> TauriApiResult<bool> {
-    Ok(api_success!(true))
+pub async fn config_terminal_validate_shell_path(path: Option<String>) -> TauriApiResult<bool> {
+    let Some(value) = path.filter(|p| !p.trim().is_empty()) else {
+        return Ok(api_error!("common.invalid_params"));
+    };
+
+    let is_valid = ShellManager::validate_shell(value.trim());
+    Ok(api_success!(is_valid))
 }

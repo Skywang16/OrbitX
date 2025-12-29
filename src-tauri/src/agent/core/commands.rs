@@ -8,6 +8,8 @@ use crate::agent::core::executor::{
 };
 use crate::agent::events::TaskProgressPayload;
 use crate::agent::ui::{UiConversation, UiMessage};
+use crate::storage::repositories::AppPreferences;
+use crate::storage::{DatabaseManager, UnifiedCache};
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use std::sync::Arc;
@@ -102,18 +104,35 @@ pub async fn agent_ui_delete_messages_from(
     conversation_id: i64,
     message_id: i64,
 ) -> TauriApiResult<Option<String>> {
-    match state
+    let deletion = match state
         .executor
         .ui_persistence()
         .delete_messages_from(conversation_id, message_id)
         .await
     {
-        Ok(content) => Ok(api_success!(content)),
+        Ok(result) => result,
         Err(e) => {
             tracing::error!("Failed to delete messages from {}: {}", message_id, e);
-            Ok(api_error!("agent.ui.delete_messages_failed"))
+            return Ok(api_error!("agent.ui.delete_messages_failed"));
         }
+    };
+
+    if let Err(err) = state
+        .executor
+        .agent_persistence()
+        .agent_executions()
+        .delete_after(conversation_id, deletion.cutoff_timestamp)
+        .await
+    {
+        tracing::error!(
+            "Failed to trim executions for conversation {}: {}",
+            conversation_id,
+            err
+        );
+        return Ok(api_error!("agent.ui.delete_messages_failed"));
     }
+
+    Ok(api_success!(deletion.user_content))
 }
 
 impl TaskExecutorState {
@@ -210,19 +229,40 @@ pub async fn agent_get_file_context_status(
 
 #[tauri::command]
 pub async fn agent_get_user_rules(
-    cache: State<'_, Arc<crate::storage::UnifiedCache>>,
+    database: State<'_, Arc<DatabaseManager>>,
+    cache: State<'_, Arc<UnifiedCache>>,
 ) -> TauriApiResult<Option<String>> {
-    let rules = cache.get_user_rules().await;
-    Ok(api_success!(rules))
+    match AppPreferences::new(&database).get("agent.user_rules").await {
+        Ok(value) => {
+            let _ = cache.set_user_rules(value.clone()).await;
+            Ok(api_success!(value))
+        }
+        Err(e) => {
+            tracing::error!("Failed to load user rules: {}", e);
+            Ok(api_error!("agent.rules.load_failed"))
+        }
+    }
 }
 
 #[tauri::command]
 pub async fn agent_set_user_rules(
     rules: Option<String>,
-    cache: State<'_, Arc<crate::storage::UnifiedCache>>,
+    database: State<'_, Arc<DatabaseManager>>,
+    cache: State<'_, Arc<UnifiedCache>>,
 ) -> TauriApiResult<EmptyData> {
-    cache.set_user_rules(rules).await.ok();
-    Ok(api_success!())
+    match AppPreferences::new(&database)
+        .set("agent.user_rules", rules.as_deref())
+        .await
+    {
+        Ok(_) => {
+            let _ = cache.set_user_rules(rules).await;
+            Ok(api_success!())
+        }
+        Err(e) => {
+            tracing::error!("Failed to save user rules: {}", e);
+            Ok(api_error!("agent.rules.save_failed"))
+        }
+    }
 }
 
 /// 手动触发会话摘要

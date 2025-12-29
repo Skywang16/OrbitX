@@ -11,15 +11,35 @@ use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::prompt::{build_agent_system_prompt, build_agent_user_prompt};
 use crate::agent::tools::{ToolDescriptionContext, ToolRegistry};
 use crate::agent::types::{Agent, Context as AgentContext, Task, TaskStatus};
-use crate::storage::UnifiedCache;
+use crate::storage::repositories::AppPreferences;
+use crate::storage::{DatabaseManager, UnifiedCache};
 
 pub struct PromptOrchestrator {
     cache: Arc<UnifiedCache>,
+    database: Arc<DatabaseManager>,
 }
 
 impl PromptOrchestrator {
-    pub fn new(cache: Arc<UnifiedCache>) -> Self {
-        Self { cache }
+    pub fn new(cache: Arc<UnifiedCache>, database: Arc<DatabaseManager>) -> Self {
+        Self { cache, database }
+    }
+
+    async fn load_rules(&self) -> TaskExecutorResult<(Option<String>, Option<String>)> {
+        let prefs = AppPreferences::new(&self.database);
+        let user_rules = prefs
+            .get("agent.user_rules")
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+        let project_rules = prefs
+            .get("workspace.project_rules")
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        // 更新缓存以供其他模块快速访问
+        let _ = self.cache.set_user_rules(user_rules.clone()).await;
+        let _ = self.cache.set_project_rules(project_rules.clone()).await;
+
+        Ok((user_rules, project_rules))
     }
 
     pub async fn build_task_prompts(
@@ -64,11 +84,8 @@ impl PromptOrchestrator {
             serde_json::Value::String(user_prompt.to_owned()),
         );
 
-        // 获取用户规则
-        let user_rules = self.cache.get_user_rules().await;
-
-        // 获取项目规则
-        let project_rules = self.cache.get_project_rules().await;
+        // 获取用户/项目规则
+        let (user_rules, project_rules) = self.load_rules().await?;
 
         // 合并项目上下文和用户规则
         let mut prompt_parts = Vec::new();
