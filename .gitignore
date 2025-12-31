@@ -25,6 +25,9 @@ src-tauri/logs/
 # Rust build outputs
 target/
 
+# Cargo local config (mirror source for China)                                    
+.cargo/
+
 # Documentation
 docs/
 
