@@ -3,7 +3,6 @@
   import { useI18n } from 'vue-i18n'
   import type { Message } from '@/types'
   import type { UiStep } from '@/api/agent/types'
-  import { useAIChatStore } from '../../store'
   import { formatTime } from '@/utils/dateFormatter'
   import { renderMarkdown } from '@/utils/markdown'
   import ThinkingBlock from './blocks/ThinkingBlock.vue'
@@ -17,7 +16,6 @@
   }
 
   const props = defineProps<Props>()
-  const aiChatStore = useAIChatStore()
 
   const sortedSteps = computed(() => {
     if (!props.message.steps) {
@@ -66,14 +64,7 @@
     <div class="ai-message-footer">
       <div class="ai-message-time">{{ formatTime(message.createdAt) }}</div>
 
-      <div
-        v-if="
-          aiChatStore.isLoading &&
-          message.role === 'assistant' &&
-          aiChatStore.messageList[aiChatStore.messageList.length - 1]?.id === message.id
-        "
-        class="streaming-indicator"
-      >
+      <div v-if="message.status === 'streaming'" class="streaming-indicator">
         <span class="streaming-dot"></span>
         {{ t('message.generating') }}
       </div>

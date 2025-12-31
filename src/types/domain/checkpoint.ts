@@ -6,7 +6,8 @@ export type FileChangeType = 'added' | 'modified' | 'deleted'
 
 export interface CheckpointSummary {
   id: number
-  conversationId: number
+  workspacePath: string
+  sessionId: number
   parentId: number | null
   userMessage: string
   createdAt: string

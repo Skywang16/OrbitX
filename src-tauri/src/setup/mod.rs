@@ -23,7 +23,7 @@ use tracing_subscriber::{self, EnvFilter};
 pub fn init_logging() {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         #[cfg(debug_assertions)]
-        let default_level = "debug,ignore=warn";
+        let default_level = "debug,ignore=warn,globset=warn";
         #[cfg(not(debug_assertions))]
         let default_level = "info";
 
@@ -227,9 +227,6 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         let agent_persistence = Arc::new(crate::agent::persistence::AgentPersistence::new(
             Arc::clone(&database_manager),
         ));
-        let ui_persistence = Arc::new(crate::agent::ui::AgentUiPersistence::new(Arc::clone(
-            &database_manager,
-        )));
         let cache = app
             .state::<Arc<crate::storage::UnifiedCache>>()
             .inner()
@@ -239,7 +236,6 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
             Arc::clone(&database_manager),
             Arc::clone(&cache),
             Arc::clone(&agent_persistence),
-            Arc::clone(&ui_persistence),
             Arc::clone(&checkpoint_service),
         ));
 

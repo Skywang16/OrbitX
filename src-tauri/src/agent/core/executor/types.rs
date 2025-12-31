@@ -18,12 +18,12 @@ pub struct ImageAttachment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecuteTaskParams {
-    pub conversation_id: i64,
+    /// 归属工作区（绝对路径/规范化）
+    pub workspace_path: String,
+    /// 会话 ID（工作区下的 session）
+    pub session_id: i64,
     pub user_prompt: String,
-    pub chat_mode: String,
     pub model_id: String,
-    #[serde(default)]
-    pub cwd: Option<String>,
     #[serde(default)]
     pub images: Option<Vec<ImageAttachment>>,
 }
@@ -33,7 +33,7 @@ pub struct ExecuteTaskParams {
 #[serde(rename_all = "camelCase")]
 pub struct TaskSummary {
     pub task_id: String,
-    pub conversation_id: i64,
+    pub session_id: i64,
     pub status: String,
     pub current_iteration: i32,
     pub error_count: i32,
@@ -45,7 +45,7 @@ pub struct TaskSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileContextStatus {
-    pub conversation_id: i64,
+    pub workspace_path: String,
     pub file_count: usize,
     pub files: Vec<String>,
 }

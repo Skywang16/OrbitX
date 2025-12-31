@@ -18,6 +18,8 @@ use crate::agent::events::{
     TaskErrorPayload, TaskPausedPayload, TaskProgressPayload, TaskResumedPayload,
     TaskStartedPayload,
 };
+use crate::agent::persistence::FileRecordState;
+use crate::workspace::{WorkspaceService, UNGROUPED_WORKSPACE_PATH};
 
 impl TaskExecutor {
     pub async fn execute_task(
@@ -25,6 +27,9 @@ impl TaskExecutor {
         params: ExecuteTaskParams,
         progress_channel: Channel<TaskProgressPayload>,
     ) -> TaskExecutorResult<Arc<TaskContext>> {
+        // 规范化参数：空工作区或 session_id=0 时使用未分组会话
+        let params = self.normalize_task_params(params).await?;
+
         let ctx = self
             .build_or_restore_context(&params, Some(progress_channel))
             .await?;
@@ -33,7 +38,7 @@ impl TaskExecutor {
         if let Some(checkpoint_service) = self.checkpoint_service() {
             self.create_pre_execution_checkpoint(
                 &checkpoint_service,
-                params.conversation_id,
+                ctx.session_id,
                 &params.user_prompt,
                 &ctx.cwd,
             )
@@ -42,7 +47,8 @@ impl TaskExecutor {
 
         ctx.send_progress(TaskProgressPayload::TaskCreated(TaskCreatedPayload {
             task_id: ctx.task_id.to_string(),
-            conversation_id: ctx.conversation_id,
+            session_id: ctx.session_id,
+            workspace_path: ctx.cwd.to_string(),
             user_prompt: params.user_prompt.clone(),
         }))
         .await?;
@@ -53,10 +59,10 @@ impl TaskExecutor {
         let (system_prompt, _) = self
             .prompt_orchestrator()
             .build_task_prompts(
-                params.conversation_id,
+                ctx.session_id,
                 ctx.task_id.to_string(),
                 &params.user_prompt,
-                Some(&ctx.cwd),
+                &ctx.cwd,
                 &ctx.tool_registry(),
             )
             .await?;
@@ -67,14 +73,13 @@ impl TaskExecutor {
         let has_history = self
             .agent_persistence()
             .agent_executions()
-            .list_recent_by_conversation(params.conversation_id, 2)
+            .list_recent_by_session(ctx.session_id, 2)
             .await
             .map(|execs| execs.len() > 1) // 当前执行 + 至少一个历史执行
             .unwrap_or(false);
 
         if has_history {
-            self.restore_conversation_history(&ctx, params.conversation_id)
-                .await?;
+            self.restore_session_history(&ctx, ctx.session_id).await?;
         }
 
         ctx.add_user_message_with_images(params.user_prompt, params.images.as_deref())
@@ -238,33 +243,18 @@ impl TaskExecutor {
         Ok(())
     }
 
-    pub async fn create_conversation(
+    pub async fn trigger_session_summary(
         &self,
-        title: Option<String>,
-        workspace_path: Option<String>,
-    ) -> TaskExecutorResult<i64> {
-        let persistence = self.agent_persistence();
-        let conversation = persistence
-            .conversations()
-            .create(title.as_deref(), workspace_path.as_deref())
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        Ok(conversation.id)
-    }
-
-    pub async fn trigger_conversation_summary(
-        &self,
-        conversation_id: i64,
+        session_id: i64,
         model_override: Option<String>,
     ) -> TaskExecutorResult<Option<crate::agent::context::SummaryResult>> {
-        use crate::agent::context::ConversationSummarizer;
+        use crate::agent::context::SessionSummarizer;
         use crate::llm::anthropic_types::{MessageContent, MessageParam, MessageRole};
 
         let persistence = self.agent_persistence();
         let mut executions = persistence
             .agent_executions()
-            .list_recent_by_conversation(conversation_id, 1)
+            .list_recent_by_session(session_id, 1)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
@@ -295,7 +285,7 @@ impl TaskExecutor {
             .collect();
 
         let summarizer =
-            ConversationSummarizer::new(conversation_id, persistence.clone(), self.database());
+            SessionSummarizer::new(session_id, persistence.clone(), self.database());
 
         let model_id = model_override.unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string());
 
@@ -310,38 +300,12 @@ impl TaskExecutor {
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
-        persistence
-            .conversations()
-            .touch(conversation_id)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
         Ok(Some(result))
     }
-
-    pub async fn continue_conversation(
-        &self,
-        conversation_id: i64,
-        user_prompt: String,
-        model_id: String,
-        progress_channel: Channel<TaskProgressPayload>,
-    ) -> TaskExecutorResult<Arc<TaskContext>> {
-        let params = ExecuteTaskParams {
-            conversation_id,
-            user_prompt,
-            chat_mode: "agent".to_string(),
-            model_id,
-            cwd: None,
-            images: None,
-        };
-
-        self.execute_task(params, progress_channel).await
-    }
-
-    async fn restore_conversation_history(
+    async fn restore_session_history(
         &self,
         ctx: &TaskContext,
-        conversation_id: i64,
+        session_id: i64,
     ) -> TaskExecutorResult<()> {
         use crate::agent::persistence::MessageRole;
         use crate::llm::anthropic_types::{
@@ -351,7 +315,7 @@ impl TaskExecutor {
         let executions = self
             .agent_persistence()
             .agent_executions()
-            .list_recent_by_conversation(conversation_id, 10)
+            .list_recent_by_session(session_id, 10)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
@@ -405,12 +369,15 @@ impl TaskExecutor {
     async fn create_pre_execution_checkpoint(
         &self,
         checkpoint_service: &crate::checkpoint::CheckpointService,
-        conversation_id: i64,
+        session_id: i64,
         user_message: &str,
         workspace_path: &str,
     ) {
         // 获取会话中所有活跃的文件（Agent 读取或编辑过的文件）
-        let files = match self.get_tracked_files_for_checkpoint(conversation_id).await {
+        let files = match self
+            .get_tracked_files_for_checkpoint(workspace_path)
+            .await
+        {
             Ok(files) => files,
             Err(e) => {
                 warn!("Failed to get tracked files for checkpoint: {}", e);
@@ -421,8 +388,8 @@ impl TaskExecutor {
         // 如果没有被追踪的文件，跳过 checkpoint 创建
         if files.is_empty() {
             info!(
-                "No tracked files for conversation {}, skipping checkpoint",
-                conversation_id
+                "No tracked files for session {}, skipping checkpoint",
+                session_id
             );
             return;
         }
@@ -430,21 +397,21 @@ impl TaskExecutor {
         let workspace = PathBuf::from(workspace_path);
 
         match checkpoint_service
-            .create_checkpoint(conversation_id, user_message, files.clone(), &workspace)
+            .create_checkpoint(session_id, user_message, files.clone(), &workspace)
             .await
         {
             Ok(checkpoint) => {
                 info!(
-                    "Created checkpoint {} for conversation {} with {} files",
+                    "Created checkpoint {} for session {} with {} files",
                     checkpoint.id,
-                    conversation_id,
+                    session_id,
                     files.len()
                 );
             }
             Err(e) => {
                 warn!(
-                    "Failed to create checkpoint for conversation {}: {}",
-                    conversation_id, e
+                    "Failed to create checkpoint for session {}: {}",
+                    session_id, e
                 );
             }
         }
@@ -455,14 +422,14 @@ impl TaskExecutor {
     /// 优先返回被 Agent 编辑过的文件，如果没有则返回所有活跃文件
     async fn get_tracked_files_for_checkpoint(
         &self,
-        conversation_id: i64,
+        workspace_path: &str,
     ) -> TaskExecutorResult<Vec<PathBuf>> {
         let persistence = self.agent_persistence();
         let file_context = persistence.file_context();
 
         // 首先尝试获取被 Agent 编辑过的文件
         let edited_files = file_context
-            .get_agent_edited_files(conversation_id)
+            .list_agent_edited_files(workspace_path)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
@@ -470,22 +437,54 @@ impl TaskExecutor {
         if !edited_files.is_empty() {
             let files: Vec<PathBuf> = edited_files
                 .into_iter()
-                .map(|entry| PathBuf::from(entry.file_path))
+                .map(|entry| {
+                    Self::workspace_relative_to_absolute(workspace_path, &entry.relative_path)
+                })
                 .collect();
             return Ok(files);
         }
 
         // 否则获取所有活跃文件（Agent 读取过的文件）
         let active_files = file_context
-            .get_active_files(conversation_id)
+            .list_by_state(workspace_path, FileRecordState::Active)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
         let files: Vec<PathBuf> = active_files
             .into_iter()
-            .map(|entry| PathBuf::from(entry.file_path))
+            .map(|entry| {
+                Self::workspace_relative_to_absolute(workspace_path, &entry.relative_path)
+            })
             .collect();
 
         Ok(files)
+    }
+
+    /// 规范化任务参数：空工作区时自动使用未分组会话
+    async fn normalize_task_params(
+        &self,
+        mut params: ExecuteTaskParams,
+    ) -> TaskExecutorResult<ExecuteTaskParams> {
+        let needs_ungrouped =
+            params.workspace_path.is_empty() || params.workspace_path.trim().is_empty();
+
+        if needs_ungrouped || params.session_id <= 0 {
+            let workspace_path = if needs_ungrouped {
+                UNGROUPED_WORKSPACE_PATH.to_string()
+            } else {
+                params.workspace_path.clone()
+            };
+
+            let service = WorkspaceService::new(self.database());
+            let session = service
+                .ensure_active_session(&workspace_path)
+                .await
+                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+            params.workspace_path = workspace_path;
+            params.session_id = session.id;
+        }
+
+        Ok(params)
     }
 }

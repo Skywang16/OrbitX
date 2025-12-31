@@ -16,7 +16,7 @@ pub mod react; // ReAct 策略与解析(预留)
 pub mod shell; // Shell 执行模块
 pub mod state; // 任务上下文与错误
 pub mod tools; // 工具接口与内置工具
-pub mod ui; // UI 回调持久化
+pub mod ui; // UI 步骤模型
 pub mod utils; // 工具函数
 pub use config::*;
 pub use error::*;
@@ -24,10 +24,7 @@ pub use types::*;
 
 pub use core::TaskExecutor;
 pub use tools::{ToolExecutionLogger, ToolRegistry};
-pub use ui::{AgentUiPersistence, UiConversation, UiMessage, UiStep};
-
-#[cfg(test)]
-mod tests;
+pub use ui::{UiMessageImage, UiStep};
 
 /// Agent服务，提供提示词构建功能
 pub struct AgentService;
@@ -54,7 +51,7 @@ impl AgentService {
 
         let task = types::Task {
             id: "current".to_string(),
-            conversation_id: 0,
+            session_id: 0,
             user_prompt: user_prompt.to_string(),
             xml: None,
             status: types::TaskStatus::Running,

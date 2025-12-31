@@ -1,21 +1,22 @@
 use std::sync::Arc;
 
-use crate::agent::error::AgentResult;
 use crate::storage::database::DatabaseManager;
 
 use super::repositories::{
-    AgentExecutionRepository, ConversationRepository, ConversationSummaryRepository,
-    ExecutionEventRepository, ExecutionMessageRepository, FileContextRepository,
-    ToolExecutionRepository,
+    AgentExecutionRepository, ExecutionEventRepository, ExecutionMessageRepository,
+    SessionMessageRepository, SessionRepository, SessionSummaryRepository,
+    ToolExecutionRepository, WorkspaceFileContextRepository, WorkspaceRepository,
 };
 
 /// Facade that wires all persistence repositories together for the agent backend.
 #[derive(Debug)]
 pub struct AgentPersistence {
     database: Arc<DatabaseManager>,
-    conversations: ConversationRepository,
-    conversation_summaries: ConversationSummaryRepository,
-    file_context: FileContextRepository,
+    workspaces: WorkspaceRepository,
+    sessions: SessionRepository,
+    session_messages: SessionMessageRepository,
+    session_summaries: SessionSummaryRepository,
+    file_context: WorkspaceFileContextRepository,
     agent_executions: AgentExecutionRepository,
     execution_messages: ExecutionMessageRepository,
     tool_executions: ToolExecutionRepository,
@@ -25,9 +26,11 @@ pub struct AgentPersistence {
 impl AgentPersistence {
     pub fn new(database: Arc<DatabaseManager>) -> Self {
         Self {
-            conversations: ConversationRepository::new(Arc::clone(&database)),
-            conversation_summaries: ConversationSummaryRepository::new(Arc::clone(&database)),
-            file_context: FileContextRepository::new(Arc::clone(&database)),
+            workspaces: WorkspaceRepository::new(Arc::clone(&database)),
+            sessions: SessionRepository::new(Arc::clone(&database)),
+            session_messages: SessionMessageRepository::new(Arc::clone(&database)),
+            session_summaries: SessionSummaryRepository::new(Arc::clone(&database)),
+            file_context: WorkspaceFileContextRepository::new(Arc::clone(&database)),
             agent_executions: AgentExecutionRepository::new(Arc::clone(&database)),
             execution_messages: ExecutionMessageRepository::new(Arc::clone(&database)),
             tool_executions: ToolExecutionRepository::new(Arc::clone(&database)),
@@ -40,15 +43,23 @@ impl AgentPersistence {
         &self.database
     }
 
-    pub fn conversations(&self) -> &ConversationRepository {
-        &self.conversations
+    pub fn workspaces(&self) -> &WorkspaceRepository {
+        &self.workspaces
     }
 
-    pub fn conversation_summaries(&self) -> &ConversationSummaryRepository {
-        &self.conversation_summaries
+    pub fn sessions(&self) -> &SessionRepository {
+        &self.sessions
     }
 
-    pub fn file_context(&self) -> &FileContextRepository {
+    pub fn session_messages(&self) -> &SessionMessageRepository {
+        &self.session_messages
+    }
+
+    pub fn session_summaries(&self) -> &SessionSummaryRepository {
+        &self.session_summaries
+    }
+
+    pub fn file_context(&self) -> &WorkspaceFileContextRepository {
         &self.file_context
     }
 
@@ -66,16 +77,5 @@ impl AgentPersistence {
 
     pub fn execution_events(&self) -> &ExecutionEventRepository {
         &self.execution_events
-    }
-
-    /// 确保conversation存在于核心轨中，如果不存在则创建
-    pub async fn ensure_conversation_exists(&self, conversation_id: i64) -> AgentResult<()> {
-        if !self.conversations.exists(conversation_id).await? {
-            let now = super::util::now_timestamp();
-            self.conversations
-                .create_with_id(conversation_id, None, None, now)
-                .await?;
-        }
-        Ok(())
     }
 }

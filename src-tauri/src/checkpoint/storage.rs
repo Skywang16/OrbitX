@@ -37,11 +37,12 @@ impl CheckpointStorage {
 
         let result = sqlx::query(
             r#"
-            INSERT INTO checkpoints (conversation_id, parent_id, user_message, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO checkpoints (workspace_path, session_id, parent_id, user_message, created_at)
+            VALUES (?, ?, ?, ?, ?)
             "#,
         )
-        .bind(checkpoint.conversation_id)
+        .bind(&checkpoint.workspace_path)
+        .bind(checkpoint.session_id)
         .bind(checkpoint.parent_id)
         .bind(&checkpoint.user_message)
         .bind(now)
@@ -50,9 +51,10 @@ impl CheckpointStorage {
 
         let id = result.last_insert_rowid();
         tracing::debug!(
-            "CheckpointStorage: inserted checkpoint id={}, conversation_id={}",
+            "CheckpointStorage: inserted checkpoint id={}, workspace_path={}, session_id={}",
             id,
-            checkpoint.conversation_id
+            checkpoint.workspace_path,
+            checkpoint.session_id
         );
 
         Ok(id)
@@ -62,7 +64,7 @@ impl CheckpointStorage {
     pub async fn get_checkpoint(&self, id: i64) -> CheckpointResult<Option<Checkpoint>> {
         let row = sqlx::query(
             r#"
-            SELECT id, conversation_id, parent_id, user_message, created_at
+            SELECT id, workspace_path, session_id, parent_id, user_message, created_at
             FROM checkpoints
             WHERE id = ?
             "#,
@@ -74,7 +76,8 @@ impl CheckpointStorage {
         Ok(row.map(|r| {
             Checkpoint::new(
                 r.get("id"),
-                r.get("conversation_id"),
+                r.get("workspace_path"),
+                r.get("session_id"),
                 r.get("parent_id"),
                 r.get("user_message"),
                 r.get("created_at"),
@@ -82,20 +85,20 @@ impl CheckpointStorage {
         }))
     }
 
-    /// 获取会话的所有 checkpoint（按时间倒序）
-    pub async fn list_by_conversation(
+    /// 获取工作区的所有 checkpoint（按时间倒序）
+    pub async fn list_by_workspace(
         &self,
-        conversation_id: i64,
+        workspace_path: &str,
     ) -> CheckpointResult<Vec<Checkpoint>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, conversation_id, parent_id, user_message, created_at
+            SELECT id, workspace_path, session_id, parent_id, user_message, created_at
             FROM checkpoints
-            WHERE conversation_id = ?
+            WHERE workspace_path = ?
             ORDER BY created_at DESC
             "#,
         )
-        .bind(conversation_id)
+        .bind(workspace_path)
         .fetch_all(&self.pool)
         .await?;
 
@@ -104,7 +107,8 @@ impl CheckpointStorage {
             .map(|r| {
                 Checkpoint::new(
                     r.get("id"),
-                    r.get("conversation_id"),
+                    r.get("workspace_path"),
+                    r.get("session_id"),
                     r.get("parent_id"),
                     r.get("user_message"),
                     r.get("created_at"),
@@ -113,25 +117,25 @@ impl CheckpointStorage {
             .collect())
     }
 
-    /// 获取会话的 checkpoint 摘要列表（包含统计信息）
-    pub async fn list_summaries_by_conversation(
+    /// 获取工作区的 checkpoint 摘要列表（包含统计信息）
+    pub async fn list_summaries_by_workspace(
         &self,
-        conversation_id: i64,
+        workspace_path: &str,
     ) -> CheckpointResult<Vec<CheckpointSummary>> {
         let rows = sqlx::query(
             r#"
             SELECT 
-                c.id, c.conversation_id, c.parent_id, c.user_message, c.created_at,
+                c.id, c.workspace_path, c.session_id, c.parent_id, c.user_message, c.created_at,
                 COUNT(f.id) as file_count,
                 COALESCE(SUM(f.file_size), 0) as total_size
             FROM checkpoints c
             LEFT JOIN checkpoint_file_snapshots f ON c.id = f.checkpoint_id
-            WHERE c.conversation_id = ?
+            WHERE c.workspace_path = ?
             GROUP BY c.id
             ORDER BY c.created_at DESC
             "#,
         )
-        .bind(conversation_id)
+        .bind(workspace_path)
         .fetch_all(&self.pool)
         .await?;
 
@@ -139,7 +143,45 @@ impl CheckpointStorage {
             .into_iter()
             .map(|r| CheckpointSummary {
                 id: r.get("id"),
-                conversation_id: r.get("conversation_id"),
+                workspace_path: r.get("workspace_path"),
+                session_id: r.get("session_id"),
+                parent_id: r.get("parent_id"),
+                user_message: r.get("user_message"),
+                created_at: super::models::timestamp_to_datetime(r.get("created_at")),
+                file_count: r.get("file_count"),
+                total_size: r.get("total_size"),
+            })
+            .collect())
+    }
+
+    /// 获取会话的 checkpoint 摘要列表
+    pub async fn list_summaries_by_session(
+        &self,
+        session_id: i64,
+    ) -> CheckpointResult<Vec<CheckpointSummary>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT 
+                c.id, c.workspace_path, c.session_id, c.parent_id, c.user_message, c.created_at,
+                COUNT(f.id) as file_count,
+                COALESCE(SUM(f.file_size), 0) as total_size
+            FROM checkpoints c
+            LEFT JOIN checkpoint_file_snapshots f ON c.id = f.checkpoint_id
+            WHERE c.session_id = ?
+            GROUP BY c.id
+            ORDER BY c.created_at DESC
+            "#,
+        )
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| CheckpointSummary {
+                id: r.get("id"),
+                workspace_path: r.get("workspace_path"),
+                session_id: r.get("session_id"),
                 parent_id: r.get("parent_id"),
                 user_message: r.get("user_message"),
                 created_at: super::models::timestamp_to_datetime(r.get("created_at")),
@@ -150,27 +192,28 @@ impl CheckpointStorage {
     }
 
     /// 获取会话的最新 checkpoint
-    pub async fn get_latest_checkpoint(
+    pub async fn get_latest_checkpoint_for_session(
         &self,
-        conversation_id: i64,
+        session_id: i64,
     ) -> CheckpointResult<Option<Checkpoint>> {
         let row = sqlx::query(
             r#"
-            SELECT id, conversation_id, parent_id, user_message, created_at
+            SELECT id, workspace_path, session_id, parent_id, user_message, created_at
             FROM checkpoints
-            WHERE conversation_id = ?
+            WHERE session_id = ?
             ORDER BY created_at DESC
             LIMIT 1
             "#,
         )
-        .bind(conversation_id)
+        .bind(session_id)
         .fetch_optional(&self.pool)
         .await?;
 
         Ok(row.map(|r| {
             Checkpoint::new(
                 r.get("id"),
-                r.get("conversation_id"),
+                r.get("workspace_path"),
+                r.get("session_id"),
                 r.get("parent_id"),
                 r.get("user_message"),
                 r.get("created_at"),
@@ -330,7 +373,8 @@ mod tests {
             r#"
             CREATE TABLE checkpoints (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                conversation_id INTEGER NOT NULL,
+                workspace_path TEXT NOT NULL,
+                session_id INTEGER NOT NULL,
                 parent_id INTEGER,
                 user_message TEXT NOT NULL,
                 created_at INTEGER NOT NULL
@@ -368,7 +412,8 @@ mod tests {
         let storage = CheckpointStorage::new(pool);
 
         let new_cp = NewCheckpoint {
-            conversation_id: 1,
+            workspace_path: "/tmp/project".to_string(),
+            session_id: 1,
             parent_id: None,
             user_message: "test message".to_string(),
         };
@@ -377,27 +422,31 @@ mod tests {
         let cp = storage.get_checkpoint(id).await.unwrap().unwrap();
 
         assert_eq!(cp.id, id);
-        assert_eq!(cp.conversation_id, 1);
+        assert_eq!(cp.session_id, 1);
+        assert_eq!(cp.workspace_path, "/tmp/project");
         assert_eq!(cp.user_message, "test message");
         assert!(cp.parent_id.is_none());
     }
 
     #[tokio::test]
-    async fn test_list_by_conversation() {
+    async fn test_list_by_workspace() {
         let pool = setup_test_db().await;
         let storage = CheckpointStorage::new(pool);
 
-        // 创建多个 checkpoint
         for i in 0..3 {
             let new_cp = NewCheckpoint {
-                conversation_id: 1,
+                workspace_path: "/tmp/project".to_string(),
+                session_id: 1,
                 parent_id: None,
                 user_message: format!("message {}", i),
             };
             storage.insert_checkpoint(&new_cp).await.unwrap();
         }
 
-        let list = storage.list_by_conversation(1).await.unwrap();
+        let list = storage
+            .list_by_workspace("/tmp/project")
+            .await
+            .unwrap();
         assert_eq!(list.len(), 3);
     }
 
@@ -407,7 +456,8 @@ mod tests {
         let storage = CheckpointStorage::new(pool);
 
         let new_cp = NewCheckpoint {
-            conversation_id: 1,
+            workspace_path: "/tmp/project".to_string(),
+            session_id: 1,
             parent_id: None,
             user_message: "test".to_string(),
         };

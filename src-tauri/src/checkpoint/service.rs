@@ -34,21 +34,25 @@ impl CheckpointService {
     /// 创建新的 checkpoint
     ///
     /// # Arguments
-    /// * `conversation_id` - 会话 ID
+    /// * `session_id` - 会话 ID
     /// * `user_message` - 用户消息
     /// * `files` - 需要快照的文件路径列表
-    /// * `workspace_path` - 工作区根路径
+    /// * `workspace_root_path` - 工作区根路径
     pub async fn create_checkpoint(
         &self,
-        conversation_id: i64,
+        session_id: i64,
         user_message: &str,
         files: Vec<PathBuf>,
-        workspace_path: &Path,
+        workspace_root_path: &Path,
     ) -> CheckpointResult<Checkpoint> {
-        let workspace_root = Self::canonicalize_workspace(workspace_path).await?;
+        let workspace_root = Self::canonicalize_workspace(workspace_root_path).await?;
+        let workspace_key = workspace_root.to_string_lossy().to_string();
 
         // 获取父 checkpoint
-        let parent = self.storage.get_latest_checkpoint(conversation_id).await?;
+        let parent = self
+            .storage
+            .get_latest_checkpoint_for_session(session_id)
+            .await?;
         let parent_id = parent.as_ref().map(|p| p.id);
 
         let parent_state = if let Some(ref p) = parent {
@@ -59,7 +63,8 @@ impl CheckpointService {
 
         // 创建 checkpoint 记录
         let new_checkpoint = NewCheckpoint {
-            conversation_id,
+            workspace_path: workspace_key.clone(),
+            session_id,
             parent_id,
             user_message: user_message.to_string(),
         };
@@ -159,13 +164,18 @@ impl CheckpointService {
     }
 
     /// 获取 checkpoint 列表
-    pub async fn list_checkpoints(
+    pub async fn list_checkpoints_by_workspace(
         &self,
-        conversation_id: i64,
+        workspace_path: &str,
     ) -> CheckpointResult<Vec<CheckpointSummary>> {
-        self.storage
-            .list_summaries_by_conversation(conversation_id)
-            .await
+        self.storage.list_summaries_by_workspace(workspace_path).await
+    }
+
+    pub async fn list_checkpoints_by_session(
+        &self,
+        session_id: i64,
+    ) -> CheckpointResult<Vec<CheckpointSummary>> {
+        self.storage.list_summaries_by_session(session_id).await
     }
 
     /// 获取 checkpoint 详情
@@ -174,19 +184,16 @@ impl CheckpointService {
     }
 
     /// 回滚到指定 checkpoint
-    pub async fn rollback_to(
-        &self,
-        checkpoint_id: i64,
-        workspace_path: &Path,
-    ) -> CheckpointResult<RollbackResult> {
-        let workspace_root = Self::canonicalize_workspace(workspace_path).await?;
-
+    pub async fn rollback_to(&self, checkpoint_id: i64) -> CheckpointResult<RollbackResult> {
         // 获取目标 checkpoint
         let checkpoint = self
             .storage
             .get_checkpoint(checkpoint_id)
             .await?
             .ok_or(CheckpointError::NotFound(checkpoint_id))?;
+
+        let workspace_root =
+            Self::canonicalize_workspace(Path::new(&checkpoint.workspace_path)).await?;
 
         let state = self
             .build_checkpoint_state(checkpoint_id, &workspace_root)
@@ -256,7 +263,7 @@ impl CheckpointService {
         let files: Vec<PathBuf> = snapshot_targets.iter().map(PathBuf::from).collect();
         let new_checkpoint = self
             .create_checkpoint(
-                checkpoint.conversation_id,
+                checkpoint.session_id,
                 &format!("Rollback to checkpoint #{}", checkpoint_id),
                 files,
                 &workspace_root,
@@ -281,15 +288,18 @@ impl CheckpointService {
     /// 计算两个 checkpoint 之间的 diff
     pub async fn diff_checkpoints(
         &self,
-        from_id: i64,
+        from_id: Option<i64>,
         to_id: i64,
         workspace_path: &Path,
     ) -> CheckpointResult<Vec<FileDiff>> {
         let workspace_root = Self::canonicalize_workspace(workspace_path).await?;
 
-        let from_state = self
-            .build_checkpoint_state(from_id, &workspace_root)
-            .await?;
+        let from_state = if let Some(parent_id) = from_id {
+            self.build_checkpoint_state(parent_id, &workspace_root)
+                .await?
+        } else {
+            AggregatedState::new()
+        };
         let to_state = self
             .build_checkpoint_state(to_id, &workspace_root)
             .await?;
@@ -334,6 +344,62 @@ impl CheckpointService {
         // 检查删除的文件
         for path in from_state.files.keys() {
             if !to_state.files.contains_key(path) {
+                diffs.push(FileDiff {
+                    file_path: path.clone(),
+                    change_type: FileChangeType::Deleted,
+                    diff_content: None,
+                });
+            }
+        }
+
+        Ok(diffs)
+    }
+
+    /// 计算 checkpoint 与当前工作区之间的差异
+    pub async fn diff_with_workspace(
+        &self,
+        checkpoint_id: i64,
+        workspace_path: &Path,
+    ) -> CheckpointResult<Vec<FileDiff>> {
+        let workspace_root = Self::canonicalize_workspace(workspace_path).await?;
+        let state = self
+            .build_checkpoint_state(checkpoint_id, &workspace_root)
+            .await?;
+
+        let mut diffs = Vec::new();
+
+        for (path, file_state) in &state.files {
+            let abs_path = workspace_root.join(path);
+            match fs::read(&abs_path).await {
+                Ok(current_content) => {
+                    let snapshot_content = self
+                        .blob_store
+                        .get(&file_state.blob_hash)
+                        .await?
+                        .unwrap_or_default();
+                    if current_content != snapshot_content {
+                        let diff_content = self.compute_diff(&current_content, &snapshot_content);
+                        diffs.push(FileDiff {
+                            file_path: path.clone(),
+                            change_type: FileChangeType::Modified,
+                            diff_content: Some(diff_content),
+                        });
+                    }
+                }
+                Err(err) if err.kind() == ErrorKind::NotFound => {
+                    diffs.push(FileDiff {
+                        file_path: path.clone(),
+                        change_type: FileChangeType::Added,
+                        diff_content: None,
+                    });
+                }
+                Err(err) => return Err(CheckpointError::Io(err)),
+            }
+        }
+
+        for path in &state.tombstones {
+            let abs_path = workspace_root.join(path);
+            if fs::metadata(&abs_path).await.is_ok() {
                 diffs.push(FileDiff {
                     file_path: path.clone(),
                     change_type: FileChangeType::Deleted,

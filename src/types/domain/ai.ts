@@ -136,7 +136,8 @@ export interface CancellableStream {
 export interface Conversation {
   id: number
   title: string
-  messageCount: number
+  workspacePath?: string | null
+  messageCount?: number
   createdAt: Date
   updatedAt: Date
 }
@@ -173,7 +174,7 @@ export interface MessageImage {
 
 export interface Message {
   id: number
-  conversationId: number
+  sessionId: number
   role: 'user' | 'assistant' | 'system'
   createdAt: Date
   steps?: UiStep[]
@@ -195,15 +196,15 @@ export interface ChatInputState {
 }
 
 export interface ConversationState {
-  currentConversationId: number | null | -1 // 增加 -1 作为新建标识
-  conversations: Conversation[]
+  currentSessionId: number | null | -1
+  sessions: Conversation[]
   messages: Message[]
   isLoading: boolean
   error: string | null
 }
 
 export interface SendMessageRequest {
-  conversationId: number
+  sessionId: number
   content: string
   modelId?: string
 }
@@ -215,7 +216,7 @@ export interface AIConfig extends BaseConfig {
 }
 
 export interface ContextStats {
-  conversationId: number
+  sessionId: number
   totalMessages: number
   summaryGenerated: boolean
   lastSummaryAt?: Date

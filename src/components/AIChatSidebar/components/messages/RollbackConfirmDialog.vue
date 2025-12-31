@@ -39,11 +39,11 @@
     if (isConfirming.value || !store.state) return
 
     isConfirming.value = true
-    const { checkpoint, messageId, workspacePath } = store.state
+    const { checkpoint, messageId } = store.state
 
     try {
       if (checkpoint && checkpoint.fileCount > 0) {
-        const result = await checkpointApi.rollback(checkpoint.id, workspacePath)
+        const result = await checkpointApi.rollback(checkpoint.id)
         if (!result) {
           emit('rollback', {
             success: false,

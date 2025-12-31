@@ -31,7 +31,6 @@ use dashmap::DashMap;
 use crate::agent::persistence::AgentPersistence;
 use crate::agent::prompt::orchestrator::PromptOrchestrator;
 use crate::agent::react::orchestrator::ReactOrchestrator;
-use crate::agent::ui::AgentUiPersistence;
 use crate::checkpoint::CheckpointService;
 use crate::storage::{DatabaseManager, UnifiedCache};
 
@@ -41,7 +40,6 @@ struct TaskExecutorInner {
     database: Arc<DatabaseManager>,
     cache: Arc<UnifiedCache>,
     agent_persistence: Arc<AgentPersistence>,
-    ui_persistence: Arc<AgentUiPersistence>,
 
     // Checkpoint 服务（可选，用于自动创建 checkpoint）
     checkpoint_service: Option<Arc<CheckpointService>>,
@@ -72,7 +70,6 @@ impl TaskExecutor {
         database: Arc<DatabaseManager>,
         cache: Arc<UnifiedCache>,
         agent_persistence: Arc<AgentPersistence>,
-        ui_persistence: Arc<AgentUiPersistence>,
     ) -> Self {
         let prompt_orchestrator = Arc::new(PromptOrchestrator::new(
             Arc::clone(&cache),
@@ -88,7 +85,6 @@ impl TaskExecutor {
                 database,
                 cache,
                 agent_persistence,
-                ui_persistence,
                 checkpoint_service: None,
                 prompt_orchestrator,
                 react_orchestrator,
@@ -102,7 +98,6 @@ impl TaskExecutor {
         database: Arc<DatabaseManager>,
         cache: Arc<UnifiedCache>,
         agent_persistence: Arc<AgentPersistence>,
-        ui_persistence: Arc<AgentUiPersistence>,
         checkpoint_service: Arc<CheckpointService>,
     ) -> Self {
         let prompt_orchestrator = Arc::new(PromptOrchestrator::new(
@@ -119,7 +114,6 @@ impl TaskExecutor {
                 database,
                 cache,
                 agent_persistence,
-                ui_persistence,
                 checkpoint_service: Some(checkpoint_service),
                 prompt_orchestrator,
                 react_orchestrator,
@@ -140,10 +134,6 @@ impl TaskExecutor {
 
     pub fn agent_persistence(&self) -> Arc<AgentPersistence> {
         Arc::clone(&self.inner.agent_persistence)
-    }
-
-    pub fn ui_persistence(&self) -> Arc<AgentUiPersistence> {
-        Arc::clone(&self.inner.ui_persistence)
     }
 
     pub(crate) fn prompt_orchestrator(&self) -> Arc<PromptOrchestrator> {

@@ -15,7 +15,7 @@
     messages: Message[]
     isLoading?: boolean
     chatMode?: string
-    conversationId?: number | null
+    sessionId?: number | null
     workspacePath?: string
   }
 
@@ -34,8 +34,8 @@
 
   // 获取消息对应的checkpoint
   const getCheckpoint = (message: Message) => {
-    if (!props.conversationId || message.role !== 'user') return null
-    return getCheckpointByMessage(props.conversationId, message.content || '')
+    if (!props.sessionId || message.role !== 'user') return null
+    return getCheckpointByMessage(props.sessionId, message.content || '')
   }
 
   watch(
@@ -50,7 +50,7 @@
 
   // 当会话ID变化时加载checkpoints
   watch(
-    () => props.conversationId,
+    () => props.sessionId,
     async newId => {
       if (newId && newId > 0) {
         await loadCheckpoints(newId)
@@ -63,8 +63,8 @@
   watch(
     () => props.messages.length,
     async () => {
-      if (props.conversationId && props.conversationId > 0) {
-        await loadCheckpoints(props.conversationId)
+      if (props.sessionId && props.sessionId > 0) {
+        await loadCheckpoints(props.sessionId)
       }
     }
   )

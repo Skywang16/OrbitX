@@ -29,10 +29,7 @@ impl TaskExecutor {
         params: &ExecuteTaskParams,
         progress_channel: Option<Channel<TaskProgressPayload>>,
     ) -> TaskExecutorResult<Arc<TaskContext>> {
-        let conversation_id = params.conversation_id;
-
-        // 检查是否有正在运行的任务，如果有则标记为完成
-        self.finish_running_task_for_conversation(conversation_id)
+        self.finish_running_task_for_session(params.session_id)
             .await?;
 
         // 创建全新的任务
@@ -40,15 +37,12 @@ impl TaskExecutor {
     }
 
     /// 结束会话中正在运行的任务
-    async fn finish_running_task_for_conversation(
-        &self,
-        conversation_id: i64,
-    ) -> TaskExecutorResult<()> {
+    async fn finish_running_task_for_session(&self, session_id: i64) -> TaskExecutorResult<()> {
         // 从数据库查询最近的执行记录
         let executions = self
             .agent_persistence()
             .agent_executions()
-            .list_recent_by_conversation(conversation_id, 1)
+            .list_recent_by_session(session_id, 1)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
@@ -76,18 +70,12 @@ impl TaskExecutor {
         progress_channel: Option<Channel<TaskProgressPayload>>,
     ) -> TaskExecutorResult<Arc<TaskContext>> {
         let task_id = format!("exec_{}", uuid::Uuid::new_v4());
-        let _cwd = params.cwd.clone().unwrap_or_else(|| {
-            std::env::current_dir()
-                .ok()
-                .and_then(|p| p.to_str().map(|s| s.to_string()))
-                .unwrap_or_else(|| "/".to_string())
-        });
 
         // 创建execution记录
         let execution = AgentExecution {
             id: 0, // 由数据库自动生成
             execution_id: task_id.clone(),
-            conversation_id: params.conversation_id,
+            session_id: params.session_id,
             user_request: params.user_prompt.clone(),
             system_prompt_used: String::new(),
             execution_config: Some(serde_json::to_string(&TaskExecutionConfig::default()).unwrap()),
@@ -112,7 +100,7 @@ impl TaskExecutor {
             .agent_executions()
             .create(
                 &task_id,
-                execution.conversation_id,
+                execution.session_id,
                 &execution.user_request,
                 &execution.system_prompt_used,
                 execution.execution_config.as_deref(),
@@ -124,7 +112,11 @@ impl TaskExecutor {
 
         // 构建TaskContext
         let ctx = self
-            .build_context_from_execution(created_execution, progress_channel)
+            .build_context_from_execution(
+                created_execution,
+                params.workspace_path.clone(),
+                progress_channel,
+            )
             .await?;
 
         let ctx_arc = Arc::new(ctx);
@@ -140,6 +132,7 @@ impl TaskExecutor {
     async fn build_context_from_execution(
         &self,
         execution: AgentExecution,
+        workspace_path: String,
         progress_channel: Option<Channel<TaskProgressPayload>>,
     ) -> TaskExecutorResult<TaskContext> {
         let config = if let Some(config_str) = &execution.execution_config {
@@ -148,15 +141,7 @@ impl TaskExecutor {
             TaskExecutionConfig::default()
         };
 
-        let cwd = self
-            .get_workspace_cwd(execution.conversation_id)
-            .await
-            .or_else(|| {
-                std::env::var("HOME")
-                    .or_else(|_| std::env::var("USERPROFILE"))
-                    .ok()
-            })
-            .unwrap_or_else(|| "/".to_string());
+        let cwd = workspace_path;
 
         let tool_registry = crate::agent::tools::create_tool_registry("agent").await;
 
@@ -168,7 +153,6 @@ impl TaskExecutor {
             progress_channel,
             Arc::clone(&self.database()),
             Arc::clone(&self.agent_persistence()),
-            Arc::clone(&self.ui_persistence()),
         )
         .await
     }
@@ -216,15 +200,5 @@ impl TaskExecutor {
         ctx.restore_messages(anthropic_messages).await?;
 
         Ok(())
-    }
-
-    async fn get_workspace_cwd(&self, conversation_id: i64) -> Option<String> {
-        self.agent_persistence()
-            .conversations()
-            .get(conversation_id)
-            .await
-            .ok()
-            .flatten()
-            .and_then(|conv| conv.workspace_path.clone())
     }
 }

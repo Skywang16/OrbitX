@@ -26,17 +26,17 @@ impl CheckpointState {
 #[tauri::command]
 pub async fn checkpoint_create(
     state: State<'_, CheckpointState>,
-    conversation_id: i64,
+    workspace_path: String,
+    session_id: i64,
     user_message: String,
     files: Vec<String>,
-    workspace_path: String,
 ) -> TauriApiResult<Checkpoint> {
     let files: Vec<PathBuf> = files.into_iter().map(PathBuf::from).collect();
     let workspace = PathBuf::from(&workspace_path);
 
     match state
         .service
-        .create_checkpoint(conversation_id, &user_message, files, &workspace)
+        .create_checkpoint(session_id, &user_message, files, &workspace)
         .await
     {
         Ok(checkpoint) => Ok(api_success!(checkpoint)),
@@ -51,9 +51,18 @@ pub async fn checkpoint_create(
 #[tauri::command]
 pub async fn checkpoint_list(
     state: State<'_, CheckpointState>,
-    conversation_id: i64,
+    workspace_path: Option<String>,
+    session_id: Option<i64>,
 ) -> TauriApiResult<Vec<CheckpointSummary>> {
-    match state.service.list_checkpoints(conversation_id).await {
+    let result = if let Some(path) = workspace_path {
+        state.service.list_checkpoints_by_workspace(&path).await
+    } else if let Some(session) = session_id {
+        state.service.list_checkpoints_by_session(session).await
+    } else {
+        return Ok(api_error!("checkpoint.list_invalid_scope"));
+    };
+
+    match result {
         Ok(checkpoints) => Ok(api_success!(checkpoints)),
         Err(e) => {
             tracing::error!("Failed to list checkpoints: {}", e);
@@ -67,11 +76,8 @@ pub async fn checkpoint_list(
 pub async fn checkpoint_rollback(
     state: State<'_, CheckpointState>,
     checkpoint_id: i64,
-    workspace_path: String,
 ) -> TauriApiResult<RollbackResult> {
-    let workspace = PathBuf::from(&workspace_path);
-
-    match state.service.rollback_to(checkpoint_id, &workspace).await {
+    match state.service.rollback_to(checkpoint_id).await {
         Ok(result) => Ok(api_success!(result)),
         Err(e) => {
             tracing::error!("Failed to rollback to checkpoint {}: {}", checkpoint_id, e);
@@ -84,7 +90,7 @@ pub async fn checkpoint_rollback(
 #[tauri::command]
 pub async fn checkpoint_diff(
     state: State<'_, CheckpointState>,
-    from_id: i64,
+    from_id: Option<i64>,
     to_id: i64,
     workspace_path: String,
 ) -> TauriApiResult<Vec<FileDiff>> {
@@ -126,6 +132,32 @@ pub async fn checkpoint_diff_with_current(
         Err(e) => {
             tracing::error!("Failed to compute diff with current: {}", e);
             Ok(api_error!("checkpoint.diff_current_failed"))
+        }
+    }
+}
+
+/// 获取 checkpoint 与当前工作区的 diff
+#[tauri::command]
+pub async fn checkpoint_diff_with_workspace(
+    state: State<'_, CheckpointState>,
+    checkpoint_id: i64,
+    workspace_path: String,
+) -> TauriApiResult<Vec<FileDiff>> {
+    if workspace_path.trim().is_empty() {
+        return Ok(api_error!("common.invalid_path"));
+    }
+
+    let workspace = PathBuf::from(&workspace_path);
+
+    match state
+        .service
+        .diff_with_workspace(checkpoint_id, &workspace)
+        .await
+    {
+        Ok(diff) => Ok(api_success!(diff)),
+        Err(e) => {
+            tracing::error!("Failed to diff checkpoint with workspace: {}", e);
+            Ok(api_error!("checkpoint.diff_failed"))
         }
     }
 }

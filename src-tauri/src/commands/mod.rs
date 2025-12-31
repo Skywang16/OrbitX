@@ -45,6 +45,12 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::workspace::commands::workspace_add_recent,
         crate::workspace::commands::workspace_remove_recent,
         crate::workspace::commands::workspace_maintain,
+        crate::workspace::commands::workspace_get_or_create,
+        crate::workspace::commands::workspace_list_sessions,
+        crate::workspace::commands::workspace_get_messages,
+        crate::workspace::commands::workspace_get_active_session,
+        crate::workspace::commands::workspace_create_session,
+        crate::workspace::commands::workspace_set_active_session,
         crate::workspace::commands::workspace_get_project_rules,
         crate::workspace::commands::workspace_set_project_rules,
         crate::workspace::commands::workspace_list_rules_files,
@@ -179,15 +185,8 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::agent::core::commands::agent_get_file_context_status,
         crate::agent::core::commands::agent_get_user_rules,
         crate::agent::core::commands::agent_set_user_rules,
+        crate::agent::core::commands::agent_trigger_session_summary,
         // 项目规则命令已迁移到 workspace 模块
-        // 双轨架构命令
-        crate::agent::core::commands::agent_create_conversation,
-        crate::agent::core::commands::agent_delete_conversation,
-        crate::agent::core::commands::agent_update_conversation_title,
-        crate::agent::core::commands::agent_ui_get_conversations,
-        crate::agent::core::commands::agent_ui_get_messages,
-        crate::agent::core::commands::agent_ui_delete_messages_from,
-        // crate::agent::core::commands::agent_trigger_context_summary, // 暂时注释：类型问题待修复
         // 存储系统命令
         crate::ai::tool::storage::storage_get_config,
         crate::ai::tool::storage::storage_update_config,
@@ -217,6 +216,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::checkpoint::commands::checkpoint_rollback,
         crate::checkpoint::commands::checkpoint_diff,
         crate::checkpoint::commands::checkpoint_diff_with_current,
+        crate::checkpoint::commands::checkpoint_diff_with_workspace,
         crate::checkpoint::commands::checkpoint_get_file_content,
         crate::checkpoint::commands::checkpoint_delete,
     ])

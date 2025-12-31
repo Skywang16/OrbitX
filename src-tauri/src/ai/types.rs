@@ -285,7 +285,7 @@ impl Default for AIConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextStats {
-    pub conversation_id: i64,
+    pub session_id: i64,
     pub total_messages: i32,
     pub summary_generated: bool,
     pub last_summary_at: Option<DateTime<Utc>>,

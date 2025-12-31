@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { CheckpointSummary, FileDiff } from '@/types/domain/checkpoint'
 import { checkpointApi } from '@/api/checkpoint'
+import { useCheckpoint } from '@/composables/useCheckpoint'
 
 export interface RollbackDialogState {
   checkpoint: CheckpointSummary | null
@@ -15,6 +16,8 @@ export const useRollbackDialogStore = defineStore('rollbackDialog', () => {
   const files = ref<FileDiff[]>([])
   const state = ref<RollbackDialogState | null>(null)
 
+  const { getChildCheckpoint } = useCheckpoint()
+
   const open = async (data: RollbackDialogState) => {
     state.value = data
     visible.value = true
@@ -22,12 +25,19 @@ export const useRollbackDialogStore = defineStore('rollbackDialog', () => {
     files.value = []
 
     try {
-      if (data.checkpoint && data.checkpoint.parentId !== null) {
-        files.value = await checkpointApi.diff(
-          data.checkpoint.parentId,
-          data.checkpoint.id,
-          data.workspacePath
-        )
+      if (!data.workspacePath || data.workspacePath.trim().length === 0) {
+        console.warn('[RollbackDialog] Missing workspace path, skip diff load')
+        files.value = []
+        return
+      }
+      if (data.checkpoint) {
+        const childCheckpoint = getChildCheckpoint(data.checkpoint.sessionId, data.checkpoint.id) ?? null
+
+        if (childCheckpoint) {
+          files.value = await checkpointApi.diff(data.checkpoint.id, childCheckpoint.id, data.workspacePath)
+        } else {
+          files.value = await checkpointApi.diffWithWorkspace(data.checkpoint.id, data.workspacePath)
+        }
       }
     } catch (error) {
       console.error('[RollbackDialog] Failed to load file diffs:', error)

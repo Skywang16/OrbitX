@@ -135,7 +135,11 @@ pub struct AiState {
     pub visible: bool,
     pub width: u32,
     pub mode: String,
-    pub conversation_id: Option<i64>,
+    #[serde(default)]
+    pub session_id: Option<i64>,
+    #[serde(default)]
+    pub workspace_path: Option<String>,
+    #[serde(default)]
     pub selected_model_id: Option<String>,
 }
 
@@ -145,7 +149,8 @@ impl Default for AiState {
             visible: false,
             width: 350,
             mode: "chat".to_string(),
-            conversation_id: None,
+            session_id: None,
+            workspace_path: None,
             selected_model_id: None,
         }
     }

@@ -44,13 +44,13 @@ impl PromptOrchestrator {
 
     pub async fn build_task_prompts(
         &self,
-        conversation_id: i64,
+        session_id: i64,
         task_id: String,
         user_prompt: &str,
-        working_directory: Option<&str>,
+        workspace_path: &str,
         tool_registry: &ToolRegistry,
     ) -> TaskExecutorResult<(String, String)> {
-        let cwd = working_directory.unwrap_or("/");
+        let cwd = workspace_path;
         let tool_schemas_full =
             tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
                 cwd: cwd.to_string(),
@@ -67,7 +67,7 @@ impl PromptOrchestrator {
 
         let task_for_prompt = Task {
             id: task_id,
-            conversation_id,
+            session_id,
             user_prompt: user_prompt.to_owned(),
             xml: None,
             status: TaskStatus::Created,
@@ -76,9 +76,7 @@ impl PromptOrchestrator {
         };
 
         let mut prompt_ctx = AgentContext::default();
-        if let Some(dir) = working_directory {
-            prompt_ctx.working_directory = Some(dir.to_owned());
-        }
+        prompt_ctx.working_directory = Some(cwd.to_owned());
         prompt_ctx.additional_context.insert(
             "taskPrompt".to_string(),
             serde_json::Value::String(user_prompt.to_owned()),

@@ -30,7 +30,3 @@ pub(crate) fn bool_to_sql(value: bool) -> i64 {
         0
     }
 }
-
-pub(crate) fn sql_to_bool(value: i64) -> bool {
-    value != 0
-}

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
-    pub conversation_id: i64,
+    pub session_id: i64,
     pub user_prompt: String,
     pub xml: Option<String>,
     pub status: TaskStatus,

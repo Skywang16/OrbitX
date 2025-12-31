@@ -456,9 +456,11 @@ Usage:
                             path.display()
                         ),
                         json!({
-                            "path": path.display().to_string(),
+                            "file": path.display().to_string(),
                             "mode": "replace",
-                            "matchType": "exact"
+                            "matchType": "exact",
+                            "old": old_text,
+                            "new": new_text
                         }),
                     ));
                 }
@@ -515,10 +517,12 @@ Usage:
                                 (fuzzy_result.best_score * 100.0) as u32
                             ),
                             json!({
-                                "path": path.display().to_string(),
+                                "file": path.display().to_string(),
                                 "mode": "replace",
                                 "matchType": "fuzzy",
-                                "similarity": fuzzy_result.best_score
+                                "similarity": fuzzy_result.best_score,
+                                "old": fuzzy_result.best_match_content,
+                                "new": new_text
                             }),
                         ));
                     }
@@ -619,9 +623,11 @@ Usage:
                         after_line
                     ),
                     json!({
-                        "path": path.display().to_string(),
+                        "file": path.display().to_string(),
                         "mode": "insert",
-                        "line": after_line
+                        "line": after_line,
+                        "old": "",
+                        "new": content
                     }),
                 )
             }
@@ -656,8 +662,10 @@ Usage:
                 success_result(
                     format!("edit_file applied\nmode=diff\nfile={}", path.display()),
                     json!({
-                        "path": path.display().to_string(),
-                        "mode": "diff"
+                        "file": path.display().to_string(),
+                        "mode": "diff",
+                        "old": "",
+                        "new": ""
                     }),
                 )
             }

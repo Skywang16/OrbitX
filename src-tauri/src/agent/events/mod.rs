@@ -15,7 +15,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct TaskCreatedPayload {
     pub task_id: String,
-    pub conversation_id: i64,
+    pub session_id: i64,
+    pub workspace_path: String,
     pub user_prompt: String,
 }
 

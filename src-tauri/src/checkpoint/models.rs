@@ -42,7 +42,8 @@ pub fn timestamp_to_datetime(ts: i64) -> DateTime<Utc> {
 #[serde(rename_all = "camelCase")]
 pub struct Checkpoint {
     pub id: i64,
-    pub conversation_id: i64,
+    pub workspace_path: String,
+    pub session_id: i64,
     pub parent_id: Option<i64>,
     pub user_message: String,
     pub created_at: DateTime<Utc>,
@@ -51,14 +52,16 @@ pub struct Checkpoint {
 impl Checkpoint {
     pub fn new(
         id: i64,
-        conversation_id: i64,
+        workspace_path: String,
+        session_id: i64,
         parent_id: Option<i64>,
         user_message: String,
         created_at: i64,
     ) -> Self {
         Self {
             id,
-            conversation_id,
+            workspace_path,
+            session_id,
             parent_id,
             user_message,
             created_at: timestamp_to_datetime(created_at),
@@ -71,7 +74,8 @@ impl Checkpoint {
 #[serde(rename_all = "camelCase")]
 pub struct CheckpointSummary {
     pub id: i64,
-    pub conversation_id: i64,
+    pub workspace_path: String,
+    pub session_id: i64,
     pub parent_id: Option<i64>,
     pub user_message: String,
     pub created_at: DateTime<Utc>,
@@ -176,7 +180,8 @@ pub struct RollbackResult {
 /// 新建 Checkpoint 的输入参数
 #[derive(Debug, Clone)]
 pub struct NewCheckpoint {
-    pub conversation_id: i64,
+    pub workspace_path: String,
+    pub session_id: i64,
     pub parent_id: Option<i64>,
     pub user_message: String,
 }

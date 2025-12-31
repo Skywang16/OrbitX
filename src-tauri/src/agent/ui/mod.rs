@@ -3,7 +3,5 @@
 //! independent from the agent's core execution persistence.
 
 mod models;
-mod persistence;
 
-pub use models::{UiConversation, UiMessage, UiMessageImage, UiStep};
-pub use persistence::AgentUiPersistence;
+pub use models::{UiMessageImage, UiStep};

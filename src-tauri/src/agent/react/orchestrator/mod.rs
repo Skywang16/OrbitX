@@ -18,7 +18,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::agent::config::CompactionConfig;
-use crate::agent::context::ConversationSummarizer;
+use crate::agent::context::SessionSummarizer;
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::iteration_outcome::IterationOutcome;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
@@ -95,8 +95,8 @@ impl ReactOrchestrator {
                 .await;
 
             // 摘要（如果需要）
-            let summarizer = ConversationSummarizer::new(
-                context.conversation_id,
+            let summarizer = SessionSummarizer::new(
+                context.session_id,
                 Arc::clone(&self.agent_persistence),
                 Arc::clone(&self.database),
             );
