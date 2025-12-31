@@ -3,6 +3,7 @@
   import { OnboardingView } from '@/views/Onboarding'
   import { useShortcutListener } from '@/shortcuts'
   import { useWindowOpacity } from '@/composables/useWindowOpacity'
+  import { useMenuEvents } from '@/composables/useMenuEvents'
   import { createStorage } from '@/utils/storage'
   import { appApi, workspaceApi } from '@/api'
   import { useTabManagerStore } from '@/stores/TabManager'
@@ -14,6 +15,9 @@
 
   // 初始化透明度管理
   useWindowOpacity()
+
+  // 初始化菜单事件监听
+  useMenuEvents()
 
   // 首次启动状态管理
   const onboardingStorage = createStorage<boolean>('orbitx-onboarding-completed')

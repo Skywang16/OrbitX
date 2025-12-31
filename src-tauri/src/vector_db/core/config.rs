@@ -1,6 +1,6 @@
+use crate::llm::types::LLMProviderConfig;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use crate::llm::types::LLMProviderConfig;
 
 /// 远程向量模型配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,14 +25,13 @@ impl Default for RemoteEmbeddingConfig {
     fn default() -> Self {
         Self {
             provider_config: LLMProviderConfig {
-                provider_type: "openai".to_string(),
+                provider_type: String::new(),
                 api_key: String::new(),
-                api_url: Some("https://api.openai.com/v1".to_string()),
+                api_url: None,
                 options: None,
-                supports_prompt_cache: false,
             },
-            model_name: "text-embedding-3-small".to_string(),
-            dimension: 1536,
+            model_name: String::new(),
+            dimension: 0,
             chunk_size: 512,
             chunk_overlap: 100,
         }
@@ -90,6 +89,16 @@ impl VectorDbConfig {
     }
 
     pub fn validate(&self) -> crate::vector_db::core::Result<()> {
+        if self.embedding.model_name.is_empty() {
+            return Err(crate::vector_db::core::VectorDbError::Config(
+                "Embedding model name is required".to_string(),
+            ));
+        }
+        if self.embedding.provider_config.api_key.is_empty() {
+            return Err(crate::vector_db::core::VectorDbError::Config(
+                "API key is required".to_string(),
+            ));
+        }
         if self.embedding.dimension == 0 {
             return Err(crate::vector_db::core::VectorDbError::Config(
                 "Dimension must be > 0".to_string(),

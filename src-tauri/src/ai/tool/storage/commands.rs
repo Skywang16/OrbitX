@@ -94,7 +94,8 @@ pub async fn storage_load_session_state(
 /// - 直接从 Mux 查询当前运行时状态，Mux 是单一数据源
 /// - ShellIntegration 状态恢复应该在应用启动时完成，不在此处理
 #[tauri::command]
-pub async fn storage_get_terminals_state() -> TauriApiResult<Vec<crate::storage::types::TerminalRuntimeState>> {
+pub async fn storage_get_terminals_state(
+) -> TauriApiResult<Vec<crate::storage::types::TerminalRuntimeState>> {
     use crate::mux::singleton::get_mux;
     use crate::storage::types::TerminalRuntimeState;
 
@@ -105,15 +106,15 @@ pub async fn storage_get_terminals_state() -> TauriApiResult<Vec<crate::storage:
         .into_iter()
         .filter_map(|pane_id| {
             let pane = mux.get_pane(pane_id)?;
-            
+
             let cwd = mux.shell_get_pane_cwd(pane_id).unwrap_or_else(|| {
                 dirs::home_dir()
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_else(|| "~".to_string())
             });
 
-            // 直接从 Pane 读取创建时的 shell，不依赖异步检测
-            let shell = pane.shell_name().to_string();
+            // 直接从 Pane 读取创建时的 shell 信息，使用 displayName
+            let shell = pane.shell_info().display_name.clone();
 
             Some(TerminalRuntimeState {
                 id: pane_id.as_u32(),

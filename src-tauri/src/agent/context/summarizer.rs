@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
+use serde::Serialize;
 use tracing::warn;
 
 use crate::agent::error::{AgentError, AgentResult};
-use crate::agent::persistence::{AgentPersistence, ConversationSummary};
+use crate::agent::persistence::{AgentPersistence, SessionSummary};
 use crate::agent::prompt::components::conversation_summary::{
     build_conversation_summary_user_prompt, CONVERSATION_SUMMARY_SYSTEM_PROMPT,
 };
@@ -15,7 +16,7 @@ const COMPRESSION_THRESHOLD: f32 = 0.85;
 const SUMMARY_MAX_TOKENS: u32 = 512;
 const RECENT_MESSAGES_TO_KEEP: usize = 3;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SummaryResult {
     pub summary: String,
     pub token_count: u32,
@@ -25,20 +26,20 @@ pub struct SummaryResult {
     pub tokens_saved: u32,
 }
 
-pub struct ConversationSummarizer {
-    conversation_id: i64,
+pub struct SessionSummarizer {
+    session_id: i64,
     persistence: Arc<AgentPersistence>,
     repositories: Arc<DatabaseManager>,
 }
 
-impl ConversationSummarizer {
+impl SessionSummarizer {
     pub fn new(
-        conversation_id: i64,
+        session_id: i64,
         persistence: Arc<AgentPersistence>,
         repositories: Arc<DatabaseManager>,
     ) -> Self {
         Self {
-            conversation_id,
+            session_id,
             persistence,
             repositories,
         }
@@ -79,7 +80,7 @@ impl ConversationSummarizer {
             Err(err) => {
                 warn!(
                     "Conversation summarization failed for conversation {}: {}. Falling back to sliding window.",
-                    self.conversation_id, err
+                    self.session_id, err
                 );
                 let fallback = self.fallback_to_sliding_window(messages, current_tokens);
                 self.persist_summary(&fallback).await?;
@@ -113,7 +114,7 @@ impl ConversationSummarizer {
             Err(err) => {
                 warn!(
                     "Manual conversation summarization failed for conversation {}: {}. Using fallback window.",
-                    self.conversation_id, err
+                    self.session_id, err
                 );
                 let fallback = self.fallback_to_sliding_window(messages, current_tokens);
                 self.persist_summary(&fallback).await?;
@@ -230,15 +231,14 @@ impl ConversationSummarizer {
         }
     }
 
-    async fn persist_summary(&self, result: &SummaryResult) -> AgentResult<ConversationSummary> {
-        let repo = self.persistence.conversation_summaries();
+    async fn persist_summary(&self, result: &SummaryResult) -> AgentResult<SessionSummary> {
+        let repo = self.persistence.session_summaries();
         repo.upsert(
-            self.conversation_id,
+            self.session_id,
             &result.summary,
             result.token_count as i64,
             result.messages_before_summary as i64,
             result.tokens_saved as i64,
-            result.cost,
         )
         .await
     }
@@ -328,7 +328,7 @@ fn extract_cost_from_usage(total_tokens: u32) -> f64 {
     (total_tokens as f64) * 0.000_002
 }
 
-impl ConversationSummarizer {
+impl SessionSummarizer {
     fn repositories(&self) -> Arc<DatabaseManager> {
         Arc::clone(&self.repositories)
     }

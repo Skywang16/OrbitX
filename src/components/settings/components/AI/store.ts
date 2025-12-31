@@ -77,18 +77,8 @@ export const useAISettingsStore = defineStore('ai-settings', () => {
     isLoading.value = false
   }
 
-  const addModel = async (model: AIModelConfig) => {
-    const payload: AIModelCreateInput = {
-      provider: model.provider,
-      apiUrl: model.apiUrl,
-      apiKey: model.apiKey,
-      model: model.model,
-      modelType: model.modelType,
-      options: model.options,
-      useCustomBaseUrl: model.useCustomBaseUrl,
-    }
-
-    await aiApi.addModel(payload)
+  const addModel = async (model: AIModelCreateInput) => {
+    await aiApi.addModel(model)
     await loadModels()
   }
 

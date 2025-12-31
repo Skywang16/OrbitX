@@ -228,7 +228,7 @@ pub async fn terminal_create_with_shell<R: Runtime>(
     let mux = get_mux();
     let size = PtySize::new(rows, cols);
 
-    let shell_config = ShellConfig::with_shell(&shell_info);
+    let shell_config = ShellConfig::with_shell(shell_info);
     let config = TerminalConfig::with_shell(shell_config);
 
     // 使用配置创建面板

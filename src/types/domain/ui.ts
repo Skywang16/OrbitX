@@ -11,12 +11,12 @@ export enum TabType {
   SETTINGS = 'settings',
 }
 
-// 终端标签页的私有数据
+// 终端标签页的 UI 数据（运行时使用，不含 cwd）
 export interface TerminalTabData {
   shell: string
 }
 
-// 设置标签页的私有数据
+// 设置标签页的 UI 数据
 export interface SettingsTabData {
   section: string
 }

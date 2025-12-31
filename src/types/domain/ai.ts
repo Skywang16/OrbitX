@@ -27,6 +27,10 @@ export interface AIModelConfig {
     maxContextTokens?: number
     temperature?: number
     timeout?: number
+    dimension?: number // 向量模型的维度
+    supportsImages?: boolean // 是否支持图片输入
+    contextWindow?: number
+    maxTokens?: number
   }
   useCustomBaseUrl?: boolean
   createdAt?: Date
@@ -132,7 +136,8 @@ export interface CancellableStream {
 export interface Conversation {
   id: number
   title: string
-  messageCount: number
+  workspacePath?: string | null
+  messageCount?: number
   createdAt: Date
   updatedAt: Date
 }
@@ -159,9 +164,17 @@ export interface NonToolStep extends BaseStep {
 
 export type AIOutputStep = ToolStep | NonToolStep
 
+export interface MessageImage {
+  id: string
+  dataUrl: string
+  fileName: string
+  fileSize: number
+  mimeType: string
+}
+
 export interface Message {
   id: number
-  conversationId: number
+  sessionId: number
   role: 'user' | 'assistant' | 'system'
   createdAt: Date
   steps?: UiStep[]
@@ -169,6 +182,7 @@ export interface Message {
   duration?: number
   // 双轨架构：user消息直接显示content，assistant消息只通过steps渲染
   content?: string // 仅用于user消息
+  images?: MessageImage[] // 用户消息的图片附件
 }
 
 export type ChatStatus = 'idle' | 'loading' | 'streaming' | 'error'
@@ -182,15 +196,15 @@ export interface ChatInputState {
 }
 
 export interface ConversationState {
-  currentConversationId: number | null | -1 // 增加 -1 作为新建标识
-  conversations: Conversation[]
+  currentSessionId: number | null | -1
+  sessions: Conversation[]
   messages: Message[]
   isLoading: boolean
   error: string | null
 }
 
 export interface SendMessageRequest {
-  conversationId: number
+  sessionId: number
   content: string
   modelId?: string
 }
@@ -202,7 +216,7 @@ export interface AIConfig extends BaseConfig {
 }
 
 export interface ContextStats {
-  conversationId: number
+  sessionId: number
   totalMessages: number
   summaryGenerated: boolean
   lastSummaryAt?: Date

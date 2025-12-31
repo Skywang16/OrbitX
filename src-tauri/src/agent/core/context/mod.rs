@@ -7,17 +7,17 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::ipc::Channel;
 use tokio::time::sleep;
-use tokio_util::sync::CancellationToken;
 
 use self::chain::Chain;
 use self::states::{ExecutionState, PlanningState, TaskStates};
 use crate::agent::config::{AgentConfig, TaskExecutionConfig};
 use crate::agent::context::FileContextTracker;
-use crate::agent::core::ring_buffer::MessageRingBuffer;
+use crate::agent::core::executor::ImageAttachment;
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::events::TaskProgressPayload;
@@ -32,27 +32,18 @@ use crate::agent::state::manager::{
 use crate::agent::state::session::SessionContext;
 use crate::agent::tools::ToolRegistry;
 use crate::agent::types::TaskDetail;
-use crate::agent::ui::{AgentUiPersistence, UiStep};
+use crate::agent::ui::{UiMessageImage, UiStep};
 use crate::agent::utils::tokenizer::count_text_tokens;
 use crate::llm::anthropic_types::{
     ContentBlock, MessageContent, MessageParam, MessageRole as AnthropicRole, SystemPrompt,
     ToolResultContent,
 };
 use crate::storage::DatabaseManager;
-
-pub fn generate_node_id(task_id: &str, phase: &str, node_index: Option<usize>) -> String {
-    if let Some(index) = node_index {
-        format!("{}_node_{}", task_id, index)
-    } else {
-        format!("{}_{}", task_id, phase)
-    }
-}
-
-const MAX_MESSAGE_HISTORY: usize = 100;
+use tokio_util::sync::CancellationToken;
 
 pub struct TaskContext {
     pub task_id: Arc<str>,
-    pub conversation_id: i64,
+    pub session_id: i64,
     pub user_prompt: Arc<str>,
     pub cwd: Arc<str>,
     config: TaskExecutionConfig,
@@ -71,12 +62,11 @@ impl TaskContext {
     pub async fn new(
         execution: AgentExecution,
         config: TaskExecutionConfig,
-        cwd: String,
+        workspace_path: String,
         tool_registry: Arc<ToolRegistry>,
         progress_channel: Option<Channel<TaskProgressPayload>>,
         repositories: Arc<DatabaseManager>,
         agent_persistence: Arc<AgentPersistence>,
-        ui_persistence: Arc<AgentUiPersistence>,
     ) -> TaskExecutorResult<Self> {
         let agent_config = AgentConfig::default();
         let runtime_config = ReactRuntimeConfig {
@@ -91,7 +81,7 @@ impl TaskContext {
 
         let record = execution;
         let task_id = record.execution_id.clone();
-        let conversation_id = record.conversation_id;
+        let session_id = record.session_id;
         let user_prompt = record.user_request.clone();
         let task_status = AgentTaskStatus::from(record.status);
         let current_iteration = record.current_iteration as u32;
@@ -102,21 +92,16 @@ impl TaskContext {
         task_state.consecutive_errors = error_count;
         task_state.task_status = map_status(&task_status);
 
-        let cwd = if cwd.trim().is_empty() {
-            fallback_cwd()
-        } else {
-            cwd
-        };
+        let normalized_workspace = workspace_path;
 
         let session = Arc::new(SessionContext::new(
             task_id.clone(),
-            conversation_id,
-            PathBuf::from(&cwd),
+            session_id,
+            PathBuf::from(&normalized_workspace),
             user_prompt.clone(),
             config,
             Arc::clone(&repositories),
             Arc::clone(&agent_persistence),
-            Arc::clone(&ui_persistence),
         ));
 
         let execution = ExecutionState::new(record, task_status);
@@ -127,9 +112,9 @@ impl TaskContext {
 
         Ok(Self {
             task_id: Arc::from(task_id.as_str()),
-            conversation_id,
+            session_id,
             user_prompt: Arc::from(user_prompt.as_str()),
-            cwd: Arc::from(cwd.as_str()),
+            cwd: Arc::from(normalized_workspace.as_str()),
             config,
             session,
             tool_registry,
@@ -153,10 +138,6 @@ impl TaskContext {
 
     pub fn agent_persistence(&self) -> Arc<AgentPersistence> {
         self.session.agent_persistence()
-    }
-
-    pub fn ui_persistence(&self) -> Arc<AgentUiPersistence> {
-        self.session.ui_persistence()
     }
 
     pub fn tool_registry(&self) -> Arc<ToolRegistry> {
@@ -381,38 +362,39 @@ impl TaskContext {
         self.states.planning.write().await.current_node_id = node_id;
     }
 
-    pub async fn check_aborted(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
-        if self
-            .states
-            .cancellation
-            .lock()
-            .await
-            .main_token
-            .is_cancelled()
-        {
+    /// 检查任务是否被中止
+    /// 简化版：只检查 aborted 标志，无需锁
+    pub fn check_aborted(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
+        if self.states.aborted.load(Ordering::SeqCst) {
+            return Err(TaskExecutorError::TaskInterrupted.into());
+        }
+        if no_check_pause {
+            return Ok(());
+        }
+        // 暂停检查保持同步方式
+        let status = self.pause_status.load(Ordering::SeqCst);
+        if status != 0 {
+            // 如果暂停，返回错误让调用者处理
+            return Err(TaskExecutorError::TaskInterrupted.into());
+        }
+        Ok(())
+    }
+
+    /// 异步检查任务是否被中止（带暂停等待）
+    pub async fn check_aborted_async(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
+        if self.states.aborted.load(Ordering::SeqCst) {
             return Err(TaskExecutorError::TaskInterrupted.into());
         }
         if no_check_pause {
             return Ok(());
         }
         loop {
-            if self
-                .states
-                .cancellation
-                .lock()
-                .await
-                .main_token
-                .is_cancelled()
-            {
+            if self.states.aborted.load(Ordering::SeqCst) {
                 return Err(TaskExecutorError::TaskInterrupted.into());
             }
             let status = self.pause_status.load(Ordering::SeqCst);
             if status == 0 {
                 break;
-            }
-            if status == 2 {
-                self.abort_current_steps();
-                self.pause_status.store(1, Ordering::SeqCst);
             }
             sleep(Duration::from_millis(500)).await;
         }
@@ -420,75 +402,47 @@ impl TaskContext {
     }
 
     /// 中止任务执行
-    /// 使用 spawn_blocking 确保即使在同步上下文中也能正确取消
+    /// 简化版：只需设置 aborted 标志
     pub fn abort(&self) {
-        use std::sync::Arc;
-        
-        // 克隆必要的状态以在异步任务中使用
-        let cancellation = Arc::clone(&self.states.cancellation);
+        self.states.aborted.store(true, Ordering::SeqCst);
+
+        // 标记 react 运行时为中止状态
         let react_runtime = Arc::clone(&self.states.react_runtime);
-        
-        // 在后台异步执行取消操作，避免阻塞
         tokio::spawn(async move {
-            // 使用阻塞锁确保取消一定能执行
-            let cancellation_guard = cancellation.lock().await;
-            cancellation_guard.main_token.cancel();
-            
-            // 取消所有步骤 tokens
-            for token in cancellation_guard.step_tokens.iter() {
-                token.cancel();
-            }
-            drop(cancellation_guard);
-            
-            // 标记 react 运行时为中止状态
             let mut react = react_runtime.write().await;
             react.mark_abort();
         });
-        
-        // 同步部分：立即尝试中止当前步骤
-        self.abort_current_steps();
     }
 
-    pub async fn reset_cancellation(&self) {
-        let mut cancellation = self.states.cancellation.lock().await;
-        cancellation.main_token = CancellationToken::new();
-        cancellation.step_tokens.clear();
+    /// 检查是否已中止
+    pub fn is_aborted(&self) -> bool {
+        self.states.aborted.load(Ordering::SeqCst)
     }
 
-    pub fn set_pause(&self, paused: bool, abort_current_step: bool) {
-        let new_status = if paused {
-            if abort_current_step {
-                2
-            } else {
-                1
-            }
-        } else {
-            0
-        };
+    pub fn set_pause(&self, paused: bool, _abort_current_step: bool) {
+        let new_status = if paused { 1 } else { 0 };
         self.pause_status.store(new_status, Ordering::SeqCst);
-        if new_status == 2 {
-            self.abort_current_steps();
-        }
     }
 
-    pub fn register_step_token(&self) -> CancellationToken {
-        let token = if let Ok(cancellation) = self.states.cancellation.try_lock() {
-            cancellation.main_token.child_token()
-        } else {
-            CancellationToken::new()
-        };
-        if let Ok(mut cancellation) = self.states.cancellation.try_lock() {
-            cancellation.step_tokens.push(token.clone());
-        }
-        token
-    }
+    /// 为 LLM 流创建取消令牌
+    /// 这个 token 会在任务 aborted 时自动取消
+    pub fn create_stream_cancel_token(&self) -> CancellationToken {
+        let token = CancellationToken::new();
+        let aborted = Arc::clone(&self.states.aborted);
+        let child_token = token.clone();
 
-    fn abort_current_steps(&self) {
-        if let Ok(mut cancellation) = self.states.cancellation.try_lock() {
-            for token in cancellation.step_tokens.drain(..) {
-                token.cancel();
+        // 监控 aborted 标志，如果被设置则取消 token
+        tokio::spawn(async move {
+            loop {
+                if aborted.load(Ordering::SeqCst) {
+                    child_token.cancel();
+                    break;
+                }
+                sleep(Duration::from_millis(100)).await;
             }
-        }
+        });
+
+        token
     }
 
     /// Add assistant message using Anthropic-native types (text and/or tool uses).
@@ -586,20 +540,55 @@ impl TaskContext {
         self.states.execution.read().await.system_prompt.clone()
     }
 
-    pub async fn with_messages<T>(
-        &self,
-        f: impl FnOnce(&MessageRingBuffer<MessageParam, MAX_MESSAGE_HISTORY>) -> T,
-    ) -> T {
-        let exec = self.states.execution.read().await;
-        f(&exec.messages)
+    pub async fn add_user_message(&self, text: String) {
+        self.add_user_message_with_images(text, None).await;
     }
 
-    pub async fn add_user_message(&self, text: String) {
+    pub async fn add_user_message_with_images(
+        &self,
+        text: String,
+        images: Option<&[ImageAttachment]>,
+    ) {
+        let content = if let Some(imgs) = images {
+            // 构建包含图片和文本的内容块
+            let mut blocks: Vec<ContentBlock> = imgs
+                .iter()
+                .filter_map(|img| {
+                    // 从 data URL 提取 base64 数据
+                    // 格式: data:image/jpeg;base64,/9j/4AAQ...
+                    let parts: Vec<&str> = img.data_url.splitn(2, ',').collect();
+                    if parts.len() == 2 {
+                        Some(ContentBlock::Image {
+                            source: crate::llm::anthropic_types::ImageSource::Base64 {
+                                media_type: img.mime_type.clone(),
+                                data: parts[1].to_string(),
+                            },
+                            cache_control: None,
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            // 添加文本块
+            if !text.is_empty() {
+                blocks.push(ContentBlock::Text {
+                    text: text.clone(),
+                    cache_control: None,
+                });
+            }
+
+            MessageContent::Blocks(blocks)
+        } else {
+            MessageContent::Text(text.clone())
+        };
+
         {
             let mut exec = self.states.execution.write().await;
             exec.messages.push(MessageParam {
                 role: AnthropicRole::User,
-                content: MessageContent::Text(text.clone()),
+                content,
             });
         }
         let _ = self.append_message(MessageRole::User, &text, false).await;
@@ -673,62 +662,79 @@ impl TaskContext {
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()).into())
     }
 
-    pub async fn initialize_ui_track(&self, user_prompt: &str) -> TaskExecutorResult<()> {
-        self.ui_persistence()
-            .ensure_conversation(self.conversation_id, None)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-        self.ui_persistence()
-            .create_user_message(self.conversation_id, user_prompt)
+    pub async fn initialize_ui_track(
+        &self,
+        user_prompt: &str,
+        images: Option<&[ImageAttachment]>,
+    ) -> TaskExecutorResult<()> {
+        let serialized_images = if let Some(imgs) = images {
+            let payload = map_image_attachments(imgs);
+            Some(serde_json::to_string(&payload).map_err(|e| {
+                TaskExecutorError::StatePersistenceFailed(e.to_string())
+            })?)
+        } else {
+            None
+        };
+
+        self.agent_persistence()
+            .session_messages()
+            .create_user_message(self.session_id, user_prompt, serialized_images.as_deref())
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
         let assistant_message_id = self
-            .ui_persistence()
-            .create_assistant_message(self.conversation_id, "streaming")
+            .agent_persistence()
+            .session_messages()
+            .create_assistant_message(self.session_id, "streaming")
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
         {
             let mut exec = self.states.execution.write().await;
             exec.ui_assistant_message_id = Some(assistant_message_id);
         }
+
         self.states.ui.lock().await.steps.clear();
         Ok(())
     }
 
     pub async fn begin_followup_turn(&self, user_prompt: &str) -> TaskExecutorResult<()> {
-        self.ui_persistence()
-            .ensure_conversation(self.conversation_id, None)
+        self.agent_persistence()
+            .session_messages()
+            .create_user_message(self.session_id, user_prompt, None)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-        self.ui_persistence()
-            .create_user_message(self.conversation_id, user_prompt)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
         let assistant_message_id = self
-            .ui_persistence()
-            .create_assistant_message(self.conversation_id, "streaming")
+            .agent_persistence()
+            .session_messages()
+            .create_assistant_message(self.session_id, "streaming")
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
         {
             let mut exec = self.states.execution.write().await;
             exec.ui_assistant_message_id = Some(assistant_message_id);
         }
+
         self.states.ui.lock().await.steps.clear();
         Ok(())
     }
 
     pub async fn restore_ui_track(&self) -> TaskExecutorResult<()> {
         if let Some(message) = self
-            .ui_persistence()
-            .get_latest_assistant_message(self.conversation_id)
+            .agent_persistence()
+            .session_messages()
+            .latest_assistant_message(self.session_id)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?
         {
             let mut exec = self.states.execution.write().await;
             exec.ui_assistant_message_id = Some(message.id);
-            if let Some(steps) = message.steps {
-                self.states.ui.lock().await.steps = steps;
+            if let Some(steps_json) = message.steps_json {
+                if let Ok(steps) = serde_json::from_str::<Vec<UiStep>>(&steps_json) {
+                    self.states.ui.lock().await.steps = steps;
+                }
             }
         }
         Ok(())
@@ -795,20 +801,22 @@ impl TaskContext {
 
     async fn persist_ui_steps(&self, steps: &[UiStep], status: &str) -> TaskExecutorResult<()> {
         let current_id = self.states.execution.read().await.ui_assistant_message_id;
+        let steps_json = serde_json::to_string(steps)
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
         if let Some(message_id) = current_id {
-            self.ui_persistence()
-                .update_assistant_message(message_id, steps, status)
+            self.agent_persistence()
+                .session_messages()
+                .update_assistant_message(message_id, &steps_json, status, None)
                 .await
                 .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            Ok(())
         } else {
-            return Err(TaskExecutorError::StatePersistenceFailed(
+            Err(TaskExecutorError::StatePersistenceFailed(
                 "assistant message id not set before persisting UI steps".to_string(),
             )
-            .into());
+            .into())
         }
-
-        Ok(())
     }
 
     fn step_from_payload(payload: &TaskProgressPayload) -> Option<UiStep> {
@@ -869,6 +877,7 @@ impl TaskContext {
                         "toolName": p.tool_name,
                         "result": p.result,
                         "isError": p.is_error,
+                        "extInfo": p.ext_info.clone(),
                     })),
                 })
             }
@@ -951,6 +960,27 @@ fn render_message_content(content: &MessageContent) -> String {
     }
 }
 
+fn map_image_attachments(images: &[ImageAttachment]) -> Vec<UiMessageImage> {
+    images
+        .iter()
+        .enumerate()
+        .map(|(index, attachment)| {
+            let ext = attachment
+                .mime_type
+                .split('/')
+                .nth(1)
+                .unwrap_or("image");
+            UiMessageImage {
+                id: format!("{}-{}", Utc::now().timestamp_millis(), index),
+                data_url: attachment.data_url.clone(),
+                file_name: format!("image_{}.{}", index, ext),
+                file_size: attachment.data_url.len() as i64,
+                mime_type: attachment.mime_type.clone(),
+            }
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallResult {
     pub call_id: String,
@@ -958,10 +988,4 @@ pub struct ToolCallResult {
     pub result: Value,
     pub is_error: bool,
     pub execution_time_ms: u64,
-}
-
-fn fallback_cwd() -> String {
-    std::env::current_dir()
-        .map(|path| path.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "/".to_string())
 }

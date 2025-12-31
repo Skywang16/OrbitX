@@ -16,7 +16,6 @@
   interface Emits {
     (e: 'select-session', sessionId: number): void
     (e: 'create-new-session'): void
-    (e: 'delete-session', sessionId: number): void
     (e: 'refresh-sessions'): void
   }
 

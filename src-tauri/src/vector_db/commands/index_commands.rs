@@ -7,81 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::State;
 use tokio::task::JoinHandle;
-use tracing::warn;
-
-#[derive(Debug, serde::Serialize)]
-pub struct IndexResult {
-    pub indexed_files: usize,
-    pub total_files: usize,
-    pub total_chunks: usize,
-}
-
-#[tauri::command]
-pub async fn index_files(
-    paths: Vec<String>,
-    state: State<'_, VectorDbState>,
-) -> TauriApiResult<IndexResult> {
-    let before = state.index_manager.get_status();
-
-    let file_paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
-    let embedder = state.search_engine.embedder();
-
-    match state
-        .index_manager
-        .index_files_with(&file_paths, &*embedder, &state.vector_index)
-        .await
-    {
-        Ok(_) => {
-            let after = state.index_manager.get_status();
-            Ok(api_success!(IndexResult {
-                indexed_files: after.total_files.saturating_sub(before.total_files),
-                total_files: after.total_files,
-                total_chunks: after.total_chunks,
-            }))
-        }
-        Err(e) => {
-            warn!(error = %e, "索引文件失败");
-            Ok(api_error!("vector_db.index_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn update_file_index(
-    path: String,
-    state: State<'_, VectorDbState>,
-) -> TauriApiResult<EmptyData> {
-    let p = PathBuf::from(&path);
-    let embedder = state.search_engine.embedder();
-    match state
-        .index_manager
-        .update_index(&p, &*embedder, &state.vector_index)
-        .await
-    {
-        Ok(_) => Ok(api_success!(EmptyData::default())),
-        Err(e) => {
-            warn!(error = %e, path = %path, "更新文件索引失败");
-            Ok(api_error!("vector_db.update_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn remove_file_index(
-    path: String,
-    state: State<'_, VectorDbState>,
-) -> TauriApiResult<EmptyData> {
-    let p = PathBuf::from(&path);
-    match state.index_manager.remove_file(&p) {
-        Ok(_) => Ok(api_success!(EmptyData::default())),
-        Err(e) => {
-            warn!(error = %e, path = %path, "移除文件索引失败");
-            Ok(api_error!("vector_db.remove_failed"))
-        }
-    }
-}
-
-// ---------------- Progress + Cancel Support ----------------
+use tracing::{error, warn};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct VectorBuildProgress {
@@ -110,6 +36,56 @@ fn tasks_store() -> &'static Arc<Mutex<HashMap<String, JoinHandle<()>>>> {
 fn set_progress(path: &str, p: VectorBuildProgress) {
     let store = progress_store();
     store.lock().insert(path.to_string(), p);
+}
+
+#[tauri::command]
+pub async fn get_index_status(
+    path: String,
+    state: State<'_, VectorDbState>,
+) -> TauriApiResult<crate::vector_db::storage::IndexStatus> {
+    let workspace_path = PathBuf::from(&path);
+
+    if !workspace_path.join(".oxi").exists() {
+        return Ok(api_success!(crate::vector_db::storage::IndexStatus {
+            total_files: 0,
+            total_chunks: 0,
+            embedding_model: String::new(),
+            vector_dimension: 0,
+        }));
+    }
+
+    let config = state.search_engine.config().clone();
+    match crate::vector_db::storage::IndexManager::new(&workspace_path, config) {
+        Ok(manager) => Ok(api_success!(manager.get_status())),
+        Err(e) => {
+            warn!(error = %e, path = %path, "获取索引状态失败");
+            Ok(api_error!("vector_db.status_failed"))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn delete_workspace_index(
+    path: String,
+    _state: State<'_, VectorDbState>,
+) -> TauriApiResult<EmptyData> {
+    let index_dir = PathBuf::from(&path).join(".oxi");
+
+    if index_dir.exists() {
+        let dir = index_dir.clone();
+        match tokio::task::spawn_blocking(move || std::fs::remove_dir_all(dir)).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => {
+                warn!(error = %e, path = %path, "删除索引失败");
+                return Ok(api_error!("vector_db.delete_failed"));
+            }
+            Err(e) => {
+                error!("删除索引任务 join 失败: {}", e);
+                return Ok(api_error!("vector_db.delete_failed"));
+            }
+        }
+    }
+    Ok(api_success!(EmptyData::default()))
 }
 
 #[tauri::command]
@@ -146,24 +122,26 @@ pub async fn vector_build_index(
     state: State<'_, VectorDbState>,
 ) -> TauriApiResult<EmptyData> {
     let root = PathBuf::from(&path);
+    let config = state.search_engine.config().clone();
     let embedder = state.search_engine.embedder();
 
-    // 为当前工作区创建独立的 IndexManager
-    let workspace_index_manager = match crate::vector_db::storage::IndexManager::new(
-        &root,
-        state.search_engine.config().clone(),
-    ) {
-        Ok(manager) => std::sync::Arc::new(manager),
-        Err(e) => {
-            tracing::error!("创建工作区索引管理器失败: {}", e);
-            return Ok(api_error!("vector_db.index_failed"));
-        }
-    };
+    let workspace_index_manager =
+        match crate::vector_db::storage::IndexManager::new(&root, config.clone()) {
+            Ok(manager) => std::sync::Arc::new(manager),
+            Err(e) => {
+                tracing::error!("创建工作区索引管理器失败: {}", e);
+                return Ok(api_error!("vector_db.index_failed"));
+            }
+        };
 
-    // Abort existing
     if let Some(existing) = tasks_store().lock().remove(&path) {
         existing.abort();
     }
+
+    let vector_index = std::sync::Arc::new(crate::vector_db::index::VectorIndex::new(
+        config.embedding.dimension,
+    ));
+    let embed_config = config.clone();
 
     set_progress(
         &path,
@@ -178,80 +156,106 @@ pub async fn vector_build_index(
         },
     );
 
-    // Spawn background task
     let path_key = path.clone();
     let index_manager = workspace_index_manager.clone();
-    let vector_index = state.vector_index.clone();
-    let config = state.search_engine.config().clone();
+    let vector_index_handle = vector_index.clone();
 
-    let handle = tokio::spawn(async move {
-        // Collect files under root
-        let files = crate::vector_db::utils::collect_source_files(&root, config.max_file_size);
-        set_progress(
-            &path_key,
-            VectorBuildProgress {
-                current_file: None,
-                files_completed: 0,
-                total_files: files.len(),
-                current_file_chunks: None,
-                total_chunks: 0,
-                is_complete: false,
-                error: None,
-            },
-        );
+    let handle = tokio::spawn({
+        let embed_config = embed_config.clone();
+        async move {
+            let file_list_res = tokio::task::spawn_blocking({
+                let root = root.clone();
+                let cfg = embed_config.clone();
+                move || crate::vector_db::utils::collect_source_files(&root, cfg.max_file_size)
+            })
+            .await;
 
-        let mut completed = 0usize;
-        for f in files {
-            let name = f
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("")
-                .to_string();
+            let files = match file_list_res {
+                Ok(list) => list,
+                Err(e) => {
+                    error!("收集文件列表失败: {}", e);
+                    set_progress(
+                        &path_key,
+                        VectorBuildProgress {
+                            current_file: None,
+                            files_completed: 0,
+                            total_files: 0,
+                            current_file_chunks: None,
+                            total_chunks: 0,
+                            is_complete: true,
+                            error: Some("collect_failed".into()),
+                        },
+                    );
+                    return;
+                }
+            };
+
             set_progress(
                 &path_key,
                 VectorBuildProgress {
-                    current_file: Some(name),
-                    files_completed: completed,
-                    total_files: completed + 1,
+                    current_file: None,
+                    files_completed: 0,
+                    total_files: files.len(),
                     current_file_chunks: None,
                     total_chunks: 0,
                     is_complete: false,
                     error: None,
                 },
             );
-            if let Err(e) = index_manager
-                .index_file_with(&f, &*embedder, &vector_index)
-                .await
-            {
+
+            let mut completed = 0usize;
+            for f in files {
+                let name = f
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
                 set_progress(
                     &path_key,
                     VectorBuildProgress {
-                        current_file: Some(f.display().to_string()),
+                        current_file: Some(name),
                         files_completed: completed,
                         total_files: completed + 1,
                         current_file_chunks: None,
                         total_chunks: 0,
                         is_complete: false,
-                        error: Some(e.to_string()),
+                        error: None,
                     },
                 );
+                if let Err(e) = index_manager
+                    .index_file_with(&f, &*embedder, vector_index_handle.as_ref())
+                    .await
+                {
+                    set_progress(
+                        &path_key,
+                        VectorBuildProgress {
+                            current_file: Some(f.display().to_string()),
+                            files_completed: completed,
+                            total_files: completed + 1,
+                            current_file_chunks: None,
+                            total_chunks: 0,
+                            is_complete: false,
+                            error: Some(e.to_string()),
+                        },
+                    );
+                }
+                completed += 1;
             }
-            completed += 1;
-        }
 
-        set_progress(
-            &path_key,
-            VectorBuildProgress {
-                current_file: None,
-                files_completed: completed,
-                total_files: completed,
-                current_file_chunks: None,
-                total_chunks: 0,
-                is_complete: true,
-                error: None,
-            },
-        );
-        tasks_store().lock().remove(&path_key);
+            set_progress(
+                &path_key,
+                VectorBuildProgress {
+                    current_file: None,
+                    files_completed: completed,
+                    total_files: completed,
+                    current_file_chunks: None,
+                    total_chunks: 0,
+                    is_complete: true,
+                    error: None,
+                },
+            );
+            tasks_store().lock().remove(&path_key);
+        }
     });
 
     tasks_store().lock().insert(path, handle);

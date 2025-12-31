@@ -4,7 +4,6 @@
   import { computed, onMounted, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import AIModelForm from './AIModelForm.vue'
-  import EmbeddingModelForm from './EmbeddingModelForm.vue'
   import { useAISettingsStore } from '../store'
   import SettingsCard from '../../../SettingsCard.vue'
 
@@ -14,38 +13,23 @@
 
   const showAddForm = ref(false)
   const editingModel = ref<AIModelConfig | null>(null)
-  const defaultModelType = ref<'chat' | 'embedding'>('chat')
 
-  // 所有模型（Chat + Embedding）
-  const models = computed(() => aiSettingsStore.models)
+  // 只显示 Chat 模型
+  const models = computed(() => aiSettingsStore.chatModels)
   const loading = computed(() => aiSettingsStore.isLoading)
 
   onMounted(async () => {
     await aiSettingsStore.loadModels()
   })
 
-  const showEmbeddingForm = ref(false)
-  const editingEmbeddingModel = ref<AIModelConfig | null>(null)
-
-  const handleAddModel = (modelType: 'chat' | 'embedding' = 'chat') => {
-    if (modelType === 'embedding') {
-      editingEmbeddingModel.value = null
-      showEmbeddingForm.value = true
-    } else {
-      editingModel.value = null
-      defaultModelType.value = modelType
-      showAddForm.value = true
-    }
+  const handleAddModel = () => {
+    editingModel.value = null
+    showAddForm.value = true
   }
 
   const handleEditModel = (model: AIModelConfig) => {
-    if (model.modelType === 'embedding') {
-      editingEmbeddingModel.value = { ...model }
-      showEmbeddingForm.value = true
-    } else {
-      editingModel.value = { ...model }
-      showAddForm.value = true
-    }
+    editingModel.value = { ...model }
+    showAddForm.value = true
   }
 
   const handleDeleteModel = async (modelId: string) => {
@@ -56,11 +40,7 @@
     if (editingModel.value) {
       await aiSettingsStore.updateModel(editingModel.value.id, modelData)
     } else {
-      const newModelData = {
-        ...modelData,
-        modelType: modelData.modelType || defaultModelType.value,
-      }
-      await aiSettingsStore.addModel(newModelData as AIModelConfig)
+      await aiSettingsStore.addModel({ ...modelData, modelType: 'chat' })
     }
     showAddForm.value = false
     editingModel.value = null
@@ -69,35 +49,6 @@
   const handleFormCancel = () => {
     showAddForm.value = false
     editingModel.value = null
-  }
-
-  // Embedding 模型表单处理
-  const handleEmbeddingFormSubmit = async (data: {
-    apiUrl: string
-    apiKey: string
-    modelName: string
-    dimension: number
-  }) => {
-    const modelData: Omit<AIModelConfig, 'id'> = {
-      provider: 'openai_compatible',
-      apiUrl: data.apiUrl,
-      apiKey: data.apiKey,
-      model: data.modelName,
-      modelType: 'embedding',
-      options: { dimension: data.dimension },
-    }
-    if (editingEmbeddingModel.value) {
-      await aiSettingsStore.updateModel(editingEmbeddingModel.value.id, modelData)
-    } else {
-      await aiSettingsStore.addModel(modelData as AIModelConfig)
-    }
-    showEmbeddingForm.value = false
-    editingEmbeddingModel.value = null
-  }
-
-  const handleEmbeddingFormCancel = () => {
-    showEmbeddingForm.value = false
-    editingEmbeddingModel.value = null
   }
 </script>
 
@@ -111,12 +62,9 @@
           <div class="settings-label">{{ t('ai_model.add_new_model') }}</div>
           <div class="settings-description">{{ t('ai_model.add_model_description') }}</div>
         </div>
-        <div class="settings-item-control model-add-buttons">
-          <x-button variant="primary" @click="handleAddModel('chat')">
+        <div class="settings-item-control">
+          <x-button variant="primary" @click="handleAddModel">
             {{ t('ai_model.add_chat_model') }}
-          </x-button>
-          <x-button variant="primary" @click="handleAddModel('embedding')">
-            {{ t('ai_model.add_embedding_model') }}
           </x-button>
         </div>
       </div>
@@ -138,24 +86,14 @@
 
     <div v-else>
       <div class="model-section">
-        <h4 class="settings-group-title">{{ t('ai_model.all_models') }}</h4>
+        <h4 class="settings-group-title">{{ t('ai_model.chat') }}</h4>
 
         <SettingsCard>
           <div v-for="model in models" :key="model.id" class="settings-item">
             <div class="settings-item-header">
               <div class="model-info">
-                <div class="settings-label">
-                  {{ model.model }}
-                  <span :class="['model-type-tag', model.modelType]">
-                    {{ model.modelType === 'embedding' ? t('ai_model.embedding') : t('ai_model.chat') }}
-                  </span>
-                </div>
-                <div class="settings-description">
-                  {{ model.provider }}
-                  <template v-if="model.modelType === 'embedding' && model.options?.dimension">
-                    · {{ t('embedding_model.dimension') }}: {{ model.options.dimension }}
-                  </template>
-                </div>
+                <div class="settings-label">{{ model.model }}</div>
+                <div class="settings-description">{{ model.provider }}</div>
               </div>
             </div>
             <div class="settings-item-control">
@@ -183,29 +121,7 @@
       </div>
     </div>
 
-    <AIModelForm
-      v-if="showAddForm"
-      :model="editingModel"
-      :defaultModelType="defaultModelType"
-      @submit="handleFormSubmit"
-      @cancel="handleFormCancel"
-    />
-
-    <EmbeddingModelForm
-      v-if="showEmbeddingForm"
-      :config="
-        editingEmbeddingModel
-          ? {
-              apiUrl: editingEmbeddingModel.apiUrl,
-              apiKey: editingEmbeddingModel.apiKey,
-              modelName: editingEmbeddingModel.model,
-              dimension: editingEmbeddingModel.options?.dimension || 1536,
-            }
-          : null
-      "
-      @submit="handleEmbeddingFormSubmit"
-      @cancel="handleEmbeddingFormCancel"
-    />
+    <AIModelForm v-if="showAddForm" :model="editingModel" @submit="handleFormSubmit" @cancel="handleFormCancel" />
   </div>
 </template>
 
@@ -223,45 +139,8 @@
     gap: 8px;
   }
 
-  .model-add-buttons {
-    display: flex;
-    gap: 12px;
-  }
-
-  .model-add-buttons .x-button {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 100px;
-    justify-content: center;
-  }
-
   .model-info {
     flex: 1;
-  }
-
-  .model-type-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    border-radius: var(--border-radius-sm);
-    font-size: 11px;
-    font-weight: 500;
-    margin-left: 8px;
-    vertical-align: middle;
-  }
-
-  .model-type-tag.chat {
-    background: rgba(34, 197, 94, 0.1);
-    color: rgb(34, 197, 94);
-    border: 1px solid rgba(34, 197, 94, 0.2);
-  }
-
-  .model-type-tag.embedding {
-    background: rgba(59, 130, 246, 0.1);
-    color: rgb(59, 130, 246);
-    border: 1px solid rgba(59, 130, 246, 0.2);
   }
 
   .action-header {

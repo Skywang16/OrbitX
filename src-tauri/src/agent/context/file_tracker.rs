@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 
 use crate::agent::error::AgentResult;
 use crate::agent::persistence::{
-    AgentPersistence, FileContextEntry, FileRecordSource, FileRecordState,
+    AgentPersistence, FileRecordSource, FileRecordState, WorkspaceFileRecord,
 };
 
 #[derive(Debug, Clone)]
@@ -41,17 +41,17 @@ impl<'a> FileOperationRecord<'a> {
 #[derive(Debug)]
 pub struct FileContextTracker {
     persistence: Arc<AgentPersistence>,
-    conversation_id: i64,
+    workspace_path: String,
     workspace_root: Option<PathBuf>,
     recently_modified: RwLock<HashSet<String>>, // user edits that require refresh
     recently_agent_edits: RwLock<HashSet<String>>, // agent changes to suppress stale warnings
 }
 
 impl FileContextTracker {
-    pub fn new(persistence: Arc<AgentPersistence>, conversation_id: i64) -> Self {
+    pub fn new(persistence: Arc<AgentPersistence>, workspace_path: impl Into<String>) -> Self {
         Self {
             persistence,
-            conversation_id,
+            workspace_path: workspace_path.into(),
             workspace_root: None,
             recently_modified: RwLock::new(HashSet::new()),
             recently_agent_edits: RwLock::new(HashSet::new()),
@@ -63,26 +63,30 @@ impl FileContextTracker {
         self
     }
 
+    pub fn normalize_path(&self, path: impl AsRef<Path>) -> String {
+        self.normalized_path(path.as_ref())
+    }
+
     pub async fn track_file_operation(
         &self,
         record: FileOperationRecord<'_>,
-    ) -> AgentResult<FileContextEntry> {
+    ) -> AgentResult<WorkspaceFileRecord> {
         let normalized_path = self.normalized_path(record.path);
         let repo = self.persistence.file_context();
         let existing = repo
-            .find_by_path(self.conversation_id, &normalized_path)
+            .find_by_path(&self.workspace_path, &normalized_path)
             .await?;
 
         let now = record.recorded_at;
         let mut agent_read_ts = existing
             .as_ref()
-            .and_then(|entry| entry.agent_read_timestamp);
+            .and_then(|entry| entry.agent_read_at);
         let mut agent_edit_ts = existing
             .as_ref()
-            .and_then(|entry| entry.agent_edit_timestamp);
+            .and_then(|entry| entry.agent_edit_at);
         let mut user_edit_ts = existing
             .as_ref()
-            .and_then(|entry| entry.user_edit_timestamp);
+            .and_then(|entry| entry.user_edit_at);
 
         let mut mark_user_modified = false;
         let mut mark_agent_edit = false;
@@ -106,7 +110,9 @@ impl FileContextTracker {
                 mark_user_modified = true;
                 FileRecordState::Stale
             }
-            FileRecordSource::FileMentioned => state_or(existing.as_ref(), FileRecordState::Active),
+            FileRecordSource::FileMentioned => {
+                state_or(existing.as_ref(), FileRecordState::Active)
+            }
         };
 
         if let Some(override_state) = record.state_override {
@@ -115,7 +121,7 @@ impl FileContextTracker {
 
         let entry = repo
             .upsert_entry(
-                self.conversation_id,
+                &self.workspace_path,
                 &normalized_path,
                 state,
                 record.source,
@@ -126,8 +132,8 @@ impl FileContextTracker {
             .await?;
 
         self.persistence
-            .conversations()
-            .touch(self.conversation_id)
+            .workspaces()
+            .touch(&self.workspace_path)
             .await?;
 
         if mark_user_modified {
@@ -148,24 +154,24 @@ impl FileContextTracker {
         Ok(entry)
     }
 
-    pub async fn get_active_files(&self) -> AgentResult<Vec<FileContextEntry>> {
+    pub async fn get_active_files(&self) -> AgentResult<Vec<WorkspaceFileRecord>> {
         self.persistence
             .file_context()
-            .get_active_files(self.conversation_id)
+            .list_by_state(&self.workspace_path, FileRecordState::Active)
             .await
     }
 
-    pub async fn get_stale_files(&self) -> AgentResult<Vec<FileContextEntry>> {
+    pub async fn get_stale_files(&self) -> AgentResult<Vec<WorkspaceFileRecord>> {
         self.persistence
             .file_context()
-            .get_stale_files(self.conversation_id)
+            .list_by_state(&self.workspace_path, FileRecordState::Stale)
             .await
     }
 
     pub async fn mark_file_as_stale(
         &self,
         path: impl AsRef<Path>,
-    ) -> AgentResult<FileContextEntry> {
+    ) -> AgentResult<WorkspaceFileRecord> {
         let record = FileOperationRecord::new(path.as_ref(), FileRecordSource::UserEdited)
             .with_state(FileRecordState::Stale);
         self.track_file_operation(record).await
@@ -187,17 +193,28 @@ impl FileContextTracker {
         } else if let Some(root) = &self.workspace_root {
             root.join(path)
         } else {
-            path.to_path_buf()
+            PathBuf::from(&self.workspace_path).join(path)
         };
 
-        resolved
+        let workspace_root = self
+            .workspace_root
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(&self.workspace_path));
+
+        let relative = resolved
+            .strip_prefix(&workspace_root)
+            .map(|p| p.to_path_buf())
+            .unwrap_or(resolved);
+
+        relative
             .components()
             .collect::<PathBuf>()
             .to_string_lossy()
+            .trim_start_matches(std::path::MAIN_SEPARATOR)
             .replace('\\', "/")
     }
 }
 
-fn state_or(existing: Option<&FileContextEntry>, fallback: FileRecordState) -> FileRecordState {
+fn state_or(existing: Option<&WorkspaceFileRecord>, fallback: FileRecordState) -> FileRecordState {
     existing.map(|entry| entry.record_state).unwrap_or(fallback)
 }

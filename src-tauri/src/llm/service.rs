@@ -50,12 +50,6 @@ impl LLMService {
             None => None,
         };
 
-        let supports_prompt_cache = options
-            .as_ref()
-            .and_then(|opts| opts.get("supportsPromptCache"))
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
         let config = LLMProviderConfig {
             provider_type,
             api_key: model.api_key,
@@ -65,7 +59,6 @@ impl LLMService {
                 Some(model.api_url)
             },
             options,
-            supports_prompt_cache,
         };
 
         Ok((config, model.model))
@@ -78,11 +71,16 @@ impl LLMService {
         let (config, model_name) = self.get_provider_config_and_model(&request.model).await?;
 
         let provider = ProviderRegistry::global()
-            .create(config)
+            .create(config.clone())
             .map_err(LlmError::from)?;
 
         let mut actual_request = request;
         actual_request.model = model_name;
+
+        // Anthropic provider 自动应用 prompt cache 优化
+        if config.provider_type == "anthropic" {
+            actual_request = crate::llm::providers::anthropic::apply_prompt_caching(actual_request);
+        }
 
         let result = provider.call(actual_request).await;
 
@@ -104,11 +102,16 @@ impl LLMService {
         let (config, model_name) = self.get_provider_config_and_model(&request.model).await?;
 
         let provider = ProviderRegistry::global()
-            .create(config)
+            .create(config.clone())
             .map_err(LlmError::from)?;
 
         let mut actual_request = request;
         actual_request.model = model_name;
+
+        // Anthropic provider 自动应用 prompt cache 优化
+        if config.provider_type == "anthropic" {
+            actual_request = crate::llm::providers::anthropic::apply_prompt_caching(actual_request);
+        }
 
         let stream = provider
             .call_stream(actual_request)

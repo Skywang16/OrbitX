@@ -132,7 +132,7 @@ impl TerminalMux {
     ///
     /// - 使用结构化日志格式
     /// - 包含性能指标
-    #[instrument(skip(self, config), fields(pane_id, shell = %config.shell_config.program))]
+    #[instrument(skip(self, config), fields(pane_id, shell = %config.shell_config.shell_info.display_name))]
     pub async fn create_pane_with_config(
         &self,
         size: PtySize,
@@ -155,7 +155,8 @@ impl TerminalMux {
         }
 
         // 设置面板的Shell类型到shell_integration
-        let shell_type = crate::shell::ShellType::from_program(&config.shell_config.program);
+        let shell_type =
+            crate::shell::ShellType::from_program(&config.shell_config.shell_info.path);
         self.shell_integration
             .set_pane_shell_type(pane_id, shell_type.clone());
 
@@ -193,9 +194,9 @@ impl TerminalMux {
                 .write()
                 .map_err(|err| TerminalMuxError::from_write_poison("panes", err))?;
 
-            panes.remove(&pane_id).ok_or_else(|| {
-                TerminalMuxError::PaneNotFound { pane_id }
-            })?
+            panes
+                .remove(&pane_id)
+                .ok_or_else(|| TerminalMuxError::PaneNotFound { pane_id })?
         };
 
         // 标记面板为死亡状态，停止I/O线程
@@ -230,9 +231,9 @@ impl TerminalMux {
     /// - 包含性能指标
     #[instrument(skip(self, data), fields(pane_id = ?pane_id, data_len = data.len()), level = "trace")]
     pub fn write_to_pane(&self, pane_id: PaneId, data: &[u8]) -> TerminalMuxResult<()> {
-        let pane = self.get_pane(pane_id).ok_or_else(|| {
-            TerminalMuxError::PaneNotFound { pane_id }
-        })?;
+        let pane = self
+            .get_pane(pane_id)
+            .ok_or_else(|| TerminalMuxError::PaneNotFound { pane_id })?;
 
         pane.write(data)?;
         Ok(())
@@ -244,9 +245,9 @@ impl TerminalMux {
     /// - 包含性能指标
     #[instrument(skip(self), fields(pane_id = ?pane_id, size = ?size))]
     pub fn resize_pane(&self, pane_id: PaneId, size: PtySize) -> TerminalMuxResult<()> {
-        let pane = self.get_pane(pane_id).ok_or_else(|| {
-            TerminalMuxError::PaneNotFound { pane_id }
-        })?;
+        let pane = self
+            .get_pane(pane_id)
+            .ok_or_else(|| TerminalMuxError::PaneNotFound { pane_id })?;
 
         pane.resize(size)?;
 
@@ -332,6 +333,14 @@ impl TerminalMux {
     pub fn notify_from_any_thread(&self, notification: MuxNotification) {
         if let Err(e) = self.notification_sender.send(notification) {
             error!("跨线程通知发送失败: {}", e);
+        }
+    }
+
+    /// 创建调试订阅者（用于测试和调试）
+    pub fn create_debug_subscriber() -> impl Fn(&MuxNotification) -> bool + Send + Sync + 'static {
+        move |notification: &MuxNotification| {
+            tracing::debug!("MuxNotification: {:?}", notification);
+            true
         }
     }
 
@@ -485,11 +494,17 @@ impl TerminalMux {
         self.shell_integration.disable_integration(pane_id);
     }
 
-    pub fn get_pane_current_command(&self, pane_id: PaneId) -> Option<std::sync::Arc<crate::shell::CommandInfo>> {
+    pub fn get_pane_current_command(
+        &self,
+        pane_id: PaneId,
+    ) -> Option<std::sync::Arc<crate::shell::CommandInfo>> {
         self.shell_integration.get_current_command(pane_id)
     }
 
-    pub fn get_pane_command_history(&self, pane_id: PaneId) -> Vec<std::sync::Arc<crate::shell::CommandInfo>> {
+    pub fn get_pane_command_history(
+        &self,
+        pane_id: PaneId,
+    ) -> Vec<std::sync::Arc<crate::shell::CommandInfo>> {
         self.shell_integration.get_command_history(pane_id)
     }
 

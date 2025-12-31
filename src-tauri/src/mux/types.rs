@@ -120,7 +120,7 @@ impl Default for TerminalConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShellConfig {
-    pub program: String,
+    pub shell_info: ShellInfo,
     pub args: Vec<String>,
     pub working_directory: Option<PathBuf>,
     pub env: Option<HashMap<String, String>>,
@@ -129,8 +129,7 @@ pub struct ShellConfig {
 impl Default for ShellConfig {
     fn default() -> Self {
         Self {
-            // 使用安全的默认值，避免循环依赖
-            program: Self::get_safe_default_shell(),
+            shell_info: ShellManager::terminal_get_default_shell(),
             args: Vec::new(),
             working_directory: None,
             env: None,
@@ -139,50 +138,18 @@ impl Default for ShellConfig {
 }
 
 impl ShellConfig {
-    fn get_safe_default_shell() -> String {
-        #[cfg(windows)]
-        {
-            "C:\\Program Files\\Git\\bin\\bash.exe".to_string()
-        }
-        #[cfg(not(windows))]
-        {
-            // 优先使用环境变量，然后是常见路径
-            std::env::var("SHELL")
-                .ok()
-                .filter(|path| std::path::Path::new(path).exists())
-                .unwrap_or_else(|| {
-                    // 按优先级检查常见shell
-                    let shells = ["/bin/zsh", "/bin/bash", "/bin/sh"];
-                    shells
-                        .iter()
-                        .find(|&&path| std::path::Path::new(path).exists())
-                        .map(|&path| path.to_string())
-                        .unwrap_or_else(|| "/bin/bash".to_string())
-                })
-        }
-    }
-
     pub fn with_default_shell() -> Self {
         Self {
-            program: ShellManager::terminal_get_default_shell().path,
+            shell_info: ShellManager::terminal_get_default_shell(),
             args: Vec::new(),
             working_directory: None,
             env: None,
         }
     }
 
-    pub fn with_shell(shell_info: &ShellInfo) -> Self {
+    pub fn with_shell(shell_info: ShellInfo) -> Self {
         Self {
-            program: shell_info.path.clone(),
-            args: Vec::new(),
-            working_directory: None,
-            env: None,
-        }
-    }
-
-    pub fn with_shell_path(path: String) -> Self {
-        Self {
-            program: path,
+            shell_info,
             args: Vec::new(),
             working_directory: None,
             env: None,

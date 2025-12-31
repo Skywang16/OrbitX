@@ -1,61 +1,53 @@
 import { agentApi } from '@/api/agent'
+import type { TaskProgressPayload, TaskProgressStream } from '@/api/agent/types'
 import { useAISettingsStore } from '@/components/settings/components/AI'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { useSessionStore } from '@/stores/session'
+import type { ImageAttachment } from '@/stores/imageLightbox'
+import type { ChatMode, Conversation, Message } from '@/types'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
-import { debounce } from 'lodash-es'
-import type { ChatMode } from '@/types'
-import type { Conversation, Message } from '@/types'
-import type { TaskProgressPayload } from '@/api/agent/types'
-import { getEventTaskId } from '@/api/agent/types'
-
-// 特殊标识：表示用户正处于"新建会话"的临时状态
-const NEW_SESSION_FLAG = -1
 
 export const useAIChatStore = defineStore('ai-chat', () => {
+  const workspaceStore = useWorkspaceStore()
   const sessionStore = useSessionStore()
+  const aiSettingsStore = useAISettingsStore()
 
-  // 基本状态
   const isVisible = ref(false)
   const sidebarWidth = ref(350)
-  const currentConversationId = ref<number | null>(null)
-  const messageList = ref<Message[]>([])
-  const isLoading = ref(false)
-  const error = ref<string | null>(null)
-  const conversations = ref<Conversation[]>([])
   const chatMode = ref<ChatMode>('agent')
   const isInitialized = ref(false)
-
-  // 当前任务状态
+  const isSending = ref(false)
+  const error = ref<string | null>(null)
   const cancelFunction = ref<(() => void) | null>(null)
   const currentTaskId = ref<string | null>(null)
   const cancelRequested = ref(false)
 
-  // 计算属性
+  // 工作区路径直接来自 workspaceStore（它从终端派生）
+  const currentWorkspacePath = computed(() => workspaceStore.currentWorkspacePath)
+  const currentSession = computed(() => workspaceStore.currentSession)
+  const sessions = computed<Conversation[]>(() =>
+    workspaceStore.sessions.map(session => ({
+      id: session.id,
+      title: session.title ?? '',
+      workspacePath: session.workspacePath,
+      messageCount: session.messageCount,
+      createdAt: new Date(session.createdAt * 1000),
+      updatedAt: new Date(session.updatedAt * 1000),
+    }))
+  )
+  const messageList = computed(() => workspaceStore.messages)
+
   const canSendMessage = computed(() => {
-    const aiSettingsStore = useAISettingsStore()
-    return !isLoading.value && aiSettingsStore.hasModels
+    return !isSending.value && aiSettingsStore.hasModels
   })
 
-  const currentConversation = computed(() => {
-    if (!currentConversationId.value) return null
-    const conversation = conversations.value.find(c => c.id === currentConversationId.value)
-    if (!conversation) return null
-    return {
-      ...conversation,
-      messages: messageList.value,
-    }
-  })
-
-  // 工具函数
   const toggleSidebar = async () => {
     isVisible.value = !isVisible.value
     if (isVisible.value) {
-      const aiSettingsStore = useAISettingsStore()
       if (!aiSettingsStore.hasModels && !aiSettingsStore.isLoading) {
         await aiSettingsStore.loadSettings()
       }
-      await refreshConversations()
     }
   }
 
@@ -63,68 +55,44 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     sidebarWidth.value = Math.max(300, Math.min(800, width))
   }
 
-  const createConversation = async (): Promise<void> => {
-    stopCurrentConversation()
-
-    // 进入临时新建状态，不触碰数据库
-    currentConversationId.value = NEW_SESSION_FLAG
-    messageList.value = []
+  const refreshSessions = async () => {
+    const path = currentWorkspacePath.value
+    if (!path) return
+    await workspaceStore.loadWorkspaceData(path)
   }
 
-  const loadConversation = async (conversationId: number): Promise<void> => {
-    isLoading.value = true
-    currentConversationId.value = conversationId
-    messageList.value = await agentApi.getMessages(conversationId)
-    isLoading.value = false
+  const switchSession = async (sessionId: number) => {
+    await workspaceStore.switchSession(sessionId)
   }
 
-  const switchToConversation = async (conversationId: number): Promise<void> => {
-    if (currentConversationId.value === conversationId) {
-      return
-    }
-
-    stopCurrentConversation()
-    messageList.value = []
-
-    // 如果是新建状态，直接切换不加载
-    if (conversationId === NEW_SESSION_FLAG) {
-      currentConversationId.value = NEW_SESSION_FLAG
-      return
-    }
-
-    await loadConversation(conversationId)
-  }
-
-  const deleteConversation = async (conversationId: number): Promise<void> => {
-    await agentApi.deleteConversation(conversationId)
-    conversations.value = conversations.value.filter(c => c.id !== conversationId)
-
-    if (currentConversationId.value === conversationId) {
-      currentConversationId.value = null
-      messageList.value = []
-    }
-  }
-
-  const refreshConversations = async (): Promise<void> => {
-    conversations.value = await agentApi.listConversations()
+  const createSession = async (title?: string) => {
+    await workspaceStore.createSession(title)
   }
 
   const handleAgentEvent = (event: TaskProgressPayload) => {
-    // 选择目标消息：优先最后一个处于 streaming 状态的助手消息
+    const messages = messageList.value
+    if (!messages.length) {
+      return
+    }
+
     const findTargetAssistantMessage = (): Message | null => {
-      for (let i = messageList.value.length - 1; i >= 0; i--) {
-        const m = messageList.value[i]
-        if (m.role === 'assistant' && (m.status === 'streaming' || !m.status)) {
-          return m
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i]
+        if (message.role === 'assistant' && (message.status === 'streaming' || !message.status)) {
+          return message
         }
       }
       return null
     }
 
     const currentMessage = findTargetAssistantMessage()
-    if (!currentMessage) return
+    if (!currentMessage) {
+      return
+    }
 
-    if (!currentMessage.steps) currentMessage.steps = []
+    if (!currentMessage.steps) {
+      currentMessage.steps = []
+    }
 
     const getTimestamp = (backendTimestamp: string | number): number => {
       if (typeof backendTimestamp === 'number') return backendTimestamp
@@ -136,24 +104,20 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       payload: { streamId: string; streamDone: boolean; iteration: number; timestamp: string },
       delta: string
     ) => {
-      // 允许空内容但streamDone=true的事件（结束标记）
       if (!delta && !payload.streamDone) return
 
       const timestamp = getTimestamp(payload.timestamp)
       const steps = currentMessage.steps!
 
-      // 必须同时匹配stepType和streamId，避免多个流混乱
       const matchingStep = steps.find(
         step => step.stepType === stepType && step.metadata?.streamId === payload.streamId
       )
 
       if (matchingStep) {
-        // 更新现有step
         if (delta) {
           matchingStep.content += delta
         }
         matchingStep.timestamp = timestamp
-        // 使用Object.assign保持metadata对象引用，确保Vue响应式
         if (!matchingStep.metadata) {
           matchingStep.metadata = {}
         }
@@ -166,7 +130,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           currentMessage.content = matchingStep.content
         }
       } else {
-        // 创建新step
         const newStep = {
           stepType,
           content: delta,
@@ -198,7 +161,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         )
         break
       }
-
       case 'Text': {
         upsertStreamStep(
           'text',
@@ -212,7 +174,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         )
         break
       }
-
       case 'ToolUse':
         currentMessage.steps.push({
           stepType: 'tool_use',
@@ -226,7 +187,6 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           },
         })
         break
-
       case 'ToolResult': {
         const lastStep = currentMessage.steps[currentMessage.steps.length - 1]
         if (lastStep && lastStep.stepType === 'tool_use') {
@@ -242,21 +202,15 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         }
         break
       }
-
       case 'TaskCompleted':
         currentMessage.status = 'complete'
         currentMessage.duration = Date.now() - currentMessage.createdAt.getTime()
-        isLoading.value = false
+        isSending.value = false
         break
-
-      case 'Finish':
-        break
-
       case 'TaskCancelled':
         currentMessage.status = 'error'
-        isLoading.value = false
+        isSending.value = false
         break
-
       case 'TaskError':
         currentMessage.steps.push({
           stepType: 'error',
@@ -268,78 +222,48 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           },
         })
         currentMessage.status = 'error'
-        isLoading.value = false
+        isSending.value = false
         break
     }
   }
 
-  const sendMessage = async (content: string): Promise<void> => {
-    // 如果处于新建状态或无会话，先创建真实会话
-    if (!currentConversationId.value || currentConversationId.value === NEW_SESSION_FLAG) {
-      isLoading.value = true
-      try {
-        const conversationId = await agentApi.createConversation()
-        const newConversation = await agentApi.getConversation(conversationId)
-        conversations.value.unshift(newConversation)
-        currentConversationId.value = newConversation.id
-        messageList.value = []
-      } catch (error) {
-        isLoading.value = false
-        throw new Error('无法创建会话: ' + (error instanceof Error ? error.message : String(error)))
-      }
-    }
-
-    isLoading.value = true
-    error.value = null
-
-    // 获取选中的模型ID
-    const selectedModelId = sessionStore.aiState?.selectedModelId
-
-    if (!selectedModelId) {
-      isLoading.value = false
-      throw new Error('没有选择模型，请先选择一个模型')
-    }
-
-    const stream = await agentApi.executeTask(content, currentConversationId.value, chatMode.value, selectedModelId)
-
-    if (!stream) throw new Error('无法创建任务流')
-
-    let messagesLoaded = false
+  const attachStreamHandlers = (stream: TaskProgressStream) => {
     let cancelSent = false
+
     stream.onProgress(async event => {
-      const taskId = getEventTaskId(event)
-      if (taskId && !currentTaskId.value) currentTaskId.value = taskId
+      // TaskCreated: 后端返回权威的 sessionId，用它加载消息
+      if (event.type === 'TaskCreated') {
+        currentTaskId.value = event.payload.taskId
+        await workspaceStore.fetchMessages(event.payload.sessionId)
+        return
+      }
+
+      // 取消逻辑
       if (!cancelSent && cancelRequested.value && currentTaskId.value) {
         await agentApi.cancelTask(currentTaskId.value)
         cancelSent = true
       }
 
-      if (!messagesLoaded && event.type === 'TaskStarted') {
-        const messages = await agentApi.getMessages(currentConversationId.value!)
-        messageList.value = messages
-        messagesLoaded = true
-        return
-      }
-
-      if (!messagesLoaded) return
+      // TaskStarted 不需要特殊处理，消息已在 TaskCreated 时加载
+      if (event.type === 'TaskStarted') return
 
       handleAgentEvent(event)
     })
 
-    stream.onError((error: Error) => {
-      console.error('Agent任务错误:', error)
+    stream.onError((streamError: Error) => {
+      console.error('Agent task error:', streamError)
       const currentMessage = messageList.value[messageList.value.length - 1]
       if (currentMessage && currentMessage.role === 'assistant') {
         currentMessage.status = 'error'
       }
-      isLoading.value = false
+      isSending.value = false
     })
 
     stream.onClose(() => {
       cancelFunction.value = null
       currentTaskId.value = null
       cancelRequested.value = false
-      isLoading.value = false
+      isSending.value = false
     })
 
     cancelFunction.value = () => {
@@ -348,19 +272,53 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         void agentApi.cancelTask(currentTaskId.value)
       }
       stream.close()
-      isLoading.value = false
+      isSending.value = false
     }
   }
 
-  const stopCurrentConversation = (): void => {
-    if (isLoading.value && cancelFunction.value) {
+  const sendMessage = async (content: string, images?: ImageAttachment[]): Promise<void> => {
+    if (!aiSettingsStore.hasModels && !aiSettingsStore.isLoading) {
+      await aiSettingsStore.loadSettings()
+    }
+
+    const selectedModelId = sessionStore.aiState?.selectedModelId || aiSettingsStore.chatModels[0]?.id
+    if (!selectedModelId) {
+      throw new Error('请先在设置中选择模型')
+    }
+
+    isSending.value = true
+    error.value = null
+
+    // 后端会自动处理 session：有则用，无则创建
+    const stream = await agentApi.executeTask({
+      workspacePath: currentWorkspacePath.value || '',
+      sessionId: currentSession.value?.id ?? 0,
+      userPrompt: content,
+      modelId: selectedModelId,
+      images: images?.map(img => ({
+        type: 'image' as const,
+        dataUrl: img.dataUrl,
+        mimeType: img.mimeType,
+      })),
+    })
+
+    if (!stream) {
+      isSending.value = false
+      throw new Error('无法创建任务流')
+    }
+
+    attachStreamHandlers(stream)
+  }
+
+  const stopCurrentTask = (): void => {
+    if (isSending.value && cancelFunction.value) {
       try {
         cancelFunction.value()
-      } catch (error) {
-        console.warn('停止对话时出现错误:', error)
+      } catch (e) {
+        console.warn('停止任务失败:', e)
       } finally {
         cancelFunction.value = null
-        isLoading.value = false
+        isSending.value = false
       }
     }
   }
@@ -369,38 +327,36 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     error.value = null
   }
 
-  // 会话状态持久化
-  const restoreFromSessionState = (): void => {
-    const aiState = sessionStore.aiState
-    if (aiState) {
-      isVisible.value = aiState.visible
-      sidebarWidth.value = aiState.width
-      chatMode.value = aiState.mode as 'chat' | 'agent'
-      currentConversationId.value = aiState.conversationId || null
-    }
-  }
+  // 当工作区路径变化时，加载对应的工作区数据
+  watch(currentWorkspacePath, async newPath => {
+    await workspaceStore.loadWorkspaceData(newPath)
+  })
 
+  // 保存 UI 状态（不包含 workspacePath）
   const saveToSessionState = (): void => {
-    // 过滤掉临时新建状态，不持久化
-    const conversationIdToSave =
-      currentConversationId.value === NEW_SESSION_FLAG ? undefined : currentConversationId.value || undefined
-
     sessionStore.updateAiState({
       visible: isVisible.value,
       width: sidebarWidth.value,
       mode: chatMode.value,
-      conversationId: conversationIdToSave,
+      selectedModelId: sessionStore.aiState?.selectedModelId,
     })
   }
 
-  // 防抖保存状态 - 避免拖拽等高频操作频繁调用后端
-  const debouncedSaveState = debounce(() => {
+  // 恢复 UI 状态
+  const restoreFromSessionState = (): void => {
+    const aiState = sessionStore.aiState
+    if (!aiState) return
+
+    isVisible.value = aiState.visible
+    sidebarWidth.value = aiState.width
+    chatMode.value = aiState.mode as ChatMode
+  }
+
+  watch([isVisible, sidebarWidth, chatMode], () => {
     if (isInitialized.value) {
       saveToSessionState()
     }
-  }, 500)
-
-  watch([isVisible, sidebarWidth, chatMode, currentConversationId], debouncedSaveState)
+  })
 
   const initialize = async (): Promise<void> => {
     if (isInitialized.value) return
@@ -408,44 +364,34 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     await sessionStore.initialize()
     restoreFromSessionState()
 
-    if (currentConversationId.value) {
-      await loadConversation(currentConversationId.value)
-    }
+    // 加载当前工作区数据（有终端用终端 cwd，无终端用未分组）
+    await workspaceStore.loadWorkspaceData(currentWorkspacePath.value)
 
-    await refreshConversations()
     isInitialized.value = true
   }
 
   return {
-    // 状态
     isVisible,
     sidebarWidth,
-    currentConversationId,
-    currentConversation,
-    messageList,
-    isLoading,
-    error,
-    conversations,
-    cancelFunction,
     chatMode,
     isInitialized,
-
-    // 计算属性
+    isSending,
+    error,
     canSendMessage,
-
-    // 方法
+    messageList,
+    sessions,
+    currentSession,
+    currentWorkspacePath,
     toggleSidebar,
     setSidebarWidth,
-    createConversation,
-    loadConversation,
-    switchToConversation,
-    deleteConversation,
-    refreshConversations,
+    refreshSessions,
+    switchSession,
+    createSession,
     sendMessage,
-    stopCurrentConversation,
+    stopCurrentTask,
     clearError,
     initialize,
-    restoreFromSessionState,
     saveToSessionState,
+    restoreFromSessionState,
   }
 })

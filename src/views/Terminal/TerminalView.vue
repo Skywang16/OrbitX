@@ -83,7 +83,7 @@
       <ContentRenderer />
 
       <div
-        v-if="aiChatStore.isVisible"
+        v-show="aiChatStore.isVisible"
         class="sidebar-wrapper"
         :style="{ '--sidebar-width': `${aiChatStore.sidebarWidth}px` }"
       >

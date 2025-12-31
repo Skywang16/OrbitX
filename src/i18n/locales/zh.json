@@ -43,7 +43,10 @@
     "new_session": "新建会话",
     "new_session_placeholder": "新建会话",
     "session_select": "选择会话",
-    "input_placeholder": "输入消息..."
+    "input_placeholder": "输入消息...",
+    "upload_image": "上传图片",
+    "max_images_reached": "最多只能上传5张图片",
+    "model_not_support_images": "当前模型不支持图片输入"
   },
   "search": {
     "placeholder": "搜索",
@@ -137,13 +140,11 @@
     "delete_confirm_text": "确认",
     "cancel": "取消",
     "add_new_model": "添加新模型",
-    "add_model_description": "配置AI模型和向量模型连接信息",
+    "add_model_description": "配置AI模型连接信息",
     "no_models": "暂无模型配置",
     "all_models": "所有模型",
     "chat": "聊天",
     "add_chat_model": "添加Chat模型",
-    "add_embedding_model": "添加向量模型",
-    "embedding": "向量",
     "context_window": "上下文窗口 (tokens)",
     "context_window_description": "模型能处理的最大上下文长度",
     "max_output_tokens": "最大输出 (tokens)",
@@ -151,7 +152,6 @@
     "advanced_options": "高级选项",
     "feature_support": "功能支持",
     "supports_images": "支持图片输入",
-    "supports_prompt_cache": "支持提示词缓存",
     "validation": {
       "api_key_required": "API Key 是必填项",
       "preset_required": "请选择一个预设提供商",
@@ -224,6 +224,17 @@
     "generating": "正在生成...",
     "duration_info": "耗时: {duration}"
   },
+  "checkpoint": {
+    "rollback": "回滚",
+    "rollback_confirm": "确定要回滚到此检查点吗？这将恢复文件到该时刻的状态。",
+    "rollback_success": "成功恢复 {count} 个文件",
+    "rollback_partial": "恢复了 {restored} 个文件，{failed} 个失败",
+    "rollback_failed": "回滚失败",
+    "confirm_revert": "确认回滚",
+    "revert_changes_desc": "回滚将恢复以下文件的修改：",
+    "loading_files": "加载文件列表...",
+    "no_files_changed": "没有文件变更"
+  },
   "tool": {
     "data_error": "数据错误"
   },
@@ -282,6 +293,7 @@
     "index_button_disabled_in_settings": "在设置页面时不可用",
     "index_button_select_non_home": "请选择非初始目录后再使用",
     "send_button_disabled_in_settings": "在设置页面时不可用",
+    "upload_button_disabled_in_settings": "在设置页面时不可用",
     "title": "代码库索引",
     "subtitle": "配置代码库索引设置以启用项目的语义搜索。",
     "current_workspace": "当前工作区",
@@ -290,7 +302,8 @@
     "build_index_tooltip_enabled": "点击构建索引",
     "refresh": "刷新",
     "delete": "删除",
-    "cancel_build": "取消索引"
+    "cancel_build": "取消索引",
+    "embedding_model": "向量模型"
   },
   "workspace": {
     "parent_directory": "上级目录",
@@ -308,7 +321,6 @@
   "embedding_model": {
     "add_title": "添加向量模型",
     "edit_title": "编辑向量模型",
-    "presets": "快速预设",
     "api_url": "API URL",
     "api_key": "API Key",
     "api_key_placeholder": "输入您的 API Key",

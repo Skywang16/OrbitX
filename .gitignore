@@ -42,3 +42,4 @@ docs/
 *.oxi
 AGENTS.md
 WARP.md
+.ace-tool/

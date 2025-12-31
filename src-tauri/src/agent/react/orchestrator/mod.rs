@@ -14,11 +14,11 @@ use std::sync::Arc;
 use chrono::Utc;
 use serde_json::Value;
 use tokio_stream::StreamExt;
-use tracing::{warn};
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::agent::config::CompactionConfig;
-use crate::agent::context::ConversationSummarizer;
+use crate::agent::context::SessionSummarizer;
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::iteration_outcome::IterationOutcome;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
@@ -70,11 +70,10 @@ impl ReactOrchestrator {
     where
         H: crate::agent::core::executor::ReactHandler,
     {
-
         let mut iteration_snapshots: Vec<IterationSnapshot> = Vec::new();
 
         while !context.should_stop().await {
-            context.check_aborted(false).await?;
+            context.check_aborted_async(false).await?;
 
             // ===== Phase 1: 迭代初始化 =====
             let iteration = context.increment_iteration().await?;
@@ -92,17 +91,12 @@ impl ReactOrchestrator {
 
             // 性能优化：使用批量读取，一次锁获取所有数据
             let (mut working_messages, mut system_prompt) = context
-                .batch_read_state(|exec| {
-                    (
-                        exec.messages.iter().cloned().collect::<Vec<_>>(),
-                        exec.system_prompt.clone(),
-                    )
-                })
+                .batch_read_state(|exec| (exec.messages.clone(), exec.system_prompt.clone()))
                 .await;
 
             // 摘要（如果需要）
-            let summarizer = ConversationSummarizer::new(
-                context.conversation_id,
+            let summarizer = SessionSummarizer::new(
+                context.session_id,
                 Arc::clone(&self.agent_persistence),
                 Arc::clone(&self.database),
             );
@@ -169,13 +163,7 @@ impl ReactOrchestrator {
                 .map_err(|e| {
                     TaskExecutorError::InternalError(format!("Compaction failed: {}", e))
                 })?;
-            if let CompactionResult::Compacted {
-                
-                
-                ..
-            } = &compaction_result
-            {
-            }
+            if let CompactionResult::Compacted { .. } = &compaction_result {}
             let final_messages = compaction_result.messages();
 
             let llm_request = handler
@@ -189,7 +177,7 @@ impl ReactOrchestrator {
                 .await?;
 
             let llm_service = crate::llm::service::LLMService::new(Arc::clone(&self.database));
-            let cancel_token = context.register_step_token();
+            let cancel_token = context.create_stream_cancel_token();
             let mut stream = llm_service
                 .call_stream(llm_request, cancel_token)
                 .await
@@ -208,7 +196,10 @@ impl ReactOrchestrator {
 
             // ===== Phase 3: 处理 Anthropic StreamEvent =====
             while let Some(item) = stream.next().await {
-                context.check_aborted(true).await?;
+                if context.is_aborted() {
+                    break;
+                }
+                context.check_aborted_async(true).await?;
 
                 match item {
                     Ok(StreamEvent::MessageStart { .. }) => {}
@@ -364,11 +355,9 @@ impl ReactOrchestrator {
                 IterationOutcome::Empty
             };
 
-
             // ===== Phase 6: 根据结果执行动作 =====
             match outcome {
                 IterationOutcome::ContinueWithTools { ref tool_calls } => {
-
                     let deduplicated_calls =
                         crate::agent::core::utils::deduplicate_tool_uses(tool_calls);
                     if deduplicated_calls.len() < tool_calls.len() {
@@ -440,8 +429,10 @@ impl ReactOrchestrator {
                     continue;
                 }
 
-                IterationOutcome::Complete { thinking: _, output } => {
-
+                IterationOutcome::Complete {
+                    thinking: _,
+                    output,
+                } => {
                     context
                         .states
                         .react_runtime

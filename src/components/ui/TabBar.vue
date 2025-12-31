@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n'
   import { useTerminalStore } from '@/stores/Terminal'
   import { useTabManagerStore } from '@/stores/TabManager'
-  import { TabType, type AnyTabItem } from '@/types'
+  import { TabType, type AnyTabItem, type TerminalTabItem } from '@/types'
   import { showPopoverAt } from '@/ui/composables/popover-api'
   import { getPathBasename } from '@/utils/path'
 
@@ -39,10 +39,18 @@
     return terminal?.cwd ?? ''
   }
 
+  // 获取终端 shell 名称
+  const getTerminalShell = (tab: AnyTabItem): string => {
+    if (tab.type === TabType.TERMINAL) {
+      return (tab as TerminalTabItem).data.shell
+    }
+    return ''
+  }
+
   const getTabTooltip = (tab: AnyTabItem): string => {
     if (tab.type === TabType.TERMINAL) {
       const cwd = getTerminalCwd(tab.id)
-      return `${tab.data.shell} • ${cwd}`
+      return `${getTerminalShell(tab)} • ${cwd}`
     }
     return t('settings.title')
   }
@@ -207,7 +215,7 @@
         <div class="tab-content" :title="getTabTooltip(tab)">
           <template v-if="tab.type === TabType.TERMINAL">
             <div class="terminal-info">
-              <span class="shell-badge">{{ tab.data.shell }}</span>
+              <span class="shell-badge">{{ getTerminalShell(tab) }}</span>
               <span class="path-info">{{ getPathBasename(getTerminalCwd(tab.id)) }}</span>
             </div>
           </template>

@@ -43,7 +43,10 @@
     "new_session": "New Session",
     "new_session_placeholder": "New Session",
     "session_select": "Select Session",
-    "input_placeholder": "Type a message..."
+    "input_placeholder": "Type a message...",
+    "upload_image": "Upload image",
+    "max_images_reached": "Maximum 5 images allowed",
+    "model_not_support_images": "Current model does not support image input"
   },
   "search": {
     "placeholder": "Search",
@@ -137,13 +140,11 @@
     "delete_confirm_text": "Confirm Delete",
     "cancel": "Cancel",
     "add_new_model": "Add New Model",
-    "add_model_description": "Configure AI model connection information",
+    "add_model_description": "Configure AI model connection",
     "no_models": "No Model Configuration",
     "all_models": "All Models",
     "chat": "Chat",
     "add_chat_model": "Add Chat Model",
-    "add_embedding_model": "Add Embedding Model",
-    "embedding": "Embedding",
     "context_window": "Context Window (tokens)",
     "context_window_description": "Maximum context length the model can handle",
     "max_output_tokens": "Max Output (tokens)",
@@ -151,7 +152,6 @@
     "advanced_options": "Advanced Options",
     "feature_support": "Feature Support",
     "supports_images": "Supports Image Input",
-    "supports_prompt_cache": "Supports Prompt Cache",
     "validation": {
       "api_key_required": "API Key is required",
       "preset_required": "Please select a preset provider",
@@ -224,6 +224,17 @@
     "generating": "Generating...",
     "duration_info": "Duration: {duration}"
   },
+  "checkpoint": {
+    "rollback": "Rollback",
+    "rollback_confirm": "Are you sure you want to rollback to this checkpoint? This will restore files to their state at that moment.",
+    "rollback_success": "Successfully restored {count} files",
+    "rollback_partial": "Restored {restored} files, {failed} failed",
+    "rollback_failed": "Rollback failed",
+    "confirm_revert": "Confirm Revert",
+    "revert_changes_desc": "Reverting will apply these changes:",
+    "loading_files": "Loading files...",
+    "no_files_changed": "No files changed"
+  },
   "tool": {
     "data_error": "Data Error"
   },
@@ -282,6 +293,7 @@
     "index_button_disabled_in_settings": "Not available on the Settings page",
     "index_button_select_non_home": "Please select a non-initial directory first",
     "send_button_disabled_in_settings": "Not available on the Settings page",
+    "upload_button_disabled_in_settings": "Not available on the Settings page",
     "title": "Code Repository Index",
     "subtitle": "Configure code repository index settings to enable semantic search for your project.",
     "current_workspace": "Current Workspace",
@@ -290,7 +302,8 @@
     "build_index_tooltip_enabled": "Click to build index",
     "refresh": "Refresh",
     "delete": "Delete",
-    "cancel_build": "Cancel Build"
+    "cancel_build": "Cancel Build",
+    "embedding_model": "Embedding Model"
   },
   "workspace": {
     "parent_directory": "Parent Directory",
@@ -308,7 +321,6 @@
   "embedding_model": {
     "add_title": "Add Embedding Model",
     "edit_title": "Edit Embedding Model",
-    "presets": "Quick Presets",
     "api_url": "API URL",
     "api_key": "API Key",
     "api_key_placeholder": "Enter your API Key",

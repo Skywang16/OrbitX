@@ -2,11 +2,12 @@
  * 任务生命周期管理
  */
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::ipc::Channel;
 use tokio::task;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
@@ -17,6 +18,8 @@ use crate::agent::events::{
     TaskErrorPayload, TaskPausedPayload, TaskProgressPayload, TaskResumedPayload,
     TaskStartedPayload,
 };
+use crate::agent::persistence::FileRecordState;
+use crate::workspace::{WorkspaceService, UNGROUPED_WORKSPACE_PATH};
 
 impl TaskExecutor {
     pub async fn execute_task(
@@ -24,39 +27,63 @@ impl TaskExecutor {
         params: ExecuteTaskParams,
         progress_channel: Channel<TaskProgressPayload>,
     ) -> TaskExecutorResult<Arc<TaskContext>> {
+        // 规范化参数：空工作区或 session_id=0 时使用未分组会话
+        let params = self.normalize_task_params(params).await?;
 
         let ctx = self
             .build_or_restore_context(&params, Some(progress_channel))
             .await?;
 
+        // 在任务执行前自动创建 checkpoint（如果已配置 checkpoint 服务）
+        if let Some(checkpoint_service) = self.checkpoint_service() {
+            self.create_pre_execution_checkpoint(
+                &checkpoint_service,
+                ctx.session_id,
+                &params.user_prompt,
+                &ctx.cwd,
+            )
+            .await;
+        }
+
         ctx.send_progress(TaskProgressPayload::TaskCreated(TaskCreatedPayload {
             task_id: ctx.task_id.to_string(),
-            conversation_id: ctx.conversation_id,
+            session_id: ctx.session_id,
+            workspace_path: ctx.cwd.to_string(),
             user_prompt: params.user_prompt.clone(),
         }))
         .await?;
 
-        ctx.initialize_ui_track(&params.user_prompt).await?;
+        ctx.initialize_ui_track(&params.user_prompt, params.images.as_deref())
+            .await?;
 
         let (system_prompt, _) = self
             .prompt_orchestrator()
             .build_task_prompts(
-                params.conversation_id,
+                ctx.session_id,
                 ctx.task_id.to_string(),
                 &params.user_prompt,
-                Some(&ctx.cwd),
+                &ctx.cwd,
                 &ctx.tool_registry(),
             )
             .await?;
 
         ctx.set_system_prompt(system_prompt).await?;
 
-        if params.has_context {
-            self.restore_conversation_history(&ctx, params.conversation_id)
-                .await?;
+        // 自动检测会话是否有历史执行记录，有则恢复上下文
+        let has_history = self
+            .agent_persistence()
+            .agent_executions()
+            .list_recent_by_session(ctx.session_id, 2)
+            .await
+            .map(|execs| execs.len() > 1) // 当前执行 + 至少一个历史执行
+            .unwrap_or(false);
+
+        if has_history {
+            self.restore_session_history(&ctx, ctx.session_id).await?;
         }
 
-        ctx.add_user_message(params.user_prompt).await;
+        ctx.add_user_message_with_images(params.user_prompt, params.images.as_deref())
+            .await;
         ctx.set_status(AgentTaskStatus::Running).await?;
 
         ctx.send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
@@ -195,81 +222,39 @@ impl TaskExecutor {
         task_id: &str,
         _reason: Option<String>,
     ) -> TaskExecutorResult<()> {
-        // 尝试从 active_tasks 获取任务
-        let ctx_opt = self
+        let ctx = self
             .active_tasks()
             .get(task_id)
-            .map(|entry| Arc::clone(entry.value()));
+            .map(|entry| Arc::clone(entry.value()))
+            .ok_or_else(|| TaskExecutorError::TaskNotFound(task_id.to_string()))?;
 
-        if let Some(ctx) = ctx_opt {
-            // 任务存在，执行正常的取消流程
+        ctx.abort();
+        ctx.set_status(AgentTaskStatus::Cancelled).await?;
 
-            // 中止执行
-            ctx.abort();
-            ctx.set_status(AgentTaskStatus::Cancelled).await?;
+        ctx.send_progress(TaskProgressPayload::TaskCancelled(TaskCancelledPayload {
+            task_id: task_id.to_string(),
+            reason: "user_requested".to_string(),
+            timestamp: chrono::Utc::now(),
+        }))
+        .await?;
 
-            ctx.send_progress(TaskProgressPayload::TaskCancelled(TaskCancelledPayload {
-                task_id: task_id.to_string(),
-                reason: "user_requested".to_string(),
-                timestamp: chrono::Utc::now(),
-            }))
-            .await?;
-
-            // 从active_tasks移除
-            self.active_tasks().remove(task_id);
-
-        } else {
-            // 任务不存在，可能还没开始或已经完成
-            // 尝试从 conversation_contexts 中查找
-            let mut found_in_conversation = false;
-            for entry in self.conversation_contexts().iter() {
-                let ctx = entry.value();
-                if ctx.task_id.as_ref() == task_id {
-                    ctx.abort();
-                    ctx.set_status(AgentTaskStatus::Cancelled).await?;
-                    found_in_conversation = true;
-                    break;
-                }
-            }
-
-            if !found_in_conversation {
-                warn!(
-                    "Task {} not found in active_tasks or conversation_contexts, it may have already completed or been cancelled",
-                    task_id
-                );
-            }
-        }
+        self.active_tasks().remove(task_id);
 
         Ok(())
     }
 
-    pub async fn create_conversation(
+    pub async fn trigger_session_summary(
         &self,
-        title: Option<String>,
-        workspace_path: Option<String>,
-    ) -> TaskExecutorResult<i64> {
-        let persistence = self.agent_persistence();
-        let conversation = persistence
-            .conversations()
-            .create(title.as_deref(), workspace_path.as_deref())
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        Ok(conversation.id)
-    }
-
-    pub async fn trigger_conversation_summary(
-        &self,
-        conversation_id: i64,
+        session_id: i64,
         model_override: Option<String>,
     ) -> TaskExecutorResult<Option<crate::agent::context::SummaryResult>> {
-        use crate::agent::context::ConversationSummarizer;
+        use crate::agent::context::SessionSummarizer;
         use crate::llm::anthropic_types::{MessageContent, MessageParam, MessageRole};
 
         let persistence = self.agent_persistence();
         let mut executions = persistence
             .agent_executions()
-            .list_recent_by_conversation(conversation_id, 1)
+            .list_recent_by_session(session_id, 1)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
@@ -300,7 +285,7 @@ impl TaskExecutor {
             .collect();
 
         let summarizer =
-            ConversationSummarizer::new(conversation_id, persistence.clone(), self.database());
+            SessionSummarizer::new(session_id, persistence.clone(), self.database());
 
         let model_id = model_override.unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string());
 
@@ -315,38 +300,12 @@ impl TaskExecutor {
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
-        persistence
-            .conversations()
-            .touch(conversation_id)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
         Ok(Some(result))
     }
-
-    pub async fn continue_conversation(
-        &self,
-        conversation_id: i64,
-        user_prompt: String,
-        model_id: String,
-        progress_channel: Channel<TaskProgressPayload>,
-    ) -> TaskExecutorResult<Arc<TaskContext>> {
-        let params = ExecuteTaskParams {
-            conversation_id,
-            user_prompt,
-            chat_mode: "agent".to_string(),
-            model_id,
-            cwd: None,
-            has_context: true,
-        };
-
-        self.execute_task(params, progress_channel).await
-    }
-
-    async fn restore_conversation_history(
+    async fn restore_session_history(
         &self,
         ctx: &TaskContext,
-        conversation_id: i64,
+        session_id: i64,
     ) -> TaskExecutorResult<()> {
         use crate::agent::persistence::MessageRole;
         use crate::llm::anthropic_types::{
@@ -356,7 +315,7 @@ impl TaskExecutor {
         let executions = self
             .agent_persistence()
             .agent_executions()
-            .list_recent_by_conversation(conversation_id, 10)
+            .list_recent_by_session(session_id, 10)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
@@ -402,5 +361,130 @@ impl TaskExecutor {
         }
 
         Ok(())
+    }
+
+    /// 在任务执行前创建 checkpoint
+    ///
+    /// 获取会话中所有被 Agent 追踪的活跃文件，并创建快照
+    async fn create_pre_execution_checkpoint(
+        &self,
+        checkpoint_service: &crate::checkpoint::CheckpointService,
+        session_id: i64,
+        user_message: &str,
+        workspace_path: &str,
+    ) {
+        // 获取会话中所有活跃的文件（Agent 读取或编辑过的文件）
+        let files = match self
+            .get_tracked_files_for_checkpoint(workspace_path)
+            .await
+        {
+            Ok(files) => files,
+            Err(e) => {
+                warn!("Failed to get tracked files for checkpoint: {}", e);
+                return;
+            }
+        };
+
+        // 如果没有被追踪的文件，跳过 checkpoint 创建
+        if files.is_empty() {
+            info!(
+                "No tracked files for session {}, skipping checkpoint",
+                session_id
+            );
+            return;
+        }
+
+        let workspace = PathBuf::from(workspace_path);
+
+        match checkpoint_service
+            .create_checkpoint(session_id, user_message, files.clone(), &workspace)
+            .await
+        {
+            Ok(checkpoint) => {
+                info!(
+                    "Created checkpoint {} for session {} with {} files",
+                    checkpoint.id,
+                    session_id,
+                    files.len()
+                );
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to create checkpoint for session {}: {}",
+                    session_id, e
+                );
+            }
+        }
+    }
+
+    /// 获取会话中被追踪的文件列表（用于 checkpoint）
+    ///
+    /// 优先返回被 Agent 编辑过的文件，如果没有则返回所有活跃文件
+    async fn get_tracked_files_for_checkpoint(
+        &self,
+        workspace_path: &str,
+    ) -> TaskExecutorResult<Vec<PathBuf>> {
+        let persistence = self.agent_persistence();
+        let file_context = persistence.file_context();
+
+        // 首先尝试获取被 Agent 编辑过的文件
+        let edited_files = file_context
+            .list_agent_edited_files(workspace_path)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        // 如果有被编辑的文件，只对这些文件创建快照
+        if !edited_files.is_empty() {
+            let files: Vec<PathBuf> = edited_files
+                .into_iter()
+                .map(|entry| {
+                    Self::workspace_relative_to_absolute(workspace_path, &entry.relative_path)
+                })
+                .collect();
+            return Ok(files);
+        }
+
+        // 否则获取所有活跃文件（Agent 读取过的文件）
+        let active_files = file_context
+            .list_by_state(workspace_path, FileRecordState::Active)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        let files: Vec<PathBuf> = active_files
+            .into_iter()
+            .map(|entry| {
+                Self::workspace_relative_to_absolute(workspace_path, &entry.relative_path)
+            })
+            .collect();
+
+        Ok(files)
+    }
+
+    /// 规范化任务参数：空工作区时自动使用未分组会话
+    async fn normalize_task_params(
+        &self,
+        mut params: ExecuteTaskParams,
+    ) -> TaskExecutorResult<ExecuteTaskParams> {
+        let needs_ungrouped =
+            params.workspace_path.is_empty() || params.workspace_path.trim().is_empty();
+
+        if needs_ungrouped || params.session_id <= 0 {
+            let workspace_path = if needs_ungrouped {
+                UNGROUPED_WORKSPACE_PATH.to_string()
+            } else {
+                params.workspace_path.clone()
+            };
+
+            let service = WorkspaceService::new(self.database());
+            let session = service
+                .ensure_active_session(&workspace_path)
+                .await
+                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+            params.workspace_path = workspace_path;
+            params.session_id = session.id;
+        }
+
+        Ok(params)
     }
 }

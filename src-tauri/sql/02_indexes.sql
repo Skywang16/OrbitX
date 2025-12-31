@@ -14,6 +14,3 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_operation ON audit_logs(operation);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_table_name ON audit_logs(table_name);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_success ON audit_logs(success);
 
--- 最近工作区索引
-CREATE INDEX IF NOT EXISTS idx_recent_workspaces_last_accessed ON recent_workspaces(last_accessed_at DESC);
-

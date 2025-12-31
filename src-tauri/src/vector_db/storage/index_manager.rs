@@ -78,9 +78,10 @@ impl IndexManager {
                 .collect();
             drop(guard);
             if !existing_ids.is_empty() {
+                // 删除该文件的向量文件
+                let _ = self.store.delete_file_vectors(file_path);
                 let mut manifest = self.manifest.write();
                 for chunk_id in existing_ids {
-                    let _ = self.store.delete_vectors(chunk_id);
                     manifest.remove_chunk(&chunk_id);
                 }
                 manifest.remove_file(file_path);
@@ -115,6 +116,7 @@ impl IndexManager {
         }
 
         // 5. 写入索引与清单
+        let mut file_vectors: Vec<(crate::vector_db::core::ChunkId, Vec<f32>)> = Vec::new();
         {
             let mut manifest = self.manifest.write();
             manifest.add_file(file_path.to_path_buf(), file_hash);
@@ -126,14 +128,17 @@ impl IndexManager {
                     chunk_type: chunk.chunk_type.clone(),
                     hash: chunk_hash,
                 };
-                // persist vector
-                self.store.save_vectors(chunk.id, &vecf)?;
+                // 收集向量数据
+                file_vectors.push((chunk.id, vecf.clone()));
                 // update in-memory index
                 vector_index.add(chunk.id, vecf, metadata.clone())?;
                 // add to manifest
                 manifest.add_chunk(chunk.id, metadata);
             }
         }
+
+        // 一次性保存该文件的所有向量
+        self.store.save_file_vectors(file_path, &file_vectors)?;
 
         // 6. 文件元数据保存
         let file_meta = crate::vector_db::core::FileMetadata::new(
@@ -199,6 +204,9 @@ impl IndexManager {
     }
 
     pub fn remove_file(&self, file_path: &Path) -> Result<()> {
+        // 删除该文件的向量文件
+        let _ = self.store.delete_file_vectors(file_path);
+
         let mut manifest = self.manifest.write();
         let chunk_ids: Vec<_> = manifest
             .get_file_chunks(file_path)
@@ -206,10 +214,10 @@ impl IndexManager {
             .map(|(id, _)| id)
             .collect();
         for id in chunk_ids {
-            let _ = self.store.delete_vectors(id);
             manifest.remove_chunk(&id);
         }
         manifest.remove_file(file_path);
+        drop(manifest);
         self.save_manifest()?;
         Ok(())
     }

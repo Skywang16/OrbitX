@@ -43,38 +43,38 @@ export interface WindowState {
 export type TabId = number
 
 /**
- * Terminal tab 数据（持久化到 session）
+ * Terminal tab 持久化数据（含 cwd）
  */
-export interface TerminalTabData {
+export interface PersistedTerminalTabData {
   shell: string
   cwd: string
 }
 
 /**
- * Terminal tab 状态
+ * Terminal tab 状态（持久化）
  */
 export interface TerminalTabState {
   type: 'terminal'
-  id: number // 直接使用 paneId，无需字符串包装
-  isActive: boolean // 是否为活跃 tab
-  data: TerminalTabData
+  id: number
+  isActive: boolean
+  data: PersistedTerminalTabData
 }
 
 /**
- * Settings tab 数据
+ * Settings tab 持久化数据
  */
-export interface SettingsTabData {
+export interface PersistedSettingsTabData {
   lastSection?: string
 }
 
 /**
- * Settings tab 状态
+ * Settings tab 状态（持久化）
  */
 export interface SettingsTabState {
   type: 'settings'
-  id: number // 使用 number，和 Terminal 一致
-  isActive: boolean // 是否为活跃 tab
-  data: SettingsTabData
+  id: number
+  isActive: boolean
+  data: PersistedSettingsTabData
 }
 
 /**
@@ -109,7 +109,6 @@ export interface AiState {
   visible: boolean
   width: number
   mode: 'chat' | 'agent'
-  conversationId?: number
   selectedModelId?: string | null
 }
 

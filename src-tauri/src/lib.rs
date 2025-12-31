@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod ai;
+pub mod checkpoint;
 pub mod commands;
 pub mod completion;
 pub mod config;
@@ -7,6 +8,7 @@ pub mod dock;
 pub mod events;
 pub mod filesystem;
 pub mod llm;
+pub mod menu;
 pub mod mux;
 pub mod node;
 pub mod setup;
@@ -14,9 +16,9 @@ pub mod shell;
 pub mod storage;
 pub mod terminal;
 pub mod utils;
+pub mod vector_db;
 pub mod window;
 pub mod workspace;
-pub mod vector_db;
 
 use setup::{
     ensure_main_window_visible, handle_startup_args, init_logging, init_plugin,
@@ -78,6 +80,24 @@ pub fn run() {
                 eprintln!("应用程序初始化失败: {}", e);
                 std::process::exit(1);
             }
+
+            // 创建并设置应用菜单
+            match menu::create_menu(app.handle()) {
+                Ok(menu) => {
+                    if let Err(e) = app.set_menu(menu) {
+                        eprintln!("设置菜单失败: {}", e);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("创建菜单失败: {}", e);
+                }
+            }
+
+            // 注册菜单事件处理器
+            let app_handle = app.handle().clone();
+            app.on_menu_event(move |_app, event| {
+                menu::handle_menu_event(&app_handle, event.id().as_ref());
+            });
 
             setup_app_events(app);
             setup_deep_links(app);

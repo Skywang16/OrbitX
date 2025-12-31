@@ -56,6 +56,10 @@ export class VectorDbApi {
     await invoke('remove_file_index', { path })
   }
 
+  deleteWorkspaceIndex = async (path: string): Promise<void> => {
+    await invoke('delete_workspace_index', { path })
+  }
+
   getBuildProgress = async (params: { path: string }): Promise<VectorBuildProgress> => {
     const p = await invoke<{
       current_file?: string

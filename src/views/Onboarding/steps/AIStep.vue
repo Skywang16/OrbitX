@@ -166,10 +166,6 @@
                         <input type="checkbox" v-model="formData.options.supportsImages" class="form-checkbox" />
                         <span>{{ t('ai_model.supports_images') }}</span>
                       </label>
-                      <label class="checkbox-label">
-                        <input type="checkbox" v-model="formData.options.supportsPromptCache" class="form-checkbox" />
-                        <span>{{ t('ai_model.supports_prompt_cache') }}</span>
-                      </label>
                     </div>
                   </div>
                 </div>
@@ -220,7 +216,6 @@
       temperature: 0.7,
       timeout: 300000,
       supportsImages: false,
-      supportsPromptCache: false,
       contextWindow: 128000,
       maxTokens: -1,
     },
@@ -334,7 +329,6 @@
         temperature: 0.7,
         timeout: 300000,
         supportsImages: false,
-        supportsPromptCache: false,
         contextWindow: 128000,
         maxTokens: -1,
       },

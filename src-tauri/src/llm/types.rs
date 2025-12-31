@@ -8,8 +8,6 @@ pub struct LLMProviderConfig {
     pub api_key: String,
     pub api_url: Option<String>,
     pub options: Option<HashMap<String, serde_json::Value>>,
-    #[serde(default)]
-    pub supports_prompt_cache: bool,
 }
 
 /// Embedding 请求参数

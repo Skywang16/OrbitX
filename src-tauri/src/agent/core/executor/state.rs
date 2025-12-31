@@ -2,6 +2,7 @@
  * 任务状态查询和管理
  */
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::agent::core::context::TaskContext;
@@ -32,7 +33,7 @@ impl TaskExecutor {
 
         Ok(TaskSummary {
             task_id: task_id.to_string(),
-            conversation_id: ctx.conversation_id,
+            session_id: ctx.session_id,
             status: format!("{:?}", status).to_lowercase(),
             current_iteration: current_iteration as i32,
             error_count: error_count as i32,
@@ -55,39 +56,48 @@ impl TaskExecutor {
         summaries
     }
 
-    /// 获取conversation的context
-    pub async fn get_conversation_context(&self, conversation_id: i64) -> Option<Arc<TaskContext>> {
-        self.conversation_contexts()
-            .get(&conversation_id)
-            .map(|entry| Arc::clone(entry.value()))
+    /// 获取 session 的 context（从活跃任务中查找）
+    pub async fn get_session_context(&self, session_id: i64) -> Option<Arc<TaskContext>> {
+        // 遍历活跃任务查找匹配的 session_id
+        for entry in self.active_tasks().iter() {
+            if entry.value().session_id == session_id {
+                return Some(Arc::clone(entry.value()));
+            }
+        }
+        None
     }
 
     /// 获取文件上下文状态
     pub async fn get_file_context_status(
         &self,
-        conversation_id: i64,
+        session_id: i64,
     ) -> TaskExecutorResult<FileContextStatus> {
         let ctx = self
-            .get_conversation_context(conversation_id)
+            .get_session_context(session_id)
             .await
             .ok_or_else(|| {
                 TaskExecutorError::InternalError(format!(
-                    "No context found for conversation {}",
-                    conversation_id
+                    "No active context found for session {}",
+                    session_id
                 ))
             })?;
 
+        let workspace_path = ctx.cwd.to_string();
         let files: Vec<String> = ctx
             .file_tracker()
             .get_active_files()
             .await
             .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?
             .into_iter()
-            .map(|entry| entry.file_path)
+            .map(|entry| {
+                let absolute =
+                    Self::workspace_relative_to_absolute(&workspace_path, &entry.relative_path);
+                absolute.to_string_lossy().replace('\\', "/")
+            })
             .collect();
 
         Ok(FileContextStatus {
-            conversation_id,
+            workspace_path,
             file_count: files.len(),
             files,
         })
@@ -138,21 +148,20 @@ impl TaskExecutor {
     pub fn get_stats(&self) -> TaskExecutorStats {
         TaskExecutorStats {
             active_tasks: self.active_tasks().len(),
-            conversation_contexts: self.conversation_contexts().len(),
         }
     }
 
     /// 列出任务
     pub async fn list_tasks(
         &self,
-        conversation_id: Option<i64>,
+        session_id: Option<i64>,
         status_filter: Option<String>,
     ) -> TaskExecutorResult<Vec<TaskSummary>> {
         let persistence = self.agent_persistence();
-        let executions = if let Some(conv_id) = conversation_id {
+        let executions = if let Some(session_id) = session_id {
             persistence
                 .agent_executions()
-                .list_recent_by_conversation(conv_id, 50)
+                .list_recent_by_session(session_id, 50)
                 .await
                 .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?
         } else {
@@ -174,7 +183,7 @@ impl TaskExecutor {
 
             summaries.push(TaskSummary {
                 task_id: execution.execution_id,
-                conversation_id: execution.conversation_id,
+                session_id: execution.session_id,
                 status: status.as_str().to_string(),
                 current_iteration: execution.current_iteration as i32,
                 error_count: execution.error_count as i32,
@@ -185,11 +194,18 @@ impl TaskExecutor {
 
         Ok(summaries)
     }
+
+    pub(crate) fn workspace_relative_to_absolute(workspace_path: &str, stored_path: &str) -> PathBuf {
+        let stored = Path::new(stored_path);
+        if stored.is_absolute() {
+            return stored.to_path_buf();
+        }
+        PathBuf::from(workspace_path).join(stored)
+    }
 }
 
 /// 任务执行器统计信息
 #[derive(Debug, Clone)]
 pub struct TaskExecutorStats {
     pub active_tasks: usize,
-    pub conversation_contexts: usize,
 }

@@ -62,36 +62,43 @@ import { invoke } from '@/utils/request'
 
 ```typescript
 /**
- * Agent API - 后端Agent系统的前端接口封装
+ * Workspace 会话 API - 基于 workspace_v2 命令
  */
 
 import { invoke } from '@/utils/request'
-import type { TaskSummary, UiMessage } from './types'
+import type { SessionRecord, UiMessage } from './types'
 
-export class AgentApi {
+export class WorkspaceV2Api {
   /**
-   * 创建会话
+   * 创建 Session
    */
-  async createConversation(title?: string): Promise<number> {
-    return invoke<number>('create_conversation', { title })
+  async createSession(workspacePath: string, title?: string): Promise<SessionRecord> {
+    return invoke<SessionRecord>('workspace_v2_create_session', { path: workspacePath, title })
+  }
+
+  /**
+   * 获取 Session 列表
+   */
+  async listSessions(workspacePath: string): Promise<SessionRecord[]> {
+    return invoke<SessionRecord[]>('workspace_v2_list_sessions', { path: workspacePath })
   }
 
   /**
    * 获取消息列表
    */
-  async getMessages(conversationId: number): Promise<UiMessage[]> {
-    return invoke<UiMessage[]>('get_messages', { conversationId })
+  async getMessages(sessionId: number): Promise<UiMessage[]> {
+    return invoke<UiMessage[]>('workspace_v2_get_messages', { sessionId })
   }
 
   /**
-   * 删除会话
+   * 切换活跃 Session
    */
-  async deleteConversation(conversationId: number): Promise<void> {
-    return invoke<void>('delete_conversation', { conversationId })
+  async setActiveSession(workspacePath: string, sessionId: number): Promise<void> {
+    return invoke<void>('workspace_v2_set_active_session', { path: workspacePath, sessionId })
   }
 }
 
-export const agentApi = new AgentApi()
+export const workspaceV2Api = new WorkspaceV2Api()
 ```
 
 ### 为什么要统一声明？
@@ -108,9 +115,12 @@ export const agentApi = new AgentApi()
 // ❌ 直接在组件中调用 Tauri 命令
 import { invoke as tauriInvoke } from '@tauri-apps/api/core'
 
-const deleteSession = async (id: number) => {
+const setActiveSession = async (workspacePath: string, sessionId: number) => {
   // 跳过了统一的错误处理
-  const result = await tauriInvoke('delete_conversation', { conversationId: id })
+  const result = await tauriInvoke('workspace_v2_set_active_session', {
+    path: workspacePath,
+    sessionId,
+  })
   // 需要手动处理错误，容易遗漏
 }
 ```
@@ -119,11 +129,11 @@ const deleteSession = async (id: number) => {
 
 ```typescript
 // ✅ 使用 API 层声明的接口
-import { agentApi } from '@/api/agent'
+import { workspaceV2Api } from '@/api/workspace/v2'
 
-const deleteSession = async (id: number) => {
+const switchSession = async (workspacePath: string, sessionId: number) => {
   // 自动应用错误处理、类型检查
-  await agentApi.deleteConversation(id)
+  await workspaceV2Api.setActiveSession(workspacePath, sessionId)
 }
 ```
 
@@ -147,10 +157,10 @@ src/api/
 
 ```typescript
 // 在组件或 Store 中使用
-import { agentApi, terminalApi, configApi } from '@/api'
+import { workspaceV2Api, terminalApi, configApi } from '@/api'
 
 // 直接调用，不需要 try-catch
-await agentApi.createConversation()
+await workspaceV2Api.createSession(currentWorkspacePath.value!)
 await terminalApi.createTerminal({ rows: 24, cols: 80 })
 await configApi.saveConfig(config)
 ```
@@ -161,12 +171,12 @@ await configApi.saveConfig(config)
 
 ```typescript
 // ❌ 错误：API 调用使用 try-catch 包裹
-const deleteConversation = async (conversationId: number): Promise<void> => {
+const switchSession = async (sessionId: number): Promise<void> => {
   try {
-    await agentApi.deleteConversation(conversationId)
-    conversations.value = conversations.value.filter(c => c.id !== conversationId)
+    await workspaceV2Api.setActiveSession(currentWorkspacePath.value!, sessionId)
+    activeSessionId.value = sessionId
   } catch (err) {
-    error.value = '删除会话失败' // 重复的错误处理
+    error.value = '切换会话失败' // 重复的错误处理
   }
 }
 ```
@@ -183,7 +193,7 @@ const deleteConversation = async (conversationId: number): Promise<void> => {
 // ❌ 错误：捕获错误但什么都不做
 const refreshSessions = async () => {
   try {
-    await aiChatStore.refreshConversations()
+    await workspaceStore.refreshSessions()
   } catch {
     // Refresh failures are non-critical
   }
@@ -224,13 +234,13 @@ const buildCkIndex = async () => {
 
 ```typescript
 // ✅ 正确：直接调用 API，信任后端错误处理
-const deleteConversation = async (conversationId: number): Promise<void> => {
-  await agentApi.deleteConversation(conversationId)
-  conversations.value = conversations.value.filter(c => c.id !== conversationId)
+const activateSession = async (sessionId: number): Promise<void> => {
+  await workspaceV2Api.setActiveSession(currentWorkspacePath.value!, sessionId)
+  activeSessionId.value = sessionId
 }
 
-const refreshConversations = async (): Promise<void> => {
-  conversations.value = await agentApi.listConversations()
+const refreshSessions = async (): Promise<void> => {
+  sessions.value = await workspaceV2Api.listSessions(currentWorkspacePath.value!)
 }
 
 const buildCkIndex = async () => {
@@ -256,10 +266,10 @@ const buildCkIndex = async () => {
 
 ```typescript
 // ✅ 正确：使用 loading 状态，不需要 try-catch
-const loadConversation = async (conversationId: number): Promise<void> => {
+const loadSession = async (sessionId: number): Promise<void> => {
   isLoading.value = true
-  currentConversationId.value = conversationId
-  messageList.value = await agentApi.getMessages(conversationId)
+  currentSessionId.value = sessionId
+  messageList.value = await workspaceV2Api.getMessages(sessionId)
   isLoading.value = false
 }
 ```
@@ -279,7 +289,12 @@ const sendMessage = async (content: string): Promise<void> => {
   error.value = null
 
   try {
-    const stream = await agentApi.executeTask(content, currentConversationId.value!)
+    const stream = await agentApi.executeTask({
+      workspacePath: currentWorkspacePath.value!,
+      sessionId: currentSessionId.value!,
+      userPrompt: content,
+      modelId: selectedModelId.value,
+    })
 
     // 设置流的回调
     stream.onProgress(handleProgress)
@@ -427,13 +442,13 @@ try {
    ```typescript
    // 修复前
    try {
-     await agentApi.deleteConversation(conversationId)
+     await workspaceV2Api.setActiveSession(currentWorkspacePath.value!, sessionId)
    } catch (err) {
-     error.value = '删除会话失败'
+     error.value = '切换会话失败'
    }
 
    // 修复后
-   await agentApi.deleteConversation(conversationId)
+   await workspaceV2Api.setActiveSession(currentWorkspacePath.value!, sessionId)
    ```
 
 2. **移除重复的错误提示**

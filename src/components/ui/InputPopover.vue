@@ -53,12 +53,12 @@
   }
 
   .popover-content {
-    max-height: 400px;
+    max-height: 70vh;
     background: var(--bg-200);
     border-radius: var(--border-radius-md);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     border: 1px solid var(--border-200);
-    overflow: hidden;
+    overflow-y: auto;
     box-sizing: border-box;
   }
 

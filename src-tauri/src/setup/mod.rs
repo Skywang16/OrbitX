@@ -23,7 +23,7 @@ use tracing_subscriber::{self, EnvFilter};
 pub fn init_logging() {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         #[cfg(debug_assertions)]
-        let default_level = "debug,ignore=warn";
+        let default_level = "debug,ignore=warn,globset=warn";
         #[cfg(not(debug_assertions))]
         let default_level = "info";
 
@@ -203,7 +203,22 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     };
     app.manage(llm_state);
 
-    // 初始化TaskExecutor状态
+    // 初始化 Checkpoint 服务（提前创建，供 TaskExecutor 使用）
+    let checkpoint_service = {
+        use crate::checkpoint::{BlobStore, CheckpointService, CheckpointStorage};
+
+        let database = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
+        let pool = database.pool().clone();
+
+        let storage = Arc::new(CheckpointStorage::new(pool.clone()));
+        let blob_store = Arc::new(BlobStore::new(pool));
+        Arc::new(CheckpointService::new(storage, blob_store))
+    };
+
+    // 初始化TaskExecutor状态（带有 Checkpoint 服务）
     let task_executor_state = {
         let database_manager = app
             .state::<Arc<crate::storage::DatabaseManager>>()
@@ -212,19 +227,16 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         let agent_persistence = Arc::new(crate::agent::persistence::AgentPersistence::new(
             Arc::clone(&database_manager),
         ));
-        let ui_persistence = Arc::new(crate::agent::ui::AgentUiPersistence::new(Arc::clone(
-            &database_manager,
-        )));
         let cache = app
             .state::<Arc<crate::storage::UnifiedCache>>()
             .inner()
             .clone();
 
-        let executor = Arc::new(crate::agent::core::TaskExecutor::new(
+        let executor = Arc::new(crate::agent::core::TaskExecutor::with_checkpoint_service(
             Arc::clone(&database_manager),
             Arc::clone(&cache),
             Arc::clone(&agent_persistence),
-            Arc::clone(&ui_persistence),
+            Arc::clone(&checkpoint_service),
         ));
 
         crate::agent::core::commands::TaskExecutorState::new(executor)
@@ -251,6 +263,13 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         }
     }
 
+    // 初始化 Checkpoint 状态（复用之前创建的 checkpoint_service）
+    let checkpoint_state = {
+        use crate::checkpoint::CheckpointState;
+        CheckpointState::new(checkpoint_service)
+    };
+    app.manage(checkpoint_state);
+
     // 初始化向量数据库状态
     {
         use crate::llm::types::LLMProviderConfig;
@@ -258,20 +277,9 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         use crate::vector_db::{
             commands::VectorDbState,
             core::{RemoteEmbeddingConfig, VectorDbConfig},
-            index::VectorIndex,
             search::SemanticSearchEngine,
-            storage::IndexManager,
         };
-        use std::path::PathBuf;
         use std::sync::Arc;
-
-        // 复用与数据库相同的应用数据目录作为根
-        let app_dir = if let Ok(dir) = std::env::var("OrbitX_DATA_DIR") {
-            PathBuf::from(dir)
-        } else {
-            let data_dir = dirs::data_dir().ok_or("无法获取系统数据目录")?;
-            data_dir.join("OrbitX")
-        };
 
         // 从数据库读取 embedding 模型配置
         let database = app
@@ -314,7 +322,6 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
                             options: model.options.as_ref().and_then(|v| v.as_object()).map(
                                 |obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
                             ),
-                            supports_prompt_cache: false,
                         },
                         model_name: model.model,
                         dimension,
@@ -333,26 +340,10 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         }
 
         if let Ok(state) = (|| -> Result<VectorDbState, crate::vector_db::core::VectorDbError> {
-            let index_manager = Arc::new(IndexManager::new(&app_dir, config.clone())?);
             let embedder = crate::vector_db::embedding::create_embedder(&config.embedding)?;
-            let vector_index = Arc::new(VectorIndex::new(config.embedding.dimension));
-            let search_engine = Arc::new(SemanticSearchEngine::new(
-                index_manager.clone(),
-                vector_index.clone(),
-                embedder.clone(),
-                config,
-            ));
-            // 设置全局只读访问
-            crate::vector_db::commands::set_global_state(
-                search_engine.clone(),
-                index_manager.clone(),
-                vector_index.clone(),
-            );
-            Ok(VectorDbState::new(
-                search_engine,
-                index_manager,
-                vector_index,
-            ))
+            let search_engine = Arc::new(SemanticSearchEngine::new(embedder, config));
+            crate::vector_db::commands::set_global_state(search_engine.clone());
+            Ok(VectorDbState::new(search_engine))
         })() {
             app.manage(state);
         } else {

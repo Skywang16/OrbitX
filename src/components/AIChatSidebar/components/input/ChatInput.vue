@@ -1,11 +1,12 @@
 <script setup lang="ts">
-  import { computed, ref, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
+  import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import { useNodeVersion } from '@/composables/useNodeVersion'
   import { useProjectRules } from '@/composables/useProjectRules'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { useTerminalStore } from '@/stores/Terminal'
+  import { useAISettingsStore } from '@/components/settings/components/AI'
   import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
   import TerminalTabTag from '../tags/TerminalTabTag.vue'
@@ -17,7 +18,10 @@
   import NodeVersionPicker from '../tags/NodeVersionPicker.vue'
   import ProjectRulesPicker from '../tags/ProjectRulesPicker.vue'
   import CircularProgress from '@/components/ui/CircularProgress.vue'
+  import ImagePreview, { type ImageAttachment } from './ImagePreview.vue'
   import { vectorDbApi as vdbApi, nodeApi } from '@/api'
+  import { processImageFile, getImageFromClipboard, validateImageFile } from '@/utils/imageUtils'
+  import { createMessage } from '@/ui/composables/message-api'
 
   interface Props {
     modelValue: string
@@ -32,7 +36,7 @@
 
   interface Emits {
     (e: 'update:modelValue', value: string): void
-    (e: 'send'): void
+    (e: 'send', images?: ImageAttachment[]): void
     (e: 'stop'): void
     (e: 'update:selectedModel', value: string | null): void
     (e: 'model-change', value: string | null): void
@@ -64,8 +68,12 @@
   const { t } = useI18n()
 
   const inputTextarea = ref<HTMLTextAreaElement>()
+  const fileInput = ref<HTMLInputElement>()
   const isComposing = ref(false)
   let compositionTimer: number | undefined
+
+  // 图片附件
+  const imageAttachments = ref<ImageAttachment[]>([])
 
   const terminalSelection = useTerminalSelection()
   const nodeVersion = useNodeVersion()
@@ -73,7 +81,15 @@
 
   const tabManagerStore = useTabManagerStore()
   const terminalStore = useTerminalStore()
+  const aiSettingsStore = useAISettingsStore()
   const activeTerminalCwd = computed(() => terminalStore.activeTerminal?.cwd || null)
+
+  // 检查当前选中的模型是否支持图片输入
+  const currentModelSupportsImages = computed(() => {
+    if (!props.selectedModel) return false
+    const model = aiSettingsStore.chatModels.find(m => m.id === props.selectedModel)
+    return model?.options?.supportsImages ?? false
+  })
 
   const isInSettingsTab = computed(() => {
     return tabManagerStore.activeTab?.type === TabType.SETTINGS
@@ -153,9 +169,74 @@
   const handleButtonClick = () => {
     if (props.loading) {
       emit('stop')
-    } else if (props.canSend) {
-      emit('send')
+    } else if (props.canSend || imageAttachments.value.length > 0) {
+      emit('send', imageAttachments.value.length > 0 ? imageAttachments.value : undefined)
+      imageAttachments.value = []
     }
+  }
+
+  // 图片上传相关
+  const handleImageUpload = () => {
+    fileInput.value?.click()
+  }
+
+  const handleFileSelect = async (event: Event) => {
+    const target = event.target as HTMLInputElement
+    const files = target.files
+    if (!files || files.length === 0) return
+
+    for (const file of Array.from(files)) {
+      await addImageFile(file)
+    }
+
+    // 清空 input，允许重复选择同一文件
+    target.value = ''
+  }
+
+  const addImageFile = async (file: File) => {
+    // 检查图片数量限制
+    if (imageAttachments.value.length >= 5) {
+      console.warn(t('chat.max_images_reached'))
+      // TODO: 显示错误提示
+      return
+    }
+
+    // 验证文件 (Tauri macOS 下 accept 属性不生效，必须在代码层验证)
+    const validation = validateImageFile(file)
+    if (!validation.valid) {
+      createMessage.error(validation.error || t('chat.invalid_file_type'))
+      return
+    }
+
+    try {
+      const processed = await processImageFile(file)
+      const attachment: ImageAttachment = {
+        id: `${Date.now()}-${Math.random()}`,
+        dataUrl: processed.dataUrl,
+        fileName: processed.fileName,
+        fileSize: processed.fileSize,
+        mimeType: processed.mimeType,
+      }
+      imageAttachments.value.push(attachment)
+    } catch (error) {
+      console.error('Failed to process image:', error)
+      // TODO: 显示错误提示
+    }
+  }
+
+  const handlePaste = async (event: ClipboardEvent) => {
+    // 如果模型不支持图片，不处理图片粘贴
+    if (!currentModelSupportsImages.value) return
+
+    const imageFile = await getImageFromClipboard(event)
+    if (imageFile) {
+      event.preventDefault()
+      await addImageFile(imageFile)
+    }
+  }
+
+  const removeImage = (id: string) => {
+    imageAttachments.value = imageAttachments.value.filter(img => img.id !== id)
   }
 
   const handleModelChange = (value: string | number | null) => {
@@ -269,48 +350,48 @@
     checkVectorIndexStatus()
   })
 
-const startProgressPolling = (targetPath: string) => {
-  if (progressTimer) {
-    clearInterval(progressTimer)
-    progressTimer = undefined
+  const startProgressPolling = (targetPath: string) => {
+    if (progressTimer) {
+      clearInterval(progressTimer)
+      progressTimer = undefined
+    }
+    progressHasData.value = false
+    progressTimer = window.setInterval(async () => {
+      const progress = await vdbApi.getBuildProgress({ path: targetPath })
+      if (progress.totalFiles > 0) {
+        const totalFiles = Math.max(progress.totalFiles, 1)
+        const filesCompleted = Math.min(progress.filesCompleted, totalFiles)
+        const perFile = 100 / totalFiles
+        let pct = filesCompleted * perFile
+
+        if (progress.totalChunks && progress.totalChunks > 0) {
+          const chunkDone = Math.min(progress.currentFileChunks ?? 0, progress.totalChunks)
+          pct += (chunkDone / progress.totalChunks) * perFile
+        }
+
+        const nextPct = Math.min(progress.isComplete ? 100 : 99, Math.max(0, pct))
+        if (!progressHasData.value) {
+          progressHasData.value = true
+          buildProgress.value = nextPct
+        } else {
+          buildProgress.value = Math.max(buildProgress.value, nextPct)
+        }
+      }
+
+      if (progress.isComplete) {
+        if (progressTimer) {
+          clearInterval(progressTimer)
+          progressTimer = undefined
+        }
+        buildProgress.value = 100
+        setTimeout(() => {
+          isBuilding.value = false
+          buildProgress.value = 0
+        }, 500)
+        await checkVectorIndexStatus()
+      }
+    }, 600)
   }
-  progressHasData.value = false
-  progressTimer = window.setInterval(async () => {
-    const progress = await vdbApi.getBuildProgress({ path: targetPath })
-    if (progress.totalFiles > 0) {
-      const totalFiles = Math.max(progress.totalFiles, 1)
-      const filesCompleted = Math.min(progress.filesCompleted, totalFiles)
-      const perFile = 100 / totalFiles
-      let pct = filesCompleted * perFile
-
-      if (progress.totalChunks && progress.totalChunks > 0) {
-        const chunkDone = Math.min(progress.currentFileChunks ?? 0, progress.totalChunks)
-        pct += (chunkDone / progress.totalChunks) * perFile
-      }
-
-      const nextPct = Math.min(progress.isComplete ? 100 : 99, Math.max(0, pct))
-      if (!progressHasData.value) {
-        progressHasData.value = true
-        buildProgress.value = nextPct
-      } else {
-        buildProgress.value = Math.max(buildProgress.value, nextPct)
-      }
-    }
-
-    if (progress.isComplete) {
-      if (progressTimer) {
-        clearInterval(progressTimer)
-        progressTimer = undefined
-      }
-      buildProgress.value = 100
-      setTimeout(() => {
-        isBuilding.value = false
-        buildProgress.value = 0
-      }, 500)
-      await checkVectorIndexStatus()
-    }
-  }, 600)
-}
 
   const rebuildVectorIndex = async () => {
     const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
@@ -343,7 +424,8 @@ const startProgressPolling = (targetPath: string) => {
   const deleteVectorIndex = async () => {
     const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
     if (!activeTerminal || !activeTerminal.cwd) return
-    // Not supported; consider removing index directory on backend if needed
+
+    await vdbApi.deleteWorkspaceIndex(activeTerminal.cwd)
     await checkVectorIndexStatus()
   }
 
@@ -399,6 +481,12 @@ const startProgressPolling = (targetPath: string) => {
     adjustTextareaHeight,
     focus: () => inputTextarea.value?.focus(),
     getTagContextInfo,
+    clearImages: () => {
+      imageAttachments.value = []
+    },
+    setImages: (images: ImageAttachment[]) => {
+      imageAttachments.value = images
+    },
   })
 </script>
 
@@ -425,6 +513,8 @@ const startProgressPolling = (targetPath: string) => {
       @click="showProjectRulesModal = true"
     />
 
+    <ImagePreview :images="imageAttachments" @remove="removeImage" />
+
     <div class="input-main">
       <div class="input-content">
         <textarea
@@ -437,9 +527,12 @@ const startProgressPolling = (targetPath: string) => {
           @input="adjustTextareaHeight"
           @compositionstart="handleCompositionStart"
           @compositionend="handleCompositionEnd"
+          @paste="handlePaste"
         />
       </div>
     </div>
+
+    <input ref="fileInput" type="file" accept="image/*" multiple style="display: none" @change="handleFileSelect" />
 
     <div class="input-bottom">
       <div class="bottom-left">
@@ -463,6 +556,26 @@ const startProgressPolling = (targetPath: string) => {
         />
       </div>
       <div class="bottom-right">
+        <button
+          class="image-upload-button"
+          :disabled="isInSettingsTab || !currentModelSupportsImages || imageAttachments.length >= 5"
+          :title="
+            isInSettingsTab
+              ? t('ck.upload_button_disabled_in_settings')
+              : !currentModelSupportsImages
+                ? t('chat.model_not_support_images')
+                : imageAttachments.length >= 5
+                  ? t('chat.max_images_reached')
+                  : t('chat.upload_image')
+          "
+          @click="handleImageUpload"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="3" ry="3" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <path d="M21 15l-5-5L5 21" />
+          </svg>
+        </button>
         <button
           class="database-button"
           :class="{
@@ -677,6 +790,34 @@ const startProgressPolling = (targetPath: string) => {
     width: 160px;
     min-width: 80px;
     flex-shrink: 1;
+  }
+
+  .image-upload-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-300);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .image-upload-button:hover:not(:disabled) {
+    background: var(--bg-300);
+    color: var(--color-primary);
+  }
+
+  .image-upload-button:active:not(:disabled) {
+    transform: scale(0.95);
+  }
+
+  .image-upload-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .database-button {

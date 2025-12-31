@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="visible" class="modal-overlay" @mousedown="handleOverlayMouseDown" @mouseup="handleOverlayMouseUp">
-      <div ref="modalRef" class="modal-container" :class="sizeClass" role="dialog" aria-modal="true">
+      <div ref="modalRef" class="modal-container" :class="[sizeClass, modalClass]" role="dialog" aria-modal="true">
         <div v-if="showHeader" class="modal-header">
           <div class="modal-title-section">
             <h3 v-if="title" class="modal-title">{{ title }}</h3>
@@ -75,6 +75,8 @@
     noPadding?: boolean
     zIndex?: number
     confirmButtonClass?: string
+    /** 自定义 modal 容器的 class */
+    modalClass?: string
   }
 
   interface Emits {
@@ -104,6 +106,7 @@
     noPadding: false,
     zIndex: 1000,
     confirmButtonClass: '',
+    modalClass: '',
   })
 
   const emit = defineEmits<Emits>()

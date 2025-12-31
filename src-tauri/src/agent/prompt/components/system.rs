@@ -76,7 +76,7 @@ impl ComponentDefinition for SystemInfoComponent {
     }
 
     fn default_template(&self) -> Option<&str> {
-        Some("Here is useful information about the environment you are running in:\n<env>\nWorking directory: {working_directory}\nPlatform: {platform}\nToday's date: {current_date}\n</env>\n\n{file_list_preview}")
+        Some("Here is useful information about the environment you are running in:\n<env>\nWorking directory: {working_directory}\nPlatform: {platform}\nToday's date: {current_date}\n</env>\n{workspace_status}\n{file_list_preview}")
     }
 
     async fn render(
@@ -92,10 +92,24 @@ impl ComponentDefinition for SystemInfoComponent {
             .context
             .as_ref()
             .and_then(|c| c.working_directory.as_deref())
+            .filter(|w| !w.trim().is_empty())
             .unwrap_or("Not specified");
 
+        let has_workspace = working_directory != "Not specified";
+
         // 获取当前目录的文件列表（最多50个）
-        let file_list_preview = get_directory_preview(working_directory).await;
+        let file_list_preview = if has_workspace {
+            get_directory_preview(working_directory).await
+        } else {
+            String::new()
+        };
+
+        // 工作区状态提示
+        let workspace_status = if has_workspace {
+            String::new()
+        } else {
+            "\n<important>\nNOTE: The user is NOT currently in any workspace directory. File system tools (read_file, write_file, list_files, shell, etc.) are NOT available. You can only have a general conversation. If the user asks about files or wants to run commands, inform them that they need to open a terminal tab first to establish a workspace.\n</important>\n".to_string()
+        };
 
         let mut template_context = HashMap::new();
         template_context.insert("platform".to_string(), json!("macOS"));
@@ -105,6 +119,7 @@ impl ComponentDefinition for SystemInfoComponent {
             json!(chrono::Utc::now().format("%Y-%m-%d").to_string()),
         );
         template_context.insert("file_list_preview".to_string(), json!(file_list_preview));
+        template_context.insert("workspace_status".to_string(), json!(workspace_status));
 
         let result = TemplateEngine::new()
             .resolve(template, &template_context)

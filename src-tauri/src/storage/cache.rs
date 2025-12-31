@@ -256,20 +256,20 @@ impl UnifiedCache {
     }
 
     /// Session: 获取活跃会话
-    pub async fn get_active_conversation(&self) -> Option<i64> {
-        self.get_deserialized_ns(CacheNamespace::Session, "active_conversation")
+    pub async fn get_active_session(&self) -> Option<i64> {
+        self.get_deserialized_ns(CacheNamespace::Session, "active_session")
             .await
             .ok()
             .flatten()
     }
 
     /// Session: 设置活跃会话
-    pub async fn set_active_conversation(&self, id: Option<i64>) -> CacheResult<()> {
-        if let Some(conversation_id) = id {
-            self.set_serialized_ns(CacheNamespace::Session, "active_conversation", &conversation_id)
+    pub async fn set_active_session(&self, id: Option<i64>) -> CacheResult<()> {
+        if let Some(session_id) = id {
+            self.set_serialized_ns(CacheNamespace::Session, "active_session", &session_id)
                 .await
         } else {
-            self.remove_ns(CacheNamespace::Session, "active_conversation").await;
+            self.remove_ns(CacheNamespace::Session, "active_session").await;
             Ok(())
         }
     }

@@ -5,9 +5,9 @@
  */
 export function getPathBasename(path: string): string {
   if (!path || path === '~') return '~'
-  
+
   const parts = path.replace(/[/\\]+$/, '').split(/[/\\]/)
   const basename = parts[parts.length - 1]
-  
+
   return basename || '~'
 }

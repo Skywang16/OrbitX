@@ -15,18 +15,16 @@ export type ChatMode = 'chat' | 'agent'
  * 任务执行参数
  */
 export interface ExecuteTaskParams {
+  /** 工作区路径 */
+  workspacePath: string
   /** 会话ID */
-  conversationId: number
+  sessionId: number
   /** 用户提示 */
   userPrompt: string
-  /** 聊天模式 - 必填！类型系统强制传递 */
-  chatMode: ChatMode
   /** 模型ID - 必填！ */
   modelId: string
-  /** 配置覆盖 */
-  configOverrides?: Record<string, unknown>
-  /** 要恢复的任务ID */
-  restoreTaskId?: string
+  /** 图片附件（可选） */
+  images?: Array<{ type: 'image'; dataUrl: string; mimeType: string }>
 }
 
 /**
@@ -36,7 +34,7 @@ export interface TaskSummary {
   /** 任务ID */
   taskId: string
   /** 会话ID */
-  conversationId: number
+  sessionId: number
   /** 任务状态 */
   status: TaskStatus
   /** 当前迭代次数 */
@@ -94,7 +92,8 @@ export interface TaskCreatedEvent {
   type: 'TaskCreated'
   payload: {
     taskId: string
-    conversationId: number
+    sessionId: number
+    workspacePath: string
     userPrompt: string
   }
 }
@@ -397,7 +396,7 @@ export interface CancelCommand {
  */
 export interface TaskListFilter {
   /** 会话ID过滤 */
-  conversationId?: number
+  sessionId?: number
   /** 状态过滤 */
   status?: TaskStatus | string
   /** 分页偏移 */
@@ -458,67 +457,6 @@ export const isErrorEvent = (event: TaskProgressPayload): boolean => {
   return event.type === 'TaskError' || event.type === 'Error'
 }
 
-// ===== 双轨架构新增类型 =====
-
-/**
- * 会话上下文快照（核心轨）
- */
-export interface ConversationContextSnapshot {
-  conversation: Conversation
-  summary?: ConversationSummary
-  activeTaskIds: string[]
-  executions: ExecutionSnapshot[]
-}
-
-/**
- * 会话信息
- */
-export interface Conversation {
-  id: number
-  title?: string
-  workspacePath?: string
-  createdAt: string
-  updatedAt: string
-}
-
-/**
- * 会话摘要
- */
-export interface ConversationSummary {
-  conversationId: number
-  summaryContent: string
-  summaryTokens: number
-  messagesBeforeSummary: number
-  tokensSaved: number
-  compressionCost: number
-  createdAt: string
-  updatedAt: string
-}
-
-/**
- * 执行快照
- */
-export interface ExecutionSnapshot {
-  executionId: string
-  conversationId: number
-  userRequest: string
-  status: 'running' | 'completed' | 'error' | 'cancelled'
-  currentIteration: number
-  errorCount: number
-  maxIterations: number
-  totalInputTokens: number
-  totalOutputTokens: number
-  totalCost: number
-  contextTokens: number
-  createdAt: string
-  updatedAt: string
-  startedAt?: string
-  completedAt?: string
-}
-
-/**
- * UI 时间线快照（UI轨）
- */
 export type UiStepType = 'thinking' | 'text' | 'tool_use' | 'tool_result' | 'error'
 
 export interface UiStep {
@@ -528,47 +466,19 @@ export interface UiStep {
   metadata?: Record<string, unknown>
 }
 
-export interface UiMessage {
-  id: number
-  conversationId: number
-  role: 'user' | 'assistant'
-  content?: string
-  steps?: UiStep[]
-  status?: 'streaming' | 'complete' | 'error'
-  durationMs?: number
-  createdAt: number
-}
-
-export interface UiConversation {
-  id: number
-  title?: string
-  messageCount: number
-  createdAt: number
-  updatedAt: number
+export interface UiMessageImage {
+  id: string
+  dataUrl: string
+  fileName: string
+  fileSize: number
+  mimeType: string
 }
 
 /**
  * 文件上下文状态
  */
 export interface FileContextStatus {
-  conversationId: number
-  activeFiles: FileContextEntry[]
-  staleFiles: FileContextEntry[]
-  totalActive: number
-  totalStale: number
-}
-
-/**
- * 文件上下文条目
- */
-export interface FileContextEntry {
-  id: number
-  conversationId: number
-  filePath: string
-  recordState: 'active' | 'stale'
-  recordSource: 'read_tool' | 'user_edited' | 'agent_edited' | 'file_mentioned'
-  agentReadTimestamp?: number
-  agentEditTimestamp?: number
-  userEditTimestamp?: number
-  createdAt: string
+  workspacePath: string
+  fileCount: number
+  files: string[]
 }
