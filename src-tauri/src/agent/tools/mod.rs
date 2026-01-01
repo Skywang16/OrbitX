@@ -4,11 +4,13 @@
 pub mod builtin;
 pub mod logger;
 pub mod metadata;
+pub mod parallel;
 pub mod registry;
 pub mod r#trait;
 // Re-exports for external use
 pub use logger::ToolExecutionLogger;
-pub use metadata::{BackoffStrategy, RateLimitConfig, ToolCategory, ToolMetadata, ToolPriority};
+pub use metadata::{BackoffStrategy, ExecutionMode, RateLimitConfig, ToolCategory, ToolMetadata, ToolPriority};
+pub use parallel::{execute_batch, ToolCall, ToolCallResult};
 pub use r#trait::{
     RunnableTool, ToolDescriptionContext, ToolPermission, ToolResult, ToolResultContent, ToolSchema,
 };

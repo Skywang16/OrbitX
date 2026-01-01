@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::agent::config::PromptComponent;
 use crate::agent::prompt::components::types::{ComponentDefinition, ComponentRegistry};
 
-use super::{agent, system, task, tools};
+use super::{agent, system, task};
 
 /// Runtime registry mirroring the front-end component registry.
 pub struct PromptComponentRegistry {
@@ -28,7 +28,6 @@ impl PromptComponentRegistry {
 
         self.register_many(agent::definitions());
         self.register_many(system::definitions());
-        self.register_many(tools::definitions());
         self.register_many(task::definitions());
 
         self.loaded = true;

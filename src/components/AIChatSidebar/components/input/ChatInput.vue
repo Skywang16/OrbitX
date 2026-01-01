@@ -4,10 +4,8 @@
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import { useNodeVersion } from '@/composables/useNodeVersion'
   import { useProjectRules } from '@/composables/useProjectRules'
-  import { useTabManagerStore } from '@/stores/TabManager'
   import { useTerminalStore } from '@/stores/Terminal'
   import { useAISettingsStore } from '@/components/settings/components/AI'
-  import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
   import TerminalTabTag from '../tags/TerminalTabTag.vue'
   import NodeVersionTag from '../tags/NodeVersionTag.vue'
@@ -79,7 +77,6 @@
   const nodeVersion = useNodeVersion()
   const projectRules = useProjectRules()
 
-  const tabManagerStore = useTabManagerStore()
   const terminalStore = useTerminalStore()
   const aiSettingsStore = useAISettingsStore()
   const activeTerminalCwd = computed(() => terminalStore.activeTerminal?.cwd || null)
@@ -91,9 +88,6 @@
     return model?.options?.supportsImages ?? false
   })
 
-  const isInSettingsTab = computed(() => {
-    return tabManagerStore.activeTab?.type === TabType.SETTINGS
-  })
 
   const homePath = ref<string>('')
 
@@ -558,15 +552,13 @@
       <div class="bottom-right">
         <button
           class="image-upload-button"
-          :disabled="isInSettingsTab || !currentModelSupportsImages || imageAttachments.length >= 5"
+          :disabled="!currentModelSupportsImages || imageAttachments.length >= 5"
           :title="
-            isInSettingsTab
-              ? t('ck.upload_button_disabled_in_settings')
-              : !currentModelSupportsImages
-                ? t('chat.model_not_support_images')
-                : imageAttachments.length >= 5
-                  ? t('chat.max_images_reached')
-                  : t('chat.upload_image')
+            !currentModelSupportsImages
+              ? t('chat.model_not_support_images')
+              : imageAttachments.length >= 5
+                ? t('chat.max_images_reached')
+                : t('chat.upload_image')
           "
           @click="handleImageUpload"
         >
@@ -582,14 +574,8 @@
             'has-index': indexStatus.isReady,
             building: isBuilding,
           }"
-          :disabled="isInSettingsTab || !canBuild"
-          :title="
-            isInSettingsTab
-              ? t('ck.index_button_disabled_in_settings')
-              : !canBuild
-                ? t('ck.index_button_select_non_home')
-                : getButtonTitle()
-          "
+          :disabled="!canBuild"
+          :title="!canBuild ? t('ck.index_button_select_non_home') : getButtonTitle()"
           @click="handleVectorIndexClick"
         >
           <div class="button-content">
@@ -613,8 +599,7 @@
         <button
           class="send-button"
           :class="{ 'stop-button': loading }"
-          :disabled="!loading && (!canSend || isInSettingsTab)"
-          :title="isInSettingsTab ? t('ck.send_button_disabled_in_settings') : ''"
+          :disabled="!loading && !canSend"
           @click="handleButtonClick"
         >
           <svg v-if="loading" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">

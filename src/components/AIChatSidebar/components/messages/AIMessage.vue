@@ -80,6 +80,8 @@
   .ai-message {
     margin-bottom: var(--spacing-md);
     width: 100%;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .step-block {
@@ -186,6 +188,8 @@
     font-size: 0.9em;
     line-height: 1.6;
     color: var(--text-200);
+    overflow: hidden;
+    min-width: 0;
   }
 
   .ai-message-text :deep(p) {
@@ -245,6 +249,7 @@
   .ai-message-text :deep(pre) {
     margin: var(--spacing-sm) 0;
     overflow-x: auto;
+    max-width: 100%;
   }
 
   .ai-message-text :deep(pre code) {
@@ -303,6 +308,9 @@
     margin: var(--spacing-sm) 0;
     border-collapse: collapse;
     width: 100%;
+    max-width: 100%;
+    display: block;
+    overflow-x: auto;
   }
 
   .ai-message-text :deep(th),

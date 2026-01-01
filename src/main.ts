@@ -10,6 +10,7 @@ import { useTerminalStore } from '@/stores/Terminal'
 import { useTabManagerStore } from '@/stores/TabManager'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import App from './App.vue'
 
 import './styles/variables.css'
@@ -113,6 +114,31 @@ const disableContextMenuInProduction = () => {
 }
 
 disableContextMenuInProduction()
+
+// 全局拦截外部链接点击，在系统浏览器中打开
+const setupExternalLinkHandler = () => {
+  document.addEventListener('click', (e: MouseEvent) => {
+    const target = e.target as HTMLElement
+    const link = target.closest('a[href]') as HTMLAnchorElement | null
+
+    if (link) {
+      const href = link.getAttribute('href')
+      // 跳过内部锚点链接和 javascript: 链接
+      if (!href || href.startsWith('#') || href.startsWith('javascript:')) {
+        return
+      }
+      // 外部链接用系统浏览器打开
+      if (href.startsWith('http://') || href.startsWith('https://')) {
+        e.preventDefault()
+        openUrl(href).catch(err => {
+          console.error('Failed to open URL:', err)
+        })
+      }
+    }
+  })
+}
+
+setupExternalLinkHandler()
 
 const setupDockFocusListener = async () => {
   await dockApi.onDockSwitchTab(payload => {

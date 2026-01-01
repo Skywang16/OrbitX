@@ -12,12 +12,12 @@ use crate::agent::core::context::{TaskContext, ToolCallResult};
 use crate::agent::core::executor::{ReactHandler, TaskExecutor};
 use crate::agent::error::TaskExecutorResult;
 use crate::agent::events::{TaskProgressPayload, ToolResultPayload, ToolUsePayload};
-use crate::agent::tools::{ToolDescriptionContext, ToolRegistry};
+use crate::agent::tools::{self, ToolDescriptionContext, ToolRegistry, ToolResultContent};
 use crate::llm::anthropic_types::CreateMessageRequest;
 
 #[async_trait::async_trait]
 impl ReactHandler for TaskExecutor {
-    #[inline] // 编译器内联，零开销
+    #[inline]
     async fn build_llm_request(
         &self,
         context: &TaskContext,
@@ -108,11 +108,8 @@ impl ReactHandler for TaskExecutor {
         iteration: u32,
         tool_calls: Vec<(String, String, Value)>,
     ) -> TaskExecutorResult<Vec<ToolCallResult>> {
-        let mut results = Vec::with_capacity(tool_calls.len());
-
-        // 串行执行工具调用（保持原有逻辑）
-        for (call_id, tool_name, params) in tool_calls {
-            // 发送ToolUse事件
+        // 发送所有 ToolUse 事件
+        for (call_id, tool_name, params) in &tool_calls {
             context
                 .send_progress(TaskProgressPayload::ToolUse(ToolUsePayload {
                     task_id: context.task_id.to_string(),
@@ -123,68 +120,44 @@ impl ReactHandler for TaskExecutor {
                     timestamp: chrono::Utc::now(),
                 }))
                 .await?;
+        }
 
-            let start = std::time::Instant::now();
+        // 转换为 ToolCall 并并行执行
+        let calls: Vec<tools::ToolCall> = tool_calls
+            .into_iter()
+            .map(|(id, name, params)| tools::ToolCall { id, name, params })
+            .collect();
 
-            // 执行工具
-            let tool_result = context
-                .tool_registry()
-                .execute_tool(&tool_name, context, params.clone())
-                .await;
+        let responses = tools::execute_batch(&context.tool_registry(), context, calls).await;
 
-            let execution_time = start.elapsed().as_millis() as u64;
+        // 转换结果并发送事件
+        let mut results = Vec::with_capacity(responses.len());
+        for resp in responses {
+            let (is_error, result_value) = convert_result(&resp.result);
 
-            // 转换ToolResult到我们的格式
-            let (is_error, result_value) = if tool_result.is_error {
-                let error_msg = tool_result
-                    .content
-                    .iter()
-                    .filter_map(|c| match c {
-                        crate::agent::tools::ToolResultContent::Error(text) => Some(text.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                (true, serde_json::json!({"error": error_msg}))
-            } else {
-                let success_content = tool_result
-                    .content
-                    .iter()
-                    .filter_map(|c| match c {
-                        crate::agent::tools::ToolResultContent::Success(text) => Some(text.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                (false, serde_json::json!({"result": success_content}))
-            };
-
-            // 发送ToolResult事件
             context
                 .send_progress(TaskProgressPayload::ToolResult(ToolResultPayload {
                     task_id: context.task_id.to_string(),
                     iteration,
-                    tool_id: call_id.clone(),
-                    tool_name: tool_name.clone(),
+                    tool_id: resp.id.clone(),
+                    tool_name: resp.name.clone(),
                     result: result_value.clone(),
                     is_error,
-                    ext_info: tool_result.ext_info.clone(),
+                    ext_info: resp.result.ext_info.clone(),
                     timestamp: chrono::Utc::now(),
                 }))
                 .await?;
 
             results.push(ToolCallResult {
-                call_id,
-                tool_name,
+                call_id: resp.id,
+                tool_name: resp.name,
                 result: result_value,
                 is_error,
-                execution_time_ms: execution_time,
+                execution_time_ms: resp.result.execution_time_ms.unwrap_or(0),
             });
         }
 
-        // 添加到context
         context.add_tool_results(results.clone()).await;
-
         Ok(results)
     }
 
@@ -192,5 +165,33 @@ impl ReactHandler for TaskExecutor {
     async fn get_context_builder(&self, context: &TaskContext) -> Arc<ContextBuilder> {
         let file_tracker = context.file_tracker();
         Arc::new(ContextBuilder::new(file_tracker))
+    }
+}
+
+/// 转换 ToolResult 到 (is_error, json_value)
+#[inline]
+fn convert_result(result: &tools::ToolResult) -> (bool, Value) {
+    if result.is_error {
+        let msg = result
+            .content
+            .iter()
+            .filter_map(|c| match c {
+                ToolResultContent::Error(text) => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        (true, serde_json::json!({"error": msg}))
+    } else {
+        let content = result
+            .content
+            .iter()
+            .filter_map(|c| match c {
+                ToolResultContent::Success(text) => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        (false, serde_json::json!({"result": content}))
     }
 }
