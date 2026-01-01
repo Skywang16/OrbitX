@@ -9,7 +9,6 @@ use crate::{api_error, api_success};
 pub async fn window_get_platform_info(
     state: State<'_, WindowState>,
 ) -> TauriApiResult<PlatformInfo> {
-
     let platform_info = match state
         .with_config_manager(|config| Ok(config.window_get_platform_info().cloned()))
         .await
@@ -23,7 +22,6 @@ pub async fn window_get_platform_info(
     if let Some(info) = platform_info {
         return Ok(api_success!(info));
     }
-
 
     let platform_info = PlatformInfo {
         platform: std::env::consts::OS.to_string(),
@@ -42,7 +40,6 @@ pub async fn window_get_platform_info(
     {
         return Ok(api_error!("window.get_platform_info_failed"));
     }
-
 
     Ok(api_success!(platform_info))
 }

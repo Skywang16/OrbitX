@@ -4,8 +4,8 @@ use crate::storage::database::DatabaseManager;
 
 use super::repositories::{
     AgentExecutionRepository, ExecutionEventRepository, ExecutionMessageRepository,
-    SessionMessageRepository, SessionRepository, SessionSummaryRepository,
-    ToolExecutionRepository, WorkspaceFileContextRepository, WorkspaceRepository,
+    SessionMessageRepository, SessionRepository, SessionSummaryRepository, ToolExecutionRepository,
+    WorkspaceFileContextRepository, WorkspaceRepository,
 };
 
 /// Facade that wires all persistence repositories together for the agent backend.

@@ -432,7 +432,9 @@ pub(crate) fn build_workspace_file_record(
         id: row.try_get("id")?,
         workspace_path: row.try_get("workspace_path")?,
         relative_path: row.try_get("relative_path")?,
-        record_state: FileRecordState::from_str(row.try_get::<String, _>("record_state")?.as_str())?,
+        record_state: FileRecordState::from_str(
+            row.try_get::<String, _>("record_state")?.as_str(),
+        )?,
         record_source: FileRecordSource::from_str(
             row.try_get::<String, _>("record_source")?.as_str(),
         )?,
@@ -443,9 +445,7 @@ pub(crate) fn build_workspace_file_record(
     })
 }
 
-pub(crate) fn build_agent_execution(
-    row: &sqlx::sqlite::SqliteRow,
-) -> AgentResult<AgentExecution> {
+pub(crate) fn build_agent_execution(row: &sqlx::sqlite::SqliteRow) -> AgentResult<AgentExecution> {
     Ok(AgentExecution {
         id: row.try_get("id")?,
         execution_id: row.try_get("execution_id")?,
@@ -508,9 +508,7 @@ pub(crate) fn build_execution_event(row: &sqlx::sqlite::SqliteRow) -> AgentResul
     Ok(ExecutionEvent {
         id: row.try_get("id")?,
         execution_id: row.try_get("execution_id")?,
-        event_type: ExecutionEventType::from_str(
-            row.try_get::<String, _>("event_type")?.as_str(),
-        )?,
+        event_type: ExecutionEventType::from_str(row.try_get::<String, _>("event_type")?.as_str())?,
         event_data: row.try_get("event_data")?,
         iteration: row.try_get("iteration")?,
         created_at: timestamp_to_datetime(row.try_get::<i64, _>("created_at")?),

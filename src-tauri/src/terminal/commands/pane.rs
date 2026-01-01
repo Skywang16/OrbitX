@@ -3,7 +3,7 @@ use crate::mux::PaneId;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use tauri::State;
-use tracing::{ error, warn};
+use tracing::{error, warn};
 
 /// 设置活跃终端面板
 #[tauri::command]
@@ -11,7 +11,6 @@ pub async fn terminal_context_set_active_pane(
     pane_id: u32,
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<EmptyData> {
-
     if pane_id == 0 {
         warn!("面板ID不能为0");
         return Ok(api_error!("common.invalid_id"));
@@ -20,9 +19,7 @@ pub async fn terminal_context_set_active_pane(
     let pane_id = PaneId::new(pane_id);
 
     match state.registry.terminal_context_set_active_pane(pane_id) {
-        Ok(()) => {
-            Ok(api_success!())
-        }
+        Ok(()) => Ok(api_success!()),
         Err(e) => {
             error!("设置活跃终端面板失败: {}", e);
             Ok(api_error!("terminal.set_active_pane_failed"))
@@ -35,7 +32,6 @@ pub async fn terminal_context_set_active_pane(
 pub async fn terminal_context_get_active_pane(
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<Option<u32>> {
-
     let active_pane = state.registry.terminal_context_get_active_pane();
     let result = active_pane.map(|pane_id| pane_id.as_u32());
 
@@ -47,11 +43,8 @@ pub async fn terminal_context_get_active_pane(
 pub async fn terminal_context_clear_active_pane(
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<EmptyData> {
-
     match state.registry.terminal_context_clear_active_pane() {
-        Ok(()) => {
-            Ok(api_success!())
-        }
+        Ok(()) => Ok(api_success!()),
         Err(e) => {
             error!("清除活跃终端面板失败: {}", e);
             Ok(api_error!("terminal.clear_active_pane_failed"))
@@ -65,7 +58,6 @@ pub async fn terminal_context_is_pane_active(
     pane_id: u32,
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<bool> {
-
     if pane_id == 0 {
         warn!("面板ID不能为0");
         return Ok(api_error!("common.invalid_id"));

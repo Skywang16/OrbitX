@@ -58,9 +58,9 @@ impl FileStore {
             .unwrap_or(source_file);
 
         // 在 vectors 目录下创建对应的目录结构
-        let vector_dir = self.vectors_path.join(
-            relative_path.parent().unwrap_or_else(|| Path::new("")),
-        );
+        let vector_dir = self
+            .vectors_path
+            .join(relative_path.parent().unwrap_or_else(|| Path::new("")));
 
         // 使用源文件名 + .oxi 后缀
         let file_name = format!(

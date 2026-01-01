@@ -27,9 +27,7 @@ use tauri::State;
 pub async fn terminal_context_get_cache_stats(
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<crate::terminal::CacheStats> {
-
     let stats = state.context_service.get_cache_stats().await;
-
 
     Ok(api_success!(stats))
 }
@@ -48,9 +46,7 @@ pub async fn terminal_context_get_cache_stats(
 pub async fn terminal_context_get_registry_stats(
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<crate::terminal::context_registry::RegistryStats> {
-
     let stats = state.registry.get_stats();
-
 
     Ok(api_success!(stats))
 }

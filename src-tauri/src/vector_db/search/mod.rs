@@ -1,5 +1,5 @@
-pub mod semantic_search;
 pub mod hybrid_search;
+pub mod semantic_search;
 
 use crate::vector_db::core::Language;
 
@@ -22,5 +22,5 @@ impl Default for SearchOptions {
     }
 }
 
-pub use semantic_search::*;
 pub use hybrid_search::*;
+pub use semantic_search::*;

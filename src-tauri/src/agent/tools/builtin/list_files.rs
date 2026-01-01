@@ -94,25 +94,16 @@ Usage:
         let path_str = path.to_string_lossy();
         if path_str == "/" {
             return Ok(validation_error(
-                "Cannot list root directory '/'. Please specify a more specific directory path."
+                "Cannot list root directory '/'. Please specify a more specific directory path.",
             ));
         }
 
         // 禁止列出系统敏感目录
         let forbidden_paths = [
-            "/System",
-            "/Library",
-            "/private",
-            "/bin",
-            "/sbin",
-            "/usr",
-            "/var",
-            "/etc",
-            "/dev",
-            "/proc",
-            "/sys",
+            "/System", "/Library", "/private", "/bin", "/sbin", "/usr", "/var", "/etc", "/dev",
+            "/proc", "/sys",
         ];
-        
+
         for forbidden in &forbidden_paths {
             if path_str == *forbidden || path_str.starts_with(&format!("{}/", forbidden)) {
                 return Ok(validation_error(format!(

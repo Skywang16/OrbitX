@@ -73,14 +73,14 @@ impl OscParser {
         let mut sequences = Vec::with_capacity(4);
         let bytes = data.as_bytes();
         let mut idx = 0;
-        
+
         while idx < bytes.len() {
             // 快速跳过非ESC字符 - 避免无效的find_sequence调用
             if bytes[idx] != 0x1b {
                 idx += 1;
                 continue;
             }
-            
+
             if let Some((start, end, term_len)) = find_sequence(bytes, idx) {
                 if let Some(seq) = self.parse_payload(&data[start + 2..end - term_len]) {
                     sequences.push(seq);

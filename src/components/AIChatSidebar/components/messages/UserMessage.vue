@@ -43,8 +43,8 @@
       <CheckpointIndicator
         class="rollback-action"
         :checkpoint="checkpoint"
-        :message-id="message.id"
         :workspace-path="workspacePath || ''"
+        :message-content="message.content || ''"
       />
     </div>
   </div>

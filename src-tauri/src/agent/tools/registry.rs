@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dashmap::{mapref::entry::Entry, DashMap};
-use tracing::{ error, warn};
+use tracing::{error, warn};
 
 use super::metadata::{RateLimitConfig, ToolCategory, ToolMetadata};
 use super::r#trait::{
@@ -163,7 +163,6 @@ impl ToolRegistry {
 
         self.execution_stats
             .insert(key.clone(), ToolExecutionStats::default());
-
 
         Ok(())
     }
@@ -448,10 +447,7 @@ impl ToolRegistry {
 
         if let Some(alias) = self.aliases.get(name) {
             let actual = alias.clone();
-            return self
-                .metadata_index
-                .get(&actual)
-                .map(|entry| entry.clone());
+            return self.metadata_index.get(&actual).map(|entry| entry.clone());
         }
 
         None

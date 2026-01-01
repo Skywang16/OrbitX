@@ -7,10 +7,16 @@ use crate::mux::{PaneId, PtySize};
 #[serde(rename_all = "camelCase")]
 #[allow(clippy::enum_variant_names)]
 pub enum MuxNotification {
-    PaneOutput { pane_id: PaneId, data: Bytes },
+    PaneOutput {
+        pane_id: PaneId,
+        data: Bytes,
+    },
     PaneAdded(PaneId),
     PaneRemoved(PaneId),
-    PaneResized { pane_id: PaneId, size: PtySize },
+    PaneResized {
+        pane_id: PaneId,
+        size: PtySize,
+    },
     PaneExited {
         pane_id: PaneId,
         exit_code: Option<i32>,

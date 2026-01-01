@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
-use tracing::{warn};
+use tracing::warn;
 
 use crate::mux::error::{MuxConfigError, MuxConfigResult};
 
@@ -217,7 +217,6 @@ impl TerminalSystemConfig {
 
     /// Apply environment variable overrides
     pub fn override_from_env(&mut self) {
-
         if let Ok(val) = std::env::var("TERMINAL_BUFFER_MAX_SIZE") {
             if let Ok(size) = val.parse::<usize>() {
                 self.buffer.max_size = size;

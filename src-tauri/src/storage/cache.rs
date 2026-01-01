@@ -109,7 +109,12 @@ impl UnifiedCache {
     }
 
     /// 设置缓存值（带命名空间）
-    pub async fn set_ns(&self, namespace: CacheNamespace, key: &str, value: Value) -> CacheResult<()> {
+    pub async fn set_ns(
+        &self,
+        namespace: CacheNamespace,
+        key: &str,
+        value: Value,
+    ) -> CacheResult<()> {
         self.set(&namespace.make_key(key), value).await
     }
 
@@ -121,7 +126,8 @@ impl UnifiedCache {
         value: Value,
         ttl: Duration,
     ) -> CacheResult<()> {
-        self.set_with_ttl(&namespace.make_key(key), value, ttl).await
+        self.set_with_ttl(&namespace.make_key(key), value, ttl)
+            .await
     }
 
     /// 序列化并存储任意值（带命名空间）
@@ -148,7 +154,8 @@ impl UnifiedCache {
     where
         T: Serialize,
     {
-        self.set_serialized_with_ttl(&namespace.make_key(key), value, ttl).await
+        self.set_serialized_with_ttl(&namespace.make_key(key), value, ttl)
+            .await
     }
 
     /// 以指定类型读取缓存（带命名空间）
@@ -230,7 +237,8 @@ impl UnifiedCache {
     /// Rules: 设置用户规则
     pub async fn set_user_rules(&self, rules: Option<String>) -> CacheResult<()> {
         if let Some(r) = rules {
-            self.set_serialized_ns(CacheNamespace::Rules, "user_rules", &r).await
+            self.set_serialized_ns(CacheNamespace::Rules, "user_rules", &r)
+                .await
         } else {
             self.remove_ns(CacheNamespace::Rules, "user_rules").await;
             Ok(())
@@ -248,7 +256,8 @@ impl UnifiedCache {
     /// Rules: 设置项目规则
     pub async fn set_project_rules(&self, rules: Option<String>) -> CacheResult<()> {
         if let Some(r) = rules {
-            self.set_serialized_ns(CacheNamespace::Rules, "project_rules", &r).await
+            self.set_serialized_ns(CacheNamespace::Rules, "project_rules", &r)
+                .await
         } else {
             self.remove_ns(CacheNamespace::Rules, "project_rules").await;
             Ok(())
@@ -269,7 +278,8 @@ impl UnifiedCache {
             self.set_serialized_ns(CacheNamespace::Session, "active_session", &session_id)
                 .await
         } else {
-            self.remove_ns(CacheNamespace::Session, "active_session").await;
+            self.remove_ns(CacheNamespace::Session, "active_session")
+                .await;
             Ok(())
         }
     }

@@ -17,7 +17,10 @@ pub fn deduplicate_tool_uses(
     let mut deduplicated = Vec::new();
 
     for (id, name, args) in tool_calls.iter() {
-        let key = (name.clone(), serde_json::to_string(args).unwrap_or_default());
+        let key = (
+            name.clone(),
+            serde_json::to_string(args).unwrap_or_default(),
+        );
 
         if seen.insert(key) {
             deduplicated.push((id.clone(), name.clone(), args.clone()));

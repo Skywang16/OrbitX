@@ -309,7 +309,8 @@
     "parent_directory": "Parent Directory",
     "no_folders": "No folders in current directory",
     "read_dir_error": "Failed to read directory",
-    "current_directory": "Current Directory"
+    "current_directory": "Current Directory",
+    "trim_session_failed": "Failed to trim session history"
   },
   "recent_workspaces": {
     "title": "Recent Workspaces"

@@ -161,10 +161,7 @@ pub async fn workspace_set_active_session(
     database: State<'_, Arc<DatabaseManager>>,
 ) -> TauriApiResult<EmptyData> {
     let service = WorkspaceService::new(Arc::clone(&database));
-    match service
-        .set_active_session(&path, Some(session_id))
-        .await
-    {
+    match service.set_active_session(&path, Some(session_id)).await {
         Ok(()) => Ok(api_success!()),
         Err(err) => {
             tracing::error!("workspace_set_active_session failed: {}", err);

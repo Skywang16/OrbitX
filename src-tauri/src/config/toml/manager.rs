@@ -126,7 +126,6 @@ impl TomlConfigManager {
     where
         T: Serialize,
     {
-
         let mut current_config = {
             let cache = self
                 .config_cache
@@ -234,7 +233,6 @@ impl TomlConfigManager {
         base_config: &AppConfig,
         partial_config: Value,
     ) -> ConfigResult<AppConfig> {
-
         // 将基础配置转换为JSON值
         let mut base_value = serde_json::to_value(base_config)?;
 

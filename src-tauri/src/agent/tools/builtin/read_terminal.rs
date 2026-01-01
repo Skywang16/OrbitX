@@ -77,16 +77,12 @@ Usage:
         // 获取活跃终端的pane_id
         // 优先使用 mux 中的第一个可用 pane
         let mux = get_mux();
-        let pane_id = mux
-            .list_panes()
-            .into_iter()
-            .next()
-            .ok_or_else(|| {
-                crate::agent::error::ToolExecutorError::ExecutionFailed {
-                    tool_name: "read_terminal".to_string(),
-                    error: "No terminal panes found. Please ensure a terminal is open.".to_string(),
-                }
-            })?;
+        let pane_id = mux.list_panes().into_iter().next().ok_or_else(|| {
+            crate::agent::error::ToolExecutorError::ExecutionFailed {
+                tool_name: "read_terminal".to_string(),
+                error: "No terminal panes found. Please ensure a terminal is open.".to_string(),
+            }
+        })?;
 
         // 从OutputAnalyzer获取终端缓冲区内容
         let buffer = match OutputAnalyzer::global().get_pane_buffer(pane_id.as_u32()) {

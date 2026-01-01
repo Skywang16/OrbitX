@@ -1,17 +1,19 @@
-//! Checkpoint Tauri 命令接口
+//! Checkpoint Tauri 命令
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::State;
 
+use crate::storage::DatabaseManager;
 use crate::utils::{EmptyData, TauriApiResult};
+use crate::workspace::WorkspaceService;
 use crate::{api_error, api_success};
 
 use super::models::{Checkpoint, CheckpointSummary, FileDiff, RollbackResult};
 use super::service::CheckpointService;
 
-/// Checkpoint 状态管理
+/// Checkpoint 状态
 pub struct CheckpointState {
     pub service: Arc<CheckpointService>,
 }
@@ -22,21 +24,20 @@ impl CheckpointState {
     }
 }
 
-/// 创建 checkpoint
+/// 创建 checkpoint（兼容旧 API，内部只创建空 checkpoint）
 #[tauri::command]
 pub async fn checkpoint_create(
     state: State<'_, CheckpointState>,
     workspace_path: String,
     session_id: i64,
-    user_message: String,
-    files: Vec<String>,
+    message_id: i64,
+    _files: Vec<String>,
 ) -> TauriApiResult<Checkpoint> {
-    let files: Vec<PathBuf> = files.into_iter().map(PathBuf::from).collect();
     let workspace = PathBuf::from(&workspace_path);
 
     match state
         .service
-        .create_checkpoint(session_id, &user_message, files, &workspace)
+        .create_empty(session_id, message_id, &workspace)
         .await
     {
         Ok(checkpoint) => Ok(api_success!(checkpoint)),
@@ -47,22 +48,22 @@ pub async fn checkpoint_create(
     }
 }
 
-/// 获取 checkpoint 列表
+/// 获取会话的 checkpoint 列表
 #[tauri::command]
 pub async fn checkpoint_list(
     state: State<'_, CheckpointState>,
-    workspace_path: Option<String>,
-    session_id: Option<i64>,
+    session_id: i64,
+    workspace_path: String,
 ) -> TauriApiResult<Vec<CheckpointSummary>> {
-    let result = if let Some(path) = workspace_path {
-        state.service.list_checkpoints_by_workspace(&path).await
-    } else if let Some(session) = session_id {
-        state.service.list_checkpoints_by_session(session).await
-    } else {
-        return Ok(api_error!("checkpoint.list_invalid_scope"));
-    };
+    if workspace_path.trim().is_empty() {
+        return Ok(api_error!("common.invalid_path"));
+    }
 
-    match result {
+    match state
+        .service
+        .list_by_session(session_id, &workspace_path)
+        .await
+    {
         Ok(checkpoints) => Ok(api_success!(checkpoints)),
         Err(e) => {
             tracing::error!("Failed to list checkpoints: {}", e);
@@ -72,18 +73,50 @@ pub async fn checkpoint_list(
 }
 
 /// 回滚到指定 checkpoint
+///
+/// 只需要 checkpoint_id，其他信息从 checkpoint 记录中获取
 #[tauri::command]
 pub async fn checkpoint_rollback(
     state: State<'_, CheckpointState>,
+    database: State<'_, Arc<DatabaseManager>>,
     checkpoint_id: i64,
 ) -> TauriApiResult<RollbackResult> {
-    match state.service.rollback_to(checkpoint_id).await {
-        Ok(result) => Ok(api_success!(result)),
+    // 先获取 checkpoint 信息
+    let checkpoint = match state.service.get(checkpoint_id).await {
+        Ok(Some(cp)) => cp,
+        Ok(None) => {
+            return Ok(api_error!("checkpoint.not_found"));
+        }
+        Err(e) => {
+            tracing::error!("Failed to get checkpoint {}: {}", checkpoint_id, e);
+            return Ok(api_error!("checkpoint.rollback_failed"));
+        }
+    };
+
+    // 执行文件回滚
+    let result = match state.service.rollback(checkpoint_id).await {
+        Ok(r) => r,
         Err(e) => {
             tracing::error!("Failed to rollback to checkpoint {}: {}", checkpoint_id, e);
-            Ok(api_error!("checkpoint.rollback_failed"))
+            return Ok(api_error!("checkpoint.rollback_failed"));
         }
+    };
+
+    // 清理消息历史（使用 checkpoint 中存储的 message_id）
+    let workspace_service = WorkspaceService::new(Arc::clone(&database));
+    if let Err(e) = workspace_service
+        .trim_session_messages(
+            &checkpoint.workspace_path,
+            checkpoint.session_id,
+            checkpoint.message_id,
+        )
+        .await
+    {
+        tracing::error!("Failed to trim session messages: {}", e);
+        return Ok(api_error!("workspace.trim_session_failed"));
     }
+
+    Ok(api_success!(result))
 }
 
 /// 获取两个 checkpoint 之间的 diff
@@ -100,38 +133,11 @@ pub async fn checkpoint_diff(
 
     let workspace = PathBuf::from(&workspace_path);
 
-    match state
-        .service
-        .diff_checkpoints(from_id, to_id, &workspace)
-        .await
-    {
+    match state.service.diff(from_id, to_id, &workspace).await {
         Ok(diffs) => Ok(api_success!(diffs)),
         Err(e) => {
             tracing::error!("Failed to compute checkpoint diff: {}", e);
             Ok(api_error!("checkpoint.diff_failed"))
-        }
-    }
-}
-
-/// 获取当前文件与 checkpoint 的 diff
-#[tauri::command]
-pub async fn checkpoint_diff_with_current(
-    state: State<'_, CheckpointState>,
-    checkpoint_id: i64,
-    file_path: String,
-    workspace_path: String,
-) -> TauriApiResult<Option<String>> {
-    let workspace = PathBuf::from(&workspace_path);
-
-    match state
-        .service
-        .diff_with_current(checkpoint_id, &file_path, &workspace)
-        .await
-    {
-        Ok(diff) => Ok(api_success!(diff)),
-        Err(e) => {
-            tracing::error!("Failed to compute diff with current: {}", e);
-            Ok(api_error!("checkpoint.diff_current_failed"))
         }
     }
 }
@@ -191,7 +197,7 @@ pub async fn checkpoint_delete(
     state: State<'_, CheckpointState>,
     checkpoint_id: i64,
 ) -> TauriApiResult<EmptyData> {
-    match state.service.delete_checkpoint(checkpoint_id).await {
+    match state.service.delete(checkpoint_id).await {
         Ok(_) => Ok(api_success!()),
         Err(e) => {
             tracing::error!("Failed to delete checkpoint {}: {}", checkpoint_id, e);

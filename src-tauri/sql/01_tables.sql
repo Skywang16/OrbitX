@@ -212,12 +212,13 @@ CREATE TABLE IF NOT EXISTS checkpoint_blobs (
 CREATE TABLE IF NOT EXISTS checkpoints (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     workspace_path TEXT NOT NULL,
-    session_id INTEGER,
+    session_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
     parent_id INTEGER,
-    user_message TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     FOREIGN KEY (workspace_path) REFERENCES workspaces(path) ON DELETE CASCADE,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (message_id) REFERENCES session_messages(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES checkpoints(id) ON DELETE SET NULL
 );
 
@@ -258,6 +259,8 @@ CREATE INDEX IF NOT EXISTS idx_checkpoints_workspace
     ON checkpoints(workspace_path, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_checkpoints_session
     ON checkpoints(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_message
+    ON checkpoints(message_id);
 CREATE INDEX IF NOT EXISTS idx_checkpoints_parent
     ON checkpoints(parent_id);
 CREATE INDEX IF NOT EXISTS idx_checkpoint_files_checkpoint
@@ -285,98 +288,3 @@ BEGIN
     SET completed_at = COALESCE(NEW.completed_at, strftime('%s','now'))
     WHERE id = NEW.id;
 END;
-
--- ===========================
--- Workspace-centric schema (experimental)
--- ===========================
-
-CREATE TABLE IF NOT EXISTS workspaces (
-    path TEXT PRIMARY KEY,
-    display_name TEXT,
-    active_session_id INTEGER,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    last_accessed_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    workspace_path TEXT NOT NULL,
-    title TEXT,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    FOREIGN KEY (workspace_path) REFERENCES workspaces(path) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS session_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id INTEGER NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
-    content TEXT,
-    steps_json TEXT,
-    images_json TEXT,
-    status TEXT CHECK (status IN ('streaming', 'complete', 'error')),
-    duration_ms INTEGER,
-    created_at INTEGER NOT NULL,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS session_summaries (
-    session_id INTEGER PRIMARY KEY,
-    summary_content TEXT NOT NULL DEFAULT '',
-    summary_tokens INTEGER NOT NULL DEFAULT 0,
-    messages_summarized INTEGER NOT NULL DEFAULT 0,
-    tokens_saved INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS workspace_file_context (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    workspace_path TEXT NOT NULL,
-    relative_path TEXT NOT NULL,
-    record_state TEXT NOT NULL CHECK (record_state IN ('active', 'stale')),
-    record_source TEXT NOT NULL CHECK (
-        record_source IN ('read_tool', 'user_edited', 'agent_edited', 'file_mentioned')
-    ),
-    agent_read_at INTEGER,
-    agent_edit_at INTEGER,
-    user_edit_at INTEGER,
-    created_at INTEGER NOT NULL,
-    UNIQUE (workspace_path, relative_path),
-    FOREIGN KEY (workspace_path) REFERENCES workspaces(path) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS workspace_checkpoints (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    workspace_path TEXT NOT NULL,
-    session_id INTEGER,
-    trigger_message TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    FOREIGN KEY (workspace_path) REFERENCES workspaces(path) ON DELETE CASCADE,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
-);
-
-CREATE TABLE IF NOT EXISTS workspace_checkpoint_file_snapshots (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    checkpoint_id INTEGER NOT NULL,
-    relative_path TEXT NOT NULL,
-    blob_hash TEXT NOT NULL,
-    change_type TEXT NOT NULL CHECK (change_type IN ('added', 'modified', 'deleted')),
-    file_size INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    UNIQUE (checkpoint_id, relative_path),
-    FOREIGN KEY (checkpoint_id) REFERENCES workspace_checkpoints(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_workspaces_last_accessed
-    ON workspaces(last_accessed_at DESC);
-CREATE INDEX IF NOT EXISTS idx_sessions_workspace
-    ON sessions(workspace_path, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_session_messages_session
-    ON session_messages(session_id, created_at ASC);
-CREATE INDEX IF NOT EXISTS idx_workspace_file_context_state
-    ON workspace_file_context(workspace_path, record_state);
-CREATE INDEX IF NOT EXISTS idx_workspace_checkpoints_workspace
-    ON workspace_checkpoints(workspace_path, created_at DESC);

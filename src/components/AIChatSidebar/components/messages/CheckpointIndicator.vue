@@ -5,8 +5,8 @@
 
   interface Props {
     checkpoint?: CheckpointSummary | null
-    messageId: number
     workspacePath: string
+    messageContent?: string | null
   }
 
   const props = defineProps<Props>()
@@ -15,16 +15,23 @@
   const rollbackStore = useRollbackDialogStore()
 
   const openConfirmDialog = () => {
+    if (!props.checkpoint) return
     rollbackStore.open({
-      checkpoint: props.checkpoint ?? null,
-      messageId: props.messageId,
+      checkpoint: props.checkpoint,
       workspacePath: props.workspacePath,
+      messageContent: props.messageContent ?? '',
     })
   }
 </script>
 
 <template>
-  <button class="rollback-btn" type="button" :title="t('checkpoint.rollback')" @click.stop="openConfirmDialog">
+  <button
+    v-if="checkpoint"
+    class="rollback-btn"
+    type="button"
+    :title="t('checkpoint.rollback')"
+    @click.stop="openConfirmDialog"
+  >
     <svg class="rollback-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M3 10h10a5 5 0 0 1 5 5v2" />
       <path d="M7 6l-4 4 4 4" />

@@ -135,10 +135,9 @@ impl ContextBuilder {
                 }
             }
             if let Some(observation) = &iter.observation {
-                if let Some(path) = self.extract_file_from_tool_result(
-                    &observation.tool_name,
-                    &observation.outcome,
-                ) {
+                if let Some(path) =
+                    self.extract_file_from_tool_result(&observation.tool_name, &observation.outcome)
+                {
                     self.push_normalized_path(&mut seen, &mut ordered, &path);
                 }
             }

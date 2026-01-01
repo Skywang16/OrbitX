@@ -14,7 +14,6 @@ impl TomlConfigValidator {
 
     /// 验证完整配置
     pub fn config_validate(&self, config: &AppConfig) -> TomlConfigResult<()> {
-
         let mut errors = Vec::new();
 
         // 验证版本

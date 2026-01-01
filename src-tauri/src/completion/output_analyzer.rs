@@ -11,7 +11,7 @@ use crate::mux::ConfigManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
-use tracing::{ warn};
+use tracing::warn;
 
 /// 全局输出分析器实例
 static GLOBAL_OUTPUT_ANALYZER: OnceLock<Arc<OutputAnalyzer>> = OnceLock::new();
@@ -99,7 +99,6 @@ impl OutputAnalyzer {
 
     /// 分析终端输出
     pub fn analyze_output(&self, pane_id: u32, data: &str) -> OutputAnalyzerResult<()> {
-
         self.maybe_cleanup_stale_buffers()?;
 
         // 一次性处理所有缓冲区操作，避免多次获取锁
@@ -182,10 +181,8 @@ impl OutputAnalyzer {
 
     /// 处理完整的命令（在锁外调用，避免死锁）
     fn process_complete_commands(&self, pane_id: u32, output: &str) -> OutputAnalyzerResult<()> {
-
         // 尝试检测命令
         if let Some((command, command_output)) = self.detect_command_completion(output) {
-
             self.process_complete_command(&command, &command_output)?;
 
             // 清理缓冲区中已处理的部分（一次性操作）
@@ -200,7 +197,6 @@ impl OutputAnalyzer {
                     } else {
                         entry.content.clear();
                     }
-
                 }
             }
         }
@@ -229,7 +225,6 @@ impl OutputAnalyzer {
 
     /// 清理过期的缓冲区
     fn cleanup_stale_buffers(&self) -> OutputAnalyzerResult<()> {
-
         let config = ConfigManager::config_get();
         let stale_threshold = config.stale_threshold();
 

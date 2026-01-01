@@ -97,8 +97,12 @@ export const useWorkspaceStore = defineStore('workspace-store', () => {
   }
 
   // 加载指定工作区的数据（会话列表、当前会话、消息）
-  const loadWorkspaceData = async (path: string) => {
-    if (!path || _loadedWorkspacePath.value === path) return
+  const loadWorkspaceData = async (path: string, force = false) => {
+    if (!path) return
+    if (!force && isLoading.value && _loadedWorkspacePath.value === path) {
+      return
+    }
+
     isLoading.value = true
     _loadedWorkspacePath.value = path
     try {

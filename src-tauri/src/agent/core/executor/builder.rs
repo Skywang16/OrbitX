@@ -153,6 +153,7 @@ impl TaskExecutor {
             progress_channel,
             Arc::clone(&self.database()),
             Arc::clone(&self.agent_persistence()),
+            self.checkpoint_service(),
         )
         .await
     }

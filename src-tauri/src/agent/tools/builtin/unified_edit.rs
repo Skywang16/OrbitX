@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use diffy::{apply, Patch};
@@ -8,7 +8,7 @@ use tokio::fs;
 
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
-use crate::agent::error::ToolExecutorResult;
+use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
@@ -442,6 +442,8 @@ Usage:
                     let updated =
                         format!("{}{}{}", before, indented_replace.join(line_ending), after);
 
+                    snapshot_before_edit(context, self.name(), path.as_path()).await?;
+
                     if let Err(err) = fs::write(&path, &updated).await {
                         return Ok(error_result(format!(
                             "Failed to write file {}: {}",
@@ -501,6 +503,8 @@ Usage:
                         result_lines.extend(after_match.iter().map(|s| s.to_string()));
 
                         let updated = result_lines.join(line_ending);
+
+                        snapshot_before_edit(context, self.name(), path.as_path()).await?;
 
                         if let Err(err) = fs::write(&path, &updated).await {
                             return Ok(error_result(format!(
@@ -608,6 +612,8 @@ Usage:
                     }
                 }
 
+                snapshot_before_edit(context, self.name(), path.as_path()).await?;
+
                 if let Err(err) = fs::write(&path, &updated).await {
                     return Ok(error_result(format!(
                         "Failed to write file {}: {}",
@@ -650,6 +656,8 @@ Usage:
                         return Ok(error_result(format!("Failed to apply patch: {}", err)));
                     }
                 };
+
+                snapshot_before_edit(context, self.name(), path.as_path()).await?;
 
                 if let Err(err) = fs::write(&path, &updated).await {
                     return Ok(error_result(format!(
@@ -699,4 +707,18 @@ fn error_result(message: impl Into<String>) -> ToolResult {
         execution_time_ms: None,
         ext_info: None,
     }
+}
+
+async fn snapshot_before_edit(
+    context: &TaskContext,
+    tool_name: &str,
+    path: &Path,
+) -> ToolExecutorResult<()> {
+    context
+        .snapshot_file_before_edit(path)
+        .await
+        .map_err(|err| ToolExecutorError::ExecutionFailed {
+            tool_name: tool_name.to_string(),
+            error: err.to_string(),
+        })
 }

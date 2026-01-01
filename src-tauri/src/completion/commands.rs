@@ -1,9 +1,9 @@
 //! Completion command handlers for Tauri
 
-use crate::storage::UnifiedCache;
 use crate::completion::engine::{CompletionEngine, CompletionEngineConfig};
 use crate::completion::error::{CompletionStateError, CompletionStateResult};
 use crate::completion::types::{CompletionContext, CompletionResponse};
+use crate::storage::UnifiedCache;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use std::path::PathBuf;

@@ -72,15 +72,12 @@ impl TaskExecutor {
         &self,
         session_id: i64,
     ) -> TaskExecutorResult<FileContextStatus> {
-        let ctx = self
-            .get_session_context(session_id)
-            .await
-            .ok_or_else(|| {
-                TaskExecutorError::InternalError(format!(
-                    "No active context found for session {}",
-                    session_id
-                ))
-            })?;
+        let ctx = self.get_session_context(session_id).await.ok_or_else(|| {
+            TaskExecutorError::InternalError(format!(
+                "No active context found for session {}",
+                session_id
+            ))
+        })?;
 
         let workspace_path = ctx.cwd.to_string();
         let files: Vec<String> = ctx
@@ -195,7 +192,10 @@ impl TaskExecutor {
         Ok(summaries)
     }
 
-    pub(crate) fn workspace_relative_to_absolute(workspace_path: &str, stored_path: &str) -> PathBuf {
+    pub(crate) fn workspace_relative_to_absolute(
+        workspace_path: &str,
+        stored_path: &str,
+    ) -> PathBuf {
         let stored = Path::new(stored_path);
         if stored.is_absolute() {
             return stored.to_path_buf();

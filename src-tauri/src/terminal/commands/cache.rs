@@ -12,7 +12,7 @@ use crate::mux::PaneId;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use tauri::State;
-use tracing::{ warn};
+use tracing::warn;
 
 /// 使指定面板的上下文缓存失效
 ///
@@ -31,7 +31,6 @@ pub async fn terminal_context_invalidate_cache(
     pane_id: u32,
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<EmptyData> {
-
     if pane_id == 0 {
         warn!("面板ID不能为0");
         return Ok(api_error!("common.invalid_id"));
@@ -58,7 +57,6 @@ pub async fn terminal_context_invalidate_cache(
 pub async fn terminal_context_clear_all_cache(
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<EmptyData> {
-
     state.context_service.clear_all_cache().await;
 
     Ok(api_success!())

@@ -2,7 +2,7 @@ pub mod chain;
 pub mod states;
 
 use std::convert::TryFrom;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,6 +11,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::ipc::Channel;
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 
 use self::chain::Chain;
@@ -34,6 +35,7 @@ use crate::agent::tools::ToolRegistry;
 use crate::agent::types::TaskDetail;
 use crate::agent::ui::{UiMessageImage, UiStep};
 use crate::agent::utils::tokenizer::count_text_tokens;
+use crate::checkpoint::CheckpointService;
 use crate::llm::anthropic_types::{
     ContentBlock, MessageContent, MessageParam, MessageRole as AnthropicRole, SystemPrompt,
     ToolResultContent,
@@ -51,6 +53,8 @@ pub struct TaskContext {
     session: Arc<SessionContext>,
     tool_registry: Arc<ToolRegistry>,
     state_manager: Arc<StateManager>,
+    checkpoint_service: Option<Arc<CheckpointService>>,
+    active_checkpoint: Arc<RwLock<Option<ActiveCheckpoint>>>,
 
     pub(crate) states: TaskStates,
 
@@ -67,6 +71,7 @@ impl TaskContext {
         progress_channel: Option<Channel<TaskProgressPayload>>,
         repositories: Arc<DatabaseManager>,
         agent_persistence: Arc<AgentPersistence>,
+        checkpoint_service: Option<Arc<CheckpointService>>,
     ) -> TaskExecutorResult<Self> {
         let agent_config = AgentConfig::default();
         let runtime_config = ReactRuntimeConfig {
@@ -119,6 +124,8 @@ impl TaskContext {
             session,
             tool_registry,
             state_manager: Arc::new(StateManager::new(task_state, StateEventEmitter::new())),
+            checkpoint_service,
+            active_checkpoint: Arc::new(RwLock::new(None)),
             states,
             pause_status: AtomicU8::new(0),
         })
@@ -126,6 +133,50 @@ impl TaskContext {
 
     pub async fn set_progress_channel(&self, channel: Option<Channel<TaskProgressPayload>>) {
         *self.states.progress_channel.lock().await = channel;
+    }
+
+    pub fn checkpointing_enabled(&self) -> bool {
+        self.checkpoint_service.is_some()
+    }
+
+    pub async fn init_checkpoint(&self, message_id: i64) -> TaskExecutorResult<()> {
+        let service = match &self.checkpoint_service {
+            Some(service) => Arc::clone(service),
+            None => return Ok(()),
+        };
+
+        let checkpoint = service
+            .create_empty(self.session_id, message_id, Path::new(self.cwd.as_ref()))
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        {
+            let mut guard = self.active_checkpoint.write().await;
+            *guard = Some(ActiveCheckpoint {
+                id: checkpoint.id,
+                workspace_root: PathBuf::from(&checkpoint.workspace_path),
+            });
+        }
+
+        Ok(())
+    }
+
+    pub async fn snapshot_file_before_edit(&self, path: &Path) -> TaskExecutorResult<()> {
+        let service = match &self.checkpoint_service {
+            Some(service) => Arc::clone(service),
+            None => return Ok(()),
+        };
+
+        let handle = { self.active_checkpoint.read().await.clone() };
+
+        if let Some(checkpoint) = handle {
+            service
+                .snapshot_file_before_edit(checkpoint.id, path, &checkpoint.workspace_root)
+                .await
+                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+        }
+
+        Ok(())
     }
 
     pub fn session(&self) -> Arc<SessionContext> {
@@ -666,17 +717,19 @@ impl TaskContext {
         &self,
         user_prompt: &str,
         images: Option<&[ImageAttachment]>,
-    ) -> TaskExecutorResult<()> {
+    ) -> TaskExecutorResult<i64> {
         let serialized_images = if let Some(imgs) = images {
             let payload = map_image_attachments(imgs);
-            Some(serde_json::to_string(&payload).map_err(|e| {
-                TaskExecutorError::StatePersistenceFailed(e.to_string())
-            })?)
+            Some(
+                serde_json::to_string(&payload)
+                    .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?,
+            )
         } else {
             None
         };
 
-        self.agent_persistence()
+        let user_message_id = self
+            .agent_persistence()
             .session_messages()
             .create_user_message(self.session_id, user_prompt, serialized_images.as_deref())
             .await
@@ -695,7 +748,7 @@ impl TaskContext {
         }
 
         self.states.ui.lock().await.steps.clear();
-        Ok(())
+        Ok(user_message_id)
     }
 
     pub async fn begin_followup_turn(&self, user_prompt: &str) -> TaskExecutorResult<()> {
@@ -942,6 +995,12 @@ impl TaskContext {
     }
 }
 
+#[derive(Clone)]
+struct ActiveCheckpoint {
+    id: i64,
+    workspace_root: PathBuf,
+}
+
 fn map_status(status: &AgentTaskStatus) -> TaskStatus {
     match status {
         AgentTaskStatus::Created => TaskStatus::Init,
@@ -965,11 +1024,7 @@ fn map_image_attachments(images: &[ImageAttachment]) -> Vec<UiMessageImage> {
         .iter()
         .enumerate()
         .map(|(index, attachment)| {
-            let ext = attachment
-                .mime_type
-                .split('/')
-                .nth(1)
-                .unwrap_or("image");
+            let ext = attachment.mime_type.split('/').nth(1).unwrap_or("image");
             UiMessageImage {
                 id: format!("{}-{}", Utc::now().timestamp_millis(), index),
                 data_url: attachment.data_url.clone(),

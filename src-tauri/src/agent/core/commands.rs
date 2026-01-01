@@ -79,11 +79,7 @@ pub async fn agent_list_tasks(
     session_id: Option<i64>,
     status_filter: Option<String>,
 ) -> TauriApiResult<Vec<TaskSummary>> {
-    match state
-        .executor
-        .list_tasks(session_id, status_filter)
-        .await
-    {
+    match state.executor.list_tasks(session_id, status_filter).await {
         Ok(tasks) => Ok(api_success!(tasks)),
         Err(e) => {
             tracing::error!("Failed to list tasks: {}", e);

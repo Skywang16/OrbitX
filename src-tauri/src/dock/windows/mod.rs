@@ -39,10 +39,12 @@ impl<R: Runtime> WindowsJumpList<R> {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
 
-        use windows::core::{HSTRING, PCWSTR, Interface, GUID};
+        use windows::core::{Interface, GUID, HSTRING, PCWSTR};
         use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
-        use windows::Win32::UI::Shell::{DestinationList, ICustomDestinationList, IShellLinkW, ShellLink};
         use windows::Win32::UI::Shell::Common::{IObjectArray, IObjectCollection};
+        use windows::Win32::UI::Shell::{
+            DestinationList, ICustomDestinationList, IShellLinkW, ShellLink,
+        };
 
         // Create destination list
         let dest_list: ICustomDestinationList =
@@ -57,33 +59,31 @@ impl<R: Runtime> WindowsJumpList<R> {
 
         // Build custom category from current tabs (limit to avoid oversized lists)
         // CLSID for EnumerableObjectCollection: {2d3468c1-36a7-43b6-ac24-d3f02fd9607a}
-        let clsid_enumerable_object_collection = GUID::from_u128(0x2d3468c1_36a7_43b6_ac24_d3f02fd9607a);
-        let collection: IObjectCollection = CoCreateInstance(&clsid_enumerable_object_collection, None, CLSCTX_INPROC_SERVER)
-            .map_err(|e| format!("Failed to create EnumerableObjectCollection: {:?}", e))?;
+        let clsid_enumerable_object_collection =
+            GUID::from_u128(0x2d3468c1_36a7_43b6_ac24_d3f02fd9607a);
+        let collection: IObjectCollection = CoCreateInstance(
+            &clsid_enumerable_object_collection,
+            None,
+            CLSCTX_INPROC_SERVER,
+        )
+        .map_err(|e| format!("Failed to create EnumerableObjectCollection: {:?}", e))?;
 
         // Resolve current exe path
-        let exe_path = std::env::current_exe()
-            .map_err(|e| format!("Failed to get current exe path: {e}"))?;
-        let exe_w: Vec<u16> = exe_path
-            .as_os_str()
-            .encode_wide()
-            .chain(Some(0))
-            .collect();
+        let exe_path =
+            std::env::current_exe().map_err(|e| format!("Failed to get current exe path: {e}"))?;
+        let exe_w: Vec<u16> = exe_path.as_os_str().encode_wide().chain(Some(0)).collect();
 
         for tab in tabs.iter().take(10) {
             // Create a shell link to the current executable with arguments to identify the tab
-            let link: IShellLinkW =
-                CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
-                    .map_err(|e| format!("Failed to create IShellLink: {:?}", e))?;
+            let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
+                .map_err(|e| format!("Failed to create IShellLink: {:?}", e))?;
 
-            link
-                .SetPath(PCWSTR(exe_w.as_ptr()))
+            link.SetPath(PCWSTR(exe_w.as_ptr()))
                 .map_err(|e| format!("Failed to SetPath on IShellLink: {:?}", e))?;
 
             let args = format!("--activate-tab {}", tab.id);
             let args_w: Vec<u16> = OsStr::new(&args).encode_wide().chain(Some(0)).collect();
-            link
-                .SetArguments(PCWSTR(args_w.as_ptr()))
+            link.SetArguments(PCWSTR(args_w.as_ptr()))
                 .map_err(|e| format!("Failed to SetArguments on IShellLink: {:?}", e))?;
 
             // Optionally set description (title) via IPropertyStore if needed in future

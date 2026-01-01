@@ -21,9 +21,7 @@ static NOTIFICATION_THREAD: OnceLock<Mutex<Option<thread::JoinHandle<()>>>> = On
 /// 注意：推荐在应用初始化时使用 init_mux_with_shell_integration 来
 /// 指定 ShellIntegrationManager，以确保回调正确注册
 pub fn get_mux() -> Arc<TerminalMux> {
-    GLOBAL_MUX
-        .get_or_init(|| init_mux_internal(None))
-        .clone()
+    GLOBAL_MUX.get_or_init(|| init_mux_internal(None)).clone()
 }
 
 /// 使用指定的 ShellIntegrationManager 初始化全局 TerminalMux

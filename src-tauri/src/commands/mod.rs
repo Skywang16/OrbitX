@@ -215,7 +215,6 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::checkpoint::commands::checkpoint_list,
         crate::checkpoint::commands::checkpoint_rollback,
         crate::checkpoint::commands::checkpoint_diff,
-        crate::checkpoint::commands::checkpoint_diff_with_current,
         crate::checkpoint::commands::checkpoint_diff_with_workspace,
         crate::checkpoint::commands::checkpoint_get_file_content,
         crate::checkpoint::commands::checkpoint_delete,

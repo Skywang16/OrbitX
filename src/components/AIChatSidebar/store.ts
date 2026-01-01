@@ -58,7 +58,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const refreshSessions = async () => {
     const path = currentWorkspacePath.value
     if (!path) return
-    await workspaceStore.loadWorkspaceData(path)
+    await workspaceStore.loadWorkspaceData(path, true)
   }
 
   const switchSession = async (sessionId: number) => {
@@ -234,7 +234,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       // TaskCreated: 后端返回权威的 sessionId，用它加载消息
       if (event.type === 'TaskCreated') {
         currentTaskId.value = event.payload.taskId
-        await workspaceStore.fetchMessages(event.payload.sessionId)
+        const workspacePath = currentWorkspacePath.value || event.payload.workspacePath
+        if (workspacePath) {
+          await workspaceStore.loadWorkspaceData(workspacePath, true)
+        } else {
+          await workspaceStore.fetchMessages(event.payload.sessionId)
+        }
         return
       }
 
@@ -329,6 +334,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   // 当工作区路径变化时，加载对应的工作区数据
   watch(currentWorkspacePath, async newPath => {
+    if (!newPath) return
     await workspaceStore.loadWorkspaceData(newPath)
   })
 
@@ -365,7 +371,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     restoreFromSessionState()
 
     // 加载当前工作区数据（有终端用终端 cwd，无终端用未分组）
-    await workspaceStore.loadWorkspaceData(currentWorkspacePath.value)
+    await workspaceStore.loadWorkspaceData(currentWorkspacePath.value, true)
 
     isInitialized.value = true
   }

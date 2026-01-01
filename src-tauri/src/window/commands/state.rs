@@ -28,7 +28,6 @@ pub async fn window_manage_state<R: Runtime>(
         Err(_) => return Ok(api_error!("window.get_window_id_failed")),
     };
 
-
     let window = match app.get_webview_window(&window_id) {
         Some(window) => window,
         None => {
@@ -84,14 +83,12 @@ async fn process_single_window_operation<R: Runtime>(
     let processing_time = operation_start.elapsed().as_millis();
 
     match result {
-        Ok(data) => {
-            WindowStateOperationResult {
-                operation: request.operation.clone(),
-                success: true,
-                data: Some(data),
-                error: None,
-            }
-        }
+        Ok(data) => WindowStateOperationResult {
+            operation: request.operation.clone(),
+            success: true,
+            data: Some(data),
+            error: None,
+        },
         Err(error) => {
             error!(
                 "Window operation failed: {:?}, error: {}, elapsed_ms: {}",
@@ -109,7 +106,6 @@ async fn process_single_window_operation<R: Runtime>(
 
 // 处理获取窗口状态操作
 async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::Value, String> {
-
     let always_on_top = state
         .with_state_manager(|manager| Ok(manager.get_always_on_top()))
         .await
@@ -164,7 +160,6 @@ async fn handle_set_always_on_top<R: Runtime>(
     window: &tauri::WebviewWindow<R>,
     state: &State<'_, WindowState>,
 ) -> Result<serde_json::Value, String> {
-
     let always_on_top = match request.params.as_ref().and_then(|p| p.always_on_top) {
         Some(value) => value,
         None => return Err(t!("window.missing_always_on_top_param")),
@@ -194,7 +189,6 @@ async fn handle_toggle_always_on_top<R: Runtime>(
     window: &tauri::WebviewWindow<R>,
     state: &State<'_, WindowState>,
 ) -> Result<serde_json::Value, String> {
-
     let new_state = state
         .with_state_manager_mut(|manager| Ok(manager.toggle_always_on_top()))
         .await
@@ -213,7 +207,6 @@ async fn handle_reset_state<R: Runtime>(
     window: &tauri::WebviewWindow<R>,
     state: &State<'_, WindowState>,
 ) -> Result<serde_json::Value, String> {
-
     if state
         .with_state_manager_mut(|manager| {
             manager.reset();

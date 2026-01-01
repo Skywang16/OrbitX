@@ -14,7 +14,7 @@ use crate::terminal::error::{EventHandlerError, EventHandlerResult};
 /// 统一的终端事件处理器
 ///
 /// 负责整合来自不同源的终端事件，并统一发送到前端
-/// 
+///
 /// 订阅三层事件:
 /// 1. Mux层 - 进程生命周期事件 (crossbeam channel)
 /// 2. Shell层 - OSC解析事件 (broadcast channel)
@@ -23,7 +23,8 @@ pub struct TerminalEventHandler<R: Runtime> {
     app_handle: AppHandle<R>,
     mux_subscriber_id: Option<usize>,
     context_event_receiver: Option<broadcast::Receiver<TerminalContextEvent>>,
-    shell_event_receiver: Option<broadcast::Receiver<(crate::mux::PaneId, crate::shell::ShellEvent)>>,
+    shell_event_receiver:
+        Option<broadcast::Receiver<(crate::mux::PaneId, crate::shell::ShellEvent)>>,
     /// 上下文事件处理任务句柄
     context_task_handle: Option<tauri::async_runtime::JoinHandle<()>>,
     /// Shell事件处理任务句柄
@@ -177,7 +178,7 @@ impl<R: Runtime> TerminalEventHandler<R> {
                     }
                 }
             });
-            
+
             self.context_task_handle = Some(handle);
         }
     }
@@ -204,7 +205,7 @@ impl<R: Runtime> TerminalEventHandler<R> {
                     }
                 }
             });
-            
+
             self.shell_task_handle = Some(handle);
         }
     }

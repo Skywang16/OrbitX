@@ -49,11 +49,6 @@
                 {{ option.description }}
               </span>
             </div>
-            <span v-if="isSelected(option)" class="x-select__option-check">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="20,6 9,17 4,12"></polyline>
-              </svg>
-            </span>
           </div>
           <div v-if="filteredOptions.length === 0" class="x-select__no-data">
             {{ actualNoDataText }}
@@ -632,22 +627,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .x-select__option-check {
-    margin-left: 8px;
-    width: 16px;
-    height: 16px;
-    color: var(--color-primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .x-select__option-check svg {
-    width: 14px;
-    height: 14px;
   }
 
   .x-select__no-data {

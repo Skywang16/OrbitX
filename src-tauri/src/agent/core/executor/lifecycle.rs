@@ -2,12 +2,11 @@
  * 任务生命周期管理
  */
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::ipc::Channel;
 use tokio::task;
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
@@ -18,7 +17,6 @@ use crate::agent::events::{
     TaskErrorPayload, TaskPausedPayload, TaskProgressPayload, TaskResumedPayload,
     TaskStartedPayload,
 };
-use crate::agent::persistence::FileRecordState;
 use crate::workspace::{WorkspaceService, UNGROUPED_WORKSPACE_PATH};
 
 impl TaskExecutor {
@@ -34,17 +32,6 @@ impl TaskExecutor {
             .build_or_restore_context(&params, Some(progress_channel))
             .await?;
 
-        // 在任务执行前自动创建 checkpoint（如果已配置 checkpoint 服务）
-        if let Some(checkpoint_service) = self.checkpoint_service() {
-            self.create_pre_execution_checkpoint(
-                &checkpoint_service,
-                ctx.session_id,
-                &params.user_prompt,
-                &ctx.cwd,
-            )
-            .await;
-        }
-
         ctx.send_progress(TaskProgressPayload::TaskCreated(TaskCreatedPayload {
             task_id: ctx.task_id.to_string(),
             session_id: ctx.session_id,
@@ -53,8 +40,16 @@ impl TaskExecutor {
         }))
         .await?;
 
-        ctx.initialize_ui_track(&params.user_prompt, params.images.as_deref())
+        // 先创建用户消息（获取 message_id）
+        let user_message_id = ctx
+            .initialize_ui_track(&params.user_prompt, params.images.as_deref())
             .await?;
+
+        if ctx.checkpointing_enabled() {
+            if let Err(err) = ctx.init_checkpoint(user_message_id).await {
+                warn!("Failed to initialize checkpoint: {}", err);
+            }
+        }
 
         let (system_prompt, _) = self
             .prompt_orchestrator()
@@ -284,8 +279,7 @@ impl TaskExecutor {
             })
             .collect();
 
-        let summarizer =
-            SessionSummarizer::new(session_id, persistence.clone(), self.database());
+        let summarizer = SessionSummarizer::new(session_id, persistence.clone(), self.database());
 
         let model_id = model_override.unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string());
 
@@ -361,103 +355,6 @@ impl TaskExecutor {
         }
 
         Ok(())
-    }
-
-    /// 在任务执行前创建 checkpoint
-    ///
-    /// 获取会话中所有被 Agent 追踪的活跃文件，并创建快照
-    async fn create_pre_execution_checkpoint(
-        &self,
-        checkpoint_service: &crate::checkpoint::CheckpointService,
-        session_id: i64,
-        user_message: &str,
-        workspace_path: &str,
-    ) {
-        // 获取会话中所有活跃的文件（Agent 读取或编辑过的文件）
-        let files = match self
-            .get_tracked_files_for_checkpoint(workspace_path)
-            .await
-        {
-            Ok(files) => files,
-            Err(e) => {
-                warn!("Failed to get tracked files for checkpoint: {}", e);
-                return;
-            }
-        };
-
-        // 如果没有被追踪的文件，跳过 checkpoint 创建
-        if files.is_empty() {
-            info!(
-                "No tracked files for session {}, skipping checkpoint",
-                session_id
-            );
-            return;
-        }
-
-        let workspace = PathBuf::from(workspace_path);
-
-        match checkpoint_service
-            .create_checkpoint(session_id, user_message, files.clone(), &workspace)
-            .await
-        {
-            Ok(checkpoint) => {
-                info!(
-                    "Created checkpoint {} for session {} with {} files",
-                    checkpoint.id,
-                    session_id,
-                    files.len()
-                );
-            }
-            Err(e) => {
-                warn!(
-                    "Failed to create checkpoint for session {}: {}",
-                    session_id, e
-                );
-            }
-        }
-    }
-
-    /// 获取会话中被追踪的文件列表（用于 checkpoint）
-    ///
-    /// 优先返回被 Agent 编辑过的文件，如果没有则返回所有活跃文件
-    async fn get_tracked_files_for_checkpoint(
-        &self,
-        workspace_path: &str,
-    ) -> TaskExecutorResult<Vec<PathBuf>> {
-        let persistence = self.agent_persistence();
-        let file_context = persistence.file_context();
-
-        // 首先尝试获取被 Agent 编辑过的文件
-        let edited_files = file_context
-            .list_agent_edited_files(workspace_path)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        // 如果有被编辑的文件，只对这些文件创建快照
-        if !edited_files.is_empty() {
-            let files: Vec<PathBuf> = edited_files
-                .into_iter()
-                .map(|entry| {
-                    Self::workspace_relative_to_absolute(workspace_path, &entry.relative_path)
-                })
-                .collect();
-            return Ok(files);
-        }
-
-        // 否则获取所有活跃文件（Agent 读取过的文件）
-        let active_files = file_context
-            .list_by_state(workspace_path, FileRecordState::Active)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        let files: Vec<PathBuf> = active_files
-            .into_iter()
-            .map(|entry| {
-                Self::workspace_relative_to_absolute(workspace_path, &entry.relative_path)
-            })
-            .collect();
-
-        Ok(files)
     }
 
     /// 规范化任务参数：空工作区时自动使用未分组会话

@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{warn};
+use tracing::warn;
 
 #[derive(Clone)]
 pub struct AIService {
@@ -206,7 +206,6 @@ impl AIService {
         headers
             .entry(CONTENT_TYPE)
             .or_insert(HeaderValue::from_static("application/json"));
-
 
         let response = client
             .post(&request.url)

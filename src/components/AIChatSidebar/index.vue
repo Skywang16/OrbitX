@@ -117,8 +117,16 @@
     aiChatStore.stopCurrentTask()
   }
 
-  const handleRollbackResult = (result: { success: boolean; message: string }) => {
+  const handleRollbackResult = async (result: { success: boolean; message: string; restoreContent?: string }) => {
     console.warn('Checkpoint rollback:', result.message)
+    if (result.success) {
+      await aiChatStore.refreshSessions()
+      if (result.restoreContent && result.restoreContent.trim().length > 0) {
+        messageInput.value = result.restoreContent
+        chatInputRef.value?.adjustTextareaHeight()
+        chatInputRef.value?.focus()
+      }
+    }
   }
 
   onMounted(async () => {

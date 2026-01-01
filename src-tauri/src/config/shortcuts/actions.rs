@@ -224,9 +224,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |_context| {
-                    Ok(serde_json::Value::String("🔥 复制功能已触发！".to_string()))
-                },
+                |_context| Ok(serde_json::Value::String("🔥 复制功能已触发！".to_string())),
             )
             .await;
 
@@ -243,9 +241,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |_context| {
-                    Ok(serde_json::Value::String("🔥 粘贴功能已触发！".to_string()))
-                },
+                |_context| Ok(serde_json::Value::String("🔥 粘贴功能已触发！".to_string())),
             )
             .await;
 
@@ -262,9 +258,7 @@ impl ActionRegistry {
                         "linux".to_string(),
                     ],
                 },
-                |_context| {
-                    Ok(serde_json::Value::String("🔥 搜索功能已触发！".to_string()))
-                },
+                |_context| Ok(serde_json::Value::String("🔥 搜索功能已触发！".to_string())),
             )
             .await;
     }
