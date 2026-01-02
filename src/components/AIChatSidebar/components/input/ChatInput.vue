@@ -5,7 +5,6 @@
   import { useNodeVersion } from '@/composables/useNodeVersion'
   import { useProjectRules } from '@/composables/useProjectRules'
   import { useTerminalStore } from '@/stores/Terminal'
-  import { useAISettingsStore } from '@/components/settings/components/AI'
   import { homeDir } from '@tauri-apps/api/path'
   import TerminalTabTag from '../tags/TerminalTabTag.vue'
   import NodeVersionTag from '../tags/NodeVersionTag.vue'
@@ -78,15 +77,7 @@
   const projectRules = useProjectRules()
 
   const terminalStore = useTerminalStore()
-  const aiSettingsStore = useAISettingsStore()
   const activeTerminalCwd = computed(() => terminalStore.activeTerminal?.cwd || null)
-
-  // 检查当前选中的模型是否支持图片输入
-  const currentModelSupportsImages = computed(() => {
-    if (!props.selectedModel) return false
-    const model = aiSettingsStore.chatModels.find(m => m.id === props.selectedModel)
-    return model?.options?.supportsImages ?? false
-  })
 
   const homePath = ref<string>('')
 
@@ -218,9 +209,6 @@
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
-    // 如果模型不支持图片，不处理图片粘贴
-    if (!currentModelSupportsImages.value) return
-
     const imageFile = await getImageFromClipboard(event)
     if (imageFile) {
       event.preventDefault()
@@ -551,14 +539,8 @@
       <div class="bottom-right">
         <button
           class="image-upload-button"
-          :disabled="!currentModelSupportsImages || imageAttachments.length >= 5"
-          :title="
-            !currentModelSupportsImages
-              ? t('chat.model_not_support_images')
-              : imageAttachments.length >= 5
-                ? t('chat.max_images_reached')
-                : t('chat.upload_image')
-          "
+          :disabled="imageAttachments.length >= 5"
+          :title="imageAttachments.length >= 5 ? t('chat.max_images_reached') : t('chat.upload_image')"
           @click="handleImageUpload"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

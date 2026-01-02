@@ -1,6 +1,9 @@
 <template>
   <div class="tool-block">
-    <div class="tool-line" :class="{ clickable: isExpandable, running: isRunning, error: isError }">
+    <div
+      class="tool-line"
+      :class="{ clickable: isExpandable, running: isRunning, error: isError, cancelled: isCancelled }"
+    >
       <span class="text" :class="{ clickable: isExpandable }" @click="toggleExpanded">
         <span v-if="toolPrefix" class="tool-prefix">{{ toolPrefix }}</span>
         <span class="tool-content">{{ getDisplayText() }}</span>
@@ -88,7 +91,7 @@
   })
 
   const isError = computed(() => {
-    return props.block.status === 'error' || Boolean(props.block.output?.isError)
+    return props.block.status === 'error'
   })
 
   const hasResult = computed(() => {
@@ -141,6 +144,10 @@
     return props.block.status === 'running'
   })
 
+  const isCancelled = computed(() => {
+    return props.block.status === 'cancelled'
+  })
+
   const diffStats = computed(() => {
     if (toolName.value !== 'edit_file' || !props.block.output?.ext) return null
     const extInfo = props.block.output.ext as EditResultData
@@ -167,6 +174,7 @@
         return 'Shell '
       case 'edit_file':
         return 'Edited '
+      case 'write_file':
       case 'write_to_file':
         return 'Wrote to '
       case 'insert_content':
@@ -185,6 +193,9 @@
   const getDisplayText = () => {
     const params = toolParams.value
     const extInfo = props.block.output?.ext as Record<string, unknown> | undefined
+    const cancelReason = props.block.output?.cancelReason
+
+    let baseText = ''
 
     switch (toolName.value) {
       case 'read_file': {
@@ -211,24 +222,39 @@
         return 'output'
       }
       case 'edit_file':
-        return formatPath(params?.path as string)
+        baseText = formatPath(params?.path as string)
+        break
+      case 'write_file':
       case 'write_to_file':
-        return formatPath(params?.path as string)
+        baseText = formatPath(params?.path as string)
+        break
       case 'insert_content':
-        return formatPath(params?.path as string)
+        baseText = formatPath(params?.path as string)
+        break
       case 'shell':
-        return formatText(params?.command as string)
+        baseText = formatText(params?.command as string)
+        break
       case 'orbit_search':
-        return formatText(params?.query as string)
+        baseText = formatText(params?.query as string)
+        break
       case 'list_files':
-        return formatPath(params?.path as string) || 'files'
+        baseText = formatPath(params?.path as string) || 'files'
+        break
       case 'web_fetch':
-        return formatUrl(params?.url as string)
+        baseText = formatUrl(params?.url as string)
+        break
       case 'apply_diff':
-        return `${(params?.files as { path: string }[])?.length || 0} files`
+        baseText = `${(params?.files as { path: string }[])?.length || 0} files`
+        break
       default:
-        return toolName.value || 'Unknown'
+        baseText = toolName.value || 'Unknown'
     }
+
+    if (isCancelled.value) {
+      return cancelReason ? `${baseText} (${cancelReason})` : `${baseText} (cancelled)`
+    }
+
+    return baseText
   }
 
   const formatPath = (path: string) => {
@@ -352,6 +378,11 @@
 
   .tool-line.error {
     color: var(--color-error);
+  }
+
+  .tool-line.cancelled {
+    color: var(--text-500);
+    opacity: 0.85;
   }
 
   .text {

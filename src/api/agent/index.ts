@@ -37,6 +37,16 @@ export class AgentApi {
     await invoke('agent_cancel_task', { taskId, reason })
   }
 
+  confirmTool = async (
+    taskId: string,
+    requestId: string,
+    decision: 'allow_once' | 'allow_always' | 'deny'
+  ): Promise<void> => {
+    await invoke('agent_tool_confirm', {
+      params: { taskId, requestId, decision },
+    })
+  }
+
   /**
    * 列出任务
    * @param filters 过滤条件

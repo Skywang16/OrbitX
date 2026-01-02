@@ -1,6 +1,7 @@
 import { agentApi } from '@/api/agent'
 import type { TaskProgressPayload, TaskProgressStream } from '@/api/agent/types'
 import { useAISettingsStore } from '@/components/settings/components/AI'
+import { useToolConfirmationDialogStore } from '@/stores/toolConfirmationDialog'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useSessionStore } from '@/stores/session'
 import type { ImageAttachment } from '@/stores/imageLightbox'
@@ -12,6 +13,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const workspaceStore = useWorkspaceStore()
   const sessionStore = useSessionStore()
   const aiSettingsStore = useAISettingsStore()
+  const toolConfirmStore = useToolConfirmationDialogStore()
 
   const isVisible = ref(false)
   const sidebarWidth = ref(350)
@@ -95,6 +97,16 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         msg.durationMs = event.durationMs
         msg.tokenUsage = event.tokenUsage
         isSending.value = false
+        break
+      }
+      case 'tool_confirmation_requested': {
+        toolConfirmStore.open({
+          taskId: event.taskId,
+          requestId: event.requestId,
+          workspacePath: event.workspacePath,
+          toolName: event.toolName,
+          summary: event.summary,
+        })
         break
       }
       case 'task_completed':

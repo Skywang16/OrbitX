@@ -30,11 +30,20 @@ pub enum ToolResultContent {
     Error(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolResultStatus {
+    Success,
+    Error,
+    Cancelled,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolResult {
     pub content: Vec<ToolResultContent>,
-    #[serde(rename = "isError")]
-    pub is_error: bool,
+    pub status: ToolResultStatus,
+    #[serde(rename = "cancelReason")]
+    pub cancel_reason: Option<String>,
     #[serde(rename = "executionTimeMs")]
     pub execution_time_ms: Option<u64>,
     #[serde(rename = "extInfo")]

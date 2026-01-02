@@ -111,7 +111,7 @@ pub enum ToolStatus {
 #[serde(rename_all = "camelCase")]
 pub struct ToolOutput {
     pub content: Value,
-    pub is_error: bool,
+    pub cancel_reason: Option<String>,
     pub ext: Option<Value>,
 }
 
@@ -135,15 +135,10 @@ pub enum TaskEvent {
     },
 
     #[serde(rename_all = "camelCase")]
-    MessageCreated {
-        message: Message,
-    },
+    MessageCreated { message: Message },
 
     #[serde(rename_all = "camelCase")]
-    BlockAppended {
-        message_id: i64,
-        block: Block,
-    },
+    BlockAppended { message_id: i64, block: Block },
 
     #[serde(rename_all = "camelCase")]
     BlockUpdated {
@@ -162,18 +157,21 @@ pub enum TaskEvent {
     },
 
     #[serde(rename_all = "camelCase")]
-    TaskCompleted {
-        task_id: String,
-    },
+    TaskCompleted { task_id: String },
 
     #[serde(rename_all = "camelCase")]
-    TaskError {
-        task_id: String,
-        error: ErrorBlock,
-    },
+    TaskError { task_id: String, error: ErrorBlock },
 
     #[serde(rename_all = "camelCase")]
-    TaskCancelled {
+    TaskCancelled { task_id: String },
+
+    /// 工具执行确认请求（前端需要弹窗并回传 decision）
+    #[serde(rename_all = "camelCase")]
+    ToolConfirmationRequested {
         task_id: String,
+        request_id: String,
+        workspace_path: String,
+        tool_name: String,
+        summary: String,
     },
 }

@@ -13,7 +13,7 @@ use crate::agent::error::ToolExecutorResult;
 use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent,
+    ToolResultContent, ToolResultStatus,
 };
 use crate::vector_db::core::Language;
 
@@ -92,7 +92,8 @@ impl ReadFileTool {
 
         ToolResult {
             content: vec![ToolResultContent::Success(result_text)],
-            is_error: false,
+            status: ToolResultStatus::Success,
+            cancel_reason: None,
             execution_time_ms: None,
             ext_info: Some(json!({
                 "mode": "full",
@@ -113,7 +114,8 @@ impl ReadFileTool {
             match self.extract_code_outline(content, language) {
                 Ok(outline) => ToolResult {
                     content: vec![ToolResultContent::Success(outline)],
-                    is_error: false,
+                    status: ToolResultStatus::Success,
+                    cancel_reason: None,
                     execution_time_ms: None,
                     ext_info: Some(json!({
                         "mode": "outline",
@@ -131,7 +133,8 @@ impl ReadFileTool {
 
             ToolResult {
                 content: vec![ToolResultContent::Success(outline.join("\n"))],
-                is_error: false,
+                status: ToolResultStatus::Success,
+                cancel_reason: None,
                 execution_time_ms: None,
                 ext_info: Some(json!({
                     "mode": "outline",
@@ -152,7 +155,8 @@ impl ReadFileTool {
 
                     ToolResult {
                         content: vec![ToolResultContent::Success(result_text)],
-                        is_error: false,
+                        status: ToolResultStatus::Success,
+                        cancel_reason: None,
                         execution_time_ms: None,
                         ext_info: Some(json!({
                             "mode": "symbol",
@@ -653,7 +657,8 @@ Usage:
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }
@@ -662,7 +667,8 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }

@@ -10,7 +10,7 @@ use crate::agent::error::ToolExecutorResult;
 use crate::agent::shell::{AgentShellExecutor, CommandStatus, ShellError};
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent,
+    ToolResultContent, ToolResultStatus,
 };
 
 /// 默认超时时间（毫秒）
@@ -170,7 +170,8 @@ Notes:
 
                     Ok(ToolResult {
                         content: vec![ToolResultContent::Success(message)],
-                        is_error: false,
+                        status: ToolResultStatus::Success,
+                        cancel_reason: None,
                         execution_time_ms: Some(2000),
                         ext_info: Some(json!({
                             "command": args.command,
@@ -207,7 +208,12 @@ Notes:
                         } else {
                             ToolResultContent::Error(result.output.clone())
                         }],
-                        is_error: !is_success,
+                        status: if is_success {
+                            ToolResultStatus::Success
+                        } else {
+                            ToolResultStatus::Error
+                        },
+                        cancel_reason: None,
                         execution_time_ms: Some(result.duration_ms),
                         ext_info: Some(json!({
                             "command": args.command,
@@ -228,25 +234,49 @@ Notes:
 }
 
 fn error_result(command: &str, cwd: &str, error: &ShellError) -> ToolResult {
-    let (message, status) = match error {
-        ShellError::Timeout(ms) => (format!("Command timed out after {}ms", ms), "timeout"),
-        ShellError::Aborted => ("Command was aborted".to_string(), "aborted"),
-        ShellError::DangerousCommand(cmd) => {
-            (format!("Dangerous command blocked: {}", cmd), "blocked")
-        }
-        ShellError::ValidationFailed(msg) => {
-            (format!("Validation failed: {}", msg), "validation_error")
-        }
+    let (message, status, tool_status, cancel_reason) = match error {
+        ShellError::Timeout(ms) => (
+            format!("Command timed out after {}ms", ms),
+            "timeout",
+            ToolResultStatus::Error,
+            None,
+        ),
+        ShellError::Aborted => (
+            "Command was aborted".to_string(),
+            "aborted",
+            ToolResultStatus::Cancelled,
+            Some("aborted".to_string()),
+        ),
+        ShellError::DangerousCommand(cmd) => (
+            format!("Dangerous command blocked: {}", cmd),
+            "blocked",
+            ToolResultStatus::Cancelled,
+            Some("blocked".to_string()),
+        ),
+        ShellError::ValidationFailed(msg) => (
+            format!("Validation failed: {}", msg),
+            "validation_error",
+            ToolResultStatus::Error,
+            None,
+        ),
         ShellError::TooManyBackgroundCommands(max) => (
             format!("Too many background commands (max: {})", max),
             "limit_exceeded",
+            ToolResultStatus::Error,
+            None,
         ),
-        _ => (format!("Command failed: {}", error), "failed"),
+        _ => (
+            format!("Command failed: {}", error),
+            "failed",
+            ToolResultStatus::Error,
+            None,
+        ),
     };
 
     ToolResult {
         content: vec![ToolResultContent::Error(message)],
-        is_error: true,
+        status: tool_status,
+        cancel_reason,
         execution_time_ms: None,
         ext_info: Some(json!({
             "command": command,

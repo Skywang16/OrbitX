@@ -6,11 +6,13 @@ use crate::agent::context::SummaryResult;
 use crate::agent::core::executor::{
     ExecuteTaskParams, FileContextStatus, TaskExecutor, TaskSummary,
 };
+use crate::agent::tools::registry::ToolConfirmationDecision;
 use crate::agent::types::TaskEvent;
 use crate::storage::repositories::AppPreferences;
 use crate::storage::{DatabaseManager, UnifiedCache};
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
+use serde::Deserialize;
 use std::sync::Arc;
 use tauri::{ipc::Channel, State};
 
@@ -54,6 +56,42 @@ pub async fn agent_cancel_task(
             tracing::error!("Failed to cancel task: {}", e);
             Ok(api_error!("agent.cancel_failed"))
         }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolConfirmationParams {
+    pub task_id: String,
+    pub request_id: String,
+    pub decision: ToolConfirmationDecision,
+}
+
+/// 回传工具确认结果
+#[tauri::command]
+pub async fn agent_tool_confirm(
+    state: State<'_, TaskExecutorState>,
+    params: ToolConfirmationParams,
+) -> TauriApiResult<EmptyData> {
+    let ctx = state
+        .executor
+        .active_tasks()
+        .get(&params.task_id)
+        .map(|entry| Arc::clone(entry.value()));
+
+    let ctx = match ctx {
+        Some(ctx) => ctx,
+        None => return Ok(api_error!("agent.task_not_found")),
+    };
+
+    let ok = ctx
+        .tool_registry()
+        .resolve_confirmation(&params.request_id, params.decision);
+
+    if ok {
+        Ok(api_success!())
+    } else {
+        Ok(api_error!("agent.tool_confirm_not_found"))
     }
 }
 

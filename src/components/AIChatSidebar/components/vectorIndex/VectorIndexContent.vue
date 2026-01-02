@@ -272,21 +272,9 @@
             <x-button size="small" variant="secondary" @click="handleEditEmbeddingModel">
               {{ t('ai_model.edit') }}
             </x-button>
-            <x-popconfirm
-              :title="t('ai_model.delete_confirm')"
-              :description="t('ai_model.delete_description', { name: embeddingModel?.model })"
-              type="danger"
-              :confirm-text="t('ai_model.delete_confirm_text')"
-              :cancel-text="t('ai_model.cancel')"
-              placement="top"
-              @confirm="handleDeleteEmbeddingModel"
-            >
-              <template #trigger>
-                <x-button size="small" variant="danger">
-                  {{ t('ai_model.delete') }}
-                </x-button>
-              </template>
-            </x-popconfirm>
+            <x-button size="small" variant="danger" @click="handleDeleteEmbeddingModel">
+              {{ t('ai_model.delete') }}
+            </x-button>
           </div>
         </div>
 

@@ -11,6 +11,7 @@
   import ResizeHandle from './components/layout/ResizeHandle.vue'
   import ImageLightbox from './components/input/ImageLightbox.vue'
   import RollbackConfirmDialog from './components/messages/RollbackConfirmDialog.vue'
+  import ToolConfirmationDialog from './components/messages/ToolConfirmationDialog.vue'
 
   const aiChatStore = useAIChatStore()
   const aiSettingsStore = useAISettingsStore()
@@ -175,6 +176,7 @@
         <!--  <TaskList /> -->
       </div>
 
+      <ToolConfirmationDialog />
       <ChatInput
         ref="chatInputRef"
         v-model="messageInput"

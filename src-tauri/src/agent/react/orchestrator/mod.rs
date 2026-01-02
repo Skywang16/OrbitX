@@ -430,7 +430,7 @@ impl ReactOrchestrator {
                                 outcome,
                             );
 
-                            if result.is_error {
+                            if result.status != crate::agent::tools::ToolResultStatus::Success {
                                 react.fail_iteration(
                                     react_iteration_index,
                                     format!("Tool {} failed", result.tool_name),

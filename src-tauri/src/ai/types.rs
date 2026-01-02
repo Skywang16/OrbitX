@@ -2,11 +2,8 @@
  * AI相关的数据类型定义
  */
 
-use chrono::{DateTime, Utc};
-use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::pin::Pin;
 
 // 重新导出Repository中的类型
 pub use crate::storage::repositories::ai_models::{AIModelConfig, AIProvider, ModelType};
@@ -134,7 +131,7 @@ impl Default for ChatSettings {
     fn default() -> Self {
         Self {
             enabled: true,
-            max_history_length: usize::MAX, // 无限历史长度
+            max_history_length: usize::MAX,
             auto_save_history: true,
             context_window_size: 4000,
         }
@@ -156,120 +153,18 @@ impl Default for AIPerformanceSettings {
             request_timeout: 30,
             max_concurrent_requests: 5,
             cache_enabled: true,
-            cache_ttl: 3600, // 1小时
+            cache_ttl: 3600,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AIStats {
-    pub total_requests: u64,
-    pub successful_requests: u64,
-    pub failed_requests: u64,
-    pub average_response_time: f64,
-    pub tokens_used: u64,
-    pub cache_hit_rate: Option<f64>,
-    pub model_usage: HashMap<String, u64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AIHealthStatus {
-    pub model_id: String,
-    pub status: HealthStatus,
-    pub last_checked: DateTime<Utc>,
-    pub response_time: Option<u64>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum HealthStatus {
-    Healthy,
-    Degraded,
-    Unhealthy,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CacheEntry<T> {
-    pub key: String,
-    pub value: T,
-    pub timestamp: DateTime<Utc>,
-    pub ttl: u64,
-    pub hits: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CacheStats {
-    pub total_entries: usize,
-    pub hit_rate: f64,
-    pub memory_usage: usize,
-    pub oldest_entry: Option<DateTime<Utc>>,
-    pub newest_entry: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StreamChunk {
-    pub content: String,
-    pub is_complete: bool,
-    pub metadata: Option<HashMap<String, serde_json::Value>>,
-}
-
-/// 流式响应类型别名
-pub type AIStreamResponse =
-    Pin<Box<dyn Stream<Item = Result<StreamChunk, crate::ai::error::AIServiceError>> + Send>>;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AdapterCapabilities {
-    pub supports_streaming: bool,
-    pub supports_batch: bool,
-    pub supports_function_calling: bool,
-    pub supports_vision: bool,
-    pub max_tokens: Option<u32>,
-    pub max_batch_size: Option<usize>,
-    pub supported_models: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HealthCheckRequest {
-    pub include_latency: bool,
-    pub include_model_info: bool,
-    pub timeout: Option<u64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HealthCheckResponse {
-    pub status: HealthStatus,
-    pub latency: Option<u64>,
-    pub model_info: Option<ModelInfo>,
-    pub error: Option<String>,
-    pub timestamp: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelInfo {
-    pub name: String,
-    pub version: Option<String>,
-    pub context_length: Option<u32>,
-    pub capabilities: Option<AdapterCapabilities>,
-}
-
-// 重新导出Repository中的会话和消息类型
 /// AI配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AIConfig {
-    pub max_context_tokens: u32, // 上下文最大token (当前版本暂未强制执行)
-    pub model_name: String,      // 使用的模型名称
-    pub enable_semantic_compression: bool, // 是否启用语义压缩 (Phase 5功能)
+    pub max_context_tokens: u32,
+    pub model_name: String,
+    pub enable_semantic_compression: bool,
 }
 
 impl Default for AIConfig {
@@ -280,13 +175,4 @@ impl Default for AIConfig {
             enable_semantic_compression: false,
         }
     }
-}
-/// 上下文统计信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ContextStats {
-    pub session_id: i64,
-    pub total_messages: i32,
-    pub summary_generated: bool,
-    pub last_summary_at: Option<DateTime<Utc>>,
 }

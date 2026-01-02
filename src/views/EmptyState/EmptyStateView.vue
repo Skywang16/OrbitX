@@ -9,7 +9,7 @@
         </svg>
         <span>{{ t('shortcuts.actions.new_tab') }}</span>
       </div>
-      <div class="action-card" @click="showCloneDialog = true">
+      <div class="action-card" @click="toggleCloneInput">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -17,6 +17,33 @@
         <span>{{ t('shortcuts.actions.clone_repository') || '克隆仓库' }}</span>
       </div>
     </div>
+
+    <!-- Inline Clone Input -->
+    <Transition name="slide">
+      <div v-if="showCloneInput" class="clone-input-container">
+        <div class="clone-input-wrapper">
+          <input
+            ref="cloneInputRef"
+            v-model="gitUrl"
+            type="text"
+            class="clone-input"
+            :class="{ 'is-invalid': gitUrlError }"
+            :placeholder="t('shortcuts.git_url_placeholder')"
+            @keydown.enter="handleCloneConfirm"
+            @keydown.escape="closeCloneInput"
+          />
+          <div class="clone-actions">
+            <button class="clone-btn clone-btn--ghost" @click="closeCloneInput">
+              {{ t('common.cancel') }}
+            </button>
+            <button class="clone-btn clone-btn--primary" @click="handleCloneConfirm">
+              {{ t('shortcuts.actions.clone_repository') }}
+            </button>
+          </div>
+        </div>
+        <div v-if="gitUrlError" class="input-error">{{ gitUrlError }}</div>
+      </div>
+    </Transition>
 
     <!-- Recent Workspaces Section -->
     <div v-if="recentWorkspaces.length > 0" class="recent-section">
@@ -40,50 +67,23 @@
         </div>
       </div>
     </div>
-
-    <!-- Clone Repository Dialog (System XModal) -->
-    <XModal
-      :visible="showCloneDialog"
-      :title="t('shortcuts.actions.clone_repository')"
-      size="small"
-      :showFooter="true"
-      :noPadding="true"
-      @update:visible="showCloneDialog = $event"
-      @opened="handleCloneOpened"
-      @confirm="handleCloneConfirm(gitUrl)"
-      @cancel="showCloneDialog = false"
-    >
-      <div class="clone-dialog-body">
-        <SearchInput
-          v-model="gitUrl"
-          :placeholder="t('shortcuts.git_url_placeholder')"
-          :clearable="true"
-          :autofocus="true"
-          @search="val => ((gitUrl = val), (gitUrlError = ''))"
-          class="dialog-input"
-          :class="{ 'is-invalid': gitUrlError }"
-        />
-        <div v-if="gitUrlError" class="input-error">{{ gitUrlError }}</div>
-      </div>
-    </XModal>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ref, onMounted } from 'vue'
+  import { ref, onMounted, nextTick } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { shortcutActionsService } from '@/shortcuts/actions'
   import { workspaceApi, type RecentWorkspace } from '@/api/workspace'
   import { useTerminalStore } from '@/stores/Terminal'
-  import XModal from '@/ui/components/Modal.vue'
-  import SearchInput from '@/ui/components/SearchInput.vue'
 
   const { t } = useI18n()
   const terminalStore = useTerminalStore()
   const recentWorkspaces = ref<RecentWorkspace[]>([])
-  const showCloneDialog = ref(false)
+  const showCloneInput = ref(false)
   const gitUrl = ref('')
   const gitUrlError = ref('')
+  const cloneInputRef = ref<HTMLInputElement>()
 
   onMounted(async () => {
     try {
@@ -93,7 +93,19 @@
     }
   })
 
-  const handleCloneOpened = () => {
+  const toggleCloneInput = () => {
+    showCloneInput.value = !showCloneInput.value
+    if (showCloneInput.value) {
+      gitUrl.value = ''
+      gitUrlError.value = ''
+      nextTick(() => {
+        cloneInputRef.value?.focus()
+      })
+    }
+  }
+
+  const closeCloneInput = () => {
+    showCloneInput.value = false
     gitUrl.value = ''
     gitUrlError.value = ''
   }
@@ -103,14 +115,13 @@
   }
 
   const isValidGitUrl = (url: string) => {
-    // 支持 SSH 和 HTTPS 两种常见形式
     const ssh = /^(git@|ssh:\/\/git@)[\w.-]+:[\w.-]+\/[\w.-]+(\.git)?$/
     const https = /^(https?:\/\/)[\w.-]+(:\d+)?\/[\w.-]+\/[\w.-]+(\.git)?(#[\w.-]+)?$/
     return ssh.test(url) || https.test(url)
   }
 
-  const handleCloneConfirm = async (url?: string) => {
-    const finalUrl = (url ?? gitUrl.value).trim()
+  const handleCloneConfirm = async () => {
+    const finalUrl = gitUrl.value.trim()
     if (!finalUrl) {
       gitUrlError.value = '请输入 Git 仓库地址'
       return
@@ -122,21 +133,16 @@
     gitUrlError.value = ''
 
     try {
-      // 新建标签页
       await shortcutActionsService.newTab()
 
-      // 等待终端准备好
       setTimeout(() => {
         const activeTerminal = terminalStore.activeTerminal
         if (activeTerminal) {
-          // 执行 git clone 命令
           terminalStore.writeToTerminal(activeTerminal.id, `git clone ${finalUrl}\n`)
         }
       }, 100)
 
-      // 关闭对话框
-      showCloneDialog.value = false
-      gitUrl.value = ''
+      closeCloneInput()
     } catch (error) {
       console.error('Failed to clone repository:', error)
     }
@@ -214,6 +220,100 @@
     color: var(--color-primary);
   }
 
+  /* Clone input inline */
+  .clone-input-container {
+    width: 100%;
+    max-width: 500px;
+    margin-bottom: var(--spacing-xl);
+  }
+
+  .clone-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: var(--bg-300);
+    border: 1px solid var(--border-300);
+    border-radius: var(--border-radius-md);
+  }
+
+  .clone-input {
+    flex: 1;
+    height: 32px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-family: var(--font-family-mono);
+    color: var(--text-100);
+    background: var(--bg-400);
+    border: 1px solid var(--border-300);
+    border-radius: var(--border-radius-sm);
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+
+  .clone-input:focus {
+    border-color: var(--color-primary);
+  }
+
+  .clone-input.is-invalid {
+    border-color: var(--color-error);
+  }
+
+  .clone-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .clone-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .clone-btn--ghost {
+    color: var(--text-300);
+    background: transparent;
+    border: none;
+  }
+
+  .clone-btn--ghost:hover {
+    color: var(--text-100);
+  }
+
+  .clone-btn--primary {
+    color: var(--bg-100);
+    background: var(--color-primary);
+    border: none;
+  }
+
+  .clone-btn--primary:hover {
+    background: var(--color-primary-hover);
+  }
+
+  .input-error {
+    margin-top: 6px;
+    padding-left: 8px;
+    color: var(--color-error);
+    font-size: 12px;
+  }
+
+  /* Transition */
+  .slide-enter-active,
+  .slide-leave-active {
+    transition: all 0.2s ease;
+  }
+
+  .slide-enter-from,
+  .slide-leave-to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
   .recent-section {
     width: 100%;
     max-width: 500px;
@@ -283,29 +383,5 @@
     text-overflow: ellipsis;
     direction: rtl;
     text-align: right;
-  }
-
-  /* Clone dialog layout */
-  .clone-dialog-body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-xs);
-    padding: var(--spacing-md) var(--spacing-xl) var(--spacing-sm) var(--spacing-xl);
-    width: 100%;
-  }
-
-  :deep(.dialog-input) {
-    width: 100%;
-    margin: 0; /* ensure no extra bottom margin */
-  }
-
-  .input-error {
-    margin-top: var(--spacing-xs);
-    color: var(--color-error);
-    font-size: var(--font-size-xs);
-  }
-
-  :deep(.is-invalid) {
-    border-color: var(--color-error) !important;
   }
 </style>

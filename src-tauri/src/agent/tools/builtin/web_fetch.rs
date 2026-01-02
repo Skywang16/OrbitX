@@ -16,7 +16,7 @@ use crate::agent::core::context::TaskContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
     BackoffStrategy, RateLimitConfig, RunnableTool, ToolCategory, ToolMetadata, ToolPermission,
-    ToolPriority, ToolResult, ToolResultContent,
+    ToolPriority, ToolResult, ToolResultContent, ToolResultStatus,
 };
 
 #[derive(Debug, Deserialize)]
@@ -129,7 +129,8 @@ Usage notes:
             Ok(Some(jina_content)) => {
                 return Ok(ToolResult {
                     content: vec![ToolResultContent::Success(jina_content.clone())],
-                    is_error: false,
+                    status: ToolResultStatus::Success,
+                    cancel_reason: None,
                     execution_time_ms: None,
                     ext_info: Some(json!({
                         "url": parsed_url.as_str(),
@@ -164,7 +165,8 @@ Usage notes:
             Err(e) => {
                 return Ok(ToolResult {
                     content: vec![ToolResultContent::Error(format!("request failed: {}", e))],
-                    is_error: true,
+                    status: ToolResultStatus::Error,
+                    cancel_reason: None,
                     execution_time_ms: Some(started.elapsed().as_millis() as u64),
                     ext_info: None,
                 });
@@ -206,9 +208,16 @@ Usage notes:
             "source": "direct",
         });
 
+        let status_flag = if (200..400).contains(&status) {
+            ToolResultStatus::Success
+        } else {
+            ToolResultStatus::Error
+        };
+
         Ok(ToolResult {
             content: vec![ToolResultContent::Success(data_text)],
-            is_error: !(200..400).contains(&status),
+            status: status_flag,
+            cancel_reason: None,
             execution_time_ms: Some(started.elapsed().as_millis() as u64),
             ext_info: Some(meta),
         })
@@ -317,7 +326,8 @@ async fn try_jina_reader(url: &Url, timeout_ms: u64) -> Result<Option<String>, T
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }
@@ -326,7 +336,8 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }

@@ -12,7 +12,7 @@ use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent,
+    ToolResultContent, ToolResultStatus,
 };
 
 use super::file_utils::{ensure_absolute, is_probably_binary};
@@ -360,6 +360,7 @@ Usage:
 
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::FileWrite, ToolPriority::Standard)
+            .with_confirmation()
             .with_tags(vec!["filesystem".into(), "edit".into()])
             .with_summary_key_arg("path")
     }
@@ -694,7 +695,8 @@ Usage:
 fn success_result(text: String, ext: serde_json::Value) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Success(text)],
-        is_error: false,
+        status: ToolResultStatus::Success,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: Some(ext),
     }
@@ -703,7 +705,8 @@ fn success_result(text: String, ext: serde_json::Value) -> ToolResult {
 fn error_result(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }

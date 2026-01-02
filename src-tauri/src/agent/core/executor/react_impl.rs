@@ -5,14 +5,16 @@
  */
 
 use serde_json::Value;
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::agent::context::ContextBuilder;
 use crate::agent::core::context::{TaskContext, ToolCallResult};
 use crate::agent::core::executor::{ReactHandler, TaskExecutor};
 use crate::agent::error::TaskExecutorResult;
-use crate::agent::tools::{self, ToolDescriptionContext, ToolRegistry, ToolResultContent};
+use crate::agent::tools::{
+    self, ToolDescriptionContext, ToolRegistry, ToolResultContent, ToolResultStatus,
+};
 use crate::agent::types::{Block, ToolBlock, ToolOutput, ToolStatus};
 use crate::llm::anthropic_types::CreateMessageRequest;
 
@@ -141,7 +143,7 @@ impl ReactHandler for TaskExecutor {
         // 转换结果并发送事件
         let mut results = Vec::with_capacity(responses.len());
         for resp in responses {
-            let (is_error, result_value) = convert_result(&resp.result);
+            let (result_status, result_value) = convert_result(&resp.result);
             let finished_at = chrono::Utc::now();
             let started_at = tool_started_at
                 .get(&resp.id)
@@ -149,10 +151,10 @@ impl ReactHandler for TaskExecutor {
                 .unwrap_or(finished_at);
             let input = tool_inputs.get(&resp.id).cloned().unwrap_or(Value::Null);
 
-            let status = if is_error {
-                ToolStatus::Error
-            } else {
-                ToolStatus::Completed
+            let status = match result_status {
+                ToolResultStatus::Success => ToolStatus::Completed,
+                ToolResultStatus::Error => ToolStatus::Error,
+                ToolResultStatus::Cancelled => ToolStatus::Cancelled,
             };
 
             // Update the existing tool block (created on ToolUse).
@@ -166,23 +168,21 @@ impl ReactHandler for TaskExecutor {
                         input,
                         output: Some(ToolOutput {
                             content: result_value.clone(),
-                            is_error,
+                            cancel_reason: resp.result.cancel_reason.clone(),
                             ext: resp.result.ext_info.clone(),
                         }),
                         started_at,
                         finished_at: Some(finished_at),
-                        duration_ms: resp
-                            .result
-                            .execution_time_ms
-                            .map(|v| v as i64)
-                            .or_else(|| {
+                        duration_ms: resp.result.execution_time_ms.map(|v| v as i64).or_else(
+                            || {
                                 Some(
                                     finished_at
                                         .signed_duration_since(started_at)
                                         .num_milliseconds()
                                         .max(0) as i64,
                                 )
-                            }),
+                            },
+                        ),
                     }),
                 )
                 .await;
@@ -191,7 +191,7 @@ impl ReactHandler for TaskExecutor {
                 call_id: resp.id,
                 tool_name: resp.name,
                 result: result_value,
-                is_error,
+                status: result_status,
                 execution_time_ms: resp.result.execution_time_ms.unwrap_or(0),
             });
         }
@@ -207,30 +207,54 @@ impl ReactHandler for TaskExecutor {
     }
 }
 
-/// 转换 ToolResult 到 (is_error, json_value)
+/// 转换 ToolResult 到 (status, json_value)
 #[inline]
-fn convert_result(result: &tools::ToolResult) -> (bool, Value) {
-    if result.is_error {
-        let msg = result
-            .content
-            .iter()
-            .filter_map(|c| match c {
-                ToolResultContent::Error(text) => Some(text.as_str()),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        (true, serde_json::json!({"error": msg}))
-    } else {
-        let content = result
-            .content
-            .iter()
-            .filter_map(|c| match c {
-                ToolResultContent::Success(text) => Some(text.as_str()),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        (false, serde_json::json!({"result": content}))
+fn convert_result(result: &tools::ToolResult) -> (ToolResultStatus, Value) {
+    match result.status {
+        ToolResultStatus::Success => {
+            let content = result
+                .content
+                .iter()
+                .filter_map(|c| match c {
+                    ToolResultContent::Success(text) => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            (
+                ToolResultStatus::Success,
+                serde_json::json!({ "result": content }),
+            )
+        }
+        ToolResultStatus::Error => {
+            let msg = result
+                .content
+                .iter()
+                .filter_map(|c| match c {
+                    ToolResultContent::Error(text) => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            (ToolResultStatus::Error, serde_json::json!({ "error": msg }))
+        }
+        ToolResultStatus::Cancelled => {
+            let msg = result
+                .content
+                .iter()
+                .filter_map(|c| match c {
+                    ToolResultContent::Error(text) => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            (
+                ToolResultStatus::Cancelled,
+                serde_json::json!({
+                    "cancelled": msg,
+                    "reason": result.cancel_reason
+                }),
+            )
+        }
     }
 }

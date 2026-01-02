@@ -536,7 +536,7 @@ impl TaskContext {
     }
 
     /// Append tool results as a user message with ToolResult blocks; also persist tool rows.
-    pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
+pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
         let blocks: Vec<ContentBlock> = results
             .iter()
             .map(|r| ContentBlock::ToolResult {
@@ -544,7 +544,7 @@ impl TaskContext {
                 content: Some(ToolResultContent::Text(
                     serde_json::to_string(&r.result).unwrap_or_else(|_| "{}".to_string()),
                 )),
-                is_error: Some(r.is_error),
+                is_error: Some(r.status != crate::agent::tools::ToolResultStatus::Success),
             })
             .collect();
 
@@ -1033,6 +1033,6 @@ pub struct ToolCallResult {
     pub call_id: String,
     pub tool_name: String,
     pub result: Value,
-    pub is_error: bool,
+    pub status: crate::agent::tools::ToolResultStatus,
     pub execution_time_ms: u64,
 }

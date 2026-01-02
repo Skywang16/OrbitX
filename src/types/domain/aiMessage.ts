@@ -41,8 +41,8 @@ export type Block =
 
 export interface ToolOutput {
   content: unknown
-  isError: boolean
   ext?: unknown
+  cancelReason?: string
 }
 
 export type TaskEvent =
@@ -50,6 +50,14 @@ export type TaskEvent =
   | { type: 'message_created'; message: Message }
   | { type: 'block_appended'; messageId: number; block: Block }
   | { type: 'block_updated'; messageId: number; blockId: string; block: Block }
+  | {
+      type: 'tool_confirmation_requested'
+      taskId: string
+      requestId: string
+      workspacePath: string
+      toolName: string
+      summary: string
+    }
   | {
       type: 'message_finished'
       messageId: number

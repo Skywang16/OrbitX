@@ -8,7 +8,7 @@ use crate::agent::error::ToolExecutorResult;
 use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent,
+    ToolResultContent, ToolResultStatus,
 };
 use crate::filesystem::commands::fs_list_directory;
 
@@ -158,7 +158,8 @@ Usage:
 
         Ok(ToolResult {
             content: vec![ToolResultContent::Success(text)],
-            is_error: false,
+            status: ToolResultStatus::Success,
+            cancel_reason: None,
             execution_time_ms: None,
             ext_info: Some(json!({
                 "path": path.display().to_string(),
@@ -176,7 +177,8 @@ Usage:
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }
@@ -185,7 +187,8 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }

@@ -6,7 +6,7 @@ use crate::agent::core::context::TaskContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent,
+    ToolResultContent, ToolResultStatus,
 };
 use crate::completion::output_analyzer::OutputAnalyzer;
 use crate::mux::singleton::get_mux;
@@ -100,7 +100,8 @@ Usage:
                 content: vec![ToolResultContent::Success(
                     "Terminal buffer is empty.".to_string(),
                 )],
-                is_error: false,
+                status: ToolResultStatus::Success,
+                cancel_reason: None,
                 execution_time_ms: None,
                 ext_info: Some(json!({
                     "paneId": pane_id.as_u32(),
@@ -134,7 +135,8 @@ Usage:
 
         Ok(ToolResult {
             content: vec![ToolResultContent::Success(result_text)],
-            is_error: false,
+            status: ToolResultStatus::Success,
+            cancel_reason: None,
             execution_time_ms: None,
             ext_info: Some(json!({
                 "paneId": pane_id.as_u32(),
@@ -153,7 +155,8 @@ Usage:
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }

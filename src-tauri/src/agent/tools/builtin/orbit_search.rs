@@ -21,7 +21,7 @@ use crate::agent::error::ToolExecutorResult;
 use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolDescriptionContext, ToolMetadata, ToolPermission, ToolPriority,
-    ToolResult, ToolResultContent,
+    ToolResult, ToolResultContent, ToolResultStatus,
 };
 
 const DEFAULT_MAX_RESULTS: usize = 10;
@@ -240,7 +240,8 @@ Usage:
                     "No code found matching \"{}\". Try using different keywords or ensure the directory is indexed.",
                     query
                 ))],
-                is_error: false,
+                status: ToolResultStatus::Success,
+                cancel_reason: None,
                 execution_time_ms: Some(elapsed_ms),
                 ext_info: Some(json!({
                     "results": entries,
@@ -267,7 +268,8 @@ Usage:
                 "{}\n\n{}",
                 summary, details
             ))],
-            is_error: false,
+            status: ToolResultStatus::Success,
+            cancel_reason: None,
             execution_time_ms: Some(elapsed_ms),
             ext_info: Some(json!({
                 "results": entries,
@@ -385,7 +387,8 @@ fn is_index_ready(search_path: &Path) -> bool {
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }
@@ -394,7 +397,8 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }

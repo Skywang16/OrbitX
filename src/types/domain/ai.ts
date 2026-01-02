@@ -17,7 +17,6 @@ export interface AIModelConfig {
     temperature?: number
     timeout?: number
     dimension?: number // 向量模型的维度
-    supportsImages?: boolean // 是否支持图片输入
     contextWindow?: number
     maxTokens?: number
   }
@@ -86,42 +85,6 @@ export class AIError extends Error {
   }
 }
 
-export interface AIStats {
-  totalRequests: number
-  successfulRequests: number
-  failedRequests: number
-  averageResponseTime: number
-  tokensUsed: number
-  cacheHitRate?: number
-  modelUsage: Record<string, number>
-}
-
-export interface AIHealthStatus {
-  modelId: string
-  status: 'healthy' | 'degraded' | 'unhealthy'
-  lastChecked: Date
-  responseTime?: number
-  error?: string
-}
-
-export interface StreamChunk {
-  content: string
-  isComplete: boolean
-  metadata?: Record<string, unknown>
-}
-
-export type StreamCallback = (chunk: StreamChunk) => void
-
-export interface ChannelStreamOptions {
-  modelId?: string
-  timeout?: number
-  maxRetries?: number
-}
-
-export interface CancellableStream {
-  cancel: () => void
-}
-
 export interface Conversation {
   id: number
   title: string
@@ -159,11 +122,4 @@ export interface AIConfig extends BaseConfig {
   maxContextTokens: number
   modelName: string
   enableSemanticCompression: boolean
-}
-
-export interface ContextStats {
-  sessionId: number
-  totalMessages: number
-  summaryGenerated: boolean
-  lastSummaryAt?: Date
 }
