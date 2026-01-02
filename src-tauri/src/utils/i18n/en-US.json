@@ -25,6 +25,7 @@
     "decrease_opacity": "Decrease Opacity",
     "fullscreen": "Enter Full Screen",
     "toggle_ai_sidebar": "Toggle AI Sidebar",
+    "toggle_git_panel": "Toggle Git Panel",
     "window": "Window",
     "minimize": "Minimize",
     "always_on_top": "Always on Top",
@@ -65,6 +66,12 @@
     "engine_not_initialized": "Completion engine not initialized",
     "stats_failed": "Failed to get completion statistics",
     "clear_cache_failed": "Failed to clear completion cache"
+  },
+  "git": {
+    "not_installed": "Git is not installed or not in PATH",
+    "not_a_repository": "Not a Git repository",
+    "parse_error": "Failed to parse Git output",
+    "command_failed": "Git command failed"
   },
   "config": {
     "get_failed": "Failed to get configuration",

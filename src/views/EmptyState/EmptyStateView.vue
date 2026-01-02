@@ -133,14 +133,8 @@
     gitUrlError.value = ''
 
     try {
-      await shortcutActionsService.newTab()
-
-      setTimeout(() => {
-        const activeTerminal = terminalStore.activeTerminal
-        if (activeTerminal) {
-          terminalStore.writeToTerminal(activeTerminal.id, `git clone ${finalUrl}\n`)
-        }
-      }, 100)
+      const paneId = await terminalStore.createTerminal(terminalStore.currentWorkingDirectory ?? undefined)
+      await terminalStore.writeToTerminal(paneId, `git clone ${finalUrl}\n`)
 
       closeCloneInput()
     } catch (error) {
@@ -150,14 +144,7 @@
 
   const handleOpenWorkspace = async (path: string) => {
     try {
-      await shortcutActionsService.newTab()
-
-      setTimeout(() => {
-        const activeTerminal = terminalStore.activeTerminal
-        if (activeTerminal) {
-          terminalStore.writeToTerminal(activeTerminal.id, `cd "${path}"\n`)
-        }
-      }, 100)
+      await terminalStore.createTerminal(path)
     } catch (error) {
       console.error('Failed to open workspace:', error)
     }

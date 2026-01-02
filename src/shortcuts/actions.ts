@@ -5,6 +5,7 @@ import { windowApi } from '@/api/window'
 import { setWindowOpacity, getWindowOpacity } from '@/api/window/opacity'
 import { useAIChatStore } from '@/components/AIChatSidebar'
 import { useWindowStore } from '@/stores/Window'
+import { useGitStore } from '@/stores/git'
 
 export class ShortcutActionsService {
   private get tabManagerStore() {
@@ -132,6 +133,12 @@ export class ShortcutActionsService {
   toggleAISidebar = (): boolean => {
     const aiChatStore = useAIChatStore()
     aiChatStore.toggleSidebar()
+    return true
+  }
+
+  toggleGitPanel = (): boolean => {
+    const gitStore = useGitStore()
+    gitStore.togglePanel()
     return true
   }
 

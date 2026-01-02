@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n'
   import { useTerminalStore } from '@/stores/Terminal'
   import { useTabManagerStore } from '@/stores/TabManager'
-  import { TabType, type AnyTabItem, type TerminalTabItem } from '@/types'
+  import { TabType, type AnyTabItem, type TerminalTabItem, type DiffTabItem } from '@/types'
   import { showPopoverAt } from '@/ui/composables/popover-api'
   import { getPathBasename } from '@/utils/path'
 
@@ -52,6 +52,10 @@
       const cwd = getTerminalCwd(tab.id)
       return `${getTerminalShell(tab)} • ${cwd}`
     }
+    if (tab.type === TabType.DIFF) {
+      const diffTab = tab as DiffTabItem
+      return `Diff: ${diffTab.data.filePath}`
+    }
     return t('settings.title')
   }
 
@@ -94,7 +98,20 @@
     if (tab.type === TabType.SETTINGS) {
       return t('settings.title')
     }
+    if (tab.type === TabType.DIFF) {
+      return 'Diff'
+    }
     return 'Tab'
+  }
+
+  // 获取 Diff tab 的文件名
+  const getDiffFileName = (tab: AnyTabItem): string => {
+    if (tab.type === TabType.DIFF) {
+      const diffTab = tab as DiffTabItem
+      const parts = diffTab.data.filePath.split('/')
+      return parts[parts.length - 1]
+    }
+    return ''
   }
 
   // 添加菜单项：仅显示可用 shell 名称
@@ -217,6 +234,12 @@
             <div class="terminal-info">
               <span class="shell-badge">{{ getTerminalShell(tab) }}</span>
               <span class="path-info">{{ getPathBasename(getTerminalCwd(tab.id)) }}</span>
+            </div>
+          </template>
+          <template v-else-if="tab.type === TabType.DIFF">
+            <div class="diff-info">
+              <span class="diff-badge">DIFF</span>
+              <span class="diff-filename">{{ getDiffFileName(tab) }}</span>
             </div>
           </template>
           <template v-else>
@@ -440,6 +463,37 @@
     min-width: 0;
     flex: 1;
     padding-left: 6px;
+  }
+
+  .diff-info {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .diff-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: #eab308;
+    background: rgba(234, 179, 8, 0.15);
+    padding: 1px 4px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    line-height: 1.2;
+    margin-right: 6px;
+  }
+
+  .diff-filename {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-200);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+    font-family: var(--font-mono);
   }
 
   .close-btn {

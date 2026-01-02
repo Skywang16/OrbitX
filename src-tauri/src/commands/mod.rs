@@ -96,6 +96,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::terminal::commands::stream::terminal_subscribe_output_cancel,
         // Shell 集成命令
         crate::shell::commands::shell_execute_background_command,
+        crate::shell::commands::shell_execute_background_program,
         crate::shell::commands::shell_setup_integration,
         crate::shell::commands::shell_check_integration_status,
         crate::shell::commands::shell_update_pane_cwd,
@@ -114,6 +115,16 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::completion::commands::completion_get,
         crate::completion::commands::completion_clear_cache,
         crate::completion::commands::completion_get_stats,
+        // Git 集成命令
+        crate::git::commands::git_check_repository,
+        crate::git::commands::git_get_status,
+        crate::git::commands::git_get_branches,
+        crate::git::commands::git_get_commits,
+        crate::git::commands::git_get_commit_files,
+        crate::git::commands::git_get_diff,
+        crate::git::commands::git_watch_start,
+        crate::git::commands::git_watch_stop,
+        crate::git::commands::git_watch_status,
         // 配置管理命令
         crate::config::commands::config_get,
         crate::config::commands::config_update,

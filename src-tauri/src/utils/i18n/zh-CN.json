@@ -25,6 +25,7 @@
     "decrease_opacity": "降低不透明度",
     "fullscreen": "进入全屏幕",
     "toggle_ai_sidebar": "切换 AI 侧边栏",
+    "toggle_git_panel": "切换 Git 面板",
     "window": "窗口",
     "minimize": "最小化",
     "always_on_top": "窗口置顶",
@@ -65,6 +66,12 @@
     "engine_not_initialized": "补全引擎未初始化",
     "stats_failed": "获取统计信息失败",
     "clear_cache_failed": "清理补全缓存失败"
+  },
+  "git": {
+    "not_installed": "未找到 Git（请确认已安装并在 PATH 中）",
+    "not_a_repository": "当前目录不是 Git 仓库",
+    "parse_error": "解析 Git 输出失败",
+    "command_failed": "Git 命令执行失败"
   },
   "config": {
     "get_failed": "获取配置失败",

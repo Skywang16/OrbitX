@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n'
   import { windowApi } from '@/api'
   import { useAIChatStore } from '@/components/AIChatSidebar'
+  import { useGitStore } from '@/stores/git'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { openUrl } from '@tauri-apps/plugin-opener'
   import { showPopoverAt } from '@/ui'
@@ -20,6 +21,7 @@
   })
 
   const aiChatStore = useAIChatStore()
+  const gitStore = useGitStore()
   const tabManagerStore = useTabManagerStore()
   const windowStore = useWindowStore()
   const isAlwaysOnTop = computed(() => windowStore.alwaysOnTop)
@@ -69,6 +71,10 @@
     aiChatStore.toggleSidebar()
   }
 
+  const toggleGitPanel = () => {
+    gitStore.togglePanel()
+  }
+
   onMounted(async () => {
     // 初始化时同步置顶状态到全局 store
     await windowStore.initFromSystem()
@@ -80,6 +86,21 @@
 <template>
   <div class="window-controls" data-tauri-drag-region="false">
     <div class="button-group">
+      <button
+        v-if="gitStore.isRepository"
+        class="control-btn git-btn"
+        :class="{ active: gitStore.isVisible }"
+        @click="toggleGitPanel"
+        :title="t('git.toggle_panel')"
+      >
+        <svg class="git-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 3v12" />
+          <path d="M6 7h7a3 3 0 0 1 3 3v11" />
+          <circle cx="6" cy="5" r="2" />
+          <circle cx="6" cy="15" r="2" />
+          <circle cx="16" cy="21" r="2" />
+        </svg>
+      </button>
       <button
         class="control-btn ai-chat-btn"
         :class="{ active: aiChatStore.isVisible }"
@@ -177,6 +198,21 @@
     height: 14px;
     width: 14px;
     color: var(--text-200);
+  }
+
+  .git-btn.active {
+    background: var(--color-primary-alpha);
+  }
+
+  .git-btn.active .git-icon {
+    color: var(--text-100);
+  }
+
+  .git-icon {
+    height: 14px;
+    width: 14px;
+    color: var(--text-200);
+    transition: color 0.2s ease;
   }
 
   .ai-chat-btn.active {

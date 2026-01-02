@@ -265,7 +265,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     }
   }
 
-  const createTerminal = async (initialDirectory?: string): Promise<number> => {
+  const createTerminal = async (initialDirectory?: string, options?: { activate?: boolean }): Promise<number> => {
     return queueOperation(async () => {
       const paneId = await terminalApi.createTerminal({
         rows: 24,
@@ -298,7 +298,9 @@ export const useTerminalStore = defineStore('Terminal', () => {
         },
       })
 
-      await setActiveTerminal(paneId)
+      if (options?.activate !== false) {
+        await setActiveTerminal(paneId)
+      }
 
       return paneId
     })

@@ -7,6 +7,7 @@
 export enum TabType {
   TERMINAL = 'terminal',
   SETTINGS = 'settings',
+  DIFF = 'diff',
 }
 
 // 终端标签页的 UI 数据（运行时使用，不含 cwd）
@@ -17,6 +18,14 @@ export interface TerminalTabData {
 // 设置标签页的 UI 数据
 export interface SettingsTabData {
   section: string
+}
+
+// Diff 标签页的 UI 数据
+export interface DiffTabData {
+  filePath: string
+  staged: boolean
+  // For commit file diff
+  commitHash?: string
 }
 
 // 标签页基础结构：通用字段 + 类型化的私有数据
@@ -30,9 +39,10 @@ export interface TabItem<TData = unknown> {
 // 类型别名（方便使用）
 export type TerminalTabItem = TabItem<TerminalTabData>
 export type SettingsTabItem = TabItem<SettingsTabData>
+export type DiffTabItem = TabItem<DiffTabData>
 
 // 联合类型（实际使用的类型）
-export type AnyTabItem = TerminalTabItem | SettingsTabItem
+export type AnyTabItem = TerminalTabItem | SettingsTabItem | DiffTabItem
 
 // ===== 组件基础类型 =====
 

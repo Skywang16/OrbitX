@@ -1,5 +1,5 @@
-import { TabType, type AnyTabItem, type TerminalTabItem, type SettingsTabItem } from '@/types'
-import type { TabState, TerminalTabState, SettingsTabState } from '@/types/domain/storage'
+import { TabType, type AnyTabItem, type TerminalTabItem, type SettingsTabItem, type DiffTabItem } from '@/types'
+import type { TabState, TerminalTabState, SettingsTabState, DiffTabState } from '@/types/domain/storage'
 import { useTerminalStore } from './Terminal'
 import { useSessionStore } from './session'
 
@@ -77,5 +77,28 @@ handlers.set('settings', {
 
   activate: async (tabId: number): Promise<void> => {
     useSessionStore().setActiveTab(tabId)
+  },
+})
+
+handlers.set('diff', {
+  buildTabItem: (tab: DiffTabState): DiffTabItem => {
+    return {
+      id: tab.id,
+      type: TabType.DIFF,
+      closable: true,
+      data: {
+        filePath: tab.data.filePath,
+        staged: tab.data.staged ?? false,
+        commitHash: tab.data.commitHash,
+      },
+    }
+  },
+
+  activate: async (tabId: number): Promise<void> => {
+    useSessionStore().setActiveTab(tabId)
+  },
+
+  close: async (tabId: number): Promise<void> => {
+    await defaultCloseTab(tabId)
   },
 })

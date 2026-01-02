@@ -150,6 +150,9 @@ export const useShortcutListener = () => {
       case 'toggle_ai_sidebar':
         frontendResult = shortcutActionsService.toggleAISidebar()
         break
+      case 'toggle_git_panel':
+        frontendResult = shortcutActionsService.toggleGitPanel()
+        break
       case 'toggle_window_pin':
         frontendResult = await shortcutActionsService.toggleWindowPin()
         break

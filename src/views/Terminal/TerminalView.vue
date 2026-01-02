@@ -2,8 +2,10 @@
   import { useAIChatStore } from '@/components/AIChatSidebar'
   import ContentRenderer from '@/components/ui/ContentRenderer.vue'
   import TitleBar from '@/components/ui/TitleBar.vue'
+  import GitPanel from '@/components/GitPanel/index.vue'
   import { useTerminalStore } from '@/stores/Terminal'
   import { useTabManagerStore } from '@/stores/TabManager'
+  import { useGitStore } from '@/stores/git'
   import { windowApi } from '@/api'
   import { onBeforeUnmount, onMounted } from 'vue'
   import type { UnlistenFn } from '@tauri-apps/api/event'
@@ -12,6 +14,7 @@
   const terminalStore = useTerminalStore()
   const aiChatStore = useAIChatStore()
   const tabManagerStore = useTabManagerStore()
+  const gitStore = useGitStore()
 
   let unlistenStartupFile: UnlistenFn | null = null
   let unlistenFileDropped: UnlistenFn | null = null
@@ -80,6 +83,14 @@
     />
 
     <div class="main-content">
+      <div
+        v-show="gitStore.isVisible"
+        class="sidebar-wrapper"
+        :style="{ '--sidebar-width': `${gitStore.panelWidth}px` }"
+      >
+        <GitPanel />
+      </div>
+
       <ContentRenderer />
 
       <div

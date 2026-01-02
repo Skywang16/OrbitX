@@ -84,16 +84,16 @@
   }
 
   // 处理文件夹点击
-  const handleFolderClick = (folderName: string) => {
+  const handleFolderClick = async (folderName: string) => {
     const targetPath = buildTargetPath(folderName)
-    terminalStore.writeToTerminal(props.terminalId, `cd "${targetPath}"\n`)
+    await terminalStore.createTerminal(targetPath)
     emit('close')
   }
 
   // 处理返回上级目录
-  const handleParentClick = () => {
+  const handleParentClick = async () => {
     const parentPath = getParentPath()
-    terminalStore.writeToTerminal(props.terminalId, `cd "${parentPath}"\n`)
+    await terminalStore.createTerminal(parentPath)
     emit('close')
   }
 

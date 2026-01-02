@@ -607,6 +607,28 @@ impl ActionRegistry {
         let _ = self
             .register_action(
                 ActionMetadata {
+                    name: "toggle_git_panel".to_string(),
+                    description: "开启/关闭Git面板".to_string(),
+
+                    requires_terminal: false,
+                    is_system_action: false,
+                    supported_platforms: vec![
+                        "windows".to_string(),
+                        "macos".to_string(),
+                        "linux".to_string(),
+                    ],
+                },
+                |_context| {
+                    Ok(serde_json::Value::String(
+                        "🔥 Git面板切换功能已触发！".to_string(),
+                    ))
+                },
+            )
+            .await;
+
+        let _ = self
+            .register_action(
+                ActionMetadata {
                     name: "toggle_window_pin".to_string(),
                     description: "钉住/取消钉住窗口".to_string(),
 

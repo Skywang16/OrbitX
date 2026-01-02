@@ -17,6 +17,7 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event_id: &str) {
         | "increase_opacity"
         | "decrease_opacity"
         | "toggle_ai_sidebar"
+        | "toggle_git_panel"
         | "toggle_always_on_top"
         | "prev_tab"
         | "next_tab"

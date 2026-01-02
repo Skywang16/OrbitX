@@ -35,6 +35,7 @@ export function useMenuEvents() {
     ['menu:increase-opacity', () => shortcutActionsService.increaseOpacity()],
     ['menu:decrease-opacity', () => shortcutActionsService.decreaseOpacity()],
     ['menu:toggle-ai-sidebar', () => shortcutActionsService.toggleAISidebar()],
+    ['menu:toggle-git-panel', () => shortcutActionsService.toggleGitPanel()],
 
     // 窗口
     ['menu:toggle-always-on-top', () => shortcutActionsService.toggleWindowPin()],

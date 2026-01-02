@@ -270,6 +270,10 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     };
     app.manage(checkpoint_state);
 
+    // 初始化 Git Watcher 状态
+    let git_watcher = crate::git::GitWatcher::new();
+    app.manage(git_watcher);
+
     // 初始化向量数据库状态
     {
         use crate::llm::types::LLMProviderConfig;

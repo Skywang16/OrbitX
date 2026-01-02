@@ -80,7 +80,26 @@ export interface SettingsTabState {
 /**
  * Tab 状态 - union type
  */
-export type TabState = TerminalTabState | SettingsTabState
+export type TabState = TerminalTabState | SettingsTabState | DiffTabState
+
+/**
+ * Diff tab 持久化数据
+ */
+export interface PersistedDiffTabData {
+  filePath: string
+  staged?: boolean
+  commitHash?: string
+}
+
+/**
+ * Diff tab 状态（持久化）
+ */
+export interface DiffTabState {
+  type: 'diff'
+  id: number
+  isActive: boolean
+  data: PersistedDiffTabData
+}
 
 /**
  * 运行时终端状态（从后端查询）

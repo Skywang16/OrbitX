@@ -7,6 +7,7 @@ pub mod config;
 pub mod dock;
 pub mod events;
 pub mod filesystem;
+pub mod git;
 pub mod llm;
 pub mod menu;
 pub mod mux;
