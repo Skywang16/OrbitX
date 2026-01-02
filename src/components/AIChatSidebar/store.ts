@@ -4,7 +4,7 @@ import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useSessionStore } from '@/stores/session'
 import type { ImageAttachment } from '@/stores/imageLightbox'
-import type { ChatMode, Conversation, Message } from '@/types'
+import type { ChatMode, Conversation } from '@/types'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
@@ -70,158 +70,36 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
 
   const handleAgentEvent = (event: TaskProgressPayload) => {
-    const messages = messageList.value
-    if (!messages.length) {
-      return
-    }
-
-    const findTargetAssistantMessage = (): Message | null => {
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const message = messages[i]
-        if (message.role === 'assistant' && (message.status === 'streaming' || !message.status)) {
-          return message
-        }
-      }
-      return null
-    }
-
-    const currentMessage = findTargetAssistantMessage()
-    if (!currentMessage) {
-      return
-    }
-
-    if (!currentMessage.steps) {
-      currentMessage.steps = []
-    }
-
-    const getTimestamp = (backendTimestamp: string | number): number => {
-      if (typeof backendTimestamp === 'number') return backendTimestamp
-      return new Date(backendTimestamp).getTime()
-    }
-
-    const upsertStreamStep = (
-      stepType: 'thinking' | 'text',
-      payload: { streamId: string; streamDone: boolean; iteration: number; timestamp: string },
-      delta: string
-    ) => {
-      if (!delta && !payload.streamDone) return
-
-      const timestamp = getTimestamp(payload.timestamp)
-      const steps = currentMessage.steps!
-
-      const matchingStep = steps.find(
-        step => step.stepType === stepType && step.metadata?.streamId === payload.streamId
-      )
-
-      if (matchingStep) {
-        if (delta) {
-          matchingStep.content += delta
-        }
-        matchingStep.timestamp = timestamp
-        if (!matchingStep.metadata) {
-          matchingStep.metadata = {}
-        }
-        Object.assign(matchingStep.metadata, {
-          streamId: payload.streamId,
-          streamDone: payload.streamDone,
-          iteration: payload.iteration,
-        })
-        if (stepType === 'text') {
-          currentMessage.content = matchingStep.content
-        }
-      } else {
-        const newStep = {
-          stepType,
-          content: delta,
-          timestamp,
-          metadata: {
-            streamId: payload.streamId,
-            streamDone: payload.streamDone,
-            iteration: payload.iteration,
-          },
-        }
-        steps.push(newStep)
-        if (stepType === 'text') {
-          currentMessage.content = newStep.content
-        }
-      }
-    }
-
     switch (event.type) {
-      case 'Thinking': {
-        upsertStreamStep(
-          'thinking',
-          {
-            streamId: event.payload.streamId,
-            streamDone: event.payload.streamDone,
-            iteration: event.payload.iteration,
-            timestamp: event.payload.timestamp,
-          },
-          event.payload.thought
-        )
+      case 'message_created': {
+        workspaceStore.messages.push(event.message)
         break
       }
-      case 'Text': {
-        upsertStreamStep(
-          'text',
-          {
-            streamId: event.payload.streamId,
-            streamDone: event.payload.streamDone,
-            iteration: event.payload.iteration,
-            timestamp: event.payload.timestamp,
-          },
-          event.payload.text
-        )
+      case 'block_appended': {
+        const msg = workspaceStore.messages.find(m => m.id === event.messageId)
+        if (msg) msg.blocks.push(event.block)
         break
       }
-      case 'ToolUse':
-        currentMessage.steps.push({
-          stepType: 'tool_use',
-          content: `调用工具: ${event.payload.toolName}`,
-          timestamp: getTimestamp(event.payload.timestamp),
-          metadata: {
-            iteration: event.payload.iteration,
-            toolId: event.payload.toolId,
-            toolName: event.payload.toolName,
-            params: event.payload.params,
-          },
-        })
-        break
-      case 'ToolResult': {
-        const lastStep = currentMessage.steps[currentMessage.steps.length - 1]
-        if (lastStep && lastStep.stepType === 'tool_use') {
-          lastStep.stepType = 'tool_result'
-          lastStep.content = event.payload.isError ? '工具执行出错' : '工具执行完成'
-          lastStep.timestamp = getTimestamp(event.payload.timestamp)
-          lastStep.metadata = {
-            ...lastStep.metadata,
-            result: event.payload.result,
-            isError: event.payload.isError,
-            extInfo: event.payload.extInfo,
-          }
-        }
+      case 'block_updated': {
+        const msg = workspaceStore.messages.find(m => m.id === event.messageId)
+        if (!msg) break
+        const idx = msg.blocks.findIndex(b => 'id' in b && b.id === event.blockId)
+        if (idx >= 0) msg.blocks[idx] = event.block
         break
       }
-      case 'TaskCompleted':
-        currentMessage.status = 'complete'
-        currentMessage.duration = Date.now() - currentMessage.createdAt.getTime()
+      case 'message_finished': {
+        const msg = workspaceStore.messages.find(m => m.id === event.messageId)
+        if (!msg) break
+        msg.status = event.status
+        msg.finishedAt = event.finishedAt
+        msg.durationMs = event.durationMs
+        msg.tokenUsage = event.tokenUsage
         isSending.value = false
         break
-      case 'TaskCancelled':
-        currentMessage.status = 'error'
-        isSending.value = false
-        break
-      case 'TaskError':
-        currentMessage.steps.push({
-          stepType: 'error',
-          content: event.payload.errorMessage,
-          timestamp: getTimestamp(event.payload.timestamp),
-          metadata: {
-            iteration: event.payload.iteration,
-            errorType: event.payload.errorType,
-          },
-        })
-        currentMessage.status = 'error'
+      }
+      case 'task_completed':
+      case 'task_cancelled':
+      case 'task_error':
         isSending.value = false
         break
     }
@@ -232,13 +110,13 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
     stream.onProgress(async event => {
       // TaskCreated: 后端返回权威的 sessionId，用它加载消息
-      if (event.type === 'TaskCreated') {
-        currentTaskId.value = event.payload.taskId
-        const workspacePath = currentWorkspacePath.value || event.payload.workspacePath
+      if (event.type === 'task_created') {
+        currentTaskId.value = event.taskId
+        const workspacePath = currentWorkspacePath.value || event.workspacePath
         if (workspacePath) {
           await workspaceStore.loadWorkspaceData(workspacePath, true)
         } else {
-          await workspaceStore.fetchMessages(event.payload.sessionId)
+          await workspaceStore.fetchMessages(event.sessionId)
         }
         return
       }
@@ -249,18 +127,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         cancelSent = true
       }
 
-      // TaskStarted 不需要特殊处理，消息已在 TaskCreated 时加载
-      if (event.type === 'TaskStarted') return
-
       handleAgentEvent(event)
     })
 
     stream.onError((streamError: Error) => {
       console.error('Agent task error:', streamError)
-      const currentMessage = messageList.value[messageList.value.length - 1]
-      if (currentMessage && currentMessage.role === 'assistant') {
-        currentMessage.status = 'error'
-      }
       isSending.value = false
     })
 

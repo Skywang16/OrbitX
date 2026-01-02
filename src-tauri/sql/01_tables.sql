@@ -97,16 +97,19 @@ CREATE TABLE IF NOT EXISTS sessions (
     FOREIGN KEY (workspace_path) REFERENCES workspaces(path) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS session_messages (
+CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
-    content TEXT,
-    steps_json TEXT,
-    images_json TEXT,
-    status TEXT CHECK (status IN ('streaming', 'complete', 'error')),
-    duration_ms INTEGER,
+    status TEXT NOT NULL CHECK (status IN ('streaming', 'completed', 'cancelled', 'error')),
+    blocks_json TEXT NOT NULL,
     created_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    duration_ms INTEGER,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    cache_read_tokens INTEGER,
+    cache_write_tokens INTEGER,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
@@ -218,7 +221,7 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     created_at INTEGER NOT NULL,
     FOREIGN KEY (workspace_path) REFERENCES workspaces(path) ON DELETE CASCADE,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
-    FOREIGN KEY (message_id) REFERENCES session_messages(id) ON DELETE CASCADE,
+    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES checkpoints(id) ON DELETE SET NULL
 );
 
@@ -239,8 +242,8 @@ CREATE INDEX IF NOT EXISTS idx_workspaces_last_accessed
     ON workspaces(last_accessed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sessions_workspace
     ON sessions(workspace_path, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_session_messages_session
-    ON session_messages(session_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_messages_session
+    ON messages(session_id, created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_session_summaries
     ON session_summaries(session_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_file_context_state

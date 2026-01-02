@@ -6,13 +6,14 @@
 
 use serde_json::Value;
 use std::sync::Arc;
+use std::collections::HashMap;
 
 use crate::agent::context::ContextBuilder;
 use crate::agent::core::context::{TaskContext, ToolCallResult};
 use crate::agent::core::executor::{ReactHandler, TaskExecutor};
 use crate::agent::error::TaskExecutorResult;
-use crate::agent::events::{TaskProgressPayload, ToolResultPayload, ToolUsePayload};
 use crate::agent::tools::{self, ToolDescriptionContext, ToolRegistry, ToolResultContent};
+use crate::agent::types::{Block, ToolBlock, ToolOutput, ToolStatus};
 use crate::llm::anthropic_types::CreateMessageRequest;
 
 #[async_trait::async_trait]
@@ -105,19 +106,26 @@ impl ReactHandler for TaskExecutor {
     async fn execute_tools(
         &self,
         context: &TaskContext,
-        iteration: u32,
+        _iteration: u32,
         tool_calls: Vec<(String, String, Value)>,
     ) -> TaskExecutorResult<Vec<ToolCallResult>> {
-        // 发送所有 ToolUse 事件
+        let mut tool_started_at: HashMap<String, chrono::DateTime<chrono::Utc>> = HashMap::new();
+        let mut tool_inputs: HashMap<String, Value> = HashMap::new();
+
         for (call_id, tool_name, params) in &tool_calls {
+            let now = chrono::Utc::now();
+            tool_started_at.insert(call_id.clone(), now);
+            tool_inputs.insert(call_id.clone(), params.clone());
             context
-                .send_progress(TaskProgressPayload::ToolUse(ToolUsePayload {
-                    task_id: context.task_id.to_string(),
-                    iteration,
-                    tool_id: call_id.clone(),
-                    tool_name: tool_name.clone(),
-                    params: params.clone(),
-                    timestamp: chrono::Utc::now(),
+                .assistant_append_block(Block::Tool(ToolBlock {
+                    id: call_id.clone(),
+                    name: tool_name.clone(),
+                    status: ToolStatus::Running,
+                    input: params.clone(),
+                    output: None,
+                    started_at: now,
+                    finished_at: None,
+                    duration_ms: None,
                 }))
                 .await?;
         }
@@ -134,19 +142,50 @@ impl ReactHandler for TaskExecutor {
         let mut results = Vec::with_capacity(responses.len());
         for resp in responses {
             let (is_error, result_value) = convert_result(&resp.result);
+            let finished_at = chrono::Utc::now();
+            let started_at = tool_started_at
+                .get(&resp.id)
+                .copied()
+                .unwrap_or(finished_at);
+            let input = tool_inputs.get(&resp.id).cloned().unwrap_or(Value::Null);
 
-            context
-                .send_progress(TaskProgressPayload::ToolResult(ToolResultPayload {
-                    task_id: context.task_id.to_string(),
-                    iteration,
-                    tool_id: resp.id.clone(),
-                    tool_name: resp.name.clone(),
-                    result: result_value.clone(),
-                    is_error,
-                    ext_info: resp.result.ext_info.clone(),
-                    timestamp: chrono::Utc::now(),
-                }))
-                .await?;
+            let status = if is_error {
+                ToolStatus::Error
+            } else {
+                ToolStatus::Completed
+            };
+
+            // Update the existing tool block (created on ToolUse).
+            let _ = context
+                .assistant_update_block(
+                    &resp.id,
+                    Block::Tool(ToolBlock {
+                        id: resp.id.clone(),
+                        name: resp.name.clone(),
+                        status,
+                        input,
+                        output: Some(ToolOutput {
+                            content: result_value.clone(),
+                            is_error,
+                            ext: resp.result.ext_info.clone(),
+                        }),
+                        started_at,
+                        finished_at: Some(finished_at),
+                        duration_ms: resp
+                            .result
+                            .execution_time_ms
+                            .map(|v| v as i64)
+                            .or_else(|| {
+                                Some(
+                                    finished_at
+                                        .signed_duration_since(started_at)
+                                        .num_milliseconds()
+                                        .max(0) as i64,
+                                )
+                            }),
+                    }),
+                )
+                .await;
 
             results.push(ToolCallResult {
                 call_id: resp.id,

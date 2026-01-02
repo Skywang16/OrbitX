@@ -4,17 +4,23 @@ use chrono::{DateTime, Utc};
 use sqlx::{self, sqlite::SqliteQueryResult, Row};
 
 use crate::agent::error::{AgentError, AgentResult};
+use crate::agent::types::{
+    Block, Message, MessageRole as UiMessageRole, MessageStatus as UiMessageStatus, TokenUsage,
+};
 use crate::storage::database::DatabaseManager;
 
 use super::models::{
     build_agent_execution, build_execution_event, build_execution_message, build_session,
-    build_session_message, build_session_summary, build_tool_execution, build_workspace,
+    build_session_summary, build_tool_execution, build_workspace,
     build_workspace_file_record, AgentExecution, ExecutionEvent, ExecutionEventType,
-    ExecutionMessage, ExecutionStatus, FileRecordSource, FileRecordState, MessageRole, Session,
-    SessionMessage, SessionSummary, TokenUsageStats, ToolExecution, ToolExecutionStatus, Workspace,
-    WorkspaceFileRecord,
+    ExecutionMessage, ExecutionStatus, FileRecordSource, FileRecordState,
+    MessageRole as AgentMessageRole,
+    Session, SessionSummary, TokenUsageStats, ToolExecution, ToolExecutionStatus, Workspace, WorkspaceFileRecord,
 };
-use super::{bool_to_sql, now_timestamp, opt_datetime_to_timestamp};
+use super::{
+    bool_to_sql, now_timestamp, opt_datetime_to_timestamp, opt_timestamp_to_datetime,
+    timestamp_to_datetime,
+};
 
 #[derive(Debug)]
 pub struct WorkspaceRepository {
@@ -262,11 +268,11 @@ impl SessionSummaryRepository {
 }
 
 #[derive(Debug)]
-pub struct SessionMessageRepository {
+pub struct MessageRepository {
     database: Arc<DatabaseManager>,
 }
 
-impl SessionMessageRepository {
+impl MessageRepository {
     pub fn new(database: Arc<DatabaseManager>) -> Self {
         Self { database }
     }
@@ -275,144 +281,124 @@ impl SessionMessageRepository {
         self.database.pool()
     }
 
-    pub async fn list(&self, session_id: i64) -> AgentResult<Vec<SessionMessage>> {
+    pub async fn list_by_session(&self, session_id: i64) -> AgentResult<Vec<Message>> {
         let rows = sqlx::query(
-            "SELECT * FROM session_messages WHERE session_id = ? ORDER BY created_at ASC, id ASC",
+            "SELECT id, session_id, role, status, blocks_json, created_at, finished_at, duration_ms,
+                    input_tokens, output_tokens, cache_read_tokens, cache_write_tokens
+             FROM messages
+             WHERE session_id = ?
+             ORDER BY created_at ASC, id ASC",
         )
         .bind(session_id)
         .fetch_all(self.pool())
         .await?;
 
         rows.into_iter()
-            .map(|row| build_session_message(&row))
-            .collect()
+            .map(|row| build_message(&row))
+            .collect::<AgentResult<Vec<_>>>()
     }
 
-    pub async fn create_user_message(
+    pub async fn get(&self, message_id: i64) -> AgentResult<Option<Message>> {
+        let row = sqlx::query(
+            "SELECT id, session_id, role, status, blocks_json, created_at, finished_at, duration_ms,
+                    input_tokens, output_tokens, cache_read_tokens, cache_write_tokens
+             FROM messages
+             WHERE id = ?",
+        )
+        .bind(message_id)
+        .fetch_optional(self.pool())
+        .await?;
+
+        row.map(|r| build_message(&r)).transpose()
+    }
+
+    pub async fn create(
         &self,
         session_id: i64,
-        content: &str,
-        images_json: Option<&str>,
-    ) -> AgentResult<i64> {
+        role: UiMessageRole,
+        status: UiMessageStatus,
+        blocks: Vec<Block>,
+    ) -> AgentResult<Message> {
         let ts = now_timestamp();
+        let blocks_json = serde_json::to_string(&blocks).map_err(|e| {
+            AgentError::Internal(format!("Failed to serialize message blocks: {}", e))
+        })?;
+
         let result = sqlx::query(
-            "INSERT INTO session_messages (session_id, role, content, steps_json, images_json, status, duration_ms, created_at)
-             VALUES (?, 'user', ?, NULL, ?, NULL, NULL, ?)",
+            "INSERT INTO messages (session_id, role, status, blocks_json, created_at)
+             VALUES (?, ?, ?, ?, ?)",
         )
         .bind(session_id)
-        .bind(content)
-        .bind(images_json)
+        .bind(role_as_str(&role))
+        .bind(status_as_str(&status))
+        .bind(blocks_json)
         .bind(ts)
         .execute(self.pool())
         .await?;
+
         let message_id = result.last_insert_rowid();
 
-        if let Some(title) = derive_session_title(content) {
-            sqlx::query(
-                "UPDATE sessions
-                 SET title = ?, updated_at = ?
-                 WHERE id = ? AND (title IS NULL OR trim(title) = '')",
-            )
-            .bind(&title)
-            .bind(ts)
-            .bind(session_id)
-            .execute(self.pool())
+        // Refresh session metadata for list ordering + default title.
+        self.touch_session_on_message_create(session_id, ts, &role, &blocks)
             .await?;
-        }
 
-        Ok(message_id)
+        Ok(Message {
+            id: message_id,
+            session_id,
+            role,
+            status,
+            blocks,
+            created_at: timestamp_to_datetime(ts),
+            finished_at: None,
+            duration_ms: None,
+            token_usage: None,
+        })
     }
 
-    pub async fn create_assistant_message(
-        &self,
-        session_id: i64,
-        status: &str,
-    ) -> AgentResult<i64> {
-        let normalized = match status {
-            "streaming" | "complete" | "error" => status,
-            other => {
-                return Err(AgentError::Internal(format!(
-                    "Invalid assistant status: {}",
-                    other
-                )))
-            }
-        };
+    pub async fn update(&self, message: &Message) -> AgentResult<()> {
+        let blocks_json = serde_json::to_string(&message.blocks).map_err(|e| {
+            AgentError::Internal(format!("Failed to serialize message blocks: {}", e))
+        })?;
 
-        let ts = now_timestamp();
-        let result = sqlx::query(
-            "INSERT INTO session_messages (session_id, role, content, steps_json, images_json, status, duration_ms, created_at)
-             VALUES (?, 'assistant', NULL, '[]', NULL, ?, NULL, ?)",
-        )
-        .bind(session_id)
-        .bind(normalized)
-        .bind(ts)
-        .execute(self.pool())
-        .await?;
-
-        Ok(result.last_insert_rowid())
-    }
-
-    pub async fn update_assistant_message(
-        &self,
-        message_id: i64,
-        steps_json: &str,
-        status: &str,
-        duration_ms: Option<i64>,
-    ) -> AgentResult<()> {
-        let normalized = match status {
-            "streaming" | "complete" | "error" => status,
-            other => {
-                return Err(AgentError::Internal(format!(
-                    "Invalid assistant status: {}",
-                    other
-                )))
-            }
-        };
+        let (input_tokens, output_tokens, cache_read_tokens, cache_write_tokens) =
+            token_usage_to_columns(message.token_usage.as_ref());
 
         sqlx::query(
-            "UPDATE session_messages
-             SET steps_json = ?, status = ?, duration_ms = ?
-             WHERE id = ? AND role = 'assistant'",
+            "UPDATE messages
+             SET status = ?,
+                 blocks_json = ?,
+                 finished_at = ?,
+                 duration_ms = ?,
+                 input_tokens = ?,
+                 output_tokens = ?,
+                 cache_read_tokens = ?,
+                 cache_write_tokens = ?
+             WHERE id = ?",
         )
-        .bind(steps_json)
-        .bind(normalized)
-        .bind(duration_ms)
-        .bind(message_id)
+        .bind(status_as_str(&message.status))
+        .bind(blocks_json)
+        .bind(opt_datetime_to_timestamp(message.finished_at))
+        .bind(message.duration_ms)
+        .bind(input_tokens)
+        .bind(output_tokens)
+        .bind(cache_read_tokens)
+        .bind(cache_write_tokens)
+        .bind(message.id)
         .execute(self.pool())
         .await?;
 
         Ok(())
     }
 
-    pub async fn latest_assistant_message(
-        &self,
-        session_id: i64,
-    ) -> AgentResult<Option<SessionMessage>> {
-        let row = sqlx::query(
-            "SELECT * FROM session_messages
-             WHERE session_id = ? AND role = 'assistant'
-             ORDER BY created_at DESC, id DESC LIMIT 1",
-        )
-        .bind(session_id)
-        .fetch_optional(self.pool())
-        .await?;
-
-        match row {
-            Some(record) => Ok(Some(build_session_message(&record)?)),
-            None => Ok(None),
-        }
-    }
-
     /// 删除指定消息及其之后的所有消息
     pub async fn delete_messages_from(&self, session_id: i64, message_id: i64) -> AgentResult<()> {
-        let created_at: i64 =
-            sqlx::query_scalar("SELECT created_at FROM session_messages WHERE id = ?")
-                .bind(message_id)
-                .fetch_one(self.pool())
-                .await?;
+        let created_at: i64 = sqlx::query_scalar("SELECT created_at FROM messages WHERE id = ?")
+            .bind(message_id)
+            .fetch_one(self.pool())
+            .await?;
 
         sqlx::query(
-            "DELETE FROM session_messages
+            "DELETE FROM messages
              WHERE session_id = ?
                AND (created_at > ? OR (created_at = ? AND id >= ?))",
         )
@@ -420,6 +406,49 @@ impl SessionMessageRepository {
         .bind(created_at)
         .bind(created_at)
         .bind(message_id)
+        .execute(self.pool())
+        .await?;
+
+        Ok(())
+    }
+
+    async fn touch_session_on_message_create(
+        &self,
+        session_id: i64,
+        created_at: i64,
+        role: &UiMessageRole,
+        blocks: &[Block],
+    ) -> AgentResult<()> {
+        // Always bump updated_at for ordering.
+        sqlx::query("UPDATE sessions SET updated_at = ? WHERE id = ?")
+            .bind(created_at)
+            .bind(session_id)
+            .execute(self.pool())
+            .await?;
+
+        if !matches!(role, UiMessageRole::User) {
+            return Ok(());
+        }
+
+        let Some(content) = blocks.iter().find_map(|b| match b {
+            Block::UserText(t) => Some(t.content.as_str()),
+            _ => None,
+        }) else {
+            return Ok(());
+        };
+
+        let Some(title) = derive_session_title(content) else {
+            return Ok(());
+        };
+
+        sqlx::query(
+            "UPDATE sessions
+             SET title = ?, updated_at = ?
+             WHERE id = ? AND (title IS NULL OR trim(title) = '')",
+        )
+        .bind(&title)
+        .bind(created_at)
+        .bind(session_id)
         .execute(self.pool())
         .await?;
 
@@ -478,6 +507,93 @@ fn derive_session_title(content: &str) -> Option<String> {
     }
 
     Some(title)
+}
+
+fn role_as_str(role: &UiMessageRole) -> &'static str {
+    match role {
+        UiMessageRole::User => "user",
+        UiMessageRole::Assistant => "assistant",
+    }
+}
+
+fn status_as_str(status: &UiMessageStatus) -> &'static str {
+    match status {
+        UiMessageStatus::Streaming => "streaming",
+        UiMessageStatus::Completed => "completed",
+        UiMessageStatus::Cancelled => "cancelled",
+        UiMessageStatus::Error => "error",
+    }
+}
+
+fn parse_role(role: &str) -> AgentResult<UiMessageRole> {
+    match role {
+        "user" => Ok(UiMessageRole::User),
+        "assistant" => Ok(UiMessageRole::Assistant),
+        other => Err(AgentError::Parse(format!("Unknown message role: {}", other))),
+    }
+}
+
+fn parse_status(status: &str) -> AgentResult<UiMessageStatus> {
+    match status {
+        "streaming" => Ok(UiMessageStatus::Streaming),
+        "completed" => Ok(UiMessageStatus::Completed),
+        "cancelled" => Ok(UiMessageStatus::Cancelled),
+        "error" => Ok(UiMessageStatus::Error),
+        other => Err(AgentError::Parse(format!("Unknown message status: {}", other))),
+    }
+}
+
+fn token_usage_to_columns(
+    usage: Option<&TokenUsage>,
+) -> (Option<i64>, Option<i64>, Option<i64>, Option<i64>) {
+    let Some(usage) = usage else {
+        return (None, None, None, None);
+    };
+    (
+        Some(usage.input_tokens),
+        Some(usage.output_tokens),
+        usage.cache_read_tokens,
+        usage.cache_write_tokens,
+    )
+}
+
+fn build_message(row: &sqlx::sqlite::SqliteRow) -> AgentResult<Message> {
+    let blocks_json: String = row.try_get("blocks_json")?;
+    let blocks: Vec<Block> = serde_json::from_str(&blocks_json).map_err(|e| {
+        AgentError::Parse(format!("Invalid message blocks_json: {}", e))
+    })?;
+
+    let role = parse_role(row.try_get::<String, _>("role")?.as_str())?;
+    let status = parse_status(row.try_get::<String, _>("status")?.as_str())?;
+
+    let token_usage = match (
+        row.try_get::<Option<i64>, _>("input_tokens")?,
+        row.try_get::<Option<i64>, _>("output_tokens")?,
+        row.try_get::<Option<i64>, _>("cache_read_tokens")?,
+        row.try_get::<Option<i64>, _>("cache_write_tokens")?,
+    ) {
+        (Some(input_tokens), Some(output_tokens), cache_read_tokens, cache_write_tokens) => {
+            Some(TokenUsage {
+                input_tokens,
+                output_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
+            })
+        }
+        _ => None,
+    };
+
+    Ok(Message {
+        id: row.try_get("id")?,
+        session_id: row.try_get("session_id")?,
+        role,
+        status,
+        blocks,
+        created_at: timestamp_to_datetime(row.try_get::<i64, _>("created_at")?),
+        finished_at: opt_timestamp_to_datetime(row.try_get("finished_at")?),
+        duration_ms: row.try_get("duration_ms")?,
+        token_usage,
+    })
 }
 
 #[derive(Debug)]
@@ -866,7 +982,7 @@ impl ExecutionMessageRepository {
     pub async fn append_message(
         &self,
         execution_id: &str,
-        role: MessageRole,
+        role: AgentMessageRole,
         content: &str,
         tokens: i64,
         is_summary: bool,

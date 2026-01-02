@@ -1,49 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import workspaceService, {
-  type SessionMessageRecord,
-  type SessionRecord,
-  type WorkspaceRecord,
-} from '@/api/workspace/service'
-import type { Message, MessageImage } from '@/types'
-import type { UiStep } from '@/api/agent/types'
+import workspaceService, { type SessionRecord, type WorkspaceRecord } from '@/api/workspace/service'
+import type { Message } from '@/types'
 import { useTerminalStore } from '@/stores/Terminal'
 import { useSessionStore } from '@/stores/session'
 
 /** 未分组工作区的特殊路径（与后端保持一致） */
 export const UNGROUPED_WORKSPACE_PATH = '__ungrouped__'
-
-const deserializeSteps = (payload?: string | null): UiStep[] => {
-  if (!payload) return []
-  try {
-    return JSON.parse(payload) as UiStep[]
-  } catch {
-    return []
-  }
-}
-
-const deserializeImages = (payload?: string | null): MessageImage[] | undefined => {
-  if (!payload) return undefined
-  try {
-    return JSON.parse(payload) as MessageImage[]
-  } catch {
-    return undefined
-  }
-}
-
-const toMessage = (record: SessionMessageRecord): Message => {
-  return {
-    id: record.id,
-    sessionId: record.sessionId,
-    role: record.role === 'assistant' ? 'assistant' : 'user',
-    createdAt: new Date(record.createdAt * 1000),
-    status: record.status ?? (record.role === 'assistant' ? 'streaming' : undefined),
-    duration: record.durationMs ?? undefined,
-    content: record.content ?? undefined,
-    steps: deserializeSteps(record.stepsJson),
-    images: deserializeImages(record.imagesJson),
-  }
-}
 
 export const useWorkspaceStore = defineStore('workspace-store', () => {
   // 内部状态 - 当前加载的工作区数据
@@ -92,8 +55,7 @@ export const useWorkspaceStore = defineStore('workspace-store', () => {
   }
 
   const fetchMessages = async (sessionId: number) => {
-    const records = await workspaceService.getMessages(sessionId)
-    messages.value = records.map(toMessage)
+    messages.value = await workspaceService.getMessages(sessionId)
   }
 
   // 加载指定工作区的数据（会话列表、当前会话、消息）

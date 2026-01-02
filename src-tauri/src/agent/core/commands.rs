@@ -6,7 +6,7 @@ use crate::agent::context::SummaryResult;
 use crate::agent::core::executor::{
     ExecuteTaskParams, FileContextStatus, TaskExecutor, TaskSummary,
 };
-use crate::agent::events::TaskProgressPayload;
+use crate::agent::types::TaskEvent;
 use crate::storage::repositories::AppPreferences;
 use crate::storage::{DatabaseManager, UnifiedCache};
 use crate::utils::{EmptyData, TauriApiResult};
@@ -30,28 +30,13 @@ impl TaskExecutorState {
 pub async fn agent_execute_task(
     state: State<'_, TaskExecutorState>,
     params: ExecuteTaskParams,
-    channel: Channel<TaskProgressPayload>,
+    channel: Channel<TaskEvent>,
 ) -> TauriApiResult<EmptyData> {
     match state.executor.execute_task(params, channel).await {
         Ok(_context) => Ok(api_success!()),
         Err(e) => {
             tracing::error!("Failed to execute Agent task: {}", e);
             Ok(api_error!("agent.execute_failed"))
-        }
-    }
-}
-
-/// 暂停任务
-#[tauri::command]
-pub async fn agent_pause_task(
-    state: State<'_, TaskExecutorState>,
-    task_id: String,
-) -> TauriApiResult<EmptyData> {
-    match state.executor.pause_task(&task_id, true).await {
-        Ok(_) => Ok(api_success!()),
-        Err(e) => {
-            tracing::error!("Failed to pause task: {}", e);
-            Ok(api_error!("agent.pause_failed"))
         }
     }
 }

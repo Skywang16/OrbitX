@@ -6,14 +6,7 @@
 
 import { invoke } from '@/utils/request'
 import { agentChannelApi } from '@/api/channel/agent'
-import type {
-  ExecuteTaskParams,
-  TaskControlCommand,
-  TaskListFilter,
-  TaskProgressPayload,
-  TaskProgressStream,
-  TaskSummary,
-} from './types'
+import type { ExecuteTaskParams, TaskListFilter, TaskProgressPayload, TaskProgressStream, TaskSummary } from './types'
 
 /**
  * Agent API 主类
@@ -32,25 +25,6 @@ export class AgentApi {
    */
   executeTask = async (params: ExecuteTaskParams): Promise<TaskProgressStream> => {
     const stream = agentChannelApi.createTaskStream(params)
-    return this.createProgressStreamFromReadableStream(stream)
-  }
-
-  /**
-   * 暂停正在执行的任务
-   * @param taskId 任务ID
-   */
-  pauseTask = async (taskId: string): Promise<void> => {
-    await invoke('agent_pause_task', { taskId })
-  }
-
-  /**
-   * 恢复已暂停的任务
-   * @param taskId 任务ID
-   * @returns 返回任务进度流
-   */
-  resumeTask = async (taskId: string): Promise<TaskProgressStream> => {
-    const stream = agentChannelApi.createResumeStream(taskId)
-
     return this.createProgressStreamFromReadableStream(stream)
   }
 
@@ -91,24 +65,8 @@ export class AgentApi {
     return task
   }
 
-  /**
-   * 发送任务控制命令
-   * @param taskId 任务ID
-   * @param command 控制命令
-   */
-  sendCommand = async (taskId: string, command: TaskControlCommand): Promise<void> => {
-    switch (command.type) {
-      case 'pause':
-        await this.pauseTask(taskId)
-        break
-      case 'cancel':
-        await this.cancelTask(taskId, command.reason)
-        break
-      default: {
-        const _exhaustiveCheck: never = command
-        throw new Error(`Unsupported command: ${(_exhaustiveCheck as TaskControlCommand).type}`)
-      }
-    }
+  sendCommand = async (taskId: string, command: { type: 'cancel'; reason?: string }): Promise<void> => {
+    await this.cancelTask(taskId, command.reason)
   }
 
   /**
@@ -141,7 +99,7 @@ export class AgentApi {
           // 打印Channel输出的内容（使用 warn 以符合 no-console 规则）
           console.warn('[Channel输出]', {
             type: value.type,
-            payload: value.payload,
+            data: value,
             timestamp: new Date().toISOString(),
           })
 

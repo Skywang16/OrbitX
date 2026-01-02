@@ -16,8 +16,8 @@ use crate::agent::config::TaskExecutionConfig;
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
-use crate::agent::events::TaskProgressPayload;
 use crate::agent::persistence::{AgentExecution, ExecutionStatus};
+use crate::agent::types::TaskEvent;
 
 impl TaskExecutor {
     /// 构建新的 TaskContext
@@ -27,7 +27,7 @@ impl TaskExecutor {
     pub async fn build_or_restore_context(
         &self,
         params: &ExecuteTaskParams,
-        progress_channel: Option<Channel<TaskProgressPayload>>,
+        progress_channel: Option<Channel<TaskEvent>>,
     ) -> TaskExecutorResult<Arc<TaskContext>> {
         self.finish_running_task_for_session(params.session_id)
             .await?;
@@ -67,7 +67,7 @@ impl TaskExecutor {
     async fn create_new_context(
         &self,
         params: &ExecuteTaskParams,
-        progress_channel: Option<Channel<TaskProgressPayload>>,
+        progress_channel: Option<Channel<TaskEvent>>,
     ) -> TaskExecutorResult<Arc<TaskContext>> {
         let task_id = format!("exec_{}", uuid::Uuid::new_v4());
 
@@ -133,7 +133,7 @@ impl TaskExecutor {
         &self,
         execution: AgentExecution,
         workspace_path: String,
-        progress_channel: Option<Channel<TaskProgressPayload>>,
+        progress_channel: Option<Channel<TaskEvent>>,
     ) -> TaskExecutorResult<TaskContext> {
         let config = if let Some(config_str) = &execution.execution_config {
             serde_json::from_str(config_str).unwrap_or_else(|_| TaskExecutionConfig::default())

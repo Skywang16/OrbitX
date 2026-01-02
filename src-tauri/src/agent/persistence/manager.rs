@@ -4,7 +4,7 @@ use crate::storage::database::DatabaseManager;
 
 use super::repositories::{
     AgentExecutionRepository, ExecutionEventRepository, ExecutionMessageRepository,
-    SessionMessageRepository, SessionRepository, SessionSummaryRepository, ToolExecutionRepository,
+    MessageRepository, SessionRepository, SessionSummaryRepository, ToolExecutionRepository,
     WorkspaceFileContextRepository, WorkspaceRepository,
 };
 
@@ -14,7 +14,7 @@ pub struct AgentPersistence {
     database: Arc<DatabaseManager>,
     workspaces: WorkspaceRepository,
     sessions: SessionRepository,
-    session_messages: SessionMessageRepository,
+    messages: MessageRepository,
     session_summaries: SessionSummaryRepository,
     file_context: WorkspaceFileContextRepository,
     agent_executions: AgentExecutionRepository,
@@ -28,7 +28,7 @@ impl AgentPersistence {
         Self {
             workspaces: WorkspaceRepository::new(Arc::clone(&database)),
             sessions: SessionRepository::new(Arc::clone(&database)),
-            session_messages: SessionMessageRepository::new(Arc::clone(&database)),
+            messages: MessageRepository::new(Arc::clone(&database)),
             session_summaries: SessionSummaryRepository::new(Arc::clone(&database)),
             file_context: WorkspaceFileContextRepository::new(Arc::clone(&database)),
             agent_executions: AgentExecutionRepository::new(Arc::clone(&database)),
@@ -51,8 +51,8 @@ impl AgentPersistence {
         &self.sessions
     }
 
-    pub fn session_messages(&self) -> &SessionMessageRepository {
-        &self.session_messages
+    pub fn messages(&self) -> &MessageRepository {
+        &self.messages
     }
 
     pub fn session_summaries(&self) -> &SessionSummaryRepository {

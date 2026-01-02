@@ -39,49 +39,6 @@ pub struct SessionSummary {
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum ChatMessageRole {
-    User,
-    Assistant,
-}
-
-impl ChatMessageRole {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::User => "user",
-            Self::Assistant => "assistant",
-        }
-    }
-}
-
-impl FromStr for ChatMessageRole {
-    type Err = AgentError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "user" => Ok(Self::User),
-            "assistant" => Ok(Self::Assistant),
-            other => Err(AgentError::Parse(format!(
-                "Unknown chat message role: {}",
-                other
-            ))),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionMessage {
-    pub id: i64,
-    pub session_id: i64,
-    pub role: ChatMessageRole,
-    pub content: Option<String>,
-    pub steps_json: Option<String>,
-    pub images_json: Option<String>,
-    pub status: Option<String>,
-    pub duration_ms: Option<i64>,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FileRecordState {
     Active,
     Stale,
@@ -409,20 +366,6 @@ pub(crate) fn build_session_summary(row: &sqlx::sqlite::SqliteRow) -> SessionSum
         created_at: timestamp_to_datetime(row.try_get::<i64, _>("created_at").unwrap_or(0)),
         updated_at: timestamp_to_datetime(row.try_get::<i64, _>("updated_at").unwrap_or(0)),
     }
-}
-
-pub(crate) fn build_session_message(row: &sqlx::sqlite::SqliteRow) -> AgentResult<SessionMessage> {
-    Ok(SessionMessage {
-        id: row.try_get("id")?,
-        session_id: row.try_get("session_id")?,
-        role: ChatMessageRole::from_str(row.try_get::<String, _>("role")?.as_str())?,
-        content: row.try_get("content").unwrap_or(None),
-        steps_json: row.try_get("steps_json").unwrap_or(None),
-        images_json: row.try_get("images_json").unwrap_or(None),
-        status: row.try_get("status").unwrap_or(None),
-        duration_ms: row.try_get("duration_ms").unwrap_or(None),
-        created_at: timestamp_to_datetime(row.try_get::<i64, _>("created_at")?),
-    })
 }
 
 pub(crate) fn build_workspace_file_record(

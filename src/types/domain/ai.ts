@@ -1,16 +1,5 @@
 import type { BaseConfig } from '../core'
-import type { UiStep } from '../../api/agent/types'
-
-export interface ToolExecution {
-  name: string
-  params: Record<string, unknown>
-  status: 'running' | 'completed' | 'error'
-  startTime: number
-  endTime?: number
-  result?: unknown
-  error?: string
-  toolId?: string
-}
+import type { Message } from './aiMessage'
 
 export type AIProvider = 'anthropic' | 'openai_compatible'
 
@@ -140,49 +129,6 @@ export interface Conversation {
   messageCount?: number
   createdAt: Date
   updatedAt: Date
-}
-
-export interface BaseStep {
-  content: string
-  timestamp: number
-  metadata?: {
-    thinkingDuration?: number
-    errorType?: string
-    errorDetails?: string
-    streamId?: string // 流式ID，用于识别同一轮流式更新
-  }
-}
-
-export interface ToolStep extends BaseStep {
-  type: 'tool_use' | 'tool_result'
-  toolExecution: ToolExecution
-}
-
-export interface NonToolStep extends BaseStep {
-  type: 'thinking' | 'task' | 'task_thought' | 'text' | 'error'
-}
-
-export type AIOutputStep = ToolStep | NonToolStep
-
-export interface MessageImage {
-  id: string
-  dataUrl: string
-  fileName: string
-  fileSize: number
-  mimeType: string
-}
-
-export interface Message {
-  id: number
-  sessionId: number
-  role: 'user' | 'assistant' | 'system'
-  createdAt: Date
-  steps?: UiStep[]
-  status?: 'streaming' | 'complete' | 'error'
-  duration?: number
-  // 双轨架构：user消息直接显示content，assistant消息只通过steps渲染
-  content?: string // 仅用于user消息
-  images?: MessageImage[] // 用户消息的图片附件
 }
 
 export type ChatStatus = 'idle' | 'loading' | 'streaming' | 'error'

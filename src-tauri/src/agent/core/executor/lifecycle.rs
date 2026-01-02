@@ -12,18 +12,14 @@ use crate::agent::core::context::TaskContext;
 use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
-use crate::agent::events::{
-    FinishPayload, TaskCancelledPayload, TaskCompletedPayload, TaskCreatedPayload,
-    TaskErrorPayload, TaskPausedPayload, TaskProgressPayload, TaskResumedPayload,
-    TaskStartedPayload,
-};
+use crate::agent::types::{ErrorBlock, TaskEvent};
 use crate::workspace::{WorkspaceService, UNGROUPED_WORKSPACE_PATH};
 
 impl TaskExecutor {
     pub async fn execute_task(
         &self,
         params: ExecuteTaskParams,
-        progress_channel: Channel<TaskProgressPayload>,
+        progress_channel: Channel<TaskEvent>,
     ) -> TaskExecutorResult<Arc<TaskContext>> {
         // 规范化参数：空工作区或 session_id=0 时使用未分组会话
         let params = self.normalize_task_params(params).await?;
@@ -32,17 +28,16 @@ impl TaskExecutor {
             .build_or_restore_context(&params, Some(progress_channel))
             .await?;
 
-        ctx.send_progress(TaskProgressPayload::TaskCreated(TaskCreatedPayload {
+        ctx.emit_event(TaskEvent::TaskCreated {
             task_id: ctx.task_id.to_string(),
             session_id: ctx.session_id,
             workspace_path: ctx.cwd.to_string(),
-            user_prompt: params.user_prompt.clone(),
-        }))
+        })
         .await?;
 
-        // 先创建用户消息（获取 message_id）
+        // 创建 UI 消息（用户 + assistant 占位）
         let user_message_id = ctx
-            .initialize_ui_track(&params.user_prompt, params.images.as_deref())
+            .initialize_message_track(&params.user_prompt, params.images.as_deref())
             .await?;
 
         if ctx.checkpointing_enabled() {
@@ -81,12 +76,6 @@ impl TaskExecutor {
             .await;
         ctx.set_status(AgentTaskStatus::Running).await?;
 
-        ctx.send_progress(TaskProgressPayload::TaskStarted(TaskStartedPayload {
-            task_id: ctx.task_id.to_string(),
-            iteration: 0,
-        }))
-        .await?;
-
         let executor = self.clone();
         let ctx_for_spawn = Arc::clone(&ctx);
         let model_id = params.model_id.clone();
@@ -115,99 +104,32 @@ impl TaskExecutor {
         match result {
             Ok(()) => {
                 ctx.set_status(AgentTaskStatus::Completed).await?;
-                let iteration = ctx.current_iteration().await;
-
-                ctx.send_progress(TaskProgressPayload::TaskCompleted(TaskCompletedPayload {
+                ctx.finish_assistant_message(crate::agent::types::MessageStatus::Completed, None)
+                    .await?;
+                ctx.emit_event(TaskEvent::TaskCompleted {
                     task_id: ctx.task_id.to_string(),
-                    final_iteration: iteration,
-                    completion_reason: "success".to_string(),
-                    timestamp: chrono::Utc::now(),
-                }))
-                .await?;
-
-                ctx.send_progress(TaskProgressPayload::Finish(FinishPayload {
-                    task_id: ctx.task_id.to_string(),
-                    iteration,
-                    finish_reason: "completed".to_string(),
-                    usage: None,
-                    timestamp: chrono::Utc::now(),
-                }))
+                })
                 .await?;
             }
             Err(e) => {
                 error!("Task failed: {}", e);
                 ctx.set_status(AgentTaskStatus::Error).await?;
-                let iteration = ctx.current_iteration().await;
 
-                ctx.send_progress(TaskProgressPayload::TaskError(TaskErrorPayload {
-                    task_id: ctx.task_id.to_string(),
-                    iteration,
-                    error_type: "execution_error".to_string(),
-                    error_message: e.to_string(),
-                    is_recoverable: false,
-                    timestamp: chrono::Utc::now(),
-                }))
-                .await?;
+                let error_block = ErrorBlock {
+                    code: "task.execution_error".to_string(),
+                    message: e.to_string(),
+                    details: None,
+                };
+
+                let _ = ctx.fail_assistant_message(error_block.clone()).await;
+                let _ = ctx
+                    .emit_event(TaskEvent::TaskError {
+                        task_id: ctx.task_id.to_string(),
+                        error: error_block,
+                    })
+                    .await;
             }
         }
-
-        Ok(())
-    }
-
-    pub async fn pause_task(
-        &self,
-        task_id: &str,
-        abort_current_step: bool,
-    ) -> TaskExecutorResult<()> {
-        let ctx = self
-            .active_tasks()
-            .get(task_id)
-            .map(|entry| Arc::clone(entry.value()))
-            .ok_or_else(|| TaskExecutorError::TaskNotFound(task_id.to_string()))?;
-
-        ctx.set_pause(true, abort_current_step);
-        ctx.set_status(AgentTaskStatus::Paused).await?;
-
-        ctx.send_progress(TaskProgressPayload::TaskPaused(TaskPausedPayload {
-            task_id: task_id.to_string(),
-            reason: if abort_current_step {
-                "user_requested_with_abort"
-            } else {
-                "user_requested"
-            }
-            .to_string(),
-            timestamp: chrono::Utc::now(),
-        }))
-        .await?;
-
-        Ok(())
-    }
-
-    pub async fn resume_task(
-        &self,
-        task_id: &str,
-        progress_channel: Channel<TaskProgressPayload>,
-    ) -> TaskExecutorResult<()> {
-        let ctx = self
-            .active_tasks()
-            .get(task_id)
-            .map(|entry| Arc::clone(entry.value()))
-            .ok_or_else(|| TaskExecutorError::TaskNotFound(task_id.to_string()))?;
-
-        // 更新progress channel
-        ctx.set_progress_channel(Some(progress_channel)).await;
-
-        // 恢复执行
-        ctx.set_pause(false, false);
-        ctx.set_status(AgentTaskStatus::Running).await?;
-
-        let iteration = ctx.current_iteration().await;
-        ctx.send_progress(TaskProgressPayload::TaskResumed(TaskResumedPayload {
-            task_id: task_id.to_string(),
-            from_iteration: iteration,
-            timestamp: chrono::Utc::now(),
-        }))
-        .await?;
 
         Ok(())
     }
@@ -226,12 +148,12 @@ impl TaskExecutor {
         ctx.abort();
         ctx.set_status(AgentTaskStatus::Cancelled).await?;
 
-        ctx.send_progress(TaskProgressPayload::TaskCancelled(TaskCancelledPayload {
-            task_id: task_id.to_string(),
-            reason: "user_requested".to_string(),
-            timestamp: chrono::Utc::now(),
-        }))
-        .await?;
+        let _ = ctx.cancel_assistant_message().await;
+        let _ = ctx
+            .emit_event(TaskEvent::TaskCancelled {
+                task_id: task_id.to_string(),
+            })
+            .await;
 
         self.active_tasks().remove(task_id);
 

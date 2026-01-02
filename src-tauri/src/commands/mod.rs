@@ -179,7 +179,6 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::llm::commands::llm_get_providers,
         // Agent 执行器命令（注册以供前端调用）
         crate::agent::core::commands::agent_execute_task,
-        crate::agent::core::commands::agent_pause_task,
         crate::agent::core::commands::agent_cancel_task,
         crate::agent::core::commands::agent_list_tasks,
         crate::agent::core::commands::agent_get_file_context_status,

@@ -6,7 +6,8 @@
  */
 
 use super::rules::get_available_rules_files;
-use super::{SessionMessageRecord, SessionRecord, WorkspaceRecord, WorkspaceService};
+use super::{SessionRecord, WorkspaceRecord, WorkspaceService};
+use crate::agent::types::Message;
 use crate::storage::repositories::AppPreferences;
 use crate::storage::{DatabaseManager, UnifiedCache};
 use crate::utils::{EmptyData, TauriApiResult};
@@ -112,7 +113,7 @@ pub async fn workspace_list_sessions(
 pub async fn workspace_get_messages(
     session_id: i64,
     database: State<'_, Arc<DatabaseManager>>,
-) -> TauriApiResult<Vec<SessionMessageRecord>> {
+) -> TauriApiResult<Vec<Message>> {
     let service = WorkspaceService::new(Arc::clone(&database));
     match service.get_session_messages(session_id).await {
         Ok(records) => Ok(api_success!(records)),

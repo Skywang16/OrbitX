@@ -1,5 +1,5 @@
 <template>
-  <div class="tool-block" v-if="step?.stepType === 'tool_use' || step?.stepType === 'tool_result'">
+  <div class="tool-block">
     <div class="tool-line" :class="{ clickable: isExpandable, running: isRunning, error: isError }">
       <span class="text" :class="{ clickable: isExpandable }" @click="toggleExpanded">
         <span v-if="toolPrefix" class="tool-prefix">{{ toolPrefix }}</span>
@@ -43,18 +43,11 @@
       </div>
     </transition>
   </div>
-
-  <div v-else class="tool-block">
-    <div class="tool-line error">
-      <span class="text">{{ t('tool.data_error') }}</span>
-    </div>
-  </div>
 </template>
 
 <script setup lang="ts">
   import { ref, computed, nextTick, watch } from 'vue'
-  import { useI18n } from 'vue-i18n'
-  import type { UiStep } from '@/api/agent/types'
+  import type { Block } from '@/types'
   import EditResult from './components/EditResult.vue'
   import stripAnsi from 'strip-ansi'
   import hljs from 'highlight.js'
@@ -72,10 +65,8 @@
     new: string
   }
 
-  const { t } = useI18n()
-
   const props = defineProps<{
-    step: UiStep
+    block: Extract<Block, { type: 'tool' }>
   }>()
 
   const isExpanded = ref(false)
@@ -85,23 +76,23 @@
 
   // Extract tool information from step metadata
   const toolName = computed(() => {
-    return (props.step.metadata?.toolName as string) || ''
+    return props.block.name || ''
   })
 
   const toolParams = computed(() => {
-    return (props.step.metadata?.params as Record<string, unknown>) || {}
+    return (props.block.input as Record<string, unknown>) || {}
   })
 
   const toolResult = computed(() => {
-    return props.step.metadata?.result || ''
+    return props.block.output?.content || ''
   })
 
   const isError = computed(() => {
-    return Boolean(props.step.metadata?.isError)
+    return props.block.status === 'error' || Boolean(props.block.output?.isError)
   })
 
   const hasResult = computed(() => {
-    return props.step.stepType === 'tool_result' && (toolResult.value || props.step.content)
+    return props.block.status !== 'running' && Boolean(toolResult.value)
   })
 
   const isEditResult = computed(() => {
@@ -127,7 +118,7 @@
       } as EditResultData
     }
     return (
-      (props.step.metadata?.extInfo as EditResultData) ||
+      (props.block.output?.ext as EditResultData) ||
       ({
         file: '',
         replacedCount: 0,
@@ -147,12 +138,12 @@
   })
 
   const isRunning = computed(() => {
-    return props.step.stepType === 'tool_use'
+    return props.block.status === 'running'
   })
 
   const diffStats = computed(() => {
-    if (toolName.value !== 'edit_file' || !props.step.metadata?.extInfo) return null
-    const extInfo = props.step.metadata.extInfo as EditResultData
+    if (toolName.value !== 'edit_file' || !props.block.output?.ext) return null
+    const extInfo = props.block.output.ext as EditResultData
     if (extInfo.old && extInfo.new) {
       const oldLines = extInfo.old.split('\n').length
       const newLines = extInfo.new.split('\n').length
@@ -193,7 +184,7 @@
 
   const getDisplayText = () => {
     const params = toolParams.value
-    const extInfo = props.step.metadata?.extInfo as Record<string, any> | undefined
+    const extInfo = props.block.output?.ext as Record<string, unknown> | undefined
 
     switch (toolName.value) {
       case 'read_file': {
@@ -263,7 +254,7 @@
   }
 
   const cleanToolResult = computed(() => {
-    const result = toolResult.value || props.step.content
+    const result = toolResult.value
 
     if (result && typeof result === 'object' && 'result' in result) {
       const text = result?.result

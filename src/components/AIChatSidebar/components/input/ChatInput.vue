@@ -88,7 +88,6 @@
     return model?.options?.supportsImages ?? false
   })
 
-
   const homePath = ref<string>('')
 
   const resolvedPath = ref<string>('.')
