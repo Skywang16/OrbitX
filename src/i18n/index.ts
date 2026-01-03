@@ -1,10 +1,10 @@
 import { createI18n } from 'vue-i18n'
-import { storageApi } from '@/api/storage'
-import { invoke } from '@/utils/request'
 import { listen } from '@tauri-apps/api/event'
-import { useSessionStore } from '@/stores/session'
+import { invoke } from '@/utils/request'
 import zh from './locales/zh.json'
 import en from './locales/en.json'
+
+export type SupportedLanguage = 'zh-CN' | 'en-US'
 
 export type MessageLanguages = keyof typeof zh
 
@@ -23,41 +23,36 @@ export const i18n = createI18n({
   silentTranslationWarn: true,
 })
 
+const getPersistedLanguage = async (): Promise<SupportedLanguage | null> => {
+  const lang = await invoke<string>('language_get_app_language').catch(() => null)
+  return lang === 'zh-CN' || lang === 'en-US' ? lang : null
+}
+
+const persistLanguage = async (language: SupportedLanguage): Promise<void> => {
+  await invoke<void>('language_set_app_language', { language })
+}
+
 // 异步初始化语言设置
 export const initLocale = async () => {
-  // 优先从后端语言管理器获取（与后端 i18n 保持一致）
-  let savedLocale: string | undefined
-  const appLanguage = await invoke<string>('language_get_app_language').catch(error => {
-    console.warn('Failed to get app language:', error)
-    return undefined
-  })
-  savedLocale = appLanguage
-
-  if (!savedLocale) {
-    const appConfig = await storageApi.getAppConfig()
-    savedLocale = appConfig?.language
+  let locale: SupportedLanguage | null = null
+  try {
+    locale = await getPersistedLanguage()
+  } catch {
+    locale = null
   }
 
-  let locale = 'en-US'
-  if (savedLocale && (savedLocale === 'zh-CN' || savedLocale === 'en-US')) {
-    locale = savedLocale
-  } else {
-    // 回退到浏览器语言
+  if (!locale) {
     const browserLang = navigator?.language?.toLowerCase() || ''
-    if (browserLang.startsWith('zh')) {
-      locale = 'zh-CN'
-    }
+    locale = browserLang.startsWith('zh') ? 'zh-CN' : 'en-US'
   }
 
-  i18n.global.locale.value = locale as 'zh-CN' | 'en-US'
+  i18n.global.locale.value = locale
 
   // 监听后端语言变化事件，保持回显同步
   await listen<string>('language-changed', event => {
     const next = event.payload
     if (next === 'zh-CN' || next === 'en-US') {
       i18n.global.locale.value = next
-      const sessionStore = useSessionStore()
-      sessionStore.updateUiState({ language: next })
     }
   }).catch(error => {
     console.warn('Failed to setup language listener:', error)
@@ -82,13 +77,7 @@ export const setLocale = async (locale: string) => {
     i18n.global.locale.value = locale as 'zh-CN' | 'en-US'
 
     // 通知后端语言管理器（写配置并广播事件）
-    await invoke<void>('language_set_app_language', { language: locale }).catch(error => {
-      console.warn('Failed to set app language:', error)
-    })
-
-    // 立即保存会话状态
-    const sessionStore = useSessionStore()
-    sessionStore.updateUiState({ language: locale })
+    await persistLanguage(locale as SupportedLanguage)
   } catch (error) {
     console.error('Failed to save locale to backend:', error)
   }

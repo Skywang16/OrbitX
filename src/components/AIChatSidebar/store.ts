@@ -6,6 +6,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { useSessionStore } from '@/stores/session'
 import type { ImageAttachment } from '@/stores/imageLightbox'
 import type { ChatMode, Conversation } from '@/types'
+import { restoreAiSidebarState } from '@/persistence/session'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
@@ -44,6 +45,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     return !isSending.value && aiSettingsStore.hasModels
   })
 
+  const persistIfInitialized = () => {
+    if (!isInitialized.value) return
+    saveToSessionState()
+  }
+
   const toggleSidebar = async () => {
     isVisible.value = !isVisible.value
     if (isVisible.value) {
@@ -51,10 +57,17 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         await aiSettingsStore.loadSettings()
       }
     }
+    persistIfInitialized()
   }
 
   const setSidebarWidth = (width: number) => {
     sidebarWidth.value = Math.max(300, Math.min(800, width))
+    persistIfInitialized()
+  }
+
+  const setChatMode = (mode: ChatMode) => {
+    chatMode.value = mode
+    persistIfInitialized()
   }
 
   const refreshSessions = async () => {
@@ -233,19 +246,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   // 恢复 UI 状态
   const restoreFromSessionState = (): void => {
-    const aiState = sessionStore.aiState
-    if (!aiState) return
-
-    isVisible.value = aiState.visible
-    sidebarWidth.value = aiState.width
-    chatMode.value = aiState.mode as ChatMode
+    const restored = restoreAiSidebarState(sessionStore.aiState)
+    if (typeof restored.visible === 'boolean') isVisible.value = restored.visible
+    if (typeof restored.width === 'number') sidebarWidth.value = restored.width
+    if (restored.mode) chatMode.value = restored.mode as ChatMode
   }
-
-  watch([isVisible, sidebarWidth, chatMode], () => {
-    if (isInitialized.value) {
-      saveToSessionState()
-    }
-  })
 
   const initialize = async (): Promise<void> => {
     if (isInitialized.value) return
@@ -273,6 +278,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     currentWorkspacePath,
     toggleSidebar,
     setSidebarWidth,
+    setChatMode,
     refreshSessions,
     switchSession,
     createSession,

@@ -57,7 +57,9 @@
     "close": "关闭"
   },
   "git": {
-    "no_repository": "当前目录未检测到 Git 仓库。",
+    "title": "Git",
+    "no_repository": "当前目录不是 Git 仓库",
+    "init_repository": "初始化仓库",
     "unknown_branch": "未知",
     "refresh": "刷新",
     "branches": "分支",
@@ -313,7 +315,8 @@
     "settings": "设置",
     "open_settings": "打开设置",
     "feedback": "问题反馈",
-    "pin": "置顶"
+    "pin": "置顶",
+    "toggle_sidebar": "切换侧边栏"
   },
   "ai_model_config": {
     "empty_description": "点击\"添加模型\"按钮开始配置您的第一个AI模型"
@@ -345,6 +348,9 @@
     "embedding_model": "向量模型"
   },
   "workspace": {
+    "title": "工作区",
+    "new_terminal": "新建终端",
+    "empty": "暂无工作区",
     "parent_directory": "上级目录",
     "no_folders": "当前目录无子文件夹",
     "read_dir_error": "读取目录失败",

@@ -114,8 +114,10 @@ export interface UiState {
   theme: string
   fontSize: number
   sidebarWidth: number
-  opacity?: number
-  language?: string
+  leftSidebarVisible?: boolean
+  leftSidebarWidth?: number
+  leftSidebarActivePanel?: 'workspace' | 'git' | null
+  onboardingCompleted?: boolean
 }
 
 export interface TaskNode {

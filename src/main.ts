@@ -1,10 +1,10 @@
 import { completionApi, dockApi } from '@/api'
-import { configApi } from '@/api/config'
 
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import { useAIChatStore } from '@/components/AIChatSidebar/store'
 import { useThemeStore } from '@/stores/theme'
 import { useSessionStore } from '@/stores/session'
+import { useLayoutStore } from '@/stores/layout'
 
 import { useTerminalStore } from '@/stores/Terminal'
 import { useTabManagerStore } from '@/stores/TabManager'
@@ -16,6 +16,7 @@ import App from './App.vue'
 import './styles/variables.css'
 import ui from './ui'
 import { i18n, initLocale } from './i18n'
+import { getWindowOpacity } from '@/api/window/opacity'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -34,6 +35,9 @@ const initializeStores = async () => {
 
     const tabManagerStore = useTabManagerStore()
     await tabManagerStore.initialize()
+
+    const layoutStore = useLayoutStore()
+    await layoutStore.initialize()
 
     const aiChatStore = useAIChatStore()
     await aiChatStore.initialize()
@@ -63,8 +67,7 @@ const initializeServices = async () => {
 
 const initializeOpacity = async () => {
   try {
-    const config = await configApi.getConfig()
-    const opacity = config.appearance.opacity !== undefined ? config.appearance.opacity : 1.0
+    const opacity = await getWindowOpacity()
     document.documentElement.style.setProperty('--bg-opacity', opacity.toString())
   } catch (error) {
     console.warn('初始化透明度失败:', error)
@@ -75,7 +78,8 @@ const initializeOpacity = async () => {
 const initializeApplication = async () => {
   try {
     const themeStore = useThemeStore()
-    await Promise.allSettled([themeStore.initialize(), initLocale(), initializeOpacity()])
+    const sessionStore = useSessionStore()
+    await Promise.allSettled([themeStore.initialize(), initLocale(), initializeOpacity(), sessionStore.initialize()])
 
     app.mount('#app')
 

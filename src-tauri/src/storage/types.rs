@@ -117,6 +117,18 @@ pub struct UiState {
     pub theme: String,
     pub font_size: f32,
     pub sidebar_width: u32,
+    #[serde(default)]
+    pub left_sidebar_visible: bool,
+    #[serde(default = "default_left_sidebar_width")]
+    pub left_sidebar_width: u32,
+    #[serde(default)]
+    pub left_sidebar_active_panel: Option<String>,
+    #[serde(default)]
+    pub onboarding_completed: bool,
+}
+
+fn default_left_sidebar_width() -> u32 {
+    280
 }
 
 impl Default for UiState {
@@ -125,6 +137,10 @@ impl Default for UiState {
             theme: "dark".to_string(),
             font_size: 14.0,
             sidebar_width: 300,
+            left_sidebar_visible: false,
+            left_sidebar_width: default_left_sidebar_width(),
+            left_sidebar_active_panel: Some("workspace".to_string()),
+            onboarding_completed: false,
         }
     }
 }

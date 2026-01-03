@@ -347,14 +347,15 @@ export const useTerminalStore = defineStore('Terminal', () => {
     sessionStore.setActiveTab(id)
   }
 
-  const writeToTerminal = async (id: number, data: string) => {
+  const writeToTerminal = async (id: number, data: string, execute: boolean = false) => {
     const terminal = terminals.value.find(t => t.id === id)
     if (!terminal) {
       console.error(`无法写入终端 '${id}': 未找到。`)
       return
     }
 
-    await terminalApi.writeToTerminal({ paneId: terminal.id, data })
+    const finalData = execute ? `${data}\n` : data
+    await terminalApi.writeToTerminal({ paneId: terminal.id, data: finalData })
   }
 
   const resizeTerminal = async (id: number, rows: number, cols: number) => {

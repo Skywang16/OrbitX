@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n'
   import { windowApi } from '@/api'
   import { useAIChatStore } from '@/components/AIChatSidebar'
-  import { useGitStore } from '@/stores/git'
+  import { useLayoutStore } from '@/stores/layout'
   import { useTabManagerStore } from '@/stores/TabManager'
   import { openUrl } from '@tauri-apps/plugin-opener'
   import { showPopoverAt } from '@/ui'
@@ -21,7 +21,7 @@
   })
 
   const aiChatStore = useAIChatStore()
-  const gitStore = useGitStore()
+  const layoutStore = useLayoutStore()
   const tabManagerStore = useTabManagerStore()
   const windowStore = useWindowStore()
   const isAlwaysOnTop = computed(() => windowStore.alwaysOnTop)
@@ -71,8 +71,9 @@
     aiChatStore.toggleSidebar()
   }
 
-  const toggleGitPanel = () => {
-    gitStore.togglePanel()
+  // 切换左侧边栏
+  const toggleLeftSidebar = () => {
+    layoutStore.toggleLeftSidebar()
   }
 
   onMounted(async () => {
@@ -87,18 +88,14 @@
   <div class="window-controls" data-tauri-drag-region="false">
     <div class="button-group">
       <button
-        v-if="gitStore.isRepository"
-        class="control-btn git-btn"
-        :class="{ active: gitStore.isVisible }"
-        @click="toggleGitPanel"
-        :title="t('git.toggle_panel')"
+        class="control-btn sidebar-btn"
+        :class="{ active: layoutStore.leftSidebarVisible }"
+        @click="toggleLeftSidebar"
+        :title="t('ui.toggle_sidebar')"
       >
-        <svg class="git-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M6 3v12" />
-          <path d="M6 7h7a3 3 0 0 1 3 3v11" />
-          <circle cx="6" cy="5" r="2" />
-          <circle cx="6" cy="15" r="2" />
-          <circle cx="16" cy="21" r="2" />
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M9 3v18" />
         </svg>
       </button>
       <button
@@ -200,15 +197,15 @@
     color: var(--text-200);
   }
 
-  .git-btn.active {
+  .sidebar-btn.active {
     background: var(--color-primary-alpha);
   }
 
-  .git-btn.active .git-icon {
+  .sidebar-btn.active .sidebar-icon {
     color: var(--text-100);
   }
 
-  .git-icon {
+  .sidebar-icon {
     height: 14px;
     width: 14px;
     color: var(--text-200);

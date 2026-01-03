@@ -14,7 +14,9 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
 // VSCode-style: treat bursts as "one logical change".
-const DEBOUNCE_MS: u64 = 300;
+const DEBOUNCE_MS: u64 = 1000;
+// Throttle: minimum interval between emits to prevent spam
+const MIN_EMIT_INTERVAL_MS: u64 = 2000;
 const CHANNEL_CAPACITY: usize = 1024;
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -135,9 +137,10 @@ impl GitWatcher {
         let repo_path_str = repo_path.to_string_lossy().to_string();
         let git_paths_for_task = git_paths.clone();
 
-        // Spawn debounced event processor
+        // Spawn debounced + throttled event processor
         tokio::spawn(async move {
             let mut pending_changes: HashSet<GitChangeType> = HashSet::new();
+            let mut last_emit_time: Option<tokio::time::Instant> = None;
             let debounce = tokio::time::sleep(Duration::from_secs(3600));
             tokio::pin!(debounce);
 
@@ -154,16 +157,29 @@ impl GitWatcher {
                         }
                     }
                     _ = &mut debounce, if !pending_changes.is_empty() => {
-                        let change_type = summarize_change(&pending_changes);
-                        pending_changes.clear();
-
-                        let event = GitChangeEvent {
-                            path: repo_path_str.clone(),
-                            change_type,
+                        // Throttle: skip if we emitted too recently
+                        let now = tokio::time::Instant::now();
+                        let should_emit = match last_emit_time {
+                            Some(last) => now.duration_since(last).as_millis() >= MIN_EMIT_INTERVAL_MS as u128,
+                            None => true,
                         };
-                        debug!("Emitting git change event: {:?}", event);
-                        if let Err(e) = emitter.emit("git:changed", &event) {
-                            error!("Failed to emit git change event: {}", e);
+
+                        if should_emit {
+                            let change_type = summarize_change(&pending_changes);
+                            pending_changes.clear();
+                            last_emit_time = Some(now);
+
+                            let event = GitChangeEvent {
+                                path: repo_path_str.clone(),
+                                change_type,
+                            };
+                            debug!("Emitting git change event: {:?}", event);
+                            if let Err(e) = emitter.emit("git:changed", &event) {
+                                error!("Failed to emit git change event: {}", e);
+                            }
+                        } else {
+                            // Reschedule debounce to try again later
+                            debounce.as_mut().reset(tokio::time::Instant::now() + Duration::from_millis(MIN_EMIT_INTERVAL_MS));
                         }
                     }
                 }
@@ -241,17 +257,17 @@ fn classify_event(event: &notify::Event, git_paths: &GitPaths) -> Option<GitChan
             let relative = path.strip_prefix(&git_paths.git_dir).ok()?;
             let relative_str = relative.to_string_lossy();
 
-            // .git/index - staging area changes
-            if relative_str == "index" || relative_str == "index.lock" {
+            // .git/index - staging area changes (ignore .lock files)
+            if relative_str == "index" {
                 return Some(GitChangeType::Index);
             }
 
-            // .git/HEAD - branch switch
-            if relative_str == "HEAD" || relative_str == "HEAD.lock" {
+            // .git/HEAD - branch switch (ignore .lock files)
+            if relative_str == "HEAD" {
                 return Some(GitChangeType::Head);
             }
 
-            // Skip other git_dir files (logs, objects, etc.)
+            // Skip lock files and other git_dir files (logs, objects, etc.)
             continue;
         }
 
@@ -265,7 +281,8 @@ fn classify_event(event: &notify::Event, git_paths: &GitPaths) -> Option<GitChan
             }
 
             // packed refs is used by many operations (fetch, tag, branch updates)
-            if relative_str == "packed-refs" || relative_str == "packed-refs.lock" {
+            // Ignore .lock files as they are temporary
+            if relative_str == "packed-refs" {
                 return Some(GitChangeType::Refs);
             }
 

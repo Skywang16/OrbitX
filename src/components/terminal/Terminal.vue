@@ -7,9 +7,6 @@
       class="terminal-container"
       :class="{ 'terminal-active': isActive, 'terminal-loading': isLoading }"
       @click="focusTerminal"
-      @dragover="handleDragOver"
-      @dragleave="handleDragLeave"
-      @drop="handleDrop"
     ></div>
 
     <TerminalCompletion
@@ -47,6 +44,7 @@
 
   import type { Theme } from '@/types'
   import { windowApi } from '@/api'
+  import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
   import { useThemeStore } from '@/stores/theme'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import { useTerminalState } from '@/composables/useTerminalState'
@@ -55,7 +53,7 @@
   import { useTerminalOutput } from '@/composables/useTerminalOutput'
   import { TERMINAL_CONFIG } from '@/constants/terminal'
   import { useTerminalStore } from '@/stores/Terminal'
-  import { createMessage } from '@/ui'
+  import { useLayoutStore } from '@/stores/layout'
   import { convertThemeToXTerm, createDefaultXTermTheme } from '@/utils/themeConverter'
   import { terminalChannelApi } from '@/api/channel/terminal'
 
@@ -81,6 +79,7 @@
 
   // === 状态管理 ===
   const terminalStore = useTerminalStore()
+  const layoutStore = useLayoutStore()
   const themeStore = useThemeStore()
   const terminalSelection = useTerminalSelection()
 
@@ -683,56 +682,31 @@
     }
   }
 
-  const handleGoToPath = (path: string) => {
-    const cleanPath = path.trim().replace(/^["']|["']$/g, '')
-    emit('input', `cd "${cleanPath}"\n`)
-    createMessage.success(`切换到: ${cleanPath}`)
+  const insertPathToTerminal = (path: string) => {
+    const quoted = path.includes(' ') ? `"${path}"` : path
+    terminalStore.writeToTerminal(props.terminalId, quoted)
   }
 
-  const handleFileDrop = async (filePath: string) => {
-    try {
-      const directory = await windowApi.handleFileOpen(filePath)
-      handleGoToPath(directory)
-    } catch {
-      createMessage.error('无法处理拖拽的文件')
-    }
-  }
+  let unlistenDragDrop: (() => void) | null = null
 
-  /**
-   * 处理拖拽悬停事件
-   */
-  const handleDragOver = (event: DragEvent) => {
-    event.preventDefault()
-    event.dataTransfer!.dropEffect = 'copy'
-  }
+  const setupDragDropListener = async () => {
+    const webview = getCurrentWebviewWindow()
+    unlistenDragDrop = await webview.onDragDropEvent(event => {
+      if (event.payload.type !== 'drop' || !props.isActive) return
 
-  /**
-   * 处理拖拽离开事件
-   */
-  const handleDragLeave = (event: DragEvent) => {
-    event.preventDefault()
-  }
-
-  /**
-   * 处理文件拖拽放置事件
-   */
-  const handleDrop = async (event: DragEvent) => {
-    event.preventDefault()
-
-    const files = event.dataTransfer?.files
-
-    if (files && files.length > 0) {
-      const file = files[0]
-
-      let filePath = ''
-      if ('path' in file && file.path) {
-        filePath = file.path as string
-      } else {
-        filePath = file.name
+      // 内部拖拽优先
+      const internalPath = layoutStore.consumeDragPath()
+      if (internalPath) {
+        insertPathToTerminal(internalPath)
+        return
       }
 
-      await handleFileDrop(filePath)
-    }
+      // 外部文件拖拽
+      const paths = event.payload.paths
+      if (paths.length > 0) {
+        insertPathToTerminal(paths[0])
+      }
+    })
   }
 
   // === Event Handlers for Terminal ===
@@ -773,6 +747,8 @@
 
       addDomListener(window, 'opacity-changed', handleOpacityChange)
 
+      await setupDragDropListener()
+
       await shellIntegration.initShellIntegration(terminal.value)
       await nextTick()
 
@@ -789,6 +765,12 @@
 
     // 清理 loading 相关资源
     stopLoading()
+
+    // 清理 Tauri drag drop 监听
+    if (unlistenDragDrop) {
+      unlistenDragDrop()
+      unlistenDragDrop = null
+    }
 
     // 刷新解码器尾部残留，避免丢字符
     const remaining = binaryDecoder.decode()

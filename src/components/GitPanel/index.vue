@@ -131,12 +131,20 @@
       </template>
 
       <div v-else class="git-panel__empty">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 16v-4" />
-          <path d="M12 8h.01" />
+        <svg class="git-panel__empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M6 3v12" />
+          <path d="M6 7h7a3 3 0 0 1 3 3v11" />
+          <circle cx="6" cy="5" r="2" />
+          <circle cx="6" cy="15" r="2" />
+          <circle cx="16" cy="21" r="2" />
         </svg>
-        <span>{{ t('git.no_repository') }}</span>
+        <span class="git-panel__empty-text">{{ t('git.no_repository') }}</span>
+        <button class="git-panel__init-btn" @click="gitStore.initRepository">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          {{ t('git.init_repository') }}
+        </button>
       </div>
     </div>
   </div>
@@ -184,19 +192,44 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: 16px;
     padding: 24px;
     color: var(--text-300);
   }
 
-  .git-panel__empty svg {
-    width: 40px;
-    height: 40px;
-    opacity: 0.5;
+  .git-panel__empty-icon {
+    width: 48px;
+    height: 48px;
+    opacity: 0.4;
   }
 
-  .git-panel__empty span {
+  .git-panel__empty-text {
     font-size: 13px;
     text-align: center;
+    color: var(--text-400);
+  }
+
+  .git-panel__init-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-100);
+    background: var(--color-primary);
+    border: none;
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .git-panel__init-btn:hover {
+    background: var(--color-primary-hover);
+  }
+
+  .git-panel__init-btn svg {
+    width: 14px;
+    height: 14px;
   }
 </style>

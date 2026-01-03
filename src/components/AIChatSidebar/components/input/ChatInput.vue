@@ -6,12 +6,10 @@
   import { useProjectRules } from '@/composables/useProjectRules'
   import { useTerminalStore } from '@/stores/Terminal'
   import { homeDir } from '@tauri-apps/api/path'
-  import TerminalTabTag from '../tags/TerminalTabTag.vue'
   import NodeVersionTag from '../tags/NodeVersionTag.vue'
   import ProjectRulesTag from '../tags/ProjectRulesTag.vue'
   import InputPopover from '@/components/ui/InputPopover.vue'
   import VectorIndexContent from '../vectorIndex/VectorIndexContent.vue'
-  import FolderPicker from '../tags/FolderPicker.vue'
   import NodeVersionPicker from '../tags/NodeVersionPicker.vue'
   import ProjectRulesPicker from '../tags/ProjectRulesPicker.vue'
   import CircularProgress from '@/components/ui/CircularProgress.vue'
@@ -284,7 +282,6 @@
   let progressTimer: number | undefined
 
   const showIndexModal = ref(false)
-  const showNavigatorModal = ref(false)
   const showNodeVersionModal = ref(false)
   const showProjectRulesModal = ref(false)
 
@@ -307,10 +304,6 @@
   const handleVectorIndexClick = async () => {
     await checkVectorIndexStatus()
     showIndexModal.value = true
-  }
-
-  const handleOpenNavigator = () => {
-    showNavigatorModal.value = true
   }
 
   const checkVectorIndexStatus = async () => {
@@ -473,15 +466,6 @@
 
 <template>
   <div class="chat-input">
-    <TerminalTabTag
-      :visible="terminalSelection.hasTerminalTab.value"
-      :terminal-id="terminalSelection.currentTerminalTab.value?.terminalId"
-      :shell="terminalSelection.currentTerminalTab.value?.shell"
-      :cwd="terminalSelection.currentTerminalTab.value?.cwd"
-      :display-path="terminalSelection.currentTerminalTab.value?.displayPath"
-      @open-navigator="handleOpenNavigator"
-    />
-
     <NodeVersionTag
       :visible="nodeVersion.state.value.isNodeProject"
       :version="nodeVersion.state.value.currentVersion"
@@ -603,15 +587,6 @@
         @delete="deleteVectorIndex"
         @refresh="checkVectorIndexStatus"
         @cancel="cancelVectorIndex"
-      />
-    </InputPopover>
-
-    <InputPopover :visible="showNavigatorModal" @update:visible="showNavigatorModal = $event">
-      <FolderPicker
-        v-if="terminalSelection.currentTerminalTab.value?.terminalId && terminalSelection.currentTerminalTab.value?.cwd"
-        :current-path="terminalSelection.currentTerminalTab.value.cwd"
-        :terminal-id="terminalSelection.currentTerminalTab.value.terminalId"
-        @close="showNavigatorModal = false"
       />
     </InputPopover>
 

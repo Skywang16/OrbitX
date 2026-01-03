@@ -2,10 +2,11 @@
   import { useAIChatStore } from '@/components/AIChatSidebar'
   import ContentRenderer from '@/components/ui/ContentRenderer.vue'
   import TitleBar from '@/components/ui/TitleBar.vue'
-  import GitPanel from '@/components/GitPanel/index.vue'
+  import ActivityBar from '@/components/ui/ActivityBar.vue'
+  import LeftSidebar from '@/components/ui/LeftSidebar.vue'
   import { useTerminalStore } from '@/stores/Terminal'
   import { useTabManagerStore } from '@/stores/TabManager'
-  import { useGitStore } from '@/stores/git'
+  import { useLayoutStore } from '@/stores/layout'
   import { windowApi } from '@/api'
   import { onBeforeUnmount, onMounted } from 'vue'
   import type { UnlistenFn } from '@tauri-apps/api/event'
@@ -14,7 +15,7 @@
   const terminalStore = useTerminalStore()
   const aiChatStore = useAIChatStore()
   const tabManagerStore = useTabManagerStore()
-  const gitStore = useGitStore()
+  const layoutStore = useLayoutStore()
 
   let unlistenStartupFile: UnlistenFn | null = null
   let unlistenFileDropped: UnlistenFn | null = null
@@ -83,13 +84,10 @@
     />
 
     <div class="main-content">
-      <div
-        v-show="gitStore.isVisible"
-        class="sidebar-wrapper"
-        :style="{ '--sidebar-width': `${gitStore.panelWidth}px` }"
-      >
-        <GitPanel />
-      </div>
+      <template v-if="layoutStore.leftSidebarVisible">
+        <ActivityBar />
+        <LeftSidebar v-if="layoutStore.activeLeftPanel" />
+      </template>
 
       <ContentRenderer />
 

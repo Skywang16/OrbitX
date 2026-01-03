@@ -57,7 +57,9 @@
     "close": "Close"
   },
   "git": {
-    "no_repository": "No Git repository detected in the current directory.",
+    "title": "Git",
+    "no_repository": "Not a Git repository",
+    "init_repository": "Initialize Repository",
     "unknown_branch": "Unknown",
     "refresh": "Refresh",
     "branches": "Branches",
@@ -313,7 +315,8 @@
     "settings": "Settings",
     "open_settings": "Open Settings",
     "feedback": "Feedback",
-    "pin": "Pin"
+    "pin": "Pin",
+    "toggle_sidebar": "Toggle Sidebar"
   },
   "ai_model_config": {
     "empty_description": "Click \"Add Model\" button to configure your first AI model"
@@ -345,6 +348,9 @@
     "embedding_model": "Embedding Model"
   },
   "workspace": {
+    "title": "Workspace",
+    "new_terminal": "New Terminal",
+    "empty": "No workspace",
     "parent_directory": "Parent Directory",
     "no_folders": "No folders in current directory",
     "read_dir_error": "Failed to read directory",

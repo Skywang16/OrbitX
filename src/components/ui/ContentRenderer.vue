@@ -1,5 +1,5 @@
 <template>
-  <div class="content-renderer">
+  <div class="content-renderer" @dragover.prevent @drop="handleDrop">
     <EmptyState v-if="tabManagerStore.tabs.length === 0" />
 
     <Terminal
@@ -39,6 +39,8 @@
   import EmptyState from '@/views/EmptyState/EmptyStateView.vue'
   import DiffView from '@/views/DiffView/DiffView.vue'
 
+  const ORBITX_DRAG_PATH_MIME = 'application/x-orbitx-path'
+
   const tabManagerStore = useTabManagerStore()
   const terminalStore = useTerminalStore()
 
@@ -56,6 +58,44 @@
     if (typeof tabManagerStore.activeTabId === 'number') {
       terminalStore.resizeTerminal(tabManagerStore.activeTabId, rows, cols)
     }
+  }
+
+  const handleDrop = (event: DragEvent) => {
+    event.preventDefault()
+
+    // 处理内部拖放（从 WorkspacePanel 拖入）
+    const orbitXPath = event.dataTransfer?.getData(ORBITX_DRAG_PATH_MIME)
+    if (orbitXPath) {
+      insertPathToTerminal(orbitXPath)
+      return
+    }
+
+    // 处理文本路径拖放
+    const textPath = event.dataTransfer?.getData('text/plain')
+    if (textPath && isAbsolutePath(textPath)) {
+      insertPathToTerminal(textPath)
+    }
+  }
+
+  const insertPathToTerminal = (path: string) => {
+    if (typeof terminalStore.activeTerminalId !== 'number') return
+
+    const cleanPath = path.trim().replace(/^["']|["']$/g, '')
+    if (!cleanPath) return
+
+    let processedPath = cleanPath
+    if (cleanPath.includes(' ')) {
+      processedPath = `"${cleanPath}"`
+    }
+
+    terminalStore.writeToTerminal(terminalStore.activeTerminalId, processedPath)
+  }
+
+  const isAbsolutePath = (value: string): boolean => {
+    if (!value) return false
+    if (value.startsWith('/')) return true
+    if (/^[A-Za-z]:[\\/]/.test(value)) return true
+    return false
   }
 </script>
 

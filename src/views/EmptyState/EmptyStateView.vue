@@ -134,7 +134,7 @@
 
     try {
       const paneId = await terminalStore.createTerminal(terminalStore.currentWorkingDirectory ?? undefined)
-      await terminalStore.writeToTerminal(paneId, `git clone ${finalUrl}\n`)
+      await terminalStore.writeToTerminal(paneId, `git clone ${finalUrl}`, true)
 
       closeCloneInput()
     } catch (error) {

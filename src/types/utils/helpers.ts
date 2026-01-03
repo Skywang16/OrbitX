@@ -9,6 +9,10 @@ export const createDefaultSessionState = () => ({
     theme: 'dark',
     fontSize: 14,
     sidebarWidth: 300,
+    leftSidebarVisible: false,
+    leftSidebarWidth: 280,
+    leftSidebarActivePanel: 'workspace' as const,
+    onboardingCompleted: false,
   },
   ai: {
     visible: false,

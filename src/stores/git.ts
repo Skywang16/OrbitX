@@ -223,6 +223,14 @@ export const useGitStore = defineStore('git', () => {
     await refreshStatus()
   }
 
+  const initRepository = async () => {
+    const path = currentPath.value
+    if (!path || path === '~') return
+
+    await shellApi.executeBackgroundProgram('git', ['init'], path)
+    await refreshStatus()
+  }
+
   // === Diff Tab 管理 ===
   let _diffTabIdCounter = Date.now()
 
@@ -359,6 +367,7 @@ export const useGitStore = defineStore('git', () => {
     pull,
     fetch,
     sync,
+    initRepository,
 
     openDiffTab,
     showCommitFileDiff,
