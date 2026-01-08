@@ -44,14 +44,6 @@ extern "C" fn switch_to_tab_action(this: &Object, _cmd: Sel, sender: id) {
             .to_string_lossy()
             .to_string();
 
-        let pane_id: u32 = match tab_id_str.parse() {
-            Ok(id) => id,
-            Err(_) => {
-                tracing::error!("Invalid tab ID: {}", tab_id_str);
-                return;
-            }
-        };
-
         static APP_HANDLE_KEY: &[u8] = b"orbitx_dock_app_handle\0";
         let key_ptr = APP_HANDLE_KEY.as_ptr() as *const std::ffi::c_void;
         let number: id = objc_getAssociatedObject(this as *const _ as id, key_ptr);
@@ -60,7 +52,7 @@ extern "C" fn switch_to_tab_action(this: &Object, _cmd: Sel, sender: id) {
             let app_handle_ptr: usize = msg_send![number, unsignedLongLongValue];
             if app_handle_ptr != 0 {
                 let app_handle_ref = &*(app_handle_ptr as *const tauri::AppHandle);
-                let payload = json!({ "tabId": pane_id });
+                let payload = json!({ "tabId": tab_id_str });
                 if let Err(e) = app_handle_ref.emit("dock_switch_tab", payload) {
                     tracing::error!("Failed to emit dock_switch_tab event: {}", e);
                 }

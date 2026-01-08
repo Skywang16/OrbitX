@@ -13,6 +13,8 @@
 
   const isDragging = ref(false)
   const isHovering = ref(false)
+  const changesHeight = ref(200)
+  const isDraggingDivider = ref(false)
 
   const panelStyle = computed(() => ({
     '--panel-width': `${gitStore.panelWidth}px`,
@@ -38,6 +40,27 @@
     document.addEventListener('mouseup', handleMouseUp)
   }
 
+  const startDividerDrag = (event: MouseEvent) => {
+    isDraggingDivider.value = true
+    const startY = event.clientY
+    const startHeight = changesHeight.value
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaY = e.clientY - startY
+      const newHeight = Math.max(100, Math.min(startHeight + deltaY, 500))
+      changesHeight.value = newHeight
+    }
+
+    const handleMouseUp = () => {
+      isDraggingDivider.value = false
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }
+
   const onMouseEnter = () => {
     isHovering.value = true
   }
@@ -50,12 +73,8 @@
     gitStore.setPanelWidth(320)
   }
 
-  const refreshAll = async () => {
-    await gitStore.refreshStatus()
-    if (gitStore.isRepository) {
-      gitStore.loadBranches()
-      gitStore.loadCommits()
-    }
+  const loadMoreCommits = async () => {
+    return await gitStore.loadMoreCommits(50)
   }
 
   onMounted(() => {
@@ -88,16 +107,16 @@
     <div class="git-panel__content">
       <GitHeader
         :branch="gitStore.currentBranch"
-        :is-loading="gitStore.isLoading"
         :ahead="gitStore.status?.ahead"
         :behind="gitStore.status?.behind"
-        :staged-count="gitStore.stagedCount"
-        @refresh="refreshAll"
+        :staged-count="gitStore.status?.stagedFiles.length ?? 0"
+        :branches="gitStore.branches"
         @commit="gitStore.commit"
         @push="gitStore.push"
         @pull="gitStore.pull"
         @sync="gitStore.sync"
         @fetch="gitStore.fetch"
+        @checkout="gitStore.checkoutBranch"
       />
 
       <div v-if="gitStore.error" class="git-panel__error">
@@ -105,27 +124,35 @@
       </div>
 
       <template v-if="gitStore.isRepository">
-        <div class="git-panel__sections">
+        <div class="git-panel__changes" :style="{ height: `${changesHeight}px` }">
           <FileChanges
             :staged="gitStore.status?.stagedFiles ?? []"
             :modified="gitStore.status?.modifiedFiles ?? []"
             :untracked="gitStore.status?.untrackedFiles ?? []"
             :conflicted="gitStore.status?.conflictedFiles ?? []"
-            :selected-file="gitStore.selectedFile"
-            :selected-is-staged="gitStore.selectedFileIsStaged"
             @select="gitStore.openDiffTab"
-            @stage="gitStore.stageFile"
-            @unstage="gitStore.unstageFile"
-            @discard="gitStore.discardFile"
+            @stage="gitStore.stageFiles"
+            @unstage="gitStore.unstageFiles"
+            @discard="gitStore.discardFiles"
             @stage-all="gitStore.stageAllFiles"
             @unstage-all="gitStore.unstageAllFiles"
             @discard-all="gitStore.discardAllChanges"
           />
+        </div>
 
+        <div
+          class="git-panel__divider"
+          :class="{ 'git-panel__divider--dragging': isDraggingDivider }"
+          @mousedown="startDividerDrag"
+        />
+
+        <div class="git-panel__history">
           <CommitHistory
             :commits="gitStore.commits"
+            :has-more="gitStore.commitsHasMore"
             :ahead-count="gitStore.status?.ahead ?? 0"
             @show-diff="gitStore.showCommitFileDiff"
+            @load-more="loadMoreCommits"
           />
         </div>
       </template>
@@ -171,11 +198,43 @@
     overflow: hidden;
   }
 
-  .git-panel__sections {
-    flex: 1;
-    min-height: 0;
+  .git-panel__changes {
+    flex-shrink: 0;
+    min-height: 100px;
+    max-height: 500px;
     overflow-y: auto;
     overflow-x: hidden;
+  }
+
+  .git-panel__divider {
+    flex-shrink: 0;
+    height: 4px;
+    background: var(--border-200);
+    cursor: ns-resize;
+    transition: background 0.15s ease;
+    position: relative;
+  }
+
+  .git-panel__divider::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 0;
+    right: 0;
+    bottom: -4px;
+  }
+
+  .git-panel__divider:hover,
+  .git-panel__divider--dragging {
+    background: var(--color-primary);
+  }
+
+  .git-panel__history {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   .git-panel__error {

@@ -21,9 +21,7 @@ use crate::agent::context::FileContextTracker;
 use crate::agent::core::executor::ImageAttachment;
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
-use crate::agent::persistence::{
-    AgentExecution, AgentPersistence, ExecutionStatus, MessageRole,
-};
+use crate::agent::persistence::{AgentExecution, AgentPersistence, ExecutionStatus, MessageRole};
 use crate::agent::react::runtime::ReactRuntime;
 use crate::agent::react::types::ReactRuntimeConfig;
 use crate::agent::state::manager::{
@@ -418,7 +416,7 @@ impl TaskContext {
     /// 简化版：只检查 aborted 标志，无需锁
     pub fn check_aborted(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
         if self.states.aborted.load(Ordering::SeqCst) {
-            return Err(TaskExecutorError::TaskInterrupted.into());
+            return Err(TaskExecutorError::TaskInterrupted);
         }
         if no_check_pause {
             return Ok(());
@@ -427,7 +425,7 @@ impl TaskContext {
         let status = self.pause_status.load(Ordering::SeqCst);
         if status != 0 {
             // 如果暂停，返回错误让调用者处理
-            return Err(TaskExecutorError::TaskInterrupted.into());
+            return Err(TaskExecutorError::TaskInterrupted);
         }
         Ok(())
     }
@@ -435,14 +433,14 @@ impl TaskContext {
     /// 异步检查任务是否被中止（带暂停等待）
     pub async fn check_aborted_async(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
         if self.states.aborted.load(Ordering::SeqCst) {
-            return Err(TaskExecutorError::TaskInterrupted.into());
+            return Err(TaskExecutorError::TaskInterrupted);
         }
         if no_check_pause {
             return Ok(());
         }
         loop {
             if self.states.aborted.load(Ordering::SeqCst) {
-                return Err(TaskExecutorError::TaskInterrupted.into());
+                return Err(TaskExecutorError::TaskInterrupted);
             }
             let status = self.pause_status.load(Ordering::SeqCst);
             if status == 0 {
@@ -502,7 +500,7 @@ impl TaskContext {
         &self,
         text: Option<String>,
         tool_calls: Option<Vec<ContentBlock>>,
-    ) {
+    ) -> TaskExecutorResult<()> {
         let content: MessageContent = match (text, tool_calls) {
             (Some(t), Some(mut calls)) => {
                 // Put text as a Text block, then append tool_use blocks
@@ -530,13 +528,13 @@ impl TaskContext {
 
         // Persist assistant visible content only as a string; do not modify DB schema.
         let rendered = render_message_content(&content);
-        let _ = self
-            .append_message(MessageRole::Assistant, &rendered, false)
-            .await;
+        self.append_message(MessageRole::Assistant, &rendered, false)
+            .await?;
+        Ok(())
     }
 
     /// Append tool results as a user message with ToolResult blocks; also persist tool rows.
-pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
+    pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) -> TaskExecutorResult<()> {
         let blocks: Vec<ContentBlock> = results
             .iter()
             .map(|r| ContentBlock::ToolResult {
@@ -551,9 +549,8 @@ pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
         // Persist each tool result as its own Tool message entry
         for result in &results {
             if let Ok(serialized) = serde_json::to_string(result) {
-                let _ = self
-                    .append_message(MessageRole::Tool, &serialized, false)
-                    .await;
+                self.append_message(MessageRole::Tool, &serialized, false)
+                    .await?;
             }
         }
 
@@ -565,6 +562,7 @@ pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
                 content: MessageContent::Blocks(blocks),
             });
         }
+        Ok(())
     }
 
     // Deprecated in zero-abstraction model: initial prompts are handled explicitly by caller.
@@ -580,7 +578,7 @@ pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
             exec.messages.clear();
             exec.message_sequence = 0;
         }
-        self.add_user_message(user_prompt).await;
+        self.add_user_message(user_prompt).await?;
         Ok(())
     }
 
@@ -592,15 +590,15 @@ pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
         self.states.execution.read().await.system_prompt.clone()
     }
 
-    pub async fn add_user_message(&self, text: String) {
-        self.add_user_message_with_images(text, None).await;
+    pub async fn add_user_message(&self, text: String) -> TaskExecutorResult<()> {
+        self.add_user_message_with_images(text, None).await
     }
 
     pub async fn add_user_message_with_images(
         &self,
         text: String,
         images: Option<&[ImageAttachment]>,
-    ) {
+    ) -> TaskExecutorResult<()> {
         let content = if let Some(imgs) = images {
             // 构建包含图片和文本的内容块
             let mut blocks: Vec<ContentBlock> = imgs
@@ -643,7 +641,8 @@ pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
                 content,
             });
         }
-        let _ = self.append_message(MessageRole::User, &text, false).await;
+        self.append_message(MessageRole::User, &text, false).await?;
+        Ok(())
     }
 
     pub async fn reset_message_state(&self) -> TaskExecutorResult<()> {
@@ -711,13 +710,15 @@ pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
             )
             .await
             .map(|_| ())
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()).into())
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))
     }
 
     pub async fn emit_event(&self, event: TaskEvent) -> TaskExecutorResult<()> {
         let channel_guard = self.states.progress_channel.lock().await;
         if let Some(channel) = channel_guard.as_ref() {
-            channel.send(event).map_err(TaskExecutorError::ChannelError)?;
+            channel
+                .send(event)
+                .map_err(TaskExecutorError::ChannelError)?;
         }
         Ok(())
     }
@@ -807,7 +808,11 @@ pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
             .await
     }
 
-    pub async fn assistant_update_block(&self, block_id: &str, block: Block) -> TaskExecutorResult<()> {
+    pub async fn assistant_update_block(
+        &self,
+        block_id: &str,
+        block: Block,
+    ) -> TaskExecutorResult<()> {
         let mut message = self
             .states
             .messages
@@ -825,8 +830,7 @@ pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
             return Err(TaskExecutorError::StatePersistenceFailed(format!(
                 "block {} not found for update",
                 block_id
-            ))
-            .into());
+            )));
         };
 
         message.blocks[index] = block.clone();
@@ -899,7 +903,8 @@ pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
     pub async fn fail_assistant_message(&self, error: ErrorBlock) -> TaskExecutorResult<()> {
         self.assistant_append_block(Block::Error(error.clone()))
             .await?;
-        self.finish_assistant_message(MessageStatus::Error, None).await?;
+        self.finish_assistant_message(MessageStatus::Error, None)
+            .await?;
         Ok(())
     }
 

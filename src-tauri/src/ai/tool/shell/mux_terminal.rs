@@ -131,7 +131,10 @@ pub async fn terminal_resize(
 
     match mux.resize_pane(pane_id_obj, size) {
         Ok(_) => Ok(api_success!()),
-        Err(_) => Ok(api_error!("shell.resize_terminal_failed")),
+        Err(err) => match err {
+            crate::mux::error::TerminalMuxError::PaneNotFound { .. } => Ok(api_success!()),
+            _ => Ok(api_error!("shell.resize_terminal_failed")),
+        },
     }
 }
 

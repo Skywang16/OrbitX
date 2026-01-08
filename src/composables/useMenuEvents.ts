@@ -1,28 +1,28 @@
 import { onMounted, onUnmounted } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { useTerminalStore } from '@/stores/Terminal'
-import { useTabManagerStore } from '@/stores/TabManager'
+import { useEditorStore } from '@/stores/Editor'
 import { shortcutActionsService } from '@/shortcuts/actions'
 
 export function useMenuEvents() {
-  const terminalStore = useTerminalStore()
-  const tabManagerStore = useTabManagerStore()
+  const editorStore = useEditorStore()
   const unlisteners: UnlistenFn[] = []
 
   // 切换标签页 (direction: -1 上一个, 1 下一个)
   const switchTab = (direction: -1 | 1) => {
-    const tabs = tabManagerStore.tabs
-    const activeId = tabManagerStore.activeTabId
+    const group = editorStore.activeGroup
+    if (!group) return
+    const tabs = group.tabs
+    const activeId = group.activeTabId
     if (tabs.length <= 1 || activeId === null) return
 
     const currentIndex = tabs.findIndex(t => t.id === activeId)
     const nextIndex = (currentIndex + direction + tabs.length) % tabs.length
-    tabManagerStore.setActiveTab(tabs[nextIndex].id)
+    editorStore.setActiveTab(group.id, tabs[nextIndex].id)
   }
 
   const menuHandlers: [string, () => void][] = [
     // Shell
-    ['menu:new-tab', () => terminalStore.createTerminal()],
+    ['menu:new-tab', () => editorStore.createTerminalTab({ activate: true })],
     ['menu:close-tab', () => shortcutActionsService.closeCurrentTab()],
 
     // 编辑
@@ -43,7 +43,7 @@ export function useMenuEvents() {
     ['menu:next-tab', () => switchTab(1)],
 
     // 设置
-    ['menu:preferences', () => tabManagerStore.createSettingsTab()],
+    ['menu:preferences', () => editorStore.createSettingsTab()],
   ]
 
   onMounted(async () => {

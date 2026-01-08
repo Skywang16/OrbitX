@@ -25,7 +25,7 @@
       id: 'git',
       icon: 'git',
       title: t('git.title'),
-      badge: gitStore.stagedCount > 0 ? gitStore.stagedCount : undefined,
+      badge: gitStore.changedCount > 0 ? gitStore.changedCount : undefined,
     },
   ])
 

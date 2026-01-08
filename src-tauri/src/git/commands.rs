@@ -41,9 +41,14 @@ pub async fn git_get_branches(path: String) -> TauriApiResult<Vec<crate::git::Br
 }
 
 #[tauri::command]
-pub async fn git_get_commits(path: String, limit: Option<u32>) -> TauriApiResult<Vec<crate::git::CommitInfo>> {
+pub async fn git_get_commits(
+    path: String,
+    limit: Option<u32>,
+    skip: Option<u32>,
+) -> TauriApiResult<Vec<crate::git::CommitInfo>> {
     let limit = limit.unwrap_or(50);
-    match GitService::get_commits(&path, limit).await {
+    let skip = skip.unwrap_or(0);
+    match GitService::get_commits(&path, limit, skip).await {
         Ok(commits) => Ok(api_success!(commits)),
         Err(e) => match e.code {
             crate::git::GitErrorCode::GitNotInstalled => Ok(api_error!(e.message.as_str())),

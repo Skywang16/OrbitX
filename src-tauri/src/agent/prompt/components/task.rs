@@ -69,11 +69,7 @@ impl ComponentDefinition for TaskContextComponent {
         template_context.insert("task_status".to_string(), json!(task.status.to_string()));
         template_context.insert("additional_context".to_string(), json!(additional_context));
 
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("failed to render task context template: {}", e))
-            })?;
+        let result = TemplateEngine::new().resolve(template, &template_context);
 
         Ok(Some(result))
     }

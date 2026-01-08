@@ -3,6 +3,7 @@
 use crate::completion::engine::{CompletionEngine, CompletionEngineConfig};
 use crate::completion::error::{CompletionStateError, CompletionStateResult};
 use crate::completion::types::{CompletionContext, CompletionResponse};
+use crate::storage::DatabaseManager;
 use crate::storage::UnifiedCache;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
@@ -101,10 +102,17 @@ pub async fn completion_get(
 pub async fn completion_init_engine(
     state: State<'_, CompletionState>,
     cache: State<'_, Arc<UnifiedCache>>,
+    database: State<'_, Arc<DatabaseManager>>,
 ) -> TauriApiResult<EmptyData> {
     let config = CompletionEngineConfig::default();
 
-    match CompletionEngine::with_default_providers(config, cache.inner().clone()).await {
+    match CompletionEngine::with_default_providers(
+        config,
+        cache.inner().clone(),
+        database.inner().clone(),
+    )
+    .await
+    {
         Ok(engine) => match state.set_engine(Arc::new(engine)).await {
             Ok(_) => Ok(api_success!()),
             Err(_) => Ok(api_error!("completion.init_failed")),

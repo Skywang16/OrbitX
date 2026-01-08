@@ -4,7 +4,7 @@
   import { windowApi } from '@/api'
   import { useAIChatStore } from '@/components/AIChatSidebar'
   import { useLayoutStore } from '@/stores/layout'
-  import { useTabManagerStore } from '@/stores/TabManager'
+  import { useEditorStore } from '@/stores/Editor'
   import { openUrl } from '@tauri-apps/plugin-opener'
   import { showPopoverAt } from '@/ui'
   import { useWindowStore } from '@/stores/Window'
@@ -22,7 +22,7 @@
 
   const aiChatStore = useAIChatStore()
   const layoutStore = useLayoutStore()
-  const tabManagerStore = useTabManagerStore()
+  const editorStore = useEditorStore()
   const windowStore = useWindowStore()
   const isAlwaysOnTop = computed(() => windowStore.alwaysOnTop)
   const settingsButtonRef = ref<HTMLElement>()
@@ -51,7 +51,7 @@
   // 处理设置操作
   const handleSettingsAction = async (action: string) => {
     if (action === 'settings') {
-      tabManagerStore.createSettingsTab()
+      await editorStore.createSettingsTab()
     } else if (action === 'feedback') {
       // 使用Tauri的opener插件在外部浏览器中打开GitHub Issues页面
       await openUrl('https://github.com/Skywang16/OrbitX/issues')

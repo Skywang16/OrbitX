@@ -64,7 +64,12 @@ impl GitService {
     pub async fn is_repository(path: &str) -> Result<Option<String>, GitError> {
         match Self::execute_text(&["rev-parse", "--show-toplevel"], path).await {
             Ok(text) => Ok(Some(text.trim().to_string())),
-            Err(e) if e.code == GitErrorCode::CommandFailed && Self::is_not_a_repository(&e.message) => Ok(None),
+            Err(e)
+                if e.code == GitErrorCode::CommandFailed
+                    && Self::is_not_a_repository(&e.message) =>
+            {
+                Ok(None)
+            }
             Err(e) => Err(e),
         }
     }
@@ -89,25 +94,29 @@ impl GitService {
             }
         };
 
-        let output = match Self::execute(&["status", "--porcelain=v1", "--branch", "-z"], &root).await {
-            Ok(bytes) => bytes,
-            Err(e) if e.code == GitErrorCode::CommandFailed && Self::is_not_a_repository(&e.message) => {
-                return Ok(RepositoryStatus {
-                    is_repository: false,
-                    root_path: None,
-                    current_branch: None,
-                    staged_files: vec![],
-                    modified_files: vec![],
-                    untracked_files: vec![],
-                    conflicted_files: vec![],
-                    ahead: None,
-                    behind: None,
-                    is_empty: false,
-                    is_detached: false,
-                })
-            }
-            Err(e) => return Err(e),
-        };
+        let output =
+            match Self::execute(&["status", "--porcelain=v1", "--branch", "-z"], &root).await {
+                Ok(bytes) => bytes,
+                Err(e)
+                    if e.code == GitErrorCode::CommandFailed
+                        && Self::is_not_a_repository(&e.message) =>
+                {
+                    return Ok(RepositoryStatus {
+                        is_repository: false,
+                        root_path: None,
+                        current_branch: None,
+                        staged_files: vec![],
+                        modified_files: vec![],
+                        untracked_files: vec![],
+                        conflicted_files: vec![],
+                        ahead: None,
+                        behind: None,
+                        is_empty: false,
+                        is_detached: false,
+                    })
+                }
+                Err(e) => return Err(e),
+            };
 
         let parsed = Self::parse_status_porcelain_v1_z(&output).ok_or(GitError {
             code: GitErrorCode::ParseError,
@@ -165,7 +174,11 @@ impl GitService {
             let upstream = parts.next().unwrap_or_default().trim().to_string();
 
             let is_current = head == "*";
-            let upstream_opt = if upstream.is_empty() { None } else { Some(upstream) };
+            let upstream_opt = if upstream.is_empty() {
+                None
+            } else {
+                Some(upstream)
+            };
 
             if is_current {
                 current_local = Some((name.clone(), upstream_opt.clone()));
@@ -208,15 +221,27 @@ impl GitService {
         Ok(branches)
     }
 
-    pub async fn get_commits(path: &str, limit: u32) -> Result<Vec<CommitInfo>, GitError> {
+    pub async fn get_commits(
+        path: &str,
+        limit: u32,
+        skip: u32,
+    ) -> Result<Vec<CommitInfo>, GitError> {
         let root = Self::ensure_repo_root(path).await?;
 
         let limit = limit.max(1).min(200);
         // Use -z for NUL-separated records, %x1f for field separator, %s for subject (no newlines)
         let format = "%H%x1f%h%x1f%an%x1f%ae%x1f%ad%x1f%D%x1f%P%x1f%s";
         let n_arg = format!("-n{}", limit);
+        let skip_arg = format!("--skip={}", skip);
         let pretty_arg = format!("--pretty=format:{}", format);
-        let args = ["log", "-z", n_arg.as_str(), "--date=iso-strict", pretty_arg.as_str()];
+        let args = [
+            "log",
+            "-z",
+            n_arg.as_str(),
+            skip_arg.as_str(),
+            "--date=iso-strict",
+            pretty_arg.as_str(),
+        ];
 
         let output = match Self::execute(&args, &root).await {
             Ok(bytes) => bytes,
@@ -237,7 +262,11 @@ impl GitService {
         Ok(Self::parse_commits(&output))
     }
 
-    pub async fn get_diff(path: &str, file_path: &str, staged: bool) -> Result<DiffContent, GitError> {
+    pub async fn get_diff(
+        path: &str,
+        file_path: &str,
+        staged: bool,
+    ) -> Result<DiffContent, GitError> {
         let root = Self::ensure_repo_root(path).await?;
 
         let mut args = vec!["diff", "--no-color", "--unified=3"];
@@ -267,7 +296,15 @@ impl GitService {
             Ok(bytes) => bytes,
             Err(e) if e.code == GitErrorCode::CommandFailed => {
                 // If commit has no parent (initial commit), diff against empty tree
-                let args = ["show", "--no-color", "--unified=3", "--format=", commit_hash, "--", file_path];
+                let args = [
+                    "show",
+                    "--no-color",
+                    "--unified=3",
+                    "--format=",
+                    commit_hash,
+                    "--",
+                    file_path,
+                ];
                 Self::execute(&args, &root).await?
             }
             Err(e) => return Err(e),
@@ -276,18 +313,37 @@ impl GitService {
         Ok(Self::parse_unified_diff(file_path, &output))
     }
 
-    pub async fn get_commit_files(path: &str, commit_hash: &str) -> Result<Vec<CommitFileChange>, GitError> {
+    pub async fn get_commit_files(
+        path: &str,
+        commit_hash: &str,
+    ) -> Result<Vec<CommitFileChange>, GitError> {
         let root = Self::ensure_repo_root(path).await?;
 
         // Use -m to show files for merge commits, --first-parent to show diff against first parent only
         let output = Self::execute_text(
-            &["show", "-m", "--first-parent", "--numstat", "--format=", "--no-color", commit_hash],
+            &[
+                "show",
+                "-m",
+                "--first-parent",
+                "--numstat",
+                "--format=",
+                "--no-color",
+                commit_hash,
+            ],
             &root,
         )
         .await?;
 
         let status_output = Self::execute_text(
-            &["show", "-m", "--first-parent", "--name-status", "--format=", "--no-color", commit_hash],
+            &[
+                "show",
+                "-m",
+                "--first-parent",
+                "--name-status",
+                "--format=",
+                "--no-color",
+                commit_hash,
+            ],
             &root,
         )
         .await?;
@@ -295,7 +351,8 @@ impl GitService {
         let mut files: Vec<CommitFileChange> = Vec::new();
 
         // Parse numstat for additions/deletions
-        let mut numstat_map: std::collections::HashMap<String, (u32, u32)> = std::collections::HashMap::new();
+        let mut numstat_map: std::collections::HashMap<String, (u32, u32)> =
+            std::collections::HashMap::new();
         for line in output.lines() {
             let parts: Vec<&str> = line.split('\t').collect();
             if parts.len() >= 3 {
@@ -359,9 +416,14 @@ impl GitService {
         Ok(files)
     }
 
-    async fn get_ahead_behind(cwd: &str, branch: &str, upstream: &str) -> Result<(u32, u32), GitError> {
+    async fn get_ahead_behind(
+        cwd: &str,
+        branch: &str,
+        upstream: &str,
+    ) -> Result<(u32, u32), GitError> {
         let range = format!("{}...{}", branch, upstream);
-        let output = Self::execute_text(&["rev-list", "--left-right", "--count", &range], cwd).await?;
+        let output =
+            Self::execute_text(&["rev-list", "--left-right", "--count", &range], cwd).await?;
         let mut parts = output.split_whitespace();
         let ahead: u32 = parts.next().unwrap_or("0").parse().unwrap_or(0);
         let behind: u32 = parts.next().unwrap_or("0").parse().unwrap_or(0);
@@ -409,7 +471,13 @@ impl GitService {
 
             let is_unmerged = matches!(
                 (x, y),
-                ('D', 'D') | ('A', 'U') | ('U', 'D') | ('U', 'A') | ('D', 'U') | ('A', 'A') | ('U', 'U')
+                ('D', 'D')
+                    | ('A', 'U')
+                    | ('U', 'D')
+                    | ('U', 'A')
+                    | ('D', 'U')
+                    | ('A', 'A')
+                    | ('U', 'U')
             );
 
             if is_unmerged || x == 'U' || y == 'U' {
@@ -554,7 +622,7 @@ impl GitService {
             let parents_str = String::from_utf8_lossy(fields[6]).to_string();
             let parents: Vec<String> = parents_str
                 .split_whitespace()
-                .map(|s| s[..7.min(s.len())].to_string())
+                .map(|s| s.to_string())
                 .collect();
 
             commits.push(CommitInfo {
@@ -677,16 +745,8 @@ impl GitService {
             }
 
             let (line_type, next_old, next_new) = match raw_line.chars().next() {
-                Some('+') => (
-                    DiffLineType::Added,
-                    old_line,
-                    new_line.map(|n| n + 1),
-                ),
-                Some('-') => (
-                    DiffLineType::Removed,
-                    old_line.map(|o| o + 1),
-                    new_line,
-                ),
+                Some('+') => (DiffLineType::Added, old_line, new_line.map(|n| n + 1)),
+                Some('-') => (DiffLineType::Removed, old_line.map(|o| o + 1), new_line),
                 Some(' ') => (
                     DiffLineType::Context,
                     old_line.map(|o| o + 1),

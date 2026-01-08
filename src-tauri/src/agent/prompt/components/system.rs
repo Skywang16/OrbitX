@@ -118,11 +118,7 @@ impl ComponentDefinition for SystemInfoComponent {
         template_context.insert("file_list_preview".to_string(), json!(file_list_preview));
         template_context.insert("workspace_status".to_string(), json!(workspace_status));
 
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("failed to render system info template: {}", e))
-            })?;
+        let result = TemplateEngine::new().resolve(template, &template_context);
 
         Ok(Some(result))
     }

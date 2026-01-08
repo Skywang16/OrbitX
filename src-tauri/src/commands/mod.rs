@@ -227,5 +227,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::checkpoint::commands::checkpoint_diff_with_workspace,
         crate::checkpoint::commands::checkpoint_get_file_content,
         crate::checkpoint::commands::checkpoint_delete,
+        // 文件系统命令
+        crate::filesystem::commands::fs_read_dir,
     ])
 }

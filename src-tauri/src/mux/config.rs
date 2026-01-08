@@ -108,8 +108,8 @@ impl Default for TerminalSystemConfig {
 impl Default for BufferConfig {
     fn default() -> Self {
         Self {
-            max_size: 50_000,
-            keep_size: 25_000,
+            max_size: 1_000_000,
+            keep_size: 500_000,
             max_truncation_attempts: 1000,
         }
     }

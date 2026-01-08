@@ -3,3 +3,28 @@
 
 @import './settings.css';
 @import './highlight.css';
+
+body.orbitx-tab-dragging,
+body.orbitx-tab-dragging * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.orbitx-drag-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  transform: translate(-9999px, -9999px);
+  pointer-events: none;
+  z-index: 9999;
+  max-width: 320px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  opacity: 0.95;
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.45));
+}
+
+.orbitx-drag-preview .tab {
+  margin: 0 !important;
+}

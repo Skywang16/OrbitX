@@ -5,14 +5,14 @@
   import { useWindowOpacity } from '@/composables/useWindowOpacity'
   import { useMenuEvents } from '@/composables/useMenuEvents'
   import { appApi, workspaceApi } from '@/api'
-  import { useTabManagerStore } from '@/stores/TabManager'
+  import { useEditorStore } from '@/stores/Editor'
   import { useSessionStore } from '@/stores/session'
   import { storeToRefs } from 'pinia'
   import { computed, onMounted, onUnmounted } from 'vue'
   import type { UnlistenFn } from '@tauri-apps/api/event'
 
   const { reloadConfig } = useShortcutListener()
-  const tabManager = useTabManagerStore()
+  const tabManager = useEditorStore()
   const sessionStore = useSessionStore()
   const { uiState } = storeToRefs(sessionStore)
 

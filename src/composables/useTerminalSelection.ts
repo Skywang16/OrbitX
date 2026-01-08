@@ -1,7 +1,6 @@
 import { ref, computed } from 'vue'
-import { useTabManagerStore } from '@/stores/TabManager'
+import { useSessionStore } from '@/stores/session'
 import { useTerminalStore } from '@/stores/Terminal'
-import { TabType } from '@/types'
 import {
   TagType,
   type TerminalSelectionTag,
@@ -21,7 +20,7 @@ interface TerminalSelection {
 const selectedTerminalData = ref<TerminalSelection | null>(null)
 
 export const useTerminalSelection = () => {
-  const tabManagerStore = useTabManagerStore()
+  const sessionStore = useSessionStore()
   const terminalStore = useTerminalStore()
 
   // 计算属性 - 自动响应数据变化
@@ -34,24 +33,25 @@ export const useTerminalSelection = () => {
 
     const { startLine, endLine, path } = data
 
-    // 提取路径的最后一部分，类似TabManager的逻辑
-    let pathDisplay = 'terminal'
-    if (path) {
-      const pathParts = path.replace(/\/$/, '').split('/')
-      pathDisplay = pathParts[pathParts.length - 1] || '~'
-    }
+    const pathDisplay = path ? getPathBasename(path) : 'terminal'
 
     return startLine === endLine ? `${pathDisplay} ${startLine}:${startLine}` : `${pathDisplay} ${startLine}:${endLine}`
   })
 
   // 终端标签页相关计算属性
-  const hasTerminalTab = computed(() => tabManagerStore.tabs.some(tab => tab.type === TabType.TERMINAL))
+  const hasTerminalTab = computed(() => {
+    const groupEntries = Object.values(sessionStore.workspaceState.groups)
+    for (const group of groupEntries) {
+      if (group.tabs.some(tab => tab.type === 'terminal')) return true
+    }
+    return false
+  })
 
   const currentTerminalTab = computed(() => {
-    const activeTab = tabManagerStore.activeTab
-    if (!activeTab || activeTab.type !== TabType.TERMINAL) return null
+    const activeTab = sessionStore.activeTab
+    if (!activeTab || activeTab.type !== 'terminal') return null
 
-    const terminal = terminalStore.terminals.find(t => t.id === activeTab.id)
+    const terminal = terminalStore.terminals.find(t => t.id === activeTab.context.paneId)
     if (!terminal) return null
 
     return {

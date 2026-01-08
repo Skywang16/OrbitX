@@ -73,7 +73,7 @@ impl TaskExecutor {
         }
 
         ctx.add_user_message_with_images(params.user_prompt, params.images.as_deref())
-            .await;
+            .await?;
         ctx.set_status(AgentTaskStatus::Running).await?;
 
         let executor = self.clone();
@@ -130,6 +130,9 @@ impl TaskExecutor {
                     .await;
             }
         }
+
+        // 任务结束后立刻从 active_tasks 移除，避免内存/确认状态泄漏
+        self.active_tasks().remove(ctx.task_id.as_ref());
 
         Ok(())
     }

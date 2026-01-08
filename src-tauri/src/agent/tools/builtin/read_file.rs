@@ -9,7 +9,7 @@ use tree_sitter::{Parser, TreeCursor};
 
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
-use crate::agent::error::ToolExecutorResult;
+use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
@@ -176,7 +176,11 @@ impl ReadFileTool {
     }
 
     /// 提取代码大纲（复用向量模块逻辑）
-    fn extract_code_outline(&self, content: &str, language: Language) -> Result<String, String> {
+    fn extract_code_outline(
+        &self,
+        content: &str,
+        language: Language,
+    ) -> ToolExecutorResult<String> {
         let mut parser = Parser::new();
 
         // 设置语言解析器（复用向量模块的逻辑）
@@ -184,59 +188,98 @@ impl ReadFileTool {
             Language::Python => {
                 parser
                     .set_language(&tree_sitter_python::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set Python language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set Python language: {}", e),
+                    })?;
             }
             Language::TypeScript => {
                 parser
                     .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
-                    .map_err(|e| format!("Failed to set TypeScript language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set TypeScript language: {}", e),
+                    })?;
             }
             Language::JavaScript => {
                 parser
                     .set_language(&tree_sitter_javascript::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set JavaScript language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set JavaScript language: {}", e),
+                    })?;
             }
             Language::Rust => {
                 parser
                     .set_language(&tree_sitter_rust::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set Rust language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set Rust language: {}", e),
+                    })?;
             }
             Language::Go => {
                 parser
                     .set_language(&tree_sitter_go::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set Go language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set Go language: {}", e),
+                    })?;
             }
             Language::Java => {
                 parser
                     .set_language(&tree_sitter_java::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set Java language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set Java language: {}", e),
+                    })?;
             }
             Language::C => {
                 parser
                     .set_language(&tree_sitter_c::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set C language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set C language: {}", e),
+                    })?;
             }
             Language::Cpp => {
                 parser
                     .set_language(&tree_sitter_cpp::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set C++ language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set C++ language: {}", e),
+                    })?;
             }
             Language::CSharp => {
                 parser
                     .set_language(&tree_sitter_c_sharp::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set C# language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set C# language: {}", e),
+                    })?;
             }
             Language::Ruby => {
                 parser
                     .set_language(&tree_sitter_ruby::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set Ruby language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set Ruby language: {}", e),
+                    })?;
             }
-            _ => return Err(format!("Language {:?} not supported for parsing", language)),
+            _ => {
+                return Err(ToolExecutorError::InvalidArguments {
+                    tool_name: "read_file".to_string(),
+                    error: format!("Language {:?} not supported for parsing", language),
+                });
+            }
         }
 
-        let tree = parser
-            .parse(content, None)
-            .ok_or_else(|| format!("Failed to parse {:?} code", language))?;
+        let tree =
+            parser
+                .parse(content, None)
+                .ok_or_else(|| ToolExecutorError::ExecutionFailed {
+                    tool_name: "read_file".to_string(),
+                    error: format!("Failed to parse {:?} code", language),
+                })?;
 
         let mut outline = Vec::new();
         let mut cursor = tree.root_node().walk();
@@ -346,7 +389,7 @@ impl ReadFileTool {
         content: &str,
         language: Language,
         symbol_name: &str,
-    ) -> Result<Option<(usize, usize)>, String> {
+    ) -> ToolExecutorResult<Option<(usize, usize)>> {
         let mut parser = Parser::new();
 
         // 设置语言解析器（与 extract_code_outline 相同）
@@ -354,59 +397,98 @@ impl ReadFileTool {
             Language::Python => {
                 parser
                     .set_language(&tree_sitter_python::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set Python language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set Python language: {}", e),
+                    })?;
             }
             Language::TypeScript => {
                 parser
                     .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
-                    .map_err(|e| format!("Failed to set TypeScript language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set TypeScript language: {}", e),
+                    })?;
             }
             Language::JavaScript => {
                 parser
                     .set_language(&tree_sitter_javascript::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set JavaScript language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set JavaScript language: {}", e),
+                    })?;
             }
             Language::Rust => {
                 parser
                     .set_language(&tree_sitter_rust::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set Rust language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set Rust language: {}", e),
+                    })?;
             }
             Language::Go => {
                 parser
                     .set_language(&tree_sitter_go::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set Go language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set Go language: {}", e),
+                    })?;
             }
             Language::Java => {
                 parser
                     .set_language(&tree_sitter_java::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set Java language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set Java language: {}", e),
+                    })?;
             }
             Language::C => {
                 parser
                     .set_language(&tree_sitter_c::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set C language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set C language: {}", e),
+                    })?;
             }
             Language::Cpp => {
                 parser
                     .set_language(&tree_sitter_cpp::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set C++ language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set C++ language: {}", e),
+                    })?;
             }
             Language::CSharp => {
                 parser
                     .set_language(&tree_sitter_c_sharp::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set C# language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set C# language: {}", e),
+                    })?;
             }
             Language::Ruby => {
                 parser
                     .set_language(&tree_sitter_ruby::LANGUAGE.into())
-                    .map_err(|e| format!("Failed to set Ruby language: {}", e))?;
+                    .map_err(|e| ToolExecutorError::ExecutionFailed {
+                        tool_name: "read_file".to_string(),
+                        error: format!("Failed to set Ruby language: {}", e),
+                    })?;
             }
-            _ => return Err(format!("Language {:?} not supported for parsing", language)),
+            _ => {
+                return Err(ToolExecutorError::InvalidArguments {
+                    tool_name: "read_file".to_string(),
+                    error: format!("Language {:?} not supported for parsing", language),
+                });
+            }
         }
 
-        let tree = parser
-            .parse(content, None)
-            .ok_or_else(|| format!("Failed to parse {:?} code", language))?;
+        let tree =
+            parser
+                .parse(content, None)
+                .ok_or_else(|| ToolExecutorError::ExecutionFailed {
+                    tool_name: "read_file".to_string(),
+                    error: format!("Failed to parse {:?} code", language),
+                })?;
 
         let mut cursor = tree.root_node().walk();
         Ok(self.find_symbol_recursive(&mut cursor, content, symbol_name, language))

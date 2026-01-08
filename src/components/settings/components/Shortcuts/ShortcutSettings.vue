@@ -48,18 +48,9 @@
             <div class="settings-description">{{ t('shortcuts.reset_description') }}</div>
           </div>
           <div class="settings-item-control">
-            <x-popconfirm
-              :title="t('shortcuts.reset_confirm_title')"
-              :description="t('shortcuts.reset_confirm_message')"
-              :confirm-text="t('common.confirm')"
-              :cancel-text="t('common.cancel')"
-              type="danger"
-              placement="top"
-              :trigger-text="t('shortcuts.reset_to_default')"
-              trigger-button-variant="outline"
-              :trigger-button-props="{ disabled: loading }"
-              @confirm="handleReset"
-            />
+            <x-button variant="outline" :disabled="loading" @click="confirmReset">
+              {{ t('shortcuts.reset_to_default') }}
+            </x-button>
           </div>
         </div>
       </SettingsCard>
@@ -70,6 +61,7 @@
 <script setup lang="ts">
   import { ref, computed } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import { confirm } from '@tauri-apps/plugin-dialog'
 
   import { useShortcuts } from '@/composables/useShortcuts'
 
@@ -95,6 +87,16 @@
     await resetToDefaults()
 
     await (window as typeof window & { reloadShortcuts?: () => void }).reloadShortcuts?.()
+  }
+
+  const confirmReset = async () => {
+    const confirmed = await confirm(t('shortcuts.reset_confirm_message'), {
+      title: t('shortcuts.reset_confirm_title'),
+      kind: 'warning',
+    })
+    if (confirmed) {
+      handleReset()
+    }
   }
 
   const allActionKeys = [

@@ -57,11 +57,7 @@ impl ComponentDefinition for AgentRoleComponent {
         let mut template_context = HashMap::new();
         template_context.insert("name".to_string(), json!(context.agent.name));
 
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("failed to render agent role template: {}", e))
-            })?;
+        let result = TemplateEngine::new().resolve(template, &template_context);
 
         Ok(Some(result))
     }
@@ -138,11 +134,7 @@ Example: If user asks "how to implement XX?", answer the question first, don't i
             .or_else(|| self.default_template())
             .ok_or_else(|| AgentError::Internal("missing agent rules template".to_string()))?;
 
-        let result = TemplateEngine::new()
-            .resolve(template, &HashMap::new())
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("failed to render agent rules template: {}", e))
-            })?;
+        let result = TemplateEngine::new().resolve(template, &HashMap::new());
         Ok(Some(result))
     }
 }
@@ -222,14 +214,7 @@ assistant: Client marked failed in src/services/process.ts:712 connectToServer f
             .or_else(|| self.default_template())
             .ok_or_else(|| AgentError::Internal("missing work methodology template".to_string()))?;
 
-        let result = TemplateEngine::new()
-            .resolve(template, &HashMap::new())
-            .map_err(|e| {
-                AgentError::TemplateRender(format!(
-                    "failed to render work methodology template: {}",
-                    e
-                ))
-            })?;
+        let result = TemplateEngine::new().resolve(template, &HashMap::new());
         Ok(Some(result))
     }
 }
@@ -281,14 +266,7 @@ impl ComponentDefinition for CustomInstructionsComponent {
         let mut template_context = HashMap::new();
         template_context.insert("instructions".to_string(), json!(instructions));
 
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!(
-                    "failed to render custom instructions template: {}",
-                    e
-                ))
-            })?;
+        let result = TemplateEngine::new().resolve(template, &template_context);
 
         Ok(Some(result))
     }

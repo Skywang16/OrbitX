@@ -37,8 +37,8 @@ pub async fn storage_load_session_state(
         Ok(Some(session_state)) => Ok(api_success!(Some(session_state))),
         Ok(None) => Ok(api_success!(None)),
         Err(_) => {
-            error!("会话状态加载失败");
-            Ok(api_error!("storage.load_session_failed"))
+            error!("会话状态加载失败，已忽略");
+            Ok(api_success!(None))
         }
     }
 }

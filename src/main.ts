@@ -7,7 +7,7 @@ import { useSessionStore } from '@/stores/session'
 import { useLayoutStore } from '@/stores/layout'
 
 import { useTerminalStore } from '@/stores/Terminal'
-import { useTabManagerStore } from '@/stores/TabManager'
+import { useEditorStore } from '@/stores/Editor'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import { openUrl } from '@tauri-apps/plugin-opener'
@@ -33,8 +33,8 @@ const initializeStores = async () => {
     const terminalStore = useTerminalStore()
     await terminalStore.initializeTerminalStore()
 
-    const tabManagerStore = useTabManagerStore()
-    await tabManagerStore.initialize()
+    const editorStore = useEditorStore()
+    await editorStore.initialize()
 
     const layoutStore = useLayoutStore()
     await layoutStore.initialize()
@@ -146,7 +146,12 @@ setupExternalLinkHandler()
 
 const setupDockFocusListener = async () => {
   await dockApi.onDockSwitchTab(payload => {
-    const tabManager = useTabManagerStore()
-    tabManager.setActiveTab(payload.tabId)
+    const editor = useEditorStore()
+    const loc = Object.values(editor.workspace.groups)
+      .map(g => ({ groupId: g.id, tabId: g.tabs.find(t => t.id === payload.tabId)?.id }))
+      .find(x => x.tabId)
+    if (loc) {
+      editor.setActiveTab(loc.groupId, payload.tabId)
+    }
   })
 }

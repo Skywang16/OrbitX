@@ -174,8 +174,7 @@
   "storage": {
     "get_config_failed": "获取配置失败",
     "update_config_failed": "更新配置失败",
-    "save_session_failed": "保存会话状态失败",
-    "load_session_failed": "加载会话状态失败"
+    "save_session_failed": "保存会话状态失败"
   },
   "dock": {
     "update_failed": "更新 Dock 菜单失败",

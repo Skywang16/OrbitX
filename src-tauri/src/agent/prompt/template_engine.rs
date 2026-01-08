@@ -17,11 +17,7 @@ impl TemplateEngine {
     }
 
     /// 解析模板，支持 {variable} 和 {object.property} 格式
-    pub fn resolve(
-        &self,
-        template: &str,
-        context: &HashMap<String, Value>,
-    ) -> Result<String, String> {
+    pub fn resolve(&self, template: &str, context: &HashMap<String, Value>) -> String {
         let mut result = template.to_string();
 
         // 使用预编译的正则表达式查找所有 {variable} 占位符
@@ -43,7 +39,7 @@ impl TemplateEngine {
             result = result.replace(full_match, &replacement);
         }
 
-        Ok(result)
+        result
     }
 
     /// 获取嵌套对象的值，支持 "object.property" 格式
@@ -67,7 +63,7 @@ impl TemplateEngine {
     }
 
     /// 提取模板中的所有占位符
-    pub fn extract_placeholders(&self, template: &str) -> Result<Vec<String>, String> {
+    pub fn extract_placeholders(&self, template: &str) -> Vec<String> {
         let mut placeholders = Vec::new();
 
         for capture in PLACEHOLDER_RE.captures_iter(template) {
@@ -77,7 +73,7 @@ impl TemplateEngine {
             }
         }
 
-        Ok(placeholders)
+        placeholders
     }
 
     /// 验证模板语法是否正确

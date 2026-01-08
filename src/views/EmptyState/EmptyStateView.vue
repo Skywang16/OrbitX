@@ -76,9 +76,11 @@
   import { shortcutActionsService } from '@/shortcuts/actions'
   import { workspaceApi, type RecentWorkspace } from '@/api/workspace'
   import { useTerminalStore } from '@/stores/Terminal'
+  import { useEditorStore } from '@/stores/Editor'
 
   const { t } = useI18n()
   const terminalStore = useTerminalStore()
+  const editorStore = useEditorStore()
   const recentWorkspaces = ref<RecentWorkspace[]>([])
   const showCloneInput = ref(false)
   const gitUrl = ref('')
@@ -133,7 +135,10 @@
     gitUrlError.value = ''
 
     try {
-      const paneId = await terminalStore.createTerminal(terminalStore.currentWorkingDirectory ?? undefined)
+      const paneId = await editorStore.createTerminalTab({
+        directory: terminalStore.currentWorkingDirectory ?? undefined,
+        activate: true,
+      })
       await terminalStore.writeToTerminal(paneId, `git clone ${finalUrl}`, true)
 
       closeCloneInput()
@@ -144,7 +149,7 @@
 
   const handleOpenWorkspace = async (path: string) => {
     try {
-      await terminalStore.createTerminal(path)
+      await editorStore.createTerminalTab({ directory: path, activate: true })
     } catch (error) {
       console.error('Failed to open workspace:', error)
     }

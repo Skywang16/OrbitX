@@ -2,9 +2,24 @@
  * 类型辅助工具
  */
 
+import { createGroupId } from '@/types/domain/storage'
+
 export const createDefaultSessionState = () => ({
   version: 1,
-  tabs: [],
+  workspace: (() => {
+    const groupId = createGroupId('group')
+    return {
+      root: { type: 'leaf' as const, id: 'leaf:0', groupId },
+      groups: {
+        [groupId]: {
+          id: groupId,
+          tabs: [],
+          activeTabId: null,
+        },
+      },
+      activeGroupId: groupId,
+    }
+  })(),
   ui: {
     theme: 'dark',
     fontSize: 14,

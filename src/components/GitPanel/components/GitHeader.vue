@@ -1,22 +1,24 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import { showContextMenu } from '@/ui/composables/popover-api'
+  import type { BranchInfo } from '@/api/git/types'
 
   interface Props {
     branch: string | null
-    isLoading: boolean
     ahead?: number | null
     behind?: number | null
     stagedCount: number
+    branches?: BranchInfo[]
   }
 
   interface Emits {
-    (e: 'refresh'): void
     (e: 'commit', message: string): void
     (e: 'push'): void
     (e: 'pull'): void
     (e: 'sync'): void
     (e: 'fetch'): void
+    (e: 'checkout', branchName: string): void
   }
 
   const props = defineProps<Props>()
@@ -30,19 +32,42 @@
   const hasRemoteChanges = computed(() => aheadCount.value > 0 || behindCount.value > 0)
 
   const commitMessage = ref('')
-  const canCommit = computed(() => props.stagedCount > 0 && commitMessage.value.trim().length > 0 && !props.isLoading)
+  const canCommit = computed(() => props.stagedCount > 0 && commitMessage.value.trim().length > 0)
 
   const submitCommit = () => {
     if (!canCommit.value) return
     emit('commit', commitMessage.value.trim())
     commitMessage.value = ''
   }
+
+  const localBranches = computed(() => props.branches?.filter(b => !b.isRemote) ?? [])
+
+  const handleBranchClick = async (event: MouseEvent) => {
+    if (localBranches.value.length === 0) return
+
+    const items = localBranches.value.map(b => ({
+      label: b.isCurrent ? `✓ ${b.name}` : `   ${b.name}`,
+      value: b.name,
+      disabled: b.isCurrent,
+      onClick: () => emit('checkout', b.name),
+    }))
+
+    await showContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items,
+    })
+  }
 </script>
 
 <template>
   <div class="git-header">
     <div class="git-header__top">
-      <div class="git-header__branch">
+      <div
+        class="git-header__branch"
+        :class="{ 'git-header__branch--clickable': localBranches.length > 0 }"
+        @click="handleBranchClick"
+      >
         <svg class="git-header__branch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M6 3v12" />
           <circle cx="18" cy="6" r="3" />
@@ -50,6 +75,16 @@
           <path d="M18 9a9 9 0 0 1-9 9" />
         </svg>
         <span class="git-header__branch-name">{{ branchText }}</span>
+        <svg
+          v-if="localBranches.length > 0"
+          class="git-header__branch-caret"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
         <span v-if="hasRemoteChanges" class="git-header__sync">
           <span v-if="aheadCount > 0" class="git-header__sync-item git-header__sync-item--ahead">
             ↑{{ aheadCount }}
@@ -59,14 +94,6 @@
           </span>
         </span>
       </div>
-
-      <button class="git-header__refresh" :disabled="isLoading" :title="t('git.refresh')" @click="emit('refresh')">
-        <span v-if="isLoading" class="git-header__spinner" />
-        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12a9 9 0 1 1-3-6.7" />
-          <path d="M21 3v6h-6" />
-        </svg>
-      </button>
     </div>
 
     <div class="git-header__actions">
@@ -75,7 +102,6 @@
           v-model="commitMessage"
           class="git-header__commit-input"
           :placeholder="t('git.commit')"
-          :disabled="isLoading"
           @keydown.enter.prevent="submitCommit"
         />
         <button
@@ -166,6 +192,25 @@
     text-overflow: ellipsis;
   }
 
+  .git-header__branch--clickable {
+    cursor: pointer;
+    padding: 4px 8px;
+    margin: -4px -8px;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+  }
+
+  .git-header__branch--clickable:hover {
+    background: var(--bg-200);
+  }
+
+  .git-header__branch-caret {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--text-300);
+  }
+
   .git-header__sync {
     display: flex;
     align-items: center;
@@ -188,51 +233,6 @@
   .git-header__sync-item--behind {
     background: rgba(59, 130, 246, 0.15);
     color: #60a5fa;
-  }
-
-  .git-header__refresh {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    border: 1px solid var(--border-200);
-    background: var(--bg-50);
-    color: var(--text-200);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: all 0.15s ease;
-  }
-
-  .git-header__refresh:hover {
-    background: var(--bg-200);
-    color: var(--text-100);
-  }
-
-  .git-header__refresh:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .git-header__refresh svg {
-    width: 14px;
-    height: 14px;
-  }
-
-  .git-header__spinner {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    border: 2px solid var(--border-200);
-    border-top-color: var(--text-100);
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 
   .git-header__actions {

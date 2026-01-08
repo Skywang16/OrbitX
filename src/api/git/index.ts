@@ -27,8 +27,8 @@ export class GitApi {
     return invoke<BranchInfo[]>('git_get_branches', { path })
   }
 
-  getCommits = async (path: string, limit?: number): Promise<CommitInfo[]> => {
-    return invoke<CommitInfo[]>('git_get_commits', { path, limit })
+  getCommits = async (path: string, limit?: number, skip?: number): Promise<CommitInfo[]> => {
+    return invoke<CommitInfo[]>('git_get_commits', { path, limit, skip })
   }
 
   getCommitFiles = async (path: string, commitHash: string): Promise<CommitFileChange[]> => {

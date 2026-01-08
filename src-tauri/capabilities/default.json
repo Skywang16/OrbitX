@@ -57,6 +57,7 @@
       "identifier": "fs:scope",
       "allow": [
         { "path": "$HOME/**" },
+        { "path": "/Users" },
         { "path": "/Users/**" },
         { "path": "$APPDATA/**" },
         { "path": "$APPCONFIG/**" },
@@ -75,6 +76,10 @@
     "core:window:allow-unmaximize",
     "core:window:allow-is-maximized",
     "window-state:default",
+    "dialog:default",
+    "dialog:allow-ask",
+    "dialog:allow-confirm",
+    "dialog:allow-message",
     "deep-link:default",
     "autostart:default",
     "autostart:allow-enable",

@@ -2,48 +2,6 @@
  * UI业务领域类型定义
  */
 
-// ===== 标签页类型 =====
-
-export enum TabType {
-  TERMINAL = 'terminal',
-  SETTINGS = 'settings',
-  DIFF = 'diff',
-}
-
-// 终端标签页的 UI 数据（运行时使用，不含 cwd）
-export interface TerminalTabData {
-  shell: string
-}
-
-// 设置标签页的 UI 数据
-export interface SettingsTabData {
-  section: string
-}
-
-// Diff 标签页的 UI 数据
-export interface DiffTabData {
-  filePath: string
-  staged: boolean
-  // For commit file diff
-  commitHash?: string
-}
-
-// 标签页基础结构：通用字段 + 类型化的私有数据
-export interface TabItem<TData = unknown> {
-  id: number
-  type: TabType
-  closable: boolean
-  data: TData
-}
-
-// 类型别名（方便使用）
-export type TerminalTabItem = TabItem<TerminalTabData>
-export type SettingsTabItem = TabItem<SettingsTabData>
-export type DiffTabItem = TabItem<DiffTabData>
-
-// 联合类型（实际使用的类型）
-export type AnyTabItem = TerminalTabItem | SettingsTabItem | DiffTabItem
-
 // ===== 组件基础类型 =====
 
 export type ThemeMode = 'light' | 'dark' | 'auto'
@@ -54,3 +12,18 @@ export interface SelectOption {
   value: string | number
   disabled?: boolean
 }
+
+// ===== 编辑器拖拽类型 =====
+
+export type EditorDropZone = 'left' | 'right' | 'top' | 'bottom' | 'center'
+export type EditorDragPhase = 'start' | 'move' | 'end'
+
+export interface EditorDragPayload {
+  phase: EditorDragPhase
+  tabId: string
+  sourceGroupId: string
+  x: number
+  y: number
+}
+
+export const EDITOR_TAB_DRAG_EVENT = 'orbitx-editor-tab-drag'

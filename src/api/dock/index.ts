@@ -19,7 +19,7 @@ export const dockApi = {
     await invoke<void>('dock_clear_tabs')
   },
 
-  onDockSwitchTab: async (callback: (payload: { tabId: number }) => void): Promise<UnlistenFn> => {
-    return listen<{ tabId: number }>('dock_switch_tab', event => callback(event.payload))
+  onDockSwitchTab: async (callback: (payload: { tabId: string }) => void): Promise<UnlistenFn> => {
+    return listen<{ tabId: string }>('dock_switch_tab', event => callback(event.payload))
   },
 }

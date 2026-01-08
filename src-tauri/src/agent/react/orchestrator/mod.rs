@@ -360,7 +360,7 @@ impl ReactOrchestrator {
             };
             context
                 .add_assistant_message(final_text.clone(), Some(tool_use_blocks))
-                .await;
+                .await?;
 
             // ===== Phase 5: 分类迭代结果 =====
             let outcome = if !pending_tool_calls.is_empty() {

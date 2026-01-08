@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::agent::config::PromptComponent;
+use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::prompt::components::types::{ComponentDefinition, ComponentRegistry};
 
 use super::{agent, system, task};
@@ -52,7 +53,7 @@ impl PromptComponentRegistry {
     pub fn sort_by_dependencies(
         &mut self,
         components: &[PromptComponent],
-    ) -> Result<Vec<PromptComponent>, String> {
+    ) -> AgentResult<Vec<PromptComponent>> {
         self.ensure_loaded();
 
         let mut sorted = Vec::new();
@@ -66,9 +67,12 @@ impl PromptComponentRegistry {
             sorted: &mut Vec<PromptComponent>,
             visited: &mut HashSet<PromptComponent>,
             visiting: &mut HashSet<PromptComponent>,
-        ) -> Result<(), String> {
+        ) -> AgentResult<()> {
             if visiting.contains(&id) {
-                return Err(format!("Circular dependency detected: {:?}", id));
+                return Err(AgentError::Internal(format!(
+                    "Circular dependency detected: {:?}",
+                    id
+                )));
             }
             if visited.contains(&id) {
                 return Ok(());

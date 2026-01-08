@@ -138,6 +138,17 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     let completion_state = CompletionState::new();
     app.manage(completion_state);
 
+    // Completion learning (SQLite-backed, offline)
+    {
+        use crate::completion::learning::{CompletionLearningConfig, CompletionLearningState};
+        let database = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
+        let learning = CompletionLearningState::new(database, CompletionLearningConfig::default());
+        app.manage(learning);
+    }
+
     // 创建 Shell Integration 并注册 Node 版本回调
     let shell_integration = Arc::new(crate::shell::ShellIntegrationManager::new());
 

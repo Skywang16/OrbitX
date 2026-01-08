@@ -273,6 +273,41 @@ CREATE INDEX IF NOT EXISTS idx_checkpoint_files_blob
 CREATE INDEX IF NOT EXISTS idx_blob_refcount
     ON checkpoint_blobs(ref_count);
 
+-- ===========================
+-- Completion learning model (offline, small footprint)
+-- ===========================
+
+CREATE TABLE IF NOT EXISTS completion_command_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    root TEXT NOT NULL,
+    sub TEXT,
+    use_count INTEGER NOT NULL DEFAULT 0,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    fail_count INTEGER NOT NULL DEFAULT 0,
+    last_used_ts INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS completion_transitions (
+    prev_id INTEGER NOT NULL,
+    next_id INTEGER NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    fail_count INTEGER NOT NULL DEFAULT 0,
+    last_used_ts INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (prev_id, next_id),
+    FOREIGN KEY (prev_id) REFERENCES completion_command_keys(id) ON DELETE CASCADE,
+    FOREIGN KEY (next_id) REFERENCES completion_command_keys(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS completion_entity_stats (
+    entity_type TEXT NOT NULL,
+    value TEXT NOT NULL,
+    use_count INTEGER NOT NULL DEFAULT 0,
+    last_used_ts INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (entity_type, value)
+);
+
 CREATE TRIGGER IF NOT EXISTS trg_session_summaries_updated_at
 AFTER UPDATE ON session_summaries
 FOR EACH ROW

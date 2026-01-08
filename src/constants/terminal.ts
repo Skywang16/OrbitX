@@ -52,9 +52,9 @@ export const TERMINAL_CONFIG: TerminalConfig = {
   rightClickSelectsWord: false, // 避免右键选择干扰中文词语
   wordSeparator: ' ()[]{}\'",;', // 为中文优化的词分隔符
 
-  // 滚动和缓冲区优化
+  // 滚动和缓冲区优化 - 针对 Canvas 渲染器性能调优
   scrollSensitivity: 1, // 降低滚动灵敏度，减少事件频率
-  fastScrollSensitivity: 3, // 降低快速滚动灵敏度
+  fastScrollSensitivity: 5, // 快速滚动时跳过更多行，减少渲染次数
   smoothScrollDuration: 0, // 禁用平滑滚动，减少渲染开销
 
   // 其他性能优化

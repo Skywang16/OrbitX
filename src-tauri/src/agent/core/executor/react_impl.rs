@@ -158,7 +158,7 @@ impl ReactHandler for TaskExecutor {
             };
 
             // Update the existing tool block (created on ToolUse).
-            let _ = context
+            context
                 .assistant_update_block(
                     &resp.id,
                     Block::Tool(ToolBlock {
@@ -185,7 +185,7 @@ impl ReactHandler for TaskExecutor {
                         ),
                     }),
                 )
-                .await;
+                .await?;
 
             results.push(ToolCallResult {
                 call_id: resp.id,
@@ -196,7 +196,7 @@ impl ReactHandler for TaskExecutor {
             });
         }
 
-        context.add_tool_results(results.clone()).await;
+        context.add_tool_results(results.clone()).await?;
         Ok(results)
     }
 

@@ -6,9 +6,9 @@ use tokio::sync::{Mutex, RwLock};
 use crate::agent::core::context::ToolCallResult;
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::persistence::AgentExecution;
-use crate::agent::types::{Message, TaskEvent};
 use crate::agent::react::runtime::ReactRuntime;
 use crate::agent::types::TaskDetail;
+use crate::agent::types::{Message, TaskEvent};
 use crate::llm::anthropic_types::{MessageParam, SystemPrompt};
 
 use super::chain::Chain;

@@ -1,11 +1,13 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import { confirm } from '@tauri-apps/plugin-dialog'
   import { useGitStore } from '@/stores/git'
   import type { DiffContent } from '@/api/git/types'
   import { gitApi } from '@/api'
 
   interface Props {
+    repoPath: string
     filePath: string
     staged?: boolean
     commitHash?: string
@@ -33,8 +35,7 @@
   })
 
   const loadDiff = async () => {
-    const repoPath = gitStore.currentPath
-    if (!repoPath || repoPath === '~') {
+    if (!props.repoPath) {
       error.value = 'No repository path'
       return
     }
@@ -44,7 +45,7 @@
 
     try {
       diff.value = await gitApi.getDiff({
-        path: repoPath,
+        path: props.repoPath,
         filePath: props.filePath,
         staged: props.staged,
         commitHash: props.commitHash,
@@ -62,7 +63,7 @@
   })
 
   watch(
-    () => [props.filePath, props.staged, props.commitHash],
+    () => [props.repoPath, props.filePath, props.staged, props.commitHash],
     () => {
       loadDiff()
     }
@@ -84,15 +85,19 @@
   }
 
   const stageFile = () => {
-    gitStore.stageFile({ path: props.filePath, status: 'modified' })
+    gitStore.stageFile({ path: props.filePath, status: 'modified' }, props.repoPath)
   }
 
   const unstageFile = () => {
-    gitStore.unstageFile({ path: props.filePath, status: 'modified' })
+    gitStore.unstageFile({ path: props.filePath, status: 'modified' }, props.repoPath)
   }
 
-  const discardFile = () => {
-    gitStore.discardFile({ path: props.filePath, status: 'modified' })
+  const discardFile = async () => {
+    const message = t('git.discard_confirm', { file: fileName.value })
+    const confirmed = await confirm(message, { title: t('git.discard'), kind: 'warning' })
+    if (confirmed) {
+      gitStore.discardFile({ path: props.filePath, status: 'modified' })
+    }
   }
 </script>
 
@@ -124,9 +129,8 @@
           <template v-else>
             <button class="action-btn" :title="t('git.discard')" @click="discardFile">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 6h18" />
-                <path d="M8 6V4h8v2" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                <path d="M3 7v6h6" />
+                <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
               </svg>
               <span>{{ t('git.discard') }}</span>
             </button>
