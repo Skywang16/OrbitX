@@ -1,7 +1,7 @@
 {
   "name": "orbitx",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OrbitX - A modern terminal application with AI assistant built with Vue.js and Tauri",
   "type": "module",
   "author": "Your Name <your.email@example.com>",
