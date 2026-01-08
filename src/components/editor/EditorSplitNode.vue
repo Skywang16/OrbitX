@@ -136,10 +136,7 @@
   }
 
   /** 启动拖拽：捕获指针并注册事件 */
-  const setupDragHandlers = (
-    event: PointerEvent,
-    onMove: (e: PointerEvent) => void
-  ) => {
+  const setupDragHandlers = (event: PointerEvent, onMove: (e: PointerEvent) => void) => {
     event.preventDefault()
     const handle = event.currentTarget as HTMLElement | null
     if (handle) {
