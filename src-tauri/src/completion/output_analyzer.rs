@@ -4,8 +4,8 @@
  * 负责分析终端输出，提取有用的上下文信息用于智能补全和 replay
  */
 
-use crate::completion::error::OutputAnalyzerResult;
 use crate::completion::command_line::normalize_command_line;
+use crate::completion::error::OutputAnalyzerResult;
 use crate::completion::providers::ContextAwareProvider;
 use crate::completion::smart_extractor::SmartExtractor;
 use crate::mux::ConfigManager;
@@ -114,15 +114,13 @@ impl OutputAnalyzer {
         };
 
         if should_process {
-            if let Some((command, output)) = self.get_pane_buffer(pane_id).ok()
-                .and_then(|content| self.detect_command_completion(&content)) {
+            if let Some((command, output)) = self
+                .get_pane_buffer(pane_id)
+                .ok()
+                .and_then(|content| self.detect_command_completion(&content))
+            {
                 // 无 Shell Integration 的 fallback 路径：从 prompt/输出中猜测命令边界
-                self.record_completed_command(
-                    pane_id,
-                    command,
-                    output,
-                    "/tmp".to_string(),
-                )?;
+                self.record_completed_command(pane_id, command, output, "/tmp".to_string())?;
             }
         }
 
@@ -139,7 +137,10 @@ impl OutputAnalyzer {
         pane_id: u32,
         command: &crate::shell::CommandInfo,
     ) -> OutputAnalyzerResult<()> {
-        let Some(command_line) = command.command_line.as_deref().and_then(normalize_command_line)
+        let Some(command_line) = command
+            .command_line
+            .as_deref()
+            .and_then(normalize_command_line)
         else {
             return Ok(());
         };
@@ -346,7 +347,9 @@ mod tests {
         };
 
         analyzer.on_shell_command_event(pane_id, &cmd).unwrap();
-        analyzer.analyze_output(pane_id, "On branch main\n").unwrap();
+        analyzer
+            .analyze_output(pane_id, "On branch main\n")
+            .unwrap();
 
         cmd.status = CommandStatus::Finished { exit_code: Some(0) };
         analyzer.on_shell_command_event(pane_id, &cmd).unwrap();

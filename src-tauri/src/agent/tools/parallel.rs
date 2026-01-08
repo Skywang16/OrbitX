@@ -46,7 +46,9 @@ pub async fn execute_batch(
     // 单个调用直接执行，无需分组
     if calls.len() == 1 {
         let call = calls.into_iter().next().unwrap();
-        let result = registry.execute_tool(&call.name, context, call.params).await;
+        let result = registry
+            .execute_tool(&call.name, context, call.params)
+            .await;
         return vec![ToolCallResult {
             id: call.id,
             name: call.name,
@@ -126,7 +128,9 @@ async fn execute_parallel(
 
     for chunk in calls.chunks(MAX_CONCURRENCY) {
         let futures = chunk.iter().map(|call| async {
-            let result = registry.execute_tool(&call.name, context, call.params.clone()).await;
+            let result = registry
+                .execute_tool(&call.name, context, call.params.clone())
+                .await;
             ToolCallResult {
                 id: call.id.clone(),
                 name: call.name.clone(),
@@ -151,7 +155,9 @@ async fn execute_sequential(
     let mut results = Vec::with_capacity(calls.len());
 
     for call in calls {
-        let result = registry.execute_tool(&call.name, context, call.params.clone()).await;
+        let result = registry
+            .execute_tool(&call.name, context, call.params.clone())
+            .await;
         results.push(ToolCallResult {
             id: call.id.clone(),
             name: call.name.clone(),
@@ -170,9 +176,21 @@ mod tests {
     fn test_execution_mode() {
         use super::super::metadata::ToolCategory;
 
-        assert_eq!(ToolCategory::FileRead.execution_mode(), ExecutionMode::Parallel);
-        assert_eq!(ToolCategory::FileWrite.execution_mode(), ExecutionMode::Sequential);
-        assert_eq!(ToolCategory::Network.execution_mode(), ExecutionMode::Parallel);
-        assert_eq!(ToolCategory::Execution.execution_mode(), ExecutionMode::Sequential);
+        assert_eq!(
+            ToolCategory::FileRead.execution_mode(),
+            ExecutionMode::Parallel
+        );
+        assert_eq!(
+            ToolCategory::FileWrite.execution_mode(),
+            ExecutionMode::Sequential
+        );
+        assert_eq!(
+            ToolCategory::Network.execution_mode(),
+            ExecutionMode::Parallel
+        );
+        assert_eq!(
+            ToolCategory::Execution.execution_mode(),
+            ExecutionMode::Sequential
+        );
     }
 }

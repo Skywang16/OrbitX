@@ -8,8 +8,8 @@ use crate::completion::providers::{
 use crate::completion::scoring::MIN_SCORE;
 use crate::completion::smart_provider::SmartCompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionResponse};
-use crate::storage::{CacheNamespace, UnifiedCache};
 use crate::storage::DatabaseManager;
+use crate::storage::{CacheNamespace, UnifiedCache};
 use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;

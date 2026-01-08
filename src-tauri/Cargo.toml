@@ -126,7 +126,7 @@ eventsource-stream = "0.2.3"
 ignore = "0.4"
 # 向量数据库相关依赖
 blake3 = "1.5"
-simsimd = "6.1"
+hnsw_rs = "0.3"
 # Tree-sitter 用于语法树解析
 tree-sitter = "0.25"
 tree-sitter-python = "0.25"
@@ -139,6 +139,8 @@ tree-sitter-c = "0.23"
 tree-sitter-cpp = "0.23"
 tree-sitter-c-sharp = "0.23"
 tree-sitter-ruby = "0.23"
+tree-sitter-php = "0.23"
+tree-sitter-swift = "0.7"
 # Tokenizers 用于精确 token 计数
 tokenizers = { version = "0.22", default-features = false, features = ["onig"] }
 hf-hub = "0.3"

@@ -2,7 +2,6 @@ use super::{ChunkMetadata, FileStore, IndexManifest};
 use crate::vector_db::chunking::TextChunker;
 use crate::vector_db::core::{Chunk, Result, VectorDbConfig, VectorDbError};
 use crate::vector_db::embedding::Embedder;
-use crate::vector_db::index::VectorIndex;
 use crate::vector_db::utils::{blake3_hash_bytes, collect_source_files};
 use parking_lot::RwLock;
 use std::path::{Path, PathBuf};
@@ -45,12 +44,7 @@ impl IndexManager {
         manifest.save(&self.manifest_path())
     }
 
-    pub async fn index_file_with(
-        &self,
-        file_path: &Path,
-        embedder: &dyn Embedder,
-        vector_index: &VectorIndex,
-    ) -> Result<()> {
+    pub async fn index_file_with(&self, file_path: &Path, embedder: &dyn Embedder) -> Result<()> {
         // 0. 限制：尺寸
         let meta = std::fs::metadata(file_path).map_err(VectorDbError::Io)?;
         if meta.len() > self.config.max_file_size {
@@ -130,8 +124,6 @@ impl IndexManager {
                 };
                 // 收集向量数据
                 file_vectors.push((chunk.id, vecf.clone()));
-                // update in-memory index
-                vector_index.add(chunk.id, vecf, metadata.clone())?;
                 // add to manifest
                 manifest.add_chunk(chunk.id, metadata);
             }
@@ -159,7 +151,6 @@ impl IndexManager {
         &self,
         file_paths: &[PathBuf],
         embedder: &dyn Embedder,
-        vector_index: &VectorIndex,
     ) -> Result<()> {
         use futures::stream::{self, StreamExt};
 
@@ -177,10 +168,7 @@ impl IndexManager {
         // 并行索引（最多 4 个并发任务）
         let concurrency = 4;
         let results: Vec<Result<()>> = stream::iter(files_to_index)
-            .map(|file_path| async move {
-                self.index_file_with(&file_path, embedder, vector_index)
-                    .await
-            })
+            .map(|file_path| async move { self.index_file_with(&file_path, embedder).await })
             .buffer_unordered(concurrency)
             .collect()
             .await;
@@ -193,14 +181,8 @@ impl IndexManager {
         Ok(())
     }
 
-    pub async fn update_index(
-        &self,
-        file_path: &Path,
-        embedder: &dyn Embedder,
-        vector_index: &VectorIndex,
-    ) -> Result<()> {
-        self.index_file_with(file_path, embedder, vector_index)
-            .await
+    pub async fn update_index(&self, file_path: &Path, embedder: &dyn Embedder) -> Result<()> {
+        self.index_file_with(file_path, embedder).await
     }
 
     pub fn remove_file(&self, file_path: &Path) -> Result<()> {
@@ -222,12 +204,7 @@ impl IndexManager {
         Ok(())
     }
 
-    pub async fn rebuild(
-        &self,
-        root: &Path,
-        embedder: &dyn Embedder,
-        vector_index: &VectorIndex,
-    ) -> Result<()> {
+    pub async fn rebuild(&self, root: &Path, embedder: &dyn Embedder) -> Result<()> {
         // 重置清单
         {
             let mut manifest = self.manifest.write();
@@ -239,7 +216,7 @@ impl IndexManager {
         self.save_manifest()?;
 
         let files = collect_source_files(root, self.config.max_file_size);
-        self.index_files_with(&files, embedder, vector_index).await
+        self.index_files_with(&files, embedder).await
     }
 
     pub fn get_status(&self) -> IndexStatus {

@@ -15,6 +15,7 @@ pub struct AppConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct AppConfigApp {
     pub language: String,
     pub confirm_on_exit: bool,
@@ -22,6 +23,7 @@ pub struct AppConfigApp {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct AppearanceConfig {
     pub ui_scale: u32,
     pub animations_enabled: bool,
@@ -31,6 +33,7 @@ pub struct AppearanceConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct TerminalConfig {
     pub scrollback: u32,
     pub shell: ShellConfig,
@@ -39,6 +42,7 @@ pub struct TerminalConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct ShellConfig {
     #[serde(rename = "default")]
     pub default_shell: String,
@@ -47,6 +51,7 @@ pub struct ShellConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct TerminalBehaviorConfig {
     pub close_on_exit: bool,
     pub confirm_close: bool,
@@ -64,6 +69,7 @@ pub struct FontConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct CursorConfig {
     pub style: CursorStyle,
     pub blink: bool,

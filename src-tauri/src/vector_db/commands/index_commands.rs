@@ -67,9 +67,12 @@ pub async fn get_index_status(
 #[tauri::command]
 pub async fn delete_workspace_index(
     path: String,
-    _state: State<'_, VectorDbState>,
+    state: State<'_, VectorDbState>,
 ) -> TauriApiResult<EmptyData> {
-    let index_dir = PathBuf::from(&path).join(".oxi");
+    let root = PathBuf::from(&path);
+    let index_dir = root.join(".oxi");
+
+    state.search_engine.invalidate_workspace_index(&root);
 
     if index_dir.exists() {
         let dir = index_dir.clone();
@@ -124,6 +127,7 @@ pub async fn vector_build_index(
     let root = PathBuf::from(&path);
     let config = state.search_engine.config().clone();
     let embedder = state.search_engine.embedder();
+    state.search_engine.invalidate_workspace_index(&root);
 
     let workspace_index_manager =
         match crate::vector_db::storage::IndexManager::new(&root, config.clone()) {
@@ -138,9 +142,6 @@ pub async fn vector_build_index(
         existing.abort();
     }
 
-    let vector_index = std::sync::Arc::new(crate::vector_db::index::VectorIndex::new(
-        config.embedding.dimension,
-    ));
     let embed_config = config.clone();
 
     set_progress(
@@ -158,8 +159,6 @@ pub async fn vector_build_index(
 
     let path_key = path.clone();
     let index_manager = workspace_index_manager.clone();
-    let vector_index_handle = vector_index.clone();
-
     let handle = tokio::spawn({
         let embed_config = embed_config.clone();
         async move {
@@ -222,10 +221,7 @@ pub async fn vector_build_index(
                         error: None,
                     },
                 );
-                if let Err(e) = index_manager
-                    .index_file_with(&f, &*embedder, vector_index_handle.as_ref())
-                    .await
-                {
+                if let Err(e) = index_manager.index_file_with(&f, &*embedder).await {
                     set_progress(
                         &path_key,
                         VectorBuildProgress {

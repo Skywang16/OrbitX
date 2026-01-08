@@ -34,7 +34,7 @@ impl Language {
             "cpp" | "cc" | "cxx" | "c++" => Some(Language::Cpp),
             "cs" => Some(Language::CSharp),
             "rb" => Some(Language::Ruby),
-            "php" => Some(Language::Php),
+            "php" | "phtml" | "php3" | "php4" | "php5" | "phps" | "phar" => Some(Language::Php),
             "swift" => Some(Language::Swift),
             "kt" | "kts" => Some(Language::Kotlin),
             _ => None,

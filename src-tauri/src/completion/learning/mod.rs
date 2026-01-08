@@ -76,9 +76,14 @@ impl CompletionLearningState {
                 let mut seen = 0_u64;
 
                 while let Some(event) = receiver.recv().await {
-                    if let Err(err) =
-                        apply_finished_event(&database, config, &mut per_pane_prev, &event, &mut seen)
-                            .await
+                    if let Err(err) = apply_finished_event(
+                        &database,
+                        config,
+                        &mut per_pane_prev,
+                        &event,
+                        &mut seen,
+                    )
+                    .await
                     {
                         warn!(error = %err, "completion.learning.apply_failed");
                     }
@@ -104,7 +109,13 @@ async fn apply_finished_event(
     let success = event.exit_code.map(|code| code == 0);
     let repo = CompletionModelRepo::new(database);
     let current_id = repo
-        .upsert_command_key(&key.key, &key.root, key.sub.as_deref(), event.finished_ts, success)
+        .upsert_command_key(
+            &key.key,
+            &key.root,
+            key.sub.as_deref(),
+            event.finished_ts,
+            success,
+        )
         .await?;
 
     if let Some(prev_id) = per_pane_prev.get(&event.pane_id).copied() {
@@ -124,7 +135,8 @@ async fn apply_finished_event(
             .finished_ts
             .saturating_sub(config.ttl_days.saturating_mul(24 * 60 * 60));
         repo.prune_older_than(cutoff_ts).await?;
-        repo.enforce_command_key_limit(config.max_command_keys).await?;
+        repo.enforce_command_key_limit(config.max_command_keys)
+            .await?;
     }
 
     Ok(())

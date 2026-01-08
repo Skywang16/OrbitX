@@ -31,14 +31,18 @@ impl TreeSitterChunker {
                     })?;
             }
             Language::TypeScript => {
-                parser
-                    .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
-                    .map_err(|e| {
-                        VectorDbError::ChunkingError(format!(
-                            "Failed to set TypeScript language: {}",
-                            e
-                        ))
-                    })?;
+                let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                let ts_lang = if ext.eq_ignore_ascii_case("tsx") {
+                    tree_sitter_typescript::LANGUAGE_TSX
+                } else {
+                    tree_sitter_typescript::LANGUAGE_TYPESCRIPT
+                };
+                parser.set_language(&ts_lang.into()).map_err(|e| {
+                    VectorDbError::ChunkingError(format!(
+                        "Failed to set TypeScript language: {}",
+                        e
+                    ))
+                })?;
             }
             Language::JavaScript => {
                 parser
@@ -97,6 +101,20 @@ impl TreeSitterChunker {
                     .set_language(&tree_sitter_ruby::LANGUAGE.into())
                     .map_err(|e| {
                         VectorDbError::ChunkingError(format!("Failed to set Ruby language: {}", e))
+                    })?;
+            }
+            Language::Php => {
+                parser
+                    .set_language(&tree_sitter_php::LANGUAGE_PHP.into())
+                    .map_err(|e| {
+                        VectorDbError::ChunkingError(format!("Failed to set PHP language: {}", e))
+                    })?;
+            }
+            Language::Swift => {
+                parser
+                    .set_language(&tree_sitter_swift::LANGUAGE.into())
+                    .map_err(|e| {
+                        VectorDbError::ChunkingError(format!("Failed to set Swift language: {}", e))
                     })?;
             }
             _ => {

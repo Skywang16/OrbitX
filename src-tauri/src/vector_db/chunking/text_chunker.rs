@@ -52,6 +52,8 @@ impl TextChunker {
                     | Language::Cpp
                     | Language::CSharp
                     | Language::Ruby
+                    | Language::Php
+                    | Language::Swift
             ) {
                 tracing::debug!("Using tree-sitter chunking for {:?}", language);
                 if let Ok(chunks) = self.tree_sitter_chunker.chunk(content, file_path, language) {

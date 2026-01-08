@@ -2,9 +2,9 @@
 //!
 //! 基于用户的命令历史提供补全建议
 
+use crate::completion::command_line::extract_command_key;
 use crate::completion::error::{CompletionProviderError, CompletionProviderResult};
 use crate::completion::providers::CompletionProvider;
-use crate::completion::command_line::extract_command_key;
 use crate::completion::scoring::{
     BaseScorer, CompositeScorer, FrecencyScorer, HistoryScorer, ScoreCalculator, ScoringContext,
 };
@@ -246,16 +246,17 @@ impl HistoryProvider {
         if pattern.contains(' ') {
             // 用户已经输入到“参数级”，返回完整命令，但只扫描最近一段，避免老垃圾刷屏。
             for (index, entry) in entries.iter().take(FULL_MODE_SCAN_LIMIT).enumerate() {
-                if entry
-                    .last_used_ts
-                    .is_some_and(|ts| ts < cutoff_ts)
-                {
+                if entry.last_used_ts.is_some_and(|ts| ts < cutoff_ts) {
                     continue;
                 }
 
                 if self.is_command_match(&entry.command, pattern) {
-                    let score =
-                        self.calculate_command_score(&entry.command, pattern, index, entry.last_used_ts);
+                    let score = self.calculate_command_score(
+                        &entry.command,
+                        pattern,
+                        index,
+                        entry.last_used_ts,
+                    );
                     matches.push(
                         CompletionItem::new(entry.command.clone(), CompletionType::History)
                             .with_score(score)
@@ -269,10 +270,7 @@ impl HistoryProvider {
             // 这里做 key 聚合（git status / git show / docker ps ...），并带频率+时近性。
             let mut stats: HashMap<String, CommandKeyStats> = HashMap::new();
             for (index, entry) in entries.iter().take(KEY_MODE_SCAN_LIMIT).enumerate() {
-                if entry
-                    .last_used_ts
-                    .is_some_and(|ts| ts < cutoff_ts)
-                {
+                if entry.last_used_ts.is_some_and(|ts| ts < cutoff_ts) {
                     continue;
                 }
 
@@ -301,9 +299,11 @@ impl HistoryProvider {
             }
 
             for (key, s) in stats {
-                let pseudo_ts = now_ts.saturating_sub((s.first_index as u64) * PSEUDO_RECENCY_STEP_SECS);
+                let pseudo_ts =
+                    now_ts.saturating_sub((s.first_index as u64) * PSEUDO_RECENCY_STEP_SECS);
                 let ts = s.last_used_ts.unwrap_or(pseudo_ts);
-                let score = self.calculate_command_key_score(pattern, &key, s.first_index, s.count, ts);
+                let score =
+                    self.calculate_command_key_score(pattern, &key, s.first_index, s.count, ts);
                 matches.push(
                     CompletionItem::new(key, CompletionType::History)
                         .with_score(score)
@@ -516,7 +516,9 @@ git commit -m "test"
         assert_eq!(commands.len(), 4);
 
         // zsh: should parse timestamp
-        assert!(entries.iter().any(|e| e.command == "ls -la" && e.last_used_ts.is_some()));
+        assert!(entries
+            .iter()
+            .any(|e| e.command == "ls -la" && e.last_used_ts.is_some()));
     }
 
     #[tokio::test]

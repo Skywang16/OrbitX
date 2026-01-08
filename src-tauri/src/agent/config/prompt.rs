@@ -69,11 +69,11 @@ impl Default for PromptConfig {
         default_component_order.insert(
             PromptType::Agent,
             vec![
-                PromptComponent::AgentRole,        // priority: 100 - 角色定义
-                PromptComponent::AgentRules,       // priority: 90  - 行为规则
-                PromptComponent::WorkMethodology,  // priority: 80  - 工作方法
-                PromptComponent::SystemInfo,       // priority: 70  - 系统信息
-                PromptComponent::TaskContext,      // priority: 60  - 任务上下文
+                PromptComponent::AgentRole,          // priority: 100 - 角色定义
+                PromptComponent::AgentRules,         // priority: 90  - 行为规则
+                PromptComponent::WorkMethodology,    // priority: 80  - 工作方法
+                PromptComponent::SystemInfo,         // priority: 70  - 系统信息
+                PromptComponent::TaskContext,        // priority: 60  - 任务上下文
                 PromptComponent::CustomInstructions, // priority: 50 - 用户自定义指令
             ],
         );

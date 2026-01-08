@@ -11,11 +11,10 @@ use crate::storage::database::DatabaseManager;
 
 use super::models::{
     build_agent_execution, build_execution_event, build_execution_message, build_session,
-    build_session_summary, build_tool_execution, build_workspace,
-    build_workspace_file_record, AgentExecution, ExecutionEvent, ExecutionEventType,
-    ExecutionMessage, ExecutionStatus, FileRecordSource, FileRecordState,
-    MessageRole as AgentMessageRole,
-    Session, SessionSummary, TokenUsageStats, ToolExecution, ToolExecutionStatus, Workspace, WorkspaceFileRecord,
+    build_session_summary, build_tool_execution, build_workspace, build_workspace_file_record,
+    AgentExecution, ExecutionEvent, ExecutionEventType, ExecutionMessage, ExecutionStatus,
+    FileRecordSource, FileRecordState, MessageRole as AgentMessageRole, Session, SessionSummary,
+    TokenUsageStats, ToolExecution, ToolExecutionStatus, Workspace, WorkspaceFileRecord,
 };
 use super::{
     bool_to_sql, now_timestamp, opt_datetime_to_timestamp, opt_timestamp_to_datetime,
@@ -529,7 +528,10 @@ fn parse_role(role: &str) -> AgentResult<UiMessageRole> {
     match role {
         "user" => Ok(UiMessageRole::User),
         "assistant" => Ok(UiMessageRole::Assistant),
-        other => Err(AgentError::Parse(format!("Unknown message role: {}", other))),
+        other => Err(AgentError::Parse(format!(
+            "Unknown message role: {}",
+            other
+        ))),
     }
 }
 
@@ -539,7 +541,10 @@ fn parse_status(status: &str) -> AgentResult<UiMessageStatus> {
         "completed" => Ok(UiMessageStatus::Completed),
         "cancelled" => Ok(UiMessageStatus::Cancelled),
         "error" => Ok(UiMessageStatus::Error),
-        other => Err(AgentError::Parse(format!("Unknown message status: {}", other))),
+        other => Err(AgentError::Parse(format!(
+            "Unknown message status: {}",
+            other
+        ))),
     }
 }
 
@@ -559,9 +564,8 @@ fn token_usage_to_columns(
 
 fn build_message(row: &sqlx::sqlite::SqliteRow) -> AgentResult<Message> {
     let blocks_json: String = row.try_get("blocks_json")?;
-    let blocks: Vec<Block> = serde_json::from_str(&blocks_json).map_err(|e| {
-        AgentError::Parse(format!("Invalid message blocks_json: {}", e))
-    })?;
+    let blocks: Vec<Block> = serde_json::from_str(&blocks_json)
+        .map_err(|e| AgentError::Parse(format!("Invalid message blocks_json: {}", e)))?;
 
     let role = parse_role(row.try_get::<String, _>("role")?.as_str())?;
     let status = parse_status(row.try_get::<String, _>("status")?.as_str())?;

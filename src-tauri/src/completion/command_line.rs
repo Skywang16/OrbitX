@@ -22,7 +22,8 @@ pub fn normalize_command_line(raw: &str) -> Option<String> {
     let mut best_start: Option<usize> = None;
     for delim in [" % ", " $ ", " # ", " > "] {
         if let Some(idx) = line.rfind(delim) {
-            best_start = Some(best_start.map_or(idx + delim.len(), |prev| prev.max(idx + delim.len())));
+            best_start =
+                Some(best_start.map_or(idx + delim.len(), |prev| prev.max(idx + delim.len())));
         }
     }
 
@@ -75,7 +76,9 @@ fn strip_leading_noise(command_line: &str) -> String {
     // 环境变量赋值前缀：FOO=bar cmd
     // 只做最保守的处理：连续的 `NAME=...` 且 NAME 没有 '/'。
     loop {
-        let Some(first) = line.split_whitespace().next() else { break };
+        let Some(first) = line.split_whitespace().next() else {
+            break;
+        };
         let Some(eq_pos) = first.find('=') else { break };
         let name = &first[..eq_pos];
         if name.is_empty() || name.contains('/') {
@@ -161,4 +164,3 @@ mod tests {
         assert_eq!(key.key, "git status");
     }
 }
-

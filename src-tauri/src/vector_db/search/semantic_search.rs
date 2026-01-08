@@ -1,7 +1,7 @@
 use super::SearchOptions;
 use crate::vector_db::core::{Result, SearchResult, VectorDbConfig};
 use crate::vector_db::embedding::Embedder;
-use crate::vector_db::index::VectorIndex;
+use crate::vector_db::search::WorkspaceIndexCache;
 use crate::vector_db::storage::IndexManager;
 use std::path::Path;
 use std::sync::Arc;
@@ -9,11 +9,18 @@ use std::sync::Arc;
 pub struct SemanticSearchEngine {
     embedder: Arc<dyn Embedder>,
     config: VectorDbConfig,
+    index_cache: WorkspaceIndexCache,
 }
 
 impl SemanticSearchEngine {
     pub fn new(embedder: Arc<dyn Embedder>, config: VectorDbConfig) -> Self {
-        Self { embedder, config }
+        // Keep memory bounded: cache only a few workspaces and cap total vector bytes.
+        let index_cache = WorkspaceIndexCache::new(3, 256 * 1024 * 1024);
+        Self {
+            embedder,
+            config,
+            index_cache,
+        }
     }
 
     pub fn embedder(&self) -> Arc<dyn Embedder> {
@@ -24,6 +31,10 @@ impl SemanticSearchEngine {
         &self.config
     }
 
+    pub fn invalidate_workspace_index(&self, workspace_root: &Path) {
+        self.index_cache.invalidate(workspace_root);
+    }
+
     pub async fn search_in_workspace(
         &self,
         workspace_root: &Path,
@@ -31,39 +42,31 @@ impl SemanticSearchEngine {
         options: SearchOptions,
     ) -> Result<Vec<SearchResult>> {
         let index_manager = IndexManager::new(workspace_root, self.config.clone())?;
-        let chunk_metadata_vec = index_manager.get_all_chunk_metadata();
-        if chunk_metadata_vec.is_empty() {
+        if index_manager.get_status().total_chunks == 0 {
             return Ok(Vec::new());
         }
 
-        let chunk_metadata: std::collections::HashMap<_, _> =
-            chunk_metadata_vec.into_iter().collect();
-        let vector_index = VectorIndex::load(
-            index_manager.store(),
-            &chunk_metadata,
-            self.config.embedding.dimension,
-        )
-        .await?;
+        let cached = self
+            .index_cache
+            .get_or_build(workspace_root, &self.config)
+            .await?;
 
         let query_embedding = self.embedder.embed(&[query]).await?;
         let query_vec = &query_embedding[0];
 
-        let results = vector_index.search(
-            query_vec,
-            options.top_k,
-            self.config.similarity_threshold.max(options.threshold),
-        )?;
+        let threshold = self.config.similarity_threshold.max(options.threshold);
+        let hits = cached.search(query_vec, options.top_k, threshold)?;
 
-        let mut search_results = Vec::with_capacity(results.len());
-        for (chunk_id, score) in results {
-            if let Some(metadata) = vector_index.get_chunk_metadata(&chunk_id) {
+        let mut search_results = Vec::with_capacity(hits.len());
+        for (internal_idx, score) in hits {
+            if let Some((_chunk_id, metadata)) = cached.chunk_meta_by_internal(internal_idx) {
                 search_results.push(SearchResult::new(
                     metadata.file_path.clone(),
                     metadata.span.clone(),
                     score,
                     format!("Chunk {:?}", metadata.chunk_type),
                     None,
-                    Some(metadata.chunk_type),
+                    Some(metadata.chunk_type.clone()),
                 ));
             }
         }

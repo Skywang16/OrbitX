@@ -2,20 +2,20 @@ version = "1.0.0"
 
 [app]
 language = "zh-CN"
-confirm_on_exit = true
-startup_behavior = "restore"
+confirmOnExit = true
+startupBehavior = "restore"
 
 [appearance]
-ui_scale = 100
-animations_enabled = true
+uiScale = 100
+animationsEnabled = true
 opacity = 1.0
 
-[appearance.theme_config]
-auto_switch_time = "18:00"
-terminal_theme = "tokyo-night"
-light_theme = "light"
-dark_theme = "dark"
-follow_system = false
+[appearance.themeConfig]
+autoSwitchTime = "18:00"
+terminalTheme = "tokyo-night"
+lightTheme = "light"
+darkTheme = "dark"
+followSystem = false
 
 [appearance.font]
 family = 'Menlo, Monaco, "SF Mono", "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", "Source Han Sans CN", "WenQuanYi Micro Hei", "Courier New", monospace'
@@ -31,7 +31,7 @@ scrollback = 1000
 [terminal.shell]
 default = "zsh"
 args = []
-working_directory = "~"
+workingDirectory = "~"
 
 [terminal.cursor]
 style = "block"
@@ -40,8 +40,8 @@ color = "#ffffff"
 thickness = 0.15000000596046448
 
 [terminal.behavior]
-close_on_exit = true
-confirm_close = false
+closeOnExit = true
+confirmClose = false
 
 [[shortcuts]]
 key = "c"

@@ -159,4 +159,3 @@ pub enum GitErrorCode {
     ParseError,
     IoError,
 }
-

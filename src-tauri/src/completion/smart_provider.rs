@@ -1,11 +1,11 @@
 //! 智能补全提供者
 
+use crate::completion::command_line::extract_command_key;
 use crate::completion::context_analyzer::{
     ArgType, CompletionPosition, ContextAnalysis, ContextAnalyzer,
 };
 use crate::completion::error::CompletionProviderResult;
 use crate::completion::metadata::CommandRegistry;
-use crate::completion::command_line::extract_command_key;
 use crate::completion::prediction::CommandPredictor;
 use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
@@ -108,11 +108,7 @@ impl SmartCompletionProvider {
         items.extend(self.predict_next_command_items(context).await);
 
         // 步骤2: 从历史记录获取相关命令
-        if let Ok(history_items) = self
-            .history_provider
-            .provide_completions(context)
-            .await
-        {
+        if let Ok(history_items) = self.history_provider.provide_completions(context).await {
             items.extend(history_items);
         }
 
@@ -182,11 +178,7 @@ impl SmartCompletionProvider {
             }
 
             // 从历史记录中获取该命令的常用选项
-            if let Ok(history_items) = self
-                .history_provider
-                .provide_completions(context)
-                .await
-            {
+            if let Ok(history_items) = self.history_provider.provide_completions(context).await {
                 for item in history_items {
                     if item.text.starts_with('-') && item.text.starts_with(&context.current_word) {
                         let score = item.score;
@@ -224,20 +216,12 @@ impl SmartCompletionProvider {
         // 根据选项类型提供补全
         if self.is_file_option(command, option) {
             // 文件类型选项
-            if let Ok(file_items) = self
-                .filesystem_provider
-                .provide_completions(context)
-                .await
-            {
+            if let Ok(file_items) = self.filesystem_provider.provide_completions(context).await {
                 items.extend(file_items);
             }
         } else if self.is_directory_option(command, option) {
             // 目录类型选项
-            if let Ok(dir_items) = self
-                .filesystem_provider
-                .provide_completions(context)
-                .await
-            {
+            if let Ok(dir_items) = self.filesystem_provider.provide_completions(context).await {
                 let dir_items: Vec<_> = dir_items
                     .into_iter()
                     .filter(|item| item.completion_type == CompletionType::Directory.to_string())
@@ -246,11 +230,7 @@ impl SmartCompletionProvider {
             }
         } else {
             // 从历史记录中查找该选项的常用值
-            if let Ok(history_items) = self
-                .history_provider
-                .provide_completions(context)
-                .await
-            {
+            if let Ok(history_items) = self.history_provider.provide_completions(context).await {
                 items.extend(history_items);
             }
         }
@@ -280,11 +260,7 @@ impl SmartCompletionProvider {
         }
 
         // 从历史记录中获取常用的子命令组合
-        if let Ok(history_items) = self
-            .history_provider
-            .provide_completions(context)
-            .await
-        {
+        if let Ok(history_items) = self.history_provider.provide_completions(context).await {
             for item in history_items {
                 // 过滤出看起来像子命令的项
                 if !item.text.starts_with('-') && item.text.starts_with(&context.current_word) {
@@ -317,10 +293,8 @@ impl SmartCompletionProvider {
             if let Some(arg_type) = meta.arg_types.get(position) {
                 match arg_type {
                     ArgType::File | ArgType::Directory => {
-                        if let Ok(file_items) = self
-                            .filesystem_provider
-                            .provide_completions(context)
-                            .await
+                        if let Ok(file_items) =
+                            self.filesystem_provider.provide_completions(context).await
                         {
                             if matches!(arg_type, ArgType::Directory) {
                                 let dir_items: Vec<_> = file_items
@@ -349,10 +323,8 @@ impl SmartCompletionProvider {
                     }
                     _ => {
                         // 对于其他类型，从历史记录获取
-                        if let Ok(history_items) = self
-                            .history_provider
-                            .provide_completions(context)
-                            .await
+                        if let Ok(history_items) =
+                            self.history_provider.provide_completions(context).await
                         {
                             items.extend(history_items);
                         }
@@ -362,19 +334,13 @@ impl SmartCompletionProvider {
         } else {
             // 没有元数据的命令，根据启发式规则
             if self.command_usually_takes_files(command) {
-                if let Ok(file_items) = self
-                    .filesystem_provider
-                    .provide_completions(context)
-                    .await
+                if let Ok(file_items) = self.filesystem_provider.provide_completions(context).await
                 {
                     items.extend(file_items);
                 }
             } else {
                 // 从历史记录获取
-                if let Ok(history_items) = self
-                    .history_provider
-                    .provide_completions(context)
-                    .await
+                if let Ok(history_items) = self.history_provider.provide_completions(context).await
                 {
                     items.extend(history_items);
                 }
@@ -459,9 +425,7 @@ impl SmartCompletionProvider {
         &self,
         context: &CompletionContext,
     ) -> CompletionProviderResult<Vec<CompletionItem>> {
-        self.filesystem_provider
-            .provide_completions(context)
-            .await
+        self.filesystem_provider.provide_completions(context).await
     }
 
     /// 提供后备补全
@@ -472,11 +436,7 @@ impl SmartCompletionProvider {
         let mut items = Vec::new();
 
         // 尝试所有提供者
-        if let Ok(history_items) = self
-            .history_provider
-            .provide_completions(context)
-            .await
-        {
+        if let Ok(history_items) = self.history_provider.provide_completions(context).await {
             items.extend(history_items);
         }
 
@@ -488,11 +448,7 @@ impl SmartCompletionProvider {
             items.extend(system_items);
         }
 
-        if let Ok(file_items) = self
-            .filesystem_provider
-            .provide_completions(context)
-            .await
-        {
+        if let Ok(file_items) = self.filesystem_provider.provide_completions(context).await {
             items.extend(file_items);
         }
 
@@ -530,8 +486,11 @@ impl SmartCompletionProvider {
             .await
             .into_iter()
             .map(|(suggested, confidence)| {
-                let mut pred =
-                    predictor.build_prediction_for_suggestion(&suggested, &last_cmd, Some(&last_output));
+                let mut pred = predictor.build_prediction_for_suggestion(
+                    &suggested,
+                    &last_cmd,
+                    Some(&last_output),
+                );
                 pred.confidence = pred.confidence.max(confidence).min(100.0);
                 pred
             })
@@ -539,11 +498,17 @@ impl SmartCompletionProvider {
 
         // 2) 兜底：静态工作流表
         if predictions.is_empty() {
-            predictions =
-                predictor.predict_next_commands(&last_cmd, Some(&last_output), &context.current_word);
+            predictions = predictor.predict_next_commands(
+                &last_cmd,
+                Some(&last_output),
+                &context.current_word,
+            );
         }
 
-        predictions.into_iter().map(|p| p.to_completion_item()).collect()
+        predictions
+            .into_iter()
+            .map(|p| p.to_completion_item())
+            .collect()
     }
 
     async fn learned_next_commands(
@@ -572,15 +537,20 @@ impl SmartCompletionProvider {
         rows.into_iter()
             .filter(|(key, _, _, _)| input_prefix.is_empty() || key.starts_with(input_prefix))
             .map(|(key, count, success_count, last_used_ts)| {
-                let confidence =
-                    transition_confidence(now, count as u64, success_count as u64, last_used_ts as u64);
+                let confidence = transition_confidence(
+                    now,
+                    count as u64,
+                    success_count as u64,
+                    last_used_ts as u64,
+                );
                 (key, confidence)
             })
             .collect()
     }
 
     fn deduplicate_and_sort(&self, items: Vec<CompletionItem>) -> Vec<CompletionItem> {
-        let mut seen: std::collections::HashMap<String, CompletionItem> = std::collections::HashMap::new();
+        let mut seen: std::collections::HashMap<String, CompletionItem> =
+            std::collections::HashMap::new();
 
         for mut item in items {
             item.score = item.score.max(0.0).min(100.0);

@@ -364,7 +364,8 @@ pub async fn shell_execute_background_program(
     working_directory: Option<String>,
 ) -> TauriApiResult<BackgroundCommandResult> {
     let start_time = Instant::now();
-    shell_execute_background_program_inner(start_time, program, args, working_directory, None, true).await
+    shell_execute_background_program_inner(start_time, program, args, working_directory, None, true)
+        .await
 }
 
 async fn shell_execute_background_program_inner(
