@@ -24,6 +24,28 @@ pub enum CompletionPosition {
     Unknown,
 }
 
+/// 令牌结构
+#[derive(Debug, Clone, Copy)]
+pub struct Token {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl Token {
+    pub fn text<'a>(&self, input: &'a str) -> &'a str {
+        &input[self.start..self.end]
+    }
+}
+
+/// 上下文分析结果（补全引擎的“第二层数据”）
+#[derive(Debug, Clone)]
+pub struct ContextAnalysis {
+    pub tokens: Vec<Token>,
+    pub current_token_index: Option<usize>,
+    pub current_word: String,
+    pub position: CompletionPosition,
+}
+
 /// 命令元数据
 #[derive(Debug, Clone)]
 pub struct CommandMeta {
@@ -117,16 +139,14 @@ impl ContextAnalyzer {
     }
 
     /// 分析命令行上下文
-    pub fn analyze(&self, input: &str, cursor_pos: usize) -> CompletionContext {
+    pub fn analyze(&self, input: &str, cursor_pos: usize) -> ContextAnalysis {
         let tokens = self.tokenize(input);
         let current_token_index = self.find_current_token_index(&tokens, cursor_pos);
 
-        let position = self.determine_position(input, &tokens, current_token_index);
+        let position = self.determine_position(input, &tokens, current_token_index, cursor_pos);
         let current_word = self.extract_current_word(input, cursor_pos);
 
-        CompletionContext {
-            input: input.to_string(),
-            cursor_position: cursor_pos,
+        ContextAnalysis {
             tokens,
             current_token_index,
             current_word,
@@ -223,6 +243,7 @@ impl ContextAnalyzer {
         input: &str,
         tokens: &[Token],
         current_index: Option<usize>,
+        cursor_pos: usize,
     ) -> CompletionPosition {
         if tokens.is_empty() {
             return CompletionPosition::Command;
@@ -230,11 +251,29 @@ impl ContextAnalyzer {
 
         let current_index = current_index.unwrap_or(tokens.len());
 
-        if current_index == 0 || (current_index == 1 && tokens.len() == 1) {
+        let command_name = tokens[0].text(input);
+
+        // 只有一个 token（命令名）时，区分：
+        // - 光标仍在命令词内部：补全命令名
+        // - 光标在命令词之后且已输入空白：进入第一个参数位置
+        if tokens.len() == 1 && current_index == 1 {
+            if let Some(cmd_token) = tokens.get(0) {
+                if cursor_pos > cmd_token.end {
+                    let tail = &input[cmd_token.end..cursor_pos.min(input.len())];
+                    if tail.chars().any(|c| c.is_whitespace()) {
+                        return CompletionPosition::Argument {
+                            command: command_name.to_string(),
+                            position: 0,
+                        };
+                    }
+                }
+            }
             return CompletionPosition::Command;
         }
 
-        let command_name = tokens[0].text(input);
+        if current_index == 0 {
+            return CompletionPosition::Command;
+        }
 
         if let Some(cmd_meta) = self.command_db.get(command_name) {
             return self.analyze_with_metadata(input, tokens, current_index, cmd_meta);
@@ -601,32 +640,48 @@ impl ContextAnalyzer {
     }
 }
 
-/// 令牌结构
-#[derive(Debug, Clone, Copy)]
-pub struct Token {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Token {
-    pub fn text<'a>(&self, input: &'a str) -> &'a str {
-        &input[self.start..self.end]
-    }
-}
-
-/// 补全上下文
-#[derive(Debug, Clone)]
-pub struct CompletionContext {
-    pub input: String,
-    pub cursor_position: usize,
-    pub tokens: Vec<Token>,
-    pub current_token_index: Option<usize>,
-    pub current_word: String,
-    pub position: CompletionPosition,
-}
-
 impl Default for ContextAnalyzer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CompletionPosition, ContextAnalyzer};
+
+    #[test]
+    fn cd_trailing_space_enters_argument_position() {
+        let analyzer = ContextAnalyzer::new();
+        let analysis = analyzer.analyze("cd ", 3);
+
+        assert_eq!(
+            analysis.position,
+            CompletionPosition::Argument {
+                command: "cd".to_string(),
+                position: 0
+            }
+        );
+        assert_eq!(analysis.current_word, "");
+        assert_eq!(analysis.tokens.len(), 1);
+        assert_eq!(analysis.tokens[0].text("cd "), "cd");
+    }
+
+    #[test]
+    fn cd_first_argument_word_is_detected() {
+        let analyzer = ContextAnalyzer::new();
+        let analysis = analyzer.analyze("cd d", 4);
+
+        assert_eq!(
+            analysis.position,
+            CompletionPosition::Argument {
+                command: "cd".to_string(),
+                position: 0
+            }
+        );
+        assert_eq!(analysis.current_word, "d");
+        assert_eq!(analysis.tokens.len(), 2);
+        assert_eq!(analysis.tokens[0].text("cd d"), "cd");
+        assert_eq!(analysis.tokens[1].text("cd d"), "d");
     }
 }

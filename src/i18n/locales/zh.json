@@ -56,6 +56,52 @@
     "next": "下一个",
     "close": "关闭"
   },
+  "git": {
+    "title": "Git",
+    "no_repository": "当前目录不是 Git 仓库",
+    "init_repository": "初始化仓库",
+    "unknown_branch": "未知",
+    "refresh": "刷新",
+    "branches": "分支",
+    "local": "本地",
+    "remote": "远程",
+    "changes": "变更",
+    "no_changes": "工作区干净",
+    "staged": "已暂存",
+    "staged_changes": "暂存的更改",
+    "modified": "已修改",
+    "untracked": "未跟踪",
+    "conflicted": "冲突",
+    "merge_conflicts": "合并冲突",
+    "commits": "提交历史",
+    "no_commits": "暂无提交",
+    "author": "作者",
+    "date": "时间",
+    "message": "消息",
+    "diff_staged": "暂存区 Diff",
+    "diff_unstaged": "工作区 Diff",
+    "no_diff": "暂无 Diff",
+    "toggle_panel": "切换 Git 面板",
+    "commit": "提交",
+    "push": "推送",
+    "pull": "拉取",
+    "sync": "同步",
+    "fetch": "获取",
+    "stage": "暂存",
+    "unstage": "取消暂存",
+    "discard": "丢弃",
+    "discard_confirm": "确定要丢弃对 \"{file}\" 的更改吗？此操作无法撤销。",
+    "discard_all_confirm": "确定要丢弃所有更改吗？此操作无法撤销。",
+    "discard_selected_confirm": "确定要丢弃选中的 {count} 个文件的更改吗？此操作无法撤销。",
+    "stage_all": "暂存全部",
+    "unstage_all": "取消全部暂存",
+    "discard_all": "丢弃全部",
+    "stage_selected": "暂存选中",
+    "unstage_selected": "取消暂存选中",
+    "discard_selected": "丢弃选中",
+    "loading": "加载中",
+    "no_files": "没有文件更改"
+  },
   "onboarding": {
     "navigation": {
       "previous": "上一步",
@@ -274,7 +320,8 @@
     "settings": "设置",
     "open_settings": "打开设置",
     "feedback": "问题反馈",
-    "pin": "置顶"
+    "pin": "置顶",
+    "toggle_sidebar": "切换侧边栏"
   },
   "ai_model_config": {
     "empty_description": "点击\"添加模型\"按钮开始配置您的第一个AI模型"
@@ -306,10 +353,14 @@
     "embedding_model": "向量模型"
   },
   "workspace": {
+    "title": "工作区",
+    "new_terminal": "新建终端",
+    "empty": "暂无工作区",
     "parent_directory": "上级目录",
     "no_folders": "当前目录无子文件夹",
     "read_dir_error": "读取目录失败",
-    "current_directory": "当前目录"
+    "current_directory": "当前目录",
+    "trim_session_failed": "裁剪会话历史失败"
   },
   "recent_workspaces": {
     "title": "最近的工作区"

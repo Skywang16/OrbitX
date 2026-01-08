@@ -78,15 +78,9 @@ impl FileContextTracker {
             .await?;
 
         let now = record.recorded_at;
-        let mut agent_read_ts = existing
-            .as_ref()
-            .and_then(|entry| entry.agent_read_at);
-        let mut agent_edit_ts = existing
-            .as_ref()
-            .and_then(|entry| entry.agent_edit_at);
-        let mut user_edit_ts = existing
-            .as_ref()
-            .and_then(|entry| entry.user_edit_at);
+        let mut agent_read_ts = existing.as_ref().and_then(|entry| entry.agent_read_at);
+        let mut agent_edit_ts = existing.as_ref().and_then(|entry| entry.agent_edit_at);
+        let mut user_edit_ts = existing.as_ref().and_then(|entry| entry.user_edit_at);
 
         let mut mark_user_modified = false;
         let mut mark_agent_edit = false;
@@ -110,9 +104,7 @@ impl FileContextTracker {
                 mark_user_modified = true;
                 FileRecordState::Stale
             }
-            FileRecordSource::FileMentioned => {
-                state_or(existing.as_ref(), FileRecordState::Active)
-            }
+            FileRecordSource::FileMentioned => state_or(existing.as_ref(), FileRecordState::Active),
         };
 
         if let Some(override_state) = record.state_override {

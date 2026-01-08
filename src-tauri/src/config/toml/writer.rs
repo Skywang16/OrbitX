@@ -4,7 +4,7 @@ use crate::config::error::{TomlConfigError, TomlConfigResult};
 use crate::config::types::AppConfig;
 use std::{io, path::PathBuf};
 use tokio::fs;
-use tracing::{warn};
+use tracing::warn;
 
 /// TOML配置写入器
 pub struct TomlConfigWriter {
@@ -86,9 +86,7 @@ impl TomlConfigWriter {
         let backup_path = if self.config_path.exists() {
             let backup = self.config_path.with_extension("backup");
             match fs::copy(&self.config_path, &backup).await {
-                Ok(_) => {
-                    Some(backup)
-                }
+                Ok(_) => Some(backup),
                 Err(e) => {
                     warn!("创建配置备份失败: {}", e);
                     None
@@ -98,11 +96,9 @@ impl TomlConfigWriter {
             None
         };
 
-
         // 直接写入配置文件
         match fs::write(&self.config_path, content).await {
             Ok(()) => {
-
                 // 删除备份文件（如果存在）
                 if let Some(backup) = backup_path {
                     let _ = fs::remove_file(&backup).await;
@@ -132,7 +128,6 @@ impl TomlConfigWriter {
                 // 尝试重命名
                 match fs::rename(&temp_path, &self.config_path).await {
                     Ok(()) => {
-
                         // 删除备份文件（如果存在）
                         if let Some(backup) = backup_path {
                             let _ = fs::remove_file(&backup).await;

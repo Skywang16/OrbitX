@@ -1,6 +1,6 @@
 <template>
   <div class="thinking-block">
-    <div class="thinking-line" :class="{ running: isStreaming }">
+    <div class="thinking-line" :class="{ running: block.isStreaming }">
       <span class="text clickable" @click="toggleExpanded">
         <span class="thinking-prefix">Thought</span>
       </span>
@@ -26,7 +26,7 @@
     <transition name="expand">
       <div v-if="isExpanded" class="thinking-result">
         <div class="result-wrapper">
-          <pre class="result-text-plain">{{ step.content }}</pre>
+          <pre class="result-text-plain">{{ block.content }}</pre>
         </div>
       </div>
     </transition>
@@ -35,19 +35,18 @@
 
 <script setup lang="ts">
   import { ref, watch } from 'vue'
-  import type { UiStep } from '@/api/agent/types'
+  import type { Block } from '@/types'
 
   interface Props {
-    step: UiStep
-    isStreaming: boolean
+    block: Extract<Block, { type: 'thinking' }>
   }
 
   const props = defineProps<Props>()
 
-  const isExpanded = ref(props.isStreaming)
+  const isExpanded = ref(props.block.isStreaming)
 
   watch(
-    () => props.isStreaming,
+    () => props.block.isStreaming,
     isStreaming => {
       isExpanded.value = isStreaming
     }

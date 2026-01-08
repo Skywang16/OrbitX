@@ -7,11 +7,13 @@
 //! - 环境变量补全
 
 pub mod commands;
+pub mod command_line;
 pub mod context_analyzer;
 pub mod engine;
 pub mod error;
 pub mod metadata;
 pub mod output_analyzer;
+pub mod learning;
 pub mod prediction;
 pub mod providers;
 pub mod scoring;

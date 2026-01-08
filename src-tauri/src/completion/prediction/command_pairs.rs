@@ -56,8 +56,29 @@ pub static COMMAND_PAIRS: &[(&str, &[&str])] = &[
 
 /// 检查命令是否匹配某个模式
 pub fn matches_command_pattern(executed_cmd: &str, pattern: &str) -> bool {
-    // 简单前缀匹配 - Linus: "Keep it simple, stupid"
-    executed_cmd.trim().starts_with(pattern)
+    // 只匹配“命令词边界”，避免把 `ls` 错配到 `lsblk` 这种垃圾情况。
+    //
+    // 规则：
+    // - pattern 是 1 个词：匹配 executed 的第 1 个词
+    // - pattern 是 N 个词：匹配 executed 的前 N 个词
+    // - 允许前缀 `sudo`（常见真实场景）
+    let mut cmd = executed_cmd.trim();
+    if let Some(rest) = cmd.strip_prefix("sudo ") {
+        cmd = rest.trim_start();
+    }
+
+    let pattern_tokens: Vec<&str> = pattern.split_whitespace().collect();
+    if pattern_tokens.is_empty() {
+        return false;
+    }
+
+    let cmd_tokens: Vec<&str> = cmd.split_whitespace().collect();
+    if cmd_tokens.len() < pattern_tokens.len() {
+        return false;
+    }
+
+    let head = cmd_tokens[..pattern_tokens.len()].join(" ");
+    head == pattern
 }
 
 /// 获取建议的后续命令

@@ -56,6 +56,52 @@
     "next": "Next",
     "close": "Close"
   },
+  "git": {
+    "title": "Git",
+    "no_repository": "Not a Git repository",
+    "init_repository": "Initialize Repository",
+    "unknown_branch": "Unknown",
+    "refresh": "Refresh",
+    "branches": "Branches",
+    "local": "Local",
+    "remote": "Remote",
+    "changes": "Changes",
+    "no_changes": "Working tree clean",
+    "staged": "Staged",
+    "staged_changes": "Staged Changes",
+    "modified": "Modified",
+    "untracked": "Untracked",
+    "conflicted": "Conflicted",
+    "merge_conflicts": "Merge Conflicts",
+    "commits": "Commits",
+    "no_commits": "No commits",
+    "author": "Author",
+    "date": "Date",
+    "message": "Message",
+    "diff_staged": "Staged diff",
+    "diff_unstaged": "Unstaged diff",
+    "no_diff": "No diff",
+    "toggle_panel": "Toggle Git Panel",
+    "commit": "Commit",
+    "push": "Push",
+    "pull": "Pull",
+    "sync": "Sync",
+    "fetch": "Fetch",
+    "stage": "Stage",
+    "unstage": "Unstage",
+    "discard": "Discard",
+    "discard_confirm": "Are you sure you want to discard changes to \"{file}\"? This cannot be undone.",
+    "discard_all_confirm": "Are you sure you want to discard all changes? This cannot be undone.",
+    "discard_selected_confirm": "Are you sure you want to discard changes to {count} selected files? This cannot be undone.",
+    "stage_all": "Stage All",
+    "unstage_all": "Unstage All",
+    "discard_all": "Discard All",
+    "stage_selected": "Stage Selected",
+    "unstage_selected": "Unstage Selected",
+    "discard_selected": "Discard Selected",
+    "loading": "Loading",
+    "no_files": "No files changed"
+  },
   "onboarding": {
     "navigation": {
       "previous": "Previous",
@@ -274,7 +320,8 @@
     "settings": "Settings",
     "open_settings": "Open Settings",
     "feedback": "Feedback",
-    "pin": "Pin"
+    "pin": "Pin",
+    "toggle_sidebar": "Toggle Sidebar"
   },
   "ai_model_config": {
     "empty_description": "Click \"Add Model\" button to configure your first AI model"
@@ -306,10 +353,14 @@
     "embedding_model": "Embedding Model"
   },
   "workspace": {
+    "title": "Workspace",
+    "new_terminal": "New Terminal",
+    "empty": "No workspace",
     "parent_directory": "Parent Directory",
     "no_folders": "No folders in current directory",
     "read_dir_error": "Failed to read directory",
-    "current_directory": "Current Directory"
+    "current_directory": "Current Directory",
+    "trim_session_failed": "Failed to trim session history"
   },
   "recent_workspaces": {
     "title": "Recent Workspaces"

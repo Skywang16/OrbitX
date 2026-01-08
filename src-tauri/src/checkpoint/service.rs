@@ -1,10 +1,8 @@
-//! CheckpointService：核心服务层
-//!
-//! 提供 checkpoint 的创建、回滚、diff 等核心功能
+//! Checkpoint 服务层（重构版）
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::io::ErrorKind;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use diffy::{create_patch, PatchFormatter};
@@ -17,7 +15,7 @@ use super::models::{
 };
 use super::storage::CheckpointStorage;
 
-/// Checkpoint 核心服务
+/// Checkpoint 服务
 pub struct CheckpointService {
     storage: Arc<CheckpointStorage>,
     blob_store: Arc<BlobStore>,
@@ -31,422 +29,226 @@ impl CheckpointService {
         }
     }
 
-    /// 创建新的 checkpoint
-    ///
-    /// # Arguments
-    /// * `session_id` - 会话 ID
-    /// * `user_message` - 用户消息
-    /// * `files` - 需要快照的文件路径列表
-    /// * `workspace_root_path` - 工作区根路径
-    pub async fn create_checkpoint(
+    /// 创建空 checkpoint，实际文件快照在修改发生前捕获
+    pub async fn create_empty(
         &self,
         session_id: i64,
-        user_message: &str,
-        files: Vec<PathBuf>,
-        workspace_root_path: &Path,
+        message_id: i64,
+        workspace_path: &Path,
     ) -> CheckpointResult<Checkpoint> {
-        let workspace_root = Self::canonicalize_workspace(workspace_root_path).await?;
+        let workspace_root = canonicalize_workspace(workspace_path).await?;
         let workspace_key = workspace_root.to_string_lossy().to_string();
 
-        // 获取父 checkpoint
         let parent = self
             .storage
-            .get_latest_checkpoint_for_session(session_id)
+            .find_latest_by_session(session_id, &workspace_key)
             .await?;
-        let parent_id = parent.as_ref().map(|p| p.id);
+        let parent_id = parent.as_ref().map(|cp| cp.id);
 
-        let parent_state = if let Some(ref p) = parent {
-            self.build_checkpoint_state(p.id, &workspace_root).await?
-        } else {
-            AggregatedState::new()
-        };
-
-        // 创建 checkpoint 记录
-        let new_checkpoint = NewCheckpoint {
-            workspace_path: workspace_key.clone(),
-            session_id,
-            parent_id,
-            user_message: user_message.to_string(),
-        };
-        let checkpoint_id = self.storage.insert_checkpoint(&new_checkpoint).await?;
-
-        // 处理每个文件
-        let mut file_snapshots = Vec::new();
-        let mut seen_paths = HashSet::new();
-
-        for raw_path in files {
-            let resolved = match Self::resolve_input_path(&raw_path, &workspace_root).await {
-                Ok(p) => p,
-                Err(e) => {
-                    tracing::warn!(
-                        "CheckpointService: invalid path {:?} for workspace {:?}: {}",
-                        raw_path,
-                        workspace_root,
-                        e
-                    );
-                    continue;
-                }
-            };
-
-            if !seen_paths.insert(resolved.relative.clone()) {
-                continue;
-            }
-
-            match fs::read(&resolved.absolute).await {
-                Ok(content) => {
-                    let blob_hash = self.blob_store.store(&content).await?;
-                    let file_size = content.len() as i64;
-
-                    let change_type = match parent_state.files.get(&resolved.relative) {
-                        None => FileChangeType::Added,
-                        Some(existing) if existing.blob_hash != blob_hash => {
-                            FileChangeType::Modified
-                        }
-                        Some(_) => {
-                            self.blob_store.decrement_ref(&blob_hash).await?;
-                            continue;
-                        }
-                    };
-
-                    file_snapshots.push(NewFileSnapshot {
-                        checkpoint_id,
-                        file_path: resolved.relative.clone(),
-                        blob_hash,
-                        change_type,
-                        file_size,
-                    });
-                }
-                Err(err) if err.kind() == ErrorKind::NotFound => {
-                    if parent_state.files.contains_key(&resolved.relative) {
-                        file_snapshots.push(NewFileSnapshot {
-                            checkpoint_id,
-                            file_path: resolved.relative.clone(),
-                            blob_hash: String::new(),
-                            change_type: FileChangeType::Deleted,
-                            file_size: 0,
-                        });
-                    } else {
-                        tracing::warn!(
-                            "CheckpointService: file {:?} missing and not tracked previously",
-                            resolved.absolute
-                        );
-                    }
-                }
-                Err(err) => {
-                    tracing::warn!(
-                        "CheckpointService: failed to read file {:?}: {}",
-                        resolved.absolute,
-                        err
-                    );
-                }
-            }
-        }
-
-        // 批量插入文件快照
-        if !file_snapshots.is_empty() {
-            self.storage.insert_file_snapshots(&file_snapshots).await?;
-        }
-
-        // 返回创建的 checkpoint
-        let checkpoint = self
+        let checkpoint_id = self
             .storage
-            .get_checkpoint(checkpoint_id)
-            .await?
-            .ok_or(CheckpointError::NotFound(checkpoint_id))?;
+            .insert(&NewCheckpoint {
+                workspace_path: workspace_key.clone(),
+                session_id,
+                message_id,
+                parent_id,
+            })
+            .await?;
 
         tracing::info!(
-            "CheckpointService: created checkpoint id={}, files={}",
+            "Created empty checkpoint {} for session {} message {}",
             checkpoint_id,
-            file_snapshots.len()
+            session_id,
+            message_id
         );
 
-        Ok(checkpoint)
+        self.storage
+            .find_by_id(checkpoint_id)
+            .await?
+            .ok_or(CheckpointError::NotFound(checkpoint_id))
     }
 
-    /// 获取 checkpoint 列表
-    pub async fn list_checkpoints_by_workspace(
+    /// 在文件被修改前记录原始内容
+    pub async fn snapshot_file_before_edit(
         &self,
-        workspace_path: &str,
-    ) -> CheckpointResult<Vec<CheckpointSummary>> {
-        self.storage.list_summaries_by_workspace(workspace_path).await
+        checkpoint_id: i64,
+        file_path: &Path,
+        workspace_root: &Path,
+    ) -> CheckpointResult<()> {
+        let resolved = resolve_file_path(file_path, workspace_root).await?;
+
+        if self
+            .storage
+            .has_file_snapshot(checkpoint_id, &resolved.relative)
+            .await?
+        {
+            return Ok(()); // 幂等：同一 checkpoint 内只记录一次
+        }
+
+        match fs::read(&resolved.absolute).await {
+            Ok(content) => {
+                let blob_hash = self.blob_store.store(&content).await?;
+                let snapshot = NewFileSnapshot {
+                    checkpoint_id,
+                    file_path: resolved.relative,
+                    blob_hash,
+                    change_type: FileChangeType::Modified,
+                    file_size: content.len() as i64,
+                };
+                self.storage.insert_file_snapshot(&snapshot).await?;
+            }
+            Err(e) if e.kind() == ErrorKind::NotFound => {
+                // 文件不存在，稍后会被新建
+                let snapshot = NewFileSnapshot {
+                    checkpoint_id,
+                    file_path: resolved.relative,
+                    blob_hash: String::new(),
+                    change_type: FileChangeType::Added,
+                    file_size: 0,
+                };
+                self.storage.insert_file_snapshot(&snapshot).await?;
+            }
+            Err(e) => return Err(CheckpointError::Io(e)),
+        }
+
+        Ok(())
     }
 
-    pub async fn list_checkpoints_by_session(
+    /// 获取 checkpoint
+    pub async fn get(&self, id: i64) -> CheckpointResult<Option<Checkpoint>> {
+        self.storage.find_by_id(id).await
+    }
+
+    /// 通过 message_id 查找 checkpoint
+    pub async fn find_by_message_id(
+        &self,
+        message_id: i64,
+    ) -> CheckpointResult<Option<Checkpoint>> {
+        self.storage.find_by_message_id(message_id).await
+    }
+
+    /// 获取会话的 checkpoint 列表
+    pub async fn list_by_session(
         &self,
         session_id: i64,
+        workspace_path: &str,
     ) -> CheckpointResult<Vec<CheckpointSummary>> {
-        self.storage.list_summaries_by_session(session_id).await
+        self.storage
+            .list_summaries_by_session(session_id, workspace_path)
+            .await
     }
 
-    /// 获取 checkpoint 详情
-    pub async fn get_checkpoint(&self, checkpoint_id: i64) -> CheckpointResult<Option<Checkpoint>> {
-        self.storage.get_checkpoint(checkpoint_id).await
-    }
-
-    /// 回滚到指定 checkpoint
-    pub async fn rollback_to(&self, checkpoint_id: i64) -> CheckpointResult<RollbackResult> {
-        // 获取目标 checkpoint
-        let checkpoint = self
+    /// 回滚到指定 checkpoint：按从最新到目标的顺序依次恢复
+    pub async fn rollback(&self, checkpoint_id: i64) -> CheckpointResult<RollbackResult> {
+        let target = self
             .storage
-            .get_checkpoint(checkpoint_id)
+            .find_by_id(checkpoint_id)
             .await?
             .ok_or(CheckpointError::NotFound(checkpoint_id))?;
 
-        let workspace_root =
-            Self::canonicalize_workspace(Path::new(&checkpoint.workspace_path)).await?;
+        let workspace_root = canonicalize_workspace(Path::new(&target.workspace_path)).await?;
+        let checkpoints = self.collect_descendants(&target).await?;
 
-        let state = self
-            .build_checkpoint_state(checkpoint_id, &workspace_root)
-            .await?;
+        let mut restored = HashSet::new();
+        let mut failed = Vec::new();
 
-        let mut restored_files = Vec::new();
-        let mut failed_files = Vec::new();
-        let mut snapshot_targets = HashSet::new();
+        for checkpoint in checkpoints {
+            let snapshots = self.storage.find_file_snapshots(checkpoint.id).await?;
+            for snapshot in snapshots {
+                let relative_path = snapshot.file_path.clone();
+                let abs_path = workspace_root.join(&relative_path);
 
-        // 恢复每个文件
-        for (relative_path, file_state) in &state.files {
-            let abs_path = workspace_root.join(relative_path);
+                match snapshot.change_type {
+                    FileChangeType::Added => match fs::remove_file(&abs_path).await {
+                        Ok(_) => {
+                            restored.insert(relative_path.clone());
+                        }
+                        Err(e) if e.kind() == ErrorKind::NotFound => {
+                            restored.insert(relative_path.clone());
+                        }
+                        Err(e) => {
+                            failed.push((relative_path.clone(), e.to_string()));
+                        }
+                    },
+                    FileChangeType::Modified | FileChangeType::Deleted => {
+                        if snapshot.blob_hash.is_empty() {
+                            failed.push((
+                                relative_path.clone(),
+                                "Missing blob hash for snapshot".to_string(),
+                            ));
+                            continue;
+                        }
 
-            // 获取 blob 内容
-            let content = match self.blob_store.get(&file_state.blob_hash).await? {
-                Some(c) => c,
-                None => {
-                    failed_files.push((
-                        relative_path.clone(),
-                        format!("Blob not found: {}", file_state.blob_hash),
-                    ));
-                    continue;
-                }
-            };
+                        let content = match self.blob_store.get(&snapshot.blob_hash).await? {
+                            Some(c) => c,
+                            None => {
+                                failed.push((
+                                    relative_path.clone(),
+                                    format!("Blob not found: {}", snapshot.blob_hash),
+                                ));
+                                continue;
+                            }
+                        };
 
-            // 确保父目录存在
-            if let Some(parent) = abs_path.parent() {
-                if let Err(e) = fs::create_dir_all(parent).await {
-                    failed_files.push((
-                        relative_path.clone(),
-                        format!("Create dir failed: {}", e),
-                    ));
-                    continue;
-                }
-            }
+                        if let Some(parent) = abs_path.parent() {
+                            if let Err(e) = fs::create_dir_all(parent).await {
+                                failed.push((relative_path.clone(), e.to_string()));
+                                continue;
+                            }
+                        }
 
-            // 写入文件
-            match fs::write(&abs_path, &content).await {
-                Ok(_) => {
-                    restored_files.push(relative_path.clone());
-                    snapshot_targets.insert(relative_path.clone());
-                }
-                Err(e) => {
-                    failed_files.push((relative_path.clone(), e.to_string()));
-                }
-            }
-        }
-
-        // 删除应当不存在的文件
-        for relative_path in &state.tombstones {
-            let abs_path = workspace_root.join(relative_path);
-            match fs::remove_file(&abs_path).await {
-                Ok(_) => {
-                    restored_files.push(relative_path.clone());
-                    snapshot_targets.insert(relative_path.clone());
-                }
-                Err(err) if err.kind() == ErrorKind::NotFound => {
-                    snapshot_targets.insert(relative_path.clone());
-                }
-                Err(err) => {
-                    failed_files.push((relative_path.clone(), err.to_string()));
+                        match fs::write(&abs_path, &content).await {
+                            Ok(_) => {
+                                restored.insert(relative_path.clone());
+                            }
+                            Err(e) => {
+                                failed.push((relative_path.clone(), e.to_string()));
+                            }
+                        }
+                    }
                 }
             }
         }
-
-        // 创建回滚后的新 checkpoint
-        let files: Vec<PathBuf> = snapshot_targets.iter().map(PathBuf::from).collect();
-        let new_checkpoint = self
-            .create_checkpoint(
-                checkpoint.session_id,
-                &format!("Rollback to checkpoint #{}", checkpoint_id),
-                files,
-                &workspace_root,
-            )
-            .await?;
 
         tracing::info!(
-            "CheckpointService: rollback to checkpoint {}, restored={}, failed={}",
+            "Rollback checkpoint {} restored={} failed={}",
             checkpoint_id,
-            restored_files.len(),
-            failed_files.len()
+            restored.len(),
+            failed.len()
         );
 
         Ok(RollbackResult {
             checkpoint_id,
-            new_checkpoint_id: new_checkpoint.id,
-            restored_files,
-            failed_files,
+            restored_files: restored.into_iter().collect(),
+            failed_files: failed,
         })
     }
 
     /// 计算两个 checkpoint 之间的 diff
-    pub async fn diff_checkpoints(
+    ///
+    /// 新设计只跟踪某个 checkpoint 捕获的原始内容，因此这里退化为返回 `from_id`（或 `to_id`）记录的文件列表。
+    pub async fn diff(
         &self,
         from_id: Option<i64>,
         to_id: i64,
         workspace_path: &Path,
     ) -> CheckpointResult<Vec<FileDiff>> {
-        let workspace_root = Self::canonicalize_workspace(workspace_path).await?;
-
-        let from_state = if let Some(parent_id) = from_id {
-            self.build_checkpoint_state(parent_id, &workspace_root)
-                .await?
-        } else {
-            AggregatedState::new()
-        };
-        let to_state = self
-            .build_checkpoint_state(to_id, &workspace_root)
-            .await?;
-
-        let mut diffs = Vec::new();
-
-        // 检查 to 中的文件
-        for (path, to_entry) in &to_state.files {
-            match from_state.files.get(path) {
-                None => {
-                    // 新增文件
-                    diffs.push(FileDiff {
-                        file_path: path.clone(),
-                        change_type: FileChangeType::Added,
-                        diff_content: None,
-                    });
-                }
-                Some(from_entry) if from_entry.blob_hash != to_entry.blob_hash => {
-                    // 修改文件，计算 diff
-                    let from_content = self
-                        .blob_store
-                        .get(&from_entry.blob_hash)
-                        .await?
-                        .unwrap_or_default();
-                    let to_content = self
-                        .blob_store
-                        .get(&to_entry.blob_hash)
-                        .await?
-                        .unwrap_or_default();
-
-                    let diff_content = self.compute_diff(&from_content, &to_content);
-                    diffs.push(FileDiff {
-                        file_path: path.clone(),
-                        change_type: FileChangeType::Modified,
-                        diff_content: Some(diff_content),
-                    });
-                }
-                _ => {} // 未变更
-            }
-        }
-
-        // 检查删除的文件
-        for path in from_state.files.keys() {
-            if !to_state.files.contains_key(path) {
-                diffs.push(FileDiff {
-                    file_path: path.clone(),
-                    change_type: FileChangeType::Deleted,
-                    diff_content: None,
-                });
-            }
-        }
-
-        Ok(diffs)
+        let checkpoint_id = from_id.unwrap_or(to_id);
+        self.diff_from_snapshots(checkpoint_id, workspace_path)
+            .await
     }
 
-    /// 计算 checkpoint 与当前工作区之间的差异
+    /// 计算 checkpoint 与当前工作区的 diff
     pub async fn diff_with_workspace(
         &self,
         checkpoint_id: i64,
         workspace_path: &Path,
     ) -> CheckpointResult<Vec<FileDiff>> {
-        let workspace_root = Self::canonicalize_workspace(workspace_path).await?;
-        let state = self
-            .build_checkpoint_state(checkpoint_id, &workspace_root)
-            .await?;
-
-        let mut diffs = Vec::new();
-
-        for (path, file_state) in &state.files {
-            let abs_path = workspace_root.join(path);
-            match fs::read(&abs_path).await {
-                Ok(current_content) => {
-                    let snapshot_content = self
-                        .blob_store
-                        .get(&file_state.blob_hash)
-                        .await?
-                        .unwrap_or_default();
-                    if current_content != snapshot_content {
-                        let diff_content = self.compute_diff(&current_content, &snapshot_content);
-                        diffs.push(FileDiff {
-                            file_path: path.clone(),
-                            change_type: FileChangeType::Modified,
-                            diff_content: Some(diff_content),
-                        });
-                    }
-                }
-                Err(err) if err.kind() == ErrorKind::NotFound => {
-                    diffs.push(FileDiff {
-                        file_path: path.clone(),
-                        change_type: FileChangeType::Added,
-                        diff_content: None,
-                    });
-                }
-                Err(err) => return Err(CheckpointError::Io(err)),
-            }
-        }
-
-        for path in &state.tombstones {
-            let abs_path = workspace_root.join(path);
-            if fs::metadata(&abs_path).await.is_ok() {
-                diffs.push(FileDiff {
-                    file_path: path.clone(),
-                    change_type: FileChangeType::Deleted,
-                    diff_content: None,
-                });
-            }
-        }
-
-        Ok(diffs)
+        self.diff_from_snapshots(checkpoint_id, workspace_path)
+            .await
     }
 
-    /// 计算当前文件与 checkpoint 的 diff
-    pub async fn diff_with_current(
-        &self,
-        checkpoint_id: i64,
-        file_path: &str,
-        workspace_path: &Path,
-    ) -> CheckpointResult<Option<String>> {
-        let workspace_root = Self::canonicalize_workspace(workspace_path).await?;
-        let normalized = match Self::normalize_relative_str(file_path) {
-            Some(p) => p,
-            None => return Ok(None),
-        };
-
-        let state = self
-            .build_checkpoint_state(checkpoint_id, &workspace_root)
-            .await?;
-
-        let entry = match state.files.get(&normalized) {
-            Some(entry) => entry,
-            None => return Ok(None),
-        };
-
-        let checkpoint_content = self
-            .blob_store
-            .get(&entry.blob_hash)
-            .await?
-            .unwrap_or_default();
-
-        let abs_path = workspace_root.join(Path::new(&normalized));
-        let current_content = fs::read(&abs_path).await.unwrap_or_default();
-
-        let diff = self.compute_diff(&checkpoint_content, &current_content);
-        Ok(Some(diff))
-    }
-
-    /// 获取 checkpoint 中某个文件的内容
+    /// 获取文件内容
     pub async fn get_file_content(
         &self,
         checkpoint_id: i64,
@@ -454,120 +256,158 @@ impl CheckpointService {
     ) -> CheckpointResult<Option<Vec<u8>>> {
         let snapshot = self
             .storage
-            .get_file_snapshot(checkpoint_id, file_path)
+            .find_file_snapshot(checkpoint_id, file_path)
             .await?;
-
         match snapshot {
-            Some(s) => self.blob_store.get(&s.blob_hash).await,
-            None => Ok(None),
+            Some(s) if !s.blob_hash.is_empty() => self.blob_store.get(&s.blob_hash).await,
+            _ => Ok(None),
         }
     }
 
-    /// 计算 unified diff
-    fn compute_diff(&self, from: &[u8], to: &[u8]) -> String {
-        let from_str = String::from_utf8_lossy(from).into_owned();
-        let to_str = String::from_utf8_lossy(to).into_owned();
+    /// 删除 checkpoint
+    pub async fn delete(&self, checkpoint_id: i64) -> CheckpointResult<()> {
+        let snapshots = self.storage.find_file_snapshots(checkpoint_id).await?;
 
-        let patch = create_patch(&from_str, &to_str);
-        let formatter = PatchFormatter::new();
-        let result = formatter.fmt_patch(&patch).to_string();
-        result
-    }
+        self.storage.delete(checkpoint_id).await?;
 
-    /// 删除 checkpoint 并清理 blob
-    pub async fn delete_checkpoint(&self, checkpoint_id: i64) -> CheckpointResult<()> {
-        // 获取 checkpoint 引用的所有 blob
-        let blob_hashes = self.storage.get_blob_hashes(checkpoint_id).await?;
-
-        // 删除 checkpoint（会级联删除 file_snapshots）
-        self.storage.delete_checkpoint(checkpoint_id).await?;
-
-        // 减少 blob 引用计数
-        for hash in blob_hashes {
-            self.blob_store.decrement_ref(&hash).await?;
+        for snapshot in snapshots {
+            if snapshot.change_type != FileChangeType::Added && !snapshot.blob_hash.is_empty() {
+                self.blob_store.decrement_ref(&snapshot.blob_hash).await?;
+            }
         }
 
-        // 执行垃圾回收
         self.blob_store.gc().await?;
-
         Ok(())
     }
 
-    async fn canonicalize_workspace(workspace_path: &Path) -> CheckpointResult<PathBuf> {
-        let canonical = fs::canonicalize(workspace_path)
-            .await
-            .map_err(|e| {
-                CheckpointError::InvalidWorkspace(format!(
-                    "{} ({})",
-                    workspace_path.display(),
-                    e
-                ))
-            })?;
-        let metadata = fs::metadata(&canonical).await.map_err(|e| {
-            CheckpointError::InvalidWorkspace(format!(
-                "{} ({})",
-                canonical.display(),
-                e
-            ))
-        })?;
+    async fn collect_descendants(&self, target: &Checkpoint) -> CheckpointResult<Vec<Checkpoint>> {
+        let mut chain = Vec::new();
+        let mut current = match self
+            .storage
+            .find_latest_by_session(target.session_id, &target.workspace_path)
+            .await?
+        {
+            Some(cp) => cp,
+            None => return Err(CheckpointError::NotFound(target.id)),
+        };
 
-        if !metadata.is_dir() {
-            return Err(CheckpointError::InvalidWorkspace(format!(
-                "{} is not a directory",
-                canonical.display()
-            )));
+        loop {
+            chain.push(current.clone());
+            if current.id == target.id {
+                break;
+            }
+
+            let parent_id = current
+                .parent_id
+                .ok_or_else(|| CheckpointError::NotFound(target.id))?;
+            current = self
+                .storage
+                .find_by_id(parent_id)
+                .await?
+                .ok_or(CheckpointError::NotFound(parent_id))?;
         }
 
-        Ok(canonical)
+        Ok(chain)
     }
 
-    async fn resolve_input_path(
-        path: &Path,
-        workspace_root: &Path,
-    ) -> CheckpointResult<ResolvedPath> {
-        if path.as_os_str().is_empty() {
-            return Err(CheckpointError::InvalidFilePath(
-                "empty path".to_string(),
-            ));
-        }
+    async fn diff_from_snapshots(
+        &self,
+        checkpoint_id: i64,
+        workspace_path: &Path,
+    ) -> CheckpointResult<Vec<FileDiff>> {
+        let workspace_root = canonicalize_workspace(workspace_path).await?;
+        let snapshots = self.storage.find_file_snapshots(checkpoint_id).await?;
+        let mut diffs = Vec::new();
 
-        if path.is_absolute() {
-            let absolute = match fs::canonicalize(path).await {
-                Ok(p) => p,
-                Err(err) if err.kind() == ErrorKind::NotFound => {
-                    path.components().collect::<PathBuf>()
+        for snapshot in snapshots {
+            let relative_path = snapshot.file_path.clone();
+            let abs_path = workspace_root.join(&relative_path);
+
+            match snapshot.change_type {
+                FileChangeType::Added => {
+                    if fs::metadata(&abs_path).await.is_ok() {
+                        diffs.push(FileDiff {
+                            file_path: relative_path,
+                            change_type: FileChangeType::Added,
+                            diff_content: None,
+                        });
+                    }
                 }
-                Err(err) => {
-                    return Err(CheckpointError::InvalidFilePath(format!(
-                        "{:?} ({})",
-                        path, err
-                    )))
+                FileChangeType::Modified => {
+                    let current = fs::read(&abs_path).await.unwrap_or_default();
+                    let original = self
+                        .blob_store
+                        .get(&snapshot.blob_hash)
+                        .await?
+                        .unwrap_or_default();
+
+                    if current != original {
+                        diffs.push(FileDiff {
+                            file_path: relative_path,
+                            change_type: FileChangeType::Modified,
+                            diff_content: Some(compute_diff(&original, &current)),
+                        });
+                    }
                 }
-            };
-
-            return Self::finalize_absolute(absolute, workspace_root);
+                FileChangeType::Deleted => {
+                    if fs::metadata(&abs_path).await.is_err() {
+                        diffs.push(FileDiff {
+                            file_path: relative_path,
+                            change_type: FileChangeType::Deleted,
+                            diff_content: None,
+                        });
+                    }
+                }
+            }
         }
 
-        let normalized = Self::normalize_relative_path(path).ok_or_else(|| {
-            CheckpointError::InvalidFilePath(path.to_string_lossy().into_owned())
-        })?;
+        Ok(diffs)
+    }
+}
 
-        if normalized.as_os_str().is_empty() {
-            return Err(CheckpointError::InvalidFilePath(
-                path.to_string_lossy().into_owned(),
-            ));
-        }
+struct ResolvedPath {
+    absolute: PathBuf,
+    relative: String,
+}
 
-        Ok(ResolvedPath {
-            absolute: workspace_root.join(&normalized),
-            relative: Self::path_to_unix_string(&normalized),
-        })
+// === 辅助函数 ===
+
+async fn canonicalize_workspace(path: &Path) -> CheckpointResult<PathBuf> {
+    let canonical = fs::canonicalize(path)
+        .await
+        .map_err(|e| CheckpointError::InvalidWorkspace(format!("{} ({})", path.display(), e)))?;
+
+    let metadata = fs::metadata(&canonical).await.map_err(|e| {
+        CheckpointError::InvalidWorkspace(format!("{} ({})", canonical.display(), e))
+    })?;
+
+    if !metadata.is_dir() {
+        return Err(CheckpointError::InvalidWorkspace(format!(
+            "{} is not a directory",
+            canonical.display()
+        )));
     }
 
-    fn finalize_absolute(
-        absolute: PathBuf,
-        workspace_root: &Path,
-    ) -> CheckpointResult<ResolvedPath> {
+    Ok(canonical)
+}
+
+async fn resolve_file_path(path: &Path, workspace_root: &Path) -> CheckpointResult<ResolvedPath> {
+    if path.as_os_str().is_empty() {
+        return Err(CheckpointError::InvalidFilePath("empty path".to_string()));
+    }
+
+    if path.is_absolute() {
+        let absolute = match fs::canonicalize(path).await {
+            Ok(p) => p,
+            Err(e) if e.kind() == ErrorKind::NotFound => path.components().collect(),
+            Err(e) => {
+                return Err(CheckpointError::InvalidFilePath(format!(
+                    "{:?} ({})",
+                    path, e
+                )))
+            }
+        };
+
         if !absolute.starts_with(workspace_root) {
             return Err(CheckpointError::InvalidFilePath(format!(
                 "{:?} is outside workspace {:?}",
@@ -591,164 +431,62 @@ impl CheckpointService {
             ));
         }
 
-        Ok(ResolvedPath {
+        return Ok(ResolvedPath {
             absolute,
-            relative: Self::path_to_unix_string(&relative),
+            relative: path_to_unix_string(&relative),
+        });
+    }
+
+    let normalized = normalize_relative_path(path)
+        .ok_or_else(|| CheckpointError::InvalidFilePath(path.to_string_lossy().into_owned()))?;
+
+    if normalized.as_os_str().is_empty() {
+        return Err(CheckpointError::InvalidFilePath(
+            path.to_string_lossy().into_owned(),
+        ));
+    }
+
+    Ok(ResolvedPath {
+        absolute: workspace_root.join(&normalized),
+        relative: path_to_unix_string(&normalized),
+    })
+}
+
+fn normalize_relative_path(path: &Path) -> Option<PathBuf> {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    return None;
+                }
+            }
+            Component::Normal(part) => normalized.push(part),
+            Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+    Some(normalized)
+}
+
+fn path_to_unix_string(path: &Path) -> String {
+    path.components()
+        .filter_map(|c| {
+            let part = c.as_os_str();
+            if part.is_empty() {
+                None
+            } else {
+                Some(part.to_string_lossy().to_string())
+            }
         })
-    }
-
-    fn normalize_relative_path(path: &Path) -> Option<PathBuf> {
-        use std::path::Component;
-
-        let mut normalized = PathBuf::new();
-        for component in path.components() {
-            match component {
-                Component::CurDir => {}
-                Component::ParentDir => {
-                    if !normalized.pop() {
-                        return None;
-                    }
-                }
-                Component::Normal(part) => normalized.push(part),
-                Component::RootDir | Component::Prefix(_) => return None,
-            }
-        }
-        Some(normalized)
-    }
-
-    fn normalize_relative_str(input: &str) -> Option<String> {
-        if input.trim().is_empty() {
-            return None;
-        }
-
-        let path = Path::new(input);
-        let normalized = Self::normalize_relative_path(path)?;
-        if normalized.as_os_str().is_empty() {
-            return None;
-        }
-        Some(Self::path_to_unix_string(&normalized))
-    }
-
-    fn path_to_unix_string(path: &Path) -> String {
-        path.components()
-            .filter_map(|component| {
-                let part = component.as_os_str();
-                if part.is_empty() {
-                    None
-                } else {
-                    Some(part.to_string_lossy().to_string())
-                }
-            })
-            .collect::<Vec<String>>()
-            .join("/")
-    }
-
-    fn normalize_stored_path(stored: &str, workspace_root: &Path) -> Option<String> {
-        if stored.trim().is_empty() {
-            return None;
-        }
-
-        let candidate = PathBuf::from(stored);
-        if candidate.is_absolute() {
-            let cleaned = candidate.components().collect::<PathBuf>();
-            if !cleaned.starts_with(workspace_root) {
-                return None;
-            }
-            let relative = cleaned.strip_prefix(workspace_root).ok()?;
-            if relative.as_os_str().is_empty() {
-                return None;
-            }
-            Some(Self::path_to_unix_string(relative))
-        } else {
-            let normalized = Self::normalize_relative_path(&candidate)?;
-            if normalized.as_os_str().is_empty() {
-                return None;
-            }
-            Some(Self::path_to_unix_string(&normalized))
-        }
-    }
-
-    async fn build_checkpoint_state(
-        &self,
-        checkpoint_id: i64,
-        workspace_root: &Path,
-    ) -> CheckpointResult<AggregatedState> {
-        let lineage = self.collect_lineage(checkpoint_id).await?;
-        let mut state = AggregatedState::new();
-
-        for ancestor in lineage {
-            let snapshots = self.storage.get_file_snapshots(ancestor).await?;
-            for snapshot in snapshots {
-                let normalized =
-                    match Self::normalize_stored_path(&snapshot.file_path, workspace_root) {
-                        Some(path) => path,
-                        None => {
-                            tracing::warn!(
-                                "CheckpointService: skip path {:?} outside workspace {:?}",
-                                snapshot.file_path,
-                                workspace_root
-                            );
-                            continue;
-                        }
-                    };
-
-                match snapshot.change_type {
-                    FileChangeType::Added | FileChangeType::Modified => {
-                        state.tombstones.remove(&normalized);
-                        state.files.insert(
-                            normalized,
-                            FileState {
-                                blob_hash: snapshot.blob_hash,
-                            },
-                        );
-                    }
-                    FileChangeType::Deleted => {
-                        state.files.remove(&normalized);
-                        state.tombstones.insert(normalized);
-                    }
-                }
-            }
-        }
-
-        Ok(state)
-    }
-
-    async fn collect_lineage(&self, checkpoint_id: i64) -> CheckpointResult<Vec<i64>> {
-        let mut lineage = Vec::new();
-        let mut current = Some(checkpoint_id);
-
-        while let Some(id) = current {
-            let checkpoint = self
-                .storage
-                .get_checkpoint(id)
-                .await?
-                .ok_or(CheckpointError::NotFound(id))?;
-            lineage.push(id);
-            current = checkpoint.parent_id;
-        }
-
-        lineage.reverse();
-        Ok(lineage)
-    }
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
-struct ResolvedPath {
-    absolute: PathBuf,
-    relative: String,
-}
-
-struct FileState {
-    blob_hash: String,
-}
-
-#[derive(Default)]
-struct AggregatedState {
-    files: HashMap<String, FileState>,
-    tombstones: HashSet<String>,
-}
-
-impl AggregatedState {
-    fn new() -> Self {
-        Self::default()
-    }
+fn compute_diff(from: &[u8], to: &[u8]) -> String {
+    let from_str = String::from_utf8_lossy(from).into_owned();
+    let to_str = String::from_utf8_lossy(to).into_owned();
+    let patch = create_patch(&from_str, &to_str);
+    let formatted = PatchFormatter::new().fmt_patch(&patch).to_string();
+    formatted
 }

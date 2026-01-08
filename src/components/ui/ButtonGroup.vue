@@ -3,7 +3,8 @@
   import { useI18n } from 'vue-i18n'
   import { windowApi } from '@/api'
   import { useAIChatStore } from '@/components/AIChatSidebar'
-  import { useTabManagerStore } from '@/stores/TabManager'
+  import { useLayoutStore } from '@/stores/layout'
+  import { useEditorStore } from '@/stores/Editor'
   import { openUrl } from '@tauri-apps/plugin-opener'
   import { showPopoverAt } from '@/ui'
   import { useWindowStore } from '@/stores/Window'
@@ -20,7 +21,8 @@
   })
 
   const aiChatStore = useAIChatStore()
-  const tabManagerStore = useTabManagerStore()
+  const layoutStore = useLayoutStore()
+  const editorStore = useEditorStore()
   const windowStore = useWindowStore()
   const isAlwaysOnTop = computed(() => windowStore.alwaysOnTop)
   const settingsButtonRef = ref<HTMLElement>()
@@ -49,7 +51,7 @@
   // 处理设置操作
   const handleSettingsAction = async (action: string) => {
     if (action === 'settings') {
-      tabManagerStore.createSettingsTab()
+      await editorStore.createSettingsTab()
     } else if (action === 'feedback') {
       // 使用Tauri的opener插件在外部浏览器中打开GitHub Issues页面
       await openUrl('https://github.com/Skywang16/OrbitX/issues')
@@ -69,6 +71,11 @@
     aiChatStore.toggleSidebar()
   }
 
+  // 切换左侧边栏
+  const toggleLeftSidebar = () => {
+    layoutStore.toggleLeftSidebar()
+  }
+
   onMounted(async () => {
     // 初始化时同步置顶状态到全局 store
     await windowStore.initFromSystem()
@@ -80,6 +87,17 @@
 <template>
   <div class="window-controls" data-tauri-drag-region="false">
     <div class="button-group">
+      <button
+        class="control-btn sidebar-btn"
+        :class="{ active: layoutStore.leftSidebarVisible }"
+        @click="toggleLeftSidebar"
+        :title="t('ui.toggle_sidebar')"
+      >
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M9 3v18" />
+        </svg>
+      </button>
       <button
         class="control-btn ai-chat-btn"
         :class="{ active: aiChatStore.isVisible }"
@@ -177,6 +195,21 @@
     height: 14px;
     width: 14px;
     color: var(--text-200);
+  }
+
+  .sidebar-btn.active {
+    background: var(--color-primary-alpha);
+  }
+
+  .sidebar-btn.active .sidebar-icon {
+    color: var(--text-100);
+  }
+
+  .sidebar-icon {
+    height: 14px;
+    width: 14px;
+    color: var(--text-200);
+    transition: color 0.2s ease;
   }
 
   .ai-chat-btn.active {

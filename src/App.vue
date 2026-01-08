@@ -4,14 +4,17 @@
   import { useShortcutListener } from '@/shortcuts'
   import { useWindowOpacity } from '@/composables/useWindowOpacity'
   import { useMenuEvents } from '@/composables/useMenuEvents'
-  import { createStorage } from '@/utils/storage'
   import { appApi, workspaceApi } from '@/api'
-  import { useTabManagerStore } from '@/stores/TabManager'
-  import { onMounted, onUnmounted, ref } from 'vue'
+  import { useEditorStore } from '@/stores/Editor'
+  import { useSessionStore } from '@/stores/session'
+  import { storeToRefs } from 'pinia'
+  import { computed, onMounted, onUnmounted } from 'vue'
   import type { UnlistenFn } from '@tauri-apps/api/event'
 
   const { reloadConfig } = useShortcutListener()
-  const tabManager = useTabManagerStore()
+  const tabManager = useEditorStore()
+  const sessionStore = useSessionStore()
+  const { uiState } = storeToRefs(sessionStore)
 
   // 初始化透明度管理
   useWindowOpacity()
@@ -19,19 +22,15 @@
   // 初始化菜单事件监听
   useMenuEvents()
 
-  // 首次启动状态管理
-  const onboardingStorage = createStorage<boolean>('orbitx-onboarding-completed')
-  const showOnboarding = ref(!onboardingStorage.exists())
+  const showOnboarding = computed(() => uiState.value.onboardingCompleted !== true)
 
   const handleOnboardingComplete = () => {
-    onboardingStorage.save(true)
-    showOnboarding.value = false
+    sessionStore.updateUiState({ onboardingCompleted: true })
   }
 
   // 测试按钮：重新打开引导页面
   const showOnboardingForTesting = () => {
-    onboardingStorage.remove()
-    showOnboarding.value = true
+    sessionStore.updateUiState({ onboardingCompleted: false })
   }
 
   // 开发环境下暴露到全局

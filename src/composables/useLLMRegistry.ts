@@ -26,7 +26,8 @@ export const useLLMRegistry = () => {
   })
 
   // 根据供应商类型获取模型选项
-  const getModelOptions = (providerType: string, _modelType?: 'chat' | 'embedding'): ModelOption[] => {
+  const getModelOptions = (providerType: string, modelType?: 'chat' | 'embedding'): ModelOption[] => {
+    void modelType
     const provider = providers.value.find(p => p.providerType.toLowerCase() === providerType.toLowerCase())
 
     if (!provider) return []

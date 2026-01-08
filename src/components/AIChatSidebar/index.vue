@@ -11,6 +11,7 @@
   import ResizeHandle from './components/layout/ResizeHandle.vue'
   import ImageLightbox from './components/input/ImageLightbox.vue'
   import RollbackConfirmDialog from './components/messages/RollbackConfirmDialog.vue'
+  import ToolConfirmationDialog from './components/messages/ToolConfirmationDialog.vue'
 
   const aiChatStore = useAIChatStore()
   const aiSettingsStore = useAISettingsStore()
@@ -117,8 +118,16 @@
     aiChatStore.stopCurrentTask()
   }
 
-  const handleRollbackResult = (result: { success: boolean; message: string }) => {
+  const handleRollbackResult = async (result: { success: boolean; message: string; restoreContent?: string }) => {
     console.warn('Checkpoint rollback:', result.message)
+    if (result.success) {
+      await aiChatStore.refreshSessions()
+      if (result.restoreContent && result.restoreContent.trim().length > 0) {
+        messageInput.value = result.restoreContent
+        chatInputRef.value?.adjustTextareaHeight()
+        chatInputRef.value?.focus()
+      }
+    }
   }
 
   onMounted(async () => {
@@ -167,6 +176,7 @@
         <!--  <TaskList /> -->
       </div>
 
+      <ToolConfirmationDialog />
       <ChatInput
         ref="chatInputRef"
         v-model="messageInput"

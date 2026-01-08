@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tokio::sync::broadcast;
-use tracing::{ warn};
+use tracing::warn;
 
 /// 窗口ID类型（为未来多窗口支持预留）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -82,7 +82,6 @@ impl ActiveTerminalContextRegistry {
             old_id
         };
 
-
         // 发送事件
         let event = TerminalContextEvent::ActivePaneChanged {
             old_pane_id,
@@ -128,7 +127,6 @@ impl ActiveTerminalContextRegistry {
         };
 
         if old_pane_id.is_some() {
-
             // 发送事件
             let event = TerminalContextEvent::ActivePaneChanged {
                 old_pane_id,
@@ -183,7 +181,6 @@ impl ActiveTerminalContextRegistry {
             window_panes.insert(window_id, pane_id)
         };
 
-
         if window_id.as_u32() == 0 || self.terminal_context_get_active_pane().is_none() {
             self.terminal_context_set_active_pane(pane_id)?;
         }
@@ -230,7 +227,6 @@ impl ActiveTerminalContextRegistry {
         };
 
         if let Some(pane_id) = removed_pane {
-
             if self.terminal_context_get_active_pane() == Some(pane_id) {
                 self.terminal_context_clear_active_pane()?;
             }

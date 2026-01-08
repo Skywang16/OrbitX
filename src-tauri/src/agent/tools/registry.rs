@@ -1,15 +1,21 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use std::{path::Path, path::PathBuf};
 
 use dashmap::{mapref::entry::Entry, DashMap};
-use tracing::{ error, warn};
+use serde::{Deserialize, Serialize};
+use tracing::{error, warn};
+use uuid::Uuid;
 
 use super::metadata::{RateLimitConfig, ToolCategory, ToolMetadata};
 use super::r#trait::{
-    RunnableTool, ToolDescriptionContext, ToolPermission, ToolResult, ToolResultContent, ToolSchema,
+    RunnableTool, ToolDescriptionContext, ToolPermission, ToolResult, ToolResultContent,
+    ToolResultStatus, ToolSchema,
 };
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
+use crate::agent::types::TaskEvent;
+use crate::storage::repositories::AppPreferences;
 
 /// 根据 chat_mode 获取授予的权限集合
 pub fn get_permissions_for_mode(mode: &str) -> Vec<ToolPermission> {
@@ -39,7 +45,7 @@ impl RateLimiter {
         }
     }
 
-    fn check_and_record(&mut self) -> Result<(), String> {
+    fn check_and_record(&mut self, tool_name: &str) -> ToolExecutorResult<()> {
         let now = Instant::now();
         let window = Duration::from_secs(self.config.window_secs);
 
@@ -47,10 +53,13 @@ impl RateLimiter {
             .retain(|&call_time| now.duration_since(call_time) < window);
 
         if self.calls.len() >= self.config.max_calls as usize {
-            return Err(format!(
-                "rate limit exceeded ({} calls / {}s)",
-                self.config.max_calls, self.config.window_secs
-            ));
+            return Err(ToolExecutorError::ResourceLimitExceeded {
+                tool_name: tool_name.to_string(),
+                resource_type: format!(
+                    "rate limit exceeded ({} calls / {}s)",
+                    self.config.max_calls, self.config.window_secs
+                ),
+            });
         }
 
         self.calls.push(now);
@@ -66,6 +75,7 @@ pub struct ToolRegistry {
     aliases: DashMap<String, String>,
     granted_permissions: Vec<ToolPermission>,
     execution_stats: DashMap<String, ToolExecutionStats>,
+    pending_confirmations: DashMap<String, tokio::sync::oneshot::Sender<ToolConfirmationDecision>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -89,6 +99,22 @@ impl ToolRegistry {
             aliases: DashMap::new(),
             granted_permissions: granted,
             execution_stats: DashMap::new(),
+            pending_confirmations: DashMap::new(),
+        }
+    }
+
+    pub fn resolve_confirmation(
+        &self,
+        request_id: &str,
+        decision: ToolConfirmationDecision,
+    ) -> bool {
+        let sender = self
+            .pending_confirmations
+            .remove(request_id)
+            .map(|(_, tx)| tx);
+        match sender {
+            Some(tx) => tx.send(decision).is_ok(),
+            None => false,
         }
     }
 
@@ -117,7 +143,7 @@ impl ToolRegistry {
                 _ => {
                     if !tool.check_permissions(granted) {
                         warn!(
-                            "工具 {} 缺少所需权限 {:?}",
+                            "Tool {} missing required permissions {:?}",
                             name,
                             tool.required_permissions()
                         );
@@ -129,7 +155,7 @@ impl ToolRegistry {
             // Agent 模式:检查权限（现有逻辑）
             if !tool.check_permissions(granted) {
                 warn!(
-                    "工具 {} 缺少所需权限 {:?}",
+                    "Tool {} missing required permissions {:?}",
                     name,
                     tool.required_permissions()
                 );
@@ -139,10 +165,9 @@ impl ToolRegistry {
         match self.tools.entry(key.clone()) {
             Entry::Occupied(_) => {
                 return Err(ToolExecutorError::ConfigurationError(format!(
-                    "工具 {} 已经注册",
+                    "Tool already registered: {}",
                     name
-                ))
-                .into());
+                )));
             }
             Entry::Vacant(entry) => {
                 entry.insert(tool);
@@ -164,13 +189,12 @@ impl ToolRegistry {
         self.execution_stats
             .insert(key.clone(), ToolExecutionStats::default());
 
-
         Ok(())
     }
 
     pub async fn unregister(&self, name: &str) -> ToolExecutorResult<()> {
         if self.tools.remove(name).is_none() {
-            return Err(ToolExecutorError::ToolNotFound(name.to_string()).into());
+            return Err(ToolExecutorError::ToolNotFound(name.to_string()));
         }
 
         self.aliases.retain(|_, v| v != name);
@@ -200,7 +224,7 @@ impl ToolRegistry {
 
     pub async fn add_alias(&self, alias: &str, tool_name: &str) -> ToolExecutorResult<()> {
         if self.resolve_name(tool_name).await.is_none() {
-            return Err(ToolExecutorError::ToolNotFound(tool_name.to_string()).into());
+            return Err(ToolExecutorError::ToolNotFound(tool_name.to_string()));
         }
 
         self.aliases
@@ -235,7 +259,14 @@ impl ToolRegistry {
             Some(name) => name,
             None => {
                 return self
-                    .make_error_result(tool_name, "工具未找到".to_string(), None, start)
+                    .make_error_result(
+                        tool_name,
+                        "Tool not found".to_string(),
+                        None,
+                        ToolResultStatus::Error,
+                        None,
+                        start,
+                    )
                     .await;
             }
         };
@@ -244,24 +275,48 @@ impl ToolRegistry {
             Some(meta) => meta,
             None => {
                 return self
-                    .make_error_result(&resolved, "工具未配置元数据".to_string(), None, start)
+                    .make_error_result(
+                        &resolved,
+                        "Tool metadata not configured".to_string(),
+                        None,
+                        ToolResultStatus::Error,
+                        None,
+                        start,
+                    )
                     .await;
             }
         };
 
-        if let Err(message) = self.check_rate_limit(&resolved).await {
+        if let Err(err) = self.check_rate_limit(&resolved).await {
             let detail = Some(format!(
                 "category={}, priority={}",
                 metadata.category.as_str(),
                 metadata.priority.as_str()
             ));
             return self
-                .make_error_result(&resolved, message, detail, start)
+                .make_error_result(
+                    &resolved,
+                    err.to_string(),
+                    detail,
+                    ToolResultStatus::Error,
+                    None,
+                    start,
+                )
                 .await;
         }
 
-        if metadata.requires_confirmation {
-            warn!("工具 {} 需要确认，但确认流程未实现", resolved);
+        let requires_confirmation = metadata.requires_confirmation
+            || self
+                .requires_workspace_confirmation(&metadata, context, &args)
+                .await;
+
+        if requires_confirmation {
+            if let Some(blocked) = self
+                .confirm_or_block_tool(&resolved, &metadata, context, &args, start)
+                .await
+            {
+                return blocked;
+            }
         }
 
         let timeout = metadata.effective_timeout();
@@ -277,16 +332,17 @@ impl ToolRegistry {
             Err(_) => {
                 let elapsed = start.elapsed().as_millis() as u64;
                 self.update_stats(&resolved, false, elapsed).await;
-                error!("工具 {} 超时 {:?}", resolved, timeout);
+                error!("Tool {} timed out {:?}", resolved, timeout);
 
                 ToolResult {
                     content: vec![ToolResultContent::Error(format!(
-                        "工具 {} 执行超时 (timeout={:?}, priority={})",
+                        "Tool {} timed out (timeout={:?}, priority={})",
                         resolved,
                         timeout,
                         metadata.priority.as_str()
                     ))],
-                    is_error: true,
+                    status: ToolResultStatus::Error,
+                    cancel_reason: None,
                     execution_time_ms: Some(elapsed),
                     ext_info: None,
                 }
@@ -294,11 +350,192 @@ impl ToolRegistry {
         }
     }
 
-    async fn check_rate_limit(&self, tool_name: &str) -> Result<(), String> {
+    async fn check_rate_limit(&self, tool_name: &str) -> ToolExecutorResult<()> {
         if let Some(mut limiter) = self.rate_limiters.get_mut(tool_name) {
-            limiter.check_and_record()?;
+            limiter.check_and_record(tool_name)?;
         }
         Ok(())
+    }
+
+    async fn requires_workspace_confirmation(
+        &self,
+        metadata: &ToolMetadata,
+        context: &TaskContext,
+        args: &serde_json::Value,
+    ) -> bool {
+        if !matches!(
+            metadata.category,
+            ToolCategory::FileRead
+                | ToolCategory::FileWrite
+                | ToolCategory::FileSystem
+                | ToolCategory::CodeAnalysis
+        ) {
+            return false;
+        }
+
+        let path = args.get("path").and_then(|v| v.as_str()).or_else(|| {
+            metadata
+                .summary_key_arg
+                .and_then(|key| args.get(key))
+                .and_then(|v| v.as_str())
+        });
+
+        let Some(path) = path else {
+            return false;
+        };
+
+        let resolved_path =
+            match crate::agent::tools::builtin::file_utils::ensure_absolute(path, &context.cwd) {
+                Ok(p) => p,
+                Err(_) => return false,
+            };
+
+        let workspace_root = PathBuf::from(context.cwd.as_ref());
+        if !workspace_root.is_absolute() {
+            return false;
+        }
+
+        !is_within_workspace(&workspace_root, &resolved_path).await
+    }
+
+    async fn confirm_or_block_tool(
+        &self,
+        tool_name: &str,
+        metadata: &ToolMetadata,
+        context: &TaskContext,
+        args: &serde_json::Value,
+        start: Instant,
+    ) -> Option<ToolResult> {
+        if context.is_aborted() {
+            return Some(
+                self.make_error_result(
+                    tool_name,
+                    "Task aborted; tool execution cancelled".to_string(),
+                    None,
+                    ToolResultStatus::Cancelled,
+                    Some("aborted".to_string()),
+                    start,
+                )
+                .await,
+            );
+        }
+
+        let workspace = context.session().workspace.to_string_lossy().to_string();
+        let preference_key = confirmation_preference_key(&workspace, tool_name);
+
+        let db = context.session().repositories();
+        let stored = AppPreferences::new(db.as_ref())
+            .get(&preference_key)
+            .await
+            .ok()
+            .flatten();
+        if matches!(stored.as_deref(), Some("allow")) {
+            return None;
+        }
+
+        let summary = summarize_tool_call(tool_name, metadata, args);
+        let decision = match self
+            .request_tool_confirmation(context, &workspace, tool_name, &summary)
+            .await
+        {
+            Ok(d) => d,
+            Err(err) => {
+                return Some(
+                    self.make_error_result(
+                        tool_name,
+                        err.to_string(),
+                        Some("tool_confirmation".into()),
+                        ToolResultStatus::Cancelled,
+                        Some("confirmation_failed".to_string()),
+                        start,
+                    )
+                    .await,
+                );
+            }
+        };
+
+        match decision {
+            ToolConfirmationDecision::AllowOnce => None,
+            ToolConfirmationDecision::AllowAlways => {
+                let _ = AppPreferences::new(db.as_ref())
+                    .set(&preference_key, Some("allow"))
+                    .await;
+                None
+            }
+            ToolConfirmationDecision::Deny => Some(
+                self.make_error_result(
+                    tool_name,
+                    format!("User denied tool execution: {}", tool_name),
+                    Some(summary),
+                    ToolResultStatus::Cancelled,
+                    Some("denied".to_string()),
+                    start,
+                )
+                .await,
+            ),
+        }
+    }
+
+    async fn request_tool_confirmation(
+        &self,
+        context: &TaskContext,
+        workspace_path: &str,
+        tool_name: &str,
+        summary: &str,
+    ) -> ToolExecutorResult<ToolConfirmationDecision> {
+        let request_id = Uuid::new_v4().to_string();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.pending_confirmations.insert(request_id.clone(), tx);
+
+        if let Err(err) = context
+            .emit_event(TaskEvent::ToolConfirmationRequested {
+                task_id: context.task_id.to_string(),
+                request_id: request_id.clone(),
+                workspace_path: workspace_path.to_string(),
+                tool_name: tool_name.to_string(),
+                summary: summary.to_string(),
+            })
+            .await
+        {
+            self.pending_confirmations.remove(&request_id);
+            return Err(ToolExecutorError::ExecutionFailed {
+                tool_name: tool_name.to_string(),
+                error: format!(
+                    "Failed to request user confirmation (UI channel unavailable): {}",
+                    err
+                ),
+            });
+        }
+
+        let decision = tokio::select! {
+            res = tokio::time::timeout(Duration::from_secs(600), rx) => {
+                match res {
+                    Ok(Ok(d)) => Ok(d),
+                    Ok(Err(_)) => Err(ToolExecutorError::ExecutionFailed {
+                        tool_name: tool_name.to_string(),
+                        error: "Confirmation channel closed".to_string(),
+                    }),
+                    Err(_) => Err(ToolExecutorError::ExecutionTimeout {
+                        tool_name: tool_name.to_string(),
+                        timeout_seconds: 600,
+                    }),
+                }
+            }
+            _ = async {
+                while !context.is_aborted() {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            } => Err(ToolExecutorError::ExecutionFailed {
+                tool_name: tool_name.to_string(),
+                error: "Task aborted; confirmation cancelled".to_string(),
+            })
+        };
+
+        if decision.is_err() {
+            self.pending_confirmations.remove(&request_id);
+        }
+
+        decision
     }
 
     async fn execute_tool_impl(
@@ -312,7 +549,14 @@ impl ToolRegistry {
             Some(t) => t,
             None => {
                 return self
-                    .make_error_result(tool_name, format!("工具未找到: {}", tool_name), None, start)
+                    .make_error_result(
+                        tool_name,
+                        format!("Tool not found: {}", tool_name),
+                        None,
+                        ToolResultStatus::Error,
+                        None,
+                        start,
+                    )
                     .await;
             }
         };
@@ -323,10 +567,12 @@ impl ToolRegistry {
                 .make_error_result(
                     tool_name,
                     format!(
-                        "权限不足: {} 需要权限 {:?}",
+                        "Permission denied: {} requires permissions {:?}",
                         tool_name,
                         tool.required_permissions()
                     ),
+                    None,
+                    ToolResultStatus::Error,
                     None,
                     start,
                 )
@@ -335,13 +581,27 @@ impl ToolRegistry {
 
         if let Err(e) = tool.validate_arguments(&args) {
             return self
-                .make_error_result(tool_name, format!("参数验证失败: {}", e), None, start)
+                .make_error_result(
+                    tool_name,
+                    format!("Argument validation failed: {}", e),
+                    None,
+                    ToolResultStatus::Error,
+                    None,
+                    start,
+                )
                 .await;
         }
 
         if let Err(e) = tool.before_run(context, &args).await {
             return self
-                .make_error_result(tool_name, format!("前置钩子失败: {}", e), None, start)
+                .make_error_result(
+                    tool_name,
+                    format!("Pre-run hook failed: {}", e),
+                    None,
+                    ToolResultStatus::Error,
+                    None,
+                    start,
+                )
                 .await;
         }
 
@@ -352,14 +612,21 @@ impl ToolRegistry {
                 self.update_stats(tool_name, true, elapsed).await;
 
                 if let Err(e) = tool.after_run(context, &r).await {
-                    warn!("工具 {} 的 after_run 失败: {}", tool_name, e);
+                    warn!("Tool {} after_run hook failed: {}", tool_name, e);
                 }
 
                 r
             }
             Err(e) => {
                 return self
-                    .make_error_result(tool_name, e.to_string(), None, start)
+                    .make_error_result(
+                        tool_name,
+                        e.to_string(),
+                        None,
+                        ToolResultStatus::Error,
+                        None,
+                        start,
+                    )
                     .await;
             }
         };
@@ -372,11 +639,13 @@ impl ToolRegistry {
         tool_name: &str,
         error_message: String,
         details: Option<String>,
+        status: ToolResultStatus,
+        cancel_reason: Option<String>,
         start: Instant,
     ) -> ToolResult {
         let elapsed = start.elapsed().as_millis() as u64;
         self.update_stats(tool_name, false, elapsed).await;
-        error!("工具 {} 执行失败: {}", tool_name, error_message);
+        error!("Tool {} failed: {}", tool_name, error_message);
 
         let full_message = if let Some(d) = details {
             format!("{} ({})", error_message, d)
@@ -386,7 +655,8 @@ impl ToolRegistry {
 
         ToolResult {
             content: vec![ToolResultContent::Error(full_message)],
-            is_error: true,
+            status,
+            cancel_reason,
             execution_time_ms: Some(elapsed),
             ext_info: None,
         }
@@ -448,10 +718,7 @@ impl ToolRegistry {
 
         if let Some(alias) = self.aliases.get(name) {
             let actual = alias.clone();
-            return self
-                .metadata_index
-                .get(&actual)
-                .map(|entry| entry.clone());
+            return self.metadata_index.get(&actual).map(|entry| entry.clone());
         }
 
         None
@@ -465,8 +732,62 @@ impl ToolRegistry {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolConfirmationDecision {
+    AllowOnce,
+    AllowAlways,
+    Deny,
+}
+
+fn confirmation_preference_key(workspace_path: &str, tool_name: &str) -> String {
+    let digest = blake3::hash(workspace_path.as_bytes());
+    format!("agent.tool_confirmation.{}/{}", digest.to_hex(), tool_name)
+}
+
+fn summarize_tool_call(
+    tool_name: &str,
+    metadata: &ToolMetadata,
+    args: &serde_json::Value,
+) -> String {
+    let summary_value = metadata
+        .summary_key_arg
+        .and_then(|key| args.get(key))
+        .map(|v| {
+            if let Some(s) = v.as_str() {
+                s.to_string()
+            } else {
+                v.to_string()
+            }
+        });
+
+    let mut summary = match summary_value {
+        Some(v) if !v.trim().is_empty() => format!("{}: {}", tool_name, v.trim()),
+        _ => tool_name.to_string(),
+    };
+
+    const MAX_LEN: usize = 240;
+    if summary.len() > MAX_LEN {
+        summary.truncate(MAX_LEN);
+        summary.push_str("…");
+    }
+    summary
+}
+
 impl Default for ToolRegistry {
     fn default() -> Self {
         Self::new(vec![])
     }
+}
+
+async fn is_within_workspace(workspace_root: &Path, resolved: &Path) -> bool {
+    let workspace_canon = tokio::fs::canonicalize(workspace_root)
+        .await
+        .unwrap_or_else(|_| workspace_root.to_path_buf());
+
+    let resolved_canon = tokio::fs::canonicalize(resolved)
+        .await
+        .unwrap_or_else(|_| resolved.to_path_buf());
+
+    resolved_canon.starts_with(&workspace_canon)
 }

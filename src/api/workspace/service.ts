@@ -1,4 +1,5 @@
 import { invoke } from '@/utils/request'
+import type { Message } from '@/types'
 
 export interface WorkspaceRecord {
   path: string
@@ -18,18 +19,6 @@ export interface SessionRecord {
   updatedAt: number
 }
 
-export interface SessionMessageRecord {
-  id: number
-  sessionId: number
-  role: 'user' | 'assistant'
-  content?: string | null
-  stepsJson?: string | null
-  imagesJson?: string | null
-  status?: 'streaming' | 'complete' | 'error' | null
-  durationMs?: number | null
-  createdAt: number
-}
-
 export const workspaceService = {
   getOrCreate: async (path: string): Promise<WorkspaceRecord> => {
     return await invoke<WorkspaceRecord>('workspace_get_or_create', { path })
@@ -37,8 +26,8 @@ export const workspaceService = {
   listSessions: async (path: string): Promise<SessionRecord[]> => {
     return await invoke<SessionRecord[]>('workspace_list_sessions', { path })
   },
-  getMessages: async (sessionId: number): Promise<SessionMessageRecord[]> => {
-    return await invoke<SessionMessageRecord[]>('workspace_get_messages', { sessionId })
+  getMessages: async (sessionId: number): Promise<Message[]> => {
+    return await invoke<Message[]>('workspace_get_messages', { sessionId })
   },
   getActiveSession: async (path: string): Promise<SessionRecord> => {
     return await invoke<SessionRecord>('workspace_get_active_session', { path })

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use diffy::{apply, Patch};
@@ -8,11 +8,11 @@ use tokio::fs;
 
 use crate::agent::context::FileOperationRecord;
 use crate::agent::core::context::TaskContext;
-use crate::agent::error::ToolExecutorResult;
+use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent,
+    ToolResultContent, ToolResultStatus,
 };
 
 use super::file_utils::{ensure_absolute, is_probably_binary};
@@ -360,6 +360,7 @@ Usage:
 
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::FileWrite, ToolPriority::Standard)
+            .with_confirmation()
             .with_tags(vec!["filesystem".into(), "edit".into()])
             .with_summary_key_arg("path")
     }
@@ -442,6 +443,8 @@ Usage:
                     let updated =
                         format!("{}{}{}", before, indented_replace.join(line_ending), after);
 
+                    snapshot_before_edit(context, self.name(), path.as_path()).await?;
+
                     if let Err(err) = fs::write(&path, &updated).await {
                         return Ok(error_result(format!(
                             "Failed to write file {}: {}",
@@ -501,6 +504,8 @@ Usage:
                         result_lines.extend(after_match.iter().map(|s| s.to_string()));
 
                         let updated = result_lines.join(line_ending);
+
+                        snapshot_before_edit(context, self.name(), path.as_path()).await?;
 
                         if let Err(err) = fs::write(&path, &updated).await {
                             return Ok(error_result(format!(
@@ -608,6 +613,8 @@ Usage:
                     }
                 }
 
+                snapshot_before_edit(context, self.name(), path.as_path()).await?;
+
                 if let Err(err) = fs::write(&path, &updated).await {
                     return Ok(error_result(format!(
                         "Failed to write file {}: {}",
@@ -651,6 +658,8 @@ Usage:
                     }
                 };
 
+                snapshot_before_edit(context, self.name(), path.as_path()).await?;
+
                 if let Err(err) = fs::write(&path, &updated).await {
                     return Ok(error_result(format!(
                         "Failed to write file {}: {}",
@@ -686,7 +695,8 @@ Usage:
 fn success_result(text: String, ext: serde_json::Value) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Success(text)],
-        is_error: false,
+        status: ToolResultStatus::Success,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: Some(ext),
     }
@@ -695,8 +705,23 @@ fn success_result(text: String, ext: serde_json::Value) -> ToolResult {
 fn error_result(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }
+}
+
+async fn snapshot_before_edit(
+    context: &TaskContext,
+    tool_name: &str,
+    path: &Path,
+) -> ToolExecutorResult<()> {
+    context
+        .snapshot_file_before_edit(path)
+        .await
+        .map_err(|err| ToolExecutorError::ExecutionFailed {
+            tool_name: tool_name.to_string(),
+            error: err.to_string(),
+        })
 }

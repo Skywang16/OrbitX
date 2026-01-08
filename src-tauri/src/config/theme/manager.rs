@@ -10,7 +10,7 @@ use std::{
     time::{Instant, SystemTime},
 };
 use tokio::sync::Mutex;
-use tracing::{warn};
+use tracing::warn;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -343,7 +343,6 @@ impl ThemeManager {
                 themes.extend(theme_index.builtin_themes.clone());
                 themes.extend(theme_index.custom_themes.clone());
 
-
                 Some(themes)
             } else {
                 None
@@ -401,7 +400,6 @@ impl ThemeManager {
 
     /// 刷新主题索引
     pub async fn refresh_index(&self) -> ThemeConfigResult<()> {
-
         // 只扫描主题目录，不区分内置和自定义主题
         let themes_dir = self.paths.themes_dir();
         let all_themes = self.scan_theme_directory(themes_dir, false).await?;
@@ -674,7 +672,6 @@ impl ThemeManager {
 
     /// 创建默认主题文件
     async fn create_default_theme_files(&self, themes_dir: &Path) -> ThemeConfigResult<()> {
-
         let dark_theme_content = r##"[theme]
 name = "dark"
 theme_type = "dark"

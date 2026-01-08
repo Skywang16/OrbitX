@@ -7,11 +7,11 @@
 
 pub mod commands;
 mod rules;
-mod types;
 mod service;
+mod types;
 
 // 导出常用类型和函数
 pub use commands::*;
 pub use rules::get_available_rules_files;
-pub use types::RULES_FILES;
 pub use service::*;
+pub use types::RULES_FILES;

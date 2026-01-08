@@ -7,23 +7,17 @@ use std::collections::HashMap;
 pub enum PromptComponent {
     // Agent level
     AgentRole,
-    AgentCapabilities,
+    AgentRules,
+    WorkMethodology,
 
     // System and context
     SystemInfo,
-    DateTime,
-
-    // Tools and interaction
-    ToolsDescription,
 
     // Task specific
     TaskContext,
-    TaskNodes,
 
     // Extras
     CustomInstructions,
-    AgentRules,
-    WorkMethodology,
 }
 
 /// Prompt type.
@@ -71,30 +65,21 @@ impl Default for PromptConfig {
     fn default() -> Self {
         let mut default_component_order = HashMap::new();
 
+        // 精简后的组件顺序（按 priority 排序）
         default_component_order.insert(
             PromptType::Agent,
             vec![
-                PromptComponent::CustomInstructions,
-                PromptComponent::ToolsDescription,
-                PromptComponent::TaskContext,
-                PromptComponent::AgentCapabilities,
-                PromptComponent::WorkMethodology,
-                PromptComponent::AgentRules,
-                PromptComponent::TaskNodes,
-                PromptComponent::AgentRole,
-                PromptComponent::SystemInfo,
-                PromptComponent::DateTime,
+                PromptComponent::AgentRole,        // priority: 100 - 角色定义
+                PromptComponent::AgentRules,       // priority: 90  - 行为规则
+                PromptComponent::WorkMethodology,  // priority: 80  - 工作方法
+                PromptComponent::SystemInfo,       // priority: 70  - 系统信息
+                PromptComponent::TaskContext,      // priority: 60  - 任务上下文
+                PromptComponent::CustomInstructions, // priority: 50 - 用户自定义指令
             ],
         );
 
         let mut template_overrides = HashMap::new();
-        template_overrides.insert(
-            "default".to_string(),
-            HashMap::from([(
-                PromptComponent::AgentRole,
-                "You are {name}, a terminal-focused AI assistant.".to_string(),
-            )]),
-        );
+        template_overrides.insert("default".to_string(), HashMap::new());
 
         let mut component_config = HashMap::new();
         component_config.insert(
@@ -102,69 +87,6 @@ impl Default for PromptConfig {
             ComponentConfig {
                 enabled: true,
                 priority: 100,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::SystemInfo,
-            ComponentConfig {
-                enabled: true,
-                priority: 80,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::AgentCapabilities,
-            ComponentConfig {
-                enabled: true,
-                priority: 70,
-                dependencies: vec![PromptComponent::ToolsDescription],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::TaskContext,
-            ComponentConfig {
-                enabled: true,
-                priority: 60,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::TaskNodes,
-            ComponentConfig {
-                enabled: true,
-                priority: 50,
-                dependencies: vec![PromptComponent::TaskContext],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::CustomInstructions,
-            ComponentConfig {
-                enabled: true,
-                priority: 40,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::DateTime,
-            ComponentConfig {
-                enabled: true,
-                priority: 30,
-                dependencies: vec![],
-                conditional_rules: vec![],
-            },
-        );
-        component_config.insert(
-            PromptComponent::ToolsDescription,
-            ComponentConfig {
-                enabled: true,
-                priority: 50,
                 dependencies: vec![],
                 conditional_rules: vec![],
             },
@@ -183,6 +105,33 @@ impl Default for PromptConfig {
             ComponentConfig {
                 enabled: true,
                 priority: 80,
+                dependencies: vec![],
+                conditional_rules: vec![],
+            },
+        );
+        component_config.insert(
+            PromptComponent::SystemInfo,
+            ComponentConfig {
+                enabled: true,
+                priority: 70,
+                dependencies: vec![],
+                conditional_rules: vec![],
+            },
+        );
+        component_config.insert(
+            PromptComponent::TaskContext,
+            ComponentConfig {
+                enabled: true,
+                priority: 60,
+                dependencies: vec![],
+                conditional_rules: vec![],
+            },
+        );
+        component_config.insert(
+            PromptComponent::CustomInstructions,
+            ComponentConfig {
+                enabled: true,
+                priority: 50,
                 dependencies: vec![],
                 conditional_rules: vec![],
             },

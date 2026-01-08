@@ -2,6 +2,7 @@
   interface Props {
     isDragging?: boolean
     isHovering?: boolean
+    side?: 'left' | 'right'
   }
 
   interface Emits {
@@ -14,6 +15,7 @@
   withDefaults(defineProps<Props>(), {
     isDragging: false,
     isHovering: false,
+    side: 'left',
   })
 
   const emit = defineEmits<Emits>()
@@ -41,6 +43,7 @@
     :class="{
       'resize-handle--dragging': isDragging,
       'resize-handle--hovering': isHovering,
+      'resize-handle--right': side === 'right',
     }"
     @mousedown="handleMouseDown"
     @mouseenter="handleMouseEnter"
@@ -59,6 +62,11 @@
     cursor: col-resize;
     z-index: 10;
     background: transparent;
+  }
+
+  .resize-handle--right {
+    left: auto;
+    right: -2px;
   }
 
   .resize-handle:hover {

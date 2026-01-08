@@ -8,7 +8,7 @@
 use chrono::Utc;
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
-use tracing::{ error };
+use tracing::error;
 
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::AgentResult;

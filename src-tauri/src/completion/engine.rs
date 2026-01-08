@@ -9,6 +9,7 @@ use crate::completion::scoring::MIN_SCORE;
 use crate::completion::smart_provider::SmartCompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionResponse};
 use crate::storage::{CacheNamespace, UnifiedCache};
+use crate::storage::DatabaseManager;
 use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
@@ -16,7 +17,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, timeout};
-use tracing::{ warn};
+use tracing::warn;
 
 #[derive(Debug, Clone, Copy)]
 pub struct CompletionEngineConfig {
@@ -66,7 +67,7 @@ impl ProviderHandle {
 
 pub struct CompletionEngine {
     providers: Vec<ProviderHandle>,
-    config: CompletionEngineConfig,  // 直接内嵌，零成本
+    config: CompletionEngineConfig, // 直接内嵌，零成本
     cache: Arc<UnifiedCache>,
 }
 
@@ -91,6 +92,7 @@ impl CompletionEngine {
     pub async fn with_default_providers(
         config: CompletionEngineConfig,
         cache: Arc<UnifiedCache>,
+        database: Arc<DatabaseManager>,
     ) -> CompletionEngineResult<Self> {
         let mut engine = Self::new(config, Arc::clone(&cache))?;
 
@@ -111,6 +113,7 @@ impl CompletionEngine {
             filesystem_provider.clone(),
             system_commands_provider.clone(),
             history_provider.clone(),
+            database,
         ));
 
         engine.add_provider(context_aware_provider);
@@ -178,11 +181,11 @@ impl CompletionEngine {
         let config = &self.config;
         let cache = Arc::clone(&self.cache);
         let context_arc = Arc::new(context.clone());
-        
+
         let mut task_stream = stream::iter(pending.into_iter().map(|(handle, cache_key)| {
             let context = Arc::clone(&context_arc);
             let cache = Arc::clone(&cache);
-            let config = *config;  // Copy, 零成本
+            let config = *config; // Copy, 零成本
             async move { Self::run_provider(handle, context, cache, cache_key, config).await }
         }))
         .buffer_unordered(self.config.max_concurrency);
@@ -245,7 +248,18 @@ impl CompletionEngine {
 
         let response = CompletionResponse {
             items,
-            replace_start: context.word_start,
+            replace_start: {
+                // 特例：`cd` 不带空格时也允许补全目录（会插入前导空格）。
+                // 这不影响 shell 的 Tab 补全，只影响 OrbitX 内联/列表建议。
+                if context.input.trim() == "cd"
+                    && context.cursor_position == context.input.len()
+                    && !context.input.chars().any(|c| c.is_whitespace())
+                {
+                    context.cursor_position
+                } else {
+                    context.word_start
+                }
+            },
             replace_end: context.cursor_position,
             has_more,
         };
@@ -285,13 +299,13 @@ impl CompletionEngine {
     fn finalize_items(&self, mut items: Vec<CompletionItem>) -> Vec<CompletionItem> {
         // 1. 过滤低分项（原地操作）
         items.retain(|item| item.score >= MIN_SCORE);
-        
+
         // 2. 排序（使用 CompletionItem 的 Ord 实现）
         items.sort_unstable();
-        
+
         // 3. 去重：保留每个文本的第一个（因已按分数排序，第一个即最高分）
         items.dedup_by(|a, b| a.text == b.text);
-        
+
         items
     }
 
@@ -300,7 +314,7 @@ impl CompletionEngine {
         context: Arc<CompletionContext>,
         cache: Arc<UnifiedCache>,
         cache_key: String,
-        config: CompletionEngineConfig,  // 直接传递，零成本Copy
+        config: CompletionEngineConfig, // 直接传递，零成本Copy
     ) -> ProviderOutcome {
         let start = Instant::now();
         let mut attempts = 0;

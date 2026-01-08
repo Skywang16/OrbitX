@@ -96,6 +96,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::terminal::commands::stream::terminal_subscribe_output_cancel,
         // Shell 集成命令
         crate::shell::commands::shell_execute_background_command,
+        crate::shell::commands::shell_execute_background_program,
         crate::shell::commands::shell_setup_integration,
         crate::shell::commands::shell_check_integration_status,
         crate::shell::commands::shell_update_pane_cwd,
@@ -114,6 +115,16 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::completion::commands::completion_get,
         crate::completion::commands::completion_clear_cache,
         crate::completion::commands::completion_get_stats,
+        // Git 集成命令
+        crate::git::commands::git_check_repository,
+        crate::git::commands::git_get_status,
+        crate::git::commands::git_get_branches,
+        crate::git::commands::git_get_commits,
+        crate::git::commands::git_get_commit_files,
+        crate::git::commands::git_get_diff,
+        crate::git::commands::git_watch_start,
+        crate::git::commands::git_watch_stop,
+        crate::git::commands::git_watch_status,
         // 配置管理命令
         crate::config::commands::config_get,
         crate::config::commands::config_update,
@@ -179,17 +190,15 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::llm::commands::llm_get_providers,
         // Agent 执行器命令（注册以供前端调用）
         crate::agent::core::commands::agent_execute_task,
-        crate::agent::core::commands::agent_pause_task,
         crate::agent::core::commands::agent_cancel_task,
+        crate::agent::core::commands::agent_tool_confirm,
         crate::agent::core::commands::agent_list_tasks,
         crate::agent::core::commands::agent_get_file_context_status,
         crate::agent::core::commands::agent_get_user_rules,
         crate::agent::core::commands::agent_set_user_rules,
         crate::agent::core::commands::agent_trigger_session_summary,
         // 项目规则命令已迁移到 workspace 模块
-        // 存储系统命令
-        crate::ai::tool::storage::storage_get_config,
-        crate::ai::tool::storage::storage_update_config,
+        // 存储系统命令（State/Runtime）
         crate::ai::tool::storage::storage_save_session_state,
         crate::ai::tool::storage::storage_load_session_state,
         crate::ai::tool::storage::storage_get_terminals_state,
@@ -215,9 +224,10 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::checkpoint::commands::checkpoint_list,
         crate::checkpoint::commands::checkpoint_rollback,
         crate::checkpoint::commands::checkpoint_diff,
-        crate::checkpoint::commands::checkpoint_diff_with_current,
         crate::checkpoint::commands::checkpoint_diff_with_workspace,
         crate::checkpoint::commands::checkpoint_get_file_content,
         crate::checkpoint::commands::checkpoint_delete,
+        // 文件系统命令
+        crate::filesystem::commands::fs_read_dir,
     ])
 }

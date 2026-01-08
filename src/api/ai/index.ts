@@ -1,4 +1,4 @@
-import type { AIHealthStatus, AIModelConfig, AISettings, AIStats } from '@/types'
+import type { AIModelConfig, AISettings } from '@/types'
 import { invoke } from '@/utils/request'
 import type { AIModelCreateInput, AIModelUpdateInput, AIModelTestConnectionInput } from './types'
 
@@ -67,14 +67,6 @@ export class AiApi {
 
   updateSettings = async (settings: Partial<AISettings>): Promise<void> => {
     await invoke<void>('update_ai_settings', { settings })
-  }
-
-  getStats = async (): Promise<AIStats> => {
-    return await invoke<AIStats>('get_ai_stats')
-  }
-
-  getHealthStatus = async (): Promise<AIHealthStatus> => {
-    return await invoke<AIHealthStatus>('get_ai_health_status')
   }
 }
 

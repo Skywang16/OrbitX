@@ -9,7 +9,7 @@
 
   const { t } = useI18n()
   const aiSettingsStore = useAISettingsStore()
-  const { loadCheckpoints, getCheckpointByMessage } = useCheckpoint()
+  const { loadCheckpoints, getCheckpointByMessageId } = useCheckpoint()
 
   interface Props {
     messages: Message[]
@@ -32,10 +32,10 @@
 
   const previousLength = ref(props.messages.length)
 
-  // 获取消息对应的checkpoint
+  // 获取消息对应的 checkpoint（使用 message.id 查找）
   const getCheckpoint = (message: Message) => {
-    if (!props.sessionId || message.role !== 'user') return null
-    return getCheckpointByMessage(props.sessionId, message.content || '')
+    if (!props.sessionId || !props.workspacePath || message.role !== 'user') return null
+    return getCheckpointByMessageId(props.sessionId, props.workspacePath, message.id)
   }
 
   watch(
@@ -50,10 +50,10 @@
 
   // 当会话ID变化时加载checkpoints
   watch(
-    () => props.sessionId,
-    async newId => {
-      if (newId && newId > 0) {
-        await loadCheckpoints(newId)
+    () => [props.sessionId, props.workspacePath] as const,
+    async ([newId, workspacePath]) => {
+      if (newId && newId > 0 && workspacePath) {
+        await loadCheckpoints(newId, workspacePath)
       }
     },
     { immediate: true }
@@ -63,8 +63,8 @@
   watch(
     () => props.messages.length,
     async () => {
-      if (props.sessionId && props.sessionId > 0) {
-        await loadCheckpoints(props.sessionId)
+      if (props.sessionId && props.sessionId > 0 && props.workspacePath) {
+        await loadCheckpoints(props.sessionId, props.workspacePath)
       }
     }
   )

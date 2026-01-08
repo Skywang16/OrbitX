@@ -158,16 +158,6 @@
                     />
                     <div class="form-description">{{ t('ai_model.max_output_tokens_description') }}</div>
                   </div>
-
-                  <div class="form-group">
-                    <label class="form-label">{{ t('ai_model.feature_support') }}</label>
-                    <div class="checkbox-group">
-                      <label class="checkbox-label">
-                        <input type="checkbox" v-model="formData.options.supportsImages" class="form-checkbox" />
-                        <span>{{ t('ai_model.supports_images') }}</span>
-                      </label>
-                    </div>
-                  </div>
                 </div>
               </template>
             </div>
@@ -215,7 +205,6 @@
       maxContextTokens: 128000,
       temperature: 0.7,
       timeout: 300000,
-      supportsImages: false,
       contextWindow: 128000,
       maxTokens: -1,
     },
@@ -328,7 +317,6 @@
         maxContextTokens: 128000,
         temperature: 0.7,
         timeout: 300000,
-        supportsImages: false,
         contextWindow: 128000,
         maxTokens: -1,
       },

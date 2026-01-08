@@ -2,9 +2,8 @@
   import { computed, ref, watch, onMounted, reactive } from 'vue'
   import { terminalContextApi, aiApi } from '@/api'
   import { useI18n } from 'vue-i18n'
-  import { useTabManagerStore } from '@/stores/TabManager'
+  import { useEditorStore } from '@/stores/Editor'
   import { useTerminalStore } from '@/stores/Terminal'
-  import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
   import { getPathBasename } from '@/utils/path'
   import { useAISettingsStore } from '@/components/settings/components/AI/store'
@@ -59,7 +58,7 @@
     return t('ck.index_not_ready')
   })
 
-  const tabManagerStore = useTabManagerStore()
+  const tabManagerStore = useEditorStore()
   const terminalStore = useTerminalStore()
 
   const displayPath = ref(props.indexStatus.path)
@@ -73,11 +72,9 @@
     let p = props.indexStatus.path
     if (!p || p === '.') {
       const activeTab = tabManagerStore.activeTab
-      if (activeTab && activeTab.type === TabType.TERMINAL) {
-        const terminal = terminalStore.terminals.find(t => t.id === activeTab.id)
-        if (terminal?.cwd) {
-          p = terminal.cwd
-        }
+      if (activeTab && activeTab.type === 'terminal') {
+        const terminal = terminalStore.terminals.find(t => t.id === activeTab.context.paneId)
+        if (terminal?.cwd) p = terminal.cwd
       }
       if (!p || p === '.') {
         try {
@@ -272,21 +269,9 @@
             <x-button size="small" variant="secondary" @click="handleEditEmbeddingModel">
               {{ t('ai_model.edit') }}
             </x-button>
-            <x-popconfirm
-              :title="t('ai_model.delete_confirm')"
-              :description="t('ai_model.delete_description', { name: embeddingModel?.model })"
-              type="danger"
-              :confirm-text="t('ai_model.delete_confirm_text')"
-              :cancel-text="t('ai_model.cancel')"
-              placement="top"
-              @confirm="handleDeleteEmbeddingModel"
-            >
-              <template #trigger>
-                <x-button size="small" variant="danger">
-                  {{ t('ai_model.delete') }}
-                </x-button>
-              </template>
-            </x-popconfirm>
+            <x-button size="small" variant="danger" @click="handleDeleteEmbeddingModel">
+              {{ t('ai_model.delete') }}
+            </x-button>
           </div>
         </div>
 

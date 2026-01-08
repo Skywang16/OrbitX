@@ -1,5 +1,5 @@
-use std::path::Path;
 use crate::vector_db::core::{Chunk, ChunkType, Language, Result, Span, VectorDbError};
+use std::path::Path;
 use tree_sitter::{Parser, TreeCursor};
 
 /// Tree-sitter 智能分块器
@@ -9,67 +9,114 @@ pub struct TreeSitterChunker {
 
 impl TreeSitterChunker {
     pub fn new(chunk_size: usize) -> Self {
-        Self { _chunk_size: chunk_size }
+        Self {
+            _chunk_size: chunk_size,
+        }
     }
-    
+
     /// 使用 tree-sitter 按语法结构分块
     pub fn chunk(&self, content: &str, file_path: &Path, language: Language) -> Result<Vec<Chunk>> {
         let mut parser = Parser::new();
-        
+
         // 设置语言解析器
         match language {
             Language::Python => {
-                parser.set_language(&tree_sitter_python::LANGUAGE.into())
-                    .map_err(|e| VectorDbError::ChunkingError(format!("Failed to set Python language: {}", e)))?;
+                parser
+                    .set_language(&tree_sitter_python::LANGUAGE.into())
+                    .map_err(|e| {
+                        VectorDbError::ChunkingError(format!(
+                            "Failed to set Python language: {}",
+                            e
+                        ))
+                    })?;
             }
             Language::TypeScript => {
-                parser.set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
-                    .map_err(|e| VectorDbError::ChunkingError(format!("Failed to set TypeScript language: {}", e)))?;
+                parser
+                    .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
+                    .map_err(|e| {
+                        VectorDbError::ChunkingError(format!(
+                            "Failed to set TypeScript language: {}",
+                            e
+                        ))
+                    })?;
             }
             Language::JavaScript => {
-                parser.set_language(&tree_sitter_javascript::LANGUAGE.into())
-                    .map_err(|e| VectorDbError::ChunkingError(format!("Failed to set JavaScript language: {}", e)))?;
+                parser
+                    .set_language(&tree_sitter_javascript::LANGUAGE.into())
+                    .map_err(|e| {
+                        VectorDbError::ChunkingError(format!(
+                            "Failed to set JavaScript language: {}",
+                            e
+                        ))
+                    })?;
             }
             Language::Rust => {
-                parser.set_language(&tree_sitter_rust::LANGUAGE.into())
-                    .map_err(|e| VectorDbError::ChunkingError(format!("Failed to set Rust language: {}", e)))?;
+                parser
+                    .set_language(&tree_sitter_rust::LANGUAGE.into())
+                    .map_err(|e| {
+                        VectorDbError::ChunkingError(format!("Failed to set Rust language: {}", e))
+                    })?;
             }
             Language::Go => {
-                parser.set_language(&tree_sitter_go::LANGUAGE.into())
-                    .map_err(|e| VectorDbError::ChunkingError(format!("Failed to set Go language: {}", e)))?;
+                parser
+                    .set_language(&tree_sitter_go::LANGUAGE.into())
+                    .map_err(|e| {
+                        VectorDbError::ChunkingError(format!("Failed to set Go language: {}", e))
+                    })?;
             }
             Language::Java => {
-                parser.set_language(&tree_sitter_java::LANGUAGE.into())
-                    .map_err(|e| VectorDbError::ChunkingError(format!("Failed to set Java language: {}", e)))?;
+                parser
+                    .set_language(&tree_sitter_java::LANGUAGE.into())
+                    .map_err(|e| {
+                        VectorDbError::ChunkingError(format!("Failed to set Java language: {}", e))
+                    })?;
             }
             Language::C => {
-                parser.set_language(&tree_sitter_c::LANGUAGE.into())
-                    .map_err(|e| VectorDbError::ChunkingError(format!("Failed to set C language: {}", e)))?;
+                parser
+                    .set_language(&tree_sitter_c::LANGUAGE.into())
+                    .map_err(|e| {
+                        VectorDbError::ChunkingError(format!("Failed to set C language: {}", e))
+                    })?;
             }
             Language::Cpp => {
-                parser.set_language(&tree_sitter_cpp::LANGUAGE.into())
-                    .map_err(|e| VectorDbError::ChunkingError(format!("Failed to set C++ language: {}", e)))?;
+                parser
+                    .set_language(&tree_sitter_cpp::LANGUAGE.into())
+                    .map_err(|e| {
+                        VectorDbError::ChunkingError(format!("Failed to set C++ language: {}", e))
+                    })?;
             }
             Language::CSharp => {
-                parser.set_language(&tree_sitter_c_sharp::LANGUAGE.into())
-                    .map_err(|e| VectorDbError::ChunkingError(format!("Failed to set C# language: {}", e)))?;
+                parser
+                    .set_language(&tree_sitter_c_sharp::LANGUAGE.into())
+                    .map_err(|e| {
+                        VectorDbError::ChunkingError(format!("Failed to set C# language: {}", e))
+                    })?;
             }
             Language::Ruby => {
-                parser.set_language(&tree_sitter_ruby::LANGUAGE.into())
-                    .map_err(|e| VectorDbError::ChunkingError(format!("Failed to set Ruby language: {}", e)))?;
+                parser
+                    .set_language(&tree_sitter_ruby::LANGUAGE.into())
+                    .map_err(|e| {
+                        VectorDbError::ChunkingError(format!("Failed to set Ruby language: {}", e))
+                    })?;
             }
-            _ => return Err(VectorDbError::ChunkingError(format!("Language {:?} not supported for tree-sitter parsing", language))),
+            _ => {
+                return Err(VectorDbError::ChunkingError(format!(
+                    "Language {:?} not supported for tree-sitter parsing",
+                    language
+                )))
+            }
         }
-        
+
         // 解析代码
-        let tree = parser.parse(content, None)
-            .ok_or_else(|| VectorDbError::ChunkingError(format!("Failed to parse {:?} code", language)))?;
-        
+        let tree = parser.parse(content, None).ok_or_else(|| {
+            VectorDbError::ChunkingError(format!("Failed to parse {:?} code", language))
+        })?;
+
         let mut chunks = Vec::new();
         let mut cursor = tree.root_node().walk();
-        
+
         self.extract_code_chunks(&mut cursor, content, &mut chunks, file_path, language);
-        
+
         // 如果没有提取到任何块，返回整个文件作为一个块
         if chunks.is_empty() {
             chunks.push(Chunk::new(
@@ -79,10 +126,10 @@ impl TreeSitterChunker {
                 ChunkType::Generic,
             ));
         }
-        
+
         Ok(chunks)
     }
-    
+
     /// 递归提取代码块
     fn extract_code_chunks(
         &self,
@@ -94,7 +141,7 @@ impl TreeSitterChunker {
     ) {
         let node = cursor.node();
         let node_kind = node.kind();
-        
+
         // 根据语言判断是否为有意义的代码块
         let is_chunk = match language {
             Language::Python => {
@@ -103,13 +150,21 @@ impl TreeSitterChunker {
             Language::TypeScript | Language::JavaScript => {
                 matches!(
                     node_kind,
-                    "function_declaration" | "class_declaration" | "method_definition" | "arrow_function"
+                    "function_declaration"
+                        | "class_declaration"
+                        | "method_definition"
+                        | "arrow_function"
                 )
             }
             Language::Rust => {
                 matches!(
                     node_kind,
-                    "function_item" | "impl_item" | "struct_item" | "enum_item" | "trait_item" | "mod_item"
+                    "function_item"
+                        | "impl_item"
+                        | "struct_item"
+                        | "enum_item"
+                        | "trait_item"
+                        | "mod_item"
                 )
             }
             Language::Go => {
@@ -137,39 +192,34 @@ impl TreeSitterChunker {
                 )
             }
             Language::Ruby => {
-                matches!(
-                    node_kind,
-                    "method" | "class" | "module"
-                )
+                matches!(node_kind, "method" | "class" | "module")
             }
             _ => false,
         };
-        
+
         if is_chunk {
             let start_byte = node.start_byte();
             let end_byte = node.end_byte();
             let start_pos = node.start_position();
             let end_pos = node.end_position();
-            
+
             let text = &source[start_byte..end_byte];
-            
+
             // 确定块类型
             let chunk_type = match node_kind {
-                "function_definition" | "function_declaration" | "arrow_function" | "function_item" => {
-                    ChunkType::Function
-                }
-                "class_definition" | "class_declaration" | "struct_item" | "enum_item" | "class_specifier" | "class" => {
-                    ChunkType::Class
-                }
-                "method_definition" | "method_declaration" | "method" => {
-                    ChunkType::Method
-                }
+                "function_definition"
+                | "function_declaration"
+                | "arrow_function"
+                | "function_item" => ChunkType::Function,
+                "class_definition" | "class_declaration" | "struct_item" | "enum_item"
+                | "class_specifier" | "class" => ChunkType::Class,
+                "method_definition" | "method_declaration" | "method" => ChunkType::Method,
                 "impl_item" | "trait_item" | "mod_item" | "module" | "interface_declaration" => {
                     ChunkType::Struct
                 }
                 _ => ChunkType::Generic,
             };
-            
+
             chunks.push(Chunk::new(
                 file_path.to_path_buf(),
                 Span::new(start_byte, end_byte, start_pos.row + 1, end_pos.row + 1),
@@ -177,7 +227,7 @@ impl TreeSitterChunker {
                 chunk_type,
             ));
         }
-        
+
         // 递归处理子节点
         if cursor.goto_first_child() {
             loop {
@@ -194,7 +244,7 @@ impl TreeSitterChunker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_python_chunking() {
         let code = r#"
@@ -205,15 +255,17 @@ class MyClass:
     def method(self):
         pass
 "#;
-        
+
         let chunker = TreeSitterChunker::new(512);
-        let chunks = chunker.chunk(code, Path::new("test.py"), Language::Python).unwrap();
-        
+        let chunks = chunker
+            .chunk(code, Path::new("test.py"), Language::Python)
+            .unwrap();
+
         assert!(chunks.len() >= 2);
         assert_eq!(chunks[0].chunk_type, ChunkType::Function);
         assert_eq!(chunks[1].chunk_type, ChunkType::Class);
     }
-    
+
     #[test]
     fn test_rust_chunking() {
         let code = r#"
@@ -231,10 +283,12 @@ impl MyStruct {
     }
 }
 "#;
-        
+
         let chunker = TreeSitterChunker::new(512);
-        let chunks = chunker.chunk(code, Path::new("test.rs"), Language::Rust).unwrap();
-        
+        let chunks = chunker
+            .chunk(code, Path::new("test.rs"), Language::Rust)
+            .unwrap();
+
         assert!(chunks.len() >= 3);
     }
 }

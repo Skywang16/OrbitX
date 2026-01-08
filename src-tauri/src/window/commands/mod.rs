@@ -124,12 +124,12 @@ impl WindowStateManager {
     }
 
     pub fn set_always_on_top(&mut self, value: bool) {
-        self.always_on_top.store(value, Ordering::Release);  // 原子写入
+        self.always_on_top.store(value, Ordering::Release); // 原子写入
         self.last_update = Some(Instant::now());
     }
 
     pub fn get_always_on_top(&self) -> bool {
-        self.always_on_top.load(Ordering::Acquire)  // 原子读取
+        self.always_on_top.load(Ordering::Acquire) // 原子读取
     }
 
     pub fn toggle_always_on_top(&mut self) -> bool {

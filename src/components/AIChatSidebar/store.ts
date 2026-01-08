@@ -1,10 +1,12 @@
 import { agentApi } from '@/api/agent'
 import type { TaskProgressPayload, TaskProgressStream } from '@/api/agent/types'
 import { useAISettingsStore } from '@/components/settings/components/AI'
+import { useToolConfirmationDialogStore } from '@/stores/toolConfirmationDialog'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useSessionStore } from '@/stores/session'
 import type { ImageAttachment } from '@/stores/imageLightbox'
-import type { ChatMode, Conversation, Message } from '@/types'
+import type { ChatMode, Conversation } from '@/types'
+import { restoreAiSidebarState } from '@/persistence/session'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
@@ -12,6 +14,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const workspaceStore = useWorkspaceStore()
   const sessionStore = useSessionStore()
   const aiSettingsStore = useAISettingsStore()
+  const toolConfirmStore = useToolConfirmationDialogStore()
 
   const isVisible = ref(false)
   const sidebarWidth = ref(350)
@@ -42,6 +45,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     return !isSending.value && aiSettingsStore.hasModels
   })
 
+  const persistIfInitialized = () => {
+    if (!isInitialized.value) return
+    saveToSessionState()
+  }
+
   const toggleSidebar = async () => {
     isVisible.value = !isVisible.value
     if (isVisible.value) {
@@ -49,16 +57,23 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         await aiSettingsStore.loadSettings()
       }
     }
+    persistIfInitialized()
   }
 
   const setSidebarWidth = (width: number) => {
     sidebarWidth.value = Math.max(300, Math.min(800, width))
+    persistIfInitialized()
+  }
+
+  const setChatMode = (mode: ChatMode) => {
+    chatMode.value = mode
+    persistIfInitialized()
   }
 
   const refreshSessions = async () => {
     const path = currentWorkspacePath.value
     if (!path) return
-    await workspaceStore.loadWorkspaceData(path)
+    await workspaceStore.loadWorkspaceData(path, true)
   }
 
   const switchSession = async (sessionId: number) => {
@@ -70,158 +85,46 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   }
 
   const handleAgentEvent = (event: TaskProgressPayload) => {
-    const messages = messageList.value
-    if (!messages.length) {
-      return
-    }
-
-    const findTargetAssistantMessage = (): Message | null => {
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const message = messages[i]
-        if (message.role === 'assistant' && (message.status === 'streaming' || !message.status)) {
-          return message
-        }
-      }
-      return null
-    }
-
-    const currentMessage = findTargetAssistantMessage()
-    if (!currentMessage) {
-      return
-    }
-
-    if (!currentMessage.steps) {
-      currentMessage.steps = []
-    }
-
-    const getTimestamp = (backendTimestamp: string | number): number => {
-      if (typeof backendTimestamp === 'number') return backendTimestamp
-      return new Date(backendTimestamp).getTime()
-    }
-
-    const upsertStreamStep = (
-      stepType: 'thinking' | 'text',
-      payload: { streamId: string; streamDone: boolean; iteration: number; timestamp: string },
-      delta: string
-    ) => {
-      if (!delta && !payload.streamDone) return
-
-      const timestamp = getTimestamp(payload.timestamp)
-      const steps = currentMessage.steps!
-
-      const matchingStep = steps.find(
-        step => step.stepType === stepType && step.metadata?.streamId === payload.streamId
-      )
-
-      if (matchingStep) {
-        if (delta) {
-          matchingStep.content += delta
-        }
-        matchingStep.timestamp = timestamp
-        if (!matchingStep.metadata) {
-          matchingStep.metadata = {}
-        }
-        Object.assign(matchingStep.metadata, {
-          streamId: payload.streamId,
-          streamDone: payload.streamDone,
-          iteration: payload.iteration,
-        })
-        if (stepType === 'text') {
-          currentMessage.content = matchingStep.content
-        }
-      } else {
-        const newStep = {
-          stepType,
-          content: delta,
-          timestamp,
-          metadata: {
-            streamId: payload.streamId,
-            streamDone: payload.streamDone,
-            iteration: payload.iteration,
-          },
-        }
-        steps.push(newStep)
-        if (stepType === 'text') {
-          currentMessage.content = newStep.content
-        }
-      }
-    }
-
     switch (event.type) {
-      case 'Thinking': {
-        upsertStreamStep(
-          'thinking',
-          {
-            streamId: event.payload.streamId,
-            streamDone: event.payload.streamDone,
-            iteration: event.payload.iteration,
-            timestamp: event.payload.timestamp,
-          },
-          event.payload.thought
-        )
+      case 'message_created': {
+        workspaceStore.messages.push(event.message)
         break
       }
-      case 'Text': {
-        upsertStreamStep(
-          'text',
-          {
-            streamId: event.payload.streamId,
-            streamDone: event.payload.streamDone,
-            iteration: event.payload.iteration,
-            timestamp: event.payload.timestamp,
-          },
-          event.payload.text
-        )
+      case 'block_appended': {
+        const msg = workspaceStore.messages.find(m => m.id === event.messageId)
+        if (msg) msg.blocks.push(event.block)
         break
       }
-      case 'ToolUse':
-        currentMessage.steps.push({
-          stepType: 'tool_use',
-          content: `调用工具: ${event.payload.toolName}`,
-          timestamp: getTimestamp(event.payload.timestamp),
-          metadata: {
-            iteration: event.payload.iteration,
-            toolId: event.payload.toolId,
-            toolName: event.payload.toolName,
-            params: event.payload.params,
-          },
-        })
-        break
-      case 'ToolResult': {
-        const lastStep = currentMessage.steps[currentMessage.steps.length - 1]
-        if (lastStep && lastStep.stepType === 'tool_use') {
-          lastStep.stepType = 'tool_result'
-          lastStep.content = event.payload.isError ? '工具执行出错' : '工具执行完成'
-          lastStep.timestamp = getTimestamp(event.payload.timestamp)
-          lastStep.metadata = {
-            ...lastStep.metadata,
-            result: event.payload.result,
-            isError: event.payload.isError,
-            extInfo: event.payload.extInfo,
-          }
-        }
+      case 'block_updated': {
+        const msg = workspaceStore.messages.find(m => m.id === event.messageId)
+        if (!msg) break
+        const idx = msg.blocks.findIndex(b => 'id' in b && b.id === event.blockId)
+        if (idx >= 0) msg.blocks[idx] = event.block
         break
       }
-      case 'TaskCompleted':
-        currentMessage.status = 'complete'
-        currentMessage.duration = Date.now() - currentMessage.createdAt.getTime()
+      case 'message_finished': {
+        const msg = workspaceStore.messages.find(m => m.id === event.messageId)
+        if (!msg) break
+        msg.status = event.status
+        msg.finishedAt = event.finishedAt
+        msg.durationMs = event.durationMs
+        msg.tokenUsage = event.tokenUsage
         isSending.value = false
         break
-      case 'TaskCancelled':
-        currentMessage.status = 'error'
-        isSending.value = false
-        break
-      case 'TaskError':
-        currentMessage.steps.push({
-          stepType: 'error',
-          content: event.payload.errorMessage,
-          timestamp: getTimestamp(event.payload.timestamp),
-          metadata: {
-            iteration: event.payload.iteration,
-            errorType: event.payload.errorType,
-          },
+      }
+      case 'tool_confirmation_requested': {
+        toolConfirmStore.open({
+          taskId: event.taskId,
+          requestId: event.requestId,
+          workspacePath: event.workspacePath,
+          toolName: event.toolName,
+          summary: event.summary,
         })
-        currentMessage.status = 'error'
+        break
+      }
+      case 'task_completed':
+      case 'task_cancelled':
+      case 'task_error':
         isSending.value = false
         break
     }
@@ -232,9 +135,14 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
     stream.onProgress(async event => {
       // TaskCreated: 后端返回权威的 sessionId，用它加载消息
-      if (event.type === 'TaskCreated') {
-        currentTaskId.value = event.payload.taskId
-        await workspaceStore.fetchMessages(event.payload.sessionId)
+      if (event.type === 'task_created') {
+        currentTaskId.value = event.taskId
+        const workspacePath = currentWorkspacePath.value || event.workspacePath
+        if (workspacePath) {
+          await workspaceStore.loadWorkspaceData(workspacePath, true)
+        } else {
+          await workspaceStore.fetchMessages(event.sessionId)
+        }
         return
       }
 
@@ -244,18 +152,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         cancelSent = true
       }
 
-      // TaskStarted 不需要特殊处理，消息已在 TaskCreated 时加载
-      if (event.type === 'TaskStarted') return
-
       handleAgentEvent(event)
     })
 
     stream.onError((streamError: Error) => {
       console.error('Agent task error:', streamError)
-      const currentMessage = messageList.value[messageList.value.length - 1]
-      if (currentMessage && currentMessage.role === 'assistant') {
-        currentMessage.status = 'error'
-      }
       isSending.value = false
     })
 
@@ -329,6 +230,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   // 当工作区路径变化时，加载对应的工作区数据
   watch(currentWorkspacePath, async newPath => {
+    if (!newPath) return
     await workspaceStore.loadWorkspaceData(newPath)
   })
 
@@ -344,19 +246,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   // 恢复 UI 状态
   const restoreFromSessionState = (): void => {
-    const aiState = sessionStore.aiState
-    if (!aiState) return
-
-    isVisible.value = aiState.visible
-    sidebarWidth.value = aiState.width
-    chatMode.value = aiState.mode as ChatMode
+    const restored = restoreAiSidebarState(sessionStore.aiState)
+    if (typeof restored.visible === 'boolean') isVisible.value = restored.visible
+    if (typeof restored.width === 'number') sidebarWidth.value = restored.width
+    if (restored.mode) chatMode.value = restored.mode as ChatMode
   }
-
-  watch([isVisible, sidebarWidth, chatMode], () => {
-    if (isInitialized.value) {
-      saveToSessionState()
-    }
-  })
 
   const initialize = async (): Promise<void> => {
     if (isInitialized.value) return
@@ -365,7 +259,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     restoreFromSessionState()
 
     // 加载当前工作区数据（有终端用终端 cwd，无终端用未分组）
-    await workspaceStore.loadWorkspaceData(currentWorkspacePath.value)
+    await workspaceStore.loadWorkspaceData(currentWorkspacePath.value, true)
 
     isInitialized.value = true
   }
@@ -384,6 +278,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     currentWorkspacePath,
     toggleSidebar,
     setSidebarWidth,
+    setChatMode,
     refreshSessions,
     switchSession,
     createSession,

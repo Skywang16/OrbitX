@@ -1,62 +1,17 @@
 /*!
- * 存储系统 Tauri 命令模块 - 直接使用管理器
+ * 存储系统 Tauri 命令模块
+ *
+ * 职责边界：只提供“State(Data/Runtime)”相关能力（msgpack 会话状态、Mux 运行时终端状态）。
+ * Config(TOML) 走 crate::config::* 命令入口，避免两套 API 造成写入分叉。
  */
 
-use crate::config::TomlConfigManager;
 use crate::storage::messagepack::MessagePackManager;
 use crate::storage::types::SessionState;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
-use serde_json::Value;
 use std::sync::Arc;
 use tauri::State;
 use tracing::error;
-
-/// 获取配置数据
-#[tauri::command]
-pub async fn storage_get_config(
-    section: String,
-    config: State<'_, Arc<TomlConfigManager>>,
-) -> TauriApiResult<Value> {
-    if section.trim().is_empty() {
-        return Ok(api_error!("common.invalid_params"));
-    }
-
-    match config.inner().config_get().await {
-        Ok(app_config) => {
-            // 从配置中提取section
-            let value = serde_json::to_value(&app_config)
-                .ok()
-                .and_then(|v| v.get(&section).cloned())
-                .unwrap_or(Value::Null);
-            Ok(api_success!(value))
-        }
-        Err(e) => {
-            error!("配置节 {} 获取失败: {}", section, e);
-            Ok(api_error!("storage.get_config_failed"))
-        }
-    }
-}
-
-/// 更新配置数据
-#[tauri::command]
-pub async fn storage_update_config(
-    section: String,
-    data: Value,
-    config: State<'_, Arc<TomlConfigManager>>,
-) -> TauriApiResult<EmptyData> {
-    if section.trim().is_empty() {
-        return Ok(api_error!("common.invalid_params"));
-    }
-
-    match config.inner().update_section(&section, data).await {
-        Ok(()) => Ok(api_success!()),
-        Err(e) => {
-            error!("配置节 {} 更新失败: {}", section, e);
-            Ok(api_error!("storage.update_config_failed"))
-        }
-    }
-}
 
 /// 保存会话状态
 #[tauri::command]
@@ -82,8 +37,8 @@ pub async fn storage_load_session_state(
         Ok(Some(session_state)) => Ok(api_success!(Some(session_state))),
         Ok(None) => Ok(api_success!(None)),
         Err(_) => {
-            error!("会话状态加载失败");
-            Ok(api_error!("storage.load_session_failed"))
+            error!("会话状态加载失败，已忽略");
+            Ok(api_success!(None))
         }
     }
 }

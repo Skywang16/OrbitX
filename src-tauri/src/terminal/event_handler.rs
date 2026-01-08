@@ -14,7 +14,7 @@ use crate::terminal::error::{EventHandlerError, EventHandlerResult};
 /// 统一的终端事件处理器
 ///
 /// 负责整合来自不同源的终端事件，并统一发送到前端
-/// 
+///
 /// 订阅三层事件:
 /// 1. Mux层 - 进程生命周期事件 (crossbeam channel)
 /// 2. Shell层 - OSC解析事件 (broadcast channel)
@@ -23,7 +23,8 @@ pub struct TerminalEventHandler<R: Runtime> {
     app_handle: AppHandle<R>,
     mux_subscriber_id: Option<usize>,
     context_event_receiver: Option<broadcast::Receiver<TerminalContextEvent>>,
-    shell_event_receiver: Option<broadcast::Receiver<(crate::mux::PaneId, crate::shell::ShellEvent)>>,
+    shell_event_receiver:
+        Option<broadcast::Receiver<(crate::mux::PaneId, crate::shell::ShellEvent)>>,
     /// 上下文事件处理任务句柄
     context_task_handle: Option<tauri::async_runtime::JoinHandle<()>>,
     /// Shell事件处理任务句柄
@@ -177,7 +178,7 @@ impl<R: Runtime> TerminalEventHandler<R> {
                     }
                 }
             });
-            
+
             self.context_task_handle = Some(handle);
         }
     }
@@ -204,13 +205,51 @@ impl<R: Runtime> TerminalEventHandler<R> {
                     }
                 }
             });
-            
+
             self.shell_task_handle = Some(handle);
         }
     }
 
     /// 处理Shell事件
     fn handle_shell_event(app_handle: &AppHandle<R>, pane_id: PaneId, event: ShellEvent) {
+        // 用 Shell Integration 的命令事件喂给补全的上下文系统：
+        // 这是“预测下一条命令”命中率的根本数据来源。
+        if let ShellEvent::CommandEvent { command } = &event {
+            if let Err(e) =
+                OutputAnalyzer::global().on_shell_command_event(pane_id.as_u32(), command)
+            {
+                warn!(
+                    "OutputAnalyzer on_shell_command_event failed: pane_id={}, err={}",
+                    pane_id.as_u32(),
+                    e
+                );
+            }
+
+            // 同时喂给离线学习模型（SQLite），用于“下一条命令”预测与排序。
+            if command.is_finished() {
+                use crate::completion::learning::{CommandFinishedEvent, CompletionLearningState};
+                use std::time::{SystemTime, UNIX_EPOCH};
+
+                if let Some(command_line) = command.command_line.clone() {
+                    let finished_ts = command
+                        .end_time_wallclock
+                        .unwrap_or_else(SystemTime::now)
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+
+                    let learning = app_handle.state::<CompletionLearningState>();
+                    learning.record_finished(CommandFinishedEvent {
+                        pane_id: pane_id.as_u32(),
+                        command_line,
+                        cwd: command.working_directory.clone(),
+                        exit_code: command.exit_code,
+                        finished_ts,
+                    });
+                }
+            }
+        }
+
         let (event_name, payload) = Self::shell_event_to_tauri_event(pane_id, &event);
 
         if let Err(e) = app_handle.emit(event_name, payload) {

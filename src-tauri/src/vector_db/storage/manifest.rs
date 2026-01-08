@@ -1,29 +1,29 @@
+use crate::vector_db::core::{ChunkId, ChunkType, Result, Span};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
-use crate::vector_db::core::{ChunkId, ChunkType, Result, Span};
 
 /// 索引清单
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexManifest {
     /// 版本号
     pub version: String,
-    
+
     /// 创建时间 (Unix timestamp)
     pub created_at: u64,
-    
+
     /// 最后更新时间 (Unix timestamp)
     pub updated_at: u64,
-    
+
     /// 嵌入模型
     pub embedding_model: String,
-    
+
     /// 向量维度
     pub vector_dimension: usize,
-    
+
     /// 文件索引映射 (文件路径 -> 文件哈希)
     pub files: HashMap<PathBuf, String>,
-    
+
     /// 块索引映射 (块 ID -> 块元数据)
     pub chunks: HashMap<ChunkId, ChunkMetadata>,
 }
@@ -80,7 +80,8 @@ impl IndexManifest {
     pub fn remove_file(&mut self, file_path: &Path) {
         self.files.remove(file_path);
         // 删除该文件的所有块
-        self.chunks.retain(|_, metadata| metadata.file_path != file_path);
+        self.chunks
+            .retain(|_, metadata| metadata.file_path != file_path);
         self.update_timestamp();
     }
 

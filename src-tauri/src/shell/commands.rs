@@ -1,13 +1,13 @@
 //! Shell 集成命令
 
-use crate::utils::{EmptyData, TauriApiResult};
+use crate::utils::{ApiResponse, EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::process::Command;
 use std::sync::Arc;
 use std::time::Instant;
 use tauri::State;
+use tokio::process::Command as AsyncCommand;
 use tracing::error;
 
 use super::{CommandInfo, PaneShellState, ShellType};
@@ -345,15 +345,55 @@ pub async fn shell_execute_background_command(
     let program = &parts[0];
     let args = &parts[1..];
 
-    let mut cmd = Command::new(program);
-    cmd.args(args);
+    shell_execute_background_program_inner(
+        start_time,
+        program.to_string(),
+        args.iter().map(|s| s.to_string()).collect(),
+        working_directory,
+        Some(command),
+        false,
+    )
+    .await
+}
+
+/// 在后台执行命令（结构化参数），不显示在终端UI中
+#[tauri::command]
+pub async fn shell_execute_background_program(
+    program: String,
+    args: Vec<String>,
+    working_directory: Option<String>,
+) -> TauriApiResult<BackgroundCommandResult> {
+    let start_time = Instant::now();
+    shell_execute_background_program_inner(start_time, program, args, working_directory, None, true).await
+}
+
+async fn shell_execute_background_program_inner(
+    start_time: Instant,
+    program: String,
+    args: Vec<String>,
+    working_directory: Option<String>,
+    command_override: Option<String>,
+    strict: bool,
+) -> TauriApiResult<BackgroundCommandResult> {
+    if program.trim().is_empty() {
+        return Ok(api_error!("shell.command_empty"));
+    }
+
+    let command = command_override.unwrap_or_else(|| {
+        let mut parts = Vec::with_capacity(1 + args.len());
+        parts.push(program.clone());
+        parts.extend(args.iter().cloned());
+        parts.join(" ")
+    });
+
+    let mut cmd = AsyncCommand::new(&program);
+    cmd.args(&args);
 
     if let Some(cwd) = working_directory {
         cmd.current_dir(cwd);
     }
 
-    // 执行命令
-    match cmd.output() {
+    match cmd.output().await {
         Ok(output) => {
             let execution_time = start_time.elapsed().as_millis() as u64;
             let exit_code = output.status.code().unwrap_or(-1);
@@ -361,6 +401,14 @@ pub async fn shell_execute_background_command(
 
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+            if strict && !success {
+                let message = stderr.trim();
+                if message.is_empty() {
+                    return Ok(api_error!("shell.execute_command_failed"));
+                }
+                return Ok(ApiResponse::error(message));
+            }
 
             Ok(api_success!(BackgroundCommandResult {
                 command,

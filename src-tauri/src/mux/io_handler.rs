@@ -61,14 +61,14 @@ impl IoHandler {
         })?;
 
         let handle = self.spawn_reader_thread(pane_id, reader, pane);
-        
+
         // 存储线程句柄
         if let Ok(mut threads) = self.reader_threads.write() {
             threads.insert(pane_id, handle);
         } else {
             warn!("无法存储面板 {:?} 的线程句柄", pane_id);
         }
-        
+
         Ok(())
     }
 
@@ -149,14 +149,14 @@ impl IoHandler {
                 if pane.is_dead() {
                     break;
                 }
-                
+
                 match reader.read(&mut buffer) {
                     Ok(0) => break,
                     Ok(len) => {
                         for chunk in decode_utf8_stream(&mut pending, &buffer[..len]) {
                             // Shell事件现在通过broadcast channel发送,不再返回
                             integration.process_output(pane_id, &chunk);
-                            
+
                             let cleaned = integration.strip_osc_sequences(&chunk);
 
                             if cleaned.is_empty() {
@@ -214,7 +214,7 @@ impl IoHandler {
 }
 
 /// 优化的 UTF-8 流解码函数
-/// 
+///
 /// 使用更高效的方式处理字节流到字符串的转换：
 /// - 减少 Vec 操作，使用 split_off 替代 drain
 /// - 预分配字符串容量
@@ -225,7 +225,7 @@ fn decode_utf8_stream(pending: &mut Vec<u8>, input: &[u8]) -> Vec<String> {
     }
 
     pending.extend_from_slice(input);
-    
+
     // 预分配结果向量（通常只有1-2个片段）
     let mut frames = Vec::with_capacity(2);
 
@@ -252,7 +252,7 @@ fn decode_utf8_stream(pending: &mut Vec<u8>, input: &[u8]) -> Vec<String> {
                     if !valid.is_empty() {
                         frames.push(valid.to_string());
                     }
-                    
+
                     // 使用 split_off 代替 drain，更高效
                     *pending = pending.split_off(valid_up_to);
                     continue;

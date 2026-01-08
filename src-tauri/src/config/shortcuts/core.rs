@@ -16,7 +16,7 @@ use crate::config::{
 };
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
-use tracing::{warn};
+use tracing::warn;
 
 pub struct ShortcutManager {
     config_manager: Arc<TomlConfigManager>,
@@ -28,7 +28,6 @@ pub struct ShortcutManager {
 
 impl ShortcutManager {
     pub async fn new(config_manager: Arc<TomlConfigManager>) -> ShortcutsResult<Self> {
-
         let action_registry = Arc::new(RwLock::new(ActionRegistry::new()));
 
         let manager = Self {
@@ -45,7 +44,6 @@ impl ShortcutManager {
     }
 
     pub async fn config_get(&self) -> ShortcutsResult<ShortcutsConfig> {
-
         {
             let cached = self.cached_config.read().await;
             if let Some(config) = cached.as_ref() {
@@ -56,7 +54,6 @@ impl ShortcutManager {
     }
 
     pub async fn config_update(&self, new_config: ShortcutsConfig) -> ShortcutsResult<()> {
-
         let validation_result = self.config_validate(&new_config).await?;
         if !validation_result.is_valid {
             let error_messages: Vec<String> = validation_result
@@ -97,7 +94,6 @@ impl ShortcutManager {
     }
 
     pub async fn shortcuts_add(&self, binding: ShortcutBinding) -> ShortcutsResult<()> {
-
         let mut config = self.config_get().await?;
 
         let key_combo = KeyCombination::from_binding(&binding);
@@ -114,7 +110,6 @@ impl ShortcutManager {
     }
 
     pub async fn shortcuts_remove(&self, index: usize) -> ShortcutsResult<ShortcutBinding> {
-
         let mut config = self.config_get().await?;
 
         if index >= config.len() {
@@ -133,7 +128,6 @@ impl ShortcutManager {
         index: usize,
         new_binding: ShortcutBinding,
     ) -> ShortcutsResult<()> {
-
         let mut config = self.config_get().await?;
         self.validate_single_binding(&new_binding).await?;
 
@@ -149,7 +143,6 @@ impl ShortcutManager {
     }
 
     pub async fn reset_to_defaults(&self) -> ShortcutsResult<()> {
-
         let default_config = crate::config::defaults::create_default_shortcuts_config();
         self.config_update(default_config).await?;
 
@@ -160,7 +153,6 @@ impl ShortcutManager {
         &self,
         config: &ShortcutsConfig,
     ) -> ShortcutsResult<ValidationResult> {
-
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
 
@@ -202,7 +194,6 @@ impl ShortcutManager {
         &self,
         config: &ShortcutsConfig,
     ) -> ShortcutsResult<ConflictResult> {
-
         let mut key_map: HashMap<String, Vec<ConflictingBinding>> = HashMap::new();
 
         for (index, binding) in config.iter().enumerate() {
@@ -256,7 +247,6 @@ impl ShortcutManager {
     }
 
     pub async fn get_statistics(&self) -> ShortcutsResult<ShortcutStatistics> {
-
         let config = self.config_get().await?;
         let total_count = config.len();
         let mut modifier_counts: HashMap<String, usize> = HashMap::new();
@@ -285,7 +275,6 @@ impl ShortcutManager {
     }
 
     pub async fn shortcuts_search(&self, options: SearchOptions) -> ShortcutsResult<SearchResult> {
-
         let config = self.config_get().await?;
         let mut matches = Vec::new();
 
@@ -373,7 +362,6 @@ impl ShortcutManager {
         action: &crate::config::types::ShortcutAction,
         context: &ActionContext,
     ) -> OperationResult<serde_json::Value> {
-
         let registry = self.action_registry.read().await;
         registry.execute_action(action, context).await
     }

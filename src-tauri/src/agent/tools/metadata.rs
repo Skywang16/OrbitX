@@ -3,6 +3,15 @@ use std::time::Duration;
 pub use crate::agent::config::{BackoffStrategy, RateLimitConfig};
 use serde::{Deserialize, Serialize};
 
+/// 工具执行模式
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExecutionMode {
+    /// 可与其他 Parallel 工具并发执行
+    Parallel,
+    /// 必须独占执行
+    Sequential,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ToolCategory {
     FileRead,
@@ -24,6 +33,17 @@ impl ToolCategory {
             Self::Network => "network",
             Self::FileSystem => "filesystem",
             Self::Terminal => "terminal",
+        }
+    }
+
+    /// 该类别的默认执行模式
+    #[inline]
+    pub const fn execution_mode(&self) -> ExecutionMode {
+        match self {
+            Self::FileRead | Self::CodeAnalysis | Self::FileSystem | Self::Network => {
+                ExecutionMode::Parallel
+            }
+            Self::FileWrite | Self::Execution | Self::Terminal => ExecutionMode::Sequential,
         }
     }
 }

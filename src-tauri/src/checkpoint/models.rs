@@ -1,86 +1,95 @@
-//! Checkpoint 系统数据模型定义
+//! Checkpoint 数据模型
 
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Checkpoint 相关错误
+/// Checkpoint 错误类型
 #[derive(Debug, thiserror::Error)]
 pub enum CheckpointError {
-    #[error("数据库错误: {0}")]
+    #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
-    #[error("IO 错误: {0}")]
+    #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("解析错误: {0}")]
-    Parse(String),
-
-    #[error("工作区路径无效: {0}")]
+    #[error("Invalid workspace path: {0}")]
     InvalidWorkspace(String),
 
-    #[error("文件路径不在工作区: {0}")]
+    #[error("File path outside workspace: {0}")]
     InvalidFilePath(String),
 
-    #[error("Checkpoint 不存在: {0}")]
+    #[error("Checkpoint not found: {0}")]
     NotFound(i64),
 
-    #[error("Blob 不存在: {0}")]
+    #[error("Blob not found: {0}")]
     BlobNotFound(String),
+
+    #[error("Parse error: {0}")]
+    Parse(String),
 }
 
 pub type CheckpointResult<T> = Result<T, CheckpointError>;
 
-/// 时间戳转 DateTime
-pub fn timestamp_to_datetime(ts: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp(ts, 0).unwrap_or_default()
+fn timestamp_to_datetime(ts: i64) -> DateTime<Utc> {
+    Utc.timestamp_opt(ts, 0).single().unwrap_or_default()
 }
 
-/// Checkpoint 记录：表示某个时间点的文件状态快照
+/// Checkpoint 记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Checkpoint {
     pub id: i64,
     pub workspace_path: String,
     pub session_id: i64,
+    pub message_id: i64,
     pub parent_id: Option<i64>,
-    pub user_message: String,
     pub created_at: DateTime<Utc>,
 }
 
 impl Checkpoint {
-    pub fn new(
-        id: i64,
-        workspace_path: String,
-        session_id: i64,
-        parent_id: Option<i64>,
-        user_message: String,
-        created_at: i64,
-    ) -> Self {
-        Self {
-            id,
-            workspace_path,
-            session_id,
-            parent_id,
-            user_message,
-            created_at: timestamp_to_datetime(created_at),
-        }
+    pub fn from_row(row: &sqlx::sqlite::SqliteRow) -> CheckpointResult<Self> {
+        use sqlx::Row;
+        Ok(Self {
+            id: row.try_get("id")?,
+            workspace_path: row.try_get("workspace_path")?,
+            session_id: row.try_get("session_id")?,
+            message_id: row.try_get("message_id")?,
+            parent_id: row.try_get("parent_id")?,
+            created_at: timestamp_to_datetime(row.try_get("created_at")?),
+        })
     }
 }
 
-/// Checkpoint 摘要：包含统计信息
+/// Checkpoint 摘要（包含文件统计）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CheckpointSummary {
     pub id: i64,
     pub workspace_path: String,
     pub session_id: i64,
+    pub message_id: i64,
     pub parent_id: Option<i64>,
-    pub user_message: String,
     pub created_at: DateTime<Utc>,
     pub file_count: i64,
     pub total_size: i64,
+}
+
+impl CheckpointSummary {
+    pub fn from_row(row: &sqlx::sqlite::SqliteRow) -> CheckpointResult<Self> {
+        use sqlx::Row;
+        Ok(Self {
+            id: row.try_get("id")?,
+            workspace_path: row.try_get("workspace_path")?,
+            session_id: row.try_get("session_id")?,
+            message_id: row.try_get("message_id")?,
+            parent_id: row.try_get("parent_id")?,
+            created_at: timestamp_to_datetime(row.try_get("created_at")?),
+            file_count: row.try_get("file_count")?,
+            total_size: row.try_get("total_size")?,
+        })
+    }
 }
 
 /// 文件变更类型
@@ -118,7 +127,7 @@ impl FromStr for FileChangeType {
     }
 }
 
-/// 文件快照：记录某个文件在 checkpoint 时的状态
+/// 文件快照
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileSnapshot {
@@ -132,34 +141,26 @@ pub struct FileSnapshot {
 }
 
 impl FileSnapshot {
-    pub fn new(
-        id: i64,
-        checkpoint_id: i64,
-        file_path: String,
-        blob_hash: String,
-        change_type: FileChangeType,
-        file_size: i64,
-        created_at: i64,
-    ) -> Self {
-        Self {
-            id,
-            checkpoint_id,
-            file_path,
-            blob_hash,
-            change_type,
-            file_size,
-            created_at: timestamp_to_datetime(created_at),
-        }
+    pub fn from_row(row: &sqlx::sqlite::SqliteRow) -> CheckpointResult<Self> {
+        use sqlx::Row;
+        Ok(Self {
+            id: row.try_get("id")?,
+            checkpoint_id: row.try_get("checkpoint_id")?,
+            file_path: row.try_get("file_path")?,
+            blob_hash: row.try_get("blob_hash")?,
+            change_type: row.try_get::<String, _>("change_type")?.parse()?,
+            file_size: row.try_get("file_size")?,
+            created_at: timestamp_to_datetime(row.try_get("created_at")?),
+        })
     }
 }
 
-/// 文件差异：两个状态之间的文件变化
+/// 文件差异
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileDiff {
     pub file_path: String,
     pub change_type: FileChangeType,
-    /// unified diff 格式的差异内容，删除的文件为 None
     pub diff_content: Option<String>,
 }
 
@@ -167,26 +168,21 @@ pub struct FileDiff {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RollbackResult {
-    /// 回滚目标 checkpoint ID
     pub checkpoint_id: i64,
-    /// 回滚后创建的新 checkpoint ID
-    pub new_checkpoint_id: i64,
-    /// 成功恢复的文件列表
     pub restored_files: Vec<String>,
-    /// 恢复失败的文件列表：(文件路径, 错误信息)
     pub failed_files: Vec<(String, String)>,
 }
 
-/// 新建 Checkpoint 的输入参数
+/// 创建 Checkpoint 的参数
 #[derive(Debug, Clone)]
 pub struct NewCheckpoint {
     pub workspace_path: String,
     pub session_id: i64,
+    pub message_id: i64,
     pub parent_id: Option<i64>,
-    pub user_message: String,
 }
 
-/// 新建文件快照的输入参数
+/// 创建文件快照的参数
 #[derive(Debug, Clone)]
 pub struct NewFileSnapshot {
     pub checkpoint_id: i64,

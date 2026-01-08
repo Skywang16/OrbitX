@@ -22,11 +22,11 @@ use crate::agent::context::SessionSummarizer;
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::iteration_outcome::IterationOutcome;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
-use crate::agent::events::{TaskProgressPayload, TextPayload, ThinkingPayload};
 use crate::agent::memory::compactor::{CompactionResult, MessageCompactor};
 use crate::agent::persistence::AgentPersistence;
 use crate::agent::state::iteration::{IterationContext, IterationSnapshot};
 use crate::agent::state::session::CompressedMemory;
+use crate::agent::types::{Block, TextBlock, ThinkingBlock};
 use crate::llm::anthropic_types::{
     ContentBlock, ContentBlockStart, ContentDelta, StreamEvent, SystemPrompt,
 };
@@ -193,6 +193,8 @@ impl ReactOrchestrator {
 
             let mut thinking_stream_id: Option<String> = None;
             let mut text_stream_id: Option<String> = None;
+            let mut thinking_created = false;
+            let mut text_created = false;
 
             // ===== Phase 3: 处理 Anthropic StreamEvent =====
             while let Some(item) = stream.next().await {
@@ -233,17 +235,19 @@ impl ReactOrchestrator {
                                         if text_stream_id.is_none() {
                                             text_stream_id = Some(Uuid::new_v4().to_string());
                                         }
-                                        context
-                                            .send_progress(TaskProgressPayload::Text(TextPayload {
-                                                task_id: context.task_id.to_string(),
-                                                iteration,
-                                                text,
-                                                stream_id: text_stream_id.clone().unwrap(),
-                                                stream_done: false,
-                                                timestamp: Utc::now(),
-                                            }))
-                                            .await?;
-                                        iter_ctx.append_output(&s).await;
+                                        let id = text_stream_id.clone().unwrap();
+                                        let block = Block::Text(TextBlock {
+                                            id: id.clone(),
+                                            content: s.clone(),
+                                            is_streaming: true,
+                                        });
+                                        if text_created {
+                                            context.assistant_update_block(&id, block).await?;
+                                        } else {
+                                            context.assistant_append_block(block).await?;
+                                            text_created = true;
+                                        }
+                                        iter_ctx.append_output(&text).await;
                                     }
                                 }
                                 ContentDelta::InputJsonDelta { partial_json } => {
@@ -257,19 +261,19 @@ impl ReactOrchestrator {
                                         if thinking_stream_id.is_none() {
                                             thinking_stream_id = Some(Uuid::new_v4().to_string());
                                         }
-                                        context
-                                            .send_progress(TaskProgressPayload::Thinking(
-                                                ThinkingPayload {
-                                                    task_id: context.task_id.to_string(),
-                                                    iteration,
-                                                    thought: thinking,
-                                                    stream_id: thinking_stream_id.clone().unwrap(),
-                                                    stream_done: false,
-                                                    timestamp: Utc::now(),
-                                                },
-                                            ))
-                                            .await?;
-                                        iter_ctx.append_thinking(&s).await;
+                                        let id = thinking_stream_id.clone().unwrap();
+                                        let block = Block::Thinking(ThinkingBlock {
+                                            id: id.clone(),
+                                            content: s.clone(),
+                                            is_streaming: true,
+                                        });
+                                        if thinking_created {
+                                            context.assistant_update_block(&id, block).await?;
+                                        } else {
+                                            context.assistant_append_block(block).await?;
+                                            thinking_created = true;
+                                        }
+                                        iter_ctx.append_thinking(&thinking).await;
                                     }
                                 }
                             }
@@ -279,6 +283,16 @@ impl ReactOrchestrator {
                         if let Some(block) = current_blocks.remove(&index) {
                             match block {
                                 BlockAccumulator::Text(text) => {
+                                    if text_created {
+                                        if let Some(id) = &text_stream_id {
+                                            let block = Block::Text(TextBlock {
+                                                id: id.clone(),
+                                                content: text.clone(),
+                                                is_streaming: false,
+                                            });
+                                            let _ = context.assistant_update_block(id, block).await;
+                                        }
+                                    }
                                     if !text.is_empty() {
                                         text_content.push(text);
                                     }
@@ -307,7 +321,18 @@ impl ReactOrchestrator {
                                         .await;
                                     pending_tool_calls.push((id, name, input));
                                 }
-                                BlockAccumulator::Thinking(_) => {}
+                                BlockAccumulator::Thinking(thinking) => {
+                                    if thinking_created {
+                                        if let Some(id) = &thinking_stream_id {
+                                            let block = Block::Thinking(ThinkingBlock {
+                                                id: id.clone(),
+                                                content: thinking,
+                                                is_streaming: false,
+                                            });
+                                            let _ = context.assistant_update_block(id, block).await;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -335,7 +360,7 @@ impl ReactOrchestrator {
             };
             context
                 .add_assistant_message(final_text.clone(), Some(tool_use_blocks))
-                .await;
+                .await?;
 
             // ===== Phase 5: 分类迭代结果 =====
             let outcome = if !pending_tool_calls.is_empty() {
@@ -405,7 +430,7 @@ impl ReactOrchestrator {
                                 outcome,
                             );
 
-                            if result.is_error {
+                            if result.status != crate::agent::tools::ToolResultStatus::Success {
                                 react.fail_iteration(
                                     react_iteration_index,
                                     format!("Tool {} failed", result.tool_name),

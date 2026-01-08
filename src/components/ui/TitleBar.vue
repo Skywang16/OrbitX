@@ -1,22 +1,9 @@
 <script setup lang="ts">
-  import { ref } from 'vue'
+  import { onBeforeUnmount, onMounted, ref } from 'vue'
   import ButtonGroup from '@/components/ui/ButtonGroup.vue'
-  import TabBar from '@/components/ui/TabBar.vue'
-  import type { AnyTabItem } from '@/types'
+  import EditorHeader from '@/components/editor/EditorHeader.vue'
   import { getCurrentWindow } from '@tauri-apps/api/window'
 
-  interface Props {
-    tabs: AnyTabItem[]
-    activeTabId: number | null
-  }
-
-  interface Emits {
-    (e: 'switch', tabId: number): void
-    (e: 'close', tabId: number): void
-  }
-
-  const props = defineProps<Props>()
-  const emit = defineEmits<Emits>()
   const DOUBLE_CLICK_TIME = 500
   const DRAG_THRESHOLD = 2
 
@@ -25,6 +12,31 @@
   const mouseDownPos = ref({ x: 0, y: 0 })
   const isDragging = ref(false)
   const canDrag = ref(false)
+
+  const controlsRef = ref<HTMLElement | null>(null)
+  const rightGutterWidth = ref(0)
+  let resizeObserver: ResizeObserver | null = null
+
+  const LEFT_GUTTER_WIDTH = 80
+
+  const updateRightGutterWidth = () => {
+    const el = controlsRef.value
+    if (!el) return
+    rightGutterWidth.value = Math.ceil(el.getBoundingClientRect().width) + 12
+  }
+
+  onMounted(() => {
+    updateRightGutterWidth()
+    const el = controlsRef.value
+    if (!el) return
+    resizeObserver = new ResizeObserver(() => updateRightGutterWidth())
+    resizeObserver.observe(el)
+  })
+
+  onBeforeUnmount(() => {
+    resizeObserver?.disconnect()
+    resizeObserver = null
+  })
 
   const startDrag = async () => {
     await getCurrentWindow().startDragging()
@@ -106,18 +118,17 @@
     @mousemove="handleMouseMove"
     @mouseup="handleMouseUp"
   >
-    <div class="left-buttons-space"></div>
-
-    <div class="tab-bar-container" data-tauri-drag-region="false">
-      <TabBar
-        :tabs="props.tabs"
-        :activeTabId="activeTabId"
-        @switch="emit('switch', $event)"
-        @close="emit('close', $event)"
-      />
+    <div
+      class="title-bar__tabs"
+      :style="{
+        '--orbitx-titlebar-left-gutter': `${LEFT_GUTTER_WIDTH}px`,
+        '--orbitx-titlebar-right-gutter': `${rightGutterWidth}px`,
+      }"
+    >
+      <EditorHeader />
     </div>
 
-    <div class="window-controls-container">
+    <div ref="controlsRef" class="window-controls-container">
       <ButtonGroup />
     </div>
   </div>
@@ -127,7 +138,8 @@
   .title-bar {
     display: flex;
     align-items: center;
-    height: var(--titlebar-height);
+    position: relative;
+    align-items: stretch;
     background-color: var(--bg-200);
     cursor: default;
     border-bottom: 1px solid var(--border-200);
@@ -135,20 +147,19 @@
     -webkit-user-select: none;
   }
 
-  .left-buttons-space {
-    width: 80px;
-    height: var(--titlebar-element-height);
-    cursor: default;
-  }
-
-  .tab-bar-container {
+  .title-bar__tabs {
     flex: 1;
     min-width: 0;
+    height: 100%;
+    overflow: hidden;
   }
 
   .window-controls-container {
-    flex-shrink: 0;
-    margin-left: auto;
-    margin-right: var(--spacing-sm);
+    position: absolute;
+    top: 0;
+    right: var(--spacing-sm);
+    height: var(--titlebar-height);
+    display: flex;
+    align-items: center;
   }
 </style>

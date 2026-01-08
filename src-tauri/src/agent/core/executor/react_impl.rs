@@ -5,19 +5,22 @@
  */
 
 use serde_json::Value;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::agent::context::ContextBuilder;
 use crate::agent::core::context::{TaskContext, ToolCallResult};
 use crate::agent::core::executor::{ReactHandler, TaskExecutor};
 use crate::agent::error::TaskExecutorResult;
-use crate::agent::events::{TaskProgressPayload, ToolResultPayload, ToolUsePayload};
-use crate::agent::tools::{ToolDescriptionContext, ToolRegistry};
+use crate::agent::tools::{
+    self, ToolDescriptionContext, ToolRegistry, ToolResultContent, ToolResultStatus,
+};
+use crate::agent::types::{Block, ToolBlock, ToolOutput, ToolStatus};
 use crate::llm::anthropic_types::CreateMessageRequest;
 
 #[async_trait::async_trait]
 impl ReactHandler for TaskExecutor {
-    #[inline] // 编译器内联，零开销
+    #[inline]
     async fn build_llm_request(
         &self,
         context: &TaskContext,
@@ -105,86 +108,95 @@ impl ReactHandler for TaskExecutor {
     async fn execute_tools(
         &self,
         context: &TaskContext,
-        iteration: u32,
+        _iteration: u32,
         tool_calls: Vec<(String, String, Value)>,
     ) -> TaskExecutorResult<Vec<ToolCallResult>> {
-        let mut results = Vec::with_capacity(tool_calls.len());
+        let mut tool_started_at: HashMap<String, chrono::DateTime<chrono::Utc>> = HashMap::new();
+        let mut tool_inputs: HashMap<String, Value> = HashMap::new();
 
-        // 串行执行工具调用（保持原有逻辑）
-        for (call_id, tool_name, params) in tool_calls {
-            // 发送ToolUse事件
+        for (call_id, tool_name, params) in &tool_calls {
+            let now = chrono::Utc::now();
+            tool_started_at.insert(call_id.clone(), now);
+            tool_inputs.insert(call_id.clone(), params.clone());
             context
-                .send_progress(TaskProgressPayload::ToolUse(ToolUsePayload {
-                    task_id: context.task_id.to_string(),
-                    iteration,
-                    tool_id: call_id.clone(),
-                    tool_name: tool_name.clone(),
-                    params: params.clone(),
-                    timestamp: chrono::Utc::now(),
+                .assistant_append_block(Block::Tool(ToolBlock {
+                    id: call_id.clone(),
+                    name: tool_name.clone(),
+                    status: ToolStatus::Running,
+                    input: params.clone(),
+                    output: None,
+                    started_at: now,
+                    finished_at: None,
+                    duration_ms: None,
                 }))
                 .await?;
+        }
 
-            let start = std::time::Instant::now();
+        // 转换为 ToolCall 并并行执行
+        let calls: Vec<tools::ToolCall> = tool_calls
+            .into_iter()
+            .map(|(id, name, params)| tools::ToolCall { id, name, params })
+            .collect();
 
-            // 执行工具
-            let tool_result = context
-                .tool_registry()
-                .execute_tool(&tool_name, context, params.clone())
-                .await;
+        let responses = tools::execute_batch(&context.tool_registry(), context, calls).await;
 
-            let execution_time = start.elapsed().as_millis() as u64;
+        // 转换结果并发送事件
+        let mut results = Vec::with_capacity(responses.len());
+        for resp in responses {
+            let (result_status, result_value) = convert_result(&resp.result);
+            let finished_at = chrono::Utc::now();
+            let started_at = tool_started_at
+                .get(&resp.id)
+                .copied()
+                .unwrap_or(finished_at);
+            let input = tool_inputs.get(&resp.id).cloned().unwrap_or(Value::Null);
 
-            // 转换ToolResult到我们的格式
-            let (is_error, result_value) = if tool_result.is_error {
-                let error_msg = tool_result
-                    .content
-                    .iter()
-                    .filter_map(|c| match c {
-                        crate::agent::tools::ToolResultContent::Error(text) => Some(text.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                (true, serde_json::json!({"error": error_msg}))
-            } else {
-                let success_content = tool_result
-                    .content
-                    .iter()
-                    .filter_map(|c| match c {
-                        crate::agent::tools::ToolResultContent::Success(text) => Some(text.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                (false, serde_json::json!({"result": success_content}))
+            let status = match result_status {
+                ToolResultStatus::Success => ToolStatus::Completed,
+                ToolResultStatus::Error => ToolStatus::Error,
+                ToolResultStatus::Cancelled => ToolStatus::Cancelled,
             };
 
-            // 发送ToolResult事件
+            // Update the existing tool block (created on ToolUse).
             context
-                .send_progress(TaskProgressPayload::ToolResult(ToolResultPayload {
-                    task_id: context.task_id.to_string(),
-                    iteration,
-                    tool_id: call_id.clone(),
-                    tool_name: tool_name.clone(),
-                    result: result_value.clone(),
-                    is_error,
-                    ext_info: tool_result.ext_info.clone(),
-                    timestamp: chrono::Utc::now(),
-                }))
+                .assistant_update_block(
+                    &resp.id,
+                    Block::Tool(ToolBlock {
+                        id: resp.id.clone(),
+                        name: resp.name.clone(),
+                        status,
+                        input,
+                        output: Some(ToolOutput {
+                            content: result_value.clone(),
+                            cancel_reason: resp.result.cancel_reason.clone(),
+                            ext: resp.result.ext_info.clone(),
+                        }),
+                        started_at,
+                        finished_at: Some(finished_at),
+                        duration_ms: resp.result.execution_time_ms.map(|v| v as i64).or_else(
+                            || {
+                                Some(
+                                    finished_at
+                                        .signed_duration_since(started_at)
+                                        .num_milliseconds()
+                                        .max(0) as i64,
+                                )
+                            },
+                        ),
+                    }),
+                )
                 .await?;
 
             results.push(ToolCallResult {
-                call_id,
-                tool_name,
+                call_id: resp.id,
+                tool_name: resp.name,
                 result: result_value,
-                is_error,
-                execution_time_ms: execution_time,
+                status: result_status,
+                execution_time_ms: resp.result.execution_time_ms.unwrap_or(0),
             });
         }
 
-        // 添加到context
-        context.add_tool_results(results.clone()).await;
-
+        context.add_tool_results(results.clone()).await?;
         Ok(results)
     }
 
@@ -192,5 +204,57 @@ impl ReactHandler for TaskExecutor {
     async fn get_context_builder(&self, context: &TaskContext) -> Arc<ContextBuilder> {
         let file_tracker = context.file_tracker();
         Arc::new(ContextBuilder::new(file_tracker))
+    }
+}
+
+/// 转换 ToolResult 到 (status, json_value)
+#[inline]
+fn convert_result(result: &tools::ToolResult) -> (ToolResultStatus, Value) {
+    match result.status {
+        ToolResultStatus::Success => {
+            let content = result
+                .content
+                .iter()
+                .filter_map(|c| match c {
+                    ToolResultContent::Success(text) => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            (
+                ToolResultStatus::Success,
+                serde_json::json!({ "result": content }),
+            )
+        }
+        ToolResultStatus::Error => {
+            let msg = result
+                .content
+                .iter()
+                .filter_map(|c| match c {
+                    ToolResultContent::Error(text) => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            (ToolResultStatus::Error, serde_json::json!({ "error": msg }))
+        }
+        ToolResultStatus::Cancelled => {
+            let msg = result
+                .content
+                .iter()
+                .filter_map(|c| match c {
+                    ToolResultContent::Error(text) => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            (
+                ToolResultStatus::Cancelled,
+                serde_json::json!({
+                    "cancelled": msg,
+                    "reason": result.cancel_reason
+                }),
+            )
+        }
     }
 }

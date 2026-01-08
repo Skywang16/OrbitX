@@ -7,6 +7,8 @@ use serde::Serialize;
 use sqlx::{self, Row};
 use tokio::task;
 
+use crate::agent::persistence::AgentPersistence;
+use crate::agent::types::{Block, Message};
 use crate::storage::DatabaseManager;
 
 /// 未分组工作区的特殊路径标识
@@ -34,27 +36,18 @@ pub struct SessionRecord {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionMessageRecord {
-    pub id: i64,
-    pub session_id: i64,
-    pub role: String,
-    pub content: Option<String>,
-    pub steps_json: Option<String>,
-    pub images_json: Option<String>,
-    pub status: Option<String>,
-    pub duration_ms: Option<i64>,
-    pub created_at: i64,
-}
-
 pub struct WorkspaceService {
     database: Arc<DatabaseManager>,
+    agent_persistence: Arc<AgentPersistence>,
 }
 
 impl WorkspaceService {
     pub fn new(database: Arc<DatabaseManager>) -> Self {
-        Self { database }
+        let persistence = Arc::new(AgentPersistence::new(Arc::clone(&database)));
+        Self {
+            database,
+            agent_persistence: persistence,
+        }
     }
 
     fn pool(&self) -> &sqlx::SqlitePool {
@@ -127,7 +120,7 @@ impl WorkspaceService {
         let normalized = self.normalize_path(workspace_path).await?;
         let rows = sqlx::query(
             "SELECT s.id, s.workspace_path, s.title, s.created_at, s.updated_at,
-                    (SELECT COUNT(*) FROM session_messages WHERE session_id = s.id AND role = 'user') as message_count
+                    (SELECT COUNT(*) FROM messages WHERE session_id = s.id AND role = 'user') as message_count
              FROM sessions s
              WHERE s.workspace_path = ?
              ORDER BY s.updated_at DESC, s.id DESC",
@@ -182,6 +175,36 @@ impl WorkspaceService {
         Ok(created)
     }
 
+    pub async fn trim_session_messages(
+        &self,
+        workspace_path: &str,
+        session_id: i64,
+        message_id: i64,
+    ) -> Result<()> {
+        let normalized = self.normalize_path(workspace_path).await?;
+        let session = self
+            .get_session(session_id)
+            .await?
+            .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+
+        if session.workspace_path != normalized {
+            return Err(anyhow!(
+                "Session {} does not belong to workspace {}",
+                session_id,
+                workspace_path
+            ));
+        }
+
+        self.agent_persistence
+            .messages()
+            .delete_messages_from(session_id, message_id)
+            .await
+            .map_err(|e| anyhow!("Trim session messages failed: {}", e))?;
+
+        self.refresh_session_metadata(session_id).await?;
+        Ok(())
+    }
+
     pub async fn set_active_session(
         &self,
         workspace_path: &str,
@@ -203,18 +226,12 @@ impl WorkspaceService {
         Ok(())
     }
 
-    pub async fn get_session_messages(&self, session_id: i64) -> Result<Vec<SessionMessageRecord>> {
-        let rows = sqlx::query(
-            "SELECT id, session_id, role, content, steps_json, images_json, status, duration_ms, created_at
-             FROM session_messages
-             WHERE session_id = ?
-             ORDER BY created_at ASC, id ASC",
-        )
-        .bind(session_id)
-        .fetch_all(self.pool())
-        .await?;
-
-        Ok(rows.into_iter().map(build_session_message).collect())
+    pub async fn get_session_messages(&self, session_id: i64) -> Result<Vec<Message>> {
+        self.agent_persistence
+            .messages()
+            .list_by_session(session_id)
+            .await
+            .map_err(|e| anyhow!("Load session messages failed: {}", e))
     }
 
     pub async fn delete_workspace(&self, path: &str) -> Result<()> {
@@ -272,7 +289,7 @@ impl WorkspaceService {
     pub async fn get_session(&self, id: i64) -> Result<Option<SessionRecord>> {
         let row = sqlx::query(
             "SELECT s.id, s.workspace_path, s.title, s.created_at, s.updated_at,
-                    (SELECT COUNT(*) FROM session_messages WHERE session_id = s.id AND role = 'user') as message_count
+                    (SELECT COUNT(*) FROM messages WHERE session_id = s.id AND role = 'user') as message_count
              FROM sessions s WHERE s.id = ?",
         )
         .bind(id)
@@ -314,16 +331,45 @@ fn build_session(row: sqlx::sqlite::SqliteRow) -> SessionRecord {
     }
 }
 
-fn build_session_message(row: sqlx::sqlite::SqliteRow) -> SessionMessageRecord {
-    SessionMessageRecord {
-        id: row.try_get("id").unwrap_or_default(),
-        session_id: row.try_get("session_id").unwrap_or_default(),
-        role: row.try_get("role").unwrap_or_default(),
-        content: row.try_get("content").unwrap_or(None),
-        steps_json: row.try_get("steps_json").unwrap_or(None),
-        images_json: row.try_get("images_json").unwrap_or(None),
-        status: row.try_get("status").unwrap_or(None),
-        duration_ms: row.try_get("duration_ms").unwrap_or(None),
-        created_at: row.try_get("created_at").unwrap_or_default(),
+impl WorkspaceService {
+    async fn refresh_session_metadata(&self, session_id: i64) -> Result<()> {
+        let latest_user_blocks_json: Option<String> = sqlx::query_scalar(
+            "SELECT blocks_json FROM messages
+             WHERE session_id = ? AND role = 'user'
+             ORDER BY created_at DESC, id DESC LIMIT 1",
+        )
+        .bind(session_id)
+        .fetch_optional(self.pool())
+        .await?
+        .flatten();
+
+        let latest_user_content = latest_user_blocks_json
+            .as_deref()
+            .and_then(extract_user_text_from_blocks_json);
+
+        let last_timestamp: Option<i64> =
+            sqlx::query_scalar("SELECT MAX(created_at) FROM messages WHERE session_id = ?")
+                .bind(session_id)
+                .fetch_one(self.pool())
+                .await?;
+
+        let updated_at = last_timestamp.unwrap_or_else(Self::now_timestamp);
+
+        sqlx::query("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?")
+            .bind(latest_user_content.as_deref())
+            .bind(updated_at)
+            .bind(session_id)
+            .execute(self.pool())
+            .await?;
+
+        Ok(())
     }
+}
+
+fn extract_user_text_from_blocks_json(blocks_json: &str) -> Option<String> {
+    let blocks: Vec<Block> = serde_json::from_str(blocks_json).ok()?;
+    blocks.into_iter().find_map(|block| match block {
+        Block::UserText(t) => Some(t.content),
+        _ => None,
+    })
 }

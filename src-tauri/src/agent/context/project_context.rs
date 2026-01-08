@@ -88,7 +88,6 @@ impl ProjectContextLoader {
                     return None;
                 }
 
-
                 Some(ProjectContext {
                     source_file: filename.to_string(),
                     content: trimmed.to_string(),

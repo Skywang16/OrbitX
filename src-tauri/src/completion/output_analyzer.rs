@@ -1,90 +1,84 @@
 /*!
  * 输出分析器模块
  *
- * 负责分析终端输出，提取有用的上下文信息用于智能补全
+ * 负责分析终端输出，提取有用的上下文信息用于智能补全和 replay
  */
 
-use crate::completion::error::{OutputAnalyzerError, OutputAnalyzerResult};
+use crate::completion::error::OutputAnalyzerResult;
+use crate::completion::command_line::normalize_command_line;
 use crate::completion::providers::ContextAwareProvider;
 use crate::completion::smart_extractor::SmartExtractor;
 use crate::mux::ConfigManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
-use std::time::{Duration, Instant};
-use tracing::{ warn};
+use std::time::Instant;
+use tracing::warn;
 
-/// 全局输出分析器实例
 static GLOBAL_OUTPUT_ANALYZER: OnceLock<Arc<OutputAnalyzer>> = OnceLock::new();
 
-/// 面板缓冲区条目
-#[derive(Debug, Clone)]
-struct PaneBufferEntry {
+struct HistoryBufferEntry {
     content: String,
-    last_access: Instant,
     created_at: Instant,
 }
 
-impl PaneBufferEntry {
+impl HistoryBufferEntry {
     fn new() -> Self {
         Self {
             content: String::new(),
-            last_access: Instant::now(),
             created_at: Instant::now(),
         }
     }
 
-    fn access(&mut self) {
-        self.last_access = Instant::now();
-    }
-
-    fn is_stale(&self, max_age: Duration) -> bool {
-        self.last_access.elapsed() > max_age
-    }
-
     fn is_too_new(&self) -> bool {
-        self.created_at.elapsed() < Duration::from_secs(2)
+        self.created_at.elapsed() < std::time::Duration::from_secs(2)
+    }
+
+    fn append(&mut self, data: &str, max_size: usize) {
+        self.content.push_str(data);
+
+        if self.content.len() > max_size {
+            let keep_size = max_size / 2;
+            let start = self.content.len().saturating_sub(keep_size);
+
+            let byte_start = self.content[start..]
+                .char_indices()
+                .find(|(i, _)| i > &0)
+                .map(|(i, _)| start + i)
+                .unwrap_or(start);
+
+            self.content = self.content[byte_start..].to_string();
+        }
     }
 }
 
-/// 输出分析器
 pub struct OutputAnalyzer {
-    /// 上下文感知提供者
     context_provider: Arc<Mutex<ContextAwareProvider>>,
-    /// 命令输出缓冲区 - 按面板ID存储，包含访问时间信息
-    output_buffer: Arc<Mutex<HashMap<u32, PaneBufferEntry>>>,
-    /// 最后清理时间
-    last_global_cleanup: Arc<Mutex<Instant>>,
+    history_buffer: Arc<Mutex<HashMap<u32, HistoryBufferEntry>>>,
+    active_command_ids: Arc<Mutex<HashMap<u32, u64>>>,
 }
 
 impl OutputAnalyzer {
-    /// 创建新的输出分析器
     pub fn new() -> Self {
         Self {
             context_provider: Arc::new(Mutex::new(ContextAwareProvider::new())),
-            output_buffer: Arc::new(Mutex::new(HashMap::new())),
-            last_global_cleanup: Arc::new(Mutex::new(Instant::now())),
+            history_buffer: Arc::new(Mutex::new(HashMap::new())),
+            active_command_ids: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    /// 获取全局实例
     pub fn global() -> &'static Arc<OutputAnalyzer> {
         GLOBAL_OUTPUT_ANALYZER.get_or_init(|| Arc::new(OutputAnalyzer::new()))
     }
 
-    /// 安全获取缓冲区锁，处理中毒情况
-    fn get_buffer_lock(
+    fn get_history_buffer_lock(
         &self,
-    ) -> OutputAnalyzerResult<MutexGuard<'_, HashMap<u32, PaneBufferEntry>>> {
-        match self.output_buffer.lock() {
+    ) -> OutputAnalyzerResult<MutexGuard<'_, HashMap<u32, HistoryBufferEntry>>> {
+        match self.history_buffer.lock() {
             Ok(guard) => Ok(guard),
-            Err(poisoned) => {
-                warn!("输出缓冲区锁被中毒，尝试恢复数据");
-                Ok(poisoned.into_inner())
-            }
+            Err(poisoned) => Ok(poisoned.into_inner()),
         }
     }
 
-    /// 安全获取上下文提供者锁，处理中毒情况
     fn get_context_provider_lock(
         &self,
     ) -> OutputAnalyzerResult<MutexGuard<'_, ContextAwareProvider>> {
@@ -97,198 +91,162 @@ impl OutputAnalyzer {
         }
     }
 
-    /// 分析终端输出
+    /// 分析终端输出，写入历史缓冲区
     pub fn analyze_output(&self, pane_id: u32, data: &str) -> OutputAnalyzerResult<()> {
+        if data.is_empty() {
+            return Ok(());
+        }
 
-        self.maybe_cleanup_stale_buffers()?;
+        let config = ConfigManager::config_get();
 
-        // 一次性处理所有缓冲区操作，避免多次获取锁
-        let (should_process_commands, processed_output) = {
-            let mut buffer = self.get_buffer_lock()?;
+        let should_process = {
+            let mut history_buffer = self.get_history_buffer_lock()?;
+            let entry = history_buffer
+                .entry(pane_id)
+                .or_insert_with(HistoryBufferEntry::new);
 
-            let entry = buffer.entry(pane_id).or_insert_with(PaneBufferEntry::new);
-            entry.access();
+            let before_len = entry.content.len();
+            entry.append(data, config.buffer.max_size);
 
-            // 添加新数据
-            entry.content.push_str(data);
-
-            // 安全截断缓冲区，防止内存泄漏和无限循环
-            let config = ConfigManager::config_get();
-            if entry.content.len() > config.buffer.max_size {
-                self.safe_truncate_buffer(&mut entry.content)?;
-            }
-
-            let should_process = self.has_complete_command(&entry.content);
-            let content_copy = if should_process {
-                Some(entry.content.clone())
-            } else {
-                None
-            };
-
-            (should_process, content_copy)
+            // 只检查新内容
+            let new_content = &entry.content[before_len..];
+            self.has_complete_command(new_content)
         };
 
-        // 在锁外处理命令，避免死锁
-        if should_process_commands {
-            if let Some(output) = processed_output {
-                self.process_complete_commands(pane_id, &output)?;
+        if should_process {
+            if let Some((command, output)) = self.get_pane_buffer(pane_id).ok()
+                .and_then(|content| self.detect_command_completion(&content)) {
+                // 无 Shell Integration 的 fallback 路径：从 prompt/输出中猜测命令边界
+                self.record_completed_command(
+                    pane_id,
+                    command,
+                    output,
+                    "/tmp".to_string(),
+                )?;
             }
         }
 
         Ok(())
     }
 
-    /// 安全截断缓冲区，防止无限循环
-    fn safe_truncate_buffer(&self, content: &mut String) -> OutputAnalyzerResult<()> {
-        let config = ConfigManager::config_get();
-        let target_start = content.len().saturating_sub(config.buffer.keep_size);
-        let mut byte_start = target_start;
-        let mut attempts = 0;
+    /// 处理来自 Shell Integration 的命令事件：可靠的“上一条命令”来源
+    ///
+    /// 设计要点：
+    /// - 命令开始时清空缓冲区，确保后续缓冲内容只属于该命令
+    /// - 命令结束时将缓冲区作为输出记录，用于预测/实体补全
+    pub fn on_shell_command_event(
+        &self,
+        pane_id: u32,
+        command: &crate::shell::CommandInfo,
+    ) -> OutputAnalyzerResult<()> {
+        let Some(command_line) = command.command_line.as_deref().and_then(normalize_command_line)
+        else {
+            return Ok(());
+        };
 
-        // 防止无限循环的安全检查
-        while !content.is_char_boundary(byte_start)
-            && byte_start < content.len()
-            && attempts < config.buffer.max_truncation_attempts
-        {
-            byte_start += 1;
-            attempts += 1;
-        }
+        if command.is_finished() {
+            let output = self.get_pane_buffer(pane_id).unwrap_or_default();
+            let cwd = command
+                .working_directory
+                .as_deref()
+                .unwrap_or("/tmp")
+                .to_string();
 
-        if attempts >= config.buffer.max_truncation_attempts {
-            warn!("字符边界查找超过最大尝试次数，使用保守截断策略");
-            byte_start = content.len().saturating_sub(config.buffer.keep_size / 2);
+            self.record_completed_command(pane_id, command_line.to_string(), output, cwd)?;
+            self.clear_pane_buffer(pane_id)?;
 
-            // 确保不会在UTF-8字符中间截断
-            while byte_start > 0 && !content.is_char_boundary(byte_start) {
-                byte_start -= 1;
+            if let Ok(mut active) = self.active_command_ids.lock() {
+                active.remove(&pane_id);
             }
+            return Ok(());
         }
 
-        if byte_start > 0 && byte_start < content.len() {
-            let truncated = content.split_off(byte_start);
-            *content = truncated;
+        // Running：只在 command id 切换时清空一次，避免重复清空导致丢输出
+        let should_clear = match self.active_command_ids.lock() {
+            Ok(mut active) => match active.get(&pane_id).copied() {
+                Some(id) if id == command.id => false,
+                _ => {
+                    active.insert(pane_id, command.id);
+                    true
+                }
+            },
+            Err(poisoned) => {
+                let mut active = poisoned.into_inner();
+                match active.get(&pane_id).copied() {
+                    Some(id) if id == command.id => false,
+                    _ => {
+                        active.insert(pane_id, command.id);
+                        true
+                    }
+                }
+            }
+        };
+
+        if should_clear {
+            self.clear_pane_buffer(pane_id)?;
         }
 
         Ok(())
     }
 
-    /// 检查是否有完整的命令
     fn has_complete_command(&self, content: &str) -> bool {
-        // 简单检查：是否包含提示符模式
         content.lines().any(|line| {
             line.contains('$') || line.contains('#') || line.contains('%') || line.contains('>')
         })
     }
 
-    /// 处理完整的命令（在锁外调用，避免死锁）
-    fn process_complete_commands(&self, pane_id: u32, output: &str) -> OutputAnalyzerResult<()> {
+    pub fn get_pane_buffer(&self, pane_id: u32) -> OutputAnalyzerResult<String> {
+        let history_buffer = self.get_history_buffer_lock()?;
 
-        // 尝试检测命令
-        if let Some((command, command_output)) = self.detect_command_completion(output) {
+        if let Some(entry) = history_buffer.get(&pane_id) {
+            Ok(entry.content.clone())
+        } else {
+            Ok(String::new())
+        }
+    }
 
-            self.process_complete_command(&command, &command_output)?;
-
-            // 清理缓冲区中已处理的部分（一次性操作）
-            {
-                let mut buffer = self.get_buffer_lock()?;
-                if let Some(entry) = buffer.get_mut(&pane_id) {
-                    entry.access();
-
-                    // 保留最后的提示符部分
-                    if let Some(last_prompt_pos) = entry.content.rfind('$') {
-                        entry.content = entry.content[last_prompt_pos..].to_string();
-                    } else {
-                        entry.content.clear();
-                    }
-
-                }
+    pub fn is_pane_buffer_too_new(&self, pane_id: u32) -> bool {
+        if let Ok(history_buffer) = self.get_history_buffer_lock() {
+            if let Some(entry) = history_buffer.get(&pane_id) {
+                return entry.is_too_new();
             }
         }
+        false
+    }
 
+    pub fn clear_pane_buffer(&self, pane_id: u32) -> OutputAnalyzerResult<()> {
+        let mut history_buffer = self.get_history_buffer_lock()?;
+        history_buffer.remove(&pane_id);
         Ok(())
     }
 
-    /// 定期清理过期的缓冲区，防止内存泄漏
-    fn maybe_cleanup_stale_buffers(&self) -> OutputAnalyzerResult<()> {
-        let config = ConfigManager::config_get();
-        let should_cleanup = {
-            let cleanup_guard = self.last_global_cleanup.lock().map_err(|_| {
-                OutputAnalyzerError::MutexPoisoned {
-                    resource: "last_global_cleanup",
-                }
-            })?;
-            cleanup_guard.elapsed() > config.cleanup_interval()
-        };
+    pub fn get_buffer_stats(&self) -> OutputAnalyzerResult<HashMap<String, usize>> {
+        let history_buffer = self.get_history_buffer_lock()?;
 
-        if should_cleanup && config.cleanup.auto_cleanup_enabled {
-            self.cleanup_stale_buffers()?;
-        }
+        let mut stats = HashMap::new();
+        stats.insert("total_panes".to_string(), history_buffer.len());
+        stats.insert(
+            "history_buffer_size".to_string(),
+            history_buffer.values().map(|e| e.content.len()).sum(),
+        );
 
-        Ok(())
+        Ok(stats)
     }
 
-    /// 清理过期的缓冲区
-    fn cleanup_stale_buffers(&self) -> OutputAnalyzerResult<()> {
-
-        let config = ConfigManager::config_get();
-        let stale_threshold = config.stale_threshold();
-
-        {
-            let mut buffer = self.get_buffer_lock()?;
-            let mut to_remove = Vec::new();
-
-            // 收集需要删除的面板ID
-            for (&pane_id, entry) in buffer.iter() {
-                if entry.is_stale(stale_threshold) {
-                    to_remove.push(pane_id);
-                }
-            }
-
-            // 删除过期条目
-            for pane_id in to_remove {
-                buffer.remove(&pane_id);
-            }
-        }
-
-        // 更新清理时间
-        {
-            let mut cleanup_guard = self.last_global_cleanup.lock().map_err(|_| {
-                OutputAnalyzerError::MutexPoisoned {
-                    resource: "last_global_cleanup",
-                }
-            })?;
-            *cleanup_guard = Instant::now();
-        }
-
-        Ok(())
-    }
-
-    /// 清理指定面板的缓冲区（外部调用）
-    pub fn cleanup_pane_buffer(&self, pane_id: u32) -> OutputAnalyzerResult<()> {
-        let mut buffer = self.get_buffer_lock()?;
-        buffer.remove(&pane_id);
-        Ok(())
-    }
-
-    /// 检测命令完成
     fn detect_command_completion(&self, output: &str) -> Option<(String, String)> {
-        // 改进的命令检测：查找命令行模式
         let lines: Vec<&str> = output.lines().collect();
 
         for i in 0..lines.len() {
             let line = lines[i];
 
-            // 检测命令行（包含 $ 或 # 提示符）
             if let Some(command_start) = self.find_command_in_line(line) {
                 let command = line[command_start..].trim().to_string();
 
-                // 收集命令输出（从下一行开始到下一个提示符或结尾）
                 let mut command_output = String::new();
                 for output_line in lines.iter().skip(i + 1) {
                     if self.is_prompt_line(output_line) {
                         break;
                     }
-
                     command_output.push_str(output_line);
                     command_output.push('\n');
                 }
@@ -302,45 +260,34 @@ impl OutputAnalyzer {
         None
     }
 
-    /// 在行中查找命令
     fn find_command_in_line(&self, line: &str) -> Option<usize> {
-        // 查找提示符后的命令
-        if let Some(pos) = line.find('$') {
-            return Some(pos + 1);
-        }
-        if let Some(pos) = line.find('#') {
-            return Some(pos + 1);
-        }
-        if let Some(pos) = line.find('%') {
-            return Some(pos + 1);
-        }
-        if let Some(pos) = line.find('>') {
-            return Some(pos + 1);
-        }
-
-        None
+        line.find('$')
+            .or_else(|| line.find('#'))
+            .or_else(|| line.find('%'))
+            .or_else(|| line.find('>'))
+            .map(|p| p + 1)
     }
 
-    /// 检查是否是提示符行
     fn is_prompt_line(&self, line: &str) -> bool {
         line.contains('$') || line.contains('#') || line.contains('%') || line.contains('>')
     }
 
-    /// 检查命令是否完整
     fn is_command_complete(&self, output: &str) -> bool {
-        // 简单检测：如果输出不为空且不包含错误信息，认为完整
         !output.trim().is_empty()
             && !output.contains("command not found")
             && !output.contains("No such file or directory")
     }
 
-    /// 处理完整的命令
-    fn process_complete_command(&self, command: &str, output: &str) -> OutputAnalyzerResult<()> {
-        // 使用智能提取器分析输出
+    fn record_completed_command(
+        &self,
+        _pane_id: u32,
+        command: String,
+        output: String,
+        working_directory: String,
+    ) -> OutputAnalyzerResult<()> {
         let extractor = SmartExtractor::global();
-        let extraction_results = extractor.extract_entities(command, output)?;
+        let extraction_results = extractor.extract_entities(&command, &output)?;
 
-        // 转换为标准格式
         let mut entities = HashMap::new();
         for result in extraction_results {
             entities
@@ -349,93 +296,66 @@ impl OutputAnalyzer {
                 .push(result.value);
         }
 
-        // 记录命令输出到上下文感知提供者
         let provider = self.get_context_provider_lock()?;
-
-        let mut enhanced_output = output.to_string();
-        if !entities.is_empty() {
-            enhanced_output.push_str("\n\n<!-- 提取的实体: ");
-            enhanced_output.push_str(&serde_json::to_string(&entities).unwrap_or_default());
-            enhanced_output.push_str(" -->");
-        }
-
-        provider.record_command_output(
-            command.to_string(),
-            enhanced_output,
-            "/tmp".to_string(), // 这里应该获取实际的工作目录
+        provider.record_command_output_with_entities(
+            command,
+            output,
+            working_directory,
+            entities,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
         )?;
 
         Ok(())
     }
 
-    /// 获取上下文感知提供者的引用
     pub fn get_context_provider(&self) -> Arc<Mutex<ContextAwareProvider>> {
         Arc::clone(&self.context_provider)
-    }
-
-    /// 获取指定面板的缓冲区内容
-    pub fn get_pane_buffer(&self, pane_id: u32) -> OutputAnalyzerResult<String> {
-        let mut buffer = self.get_buffer_lock()?;
-
-        if let Some(entry) = buffer.get_mut(&pane_id) {
-            entry.access();
-            Ok(entry.content.clone())
-        } else {
-            Ok(String::new())
-        }
-    }
-
-    /// 检查指定面板的缓冲区是否太新（刚创建 <2秒）
-    pub fn is_pane_buffer_too_new(&self, pane_id: u32) -> bool {
-        if let Ok(buffer) = self.get_buffer_lock() {
-            if let Some(entry) = buffer.get(&pane_id) {
-                return entry.is_too_new();
-            }
-        }
-        false
-    }
-
-    /// 设置指定面板的缓冲区内容
-    pub fn set_pane_buffer(&self, pane_id: u32, content: String) -> OutputAnalyzerResult<()> {
-        let mut buffer = self.get_buffer_lock()?;
-
-        let entry = buffer.entry(pane_id).or_insert_with(PaneBufferEntry::new);
-        entry.content = content;
-        entry.access();
-
-        Ok(())
-    }
-
-    /// 清理指定面板的缓冲区
-    pub fn clear_pane_buffer(&self, pane_id: u32) -> OutputAnalyzerResult<()> {
-        let mut buffer = self.get_buffer_lock()?;
-        buffer.remove(&pane_id);
-        Ok(())
-    }
-
-    /// 获取缓冲区统计信息
-    pub fn get_buffer_stats(&self) -> OutputAnalyzerResult<HashMap<String, usize>> {
-        let buffer = self.get_buffer_lock()?;
-
-        let mut stats = HashMap::new();
-        stats.insert("total_panes".to_string(), buffer.len());
-
-        let total_size: usize = buffer.values().map(|entry| entry.content.len()).sum();
-        stats.insert("total_buffer_size".to_string(), total_size);
-
-        let avg_size = if buffer.is_empty() {
-            0
-        } else {
-            total_size / buffer.len()
-        };
-        stats.insert("average_buffer_size".to_string(), avg_size);
-
-        Ok(stats)
     }
 }
 
 impl Default for OutputAnalyzer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::shell::osc_parser::CommandStatus;
+    use crate::shell::CommandInfo;
+
+    #[test]
+    fn test_shell_command_event_records_last_command() {
+        let analyzer = OutputAnalyzer::new();
+        let pane_id = 1u32;
+
+        let mut cmd = CommandInfo {
+            id: 42,
+            start_time: Instant::now(),
+            start_time_wallclock: std::time::SystemTime::now(),
+            end_time: None,
+            end_time_wallclock: None,
+            exit_code: None,
+            status: CommandStatus::Running,
+            command_line: Some("wangjiajie@host % git status".to_string()),
+            working_directory: Some("/tmp".to_string()),
+        };
+
+        analyzer.on_shell_command_event(pane_id, &cmd).unwrap();
+        analyzer.analyze_output(pane_id, "On branch main\n").unwrap();
+
+        cmd.status = CommandStatus::Finished { exit_code: Some(0) };
+        analyzer.on_shell_command_event(pane_id, &cmd).unwrap();
+
+        let provider = analyzer.get_context_provider();
+        let guard = provider.lock().unwrap();
+        let (last_cmd, last_output) = guard.get_last_command().unwrap();
+
+        assert_eq!(last_cmd, "git status");
+        assert!(last_output.contains("On branch main"));
     }
 }

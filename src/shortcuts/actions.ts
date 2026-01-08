@@ -1,52 +1,55 @@
-import { useTabManagerStore } from '@/stores/TabManager'
-import { useTerminalStore } from '@/stores/Terminal'
+import { useEditorStore } from '@/stores/Editor'
 
 import { windowApi } from '@/api/window'
 import { setWindowOpacity, getWindowOpacity } from '@/api/window/opacity'
 import { useAIChatStore } from '@/components/AIChatSidebar'
 import { useWindowStore } from '@/stores/Window'
+import { useGitStore } from '@/stores/git'
 
 export class ShortcutActionsService {
-  private get tabManagerStore() {
-    return useTabManagerStore()
-  }
-
-  private get terminalStore() {
-    return useTerminalStore()
+  private get editorStore() {
+    return useEditorStore()
   }
 
   switchToTab = (index: number): boolean => {
-    const tabs = this.tabManagerStore.tabs
+    const group = this.editorStore.activeGroup
+    if (!group) return false
+
+    const tabs = group.tabs
     if (index >= 0 && index < tabs.length) {
-      this.tabManagerStore.setActiveTab(tabs[index].id)
+      void this.editorStore.setActiveTab(group.id, tabs[index].id)
       return true
     }
     return false
   }
 
   switchToLastTab = (): boolean => {
-    const tabs = this.tabManagerStore.tabs
+    const group = this.editorStore.activeGroup
+    if (!group) return false
+
+    const tabs = group.tabs
     if (tabs.length > 0) {
-      this.tabManagerStore.setActiveTab(tabs[tabs.length - 1].id)
+      void this.editorStore.setActiveTab(group.id, tabs[tabs.length - 1].id)
       return true
     }
     return false
   }
 
   newTab = async (): Promise<boolean> => {
-    await this.terminalStore.createTerminal()
+    await this.editorStore.createTerminalTab({ activate: true })
     return true
   }
 
   closeCurrentTab = (): boolean => {
-    const activeTab = this.tabManagerStore.activeTab
+    const groupId = this.editorStore.activeGroupId
+    const activeTab = this.editorStore.activeTab
 
     if (!activeTab) {
       return true // 没有活动标签页，阻止默认行为
     }
 
     // 直接关闭当前标签页，不再限制最后一个终端标签页
-    this.tabManagerStore.closeTab(activeTab.id)
+    void this.editorStore.closeTab(groupId, activeTab.id)
     return true
   }
 
@@ -83,7 +86,7 @@ export class ShortcutActionsService {
   }
 
   openSettings = (): boolean => {
-    this.tabManagerStore.createSettingsTab()
+    void this.editorStore.createSettingsTab()
     return true
   }
 
@@ -132,6 +135,12 @@ export class ShortcutActionsService {
   toggleAISidebar = (): boolean => {
     const aiChatStore = useAIChatStore()
     aiChatStore.toggleSidebar()
+    return true
+  }
+
+  toggleGitPanel = (): boolean => {
+    const gitStore = useGitStore()
+    gitStore.togglePanel()
     return true
   }
 

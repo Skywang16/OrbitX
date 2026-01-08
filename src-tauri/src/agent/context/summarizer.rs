@@ -8,7 +8,9 @@ use crate::agent::persistence::{AgentPersistence, SessionSummary};
 use crate::agent::prompt::components::conversation_summary::{
     build_conversation_summary_user_prompt, CONVERSATION_SUMMARY_SYSTEM_PROMPT,
 };
-use crate::llm::anthropic_types::{ContentBlock, CreateMessageRequest, MessageContent, MessageParam, SystemPrompt};
+use crate::llm::anthropic_types::{
+    ContentBlock, CreateMessageRequest, MessageContent, MessageParam, SystemPrompt,
+};
 use crate::llm::service::LLMService;
 use crate::storage::DatabaseManager;
 
@@ -174,21 +176,35 @@ impl SessionSummarizer {
         })
     }
 
-    fn build_summary_request(&self, model_id: &str, summary_scope: &[MessageParam]) -> CreateMessageRequest {
+    fn build_summary_request(
+        &self,
+        model_id: &str,
+        summary_scope: &[MessageParam],
+    ) -> CreateMessageRequest {
         let mut history_builder = String::new();
         for message in summary_scope {
             history_builder.push_str(&format!(
                 "[{role}] {content}\n\n",
-                role = match message.role { crate::llm::anthropic_types::MessageRole::User => "user", crate::llm::anthropic_types::MessageRole::Assistant => "assistant" },
+                role = match message.role {
+                    crate::llm::anthropic_types::MessageRole::User => "user",
+                    crate::llm::anthropic_types::MessageRole::Assistant => "assistant",
+                },
                 content = render_message_param_content(&message.content)
             ));
         }
 
         CreateMessageRequest {
             model: model_id.to_string(),
-            messages: vec![MessageParam { role: crate::llm::anthropic_types::MessageRole::User, content: MessageContent::Text(build_conversation_summary_user_prompt(&history_builder)) }],
+            messages: vec![MessageParam {
+                role: crate::llm::anthropic_types::MessageRole::User,
+                content: MessageContent::Text(build_conversation_summary_user_prompt(
+                    &history_builder,
+                )),
+            }],
             max_tokens: SUMMARY_MAX_TOKENS,
-            system: Some(SystemPrompt::Text(CONVERSATION_SUMMARY_SYSTEM_PROMPT.to_string())),
+            system: Some(SystemPrompt::Text(
+                CONVERSATION_SUMMARY_SYSTEM_PROMPT.to_string(),
+            )),
             tools: None,
             temperature: Some(0.3),
             stop_sequences: None,
@@ -305,7 +321,9 @@ fn render_content_blocks(blocks: &Vec<ContentBlock>) -> String {
     for b in blocks {
         match b {
             ContentBlock::Text { text, .. } => {
-                if !out.is_empty() { out.push_str("\n"); }
+                if !out.is_empty() {
+                    out.push_str("\n");
+                }
                 out.push_str(text);
             }
             ContentBlock::Thinking { thinking, .. } => {
@@ -315,7 +333,9 @@ fn render_content_blocks(blocks: &Vec<ContentBlock>) -> String {
             other => {
                 // 对于非文本块，简化为 JSON 摘要
                 let s = serde_json::to_string(other).unwrap_or_default();
-                if !out.is_empty() { out.push_str("\n"); }
+                if !out.is_empty() {
+                    out.push_str("\n");
+                }
                 out.push_str(&s);
             }
         }
@@ -341,8 +361,14 @@ mod tests {
     #[test]
     fn split_messages_handles_short_history() {
         let messages = vec![
-            MessageParam { role: crate::llm::anthropic_types::MessageRole::User, content: MessageContent::Text("hello".into()) },
-            MessageParam { role: crate::llm::anthropic_types::MessageRole::Assistant, content: MessageContent::Text("world".into()) },
+            MessageParam {
+                role: crate::llm::anthropic_types::MessageRole::User,
+                content: MessageContent::Text("hello".into()),
+            },
+            MessageParam {
+                role: crate::llm::anthropic_types::MessageRole::Assistant,
+                content: MessageContent::Text("world".into()),
+            },
         ];
 
         let (summary, tail) = split_messages(&messages, 3);
@@ -353,7 +379,14 @@ mod tests {
     #[test]
     fn split_messages_keeps_tail() {
         let messages = (0..5)
-            .map(|i| MessageParam { role: if i % 2 == 0 { crate::llm::anthropic_types::MessageRole::User } else { crate::llm::anthropic_types::MessageRole::Assistant }, content: MessageContent::Text(format!("m{}", i)) })
+            .map(|i| MessageParam {
+                role: if i % 2 == 0 {
+                    crate::llm::anthropic_types::MessageRole::User
+                } else {
+                    crate::llm::anthropic_types::MessageRole::Assistant
+                },
+                content: MessageContent::Text(format!("m{}", i)),
+            })
             .collect::<Vec<_>>();
 
         let (summary, tail) = split_messages(&messages, 3);

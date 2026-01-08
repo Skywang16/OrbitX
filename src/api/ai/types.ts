@@ -1,6 +1,6 @@
 import type { AIModelConfig } from '@/types'
 
-export type { AIHealthStatus, AIModelConfig, AISettings, AIStats } from '@/types'
+export type { AIModelConfig, AISettings } from '@/types'
 
 export interface AIModelCreateInput {
   provider: AIModelConfig['provider']

@@ -11,12 +11,14 @@ pub mod ai_features;
 pub mod ai_models;
 pub mod app_preferences;
 pub mod audit_logs;
+pub mod completion_model;
 
 // ==================== Repository 结构体 ====================
 pub use ai_features::AIFeatures;
 pub use ai_models::{AIModelConfig, AIModels, AIProvider, ModelType};
 pub use app_preferences::AppPreferences;
 pub use audit_logs::AuditLogs;
+pub use completion_model::CompletionModelRepo;
 
 // ==================== 通用查询参数 ====================
 

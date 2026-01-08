@@ -144,6 +144,11 @@ fn create_view_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu
                 .accelerator("CmdOrCtrl+L")
                 .build(app)?,
         )
+        .item(
+            &MenuItemBuilder::with_id("toggle_git_panel", t("menu.toggle_git_panel"))
+                .accelerator("CmdOrCtrl+G")
+                .build(app)?,
+        )
         .build()
 }
 

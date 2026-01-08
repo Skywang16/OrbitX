@@ -32,6 +32,8 @@
 
   const completionItems = ref<CompletionItem[]>([])
   const currentSuggestion = ref('')
+  const replaceStart = ref(0)
+  const replaceEnd = ref(0)
   const isLoading = ref(false)
   let currentRequest: AbortController | null = null
 
@@ -44,15 +46,17 @@
   })
 
   const completionText = computed(() => {
-    if (!currentSuggestion.value || !props.input) return ''
+    if (!currentSuggestion.value) return ''
+    const cursorPos = props.input.length
+    const start = Math.min(replaceStart.value, cursorPos)
+    const offset = cursorPos - start
 
-    const input = props.input.toLowerCase()
-    const suggestion = currentSuggestion.value.toLowerCase()
-
-    if (suggestion.startsWith(input)) {
-      return currentSuggestion.value.slice(props.input.length)
+    const typed = props.input.slice(start, cursorPos)
+    if (!currentSuggestion.value.toLowerCase().startsWith(typed.toLowerCase())) {
+      return ''
     }
-    return ''
+
+    return currentSuggestion.value.slice(offset)
   })
 
   const completionStyle = computed(() => {
@@ -184,13 +188,13 @@
     // 设置第一个匹配项作为内联补全
     if (response.items.length > 0) {
       const firstItem = response.items[0]
-      if (firstItem.text.toLowerCase().startsWith(input.toLowerCase())) {
-        currentSuggestion.value = firstItem.text
-      } else {
-        currentSuggestion.value = ''
-      }
+      replaceStart.value = response.replaceStart ?? 0
+      replaceEnd.value = response.replaceEnd ?? input.length
+      currentSuggestion.value = firstItem.text
     } else {
       currentSuggestion.value = ''
+      replaceStart.value = 0
+      replaceEnd.value = 0
     }
 
     emit('suggestion-change', currentSuggestion.value)
@@ -218,6 +222,8 @@
     if (completionToAccept && completionToAccept.trim()) {
       // 清除当前补全状态
       currentSuggestion.value = ''
+      replaceStart.value = 0
+      replaceEnd.value = 0
       completionItems.value = []
       emit('suggestion-change', '')
       emit('completion-ready', [])

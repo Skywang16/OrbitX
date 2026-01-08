@@ -1,7 +1,101 @@
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
+use ignore::gitignore::GitignoreBuilder;
 use ignore::WalkBuilder;
 use std::path::PathBuf;
+
+/// 扩展的目录条目，包含 gitignore 状态
+#[derive(serde::Serialize)]
+pub struct DirEntryExt {
+    pub name: String,
+    pub is_directory: bool,
+    pub is_file: bool,
+    pub is_symlink: bool,
+    pub is_ignored: bool,
+}
+
+/// 读取目录内容（完整版，包含 gitignore 状态）
+#[tauri::command]
+pub async fn fs_read_dir(path: String) -> TauriApiResult<Vec<DirEntryExt>> {
+    let root = PathBuf::from(&path);
+    if !root.exists() {
+        return Ok(api_error!("common.not_found"));
+    }
+    if !root.is_dir() {
+        return Ok(api_error!("common.invalid_path"));
+    }
+
+    // 手动创建 gitignore 检查器
+    let mut gi_builder = GitignoreBuilder::new(&root);
+
+    // 尝试手动添加当前目录的 .gitignore 文件
+    let gitignore_path = root.join(".gitignore");
+    if gitignore_path.exists() {
+        let _ = gi_builder.add(&gitignore_path);
+    }
+
+    // 向上查找并添加父目录的 .gitignore
+    let mut parent = root.parent();
+    while let Some(p) = parent {
+        let parent_gitignore = p.join(".gitignore");
+        if parent_gitignore.exists() {
+            let _ = gi_builder.add(&parent_gitignore);
+        }
+        // 检查是否到达了 git 仓库根目录或文件系统根目录
+        if p.join(".git").exists() || p.parent().is_none() {
+            break;
+        }
+        parent = p.parent();
+    }
+
+    let gitignore = match gi_builder.build() {
+        Ok(g) => g,
+        Err(_) => GitignoreBuilder::new(&root).build().unwrap(),
+    };
+
+    let mut entries = Vec::new();
+
+    // 读取目录内容
+    let read_dir = match std::fs::read_dir(&root) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("Failed to read directory: {}", e);
+            return Ok(api_success!(entries));
+        }
+    };
+
+    for entry_result in read_dir {
+        let entry = match entry_result {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::warn!("Failed to read directory entry: {}", e);
+                continue;
+            }
+        };
+
+        let file_path = entry.path();
+        let file_name = entry.file_name();
+
+        let name = file_name.to_string_lossy().to_string();
+        let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
+        let is_file = entry.file_type().map(|ft| ft.is_file()).unwrap_or(false);
+        let is_symlink = entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(false);
+
+        // 检查是否被 gitignore 忽略（相对于根目录）
+        let relative_path = file_path.strip_prefix(&root).unwrap_or(&file_path);
+        let is_ignored = gitignore.matched(relative_path, is_dir).is_ignore();
+
+        entries.push(DirEntryExt {
+            name,
+            is_directory: is_dir,
+            is_file,
+            is_symlink,
+            is_ignored,
+        });
+    }
+
+    Ok(api_success!(entries))
+}
 
 pub(crate) async fn fs_list_directory(
     path: String,

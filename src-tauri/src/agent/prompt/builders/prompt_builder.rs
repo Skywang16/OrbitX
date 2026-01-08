@@ -112,11 +112,7 @@ impl PromptBuilder {
             template_context.insert(format!("{:?}", component).to_uppercase(), json!(value));
         }
 
-        TemplateEngine::new()
-            .resolve(&variant.template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("Failed to render prompt variant: {e}"))
-            })
+        Ok(TemplateEngine::new().resolve(&variant.template, &template_context))
     }
 
     async fn build_components(
@@ -129,10 +125,7 @@ impl PromptBuilder {
             .extend(options.additional_context.clone());
 
         let components = options.components.clone();
-        let sorted = self
-            .registry
-            .sort_by_dependencies(&components)
-            .map_err(|e| AgentError::Internal(format!("Prompt component dependency cycle: {e}")))?;
+        let sorted = self.registry.sort_by_dependencies(&components)?;
 
         let mut rendered = HashMap::new();
         for component_id in sorted.iter() {

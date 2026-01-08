@@ -37,28 +37,73 @@ export interface WindowState {
   maximized: boolean
 }
 
-/**
- * Tab ID - 统一使用 number
- */
-export type TabId = number
+export type EditorSplitDirection = 'row' | 'column'
+
+export type GroupId = string
+
+export const createGroupId = (prefix: string): GroupId => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `${prefix}:${crypto.randomUUID()}`
+  }
+  return `${prefix}:${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+export interface GroupLeafNode {
+  type: 'leaf'
+  id: string
+  groupId: GroupId
+}
+
+export interface GroupSplitNode {
+  type: 'split'
+  id: string
+  direction: EditorSplitDirection
+  ratio: number
+  first: GroupNode
+  second: GroupNode
+}
+
+export type GroupNode = GroupLeafNode | GroupSplitNode
 
 /**
- * Terminal tab 持久化数据（含 cwd）
+ * Tab ID - 统一使用 string（稳定标识，不与运行时 paneId 绑定）
  */
-export interface PersistedTerminalTabData {
-  shell: string
-  cwd: string
+export type TabId = string
+
+export const createTabId = (prefix: string): TabId => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `${prefix}:${crypto.randomUUID()}`
+  }
+  return `${prefix}:${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+/**
+ * Tab 上下文（Context）是一等公民：所有“归属/工作区/仓库/运行时资源”的信息都在这里。
+ * 业务层只看 context，不看 tab.type / tab.data。
+ */
+export type TabContext =
+  | { kind: 'none' }
+  | { kind: 'terminal'; paneId: number }
+  | { kind: 'workspace'; path: string }
+  | { kind: 'git'; repoPath: string }
+
+export interface BaseTabState<TType extends string, TContext extends TabContext, TData> {
+  type: TType
+  id: TabId
+  isActive: boolean
+  context: TContext
+  data: TData
 }
 
 /**
  * Terminal tab 状态（持久化）
  */
-export interface TerminalTabState {
-  type: 'terminal'
-  id: number
-  isActive: boolean
-  data: PersistedTerminalTabData
+export interface TerminalTabData {
+  cwd?: string
+  shellName?: string
 }
+
+export type TerminalTabState = BaseTabState<'terminal', { kind: 'terminal'; paneId: number }, TerminalTabData>
 
 /**
  * Settings tab 持久化数据
@@ -70,17 +115,26 @@ export interface PersistedSettingsTabData {
 /**
  * Settings tab 状态（持久化）
  */
-export interface SettingsTabState {
-  type: 'settings'
-  id: number
-  isActive: boolean
-  data: PersistedSettingsTabData
-}
+export type SettingsTabState = BaseTabState<'settings', { kind: 'none' }, PersistedSettingsTabData>
 
 /**
  * Tab 状态 - union type
  */
-export type TabState = TerminalTabState | SettingsTabState
+export type TabState = TerminalTabState | SettingsTabState | DiffTabState
+
+/**
+ * Diff tab 持久化数据
+ */
+export interface PersistedDiffTabData {
+  filePath: string
+  staged?: boolean
+  commitHash?: string
+}
+
+/**
+ * Diff tab 状态（持久化）
+ */
+export type DiffTabState = BaseTabState<'diff', { kind: 'git'; repoPath: string }, PersistedDiffTabData>
 
 /**
  * 运行时终端状态（从后端查询）
@@ -95,8 +149,10 @@ export interface UiState {
   theme: string
   fontSize: number
   sidebarWidth: number
-  opacity?: number
-  language?: string
+  leftSidebarVisible?: boolean
+  leftSidebarWidth?: number
+  leftSidebarActivePanel?: 'workspace' | 'git' | null
+  onboardingCompleted?: boolean
 }
 
 export interface TaskNode {
@@ -112,12 +168,24 @@ export interface AiState {
   selectedModelId?: string | null
 }
 
+export interface TabGroupState {
+  id: GroupId
+  tabs: TabState[]
+  activeTabId: TabId | null
+}
+
+export interface WorkspaceState {
+  root: GroupNode
+  groups: Record<GroupId, TabGroupState>
+  activeGroupId: GroupId
+}
+
 /**
- * 会话状态 - 统一 tab 管理
+ * 会话状态 - VSCode 风格分区（Group）+ 每区 tabs
  */
 export interface SessionState {
   version: number
-  tabs: TabState[]
+  workspace: WorkspaceState
   ui: UiState
   ai: AiState
   timestamp: string

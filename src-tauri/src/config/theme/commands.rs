@@ -228,7 +228,6 @@ pub async fn handle_system_theme_change<R: tauri::Runtime>(
     app_handle: &AppHandle<R>,
     is_dark: bool,
 ) -> ConfigCommandResult<()> {
-
     let config_manager = app_handle.state::<Arc<TomlConfigManager>>();
     let theme_service = app_handle.state::<Arc<ThemeService>>();
 
@@ -241,7 +240,6 @@ pub async fn handle_system_theme_change<R: tauri::Runtime>(
     if config.appearance.theme_config.follow_system {
         let current_theme_name =
             theme_service.get_current_theme_name(&config.appearance.theme_config, Some(is_dark));
-
 
         // 通知前端主题已更改
         app_handle

@@ -8,8 +8,8 @@ export interface CheckpointSummary {
   id: number
   workspacePath: string
   sessionId: number
+  messageId: number
   parentId: number | null
-  userMessage: string
   createdAt: string
   fileCount: number
   totalSize: number
@@ -23,7 +23,6 @@ export interface FileDiff {
 
 export interface RollbackResult {
   checkpointId: number
-  newCheckpointId: number
   restoredFiles: string[]
   failedFiles: [string, string][]
 }

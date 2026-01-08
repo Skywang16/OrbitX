@@ -2,15 +2,16 @@ pub mod chain;
 pub mod states;
 
 use std::convert::TryFrom;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use tauri::ipc::Channel;
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 
 use self::chain::Chain;
@@ -20,10 +21,7 @@ use crate::agent::context::FileContextTracker;
 use crate::agent::core::executor::ImageAttachment;
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
-use crate::agent::events::TaskProgressPayload;
-use crate::agent::persistence::{
-    now_timestamp, AgentExecution, AgentPersistence, ExecutionStatus, MessageRole,
-};
+use crate::agent::persistence::{AgentExecution, AgentPersistence, ExecutionStatus, MessageRole};
 use crate::agent::react::runtime::ReactRuntime;
 use crate::agent::react::types::ReactRuntimeConfig;
 use crate::agent::state::manager::{
@@ -31,9 +29,12 @@ use crate::agent::state::manager::{
 };
 use crate::agent::state::session::SessionContext;
 use crate::agent::tools::ToolRegistry;
-use crate::agent::types::TaskDetail;
-use crate::agent::ui::{UiMessageImage, UiStep};
+use crate::agent::types::{
+    Block, ErrorBlock, MessageRole as UiMessageRole, MessageStatus, TaskDetail, TaskEvent,
+    TokenUsage, ToolStatus, UserImageBlock, UserTextBlock,
+};
 use crate::agent::utils::tokenizer::count_text_tokens;
+use crate::checkpoint::CheckpointService;
 use crate::llm::anthropic_types::{
     ContentBlock, MessageContent, MessageParam, MessageRole as AnthropicRole, SystemPrompt,
     ToolResultContent,
@@ -51,6 +52,8 @@ pub struct TaskContext {
     session: Arc<SessionContext>,
     tool_registry: Arc<ToolRegistry>,
     state_manager: Arc<StateManager>,
+    checkpoint_service: Option<Arc<CheckpointService>>,
+    active_checkpoint: Arc<RwLock<Option<ActiveCheckpoint>>>,
 
     pub(crate) states: TaskStates,
 
@@ -64,9 +67,10 @@ impl TaskContext {
         config: TaskExecutionConfig,
         workspace_path: String,
         tool_registry: Arc<ToolRegistry>,
-        progress_channel: Option<Channel<TaskProgressPayload>>,
+        progress_channel: Option<Channel<TaskEvent>>,
         repositories: Arc<DatabaseManager>,
         agent_persistence: Arc<AgentPersistence>,
+        checkpoint_service: Option<Arc<CheckpointService>>,
     ) -> TaskExecutorResult<Self> {
         let agent_config = AgentConfig::default();
         let runtime_config = ReactRuntimeConfig {
@@ -119,13 +123,59 @@ impl TaskContext {
             session,
             tool_registry,
             state_manager: Arc::new(StateManager::new(task_state, StateEventEmitter::new())),
+            checkpoint_service,
+            active_checkpoint: Arc::new(RwLock::new(None)),
             states,
             pause_status: AtomicU8::new(0),
         })
     }
 
-    pub async fn set_progress_channel(&self, channel: Option<Channel<TaskProgressPayload>>) {
+    pub async fn set_progress_channel(&self, channel: Option<Channel<TaskEvent>>) {
         *self.states.progress_channel.lock().await = channel;
+    }
+
+    pub fn checkpointing_enabled(&self) -> bool {
+        self.checkpoint_service.is_some()
+    }
+
+    pub async fn init_checkpoint(&self, message_id: i64) -> TaskExecutorResult<()> {
+        let service = match &self.checkpoint_service {
+            Some(service) => Arc::clone(service),
+            None => return Ok(()),
+        };
+
+        let checkpoint = service
+            .create_empty(self.session_id, message_id, Path::new(self.cwd.as_ref()))
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        {
+            let mut guard = self.active_checkpoint.write().await;
+            *guard = Some(ActiveCheckpoint {
+                id: checkpoint.id,
+                workspace_root: PathBuf::from(&checkpoint.workspace_path),
+            });
+        }
+
+        Ok(())
+    }
+
+    pub async fn snapshot_file_before_edit(&self, path: &Path) -> TaskExecutorResult<()> {
+        let service = match &self.checkpoint_service {
+            Some(service) => Arc::clone(service),
+            None => return Ok(()),
+        };
+
+        let handle = { self.active_checkpoint.read().await.clone() };
+
+        if let Some(checkpoint) = handle {
+            service
+                .snapshot_file_before_edit(checkpoint.id, path, &checkpoint.workspace_root)
+                .await
+                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+        }
+
+        Ok(())
     }
 
     pub fn session(&self) -> Arc<SessionContext> {
@@ -366,7 +416,7 @@ impl TaskContext {
     /// 简化版：只检查 aborted 标志，无需锁
     pub fn check_aborted(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
         if self.states.aborted.load(Ordering::SeqCst) {
-            return Err(TaskExecutorError::TaskInterrupted.into());
+            return Err(TaskExecutorError::TaskInterrupted);
         }
         if no_check_pause {
             return Ok(());
@@ -375,7 +425,7 @@ impl TaskContext {
         let status = self.pause_status.load(Ordering::SeqCst);
         if status != 0 {
             // 如果暂停，返回错误让调用者处理
-            return Err(TaskExecutorError::TaskInterrupted.into());
+            return Err(TaskExecutorError::TaskInterrupted);
         }
         Ok(())
     }
@@ -383,14 +433,14 @@ impl TaskContext {
     /// 异步检查任务是否被中止（带暂停等待）
     pub async fn check_aborted_async(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
         if self.states.aborted.load(Ordering::SeqCst) {
-            return Err(TaskExecutorError::TaskInterrupted.into());
+            return Err(TaskExecutorError::TaskInterrupted);
         }
         if no_check_pause {
             return Ok(());
         }
         loop {
             if self.states.aborted.load(Ordering::SeqCst) {
-                return Err(TaskExecutorError::TaskInterrupted.into());
+                return Err(TaskExecutorError::TaskInterrupted);
             }
             let status = self.pause_status.load(Ordering::SeqCst);
             if status == 0 {
@@ -450,7 +500,7 @@ impl TaskContext {
         &self,
         text: Option<String>,
         tool_calls: Option<Vec<ContentBlock>>,
-    ) {
+    ) -> TaskExecutorResult<()> {
         let content: MessageContent = match (text, tool_calls) {
             (Some(t), Some(mut calls)) => {
                 // Put text as a Text block, then append tool_use blocks
@@ -478,13 +528,13 @@ impl TaskContext {
 
         // Persist assistant visible content only as a string; do not modify DB schema.
         let rendered = render_message_content(&content);
-        let _ = self
-            .append_message(MessageRole::Assistant, &rendered, false)
-            .await;
+        self.append_message(MessageRole::Assistant, &rendered, false)
+            .await?;
+        Ok(())
     }
 
     /// Append tool results as a user message with ToolResult blocks; also persist tool rows.
-    pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) {
+    pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) -> TaskExecutorResult<()> {
         let blocks: Vec<ContentBlock> = results
             .iter()
             .map(|r| ContentBlock::ToolResult {
@@ -492,16 +542,15 @@ impl TaskContext {
                 content: Some(ToolResultContent::Text(
                     serde_json::to_string(&r.result).unwrap_or_else(|_| "{}".to_string()),
                 )),
-                is_error: Some(r.is_error),
+                is_error: Some(r.status != crate::agent::tools::ToolResultStatus::Success),
             })
             .collect();
 
         // Persist each tool result as its own Tool message entry
         for result in &results {
             if let Ok(serialized) = serde_json::to_string(result) {
-                let _ = self
-                    .append_message(MessageRole::Tool, &serialized, false)
-                    .await;
+                self.append_message(MessageRole::Tool, &serialized, false)
+                    .await?;
             }
         }
 
@@ -513,6 +562,7 @@ impl TaskContext {
                 content: MessageContent::Blocks(blocks),
             });
         }
+        Ok(())
     }
 
     // Deprecated in zero-abstraction model: initial prompts are handled explicitly by caller.
@@ -528,7 +578,7 @@ impl TaskContext {
             exec.messages.clear();
             exec.message_sequence = 0;
         }
-        self.add_user_message(user_prompt).await;
+        self.add_user_message(user_prompt).await?;
         Ok(())
     }
 
@@ -540,15 +590,15 @@ impl TaskContext {
         self.states.execution.read().await.system_prompt.clone()
     }
 
-    pub async fn add_user_message(&self, text: String) {
-        self.add_user_message_with_images(text, None).await;
+    pub async fn add_user_message(&self, text: String) -> TaskExecutorResult<()> {
+        self.add_user_message_with_images(text, None).await
     }
 
     pub async fn add_user_message_with_images(
         &self,
         text: String,
         images: Option<&[ImageAttachment]>,
-    ) {
+    ) -> TaskExecutorResult<()> {
         let content = if let Some(imgs) = images {
             // 构建包含图片和文本的内容块
             let mut blocks: Vec<ContentBlock> = imgs
@@ -591,7 +641,8 @@ impl TaskContext {
                 content,
             });
         }
-        let _ = self.append_message(MessageRole::User, &text, false).await;
+        self.append_message(MessageRole::User, &text, false).await?;
+        Ok(())
     }
 
     pub async fn reset_message_state(&self) -> TaskExecutorResult<()> {
@@ -659,287 +710,284 @@ impl TaskContext {
             )
             .await
             .map(|_| ())
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()).into())
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))
     }
 
-    pub async fn initialize_ui_track(
+    pub async fn emit_event(&self, event: TaskEvent) -> TaskExecutorResult<()> {
+        let channel_guard = self.states.progress_channel.lock().await;
+        if let Some(channel) = channel_guard.as_ref() {
+            channel
+                .send(event)
+                .map_err(TaskExecutorError::ChannelError)?;
+        }
+        Ok(())
+    }
+
+    pub async fn initialize_message_track(
         &self,
         user_prompt: &str,
         images: Option<&[ImageAttachment]>,
-    ) -> TaskExecutorResult<()> {
-        let serialized_images = if let Some(imgs) = images {
-            let payload = map_image_attachments(imgs);
-            Some(serde_json::to_string(&payload).map_err(|e| {
-                TaskExecutorError::StatePersistenceFailed(e.to_string())
-            })?)
-        } else {
-            None
-        };
+    ) -> TaskExecutorResult<i64> {
+        let mut user_blocks = Vec::new();
 
-        self.agent_persistence()
-            .session_messages()
-            .create_user_message(self.session_id, user_prompt, serialized_images.as_deref())
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+        if let Some(images) = images {
+            user_blocks.extend(map_user_image_blocks(images));
+        }
+        user_blocks.push(Block::UserText(UserTextBlock {
+            content: user_prompt.to_string(),
+        }));
 
-        let assistant_message_id = self
+        let user_message = self
             .agent_persistence()
-            .session_messages()
-            .create_assistant_message(self.session_id, "streaming")
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        {
-            let mut exec = self.states.execution.write().await;
-            exec.ui_assistant_message_id = Some(assistant_message_id);
-        }
-
-        self.states.ui.lock().await.steps.clear();
-        Ok(())
-    }
-
-    pub async fn begin_followup_turn(&self, user_prompt: &str) -> TaskExecutorResult<()> {
-        self.agent_persistence()
-            .session_messages()
-            .create_user_message(self.session_id, user_prompt, None)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        let assistant_message_id = self
-            .agent_persistence()
-            .session_messages()
-            .create_assistant_message(self.session_id, "streaming")
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        {
-            let mut exec = self.states.execution.write().await;
-            exec.ui_assistant_message_id = Some(assistant_message_id);
-        }
-
-        self.states.ui.lock().await.steps.clear();
-        Ok(())
-    }
-
-    pub async fn restore_ui_track(&self) -> TaskExecutorResult<()> {
-        if let Some(message) = self
-            .agent_persistence()
-            .session_messages()
-            .latest_assistant_message(self.session_id)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?
-        {
-            let mut exec = self.states.execution.write().await;
-            exec.ui_assistant_message_id = Some(message.id);
-            if let Some(steps_json) = message.steps_json {
-                if let Ok(steps) = serde_json::from_str::<Vec<UiStep>>(&steps_json) {
-                    self.states.ui.lock().await.steps = steps;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Send progress payload back to the frontend if a channel is attached and update UI track.
-    pub async fn send_progress(&self, payload: TaskProgressPayload) -> TaskExecutorResult<()> {
-        // Debug emission ordering with a per-context sequence
-        {
-            let channel_guard = self.states.progress_channel.lock().await;
-            if let Some(channel) = channel_guard.as_ref() {
-                channel
-                    .send(payload.clone())
-                    .map_err(TaskExecutorError::ChannelError)?;
-            }
-        }
-
-        self.update_ui_track(&payload).await?;
-        Ok(())
-    }
-
-    async fn update_ui_track(&self, payload: &TaskProgressPayload) -> TaskExecutorResult<()> {
-        let mut maybe_step = Self::step_from_payload(payload);
-        let status_override = Self::status_from_payload(payload);
-
-        if maybe_step.is_none() && status_override.is_none() {
-            return Ok(());
-        }
-
-        let steps_snapshot = {
-            let mut ui = self.states.ui.lock().await;
-            if let Some(step) = maybe_step.take() {
-                let stream_id = step
-                    .metadata
-                    .as_ref()
-                    .and_then(|m| m.get("streamId"))
-                    .and_then(|v| v.as_str());
-
-                if let Some(sid) = stream_id {
-                    if let Some(existing) = ui.steps.iter_mut().find(|s| {
-                        s.step_type == step.step_type
-                            && s.metadata
-                                .as_ref()
-                                .and_then(|m| m.get("streamId"))
-                                .and_then(|v| v.as_str())
-                                == Some(sid)
-                    }) {
-                        existing.content.push_str(&step.content);
-                        existing.timestamp = step.timestamp;
-                        existing.metadata = step.metadata;
-                    } else {
-                        ui.steps.push(step);
-                    }
-                } else {
-                    ui.steps.push(step);
-                }
-            }
-            ui.steps.clone()
-        };
-
-        let status = status_override.unwrap_or("streaming");
-        self.persist_ui_steps(&steps_snapshot, status).await
-    }
-
-    async fn persist_ui_steps(&self, steps: &[UiStep], status: &str) -> TaskExecutorResult<()> {
-        let current_id = self.states.execution.read().await.ui_assistant_message_id;
-        let steps_json = serde_json::to_string(steps)
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        if let Some(message_id) = current_id {
-            self.agent_persistence()
-                .session_messages()
-                .update_assistant_message(message_id, &steps_json, status, None)
-                .await
-                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-            Ok(())
-        } else {
-            Err(TaskExecutorError::StatePersistenceFailed(
-                "assistant message id not set before persisting UI steps".to_string(),
+            .messages()
+            .create(
+                self.session_id,
+                UiMessageRole::User,
+                MessageStatus::Completed,
+                user_blocks,
             )
-            .into())
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        self.emit_event(TaskEvent::MessageCreated {
+            message: user_message.clone(),
+        })
+        .await?;
+
+        let assistant_message = self
+            .agent_persistence()
+            .messages()
+            .create(
+                self.session_id,
+                UiMessageRole::Assistant,
+                MessageStatus::Streaming,
+                Vec::new(),
+            )
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        {
+            let mut msg_state = self.states.messages.lock().await;
+            msg_state.assistant_message = Some(assistant_message.clone());
         }
+
+        self.emit_event(TaskEvent::MessageCreated {
+            message: assistant_message,
+        })
+        .await?;
+
+        Ok(user_message.id)
     }
 
-    fn step_from_payload(payload: &TaskProgressPayload) -> Option<UiStep> {
-        match payload {
-            TaskProgressPayload::Thinking(p) => {
-                let ts = p.timestamp.timestamp_millis();
-                Some(UiStep {
-                    step_type: "thinking".to_string(),
-                    content: p.thought.clone(),
-                    timestamp: ts,
-                    metadata: Some(json!({
-                        "iteration": p.iteration,
-                        "streamId": p.stream_id,
-                        "streamDone": p.stream_done,
-                    })),
-                })
-            }
-            TaskProgressPayload::Text(p) => {
-                let ts = p.timestamp.timestamp_millis();
-                Some(UiStep {
-                    step_type: "text".to_string(),
-                    content: p.text.clone(),
-                    timestamp: ts,
-                    metadata: Some(json!({
-                        "iteration": p.iteration,
-                        "streamId": p.stream_id,
-                        "streamDone": p.stream_done,
-                    })),
-                })
-            }
-            TaskProgressPayload::ToolUse(p) => {
-                let ts = p.timestamp.timestamp_millis();
-                Some(UiStep {
-                    step_type: "tool_use".to_string(),
-                    content: format!("调用工具: {}", p.tool_name),
-                    timestamp: ts,
-                    metadata: Some(json!({
-                        "iteration": p.iteration,
-                        "toolId": p.tool_id,
-                        "toolName": p.tool_name,
-                        "params": p.params,
-                    })),
-                })
-            }
-            TaskProgressPayload::ToolResult(p) => {
-                let ts = p.timestamp.timestamp_millis();
-                Some(UiStep {
-                    step_type: "tool_result".to_string(),
-                    content: if p.is_error {
-                        format!("工具 {} 执行失败", p.tool_name)
-                    } else {
-                        format!("工具 {} 返回结果", p.tool_name)
-                    },
-                    timestamp: ts,
-                    metadata: Some(json!({
-                        "iteration": p.iteration,
-                        "toolId": p.tool_id,
-                        "toolName": p.tool_name,
-                        "result": p.result,
-                        "isError": p.is_error,
-                        "extInfo": p.ext_info.clone(),
-                    })),
-                })
-            }
-            TaskProgressPayload::FinalAnswer(p) => {
-                let ts = p.timestamp.timestamp_millis();
-                Some(UiStep {
-                    step_type: "text".to_string(),
-                    content: p.answer.clone(),
-                    timestamp: ts,
-                    metadata: Some(json!({
-                        "iteration": p.iteration,
-                        "final": true,
-                    })),
-                })
-            }
-            TaskProgressPayload::TaskError(p) => {
-                let ts = p.timestamp.timestamp_millis();
-                Some(UiStep {
-                    step_type: "error".to_string(),
-                    content: format!("任务错误: {}", p.error_message),
-                    timestamp: ts,
-                    metadata: Some(json!({
-                        "iteration": p.iteration,
-                        "errorType": p.error_type,
-                        "recoverable": p.is_recoverable,
-                    })),
-                })
-            }
-            TaskProgressPayload::Error(p) => {
-                let ts = now_timestamp();
-                Some(UiStep {
-                    step_type: "error".to_string(),
-                    content: p.message.clone(),
-                    timestamp: ts,
-                    metadata: None,
-                })
-            }
-            TaskProgressPayload::SystemMessage(p) => {
-                let ts = p.timestamp.timestamp_millis();
-                Some(UiStep {
-                    step_type: "text".to_string(),
-                    content: p.message.clone(),
-                    timestamp: ts,
-                    metadata: Some(json!({
-                        "kind": "system",
-                        "level": p.level,
-                    })),
-                })
-            }
-            _ => None,
-        }
+    pub async fn assistant_append_block(&self, block: Block) -> TaskExecutorResult<()> {
+        let mut message = self
+            .states
+            .messages
+            .lock()
+            .await
+            .assistant_message
+            .clone()
+            .ok_or_else(|| {
+                TaskExecutorError::StatePersistenceFailed(
+                    "assistant message not initialized".to_string(),
+                )
+            })?;
+
+        message.blocks.push(block.clone());
+        let message_id = message.id;
+
+        self.agent_persistence()
+            .messages()
+            .update(&message)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        self.states.messages.lock().await.assistant_message = Some(message);
+
+        self.emit_event(TaskEvent::BlockAppended { message_id, block })
+            .await
     }
 
-    fn status_from_payload(payload: &TaskProgressPayload) -> Option<&'static str> {
-        match payload {
-            TaskProgressPayload::TaskCompleted(_)
-            | TaskProgressPayload::Finish(_)
-            | TaskProgressPayload::TaskCancelled(_) => Some("complete"),
-            TaskProgressPayload::TaskError(_) | TaskProgressPayload::Error(_) => Some("error"),
-            _ => None,
-        }
+    pub async fn assistant_update_block(
+        &self,
+        block_id: &str,
+        block: Block,
+    ) -> TaskExecutorResult<()> {
+        let mut message = self
+            .states
+            .messages
+            .lock()
+            .await
+            .assistant_message
+            .clone()
+            .ok_or_else(|| {
+                TaskExecutorError::StatePersistenceFailed(
+                    "assistant message not initialized".to_string(),
+                )
+            })?;
+
+        let Some(index) = find_block_index(&message.blocks, block_id) else {
+            return Err(TaskExecutorError::StatePersistenceFailed(format!(
+                "block {} not found for update",
+                block_id
+            )));
+        };
+
+        message.blocks[index] = block.clone();
+        let message_id = message.id;
+
+        self.agent_persistence()
+            .messages()
+            .update(&message)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        self.states.messages.lock().await.assistant_message = Some(message);
+
+        self.emit_event(TaskEvent::BlockUpdated {
+            message_id,
+            block_id: block_id.to_string(),
+            block,
+        })
+        .await
     }
+
+    pub async fn finish_assistant_message(
+        &self,
+        status: MessageStatus,
+        token_usage: Option<TokenUsage>,
+    ) -> TaskExecutorResult<()> {
+        let mut message = self
+            .states
+            .messages
+            .lock()
+            .await
+            .assistant_message
+            .clone()
+            .ok_or_else(|| {
+                TaskExecutorError::StatePersistenceFailed(
+                    "assistant message not initialized".to_string(),
+                )
+            })?;
+
+        let finished_at = Utc::now();
+        let duration_ms = finished_at
+            .signed_duration_since(message.created_at)
+            .num_milliseconds()
+            .max(0) as i64;
+
+        message.status = status.clone();
+        message.finished_at = Some(finished_at);
+        message.duration_ms = Some(duration_ms);
+        message.token_usage = token_usage.clone();
+
+        self.agent_persistence()
+            .messages()
+            .update(&message)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        let message_id = message.id;
+        self.states.messages.lock().await.assistant_message = Some(message);
+
+        self.emit_event(TaskEvent::MessageFinished {
+            message_id,
+            status,
+            finished_at,
+            duration_ms,
+            token_usage,
+        })
+        .await
+    }
+
+    pub async fn fail_assistant_message(&self, error: ErrorBlock) -> TaskExecutorResult<()> {
+        self.assistant_append_block(Block::Error(error.clone()))
+            .await?;
+        self.finish_assistant_message(MessageStatus::Error, None)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn cancel_assistant_message(&self) -> TaskExecutorResult<()> {
+        let Some(mut message) = self.states.messages.lock().await.assistant_message.clone() else {
+            return Ok(());
+        };
+
+        let now = Utc::now();
+        let mut changed_blocks: Vec<(String, Block)> = Vec::new();
+
+        for block in &mut message.blocks {
+            match block {
+                Block::Thinking(b) => {
+                    if b.is_streaming {
+                        b.is_streaming = false;
+                        changed_blocks.push((b.id.clone(), Block::Thinking(b.clone())));
+                    }
+                }
+                Block::Text(b) => {
+                    if b.is_streaming {
+                        b.is_streaming = false;
+                        changed_blocks.push((b.id.clone(), Block::Text(b.clone())));
+                    }
+                }
+                Block::Tool(b) => {
+                    if matches!(b.status, ToolStatus::Running) {
+                        b.status = ToolStatus::Cancelled;
+                        b.finished_at = Some(now);
+                        b.duration_ms = Some(
+                            now.signed_duration_since(b.started_at)
+                                .num_milliseconds()
+                                .max(0) as i64,
+                        );
+                        changed_blocks.push((b.id.clone(), Block::Tool(b.clone())));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        message.status = MessageStatus::Cancelled;
+        message.finished_at = Some(now);
+        message.duration_ms = Some(
+            now.signed_duration_since(message.created_at)
+                .num_milliseconds()
+                .max(0) as i64,
+        );
+
+        self.agent_persistence()
+            .messages()
+            .update(&message)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        self.states.messages.lock().await.assistant_message = Some(message.clone());
+
+        for (block_id, block) in changed_blocks {
+            let _ = self
+                .emit_event(TaskEvent::BlockUpdated {
+                    message_id: message.id,
+                    block_id,
+                    block,
+                })
+                .await;
+        }
+
+        self.emit_event(TaskEvent::MessageFinished {
+            message_id: message.id,
+            status: MessageStatus::Cancelled,
+            finished_at: now,
+            duration_ms: message.duration_ms.unwrap_or(0),
+            token_usage: None,
+        })
+        .await?;
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct ActiveCheckpoint {
+    id: i64,
+    workspace_root: PathBuf,
 }
 
 fn map_status(status: &AgentTaskStatus) -> TaskStatus {
@@ -960,25 +1008,29 @@ fn render_message_content(content: &MessageContent) -> String {
     }
 }
 
-fn map_image_attachments(images: &[ImageAttachment]) -> Vec<UiMessageImage> {
+fn map_user_image_blocks(images: &[ImageAttachment]) -> Vec<Block> {
     images
         .iter()
         .enumerate()
         .map(|(index, attachment)| {
-            let ext = attachment
-                .mime_type
-                .split('/')
-                .nth(1)
-                .unwrap_or("image");
-            UiMessageImage {
-                id: format!("{}-{}", Utc::now().timestamp_millis(), index),
+            let ext = attachment.mime_type.split('/').nth(1).unwrap_or("image");
+            Block::UserImage(UserImageBlock {
                 data_url: attachment.data_url.clone(),
-                file_name: format!("image_{}.{}", index, ext),
-                file_size: attachment.data_url.len() as i64,
                 mime_type: attachment.mime_type.clone(),
-            }
+                file_name: Some(format!("image_{}.{}", index, ext)),
+                file_size: Some(attachment.data_url.len() as i64),
+            })
         })
         .collect()
+}
+
+fn find_block_index(blocks: &[Block], block_id: &str) -> Option<usize> {
+    blocks.iter().position(|block| match block {
+        Block::Thinking(b) => b.id == block_id,
+        Block::Text(b) => b.id == block_id,
+        Block::Tool(b) => b.id == block_id,
+        _ => false,
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -986,6 +1038,6 @@ pub struct ToolCallResult {
     pub call_id: String,
     pub tool_name: String,
     pub result: Value,
-    pub is_error: bool,
+    pub status: crate::agent::tools::ToolResultStatus,
     pub execution_time_ms: u64,
 }

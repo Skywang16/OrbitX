@@ -4,13 +4,15 @@
   import { useRollbackDialogStore } from '@/stores/rollbackDialog'
   import { checkpointApi } from '@/api/checkpoint'
   import type { FileChangeType } from '@/types/domain/checkpoint'
+  import { useCheckpoint } from '@/composables/useCheckpoint'
 
   const emit = defineEmits<{
-    rollback: [result: { success: boolean; message: string; messageId: number }]
+    rollback: [result: { success: boolean; message: string; restoreContent?: string }]
   }>()
 
   const { t } = useI18n()
   const store = useRollbackDialogStore()
+  const { refreshCheckpoints } = useCheckpoint()
   const isConfirming = ref(false)
 
   const getChangeIcon = (type: FileChangeType) => {
@@ -39,43 +41,41 @@
     if (isConfirming.value || !store.state) return
 
     isConfirming.value = true
-    const { checkpoint, messageId } = store.state
+    const { checkpoint, workspacePath } = store.state
 
     try {
-      if (checkpoint && checkpoint.fileCount > 0) {
-        const result = await checkpointApi.rollback(checkpoint.id)
-        if (!result) {
-          emit('rollback', {
-            success: false,
-            message: t('checkpoint.rollback_failed'),
-            messageId,
-          })
-          return
-        }
-        if (result.failedFiles.length > 0) {
-          emit('rollback', {
-            success: false,
-            message: t('checkpoint.rollback_partial', {
-              restored: result.restoredFiles.length,
-              failed: result.failedFiles.length,
-            }),
-            messageId,
-          })
-          return
-        }
+      const result = await checkpointApi.rollback(checkpoint.id)
+      if (!result) {
+        emit('rollback', {
+          success: false,
+          message: t('checkpoint.rollback_failed'),
+        })
+        return
       }
+
+      if (result.failedFiles.length > 0) {
+        emit('rollback', {
+          success: false,
+          message: t('checkpoint.rollback_partial', {
+            restored: result.restoredFiles.length,
+            failed: result.failedFiles.length,
+          }),
+        })
+        return
+      }
+
+      await refreshCheckpoints(checkpoint.sessionId, workspacePath)
 
       emit('rollback', {
         success: true,
-        message: t('checkpoint.rollback_success', { count: checkpoint?.fileCount ?? 0 }),
-        messageId,
+        message: t('checkpoint.rollback_success', { count: result.restoredFiles.length }),
+        restoreContent: store.state?.messageContent || '',
       })
     } catch (error) {
       console.error('[RollbackConfirmDialog] Rollback error:', error)
       emit('rollback', {
         success: false,
         message: String(error),
-        messageId,
       })
     } finally {
       isConfirming.value = false

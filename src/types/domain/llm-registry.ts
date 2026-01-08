@@ -7,11 +7,6 @@ export interface PresetModel {
   name: string
   maxTokens: number | null
   contextWindow: number
-  supportsImages: boolean
-  inputPrice?: number // 每百万 tokens，单位：美元
-  outputPrice?: number // 每百万 tokens，单位：美元
-  cacheReadsPrice?: number // 每百万 tokens，单位：美元
-  cacheWritesPrice?: number // 每百万 tokens，单位：美元
   description?: string
 }
 

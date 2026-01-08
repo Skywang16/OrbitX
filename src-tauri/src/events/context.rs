@@ -14,7 +14,10 @@ pub enum TerminalContextEvent {
         pane_id: PaneId,
         context: TerminalContext,
     },
-    PaneShellIntegrationChanged { pane_id: PaneId, enabled: bool },
+    PaneShellIntegrationChanged {
+        pane_id: PaneId,
+        enabled: bool,
+    },
     PaneCwdChanged {
         pane_id: PaneId,
         old_cwd: Option<String>,

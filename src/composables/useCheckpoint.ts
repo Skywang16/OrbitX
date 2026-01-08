@@ -5,51 +5,69 @@ import { ref } from 'vue'
 import { checkpointApi } from '@/api/checkpoint'
 import type { CheckpointSummary } from '@/types/domain/checkpoint'
 
-const checkpointsMap = ref<Map<number, CheckpointSummary[]>>(new Map())
-const loadingSessions = ref<Set<number>>(new Set())
+const checkpointsMap = ref<Map<string, CheckpointSummary[]>>(new Map())
+const loadingSessions = ref<Set<string>>(new Set())
+
+const makeKey = (sessionId: number, workspacePath: string) => `${workspacePath}::${sessionId}`
 
 export function useCheckpoint() {
-  const loadCheckpoints = async (sessionId: number) => {
-    if (loadingSessions.value.has(sessionId)) return
+  const loadCheckpoints = async (sessionId: number, workspacePath: string) => {
+    if (!workspacePath) return
+    const key = makeKey(sessionId, workspacePath)
+    if (loadingSessions.value.has(key)) return
 
-    loadingSessions.value.add(sessionId)
+    loadingSessions.value.add(key)
     try {
-      const list = await checkpointApi.list({ sessionId })
-      checkpointsMap.value.set(sessionId, list)
+      const list = await checkpointApi.list(sessionId, workspacePath)
+      checkpointsMap.value.set(key, list)
     } finally {
-      loadingSessions.value.delete(sessionId)
+      loadingSessions.value.delete(key)
     }
   }
 
-  const getCheckpointByMessage = (sessionId: number, userMessage: string): CheckpointSummary | null => {
-    const list = checkpointsMap.value.get(sessionId)
+  /**
+   * 通过 messageId 查找 checkpoint
+   */
+  const getCheckpointByMessageId = (
+    sessionId: number,
+    workspacePath: string,
+    messageId: number
+  ): CheckpointSummary | null => {
+    const list = checkpointsMap.value.get(makeKey(sessionId, workspacePath))
     if (!list) return null
-    // 匹配用户消息内容找到对应的checkpoint
-    return list.find(cp => cp.userMessage === userMessage) ?? null
+    return list.find(cp => cp.messageId === messageId) ?? null
   }
 
-  const getChildCheckpoint = (sessionId: number, checkpointId: number): CheckpointSummary | null => {
-    const list = checkpointsMap.value.get(sessionId)
+  /**
+   * 获取指定 checkpoint 的子 checkpoint
+   */
+  const getChildCheckpoint = (
+    sessionId: number,
+    workspacePath: string,
+    checkpointId: number
+  ): CheckpointSummary | null => {
+    const list = checkpointsMap.value.get(makeKey(sessionId, workspacePath))
     if (!list) return null
     return list.find(cp => cp.parentId === checkpointId) ?? null
   }
 
-  const getCheckpointsBySession = (sessionId: number): CheckpointSummary[] => {
-    return checkpointsMap.value.get(sessionId) ?? []
+  const getCheckpointsBySession = (sessionId: number, workspacePath: string): CheckpointSummary[] => {
+    return checkpointsMap.value.get(makeKey(sessionId, workspacePath)) ?? []
   }
 
-  const refreshCheckpoints = async (sessionId: number) => {
-    checkpointsMap.value.delete(sessionId)
-    await loadCheckpoints(sessionId)
+  const refreshCheckpoints = async (sessionId: number, workspacePath: string) => {
+    const key = makeKey(sessionId, workspacePath)
+    checkpointsMap.value.delete(key)
+    await loadCheckpoints(sessionId, workspacePath)
   }
 
-  const isLoading = (sessionId: number) => {
-    return loadingSessions.value.has(sessionId)
+  const isLoading = (sessionId: number, workspacePath: string) => {
+    return loadingSessions.value.has(makeKey(sessionId, workspacePath))
   }
 
   return {
     loadCheckpoints,
-    getCheckpointByMessage,
+    getCheckpointByMessageId,
     getChildCheckpoint,
     getCheckpointsBySession,
     refreshCheckpoints,

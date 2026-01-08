@@ -11,7 +11,6 @@ use crate::filesystem::commands::fs_list_directory;
 
 const MAX_PREVIEW_FILES: usize = 50;
 
-/// 获取目录文件列表预览（最多50个文件）
 async fn get_directory_preview(working_directory: &str) -> String {
     if working_directory == "Not specified" || working_directory.trim().is_empty() {
         return String::new();
@@ -48,7 +47,7 @@ async fn get_directory_preview(working_directory: &str) -> String {
 }
 
 pub fn definitions() -> Vec<Arc<dyn ComponentDefinition>> {
-    vec![Arc::new(SystemInfoComponent), Arc::new(DateTimeComponent)]
+    vec![Arc::new(SystemInfoComponent)]
 }
 
 struct SystemInfoComponent;
@@ -97,14 +96,12 @@ impl ComponentDefinition for SystemInfoComponent {
 
         let has_workspace = working_directory != "Not specified";
 
-        // 获取当前目录的文件列表（最多50个）
         let file_list_preview = if has_workspace {
             get_directory_preview(working_directory).await
         } else {
             String::new()
         };
 
-        // 工作区状态提示
         let workspace_status = if has_workspace {
             String::new()
         } else {
@@ -121,53 +118,8 @@ impl ComponentDefinition for SystemInfoComponent {
         template_context.insert("file_list_preview".to_string(), json!(file_list_preview));
         template_context.insert("workspace_status".to_string(), json!(workspace_status));
 
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("failed to render system info template: {}", e))
-            })?;
+        let result = TemplateEngine::new().resolve(template, &template_context);
 
         Ok(Some(result))
-    }
-}
-
-struct DateTimeComponent;
-
-#[async_trait]
-impl ComponentDefinition for DateTimeComponent {
-    fn id(&self) -> PromptComponent {
-        PromptComponent::DateTime
-    }
-
-    fn name(&self) -> &str {
-        "DateTime"
-    }
-
-    fn description(&self) -> &str {
-        "Current date and time information"
-    }
-
-    fn required(&self) -> bool {
-        false
-    }
-
-    fn dependencies(&self) -> &[PromptComponent] {
-        &[]
-    }
-
-    fn default_template(&self) -> Option<&str> {
-        Some("You are OrbitX Agent, a terminal-focused AI assistant.")
-    }
-
-    async fn render(
-        &self,
-        _context: &ComponentContext,
-        template_override: Option<&str>,
-    ) -> AgentResult<Option<String>> {
-        let template = template_override
-            .or_else(|| self.default_template())
-            .ok_or_else(|| AgentError::Internal("missing datetime template".to_string()))?;
-
-        Ok(Some(template.to_string()))
     }
 }

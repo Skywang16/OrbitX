@@ -6,11 +6,13 @@ use crate::agent::context::SummaryResult;
 use crate::agent::core::executor::{
     ExecuteTaskParams, FileContextStatus, TaskExecutor, TaskSummary,
 };
-use crate::agent::events::TaskProgressPayload;
+use crate::agent::tools::registry::ToolConfirmationDecision;
+use crate::agent::types::TaskEvent;
 use crate::storage::repositories::AppPreferences;
 use crate::storage::{DatabaseManager, UnifiedCache};
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
+use serde::Deserialize;
 use std::sync::Arc;
 use tauri::{ipc::Channel, State};
 
@@ -30,28 +32,13 @@ impl TaskExecutorState {
 pub async fn agent_execute_task(
     state: State<'_, TaskExecutorState>,
     params: ExecuteTaskParams,
-    channel: Channel<TaskProgressPayload>,
+    channel: Channel<TaskEvent>,
 ) -> TauriApiResult<EmptyData> {
     match state.executor.execute_task(params, channel).await {
         Ok(_context) => Ok(api_success!()),
         Err(e) => {
             tracing::error!("Failed to execute Agent task: {}", e);
             Ok(api_error!("agent.execute_failed"))
-        }
-    }
-}
-
-/// 暂停任务
-#[tauri::command]
-pub async fn agent_pause_task(
-    state: State<'_, TaskExecutorState>,
-    task_id: String,
-) -> TauriApiResult<EmptyData> {
-    match state.executor.pause_task(&task_id, true).await {
-        Ok(_) => Ok(api_success!()),
-        Err(e) => {
-            tracing::error!("Failed to pause task: {}", e);
-            Ok(api_error!("agent.pause_failed"))
         }
     }
 }
@@ -72,6 +59,42 @@ pub async fn agent_cancel_task(
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolConfirmationParams {
+    pub task_id: String,
+    pub request_id: String,
+    pub decision: ToolConfirmationDecision,
+}
+
+/// 回传工具确认结果
+#[tauri::command]
+pub async fn agent_tool_confirm(
+    state: State<'_, TaskExecutorState>,
+    params: ToolConfirmationParams,
+) -> TauriApiResult<EmptyData> {
+    let ctx = state
+        .executor
+        .active_tasks()
+        .get(&params.task_id)
+        .map(|entry| Arc::clone(entry.value()));
+
+    let ctx = match ctx {
+        Some(ctx) => ctx,
+        None => return Ok(api_error!("agent.task_not_found")),
+    };
+
+    let ok = ctx
+        .tool_registry()
+        .resolve_confirmation(&params.request_id, params.decision);
+
+    if ok {
+        Ok(api_success!())
+    } else {
+        Ok(api_error!("agent.tool_confirm_not_found"))
+    }
+}
+
 /// 列出任务
 #[tauri::command]
 pub async fn agent_list_tasks(
@@ -79,11 +102,7 @@ pub async fn agent_list_tasks(
     session_id: Option<i64>,
     status_filter: Option<String>,
 ) -> TauriApiResult<Vec<TaskSummary>> {
-    match state
-        .executor
-        .list_tasks(session_id, status_filter)
-        .await
-    {
+    match state.executor.list_tasks(session_id, status_filter).await {
         Ok(tasks) => Ok(api_success!(tasks)),
         Err(e) => {
             tracing::error!("Failed to list tasks: {}", e);

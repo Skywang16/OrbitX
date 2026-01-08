@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { computed } from 'vue'
   import type { Message, CheckpointSummary } from '@/types'
   import { useImageLightboxStore } from '@/stores/imageLightbox'
   import CheckpointIndicator from './CheckpointIndicator.vue'
@@ -9,9 +10,18 @@
     workspacePath?: string
   }
 
-  defineProps<Props>()
+  const props = defineProps<Props>()
 
   const lightboxStore = useImageLightboxStore()
+
+  const userText = computed(() => {
+    const block = props.message.blocks.find(b => b.type === 'user_text')
+    return block?.content || ''
+  })
+
+  const userImages = computed(() => {
+    return props.message.blocks.filter(b => b.type === 'user_image')
+  })
 
   const handleImageClick = (image: { id: string; dataUrl: string; fileName: string }) => {
     lightboxStore.openImage({
@@ -28,23 +38,29 @@
   <div class="user-message">
     <div class="user-message-content">
       <div class="user-message-bubble">
-        <div v-if="message.images && message.images.length > 0" class="user-message-images">
+        <div v-if="userImages.length > 0" class="user-message-images">
           <div
-            v-for="image in message.images"
-            :key="image.id"
+            v-for="(image, index) in userImages"
+            :key="`${message.id}-img-${index}`"
             class="message-image-item"
-            @click="handleImageClick(image)"
+            @click="
+              handleImageClick({
+                id: `${message.id}-img-${index}`,
+                dataUrl: image.dataUrl,
+                fileName: image.fileName || `image_${index}`,
+              })
+            "
           >
-            <img :src="image.dataUrl" :alt="image.fileName" class="message-image" />
+            <img :src="image.dataUrl" :alt="image.fileName || `image_${index}`" class="message-image" />
           </div>
         </div>
-        <div v-if="message.content" class="user-message-text">{{ message.content }}</div>
+        <div v-if="userText" class="user-message-text">{{ userText }}</div>
       </div>
       <CheckpointIndicator
         class="rollback-action"
         :checkpoint="checkpoint"
-        :message-id="message.id"
         :workspace-path="workspacePath || ''"
+        :message-content="userText"
       />
     </div>
   </div>

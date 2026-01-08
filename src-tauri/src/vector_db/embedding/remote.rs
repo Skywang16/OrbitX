@@ -1,11 +1,11 @@
-use async_trait::async_trait;
-use crate::vector_db::core::{Result, VectorDbError};
 use super::Embedder;
 use crate::llm::{
-    types::{EmbeddingRequest, LLMProviderConfig},
     providers::base::LLMProvider,
     providers::openai::OpenAIProvider,
+    types::{EmbeddingRequest, LLMProviderConfig},
 };
+use crate::vector_db::core::{Result, VectorDbError};
+use async_trait::async_trait;
 
 pub struct RemoteEmbedder {
     provider: OpenAIProvider,

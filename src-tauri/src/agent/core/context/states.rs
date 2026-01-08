@@ -5,11 +5,10 @@ use tokio::sync::{Mutex, RwLock};
 
 use crate::agent::core::context::ToolCallResult;
 use crate::agent::core::status::AgentTaskStatus;
-use crate::agent::events::TaskProgressPayload;
 use crate::agent::persistence::AgentExecution;
 use crate::agent::react::runtime::ReactRuntime;
 use crate::agent::types::TaskDetail;
-use crate::agent::ui::UiStep;
+use crate::agent::types::{Message, TaskEvent};
 use crate::llm::anthropic_types::{MessageParam, SystemPrompt};
 
 use super::chain::Chain;
@@ -23,7 +22,6 @@ pub(crate) struct ExecutionState {
     pub(crate) messages: Vec<MessageParam>,
     pub(crate) message_sequence: i64,
     pub(crate) tool_results: Vec<ToolCallResult>,
-    pub(crate) ui_assistant_message_id: Option<i64>,
 }
 
 impl ExecutionState {
@@ -35,7 +33,6 @@ impl ExecutionState {
             messages: Vec::new(),
             message_sequence: 0,
             tool_results: Vec::new(),
-            ui_assistant_message_id: None,
         }
     }
 
@@ -72,18 +69,18 @@ impl PlanningState {
     }
 }
 
-/// UI状态
+/// UI 消息状态（消息表的实时镜像）
 #[derive(Default)]
-pub(crate) struct UiState {
-    pub(crate) steps: Vec<UiStep>,
+pub(crate) struct MessageState {
+    pub(crate) assistant_message: Option<Message>,
 }
 
 pub(crate) struct TaskStates {
     pub execution: Arc<RwLock<ExecutionState>>,
     pub planning: Arc<RwLock<PlanningState>>,
-    pub ui: Arc<Mutex<UiState>>,
+    pub messages: Arc<Mutex<MessageState>>,
     pub react_runtime: Arc<RwLock<ReactRuntime>>,
-    pub progress_channel: Arc<Mutex<Option<Channel<TaskProgressPayload>>>>,
+    pub progress_channel: Arc<Mutex<Option<Channel<TaskEvent>>>>,
     /// 简化的取消标志 - 用 AtomicBool 替代 CancellationToken
     pub aborted: Arc<AtomicBool>,
 }
@@ -93,12 +90,12 @@ impl TaskStates {
         execution: ExecutionState,
         planning: PlanningState,
         react_runtime: ReactRuntime,
-        progress_channel: Option<Channel<TaskProgressPayload>>,
+        progress_channel: Option<Channel<TaskEvent>>,
     ) -> Self {
         Self {
             execution: Arc::new(RwLock::new(execution)),
             planning: Arc::new(RwLock::new(planning)),
-            ui: Arc::new(Mutex::new(UiState::default())),
+            messages: Arc::new(Mutex::new(MessageState::default())),
             react_runtime: Arc::new(RwLock::new(react_runtime)),
             progress_channel: Arc::new(Mutex::new(progress_channel)),
             aborted: Arc::new(AtomicBool::new(false)),

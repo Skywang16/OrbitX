@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{ warn};
+use tracing::warn;
 
 use crate::mux::TerminalMuxStatus;
 

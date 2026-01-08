@@ -126,7 +126,8 @@ impl Eq for CompletionItem {}
 impl Ord for CompletionItem {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         // 按分数降序排序，分数相同则按文本字母序
-        other.score
+        other
+            .score
             .partial_cmp(&self.score)
             .unwrap_or(std::cmp::Ordering::Equal)
             .then_with(|| self.text.cmp(&other.text))

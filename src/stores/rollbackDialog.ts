@@ -5,9 +5,9 @@ import { checkpointApi } from '@/api/checkpoint'
 import { useCheckpoint } from '@/composables/useCheckpoint'
 
 export interface RollbackDialogState {
-  checkpoint: CheckpointSummary | null
-  messageId: number
+  checkpoint: CheckpointSummary
   workspacePath: string
+  messageContent: string
 }
 
 export const useRollbackDialogStore = defineStore('rollbackDialog', () => {
@@ -30,14 +30,13 @@ export const useRollbackDialogStore = defineStore('rollbackDialog', () => {
         files.value = []
         return
       }
-      if (data.checkpoint) {
-        const childCheckpoint = getChildCheckpoint(data.checkpoint.sessionId, data.checkpoint.id) ?? null
 
-        if (childCheckpoint) {
-          files.value = await checkpointApi.diff(data.checkpoint.id, childCheckpoint.id, data.workspacePath)
-        } else {
-          files.value = await checkpointApi.diffWithWorkspace(data.checkpoint.id, data.workspacePath)
-        }
+      const childCheckpoint = getChildCheckpoint(data.checkpoint.sessionId, data.workspacePath, data.checkpoint.id)
+
+      if (childCheckpoint) {
+        files.value = await checkpointApi.diff(data.checkpoint.id, childCheckpoint.id, data.workspacePath)
+      } else {
+        files.value = await checkpointApi.diffWithWorkspace(data.checkpoint.id, data.workspacePath)
       }
     } catch (error) {
       console.error('[RollbackDialog] Failed to load file diffs:', error)

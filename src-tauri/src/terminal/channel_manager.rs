@@ -67,6 +67,7 @@ impl TerminalChannelManager {
             }
         }
 
+
         let buffered = {
             if let Ok(mut pending) = self.pending.write() {
                 pending.remove(&pane_id).map(PendingQueue::drain)

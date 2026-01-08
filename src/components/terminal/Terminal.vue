@@ -7,9 +7,6 @@
       class="terminal-container"
       :class="{ 'terminal-active': isActive, 'terminal-loading': isLoading }"
       @click="focusTerminal"
-      @dragover="handleDragOver"
-      @dragleave="handleDragLeave"
-      @drop="handleDrop"
     ></div>
 
     <TerminalCompletion
@@ -47,6 +44,7 @@
 
   import type { Theme } from '@/types'
   import { windowApi } from '@/api'
+  import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
   import { useThemeStore } from '@/stores/theme'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import { useTerminalState } from '@/composables/useTerminalState'
@@ -55,7 +53,7 @@
   import { useTerminalOutput } from '@/composables/useTerminalOutput'
   import { TERMINAL_CONFIG } from '@/constants/terminal'
   import { useTerminalStore } from '@/stores/Terminal'
-  import { createMessage } from '@/ui'
+  import { useLayoutStore } from '@/stores/layout'
   import { convertThemeToXTerm, createDefaultXTermTheme } from '@/utils/themeConverter'
   import { terminalChannelApi } from '@/api/channel/terminal'
 
@@ -74,13 +72,10 @@
   }
 
   const props = defineProps<Props>()
-  const emit = defineEmits<{
-    (e: 'input', data: string): void // 用户输入事件
-    (e: 'resize', rows: number, cols: number): void // 终端大小变化事件
-  }>()
 
   // === 状态管理 ===
   const terminalStore = useTerminalStore()
+  const layoutStore = useLayoutStore()
   const themeStore = useThemeStore()
   const terminalSelection = useTerminalSelection()
 
@@ -97,7 +92,7 @@
   const fitAddon = ref<FitAddon | null>(null)
   const searchAddon = ref<SearchAddon | null>(null)
   // 流式 UTF-8 解码器：仅用于 OSC 解析与状态分发，渲染走 writeUtf8
-  const binaryDecoder = new TextDecoder('utf-8', { fatal: false })
+  let binaryDecoder = new TextDecoder('utf-8', { fatal: false })
   let resizeObserver: ResizeObserver | null = null
 
   const MAX_INITIAL_FIT_RETRIES = 20
@@ -117,13 +112,22 @@
   let hasDisposed = false
   let channelSub: { unsubscribe: () => Promise<void> } | null = null
   let keyListener: { dispose: () => void } | null = null
+  let ligaturesAddonLoaded = false
 
-  // Loading 状态管理
-  // 如果有 terminalId，初始状态就显示 loading
-  const isLoading = ref(typeof props.terminalId === 'number')
+  // Loading 状态管理：只在“刚创建的新终端”且“尚未收到输出”时显示
+  const isLoading = ref(
+    typeof props.terminalId === 'number' &&
+      terminalStore.isPaneNew(props.terminalId) &&
+      !terminalStore.hasPaneOutput(props.terminalId)
+  )
   let loadingTimer: number | null = null
   let hasReceivedData = false
   const LOADING_TIMEOUT = 5000 // 5秒超时
+
+  const shouldDecodeTextOutput = () => {
+    if (props.isActive) return true
+    return terminalStore.hasOutputSubscribers(props.terminalId)
+  }
 
   // 统一的事件资源管理
   const disposers: Array<() => void> = []
@@ -138,7 +142,7 @@
   }
 
   const commitResize = () => {
-    if (!terminal.value || !props.isActive) {
+    if (!terminal.value) {
       return
     }
 
@@ -154,7 +158,7 @@
     }
 
     lastEmittedResize = { rows, cols }
-    emit('resize', rows, cols)
+    terminalStore.resizeTerminal(props.terminalId, rows, cols).catch(() => {})
   }
 
   const processBinaryChunk = (paneId: number, bytes: Uint8Array) => {
@@ -163,18 +167,18 @@
     // 首次收到数据时停止 loading
     if (!hasReceivedData && bytes.length > 0) {
       hasReceivedData = true
+      terminalStore.markPaneHasOutput(paneId)
       stopLoading()
     }
 
     // 直接写入 xterm
     handleTerminalOutputBinary(terminal.value, bytes)
 
-    // 可选：扩展功能（shell integration, 状态分发）
+    if (!shouldDecodeTextOutput()) return
     const text = binaryDecoder.decode(bytes, { stream: true })
-    if (text) {
-      shellIntegration.processTerminalOutput(text)
-      terminalStore.dispatchOutputForPaneId(paneId, text)
-    }
+    if (!text) return
+    shellIntegration.processTerminalOutput(text)
+    terminalStore.dispatchOutputForPaneId(paneId, text)
   }
 
   const startLoading = () => {
@@ -203,12 +207,9 @@
 
   const disposeChannelSubscription = () => {
     if (channelSub) {
-      channelSub
-        .unsubscribe()
-        .catch(() => {})
-        .finally(() => {
-          channelSub = null
-        })
+      const sub = channelSub
+      channelSub = null
+      sub.unsubscribe().catch(() => {})
     }
   }
 
@@ -224,27 +225,25 @@
 
     subscribedPaneId = paneId
 
-    // 如果还没有开始 loading（例如从其他 pane 切换过来），则开始
-    if (!isLoading.value) {
+    if (terminalStore.isPaneNew(paneId) && !terminalStore.hasPaneOutput(paneId)) {
       startLoading()
+    } else {
+      stopLoading()
     }
 
     try {
-      // 更新 shell integration
       shellIntegration.updateTerminalId(paneId)
     } catch (error) {
       console.warn('Failed to update shell integration terminal id:', error)
     }
 
     try {
-      // 🔑 订阅后自动接收 replay + 实时数据（后端已实现）
       channelSub = terminalChannelApi.subscribeBinary(paneId, bytes => {
         if (subscribedPaneId !== paneId) return
         processBinaryChunk(paneId, bytes)
       })
     } catch (e) {
       console.warn('Failed to subscribe terminal channel:', e)
-      // 订阅失败时停止 loading
       stopLoading()
     }
   }
@@ -253,6 +252,15 @@
   let resizeTimer: number | null = null
 
   const MAX_SELECTION_LENGTH = 4096
+
+  let selectionRaf: number | null = null
+  const scheduleSelectionSync = () => {
+    if (selectionRaf) return
+    selectionRaf = requestAnimationFrame(() => {
+      selectionRaf = null
+      syncSelection()
+    })
+  }
 
   const syncSelection = () => {
     try {
@@ -348,11 +356,14 @@
 
       // 启用连字支持，提升编程连字与特殊字符的显示效果
       // 必须在终端打开后加载，因为连字插件需要注册字符连接器
-      try {
-        const ligaturesAddon = new LigaturesAddon()
-        terminal.value.loadAddon(ligaturesAddon)
-      } catch (e) {
-        console.warn('Ligatures addon failed to load.', e)
+      if (props.isActive && !ligaturesAddonLoaded) {
+        try {
+          const ligaturesAddon = new LigaturesAddon()
+          terminal.value.loadAddon(ligaturesAddon)
+          ligaturesAddonLoaded = true
+        } catch (e) {
+          console.warn('Ligatures addon failed to load.', e)
+        }
       }
 
       // 加载插件与 open 之后，重新应用主题并强制刷新以确保颜色正确
@@ -370,18 +381,18 @@
 
       trackDisposable(
         terminal.value.onData(data => {
-          emit('input', data)
+          terminalStore.writeToTerminal(props.terminalId, data).catch(() => {})
           updateInputLine(data)
-          updateTerminalCursorPosition()
+          scheduleCursorPositionUpdate()
         })
       )
 
       trackDisposable(terminal.value.onKey(e => handleKeyDown(e.domEvent)))
 
-      trackDisposable(terminal.value.onCursorMove(updateTerminalCursorPosition))
+      trackDisposable(terminal.value.onCursorMove(scheduleCursorPositionUpdate))
       // 移除 onScroll 事件监听，减少滚动时的性能开销
 
-      trackDisposable(terminal.value.onSelectionChange(syncSelection))
+      trackDisposable(terminal.value.onSelectionChange(scheduleSelectionSync))
 
       // 初始尺寸适配
       resizeTerminal()
@@ -499,7 +510,7 @@
       inputState.currentLine += completionText
       inputState.cursorCol += completionText.length
 
-      emit('input', completionText)
+      terminalStore.writeToTerminal(props.terminalId, completionText).catch(() => {})
 
       updateTerminalCursorPosition()
     } catch (error) {
@@ -588,10 +599,6 @@
     }
   }
 
-  /**
-   * 调整终端大小
-   * 根据容器大小自动调整终端尺寸
-   */
   const resizeTerminal = () => {
     try {
       if (!terminal.value || !fitAddon.value || !terminalRef.value) {
@@ -625,26 +632,21 @@
         clearTimeout(resizeTimer)
       }
 
-      resizeTimer = window.setTimeout(() => {
-        try {
-          fitAddon.value?.fit()
-          commitResize()
-          logTerminalEvent('resizeTerminal:fit', {
-            rows: terminal.value?.rows,
-            cols: terminal.value?.cols,
-          })
-        } catch {
-          // ignore
-        }
-      }, 50)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          try {
+            fitAddon.value?.fit()
+            commitResize()
+          } catch {
+            // ignore
+          }
+        })
+      })
     } catch {
       // ignore
     }
   }
 
-  /**
-   * 更新终端光标位置
-   */
   const updateTerminalCursorPosition = () => {
     if (!props.isActive || !terminal.value || !terminalRef.value) {
       return
@@ -663,7 +665,6 @@
         return
       }
 
-      // 后备方案：手动计算光标位置
       const xtermScreen = terminalRef.value.querySelector('.xterm-screen')
       if (!xtermScreen) return
 
@@ -683,56 +684,40 @@
     }
   }
 
-  const handleGoToPath = (path: string) => {
-    const cleanPath = path.trim().replace(/^["']|["']$/g, '')
-    emit('input', `cd "${cleanPath}"\n`)
-    createMessage.success(`切换到: ${cleanPath}`)
+  let cursorRaf: number | null = null
+  const scheduleCursorPositionUpdate = () => {
+    if (cursorRaf) return
+    cursorRaf = requestAnimationFrame(() => {
+      cursorRaf = null
+      updateTerminalCursorPosition()
+    })
   }
 
-  const handleFileDrop = async (filePath: string) => {
-    try {
-      const directory = await windowApi.handleFileOpen(filePath)
-      handleGoToPath(directory)
-    } catch {
-      createMessage.error('无法处理拖拽的文件')
-    }
+  const insertPathToTerminal = (path: string) => {
+    const quoted = path.includes(' ') ? `"${path}"` : path
+    terminalStore.writeToTerminal(props.terminalId, quoted)
   }
 
-  /**
-   * 处理拖拽悬停事件
-   */
-  const handleDragOver = (event: DragEvent) => {
-    event.preventDefault()
-    event.dataTransfer!.dropEffect = 'copy'
-  }
+  let unlistenDragDrop: (() => void) | null = null
 
-  /**
-   * 处理拖拽离开事件
-   */
-  const handleDragLeave = (event: DragEvent) => {
-    event.preventDefault()
-  }
+  const setupDragDropListener = async () => {
+    const webview = getCurrentWebviewWindow()
+    unlistenDragDrop = await webview.onDragDropEvent(event => {
+      if (event.payload.type !== 'drop' || !props.isActive) return
 
-  /**
-   * 处理文件拖拽放置事件
-   */
-  const handleDrop = async (event: DragEvent) => {
-    event.preventDefault()
-
-    const files = event.dataTransfer?.files
-
-    if (files && files.length > 0) {
-      const file = files[0]
-
-      let filePath = ''
-      if ('path' in file && file.path) {
-        filePath = file.path as string
-      } else {
-        filePath = file.name
+      // 内部拖拽优先
+      const internalPath = layoutStore.consumeDragPath()
+      if (internalPath) {
+        insertPathToTerminal(internalPath)
+        return
       }
 
-      await handleFileDrop(filePath)
-    }
+      // 外部文件拖拽
+      const paths = event.payload.paths
+      if (paths.length > 0) {
+        insertPathToTerminal(paths[0])
+      }
+    })
   }
 
   // === Event Handlers for Terminal ===
@@ -743,8 +728,10 @@
       logTerminalEvent('onMounted:init')
 
       // 如果有 terminalId，立即开始 loading 并设置超时
-      if (typeof props.terminalId === 'number') {
+      if (terminalStore.isPaneNew(props.terminalId) && !terminalStore.hasPaneOutput(props.terminalId)) {
         startLoading()
+      } else {
+        stopLoading()
       }
 
       await initPlatformInfo()
@@ -773,6 +760,8 @@
 
       addDomListener(window, 'opacity-changed', handleOpacityChange)
 
+      await setupDragDropListener()
+
       await shellIntegration.initShellIntegration(terminal.value)
       await nextTick()
 
@@ -789,6 +778,12 @@
 
     // 清理 loading 相关资源
     stopLoading()
+
+    // 清理 Tauri drag drop 监听
+    if (unlistenDragDrop) {
+      unlistenDragDrop()
+      unlistenDragDrop = null
+    }
 
     // 刷新解码器尾部残留，避免丢字符
     const remaining = binaryDecoder.decode()
@@ -809,6 +804,8 @@
     document.removeEventListener('open-terminal-search', handleOpenTerminalSearchEvent)
 
     if (resizeTimer) clearTimeout(resizeTimer)
+    if (selectionRaf) cancelAnimationFrame(selectionRaf)
+    if (cursorRaf) cancelAnimationFrame(cursorRaf)
 
     // 防止组件卸载后仍触发Shell Integration的异步调用
     try {
@@ -816,8 +813,6 @@
     } catch {
       // ignore
     }
-
-    terminalStore.unregisterResizeCallback(props.terminalId)
 
     // 取消 Tauri Channel 订阅，避免后端通道残留
     disposeChannelSubscription()
@@ -860,6 +855,15 @@
         nextTick(() => {
           focusTerminal()
           resizeTerminal()
+          if (terminal.value && !ligaturesAddonLoaded) {
+            try {
+              const ligaturesAddon = new LigaturesAddon()
+              terminal.value.loadAddon(ligaturesAddon)
+              ligaturesAddonLoaded = true
+            } catch (e) {
+              console.warn('Ligatures addon failed to load.', e)
+            }
+          }
         })
       } else {
         logTerminalEvent('watch:isActive->false')
@@ -870,12 +874,30 @@
 
   watch(
     () => props.terminalId,
-    newId => {
-      logTerminalEvent('watch:terminalId', { newId })
+    (newId, oldId) => {
+      logTerminalEvent('watch:terminalId', { newId, oldId })
 
       if (!isXtermReady) {
         // xterm 未就绪，等待 onMounted 中的订阅
         return
+      }
+
+      if (typeof oldId === 'number' && typeof newId === 'number' && oldId !== newId) {
+        try {
+          terminal.value?.reset()
+        } catch {
+          // ignore
+        }
+
+        // 切换到新 pane 时重置解码器与 shell integration 状态，避免历史/提示符叠加
+        try {
+          binaryDecoder.decode()
+        } catch {
+          // ignore
+        }
+        binaryDecoder = new TextDecoder('utf-8', { fatal: false })
+        shellIntegration.resetState()
+        terminalSelection.clearSelection()
       }
 
       if (typeof newId === 'number') {
@@ -883,6 +905,12 @@
       } else {
         subscribeToPane(null)
         shellIntegration.resetState()
+        terminalSelection.clearSelection()
+        try {
+          terminal.value?.reset()
+        } catch {
+          // ignore
+        }
       }
 
       lastEmittedResize = null
@@ -902,29 +930,38 @@
     position: relative;
     height: 100%;
     width: 100%;
-    padding: 10px 10px 0 10px;
-    /* 透明背景 */
+    padding: 10px;
+    box-sizing: border-box;
     background: transparent;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .terminal-container {
-    height: 100%;
+    flex: 1;
     width: 100%;
-    /* 完全透明，继承窗口统一背景 */
     background: transparent;
     overflow: hidden;
+    min-height: 0;
   }
 
   .terminal-container :global(.xterm) {
-    height: 100% !important;
+    width: 100%;
+    height: 100%;
   }
 
   .terminal-container :global(.xterm .xterm-viewport) {
     height: 100% !important;
-    /* 优化滚动性能 */
     overscroll-behavior: contain;
     scroll-behavior: auto;
     background-color: transparent !important;
+    transform: translateZ(0);
+    will-change: scroll-position;
+  }
+
+  .terminal-container :global(.xterm .xterm-screen canvas) {
+    transform: translateZ(0);
   }
 
   :global(.xterm-link-layer a) {

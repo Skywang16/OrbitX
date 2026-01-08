@@ -1,10 +1,10 @@
-use std::collections::{HashMap, BinaryHeap};
-use std::sync::Arc;
-use std::cmp::Ordering;
-use parking_lot::RwLock;
-use simsimd::SpatialSimilarity;
 use crate::vector_db::core::{ChunkId, Result, VectorDbError};
 use crate::vector_db::storage::{ChunkMetadata, FileStore};
+use parking_lot::RwLock;
+use simsimd::SpatialSimilarity;
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap};
+use std::sync::Arc;
 
 /// 向量索引数据（合并锁以减少争用）
 struct IndexData {
@@ -52,7 +52,7 @@ impl VectorIndex {
             dimension,
         }
     }
-    
+
     /// 规范化向量（L2 归一化）——使用 SIMD 优化
     #[inline]
     fn normalize_vector(vector: &[f32]) -> Vec<f32> {
@@ -65,7 +65,7 @@ impl VectorIndex {
             vector.to_vec()
         }
     }
-    
+
     /// 计算点积（规范化向量的点积即为余弦相似度）——使用 SIMD 优化
     #[inline]
     fn dot_product(a: &[f32], b: &[f32]) -> f32 {
@@ -83,18 +83,18 @@ impl VectorIndex {
 
         // 规范化向量
         let normalized = Self::normalize_vector(&vector);
-        
+
         let mut data = self.data.write();
         data.vectors.insert(chunk_id, normalized);
         data.chunks.insert(chunk_id, metadata);
-        
+
         Ok(())
     }
 
     /// 批量添加向量（自动规范化，预分配容量）
     pub fn add_batch(&self, items: Vec<(ChunkId, Vec<f32>, ChunkMetadata)>) -> Result<()> {
         let mut data = self.data.write();
-        
+
         // 预分配容量
         data.vectors.reserve(items.len());
         data.chunks.reserve(items.len());
@@ -106,7 +106,7 @@ impl VectorIndex {
                     actual: vector.len(),
                 });
             }
-            
+
             // 规范化向量
             let normalized = Self::normalize_vector(&vector);
             data.vectors.insert(chunk_id, normalized);
@@ -125,7 +125,12 @@ impl VectorIndex {
     }
 
     /// 搜索相似向量（使用堆维护 top-k，O(n log k) 时间复杂度）
-    pub fn search(&self, query: &[f32], top_k: usize, threshold: f32) -> Result<Vec<(ChunkId, f32)>> {
+    pub fn search(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        threshold: f32,
+    ) -> Result<Vec<(ChunkId, f32)>> {
         if query.len() != self.dimension {
             return Err(VectorDbError::InvalidDimension {
                 expected: self.dimension,
@@ -135,20 +140,20 @@ impl VectorIndex {
 
         // 规范化查询向量（只计算一次）
         let query_normalized = Self::normalize_vector(query);
-        
+
         let data = self.data.read();
-        
+
         // 使用最小堆维护 top-k（性能更优）
         let mut top_k_heap = BinaryHeap::with_capacity(top_k);
-        
+
         for (chunk_id, vector) in data.vectors.iter() {
             // 规范化向量的点积即为余弦相似度
             let similarity = Self::dot_product(&query_normalized, vector);
-            
+
             if similarity < threshold {
                 continue;
             }
-            
+
             if top_k_heap.len() < top_k {
                 top_k_heap.push(MinScore(similarity, *chunk_id));
             } else if let Some(min) = top_k_heap.peek() {
@@ -158,19 +163,18 @@ impl VectorIndex {
                 }
             }
         }
-        
+
         // 从堆中提取结果并排序
         let mut results: Vec<(ChunkId, f32)> = top_k_heap
             .into_iter()
             .map(|MinScore(score, id)| (id, score))
             .collect();
-        
+
         // 按相似度降序排序
         results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
-        
+
         Ok(results)
     }
-
 
     /// 获取块元数据
     pub fn get_chunk_metadata(&self, chunk_id: &ChunkId) -> Option<ChunkMetadata> {
@@ -213,7 +217,7 @@ impl VectorIndex {
     pub async fn load(
         store: &FileStore,
         chunk_metadata: &HashMap<ChunkId, ChunkMetadata>,
-        dimension: usize
+        dimension: usize,
     ) -> Result<Self> {
         use std::collections::HashMap;
         use std::path::PathBuf;

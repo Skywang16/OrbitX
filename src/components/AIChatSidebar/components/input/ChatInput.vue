@@ -4,17 +4,12 @@
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import { useNodeVersion } from '@/composables/useNodeVersion'
   import { useProjectRules } from '@/composables/useProjectRules'
-  import { useTabManagerStore } from '@/stores/TabManager'
   import { useTerminalStore } from '@/stores/Terminal'
-  import { useAISettingsStore } from '@/components/settings/components/AI'
-  import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
-  import TerminalTabTag from '../tags/TerminalTabTag.vue'
   import NodeVersionTag from '../tags/NodeVersionTag.vue'
   import ProjectRulesTag from '../tags/ProjectRulesTag.vue'
   import InputPopover from '@/components/ui/InputPopover.vue'
   import VectorIndexContent from '../vectorIndex/VectorIndexContent.vue'
-  import FolderPicker from '../tags/FolderPicker.vue'
   import NodeVersionPicker from '../tags/NodeVersionPicker.vue'
   import ProjectRulesPicker from '../tags/ProjectRulesPicker.vue'
   import CircularProgress from '@/components/ui/CircularProgress.vue'
@@ -79,21 +74,8 @@
   const nodeVersion = useNodeVersion()
   const projectRules = useProjectRules()
 
-  const tabManagerStore = useTabManagerStore()
   const terminalStore = useTerminalStore()
-  const aiSettingsStore = useAISettingsStore()
   const activeTerminalCwd = computed(() => terminalStore.activeTerminal?.cwd || null)
-
-  // 检查当前选中的模型是否支持图片输入
-  const currentModelSupportsImages = computed(() => {
-    if (!props.selectedModel) return false
-    const model = aiSettingsStore.chatModels.find(m => m.id === props.selectedModel)
-    return model?.options?.supportsImages ?? false
-  })
-
-  const isInSettingsTab = computed(() => {
-    return tabManagerStore.activeTab?.type === TabType.SETTINGS
-  })
 
   const homePath = ref<string>('')
 
@@ -225,9 +207,6 @@
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
-    // 如果模型不支持图片，不处理图片粘贴
-    if (!currentModelSupportsImages.value) return
-
     const imageFile = await getImageFromClipboard(event)
     if (imageFile) {
       event.preventDefault()
@@ -303,7 +282,6 @@
   let progressTimer: number | undefined
 
   const showIndexModal = ref(false)
-  const showNavigatorModal = ref(false)
   const showNodeVersionModal = ref(false)
   const showProjectRulesModal = ref(false)
 
@@ -326,10 +304,6 @@
   const handleVectorIndexClick = async () => {
     await checkVectorIndexStatus()
     showIndexModal.value = true
-  }
-
-  const handleOpenNavigator = () => {
-    showNavigatorModal.value = true
   }
 
   const checkVectorIndexStatus = async () => {
@@ -492,15 +466,6 @@
 
 <template>
   <div class="chat-input">
-    <TerminalTabTag
-      :visible="terminalSelection.hasTerminalTab.value"
-      :terminal-id="terminalSelection.currentTerminalTab.value?.terminalId"
-      :shell="terminalSelection.currentTerminalTab.value?.shell"
-      :cwd="terminalSelection.currentTerminalTab.value?.cwd"
-      :display-path="terminalSelection.currentTerminalTab.value?.displayPath"
-      @open-navigator="handleOpenNavigator"
-    />
-
     <NodeVersionTag
       :visible="nodeVersion.state.value.isNodeProject"
       :version="nodeVersion.state.value.currentVersion"
@@ -558,16 +523,8 @@
       <div class="bottom-right">
         <button
           class="image-upload-button"
-          :disabled="isInSettingsTab || !currentModelSupportsImages || imageAttachments.length >= 5"
-          :title="
-            isInSettingsTab
-              ? t('ck.upload_button_disabled_in_settings')
-              : !currentModelSupportsImages
-                ? t('chat.model_not_support_images')
-                : imageAttachments.length >= 5
-                  ? t('chat.max_images_reached')
-                  : t('chat.upload_image')
-          "
+          :disabled="imageAttachments.length >= 5"
+          :title="imageAttachments.length >= 5 ? t('chat.max_images_reached') : t('chat.upload_image')"
           @click="handleImageUpload"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -582,14 +539,8 @@
             'has-index': indexStatus.isReady,
             building: isBuilding,
           }"
-          :disabled="isInSettingsTab || !canBuild"
-          :title="
-            isInSettingsTab
-              ? t('ck.index_button_disabled_in_settings')
-              : !canBuild
-                ? t('ck.index_button_select_non_home')
-                : getButtonTitle()
-          "
+          :disabled="!canBuild"
+          :title="!canBuild ? t('ck.index_button_select_non_home') : getButtonTitle()"
           @click="handleVectorIndexClick"
         >
           <div class="button-content">
@@ -613,8 +564,7 @@
         <button
           class="send-button"
           :class="{ 'stop-button': loading }"
-          :disabled="!loading && (!canSend || isInSettingsTab)"
-          :title="isInSettingsTab ? t('ck.send_button_disabled_in_settings') : ''"
+          :disabled="!loading && !canSend"
           @click="handleButtonClick"
         >
           <svg v-if="loading" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -637,15 +587,6 @@
         @delete="deleteVectorIndex"
         @refresh="checkVectorIndexStatus"
         @cancel="cancelVectorIndex"
-      />
-    </InputPopover>
-
-    <InputPopover :visible="showNavigatorModal" @update:visible="showNavigatorModal = $event">
-      <FolderPicker
-        v-if="terminalSelection.currentTerminalTab.value?.terminalId && terminalSelection.currentTerminalTab.value?.cwd"
-        :current-path="terminalSelection.currentTerminalTab.value.cwd"
-        :terminal-id="terminalSelection.currentTerminalTab.value.terminalId"
-        @close="showNavigatorModal = false"
       />
     </InputPopover>
 

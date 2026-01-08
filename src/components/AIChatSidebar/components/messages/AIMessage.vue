@@ -2,14 +2,11 @@
   import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
   import type { Message } from '@/types'
-  import type { UiStep } from '@/api/agent/types'
   import { formatTime } from '@/utils/dateFormatter'
   import { renderMarkdown } from '@/utils/markdown'
   import ThinkingBlock from './blocks/ThinkingBlock.vue'
   import ToolBlock from './blocks/ToolBlock.vue'
-  import { useStepProcessor } from '@/composables/useStepProcessor'
   const { t } = useI18n()
-  const { processSteps } = useStepProcessor()
 
   interface Props {
     message: Message
@@ -17,12 +14,7 @@
 
   const props = defineProps<Props>()
 
-  const sortedSteps = computed(() => {
-    if (!props.message.steps) {
-      return [] as UiStep[]
-    }
-    return processSteps(props.message.steps as UiStep[])
-  })
+  const blocks = computed(() => props.message.blocks)
 
   const formatDuration = (ms: number) => {
     if (ms < 1000) return `${ms}ms`
@@ -33,30 +25,28 @@
 
 <template>
   <div class="ai-message">
-    <template v-if="message.steps && message.steps.length > 0">
-      <template v-for="(step, index) in sortedSteps" :key="step.metadata?.stepId || `fallback-${index}`">
-        <ThinkingBlock
-          v-if="step.stepType === 'thinking'"
-          :step="step"
-          :is-streaming="message.status === 'streaming' || !message.status"
-        />
+    <template v-if="blocks.length > 0">
+      <template
+        v-for="(block, index) in blocks"
+        :key="('id' in block && block.id) || `${message.id}-${block.type}-${index}`"
+      >
+        <ThinkingBlock v-if="block.type === 'thinking'" :block="block" />
 
-        <ToolBlock v-else-if="step.stepType === 'tool_use' || step.stepType === 'tool_result'" :step="step" />
+        <ToolBlock v-else-if="block.type === 'tool'" :block="block" />
 
-        <div v-else-if="step.stepType === 'text'" class="ai-message-text step-block">
-          <div v-html="renderMarkdown(step.content)"></div>
+        <div v-else-if="block.type === 'text'" class="ai-message-text step-block">
+          <div v-html="renderMarkdown(block.content)"></div>
         </div>
 
-        <div v-else-if="step.stepType === 'error'" class="error-output step-block">
-          <div class="error-content">{{ step.content }}</div>
+        <div v-else-if="block.type === 'error'" class="error-output step-block">
+          <div class="error-content">{{ block.message }}</div>
         </div>
 
         <div v-else class="unknown-step step-block">
           <div class="unknown-header">
             <span class="unknown-icon">❓</span>
-            <span class="unknown-label">未知步骤类型: {{ step.stepType }}</span>
+            <span class="unknown-label">未知块类型: {{ block.type }}</span>
           </div>
-          <div class="unknown-content">{{ step.content }}</div>
         </div>
       </template>
     </template>
@@ -69,8 +59,8 @@
         {{ t('message.generating') }}
       </div>
 
-      <div v-else-if="message.duration" class="duration-info">
-        {{ t('message.duration_info', { duration: formatDuration(message.duration) }) }}
+      <div v-else-if="message.durationMs" class="duration-info">
+        {{ t('message.duration_info', { duration: formatDuration(message.durationMs) }) }}
       </div>
     </div>
   </div>
@@ -80,6 +70,8 @@
   .ai-message {
     margin-bottom: var(--spacing-md);
     width: 100%;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .step-block {
@@ -186,6 +178,8 @@
     font-size: 0.9em;
     line-height: 1.6;
     color: var(--text-200);
+    overflow: hidden;
+    min-width: 0;
   }
 
   .ai-message-text :deep(p) {
@@ -245,6 +239,7 @@
   .ai-message-text :deep(pre) {
     margin: var(--spacing-sm) 0;
     overflow-x: auto;
+    max-width: 100%;
   }
 
   .ai-message-text :deep(pre code) {
@@ -303,6 +298,9 @@
     margin: var(--spacing-sm) 0;
     border-collapse: collapse;
     width: 100%;
+    max-width: 100%;
+    display: block;
+    overflow-x: auto;
   }
 
   .ai-message-text :deep(th),

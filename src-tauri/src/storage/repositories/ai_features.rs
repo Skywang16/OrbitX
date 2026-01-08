@@ -67,16 +67,20 @@ impl AIFeatureConfig {
             enabled: row.try_get("enabled")?,
             config_json: row.try_get("config_json")?,
             created_at: DateTime::parse_from_rfc3339(&row.try_get::<String, _>("created_at")?)
-                .map_err(|e| RepositoryError::internal(format!(
-                    "Failed to parse created_at timestamp: {}",
-                    e
-                )))?
+                .map_err(|e| {
+                    RepositoryError::internal(format!(
+                        "Failed to parse created_at timestamp: {}",
+                        e
+                    ))
+                })?
                 .with_timezone(&Utc),
             updated_at: DateTime::parse_from_rfc3339(&row.try_get::<String, _>("updated_at")?)
-                .map_err(|e| RepositoryError::internal(format!(
-                    "Failed to parse updated_at timestamp: {}",
-                    e
-                )))?
+                .map_err(|e| {
+                    RepositoryError::internal(format!(
+                        "Failed to parse updated_at timestamp: {}",
+                        e
+                    ))
+                })?
                 .with_timezone(&Utc),
         })
     }
@@ -107,7 +111,9 @@ impl<'a> AIFeatures<'a> {
         .fetch_optional(self.db.pool())
         .await?;
 
-        Ok(row_opt.map(|row| AIFeatureConfig::from_row(&row)).transpose()?)
+        Ok(row_opt
+            .map(|row| AIFeatureConfig::from_row(&row))
+            .transpose()?)
     }
 
     /// 保存或更新功能配置
@@ -162,8 +168,7 @@ impl<'a> AIFeatures<'a> {
         .fetch_all(self.db.pool())
         .await?;
 
-        rows
-            .into_iter()
+        rows.into_iter()
             .map(|row| AIFeatureConfig::from_row(&row))
             .collect()
     }
