@@ -24,10 +24,9 @@ pub async fn build_agent_system_prompt(
 }
 
 pub async fn build_agent_user_prompt(
-    agent: Agent,
     task: Option<Task>,
     context: Option<Context>,
     tools: Vec<ToolSchema>,
 ) -> AgentResult<String> {
-    builders::build_agent_user_prompt(agent, task, context, tools).await
+    builders::build_agent_user_prompt(task, context, tools).await
 }

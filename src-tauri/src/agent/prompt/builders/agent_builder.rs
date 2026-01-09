@@ -77,13 +77,10 @@ fn build_agent_root_xml(agent_xml: &str, task_prompt: &str, mark_nodes: bool) ->
 }
 
 pub async fn build_agent_user_prompt(
-    agent: Agent,
     task: Option<Task>,
     context: Option<Context>,
     tools: Vec<ToolSchema>,
 ) -> AgentResult<String> {
-    let _ = agent; // currently unused but reserved for future parity with frontend
-
     let has_task_node_status_tool = tools.iter().any(|tool| tool.name == TASK_NODE_STATUS_TOOL);
 
     let agent_xml = task

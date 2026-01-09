@@ -113,12 +113,8 @@ impl PromptOrchestrator {
         .await
         .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?;
 
-        let user_prompt_built = build_agent_user_prompt(
-            agent_info,
-            Some(task_for_prompt),
-            Some(prompt_ctx),
-            tool_schemas_full,
-        )
+        let user_prompt_built =
+            build_agent_user_prompt(Some(task_for_prompt), Some(prompt_ctx), tool_schemas_full)
         .await
         .map_err(|e| {
             TaskExecutorError::InternalError(format!("Failed to build user prompt: {}", e))
