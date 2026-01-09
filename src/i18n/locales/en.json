@@ -350,6 +350,12 @@
     "refresh": "Refresh",
     "delete": "Delete",
     "cancel_build": "Cancel Build",
+    "build_failed": "Index build failed",
+    "build_failed_with_error": "Index build failed: {error}",
+    "build_cancelled": "Index build cancelled",
+    "build_done": "Index build completed",
+    "build_done_with_failures": "Index build completed, but {count} file(s) failed",
+    "build_channel_error": "Index build channel error",
     "embedding_model": "Embedding Model"
   },
   "workspace": {

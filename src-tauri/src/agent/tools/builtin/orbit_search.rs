@@ -81,9 +81,15 @@ Usage:
         let has_index = is_index_ready(path);
 
         if has_index {
-            Some("Search for code snippets in the current project. Supports three modes: 'semantic' (AI-powered understanding of code semantics, recommended), 'hybrid' (combines semantic and keyword matching), and 'regex' (pattern-based search). The project index is ready - use semantic or hybrid mode for best results.".to_string())
+            Some(
+                "Search for code snippets in the current project. Supports three modes: 'semantic' (AI-powered understanding of code semantics, recommended), 'hybrid' (combines semantic and keyword matching), and 'regex' (pattern-based search). The project index is ready - use semantic or hybrid mode for best results."
+                    .to_string(),
+            )
         } else {
-            Some("Search for code snippets in the current project. Currently, only 'regex' mode (pattern-based search) is available because no index has been built yet. To use 'semantic' and 'hybrid' intelligent search modes, please build the index first using the CK index button in the interface.".to_string())
+            Some(
+                "Search for code snippets in the current project. Currently, only 'regex' mode (pattern-based search) is available because no index has been built yet. To use 'semantic' and 'hybrid' intelligent search modes, please build the index first using the Vector Index (workspace index) button in the interface."
+                    .to_string(),
+            )
         }
     }
 

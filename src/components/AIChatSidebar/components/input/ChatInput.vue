@@ -17,6 +17,7 @@
   import { vectorDbApi as vdbApi, nodeApi } from '@/api'
   import { processImageFile, getImageFromClipboard, validateImageFile } from '@/utils/imageUtils'
   import { createMessage } from '@/ui/composables/message-api'
+  import type { ChannelSubscription } from '@/api/channel'
 
   interface Props {
     modelValue: string
@@ -49,10 +50,8 @@
   })
 
   onBeforeUnmount(() => {
-    if (progressTimer) {
-      clearInterval(progressTimer)
-      progressTimer = undefined
-    }
+    buildSubscription?.unsubscribe().catch(() => {})
+    buildSubscription = null
     if (compositionTimer) {
       clearTimeout(compositionTimer)
       compositionTimer = undefined
@@ -278,8 +277,7 @@
 
   const buildProgress = ref(0)
   const isBuilding = ref(false)
-  const progressHasData = ref(false)
-  let progressTimer: number | undefined
+  let buildSubscription: ChannelSubscription | null = null
 
   const showIndexModal = ref(false)
   const showNodeVersionModal = ref(false)
@@ -324,47 +322,17 @@
     checkVectorIndexStatus()
   })
 
-  const startProgressPolling = (targetPath: string) => {
-    if (progressTimer) {
-      clearInterval(progressTimer)
-      progressTimer = undefined
-    }
-    progressHasData.value = false
-    progressTimer = window.setInterval(async () => {
-      const progress = await vdbApi.getBuildProgress({ path: targetPath })
-      if (progress.totalFiles > 0) {
-        const totalFiles = Math.max(progress.totalFiles, 1)
-        const filesCompleted = Math.min(progress.filesCompleted, totalFiles)
-        const perFile = 100 / totalFiles
-        let pct = filesCompleted * perFile
-
-        if (progress.totalChunks && progress.totalChunks > 0) {
-          const chunkDone = Math.min(progress.currentFileChunks ?? 0, progress.totalChunks)
-          pct += (chunkDone / progress.totalChunks) * perFile
-        }
-
-        const nextPct = Math.min(progress.isComplete ? 100 : 99, Math.max(0, pct))
-        if (!progressHasData.value) {
-          progressHasData.value = true
-          buildProgress.value = nextPct
-        } else {
-          buildProgress.value = Math.max(buildProgress.value, nextPct)
-        }
-      }
-
-      if (progress.isComplete) {
-        if (progressTimer) {
-          clearInterval(progressTimer)
-          progressTimer = undefined
-        }
-        buildProgress.value = 100
-        setTimeout(() => {
-          isBuilding.value = false
-          buildProgress.value = 0
-        }, 500)
-        await checkVectorIndexStatus()
-      }
-    }, 600)
+  const computeBuildPercent = (p: {
+    totalFiles: number
+    filesDone: number
+    currentFileChunksTotal: number
+    currentFileChunksDone: number
+    isDone: boolean
+  }): number => {
+    if (p.totalFiles <= 0) return 0
+    const currentFrac = p.currentFileChunksTotal > 0 ? p.currentFileChunksDone / p.currentFileChunksTotal : 0
+    const pct = ((p.filesDone + currentFrac) / p.totalFiles) * 100
+    return p.isDone ? 100 : Math.min(99, Math.max(0, pct))
   }
 
   const rebuildVectorIndex = async () => {
@@ -375,24 +343,57 @@
     isBuilding.value = true
     buildProgress.value = 0
 
-    await vdbApi.rebuildIndex({ root: targetPath })
+    await buildSubscription?.unsubscribe().catch(() => {})
+    buildSubscription = null
 
-    startProgressPolling(targetPath)
+    await vdbApi.startBuildIndex({ root: targetPath })
+    buildSubscription = vdbApi.subscribeBuildProgress(
+      { root: targetPath },
+      {
+        onMessage: async progress => {
+          buildProgress.value = computeBuildPercent(progress)
+          if (!progress.isDone) return
+
+          await buildSubscription?.unsubscribe().catch(() => {})
+          buildSubscription = null
+
+          isBuilding.value = false
+          buildProgress.value = 0
+
+          if (progress.phase === 'failed') {
+            createMessage.error(
+              progress.error ? t('ck.build_failed_with_error', { error: progress.error }) : t('ck.build_failed')
+            )
+          } else if (progress.phase === 'cancelled') {
+            createMessage.info(t('ck.build_cancelled'))
+          } else if (progress.filesFailed > 0) {
+            createMessage.warning(t('ck.build_done_with_failures', { count: progress.filesFailed }))
+          } else {
+            createMessage.success(t('ck.build_done'))
+          }
+
+          await checkVectorIndexStatus()
+        },
+        onError: err => {
+          console.warn('vector build channel error:', err)
+          createMessage.error(t('ck.build_channel_error'))
+          isBuilding.value = false
+          buildProgress.value = 0
+        },
+      }
+    )
   }
 
   const cancelVectorIndex = async () => {
     const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
     if (!activeTerminal || !activeTerminal.cwd) return
 
-    await vdbApi.cancelBuild({ path: activeTerminal.cwd })
+    await vdbApi.cancelBuild({ root: activeTerminal.cwd })
+    await buildSubscription?.unsubscribe().catch(() => {})
+    buildSubscription = null
 
     isBuilding.value = false
     buildProgress.value = 0
-
-    if (progressTimer) {
-      clearInterval(progressTimer)
-      progressTimer = undefined
-    }
   }
 
   const deleteVectorIndex = async () => {
@@ -426,28 +427,33 @@
 
     nodeVersion.setupListener(() => terminalSelection.currentTerminalTab.value?.terminalId ?? 0)
 
-    try {
-      const targetPath = indexStatus.value.path || activeTerminalCwd.value
-      if (targetPath) {
-        const progress = await vdbApi.getBuildProgress({ path: targetPath })
-        if (!progress.isComplete && (progress.totalFiles > 0 || progress.error !== 'progress_unavailable')) {
-          isBuilding.value = true
-          if (progress.totalFiles > 0) {
-            const totalFiles = Math.max(progress.totalFiles, 1)
-            const filesCompleted = Math.min(progress.filesCompleted, totalFiles)
-            const perFile = 100 / totalFiles
-            let pct = filesCompleted * perFile
-            if (progress.totalChunks && progress.totalChunks > 0) {
-              const chunkDone = Math.min(progress.currentFileChunks ?? 0, progress.totalChunks)
-              pct += (chunkDone / progress.totalChunks) * perFile
-            }
-            buildProgress.value = Math.min(99, Math.max(0, pct))
+    const targetPath = indexStatus.value.path || activeTerminalCwd.value
+    if (targetPath) {
+      const progress = await vdbApi.getBuildStatus({ root: targetPath })
+      if (progress && !progress.isDone) {
+        isBuilding.value = true
+        buildProgress.value = computeBuildPercent(progress)
+        buildSubscription = vdbApi.subscribeBuildProgress(
+          { root: targetPath },
+          {
+            onMessage: async p => {
+              buildProgress.value = computeBuildPercent(p)
+              if (!p.isDone) return
+
+              await buildSubscription?.unsubscribe().catch(() => {})
+              buildSubscription = null
+              isBuilding.value = false
+              buildProgress.value = 0
+              await checkVectorIndexStatus()
+            },
+            onError: err => {
+              console.warn('vector build channel error:', err)
+              isBuilding.value = false
+              buildProgress.value = 0
+            },
           }
-          startProgressPolling(targetPath)
-        }
+        )
       }
-    } catch (e) {
-      console.warn('Failed to start progress polling:', e)
     }
   })
 

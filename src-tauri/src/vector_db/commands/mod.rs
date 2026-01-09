@@ -1,8 +1,10 @@
-pub mod index_commands;
-pub mod search_commands;
+pub mod build;
+pub mod index;
+pub mod search;
 
-pub use index_commands::*;
-pub use search_commands::*;
+pub use build::*;
+pub use index::*;
+pub use search::*;
 
 use crate::vector_db::SemanticSearchEngine;
 use std::sync::{Arc, OnceLock};

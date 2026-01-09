@@ -358,25 +358,14 @@
       </div>
 
       <div class="divider"></div>
-      <div v-if="!indexStatus.hasIndex" class="workspace-section">
+      <div class="workspace-section">
         <div class="workspace-info">
           <div class="workspace-label">{{ t('ck.current_workspace') }}</div>
           <div class="workspace-path">{{ displayPath }}</div>
         </div>
 
-        <!-- 未构建状态：显示构建按钮 -->
-        <x-button
-          v-if="!isBuilding"
-          variant="primary"
-          :disabled="!canBuild"
-          :title="!canBuild ? t('ck.build_index_tooltip_disabled') : t('ck.build_index_tooltip_enabled')"
-          @click="handleBuild"
-        >
-          {{ t('ck.build_index_button') }}
-        </x-button>
-
         <!-- 构建中状态：显示横向进度条 + 取消按钮 -->
-        <div v-else class="building-section">
+        <div v-if="isBuilding" class="building-section">
           <div class="progress-container">
             <div class="progress-bar-wrapper">
               <div class="progress-bar">
@@ -389,41 +378,59 @@
             {{ t('ck.cancel_build') }}
           </x-button>
         </div>
-      </div>
+        <template v-else>
+          <!-- 未构建状态：显示构建按钮 -->
+          <x-button
+            v-if="!indexStatus.hasIndex"
+            variant="primary"
+            :disabled="!canBuild"
+            :title="!canBuild ? t('ck.build_index_tooltip_disabled') : t('ck.build_index_tooltip_enabled')"
+            @click="handleBuild"
+          >
+            {{ t('ck.build_index_button') }}
+          </x-button>
 
-      <div v-if="indexStatus.hasIndex" class="indexed-section">
-        <div class="status-row">
-          <div class="status-info">
-            <span class="status-text">{{ statusText }}</span>
-            <div class="index-size-info" v-if="indexSize">
-              <span class="size-value">{{ indexSize }}</span>
+          <!-- 已构建：显示状态 + 操作按钮 -->
+          <div v-else class="indexed-section">
+            <div class="status-row">
+              <div class="status-info">
+                <span class="status-text">{{ statusText }}</span>
+                <div class="index-size-info" v-if="indexSize">
+                  <span class="size-value">{{ indexSize }}</span>
+                </div>
+              </div>
+              <div class="action-buttons">
+                <x-button size="small" variant="secondary" :disabled="!canBuild" @click="handleBuild">
+                  {{ t('ck.build_index_button') }}
+                </x-button>
+                <x-button size="small" variant="primary" @click="handleRefresh">
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                      <path d="M3 3v5h5" />
+                      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                      <path d="M21 21v-5h-5" />
+                    </svg>
+                  </template>
+                  {{ t('ck.refresh') }}
+                </x-button>
+                <x-button size="small" variant="danger" @click="handleDelete">
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="3,6 5,6 21,6"></polyline>
+                      <path
+                        d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"
+                      ></path>
+                      <line x1="10" x2="10" y1="11" y2="17"></line>
+                      <line x1="14" x2="14" y1="11" y2="17"></line>
+                    </svg>
+                  </template>
+                  {{ t('ck.delete') }}
+                </x-button>
+              </div>
             </div>
           </div>
-          <div class="action-buttons">
-            <x-button size="small" variant="primary" @click="handleRefresh">
-              <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                  <path d="M3 3v5h5" />
-                  <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                  <path d="M21 21v-5h-5" />
-                </svg>
-              </template>
-              {{ t('ck.refresh') }}
-            </x-button>
-            <x-button size="small" variant="danger" @click="handleDelete">
-              <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="3,6 5,6 21,6"></polyline>
-                  <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
-                  <line x1="10" x2="10" y1="11" y2="17"></line>
-                  <line x1="14" x2="14" y1="11" y2="17"></line>
-                </svg>
-              </template>
-              {{ t('ck.delete') }}
-            </x-button>
-          </div>
-        </div>
+        </template>
       </div>
     </div>
   </div>

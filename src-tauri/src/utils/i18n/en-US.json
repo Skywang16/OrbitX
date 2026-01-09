@@ -184,6 +184,9 @@
   },
   "vector_db": {
     "index_failed": "Failed to index files",
+    "status_failed": "Failed to get index status",
+    "delete_failed": "Failed to delete index",
+    "progress_unavailable": "Index build progress unavailable",
     "update_failed": "Failed to update file index",
     "remove_failed": "Failed to remove file index",
     "search_failed": "Semantic search failed"

@@ -216,9 +216,10 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::vector_db::commands::semantic_search,
         crate::vector_db::commands::get_index_status,
         crate::vector_db::commands::delete_workspace_index,
-        crate::vector_db::commands::vector_build_index,
-        crate::vector_db::commands::vector_get_build_progress,
-        crate::vector_db::commands::vector_cancel_build,
+        crate::vector_db::commands::vector_build_index_start,
+        crate::vector_db::commands::vector_build_index_status,
+        crate::vector_db::commands::vector_build_index_subscribe,
+        crate::vector_db::commands::vector_build_index_cancel,
         // Checkpoint 系统命令
         crate::checkpoint::commands::checkpoint_create,
         crate::checkpoint::commands::checkpoint_list,

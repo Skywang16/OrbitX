@@ -7,6 +7,11 @@ use parking_lot::RwLock;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+#[derive(Debug, Clone, Copy)]
+pub struct IndexFileOutcome {
+    pub indexed_chunks: usize,
+}
+
 pub struct IndexManager {
     pub(crate) store: Arc<FileStore>,
     pub(crate) manifest: Arc<RwLock<IndexManifest>>,
@@ -45,14 +50,35 @@ impl IndexManager {
     }
 
     pub async fn index_file_with(&self, file_path: &Path, embedder: &dyn Embedder) -> Result<()> {
+        let _ = self
+            .index_file_with_progress(file_path, embedder, |_done, _total| {})
+            .await?;
+        Ok(())
+    }
+
+    pub async fn index_file_with_progress<F>(
+        &self,
+        file_path: &Path,
+        embedder: &dyn Embedder,
+        mut on_progress: F,
+    ) -> Result<IndexFileOutcome>
+    where
+        F: FnMut(usize, usize) + Send,
+    {
         // 0. 限制：尺寸
         let meta = std::fs::metadata(file_path).map_err(VectorDbError::Io)?;
         if meta.len() > self.config.max_file_size {
-            return Ok(()); // 跳过过大文件
+            return Ok(IndexFileOutcome { indexed_chunks: 0 }); // 跳过过大文件
         }
 
         // 1. 读取内容
-        let content = std::fs::read_to_string(file_path)?;
+        let content = match std::fs::read(file_path) {
+            Ok(bytes) => match String::from_utf8(bytes) {
+                Ok(s) => s,
+                Err(_) => return Ok(IndexFileOutcome { indexed_chunks: 0 }), // 跳过非 UTF-8 文件
+            },
+            Err(e) => return Err(VectorDbError::Io(e)),
+        };
         let file_hash = blake3_hash_bytes(content.as_bytes());
         let _language = crate::vector_db::core::Language::from_path(file_path);
         let last_modified = meta
@@ -87,30 +113,49 @@ impl IndexManager {
         let chunks: Vec<Chunk> = chunker.chunk(&content, file_path)?;
 
         if chunks.is_empty() {
-            return Ok(());
+            return Ok(IndexFileOutcome { indexed_chunks: 0 });
         }
 
-        // 4. 生成嵌入（使用引用，零克隆）
-        let texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
-        let embeddings = embedder.embed(&texts).await?;
-        if embeddings.is_empty() {
-            return Err(VectorDbError::Embedding("No embeddings returned".into()));
-        }
-        let actual_dim = embeddings[0].len();
-        if actual_dim != self.config.embedding.dimension {
-            tracing::error!(
-                "向量维度不匹配: 期望 {}, 实际 {}. 请在模型配置中设置正确的维度。",
-                self.config.embedding.dimension,
-                actual_dim
-            );
-            return Err(VectorDbError::InvalidDimension {
-                expected: self.config.embedding.dimension,
-                actual: actual_dim,
-            });
+        // 4. 生成嵌入（分批 + 进度）
+        const EMBED_BATCH_SIZE: usize = 64;
+        let total_chunks = chunks.len();
+        let mut embeddings: Vec<Vec<f32>> = Vec::with_capacity(total_chunks);
+        let mut done_chunks = 0usize;
+        on_progress(0, total_chunks);
+
+        while done_chunks < total_chunks {
+            let end = (done_chunks + EMBED_BATCH_SIZE).min(total_chunks);
+            let texts: Vec<&str> = chunks[done_chunks..end]
+                .iter()
+                .map(|c| c.content.as_str())
+                .collect();
+
+            let mut batch = embedder.embed(&texts).await?;
+            if batch.is_empty() {
+                return Err(VectorDbError::Embedding("No embeddings returned".into()));
+            }
+
+            let actual_dim = batch[0].len();
+            if actual_dim != self.config.embedding.dimension {
+                tracing::error!(
+                    "向量维度不匹配: 期望 {}, 实际 {}. 请在模型配置中设置正确的维度。",
+                    self.config.embedding.dimension,
+                    actual_dim
+                );
+                return Err(VectorDbError::InvalidDimension {
+                    expected: self.config.embedding.dimension,
+                    actual: actual_dim,
+                });
+            }
+
+            embeddings.append(&mut batch);
+            done_chunks = embeddings.len();
+            on_progress(done_chunks, total_chunks);
         }
 
         // 5. 写入索引与清单
-        let mut file_vectors: Vec<(crate::vector_db::core::ChunkId, Vec<f32>)> = Vec::new();
+        let mut file_vectors: Vec<(crate::vector_db::core::ChunkId, Vec<f32>)> =
+            Vec::with_capacity(total_chunks);
         {
             let mut manifest = self.manifest.write();
             manifest.add_file(file_path.to_path_buf(), file_hash);
@@ -123,7 +168,7 @@ impl IndexManager {
                     hash: chunk_hash,
                 };
                 // 收集向量数据
-                file_vectors.push((chunk.id, vecf.clone()));
+                file_vectors.push((chunk.id, vecf));
                 // add to manifest
                 manifest.add_chunk(chunk.id, metadata);
             }
@@ -144,7 +189,9 @@ impl IndexManager {
         // 7. 保存清单
         self.save_manifest()?;
 
-        Ok(())
+        Ok(IndexFileOutcome {
+            indexed_chunks: total_chunks,
+        })
     }
 
     pub async fn index_files_with(
@@ -226,7 +273,14 @@ impl IndexManager {
             total_chunks: manifest.chunks.len(),
             embedding_model: manifest.embedding_model.clone(),
             vector_dimension: manifest.vector_dimension,
+            size_bytes: 0,
         }
+    }
+
+    pub fn get_status_with_size_bytes(&self) -> IndexStatus {
+        let mut status = self.get_status();
+        status.size_bytes = self.store.disk_usage_bytes().unwrap_or_else(|_| 0);
+        status
     }
 
     /// 获取所有 chunk_id
@@ -257,4 +311,5 @@ pub struct IndexStatus {
     pub total_chunks: usize,
     pub embedding_model: String,
     pub vector_dimension: usize,
+    pub size_bytes: u64,
 }

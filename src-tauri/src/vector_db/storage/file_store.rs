@@ -179,4 +179,30 @@ impl FileStore {
     pub fn vectors_path(&self) -> &Path {
         &self.vectors_path
     }
+
+    /// 统计索引目录占用的磁盘空间（字节）
+    pub fn disk_usage_bytes(&self) -> Result<u64> {
+        let mut total = 0u64;
+        let mut stack = vec![self.root_path.clone()];
+
+        while let Some(dir) = stack.pop() {
+            let entries = match fs::read_dir(&dir) {
+                Ok(v) => v,
+                Err(e) => return Err(VectorDbError::Io(e)),
+            };
+
+            for entry in entries {
+                let entry = entry.map_err(VectorDbError::Io)?;
+                let path = entry.path();
+                let meta = entry.metadata().map_err(VectorDbError::Io)?;
+                if meta.is_dir() {
+                    stack.push(path);
+                } else if meta.is_file() {
+                    total = total.saturating_add(meta.len());
+                }
+            }
+        }
+
+        Ok(total)
+    }
 }

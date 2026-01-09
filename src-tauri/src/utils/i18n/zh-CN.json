@@ -184,6 +184,9 @@
   },
   "vector_db": {
     "index_failed": "索引文件失败",
+    "status_failed": "获取索引状态失败",
+    "delete_failed": "删除索引失败",
+    "progress_unavailable": "索引构建进度不可用",
     "update_failed": "更新文件索引失败",
     "remove_failed": "移除文件索引失败",
     "search_failed": "语义搜索失败"

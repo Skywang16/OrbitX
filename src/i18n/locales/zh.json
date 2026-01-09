@@ -350,6 +350,12 @@
     "refresh": "刷新",
     "delete": "删除",
     "cancel_build": "取消索引",
+    "build_failed": "索引构建失败",
+    "build_failed_with_error": "索引构建失败：{error}",
+    "build_cancelled": "索引构建已取消",
+    "build_done": "索引构建完成",
+    "build_done_with_failures": "索引构建完成，但有 {count} 个文件失败",
+    "build_channel_error": "索引构建通道错误",
     "embedding_model": "向量模型"
   },
   "workspace": {
