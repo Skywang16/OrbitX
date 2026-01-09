@@ -11,8 +11,11 @@ use crate::filesystem::commands::fs_list_directory;
 
 const MAX_PREVIEW_FILES: usize = 50;
 
-async fn get_directory_preview(working_directory: &str) -> String {
-    if working_directory == "Not specified" || working_directory.trim().is_empty() {
+async fn get_directory_preview(working_directory: Option<&str>) -> String {
+    let Some(working_directory) = working_directory else {
+        return String::new();
+    };
+    if working_directory.trim().is_empty() {
         return String::new();
     }
 
@@ -87,17 +90,17 @@ impl ComponentDefinition for SystemInfoComponent {
             .or_else(|| self.default_template())
             .ok_or_else(|| AgentError::Internal("missing system info template".to_string()))?;
 
-        let working_directory = context
+        let working_directory_opt = context
             .context
             .as_ref()
             .and_then(|c| c.working_directory.as_deref())
-            .filter(|w| !w.trim().is_empty())
-            .unwrap_or("Not specified");
+            .map(str::trim)
+            .filter(|w| !w.is_empty());
 
-        let has_workspace = working_directory != "Not specified";
+        let has_workspace = working_directory_opt.is_some();
 
         let file_list_preview = if has_workspace {
-            get_directory_preview(working_directory).await
+            get_directory_preview(working_directory_opt).await
         } else {
             String::new()
         };
@@ -107,6 +110,8 @@ impl ComponentDefinition for SystemInfoComponent {
         } else {
             "\n<important>\nNOTE: The user is NOT currently in any workspace directory. File system tools (read_file, write_file, list_files, shell, etc.) are NOT available. You can only have a general conversation. If the user asks about files or wants to run commands, inform them that they need to open a terminal tab first to establish a workspace.\n</important>\n".to_string()
         };
+
+        let working_directory = working_directory_opt.unwrap_or("(none)");
 
         let mut template_context = HashMap::new();
         template_context.insert("platform".to_string(), json!("macOS"));

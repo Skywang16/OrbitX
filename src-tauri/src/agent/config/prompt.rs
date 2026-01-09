@@ -26,21 +26,11 @@ pub enum PromptType {
     Agent,
 }
 
-/// Conditional rule for component evaluation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConditionalRule {
-    pub condition: String,
-    pub action: String,
-    pub params: Option<serde_json::Value>,
-}
-
 /// Per-component toggle/metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentConfig {
     pub enabled: bool,
     pub priority: u32,
-    pub dependencies: Vec<PromptComponent>,
-    pub conditional_rules: Vec<ConditionalRule>,
 }
 
 /// Prompt configuration with default ordering and overrides.
@@ -48,17 +38,7 @@ pub struct ComponentConfig {
 pub struct PromptConfig {
     pub default_component_order: HashMap<PromptType, Vec<PromptComponent>>,
     pub template_overrides: HashMap<String, HashMap<PromptComponent, String>>,
-    pub enabled_features: Vec<String>,
     pub component_config: HashMap<PromptComponent, ComponentConfig>,
-    pub variants: HashMap<String, PromptVariant>,
-}
-
-/// A named prompt variant referencing a subset of components.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PromptVariant {
-    pub prompt_type: PromptType,
-    pub components: Vec<PromptComponent>,
-    pub template: String,
 }
 
 impl Default for PromptConfig {
@@ -87,8 +67,6 @@ impl Default for PromptConfig {
             ComponentConfig {
                 enabled: true,
                 priority: 100,
-                dependencies: vec![],
-                conditional_rules: vec![],
             },
         );
         component_config.insert(
@@ -96,8 +74,6 @@ impl Default for PromptConfig {
             ComponentConfig {
                 enabled: true,
                 priority: 90,
-                dependencies: vec![],
-                conditional_rules: vec![],
             },
         );
         component_config.insert(
@@ -105,8 +81,6 @@ impl Default for PromptConfig {
             ComponentConfig {
                 enabled: true,
                 priority: 80,
-                dependencies: vec![],
-                conditional_rules: vec![],
             },
         );
         component_config.insert(
@@ -114,8 +88,6 @@ impl Default for PromptConfig {
             ComponentConfig {
                 enabled: true,
                 priority: 70,
-                dependencies: vec![],
-                conditional_rules: vec![],
             },
         );
         component_config.insert(
@@ -123,8 +95,6 @@ impl Default for PromptConfig {
             ComponentConfig {
                 enabled: true,
                 priority: 60,
-                dependencies: vec![],
-                conditional_rules: vec![],
             },
         );
         component_config.insert(
@@ -132,17 +102,50 @@ impl Default for PromptConfig {
             ComponentConfig {
                 enabled: true,
                 priority: 50,
-                dependencies: vec![],
-                conditional_rules: vec![],
             },
         );
 
         Self {
             default_component_order,
             template_overrides,
-            enabled_features: vec![],
             component_config,
-            variants: HashMap::new(),
         }
+    }
+}
+
+impl PromptConfig {
+    pub fn component_order(&self, prompt_type: PromptType) -> Vec<PromptComponent> {
+        let mut order = self
+            .default_component_order
+            .get(&prompt_type)
+            .cloned()
+            .unwrap_or_default();
+
+        order.retain(|component| {
+            self.component_config
+                .get(component)
+                .map(|c| c.enabled)
+                .unwrap_or(true)
+        });
+
+        order.sort_by_key(|component| {
+            self.component_config
+                .get(component)
+                .map(|c| c.priority)
+                .unwrap_or(0)
+        });
+
+        order
+    }
+
+    pub fn template_overrides_for(
+        &self,
+        scenario: Option<&str>,
+    ) -> HashMap<PromptComponent, String> {
+        let name = scenario.unwrap_or("default");
+        self.template_overrides
+            .get(name)
+            .cloned()
+            .unwrap_or_default()
     }
 }
