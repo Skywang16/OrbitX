@@ -9,8 +9,7 @@ use tauri::{AppHandle, Runtime, State};
 use tracing::error;
 
 use crate::mux::{
-    get_mux, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager, ShellManagerStats,
-    TerminalConfig,
+    get_mux, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager, TerminalConfig,
 };
 use crate::utils::{ApiResponse, EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
@@ -240,86 +239,6 @@ pub async fn terminal_create_with_shell<R: Runtime>(
         Err(_) => {
             error!("创建终端失败");
             Ok(api_error!("shell.create_terminal_failed"))
-        }
-    }
-}
-
-/// 根据名称查找shell
-///
-#[tauri::command]
-pub async fn terminal_find_shell_by_name(shell_name: String) -> TauriApiResult<Option<ShellInfo>> {
-    if shell_name.trim().is_empty() {
-        return Ok(api_error!("common.empty_content"));
-    }
-
-    match std::panic::catch_unwind(|| ShellManager::terminal_find_shell_by_name(&shell_name)) {
-        Ok(shell_info) => Ok(api_success!(shell_info)),
-        Err(_) => Ok(api_error!("shell.find_shell_failed")),
-    }
-}
-
-/// 根据路径查找shell
-///
-#[tauri::command]
-pub async fn terminal_find_shell_by_path(shell_path: String) -> TauriApiResult<Option<ShellInfo>> {
-    if shell_path.trim().is_empty() {
-        return Ok(api_error!("common.empty_content"));
-    }
-
-    match std::panic::catch_unwind(|| ShellManager::terminal_find_shell_by_path(&shell_path)) {
-        Ok(shell_info) => Ok(api_success!(shell_info)),
-        Err(_) => Ok(api_error!("shell.find_shell_failed")),
-    }
-}
-
-/// 获取Shell管理器统计信息
-///
-#[tauri::command]
-pub async fn terminal_get_shell_stats() -> TauriApiResult<ShellManagerStats> {
-    match std::panic::catch_unwind(|| {
-        let manager = ShellManager::new();
-        manager.get_stats().clone()
-    }) {
-        Ok(stats) => Ok(api_success!(stats)),
-        Err(_) => {
-            let error_msg = "获取Shell统计信息时发生系统错误";
-            error!("获取Shell统计信息失败: {}", error_msg);
-            Ok(api_error!("shell.get_buffer_failed"))
-        }
-    }
-}
-
-/// 初始化Shell管理器
-///
-#[tauri::command]
-pub async fn terminal_initialize_shell_manager() -> TauriApiResult<EmptyData> {
-    // ShellManager 不需要单独的初始化方法，创建实例时自动初始化
-    match std::panic::catch_unwind(|| {
-        ShellManager::new();
-    }) {
-        Ok(()) => Ok(api_success!()),
-        Err(_) => {
-            let error_msg = "Shell管理器初始化失败";
-            error!("{}", error_msg);
-            Ok(api_error!("shell.get_buffer_failed"))
-        }
-    }
-}
-
-/// 验证Shell管理器状态
-///
-#[tauri::command]
-pub async fn terminal_validate_shell_manager() -> TauriApiResult<EmptyData> {
-    // ShellManager 不需要单独的验证方法，创建实例时自动验证
-    match std::panic::catch_unwind(|| {
-        let manager = ShellManager::new();
-        manager.get_stats();
-    }) {
-        Ok(()) => Ok(api_success!()),
-        Err(_) => {
-            let error_msg = "Shell管理器验证失败";
-            error!("{}", error_msg);
-            Ok(api_error!("shell.get_buffer_failed"))
         }
     }
 }

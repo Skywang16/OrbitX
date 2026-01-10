@@ -39,36 +39,6 @@ pub async fn terminal_context_get_active_pane(
 }
 
 /// 清除当前活跃终端
-#[tauri::command]
-pub async fn terminal_context_clear_active_pane(
-    state: State<'_, TerminalContextState>,
-) -> TauriApiResult<EmptyData> {
-    match state.registry.terminal_context_clear_active_pane() {
-        Ok(()) => Ok(api_success!()),
-        Err(e) => {
-            error!("清除活跃终端面板失败: {}", e);
-            Ok(api_error!("terminal.clear_active_pane_failed"))
-        }
-    }
-}
-
-/// 检查指定面板是否为活跃终端
-#[tauri::command]
-pub async fn terminal_context_is_pane_active(
-    pane_id: u32,
-    state: State<'_, TerminalContextState>,
-) -> TauriApiResult<bool> {
-    if pane_id == 0 {
-        warn!("面板ID不能为0");
-        return Ok(api_error!("common.invalid_id"));
-    }
-
-    let pane_id = PaneId::new(pane_id);
-    let is_active = state.registry.terminal_context_is_pane_active(pane_id);
-
-    Ok(api_success!(is_active))
-}
-
 #[cfg(test)]
 mod tests {
     use crate::mux::PaneId;
@@ -107,45 +77,5 @@ mod tests {
             .registry
             .terminal_context_is_pane_active(valid_pane_id);
         assert!(is_active);
-    }
-
-    #[tokio::test]
-    async fn test_is_pane_active() {
-        let state = create_test_state();
-        let pane_id = PaneId::new(123);
-
-        let is_active = state.registry.terminal_context_is_pane_active(pane_id);
-        assert!(!is_active);
-
-        state
-            .registry
-            .terminal_context_set_active_pane(pane_id)
-            .unwrap();
-        let is_active = state.registry.terminal_context_is_pane_active(pane_id);
-        assert!(is_active);
-
-        let other_pane = PaneId::new(456);
-        let is_active = state.registry.terminal_context_is_pane_active(other_pane);
-        assert!(!is_active);
-    }
-
-    #[tokio::test]
-    async fn test_clear_active_pane() {
-        let state = create_test_state();
-        let pane_id = PaneId::new(123);
-
-        state
-            .registry
-            .terminal_context_set_active_pane(pane_id)
-            .unwrap();
-        assert_eq!(
-            state.registry.terminal_context_get_active_pane(),
-            Some(pane_id)
-        );
-
-        let result = state.registry.terminal_context_clear_active_pane();
-        assert!(result.is_ok());
-
-        assert_eq!(state.registry.terminal_context_get_active_pane(), None);
     }
 }

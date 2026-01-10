@@ -63,19 +63,6 @@ export interface ShellConfig {
   workingDirectory: string
 }
 
-export interface DetectedShell {
-  name: string
-  path: string
-  version?: string
-  description?: string
-  available: boolean
-}
-
-export interface SystemShellsResult {
-  shells: DetectedShell[]
-  currentDefault?: string
-}
-
 export interface ShellInfo {
   name: string
   path: string

@@ -42,13 +42,6 @@ export class ShellApi {
 
   // ===== 后台命令执行功能 =====
 
-  executeBackgroundCommand = async (command: string, workingDirectory?: string): Promise<BackgroundCommandResult> => {
-    return await invoke<BackgroundCommandResult>('shell_execute_background_command', {
-      command,
-      working_directory: workingDirectory,
-    })
-  }
-
   executeBackgroundProgram = async (
     program: string,
     args: string[],

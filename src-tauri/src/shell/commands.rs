@@ -1,22 +1,16 @@
 //! Shell 集成命令
 
-use crate::utils::{ApiResponse, EmptyData, TauriApiResult};
+use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tauri::State;
 use tokio::process::Command as AsyncCommand;
 use tracing::error;
 
-use super::{CommandInfo, PaneShellState, ShellType};
+use super::{CommandInfo, PaneShellState};
 use crate::mux::{PaneId, TerminalMux};
-
-/// 使用shell-words解析命令行 - 零开销,不重复造轮子
-fn parse_command_line(command: &str) -> Result<Vec<String>, String> {
-    shell_words::split(command).map_err(|_| "Invalid shell syntax".to_string())
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrontendCommandInfo {
@@ -111,23 +105,7 @@ impl From<&PaneShellState> for FrontendPaneState {
 }
 
 #[tauri::command]
-pub async fn shell_check_integration_status(
-    pane_id: u32,
-    state: State<'_, Arc<TerminalMux>>,
-) -> TauriApiResult<bool> {
-    let mux = &*state;
-    let pane_id = PaneId::from(pane_id);
-
-    if !mux.pane_exists(pane_id) {
-        return Ok(api_error!("shell.pane_not_exist"));
-    }
-
-    let status = mux.is_pane_integrated(pane_id);
-    Ok(api_success!(status))
-}
-
-#[tauri::command]
-pub async fn shell_setup_integration(
+pub async fn shell_pane_setup_integration(
     pane_id: u32,
     silent: Option<bool>,
     state: State<'_, Arc<TerminalMux>>,
@@ -149,24 +127,7 @@ pub async fn shell_setup_integration(
 }
 
 #[tauri::command]
-pub async fn shell_update_pane_cwd(
-    pane_id: u32,
-    cwd: String,
-    state: State<'_, Arc<TerminalMux>>,
-) -> TauriApiResult<EmptyData> {
-    let mux = &*state;
-    let pane_id = PaneId::from(pane_id);
-
-    if !mux.pane_exists(pane_id) {
-        return Ok(api_error!("shell.pane_not_exist"));
-    }
-
-    mux.shell_update_pane_cwd(pane_id, cwd);
-    Ok(api_success!())
-}
-
-#[tauri::command]
-pub async fn get_pane_shell_state(
+pub async fn shell_pane_get_state(
     pane_id: u32,
     state: State<'_, Arc<TerminalMux>>,
 ) -> TauriApiResult<Option<FrontendPaneState>> {
@@ -183,177 +144,17 @@ pub async fn get_pane_shell_state(
     Ok(api_success!(shell_state))
 }
 
-#[tauri::command]
-pub async fn set_pane_shell_type(
-    pane_id: u32,
-    shell_type: String,
-    state: State<'_, Arc<TerminalMux>>,
-) -> TauriApiResult<EmptyData> {
-    let mux = &*state;
-    let pane_id = PaneId::from(pane_id);
-
-    if !mux.pane_exists(pane_id) {
-        return Ok(api_error!("shell.pane_not_exist"));
-    }
-
-    let shell_type = ShellType::from_program(&shell_type);
-    mux.set_pane_shell_type(pane_id, shell_type);
-    Ok(api_success!())
-}
-
-#[tauri::command]
-pub async fn generate_shell_integration_script(
-    shell_type: String,
-    state: State<'_, Arc<TerminalMux>>,
-) -> TauriApiResult<String> {
-    let mux = &*state;
-    let shell_type = ShellType::from_program(&shell_type);
-
-    if !shell_type.supports_integration() {
-        return Ok(api_error!("shell.shell_not_supported"));
-    }
-
-    match mux.generate_shell_integration_script(&shell_type) {
-        Ok(script) => Ok(api_success!(script)),
-        Err(_) => Ok(api_error!("shell.generate_script_failed")),
-    }
-}
-
-#[tauri::command]
-pub async fn generate_shell_env_vars(
-    shell_type: String,
-    state: State<'_, Arc<TerminalMux>>,
-) -> TauriApiResult<HashMap<String, String>> {
-    let mux = &*state;
-    let shell_type = ShellType::from_program(&shell_type);
-
-    let env_vars = mux.generate_shell_env_vars(&shell_type);
-    Ok(api_success!(env_vars))
-}
-
-#[tauri::command]
-pub async fn enable_pane_integration(
-    pane_id: u32,
-    state: State<'_, Arc<TerminalMux>>,
-) -> TauriApiResult<EmptyData> {
-    let mux = &*state;
-    let pane_id = PaneId::from(pane_id);
-
-    if !mux.pane_exists(pane_id) {
-        return Ok(api_error!("shell.pane_not_exist"));
-    }
-
-    mux.enable_pane_integration(pane_id);
-    Ok(api_success!())
-}
-
-#[tauri::command]
-pub async fn disable_pane_integration(
-    pane_id: u32,
-    state: State<'_, Arc<TerminalMux>>,
-) -> TauriApiResult<EmptyData> {
-    let mux = &*state;
-    let pane_id = PaneId::from(pane_id);
-
-    if !mux.pane_exists(pane_id) {
-        return Ok(api_error!("shell.pane_not_exist"));
-    }
-
-    mux.disable_pane_integration(pane_id);
-    Ok(api_success!())
-}
-
-#[tauri::command]
-pub async fn get_pane_current_command(
-    pane_id: u32,
-    state: State<'_, Arc<TerminalMux>>,
-) -> TauriApiResult<Option<FrontendCommandInfo>> {
-    let mux = &*state;
-    let pane_id = PaneId::from(pane_id);
-
-    if !mux.pane_exists(pane_id) {
-        return Ok(api_error!("shell.pane_not_exist"));
-    }
-
-    let command = mux
-        .get_pane_current_command(pane_id)
-        .map(|cmd| FrontendCommandInfo::from(&*cmd));
-    Ok(api_success!(command))
-}
-
-#[tauri::command]
-pub async fn get_pane_command_history(
-    pane_id: u32,
-    state: State<'_, Arc<TerminalMux>>,
-) -> TauriApiResult<Vec<FrontendCommandInfo>> {
-    let mux = &*state;
-    let pane_id = PaneId::from(pane_id);
-
-    if !mux.pane_exists(pane_id) {
-        return Ok(api_error!("shell.pane_not_exist"));
-    }
-
-    let history = mux
-        .get_pane_command_history(pane_id)
-        .into_iter()
-        .map(|cmd| FrontendCommandInfo::from(&*cmd))
-        .collect();
-    Ok(api_success!(history))
-}
-
-#[tauri::command]
-pub async fn detect_shell_type(shell_program: String) -> TauriApiResult<String> {
-    let shell_type = ShellType::from_program(&shell_program);
-    Ok(api_success!(shell_type.display_name().to_string()))
-}
-
-#[tauri::command]
-pub async fn check_shell_integration_support(shell_program: String) -> TauriApiResult<bool> {
-    let shell_type = ShellType::from_program(&shell_program);
-    Ok(api_success!(shell_type.supports_integration()))
-}
-
 /// 后台命令执行结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BackgroundCommandResult {
-    pub command: String,
+    pub program: String,
+    pub args: Vec<String>,
     pub exit_code: i32,
     pub stdout: String,
     pub stderr: String,
     pub execution_time_ms: u64,
     pub success: bool,
-}
-
-/// 在后台执行命令，不显示在终端UI中
-#[tauri::command]
-pub async fn shell_execute_background_command(
-    command: String,
-    working_directory: Option<String>,
-) -> TauriApiResult<BackgroundCommandResult> {
-    let start_time = Instant::now();
-
-    // 解析命令和参数 - 正确处理引号
-    let parts = match parse_command_line(&command) {
-        Ok(parts) => parts,
-        Err(_) => return Ok(api_error!("shell.quotes_mismatch")),
-    };
-
-    if parts.is_empty() {
-        return Ok(api_error!("shell.command_empty"));
-    }
-
-    let program = &parts[0];
-    let args = &parts[1..];
-
-    shell_execute_background_program_inner(
-        start_time,
-        program.to_string(),
-        args.iter().map(|s| s.to_string()).collect(),
-        working_directory,
-        Some(command),
-        false,
-    )
-    .await
 }
 
 /// 在后台执行命令（结构化参数），不显示在终端UI中
@@ -364,28 +165,10 @@ pub async fn shell_execute_background_program(
     working_directory: Option<String>,
 ) -> TauriApiResult<BackgroundCommandResult> {
     let start_time = Instant::now();
-    shell_execute_background_program_inner(start_time, program, args, working_directory, None, true)
-        .await
-}
 
-async fn shell_execute_background_program_inner(
-    start_time: Instant,
-    program: String,
-    args: Vec<String>,
-    working_directory: Option<String>,
-    command_override: Option<String>,
-    strict: bool,
-) -> TauriApiResult<BackgroundCommandResult> {
     if program.trim().is_empty() {
         return Ok(api_error!("shell.command_empty"));
     }
-
-    let command = command_override.unwrap_or_else(|| {
-        let mut parts = Vec::with_capacity(1 + args.len());
-        parts.push(program.clone());
-        parts.extend(args.iter().cloned());
-        parts.join(" ")
-    });
 
     let mut cmd = AsyncCommand::new(&program);
     cmd.args(&args);
@@ -403,16 +186,9 @@ async fn shell_execute_background_program_inner(
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-            if strict && !success {
-                let message = stderr.trim();
-                if message.is_empty() {
-                    return Ok(api_error!("shell.execute_command_failed"));
-                }
-                return Ok(ApiResponse::error(message));
-            }
-
             Ok(api_success!(BackgroundCommandResult {
-                command,
+                program,
+                args,
                 exit_code,
                 stdout,
                 stderr,
@@ -421,7 +197,7 @@ async fn shell_execute_background_program_inner(
             }))
         }
         Err(e) => {
-            error!("Background command failed: {} - {}", command, e);
+            error!("Background command failed: {} {:?} - {}", program, args, e);
             Ok(api_error!("shell.execute_command_failed"))
         }
     }

@@ -92,9 +92,6 @@ export class FilesystemApi {
   /**
    * 列出目录（后端命令，完整 .gitignore 语义，递归可选）
    */
-  listDirectory = async (path: string, recursive: boolean = false): Promise<string[]> => {
-    return await appInvoke<string[]>('fs_list_directory', { path, recursive })
-  }
 }
 
 export const filesystemApi = new FilesystemApi()

@@ -1,10 +1,8 @@
 pub mod build;
 pub mod index;
-pub mod search;
 
 pub use build::*;
 pub use index::*;
-pub use search::*;
 
 use crate::vector_db::SemanticSearchEngine;
 use std::sync::{Arc, OnceLock};

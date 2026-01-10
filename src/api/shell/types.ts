@@ -50,7 +50,8 @@ export interface ShellStats {
 // ===== 后台命令执行相关类型 =====
 
 export interface BackgroundCommandResult {
-  command: string
+  program: string
+  args: string[]
   exitCode: number
   stdout: string
   stderr: string

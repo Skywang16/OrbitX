@@ -7,6 +7,7 @@ use crate::storage::DatabaseManager;
 use crate::storage::UnifiedCache;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::State;
@@ -137,22 +138,24 @@ pub async fn completion_clear_cache(
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionStats {
+    pub provider_count: usize,
+}
+
 /// 获取统计信息命令
 #[tauri::command]
-pub async fn completion_get_stats(state: State<'_, CompletionState>) -> TauriApiResult<String> {
+pub async fn completion_get_stats(state: State<'_, CompletionState>) -> TauriApiResult<CompletionStats> {
     let engine = match state.get_engine().await {
         Ok(engine) => engine,
         Err(_) => return Ok(api_error!("completion.engine_not_initialized")),
     };
 
     match engine.get_stats() {
-        Ok(stats) => {
-            let stats_json = serde_json::json!({
-                "provider_count": stats.provider_count
-            });
-
-            Ok(api_success!(stats_json.to_string()))
-        }
+        Ok(stats) => Ok(api_success!(CompletionStats {
+            provider_count: stats.provider_count,
+        })),
         Err(_) => Ok(api_error!("completion.stats_failed")),
     }
 }

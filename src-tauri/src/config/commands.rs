@@ -3,7 +3,7 @@ use crate::config::{defaults::create_default_config, types::AppConfig, TomlConfi
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
 /// 配置管理器状态
@@ -33,7 +33,7 @@ pub async fn config_get(state: State<'_, ConfigManagerState>) -> TauriApiResult<
 }
 
 #[tauri::command]
-pub async fn config_update(
+pub async fn config_set(
     new_config: AppConfig,
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
@@ -47,26 +47,6 @@ pub async fn config_update(
     {
         Ok(_) => Ok(api_success!()),
         Err(_) => Ok(api_error!("config.update_failed")),
-    }
-}
-
-#[tauri::command]
-pub async fn config_save(state: State<'_, ConfigManagerState>) -> TauriApiResult<EmptyData> {
-    match state.toml_manager.config_update(|_config| Ok(())).await {
-        Ok(_) => Ok(api_success!()),
-        Err(_) => Ok(api_error!("config.save_failed")),
-    }
-}
-
-#[tauri::command]
-pub async fn config_validate(state: State<'_, ConfigManagerState>) -> TauriApiResult<EmptyData> {
-    let config = match state.toml_manager.config_get().await {
-        Ok(config) => config,
-        Err(_) => return Ok(api_error!("config.get_failed")),
-    };
-    match state.toml_manager.config_validate(&config) {
-        Ok(_) => Ok(api_success!()),
-        Err(_) => Ok(api_error!("config.validate_failed")),
     }
 }
 
@@ -89,50 +69,8 @@ pub async fn config_reset_to_defaults(
 }
 
 #[tauri::command]
-pub async fn config_get_file_path() -> TauriApiResult<String> {
-    Ok(api_success!("config/config.toml".to_string()))
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct ConfigFileInfo {
-    pub path: String,
-    pub exists: bool,
-}
-
-#[tauri::command]
-pub async fn config_get_file_info() -> TauriApiResult<ConfigFileInfo> {
-    Ok(api_success!(ConfigFileInfo {
-        path: "config/config.toml".to_string(),
-        exists: true,
-    }))
-}
-
-#[tauri::command]
-pub async fn config_open_file() -> TauriApiResult<EmptyData> {
-    Ok(api_success!())
-}
-
-#[tauri::command]
-pub async fn config_subscribe_events() -> TauriApiResult<EmptyData> {
-    Ok(api_success!())
-}
-
-#[tauri::command]
-pub async fn config_get_folder_path(
-    state: State<'_, ConfigManagerState>,
-) -> TauriApiResult<String> {
-    let config_path = state.toml_manager.get_config_path().await;
-
-    if let Some(config_dir) = config_path.parent() {
-        Ok(api_success!(config_dir.to_string_lossy().to_string()))
-    } else {
-        Ok(api_error!("config.get_folder_path_failed"))
-    }
-}
-
-#[tauri::command]
 pub async fn config_open_folder<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
+    app: AppHandle<R>,
     state: State<'_, ConfigManagerState>,
 ) -> TauriApiResult<EmptyData> {
     let config_path = state.toml_manager.get_config_path().await;

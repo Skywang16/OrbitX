@@ -1,5 +1,5 @@
 import { invoke } from '@/utils/request'
-import type { AppConfig, ConfigFileInfo, Theme, ThemeInfo, ThemeConfigStatus } from './types'
+import type { AppConfig, Theme, ThemeInfo, ThemeConfigStatus } from './types'
 
 class ThemeAPI {
   getThemeConfigStatus = async (): Promise<ThemeConfigStatus> => {
@@ -34,56 +34,12 @@ export class ConfigApi {
     return await invoke<AppConfig>('config_get')
   }
 
-  updateConfig = async (config: AppConfig): Promise<void> => {
-    await invoke<void>('config_update', { newConfig: config })
-  }
-
-  saveConfig = async (): Promise<void> => {
-    await invoke<void>('config_save')
-  }
-
-  validateConfig = async (): Promise<void> => {
-    await invoke<void>('config_validate')
-  }
-
-  resetConfig = async (): Promise<void> => {
-    await invoke<void>('reset_config')
-  }
-
-  reloadConfig = async (): Promise<void> => {
-    await invoke<void>('reload_config')
-  }
-
-  getConfigFileInfo = async (): Promise<ConfigFileInfo> => {
-    return await invoke<ConfigFileInfo>('config_get_file_info')
-  }
-
-  exportConfig = async (): Promise<string> => {
-    return await invoke<string>('export_config')
-  }
-
-  importConfig = async (configData: string): Promise<void> => {
-    await invoke<void>('import_config', { data: configData })
+  setConfig = async (config: AppConfig): Promise<void> => {
+    await invoke<void>('config_set', { newConfig: config })
   }
 
   resetToDefaults = async (): Promise<void> => {
     await invoke<void>('config_reset_to_defaults')
-  }
-
-  getFilePath = async (): Promise<string> => {
-    return await invoke<string>('config_get_file_path')
-  }
-
-  getFileInfo = async (): Promise<ConfigFileInfo> => {
-    return await invoke<ConfigFileInfo>('config_get_file_info')
-  }
-
-  openFile = async (): Promise<void> => {
-    await invoke<void>('config_open_file')
-  }
-
-  getConfigFolderPath = async (): Promise<string> => {
-    return await invoke<string>('config_get_folder_path')
   }
 
   openConfigFolder = async (): Promise<void> => {

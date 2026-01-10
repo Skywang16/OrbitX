@@ -16,9 +16,7 @@ import type {
   TerminalResizeOptions,
   TerminalWriteOptions,
   TerminalConfig,
-  CursorConfig,
   TerminalConfigValidationResult,
-  SystemShellsResult,
 } from './types'
 
 /**
@@ -87,31 +85,19 @@ export class TerminalApi {
   // ===== 终端配置管理 =====
 
   getTerminalConfig = async (): Promise<TerminalConfig> => {
-    return await invoke<TerminalConfig>('config_terminal_get')
+    return await invoke<TerminalConfig>('terminal_config_get')
   }
 
-  updateTerminalConfig = async (config: TerminalConfig): Promise<void> => {
-    await invoke<void>('config_terminal_update', { terminalConfig: config })
+  setTerminalConfig = async (config: TerminalConfig): Promise<void> => {
+    await invoke<void>('terminal_config_set', { terminalConfig: config })
   }
 
   validateTerminalConfig = async (): Promise<TerminalConfigValidationResult> => {
-    return await invoke<TerminalConfigValidationResult>('config_terminal_validate')
+    return await invoke<TerminalConfigValidationResult>('terminal_config_validate')
   }
 
   resetTerminalConfigToDefaults = async (): Promise<void> => {
-    await invoke('config_terminal_reset_to_defaults')
-  }
-
-  detectSystemShells = async (): Promise<SystemShellsResult> => {
-    return await invoke<SystemShellsResult>('config_terminal_detect_system_shells')
-  }
-
-  getShellInfo = async (shellPath: string): Promise<ShellInfo | null> => {
-    return await invoke<ShellInfo | null>('config_terminal_get_shell_info', { shellPath })
-  }
-
-  updateCursorConfig = async (cursorConfig: CursorConfig): Promise<void> => {
-    await invoke('config_terminal_update_cursor', { cursorConfig })
+    await invoke('terminal_config_reset_to_defaults')
   }
 
   // ===== 事件监听 =====

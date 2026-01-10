@@ -6,11 +6,11 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::storage::DatabaseManager;
-use crate::utils::{EmptyData, TauriApiResult};
+use crate::utils::TauriApiResult;
 use crate::workspace::WorkspaceService;
 use crate::{api_error, api_success};
 
-use super::models::{Checkpoint, CheckpointSummary, FileDiff, RollbackResult};
+use super::models::{CheckpointSummary, FileDiff, RollbackResult};
 use super::service::CheckpointService;
 
 /// Checkpoint 状态
@@ -21,30 +21,6 @@ pub struct CheckpointState {
 impl CheckpointState {
     pub fn new(service: Arc<CheckpointService>) -> Self {
         Self { service }
-    }
-}
-
-/// 创建 checkpoint（兼容旧 API，内部只创建空 checkpoint）
-#[tauri::command]
-pub async fn checkpoint_create(
-    state: State<'_, CheckpointState>,
-    workspace_path: String,
-    session_id: i64,
-    message_id: i64,
-    _files: Vec<String>,
-) -> TauriApiResult<Checkpoint> {
-    let workspace = PathBuf::from(&workspace_path);
-
-    match state
-        .service
-        .create_empty(session_id, message_id, &workspace)
-        .await
-    {
-        Ok(checkpoint) => Ok(api_success!(checkpoint)),
-        Err(e) => {
-            tracing::error!("Failed to create checkpoint: {}", e);
-            Ok(api_error!("checkpoint.create_failed"))
-        }
     }
 }
 
@@ -187,21 +163,6 @@ pub async fn checkpoint_get_file_content(
         Err(e) => {
             tracing::error!("Failed to get file content: {}", e);
             Ok(api_error!("checkpoint.get_content_failed"))
-        }
-    }
-}
-
-/// 删除 checkpoint
-#[tauri::command]
-pub async fn checkpoint_delete(
-    state: State<'_, CheckpointState>,
-    checkpoint_id: i64,
-) -> TauriApiResult<EmptyData> {
-    match state.service.delete(checkpoint_id).await {
-        Ok(_) => Ok(api_success!()),
-        Err(e) => {
-            tracing::error!("Failed to delete checkpoint {}: {}", checkpoint_id, e);
-            Ok(api_error!("checkpoint.delete_failed"))
         }
     }
 }

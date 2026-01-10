@@ -2,15 +2,7 @@
   <div v-if="contextUsage" class="context-usage-ring" :title="tooltipText">
     <svg width="24" height="24" viewBox="0 0 24 24" class="ring-svg">
       <!-- Background circle -->
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="var(--border-300)"
-        stroke-width="2"
-        fill="none"
-        opacity="0.3"
-      />
+      <circle cx="12" cy="12" r="10" stroke="var(--border-300)" stroke-width="2" fill="none" opacity="0.3" />
       <!-- Progress circle -->
       <circle
         cx="12"

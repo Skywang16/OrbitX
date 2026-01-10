@@ -8,7 +8,7 @@
  */
 
 import { invoke } from '@/utils/request'
-import type { CompletionEngineStatus, CompletionRequest, CompletionResponse, CompletionStats } from './types'
+import type { CompletionRequest, CompletionResponse, CompletionStats } from './types'
 
 /**
  * 补全 API 接口类
@@ -32,13 +32,7 @@ export class CompletionApi {
   }
 
   getStats = async (): Promise<CompletionStats> => {
-    const stats = await invoke<string>('completion_get_stats')
-    return JSON.parse(stats) as CompletionStats
-  }
-
-  getEngineStatus = async (): Promise<CompletionEngineStatus> => {
-    await this.getStats()
-    return { initialized: true, ready: true }
+    return await invoke<CompletionStats>('completion_get_stats')
   }
 }
 

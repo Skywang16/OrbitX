@@ -120,19 +120,6 @@ export interface TerminalConfigValidationResult {
   warnings?: string[]
 }
 
-export interface SystemShellsResult {
-  shells: DetectedShell[]
-  currentDefault?: string
-}
-
-export interface DetectedShell {
-  name: string
-  path: string
-  version?: string
-  description?: string
-  available: boolean
-}
-
 // ===== 通用响应类型 =====
 
 export interface APIResponse<T = unknown> {

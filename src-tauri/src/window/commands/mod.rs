@@ -1,25 +1,18 @@
 // Window command handlers exposed to Tauri
 
-pub mod directory;
-pub mod opacity;
-pub mod platform;
 pub mod state;
 
-pub use directory::*;
-pub use opacity::*;
-pub use platform::*;
 pub use state::*;
 
 use crate::window::WindowStateResult;
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::Mutex;
-use tracing::{error, warn};
 
 // Window state management container
 pub struct WindowState {
@@ -37,57 +30,22 @@ pub struct PlatformInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WindowStateOperation {
-    GetState,
-    SetAlwaysOnTop,
-    ToggleAlwaysOnTop,
-    ResetState,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WindowStateOperationParams {
-    pub always_on_top: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WindowStateOperationRequest {
-    pub operation: WindowStateOperation,
-    pub params: Option<WindowStateOperationParams>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WindowStateBatchRequest {
-    pub operations: Vec<WindowStateOperationRequest>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WindowStateOperationResult {
-    pub operation: WindowStateOperation,
-    pub success: bool,
-    pub data: Option<serde_json::Value>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WindowStateBatchResponse {
-    pub results: Vec<WindowStateOperationResult>,
-    pub overall_success: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CompleteWindowState {
+pub struct WindowStateSnapshot {
     pub always_on_top: bool,
     pub current_directory: String,
     pub home_directory: String,
     pub platform_info: PlatformInfo,
+    pub opacity: f64,
     pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowStateUpdate {
+    pub always_on_top: Option<bool>,
+    pub opacity: Option<f64>,
+    pub refresh_directories: Option<bool>,
 }
 
 #[derive(Debug)]

@@ -1,4 +1,4 @@
-import type { AIModelConfig, AISettings } from '@/types'
+import type { AIModelConfig } from '@/types'
 import { invoke } from '@/utils/request'
 import type { AIModelCreateInput, AIModelUpdateInput, AIModelTestConnectionInput } from './types'
 
@@ -59,14 +59,6 @@ export class AiApi {
 
   setUserRules = async (rules: string | null): Promise<void> => {
     await invoke<void>('agent_set_user_rules', { rules })
-  }
-
-  getSettings = async (): Promise<AISettings> => {
-    return await invoke<AISettings>('get_ai_settings')
-  }
-
-  updateSettings = async (settings: Partial<AISettings>): Promise<void> => {
-    await invoke<void>('update_ai_settings', { settings })
   }
 }
 

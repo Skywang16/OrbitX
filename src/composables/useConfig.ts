@@ -62,7 +62,7 @@ export const useConfig = () => {
     }
 
     return withLoading(async () => {
-      await configApi.updateConfig(newConfig)
+      await configApi.setConfig(newConfig)
       config.value = newConfig
     })
   }
@@ -82,13 +82,6 @@ export const useConfig = () => {
     }
 
     await updateConfigData(updatedConfig)
-  }
-
-  // 保存配置
-  const saveConfigData = async () => {
-    return withLoading(async () => {
-      await configApi.saveConfig()
-    })
   }
 
   // 重置为默认值
@@ -122,7 +115,6 @@ export const useConfig = () => {
     loadConfig,
     updateConfig: updateConfigData,
     updateConfigSection,
-    saveConfig: saveConfigData,
     resetToDefaults,
     clearError,
   }

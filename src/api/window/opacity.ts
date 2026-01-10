@@ -22,7 +22,7 @@ export const setWindowOpacity = async (opacity: number): Promise<void> => {
   if (opacity < 0.05 || opacity > 1.0) {
     throw new Error('透明度值必须在 0.05 到 1.0 之间')
   }
-  await invoke<void>('window_set_opacity', { opacity })
+  await invoke('window_state_update', { update: { opacity } })
 }
 
 /**
@@ -30,7 +30,8 @@ export const setWindowOpacity = async (opacity: number): Promise<void> => {
  * @returns 当前透明度值
  */
 export const getWindowOpacity = async (): Promise<number> => {
-  return await invoke<number>('window_get_opacity')
+  const state = await invoke<{ opacity: number }>('window_state_get', { refresh: false })
+  return state.opacity
 }
 
 /**

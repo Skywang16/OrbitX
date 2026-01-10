@@ -35,22 +35,3 @@ pub async fn language_get_app_language() -> TauriApiResult<String> {
     let lang = LanguageManager::get_language_string();
     Ok(api_success!(lang))
 }
-
-#[tauri::command]
-pub async fn language_get_supported_languages() -> TauriApiResult<Vec<LanguageInfo>> {
-    let languages: Vec<LanguageInfo> = Language::all()
-        .into_iter()
-        .map(|lang| LanguageInfo {
-            code: lang.to_string(),
-            name: lang.display_name().to_string(),
-        })
-        .collect();
-
-    Ok(api_success!(languages))
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-pub struct LanguageInfo {
-    pub code: String,
-    pub name: String,
-}
