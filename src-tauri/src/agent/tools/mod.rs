@@ -22,7 +22,7 @@ pub use registry::{get_permissions_for_mode, ToolExecutionStats, ToolRegistry};
 // Builtin tool type re-exports
 pub use builtin::{
     ListFilesTool, OrbitSearchTool, ReadFileTool, ReadTerminalTool, ShellTool, UnifiedEditTool,
-    WebFetchTool, WriteFileTool,
+    TodoWriteTool, WebFetchTool, WriteFileTool,
 };
 
 use std::sync::Arc;
@@ -37,6 +37,11 @@ pub async fn create_tool_registry(chat_mode: &str) -> Arc<ToolRegistry> {
 
 async fn register_builtin_tools(registry: &ToolRegistry, is_chat_mode: bool) {
     use std::sync::Arc;
+
+    registry
+        .register("todowrite", Arc::new(TodoWriteTool::new()), is_chat_mode)
+        .await
+        .ok();
 
     registry
         .register("web_fetch", Arc::new(WebFetchTool::new()), is_chat_mode)

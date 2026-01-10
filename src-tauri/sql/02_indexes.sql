@@ -25,3 +25,16 @@ CREATE INDEX IF NOT EXISTS idx_completion_transitions_last_used
     ON completion_transitions(last_used_ts DESC);
 CREATE INDEX IF NOT EXISTS idx_completion_entities_type_last_used
     ON completion_entity_stats(entity_type, last_used_ts DESC);
+
+-- Agent session message indexes
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_messages_summary
+    ON messages(session_id, is_summary)
+    WHERE is_summary = 1;
+
+-- Tool output indexes
+CREATE INDEX IF NOT EXISTS idx_tool_outputs_session ON tool_outputs(session_id);
+CREATE INDEX IF NOT EXISTS idx_tool_outputs_message ON tool_outputs(message_id);
+CREATE INDEX IF NOT EXISTS idx_tool_outputs_compacted
+    ON tool_outputs(compacted_at)
+    WHERE compacted_at IS NOT NULL;

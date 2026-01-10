@@ -1,5 +1,22 @@
 <template>
-  <div class="tool-block">
+  <!-- todowrite 特殊渲染：简单的进度列表 -->
+  <div v-if="isTodoWrite" class="todo-block">
+    <div class="todo-header">
+      <span class="todo-label">Todo</span>
+      <span class="todo-progress">{{ todoProgress }}</span>
+    </div>
+    <div v-if="todoItems.length > 0" class="todo-list">
+      <div v-for="(item, idx) in todoItems" :key="idx" class="todo-item" :class="item.status">
+        <span class="todo-icon">
+          {{ item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '▶' : '○' }}
+        </span>
+        <span class="todo-text">{{ item.content }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 其他工具的通用渲染 -->
+  <div v-else class="tool-block">
     <div
       class="tool-line"
       :class="{ clickable: isExpandable, running: isRunning, error: isError, cancelled: isCancelled }"
@@ -80,6 +97,26 @@
   // Extract tool information from step metadata
   const toolName = computed(() => {
     return props.block.name || ''
+  })
+
+  // todowrite 特殊处理
+  const isTodoWrite = computed(() => toolName.value === 'todowrite')
+
+  interface TodoItem {
+    content: string
+    status: 'pending' | 'in_progress' | 'completed'
+  }
+
+  const todoItems = computed<TodoItem[]>(() => {
+    if (!isTodoWrite.value) return []
+    const input = props.block.input as { todos?: TodoItem[] } | undefined
+    return input?.todos || []
+  })
+
+  const todoProgress = computed(() => {
+    if (todoItems.value.length === 0) return ''
+    const done = todoItems.value.filter(t => t.status === 'completed').length
+    return `${done}/${todoItems.value.length}`
   })
 
   const toolParams = computed(() => {
@@ -335,6 +372,71 @@
 </script>
 
 <style scoped>
+  /* Todo block 样式 */
+  .todo-block {
+    margin: 6px 0;
+    font-size: 13px;
+  }
+
+  .todo-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-400);
+    margin-bottom: 4px;
+  }
+
+  .todo-label {
+    font-weight: 500;
+  }
+
+  .todo-progress {
+    color: var(--text-500);
+    font-size: 12px;
+  }
+
+  .todo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .todo-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    color: var(--text-400);
+  }
+
+  .todo-item.completed {
+    color: var(--text-500);
+  }
+
+  .todo-item.in_progress {
+    color: var(--text-300);
+  }
+
+  .todo-icon {
+    width: 14px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .todo-item.completed .todo-icon {
+    color: #10b981;
+  }
+
+  .todo-item.in_progress .todo-icon {
+    color: #3b82f6;
+  }
+
+  .todo-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Tool block 样式 */
   .tool-block {
     margin: 6px 0;
     font-size: 14px;

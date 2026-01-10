@@ -11,25 +11,19 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::Utc;
 use serde_json::Value;
 use tokio_stream::StreamExt;
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::agent::config::CompactionConfig;
-use crate::agent::context::SessionSummarizer;
+use crate::agent::compaction::{CompactionConfig, CompactionService, CompactionTrigger, SessionMessageLoader};
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::iteration_outcome::IterationOutcome;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
-use crate::agent::memory::compactor::{CompactionResult, MessageCompactor};
 use crate::agent::persistence::AgentPersistence;
 use crate::agent::state::iteration::{IterationContext, IterationSnapshot};
-use crate::agent::state::session::CompressedMemory;
 use crate::agent::types::{Block, TextBlock, ThinkingBlock};
-use crate::llm::anthropic_types::{
-    ContentBlock, ContentBlockStart, ContentDelta, StreamEvent, SystemPrompt,
-};
+use crate::llm::anthropic_types::{ContentBlock, ContentBlockStart, ContentDelta, StreamEvent};
 use crate::storage::DatabaseManager;
 
 /// 内容块累积器（用于流式组装）
@@ -70,8 +64,6 @@ impl ReactOrchestrator {
     where
         H: crate::agent::core::executor::ReactHandler,
     {
-        let mut iteration_snapshots: Vec<IterationSnapshot> = Vec::new();
-
         while !context.should_stop().await {
             context.check_aborted_async(false).await?;
 
@@ -85,56 +77,9 @@ impl ReactOrchestrator {
 
             let iter_ctx = IterationContext::new(iteration, context.session());
 
-            // ===== Phase 2: 准备消息上下文（零转换） =====
+            // ===== Phase 2: 准备消息上下文（从 messages 表加载，Summary 作为断点） =====
 
             let tool_registry = context.tool_registry();
-
-            // 性能优化：使用批量读取，一次锁获取所有数据
-            let (mut working_messages, mut system_prompt) = context
-                .batch_read_state(|exec| (exec.messages.clone(), exec.system_prompt.clone()))
-                .await;
-
-            // 摘要（如果需要）
-            let summarizer = SessionSummarizer::new(
-                context.session_id,
-                Arc::clone(&self.agent_persistence),
-                Arc::clone(&self.database),
-            );
-            if let Ok(Some(summary)) = summarizer
-                .summarize_if_needed(&model_id, &working_messages, &system_prompt)
-                .await
-            {
-                let sys_text = match &system_prompt {
-                    Some(SystemPrompt::Text(t)) => {
-                        let capacity = t.len() + summary.summary.len() + 15;
-                        let mut buf = String::with_capacity(capacity);
-                        buf.push_str(t);
-                        buf.push_str("\n\n[summary]\n");
-                        buf.push_str(&summary.summary);
-                        buf
-                    }
-                    Some(SystemPrompt::Blocks(_)) | None => summary.summary,
-                };
-                system_prompt = Some(SystemPrompt::Text(sys_text.clone()));
-                let _ = context.update_system_prompt(sys_text).await;
-            }
-
-            let compressed_history = context.session().get_compressed_history_text().await;
-            if !compressed_history.is_empty() {
-                let sys_text = match &system_prompt {
-                    Some(SystemPrompt::Text(t)) => {
-                        let capacity = t.len() + compressed_history.len() + 15;
-                        let mut buf = String::with_capacity(capacity);
-                        buf.push_str(t);
-                        buf.push_str("\n\n[history]\n");
-                        buf.push_str(&compressed_history);
-                        buf
-                    }
-                    Some(SystemPrompt::Blocks(_)) | None => compressed_history,
-                };
-                system_prompt = Some(SystemPrompt::Text(sys_text.clone()));
-                let _ = context.update_system_prompt(sys_text).await;
-            }
 
             // 文件上下文（如有），追加为 user 临时消息
             let recent_iterations = {
@@ -142,29 +87,21 @@ impl ReactOrchestrator {
                 react.get_snapshot().iterations.clone()
             };
             let builder = handler.get_context_builder(context).await;
-            if let Some(file_msg) = builder.build_file_context_message(&recent_iterations).await {
-                working_messages.push(file_msg);
-            }
-
-            // 消息压缩（超过上下文窗口时）
-            let context_window = self
-                .get_model_context_window(&model_id)
+            let context_window = crate::agent::utils::get_model_context_window(&self.database, model_id)
                 .await
                 .unwrap_or(128_000);
-            let compaction_result = MessageCompactor::new()
-                .with_config(CompactionConfig::default())
-                .compact_if_needed(
-                    working_messages,
-                    system_prompt.clone(),
-                    &model_id,
-                    context_window,
-                )
+            self.maybe_compact_session(context, model_id, context_window)
+                .await?;
+
+            let loader = SessionMessageLoader::new(Arc::clone(&self.agent_persistence));
+            let mut final_messages = loader
+                .load_for_llm(context.session_id)
                 .await
-                .map_err(|e| {
-                    TaskExecutorError::InternalError(format!("Compaction failed: {}", e))
-                })?;
-            if let CompactionResult::Compacted { .. } = &compaction_result {}
-            let final_messages = compaction_result.messages();
+                .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?;
+
+            if let Some(file_msg) = builder.build_file_context_message(&recent_iterations).await {
+                final_messages.push(file_msg);
+            }
 
             let llm_request = handler
                 .build_llm_request(
@@ -450,7 +387,7 @@ impl ReactOrchestrator {
                     }
 
                     let snapshot = iter_ctx.finalize().await;
-                    Self::finalize_iteration(context, snapshot, &mut iteration_snapshots).await?;
+                    Self::update_session_stats(context, &snapshot).await;
                     continue;
                 }
 
@@ -466,7 +403,7 @@ impl ReactOrchestrator {
                         .complete_iteration(react_iteration_index, output.clone(), None);
 
                     let snapshot = iter_ctx.finalize().await;
-                    Self::finalize_iteration(context, snapshot, &mut iteration_snapshots).await?;
+                    Self::update_session_stats(context, &snapshot).await;
                     break;
                 }
 
@@ -477,23 +414,15 @@ impl ReactOrchestrator {
                     );
 
                     let snapshot = iter_ctx.finalize().await;
-                    Self::finalize_iteration(context, snapshot, &mut iteration_snapshots).await?;
+                    Self::update_session_stats(context, &snapshot).await;
                     break;
                 }
             }
         }
-
-        if !iteration_snapshots.is_empty() {
-            Self::compress_iteration_batch(context, &iteration_snapshots).await?;
-        }
         Ok(())
     }
 
-    async fn finalize_iteration(
-        context: &TaskContext,
-        snapshot: IterationSnapshot,
-        snapshots: &mut Vec<IterationSnapshot>,
-    ) -> TaskExecutorResult<()> {
+    async fn update_session_stats(context: &TaskContext, snapshot: &IterationSnapshot) {
         let tool_calls = snapshot.tools_used.len() as u32;
         let files = snapshot.files_touched.len() as u32;
         context
@@ -504,68 +433,54 @@ impl ReactOrchestrator {
                 stats.files_read = stats.files_read.saturating_add(files);
             })
             .await;
-        snapshots.push(snapshot);
-        if snapshots.len() >= 5 {
-            Self::compress_iteration_batch(context, snapshots).await?;
-            snapshots.clear();
-        }
-        Ok(())
     }
 
-    async fn compress_iteration_batch(
+    async fn maybe_compact_session(
+        &self,
         context: &TaskContext,
-        snapshots: &[IterationSnapshot],
+        model_id: &str,
+        context_window: u32,
     ) -> TaskExecutorResult<()> {
-        if snapshots.is_empty() {
+        let service = CompactionService::new(
+            Arc::clone(&self.database),
+            Arc::clone(&self.agent_persistence),
+            CompactionConfig::default(),
+        );
+
+        let prepared = service
+            .prepare_compaction(context.session_id, context_window, CompactionTrigger::Auto)
+            .await
+            .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?;
+
+        let Some(job) = prepared.summary_job else {
             return Ok(());
-        }
-
-        let start_iter = snapshots.first().unwrap().iteration;
-        let end_iter = snapshots.last().unwrap().iteration;
-
-        let mut files = Vec::new();
-        let mut tools = Vec::new();
-        let mut summary_parts = Vec::new();
-
-        for snapshot in snapshots {
-            files.extend(snapshot.files_touched.clone());
-            tools.extend(snapshot.tools_used.clone());
-            summary_parts.push(snapshot.summarize());
-        }
-
-        files.sort();
-        files.dedup();
-        tools.sort();
-        tools.dedup();
-
-        let memory = CompressedMemory {
-            created_at: Utc::now(),
-            iteration_range: (start_iter, end_iter),
-            summary: summary_parts.join("\n"),
-            files_touched: files,
-            tools_used: tools,
-            tokens_saved: 0,
         };
 
-        context.session().add_compressed_memory(memory).await;
+        context
+            .emit_event(crate::agent::types::TaskEvent::MessageCreated {
+                message: job.summary_message.clone(),
+            })
+            .await?;
+
+        let completed = service
+            .complete_summary_job(job, model_id)
+            .await
+            .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?;
+
+        let context_usage = context.calculate_context_usage(model_id).await;
+        context
+            .emit_event(crate::agent::types::TaskEvent::MessageFinished {
+                message_id: completed.message_id,
+                status: completed.status,
+                finished_at: completed.finished_at,
+                duration_ms: completed.duration_ms,
+                token_usage: None,
+                context_usage,
+            })
+            .await?;
 
         Ok(())
     }
-
-    async fn get_model_context_window(&self, model_id: &str) -> Option<u32> {
-        let model = crate::storage::repositories::AIModels::new(&self.database)
-            .find_by_id(model_id)
-            .await
-            .ok()??;
-
-        if let Some(options) = model.options {
-            if let Some(max_tokens) = options.get("maxContextTokens") {
-                if let Some(value) = max_tokens.as_u64() {
-                    return Some(value as u32);
-                }
-            }
-        }
-
-        None
-    }
 }
+
+// Compaction business rules live in `agent/compaction/*` (not in the orchestrator).

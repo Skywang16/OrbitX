@@ -348,15 +348,6 @@ impl TaskContext {
         f(&exec)
     }
 
-    #[allow(dead_code)]
-    pub(crate) async fn batch_update_state<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut ExecutionState) -> R,
-    {
-        let mut exec = self.states.execution.write().await;
-        f(&mut exec)
-    }
-
     pub async fn with_chain<T>(&self, f: impl FnOnce(&Chain) -> T) -> T {
         let planning = self.states.planning.read().await;
         f(&planning.chain)
@@ -745,6 +736,7 @@ impl TaskContext {
                 UiMessageRole::User,
                 MessageStatus::Completed,
                 user_blocks,
+                false,
             )
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
@@ -762,6 +754,7 @@ impl TaskContext {
                 UiMessageRole::Assistant,
                 MessageStatus::Streaming,
                 Vec::new(),
+                false,
             )
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
@@ -808,6 +801,16 @@ impl TaskContext {
             .await
     }
 
+    pub async fn active_assistant_message_id(&self) -> Option<i64> {
+        self.states
+            .messages
+            .lock()
+            .await
+            .assistant_message
+            .as_ref()
+            .map(|m| m.id)
+    }
+
     pub async fn assistant_update_block(
         &self,
         block_id: &str,
@@ -852,10 +855,35 @@ impl TaskContext {
         .await
     }
 
+    /// 计算当前会话的上下文占用
+    pub async fn calculate_context_usage(&self, model_id: &str) -> Option<crate::agent::types::ContextUsage> {
+        use crate::agent::compaction::SessionMessageLoader;
+        use crate::agent::utils::{count_message_param_tokens, get_model_context_window};
+
+        // 获取模型的 context_window
+        let context_window = get_model_context_window(&self.session.repositories(), model_id).await?;
+
+        // 加载当前会话的消息（带断点）
+        let loader = SessionMessageLoader::new(Arc::clone(&self.session.agent_persistence()));
+        let messages = loader.load_for_llm(self.session_id).await.ok()?;
+
+        // 计算 tokens_used
+        let tokens_used = messages
+            .iter()
+            .map(|m| count_message_param_tokens(m) as u32)
+            .fold(0u32, |acc, n| acc.saturating_add(n));
+
+        Some(crate::agent::types::ContextUsage {
+            tokens_used,
+            context_window,
+        })
+    }
+
     pub async fn finish_assistant_message(
         &self,
         status: MessageStatus,
         token_usage: Option<TokenUsage>,
+        context_usage: Option<crate::agent::types::ContextUsage>,
     ) -> TaskExecutorResult<()> {
         let mut message = self
             .states
@@ -880,6 +908,7 @@ impl TaskContext {
         message.finished_at = Some(finished_at);
         message.duration_ms = Some(duration_ms);
         message.token_usage = token_usage.clone();
+        message.context_usage = context_usage.clone();
 
         self.agent_persistence()
             .messages()
@@ -896,6 +925,7 @@ impl TaskContext {
             finished_at,
             duration_ms,
             token_usage,
+            context_usage,
         })
         .await
     }
@@ -903,7 +933,7 @@ impl TaskContext {
     pub async fn fail_assistant_message(&self, error: ErrorBlock) -> TaskExecutorResult<()> {
         self.assistant_append_block(Block::Error(error.clone()))
             .await?;
-        self.finish_assistant_message(MessageStatus::Error, None)
+        self.finish_assistant_message(MessageStatus::Error, None, None)
             .await?;
         Ok(())
     }
@@ -978,6 +1008,7 @@ impl TaskContext {
             finished_at: now,
             duration_ms: message.duration_ms.unwrap_or(0),
             token_usage: None,
+            context_usage: None,
         })
         .await?;
         Ok(())

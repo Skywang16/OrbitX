@@ -9,8 +9,6 @@ use tracing::warn;
 /// TOML配置读取器
 pub struct TomlConfigReader {
     config_path: PathBuf,
-    #[allow(dead_code)]
-    paths: ConfigPaths,
 }
 
 impl TomlConfigReader {
@@ -19,7 +17,7 @@ impl TomlConfigReader {
         let paths = ConfigPaths::new().map_err(|e| TomlConfigError::Internal(e.to_string()))?;
         let config_path = paths.config_file();
 
-        Ok(Self { config_path, paths })
+        Ok(Self { config_path })
     }
 
     /// 创建指定配置路径的配置读取器（主要用于测试）
@@ -27,10 +25,10 @@ impl TomlConfigReader {
     pub fn new_with_config_path(config_path: PathBuf) -> TomlConfigResult<Self> {
         // 为测试创建一个虚拟的 ConfigPaths
         let temp_dir = config_path.parent().ok_or(TomlConfigError::InvalidPath)?;
-        let paths = ConfigPaths::with_app_data_dir(temp_dir)
+        let _paths = ConfigPaths::with_app_data_dir(temp_dir)
             .map_err(|e| TomlConfigError::Internal(e.to_string()))?;
 
-        Ok(Self { config_path, paths })
+        Ok(Self { config_path })
     }
 
     /// 从文件系统加载TOML配置

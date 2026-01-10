@@ -36,7 +36,6 @@
       maxContextTokens: 128000,
       temperature: 0.7,
       timeout: 300000,
-      contextWindow: 128000,
       maxTokens: -1,
     },
     useCustomBaseUrl: false,
@@ -72,7 +71,6 @@
       maxContextTokens: 128000,
       temperature: 0.7,
       timeout: 300000,
-      contextWindow: 128000,
       maxTokens: -1,
     }
     showAdvancedOptions.value = false
@@ -108,7 +106,6 @@
       maxContextTokens: model.options?.maxContextTokens ?? 128000,
       temperature: model.options?.temperature ?? 0.7,
       timeout: model.options?.timeout ?? 300000,
-      contextWindow: model.options?.contextWindow ?? 128000,
       maxTokens: model.options?.maxTokens ?? -1,
     }
     showAdvancedOptions.value = false
@@ -331,7 +328,7 @@
           </div>
           <div class="settings-item-control">
             <input
-              v-model.number="formData.options.contextWindow"
+              v-model.number="formData.options.maxContextTokens"
               type="number"
               class="settings-input mono"
               placeholder="128000"
@@ -480,7 +477,7 @@
               </div>
               <div class="settings-item-control">
                 <input
-                  v-model.number="formData.options.contextWindow"
+                  v-model.number="formData.options.maxContextTokens"
                   type="number"
                   class="settings-input mono"
                   placeholder="128000"

@@ -5,11 +5,11 @@ pub mod prompt;
 pub mod types;
 
 pub mod common; // 公共工具与模板等
+pub mod compaction; // 上下文工程：Prune/Compact/断点加载
 pub mod context; // 会话上下文追踪器与摘要器（阶段二）
 pub mod core; // 执行器核心（仅执行器，不含工具相关）
 pub mod llm; // LLM 集成与解析
 pub mod mcp; // MCP 适配（预留）
-pub mod memory; // 对话/上下文压缩与快照策略（预留）
 pub mod persistence; // 持久化与仓库抽象
 pub mod react; // ReAct 策略与解析(预留)
 pub mod shell; // Shell 执行模块

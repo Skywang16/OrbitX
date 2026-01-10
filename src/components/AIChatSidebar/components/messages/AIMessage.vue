@@ -25,7 +25,12 @@
 
 <template>
   <div class="ai-message">
-    <template v-if="blocks.length > 0">
+    <div v-if="message.isSummary" class="summary-message">
+      <div v-if="message.status === 'streaming'" class="summary-loading">正在压缩…</div>
+      <div v-else class="summary-divider" aria-hidden="true"></div>
+    </div>
+
+    <template v-else-if="blocks.length > 0">
       <template
         v-for="(block, index) in blocks"
         :key="('id' in block && block.id) || `${message.id}-${block.type}-${index}`"
@@ -72,6 +77,28 @@
     width: 100%;
     min-width: 0;
     overflow: hidden;
+  }
+
+  .summary-message {
+    margin: 10px 0;
+    width: 100%;
+  }
+
+  .summary-loading {
+    width: 100%;
+    padding: 10px 0;
+    text-align: center;
+    font-size: var(--font-size-sm);
+    color: var(--text-400);
+  }
+
+  .summary-divider {
+    padding: 8px 0;
+    border-top: 1px dashed var(--border-200);
+    border-bottom: 1px dashed var(--border-200);
+    text-align: center;
+    font-size: var(--font-size-xs);
+    color: var(--text-500);
   }
 
   .step-block {

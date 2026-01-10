@@ -157,49 +157,4 @@ impl TaskExecutor {
         )
         .await
     }
-
-    /// 恢复消息历史（用于 has_context=true 时加载历史对话）
-    #[allow(dead_code)]
-    pub(crate) async fn restore_messages_for_context(
-        &self,
-        ctx: &TaskContext,
-        execution_id: &str,
-    ) -> TaskExecutorResult<()> {
-        let messages = self
-            .agent_persistence()
-            .execution_messages()
-            .list_by_execution(execution_id)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        if messages.is_empty() {
-            return Ok(());
-        }
-
-        // 转换为Anthropic MessageParam格式
-        let anthropic_messages = messages
-            .into_iter()
-            .filter_map(|msg| {
-                use crate::agent::persistence::MessageRole;
-                use crate::llm::anthropic_types::{
-                    MessageContent, MessageParam, MessageRole as AnthropicRole,
-                };
-
-                let role = match msg.role {
-                    MessageRole::User => AnthropicRole::User,
-                    MessageRole::Assistant => AnthropicRole::Assistant,
-                    _ => return None,
-                };
-
-                Some(MessageParam {
-                    role,
-                    content: MessageContent::Text(msg.content),
-                })
-            })
-            .collect::<Vec<_>>();
-
-        ctx.restore_messages(anthropic_messages).await?;
-
-        Ok(())
-    }
 }

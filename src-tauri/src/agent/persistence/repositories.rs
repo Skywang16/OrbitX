@@ -5,16 +5,17 @@ use sqlx::{self, sqlite::SqliteQueryResult, Row};
 
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::types::{
-    Block, Message, MessageRole as UiMessageRole, MessageStatus as UiMessageStatus, TokenUsage,
+    Block, ContextUsage, Message, MessageRole as UiMessageRole, MessageStatus as UiMessageStatus, TokenUsage,
 };
 use crate::storage::database::DatabaseManager;
 
 use super::models::{
     build_agent_execution, build_execution_event, build_execution_message, build_session,
-    build_session_summary, build_tool_execution, build_workspace, build_workspace_file_record,
-    AgentExecution, ExecutionEvent, ExecutionEventType, ExecutionMessage, ExecutionStatus,
-    FileRecordSource, FileRecordState, MessageRole as AgentMessageRole, Session, SessionSummary,
-    TokenUsageStats, ToolExecution, ToolExecutionStatus, Workspace, WorkspaceFileRecord,
+    build_tool_execution, build_workspace,
+    build_workspace_file_record, AgentExecution, ExecutionEvent, ExecutionEventType,
+    ExecutionMessage, ExecutionStatus, FileRecordSource, FileRecordState,
+    MessageRole as AgentMessageRole, Session, TokenUsageStats,
+    ToolExecution, ToolExecutionStatus, Workspace, WorkspaceFileRecord,
 };
 use super::{
     bool_to_sql, now_timestamp, opt_datetime_to_timestamp, opt_timestamp_to_datetime,
@@ -199,74 +200,6 @@ impl SessionRepository {
 }
 
 #[derive(Debug)]
-pub struct SessionSummaryRepository {
-    database: Arc<DatabaseManager>,
-}
-
-impl SessionSummaryRepository {
-    pub fn new(database: Arc<DatabaseManager>) -> Self {
-        Self { database }
-    }
-
-    fn pool(&self) -> &sqlx::SqlitePool {
-        self.database.pool()
-    }
-
-    pub async fn upsert(
-        &self,
-        session_id: i64,
-        summary_content: &str,
-        summary_tokens: i64,
-        messages_summarized: i64,
-        tokens_saved: i64,
-    ) -> AgentResult<SessionSummary> {
-        let ts = now_timestamp();
-        sqlx::query(
-            "INSERT INTO session_summaries (
-                session_id, summary_content, summary_tokens,
-                messages_summarized, tokens_saved, created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(session_id) DO UPDATE SET
-                summary_content = excluded.summary_content,
-                summary_tokens = excluded.summary_tokens,
-                messages_summarized = excluded.messages_summarized,
-                tokens_saved = excluded.tokens_saved,
-                updated_at = excluded.updated_at",
-        )
-        .bind(session_id)
-        .bind(summary_content)
-        .bind(summary_tokens)
-        .bind(messages_summarized)
-        .bind(tokens_saved)
-        .bind(ts)
-        .bind(ts)
-        .execute(self.pool())
-        .await?;
-
-        self.get(session_id).await?.ok_or_else(|| {
-            AgentError::Internal(format!("Failed to retrieve summary {}", session_id))
-        })
-    }
-
-    pub async fn get(&self, session_id: i64) -> AgentResult<Option<SessionSummary>> {
-        let row = sqlx::query("SELECT * FROM session_summaries WHERE session_id = ?")
-            .bind(session_id)
-            .fetch_optional(self.pool())
-            .await?;
-
-        Ok(row.map(|r| build_session_summary(&r)))
-    }
-
-    pub async fn delete(&self, session_id: i64) -> AgentResult<()> {
-        sqlx::query("DELETE FROM session_summaries WHERE session_id = ?")
-            .bind(session_id)
-            .execute(self.pool())
-            .await?;
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
 pub struct MessageRepository {
     database: Arc<DatabaseManager>,
 }
@@ -282,8 +215,9 @@ impl MessageRepository {
 
     pub async fn list_by_session(&self, session_id: i64) -> AgentResult<Vec<Message>> {
         let rows = sqlx::query(
-            "SELECT id, session_id, role, status, blocks_json, created_at, finished_at, duration_ms,
-                    input_tokens, output_tokens, cache_read_tokens, cache_write_tokens
+            "SELECT id, session_id, role, status, blocks_json, is_summary, created_at, finished_at, duration_ms,
+                    input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                    context_tokens_used, context_window
              FROM messages
              WHERE session_id = ?
              ORDER BY created_at ASC, id ASC",
@@ -297,10 +231,39 @@ impl MessageRepository {
             .collect::<AgentResult<Vec<_>>>()
     }
 
+    /// 从后往前加载，遇到 summary 消息停止（包含该 summary），用于构建上下文与 UI 历史断点加载。
+    pub async fn list_by_session_with_breakpoint(&self, session_id: i64) -> AgentResult<Vec<Message>> {
+        let rows = sqlx::query(
+            "SELECT id, session_id, role, status, blocks_json, is_summary, created_at, finished_at, duration_ms,
+                    input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                    context_tokens_used, context_window
+             FROM messages
+             WHERE session_id = ?
+             ORDER BY created_at DESC, id DESC",
+        )
+        .bind(session_id)
+        .fetch_all(self.pool())
+        .await?;
+
+        let mut reversed = Vec::new();
+        for row in rows {
+            let msg = build_message(&row)?;
+            let is_summary = msg.is_summary;
+            reversed.push(msg);
+            if is_summary {
+                break;
+            }
+        }
+
+        reversed.reverse();
+        Ok(reversed)
+    }
+
     pub async fn get(&self, message_id: i64) -> AgentResult<Option<Message>> {
         let row = sqlx::query(
-            "SELECT id, session_id, role, status, blocks_json, created_at, finished_at, duration_ms,
-                    input_tokens, output_tokens, cache_read_tokens, cache_write_tokens
+            "SELECT id, session_id, role, status, blocks_json, is_summary, created_at, finished_at, duration_ms,
+                    input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                    context_tokens_used, context_window
              FROM messages
              WHERE id = ?",
         )
@@ -317,6 +280,7 @@ impl MessageRepository {
         role: UiMessageRole,
         status: UiMessageStatus,
         blocks: Vec<Block>,
+        is_summary: bool,
     ) -> AgentResult<Message> {
         let ts = now_timestamp();
         let blocks_json = serde_json::to_string(&blocks).map_err(|e| {
@@ -324,13 +288,14 @@ impl MessageRepository {
         })?;
 
         let result = sqlx::query(
-            "INSERT INTO messages (session_id, role, status, blocks_json, created_at)
-             VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO messages (session_id, role, status, blocks_json, is_summary, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)",
         )
         .bind(session_id)
         .bind(role_as_str(&role))
         .bind(status_as_str(&status))
         .bind(blocks_json)
+        .bind(bool_to_sql(is_summary))
         .bind(ts)
         .execute(self.pool())
         .await?;
@@ -347,10 +312,12 @@ impl MessageRepository {
             role,
             status,
             blocks,
+            is_summary,
             created_at: timestamp_to_datetime(ts),
             finished_at: None,
             duration_ms: None,
             token_usage: None,
+            context_usage: None,
         })
     }
 
@@ -362,26 +329,35 @@ impl MessageRepository {
         let (input_tokens, output_tokens, cache_read_tokens, cache_write_tokens) =
             token_usage_to_columns(message.token_usage.as_ref());
 
+        let (context_tokens_used, context_window) =
+            context_usage_to_columns(message.context_usage.as_ref());
+
         sqlx::query(
             "UPDATE messages
              SET status = ?,
                  blocks_json = ?,
+                 is_summary = ?,
                  finished_at = ?,
                  duration_ms = ?,
                  input_tokens = ?,
                  output_tokens = ?,
                  cache_read_tokens = ?,
-                 cache_write_tokens = ?
+                 cache_write_tokens = ?,
+                 context_tokens_used = ?,
+                 context_window = ?
              WHERE id = ?",
         )
         .bind(status_as_str(&message.status))
         .bind(blocks_json)
+        .bind(bool_to_sql(message.is_summary))
         .bind(opt_datetime_to_timestamp(message.finished_at))
         .bind(message.duration_ms)
         .bind(input_tokens)
         .bind(output_tokens)
         .bind(cache_read_tokens)
         .bind(cache_write_tokens)
+        .bind(context_tokens_used)
+        .bind(context_window)
         .bind(message.id)
         .execute(self.pool())
         .await?;
@@ -562,6 +538,13 @@ fn token_usage_to_columns(
     )
 }
 
+fn context_usage_to_columns(usage: Option<&ContextUsage>) -> (Option<i64>, Option<i64>) {
+    let Some(usage) = usage else {
+        return (None, None);
+    };
+    (Some(usage.tokens_used as i64), Some(usage.context_window as i64))
+}
+
 fn build_message(row: &sqlx::sqlite::SqliteRow) -> AgentResult<Message> {
     let blocks_json: String = row.try_get("blocks_json")?;
     let blocks: Vec<Block> = serde_json::from_str(&blocks_json)
@@ -569,6 +552,7 @@ fn build_message(row: &sqlx::sqlite::SqliteRow) -> AgentResult<Message> {
 
     let role = parse_role(row.try_get::<String, _>("role")?.as_str())?;
     let status = parse_status(row.try_get::<String, _>("status")?.as_str())?;
+    let is_summary: i64 = row.try_get("is_summary")?;
 
     let token_usage = match (
         row.try_get::<Option<i64>, _>("input_tokens")?,
@@ -587,16 +571,29 @@ fn build_message(row: &sqlx::sqlite::SqliteRow) -> AgentResult<Message> {
         _ => None,
     };
 
+    let context_usage = match (
+        row.try_get::<Option<i64>, _>("context_tokens_used")?,
+        row.try_get::<Option<i64>, _>("context_window")?,
+    ) {
+        (Some(tokens_used), Some(context_window)) => Some(ContextUsage {
+            tokens_used: tokens_used as u32,
+            context_window: context_window as u32,
+        }),
+        _ => None,
+    };
+
     Ok(Message {
         id: row.try_get("id")?,
         session_id: row.try_get("session_id")?,
         role,
         status,
         blocks,
+        is_summary: is_summary != 0,
         created_at: timestamp_to_datetime(row.try_get::<i64, _>("created_at")?),
         finished_at: opt_timestamp_to_datetime(row.try_get("finished_at")?),
         duration_ms: row.try_get("duration_ms")?,
         token_usage,
+        context_usage,
     })
 }
 

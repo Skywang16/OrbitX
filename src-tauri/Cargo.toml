@@ -124,6 +124,10 @@ tauri-plugin-window-state = "2.4.0"
 tauri-plugin-autostart = "2.5.0"
 eventsource-stream = "0.2.3"
 ignore = "0.4"
+# ripgrep 核心 crate (内嵌搜索，无需外部 rg 二进制)
+grep-searcher = "0.1"
+grep-regex = "0.1"
+grep-matcher = "0.1"
 # 向量数据库相关依赖
 blake3 = "1.5"
 hnsw_rs = "0.3"

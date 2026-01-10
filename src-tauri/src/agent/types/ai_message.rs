@@ -11,10 +11,12 @@ pub struct Message {
     pub role: MessageRole,
     pub status: MessageStatus,
     pub blocks: Vec<Block>,
+    pub is_summary: bool,
     pub created_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
     pub duration_ms: Option<i64>,
     pub token_usage: Option<TokenUsage>,
+    pub context_usage: Option<ContextUsage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,6 +42,16 @@ pub struct TokenUsage {
     pub output_tokens: i64,
     pub cache_read_tokens: Option<i64>,
     pub cache_write_tokens: Option<i64>,
+}
+
+/// 上下文占用信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextUsage {
+    /// 当前已使用的 token 数
+    pub tokens_used: u32,
+    /// 上下文窗口总大小
+    pub context_window: u32,
 }
 
 /// 内容块 - 消息的组成单元
@@ -93,6 +105,7 @@ pub struct ToolBlock {
     pub status: ToolStatus,
     pub input: Value,
     pub output: Option<ToolOutput>,
+    pub compacted_at: Option<DateTime<Utc>>,
     pub started_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
     pub duration_ms: Option<i64>,
@@ -154,6 +167,7 @@ pub enum TaskEvent {
         finished_at: DateTime<Utc>,
         duration_ms: i64,
         token_usage: Option<TokenUsage>,
+        context_usage: Option<ContextUsage>,
     },
 
     #[serde(rename_all = "camelCase")]

@@ -104,7 +104,8 @@ impl TaskExecutor {
         match result {
             Ok(()) => {
                 ctx.set_status(AgentTaskStatus::Completed).await?;
-                ctx.finish_assistant_message(crate::agent::types::MessageStatus::Completed, None)
+                let context_usage = ctx.calculate_context_usage(&model_id).await;
+                ctx.finish_assistant_message(crate::agent::types::MessageStatus::Completed, None, context_usage)
                     .await?;
                 ctx.emit_event(TaskEvent::TaskCompleted {
                     task_id: ctx.task_id.to_string(),
@@ -163,64 +164,6 @@ impl TaskExecutor {
         Ok(())
     }
 
-    pub async fn trigger_session_summary(
-        &self,
-        session_id: i64,
-        model_override: Option<String>,
-    ) -> TaskExecutorResult<Option<crate::agent::context::SummaryResult>> {
-        use crate::agent::context::SessionSummarizer;
-        use crate::llm::anthropic_types::{MessageContent, MessageParam, MessageRole};
-
-        let persistence = self.agent_persistence();
-        let mut executions = persistence
-            .agent_executions()
-            .list_recent_by_session(session_id, 1)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        let Some(latest_execution) = executions.pop() else {
-            return Ok(None);
-        };
-
-        let messages = persistence
-            .execution_messages()
-            .list_by_execution(&latest_execution.execution_id)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        if messages.is_empty() {
-            return Ok(None);
-        }
-
-        // 转换消息格式
-        let llm_messages: Vec<MessageParam> = messages
-            .iter()
-            .map(|msg| MessageParam {
-                role: match msg.role.as_str() {
-                    "user" => MessageRole::User,
-                    _ => MessageRole::Assistant,
-                },
-                content: MessageContent::Text(msg.content.clone()),
-            })
-            .collect();
-
-        let summarizer = SessionSummarizer::new(session_id, persistence.clone(), self.database());
-
-        let model_id = model_override.unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string());
-
-        let result = summarizer
-            .summarize_now(&model_id, &llm_messages, &None)
-            .await
-            .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?;
-
-        persistence
-            .agent_executions()
-            .set_has_context(&latest_execution.execution_id, true)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        Ok(Some(result))
-    }
     async fn restore_session_history(
         &self,
         ctx: &TaskContext,

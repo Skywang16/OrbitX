@@ -196,7 +196,8 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::agent::core::commands::agent_get_file_context_status,
         crate::agent::core::commands::agent_get_user_rules,
         crate::agent::core::commands::agent_set_user_rules,
-        crate::agent::core::commands::agent_trigger_session_summary,
+        crate::agent::core::commands::agent_trigger_compaction,
+        crate::agent::core::commands::agent_clear_compaction,
         // 项目规则命令已迁移到 workspace 模块
         // 存储系统命令（State/Runtime）
         crate::ai::tool::storage::storage_save_session_state,

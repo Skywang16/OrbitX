@@ -18,6 +18,8 @@ use crate::agent::tools::{
 use crate::agent::types::{Block, ToolBlock, ToolOutput, ToolStatus};
 use crate::llm::anthropic_types::CreateMessageRequest;
 
+const TOOL_OUTPUT_PREVIEW_MAX_CHARS: usize = 8000;
+
 #[async_trait::async_trait]
 impl ReactHandler for TaskExecutor {
     #[inline]
@@ -125,6 +127,7 @@ impl ReactHandler for TaskExecutor {
                     status: ToolStatus::Running,
                     input: params.clone(),
                     output: None,
+                    compacted_at: None,
                     started_at: now,
                     finished_at: None,
                     duration_ms: None,
@@ -144,6 +147,8 @@ impl ReactHandler for TaskExecutor {
         let mut results = Vec::with_capacity(responses.len());
         for resp in responses {
             let (result_status, result_value) = convert_result(&resp.result);
+            let output_content = extract_tool_output_content(&result_value);
+            let preview_value = truncate_tool_output_value(&result_value, TOOL_OUTPUT_PREVIEW_MAX_CHARS);
             let finished_at = chrono::Utc::now();
             let started_at = tool_started_at
                 .get(&resp.id)
@@ -158,6 +163,20 @@ impl ReactHandler for TaskExecutor {
             };
 
             // Update the existing tool block (created on ToolUse).
+            if let Some(message_id) = context.active_assistant_message_id().await {
+                context
+                    .agent_persistence()
+                    .tool_outputs()
+                    .upsert(
+                        context.session_id,
+                        message_id,
+                        &resp.id,
+                        &resp.name,
+                        &output_content,
+                    )
+                    .await?;
+            }
+
             context
                 .assistant_update_block(
                     &resp.id,
@@ -167,15 +186,16 @@ impl ReactHandler for TaskExecutor {
                         status,
                         input,
                         output: Some(ToolOutput {
-                            content: result_value.clone(),
+                            content: preview_value.clone(),
                             cancel_reason: resp.result.cancel_reason.clone(),
                             ext: resp.result.ext_info.clone(),
                         }),
+                        compacted_at: None,
                         started_at,
                         finished_at: Some(finished_at),
-                        duration_ms: resp.result.execution_time_ms.map(|v| v as i64).or_else(
-                            || {
-                                Some(
+                            duration_ms: resp.result.execution_time_ms.map(|v| v as i64).or_else(
+                                || {
+                                    Some(
                                     finished_at
                                         .signed_duration_since(started_at)
                                         .num_milliseconds()
@@ -257,4 +277,47 @@ fn convert_result(result: &tools::ToolResult) -> (ToolResultStatus, Value) {
             )
         }
     }
+}
+
+fn extract_tool_output_content(value: &Value) -> String {
+    match value {
+        Value::String(s) => s.clone(),
+        Value::Object(map) => {
+            for key in ["result", "error", "cancelled"] {
+                if let Some(Value::String(s)) = map.get(key) {
+                    return s.clone();
+                }
+            }
+            serde_json::to_string(value).unwrap_or_default()
+        }
+        _ => serde_json::to_string(value).unwrap_or_default(),
+    }
+}
+
+fn truncate_tool_output_value(value: &Value, max_chars: usize) -> Value {
+    let mut out = value.clone();
+    match &mut out {
+        Value::String(s) => truncate_in_place(s, max_chars),
+        Value::Object(map) => {
+            for key in ["result", "error", "cancelled"] {
+                if let Some(Value::String(s)) = map.get_mut(key) {
+                    truncate_in_place(s, max_chars);
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
+fn truncate_in_place(s: &mut String, max_chars: usize) {
+    if max_chars == 0 {
+        s.clear();
+        return;
+    }
+    if s.chars().count() <= max_chars {
+        return;
+    }
+    let truncated: String = s.chars().take(max_chars).collect();
+    *s = format!("{truncated}... (truncated)");
 }

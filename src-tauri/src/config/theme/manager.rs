@@ -107,10 +107,6 @@ pub struct ThemeManager {
     /// 统一缓存
     cache: Arc<UnifiedCache>,
 
-    /// 管理器选项
-    #[allow(dead_code)]
-    options: ThemeManagerOptions,
-
     /// 最后索引刷新时间
     last_index_refresh: Arc<Mutex<Option<Instant>>>,
 }
@@ -126,14 +122,13 @@ impl ThemeManager {
     /// 返回主题管理器实例
     pub async fn new(
         paths: ConfigPaths,
-        options: ThemeManagerOptions,
+        _options: ThemeManagerOptions,
         cache: Arc<UnifiedCache>,
     ) -> ThemeConfigResult<Self> {
         let manager = Self {
             paths,
             index: Arc::new(RwLock::new(None)),
             cache,
-            options,
             last_index_refresh: Arc::new(Mutex::new(None)),
         };
 
@@ -582,90 +577,6 @@ impl ThemeManager {
         // 没有主题文件时创建默认主题作为后备
         self.ensure_default_themes_exist(themes_dir).await?;
         let _ = self.refresh_index().await;
-
-        Ok(())
-    }
-
-    /// 扫描主题目录并加载现有主题文件
-    #[allow(dead_code)]
-    async fn scan_and_load_existing_themes(&self, themes_dir: &Path) -> ThemeConfigResult<()> {
-        if !themes_dir.exists() {
-            self.create_default_theme_files(themes_dir).await?;
-            return Ok(());
-        }
-
-        // 扫描现有的 TOML 主题文件
-        let entries = fs::read_dir(themes_dir).map_err(|err| {
-            ThemeConfigError::Internal(format!(
-                "Failed to read theme directory {}: {}",
-                themes_dir.display(),
-                err
-            ))
-        })?;
-
-        let mut theme_count = 0;
-        for entry in entries {
-            let entry = entry.map_err(|err| {
-                ThemeConfigError::Internal(format!("Failed to read directory entry: {}", err))
-            })?;
-            let path = entry.path();
-
-            // 只处理 .toml 文件
-            if path.is_file() && path.extension().is_some_and(|ext| ext == "toml") {
-                if let Some(file_name) = path.file_stem().and_then(|s| s.to_str()) {
-                    // 跳过索引文件
-                    if file_name == "index" {
-                        continue;
-                    }
-
-                    // 验证主题文件格式
-                    match self.validate_theme_file(&path).await {
-                        Ok(_) => {
-                            theme_count += 1;
-                        }
-                        Err(e) => {
-                            warn!("Invalid theme file format {}: {}", path.display(), e);
-                        }
-                    }
-                }
-            }
-        }
-
-        if theme_count == 0 {
-            self.create_default_theme_files(themes_dir).await?;
-        }
-
-        Ok(())
-    }
-
-    /// 验证主题文件格式
-    #[allow(dead_code)]
-    async fn validate_theme_file(&self, path: &Path) -> ThemeConfigResult<()> {
-        let content = tokio::fs::read_to_string(path).await.map_err(|err| {
-            ThemeConfigError::Internal(format!(
-                "Failed to read theme file {}: {}",
-                path.display(),
-                err
-            ))
-        })?;
-
-        let theme_wrapper: ThemeFileWrapper = toml::from_str(&content).map_err(|err| {
-            ThemeConfigError::Internal(format!(
-                "Failed to parse theme file {}: {}",
-                path.display(),
-                err
-            ))
-        })?;
-
-        let theme = theme_wrapper.theme;
-
-        // 验证主题
-        let validation_result = ThemeValidator::validate_theme(&theme);
-        if !validation_result.is_valid {
-            return Err(ThemeConfigError::Validation {
-                reason: format!("Theme validation failed: {:?}", validation_result.errors),
-            });
-        }
 
         Ok(())
     }

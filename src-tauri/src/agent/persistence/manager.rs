@@ -4,9 +4,10 @@ use crate::storage::database::DatabaseManager;
 
 use super::repositories::{
     AgentExecutionRepository, ExecutionEventRepository, ExecutionMessageRepository,
-    MessageRepository, SessionRepository, SessionSummaryRepository, ToolExecutionRepository,
-    WorkspaceFileContextRepository, WorkspaceRepository,
+    MessageRepository, SessionRepository,
+    ToolExecutionRepository, WorkspaceFileContextRepository, WorkspaceRepository,
 };
+use super::ToolOutputRepository;
 
 /// Facade that wires all persistence repositories together for the agent backend.
 #[derive(Debug)]
@@ -15,7 +16,7 @@ pub struct AgentPersistence {
     workspaces: WorkspaceRepository,
     sessions: SessionRepository,
     messages: MessageRepository,
-    session_summaries: SessionSummaryRepository,
+    tool_outputs: ToolOutputRepository,
     file_context: WorkspaceFileContextRepository,
     agent_executions: AgentExecutionRepository,
     execution_messages: ExecutionMessageRepository,
@@ -29,7 +30,7 @@ impl AgentPersistence {
             workspaces: WorkspaceRepository::new(Arc::clone(&database)),
             sessions: SessionRepository::new(Arc::clone(&database)),
             messages: MessageRepository::new(Arc::clone(&database)),
-            session_summaries: SessionSummaryRepository::new(Arc::clone(&database)),
+            tool_outputs: ToolOutputRepository::new(Arc::clone(&database)),
             file_context: WorkspaceFileContextRepository::new(Arc::clone(&database)),
             agent_executions: AgentExecutionRepository::new(Arc::clone(&database)),
             execution_messages: ExecutionMessageRepository::new(Arc::clone(&database)),
@@ -55,8 +56,8 @@ impl AgentPersistence {
         &self.messages
     }
 
-    pub fn session_summaries(&self) -> &SessionSummaryRepository {
-        &self.session_summaries
+    pub fn tool_outputs(&self) -> &ToolOutputRepository {
+        &self.tool_outputs
     }
 
     pub fn file_context(&self) -> &WorkspaceFileContextRepository {

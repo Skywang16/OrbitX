@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use reqwest::Client;
 use std::pin::Pin;
 use tokio_stream::Stream;
 
@@ -10,18 +9,11 @@ use crate::llm::{
 };
 
 /// Gemini Provider (messages unsupported in zero-abstraction mode)
-#[allow(dead_code)]
-pub struct GeminiProvider {
-    client: Client,
-    config: LLMProviderConfig,
-}
+pub struct GeminiProvider;
 
 impl GeminiProvider {
-    pub fn new(config: LLMProviderConfig) -> Self {
-        Self {
-            client: Client::new(),
-            config,
-        }
+    pub fn new(_config: LLMProviderConfig) -> Self {
+        Self
     }
 }
 

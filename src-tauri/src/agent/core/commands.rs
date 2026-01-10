@@ -2,12 +2,12 @@
  * TaskExecutor Tauri命令接口（已迁移至 agent/core/commands）
  */
 
-use crate::agent::context::SummaryResult;
 use crate::agent::core::executor::{
     ExecuteTaskParams, FileContextStatus, TaskExecutor, TaskSummary,
 };
 use crate::agent::tools::registry::ToolConfirmationDecision;
 use crate::agent::types::TaskEvent;
+use crate::agent::compaction::{CompactionConfig, CompactionResult, CompactionService};
 use crate::storage::repositories::AppPreferences;
 use crate::storage::{DatabaseManager, UnifiedCache};
 use crate::utils::{EmptyData, TauriApiResult};
@@ -164,22 +164,72 @@ pub async fn agent_set_user_rules(
     }
 }
 
-/// 手动触发会话摘要
+/// 手动触发上下文压缩（Prune + 可选 Compact）
 #[tauri::command]
-pub async fn agent_trigger_session_summary(
+pub async fn agent_trigger_compaction(
     state: State<'_, TaskExecutorState>,
     session_id: i64,
     model_override: Option<String>,
-) -> TauriApiResult<Option<SummaryResult>> {
-    match state
-        .executor
-        .trigger_session_summary(session_id, model_override)
+) -> TauriApiResult<CompactionResult> {
+    use crate::agent::compaction::CompactionTrigger;
+    use crate::storage::repositories::AIModels;
+
+    let model_id = model_override.unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string());
+
+    let context_window = AIModels::new(&state.executor.database())
+        .find_by_id(&model_id)
+        .await
+        .ok()
+        .and_then(|m| m.and_then(|m| m.options))
+        .and_then(|opts| opts.get("maxContextTokens").and_then(|v| v.as_u64()))
+        .map(|v| v as u32)
+        .unwrap_or(128_000);
+
+    let service = CompactionService::new(
+        state.executor.database(),
+        state.executor.agent_persistence(),
+        CompactionConfig::default(),
+    );
+
+    match service
+        .prepare_compaction(session_id, context_window, CompactionTrigger::Manual)
         .await
     {
-        Ok(result) => Ok(api_success!(result)),
+        Ok(prepared) => {
+            if let Some(job) = prepared.summary_job {
+                let service = service.clone();
+                let model_id = model_id.clone();
+                tokio::spawn(async move {
+                    if let Err(err) = service.complete_summary_job(job, &model_id).await {
+                        tracing::warn!("Manual compaction failed: {}", err);
+                    }
+                });
+            }
+            Ok(api_success!(prepared.result))
+        }
         Err(e) => {
-            tracing::error!("Failed to trigger session summary: {}", e);
-            Ok(api_error!("agent.context.summary_failed"))
+            tracing::error!("Failed to trigger compaction: {}", e);
+            Ok(api_error!("agent.context.compaction_failed"))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn agent_clear_compaction(
+    state: State<'_, TaskExecutorState>,
+    session_id: i64,
+) -> TauriApiResult<EmptyData> {
+    let service = CompactionService::new(
+        state.executor.database(),
+        state.executor.agent_persistence(),
+        CompactionConfig::default(),
+    );
+
+    match service.clear_compaction_for_session(session_id).await {
+        Ok(_) => Ok(api_success!()),
+        Err(e) => {
+            tracing::error!("Failed to clear compaction: {}", e);
+            Ok(api_error!("agent.context.compaction_clear_failed"))
         }
     }
 }

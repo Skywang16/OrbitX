@@ -9,16 +9,6 @@ use crate::agent::context::FileContextTracker;
 use crate::agent::persistence::AgentPersistence;
 use crate::storage::DatabaseManager;
 
-#[derive(Debug, Clone)]
-pub struct CompressedMemory {
-    pub created_at: DateTime<Utc>,
-    pub iteration_range: (u32, u32),
-    pub summary: String,
-    pub files_touched: Vec<String>,
-    pub tools_used: Vec<String>,
-    pub tokens_saved: u32,
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct SessionStats {
     pub total_iterations: u32,
@@ -29,9 +19,6 @@ pub struct SessionStats {
     pub files_modified: u32,
 }
 
-/// 最大压缩历史记录数
-const MAX_COMPRESSED_HISTORY: usize = 32;
-
 pub struct SessionContext {
     pub task_id: String,
     pub session_id: i64,
@@ -40,8 +27,6 @@ pub struct SessionContext {
     pub created_at: DateTime<Utc>,
     pub config: TaskExecutionConfig,
 
-    /// 简化：用 Vec 替代 MessageRingBuffer，保持最近 32 条记录
-    compressed_history: Arc<RwLock<Vec<CompressedMemory>>>,
     file_tracker: Arc<FileContextTracker>,
     repositories: Arc<DatabaseManager>,
     agent_persistence: Arc<AgentPersistence>,
@@ -74,7 +59,6 @@ impl SessionContext {
             initial_request,
             created_at: Utc::now(),
             config,
-            compressed_history: Arc::new(RwLock::new(Vec::new())),
             file_tracker: tracker,
             repositories,
             agent_persistence,
@@ -96,46 +80,6 @@ impl SessionContext {
 
     pub fn config(&self) -> &TaskExecutionConfig {
         &self.config
-    }
-
-    pub async fn add_compressed_memory(&self, memory: CompressedMemory) {
-        let mut history = self.compressed_history.write().await;
-        history.push(memory);
-        // 保持最多 MAX_COMPRESSED_HISTORY 条记录
-        if history.len() > MAX_COMPRESSED_HISTORY {
-            history.remove(0);
-        }
-    }
-
-    pub async fn compressed_history(&self) -> Vec<CompressedMemory> {
-        self.compressed_history.read().await.clone()
-    }
-
-    pub async fn get_compressed_history_text(&self) -> String {
-        let history = self.compressed_history.read().await;
-        if history.is_empty() {
-            return String::new();
-        }
-
-        let mut text = String::from("## Compressed Session History\n\n");
-        for memory in history.iter() {
-            text.push_str(&format!(
-                "**Iterations {}-{}** ({})\n{}\n",
-                memory.iteration_range.0,
-                memory.iteration_range.1,
-                memory.created_at.format("%Y-%m-%d %H:%M:%S"),
-                memory.summary
-            ));
-            if !memory.files_touched.is_empty() {
-                text.push_str(&format!("_Files:_ {}\n", memory.files_touched.join(", ")));
-            }
-            if !memory.tools_used.is_empty() {
-                text.push_str(&format!("_Tools:_ {}\n", memory.tools_used.join(", ")));
-            }
-            text.push('\n');
-        }
-
-        text
     }
 
     pub async fn update_stats<F>(&self, updater: F)

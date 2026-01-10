@@ -11,6 +11,8 @@ use crate::agent::persistence::AgentPersistence;
 use crate::agent::types::{Block, Message};
 use crate::storage::DatabaseManager;
 
+const TOOL_OUTPUT_PREVIEW_MAX_CHARS: usize = 8000;
+
 /// 未分组工作区的特殊路径标识
 pub const UNGROUPED_WORKSPACE_PATH: &str = "__ungrouped__";
 
@@ -201,6 +203,24 @@ impl WorkspaceService {
             .await
             .map_err(|e| anyhow!("Trim session messages failed: {}", e))?;
 
+        // Checkpoint rollback: clear compaction markers and summary breakpoint before the rollback point.
+        self.agent_persistence
+            .tool_outputs()
+            .clear_compaction_marks_before(session_id, message_id)
+            .await
+            .map_err(|e| anyhow!("Clear tool output compaction failed: {}", e))?;
+
+        sqlx::query(
+            "UPDATE messages
+             SET is_summary = 0
+             WHERE session_id = ? AND id <= ?",
+        )
+        .bind(session_id)
+        .bind(message_id)
+        .execute(self.pool())
+        .await?;
+
+        self.restore_tool_block_compaction_state(session_id).await?;
         self.refresh_session_metadata(session_id).await?;
         Ok(())
     }
@@ -229,7 +249,7 @@ impl WorkspaceService {
     pub async fn get_session_messages(&self, session_id: i64) -> Result<Vec<Message>> {
         self.agent_persistence
             .messages()
-            .list_by_session(session_id)
+            .list_by_session_with_breakpoint(session_id)
             .await
             .map_err(|e| anyhow!("Load session messages failed: {}", e))
     }
@@ -298,6 +318,91 @@ impl WorkspaceService {
 
         Ok(row.map(build_session))
     }
+
+    async fn restore_tool_block_compaction_state(&self, session_id: i64) -> Result<()> {
+        let messages = self
+            .agent_persistence
+            .messages()
+            .list_by_session(session_id)
+            .await
+            .map_err(|e| anyhow!("Load messages for compaction restore failed: {}", e))?;
+
+        let message_ids = messages.iter().map(|m| m.id).collect::<Vec<_>>();
+        let outputs = self
+            .agent_persistence
+            .tool_outputs()
+            .list_by_message_ids(&message_ids)
+            .await
+            .map_err(|e| anyhow!("Load tool outputs for compaction restore failed: {}", e))?;
+
+        let mut output_map = std::collections::HashMap::new();
+        for (message_id, block_id, output_content, compacted_at) in outputs {
+            output_map.insert((message_id, block_id), (output_content, compacted_at));
+        }
+
+        for mut message in messages {
+            let mut changed = false;
+
+            for block in &mut message.blocks {
+                if let crate::agent::types::Block::Tool(tool) = block {
+                    let Some((content, compacted_at)) =
+                        output_map.get(&(message.id, tool.id.clone()))
+                    else {
+                        continue;
+                    };
+
+                    if compacted_at.is_none() && tool.compacted_at.is_some() {
+                        tool.compacted_at = None;
+                        if let Some(output) = &mut tool.output {
+                            output.content = restore_tool_output_preview(
+                                &output.content,
+                                content,
+                                TOOL_OUTPUT_PREVIEW_MAX_CHARS,
+                            );
+                        }
+                        changed = true;
+                    }
+                }
+            }
+
+            if changed {
+                self.agent_persistence
+                    .messages()
+                    .update(&message)
+                    .await
+                    .map_err(|e| anyhow!("Restore tool block compaction state failed: {}", e))?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn restore_tool_output_preview(existing: &serde_json::Value, output_text: &str, max_chars: usize) -> serde_json::Value {
+    let preview = truncate_text(output_text, max_chars);
+    if let serde_json::Value::Object(map) = existing {
+        if map.contains_key("error") {
+            return serde_json::json!({ "error": preview });
+        }
+        if map.contains_key("cancelled") {
+            return serde_json::json!({ "cancelled": preview });
+        }
+        if map.contains_key("result") {
+            return serde_json::json!({ "result": preview });
+        }
+    }
+    serde_json::json!({ "result": preview })
+}
+
+fn truncate_text(text: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    let head: String = text.chars().take(max_chars).collect();
+    format!("{head}... (truncated)")
 }
 
 fn path_to_string(path: &Path) -> Result<String> {

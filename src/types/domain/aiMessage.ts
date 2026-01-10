@@ -9,16 +9,23 @@ export interface TokenUsage {
   cacheWriteTokens?: number
 }
 
+export interface ContextUsage {
+  tokensUsed: number
+  contextWindow: number
+}
+
 export interface Message {
   id: number
   sessionId: number
   role: MessageRole
   status: MessageStatus
   blocks: Block[]
+  isSummary: boolean
   createdAt: string
   finishedAt?: string
   durationMs?: number
   tokenUsage?: TokenUsage
+  contextUsage?: ContextUsage
 }
 
 export type Block =
@@ -33,6 +40,7 @@ export type Block =
       status: ToolStatus
       input: unknown
       output?: ToolOutput
+      compactedAt?: string
       startedAt: string
       finishedAt?: string
       durationMs?: number
@@ -65,6 +73,7 @@ export type TaskEvent =
       finishedAt: string
       durationMs: number
       tokenUsage?: TokenUsage
+      contextUsage?: ContextUsage
     }
   | { type: 'task_completed'; taskId: string }
   | { type: 'task_error'; taskId: string; error: { code: string; message: string; details?: string } }

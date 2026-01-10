@@ -2,13 +2,10 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use async_trait::async_trait;
-
-#[derive(Clone, Debug)]
-enum SearchMode {
-    Semantic,
-    Hybrid,
-    Regex,
-}
+use grep_regex::RegexMatcher;
+use grep_searcher::sinks::UTF8;
+use grep_searcher::Searcher;
+use ignore::WalkBuilder;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
@@ -24,6 +21,12 @@ use crate::agent::tools::{
     ToolResult, ToolResultContent, ToolResultStatus,
 };
 
+#[derive(Clone, Debug, PartialEq)]
+enum SearchMode {
+    Semantic,
+    Grep,
+}
+
 const DEFAULT_MAX_RESULTS: usize = 10;
 const MAX_RESULTS_LIMIT: usize = 50;
 const SNIPPET_MAX_LEN: usize = 200;
@@ -37,7 +40,7 @@ struct OrbitSearchArgs {
     mode: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct OrbitSearchResultEntry {
     file_path: String,
@@ -63,17 +66,18 @@ impl RunnableTool for OrbitSearchTool {
     }
 
     fn description(&self) -> &str {
-        "A powerful semantic and pattern-based code search tool.
+        "Code search tool with two modes: grep and semantic.
+
+Modes:
+  - 'grep': Regex pattern search via ripgrep. Always available.
+    Examples: 'fn main', 'class.*Controller', 'import.*from', 'TODO|FIXME'
+  - 'semantic': AI-powered conceptual search. Requires vector index.
+    Examples: 'authentication logic', 'error handling', 'database connection'
 
 Usage:
-  - ALWAYS use orbit_search for finding code in the codebase. NEVER invoke `grep` or `find` as a shell command for code searching.
-  - Supports three search modes: 'semantic' (AI-powered, requires index), 'hybrid' (semantic + keyword, requires index), 'regex' (pattern-based, always available)
-  - Returns file paths, line ranges, code snippets, and relevance scores
-  - Automatically respects .gitignore patterns
-  - Use semantic/hybrid modes for conceptual searches (e.g., 'authentication logic', 'database connection')
-  - Use regex mode for exact patterns (e.g., 'function\\s+\\w+', 'class.*Controller')
-  - Pattern syntax: Uses ripgrep regex (not grep) - literal braces need escaping
-  - You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful."
+  - Use grep for exact patterns (function names, class names, imports)
+  - Use semantic for conceptual searches
+  - Pattern syntax: ripgrep regex (same as grep -E)"
     }
 
     fn description_with_context(&self, context: &ToolDescriptionContext) -> Option<String> {
@@ -81,15 +85,9 @@ Usage:
         let has_index = is_index_ready(path);
 
         if has_index {
-            Some(
-                "Search for code snippets in the current project. Supports three modes: 'semantic' (AI-powered understanding of code semantics, recommended), 'hybrid' (combines semantic and keyword matching), and 'regex' (pattern-based search). The project index is ready - use semantic or hybrid mode for best results."
-                    .to_string(),
-            )
+            Some("Code search: grep or semantic (index ready).".to_string())
         } else {
-            Some(
-                "Search for code snippets in the current project. Currently, only 'regex' mode (pattern-based search) is available because no index has been built yet. To use 'semantic' and 'hybrid' intelligent search modes, please build the index first using the Vector Index (workspace index) button in the interface."
-                    .to_string(),
-            )
+            Some("Code search: grep available. Semantic unavailable (no index).".to_string())
         }
     }
 
@@ -99,22 +97,22 @@ Usage:
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "The search query. For semantic/hybrid modes: use natural language (e.g., 'file upload handler', 'authentication middleware'). For regex mode: use ripgrep regex syntax (e.g., 'function\\s+\\w+', 'class.*Component'). Query must be at least 3 characters."
+                    "description": "Search pattern. For grep: regex pattern (e.g., 'fn.*async', 'class\\s+\\w+'). For semantic: natural language (e.g., 'error handling'). Min 3 chars."
                 },
                 "maxResults": {
                     "type": "number",
                     "minimum": 1,
                     "maximum": 50,
-                    "description": "Maximum number of results to return (default: 10, max: 50). Use lower numbers (5-10) for focused searches, higher numbers (20-50) when exploring."
+                    "description": "Max results to return (default: 10)."
                 },
                 "path": {
                     "type": "string",
-                    "description": "Optional absolute path to scope the search to a specific directory or file. For example: '/Users/user/project/src/components'. If omitted, searches the entire workspace."
+                    "description": "Optional path to scope search. Defaults to workspace root."
                 },
                 "mode": {
                     "type": "string",
-                    "enum": ["semantic", "hybrid", "regex"],
-                    "description": "Search mode: 'semantic' for AI-powered concept search (requires index), 'hybrid' for combined semantic+keyword (requires index), 'regex' for pattern matching (always available). Default: 'semantic'. Use 'hybrid' for best results."
+                    "enum": ["grep", "semantic"],
+                    "description": "Search mode: 'grep' (regex/ripgrep) or 'semantic' (AI search, requires index). Default: 'grep'."
                 }
             },
             "required": ["query"]
@@ -154,12 +152,11 @@ Usage:
         }
 
         let mode = match args.mode.as_deref() {
-            Some("regex") => SearchMode::Regex,
-            Some("hybrid") => SearchMode::Hybrid,
-            Some("semantic") | None => SearchMode::Semantic,
+            Some("grep") | None => SearchMode::Grep, // 默认 grep
+            Some("semantic") => SearchMode::Semantic,
             Some(other) => {
                 return Ok(validation_error(format!(
-                    "Unsupported search mode: {}",
+                    "Unsupported mode: '{}'. Use 'grep' or 'semantic'.",
                     other
                 )));
             }
@@ -178,12 +175,208 @@ Usage:
         }
 
         let started = Instant::now();
+        let has_index = is_index_ready(&search_path);
 
-        // 使用工作区路径加载向量索引进行搜索
-        let global = match crate::vector_db::commands::get_global_state() {
-            Some(g) => g,
-            None => return Ok(tool_error("Vector DB not initialized")),
+        // 根据 mode 和索引状态选择搜索方式
+        let result = match mode {
+            SearchMode::Grep => {
+                // Grep 模式：使用内嵌 ripgrep crate
+                self.grep_search(&search_path, query, max_results).await
+            }
+            SearchMode::Semantic => {
+                if has_index {
+                    // 有索引：使用向量搜索
+                    self.vector_search(&search_path, query, max_results).await
+                } else {
+                    // 无索引：自动降级到 grep 模式
+                    tracing::info!(
+                        "No index for {:?}, falling back to grep",
+                        search_path
+                    );
+                    self.grep_search(&search_path, query, max_results).await
+                }
+            }
         };
+
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+
+        match result {
+            Ok(entries) => {
+                // 记录文件操作
+                for entry in &entries {
+                    if let Ok(p) = PathBuf::from(&entry.file_path).canonicalize() {
+                        let _ = context
+                            .file_tracker()
+                            .track_file_operation(FileOperationRecord::new(
+                                p.as_path(),
+                                FileRecordSource::FileMentioned,
+                            ))
+                            .await;
+                    }
+                }
+
+                let actual_mode = if !has_index && mode == SearchMode::Semantic {
+                    "grep (fallback)"
+                } else {
+                    mode_as_str(&mode)
+                };
+
+                if entries.is_empty() {
+                    return Ok(ToolResult {
+                        content: vec![ToolResultContent::Success(format!(
+                            "No code found matching \"{}\". Try different keywords or patterns.",
+                            query
+                        ))],
+                        status: ToolResultStatus::Success,
+                        cancel_reason: None,
+                        execution_time_ms: Some(elapsed_ms),
+                        ext_info: Some(json!({
+                            "results": entries,
+                            "totalFound": 0,
+                            "query": query,
+                            "path": search_path.display().to_string(),
+                            "mode": actual_mode,
+                            "hasIndex": has_index,
+                            "searchTimeMs": elapsed_ms,
+                        })),
+                    });
+                }
+
+                let summary = format!(
+                    "Found {} match{} for \"{}\" [{}] ({}ms)",
+                    entries.len(),
+                    if entries.len() == 1 { "" } else { "es" },
+                    query,
+                    actual_mode,
+                    elapsed_ms
+                );
+                let details = format_result_details(&entries);
+
+                Ok(ToolResult {
+                    content: vec![ToolResultContent::Success(format!(
+                        "{}\n\n{}",
+                        summary, details
+                    ))],
+                    status: ToolResultStatus::Success,
+                    cancel_reason: None,
+                    execution_time_ms: Some(elapsed_ms),
+                    ext_info: Some(json!({
+                        "results": entries,
+                        "totalFound": entries.len(),
+                        "query": query,
+                        "path": search_path.display().to_string(),
+                        "mode": actual_mode,
+                        "hasIndex": has_index,
+                        "searchTimeMs": elapsed_ms,
+                    })),
+                })
+            }
+            Err(err_msg) => Ok(tool_error(err_msg)),
+        }
+    }
+}
+
+impl OrbitSearchTool {
+    /// 使用内嵌的 ripgrep crate 进行正则搜索
+    async fn grep_search(
+        &self,
+        path: &Path,
+        pattern: &str,
+        max_results: usize,
+    ) -> Result<Vec<OrbitSearchResultEntry>, String> {
+        let path = path.to_path_buf();
+        let pattern = pattern.to_string();
+
+        // 在阻塞线程中执行搜索（grep-searcher 是同步的）
+        tokio::task::spawn_blocking(move || {
+            Self::grep_search_sync(&path, &pattern, max_results)
+        })
+        .await
+        .map_err(|e| format!("Search task failed: {}", e))?
+    }
+
+    /// 同步版本的 grep 搜索
+    fn grep_search_sync(
+        path: &Path,
+        pattern: &str,
+        max_results: usize,
+    ) -> Result<Vec<OrbitSearchResultEntry>, String> {
+        use std::cell::RefCell;
+
+        // 构建正则匹配器
+        let matcher = RegexMatcher::new_line_matcher(pattern)
+            .map_err(|e| format!("Invalid regex pattern: {}", e))?;
+
+        let results = RefCell::new(Vec::with_capacity(max_results));
+
+        // 使用 ignore crate 遍历目录（自动尊重 .gitignore）
+        let walker = WalkBuilder::new(path)
+            .hidden(false)
+            .git_ignore(true)
+            .git_global(true)
+            .git_exclude(true)
+            .build();
+
+        'outer: for entry in walker.flatten() {
+            if results.borrow().len() >= max_results {
+                break;
+            }
+
+            let entry_path = entry.path();
+            if entry_path.is_dir() {
+                continue;
+            }
+
+            // 跳过大文件 (> 1MB)
+            if let Ok(meta) = entry_path.metadata() {
+                if meta.len() > 1024 * 1024 {
+                    continue;
+                }
+            }
+
+            let file_path_str = entry_path.display().to_string();
+            let language = language_from_path(entry_path);
+
+            let mut searcher = Searcher::new();
+            let _ = searcher.search_path(
+                &matcher,
+                entry_path,
+                UTF8(|line_num, line| {
+                    let mut res = results.borrow_mut();
+                    if res.len() >= max_results {
+                        return Ok(false);
+                    }
+
+                    res.push(OrbitSearchResultEntry {
+                        file_path: file_path_str.clone(),
+                        start_line: line_num as usize,
+                        end_line: line_num as usize,
+                        snippet: truncate_snippet(line.trim()),
+                        score: None,
+                        language: language.clone(),
+                    });
+
+                    Ok(res.len() < max_results)
+                }),
+            );
+
+            if results.borrow().len() >= max_results {
+                break 'outer;
+            }
+        }
+
+        Ok(results.into_inner())
+    }
+
+    /// 使用向量索引进行语义搜索
+    async fn vector_search(
+        &self,
+        path: &Path,
+        query: &str,
+        max_results: usize,
+    ) -> Result<Vec<OrbitSearchResultEntry>, String> {
+        let global = crate::vector_db::commands::get_global_state()
+            .ok_or_else(|| "Vector DB not initialized".to_string())?;
 
         let search_options = crate::vector_db::search::SearchOptions {
             top_k: max_results,
@@ -192,25 +385,15 @@ Usage:
             filter_languages: vec![],
         };
 
-        let results = match global
+        let results = global
             .search_engine
-            .search_in_workspace(&search_path, query, search_options)
+            .search_in_workspace(path, query, search_options)
             .await
-        {
-            Ok(r) if !r.is_empty() => r,
-            Ok(_) => {
-                return Ok(tool_error(format!(
-                    "No code found matching \"{}\". Try using different keywords or ensure the directory is indexed.",
-                    query
-                )))
-            }
-            Err(e) => return Ok(tool_error(format!("Search failed: {}", e))),
-        };
+            .map_err(|e| format!("Vector search failed: {}", e))?;
 
         let mut entries: Vec<OrbitSearchResultEntry> = Vec::new();
         for r in results.into_iter().take(max_results) {
-            // Scope to path if provided
-            if !search_path.as_os_str().is_empty() && !r.file_path.starts_with(&search_path) {
+            if !path.as_os_str().is_empty() && !r.file_path.starts_with(path) {
                 continue;
             }
             let span = r.span.clone();
@@ -226,66 +409,7 @@ Usage:
             });
         }
 
-        let elapsed_ms = started.elapsed().as_millis() as u64;
-
-        for entry in &entries {
-            if let Ok(p) = PathBuf::from(&entry.file_path).canonicalize() {
-                let _ = context
-                    .file_tracker()
-                    .track_file_operation(FileOperationRecord::new(
-                        p.as_path(),
-                        FileRecordSource::FileMentioned,
-                    ))
-                    .await;
-            }
-        }
-
-        if entries.is_empty() {
-            return Ok(ToolResult {
-                content: vec![ToolResultContent::Success(format!(
-                    "No code found matching \"{}\". Try using different keywords or ensure the directory is indexed.",
-                    query
-                ))],
-                status: ToolResultStatus::Success,
-                cancel_reason: None,
-                execution_time_ms: Some(elapsed_ms),
-                ext_info: Some(json!({
-                    "results": entries,
-                    "totalFound": 0,
-                    "query": query,
-                    "path": search_path.display().to_string(),
-                    "mode": mode_as_str(&mode),
-                    "searchTimeMs": elapsed_ms,
-                })),
-            });
-        }
-
-        let summary = format!(
-            "Found {} code snippet{} matching \"{}\" ({}ms)",
-            entries.len(),
-            if entries.len() == 1 { "" } else { "s" },
-            query,
-            elapsed_ms
-        );
-        let details = format_result_details(&entries);
-
-        Ok(ToolResult {
-            content: vec![ToolResultContent::Success(format!(
-                "{}\n\n{}",
-                summary, details
-            ))],
-            status: ToolResultStatus::Success,
-            cancel_reason: None,
-            execution_time_ms: Some(elapsed_ms),
-            ext_info: Some(json!({
-                "results": entries,
-                "totalFound": entries.len(),
-                "query": query,
-                "path": search_path.display().to_string(),
-                "mode": mode_as_str(&mode),
-                "searchTimeMs": elapsed_ms,
-            })),
-        })
+        Ok(entries)
     }
 }
 
@@ -312,8 +436,7 @@ fn language_from_path(path: &Path) -> String {
 fn mode_as_str(mode: &SearchMode) -> &'static str {
     match mode {
         SearchMode::Semantic => "semantic",
-        SearchMode::Hybrid => "hybrid",
-        SearchMode::Regex => "regex",
+        SearchMode::Grep => "grep",
     }
 }
 
@@ -421,11 +544,10 @@ fn format_result_details(results: &[OrbitSearchResultEntry]) -> String {
                 .unwrap_or_default();
             let snippet = entry.snippet.replace('\n', "\n   ");
             format!(
-                "{}. {}:{}-{}{}\n   {}",
+                "{}. {}:{}{}\n   {}",
                 idx + 1,
                 entry.file_path,
                 entry.start_line,
-                entry.end_line,
                 score_text,
                 snippet
             )

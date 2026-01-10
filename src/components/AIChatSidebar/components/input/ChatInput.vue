@@ -14,9 +14,11 @@
   import ProjectRulesPicker from '../tags/ProjectRulesPicker.vue'
   import CircularProgress from '@/components/ui/CircularProgress.vue'
   import ImagePreview, { type ImageAttachment } from './ImagePreview.vue'
+  import ContextUsageRing from './ContextUsageRing.vue'
   import { vectorDbApi as vdbApi, nodeApi } from '@/api'
   import { processImageFile, getImageFromClipboard, validateImageFile } from '@/utils/imageUtils'
   import { createMessage } from '@/ui/composables/message-api'
+  import { useAIChatStore } from '@/components/AIChatSidebar/store'
   import type { ChannelSubscription } from '@/api/channel'
 
   interface Props {
@@ -72,6 +74,7 @@
   const terminalSelection = useTerminalSelection()
   const nodeVersion = useNodeVersion()
   const projectRules = useProjectRules()
+  const aiChatStore = useAIChatStore()
 
   const terminalStore = useTerminalStore()
   const activeTerminalCwd = computed(() => terminalStore.activeTerminal?.cwd || null)
@@ -486,6 +489,8 @@
 
     <ImagePreview :images="imageAttachments" @remove="removeImage" />
 
+    <ContextUsageRing :context-usage="aiChatStore.contextUsage" class="context-usage-indicator" />
+
     <div class="input-main">
       <div class="input-content">
         <textarea
@@ -633,6 +638,13 @@
 
   .chat-input:hover {
     border-color: var(--color-primary);
+  }
+
+  .context-usage-indicator {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 10;
   }
 
   .input-main {

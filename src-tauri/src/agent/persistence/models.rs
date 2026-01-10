@@ -27,17 +27,6 @@ pub struct Session {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionSummary {
-    pub session_id: i64,
-    pub summary_content: String,
-    pub summary_tokens: i64,
-    pub messages_summarized: i64,
-    pub tokens_saved: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FileRecordState {
     Active,
@@ -356,17 +345,6 @@ pub(crate) fn build_session(row: &sqlx::sqlite::SqliteRow) -> Session {
     }
 }
 
-pub(crate) fn build_session_summary(row: &sqlx::sqlite::SqliteRow) -> SessionSummary {
-    SessionSummary {
-        session_id: row.try_get("session_id").unwrap_or_default(),
-        summary_content: row.try_get("summary_content").unwrap_or_default(),
-        summary_tokens: row.try_get("summary_tokens").unwrap_or_default(),
-        messages_summarized: row.try_get("messages_summarized").unwrap_or_default(),
-        tokens_saved: row.try_get("tokens_saved").unwrap_or_default(),
-        created_at: timestamp_to_datetime(row.try_get::<i64, _>("created_at").unwrap_or(0)),
-        updated_at: timestamp_to_datetime(row.try_get::<i64, _>("updated_at").unwrap_or(0)),
-    }
-}
 
 pub(crate) fn build_workspace_file_record(
     row: &sqlx::sqlite::SqliteRow,

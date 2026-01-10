@@ -25,6 +25,19 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const cancelFunction = ref<(() => void) | null>(null)
   const currentTaskId = ref<string | null>(null)
   const cancelRequested = ref(false)
+  const contextUsage = ref<{ tokensUsed: number; contextWindow: number } | null>(null)
+
+  // 从消息列表提取最新的 contextUsage
+  const extractContextUsage = () => {
+    for (let i = workspaceStore.messages.length - 1; i >= 0; i--) {
+      const msg = workspaceStore.messages[i]
+      if (msg.contextUsage) {
+        contextUsage.value = msg.contextUsage
+        return
+      }
+    }
+    contextUsage.value = null
+  }
 
   // 工作区路径直接来自 workspaceStore（它从终端派生）
   const currentWorkspacePath = computed(() => workspaceStore.currentWorkspacePath)
@@ -78,10 +91,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
   const switchSession = async (sessionId: number) => {
     await workspaceStore.switchSession(sessionId)
+    extractContextUsage()
   }
 
   const createSession = async (title?: string) => {
     await workspaceStore.createSession(title)
+    extractContextUsage()
   }
 
   const handleAgentEvent = (event: TaskProgressPayload) => {
@@ -109,7 +124,13 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         msg.finishedAt = event.finishedAt
         msg.durationMs = event.durationMs
         msg.tokenUsage = event.tokenUsage
-        isSending.value = false
+        msg.contextUsage = event.contextUsage
+        if (event.contextUsage) {
+          contextUsage.value = event.contextUsage
+        }
+        if (!msg.isSummary) {
+          isSending.value = false
+        }
         break
       }
       case 'tool_confirmation_requested': {
@@ -143,6 +164,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         } else {
           await workspaceStore.fetchMessages(event.sessionId)
         }
+        return
+      }
+
+      // Summary 是断点消息：由后端保证顺序，前端直接重新拉取，避免本地排序/插入逻辑。
+      if (event.type === 'message_created' && event.message.isSummary) {
+        await workspaceStore.fetchMessages(event.message.sessionId)
         return
       }
 
@@ -232,6 +259,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   watch(currentWorkspacePath, async newPath => {
     if (!newPath) return
     await workspaceStore.loadWorkspaceData(newPath)
+    extractContextUsage()
   })
 
   // 保存 UI 状态（不包含 workspacePath）
@@ -260,6 +288,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
     // 加载当前工作区数据（有终端用终端 cwd，无终端用未分组）
     await workspaceStore.loadWorkspaceData(currentWorkspacePath.value, true)
+    extractContextUsage()
 
     isInitialized.value = true
   }
@@ -276,6 +305,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     sessions,
     currentSession,
     currentWorkspacePath,
+    contextUsage,
     toggleSidebar,
     setSidebarWidth,
     setChatMode,

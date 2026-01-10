@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS messages (
     role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
     status TEXT NOT NULL CHECK (status IN ('streaming', 'completed', 'cancelled', 'error')),
     blocks_json TEXT NOT NULL,
+    is_summary INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     finished_at INTEGER,
     duration_ms INTEGER,
@@ -110,18 +111,22 @@ CREATE TABLE IF NOT EXISTS messages (
     output_tokens INTEGER,
     cache_read_tokens INTEGER,
     cache_write_tokens INTEGER,
+    context_tokens_used INTEGER,
+    context_window INTEGER,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS session_summaries (
-    session_id INTEGER PRIMARY KEY,
-    summary_content TEXT NOT NULL DEFAULT '',
-    summary_tokens INTEGER NOT NULL DEFAULT 0,
-    messages_summarized INTEGER NOT NULL DEFAULT 0,
-    tokens_saved INTEGER NOT NULL DEFAULT 0,
+CREATE TABLE IF NOT EXISTS tool_outputs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    block_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    output_content TEXT NOT NULL,
+    compacted_at INTEGER,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    UNIQUE(message_id, block_id),
+    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS workspace_file_context (
@@ -244,8 +249,6 @@ CREATE INDEX IF NOT EXISTS idx_sessions_workspace
     ON sessions(workspace_path, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_session
     ON messages(session_id, created_at ASC);
-CREATE INDEX IF NOT EXISTS idx_session_summaries
-    ON session_summaries(session_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_file_context_state
     ON workspace_file_context(workspace_path, record_state);
 CREATE INDEX IF NOT EXISTS idx_agent_executions_session
@@ -307,15 +310,6 @@ CREATE TABLE IF NOT EXISTS completion_entity_stats (
     last_used_ts INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (entity_type, value)
 );
-
-CREATE TRIGGER IF NOT EXISTS trg_session_summaries_updated_at
-AFTER UPDATE ON session_summaries
-FOR EACH ROW
-BEGIN
-    UPDATE session_summaries
-    SET updated_at = strftime('%s','now')
-    WHERE session_id = NEW.session_id;
-END;
 
 CREATE TRIGGER IF NOT EXISTS trg_agent_executions_completed_at
 AFTER UPDATE OF status ON agent_executions
