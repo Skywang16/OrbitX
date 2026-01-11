@@ -13,41 +13,6 @@ pub struct Task {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Task node types derived from agent XML (<nodes><node>…</node></nodes>…)
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TaskNode {
-    pub text: String,
-}
-
-/// Detailed task description for tracking.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskDetail {
-    pub task_id: String,
-    pub name: String,
-    pub thought: String,
-    pub description: String,
-    pub nodes: Vec<TaskNode>,
-    pub status: TaskDetailStatus,
-    pub xml: String,
-    pub modified: bool,
-    pub task_prompt: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum TaskDetailStatus {
-    Init,
-    Running,
-    Done,
-    Error,
-}
-
-impl Default for TaskDetailStatus {
-    fn default() -> Self {
-        TaskDetailStatus::Init
-    }
-}
-
 /// High level task status shared with front-end
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TaskStatus {

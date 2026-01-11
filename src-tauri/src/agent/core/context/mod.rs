@@ -15,7 +15,7 @@ use tokio::sync::RwLock;
 use tokio::time::sleep;
 
 use self::chain::Chain;
-use self::states::{ExecutionState, PlanningState, TaskStates};
+use self::states::{ExecutionState, TaskStates};
 use crate::agent::config::{AgentConfig, TaskExecutionConfig};
 use crate::agent::context::FileContextTracker;
 use crate::agent::core::executor::ImageAttachment;
@@ -30,8 +30,8 @@ use crate::agent::state::manager::{
 use crate::agent::state::session::SessionContext;
 use crate::agent::tools::ToolRegistry;
 use crate::agent::types::{
-    Block, ErrorBlock, MessageRole as UiMessageRole, MessageStatus, TaskDetail, TaskEvent,
-    TokenUsage, ToolStatus, UserImageBlock, UserTextBlock,
+    Block, ErrorBlock, MessageRole as UiMessageRole, MessageStatus, TaskEvent, TokenUsage,
+    ToolStatus, UserImageBlock, UserTextBlock,
 };
 use crate::agent::utils::tokenizer::count_text_tokens;
 use crate::checkpoint::CheckpointService;
@@ -109,10 +109,9 @@ impl TaskContext {
         ));
 
         let execution = ExecutionState::new(record, task_status);
-        let planning = PlanningState::new(user_prompt.clone());
         let react_runtime = ReactRuntime::new(runtime_config);
 
-        let states = TaskStates::new(execution, planning, react_runtime, progress_channel);
+        let states = TaskStates::new(execution, react_runtime, progress_channel);
 
         Ok(Self {
             task_id: Arc::from(task_id.as_str()),
@@ -348,59 +347,9 @@ impl TaskContext {
         f(&exec)
     }
 
-    pub async fn with_chain<T>(&self, f: impl FnOnce(&Chain) -> T) -> T {
-        let planning = self.states.planning.read().await;
-        f(&planning.chain)
-    }
-
     pub async fn with_chain_mut<T>(&self, f: impl FnOnce(&mut Chain) -> T) -> T {
-        let mut planning = self.states.planning.write().await;
-        f(&mut planning.chain)
-    }
-
-    /// Push a user intervention (manual conversation entry).
-    pub async fn push_conversation_message(&self, message: String) {
-        self.states
-            .planning
-            .write()
-            .await
-            .conversation
-            .push(message);
-    }
-
-    pub async fn drain_conversation(&self) -> Vec<String> {
-        let mut planning = self.states.planning.write().await;
-        std::mem::take(&mut planning.conversation)
-    }
-
-    pub async fn set_task_detail(&self, task: Option<TaskDetail>) {
-        self.states.planning.write().await.task_detail = task;
-    }
-
-    pub async fn task_detail(&self) -> Option<TaskDetail> {
-        self.states.planning.read().await.task_detail.clone()
-    }
-
-    pub async fn attach_parent(&self, parent_task_id: String, root_task_id: Option<String>) {
-        let mut planning = self.states.planning.write().await;
-        planning.parent_task_id = Some(parent_task_id.clone());
-        planning.root_task_id = Some(root_task_id.unwrap_or(parent_task_id));
-    }
-
-    pub async fn add_child(&self, child_task_id: String) {
-        let mut planning = self.states.planning.write().await;
-        if !planning.children.contains(&child_task_id) {
-            planning.children.push(child_task_id);
-        }
-    }
-
-    /// Read current node identifier.
-    pub async fn current_node_id(&self) -> Option<String> {
-        self.states.planning.read().await.current_node_id.clone()
-    }
-
-    pub async fn set_planning_node(&self, node_id: Option<String>) {
-        self.states.planning.write().await.current_node_id = node_id;
+        let mut chain = self.states.chain.write().await;
+        f(&mut chain)
     }
 
     /// 检查任务是否被中止
