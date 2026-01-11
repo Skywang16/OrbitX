@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use crate::agent::error::{AgentError, AgentResult};
-use crate::llm::anthropic_types::{CreateMessageRequest, MessageContent, MessageParam, MessageRole as AnthropicRole, SystemPrompt};
+use crate::llm::anthropic_types::{
+    CreateMessageRequest, MessageContent, MessageParam, MessageRole as AnthropicRole, SystemPrompt,
+};
 use crate::llm::service::LLMService;
 use crate::storage::DatabaseManager;
 
@@ -18,10 +20,17 @@ pub struct SessionCompactor {
 
 impl SessionCompactor {
     pub fn new(repositories: Arc<DatabaseManager>, config: CompactionConfig) -> Self {
-        Self { repositories, config }
+        Self {
+            repositories,
+            config,
+        }
     }
 
-    pub async fn generate_summary(&self, model_id: &str, conversation_text: &str) -> AgentResult<String> {
+    pub async fn generate_summary(
+        &self,
+        model_id: &str,
+        conversation_text: &str,
+    ) -> AgentResult<String> {
         let model = self
             .config
             .summary_model

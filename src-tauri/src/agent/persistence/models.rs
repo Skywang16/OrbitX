@@ -345,7 +345,6 @@ pub(crate) fn build_session(row: &sqlx::sqlite::SqliteRow) -> Session {
     }
 }
 
-
 pub(crate) fn build_workspace_file_record(
     row: &sqlx::sqlite::SqliteRow,
 ) -> AgentResult<WorkspaceFileRecord> {

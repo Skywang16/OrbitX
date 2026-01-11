@@ -105,8 +105,12 @@ impl TaskExecutor {
             Ok(()) => {
                 ctx.set_status(AgentTaskStatus::Completed).await?;
                 let context_usage = ctx.calculate_context_usage(&model_id).await;
-                ctx.finish_assistant_message(crate::agent::types::MessageStatus::Completed, None, context_usage)
-                    .await?;
+                ctx.finish_assistant_message(
+                    crate::agent::types::MessageStatus::Completed,
+                    None,
+                    context_usage,
+                )
+                .await?;
                 ctx.emit_event(TaskEvent::TaskCompleted {
                     task_id: ctx.task_id.to_string(),
                 })

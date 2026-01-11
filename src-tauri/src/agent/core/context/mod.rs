@@ -856,12 +856,16 @@ impl TaskContext {
     }
 
     /// 计算当前会话的上下文占用
-    pub async fn calculate_context_usage(&self, model_id: &str) -> Option<crate::agent::types::ContextUsage> {
+    pub async fn calculate_context_usage(
+        &self,
+        model_id: &str,
+    ) -> Option<crate::agent::types::ContextUsage> {
         use crate::agent::compaction::SessionMessageLoader;
         use crate::agent::utils::{count_message_param_tokens, get_model_context_window};
 
         // 获取模型的 context_window
-        let context_window = get_model_context_window(&self.session.repositories(), model_id).await?;
+        let context_window =
+            get_model_context_window(&self.session.repositories(), model_id).await?;
 
         // 加载当前会话的消息（带断点）
         let loader = SessionMessageLoader::new(Arc::clone(&self.session.agent_persistence()));

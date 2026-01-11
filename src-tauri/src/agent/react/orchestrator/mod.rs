@@ -16,7 +16,9 @@ use tokio_stream::StreamExt;
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::agent::compaction::{CompactionConfig, CompactionService, CompactionTrigger, SessionMessageLoader};
+use crate::agent::compaction::{
+    CompactionConfig, CompactionService, CompactionTrigger, SessionMessageLoader,
+};
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::iteration_outcome::IterationOutcome;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
@@ -87,9 +89,10 @@ impl ReactOrchestrator {
                 react.get_snapshot().iterations.clone()
             };
             let builder = handler.get_context_builder(context).await;
-            let context_window = crate::agent::utils::get_model_context_window(&self.database, model_id)
-                .await
-                .unwrap_or(128_000);
+            let context_window =
+                crate::agent::utils::get_model_context_window(&self.database, model_id)
+                    .await
+                    .unwrap_or(128_000);
             self.maybe_compact_session(context, model_id, context_window)
                 .await?;
 

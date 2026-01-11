@@ -6,9 +6,7 @@
  */
 
 use crate::config::{
-    commands::ConfigManagerState,
-    defaults::create_default_terminal_config,
-    types::TerminalConfig,
+    commands::ConfigManagerState, defaults::create_default_terminal_config, types::TerminalConfig,
 };
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
@@ -33,7 +31,9 @@ pub struct TerminalConfigValidationResult {
 
 /// 获取终端配置
 #[tauri::command]
-pub async fn terminal_config_get(state: State<'_, ConfigManagerState>) -> TauriApiResult<TerminalConfig> {
+pub async fn terminal_config_get(
+    state: State<'_, ConfigManagerState>,
+) -> TauriApiResult<TerminalConfig> {
     match state.toml_manager.config_get().await {
         Ok(config) => {
             let terminal_config = config.terminal.clone();

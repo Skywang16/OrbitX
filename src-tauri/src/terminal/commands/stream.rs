@@ -23,3 +23,12 @@ pub async fn terminal_subscribe_output(
     state.manager.register(args.pane_id, channel);
     Ok(api_success!())
 }
+
+#[tauri::command]
+pub async fn terminal_subscribe_output_cancel(
+    args: PaneArgs,
+    state: State<'_, TerminalChannelState>,
+) -> TauriApiResult<EmptyData> {
+    state.manager.remove(args.pane_id);
+    Ok(api_success!())
+}

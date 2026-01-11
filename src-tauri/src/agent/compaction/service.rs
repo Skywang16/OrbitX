@@ -103,7 +103,9 @@ impl CompactionService {
             }
         };
 
-        if !should_compact || (matches!(trigger, CompactionTrigger::Auto) && !self.config.auto_compact) {
+        if !should_compact
+            || (matches!(trigger, CompactionTrigger::Auto) && !self.config.auto_compact)
+        {
             return Ok(PreparedCompaction {
                 result: CompactionResult {
                     phase: CompactionPhase::Pruned,
@@ -192,7 +194,9 @@ impl CompactionService {
         } else {
             let compactor =
                 SessionCompactor::new(Arc::clone(&self.repositories), self.config.clone());
-            compactor.generate_summary(model_id, &job.conversation_text).await?
+            compactor
+                .generate_summary(model_id, &job.conversation_text)
+                .await?
         };
 
         let finished_at = Utc::now();
@@ -210,7 +214,10 @@ impl CompactionService {
             is_streaming: false,
         })];
 
-        self.persistence.messages().update(&job.summary_message).await?;
+        self.persistence
+            .messages()
+            .update(&job.summary_message)
+            .await?;
 
         Ok(SummaryCompletion {
             message_id: job.summary_message.id,
@@ -226,7 +233,11 @@ impl CompactionService {
             .clear_compaction_marks_for_session(session_id)
             .await?;
 
-        let messages = self.persistence.messages().list_by_session(session_id).await?;
+        let messages = self
+            .persistence
+            .messages()
+            .list_by_session(session_id)
+            .await?;
         for mut message in messages {
             let was_summary = message.is_summary;
             if was_summary {
@@ -265,7 +276,11 @@ impl CompactionService {
         }
 
         let message_ids = messages.iter().map(|m| m.id).collect::<Vec<_>>();
-        let outputs = self.persistence.tool_outputs().list_by_message_ids(&message_ids).await?;
+        let outputs = self
+            .persistence
+            .tool_outputs()
+            .list_by_message_ids(&message_ids)
+            .await?;
 
         let mut map = std::collections::HashMap::new();
         for (mid, bid, content, compacted_at) in outputs {
@@ -288,10 +303,7 @@ impl<'a> SummaryScope<'a> {
         }
 
         let split_at = messages.len().saturating_sub(keep_recent_messages);
-        let boundary_ts = messages[split_at]
-            .created_at
-            .timestamp()
-            .saturating_sub(1);
+        let boundary_ts = messages[split_at].created_at.timestamp().saturating_sub(1);
 
         Some(Self {
             boundary_ts,
@@ -360,8 +372,8 @@ fn render_messages(
                         continue;
                     }
                     let key = (msg.id, tool.id.clone());
-                    let compacted =
-                        tool.compacted_at.is_some() || tool_outputs.get(&key).and_then(|(_, ts)| *ts).is_some();
+                    let compacted = tool.compacted_at.is_some()
+                        || tool_outputs.get(&key).and_then(|(_, ts)| *ts).is_some();
                     let content = if compacted {
                         "[tool result cleared]".to_string()
                     } else {
@@ -370,10 +382,7 @@ fn render_messages(
                             .map(|(c, _)| c.clone())
                             .unwrap_or_else(|| String::new())
                     };
-                    out.push_str(&format!(
-                        "tool {}({}): {}\n",
-                        tool.name, tool.id, content
-                    ));
+                    out.push_str(&format!("tool {}({}): {}\n", tool.name, tool.id, content));
                 }
                 _ => {}
             }

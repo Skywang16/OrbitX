@@ -57,7 +57,11 @@ impl ToolOutputRepository {
             return Ok(Vec::new());
         }
 
-        let placeholders = message_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let placeholders = message_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
         let sql = format!(
             "SELECT message_id, block_id, output_content, compacted_at
              FROM tool_outputs
@@ -77,8 +81,10 @@ impl ToolOutputRepository {
                 (
                     row.try_get::<i64, _>("message_id").unwrap_or_default(),
                     row.try_get::<String, _>("block_id").unwrap_or_default(),
-                    row.try_get::<String, _>("output_content").unwrap_or_default(),
-                    row.try_get::<Option<i64>, _>("compacted_at").unwrap_or(None),
+                    row.try_get::<String, _>("output_content")
+                        .unwrap_or_default(),
+                    row.try_get::<Option<i64>, _>("compacted_at")
+                        .unwrap_or(None),
                 )
             })
             .collect())

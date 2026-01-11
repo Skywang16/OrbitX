@@ -12,14 +12,14 @@
         :is="getTabDefinition(activeTab.type).component"
         v-bind="getTabDefinition(activeTab.type).getComponentProps(activeTab as never)"
       />
+    </div>
 
-      <div v-if="dropState.visible" class="editor-group__drop-overlay">
-        <div v-if="dropState.zone === 'left'" class="editor-group__drop-hint left"></div>
-        <div v-if="dropState.zone === 'right'" class="editor-group__drop-hint right"></div>
-        <div v-if="dropState.zone === 'top'" class="editor-group__drop-hint top"></div>
-        <div v-if="dropState.zone === 'bottom'" class="editor-group__drop-hint bottom"></div>
-        <div v-if="dropState.zone === 'center'" class="editor-group__drop-hint center"></div>
-      </div>
+    <div v-if="dropState.visible" class="editor-group__drop-overlay">
+      <div v-if="dropState.zone === 'left'" class="editor-group__drop-hint left"></div>
+      <div v-if="dropState.zone === 'right'" class="editor-group__drop-hint right"></div>
+      <div v-if="dropState.zone === 'top'" class="editor-group__drop-hint top"></div>
+      <div v-if="dropState.zone === 'bottom'" class="editor-group__drop-hint bottom"></div>
+      <div v-if="dropState.zone === 'center'" class="editor-group__drop-hint center"></div>
     </div>
   </div>
 </template>
@@ -67,7 +67,7 @@
 
   /**
    * 根据鼠标位置判断落入哪个区域
-   * 边缘阈值：水平方向 18% (48-180px)，垂直方向 28% (72-260px)
+   * 边缘阈值：水平方向 28% (72-320px)，垂直方向 34% (88-320px)
    */
   const pickZone = (x: number, y: number): EditorDropZone | null => {
     const el = groupRef.value
@@ -84,8 +84,8 @@
     const top = localY
     const bottom = rect.height - localY
 
-    const thresholdX = Math.min(180, Math.max(48, rect.width * 0.18))
-    const thresholdY = Math.min(260, Math.max(72, rect.height * 0.28))
+    const thresholdX = Math.min(320, Math.max(72, rect.width * 0.28))
+    const thresholdY = Math.min(320, Math.max(88, rect.height * 0.34))
 
     const candidates: Array<{ zone: EditorDropZone; dist: number; ok: boolean }> = [
       { zone: 'left', dist: left, ok: left <= thresholdX },
@@ -169,6 +169,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    position: relative;
     background: var(--bg-200);
   }
 

@@ -15,7 +15,10 @@ pub struct Pruner {
 
 impl Pruner {
     pub fn new(persistence: std::sync::Arc<AgentPersistence>, config: CompactionConfig) -> Self {
-        Self { persistence, config }
+        Self {
+            persistence,
+            config,
+        }
     }
 
     pub async fn prune_session(&self, session_id: i64) -> AgentResult<usize> {
@@ -33,7 +36,9 @@ impl Pruner {
             return Ok(0);
         }
 
-        let keep_from = messages.len().saturating_sub(self.config.keep_recent_messages);
+        let keep_from = messages
+            .len()
+            .saturating_sub(self.config.keep_recent_messages);
         let now = Utc::now();
         let compacted_at = now.timestamp();
         let mut tools_compacted = 0usize;

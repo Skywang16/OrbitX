@@ -24,13 +24,11 @@ pub use paths::ConfigPaths;
 pub use shortcuts::{
     shortcuts_add, shortcuts_detect_conflicts, shortcuts_execute_action, shortcuts_get_config,
     shortcuts_get_current_platform, shortcuts_get_statistics, shortcuts_remove,
-    shortcuts_reset_to_defaults, shortcuts_update, shortcuts_update_config, shortcuts_validate_config,
-    ShortcutManagerState,
+    shortcuts_reset_to_defaults, shortcuts_update, shortcuts_update_config,
+    shortcuts_validate_config, ShortcutManagerState,
 };
 pub use terminal_commands::{
-    terminal_config_get,
-    terminal_config_reset_to_defaults,
-    terminal_config_set,
+    terminal_config_get, terminal_config_reset_to_defaults, terminal_config_set,
     terminal_config_validate,
 };
 pub use theme::{

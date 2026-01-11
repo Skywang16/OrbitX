@@ -47,8 +47,16 @@ impl TerminalChannelManager {
     }
 
     pub fn register(&self, pane_id: u32, channel: Channel<TerminalChannelMessage>) {
-        if let Ok(mut map) = self.channels.write() {
-            map.insert(pane_id, channel);
+        let had_existing = if let Ok(mut map) = self.channels.write() {
+            map.insert(pane_id, channel).is_some()
+        } else {
+            false
+        };
+
+        // 重复订阅（常见于前端重布局/分屏导致的短时间重挂载）：只替换 channel，不做 replay。
+        // replay 会把历史输出“重放”到前端，造成 zsh prompt 等内容刷屏式重复显示。
+        if had_existing {
+            return;
         }
 
         // 检查缓冲区是否太新（<2秒），如果是则跳过 replay（避免新建终端重复输出）

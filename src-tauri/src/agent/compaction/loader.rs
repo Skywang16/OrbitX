@@ -86,9 +86,8 @@ fn map_user_blocks_to_content(blocks: &[Block]) -> AgentResult<MessageContent> {
                 cache_control: None,
             }),
             Block::UserImage(b) => {
-                let base64 = extract_base64_data(&b.data_url).ok_or_else(|| {
-                    AgentError::Parse("Invalid user image dataUrl".to_string())
-                })?;
+                let base64 = extract_base64_data(&b.data_url)
+                    .ok_or_else(|| AgentError::Parse("Invalid user image dataUrl".to_string()))?;
                 out.push(ContentBlock::Image {
                     source: ImageSource::Base64 {
                         media_type: b.mime_type.clone(),
@@ -146,7 +145,11 @@ fn map_assistant_blocks(
             }
             Block::Error(b) => {
                 assistant_blocks.push(ContentBlock::Text {
-                    text: format!("[error] {}{}", b.message, b.details.as_deref().unwrap_or("")),
+                    text: format!(
+                        "[error] {}{}",
+                        b.message,
+                        b.details.as_deref().unwrap_or("")
+                    ),
                     cache_control: None,
                 });
             }

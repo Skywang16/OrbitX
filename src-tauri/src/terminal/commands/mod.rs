@@ -56,7 +56,7 @@ pub mod stream;
 
 pub use context::{terminal_context_get, terminal_context_get_active};
 pub use pane::{terminal_context_get_active_pane, terminal_context_set_active_pane};
-pub use stream::terminal_subscribe_output;
+pub use stream::{terminal_subscribe_output, terminal_subscribe_output_cancel};
 
 #[cfg(test)]
 mod tests {

@@ -189,10 +189,7 @@ Usage:
                     self.vector_search(&search_path, query, max_results).await
                 } else {
                     // 无索引：自动降级到 grep 模式
-                    tracing::info!(
-                        "No index for {:?}, falling back to grep",
-                        search_path
-                    );
+                    tracing::info!("No index for {:?}, falling back to grep", search_path);
                     self.grep_search(&search_path, query, max_results).await
                 }
             }
@@ -288,11 +285,9 @@ impl OrbitSearchTool {
         let pattern = pattern.to_string();
 
         // 在阻塞线程中执行搜索（grep-searcher 是同步的）
-        tokio::task::spawn_blocking(move || {
-            Self::grep_search_sync(&path, &pattern, max_results)
-        })
-        .await
-        .map_err(|e| format!("Search task failed: {}", e))?
+        tokio::task::spawn_blocking(move || Self::grep_search_sync(&path, &pattern, max_results))
+            .await
+            .map_err(|e| format!("Search task failed: {}", e))?
     }
 
     /// 同步版本的 grep 搜索

@@ -5,17 +5,17 @@ use sqlx::{self, sqlite::SqliteQueryResult, Row};
 
 use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::types::{
-    Block, ContextUsage, Message, MessageRole as UiMessageRole, MessageStatus as UiMessageStatus, TokenUsage,
+    Block, ContextUsage, Message, MessageRole as UiMessageRole, MessageStatus as UiMessageStatus,
+    TokenUsage,
 };
 use crate::storage::database::DatabaseManager;
 
 use super::models::{
     build_agent_execution, build_execution_event, build_execution_message, build_session,
-    build_tool_execution, build_workspace,
-    build_workspace_file_record, AgentExecution, ExecutionEvent, ExecutionEventType,
-    ExecutionMessage, ExecutionStatus, FileRecordSource, FileRecordState,
-    MessageRole as AgentMessageRole, Session, TokenUsageStats,
-    ToolExecution, ToolExecutionStatus, Workspace, WorkspaceFileRecord,
+    build_tool_execution, build_workspace, build_workspace_file_record, AgentExecution,
+    ExecutionEvent, ExecutionEventType, ExecutionMessage, ExecutionStatus, FileRecordSource,
+    FileRecordState, MessageRole as AgentMessageRole, Session, TokenUsageStats, ToolExecution,
+    ToolExecutionStatus, Workspace, WorkspaceFileRecord,
 };
 use super::{
     bool_to_sql, now_timestamp, opt_datetime_to_timestamp, opt_timestamp_to_datetime,
@@ -232,7 +232,10 @@ impl MessageRepository {
     }
 
     /// 从后往前加载，遇到 summary 消息停止（包含该 summary），用于构建上下文与 UI 历史断点加载。
-    pub async fn list_by_session_with_breakpoint(&self, session_id: i64) -> AgentResult<Vec<Message>> {
+    pub async fn list_by_session_with_breakpoint(
+        &self,
+        session_id: i64,
+    ) -> AgentResult<Vec<Message>> {
         let rows = sqlx::query(
             "SELECT id, session_id, role, status, blocks_json, is_summary, created_at, finished_at, duration_ms,
                     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
@@ -542,7 +545,10 @@ fn context_usage_to_columns(usage: Option<&ContextUsage>) -> (Option<i64>, Optio
     let Some(usage) = usage else {
         return (None, None);
     };
-    (Some(usage.tokens_used as i64), Some(usage.context_window as i64))
+    (
+        Some(usage.tokens_used as i64),
+        Some(usage.context_window as i64),
+    )
 }
 
 fn build_message(row: &sqlx::sqlite::SqliteRow) -> AgentResult<Message> {

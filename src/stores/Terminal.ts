@@ -104,6 +104,18 @@ export const useTerminalStore = defineStore('Terminal', () => {
   // 跟踪每个终端的初始目录，避免记录
   const terminalInitialCwd = ref<Map<number, string>>(new Map())
 
+  // PTY resize 合并/防抖：分屏/拖拽时布局抖动会疯狂触发 fit+resize，zsh 会反复重绘 prompt。
+  // 用 trailing debounce：停止变化一段时间后，只发最后一次尺寸。
+  const RESIZE_DEBOUNCE_MS = 180
+  const resizeStateById = new Map<
+    number,
+    {
+      timer: number | null
+      pending: { rows: number; cols: number } | null
+      lastSent: { rows: number; cols: number } | null
+    }
+  >()
+
   const activeTerminal = computed(() => terminals.value.find(t => t.id === activeTerminalId.value))
   const currentWorkingDirectory = computed(() => activeTerminal.value?.cwd || null)
 
@@ -307,6 +319,12 @@ export const useTerminalStore = defineStore('Terminal', () => {
         return
       }
 
+      const resizeState = resizeStateById.get(id)
+      if (resizeState?.timer) {
+        clearTimeout(resizeState.timer)
+      }
+      resizeStateById.delete(id)
+
       // 清理终端的初始目录跟踪
       terminalInitialCwd.value.delete(id)
       paneOutputById.value.delete(id)
@@ -351,17 +369,43 @@ export const useTerminalStore = defineStore('Terminal', () => {
   }
 
   const resizeTerminal = async (id: number, rows: number, cols: number) => {
-    const terminalSession = terminals.value.find(t => t.id === id)
-    if (!terminalSession) {
-      console.warn(`[HMR] 终端 '${id}' 不在 store 中，可能是热更新导致`)
-      return
+    let state = resizeStateById.get(id)
+    if (!state) {
+      state = { timer: null, pending: null, lastSent: null }
+      resizeStateById.set(id, state)
     }
 
-    await terminalApi.resizeTerminal({
-      paneId: terminalSession.id,
-      rows,
-      cols,
-    })
+    state.pending = { rows, cols }
+    if (state.timer) {
+      clearTimeout(state.timer)
+    }
+
+    state.timer = window.setTimeout(async () => {
+      const current = resizeStateById.get(id)
+      if (!current) return
+
+      current.timer = null
+      const pending = current.pending
+      current.pending = null
+      if (!pending) return
+
+      if (current.lastSent && current.lastSent.rows === pending.rows && current.lastSent.cols === pending.cols) {
+        return
+      }
+
+      const terminalSession = terminals.value.find(t => t.id === id)
+      if (!terminalSession) {
+        console.warn(`[HMR] 终端 '${id}' 不在 store 中，可能是热更新导致`)
+        return
+      }
+
+      current.lastSent = pending
+      await terminalApi.resizeTerminal({
+        paneId: terminalSession.id,
+        rows: pending.rows,
+        cols: pending.cols,
+      })
+    }, RESIZE_DEBOUNCE_MS)
   }
   const loadAvailableShells = async () => {
     shellManager.value.isLoading = true

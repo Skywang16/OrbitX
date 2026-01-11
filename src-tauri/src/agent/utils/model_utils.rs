@@ -7,10 +7,7 @@ pub async fn get_model_context_window(
     database: &Arc<DatabaseManager>,
     model_id: &str,
 ) -> Option<u32> {
-    let model = AIModels::new(database)
-        .find_by_id(model_id)
-        .await
-        .ok()??;
+    let model = AIModels::new(database).find_by_id(model_id).await.ok()??;
 
     model
         .options

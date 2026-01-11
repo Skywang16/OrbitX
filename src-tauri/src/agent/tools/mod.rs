@@ -21,8 +21,8 @@ pub use registry::{get_permissions_for_mode, ToolExecutionStats, ToolRegistry};
 
 // Builtin tool type re-exports
 pub use builtin::{
-    ListFilesTool, OrbitSearchTool, ReadFileTool, ReadTerminalTool, ShellTool, UnifiedEditTool,
-    TodoWriteTool, WebFetchTool, WriteFileTool,
+    ListFilesTool, OrbitSearchTool, ReadFileTool, ReadTerminalTool, ShellTool, TodoWriteTool,
+    UnifiedEditTool, WebFetchTool, WriteFileTool,
 };
 
 use std::sync::Arc;

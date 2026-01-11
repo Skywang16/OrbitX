@@ -148,7 +148,8 @@ impl ReactHandler for TaskExecutor {
         for resp in responses {
             let (result_status, result_value) = convert_result(&resp.result);
             let output_content = extract_tool_output_content(&result_value);
-            let preview_value = truncate_tool_output_value(&result_value, TOOL_OUTPUT_PREVIEW_MAX_CHARS);
+            let preview_value =
+                truncate_tool_output_value(&result_value, TOOL_OUTPUT_PREVIEW_MAX_CHARS);
             let finished_at = chrono::Utc::now();
             let started_at = tool_started_at
                 .get(&resp.id)
@@ -193,9 +194,9 @@ impl ReactHandler for TaskExecutor {
                         compacted_at: None,
                         started_at,
                         finished_at: Some(finished_at),
-                            duration_ms: resp.result.execution_time_ms.map(|v| v as i64).or_else(
-                                || {
-                                    Some(
+                        duration_ms: resp.result.execution_time_ms.map(|v| v as i64).or_else(
+                            || {
+                                Some(
                                     finished_at
                                         .signed_duration_since(started_at)
                                         .num_milliseconds()

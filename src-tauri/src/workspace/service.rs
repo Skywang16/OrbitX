@@ -378,7 +378,11 @@ impl WorkspaceService {
     }
 }
 
-fn restore_tool_output_preview(existing: &serde_json::Value, output_text: &str, max_chars: usize) -> serde_json::Value {
+fn restore_tool_output_preview(
+    existing: &serde_json::Value,
+    output_text: &str,
+    max_chars: usize,
+) -> serde_json::Value {
     let preview = truncate_text(output_text, max_chars);
     if let serde_json::Value::Object(map) = existing {
         if map.contains_key("error") {

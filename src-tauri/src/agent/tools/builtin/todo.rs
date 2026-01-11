@@ -109,7 +109,11 @@ impl RunnableTool for TodoWriteTool {
         }
 
         // Format output
-        let done = args.todos.iter().filter(|t| t.status == "completed").count();
+        let done = args
+            .todos
+            .iter()
+            .filter(|t| t.status == "completed")
+            .count();
         let total = args.todos.len();
 
         let mut output = format!("Todo ({}/{})\n", done, total);

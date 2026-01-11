@@ -4,8 +4,8 @@ use crate::storage::database::DatabaseManager;
 
 use super::repositories::{
     AgentExecutionRepository, ExecutionEventRepository, ExecutionMessageRepository,
-    MessageRepository, SessionRepository,
-    ToolExecutionRepository, WorkspaceFileContextRepository, WorkspaceRepository,
+    MessageRepository, SessionRepository, ToolExecutionRepository, WorkspaceFileContextRepository,
+    WorkspaceRepository,
 };
 use super::ToolOutputRepository;
 

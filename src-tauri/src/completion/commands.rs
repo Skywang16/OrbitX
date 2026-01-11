@@ -146,7 +146,9 @@ pub struct CompletionStats {
 
 /// 获取统计信息命令
 #[tauri::command]
-pub async fn completion_get_stats(state: State<'_, CompletionState>) -> TauriApiResult<CompletionStats> {
+pub async fn completion_get_stats(
+    state: State<'_, CompletionState>,
+) -> TauriApiResult<CompletionStats> {
     let engine = match state.get_engine().await {
         Ok(engine) => engine,
         Err(_) => return Ok(api_error!("completion.engine_not_initialized")),

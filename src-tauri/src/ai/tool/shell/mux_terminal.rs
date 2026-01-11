@@ -8,9 +8,7 @@
 use tauri::{AppHandle, Runtime, State};
 use tracing::error;
 
-use crate::mux::{
-    get_mux, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager, TerminalConfig,
-};
+use crate::mux::{get_mux, PaneId, PtySize, ShellConfig, ShellInfo, ShellManager, TerminalConfig};
 use crate::utils::{ApiResponse, EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 

@@ -74,6 +74,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::terminal::commands::context::terminal_context_get_active,
         // 终端 Channel 流命令
         crate::terminal::commands::stream::terminal_subscribe_output,
+        crate::terminal::commands::stream::terminal_subscribe_output_cancel,
         // Shell 集成命令
         crate::shell::commands::shell_pane_setup_integration,
         crate::shell::commands::shell_pane_get_state,
